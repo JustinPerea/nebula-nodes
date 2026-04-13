@@ -40,22 +40,19 @@ async def handle_runway_gen4_turbo(
         "model": model,
         "promptImage": image_value,
         "duration": duration,
+        "ratio": node.params.get("ratio", "1280:720"),
     }
 
     prompt_input = inputs.get("prompt")
     if prompt_input and prompt_input.value:
         submit_body["promptText"] = str(prompt_input.value)[:1000]
 
-    ratio = node.params.get("ratio")
-    if ratio:
-        submit_body["ratio"] = ratio
-
     seed = node.params.get("seed")
     if seed is not None:
         submit_body["seed"] = int(seed)
 
     config = AsyncPollConfig(
-        submit_url=f"{RUNWAY_API_BASE}/tasks",
+        submit_url=f"{RUNWAY_API_BASE}/image_to_video",
         poll_url_template=f"{RUNWAY_API_BASE}/tasks/{{task_id}}",
         headers={
             "Authorization": f"Bearer {api_key}",

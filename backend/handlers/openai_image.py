@@ -25,11 +25,17 @@ async def handle_openai_image_generate(
     if not api_key:
         raise ValueError("OPENAI_API_KEY is required")
 
+    model = node.params.get("model", "gpt-image-1")
+
     body: dict[str, Any] = {
-        "model": node.params.get("model", "gpt-image-1"),
+        "model": model,
         "prompt": prompt_text,
-        "response_format": "b64_json",
     }
+
+    # gpt-image-1 always returns b64_json by default — no response_format needed.
+    # DALL-E models use response_format.
+    if model.startswith("dall-e"):
+        body["response_format"] = "b64_json"
 
     size = node.params.get("size")
     if size and size != "auto":
@@ -52,6 +58,9 @@ async def handle_openai_image_generate(
             },
             json=body,
         )
+        if response.status_code != 200:
+            error_detail = response.text
+            raise RuntimeError(f"OpenAI API error {response.status_code}: {error_detail}")
         response.raise_for_status()
 
     data = response.json()

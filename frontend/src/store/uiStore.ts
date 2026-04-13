@@ -13,11 +13,18 @@ interface UIState {
     settings: PanelState;
   };
   librarySearch: string;
+  contextMenu: {
+    visible: boolean;
+    position: { x: number; y: number };
+    nodeId: string | null;
+  };
 
   selectNode: (nodeId: string | null) => void;
   togglePanel: (panel: 'library' | 'inspector' | 'settings') => void;
   setPanelPosition: (panel: 'library' | 'inspector' | 'settings', position: { x: number; y: number }) => void;
   setLibrarySearch: (search: string) => void;
+  showContextMenu: (position: { x: number; y: number }, nodeId: string | null) => void;
+  hideContextMenu: () => void;
 }
 
 export const useUIStore = create<UIState>((set) => ({
@@ -28,6 +35,11 @@ export const useUIStore = create<UIState>((set) => ({
     settings: { visible: false, position: { x: -340, y: 60 } },
   },
   librarySearch: '',
+  contextMenu: {
+    visible: false,
+    position: { x: 0, y: 0 },
+    nodeId: null,
+  },
 
   selectNode: (nodeId) =>
     set((state) => ({
@@ -55,4 +67,14 @@ export const useUIStore = create<UIState>((set) => ({
     })),
 
   setLibrarySearch: (search) => set({ librarySearch: search }),
+
+  showContextMenu: (position, nodeId) =>
+    set({
+      contextMenu: { visible: true, position, nodeId },
+    }),
+
+  hideContextMenu: () =>
+    set({
+      contextMenu: { visible: false, position: { x: 0, y: 0 }, nodeId: null },
+    }),
 }));

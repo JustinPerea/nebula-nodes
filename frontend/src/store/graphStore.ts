@@ -11,7 +11,7 @@ import {
 import { v4 as uuidv4 } from 'uuid';
 import type { NodeData } from '../types';
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
-import { executeGraph as apiExecuteGraph } from '../lib/api';
+import { executeGraph as apiExecuteGraph, executeNode as apiExecuteNode } from '../lib/api';
 import { wsClient, type ExecutionEvent } from '../lib/wsClient';
 
 interface GraphState {
@@ -26,6 +26,11 @@ interface GraphState {
   executeGraph: () => Promise<void>;
   resetExecution: () => void;
   handleExecutionEvent: (event: ExecutionEvent) => void;
+  executeNode: (nodeId: string) => Promise<void>;
+  duplicateNode: (nodeId: string) => void;
+  deleteNode: (nodeId: string) => void;
+  loadGraph: (nodes: Node<NodeData>[], edges: Edge[]) => void;
+  clearGraph: () => void;
 }
 
 wsClient.connect();
@@ -124,6 +129,67 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       console.error('Failed to start execution:', err);
       set({ isExecuting: false });
     }
+  },
+
+  executeNode: async (nodeId) => {
+    const { nodes, edges, isExecuting, resetExecution } = get();
+    if (isExecuting) return;
+    resetExecution();
+    set({ isExecuting: true });
+    const graphNodes = nodes.map((n) => ({
+      id: n.id,
+      definitionId: n.data.definitionId,
+      params: n.data.params,
+      outputs: {},
+    }));
+    const graphEdges = edges.map((e) => ({
+      id: e.id,
+      source: e.source,
+      sourceHandle: e.sourceHandle,
+      target: e.target,
+      targetHandle: e.targetHandle,
+    }));
+    try {
+      const result = await apiExecuteNode(graphNodes, graphEdges, nodeId);
+      if (result.status === 'validation_error') set({ isExecuting: false });
+    } catch (err) {
+      console.error('Failed to start node execution:', err);
+      set({ isExecuting: false });
+    }
+  },
+
+  duplicateNode: (nodeId) => {
+    const node = get().nodes.find((n) => n.id === nodeId);
+    if (!node) return;
+    const newNode: Node<NodeData> = {
+      id: uuidv4(),
+      type: node.type,
+      position: { x: node.position.x + 20, y: node.position.y + 20 },
+      data: {
+        ...node.data,
+        state: 'idle' as const,
+        outputs: {},
+        error: undefined,
+        progress: undefined,
+        streamingText: undefined,
+      },
+    };
+    set((state) => ({ nodes: [...state.nodes, newNode] }));
+  },
+
+  deleteNode: (nodeId) => {
+    set((state) => ({
+      nodes: state.nodes.filter((n) => n.id !== nodeId),
+      edges: state.edges.filter((e) => e.source !== nodeId && e.target !== nodeId),
+    }));
+  },
+
+  loadGraph: (nodes, edges) => {
+    set({ nodes, edges, isExecuting: false });
+  },
+
+  clearGraph: () => {
+    set({ nodes: [], edges: [], isExecuting: false });
   },
 
   handleExecutionEvent: (event) => {

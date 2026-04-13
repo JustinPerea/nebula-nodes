@@ -3,8 +3,6 @@ import {
   ReactFlow,
   Background,
   BackgroundVariant,
-  MiniMap,
-  Controls,
   type NodeTypes,
   type EdgeTypes,
 } from '@xyflow/react';
@@ -87,22 +85,6 @@ export function Canvas() {
           gap={32}
           size={1}
           color="rgba(255, 255, 255, 0.04)"
-        />
-        <Controls
-          showInteractive={false}
-          position="bottom-right"
-          style={{ background: '#1c1c1c', border: '1px solid #333', borderRadius: 6 }}
-        />
-        <MiniMap
-          position="bottom-right"
-          style={{
-            background: '#111',
-            border: '1px solid #333',
-            borderRadius: 6,
-            marginBottom: 50,
-          }}
-          maskColor="rgba(0, 0, 0, 0.6)"
-          nodeColor="#333"
         />
       </ReactFlow>
     </div>
