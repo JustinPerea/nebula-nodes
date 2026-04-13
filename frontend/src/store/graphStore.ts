@@ -19,6 +19,7 @@ import {
   type OpenRouterModel,
 } from '../lib/api';
 import { wsClient, type ExecutionEvent } from '../lib/wsClient';
+import { useUIStore } from './uiStore';
 
 // ---------------------------------------------------------------------------
 // Undo/Redo types and helpers
@@ -360,11 +361,27 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     for (const param of definition.params) {
       if (param.default !== undefined) defaults[param.key] = param.default;
     }
+
+    // Determine node type — reroute gets its own minimal dot renderer
+    const nodeType = definitionId === 'reroute' ? 'reroute-node' : 'model-node';
+
+    // Check API key status from settings cache
+    let keyStatus: 'missing' | undefined;
+    const { settingsCache } = useUIStore.getState();
+    if (settingsCache.loaded && definition.envKeyName) {
+      const keyNames = Array.isArray(definition.envKeyName)
+        ? definition.envKeyName
+        : [definition.envKeyName];
+      if (keyNames.length > 0 && !keyNames.some((k) => Boolean(settingsCache.apiKeys[k]))) {
+        keyStatus = 'missing';
+      }
+    }
+
     const newNode: Node<NodeData> = {
       id: uuidv4(),
-      type: 'model-node',
+      type: nodeType,
       position,
-      data: { label: definition.displayName, definitionId, params: defaults, state: 'idle', outputs: {} },
+      data: { label: definition.displayName, definitionId, params: defaults, state: 'idle', outputs: {}, keyStatus },
     };
     set((state) => ({ nodes: [...state.nodes, newNode] }));
   },
@@ -386,6 +403,18 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       'fal-universal': 'fal',
     };
 
+    // Check API key status from settings cache
+    let keyStatus: 'missing' | undefined;
+    const { settingsCache } = useUIStore.getState();
+    if (settingsCache.loaded && definition.envKeyName) {
+      const keyNames = Array.isArray(definition.envKeyName)
+        ? definition.envKeyName
+        : [definition.envKeyName];
+      if (keyNames.length > 0 && !keyNames.some((k) => Boolean(settingsCache.apiKeys[k]))) {
+        keyStatus = 'missing';
+      }
+    }
+
     const newNode: Node<DynamicNodeData> = {
       id: uuidv4(),
       type: 'dynamic-node',
@@ -396,6 +425,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         params: defaults,
         state: 'idle',
         outputs: {},
+        keyStatus,
         isDynamic: true,
         providerType: providerMap[definitionId] ?? 'openrouter',
         dynamicInputPorts: definition.inputPorts.map((p) => ({

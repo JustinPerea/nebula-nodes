@@ -18,6 +18,10 @@ interface UIState {
     position: { x: number; y: number };
     nodeId: string | null;
   };
+  settingsCache: {
+    apiKeys: Record<string, string>;
+    loaded: boolean;
+  };
 
   selectNode: (nodeId: string | null) => void;
   togglePanel: (panel: 'library' | 'inspector' | 'settings') => void;
@@ -25,6 +29,7 @@ interface UIState {
   setLibrarySearch: (search: string) => void;
   showContextMenu: (position: { x: number; y: number }, nodeId: string | null) => void;
   hideContextMenu: () => void;
+  setSettingsCache: (apiKeys: Record<string, string>) => void;
 }
 
 export const useUIStore = create<UIState>((set) => ({
@@ -40,6 +45,7 @@ export const useUIStore = create<UIState>((set) => ({
     position: { x: 0, y: 0 },
     nodeId: null,
   },
+  settingsCache: { apiKeys: {}, loaded: false },
 
   selectNode: (nodeId) =>
     set((state) => ({
@@ -77,4 +83,7 @@ export const useUIStore = create<UIState>((set) => ({
     set({
       contextMenu: { visible: false, position: { x: 0, y: 0 }, nodeId: null },
     }),
+
+  setSettingsCache: (apiKeys) =>
+    set({ settingsCache: { apiKeys, loaded: true } }),
 }));

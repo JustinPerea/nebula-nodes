@@ -101,6 +101,7 @@ export function Settings() {
     try {
       await updateSettings({ apiKeys, routing, outputPath: outputPath || null });
       setSaveStatus('saved');
+      window.dispatchEvent(new CustomEvent('nebula:settings-saved'));
       setTimeout(() => setSaveStatus('idle'), 2000);
     } catch (err) {
       console.error('Failed to save settings:', err);
