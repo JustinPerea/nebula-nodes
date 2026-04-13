@@ -121,3 +121,36 @@
   border-radius: 1px;
   transition: width 0.3s ease;
 }
+
+.model-node__preview-text {
+  background: #161616;
+  border: 1px solid #2a2a2a;
+  border-radius: 4px;
+  padding: 8px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #aaa;
+  max-height: 120px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  scrollbar-width: thin;
+  scrollbar-color: #333 transparent;
+}
+
+.model-node__preview-text--streaming {
+  border-color: #2196F3;
+  color: #ccc;
+}
+
+.model-node__preview-text--streaming::after {
+  content: '\25AE';
+  animation: blink-cursor 0.8s step-end infinite;
+  color: #2196F3;
+  margin-left: 1px;
+}
+
+@keyframes blink-cursor {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}

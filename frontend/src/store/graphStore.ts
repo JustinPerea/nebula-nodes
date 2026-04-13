@@ -132,7 +132,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         get().updateNodeData(event.nodeId, { state: 'queued' });
         break;
       case 'executing':
-        get().updateNodeData(event.nodeId, { state: 'executing', progress: 0 });
+        get().updateNodeData(event.nodeId, { state: 'executing', progress: 0, streamingText: undefined });
         break;
       case 'progress':
         get().updateNodeData(event.nodeId, { progress: event.value });
@@ -153,9 +153,12 @@ export const useGraphStore = create<GraphState>((set, get) => ({
             outputs[key] = outputVal;
           }
         }
-        get().updateNodeData(event.nodeId, { state: 'complete', outputs, progress: undefined });
+        get().updateNodeData(event.nodeId, { state: 'complete', outputs, progress: undefined, streamingText: undefined });
         break;
       }
+      case 'streamDelta':
+        get().updateNodeData(event.nodeId, { streamingText: event.accumulated });
+        break;
       case 'error':
         get().updateNodeData(event.nodeId, { state: 'error', error: event.error, progress: undefined });
         break;

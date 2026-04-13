@@ -9,6 +9,7 @@ from .events import (
     ValidationErrorEvent,
     ValidationErrorDetail,
     GraphCompleteEvent,
+    StreamDeltaEvent,
 )
 
 __all__ = [
@@ -25,4 +26,5 @@ __all__ = [
     "ValidationErrorEvent",
     "ValidationErrorDetail",
     "GraphCompleteEvent",
+    "StreamDeltaEvent",
 ]

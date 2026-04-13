@@ -90,6 +90,7 @@ export interface NodeData {
   outputs: Record<string, PortValue>;
   error?: string;
   keyStatus?: 'ok' | 'missing';
+  streamingText?: string;
 }
 
 export type CanvasMode =

@@ -17,6 +17,11 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
   const categoryColor = CATEGORY_COLORS[definition.category] ?? '#424242';
   const stateClass = `model-node--${nodeData.state}`;
   const imageOutput = Object.values(nodeData.outputs).find((o) => o.type === 'Image' && o.value);
+  const textOutput = Object.values(nodeData.outputs).find((o) => o.type === 'Text' && o.value);
+  const videoOutput = Object.values(nodeData.outputs).find((o) => o.type === 'Video' && o.value);
+
+  const displayText = nodeData.streamingText ?? (textOutput && typeof textOutput.value === 'string' ? textOutput.value : null);
+  const isStreaming = nodeData.state === 'executing' && nodeData.streamingText != null;
 
   return (
     <div className={`model-node ${stateClass} ${selected ? 'model-node--selected' : ''}`} onClick={() => selectNode(id)}>
@@ -49,7 +54,21 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
         </div>
       )}
 
-      {nodeData.state === 'complete' && !imageOutput && Object.keys(nodeData.outputs).length > 0 && (
+      {displayText && (
+        <div className="model-node__preview">
+          <div className={`model-node__preview-text ${isStreaming ? 'model-node__preview-text--streaming' : ''}`}>
+            {displayText.length > 300 ? `${displayText.slice(0, 300)}...` : displayText}
+          </div>
+        </div>
+      )}
+
+      {nodeData.state === 'complete' && videoOutput && (
+        <div className="model-node__preview">
+          <div className="model-node__preview-placeholder">Video ready</div>
+        </div>
+      )}
+
+      {nodeData.state === 'complete' && !imageOutput && !textOutput && !videoOutput && Object.keys(nodeData.outputs).length > 0 && (
         <div className="model-node__preview">
           <div className="model-node__preview-placeholder">Output ready</div>
         </div>

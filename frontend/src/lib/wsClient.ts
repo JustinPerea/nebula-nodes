@@ -5,7 +5,8 @@ export type ExecutionEvent =
   | { type: 'executed'; nodeId: string; outputs: Record<string, { type: string; value: string | null }> }
   | { type: 'error'; nodeId: string; error: string; retryable: boolean }
   | { type: 'validationError'; errors: Array<{ nodeId: string; portId: string; message: string }> }
-  | { type: 'graphComplete'; duration: number; nodesExecuted: number };
+  | { type: 'graphComplete'; duration: number; nodesExecuted: number }
+  | { type: 'streamDelta'; nodeId: string; delta: string; accumulated: string };
 
 type EventHandler = (event: ExecutionEvent) => void;
 

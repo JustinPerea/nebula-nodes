@@ -51,6 +51,13 @@ class GraphCompleteEvent(BaseModel):
     nodes_executed: int
 
 
+class StreamDeltaEvent(BaseModel):
+    type: Literal["stream_delta"] = "stream_delta"
+    node_id: str
+    delta: str
+    accumulated: str
+
+
 ExecutionEvent = Union[
     QueuedEvent,
     ExecutingEvent,
@@ -59,4 +66,5 @@ ExecutionEvent = Union[
     ErrorEvent,
     ValidationErrorEvent,
     GraphCompleteEvent,
+    StreamDeltaEvent,
 ]
