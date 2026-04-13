@@ -1,16 +1,28 @@
-import { memo } from 'react';
+import { memo, useCallback } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import type { NodeData } from '../../types';
 import { NODE_DEFINITIONS } from '../../constants/nodeDefinitions';
 import { PORT_COLORS } from '../../lib/portCompatibility';
 import { CATEGORY_COLORS } from '../../constants/ports';
 import { useUIStore } from '../../store/uiStore';
+import { useGraphStore } from '../../store/graphStore';
 import '../../styles/nodes.css';
 
 function ModelNodeComponent({ id, data, selected }: NodeProps) {
   const nodeData = data as unknown as NodeData;
   const definition = NODE_DEFINITIONS[nodeData.definitionId];
   const selectNode = useUIStore((s) => s.selectNode);
+  const updateNodeData = useGraphStore((s) => s.updateNodeData);
+
+  const handleTextChange = useCallback(
+    (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+      e.stopPropagation();
+      updateNodeData(id, {
+        params: { ...nodeData.params, value: e.target.value },
+      });
+    },
+    [id, nodeData.params, updateNodeData]
+  );
 
   if (!definition) return <div className="model-node model-node--error">Unknown node type</div>;
 
@@ -22,13 +34,14 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
 
   const displayText = nodeData.streamingText ?? (textOutput && typeof textOutput.value === 'string' ? textOutput.value : null);
   const isStreaming = nodeData.state === 'executing' && nodeData.streamingText != null;
+  const isTextInput = nodeData.definitionId === 'text-input';
 
   return (
     <div className={`model-node ${stateClass} ${selected ? 'model-node--selected' : ''}`} onClick={() => selectNode(id)}>
       <div className="model-node__header">
         <span className="model-node__category-dot" style={{ backgroundColor: categoryColor }} />
         <span className="model-node__label">{nodeData.label}</span>
-        {nodeData.keyStatus === 'missing' && <span className="model-node__badge model-node__badge--warning" title="API Key Missing">⚠</span>}
+        {nodeData.keyStatus === 'missing' && <span className="model-node__badge model-node__badge--warning" title="API Key Missing">&#x26A0;</span>}
       </div>
 
       {definition.inputPorts.length > 0 && (
@@ -39,6 +52,22 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
               <span className="model-node__port-label">{port.label}</span>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Inline textarea for text-input nodes */}
+      {isTextInput && (
+        <div className="model-node__inline-textarea">
+          <textarea
+            className="model-node__textarea nodrag nowheel"
+            value={String(nodeData.params.value ?? '')}
+            onChange={handleTextChange}
+            onMouseDown={(e) => e.stopPropagation()}
+            onKeyDown={(e) => e.stopPropagation()}
+            placeholder="Enter text or prompt..."
+            rows={4}
+            spellCheck={false}
+          />
         </div>
       )}
 
@@ -54,7 +83,7 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
         </div>
       )}
 
-      {displayText && (
+      {displayText && !isTextInput && (
         <div className="model-node__preview">
           <div className={`model-node__preview-text ${isStreaming ? 'model-node__preview-text--streaming' : ''}`}>
             {displayText.length > 300 ? `${displayText.slice(0, 300)}...` : displayText}
