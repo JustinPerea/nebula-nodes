@@ -1,15 +1,58 @@
+import { useEffect, useCallback } from 'react';
 import { useReactFlow } from '@xyflow/react';
 import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
+import { saveToFile, loadFromFile } from '../../lib/graphFile';
+import type { NodeData } from '../../types';
+import type { Node } from '@xyflow/react';
 import '../../styles/panels.css';
 
 export function Toolbar() {
-  const { fitView } = useReactFlow();
+  const { fitView, getViewport } = useReactFlow();
   const togglePanel = useUIStore((s) => s.togglePanel);
   const executeGraph = useGraphStore((s) => s.executeGraph);
   const resetExecution = useGraphStore((s) => s.resetExecution);
   const isExecuting = useGraphStore((s) => s.isExecuting);
   const nodeCount = useGraphStore((s) => s.nodes.length);
+
+  const handleSave = useCallback(async () => {
+    const { nodes, edges } = useGraphStore.getState();
+    const viewport = getViewport();
+    await saveToFile(nodes as Node<NodeData>[], edges, viewport);
+  }, [getViewport]);
+
+  const handleLoad = useCallback(async () => {
+    const result = await loadFromFile();
+    if (!result) return; // User cancelled
+
+    if (result.warnings.length > 0) {
+      console.warn('[nebula] Load warnings:', result.warnings);
+    }
+
+    useGraphStore.getState().loadGraph(
+      result.nodes as Node<NodeData>[],
+      result.edges,
+    );
+
+    // Fit to loaded graph after a tick
+    setTimeout(() => fitView({ padding: 0.2, duration: 300 }), 50);
+  }, [fitView]);
+
+  // Listen for custom events from keyboard shortcuts (Ctrl+S, Ctrl+O)
+  useEffect(() => {
+    function onSave() {
+      handleSave();
+    }
+    function onLoad() {
+      handleLoad();
+    }
+    window.addEventListener('nebula:save', onSave);
+    window.addEventListener('nebula:load', onLoad);
+    return () => {
+      window.removeEventListener('nebula:save', onSave);
+      window.removeEventListener('nebula:load', onLoad);
+    };
+  }, [handleSave, handleLoad]);
 
   return (
     <div className="toolbar">
@@ -31,6 +74,9 @@ export function Toolbar() {
           {'\u25B6 Run'}
         </button>
       )}
+      <div className="toolbar__divider" />
+      <button className="toolbar__button" onClick={handleSave} title="Save graph (Ctrl+S)">Save</button>
+      <button className="toolbar__button" onClick={handleLoad} title="Load graph (Ctrl+O)">Load</button>
       <div className="toolbar__divider" />
       <button className="toolbar__button" onClick={() => fitView({ padding: 0.2, duration: 300 })} title="Fit to screen">Fit</button>
       <div className="toolbar__divider" />
