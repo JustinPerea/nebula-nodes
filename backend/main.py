@@ -15,6 +15,9 @@ from execution.engine import execute_graph, validate_graph, CycleError
 from execution.sync_runner import get_handler_registry
 from services.settings import load_settings, save_settings, get_api_key
 from services.output import OUTPUT_ROOT
+from services.cache import ExecutionCache
+
+execution_cache = ExecutionCache(ttl=3600)
 
 app = FastAPI(title="Nebula Node Backend", version="0.1.0")
 
@@ -168,6 +171,7 @@ async def execute(request: ExecuteRequest) -> dict:
             api_keys=api_keys,
             handler_registry=handler_registry,
             emit=manager.broadcast,
+            cache=execution_cache,
         )
 
     asyncio.create_task(_run())

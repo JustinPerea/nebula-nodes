@@ -6,6 +6,7 @@ from graphlib import TopologicalSorter, CycleError as _GraphlibCycleError
 from typing import Any, Callable, Awaitable
 
 from models.graph import GraphNode, GraphEdge, PortValueDict
+from services.cache import ExecutionCache
 from models.events import (
     ExecutionEvent,
     QueuedEvent,
@@ -145,6 +146,7 @@ async def execute_graph(
     api_keys: dict[str, str],
     handler_registry: dict[str, NodeHandler],
     emit: Callable[[ExecutionEvent], Awaitable[None]],
+    cache: ExecutionCache | None = None,
 ) -> None:
     start_time = time.monotonic()
     nodes_executed = 0
@@ -167,6 +169,25 @@ async def execute_graph(
                     resolved_inputs[edge.target_handle] = upstream_outputs[edge.source_handle]
 
         try:
+            cache_key: str | None = None
+            if cache is not None:
+                inputs_for_key = {
+                    k: {"type": v.type, "value": v.value}
+                    for k, v in resolved_inputs.items()
+                }
+                cache_key = ExecutionCache.get_key(
+                    node.definition_id, dict(node.params), inputs_for_key
+                )
+                cached_outputs = cache.get(cache_key)
+                if cached_outputs is not None:
+                    outputs_cache[nid] = {
+                        k: PortValueDict(type=v.get("type", "Any"), value=v.get("value"))
+                        for k, v in cached_outputs.items()
+                    }
+                    await emit(ExecutedEvent(node_id=nid, outputs=cached_outputs))
+                    nodes_executed += 1
+                    continue
+
             handler = handler_registry.get(node.definition_id)
             if handler is None:
                 if node.definition_id == "text-input":
@@ -191,6 +212,9 @@ async def execute_graph(
                 k: PortValueDict(type=v.get("type", "Any"), value=v.get("value"))
                 for k, v in node_outputs.items()
             }
+
+            if cache is not None and cache_key is not None and handler is not None:
+                cache.set(cache_key, node_outputs)
 
             await emit(ExecutedEvent(node_id=nid, outputs=node_outputs))
             nodes_executed += 1

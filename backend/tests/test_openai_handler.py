@@ -70,7 +70,8 @@ async def test_generates_image_and_saves_file() -> None:
     body = call_kwargs.kwargs.get("json") or call_kwargs[1].get("json")
     assert body["model"] == "gpt-image-1"
     assert body["prompt"] == "a red pixel"
-    assert body["response_format"] == "b64_json"
+    # gpt-image-1 returns b64_json by default — response_format is omitted for non-DALL-E models
+    assert "response_format" not in body
 
 
 @pytest.mark.asyncio
