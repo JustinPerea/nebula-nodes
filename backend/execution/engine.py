@@ -85,6 +85,41 @@ def topological_sort(nodes: list[GraphNode], edges: list[GraphEdge]) -> list[str
         raise CycleError(str(exc)) from exc
 
 
+def get_subgraph(
+    nodes: list[GraphNode],
+    edges: list[GraphEdge],
+    target_node_id: str,
+) -> tuple[list[GraphNode], list[GraphEdge]]:
+    """Return the subgraph of all ancestors of target_node_id (inclusive).
+
+    Traverses edges in reverse (target -> source) to find every node that
+    feeds into the target. Returns filtered lists of nodes and edges that
+    belong to this subgraph.
+    """
+    # Build reverse adjacency: node_id -> set of upstream node_ids
+    reverse_adj: dict[str, set[str]] = {n.id: set() for n in nodes}
+    for edge in edges:
+        if edge.target in reverse_adj:
+            reverse_adj[edge.target].add(edge.source)
+
+    # BFS from target node to find all ancestors
+    needed: set[str] = set()
+    queue = [target_node_id]
+    while queue:
+        nid = queue.pop()
+        if nid in needed:
+            continue
+        needed.add(nid)
+        for upstream in reverse_adj.get(nid, set()):
+            if upstream not in needed:
+                queue.append(upstream)
+
+    node_map = {n.id: n for n in nodes}
+    sub_nodes = [node_map[nid] for nid in needed if nid in node_map]
+    sub_edges = [e for e in edges if e.source in needed and e.target in needed]
+    return sub_nodes, sub_edges
+
+
 def validate_graph(
     nodes: list[GraphNode],
     edges: list[GraphEdge],

@@ -32,3 +32,11 @@ class GraphEdge(BaseModel):
 class ExecuteRequest(BaseModel):
     nodes: list[GraphNode]
     edges: list[GraphEdge]
+
+
+class ExecuteNodeRequest(BaseModel):
+    nodes: list[GraphNode]
+    edges: list[GraphEdge]
+    target_node_id: str = Field(alias="targetNodeId")
+
+    model_config = {"populate_by_name": True}

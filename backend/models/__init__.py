@@ -1,4 +1,4 @@
-from .graph import GraphNode, GraphEdge, ExecuteRequest, PortValueDict
+from .graph import GraphNode, GraphEdge, ExecuteRequest, ExecuteNodeRequest, PortValueDict
 from .events import (
     ExecutionEvent,
     QueuedEvent,
@@ -16,6 +16,7 @@ __all__ = [
     "GraphNode",
     "GraphEdge",
     "ExecuteRequest",
+    "ExecuteNodeRequest",
     "PortValueDict",
     "ExecutionEvent",
     "QueuedEvent",

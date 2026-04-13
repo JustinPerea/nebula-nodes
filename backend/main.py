@@ -9,9 +9,9 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from models import ExecuteRequest, ValidationErrorEvent
+from models import ExecuteRequest, ExecuteNodeRequest, ValidationErrorEvent
 from models.events import ExecutionEvent
-from execution.engine import execute_graph, validate_graph, CycleError
+from execution.engine import execute_graph, validate_graph, topological_sort, get_subgraph, CycleError
 from execution.sync_runner import get_handler_registry
 from services.settings import load_settings, save_settings, get_api_key
 from services.output import OUTPUT_ROOT
@@ -146,7 +146,6 @@ async def execute(request: ExecuteRequest) -> dict:
         return {"status": "validation_error", "errorCount": len(errors)}
 
     try:
-        from execution.engine import topological_sort
         topological_sort(request.nodes, request.edges)
     except CycleError as exc:
         await manager.broadcast(
@@ -177,3 +176,55 @@ async def execute(request: ExecuteRequest) -> dict:
     asyncio.create_task(_run())
 
     return {"status": "started"}
+
+
+@app.post("/api/execute-node")
+async def execute_node(request: ExecuteNodeRequest) -> dict:
+    """Execute only the subgraph feeding into a specific target node."""
+    settings = load_settings()
+    api_keys = settings.get("apiKeys", {})
+
+    # Compute the subgraph: target node + all its ancestors
+    sub_nodes, sub_edges = get_subgraph(
+        request.nodes, request.edges, request.target_node_id
+    )
+
+    if not sub_nodes:
+        return {"status": "error", "message": f"Node '{request.target_node_id}' not found in graph"}
+
+    errors = validate_graph(sub_nodes, sub_edges, api_keys)
+    if errors:
+        await manager.broadcast(ValidationErrorEvent(errors=errors))
+        return {"status": "validation_error", "errorCount": len(errors)}
+
+    try:
+        topological_sort(sub_nodes, sub_edges)
+    except CycleError as exc:
+        await manager.broadcast(
+            ValidationErrorEvent(
+                errors=[
+                    {
+                        "node_id": "",
+                        "port_id": "",
+                        "message": f"Subgraph contains a cycle: {exc}",
+                    }
+                ]
+            )
+        )
+        return {"status": "cycle_error"}
+
+    handler_registry = get_handler_registry(emit=manager.broadcast)
+
+    async def _run() -> None:
+        await execute_graph(
+            nodes=sub_nodes,
+            edges=sub_edges,
+            api_keys=api_keys,
+            handler_registry=handler_registry,
+            emit=manager.broadcast,
+            cache=execution_cache,
+        )
+
+    asyncio.create_task(_run())
+
+    return {"status": "started", "nodeCount": len(sub_nodes)}
