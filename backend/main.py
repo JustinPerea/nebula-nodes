@@ -162,7 +162,7 @@ async def execute(request: ExecuteRequest) -> dict:
         )
         return {"status": "cycle_error"}
 
-    handler_registry = get_handler_registry()
+    handler_registry = get_handler_registry(emit=manager.broadcast)
 
     async def _run() -> None:
         await execute_graph(
