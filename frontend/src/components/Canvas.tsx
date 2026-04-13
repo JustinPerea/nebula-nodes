@@ -75,10 +75,14 @@ export function Canvas() {
     hideContextMenu();
   }, [hideContextMenu]);
 
-  // Keyboard shortcuts: Ctrl+Enter to run, Ctrl+S to save, Ctrl+O to load
+  // Keyboard shortcuts: Ctrl+Enter, Ctrl+S, Ctrl+O, Ctrl+A, Ctrl+D, Ctrl+Z, Ctrl+Shift+Z, Ctrl+C, Ctrl+V
   const onKeyDown = useCallback(
     (event: React.KeyboardEvent) => {
       const isCtrlOrCmd = event.ctrlKey || event.metaKey;
+
+      // Don't capture shortcuts when user is typing in an input/textarea/select
+      const tag = (event.target as HTMLElement).tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
 
       // Ctrl+Enter — Run graph
       if (isCtrlOrCmd && event.key === 'Enter' && !isExecuting) {
@@ -99,6 +103,48 @@ export function Canvas() {
       if (isCtrlOrCmd && event.key === 'o') {
         event.preventDefault();
         window.dispatchEvent(new CustomEvent('nebula:load'));
+        return;
+      }
+
+      // Ctrl+A — Select all nodes
+      if (isCtrlOrCmd && event.key === 'a') {
+        event.preventDefault();
+        useGraphStore.getState().selectAll();
+        return;
+      }
+
+      // Ctrl+D — Duplicate selected nodes
+      if (isCtrlOrCmd && event.key === 'd') {
+        event.preventDefault();
+        useGraphStore.getState().duplicateSelected();
+        return;
+      }
+
+      // Ctrl+Z — Undo (must check before Ctrl+Shift+Z to avoid conflict)
+      if (isCtrlOrCmd && !event.shiftKey && event.key === 'z') {
+        event.preventDefault();
+        useGraphStore.getState().undo();
+        return;
+      }
+
+      // Ctrl+Shift+Z — Redo
+      if (isCtrlOrCmd && event.shiftKey && event.key === 'z') {
+        event.preventDefault();
+        useGraphStore.getState().redo();
+        return;
+      }
+
+      // Ctrl+C — Copy selected nodes
+      if (isCtrlOrCmd && event.key === 'c') {
+        event.preventDefault();
+        useGraphStore.getState().copySelected();
+        return;
+      }
+
+      // Ctrl+V — Paste
+      if (isCtrlOrCmd && event.key === 'v') {
+        event.preventDefault();
+        useGraphStore.getState().pasteClipboard();
         return;
       }
     },
