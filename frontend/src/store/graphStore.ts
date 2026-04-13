@@ -9,7 +9,7 @@ import {
   type Connection,
 } from '@xyflow/react';
 import { v4 as uuidv4 } from 'uuid';
-import type { NodeData } from '../types';
+import type { NodeData, DynamicNodeData, PortDataType } from '../types';
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 import { executeGraph as apiExecuteGraph, executeNode as apiExecuteNode } from '../lib/api';
 import { wsClient, type ExecutionEvent } from '../lib/wsClient';
@@ -19,6 +19,7 @@ interface GraphState {
   edges: Edge[];
   isExecuting: boolean;
   addNode: (definitionId: string, position: { x: number; y: number }) => void;
+  addDynamicNode: (definitionId: string, position: { x: number; y: number }) => void;
   onNodesChange: (changes: NodeChange[]) => void;
   onEdgesChange: (changes: EdgeChange[]) => void;
   onConnect: (connection: Connection) => void;
@@ -44,6 +45,11 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   isExecuting: false,
 
   addNode: (definitionId, position) => {
+    const DYNAMIC_IDS = ['openrouter-universal', 'replicate-universal', 'fal-universal'];
+    if (DYNAMIC_IDS.includes(definitionId)) {
+      get().addDynamicNode(definitionId, position);
+      return;
+    }
     const definition = NODE_DEFINITIONS[definitionId];
     if (!definition) return;
     const defaults: Record<string, unknown> = {};
@@ -57,6 +63,51 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       data: { label: definition.displayName, definitionId, params: defaults, state: 'idle', outputs: {} },
     };
     set((state) => ({ nodes: [...state.nodes, newNode] }));
+  },
+
+  addDynamicNode: (definitionId, position) => {
+    const definition = NODE_DEFINITIONS[definitionId];
+    if (!definition) return;
+    const defaults: Record<string, unknown> = {};
+    for (const param of definition.params) {
+      if (param.default !== undefined) defaults[param.key] = param.default;
+    }
+
+    const providerMap: Record<string, 'openrouter' | 'replicate' | 'fal'> = {
+      'openrouter-universal': 'openrouter',
+      'replicate-universal': 'replicate',
+      'fal-universal': 'fal',
+    };
+
+    const newNode: Node<DynamicNodeData> = {
+      id: uuidv4(),
+      type: 'dynamic-node',
+      position,
+      data: {
+        label: definition.displayName,
+        definitionId,
+        params: defaults,
+        state: 'idle',
+        outputs: {},
+        isDynamic: true,
+        providerType: providerMap[definitionId] ?? 'openrouter',
+        dynamicInputPorts: definition.inputPorts.map((p) => ({
+          id: p.id,
+          label: p.label,
+          dataType: p.dataType,
+          required: p.required,
+        })),
+        dynamicOutputPorts: definition.outputPorts.map((p) => ({
+          id: p.id,
+          label: p.label,
+          dataType: p.dataType,
+          required: p.required,
+        })),
+        dynamicParams: [],
+        providerMeta: {},
+      },
+    };
+    set((state) => ({ nodes: [...state.nodes, newNode as unknown as Node<NodeData>] }));
   },
 
   onNodesChange: (changes) => {
@@ -80,11 +131,21 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     const sourceNode = get().nodes.find((n) => n.id === connection.source);
     const targetNode = get().nodes.find((n) => n.id === connection.target);
     if (!sourceNode || !targetNode) return;
-    const sourceDef = NODE_DEFINITIONS[sourceNode.data.definitionId];
-    const targetDef = NODE_DEFINITIONS[targetNode.data.definitionId];
-    if (!sourceDef || !targetDef) return;
-    const sourcePort = sourceDef.outputPorts.find((p) => p.id === connection.sourceHandle);
-    const dataType = sourcePort?.dataType ?? 'Any';
+
+    // Resolve source port data type — static or dynamic
+    let dataType: PortDataType = 'Any';
+    const sourceDynamic = sourceNode.data as unknown as DynamicNodeData | undefined;
+    if (sourceDynamic?.isDynamic && sourceDynamic.dynamicOutputPorts) {
+      const dynPort = sourceDynamic.dynamicOutputPorts.find((p) => p.id === connection.sourceHandle);
+      if (dynPort) dataType = dynPort.dataType;
+    } else {
+      const sourceDef = NODE_DEFINITIONS[sourceNode.data.definitionId];
+      if (sourceDef) {
+        const sourcePort = sourceDef.outputPorts.find((p) => p.id === connection.sourceHandle);
+        if (sourcePort) dataType = sourcePort.dataType;
+      }
+    }
+
     const newEdge: Edge = {
       id: uuidv4(),
       source: connection.source,

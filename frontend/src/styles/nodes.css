@@ -188,3 +188,16 @@
 .model-node__textarea::placeholder {
   color: #444;
 }
+
+.dynamic-node__model-badge {
+  padding: 2px 8px;
+  margin: 0 8px 4px;
+  font-size: 10px;
+  color: #aaa;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: 'SF Mono', 'Menlo', monospace;
+}

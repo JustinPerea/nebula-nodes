@@ -15,7 +15,8 @@ export type NodeCategory =
   | 'audio-gen'
   | 'transform'
   | 'analyzer'
-  | 'utility';
+  | 'utility'
+  | 'universal';
 
 export type NodeState = 'idle' | 'queued' | 'executing' | 'complete' | 'error';
 
@@ -91,6 +92,37 @@ export interface NodeData {
   error?: string;
   keyStatus?: 'ok' | 'missing';
   streamingText?: string;
+}
+
+export interface DynamicPortDefinition {
+  id: string;
+  label: string;
+  dataType: PortDataType;
+  required: boolean;
+}
+
+export interface DynamicParamDefinition {
+  key: string;
+  label: string;
+  type: 'string' | 'integer' | 'float' | 'boolean' | 'enum' | 'textarea' | 'file';
+  required: boolean;
+  default?: unknown;
+  options?: Array<{ label: string; value: string | number }>;
+  min?: number;
+  max?: number;
+  step?: number;
+  placeholder?: string;
+}
+
+export interface DynamicNodeData extends NodeData {
+  isDynamic: true;
+  providerType: 'openrouter' | 'replicate' | 'fal';
+  modelId?: string;
+  dynamicInputPorts: DynamicPortDefinition[];
+  dynamicOutputPorts: DynamicPortDefinition[];
+  dynamicParams: DynamicParamDefinition[];
+  /** Provider-specific metadata (e.g. Replicate version_id, FAL endpoint_id) */
+  providerMeta: Record<string, unknown>;
 }
 
 export type CanvasMode =

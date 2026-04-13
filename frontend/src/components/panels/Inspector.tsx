@@ -3,7 +3,7 @@ import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
 import { NODE_DEFINITIONS } from '../../constants/nodeDefinitions';
 import { CATEGORY_COLORS } from '../../constants/ports';
-import type { NodeData } from '../../types';
+import type { NodeData, DynamicNodeData } from '../../types';
 import '../../styles/panels.css';
 
 export function Inspector() {
@@ -44,7 +44,9 @@ export function Inspector() {
     };
   }, [setPanelPosition]);
 
-  if (!visible || !selectedNode || !definition || !nodeData) return null;
+  if (!visible || !selectedNode || !nodeData) return null;
+  // For dynamic nodes, definition may be a shell — that's fine
+  if (!definition && !(nodeData as unknown as DynamicNodeData)?.isDynamic) return null;
 
   const resolvedX = position.x < 0 ? window.innerWidth + position.x : position.x;
 
@@ -84,7 +86,7 @@ export function Inspector() {
               width: 8,
               height: 8,
               borderRadius: '50%',
-              backgroundColor: CATEGORY_COLORS[definition.category],
+              backgroundColor: CATEGORY_COLORS[definition?.category ?? 'universal'],
               flexShrink: 0,
             }}
           />
@@ -93,7 +95,7 @@ export function Inspector() {
           </span>
         </div>
 
-        {definition.params.map((param) => (
+        {(definition?.params ?? []).map((param) => (
           <div key={param.key} className="inspector__section">
             <div className="inspector__label">{param.label}</div>
             {param.type === 'enum' && param.options ? (
@@ -146,6 +148,56 @@ export function Inspector() {
             )}
           </div>
         ))}
+
+        {/* Dynamic params for dynamic nodes */}
+        {(() => {
+          const dynData = nodeData as unknown as DynamicNodeData;
+          const hasDynamicParams = dynData?.isDynamic && dynData.dynamicParams?.length > 0;
+          if (!hasDynamicParams) return null;
+          return dynData.dynamicParams.map((param) => (
+            <div key={param.key} className="inspector__section">
+              <div className="inspector__label">{param.label}</div>
+              {param.type === 'enum' && param.options ? (
+                <select
+                  className="inspector__field"
+                  value={String(nodeData.params[param.key] ?? param.default ?? '')}
+                  onChange={(e) => onParamChange(param.key, e.target.value)}
+                >
+                  {param.options.map((opt) => (
+                    <option key={String(opt.value)} value={String(opt.value)}>{opt.label}</option>
+                  ))}
+                </select>
+              ) : param.type === 'integer' || param.type === 'float' ? (
+                <input
+                  className="inspector__field"
+                  type="number"
+                  value={String(nodeData.params[param.key] ?? param.default ?? '')}
+                  onChange={(e) => onParamChange(param.key, Number(e.target.value))}
+                  min={param.min}
+                  max={param.max}
+                  step={param.step ?? (param.type === 'float' ? 0.1 : 1)}
+                />
+              ) : param.type === 'boolean' ? (
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#aaa' }}>
+                  <input
+                    type="checkbox"
+                    checked={Boolean(nodeData.params[param.key] ?? param.default)}
+                    onChange={(e) => onParamChange(param.key, e.target.checked)}
+                  />
+                  {param.label}
+                </label>
+              ) : (
+                <input
+                  className="inspector__field"
+                  type="text"
+                  value={String(nodeData.params[param.key] ?? param.default ?? '')}
+                  onChange={(e) => onParamChange(param.key, e.target.value)}
+                  placeholder={param.placeholder}
+                />
+              )}
+            </div>
+          ));
+        })()}
 
         <div className="inspector__section" style={{ marginTop: 16, borderTop: '1px solid #2a2a2a', paddingTop: 8 }}>
           <div className="inspector__label">State</div>

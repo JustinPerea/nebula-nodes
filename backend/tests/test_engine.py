@@ -84,3 +84,25 @@ class TestValidateGraph:
         errors = validate_graph(nodes, [], {})
         key_errors = [e for e in errors if "api key" in e.message.lower()]
         assert len(key_errors) == 0
+
+
+class TestDynamicNodeValidation:
+    def test_dynamic_node_skips_port_validation(self) -> None:
+        """Dynamic nodes not in NODE_DEFS should not fail port validation."""
+        nodes = [_node("a", "openrouter-universal")]
+        errors = validate_graph(nodes, [], {"OPENROUTER_API_KEY": "or-test"})
+        port_errors = [e for e in errors if e.port_id]
+        assert len(port_errors) == 0
+
+    def test_dynamic_node_missing_key(self) -> None:
+        """Dynamic nodes should still validate API keys."""
+        nodes = [_node("a", "openrouter-universal")]
+        errors = validate_graph(nodes, [], {})
+        key_errors = [e for e in errors if "OPENROUTER_API_KEY" in e.message]
+        assert len(key_errors) == 1
+
+    def test_unknown_dynamic_node_passes(self) -> None:
+        """Truly unknown nodes should be silently skipped."""
+        nodes = [_node("a", "some-future-node-type")]
+        errors = validate_graph(nodes, [], {})
+        assert len(errors) == 0

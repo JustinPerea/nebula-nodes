@@ -300,6 +300,99 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     outputPorts: [],
     params: [],
   },
+
+  'openrouter-universal': {
+    id: 'openrouter-universal',
+    displayName: 'OpenRouter',
+    category: 'universal',
+    apiProvider: 'openrouter',
+    apiEndpoint: 'https://openrouter.ai/api/v1/chat/completions',
+    envKeyName: 'OPENROUTER_API_KEY',
+    executionPattern: 'stream',
+    inputPorts: [
+      { id: 'messages', label: 'Messages', dataType: 'Text', required: true },
+    ],
+    outputPorts: [
+      { id: 'text', label: 'Text', dataType: 'Text', required: false },
+    ],
+    params: [
+      {
+        key: 'model',
+        label: 'Model',
+        type: 'string',
+        required: true,
+        default: '',
+        placeholder: 'Loading models...',
+      },
+      {
+        key: 'temperature',
+        label: 'Temperature',
+        type: 'float',
+        required: false,
+        default: 1.0,
+        min: 0,
+        max: 2,
+        step: 0.1,
+      },
+      {
+        key: 'max_tokens',
+        label: 'Max Tokens',
+        type: 'integer',
+        required: false,
+        default: 4096,
+        min: 1,
+        max: 200000,
+      },
+    ],
+  },
+
+  'replicate-universal': {
+    id: 'replicate-universal',
+    displayName: 'Replicate',
+    category: 'universal',
+    apiProvider: 'replicate',
+    apiEndpoint: 'https://api.replicate.com/v1/predictions',
+    envKeyName: 'REPLICATE_API_TOKEN',
+    executionPattern: 'async-poll',
+    inputPorts: [],
+    outputPorts: [],
+    params: [
+      {
+        key: 'model_id',
+        label: 'Model ID',
+        type: 'string',
+        required: true,
+        default: '',
+        placeholder: 'owner/name (e.g. stability-ai/sdxl)',
+      },
+    ],
+  },
+
+  'fal-universal': {
+    id: 'fal-universal',
+    displayName: 'FAL',
+    category: 'universal',
+    apiProvider: 'fal',
+    apiEndpoint: 'https://queue.fal.run',
+    envKeyName: 'FAL_KEY',
+    executionPattern: 'async-poll',
+    inputPorts: [
+      { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
+    ],
+    outputPorts: [
+      { id: 'image', label: 'Image', dataType: 'Image', required: false },
+    ],
+    params: [
+      {
+        key: 'endpoint_id',
+        label: 'Endpoint',
+        type: 'string',
+        required: true,
+        default: 'fal-ai/flux-pro/v1.1-ultra',
+        placeholder: 'fal-ai/flux-pro/v1.1-ultra',
+      },
+    ],
+  },
 };
 
 export function getNodeDefinition(definitionId: string): ModelNodeDefinition | undefined {

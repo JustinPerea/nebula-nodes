@@ -13,6 +13,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   'transform': 'Transform',
   'analyzer': 'Analyzer',
   'utility': 'Utility',
+  'universal': 'Universal',
 };
 
 export function NodeLibrary() {

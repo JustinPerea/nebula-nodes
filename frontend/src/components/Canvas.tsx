@@ -11,12 +11,14 @@ import { useGraphStore } from '../store/graphStore';
 import { useUIStore } from '../store/uiStore';
 import { useIsValidConnection } from '../hooks/useIsValidConnection';
 import { ModelNode } from './nodes/ModelNode';
+import { DynamicNode } from './nodes/DynamicNode';
 import { TypedEdge } from './edges/TypedEdge';
 import { ContextMenu } from './ContextMenu';
 import '../styles/canvas.css';
 
 const nodeTypes: NodeTypes = {
   'model-node': ModelNode,
+  'dynamic-node': DynamicNode,
 };
 
 const edgeTypes: EdgeTypes = {

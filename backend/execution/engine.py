@@ -135,6 +135,21 @@ def validate_graph(
     for node in nodes:
         node_def = NODE_DEFS.get(node.definition_id)
         if not node_def:
+            # Dynamic node — still validate API key if definition_id is recognized
+            DYNAMIC_ENV_KEYS: dict[str, str] = {
+                "openrouter-universal": "OPENROUTER_API_KEY",
+                "replicate-universal": "REPLICATE_API_TOKEN",
+                "fal-universal": "FAL_KEY",
+            }
+            env_key = DYNAMIC_ENV_KEYS.get(node.definition_id)
+            if env_key and not api_keys.get(env_key):
+                errors.append(
+                    ValidationErrorDetail(
+                        node_id=node.id,
+                        port_id="",
+                        message=f"Missing API key: {env_key}",
+                    )
+                )
             continue
 
         for port in node_def["inputPorts"]:

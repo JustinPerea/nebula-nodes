@@ -8,6 +8,7 @@ export const CATEGORY_COLORS: Record<string, string> = {
   'transform': '#004D40',
   'analyzer': '#1B5E20',
   'utility': '#424242',
+  'universal': '#E65100',
 };
 
 export const PORT_DATA_TYPES: PortDataType[] = [

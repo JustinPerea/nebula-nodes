@@ -2,7 +2,7 @@ import { useCallback } from 'react';
 import { useReactFlow, getOutgoers, type Node, type Edge, type Connection } from '@xyflow/react';
 import { isPortCompatible } from '../lib/portCompatibility';
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
-import type { NodeData, PortDataType } from '../types';
+import type { NodeData, DynamicNodeData, PortDataType } from '../types';
 
 export function wouldCreateCycle(
   sourceId: string,
@@ -49,15 +49,39 @@ export function useIsValidConnection() {
       const targetNode = nodes.find((n) => n.id === connection.target) as Node<NodeData> | undefined;
       if (!sourceNode || !targetNode) return false;
 
-      const sourceDef = NODE_DEFINITIONS[sourceNode.data.definitionId];
-      const targetDef = NODE_DEFINITIONS[targetNode.data.definitionId];
-      if (!sourceDef || !targetDef) return false;
+      const sourceData = sourceNode.data as NodeData;
+      const targetData = targetNode.data as NodeData;
 
-      const sourcePort = sourceDef.outputPorts.find((p) => p.id === connection.sourceHandle);
-      const targetPort = targetDef.inputPorts.find((p) => p.id === connection.targetHandle);
-      if (!sourcePort || !targetPort) return false;
+      let sourcePortType: PortDataType | undefined;
+      let targetPortType: PortDataType | undefined;
 
-      return isPortCompatible(sourcePort.dataType, targetPort.dataType);
+      // Check static definitions first
+      const sourceDef = NODE_DEFINITIONS[sourceData.definitionId];
+      const targetDef = NODE_DEFINITIONS[targetData.definitionId];
+
+      if (sourceDef) {
+        const p = sourceDef.outputPorts.find((p) => p.id === connection.sourceHandle);
+        if (p) sourcePortType = p.dataType;
+      }
+      if (targetDef) {
+        const p = targetDef.inputPorts.find((p) => p.id === connection.targetHandle);
+        if (p) targetPortType = p.dataType;
+      }
+
+      // Fallback to dynamic ports
+      if (!sourcePortType && 'isDynamic' in sourceData) {
+        const dyn = sourceData as DynamicNodeData;
+        const p = dyn.dynamicOutputPorts?.find((p) => p.id === connection.sourceHandle);
+        if (p) sourcePortType = p.dataType;
+      }
+      if (!targetPortType && 'isDynamic' in targetData) {
+        const dyn = targetData as DynamicNodeData;
+        const p = dyn.dynamicInputPorts?.find((p) => p.id === connection.targetHandle);
+        if (p) targetPortType = p.dataType;
+      }
+
+      if (!sourcePortType || !targetPortType) return false;
+      return isPortCompatible(sourcePortType, targetPortType);
     },
     [getNodes, getEdges]
   );
