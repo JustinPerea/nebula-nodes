@@ -42,3 +42,32 @@ export async function updateSettings(settings: Record<string, unknown>): Promise
   if (!response.ok) throw new Error(`Update settings failed: ${response.status}`);
   return response.json();
 }
+
+export interface OpenRouterModel {
+  id: string;
+  name: string;
+  input_modalities: string[];
+  output_modalities: string[];
+  context_length: number;
+  pricing: Record<string, string>;
+}
+
+export async function fetchOpenRouterModels(): Promise<{ models: OpenRouterModel[]; count: number }> {
+  const response = await fetch(`${API_BASE}/openrouter/models`);
+  if (!response.ok) throw new Error(`Fetch OpenRouter models failed: ${response.status}`);
+  return response.json();
+}
+
+export interface ReplicateSchema {
+  version_id: string;
+  model_id: string;
+  input_schema: Record<string, unknown>;
+  output_schema: Record<string, unknown>;
+  description: string;
+}
+
+export async function fetchReplicateSchema(owner: string, name: string): Promise<ReplicateSchema> {
+  const response = await fetch(`${API_BASE}/replicate/schema/${encodeURIComponent(owner)}/${encodeURIComponent(name)}`);
+  if (!response.ok) throw new Error(`Fetch Replicate schema failed: ${response.status}`);
+  return response.json();
+}

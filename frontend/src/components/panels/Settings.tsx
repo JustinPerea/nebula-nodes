@@ -12,6 +12,8 @@ interface ApiKeyField {
 const API_KEY_FIELDS: ApiKeyField[] = [
   { key: 'OPENAI_API_KEY', label: 'OpenAI', placeholder: 'sk-...' },
   { key: 'ANTHROPIC_API_KEY', label: 'Anthropic', placeholder: 'sk-ant-...' },
+  { key: 'OPENROUTER_API_KEY', label: 'OpenRouter', placeholder: 'sk-or-...' },
+  { key: 'REPLICATE_API_TOKEN', label: 'Replicate', placeholder: 'r8_...' },
   { key: 'FAL_KEY', label: 'fal.ai', placeholder: 'fal_...' },
   { key: 'BFL_API_KEY', label: 'Black Forest Labs', placeholder: 'bfl-...' },
   { key: 'RUNWAY_API_KEY', label: 'Runway', placeholder: 'key_...' },

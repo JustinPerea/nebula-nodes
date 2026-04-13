@@ -16,6 +16,9 @@ from execution.sync_runner import get_handler_registry
 from services.settings import load_settings, save_settings, get_api_key
 from services.output import OUTPUT_ROOT
 from services.cache import ExecutionCache
+from routes.openrouter_proxy import router as openrouter_router
+from routes.replicate_proxy import router as replicate_router
+from routes.fal_proxy import router as fal_router
 
 execution_cache = ExecutionCache(ttl=3600)
 
@@ -32,6 +35,10 @@ app.add_middleware(
 # Serve output files as static assets
 OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
 app.mount("/api/outputs", StaticFiles(directory=str(OUTPUT_ROOT)), name="outputs")
+
+app.include_router(openrouter_router)
+app.include_router(replicate_router)
+app.include_router(fal_router)
 
 
 # ---------- WebSocket connection manager ----------
