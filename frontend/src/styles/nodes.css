@@ -1,0 +1,105 @@
+.model-node {
+  background: #1c1c1c;
+  border: 1px solid #333;
+  border-radius: 6px;
+  min-width: 200px;
+  max-width: 240px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 12px;
+  color: #ccc;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  border-left: 3px solid transparent;
+}
+
+.model-node--selected {
+  border-color: #555;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.5);
+}
+
+.model-node--idle { border-left-color: transparent; }
+.model-node--queued { border-left-color: #666; }
+.model-node--executing {
+  border-left-color: #2196F3;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+.model-node--complete { border-left-color: #4CAF50; }
+.model-node--error { border-left-color: #F44336; }
+
+@keyframes shimmer {
+  0%, 100% { border-left-color: #2196F3; }
+  50% { border-left-color: #64B5F6; }
+}
+
+.model-node__header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-bottom: 1px solid #2a2a2a;
+}
+
+.model-node__category-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.model-node__label {
+  flex: 1;
+  font-weight: 500;
+  color: #eee;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.model-node__badge { font-size: 11px; flex-shrink: 0; }
+.model-node__badge--warning { color: #FFC107; }
+
+.model-node__ports { padding: 6px 0; }
+
+.model-node__port-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 10px;
+  position: relative;
+}
+
+.model-node__port-row--output { justify-content: flex-end; }
+
+.model-node__port-label { font-size: 11px; color: #888; }
+
+.model-node__handle {
+  width: 10px !important;
+  height: 10px !important;
+  border: 2px solid rgba(255, 255, 255, 0.3) !important;
+  border-radius: 50% !important;
+  transition: transform 0.15s ease;
+}
+
+.model-node__handle:hover { transform: scale(1.4); }
+
+.model-node__preview {
+  padding: 6px 10px;
+  border-top: 1px solid #2a2a2a;
+}
+
+.model-node__preview-placeholder {
+  background: #161616;
+  border: 1px solid #2a2a2a;
+  border-radius: 4px;
+  padding: 8px;
+  text-align: center;
+  color: #555;
+  font-size: 11px;
+}
+
+.model-node__error {
+  padding: 4px 10px;
+  font-size: 10px;
+  color: #F44336;
+  background: rgba(244, 67, 54, 0.1);
+  border-top: 1px solid #2a2a2a;
+}
