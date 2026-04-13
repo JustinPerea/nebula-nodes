@@ -24,10 +24,15 @@ class AsyncPollConfig:
 
 
 def _get_nested(data: dict[str, Any], path: str) -> Any:
-    current = data
+    current: Any = data
     for key in path.split("."):
         if isinstance(current, dict):
             current = current[key]
+        elif isinstance(current, list):
+            try:
+                current = current[int(key)]
+            except (ValueError, IndexError):
+                raise KeyError(f"Cannot index list at '{key}' in path '{path}'")
         else:
             raise KeyError(f"Cannot traverse path '{path}' — hit non-dict at '{key}'")
     return current
