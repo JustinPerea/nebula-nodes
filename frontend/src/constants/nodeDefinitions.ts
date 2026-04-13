@@ -465,6 +465,319 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
     ],
   },
+
+  'dalle-3-generate': {
+    id: 'dalle-3-generate',
+    displayName: 'DALL-E 3',
+    category: 'image-gen',
+    apiProvider: 'openai',
+    apiEndpoint: '/v1/images/generations',
+    envKeyName: 'OPENAI_API_KEY',
+    executionPattern: 'sync',
+    inputPorts: [
+      { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
+    ],
+    outputPorts: [
+      { id: 'image', label: 'Image', dataType: 'Image', required: false },
+    ],
+    params: [
+      {
+        key: 'model',
+        label: 'Model',
+        type: 'enum',
+        required: true,
+        default: 'dall-e-3',
+        options: [
+          { label: 'DALL-E 3', value: 'dall-e-3' },
+          { label: 'DALL-E 2', value: 'dall-e-2' },
+        ],
+      },
+      {
+        key: 'size',
+        label: 'Size',
+        type: 'enum',
+        required: false,
+        default: '1024x1024',
+        options: [
+          { label: '1024×1024', value: '1024x1024' },
+          { label: '1024×1792', value: '1024x1792' },
+          { label: '1792×1024', value: '1792x1024' },
+        ],
+      },
+      {
+        key: 'quality',
+        label: 'Quality',
+        type: 'enum',
+        required: false,
+        default: 'standard',
+        options: [
+          { label: 'Standard', value: 'standard' },
+          { label: 'HD', value: 'hd' },
+        ],
+      },
+      {
+        key: 'style',
+        label: 'Style',
+        type: 'enum',
+        required: false,
+        default: 'vivid',
+        options: [
+          { label: 'Vivid', value: 'vivid' },
+          { label: 'Natural', value: 'natural' },
+        ],
+      },
+    ],
+  },
+
+  'gpt-4o-chat': {
+    id: 'gpt-4o-chat',
+    displayName: 'GPT-4o Chat',
+    category: 'text-gen',
+    apiProvider: 'openai',
+    apiEndpoint: '/v1/chat/completions',
+    envKeyName: 'OPENAI_API_KEY',
+    executionPattern: 'stream',
+    inputPorts: [
+      { id: 'messages', label: 'Messages', dataType: 'Text', required: true },
+      { id: 'images', label: 'Images', dataType: 'Image', required: false, multiple: true },
+    ],
+    outputPorts: [
+      { id: 'text', label: 'Text', dataType: 'Text', required: false },
+    ],
+    params: [
+      {
+        key: 'model',
+        label: 'Model',
+        type: 'enum',
+        required: true,
+        default: 'gpt-4o',
+        options: [
+          { label: 'GPT-4o', value: 'gpt-4o' },
+          { label: 'GPT-4o Mini', value: 'gpt-4o-mini' },
+          { label: 'GPT-4.1', value: 'gpt-4.1' },
+        ],
+      },
+      {
+        key: 'max_tokens',
+        label: 'Max Tokens',
+        type: 'integer',
+        required: false,
+        default: 4096,
+        min: 1,
+        max: 128000,
+      },
+      {
+        key: 'temperature',
+        label: 'Temperature',
+        type: 'float',
+        required: false,
+        default: 1,
+        min: 0,
+        max: 2,
+        step: 0.1,
+      },
+    ],
+  },
+
+  'gemini-chat': {
+    id: 'gemini-chat',
+    displayName: 'Gemini',
+    category: 'text-gen',
+    apiProvider: 'google',
+    apiEndpoint: '/v1beta/models/{model}:streamGenerateContent',
+    envKeyName: 'GOOGLE_API_KEY',
+    executionPattern: 'stream',
+    inputPorts: [
+      { id: 'messages', label: 'Messages', dataType: 'Text', required: true },
+      { id: 'images', label: 'Images', dataType: 'Image', required: false, multiple: true },
+    ],
+    outputPorts: [
+      { id: 'text', label: 'Text', dataType: 'Text', required: false },
+    ],
+    params: [
+      {
+        key: 'model',
+        label: 'Model',
+        type: 'enum',
+        required: true,
+        default: 'gemini-2.5-flash',
+        options: [
+          { label: 'Gemini 2.5 Pro', value: 'gemini-2.5-pro' },
+          { label: 'Gemini 2.5 Flash', value: 'gemini-2.5-flash' },
+          { label: 'Gemini 3 Pro Preview', value: 'gemini-3-pro-preview' },
+          { label: 'Gemini 3 Flash Preview', value: 'gemini-3-flash-preview' },
+        ],
+      },
+      {
+        key: 'max_tokens',
+        label: 'Max Tokens',
+        type: 'integer',
+        required: false,
+        default: 8192,
+        min: 1,
+        max: 65535,
+      },
+      {
+        key: 'temperature',
+        label: 'Temperature',
+        type: 'float',
+        required: false,
+        default: 1,
+        min: 0,
+        max: 2,
+        step: 0.1,
+      },
+    ],
+  },
+
+  'imagen-4-generate': {
+    id: 'imagen-4-generate',
+    displayName: 'Imagen 4',
+    category: 'image-gen',
+    apiProvider: 'google',
+    apiEndpoint: '/v1beta/models/{model}:generateImages',
+    envKeyName: 'GOOGLE_API_KEY',
+    executionPattern: 'sync',
+    inputPorts: [
+      { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
+    ],
+    outputPorts: [
+      { id: 'image', label: 'Image', dataType: 'Image', required: false },
+    ],
+    params: [
+      {
+        key: 'model',
+        label: 'Model',
+        type: 'enum',
+        required: true,
+        default: 'imagen-4.0-generate-001',
+        options: [
+          { label: 'Imagen 4', value: 'imagen-4.0-generate-001' },
+          { label: 'Imagen 4 Ultra', value: 'imagen-4.0-ultra-generate-001' },
+          { label: 'Imagen 4 Fast', value: 'imagen-4.0-fast-generate-001' },
+        ],
+      },
+      {
+        key: 'aspectRatio',
+        label: 'Aspect Ratio',
+        type: 'enum',
+        required: false,
+        default: '1:1',
+        options: [
+          { label: '1:1', value: '1:1' },
+          { label: '4:3', value: '4:3' },
+          { label: '3:4', value: '3:4' },
+          { label: '16:9', value: '16:9' },
+          { label: '9:16', value: '9:16' },
+        ],
+      },
+      {
+        key: 'numberOfImages',
+        label: 'Count',
+        type: 'integer',
+        required: false,
+        default: 1,
+        min: 1,
+        max: 4,
+      },
+    ],
+  },
+
+  'kling-v2-1': {
+    id: 'kling-v2-1',
+    displayName: 'Kling v2.1',
+    category: 'video-gen',
+    apiProvider: 'fal',
+    apiEndpoint: 'fal-ai/kling-video/v2.1/pro/image-to-video',
+    envKeyName: 'FAL_KEY',
+    executionPattern: 'async-poll',
+    inputPorts: [
+      { id: 'image', label: 'Image', dataType: 'Image', required: true },
+      { id: 'prompt', label: 'Prompt', dataType: 'Text', required: false },
+    ],
+    outputPorts: [
+      { id: 'video', label: 'Video', dataType: 'Video', required: false },
+    ],
+    params: [
+      {
+        key: 'duration',
+        label: 'Duration',
+        type: 'enum',
+        required: false,
+        default: '5',
+        options: [
+          { label: '5 seconds', value: '5' },
+          { label: '10 seconds', value: '10' },
+        ],
+      },
+      {
+        key: 'aspect_ratio',
+        label: 'Aspect Ratio',
+        type: 'enum',
+        required: false,
+        default: '16:9',
+        options: [
+          { label: '16:9', value: '16:9' },
+          { label: '9:16', value: '9:16' },
+          { label: '1:1', value: '1:1' },
+        ],
+      },
+    ],
+  },
+
+  'sora-2': {
+    id: 'sora-2',
+    displayName: 'Sora 2',
+    category: 'video-gen',
+    apiProvider: 'fal',
+    apiEndpoint: 'fal-ai/sora-2/text-to-video',
+    envKeyName: 'FAL_KEY',
+    executionPattern: 'async-poll',
+    inputPorts: [
+      { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
+    ],
+    outputPorts: [
+      { id: 'video', label: 'Video', dataType: 'Video', required: false },
+    ],
+    params: [
+      {
+        key: 'resolution',
+        label: 'Resolution',
+        type: 'enum',
+        required: false,
+        default: '1080p',
+        options: [
+          { label: '720p', value: '720p' },
+          { label: '1080p', value: '1080p' },
+        ],
+      },
+      {
+        key: 'aspect_ratio',
+        label: 'Aspect Ratio',
+        type: 'enum',
+        required: false,
+        default: '16:9',
+        options: [
+          { label: '16:9', value: '16:9' },
+          { label: '9:16', value: '9:16' },
+        ],
+      },
+      {
+        key: 'duration',
+        label: 'Duration (s)',
+        type: 'enum',
+        required: false,
+        default: 4,
+        options: [
+          { label: '4s', value: 4 },
+          { label: '8s', value: 8 },
+          { label: '12s', value: 12 },
+          { label: '16s', value: 16 },
+          { label: '20s', value: 20 },
+        ],
+      },
+    ],
+  },
 };
 
 export function getNodeDefinition(definitionId: string): ModelNodeDefinition | undefined {

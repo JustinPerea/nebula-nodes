@@ -88,6 +88,45 @@ NODE_DEFS: dict[str, dict[str, Any]] = {
         "outputPorts": [{"id": "output"}],
         "envKeyName": [],
     },
+    "dalle-3-generate": {
+        "inputPorts": [{"id": "prompt", "required": True}],
+        "outputPorts": [{"id": "image"}],
+        "envKeyName": "OPENAI_API_KEY",
+    },
+    "gpt-4o-chat": {
+        "inputPorts": [
+            {"id": "messages", "required": True},
+            {"id": "images", "required": False},
+        ],
+        "outputPorts": [{"id": "text"}],
+        "envKeyName": "OPENAI_API_KEY",
+    },
+    "gemini-chat": {
+        "inputPorts": [
+            {"id": "messages", "required": True},
+            {"id": "images", "required": False},
+        ],
+        "outputPorts": [{"id": "text"}],
+        "envKeyName": "GOOGLE_API_KEY",
+    },
+    "imagen-4-generate": {
+        "inputPorts": [{"id": "prompt", "required": True}],
+        "outputPorts": [{"id": "image"}],
+        "envKeyName": "GOOGLE_API_KEY",
+    },
+    "kling-v2-1": {
+        "inputPorts": [
+            {"id": "image", "required": True},
+            {"id": "prompt", "required": False},
+        ],
+        "outputPorts": [{"id": "video"}],
+        "envKeyName": "FAL_KEY",
+    },
+    "sora-2": {
+        "inputPorts": [{"id": "prompt", "required": True}],
+        "outputPorts": [{"id": "video"}],
+        "envKeyName": "FAL_KEY",
+    },
 }
 
 
