@@ -10,12 +10,13 @@ interface UIState {
   panels: {
     library: PanelState;
     inspector: PanelState;
+    settings: PanelState;
   };
   librarySearch: string;
 
   selectNode: (nodeId: string | null) => void;
-  togglePanel: (panel: 'library' | 'inspector') => void;
-  setPanelPosition: (panel: 'library' | 'inspector', position: { x: number; y: number }) => void;
+  togglePanel: (panel: 'library' | 'inspector' | 'settings') => void;
+  setPanelPosition: (panel: 'library' | 'inspector' | 'settings', position: { x: number; y: number }) => void;
   setLibrarySearch: (search: string) => void;
 }
 
@@ -24,6 +25,7 @@ export const useUIStore = create<UIState>((set) => ({
   panels: {
     library: { visible: true, position: { x: 16, y: 16 } },
     inspector: { visible: false, position: { x: -280, y: 16 } },
+    settings: { visible: false, position: { x: -340, y: 60 } },
   },
   librarySearch: '',
 

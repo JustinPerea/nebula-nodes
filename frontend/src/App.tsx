@@ -2,6 +2,7 @@ import { ReactFlowProvider } from '@xyflow/react';
 import { Canvas } from './components/Canvas';
 import { NodeLibrary } from './components/panels/NodeLibrary';
 import { Inspector } from './components/panels/Inspector';
+import { Settings } from './components/panels/Settings';
 import { Toolbar } from './components/panels/Toolbar';
 import './App.css';
 
@@ -11,6 +12,7 @@ export default function App() {
       <Canvas />
       <NodeLibrary />
       <Inspector />
+      <Settings />
       <Toolbar />
     </ReactFlowProvider>
   );
