@@ -290,3 +290,29 @@
   font-size: 11px;
   margin-left: 16px;
 }
+
+/* ---------- Inspector action buttons ---------- */
+
+.inspector__action-button {
+  flex: 1;
+  background: #252525;
+  border: 1px solid #333;
+  border-radius: 4px;
+  color: #aaa;
+  font-size: 11px;
+  padding: 5px 0;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.1s, color 0.1s;
+}
+
+.inspector__action-button:hover {
+  background: #333;
+  color: #eee;
+}
+
+.inspector__action-button--danger:hover {
+  background: #3a1a1a;
+  color: #F44336;
+  border-color: #5a2a2a;
+}

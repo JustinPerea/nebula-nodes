@@ -1,4 +1,4 @@
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useCallback } from 'react';
 import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
 import { NODE_DEFINITIONS } from '../../constants/nodeDefinitions';
@@ -14,6 +14,9 @@ export function Inspector() {
   const setPanelPosition = useUIStore((s) => s.setPanelPosition);
   const nodes = useGraphStore((s) => s.nodes);
   const updateNodeData = useGraphStore((s) => s.updateNodeData);
+  const executeNode = useGraphStore((s) => s.executeNode);
+  const duplicateNode = useGraphStore((s) => s.duplicateNode);
+  const deleteNode = useGraphStore((s) => s.deleteNode);
   const dragRef = useRef<{ startX: number; startY: number; panelX: number; panelY: number } | null>(null);
 
   const selectedNode = nodes.find((n) => n.id === selectedNodeId);
@@ -147,6 +150,31 @@ export function Inspector() {
         <div className="inspector__section" style={{ marginTop: 16, borderTop: '1px solid #2a2a2a', paddingTop: 8 }}>
           <div className="inspector__label">State</div>
           <div style={{ color: '#888', fontSize: 11 }}>{nodeData.state}</div>
+        </div>
+
+        {/* Actions */}
+        <div className="inspector__section" style={{ marginTop: 12, borderTop: '1px solid #2a2a2a', paddingTop: 8, display: 'flex', gap: 6 }}>
+          <button
+            className="inspector__action-button"
+            onClick={() => selectedNodeId && executeNode(selectedNodeId)}
+            title="Run this node and its dependencies"
+          >
+            ▶ Run
+          </button>
+          <button
+            className="inspector__action-button"
+            onClick={() => selectedNodeId && duplicateNode(selectedNodeId)}
+            title="Duplicate this node"
+          >
+            Duplicate
+          </button>
+          <button
+            className="inspector__action-button inspector__action-button--danger"
+            onClick={() => selectedNodeId && deleteNode(selectedNodeId)}
+            title="Delete this node"
+          >
+            Delete
+          </button>
         </div>
       </div>
     </div>
