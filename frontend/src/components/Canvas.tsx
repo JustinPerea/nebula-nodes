@@ -12,6 +12,7 @@ import { useUIStore } from '../store/uiStore';
 import { useIsValidConnection } from '../hooks/useIsValidConnection';
 import { ModelNode } from './nodes/ModelNode';
 import { DynamicNode } from './nodes/DynamicNode';
+import { RerouteNode } from './nodes/RerouteNode';
 import { TypedEdge } from './edges/TypedEdge';
 import { ContextMenu } from './ContextMenu';
 import '../styles/canvas.css';
@@ -19,6 +20,7 @@ import '../styles/canvas.css';
 const nodeTypes: NodeTypes = {
   'model-node': ModelNode,
   'dynamic-node': DynamicNode,
+  'reroute-node': RerouteNode,
 };
 
 const edgeTypes: EdgeTypes = {

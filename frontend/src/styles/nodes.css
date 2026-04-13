@@ -189,6 +189,32 @@
   color: #444;
 }
 
+/* ---------- Reroute node (minimal dot) ---------- */
+
+.reroute-node {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #444;
+  border: 2px solid #666;
+  position: relative;
+  cursor: crosshair;
+}
+
+.reroute-node:hover {
+  background: #555;
+  border-color: #888;
+}
+
+.reroute-node__handle {
+  width: 8px !important;
+  height: 8px !important;
+  background: transparent !important;
+  border: none !important;
+  min-width: 8px !important;
+  min-height: 8px !important;
+}
+
 .dynamic-node__model-badge {
   padding: 2px 8px;
   margin: 0 8px 4px;

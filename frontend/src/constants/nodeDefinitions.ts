@@ -301,6 +301,78 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     params: [],
   },
 
+  'combine-text': {
+    id: 'combine-text',
+    displayName: 'Combine Text',
+    category: 'utility',
+    apiProvider: 'openai',
+    apiEndpoint: '',
+    envKeyName: [],
+    executionPattern: 'sync',
+    inputPorts: [
+      { id: 'text1', label: 'Text 1', dataType: 'Text', required: true },
+      { id: 'text2', label: 'Text 2', dataType: 'Text', required: false },
+      { id: 'text3', label: 'Text 3', dataType: 'Text', required: false },
+    ],
+    outputPorts: [
+      { id: 'text', label: 'Text', dataType: 'Text', required: false },
+    ],
+    params: [
+      {
+        key: 'separator',
+        label: 'Separator',
+        type: 'string',
+        required: false,
+        default: '\\n',
+        placeholder: 'e.g. \\n or " | " or ", "',
+      },
+      {
+        key: 'template',
+        label: 'Template',
+        type: 'textarea',
+        required: false,
+        default: '',
+        placeholder: 'Optional: use {text1}, {text2}, {text3} placeholders',
+      },
+    ],
+  },
+
+  'router': {
+    id: 'router',
+    displayName: 'Router',
+    category: 'utility',
+    apiProvider: 'openai',
+    apiEndpoint: '',
+    envKeyName: [],
+    executionPattern: 'sync',
+    inputPorts: [
+      { id: 'input', label: 'Input', dataType: 'Any', required: true },
+    ],
+    outputPorts: [
+      { id: 'out1', label: 'Out 1', dataType: 'Any', required: false },
+      { id: 'out2', label: 'Out 2', dataType: 'Any', required: false },
+      { id: 'out3', label: 'Out 3', dataType: 'Any', required: false },
+    ],
+    params: [],
+  },
+
+  'reroute': {
+    id: 'reroute',
+    displayName: 'Reroute',
+    category: 'utility',
+    apiProvider: 'openai',
+    apiEndpoint: '',
+    envKeyName: [],
+    executionPattern: 'sync',
+    inputPorts: [
+      { id: 'input', label: '', dataType: 'Any', required: true },
+    ],
+    outputPorts: [
+      { id: 'output', label: '', dataType: 'Any', required: false },
+    ],
+    params: [],
+  },
+
   'openrouter-universal': {
     id: 'openrouter-universal',
     displayName: 'OpenRouter',

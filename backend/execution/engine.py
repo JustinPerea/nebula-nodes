@@ -69,6 +69,25 @@ NODE_DEFS: dict[str, dict[str, Any]] = {
         "outputPorts": [],
         "envKeyName": [],
     },
+    "combine-text": {
+        "inputPorts": [
+            {"id": "text1", "required": True},
+            {"id": "text2", "required": False},
+            {"id": "text3", "required": False},
+        ],
+        "outputPorts": [{"id": "text"}],
+        "envKeyName": [],
+    },
+    "router": {
+        "inputPorts": [{"id": "input", "required": True}],
+        "outputPorts": [{"id": "out1"}, {"id": "out2"}, {"id": "out3"}],
+        "envKeyName": [],
+    },
+    "reroute": {
+        "inputPorts": [{"id": "input", "required": True}],
+        "outputPorts": [{"id": "output"}],
+        "envKeyName": [],
+    },
 }
 
 
@@ -253,6 +272,44 @@ async def execute_graph(
                             "type": resolved_inputs["input"].type,
                             "value": resolved_inputs["input"].value,
                         }
+                elif node.definition_id == "combine-text":
+                    texts = []
+                    for port_id in ("text1", "text2", "text3"):
+                        if port_id in resolved_inputs and resolved_inputs[port_id].value:
+                            texts.append(str(resolved_inputs[port_id].value))
+
+                    template = node.params.get("template", "")
+                    if template:
+                        # Template mode: replace {text1}, {text2}, {text3}
+                        result = str(template)
+                        for port_id in ("text1", "text2", "text3"):
+                            val = ""
+                            if port_id in resolved_inputs and resolved_inputs[port_id].value:
+                                val = str(resolved_inputs[port_id].value)
+                            result = result.replace(f"{{{port_id}}}", val)
+                        node_outputs = {"text": {"type": "Text", "value": result}}
+                    else:
+                        # Separator mode: join non-empty texts
+                        separator = node.params.get("separator", "\n")
+                        separator = str(separator).replace("\\n", "\n").replace("\\t", "\t")
+                        node_outputs = {"text": {"type": "Text", "value": separator.join(texts)}}
+                elif node.definition_id == "router":
+                    input_val = resolved_inputs.get("input")
+                    if input_val and input_val.value is not None:
+                        port_val = {"type": input_val.type, "value": input_val.value}
+                        node_outputs = {
+                            "out1": port_val,
+                            "out2": port_val,
+                            "out3": port_val,
+                        }
+                    else:
+                        node_outputs = {}
+                elif node.definition_id == "reroute":
+                    input_val = resolved_inputs.get("input")
+                    if input_val and input_val.value is not None:
+                        node_outputs = {"output": {"type": input_val.type, "value": input_val.value}}
+                    else:
+                        node_outputs = {}
                 else:
                     raise RuntimeError(f"No handler registered for '{node.definition_id}'")
             else:
