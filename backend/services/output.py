@@ -21,3 +21,23 @@ def save_base64_image(b64_data: str, run_dir: Path, extension: str = "png") -> P
     file_path = run_dir / filename
     file_path.write_bytes(image_bytes)
     return file_path
+
+
+async def save_video_from_url(url: str, run_dir: Path, extension: str = "mp4") -> Path:
+    import httpx
+    filename = f"{uuid4().hex[:12]}.{extension}"
+    file_path = run_dir / filename
+    async with httpx.AsyncClient(timeout=120.0) as client:
+        response = await client.get(url)
+        response.raise_for_status()
+        file_path.write_bytes(response.content)
+    return file_path
+
+
+def image_to_data_uri(file_path: Path) -> str:
+    image_bytes = file_path.read_bytes()
+    b64 = base64.b64encode(image_bytes).decode("ascii")
+    suffix = file_path.suffix.lstrip(".").lower()
+    mime_map = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg", "webp": "image/webp"}
+    mime = mime_map.get(suffix, "image/png")
+    return f"data:{mime};base64,{b64}"
