@@ -9,9 +9,15 @@ import {
   type Connection,
 } from '@xyflow/react';
 import { v4 as uuidv4 } from 'uuid';
-import type { NodeData, DynamicNodeData, PortDataType } from '../types';
+import type { NodeData, DynamicNodeData, DynamicPortDefinition, DynamicParamDefinition, PortDataType } from '../types';
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
-import { executeGraph as apiExecuteGraph, executeNode as apiExecuteNode } from '../lib/api';
+import {
+  executeGraph as apiExecuteGraph,
+  executeNode as apiExecuteNode,
+  fetchOpenRouterModels,
+  fetchReplicateSchema,
+  type OpenRouterModel,
+} from '../lib/api';
 import { wsClient, type ExecutionEvent } from '../lib/wsClient';
 
 interface GraphState {
@@ -32,6 +38,8 @@ interface GraphState {
   deleteNode: (nodeId: string) => void;
   loadGraph: (nodes: Node<NodeData>[], edges: Edge[]) => void;
   clearGraph: () => void;
+  configureOpenRouterModel: (nodeId: string, modelId: string, model: OpenRouterModel) => void;
+  fetchReplicateSchemaAndConfigure: (nodeId: string, owner: string, name: string) => Promise<void>;
 }
 
 wsClient.connect();
@@ -251,6 +259,142 @@ export const useGraphStore = create<GraphState>((set, get) => ({
 
   clearGraph: () => {
     set({ nodes: [], edges: [], isExecuting: false });
+  },
+
+  configureOpenRouterModel: (nodeId, modelId, model) => {
+    const inputModalities = model.input_modalities || ['text'];
+    const outputModalities = model.output_modalities || ['text'];
+
+    const inputPorts: DynamicPortDefinition[] = [
+      { id: 'messages', label: 'Messages', dataType: 'Text', required: true },
+    ];
+    if (inputModalities.includes('image')) {
+      inputPorts.push({ id: 'images', label: 'Images', dataType: 'Image', required: false });
+    }
+
+    const outputPorts: DynamicPortDefinition[] = [];
+    if (outputModalities.includes('text')) {
+      outputPorts.push({ id: 'text', label: 'Text', dataType: 'Text', required: false });
+    }
+    if (outputModalities.includes('image')) {
+      outputPorts.push({ id: 'image', label: 'Image', dataType: 'Image', required: false });
+    }
+
+    const wantsImage = outputModalities.includes('image');
+
+    set((state) => ({
+      nodes: state.nodes.map((n) => {
+        if (n.id !== nodeId) return n;
+        const data = n.data as unknown as DynamicNodeData;
+        return {
+          ...n,
+          data: {
+            ...data,
+            modelId,
+            params: { ...data.params, model: modelId, _output_image: wantsImage },
+            dynamicInputPorts: inputPorts,
+            dynamicOutputPorts: outputPorts,
+          } as unknown as NodeData,
+        };
+      }),
+      // Remove edges connected to ports that no longer exist
+      edges: state.edges.filter((e) => {
+        if (e.source === nodeId) {
+          return outputPorts.some((p) => p.id === e.sourceHandle);
+        }
+        if (e.target === nodeId) {
+          return inputPorts.some((p) => p.id === e.targetHandle);
+        }
+        return true;
+      }),
+    }));
+  },
+
+  fetchReplicateSchemaAndConfigure: async (nodeId, owner, name) => {
+    try {
+      const schema = await fetchReplicateSchema(owner, name);
+
+      const inputProps = ((schema.input_schema as Record<string, unknown>)?.properties as Record<string, Record<string, unknown>>) ?? {};
+      const requiredInputs: string[] = ((schema.input_schema as Record<string, unknown>)?.required as string[]) ?? [];
+      const dynamicParams: DynamicParamDefinition[] = [];
+      const inputPorts: DynamicPortDefinition[] = [];
+
+      for (const [key, prop] of Object.entries(inputProps)) {
+        const p = prop as Record<string, unknown>;
+        const description = (p.description as string) ?? '';
+        const isUploadable = p['x-uploadable'] === true;
+        const format = (p.format as string) ?? '';
+
+        if (isUploadable || format === 'uri') {
+          inputPorts.push({
+            id: key,
+            label: key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
+            dataType: 'Image',
+            required: requiredInputs.includes(key),
+          });
+          continue;
+        }
+
+        let paramType: DynamicParamDefinition['type'] = 'string';
+        if (p.type === 'integer') paramType = 'integer';
+        else if (p.type === 'number') paramType = 'float';
+        else if (p.type === 'boolean') paramType = 'boolean';
+        else if (p.enum) paramType = 'enum';
+
+        const param: DynamicParamDefinition = {
+          key,
+          label: key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
+          type: paramType,
+          required: requiredInputs.includes(key),
+          default: p.default,
+          placeholder: description.slice(0, 80),
+        };
+
+        if (p.enum) {
+          param.options = (p.enum as Array<string | number>).map((v) => ({ label: String(v), value: v }));
+        }
+        if (p.minimum !== undefined) param.min = p.minimum as number;
+        if (p.maximum !== undefined) param.max = p.maximum as number;
+
+        dynamicParams.push(param);
+      }
+
+      const outputPorts: DynamicPortDefinition[] = [];
+      const outputSchema = schema.output_schema as Record<string, unknown>;
+
+      if (outputSchema?.type === 'string' && outputSchema?.format === 'uri') {
+        outputPorts.push({ id: 'image', label: 'Output', dataType: 'Image', required: false });
+      } else if (outputSchema?.type === 'array') {
+        outputPorts.push({ id: 'image', label: 'Output', dataType: 'Image', required: false });
+      } else {
+        outputPorts.push({ id: 'text', label: 'Output', dataType: 'Text', required: false });
+      }
+
+      const paramDefaults: Record<string, unknown> = {};
+      for (const dp of dynamicParams) {
+        if (dp.default !== undefined) paramDefaults[dp.key] = dp.default;
+      }
+
+      set((state) => ({
+        nodes: state.nodes.map((n) => {
+          if (n.id !== nodeId) return n;
+          const data = n.data as unknown as DynamicNodeData;
+          return {
+            ...n,
+            data: {
+              ...data,
+              params: { ...data.params, ...paramDefaults, _version_id: schema.version_id, _schema_fetched: true },
+              dynamicInputPorts: inputPorts,
+              dynamicOutputPorts: outputPorts,
+              dynamicParams,
+              providerMeta: { ...data.providerMeta, version_id: schema.version_id, description: schema.description },
+            } as unknown as NodeData,
+          };
+        }),
+      }));
+    } catch (err) {
+      console.error('Failed to fetch Replicate schema:', err);
+    }
   },
 
   handleExecutionEvent: (event) => {

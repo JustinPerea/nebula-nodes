@@ -1,9 +1,10 @@
-import { useRef, useEffect, useCallback } from 'react';
+import { useRef, useEffect, useState, useMemo } from 'react';
 import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
 import { NODE_DEFINITIONS } from '../../constants/nodeDefinitions';
 import { CATEGORY_COLORS } from '../../constants/ports';
 import type { NodeData, DynamicNodeData } from '../../types';
+import { fetchOpenRouterModels, type OpenRouterModel } from '../../lib/api';
 import '../../styles/panels.css';
 
 export function Inspector() {
@@ -17,11 +18,40 @@ export function Inspector() {
   const executeNode = useGraphStore((s) => s.executeNode);
   const duplicateNode = useGraphStore((s) => s.duplicateNode);
   const deleteNode = useGraphStore((s) => s.deleteNode);
+  const configureOpenRouterModel = useGraphStore((s) => s.configureOpenRouterModel);
+  const fetchReplicateSchemaAndConfigure = useGraphStore((s) => s.fetchReplicateSchemaAndConfigure);
   const dragRef = useRef<{ startX: number; startY: number; panelX: number; panelY: number } | null>(null);
+
+  // OpenRouter model selector state
+  const [openRouterModels, setOpenRouterModels] = useState<OpenRouterModel[]>([]);
+  const [modelsLoading, setModelsLoading] = useState(false);
+  const [modelSearch, setModelSearch] = useState('');
+
+  // Replicate schema fetch state
+  const [schemaLoading, setSchemaLoading] = useState(false);
 
   const selectedNode = nodes.find((n) => n.id === selectedNodeId);
   const nodeData = selectedNode?.data as NodeData | undefined;
   const definition = nodeData ? NODE_DEFINITIONS[nodeData.definitionId] : undefined;
+
+  // Fetch OpenRouter models when an OpenRouter node is selected
+  useEffect(() => {
+    if (!nodeData || nodeData.definitionId !== 'openrouter-universal') return;
+    setModelsLoading(true);
+    fetchOpenRouterModels()
+      .then((data) => setOpenRouterModels(data.models))
+      .catch((err) => console.error('Failed to load OpenRouter models:', err))
+      .finally(() => setModelsLoading(false));
+  }, [nodeData?.definitionId]);
+
+  // Filter models by search query — cap at 50 to avoid huge dropdowns
+  const filteredModels = useMemo(() => {
+    if (!modelSearch.trim()) return openRouterModels.slice(0, 50);
+    const lower = modelSearch.toLowerCase();
+    return openRouterModels
+      .filter((m) => m.id.toLowerCase().includes(lower) || m.name.toLowerCase().includes(lower))
+      .slice(0, 50);
+  }, [openRouterModels, modelSearch]);
 
   useEffect(() => {
     function onMouseMove(e: MouseEvent) {
@@ -98,7 +128,41 @@ export function Inspector() {
         {(definition?.params ?? []).map((param) => (
           <div key={param.key} className="inspector__section">
             <div className="inspector__label">{param.label}</div>
-            {param.type === 'enum' && param.options ? (
+            {/* OpenRouter: replace the 'model' param with a searchable dropdown */}
+            {nodeData.definitionId === 'openrouter-universal' && param.key === 'model' ? (
+              <div>
+                <input
+                  className="inspector__field"
+                  type="text"
+                  placeholder={modelsLoading ? 'Loading models...' : 'Search models...'}
+                  value={modelSearch}
+                  onChange={(e) => setModelSearch(e.target.value)}
+                />
+                <select
+                  className="inspector__field"
+                  style={{ marginTop: 4 }}
+                  value={String(nodeData.params.model ?? '')}
+                  onChange={(e) => {
+                    const selected = openRouterModels.find((m) => m.id === e.target.value);
+                    if (selected && selectedNodeId) {
+                      configureOpenRouterModel(selectedNodeId, selected.id, selected);
+                    }
+                  }}
+                >
+                  <option value="">-- Select a model --</option>
+                  {filteredModels.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.name} ({m.id})
+                    </option>
+                  ))}
+                </select>
+                {nodeData.params.model && (
+                  <div style={{ fontSize: 10, color: '#666', marginTop: 2 }}>
+                    Selected: {String(nodeData.params.model)}
+                  </div>
+                )}
+              </div>
+            ) : param.type === 'enum' && param.options ? (
               <select
                 className="inspector__field"
                 value={String(nodeData.params[param.key] ?? param.default ?? '')}
@@ -145,6 +209,27 @@ export function Inspector() {
                 onChange={(e) => onParamChange(param.key, e.target.value)}
                 placeholder={param.placeholder}
               />
+            )}
+            {/* Replicate: show Fetch Schema button below the model_id field */}
+            {nodeData.definitionId === 'replicate-universal' && param.key === 'model_id' && (
+              <button
+                className="inspector__action-button"
+                style={{ marginTop: 4, width: '100%' }}
+                disabled={schemaLoading || !nodeData.params.model_id}
+                onClick={async () => {
+                  const modelId = String(nodeData.params.model_id ?? '');
+                  if (!modelId.includes('/')) return;
+                  const [owner, name] = modelId.split('/', 2);
+                  setSchemaLoading(true);
+                  try {
+                    await fetchReplicateSchemaAndConfigure(selectedNodeId!, owner, name);
+                  } finally {
+                    setSchemaLoading(false);
+                  }
+                }}
+              >
+                {schemaLoading ? 'Fetching...' : (nodeData.params._schema_fetched ? 'Refresh Schema' : 'Fetch Schema')}
+              </button>
             )}
           </div>
         ))}
