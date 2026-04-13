@@ -32,6 +32,9 @@ def get_handler_registry(
     if emit is not None:
         from handlers.runway import handle_runway_gen4_turbo
         from handlers.anthropic_chat import handle_claude_chat
+        from handlers.openrouter import handle_openrouter_universal
+        from handlers.replicate_universal import handle_replicate_universal
+        from handlers.fal_universal import handle_fal_universal
 
         async def _runway_handler(
             node: GraphNode,
@@ -47,7 +50,31 @@ def get_handler_registry(
         ) -> dict[str, Any]:
             return await handle_claude_chat(node, inputs, api_keys, emit=emit)
 
+        async def _openrouter_handler(
+            node: GraphNode,
+            inputs: dict[str, PortValueDict],
+            api_keys: dict[str, str],
+        ) -> dict[str, Any]:
+            return await handle_openrouter_universal(node, inputs, api_keys, emit=emit)
+
+        async def _replicate_handler(
+            node: GraphNode,
+            inputs: dict[str, PortValueDict],
+            api_keys: dict[str, str],
+        ) -> dict[str, Any]:
+            return await handle_replicate_universal(node, inputs, api_keys, emit=emit)
+
+        async def _fal_handler(
+            node: GraphNode,
+            inputs: dict[str, PortValueDict],
+            api_keys: dict[str, str],
+        ) -> dict[str, Any]:
+            return await handle_fal_universal(node, inputs, api_keys, emit=emit)
+
         registry["runway-gen4-turbo"] = _runway_handler
         registry["claude-chat"] = _claude_handler
+        registry["openrouter-universal"] = _openrouter_handler
+        registry["replicate-universal"] = _replicate_handler
+        registry["fal-universal"] = _fal_handler
 
     return registry

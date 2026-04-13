@@ -20,11 +20,16 @@ class StreamConfig:
 
 
 def _get_nested(data: dict[str, Any], path: str) -> Any:
-    current = data
+    current: Any = data
     for key in path.split("."):
         if isinstance(current, dict):
             current = current.get(key)
             if current is None:
+                return None
+        elif isinstance(current, list):
+            try:
+                current = current[int(key)]
+            except (ValueError, IndexError):
                 return None
         else:
             return None
