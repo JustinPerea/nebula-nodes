@@ -1,4 +1,17 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { vi, describe, it, expect, beforeEach } from 'vitest';
+
+// Mock WebSocket for jsdom
+vi.mock('../../src/lib/wsClient', () => ({
+  wsClient: {
+    connect: vi.fn(),
+    subscribe: vi.fn(),
+    disconnect: vi.fn(),
+  },
+}));
+
+// Mock fetch for api.ts
+globalThis.fetch = vi.fn();
+
 import { useGraphStore } from '../../src/store/graphStore';
 
 describe('graphStore', () => {

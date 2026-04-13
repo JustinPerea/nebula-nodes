@@ -103,3 +103,21 @@
   background: rgba(244, 67, 54, 0.1);
   border-top: 1px solid #2a2a2a;
 }
+
+.model-node__preview-image {
+  width: 100%;
+  border-radius: 4px;
+  display: block;
+}
+
+.model-node__progress {
+  padding: 4px 10px;
+  border-top: 1px solid #2a2a2a;
+}
+
+.model-node__progress-bar {
+  height: 2px;
+  background: #2196F3;
+  border-radius: 1px;
+  transition: width 0.3s ease;
+}
