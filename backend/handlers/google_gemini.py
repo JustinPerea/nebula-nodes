@@ -83,8 +83,14 @@ async def handle_gemini_chat(
     if generation_config:
         request_body["generationConfig"] = generation_config
 
+    # Thinking control: thinkingLevel for Gemini 3, thinkingBudget for 2.5
+    # Cannot use both — API returns 400
+    thinking_level = node.params.get("thinkingLevel")
     thinking_budget = node.params.get("thinkingBudget")
-    if thinking_budget is not None and thinking_budget != "":
+    if thinking_level and thinking_level != "":
+        request_body["generationConfig"] = request_body.get("generationConfig", {})
+        request_body["generationConfig"]["thinkingConfig"] = {"thinkingLevel": thinking_level}
+    elif thinking_budget is not None and thinking_budget != "":
         request_body["generationConfig"] = request_body.get("generationConfig", {})
         request_body["generationConfig"]["thinkingConfig"] = {"thinkingBudget": int(thinking_budget)}
 
@@ -92,12 +98,12 @@ async def handle_gemini_chat(
     if system_prompt:
         request_body["systemInstruction"] = {"parts": [{"text": str(system_prompt)}]}
 
-    # Use streaming endpoint with ?alt=sse
-    url = f"{GEMINI_BASE_URL}/{model}:streamGenerateContent?key={api_key}&alt=sse"
+    # Use streaming endpoint with header auth (per Gemini 3 docs)
+    url = f"{GEMINI_BASE_URL}/{model}:streamGenerateContent?alt=sse"
 
     config = StreamConfig(
         url=url,
-        headers={"Content-Type": "application/json"},
+        headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
         event_type_filter=None,  # Gemini SSE has no event type lines
         delta_path="candidates.0.content.parts.0.text",
         timeout=60.0,
@@ -163,10 +169,10 @@ async def handle_nano_banana(
     if aspect:
         body["generationConfig"]["imageConfig"] = {"aspectRatio": aspect}
 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 
     async with httpx.AsyncClient(timeout=120.0) as client:
-        response = await client.post(url, json=body)
+        response = await client.post(url, json=body, headers={"x-goog-api-key": api_key})
         if response.status_code != 200:
             raise RuntimeError(f"Gemini API error {response.status_code}: {response.text}")
 
@@ -234,12 +240,12 @@ async def handle_imagen4(
     if person_gen:
         request_body["parameters"]["personGeneration"] = str(person_gen)
 
-    url = f"{IMAGEN_BASE_URL}/{model}:generateImages?key={api_key}"
+    url = f"{IMAGEN_BASE_URL}/{model}:generateImages"
 
     async with httpx.AsyncClient(timeout=120.0) as client:
         response = await client.post(
             url,
-            headers={"Content-Type": "application/json"},
+            headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
             json=request_body,
         )
         if response.status_code != 200:
