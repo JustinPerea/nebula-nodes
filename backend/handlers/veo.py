@@ -81,8 +81,9 @@ async def handle_veo(
     resolution = node.params.get("resolution")
     if resolution:
         parameters["resolution"] = str(resolution)
+    # generateAudio only supported on Veo 3.1 models, not Veo 2/3
     generate_audio = node.params.get("generateAudio")
-    if generate_audio is not None:
+    if generate_audio is not None and "3.1" in model:
         parameters["generateAudio"] = bool(generate_audio)
 
     request_body: dict[str, Any] = {
