@@ -10,7 +10,13 @@ from models.events import ExecutionEvent, ProgressEvent
 from services.output import image_to_data_uri
 from pathlib import Path
 
+import sys
+
 MESHY_API_BASE = "https://api.meshy.ai/openapi"
+
+
+def _log(msg: str) -> None:
+    print(f"[meshy] {msg}", file=sys.stderr, flush=True)
 
 
 async def handle_meshy_image_to_3d(
@@ -19,6 +25,7 @@ async def handle_meshy_image_to_3d(
     api_keys: dict[str, str],
     emit: Callable[[ExecutionEvent], Awaitable[None]] | None = None,
 ) -> dict[str, Any]:
+    _log(f"handle_meshy_image_to_3d called, node={node.id}")
     api_key = api_keys.get("MESHY_API_KEY")
     if not api_key:
         raise ValueError("MESHY_API_KEY is required")
@@ -28,12 +35,14 @@ async def handle_meshy_image_to_3d(
         raise ValueError("Image input is required")
 
     image_value = str(image_input.value)
+    _log(f"image_value starts with: {image_value[:80]}...")
     # Convert local file paths to data URIs for the API
     if not image_value.startswith(("http://", "https://", "data:")):
         image_path = Path(image_value)
         if not image_path.exists():
             raise ValueError(f"Image file not found: {image_value}")
         image_value = image_to_data_uri(image_path)
+        _log(f"converted to data URI, length={len(image_value)}")
 
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -53,21 +62,25 @@ async def handle_meshy_image_to_3d(
 
     _emit = emit or noop_emit
 
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with httpx.AsyncClient(timeout=120.0) as client:
         # Submit task
+        _log(f"submitting to {MESHY_API_BASE}/v1/image-to-3d, body keys: {list(body.keys())}")
         resp = await client.post(
             f"{MESHY_API_BASE}/v1/image-to-3d",
             headers=headers,
             json=body,
         )
+        _log(f"submit response: {resp.status_code}")
         if resp.status_code not in (200, 201, 202):
             raise RuntimeError(f"Meshy submit failed ({resp.status_code}): {resp.text}")
 
         task_data = resp.json()
+        _log(f"task_data: {task_data}")
         task_id = task_data.get("result") or task_data.get("id") or task_data.get("task_id")
         if not task_id:
             raise RuntimeError(f"Meshy did not return task ID: {task_data}")
 
+        _log(f"polling task {task_id}")
         # Poll for completion
         poll_url = f"{MESHY_API_BASE}/v1/image-to-3d/{task_id}"
         max_polls = 300
@@ -78,10 +91,13 @@ async def handle_meshy_image_to_3d(
 
             poll_resp = await client.get(poll_url, headers={"Authorization": f"Bearer {api_key}"})
             if poll_resp.status_code != 200:
+                _log(f"poll FAILED: {poll_resp.status_code} {poll_resp.text}")
                 raise RuntimeError(f"Meshy poll failed ({poll_resp.status_code}): {poll_resp.text}")
 
             poll_data = poll_resp.json()
             status = poll_data.get("status", "")
+            if poll_num % 10 == 1:
+                _log(f"poll #{poll_num}: status={status}")
 
             progress = min(poll_num / max_polls, 0.99)
             await _emit(ProgressEvent(node_id=node.id, value=progress))
@@ -89,14 +105,23 @@ async def handle_meshy_image_to_3d(
             if status == "SUCCEEDED":
                 model_urls = poll_data.get("model_urls", {})
                 glb_url = model_urls.get("glb", "")
+                _log(f"SUCCEEDED! glb_url={glb_url[:100] if glb_url else 'NONE'}")
                 if glb_url:
-                    return {"mesh": {"type": "Mesh", "value": glb_url}}
+                    # Download GLB locally to avoid CORS issues
+                    from services.output import save_mesh_from_url, get_run_dir
+                    run_dir = get_run_dir()
+                    local_path = await save_mesh_from_url(glb_url, run_dir)
+                    _log(f"downloaded to {local_path}")
+                    return {"mesh": {"type": "Mesh", "value": str(local_path)}}
+                _log(f"no glb_url found, full data keys: {list(poll_data.keys())}")
                 return {"mesh": {"type": "Mesh", "value": str(poll_data)}}
 
             elif status == "FAILED":
                 error = poll_data.get("task_error", {}).get("message", "Unknown error")
+                _log(f"FAILED: {error}")
                 raise RuntimeError(f"Meshy task failed: {error}")
 
+        _log("TIMED OUT")
         raise RuntimeError(f"Meshy task timed out after {max_polls} polls")
 
 

@@ -223,14 +223,21 @@ async def execute(request: ExecuteRequest) -> dict:
     handler_registry = get_handler_registry(emit=manager.broadcast)
 
     async def _run() -> None:
-        await execute_graph(
-            nodes=request.nodes,
-            edges=request.edges,
-            api_keys=api_keys,
-            handler_registry=handler_registry,
-            emit=manager.broadcast,
-            cache=execution_cache,
-        )
+        import traceback, sys
+        print("[exec] _run started", file=sys.stderr, flush=True)
+        try:
+            await execute_graph(
+                nodes=request.nodes,
+                edges=request.edges,
+                api_keys=api_keys,
+                handler_registry=handler_registry,
+                emit=manager.broadcast,
+                cache=execution_cache,
+            )
+            print("[exec] _run completed successfully", file=sys.stderr, flush=True)
+        except Exception as e:
+            print(f"[exec] _run FAILED: {e}", file=sys.stderr, flush=True)
+            traceback.print_exc(file=sys.stderr)
 
     asyncio.create_task(_run())
 
@@ -275,14 +282,18 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
     handler_registry = get_handler_registry(emit=manager.broadcast)
 
     async def _run() -> None:
-        await execute_graph(
-            nodes=sub_nodes,
-            edges=sub_edges,
-            api_keys=api_keys,
-            handler_registry=handler_registry,
-            emit=manager.broadcast,
-            cache=execution_cache,
-        )
+        import traceback
+        try:
+            await execute_graph(
+                nodes=sub_nodes,
+                edges=sub_edges,
+                api_keys=api_keys,
+                handler_registry=handler_registry,
+                emit=manager.broadcast,
+                cache=execution_cache,
+            )
+        except Exception:
+            traceback.print_exc()
 
     asyncio.create_task(_run())
 

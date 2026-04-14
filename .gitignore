@@ -30,3 +30,4 @@ Thumbs.db
 
 # SQLite (future)
 *.db
+.firecrawl/
