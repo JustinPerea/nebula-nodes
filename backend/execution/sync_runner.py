@@ -289,6 +289,22 @@ def get_handler_registry(
             node.params.setdefault("endpoint_id", "fal-ai/ltx-2.3/image-to-video")
             return await handle_fal_universal(node, inputs, api_keys, emit=emit)
 
+        async def _grok_video_handler(
+            node: GraphNode,
+            inputs: dict[str, PortValueDict],
+            api_keys: dict[str, str],
+        ) -> dict[str, Any]:
+            from handlers.grok_video import handle_grok_video
+            return await handle_grok_video(node, inputs, api_keys, emit=emit)
+
+        async def _higgsfield_handler(
+            node: GraphNode,
+            inputs: dict[str, PortValueDict],
+            api_keys: dict[str, str],
+        ) -> dict[str, Any]:
+            from handlers.higgsfield import handle_higgsfield
+            return await handle_higgsfield(node, inputs, api_keys, emit=emit)
+
         registry["runway-gen4-turbo"] = _runway_handler
         registry["claude-chat"] = _claude_handler
         registry["gpt-4o-chat"] = _openai_chat_handler
@@ -324,5 +340,7 @@ def get_handler_registry(
         registry["moonvalley"] = _moonvalley_handler
         registry["kling-o3"] = _kling_o3_handler
         registry["ltx-2-3"] = _ltx_23_handler
+        registry["grok-imagine-video"] = _grok_video_handler
+        registry["higgsfield"] = _higgsfield_handler
 
     return registry

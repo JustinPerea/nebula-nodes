@@ -467,14 +467,18 @@ async def execute_graph(
                     except ImportError:
                         raise ValueError("cairosvg not installed — run: pip install cairosvg")
                 elif node.definition_id in ("iterator-image", "iterator-text"):
-                    # Simplified iterator — emits first item only
-                    # Full iteration (trigger downstream per item) requires engine refactor
                     array_input = resolved_inputs.get("array")
                     if array_input and isinstance(array_input.value, list) and len(array_input.value) > 0:
-                        first_item = array_input.value[0]
+                        cap = int(node.params.get("batch_size_cap", 10))
+                        items = array_input.value[:cap]
                         out_type = "Image" if node.definition_id == "iterator-image" else "Text"
                         out_key = "image" if node.definition_id == "iterator-image" else "text"
-                        node_outputs = {out_key: {"type": out_type, "value": first_item}}
+                        # Emit each item as a separate executed event
+                        for i, item in enumerate(items):
+                            iter_outputs = {out_key: {"type": out_type, "value": item}}
+                            await emit(ExecutedEvent(node_id=nid, outputs=iter_outputs))
+                        nodes_executed += 1
+                        continue  # Skip the default ExecutedEvent below
                     else:
                         node_outputs = {}
                 elif node.definition_id == "preview":
