@@ -210,6 +210,7 @@ No parameters.
 | Size | enum | square_hd | Square HD, Square, Portrait 4:3, Portrait 16:9, Landscape 4:3, Landscape 16:9 |
 | Style | enum | realistic_image | Realistic, Digital Illustration, Vector Illustration, Icon |
 | Style ID | string | — | Custom style UUID |
+| Color Palette | string | — | Comma-separated hex (e.g. #FF0000,#00FF00,#0000FF) |
 
 ---
 
@@ -228,6 +229,7 @@ No parameters.
 | Size | enum | square_hd | Square HD, Square, Portrait 4:3, Portrait 16:9, Landscape 4:3, Landscape 16:9 |
 | Style | enum | vector_illustration | Vector Illustration, Digital Illustration, Icon |
 | Style ID | string | — | Custom style UUID |
+| Color Palette | string | — | Comma-separated hex (e.g. #FF0000,#00FF00,#0000FF) |
 
 ---
 
@@ -534,7 +536,7 @@ No parameters.
 | **Provider** | FAL |
 | **API Key** | `FAL_KEY` |
 | **Execution** | Async-poll |
-| **Input** | Image (required), Prompt (Text, required) |
+| **Input** | Image (required), Prompt (Text, required), Ref Video 1-3 (Video, optional) |
 | **Output** | Video |
 
 | Parameter | Type | Default | Options |
@@ -728,7 +730,7 @@ No parameters.
 
 | Parameter | Type | Default | Options |
 |-----------|------|---------|---------|
-| Model | enum | higgsfield-native | Higgsfield Native |
+| Model | enum | higgsfield-native | Higgsfield Native, Kling 2.6, Sora 2, Veo 3.1 |
 | Duration | int (1-15) | 5 | — |
 
 ---
@@ -1015,7 +1017,7 @@ No parameters.
 ### Array Builder
 | **ID** | `array-builder` |
 |---|---|
-| **Input** | Item 1 (Any, required), Item 2-4 (Any, optional) |
+| **Input** | Item 1 (Any, required), Item 2-8 (Any, optional) |
 | **Output** | Array |
 
 ### Array Selector
