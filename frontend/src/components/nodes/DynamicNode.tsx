@@ -5,6 +5,7 @@ import { NODE_DEFINITIONS } from '../../constants/nodeDefinitions';
 import { PORT_COLORS } from '../../lib/portCompatibility';
 import { CATEGORY_COLORS } from '../../constants/ports';
 import { useUIStore } from '../../store/uiStore';
+import { MeshPreview } from './MeshPreview';
 import '../../styles/nodes.css';
 
 function isDynamicData(data: NodeData): data is DynamicNodeData {
@@ -26,6 +27,7 @@ function DynamicNodeComponent({ id, data, selected }: NodeProps) {
 
   const imageOutput = Object.values(nodeData.outputs).find((o) => o.type === 'Image' && o.value);
   const textOutput = Object.values(nodeData.outputs).find((o) => o.type === 'Text' && o.value);
+  const meshOutput = Object.values(nodeData.outputs).find((o) => o.type === 'Mesh' && o.value);
   const displayText = nodeData.streamingText ?? (textOutput && typeof textOutput.value === 'string' ? textOutput.value : null);
   const isStreaming = nodeData.state === 'executing' && nodeData.streamingText != null;
 
@@ -81,6 +83,12 @@ function DynamicNodeComponent({ id, data, selected }: NodeProps) {
           <div className={`model-node__preview-text ${isStreaming ? 'model-node__preview-text--streaming' : ''}`}>
             {displayText.length > 300 ? `${displayText.slice(0, 300)}...` : displayText}
           </div>
+        </div>
+      )}
+
+      {nodeData.state === 'complete' && meshOutput && typeof meshOutput.value === 'string' && (
+        <div className="model-node__preview">
+          <MeshPreview src={meshOutput.value} />
         </div>
       )}
 

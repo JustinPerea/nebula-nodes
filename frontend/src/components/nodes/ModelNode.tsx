@@ -6,6 +6,7 @@ import { PORT_COLORS } from '../../lib/portCompatibility';
 import { CATEGORY_COLORS } from '../../constants/ports';
 import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
+import { MeshPreview } from './MeshPreview';
 import '../../styles/nodes.css';
 
 function ModelNodeComponent({ id, data, selected }: NodeProps) {
@@ -31,6 +32,7 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
   const imageOutput = Object.values(nodeData.outputs).find((o) => o.type === 'Image' && o.value);
   const textOutput = Object.values(nodeData.outputs).find((o) => o.type === 'Text' && o.value);
   const videoOutput = Object.values(nodeData.outputs).find((o) => o.type === 'Video' && o.value);
+  const meshOutput = Object.values(nodeData.outputs).find((o) => o.type === 'Mesh' && o.value);
 
   const displayText = nodeData.streamingText ?? (textOutput && typeof textOutput.value === 'string' ? textOutput.value : null);
   const isStreaming = nodeData.state === 'executing' && nodeData.streamingText != null;
@@ -97,7 +99,13 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
         </div>
       )}
 
-      {nodeData.state === 'complete' && !imageOutput && !textOutput && !videoOutput && Object.keys(nodeData.outputs).length > 0 && (
+      {nodeData.state === 'complete' && meshOutput && typeof meshOutput.value === 'string' && (
+        <div className="model-node__preview">
+          <MeshPreview src={meshOutput.value} />
+        </div>
+      )}
+
+      {nodeData.state === 'complete' && !imageOutput && !textOutput && !videoOutput && !meshOutput && Object.keys(nodeData.outputs).length > 0 && (
         <div className="model-node__preview">
           <div className="model-node__preview-placeholder">Output ready</div>
         </div>
