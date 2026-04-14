@@ -353,6 +353,43 @@ async def execute_graph(
                     node_outputs = {"audio": {"type": "Audio", "value": str(file_path)}}
                 elif node.definition_id == "sticky-note":
                     node_outputs = {}
+                elif node.definition_id == "frame-extractor":
+                    # Placeholder — frame extraction requires ffmpeg
+                    video_input = resolved_inputs.get("video")
+                    if video_input and video_input.value:
+                        node_outputs = {"image": {"type": "Image", "value": str(video_input.value)}}
+                    else:
+                        node_outputs = {}
+                elif node.definition_id == "array-builder":
+                    items = []
+                    for port_id in ("item1", "item2", "item3", "item4"):
+                        if port_id in resolved_inputs and resolved_inputs[port_id].value is not None:
+                            items.append(resolved_inputs[port_id].value)
+                    node_outputs = {"array": {"type": "Array", "value": items}}
+                elif node.definition_id == "array-selector":
+                    array_input = resolved_inputs.get("array")
+                    if array_input and isinstance(array_input.value, list) and len(array_input.value) > 0:
+                        mode = node.params.get("mode", "first")
+                        arr = array_input.value
+                        if mode == "first":
+                            selected = arr[0]
+                        elif mode == "last":
+                            selected = arr[-1]
+                        elif mode == "random":
+                            import random
+                            selected = random.choice(arr)
+                        else:  # index
+                            idx = int(node.params.get("index", 0))
+                            selected = arr[min(idx, len(arr) - 1)]
+                        node_outputs = {"item": {"type": "Any", "value": selected}}
+                    else:
+                        node_outputs = {}
+                elif node.definition_id == "image-compare":
+                    node_outputs = {}
+                    if "imageA" in resolved_inputs:
+                        node_outputs["imageA"] = {"type": resolved_inputs["imageA"].type, "value": resolved_inputs["imageA"].value}
+                    if "imageB" in resolved_inputs:
+                        node_outputs["imageB"] = {"type": resolved_inputs["imageB"].type, "value": resolved_inputs["imageB"].value}
                 elif node.definition_id == "preview":
                     node_outputs = {}
                     if "input" in resolved_inputs:

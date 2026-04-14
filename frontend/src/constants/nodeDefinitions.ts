@@ -3059,6 +3059,122 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
     ],
   },
+
+  'frame-extractor': {
+    id: 'frame-extractor',
+    displayName: 'Frame Extractor',
+    category: 'transform',
+    apiProvider: 'openai',
+    apiEndpoint: '',
+    envKeyName: [],
+    executionPattern: 'sync',
+    inputPorts: [
+      { id: 'video', label: 'Video', dataType: 'Video', required: true },
+    ],
+    outputPorts: [
+      { id: 'image', label: 'Image', dataType: 'Image', required: false },
+    ],
+    params: [
+      {
+        key: 'mode',
+        label: 'Mode',
+        type: 'enum',
+        required: false,
+        default: 'first_frame',
+        options: [
+          { label: 'First Frame', value: 'first_frame' },
+          { label: 'Last Frame', value: 'last_frame' },
+          { label: 'Middle Frame', value: 'middle_frame' },
+          { label: 'At Timestamp', value: 'timestamp' },
+        ],
+      },
+      {
+        key: 'timestamp',
+        label: 'Timestamp (s)',
+        type: 'float',
+        required: false,
+        default: 0,
+        min: 0,
+        step: 0.1,
+        placeholder: '0.0',
+      },
+    ],
+  },
+
+  'array-builder': {
+    id: 'array-builder',
+    displayName: 'Array Builder',
+    category: 'utility',
+    apiProvider: 'openai',
+    apiEndpoint: '',
+    envKeyName: [],
+    executionPattern: 'sync',
+    inputPorts: [
+      { id: 'item1', label: 'Item 1', dataType: 'Any', required: true },
+      { id: 'item2', label: 'Item 2', dataType: 'Any', required: false },
+      { id: 'item3', label: 'Item 3', dataType: 'Any', required: false },
+      { id: 'item4', label: 'Item 4', dataType: 'Any', required: false },
+    ],
+    outputPorts: [
+      { id: 'array', label: 'Array', dataType: 'Array', required: false },
+    ],
+    params: [],
+  },
+
+  'array-selector': {
+    id: 'array-selector',
+    displayName: 'Array Selector',
+    category: 'utility',
+    apiProvider: 'openai',
+    apiEndpoint: '',
+    envKeyName: [],
+    executionPattern: 'sync',
+    inputPorts: [
+      { id: 'array', label: 'Array', dataType: 'Array', required: true },
+    ],
+    outputPorts: [
+      { id: 'item', label: 'Item', dataType: 'Any', required: false },
+    ],
+    params: [
+      {
+        key: 'mode',
+        label: 'Mode',
+        type: 'enum',
+        required: false,
+        default: 'first',
+        options: [
+          { label: 'First', value: 'first' },
+          { label: 'Last', value: 'last' },
+          { label: 'Random', value: 'random' },
+          { label: 'By Index', value: 'index' },
+        ],
+      },
+      {
+        key: 'index',
+        label: 'Index',
+        type: 'integer',
+        required: false,
+        default: 0,
+        min: 0,
+      },
+    ],
+  },
+
+  'image-compare': {
+    id: 'image-compare',
+    displayName: 'Image Compare',
+    category: 'utility',
+    apiProvider: 'openai',
+    apiEndpoint: '',
+    envKeyName: [],
+    executionPattern: 'sync',
+    inputPorts: [
+      { id: 'imageA', label: 'Image A', dataType: 'Image', required: true },
+      { id: 'imageB', label: 'Image B', dataType: 'Image', required: true },
+    ],
+    outputPorts: [],
+    params: [],
+  },
 };
 
 export function getNodeDefinition(definitionId: string): ModelNodeDefinition | undefined {
