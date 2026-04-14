@@ -149,3 +149,50 @@ async def test_job_failure_propagates():
                     {"FAL_KEY": "fal_test"},
                     emit=AsyncMock(),
                 )
+
+
+@pytest.mark.asyncio
+async def test_multi_image_inputs_mapped():
+    """Hunyuan3D V3 Image-to-3D sends front/back/left/right images."""
+    mock_submit = MagicMock()
+    mock_submit.status_code = 200
+    mock_submit.json.return_value = {"request_id": "req-3d"}
+
+    mock_status = MagicMock()
+    mock_status.status_code = 200
+    mock_status.json.return_value = {"status": "COMPLETED"}
+
+    mock_result = MagicMock()
+    mock_result.status_code = 200
+    mock_result.json.return_value = {
+        "model_urls": {"glb": "https://fal.ai/model.glb"}
+    }
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            result = await handle_fal_universal(
+                _make_node({"endpoint_id": "fal-ai/hunyuan3d-v3/image-to-3d"}),
+                {
+                    "front_image": PortValueDict(type="Image", value="https://example.com/front.png"),
+                    "back_image": PortValueDict(type="Image", value="https://example.com/back.png"),
+                    "left_image": PortValueDict(type="Image", value="https://example.com/left.png"),
+                    "right_image": PortValueDict(type="Image", value="https://example.com/right.png"),
+                },
+                {"FAL_KEY": "fal_test"},
+                emit=AsyncMock(),
+            )
+
+        # Verify the submit payload included all images
+        call_args = mock_client.post.call_args
+        payload = call_args.kwargs.get("json") or call_args[1].get("json")
+        assert payload["image_url"] == "https://example.com/front.png"
+        assert payload["back_image_url"] == "https://example.com/back.png"
+        assert payload["left_image_url"] == "https://example.com/left.png"
+        assert payload["right_image_url"] == "https://example.com/right.png"

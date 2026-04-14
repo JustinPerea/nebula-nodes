@@ -41,6 +41,23 @@ async def handle_fal_universal(
     if image_input and image_input.value:
         fal_input["image_url"] = str(image_input.value)
 
+    # Multi-image inputs for 3D models (Hunyuan3D V3 Image-to-3D)
+    front_image = inputs.get("front_image")
+    if front_image and front_image.value:
+        fal_input["image_url"] = str(front_image.value)
+
+    back_image = inputs.get("back_image")
+    if back_image and back_image.value:
+        fal_input["back_image_url"] = str(back_image.value)
+
+    left_image = inputs.get("left_image")
+    if left_image and left_image.value:
+        fal_input["left_image_url"] = str(left_image.value)
+
+    right_image = inputs.get("right_image")
+    if right_image and right_image.value:
+        fal_input["right_image_url"] = str(right_image.value)
+
     # Map node params (excluding our internal keys)
     INTERNAL_KEYS = {"endpoint_id"}
     for param_key, param_val in node.params.items():
