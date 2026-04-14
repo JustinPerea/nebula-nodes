@@ -24,6 +24,8 @@ Complete reference for all 31 nodes. Nodes with dual-provider support show separ
 | Size | enum | auto | Auto, 1024x1024, 1536x1024, 1024x1536 |
 | Quality | enum | auto | Auto, Low, Medium, High |
 | Count | int (1-10) | 1 | — |
+| Format | enum | png | PNG, JPEG, WebP |
+| Background | enum | auto | Auto, Transparent, Opaque |
 
 ---
 
@@ -135,6 +137,7 @@ Complete reference for all 31 nodes. Nodes with dual-provider support show separ
 | Image Size | enum | landscape_16_9 | square, landscape_16_9, portrait_9_16, landscape_4_3, portrait_3_4 |
 | Steps | int (1-12) | 4 | — |
 | Seed | int | random | — |
+| Count | int (1-4) | 1 | — |
 
 ---
 
@@ -174,6 +177,8 @@ Complete reference for all 31 nodes. Nodes with dual-provider support show separ
 | Model | enum | claude-sonnet-4-6 | Claude Opus 4, Claude Sonnet 4.6, Claude Haiku 3.5 |
 | Max Tokens | int (1-200000) | 4096 | — |
 | Temperature | float (0-1) | 1 | — |
+| System Prompt | textarea | — | — |
+| Top P | float (0-1) | default | — |
 
 ---
 
@@ -192,6 +197,10 @@ Complete reference for all 31 nodes. Nodes with dual-provider support show separ
 | Model | enum | gpt-4o | GPT-4o, GPT-4o Mini, GPT-4.1 |
 | Max Tokens | int (1-128000) | 4096 | — |
 | Temperature | float (0-2) | 1 | — |
+| Top P | float (0-1) | default | — |
+| Frequency Penalty | float (-2 to 2) | 0 | — |
+| Presence Penalty | float (-2 to 2) | 0 | — |
+| Response Format | enum | text | Text, JSON |
 
 ---
 
@@ -211,6 +220,8 @@ Complete reference for all 31 nodes. Nodes with dual-provider support show separ
 | Max Tokens | int (1-65535) | 8192 | — |
 | Temperature | float (0-2) | 1 | — |
 | Thinking Budget | int (0-65536) | default | — |
+| Top P | float (0-1) | default | — |
+| Top K | int | 64 | — |
 
 ---
 
@@ -266,6 +277,8 @@ Complete reference for all 31 nodes. Nodes with dual-provider support show separ
 |-----------|------|---------|---------|
 | Model | enum | gen4_turbo | Gen-4 Turbo, Gen-4, Gen-4 Aleph |
 | Duration | enum | 5 | 5s, 10s |
+| Ratio | enum | 1280:720 | 1280x720, 1584x672, 1104x832, 720x1280, 832x1104, 960x960 |
+| Seed | int (0-4294967295) | random | — |
 
 ---
 
@@ -283,6 +296,8 @@ Complete reference for all 31 nodes. Nodes with dual-provider support show separ
 |-----------|------|---------|---------|
 | Duration | enum | 5 | 5s, 10s |
 | Aspect Ratio | enum | 16:9 | 16:9, 9:16, 1:1 |
+| Negative Prompt | string | blur, distort, and low quality | — |
+| CFG Scale | float (0-1) | 0.5 | — |
 
 ---
 
@@ -316,9 +331,12 @@ Complete reference for all 31 nodes. Nodes with dual-provider support show separ
 
 | Parameter | Type | Default | Options |
 |-----------|------|---------|---------|
-| Resolution | enum | 720p | 480p, 720p |
+| Resolution | enum | 720p | 720p, 1080p |
 | Aspect Ratio | enum | 16:9 | 16:9, 9:16, 1:1 |
-| Duration | enum | 5s | 5s |
+| Duration | enum | 5s | 5s, 10s, 15s |
+| Negative Prompt | string | — | — |
+| Seed | int | random | — |
+| Generate Audio | bool | false | — |
 
 ---
 
@@ -337,6 +355,7 @@ Complete reference for all 31 nodes. Nodes with dual-provider support show separ
 | Aspect Ratio | enum | 16:9 | 16:9, 9:16, 1:1, 4:3, 3:4, 21:9 |
 | Resolution | enum | 720p | 540p, 720p, 1080p |
 | Duration | enum | 5s | 5s, 9s |
+| Seamless Loop | bool | false | — |
 
 ---
 
@@ -353,8 +372,8 @@ Complete reference for all 31 nodes. Nodes with dual-provider support show separ
 | Parameter | Type | Default | Options |
 |-----------|------|---------|---------|
 | Aspect Ratio | enum | 16:9 | 16:9, 9:16, 1:1, 4:3, 3:4 |
-| Resolution | enum | 720p | 480p, 720p |
-| Duration | enum | 5s | 2s, 5s, 8s |
+| Resolution | enum | 1080p | 1080p, 1440p, 2160p |
+| Duration | enum | 6 | 6, 8, 10 |
 
 ---
 
@@ -375,6 +394,11 @@ Complete reference for all 31 nodes. Nodes with dual-provider support show separ
 | Model | enum | eleven_multilingual_v2 | v3 (Highest), Multilingual v2, Flash v2.5 |
 | Stability | float (0-1) | 0.5 | — |
 | Voice ID | string | 21m00Tcm4TlvDq8ikWAM | Rachel (default) |
+| Similarity Boost | float (0-1) | 0.75 | — |
+| Style | float (0-1) | 0 | — |
+| Speed | float (0.1-4.0) | 1.0 | — |
+| Output Format | enum | mp3_44100_128 | MP3 44.1kHz, MP3 22kHz, PCM 16kHz, PCM 24kHz, PCM 44.1kHz |
+| Seed | int | random | — |
 
 ---
 
