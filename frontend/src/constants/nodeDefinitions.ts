@@ -2192,6 +2192,373 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
     ],
   },
+
+  'minimax-t2v': {
+    id: 'minimax-t2v',
+    displayName: 'MiniMax T2V',
+    category: 'video-gen',
+    apiProvider: 'minimax',
+    apiEndpoint: 'https://api.minimaxi.chat/v1/video_generation',
+    envKeyName: 'MINIMAX_API_KEY',
+    executionPattern: 'async-poll',
+    inputPorts: [
+      { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
+    ],
+    outputPorts: [
+      { id: 'video', label: 'Video', dataType: 'Video', required: false },
+    ],
+    params: [
+      {
+        key: 'model',
+        label: 'Model',
+        type: 'enum',
+        required: false,
+        default: 'MiniMax-Hailuo-2.3',
+        options: [
+          { label: 'Hailuo 2.3', value: 'MiniMax-Hailuo-2.3' },
+          { label: 'Hailuo 02', value: 'MiniMax-Hailuo-02' },
+        ],
+      },
+      {
+        key: 'duration',
+        label: 'Duration',
+        type: 'enum',
+        required: false,
+        default: 6,
+        options: [
+          { label: '6 seconds', value: 6 },
+          { label: '9 seconds', value: 9 },
+        ],
+      },
+      {
+        key: 'resolution',
+        label: 'Resolution',
+        type: 'enum',
+        required: false,
+        default: '1080P',
+        options: [
+          { label: '720P', value: '720P' },
+          { label: '1080P', value: '1080P' },
+        ],
+      },
+    ],
+  },
+
+  'minimax-i2v': {
+    id: 'minimax-i2v',
+    displayName: 'MiniMax I2V',
+    category: 'video-gen',
+    apiProvider: 'minimax',
+    apiEndpoint: 'https://api.minimaxi.chat/v1/video_generation',
+    envKeyName: 'MINIMAX_API_KEY',
+    executionPattern: 'async-poll',
+    inputPorts: [
+      { id: 'image', label: 'First Frame', dataType: 'Image', required: true },
+      { id: 'last_frame', label: 'Last Frame', dataType: 'Image', required: false },
+      { id: 'prompt', label: 'Prompt', dataType: 'Text', required: false },
+    ],
+    outputPorts: [
+      { id: 'video', label: 'Video', dataType: 'Video', required: false },
+    ],
+    params: [
+      {
+        key: 'model',
+        label: 'Model',
+        type: 'enum',
+        required: false,
+        default: 'MiniMax-Hailuo-2.3',
+        options: [
+          { label: 'Hailuo 2.3', value: 'MiniMax-Hailuo-2.3' },
+          { label: 'Hailuo 02', value: 'MiniMax-Hailuo-02' },
+        ],
+      },
+      {
+        key: 'duration',
+        label: 'Duration',
+        type: 'enum',
+        required: false,
+        default: 6,
+        options: [
+          { label: '6 seconds', value: 6 },
+          { label: '9 seconds', value: 9 },
+        ],
+      },
+      {
+        key: 'resolution',
+        label: 'Resolution',
+        type: 'enum',
+        required: false,
+        default: '1080P',
+        options: [
+          { label: '720P', value: '720P' },
+          { label: '1080P', value: '1080P' },
+        ],
+      },
+    ],
+  },
+
+  'minimax-s2v': {
+    id: 'minimax-s2v',
+    displayName: 'MiniMax S2V',
+    category: 'video-gen',
+    apiProvider: 'minimax',
+    apiEndpoint: 'https://api.minimaxi.chat/v1/video_generation',
+    envKeyName: 'MINIMAX_API_KEY',
+    executionPattern: 'async-poll',
+    inputPorts: [
+      { id: 'image', label: 'Character Image', dataType: 'Image', required: true },
+      { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
+    ],
+    outputPorts: [
+      { id: 'video', label: 'Video', dataType: 'Video', required: false },
+    ],
+    params: [
+      {
+        key: 'duration',
+        label: 'Duration',
+        type: 'enum',
+        required: false,
+        default: 6,
+        options: [
+          { label: '6 seconds', value: 6 },
+          { label: '9 seconds', value: 9 },
+        ],
+      },
+      {
+        key: 'resolution',
+        label: 'Resolution',
+        type: 'enum',
+        required: false,
+        default: '1080P',
+        options: [
+          { label: '720P', value: '720P' },
+          { label: '1080P', value: '1080P' },
+        ],
+      },
+    ],
+  },
+
+  'kling-v3': {
+    id: 'kling-v3',
+    displayName: 'Kling V3',
+    category: 'video-gen',
+    apiProvider: 'fal',
+    apiEndpoint: 'fal-ai/kling-video/v3/standard/text-to-video',
+    envKeyName: 'FAL_KEY',
+    executionPattern: 'async-poll',
+    inputPorts: [
+      { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
+      { id: 'image', label: 'Start Image', dataType: 'Image', required: false },
+      { id: 'end_image', label: 'End Image', dataType: 'Image', required: false },
+    ],
+    outputPorts: [
+      { id: 'video', label: 'Video', dataType: 'Video', required: false },
+    ],
+    params: [
+      {
+        key: 'duration',
+        label: 'Duration',
+        type: 'enum',
+        required: false,
+        default: '5',
+        options: [
+          { label: '3 seconds', value: '3' },
+          { label: '5 seconds', value: '5' },
+          { label: '10 seconds', value: '10' },
+          { label: '15 seconds', value: '15' },
+        ],
+      },
+      {
+        key: 'resolution',
+        label: 'Resolution',
+        type: 'enum',
+        required: false,
+        default: '1080p',
+        options: [
+          { label: '720p', value: '720p' },
+          { label: '1080p', value: '1080p' },
+        ],
+      },
+      {
+        key: 'aspect_ratio',
+        label: 'Aspect Ratio',
+        type: 'enum',
+        required: false,
+        default: '16:9',
+        options: [
+          { label: '16:9', value: '16:9' },
+          { label: '9:16', value: '9:16' },
+          { label: '1:1', value: '1:1' },
+        ],
+      },
+      {
+        key: 'negative_prompt',
+        label: 'Negative Prompt',
+        type: 'string',
+        required: false,
+        placeholder: 'What to avoid',
+      },
+      {
+        key: 'generate_audio',
+        label: 'Generate Audio',
+        type: 'boolean',
+        required: false,
+        default: true,
+      },
+      {
+        key: 'cfg_scale',
+        label: 'CFG Scale',
+        type: 'float',
+        required: false,
+        default: 0.5,
+        min: 0,
+        max: 1,
+        step: 0.1,
+      },
+    ],
+  },
+
+  'luma-ray2-i2v': {
+    id: 'luma-ray2-i2v',
+    displayName: 'Luma Ray 2 I2V',
+    category: 'video-gen',
+    apiProvider: 'fal',
+    apiEndpoint: 'fal-ai/luma-dream-machine/ray-2/image-to-video',
+    envKeyName: 'FAL_KEY',
+    executionPattern: 'async-poll',
+    inputPorts: [
+      { id: 'image', label: 'Image', dataType: 'Image', required: true },
+      { id: 'end_image', label: 'End Image', dataType: 'Image', required: false },
+      { id: 'prompt', label: 'Prompt', dataType: 'Text', required: false },
+    ],
+    outputPorts: [
+      { id: 'video', label: 'Video', dataType: 'Video', required: false },
+    ],
+    params: [
+      {
+        key: 'aspect_ratio',
+        label: 'Aspect Ratio',
+        type: 'enum',
+        required: false,
+        default: '16:9',
+        options: [
+          { label: '16:9', value: '16:9' },
+          { label: '9:16', value: '9:16' },
+          { label: '4:3', value: '4:3' },
+          { label: '3:4', value: '3:4' },
+          { label: '21:9', value: '21:9' },
+        ],
+      },
+      {
+        key: 'resolution',
+        label: 'Resolution',
+        type: 'enum',
+        required: false,
+        default: '540p',
+        options: [
+          { label: '540p', value: '540p' },
+          { label: '720p (2x cost)', value: '720p' },
+          { label: '1080p (4x cost)', value: '1080p' },
+        ],
+      },
+      {
+        key: 'duration',
+        label: 'Duration',
+        type: 'enum',
+        required: false,
+        default: '5s',
+        options: [
+          { label: '5 seconds', value: '5s' },
+          { label: '9 seconds', value: '9s' },
+        ],
+      },
+      {
+        key: 'loop',
+        label: 'Seamless Loop',
+        type: 'boolean',
+        required: false,
+        default: false,
+      },
+    ],
+  },
+
+  'wan-2-6-i2v': {
+    id: 'wan-2-6-i2v',
+    displayName: 'Wan 2.6 I2V',
+    category: 'video-gen',
+    apiProvider: 'fal',
+    apiEndpoint: 'fal-ai/wan/v2.6/image-to-video',
+    envKeyName: 'FAL_KEY',
+    executionPattern: 'async-poll',
+    inputPorts: [
+      { id: 'image', label: 'Image', dataType: 'Image', required: true },
+      { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
+    ],
+    outputPorts: [
+      { id: 'video', label: 'Video', dataType: 'Video', required: false },
+    ],
+    params: [
+      {
+        key: 'duration',
+        label: 'Duration',
+        type: 'enum',
+        required: false,
+        default: '5s',
+        options: [
+          { label: '5 seconds', value: '5s' },
+          { label: '10 seconds', value: '10s' },
+          { label: '15 seconds', value: '15s' },
+        ],
+      },
+      {
+        key: 'resolution',
+        label: 'Resolution',
+        type: 'enum',
+        required: false,
+        default: '720p',
+        options: [
+          { label: '480p', value: '480p' },
+          { label: '720p', value: '720p' },
+          { label: '1080p', value: '1080p' },
+        ],
+      },
+      {
+        key: 'aspect_ratio',
+        label: 'Aspect Ratio',
+        type: 'enum',
+        required: false,
+        default: '16:9',
+        options: [
+          { label: '16:9', value: '16:9' },
+          { label: '9:16', value: '9:16' },
+          { label: '1:1', value: '1:1' },
+          { label: '4:3', value: '4:3' },
+          { label: '3:4', value: '3:4' },
+        ],
+      },
+      {
+        key: 'negative_prompt',
+        label: 'Negative Prompt',
+        type: 'string',
+        required: false,
+        placeholder: 'What to avoid',
+      },
+      {
+        key: 'seed',
+        label: 'Seed',
+        type: 'integer',
+        required: false,
+        placeholder: 'Random',
+      },
+      {
+        key: 'generate_audio',
+        label: 'Generate Audio',
+        type: 'boolean',
+        required: false,
+        default: false,
+      },
+    ],
+  },
 };
 
 export function getNodeDefinition(definitionId: string): ModelNodeDefinition | undefined {
