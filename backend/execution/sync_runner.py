@@ -162,6 +162,10 @@ def get_handler_registry(
             inputs: dict[str, PortValueDict],
             api_keys: dict[str, str],
         ) -> dict[str, Any]:
+            # Prefer direct Meshy API, fall back to FAL
+            if api_keys.get("MESHY_API_KEY"):
+                from handlers.meshy import handle_meshy_text_to_3d
+                return await handle_meshy_text_to_3d(node, inputs, api_keys, emit=emit)
             node.params.setdefault("endpoint_id", "fal-ai/meshy/v6/text-to-3d")
             return await handle_fal_universal(node, inputs, api_keys, emit=emit)
 
@@ -170,6 +174,10 @@ def get_handler_registry(
             inputs: dict[str, PortValueDict],
             api_keys: dict[str, str],
         ) -> dict[str, Any]:
+            # Prefer direct Meshy API, fall back to FAL
+            if api_keys.get("MESHY_API_KEY"):
+                from handlers.meshy import handle_meshy_image_to_3d
+                return await handle_meshy_image_to_3d(node, inputs, api_keys, emit=emit)
             node.params.setdefault("endpoint_id", "fal-ai/meshy/v6/image-to-3d")
             return await handle_fal_universal(node, inputs, api_keys, emit=emit)
 

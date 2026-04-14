@@ -1141,7 +1141,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     category: '3d-gen',
     apiProvider: 'fal',
     apiEndpoint: 'fal-ai/meshy/v6/text-to-3d',
-    envKeyName: 'FAL_KEY',
+    envKeyName: ['MESHY_API_KEY', 'FAL_KEY'],
     executionPattern: 'async-poll',
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
@@ -1235,7 +1235,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     category: '3d-gen',
     apiProvider: 'fal',
     apiEndpoint: 'fal-ai/meshy/v6/image-to-3d',
-    envKeyName: 'FAL_KEY',
+    envKeyName: ['MESHY_API_KEY', 'FAL_KEY'],
     executionPattern: 'async-poll',
     inputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: true },
