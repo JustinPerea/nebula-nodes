@@ -70,7 +70,7 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
             onKeyDown={(e) => e.stopPropagation()}
             placeholder="Enter text or prompt..."
             rows={4}
-            spellCheck={false}
+            spellCheck
           />
         </div>
       )}

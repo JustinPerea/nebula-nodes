@@ -123,13 +123,20 @@ class ConnectionManager:
 manager = ConnectionManager()
 
 
+def _snake_to_camel(s: str) -> str:
+    parts = s.split("_")
+    return parts[0] + "".join(p.capitalize() for p in parts[1:])
+
+
 def _event_to_camel(event: ExecutionEvent) -> dict[str, Any]:
     raw = event.model_dump()
     result: dict[str, Any] = {}
     for key, value in raw.items():
-        parts = key.split("_")
-        camel = parts[0] + "".join(p.capitalize() for p in parts[1:])
-        if camel == "nodeId" and isinstance(value, str):
+        camel = _snake_to_camel(key)
+        # Also camelize the "type" value (e.g. "graph_complete" → "graphComplete")
+        if key == "type" and isinstance(value, str):
+            result[camel] = _snake_to_camel(value)
+        elif camel == "nodeId" and isinstance(value, str):
             result["nodeId"] = value
         elif camel == "nodesExecuted":
             result["nodesExecuted"] = value
