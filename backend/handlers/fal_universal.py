@@ -88,7 +88,8 @@ async def handle_fal_universal(
         submit_data = submit_resp.json()
         request_id = submit_data.get("request_id")
         if not request_id:
-            raise RuntimeError(f"FAL did not return request_id: {submit_data}")
+            # Some FAL endpoints return the result directly (no queue)
+            return _parse_fal_output(submit_data)
 
         # Step 2: Poll for status
         status_url = f"{FAL_QUEUE_BASE}/{endpoint_id}/requests/{request_id}/status"

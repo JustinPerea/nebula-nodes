@@ -87,7 +87,7 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
         </div>
       )}
 
-      {nodeData.state === 'complete' && imageOutput && typeof imageOutput.value === 'string' && (
+      {nodeData.state === 'complete' && imageOutput && typeof imageOutput.value === 'string' && !imageInputPreview && (
         <div className="model-node__preview">
           <img src={imageOutput.value} alt="Generated output" className="model-node__preview-image" loading="lazy" />
         </div>
