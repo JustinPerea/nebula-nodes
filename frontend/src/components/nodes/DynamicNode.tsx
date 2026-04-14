@@ -28,6 +28,7 @@ function DynamicNodeComponent({ id, data, selected }: NodeProps) {
   const imageOutput = Object.values(nodeData.outputs).find((o) => o.type === 'Image' && o.value);
   const textOutput = Object.values(nodeData.outputs).find((o) => o.type === 'Text' && o.value);
   const meshOutput = Object.values(nodeData.outputs).find((o) => o.type === 'Mesh' && o.value);
+  const videoOutput = Object.values(nodeData.outputs).find((o) => o.type === 'Video' && o.value);
   const displayText = nodeData.streamingText ?? (textOutput && typeof textOutput.value === 'string' ? textOutput.value : null);
   const isStreaming = nodeData.state === 'executing' && nodeData.streamingText != null;
 
@@ -66,9 +67,17 @@ function DynamicNodeComponent({ id, data, selected }: NodeProps) {
         </div>
       )}
 
-      {nodeData.state === 'executing' && nodeData.progress !== undefined && (
-        <div className="model-node__progress">
-          <div className="model-node__progress-bar" style={{ width: `${Math.round(nodeData.progress * 100)}%` }} />
+      {nodeData.state === 'executing' && (
+        <div className="model-node__loading">
+          <div className="model-node__loading-spinner" />
+          <span className="model-node__loading-text">
+            {nodeData.progress !== undefined ? `${Math.round(nodeData.progress * 100)}%` : 'Starting...'}
+          </span>
+          {nodeData.progress !== undefined && (
+            <div className="model-node__progress">
+              <div className="model-node__progress-bar" style={{ width: `${Math.round(nodeData.progress * 100)}%` }} />
+            </div>
+          )}
         </div>
       )}
 
@@ -89,6 +98,18 @@ function DynamicNodeComponent({ id, data, selected }: NodeProps) {
       {nodeData.state === 'complete' && meshOutput && typeof meshOutput.value === 'string' && (
         <div className="model-node__preview">
           <MeshPreview src={meshOutput.value} />
+        </div>
+      )}
+
+      {nodeData.state === 'complete' && videoOutput && typeof videoOutput.value === 'string' && (
+        <div className="model-node__preview">
+          <video
+            src={videoOutput.value}
+            controls
+            className="model-node__preview-video nodrag nowheel"
+            style={{ width: '100%', borderRadius: 4, display: 'block' }}
+            onMouseDown={(e) => e.stopPropagation()}
+          />
         </div>
       )}
 

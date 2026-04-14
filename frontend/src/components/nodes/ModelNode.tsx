@@ -53,7 +53,9 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
           {definition.inputPorts.map((port) => (
             <div key={port.id} className="model-node__port-row">
               <Handle type="target" position={Position.Left} id={port.id} className="model-node__handle" style={{ backgroundColor: PORT_COLORS[port.dataType] }} />
-              <span className="model-node__port-label">{port.label}</span>
+              <span className="model-node__port-label">
+                {port.label}{port.multiple ? ' +' : ''}
+              </span>
             </div>
           ))}
         </div>
@@ -81,9 +83,17 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
         </div>
       )}
 
-      {nodeData.state === 'executing' && nodeData.progress !== undefined && (
-        <div className="model-node__progress">
-          <div className="model-node__progress-bar" style={{ width: `${Math.round(nodeData.progress * 100)}%` }} />
+      {nodeData.state === 'executing' && (
+        <div className="model-node__loading">
+          <div className="model-node__loading-spinner" />
+          <span className="model-node__loading-text">
+            {nodeData.progress !== undefined ? `${Math.round(nodeData.progress * 100)}%` : 'Starting...'}
+          </span>
+          {nodeData.progress !== undefined && (
+            <div className="model-node__progress">
+              <div className="model-node__progress-bar" style={{ width: `${Math.round(nodeData.progress * 100)}%` }} />
+            </div>
+          )}
         </div>
       )}
 
@@ -101,9 +111,15 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
         </div>
       )}
 
-      {nodeData.state === 'complete' && videoOutput && (
+      {nodeData.state === 'complete' && videoOutput && typeof videoOutput.value === 'string' && (
         <div className="model-node__preview">
-          <div className="model-node__preview-placeholder">Video ready</div>
+          <video
+            src={videoOutput.value}
+            controls
+            className="model-node__preview-video nodrag nowheel"
+            style={{ width: '100%', borderRadius: 4, display: 'block' }}
+            onMouseDown={(e) => e.stopPropagation()}
+          />
         </div>
       )}
 

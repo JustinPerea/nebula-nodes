@@ -109,6 +109,42 @@
   display: block;
 }
 
+/* Loading indicator */
+.model-node__loading {
+  padding: 8px 10px;
+  border-top: 1px solid #2a2a2a;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.model-node__loading-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid #333;
+  border-top-color: #2196F3;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.model-node__loading-text {
+  font-size: 11px;
+  color: #888;
+  flex: 1;
+}
+
+.model-node__loading .model-node__progress {
+  width: 100%;
+  padding: 0;
+  border-top: none;
+}
+
 .model-node__progress {
   padding: 4px 10px;
   border-top: 1px solid #2a2a2a;
