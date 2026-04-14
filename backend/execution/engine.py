@@ -127,6 +127,47 @@ NODE_DEFS: dict[str, dict[str, Any]] = {
         "outputPorts": [{"id": "video"}],
         "envKeyName": "FAL_KEY",
     },
+    "nano-banana": {
+        "inputPorts": [
+            {"id": "prompt", "required": True},
+            {"id": "images", "required": False},
+        ],
+        "outputPorts": [{"id": "image"}, {"id": "text"}],
+        "envKeyName": "GOOGLE_API_KEY",
+    },
+    "veo-3": {
+        "inputPorts": [{"id": "prompt", "required": True}],
+        "outputPorts": [{"id": "video"}],
+        "envKeyName": "FAL_KEY",
+    },
+    "flux-schnell": {
+        "inputPorts": [{"id": "prompt", "required": True}],
+        "outputPorts": [{"id": "image"}],
+        "envKeyName": "FAL_KEY",
+    },
+    "fast-sdxl": {
+        "inputPorts": [{"id": "prompt", "required": True}],
+        "outputPorts": [{"id": "image"}],
+        "envKeyName": "FAL_KEY",
+    },
+    "wan-2-6-t2v": {
+        "inputPorts": [{"id": "prompt", "required": True}],
+        "outputPorts": [{"id": "video"}],
+        "envKeyName": "FAL_KEY",
+    },
+    "luma-ray2-t2v": {
+        "inputPorts": [{"id": "prompt", "required": True}],
+        "outputPorts": [{"id": "video"}],
+        "envKeyName": "FAL_KEY",
+    },
+    "ltx-video-2": {
+        "inputPorts": [
+            {"id": "image", "required": True},
+            {"id": "prompt", "required": True},
+        ],
+        "outputPorts": [{"id": "video"}],
+        "envKeyName": "FAL_KEY",
+    },
 }
 
 

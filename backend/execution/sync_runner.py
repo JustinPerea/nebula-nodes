@@ -5,7 +5,7 @@ from typing import Any, Awaitable, Callable
 from models.graph import GraphNode, PortValueDict
 from models.events import ExecutionEvent
 from handlers.openai_image import handle_openai_image_generate
-from handlers.google_gemini import handle_imagen4
+from handlers.google_gemini import handle_imagen4, handle_nano_banana
 
 
 SYNC_HANDLERS: dict[
@@ -18,6 +18,7 @@ SYNC_HANDLERS: dict[
     "gpt-image-1-generate": handle_openai_image_generate,
     "dalle-3-generate": handle_openai_image_generate,
     "imagen-4-generate": handle_imagen4,
+    "nano-banana": handle_nano_banana,
 }
 
 
@@ -108,6 +109,54 @@ def get_handler_registry(
             node.params.setdefault("endpoint_id", "fal-ai/sora-2/text-to-video")
             return await handle_fal_universal(node, inputs, api_keys, emit=emit)
 
+        async def _veo3_handler(
+            node: GraphNode,
+            inputs: dict[str, PortValueDict],
+            api_keys: dict[str, str],
+        ) -> dict[str, Any]:
+            node.params.setdefault("endpoint_id", "fal-ai/veo3")
+            return await handle_fal_universal(node, inputs, api_keys, emit=emit)
+
+        async def _flux_schnell_handler(
+            node: GraphNode,
+            inputs: dict[str, PortValueDict],
+            api_keys: dict[str, str],
+        ) -> dict[str, Any]:
+            node.params.setdefault("endpoint_id", "fal-ai/flux/schnell")
+            return await handle_fal_universal(node, inputs, api_keys, emit=emit)
+
+        async def _fast_sdxl_handler(
+            node: GraphNode,
+            inputs: dict[str, PortValueDict],
+            api_keys: dict[str, str],
+        ) -> dict[str, Any]:
+            node.params.setdefault("endpoint_id", "fal-ai/fast-sdxl")
+            return await handle_fal_universal(node, inputs, api_keys, emit=emit)
+
+        async def _wan26_t2v_handler(
+            node: GraphNode,
+            inputs: dict[str, PortValueDict],
+            api_keys: dict[str, str],
+        ) -> dict[str, Any]:
+            node.params.setdefault("endpoint_id", "wan/v2.6/text-to-video")
+            return await handle_fal_universal(node, inputs, api_keys, emit=emit)
+
+        async def _luma_ray2_handler(
+            node: GraphNode,
+            inputs: dict[str, PortValueDict],
+            api_keys: dict[str, str],
+        ) -> dict[str, Any]:
+            node.params.setdefault("endpoint_id", "fal-ai/luma-dream-machine/ray-2")
+            return await handle_fal_universal(node, inputs, api_keys, emit=emit)
+
+        async def _ltx_video2_handler(
+            node: GraphNode,
+            inputs: dict[str, PortValueDict],
+            api_keys: dict[str, str],
+        ) -> dict[str, Any]:
+            node.params.setdefault("endpoint_id", "fal-ai/ltx-2/image-to-video")
+            return await handle_fal_universal(node, inputs, api_keys, emit=emit)
+
         registry["runway-gen4-turbo"] = _runway_handler
         registry["claude-chat"] = _claude_handler
         registry["gpt-4o-chat"] = _openai_chat_handler
@@ -117,5 +166,11 @@ def get_handler_registry(
         registry["fal-universal"] = _fal_handler
         registry["kling-v2-1"] = _kling_handler
         registry["sora-2"] = _sora2_handler
+        registry["veo-3"] = _veo3_handler
+        registry["flux-schnell"] = _flux_schnell_handler
+        registry["fast-sdxl"] = _fast_sdxl_handler
+        registry["wan-2-6-t2v"] = _wan26_t2v_handler
+        registry["luma-ray2-t2v"] = _luma_ray2_handler
+        registry["ltx-video-2"] = _ltx_video2_handler
 
     return registry

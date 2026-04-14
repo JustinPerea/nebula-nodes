@@ -112,6 +112,81 @@ async def handle_gemini_chat(
     return {"text": {"type": "Text", "value": full_text}}
 
 
+async def handle_nano_banana(
+    node: GraphNode,
+    inputs: dict[str, PortValueDict],
+    api_keys: dict[str, str],
+    emit=None,
+) -> dict[str, Any]:
+    prompt_input = inputs.get("prompt")
+    if not prompt_input or not prompt_input.value:
+        raise ValueError("Prompt input is required")
+
+    api_key = api_keys.get("GOOGLE_API_KEY")
+    if not api_key:
+        raise ValueError("GOOGLE_API_KEY is required")
+
+    model = node.params.get("model", "gemini-2.5-flash-preview-05-20")
+
+    contents = [{"parts": [{"text": str(prompt_input.value)}]}]
+
+    # Add images if connected
+    images_input = inputs.get("images")
+    if images_input and images_input.value:
+        image_values = images_input.value if isinstance(images_input.value, list) else [images_input.value]
+        for img_val in image_values:
+            img_str = str(img_val)
+            if img_str.startswith(("http://", "https://")):
+                contents[0]["parts"].append({"fileData": {"fileUri": img_str}})
+            else:
+                import base64 as _base64
+                img_path = Path(img_str)
+                if img_path.exists():
+                    b64 = _base64.b64encode(img_path.read_bytes()).decode("ascii")
+                    suffix = img_path.suffix.lstrip(".").lower()
+                    mime = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg", "webp": "image/webp"}.get(suffix, "image/png")
+                    contents[0]["parts"].append({"inlineData": {"mimeType": mime, "data": b64}})
+
+    body: dict[str, Any] = {
+        "contents": contents,
+        "generationConfig": {
+            "responseModalities": ["IMAGE", "TEXT"],
+        },
+    }
+
+    aspect = node.params.get("aspect_ratio")
+    if aspect:
+        body["generationConfig"]["imageConfig"] = {"aspectRatio": aspect}
+
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+
+    async with httpx.AsyncClient(timeout=120.0) as client:
+        response = await client.post(url, json=body)
+        if response.status_code != 200:
+            raise RuntimeError(f"Gemini API error {response.status_code}: {response.text}")
+
+    data = response.json()
+    parts = data.get("candidates", [{}])[0].get("content", {}).get("parts", [])
+
+    result: dict[str, Any] = {}
+
+    for part in parts:
+        if "inlineData" in part:
+            b64_data = part["inlineData"]["data"]
+            mime = part["inlineData"].get("mimeType", "image/png")
+            ext = "png" if "png" in mime else "jpeg" if "jpeg" in mime else "webp" if "webp" in mime else "png"
+            run_dir = get_run_dir()
+            file_path = save_base64_image(b64_data, run_dir, extension=ext)
+            result["image"] = {"type": "Image", "value": str(file_path)}
+        elif "text" in part:
+            result["text"] = {"type": "Text", "value": part["text"]}
+
+    if not result:
+        raise RuntimeError("Gemini returned no image or text content")
+
+    return result
+
+
 async def handle_imagen4(
     node: GraphNode,
     inputs: dict[str, PortValueDict],
