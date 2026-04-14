@@ -155,6 +155,30 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         step: 0.05,
         placeholder: 'Default',
       },
+      {
+        key: 'stop_sequences',
+        label: 'Stop Sequences',
+        type: 'string',
+        required: false,
+        placeholder: 'Comma-separated',
+      },
+      {
+        key: 'extended_thinking',
+        label: 'Extended Thinking',
+        type: 'boolean',
+        required: false,
+        default: false,
+      },
+      {
+        key: 'thinkingBudget',
+        label: 'Thinking Budget',
+        type: 'integer',
+        required: false,
+        placeholder: 'Default (min 1024)',
+        min: 1024,
+        max: 200000,
+        condition: 'extended_thinking',
+      },
     ],
   },
 
@@ -643,9 +667,13 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     executionPattern: 'async-poll',
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
+      { id: 'image', label: 'Image', dataType: 'Image', required: false },
     ],
     outputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: false },
+      { id: 'video', label: 'Video', dataType: 'Video', required: false },
+      { id: 'audio', label: 'Audio', dataType: 'Audio', required: false },
+      { id: 'mesh', label: 'Mesh', dataType: 'Mesh', required: false },
     ],
     params: [
       {
@@ -888,6 +916,24 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         type: 'integer',
         required: false,
         placeholder: '64',
+      },
+      {
+        key: 'stop_sequences',
+        label: 'Stop Sequences',
+        type: 'string',
+        required: false,
+        placeholder: 'Comma-separated',
+      },
+      {
+        key: 'response_format',
+        label: 'Response Format',
+        type: 'enum',
+        required: false,
+        default: 'text/plain',
+        options: [
+          { label: 'Text', value: 'text/plain' },
+          { label: 'JSON', value: 'application/json' },
+        ],
       },
     ],
   },
