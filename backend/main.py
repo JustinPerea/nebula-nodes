@@ -5,8 +5,9 @@ import json
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from models import ExecuteRequest, ExecuteNodeRequest, ValidationErrorEvent
@@ -32,13 +33,46 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Serve output files as static assets
+# Serve output files as static assets (mounted after dynamic routes — mounts are catch-all)
 OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
-app.mount("/api/outputs", StaticFiles(directory=str(OUTPUT_ROOT)), name="outputs")
 
 app.include_router(openrouter_router)
 app.include_router(replicate_router)
 app.include_router(fal_router)
+
+
+@app.get("/api/convert-to-glb")
+async def convert_to_glb(path: str) -> Any:
+    """Convert a non-GLB 3D file to GLB for preview. Caches the result."""
+    import trimesh
+
+    source_path = OUTPUT_ROOT / path
+    if not source_path.exists():
+        raise HTTPException(status_code=404, detail="Source file not found")
+
+    # Security: ensure path stays within OUTPUT_ROOT
+    try:
+        source_path.resolve().relative_to(OUTPUT_ROOT.resolve())
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid path")
+
+    # If already GLB, serve directly
+    if source_path.suffix.lower() == ".glb":
+        return FileResponse(str(source_path), media_type="model/gltf-binary")
+
+    # Check for cached conversion
+    preview_path = source_path.with_suffix(".preview.glb")
+    if preview_path.exists():
+        return FileResponse(str(preview_path), media_type="model/gltf-binary")
+
+    # Convert to GLB using trimesh
+    try:
+        mesh = trimesh.load(str(source_path))
+        mesh.export(str(preview_path), file_type="glb")
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Conversion failed: {exc}")
+
+    return FileResponse(str(preview_path), media_type="model/gltf-binary")
 
 
 # ---------- WebSocket connection manager ----------
@@ -235,3 +269,7 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
     asyncio.create_task(_run())
 
     return {"status": "started", "nodeCount": len(sub_nodes)}
+
+
+# Static mount MUST come after all dynamic routes — it is a catch-all for /api/outputs
+app.mount("/api/outputs", StaticFiles(directory=str(OUTPUT_ROOT)), name="outputs")
