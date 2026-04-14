@@ -1308,13 +1308,15 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     apiEndpoint: 'fal-ai/meshy/v6/image-to-3d',
     envKeyName: ['MESHY_API_KEY', 'FAL_KEY'],
     executionPattern: 'async-poll',
+    directKeyName: 'MESHY_API_KEY',
     inputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: true },
     ],
     outputPorts: [
       { id: 'mesh', label: 'Mesh', dataType: 'Mesh', required: false },
     ],
-    params: [
+    params: [],
+    sharedParams: [
       {
         key: 'topology',
         label: 'Topology',
@@ -1379,6 +1381,55 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         type: 'boolean',
         required: false,
         default: false,
+      },
+    ],
+    directParams: [
+      {
+        key: 'ai_model',
+        label: 'AI Model',
+        type: 'enum',
+        required: false,
+        default: 'latest',
+        options: [
+          { label: 'Latest (Meshy 6)', value: 'latest' },
+          { label: 'Meshy 6', value: 'meshy-6' },
+          { label: 'Meshy 5', value: 'meshy-5' },
+        ],
+      },
+      {
+        key: 'model_type',
+        label: 'Mesh Type',
+        type: 'enum',
+        required: false,
+        default: 'standard',
+        options: [
+          { label: 'Standard', value: 'standard' },
+          { label: 'Low Poly', value: 'lowpoly' },
+        ],
+      },
+      {
+        key: 'target_formats',
+        label: 'Output Formats',
+        type: 'string',
+        required: false,
+        default: 'glb',
+        placeholder: 'glb,fbx,obj,usdz',
+      },
+    ],
+    falParams: [
+      {
+        key: 'texture_prompt',
+        label: 'Texture Prompt',
+        type: 'string',
+        required: false,
+        placeholder: 'Guide the texturing process',
+      },
+      {
+        key: 'enable_safety_checker',
+        label: 'Safety Checker',
+        type: 'boolean',
+        required: false,
+        default: true,
       },
       {
         key: 'seed',

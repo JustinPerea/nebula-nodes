@@ -3,7 +3,7 @@ import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
 import { NODE_DEFINITIONS } from '../../constants/nodeDefinitions';
 import { CATEGORY_COLORS } from '../../constants/ports';
-import type { NodeData, DynamicNodeData } from '../../types';
+import type { NodeData, DynamicNodeData, ParamDefinition } from '../../types';
 import { fetchOpenRouterModels, type OpenRouterModel } from '../../lib/api';
 import '../../styles/panels.css';
 
@@ -33,6 +33,22 @@ export function Inspector() {
   const selectedNode = nodes.find((n) => n.id === selectedNodeId);
   const nodeData = selectedNode?.data as NodeData | undefined;
   const definition = nodeData ? NODE_DEFINITIONS[nodeData.definitionId] : undefined;
+
+  // Resolve params: dual-param nodes use sharedParams + (falParams or directParams)
+  const { settingsCache } = useUIStore.getState();
+  const resolvedParams: ParamDefinition[] = useMemo(() => {
+    if (!definition) return [];
+    if (definition.sharedParams) {
+      const useDirectRoute = definition.directKeyName
+        && settingsCache.loaded
+        && Boolean(settingsCache.apiKeys[definition.directKeyName]);
+      const routeParams = useDirectRoute
+        ? (definition.directParams ?? [])
+        : (definition.falParams ?? []);
+      return [...definition.sharedParams, ...routeParams];
+    }
+    return definition.params;
+  }, [definition, settingsCache.loaded, settingsCache.apiKeys, definition?.directKeyName]);
 
   // Fetch OpenRouter models when an OpenRouter node is selected
   useEffect(() => {
@@ -125,7 +141,7 @@ export function Inspector() {
           </span>
         </div>
 
-        {(definition?.params ?? []).map((param) => (
+        {resolvedParams.map((param) => (
           <div key={param.key} className="inspector__section">
             <div className="inspector__label">{param.label}</div>
             {/* OpenRouter: replace the 'model' param with a searchable dropdown */}

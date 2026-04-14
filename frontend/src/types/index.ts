@@ -76,6 +76,15 @@ export interface ModelNodeDefinition {
   inputPorts: PortDefinition[];
   outputPorts: PortDefinition[];
   params: ParamDefinition[];
+  /** Dual-param architecture for nodes with both FAL and direct API support.
+   *  When present, Inspector renders sharedParams + (falParams or directParams)
+   *  based on which API key is available. `params` is ignored when these are set. */
+  sharedParams?: ParamDefinition[];
+  falParams?: ParamDefinition[];
+  directParams?: ParamDefinition[];
+  /** Which env key name selects the "direct" route (vs FAL). Used by Inspector
+   *  to decide which param set to show. e.g. 'MESHY_API_KEY' or 'GOOGLE_API_KEY'. */
+  directKeyName?: string;
   docUrl?: string;
 }
 

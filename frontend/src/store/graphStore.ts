@@ -357,8 +357,12 @@ export const useGraphStore = create<GraphState>((set, get) => ({
 
     pushUndo(set, get);
 
+    // Build defaults from all param sources (shared + route-specific + legacy params)
     const defaults: Record<string, unknown> = {};
-    for (const param of definition.params) {
+    const allParamSources = definition.sharedParams
+      ? [...definition.sharedParams, ...(definition.falParams ?? []), ...(definition.directParams ?? [])]
+      : definition.params;
+    for (const param of allParamSources) {
       if (param.default !== undefined) defaults[param.key] = param.default;
     }
 
