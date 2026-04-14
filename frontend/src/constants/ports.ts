@@ -5,6 +5,7 @@ export const CATEGORY_COLORS: Record<string, string> = {
   'video-gen': '#B71C1C',
   'text-gen': '#4A148C',
   'audio-gen': '#FF6F00',
+  '3d-gen': '#00ACC1',
   'transform': '#004D40',
   'analyzer': '#1B5E20',
   'utility': '#424242',
@@ -12,5 +13,5 @@ export const CATEGORY_COLORS: Record<string, string> = {
 };
 
 export const PORT_DATA_TYPES: PortDataType[] = [
-  'Text', 'Image', 'Video', 'Audio', 'Mask', 'Array', 'SVG', 'Any',
+  'Text', 'Image', 'Video', 'Audio', 'Mask', 'Array', 'SVG', 'Mesh', 'Any',
 ];

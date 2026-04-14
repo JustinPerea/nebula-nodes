@@ -6,6 +6,7 @@ export type PortDataType =
   | 'Mask'
   | 'Array'
   | 'SVG'
+  | 'Mesh'
   | 'Any';
 
 export type NodeCategory =
@@ -13,6 +14,7 @@ export type NodeCategory =
   | 'video-gen'
   | 'text-gen'
   | 'audio-gen'
+  | '3d-gen'
   | 'transform'
   | 'analyzer'
   | 'utility'
