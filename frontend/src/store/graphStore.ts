@@ -765,12 +765,17 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         for (const [key, val] of Object.entries(event.outputs)) {
           const outputVal = val as { type: string; value: string | null };
           if ((outputVal.type === 'Image' || outputVal.type === 'Video' || outputVal.type === 'Mesh') && outputVal.value && typeof outputVal.value === 'string') {
-            const outputIdx = outputVal.value.indexOf('/output/');
-            if (outputIdx !== -1) {
-              const relativePath = outputVal.value.substring(outputIdx + '/output/'.length);
-              outputs[key] = { type: outputVal.type, value: `/api/outputs/${relativePath}` };
-            } else {
+            // Skip rewriting for external URLs — only rewrite local filesystem paths
+            if (outputVal.value.startsWith('http://') || outputVal.value.startsWith('https://')) {
               outputs[key] = outputVal;
+            } else {
+              const outputIdx = outputVal.value.indexOf('/output/');
+              if (outputIdx !== -1) {
+                const relativePath = outputVal.value.substring(outputIdx + '/output/'.length);
+                outputs[key] = { type: outputVal.type, value: `/api/outputs/${relativePath}` };
+              } else {
+                outputs[key] = outputVal;
+              }
             }
           } else {
             outputs[key] = outputVal;
