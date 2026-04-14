@@ -116,6 +116,10 @@ def get_handler_registry(
             inputs: dict[str, PortValueDict],
             api_keys: dict[str, str],
         ) -> dict[str, Any]:
+            # Prefer direct Google API, fall back to FAL
+            if api_keys.get("GOOGLE_API_KEY"):
+                from handlers.veo import handle_veo
+                return await handle_veo(node, inputs, api_keys, emit=emit)
             node.params.setdefault("endpoint_id", "fal-ai/veo3")
             return await handle_fal_universal(node, inputs, api_keys, emit=emit)
 

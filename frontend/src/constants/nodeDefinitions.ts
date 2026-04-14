@@ -872,21 +872,36 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
 
   'veo-3': {
     id: 'veo-3',
-    displayName: 'Veo 3',
+    displayName: 'Veo 3.1',
     category: 'video-gen',
-    apiProvider: 'fal',
-    apiEndpoint: 'fal-ai/veo3',
-    envKeyName: 'FAL_KEY',
+    apiProvider: 'google',
+    apiEndpoint: 'veo-3.1-generate-preview',
+    envKeyName: ['GOOGLE_API_KEY', 'FAL_KEY'],
     executionPattern: 'async-poll',
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
+      { id: 'image', label: 'Image', dataType: 'Image', required: false },
     ],
     outputPorts: [
       { id: 'video', label: 'Video', dataType: 'Video', required: false },
     ],
     params: [
       {
-        key: 'aspect_ratio',
+        key: 'model',
+        label: 'Model',
+        type: 'enum',
+        required: false,
+        default: 'veo-3.1-generate-preview',
+        options: [
+          { label: 'Veo 3.1', value: 'veo-3.1-generate-preview' },
+          { label: 'Veo 3.1 Lite', value: 'veo-3.1-lite-generate-preview' },
+          { label: 'Veo 3.1 Fast', value: 'veo-3.1-fast-generate-preview' },
+          { label: 'Veo 3', value: 'veo-3-generate-001' },
+          { label: 'Veo 2', value: 'veo-2-generate-001' },
+        ],
+      },
+      {
+        key: 'aspectRatio',
         label: 'Aspect Ratio',
         type: 'enum',
         required: false,
@@ -901,9 +916,11 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         label: 'Duration',
         type: 'enum',
         required: false,
-        default: '8s',
+        default: '8',
         options: [
-          { label: '8 seconds', value: '8s' },
+          { label: '4 seconds', value: '4' },
+          { label: '6 seconds', value: '6' },
+          { label: '8 seconds', value: '8' },
         ],
       },
       {
@@ -916,6 +933,13 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
           { label: '720p', value: '720p' },
           { label: '1080p', value: '1080p' },
         ],
+      },
+      {
+        key: 'generateAudio',
+        label: 'Generate Audio',
+        type: 'boolean',
+        required: false,
+        default: true,
       },
     ],
   },
