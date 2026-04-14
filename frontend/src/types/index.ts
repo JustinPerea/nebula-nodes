@@ -40,7 +40,8 @@ export type APIProvider =
   | 'recraft'
   | 'ideogram'
   | 'openrouter'
-  | 'bfl';
+  | 'bfl'
+  | 'higgsfield';
 
 export interface PortDefinition {
   id: string;

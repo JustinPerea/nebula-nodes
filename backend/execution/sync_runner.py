@@ -261,6 +261,34 @@ def get_handler_registry(
             from handlers.minimax import handle_minimax_video
             return await handle_minimax_video(node, inputs, api_keys, emit=emit)
 
+        async def _luma_ray2_flash_modify_handler(node, inputs, api_keys):
+            node.params.setdefault("endpoint_id", "fal-ai/luma-dream-machine/ray-2-flash/modify")
+            return await handle_fal_universal(node, inputs, api_keys, emit=emit)
+
+        async def _wan26_r2v_handler(node, inputs, api_keys):
+            node.params.setdefault("endpoint_id", "fal-ai/wan/v2.6/reference-to-video")
+            return await handle_fal_universal(node, inputs, api_keys, emit=emit)
+
+        async def _pixverse_handler(node, inputs, api_keys):
+            node.params.setdefault("endpoint_id", "fal-ai/pixverse/v4.5/text-to-video")
+            return await handle_fal_universal(node, inputs, api_keys, emit=emit)
+
+        async def _seedance_handler(node, inputs, api_keys):
+            node.params.setdefault("endpoint_id", "fal-ai/seedance/v1.5/text-to-video")
+            return await handle_fal_universal(node, inputs, api_keys, emit=emit)
+
+        async def _moonvalley_handler(node, inputs, api_keys):
+            node.params.setdefault("endpoint_id", "fal-ai/moonvalley/image-to-video")
+            return await handle_fal_universal(node, inputs, api_keys, emit=emit)
+
+        async def _kling_o3_handler(node, inputs, api_keys):
+            node.params.setdefault("endpoint_id", "fal-ai/kling-video/o3/standard/image-to-video")
+            return await handle_fal_universal(node, inputs, api_keys, emit=emit)
+
+        async def _ltx_23_handler(node, inputs, api_keys):
+            node.params.setdefault("endpoint_id", "fal-ai/ltx-2.3/image-to-video")
+            return await handle_fal_universal(node, inputs, api_keys, emit=emit)
+
         registry["runway-gen4-turbo"] = _runway_handler
         registry["claude-chat"] = _claude_handler
         registry["gpt-4o-chat"] = _openai_chat_handler
@@ -289,5 +317,12 @@ def get_handler_registry(
         registry["minimax-t2v"] = _minimax_handler
         registry["minimax-i2v"] = _minimax_handler
         registry["minimax-s2v"] = _minimax_handler
+        registry["luma-ray2-flash-modify"] = _luma_ray2_flash_modify_handler
+        registry["wan-2-6-r2v"] = _wan26_r2v_handler
+        registry["pixverse-v4-5"] = _pixverse_handler
+        registry["seedance-v1-5"] = _seedance_handler
+        registry["moonvalley"] = _moonvalley_handler
+        registry["kling-o3"] = _kling_o3_handler
+        registry["ltx-2-3"] = _ltx_23_handler
 
     return registry
