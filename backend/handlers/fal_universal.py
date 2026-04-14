@@ -147,6 +147,13 @@ def _parse_fal_output(data: dict[str, Any]) -> dict[str, Any]:
     if isinstance(glb, str) and glb:
         return {"mesh": {"type": "Mesh", "value": glb}}
 
+    # model_glb pattern: {"model_glb": {"url": "..."}} or {"model_glb": "url"}
+    model_glb = data.get("model_glb")
+    if isinstance(model_glb, dict) and model_glb.get("url"):
+        return {"mesh": {"type": "Mesh", "value": model_glb["url"]}}
+    if isinstance(model_glb, str) and model_glb:
+        return {"mesh": {"type": "Mesh", "value": model_glb}}
+
     # model_mesh pattern: {"model_mesh": {"url": "..."}}
     model_mesh = data.get("model_mesh")
     if isinstance(model_mesh, dict) and model_mesh.get("url"):

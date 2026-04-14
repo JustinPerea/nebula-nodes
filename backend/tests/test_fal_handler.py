@@ -69,6 +69,12 @@ class TestParseFalOutput:
         assert result["mesh"]["type"] == "Mesh"
         assert result["mesh"]["value"] == "https://fal.ai/mesh.glb"
 
+    def test_mesh_model_glb_dict(self) -> None:
+        """model_glb dict pattern (spec-mentioned field)."""
+        result = _parse_fal_output({"model_glb": {"url": "https://fal.ai/output.glb"}})
+        assert result["mesh"]["type"] == "Mesh"
+        assert result["mesh"]["value"] == "https://fal.ai/output.glb"
+
 
 @pytest.mark.asyncio
 async def test_missing_api_key_raises():

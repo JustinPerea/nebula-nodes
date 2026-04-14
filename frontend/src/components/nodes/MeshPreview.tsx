@@ -1,4 +1,5 @@
 import { memo, useState, useCallback, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import '@google/model-viewer';
 
 interface MeshPreviewProps {
@@ -37,7 +38,7 @@ function MeshPreviewComponent({ src }: MeshPreviewProps) {
         />
       </div>
 
-      {showModal && (
+      {showModal && createPortal(
         <div className="mesh-modal-overlay" onClick={handleClose}>
           <div className="mesh-modal" onClick={(e) => e.stopPropagation()}>
             <button className="mesh-modal__close" onClick={handleClose} aria-label="Close">
@@ -48,6 +49,7 @@ function MeshPreviewComponent({ src }: MeshPreviewProps) {
               camera-controls
               auto-rotate
               shadow-intensity="1"
+              alt="3D model preview"
               style={{ width: '100%', height: '100%', backgroundColor: '#161616' }}
             />
             <div className="mesh-modal__info">
@@ -59,7 +61,8 @@ function MeshPreviewComponent({ src }: MeshPreviewProps) {
               </a>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );
