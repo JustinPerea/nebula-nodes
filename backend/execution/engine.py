@@ -345,6 +345,14 @@ async def execute_graph(
                 elif node.definition_id == "image-input":
                     file_path = node.params.get("filePath", "")
                     node_outputs = {"image": {"type": "Image", "value": str(file_path)}}
+                elif node.definition_id == "video-input":
+                    file_path = node.params.get("filePath", "")
+                    node_outputs = {"video": {"type": "Video", "value": str(file_path)}}
+                elif node.definition_id == "audio-input":
+                    file_path = node.params.get("filePath", "")
+                    node_outputs = {"audio": {"type": "Audio", "value": str(file_path)}}
+                elif node.definition_id == "sticky-note":
+                    node_outputs = {}
                 elif node.definition_id == "preview":
                     node_outputs = {}
                     if "input" in resolved_inputs:

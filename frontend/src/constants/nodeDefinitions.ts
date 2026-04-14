@@ -2559,6 +2559,85 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
     ],
   },
+  'video-input': {
+    id: 'video-input',
+    displayName: 'Video Input',
+    category: 'utility',
+    apiProvider: 'openai',
+    apiEndpoint: '',
+    envKeyName: [],
+    executionPattern: 'sync',
+    inputPorts: [],
+    outputPorts: [
+      { id: 'video', label: 'Video', dataType: 'Video', required: false },
+    ],
+    params: [
+      {
+        key: 'filePath',
+        label: 'File',
+        type: 'file',
+        required: true,
+        default: '',
+      },
+    ],
+  },
+  'audio-input': {
+    id: 'audio-input',
+    displayName: 'Audio Input',
+    category: 'utility',
+    apiProvider: 'openai',
+    apiEndpoint: '',
+    envKeyName: [],
+    executionPattern: 'sync',
+    inputPorts: [],
+    outputPorts: [
+      { id: 'audio', label: 'Audio', dataType: 'Audio', required: false },
+    ],
+    params: [
+      {
+        key: 'filePath',
+        label: 'File',
+        type: 'file',
+        required: true,
+        default: '',
+      },
+    ],
+  },
+  'sticky-note': {
+    id: 'sticky-note',
+    displayName: 'Sticky Note',
+    category: 'utility',
+    apiProvider: 'openai',
+    apiEndpoint: '',
+    envKeyName: [],
+    executionPattern: 'sync',
+    inputPorts: [],
+    outputPorts: [],
+    params: [
+      {
+        key: 'content',
+        label: 'Note',
+        type: 'textarea',
+        required: false,
+        default: '',
+        placeholder: 'Add a note...',
+      },
+      {
+        key: 'color',
+        label: 'Color',
+        type: 'enum',
+        required: false,
+        default: 'yellow',
+        options: [
+          { label: 'Yellow', value: 'yellow' },
+          { label: 'Blue', value: 'blue' },
+          { label: 'Green', value: 'green' },
+          { label: 'Pink', value: 'pink' },
+          { label: 'Grey', value: 'grey' },
+        ],
+      },
+    ],
+  },
 };
 
 export function getNodeDefinition(definitionId: string): ModelNodeDefinition | undefined {
