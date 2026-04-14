@@ -83,6 +83,11 @@ async def handle_gemini_chat(
     if generation_config:
         request_body["generationConfig"] = generation_config
 
+    thinking_budget = node.params.get("thinkingBudget")
+    if thinking_budget is not None and thinking_budget != "":
+        request_body["generationConfig"] = request_body.get("generationConfig", {})
+        request_body["generationConfig"]["thinkingConfig"] = {"thinkingBudget": int(thinking_budget)}
+
     system_prompt = node.params.get("system")
     if system_prompt:
         request_body["systemInstruction"] = {"parts": [{"text": str(system_prompt)}]}
@@ -216,6 +221,18 @@ async def handle_imagen4(
     aspect_ratio = node.params.get("aspectRatio")
     if aspect_ratio:
         request_body["parameters"]["aspectRatio"] = str(aspect_ratio)
+
+    seed = node.params.get("seed")
+    if seed is not None and seed != "":
+        request_body["parameters"]["seed"] = int(seed)
+
+    enhance_prompt = node.params.get("enhancePrompt")
+    if enhance_prompt:
+        request_body["parameters"]["enhancePrompt"] = True
+
+    person_gen = node.params.get("personGeneration")
+    if person_gen:
+        request_body["parameters"]["personGeneration"] = str(person_gen)
 
     url = f"{IMAGEN_BASE_URL}/{model}:generateImages?key={api_key}"
 
