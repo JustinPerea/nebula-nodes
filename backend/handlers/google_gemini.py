@@ -131,7 +131,7 @@ async def handle_nano_banana(
     if not api_key:
         raise ValueError("GOOGLE_API_KEY is required")
 
-    model = node.params.get("model", "gemini-2.5-flash-preview-05-20")
+    model = node.params.get("model", "gemini-2.5-flash-image")
 
     contents = [{"parts": [{"text": str(prompt_input.value)}]}]
 

@@ -610,10 +610,12 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: true,
         default: 'gemini-2.5-flash',
         options: [
+          { label: 'Gemini 3.1 Pro', value: 'gemini-3.1-pro-preview' },
+          { label: 'Gemini 3 Flash', value: 'gemini-3-flash-preview' },
+          { label: 'Gemini 3.1 Flash Lite', value: 'gemini-3.1-flash-lite-preview' },
           { label: 'Gemini 2.5 Pro', value: 'gemini-2.5-pro' },
           { label: 'Gemini 2.5 Flash', value: 'gemini-2.5-flash' },
-          { label: 'Gemini 3 Pro Preview', value: 'gemini-3-pro-preview' },
-          { label: 'Gemini 3 Flash Preview', value: 'gemini-3-flash-preview' },
+          { label: 'Gemini 2.5 Flash Lite', value: 'gemini-2.5-flash-lite' },
         ],
       },
       {
@@ -844,11 +846,11 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         label: 'Model',
         type: 'enum',
         required: false,
-        default: 'gemini-2.5-flash-preview-05-20',
+        default: 'gemini-2.5-flash-image',
         options: [
-          { label: 'Gemini 2.5 Flash Image', value: 'gemini-2.5-flash-preview-05-20' },
-          { label: 'Gemini 3.1 Flash Image Preview', value: 'gemini-3.1-flash-image-preview' },
           { label: 'Gemini 3 Pro Image', value: 'gemini-3-pro-image-preview' },
+          { label: 'Gemini 3.1 Flash Image', value: 'gemini-3.1-flash-image-preview' },
+          { label: 'Gemini 2.5 Flash Image', value: 'gemini-2.5-flash-image' },
         ],
       },
       {
