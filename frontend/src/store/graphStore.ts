@@ -521,7 +521,14 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       isExecuting: false,
       nodes: state.nodes.map((node) => ({
         ...node,
-        data: { ...node.data, state: 'idle' as const, error: undefined, progress: undefined },
+        data: {
+          ...node.data,
+          // Only reset nodes that are mid-execution — preserve completed/errored results
+          state: (node.data.state === 'queued' || node.data.state === 'executing')
+            ? 'idle' as const
+            : node.data.state,
+          progress: undefined,
+        },
       })),
     }));
   },
