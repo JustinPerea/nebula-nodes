@@ -5,6 +5,7 @@ from typing import Any, Awaitable, Callable
 from models.graph import GraphNode, PortValueDict
 from models.events import ExecutionEvent
 from handlers.openai_image import handle_openai_image_generate
+from handlers.openai_image_edit import handle_openai_image_edit
 from handlers.google_gemini import handle_imagen4, handle_nano_banana
 from handlers.elevenlabs import handle_elevenlabs_tts
 
@@ -17,6 +18,7 @@ SYNC_HANDLERS: dict[
     ],
 ] = {
     "gpt-image-1-generate": handle_openai_image_generate,
+    "gpt-image-1-edit": handle_openai_image_edit,
     "dalle-3-generate": handle_openai_image_generate,
     "imagen-4-generate": handle_imagen4,
     "nano-banana": handle_nano_banana,
@@ -203,6 +205,30 @@ def get_handler_registry(
             node.params.setdefault("endpoint_id", "fal-ai/hunyuan3d-v3/image-to-3d")
             return await handle_fal_universal(node, inputs, api_keys, emit=emit)
 
+        async def _remove_bg_handler(
+            node: GraphNode,
+            inputs: dict[str, PortValueDict],
+            api_keys: dict[str, str],
+        ) -> dict[str, Any]:
+            node.params.setdefault("endpoint_id", "fal-ai/imageutils/rembg")
+            return await handle_fal_universal(node, inputs, api_keys, emit=emit)
+
+        async def _recraft_raster_handler(
+            node: GraphNode,
+            inputs: dict[str, PortValueDict],
+            api_keys: dict[str, str],
+        ) -> dict[str, Any]:
+            node.params.setdefault("endpoint_id", "fal-ai/recraft/v4/text-to-image")
+            return await handle_fal_universal(node, inputs, api_keys, emit=emit)
+
+        async def _recraft_svg_handler(
+            node: GraphNode,
+            inputs: dict[str, PortValueDict],
+            api_keys: dict[str, str],
+        ) -> dict[str, Any]:
+            node.params.setdefault("endpoint_id", "fal-ai/recraft/v4/text-to-vector")
+            return await handle_fal_universal(node, inputs, api_keys, emit=emit)
+
         registry["runway-gen4-turbo"] = _runway_handler
         registry["claude-chat"] = _claude_handler
         registry["gpt-4o-chat"] = _openai_chat_handler
@@ -222,5 +248,8 @@ def get_handler_registry(
         registry["meshy-image-to-3d"] = _meshy_image_to_3d_handler
         registry["hunyuan3d-text-to-3d"] = _hunyuan3d_text_to_3d_handler
         registry["hunyuan3d-image-to-3d"] = _hunyuan3d_image_to_3d_handler
+        registry["remove-background"] = _remove_bg_handler
+        registry["recraft-v4-raster"] = _recraft_raster_handler
+        registry["recraft-v4-svg"] = _recraft_svg_handler
 
     return registry
