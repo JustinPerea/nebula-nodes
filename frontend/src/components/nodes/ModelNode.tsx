@@ -37,6 +37,8 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
   const displayText = nodeData.streamingText ?? (textOutput && typeof textOutput.value === 'string' ? textOutput.value : null);
   const isStreaming = nodeData.state === 'executing' && nodeData.streamingText != null;
   const isTextInput = nodeData.definitionId === 'text-input';
+  const isImageInput = nodeData.definitionId === 'image-input';
+  const imageInputPreview = isImageInput && nodeData.params._previewUrl ? String(nodeData.params._previewUrl) : null;
 
   return (
     <div className={`model-node ${stateClass} ${selected ? 'model-node--selected' : ''}`} onClick={() => selectNode(id)}>
@@ -70,6 +72,12 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
             rows={4}
             spellCheck={false}
           />
+        </div>
+      )}
+
+      {imageInputPreview && (
+        <div className="model-node__preview">
+          <img src={imageInputPreview} alt="Image input" className="model-node__preview-image" loading="lazy" />
         </div>
       )}
 

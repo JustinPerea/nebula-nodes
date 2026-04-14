@@ -42,6 +42,44 @@ export function Canvas() {
   const onDrop = useCallback(
     (event: React.DragEvent) => {
       event.preventDefault();
+
+      // Check for image file drops first
+      const files = event.dataTransfer.files;
+      if (files.length > 0) {
+        const imageFiles = Array.from(files).filter((f) => f.type.startsWith('image/'));
+        if (imageFiles.length > 0) {
+          const reactFlowBounds = (event.target as HTMLElement)
+            .closest('.react-flow')
+            ?.getBoundingClientRect();
+          if (!reactFlowBounds) return;
+
+          imageFiles.forEach((file, idx) => {
+            const position = {
+              x: event.clientX - reactFlowBounds.left + idx * 40,
+              y: event.clientY - reactFlowBounds.top + idx * 40,
+            };
+            // Upload file then create node
+            const formData = new FormData();
+            formData.append('file', file);
+            fetch('http://localhost:8000/api/upload', { method: 'POST', body: formData })
+              .then((r) => r.json())
+              .then((data: { path: string; url: string }) => {
+                useGraphStore.getState().addNode('image-input', position);
+                // Find the node that was just added (last node)
+                const nodes = useGraphStore.getState().nodes;
+                const newNode = nodes[nodes.length - 1];
+                if (newNode) {
+                  useGraphStore.getState().updateNodeData(newNode.id, {
+                    params: { filePath: data.path, _previewUrl: data.url },
+                  });
+                }
+              })
+              .catch((err) => console.error('Upload failed:', err));
+          });
+          return;
+        }
+      }
+
       const definitionId = event.dataTransfer.getData('application/nebula-node');
       if (!definitionId) return;
 

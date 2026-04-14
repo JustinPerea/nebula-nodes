@@ -192,6 +192,39 @@ export function Inspector() {
                 max={param.max}
                 step={param.step ?? (param.type === 'float' ? 0.1 : 1)}
               />
+            ) : param.type === 'file' ? (
+              <div>
+                <label style={{ display: 'inline-block', padding: '4px 10px', background: '#333', border: '1px solid #555', borderRadius: 4, cursor: 'pointer', color: '#ccc', fontSize: 12 }}>
+                  Choose File
+                  <input
+                    type="file"
+                    accept="image/*"
+                    style={{ display: 'none' }}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      const formData = new FormData();
+                      formData.append('file', file);
+                      fetch('http://localhost:8000/api/upload', { method: 'POST', body: formData })
+                        .then((r) => r.json())
+                        .then((data: { path: string; url: string }) => {
+                          if (!selectedNodeId) return;
+                          updateNodeData(selectedNodeId, {
+                            params: { ...nodeData!.params, [param.key]: data.path, _previewUrl: data.url },
+                          });
+                        })
+                        .catch((err) => console.error('Upload failed:', err));
+                    }}
+                  />
+                </label>
+                {nodeData.params._previewUrl && (
+                  <img
+                    src={String(nodeData.params._previewUrl)}
+                    alt="Preview"
+                    style={{ width: '100%', borderRadius: 4, marginTop: 6, display: 'block' }}
+                  />
+                )}
+              </div>
             ) : param.type === 'boolean' ? (
               <label style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#aaa' }}>
                 <input

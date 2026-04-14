@@ -5,7 +5,9 @@ import json
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from uuid import uuid4
+
+from fastapi import FastAPI, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -39,6 +41,22 @@ OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
 app.include_router(openrouter_router)
 app.include_router(replicate_router)
 app.include_router(fal_router)
+
+
+@app.post("/api/upload")
+async def upload_file(file: UploadFile) -> dict:
+    """Upload a file (image, etc.) and return its path and URL."""
+    uploads_dir = OUTPUT_ROOT / "uploads"
+    uploads_dir.mkdir(parents=True, exist_ok=True)
+    ext = Path(file.filename or "file").suffix or ".png"
+    filename = f"{uuid4().hex[:12]}{ext}"
+    file_path = uploads_dir / filename
+    content = await file.read()
+    file_path.write_bytes(content)
+    return {
+        "path": str(file_path.resolve()),
+        "url": f"/api/outputs/uploads/{filename}",
+    }
 
 
 @app.get("/api/convert-to-glb")
