@@ -214,6 +214,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     apiEndpoint: 'fal-ai/flux-pro/v1.1-ultra',
     envKeyName: ['FAL_KEY', 'BFL_API_KEY'],
     executionPattern: 'sync',
+    directKeyName: 'BFL_API_KEY',
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
       { id: 'image', label: 'Image Guide', dataType: 'Image', required: false },
@@ -221,7 +222,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     outputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: false },
     ],
-    params: [
+    params: [],
+    sharedParams: [
       {
         key: 'aspect_ratio',
         label: 'Aspect Ratio',
@@ -229,10 +231,15 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: false,
         default: '16:9',
         options: [
-          { label: '1:1', value: '1:1' },
-          { label: '4:3', value: '4:3' },
+          { label: '21:9', value: '21:9' },
           { label: '16:9', value: '16:9' },
+          { label: '4:3', value: '4:3' },
+          { label: '3:2', value: '3:2' },
+          { label: '1:1', value: '1:1' },
+          { label: '2:3', value: '2:3' },
+          { label: '3:4', value: '3:4' },
           { label: '9:16', value: '9:16' },
+          { label: '9:21', value: '9:21' },
         ],
       },
       {
@@ -243,6 +250,67 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         default: 1,
         min: 1,
         max: 4,
+      },
+    ],
+    directParams: [
+      {
+        key: 'raw',
+        label: 'Raw (Natural Look)',
+        type: 'boolean',
+        required: false,
+        default: false,
+      },
+    ],
+    falParams: [
+      {
+        key: 'safety_tolerance',
+        label: 'Safety Tolerance',
+        type: 'enum',
+        required: false,
+        default: '2',
+        options: [
+          { label: '1 (Strict)', value: '1' },
+          { label: '2', value: '2' },
+          { label: '3', value: '3' },
+          { label: '4', value: '4' },
+          { label: '5', value: '5' },
+          { label: '6 (Permissive)', value: '6' },
+        ],
+      },
+      {
+        key: 'enhance_prompt',
+        label: 'Enhance Prompt',
+        type: 'boolean',
+        required: false,
+        default: false,
+      },
+      {
+        key: 'output_format',
+        label: 'Format',
+        type: 'enum',
+        required: false,
+        default: 'jpeg',
+        options: [
+          { label: 'JPEG', value: 'jpeg' },
+          { label: 'PNG', value: 'png' },
+        ],
+      },
+      {
+        key: 'seed',
+        label: 'Seed',
+        type: 'integer',
+        required: false,
+        placeholder: 'Random',
+      },
+      {
+        key: 'image_prompt_strength',
+        label: 'Image Influence',
+        type: 'float',
+        required: false,
+        default: 0.1,
+        min: 0,
+        max: 1,
+        step: 0.05,
       },
     ],
   },
@@ -878,6 +946,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     apiEndpoint: 'veo-3.1-generate-preview',
     envKeyName: ['GOOGLE_API_KEY', 'FAL_KEY'],
     executionPattern: 'async-poll',
+    directKeyName: 'GOOGLE_API_KEY',
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
       { id: 'image', label: 'First Frame', dataType: 'Image', required: false },
@@ -886,21 +955,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     outputPorts: [
       { id: 'video', label: 'Video', dataType: 'Video', required: false },
     ],
-    params: [
-      {
-        key: 'model',
-        label: 'Model',
-        type: 'enum',
-        required: false,
-        default: 'veo-3.1-generate-preview',
-        options: [
-          { label: 'Veo 3.1', value: 'veo-3.1-generate-preview' },
-          { label: 'Veo 3.1 Lite', value: 'veo-3.1-lite-generate-preview' },
-          { label: 'Veo 3.1 Fast', value: 'veo-3.1-fast-generate-preview' },
-          { label: 'Veo 3', value: 'veo-3-generate-001' },
-          { label: 'Veo 2', value: 'veo-2-generate-001' },
-        ],
-      },
+    params: [],
+    sharedParams: [
       {
         key: 'aspectRatio',
         label: 'Aspect Ratio',
@@ -941,6 +997,53 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         type: 'boolean',
         required: false,
         default: true,
+      },
+    ],
+    directParams: [
+      {
+        key: 'model',
+        label: 'Model',
+        type: 'enum',
+        required: false,
+        default: 'veo-3.1-generate-preview',
+        options: [
+          { label: 'Veo 3.1', value: 'veo-3.1-generate-preview' },
+          { label: 'Veo 3.1 Lite', value: 'veo-3.1-lite-generate-preview' },
+          { label: 'Veo 3.1 Fast', value: 'veo-3.1-fast-generate-preview' },
+          { label: 'Veo 3', value: 'veo-3-generate-001' },
+          { label: 'Veo 2', value: 'veo-2-generate-001' },
+        ],
+      },
+    ],
+    falParams: [
+      {
+        key: 'negative_prompt',
+        label: 'Negative Prompt',
+        type: 'string',
+        required: false,
+        placeholder: 'What to avoid',
+      },
+      {
+        key: 'seed',
+        label: 'Seed',
+        type: 'integer',
+        required: false,
+        placeholder: 'Random',
+      },
+      {
+        key: 'safety_tolerance',
+        label: 'Safety Tolerance',
+        type: 'enum',
+        required: false,
+        default: '4',
+        options: [
+          { label: '1 (Strict)', value: '1' },
+          { label: '2', value: '2' },
+          { label: '3', value: '3' },
+          { label: '4', value: '4' },
+          { label: '5', value: '5' },
+          { label: '6 (Permissive)', value: '6' },
+        ],
       },
     ],
   },
@@ -1214,13 +1317,15 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     apiEndpoint: 'fal-ai/meshy/v6/text-to-3d',
     envKeyName: ['MESHY_API_KEY', 'FAL_KEY'],
     executionPattern: 'async-poll',
+    directKeyName: 'MESHY_API_KEY',
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
     ],
     outputPorts: [
       { id: 'mesh', label: 'Mesh', dataType: 'Mesh', required: false },
     ],
-    params: [
+    params: [],
+    sharedParams: [
       {
         key: 'mode',
         label: 'Mode',
@@ -1289,6 +1394,58 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         type: 'boolean',
         required: false,
         default: false,
+      },
+    ],
+    directParams: [
+      {
+        key: 'ai_model',
+        label: 'AI Model',
+        type: 'enum',
+        required: false,
+        default: 'latest',
+        options: [
+          { label: 'Latest (Meshy 6)', value: 'latest' },
+          { label: 'Meshy 6', value: 'meshy-6' },
+          { label: 'Meshy 5', value: 'meshy-5' },
+        ],
+      },
+      {
+        key: 'target_formats',
+        label: 'Output Formats',
+        type: 'string',
+        required: false,
+        default: 'glb',
+        placeholder: 'glb,fbx,obj,usdz',
+      },
+      {
+        key: 'seed',
+        label: 'Seed',
+        type: 'integer',
+        required: false,
+        placeholder: 'Random',
+      },
+    ],
+    falParams: [
+      {
+        key: 'texture_prompt',
+        label: 'Texture Prompt',
+        type: 'string',
+        required: false,
+        placeholder: 'Guide the texturing process',
+      },
+      {
+        key: 'enable_prompt_expansion',
+        label: 'Enhance Prompt',
+        type: 'boolean',
+        required: false,
+        default: false,
+      },
+      {
+        key: 'enable_safety_checker',
+        label: 'Safety Checker',
+        type: 'boolean',
+        required: false,
+        default: true,
       },
       {
         key: 'seed',
