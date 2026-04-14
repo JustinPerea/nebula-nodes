@@ -186,6 +186,17 @@
   margin-bottom: 10px;
 }
 
+.settings__key-link {
+  color: #888;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.settings__key-link:hover {
+  color: #ccc;
+  text-decoration: underline;
+}
+
 .settings__key-input-wrapper {
   display: flex;
   gap: 4px;

@@ -7,19 +7,20 @@ interface ApiKeyField {
   key: string;
   label: string;
   placeholder: string;
+  url: string;
 }
 
 const API_KEY_FIELDS: ApiKeyField[] = [
-  { key: 'OPENAI_API_KEY', label: 'OpenAI', placeholder: 'sk-...' },
-  { key: 'ANTHROPIC_API_KEY', label: 'Anthropic', placeholder: 'sk-ant-...' },
-  { key: 'GOOGLE_API_KEY', label: 'Google (Gemini)', placeholder: 'AIza...' },
-  { key: 'OPENROUTER_API_KEY', label: 'OpenRouter', placeholder: 'sk-or-...' },
-  { key: 'REPLICATE_API_TOKEN', label: 'Replicate', placeholder: 'r8_...' },
-  { key: 'FAL_KEY', label: 'fal.ai', placeholder: 'fal_...' },
-  { key: 'MESHY_API_KEY', label: 'Meshy', placeholder: 'msy_...' },
-  { key: 'BFL_API_KEY', label: 'Black Forest Labs', placeholder: 'bfl-...' },
-  { key: 'RUNWAY_API_KEY', label: 'Runway', placeholder: 'key_...' },
-  { key: 'ELEVENLABS_API_KEY', label: 'ElevenLabs', placeholder: 'el_...' },
+  { key: 'OPENAI_API_KEY', label: 'OpenAI', placeholder: 'sk-...', url: 'https://platform.openai.com/api-keys' },
+  { key: 'ANTHROPIC_API_KEY', label: 'Anthropic', placeholder: 'sk-ant-...', url: 'https://console.anthropic.com/settings/keys' },
+  { key: 'GOOGLE_API_KEY', label: 'Google (Gemini)', placeholder: 'AIza...', url: 'https://aistudio.google.com/apikey' },
+  { key: 'OPENROUTER_API_KEY', label: 'OpenRouter', placeholder: 'sk-or-...', url: 'https://openrouter.ai/keys' },
+  { key: 'REPLICATE_API_TOKEN', label: 'Replicate', placeholder: 'r8_...', url: 'https://replicate.com/account/api-tokens' },
+  { key: 'FAL_KEY', label: 'fal.ai', placeholder: 'fal_...', url: 'https://fal.ai/dashboard/keys' },
+  { key: 'MESHY_API_KEY', label: 'Meshy', placeholder: 'msy_...', url: 'https://app.meshy.ai/settings/api' },
+  { key: 'BFL_API_KEY', label: 'Black Forest Labs', placeholder: 'bfl-...', url: 'https://api.bfl.ml/auth/profile' },
+  { key: 'RUNWAY_API_KEY', label: 'Runway', placeholder: 'key_...', url: 'https://app.runwayml.com/settings/api-keys' },
+  { key: 'ELEVENLABS_API_KEY', label: 'ElevenLabs', placeholder: 'el_...', url: 'https://elevenlabs.io/app/settings/api-keys' },
 ];
 
 interface RoutingOption {
@@ -156,7 +157,13 @@ export function Settings() {
             <div className="settings__section-label">API Keys</div>
             {API_KEY_FIELDS.map((field) => (
               <div key={field.key} className="settings__key-row">
-                <div className="inspector__label">{field.label}</div>
+                <a
+                  className="inspector__label settings__key-link"
+                  href={field.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title={`Get ${field.label} API key`}
+                >{field.label}</a>
                 <div className="settings__key-input-wrapper">
                   <input
                     className="inspector__field settings__key-input"
