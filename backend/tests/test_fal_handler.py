@@ -43,6 +43,32 @@ class TestParseFalOutput:
         assert result["text"]["type"] == "Text"
         assert "some_unknown_field" in result["text"]["value"]
 
+    def test_mesh_model_urls_glb(self) -> None:
+        """Meshy 6 pattern: model_urls dict with glb key."""
+        result = _parse_fal_output({
+            "model_urls": {"glb": "https://fal.ai/model.glb", "fbx": "https://fal.ai/model.fbx"}
+        })
+        assert result["mesh"]["type"] == "Mesh"
+        assert result["mesh"]["value"] == "https://fal.ai/model.glb"
+
+    def test_mesh_glb_dict(self) -> None:
+        """Hunyuan3D pattern: glb as dict with url."""
+        result = _parse_fal_output({"glb": {"url": "https://fal.ai/output.glb"}})
+        assert result["mesh"]["type"] == "Mesh"
+        assert result["mesh"]["value"] == "https://fal.ai/output.glb"
+
+    def test_mesh_glb_string(self) -> None:
+        """Direct glb URL string."""
+        result = _parse_fal_output({"glb": "https://fal.ai/output.glb"})
+        assert result["mesh"]["type"] == "Mesh"
+        assert result["mesh"]["value"] == "https://fal.ai/output.glb"
+
+    def test_mesh_model_mesh_url(self) -> None:
+        """model_mesh dict pattern."""
+        result = _parse_fal_output({"model_mesh": {"url": "https://fal.ai/mesh.glb"}})
+        assert result["mesh"]["type"] == "Mesh"
+        assert result["mesh"]["value"] == "https://fal.ai/mesh.glb"
+
 
 @pytest.mark.asyncio
 async def test_missing_api_key_raises():

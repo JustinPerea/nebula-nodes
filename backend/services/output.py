@@ -34,6 +34,17 @@ async def save_video_from_url(url: str, run_dir: Path, extension: str = "mp4") -
     return file_path
 
 
+async def save_mesh_from_url(url: str, run_dir: Path, extension: str = "glb") -> Path:
+    import httpx
+    filename = f"{uuid4().hex[:12]}.{extension}"
+    file_path = run_dir / filename
+    async with httpx.AsyncClient(timeout=120.0) as client:
+        response = await client.get(url)
+        response.raise_for_status()
+        file_path.write_bytes(response.content)
+    return file_path
+
+
 def image_to_data_uri(file_path: Path) -> str:
     image_bytes = file_path.read_bytes()
     b64 = base64.b64encode(image_bytes).decode("ascii")
