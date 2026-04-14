@@ -3175,6 +3175,186 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     outputPorts: [],
     params: [],
   },
+
+  'grok-imagine-video': {
+    id: 'grok-imagine-video',
+    displayName: 'Grok Imagine Video',
+    category: 'video-gen',
+    apiProvider: 'xai',
+    apiEndpoint: 'https://api.x.ai/v1/images/generations',
+    envKeyName: 'XAI_API_KEY',
+    executionPattern: 'async-poll',
+    inputPorts: [
+      { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
+      { id: 'image', label: 'Image', dataType: 'Image', required: false },
+    ],
+    outputPorts: [
+      { id: 'video', label: 'Video', dataType: 'Video', required: false },
+    ],
+    params: [
+      {
+        key: 'duration',
+        label: 'Duration',
+        type: 'integer',
+        required: false,
+        default: 5,
+        min: 1,
+        max: 15,
+      },
+      {
+        key: 'aspect_ratio',
+        label: 'Aspect Ratio',
+        type: 'enum',
+        required: false,
+        default: '16:9',
+        options: [
+          { label: '16:9', value: '16:9' },
+          { label: '9:16', value: '9:16' },
+          { label: '1:1', value: '1:1' },
+          { label: '4:3', value: '4:3' },
+          { label: '3:4', value: '3:4' },
+        ],
+      },
+    ],
+  },
+
+  'higgsfield': {
+    id: 'higgsfield',
+    displayName: 'Higgsfield',
+    category: 'video-gen',
+    apiProvider: 'higgsfield',
+    apiEndpoint: 'https://api.higgsfield.ai/v1/video/generate',
+    envKeyName: 'HIGGSFIELD_API_KEY',
+    executionPattern: 'async-poll',
+    inputPorts: [
+      { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
+    ],
+    outputPorts: [
+      { id: 'video', label: 'Video', dataType: 'Video', required: false },
+    ],
+    params: [
+      {
+        key: 'model',
+        label: 'Model',
+        type: 'enum',
+        required: false,
+        default: 'higgsfield-native',
+        options: [
+          { label: 'Higgsfield Native', value: 'higgsfield-native' },
+        ],
+      },
+      {
+        key: 'duration',
+        label: 'Duration',
+        type: 'integer',
+        required: false,
+        default: 5,
+        min: 1,
+        max: 15,
+      },
+    ],
+  },
+
+  'svg-rasterize': {
+    id: 'svg-rasterize',
+    displayName: 'SVG Rasterize',
+    category: 'transform',
+    apiProvider: 'openai',
+    apiEndpoint: '',
+    envKeyName: [],
+    executionPattern: 'sync',
+    inputPorts: [
+      { id: 'svg', label: 'SVG', dataType: 'SVG', required: true },
+    ],
+    outputPorts: [
+      { id: 'image', label: 'Image', dataType: 'Image', required: false },
+    ],
+    params: [
+      {
+        key: 'width',
+        label: 'Width',
+        type: 'integer',
+        required: false,
+        default: 1024,
+        min: 64,
+        max: 4096,
+      },
+      {
+        key: 'height',
+        label: 'Height',
+        type: 'integer',
+        required: false,
+        default: 1024,
+        min: 64,
+        max: 4096,
+      },
+      {
+        key: 'background',
+        label: 'Background',
+        type: 'enum',
+        required: false,
+        default: 'transparent',
+        options: [
+          { label: 'Transparent', value: 'transparent' },
+          { label: 'White', value: 'white' },
+        ],
+      },
+    ],
+  },
+
+  'iterator-image': {
+    id: 'iterator-image',
+    displayName: 'Image Iterator',
+    category: 'utility',
+    apiProvider: 'openai',
+    apiEndpoint: '',
+    envKeyName: [],
+    executionPattern: 'sync',
+    inputPorts: [
+      { id: 'array', label: 'Images', dataType: 'Array', required: true },
+    ],
+    outputPorts: [
+      { id: 'image', label: 'Image', dataType: 'Image', required: false },
+    ],
+    params: [
+      {
+        key: 'batch_size_cap',
+        label: 'Batch Size Cap',
+        type: 'integer',
+        required: false,
+        default: 10,
+        min: 1,
+        max: 25,
+      },
+    ],
+  },
+
+  'iterator-text': {
+    id: 'iterator-text',
+    displayName: 'Text Iterator',
+    category: 'utility',
+    apiProvider: 'openai',
+    apiEndpoint: '',
+    envKeyName: [],
+    executionPattern: 'sync',
+    inputPorts: [
+      { id: 'array', label: 'Texts', dataType: 'Array', required: true },
+    ],
+    outputPorts: [
+      { id: 'text', label: 'Text', dataType: 'Text', required: false },
+    ],
+    params: [
+      {
+        key: 'batch_size_cap',
+        label: 'Batch Size Cap',
+        type: 'integer',
+        required: false,
+        default: 10,
+        min: 1,
+        max: 25,
+      },
+    ],
+  },
 };
 
 export function getNodeDefinition(definitionId: string): ModelNodeDefinition | undefined {

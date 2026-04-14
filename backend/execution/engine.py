@@ -390,6 +390,24 @@ async def execute_graph(
                         node_outputs["imageA"] = {"type": resolved_inputs["imageA"].type, "value": resolved_inputs["imageA"].value}
                     if "imageB" in resolved_inputs:
                         node_outputs["imageB"] = {"type": resolved_inputs["imageB"].type, "value": resolved_inputs["imageB"].value}
+                elif node.definition_id == "svg-rasterize":
+                    # Placeholder — SVG rasterization requires sharp or cairosvg
+                    svg_input = resolved_inputs.get("svg")
+                    if svg_input and svg_input.value:
+                        node_outputs = {"image": {"type": "Image", "value": str(svg_input.value)}}
+                    else:
+                        node_outputs = {}
+                elif node.definition_id in ("iterator-image", "iterator-text"):
+                    # Simplified iterator — emits first item only
+                    # Full iteration (trigger downstream per item) requires engine refactor
+                    array_input = resolved_inputs.get("array")
+                    if array_input and isinstance(array_input.value, list) and len(array_input.value) > 0:
+                        first_item = array_input.value[0]
+                        out_type = "Image" if node.definition_id == "iterator-image" else "Text"
+                        out_key = "image" if node.definition_id == "iterator-image" else "text"
+                        node_outputs = {out_key: {"type": out_type, "value": first_item}}
+                    else:
+                        node_outputs = {}
                 elif node.definition_id == "preview":
                     node_outputs = {}
                     if "input" in resolved_inputs:
