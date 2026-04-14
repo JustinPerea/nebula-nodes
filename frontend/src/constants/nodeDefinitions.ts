@@ -627,6 +627,15 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         max: 2,
         step: 0.1,
       },
+      {
+        key: 'thinkingBudget',
+        label: 'Thinking Budget',
+        type: 'integer',
+        required: false,
+        placeholder: 'Default',
+        min: 0,
+        max: 65536,
+      },
     ],
   },
 
@@ -679,6 +688,32 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         default: 1,
         min: 1,
         max: 4,
+      },
+      {
+        key: 'seed',
+        label: 'Seed',
+        type: 'integer',
+        required: false,
+        placeholder: 'Random',
+      },
+      {
+        key: 'enhancePrompt',
+        label: 'Enhance Prompt',
+        type: 'boolean',
+        required: false,
+        default: false,
+      },
+      {
+        key: 'personGeneration',
+        label: 'Person Generation',
+        type: 'enum',
+        required: false,
+        default: 'allow_adult',
+        options: [
+          { label: 'Allow All', value: 'allow_all' },
+          { label: 'Allow Adult', value: 'allow_adult' },
+          { label: "Don't Allow", value: 'dont_allow' },
+        ],
       },
     ],
   },
@@ -805,6 +840,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         options: [
           { label: 'Gemini 2.5 Flash Image', value: 'gemini-2.5-flash-preview-05-20' },
           { label: 'Gemini 3.1 Flash Image Preview', value: 'gemini-3.1-flash-image-preview' },
+          { label: 'Gemini 3 Pro Image', value: 'gemini-3-pro-image-preview' },
         ],
       },
       {
