@@ -1980,6 +1980,218 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
     ],
   },
+
+  'gpt-image-1-edit': {
+    id: 'gpt-image-1-edit',
+    displayName: 'GPT Image 1 Edit',
+    category: 'image-gen',
+    apiProvider: 'openai',
+    apiEndpoint: '/v1/images/edits',
+    envKeyName: 'OPENAI_API_KEY',
+    executionPattern: 'sync',
+    inputPorts: [
+      { id: 'image', label: 'Image', dataType: 'Image', required: true },
+      { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
+      { id: 'mask', label: 'Mask', dataType: 'Mask', required: false },
+    ],
+    outputPorts: [
+      { id: 'image', label: 'Image', dataType: 'Image', required: false },
+    ],
+    params: [
+      {
+        key: 'model',
+        label: 'Model',
+        type: 'enum',
+        required: true,
+        default: 'gpt-image-1',
+        options: [
+          { label: 'GPT Image 1', value: 'gpt-image-1' },
+          { label: 'GPT Image 1.5', value: 'gpt-image-1.5' },
+          { label: 'GPT Image 1 Mini', value: 'gpt-image-1-mini' },
+          { label: 'DALL-E 2', value: 'dall-e-2' },
+        ],
+      },
+      {
+        key: 'n',
+        label: 'Count',
+        type: 'integer',
+        required: false,
+        default: 1,
+        min: 1,
+        max: 10,
+      },
+      {
+        key: 'size',
+        label: 'Size',
+        type: 'enum',
+        required: false,
+        default: '1024x1024',
+        options: [
+          { label: '1024×1024', value: '1024x1024' },
+          { label: '1536×1024', value: '1536x1024' },
+          { label: '1024×1536', value: '1024x1536' },
+        ],
+      },
+      {
+        key: 'quality',
+        label: 'Quality',
+        type: 'enum',
+        required: false,
+        default: 'medium',
+        options: [
+          { label: 'Low', value: 'low' },
+          { label: 'Medium', value: 'medium' },
+          { label: 'High', value: 'high' },
+        ],
+      },
+      {
+        key: 'output_format',
+        label: 'Format',
+        type: 'enum',
+        required: false,
+        default: 'png',
+        options: [
+          { label: 'PNG', value: 'png' },
+          { label: 'JPEG', value: 'jpeg' },
+          { label: 'WebP', value: 'webp' },
+        ],
+      },
+      {
+        key: 'background',
+        label: 'Background',
+        type: 'enum',
+        required: false,
+        default: 'auto',
+        options: [
+          { label: 'Auto', value: 'auto' },
+          { label: 'Transparent', value: 'transparent' },
+          { label: 'Opaque', value: 'opaque' },
+        ],
+      },
+    ],
+  },
+
+  'remove-background': {
+    id: 'remove-background',
+    displayName: 'Remove Background',
+    category: 'transform',
+    apiProvider: 'fal',
+    apiEndpoint: 'fal-ai/imageutils/rembg',
+    envKeyName: 'FAL_KEY',
+    executionPattern: 'async-poll',
+    inputPorts: [
+      { id: 'image', label: 'Image', dataType: 'Image', required: true },
+    ],
+    outputPorts: [
+      { id: 'image', label: 'Image', dataType: 'Image', required: false },
+    ],
+    params: [],
+  },
+
+  'recraft-v4-raster': {
+    id: 'recraft-v4-raster',
+    displayName: 'Recraft V4',
+    category: 'image-gen',
+    apiProvider: 'fal',
+    apiEndpoint: 'fal-ai/recraft/v4/text-to-image',
+    envKeyName: 'FAL_KEY',
+    executionPattern: 'async-poll',
+    inputPorts: [
+      { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
+    ],
+    outputPorts: [
+      { id: 'image', label: 'Image', dataType: 'Image', required: false },
+    ],
+    params: [
+      {
+        key: 'image_size',
+        label: 'Size',
+        type: 'enum',
+        required: false,
+        default: 'square_hd',
+        options: [
+          { label: 'Square HD', value: 'square_hd' },
+          { label: 'Square', value: 'square' },
+          { label: 'Portrait 4:3', value: 'portrait_4_3' },
+          { label: 'Portrait 16:9', value: 'portrait_16_9' },
+          { label: 'Landscape 4:3', value: 'landscape_4_3' },
+          { label: 'Landscape 16:9', value: 'landscape_16_9' },
+        ],
+      },
+      {
+        key: 'style',
+        label: 'Style',
+        type: 'enum',
+        required: false,
+        default: 'realistic_image',
+        options: [
+          { label: 'Realistic', value: 'realistic_image' },
+          { label: 'Digital Illustration', value: 'digital_illustration' },
+          { label: 'Vector Illustration', value: 'vector_illustration' },
+          { label: 'Icon', value: 'icon' },
+        ],
+      },
+      {
+        key: 'style_id',
+        label: 'Style ID',
+        type: 'string',
+        required: false,
+        placeholder: 'Custom style UUID',
+      },
+    ],
+  },
+
+  'recraft-v4-svg': {
+    id: 'recraft-v4-svg',
+    displayName: 'Recraft V4 SVG',
+    category: 'image-gen',
+    apiProvider: 'fal',
+    apiEndpoint: 'fal-ai/recraft/v4/text-to-vector',
+    envKeyName: 'FAL_KEY',
+    executionPattern: 'async-poll',
+    inputPorts: [
+      { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
+    ],
+    outputPorts: [
+      { id: 'svg', label: 'SVG', dataType: 'SVG', required: false },
+    ],
+    params: [
+      {
+        key: 'image_size',
+        label: 'Size',
+        type: 'enum',
+        required: false,
+        default: 'square_hd',
+        options: [
+          { label: 'Square HD', value: 'square_hd' },
+          { label: 'Square', value: 'square' },
+          { label: 'Portrait 4:3', value: 'portrait_4_3' },
+          { label: 'Portrait 16:9', value: 'portrait_16_9' },
+          { label: 'Landscape 4:3', value: 'landscape_4_3' },
+          { label: 'Landscape 16:9', value: 'landscape_16_9' },
+        ],
+      },
+      {
+        key: 'style',
+        label: 'Style',
+        type: 'enum',
+        required: false,
+        default: 'vector_illustration',
+        options: [
+          { label: 'Vector Illustration', value: 'vector_illustration' },
+          { label: 'Digital Illustration', value: 'digital_illustration' },
+          { label: 'Icon', value: 'icon' },
+        ],
+      },
+      {
+        key: 'style_id',
+        label: 'Style ID',
+        type: 'string',
+        required: false,
+        placeholder: 'Custom style UUID',
+      },
+    ],
+  },
 };
 
 export function getNodeDefinition(definitionId: string): ModelNodeDefinition | undefined {
