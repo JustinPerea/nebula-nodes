@@ -354,12 +354,52 @@ async def execute_graph(
                 elif node.definition_id == "sticky-note":
                     node_outputs = {}
                 elif node.definition_id == "frame-extractor":
-                    # Placeholder — frame extraction requires ffmpeg
                     video_input = resolved_inputs.get("video")
-                    if video_input and video_input.value:
-                        node_outputs = {"image": {"type": "Image", "value": str(video_input.value)}}
-                    else:
-                        node_outputs = {}
+                    if not video_input or not video_input.value:
+                        raise ValueError("Video input is required for frame extraction")
+                    try:
+                        import subprocess
+                        from services.output import get_run_dir
+                        from uuid import uuid4
+
+                        video_path = str(video_input.value)
+                        mode = node.params.get("mode", "first_frame")
+                        timestamp = float(node.params.get("timestamp", 0))
+
+                        run_dir = get_run_dir()
+                        out_path = run_dir / f"{uuid4().hex[:12]}.png"
+
+                        if mode == "first_frame":
+                            ts = "00:00:00.000"
+                        elif mode == "last_frame":
+                            probe = subprocess.run(
+                                ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+                                 "-of", "default=noprint_wrappers=1:nokey=1", video_path],
+                                capture_output=True, text=True
+                            )
+                            dur = float(probe.stdout.strip()) if probe.stdout.strip() else 1.0
+                            ts_secs = max(0, dur - 0.1)
+                            ts = f"{int(ts_secs//3600):02d}:{int((ts_secs%3600)//60):02d}:{ts_secs%60:06.3f}"
+                        elif mode == "middle_frame":
+                            probe = subprocess.run(
+                                ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+                                 "-of", "default=noprint_wrappers=1:nokey=1", video_path],
+                                capture_output=True, text=True
+                            )
+                            dur = float(probe.stdout.strip()) if probe.stdout.strip() else 1.0
+                            ts_secs = dur / 2
+                            ts = f"{int(ts_secs//3600):02d}:{int((ts_secs%3600)//60):02d}:{ts_secs%60:06.3f}"
+                        else:  # timestamp mode
+                            ts = f"{int(timestamp//3600):02d}:{int((timestamp%3600)//60):02d}:{timestamp%60:06.3f}"
+
+                        subprocess.run(
+                            ["ffmpeg", "-y", "-ss", ts, "-i", video_path, "-frames:v", "1",
+                             "-q:v", "2", str(out_path)],
+                            capture_output=True, check=True
+                        )
+                        node_outputs = {"image": {"type": "Image", "value": str(out_path)}}
+                    except FileNotFoundError:
+                        raise ValueError("ffmpeg not found — install ffmpeg to use Frame Extractor")
                 elif node.definition_id == "array-builder":
                     items = []
                     for port_id in ("item1", "item2", "item3", "item4"):
@@ -391,12 +431,41 @@ async def execute_graph(
                     if "imageB" in resolved_inputs:
                         node_outputs["imageB"] = {"type": resolved_inputs["imageB"].type, "value": resolved_inputs["imageB"].value}
                 elif node.definition_id == "svg-rasterize":
-                    # Placeholder — SVG rasterization requires sharp or cairosvg
                     svg_input = resolved_inputs.get("svg")
-                    if svg_input and svg_input.value:
-                        node_outputs = {"image": {"type": "Image", "value": str(svg_input.value)}}
-                    else:
-                        node_outputs = {}
+                    if not svg_input or not svg_input.value:
+                        raise ValueError("SVG input is required")
+                    svg_value = str(svg_input.value)
+                    width = int(node.params.get("width", 1024))
+                    height = int(node.params.get("height", 1024))
+                    bg = node.params.get("background", "transparent")
+
+                    from services.output import get_run_dir
+                    from uuid import uuid4
+
+                    run_dir = get_run_dir()
+                    out_path = run_dir / f"{uuid4().hex[:12]}.png"
+
+                    try:
+                        import cairosvg
+                        # Read SVG content — could be a file path or raw SVG string
+                        from pathlib import Path as _Path
+                        svg_path = _Path(svg_value)
+                        if svg_path.exists():
+                            svg_data = svg_path.read_text()
+                        else:
+                            svg_data = svg_value
+
+                        bg_color = None if bg == "transparent" else "#FFFFFF"
+                        cairosvg.svg2png(
+                            bytestring=svg_data.encode("utf-8"),
+                            write_to=str(out_path),
+                            output_width=width,
+                            output_height=height,
+                            background_color=bg_color,
+                        )
+                        node_outputs = {"image": {"type": "Image", "value": str(out_path)}}
+                    except ImportError:
+                        raise ValueError("cairosvg not installed — run: pip install cairosvg")
                 elif node.definition_id in ("iterator-image", "iterator-text"):
                     # Simplified iterator — emits first item only
                     # Full iteration (trigger downstream per item) requires engine refactor

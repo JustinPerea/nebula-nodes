@@ -5,3 +5,4 @@ pydantic==2.11.3
 python-dotenv==1.1.0
 python-multipart==0.0.20
 trimesh==4.6.8
+cairosvg==2.9.0
