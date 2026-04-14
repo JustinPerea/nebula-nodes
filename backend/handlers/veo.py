@@ -20,6 +20,28 @@ def _log(msg: str) -> None:
     print(f"[veo] {msg}", file=sys.stderr, flush=True)
 
 
+async def _image_to_veo_payload(img_str: str) -> dict[str, Any]:
+    """Convert an image path/URL/data URI to Veo's inline data format."""
+    if img_str.startswith(("http://", "https://")):
+        async with httpx.AsyncClient(timeout=60.0) as dl_client:
+            resp = await dl_client.get(img_str)
+            resp.raise_for_status()
+            b64_data = base64.b64encode(resp.content).decode("ascii")
+            return {"bytesBase64Encoded": b64_data, "mimeType": "image/png"}
+    elif img_str.startswith("data:"):
+        header, b64_data = img_str.split(",", 1)
+        mime_type = header.split(":")[1].split(";")[0]
+        return {"bytesBase64Encoded": b64_data, "mimeType": mime_type}
+    else:
+        img_path = Path(img_str)
+        if img_path.exists():
+            b64_data = base64.b64encode(img_path.read_bytes()).decode("ascii")
+            suffix = img_path.suffix.lstrip(".").lower()
+            mime_map = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg", "webp": "image/webp"}
+            return {"bytesBase64Encoded": b64_data, "mimeType": mime_map.get(suffix, "image/png")}
+    raise ValueError(f"Image not found: {img_str}")
+
+
 async def handle_veo(
     node: GraphNode,
     inputs: dict[str, PortValueDict],
@@ -39,28 +61,15 @@ async def handle_veo(
     if prompt_text:
         instance["prompt"] = prompt_text
 
-    # Image input for image-to-video
+    # First frame (image-to-video)
     image_input = inputs.get("image")
     if image_input and image_input.value:
-        img_str = str(image_input.value)
-        if img_str.startswith(("http://", "https://")):
-            # Can't use URL directly with Veo — need to convert to base64
-            async with httpx.AsyncClient(timeout=60.0) as dl_client:
-                resp = await dl_client.get(img_str)
-                resp.raise_for_status()
-                b64_data = base64.b64encode(resp.content).decode("ascii")
-                instance["image"] = {"bytesBase64Encoded": b64_data, "mimeType": "image/png"}
-        elif img_str.startswith("data:"):
-            header, b64_data = img_str.split(",", 1)
-            mime_type = header.split(":")[1].split(";")[0]
-            instance["image"] = {"bytesBase64Encoded": b64_data, "mimeType": mime_type}
-        else:
-            img_path = Path(img_str)
-            if img_path.exists():
-                b64_data = base64.b64encode(img_path.read_bytes()).decode("ascii")
-                suffix = img_path.suffix.lstrip(".").lower()
-                mime_map = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg", "webp": "image/webp"}
-                instance["image"] = {"bytesBase64Encoded": b64_data, "mimeType": mime_map.get(suffix, "image/png")}
+        instance["image"] = await _image_to_veo_payload(str(image_input.value))
+
+    # Last frame (interpolation)
+    last_frame_input = inputs.get("last_frame")
+    if last_frame_input and last_frame_input.value:
+        instance["lastFrame"] = await _image_to_veo_payload(str(last_frame_input.value))
 
     parameters: dict[str, Any] = {}
     aspect_ratio = node.params.get("aspectRatio")

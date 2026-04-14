@@ -880,7 +880,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     executionPattern: 'async-poll',
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
-      { id: 'image', label: 'Image', dataType: 'Image', required: false },
+      { id: 'image', label: 'First Frame', dataType: 'Image', required: false },
+      { id: 'last_frame', label: 'Last Frame', dataType: 'Image', required: false },
     ],
     outputPorts: [
       { id: 'video', label: 'Video', dataType: 'Video', required: false },
