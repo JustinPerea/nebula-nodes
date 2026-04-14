@@ -1,6 +1,6 @@
 # Nebula Node — Model Reference
 
-Complete reference for all 31 nodes. Nodes with dual-provider support show separate parameter tables for each API route.
+Complete reference for all 51 nodes. Nodes with dual-provider support show separate parameter tables for each API route.
 
 **Dual-param nodes** (marked with `[dual]`) show different parameters depending on which API key is configured. The Inspector automatically selects the right set.
 
@@ -157,6 +157,77 @@ Complete reference for all 31 nodes. Nodes with dual-provider support show separ
 | Steps | int (1-50) | 25 | — |
 | Guidance | float (1-20) | 7.5 | — |
 | Seed | int | random | — |
+
+---
+
+### GPT Image 1 Edit
+| | |
+|---|---|
+| **ID** | `gpt-image-1-edit` |
+| **Provider** | OpenAI |
+| **API Key** | `OPENAI_API_KEY` |
+| **Execution** | Sync |
+| **Input** | Image (required), Prompt (Text, required), Mask (optional) |
+| **Output** | Image |
+
+| Parameter | Type | Default | Options |
+|-----------|------|---------|---------|
+| Model | enum | gpt-image-1 | GPT Image 1, GPT Image 1.5, GPT Image 1 Mini, DALL-E 2 |
+| Count | int (1-10) | 1 | — |
+| Size | enum | 1024x1024 | 1024x1024, 1536x1024, 1024x1536 |
+| Quality | enum | medium | Low, Medium, High |
+| Format | enum | png | PNG, JPEG, WebP |
+| Background | enum | auto | Auto, Transparent, Opaque |
+
+---
+
+### Remove Background
+| | |
+|---|---|
+| **ID** | `remove-background` |
+| **Provider** | FAL |
+| **API Key** | `FAL_KEY` |
+| **Execution** | Async-poll |
+| **Input** | Image (required) |
+| **Output** | Image (transparent PNG) |
+
+No parameters.
+
+---
+
+### Recraft V4
+| | |
+|---|---|
+| **ID** | `recraft-v4-raster` |
+| **Provider** | FAL |
+| **API Key** | `FAL_KEY` |
+| **Execution** | Async-poll |
+| **Input** | Prompt (Text) |
+| **Output** | Image |
+
+| Parameter | Type | Default | Options |
+|-----------|------|---------|---------|
+| Size | enum | square_hd | Square HD, Square, Portrait 4:3, Portrait 16:9, Landscape 4:3, Landscape 16:9 |
+| Style | enum | realistic_image | Realistic, Digital Illustration, Vector Illustration, Icon |
+| Style ID | string | — | Custom style UUID |
+
+---
+
+### Recraft V4 SVG
+| | |
+|---|---|
+| **ID** | `recraft-v4-svg` |
+| **Provider** | FAL |
+| **API Key** | `FAL_KEY` |
+| **Execution** | Async-poll |
+| **Input** | Prompt (Text) |
+| **Output** | SVG |
+
+| Parameter | Type | Default | Options |
+|-----------|------|---------|---------|
+| Size | enum | square_hd | Square HD, Square, Portrait 4:3, Portrait 16:9, Landscape 4:3, Landscape 16:9 |
+| Style | enum | vector_illustration | Vector Illustration, Digital Illustration, Icon |
+| Style ID | string | — | Custom style UUID |
 
 ---
 
@@ -379,6 +450,252 @@ Complete reference for all 31 nodes. Nodes with dual-provider support show separ
 | Aspect Ratio | enum | 16:9 | 16:9, 9:16, 1:1, 4:3, 3:4 |
 | Resolution | enum | 1080p | 1080p, 1440p, 2160p |
 | Duration | enum | 6 | 6, 8, 10 |
+
+---
+
+### MiniMax T2V
+| | |
+|---|---|
+| **ID** | `minimax-t2v` |
+| **Provider** | MiniMax |
+| **API Key** | `MINIMAX_API_KEY` |
+| **Execution** | Async-poll (3-step) |
+| **Input** | Prompt (Text) |
+| **Output** | Video |
+
+| Parameter | Type | Default | Options |
+|-----------|------|---------|---------|
+| Model | enum | MiniMax-Hailuo-2.3 | Hailuo 2.3, Hailuo 02 |
+| Duration | enum | 6 | 6s, 9s |
+| Resolution | enum | 1080P | 720P, 1080P |
+
+---
+
+### MiniMax I2V
+| | |
+|---|---|
+| **ID** | `minimax-i2v` |
+| **Provider** | MiniMax |
+| **API Key** | `MINIMAX_API_KEY` |
+| **Execution** | Async-poll (3-step) |
+| **Input** | First Frame (Image, required), Last Frame (Image, optional), Prompt (Text, optional) |
+| **Output** | Video |
+
+| Parameter | Type | Default | Options |
+|-----------|------|---------|---------|
+| Model | enum | MiniMax-Hailuo-2.3 | Hailuo 2.3, Hailuo 02 |
+| Duration | enum | 6 | 6s, 9s |
+| Resolution | enum | 1080P | 720P, 1080P |
+
+---
+
+### MiniMax S2V
+| | |
+|---|---|
+| **ID** | `minimax-s2v` |
+| **Provider** | MiniMax |
+| **API Key** | `MINIMAX_API_KEY` |
+| **Execution** | Async-poll (3-step) |
+| **Input** | Character Image (required), Prompt (Text, required) |
+| **Output** | Video |
+
+| Parameter | Type | Default | Options |
+|-----------|------|---------|---------|
+| Duration | enum | 6 | 6s, 9s |
+| Resolution | enum | 1080P | 720P, 1080P |
+
+---
+
+### Kling V3
+| | |
+|---|---|
+| **ID** | `kling-v3` |
+| **Provider** | FAL |
+| **API Key** | `FAL_KEY` |
+| **Execution** | Async-poll |
+| **Input** | Prompt (Text, required), Start Image (optional), End Image (optional) |
+| **Output** | Video |
+
+| Parameter | Type | Default | Options |
+|-----------|------|---------|---------|
+| Duration | enum | 5 | 3s, 5s, 10s, 15s |
+| Resolution | enum | 1080p | 720p, 1080p |
+| Aspect Ratio | enum | 16:9 | 16:9, 9:16, 1:1 |
+| Negative Prompt | string | — | — |
+| Generate Audio | bool | true | — |
+| CFG Scale | float (0-1) | 0.5 | — |
+
+---
+
+### Kling Omni 3
+| | |
+|---|---|
+| **ID** | `kling-o3` |
+| **Provider** | FAL |
+| **API Key** | `FAL_KEY` |
+| **Execution** | Async-poll |
+| **Input** | Image (required), Prompt (Text, required) |
+| **Output** | Video |
+
+| Parameter | Type | Default | Options |
+|-----------|------|---------|---------|
+| Duration | enum | 5 | 5s, 10s |
+| Resolution | enum | 1080p | 720p, 1080p |
+| Aspect Ratio | enum | 16:9 | 16:9, 9:16, 1:1 |
+| Generate Audio | bool | true | — |
+
+---
+
+### Luma Ray 2 I2V
+| | |
+|---|---|
+| **ID** | `luma-ray2-i2v` |
+| **Provider** | FAL |
+| **API Key** | `FAL_KEY` |
+| **Execution** | Async-poll |
+| **Input** | Image (required), End Image (optional), Prompt (Text, optional) |
+| **Output** | Video |
+
+| Parameter | Type | Default | Options |
+|-----------|------|---------|---------|
+| Aspect Ratio | enum | 16:9 | 16:9, 9:16, 4:3, 3:4, 21:9 |
+| Resolution | enum | 540p | 540p, 720p (2x), 1080p (4x) |
+| Duration | enum | 5s | 5s, 9s |
+| Seamless Loop | bool | false | — |
+
+---
+
+### Luma Ray 2 Flash Modify
+| | |
+|---|---|
+| **ID** | `luma-ray2-flash-modify` |
+| **Provider** | FAL |
+| **API Key** | `FAL_KEY` |
+| **Execution** | Async-poll |
+| **Input** | Video (required), Prompt (Text, required) |
+| **Output** | Video |
+
+| Parameter | Type | Default | Options |
+|-----------|------|---------|---------|
+| Aspect Ratio | enum | 16:9 | 16:9, 9:16, 4:3, 3:4, 21:9 |
+| Resolution | enum | 540p | 540p, 720p, 1080p |
+| Duration | enum | 5s | 5s, 9s |
+
+---
+
+### Wan 2.6 I2V
+| | |
+|---|---|
+| **ID** | `wan-2-6-i2v` |
+| **Provider** | FAL |
+| **API Key** | `FAL_KEY` |
+| **Execution** | Async-poll |
+| **Input** | Image (required), Prompt (Text, required) |
+| **Output** | Video |
+
+| Parameter | Type | Default | Options |
+|-----------|------|---------|---------|
+| Duration | enum | 5s | 5s, 10s, 15s |
+| Resolution | enum | 720p | 480p, 720p, 1080p |
+| Aspect Ratio | enum | 16:9 | 16:9, 9:16, 1:1, 4:3, 3:4 |
+| Negative Prompt | string | — | — |
+| Seed | int | random | — |
+| Generate Audio | bool | false | — |
+
+---
+
+### Wan 2.6 R2V
+| | |
+|---|---|
+| **ID** | `wan-2-6-r2v` |
+| **Provider** | FAL |
+| **API Key** | `FAL_KEY` |
+| **Execution** | Async-poll |
+| **Input** | Prompt (Text, required), Video 1 (required), Video 2, Video 3 (optional) |
+| **Output** | Video |
+
+| Parameter | Type | Default | Options |
+|-----------|------|---------|---------|
+| Duration | enum | 5s | 5s, 10s, 15s |
+| Resolution | enum | 720p | 480p, 720p, 1080p |
+| Aspect Ratio | enum | 16:9 | 16:9, 9:16, 1:1 |
+| Negative Prompt | string | — | — |
+| Seed | int | random | — |
+
+---
+
+### PixVerse V4.5
+| | |
+|---|---|
+| **ID** | `pixverse-v4-5` |
+| **Provider** | FAL |
+| **API Key** | `FAL_KEY` |
+| **Execution** | Async-poll |
+| **Input** | Prompt (Text, required), Image (optional) |
+| **Output** | Video |
+
+| Parameter | Type | Default | Options |
+|-----------|------|---------|---------|
+| Duration | enum | 5 | 5s, 8s |
+| Resolution | enum | 720p | 360p, 540p, 720p, 1080p |
+| Quality | enum | Normal | Turbo, Normal, Fast |
+| Negative Prompt | string | — | — |
+| Seed | int | random | — |
+
+---
+
+### Seedance V1.5
+| | |
+|---|---|
+| **ID** | `seedance-v1-5` |
+| **Provider** | FAL |
+| **API Key** | `FAL_KEY` |
+| **Execution** | Async-poll |
+| **Input** | Prompt (Text, required), Image (optional) |
+| **Output** | Video |
+
+| Parameter | Type | Default | Options |
+|-----------|------|---------|---------|
+| Duration | enum | 8s | 4s, 6s, 8s, 10s, 12s |
+| Aspect Ratio | enum | 16:9 | 16:9, 9:16, 1:1, 21:9, 4:3, 3:4 |
+| Resolution | enum | 720p | 480p, 720p |
+
+---
+
+### Moonvalley
+| | |
+|---|---|
+| **ID** | `moonvalley` |
+| **Provider** | FAL |
+| **API Key** | `FAL_KEY` |
+| **Execution** | Async-poll |
+| **Input** | Image (required), Prompt (Text, optional) |
+| **Output** | Video |
+
+| Parameter | Type | Default | Options |
+|-----------|------|---------|---------|
+| Duration | enum | 5s | 5s, 10s |
+| Resolution | enum | 1920x1080 | 1920x1080, 1080x1920, 1152x1152 |
+
+---
+
+### LTX 2.3
+| | |
+|---|---|
+| **ID** | `ltx-2-3` |
+| **Provider** | FAL |
+| **API Key** | `FAL_KEY` |
+| **Execution** | Async-poll |
+| **Input** | Image (optional), Prompt (Text, required), Audio (optional) |
+| **Output** | Video |
+
+| Parameter | Type | Default | Options |
+|-----------|------|---------|---------|
+| Duration | int (2-20) | 6 | — |
+| Resolution | enum | 1080p | 1080p, 1440p, 2160p |
+| Aspect Ratio | enum | 16:9 | 16:9, 9:16, 1:1 |
+| FPS | enum | 25 | 25, 50 |
+| Generate Audio | bool | false | — |
 
 ---
 
@@ -624,6 +941,27 @@ Complete reference for all 31 nodes. Nodes with dual-provider support show separ
 | **Input** | Input (Any) |
 | **Output** | Output (Any) |
 
+### Video Input
+| **ID** | `video-input` |
+|---|---|
+| **Input** | — (file upload) |
+| **Output** | Video |
+| **Param** | File (file picker) |
+
+### Audio Input
+| **ID** | `audio-input` |
+|---|---|
+| **Input** | — (file upload) |
+| **Output** | Audio |
+| **Param** | File (file picker) |
+
+### Sticky Note
+| **ID** | `sticky-note` |
+|---|---|
+| **Input** | — |
+| **Output** | — |
+| **Params** | Content (textarea), Color (yellow, blue, green, pink, grey) |
+
 ---
 
 ## API Key Summary
@@ -640,6 +978,7 @@ Complete reference for all 31 nodes. Nodes with dual-provider support show separ
 | `BFL_API_KEY` | [Black Forest Labs](https://api.bfl.ml/auth/profile) | FLUX 1.1 Ultra |
 | `RUNWAY_API_KEY` | [Runway](https://app.runwayml.com/settings/api-keys) | Runway Gen-4 |
 | `ELEVENLABS_API_KEY` | [ElevenLabs](https://elevenlabs.io/app/settings/api-keys) | ElevenLabs TTS |
+| `MINIMAX_API_KEY` | [MiniMax](https://www.minimaxi.com/platform) | MiniMax T2V/I2V/S2V |
 
 ---
 
