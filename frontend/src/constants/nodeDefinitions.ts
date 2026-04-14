@@ -1229,13 +1229,6 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
           { label: '1080p', value: '1080p' },
         ],
       },
-      {
-        key: 'generateAudio',
-        label: 'Generate Audio',
-        type: 'boolean',
-        required: false,
-        default: true,
-      },
     ],
     directParams: [
       {

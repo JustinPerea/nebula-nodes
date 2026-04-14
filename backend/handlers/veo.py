@@ -81,15 +81,14 @@ async def handle_veo(
     resolution = node.params.get("resolution")
     if resolution:
         parameters["resolution"] = str(resolution)
-    # generateAudio only supported on Veo 3.1 models, not Veo 2/3
-    generate_audio = node.params.get("generateAudio")
-    if generate_audio is not None and "3.1" in model:
-        parameters["generateAudio"] = bool(generate_audio)
+    # Note: generateAudio is NOT a Veo API parameter — audio is always on
+    # for 3.1 models and always off for Veo 2. Controlled via prompt only.
 
     request_body: dict[str, Any] = {
         "instances": [instance],
-        "parameters": parameters,
     }
+    if parameters:
+        request_body["parameters"] = parameters
 
     async def noop_emit(event: ExecutionEvent) -> None:
         pass
@@ -97,10 +96,14 @@ async def handle_veo(
     _emit = emit or noop_emit
 
     _log(f"submitting to {model}")
+    auth_headers = {
+        "x-goog-api-key": api_key,
+        "Content-Type": "application/json",
+    }
     async with httpx.AsyncClient(timeout=120.0) as client:
         # Submit long-running operation
-        url = f"{VEO_BASE_URL}/{model}:predictLongRunning?key={api_key}"
-        resp = await client.post(url, json=request_body, headers={"Content-Type": "application/json"})
+        url = f"{VEO_BASE_URL}/{model}:predictLongRunning"
+        resp = await client.post(url, json=request_body, headers=auth_headers)
         _log(f"submit response: {resp.status_code}")
         if resp.status_code != 200:
             raise RuntimeError(f"Veo submit failed ({resp.status_code}): {resp.text}")
@@ -113,14 +116,14 @@ async def handle_veo(
         _log(f"polling operation {op_name}")
 
         # Poll for completion
-        poll_url = f"https://generativelanguage.googleapis.com/v1beta/{op_name}?key={api_key}"
+        poll_url = f"https://generativelanguage.googleapis.com/v1beta/{op_name}"
         max_polls = 300
         poll_interval = 3.0
 
         for poll_num in range(1, max_polls + 1):
             await asyncio.sleep(poll_interval)
 
-            poll_resp = await client.get(poll_url)
+            poll_resp = await client.get(poll_url, headers={"x-goog-api-key": api_key})
             if poll_resp.status_code != 200:
                 _log(f"poll FAILED: {poll_resp.status_code}")
                 raise RuntimeError(f"Veo poll failed ({poll_resp.status_code}): {poll_resp.text}")
@@ -151,7 +154,12 @@ async def handle_veo(
                         run_dir = get_run_dir()
                         filename = f"{uuid4().hex[:12]}.mp4"
                         file_path = run_dir / filename
-                        dl_resp = await client.get(f"{video_uri}?key={api_key}", timeout=120.0)
+                        dl_resp = await client.get(
+                            video_uri,
+                            headers={"x-goog-api-key": api_key},
+                            timeout=120.0,
+                            follow_redirects=True,
+                        )
                         dl_resp.raise_for_status()
                         file_path.write_bytes(dl_resp.content)
                         _log(f"saved to {file_path}")
