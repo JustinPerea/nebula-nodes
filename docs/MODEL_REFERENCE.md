@@ -1,6 +1,8 @@
 # Nebula Node — Model Reference
 
-Complete reference for all 31 nodes, their inputs, outputs, parameters, and API sources.
+Complete reference for all 31 nodes. Nodes with dual-provider support show separate parameter tables for each API route.
+
+**Dual-param nodes** (marked with `[dual]`) show different parameters depending on which API key is configured. The Inspector automatically selects the right set.
 
 ---
 
@@ -82,20 +84,39 @@ Complete reference for all 31 nodes, their inputs, outputs, parameters, and API 
 
 ---
 
-### FLUX 1.1 Ultra
+### FLUX 1.1 Ultra `[dual]`
 | | |
 |---|---|
 | **ID** | `flux-1-1-ultra` |
 | **Provider** | FAL / Black Forest Labs |
 | **API Key** | `FAL_KEY` or `BFL_API_KEY` |
+| **Direct Key** | `BFL_API_KEY` |
 | **Execution** | Sync |
 | **Input** | Prompt (Text), Image Guide (Image, optional) |
 | **Output** | Image |
 
+**Shared params (always shown):**
+
 | Parameter | Type | Default | Options |
 |-----------|------|---------|---------|
-| Aspect Ratio | enum | 16:9 | 1:1, 4:3, 16:9, 9:16 |
+| Aspect Ratio | enum | 16:9 | 21:9, 16:9, 4:3, 3:2, 1:1, 2:3, 3:4, 9:16, 9:21 |
 | Count | int (1-4) | 1 | — |
+
+**BFL Direct params** (when `BFL_API_KEY` set):
+
+| Parameter | Type | Default | Options |
+|-----------|------|---------|---------|
+| Raw (Natural Look) | bool | false | — |
+
+**FAL params** (when only `FAL_KEY` set):
+
+| Parameter | Type | Default | Options |
+|-----------|------|---------|---------|
+| Safety Tolerance | enum | 2 | 1 (Strict) – 6 (Permissive) |
+| Enhance Prompt | bool | false | — |
+| Format | enum | jpeg | JPEG, PNG |
+| Seed | int | random | — |
+| Image Influence | float (0-1) | 0.1 | — |
 
 ---
 
@@ -195,23 +216,39 @@ Complete reference for all 31 nodes, their inputs, outputs, parameters, and API 
 
 ## Video Generation
 
-### Veo 3.1
+### Veo 3.1 `[dual]`
 | | |
 |---|---|
 | **ID** | `veo-3` |
 | **Provider** | Google (direct) / FAL (fallback) |
 | **API Key** | `GOOGLE_API_KEY` or `FAL_KEY` |
+| **Direct Key** | `GOOGLE_API_KEY` |
 | **Execution** | Async-poll |
 | **Input** | Prompt (Text), First Frame (Image, optional), Last Frame (Image, optional) |
 | **Output** | Video |
 
+**Shared params (always shown):**
+
 | Parameter | Type | Default | Options |
 |-----------|------|---------|---------|
-| Model | enum | veo-3.1-generate-preview | Veo 3.1, Veo 3.1 Lite, Veo 3.1 Fast, Veo 3, Veo 2 |
 | Aspect Ratio | enum | 16:9 | 16:9, 9:16 |
 | Duration | enum | 8 | 4s, 6s, 8s |
 | Resolution | enum | 720p | 720p, 1080p |
 | Generate Audio | bool | true | — |
+
+**Google Direct params** (when `GOOGLE_API_KEY` set):
+
+| Parameter | Type | Default | Options |
+|-----------|------|---------|---------|
+| Model | enum | veo-3.1-generate-preview | Veo 3.1, Veo 3.1 Lite, Veo 3.1 Fast, Veo 3, Veo 2 |
+
+**FAL params** (when only `FAL_KEY` set):
+
+| Parameter | Type | Default | Options |
+|-----------|------|---------|---------|
+| Negative Prompt | string | — | — |
+| Seed | int | random | — |
+| Safety Tolerance | enum | 4 | 1 (Strict) – 6 (Permissive) |
 
 ---
 
@@ -343,15 +380,18 @@ Complete reference for all 31 nodes, their inputs, outputs, parameters, and API 
 
 ## 3D Generation
 
-### Meshy 6 Text-to-3D
+### Meshy 6 Text-to-3D `[dual]`
 | | |
 |---|---|
 | **ID** | `meshy-text-to-3d` |
 | **Provider** | Meshy (direct) / FAL (fallback) |
 | **API Key** | `MESHY_API_KEY` or `FAL_KEY` |
+| **Direct Key** | `MESHY_API_KEY` |
 | **Execution** | Async-poll |
 | **Input** | Prompt (Text) |
 | **Output** | Mesh |
+
+**Shared params (always shown):**
 
 | Parameter | Type | Default | Options |
 |-----------|------|---------|---------|
@@ -362,19 +402,38 @@ Complete reference for all 31 nodes, their inputs, outputs, parameters, and API 
 | PBR Materials | bool | false | — |
 | Pose Mode | enum | (none) | None, A-Pose, T-Pose |
 | Rigging | bool | false | — |
+
+**Meshy Direct params** (when `MESHY_API_KEY` set):
+
+| Parameter | Type | Default | Options |
+|-----------|------|---------|---------|
+| AI Model | enum | latest | Latest (Meshy 6), Meshy 6, Meshy 5 |
+| Output Formats | string | glb | glb,fbx,obj,usdz |
+| Seed | int | random | — |
+
+**FAL params** (when only `FAL_KEY` set):
+
+| Parameter | Type | Default | Options |
+|-----------|------|---------|---------|
+| Texture Prompt | string | — | Guide the texturing process |
+| Enhance Prompt | bool | false | — |
+| Safety Checker | bool | true | — |
 | Seed | int | random | — |
 
 ---
 
-### Meshy 6 Image-to-3D
+### Meshy 6 Image-to-3D `[dual]`
 | | |
 |---|---|
 | **ID** | `meshy-image-to-3d` |
 | **Provider** | Meshy (direct) / FAL (fallback) |
 | **API Key** | `MESHY_API_KEY` or `FAL_KEY` |
+| **Direct Key** | `MESHY_API_KEY` |
 | **Execution** | Async-poll |
 | **Input** | Image (required) |
 | **Output** | Mesh |
+
+**Shared params (always shown):**
 
 | Parameter | Type | Default | Options |
 |-----------|------|---------|---------|
@@ -385,6 +444,21 @@ Complete reference for all 31 nodes, their inputs, outputs, parameters, and API 
 | PBR Materials | bool | false | — |
 | Pose Mode | enum | (none) | None, A-Pose, T-Pose |
 | Rigging | bool | false | — |
+
+**Meshy Direct params** (when `MESHY_API_KEY` set):
+
+| Parameter | Type | Default | Options |
+|-----------|------|---------|---------|
+| AI Model | enum | latest | Latest (Meshy 6), Meshy 6, Meshy 5 |
+| Mesh Type | enum | standard | Standard, Low Poly |
+| Output Formats | string | glb | glb,fbx,obj,usdz |
+
+**FAL params** (when only `FAL_KEY` set):
+
+| Parameter | Type | Default | Options |
+|-----------|------|---------|---------|
+| Texture Prompt | string | — | Guide the texturing process |
+| Safety Checker | bool | true | — |
 | Seed | int | random | — |
 
 ---
@@ -487,7 +561,7 @@ Complete reference for all 31 nodes, their inputs, outputs, parameters, and API 
 |---|---|
 | **Input** | — |
 | **Output** | Text |
-| **Param** | Text (textarea) |
+| **Param** | Text (textarea, spellcheck enabled) |
 
 ### Image Input
 | **ID** | `image-input` |
@@ -534,7 +608,7 @@ Complete reference for all 31 nodes, their inputs, outputs, parameters, and API 
 | `REPLICATE_API_TOKEN` | [Replicate](https://replicate.com/account/api-tokens) | Replicate |
 | `FAL_KEY` | [fal.ai](https://fal.ai/dashboard/keys) | FLUX, Kling, Sora 2, Wan, Luma, LTX, Hunyuan3D, fallbacks |
 | `MESHY_API_KEY` | [Meshy](https://app.meshy.ai/settings/api) | Meshy 6 Text/Image-to-3D |
-| `BFL_API_KEY` | [Black Forest Labs](https://api.bfl.ml/auth/profile) | FLUX 1.1 Ultra (alternative to FAL) |
+| `BFL_API_KEY` | [Black Forest Labs](https://api.bfl.ml/auth/profile) | FLUX 1.1 Ultra |
 | `RUNWAY_API_KEY` | [Runway](https://app.runwayml.com/settings/api-keys) | Runway Gen-4 |
 | `ELEVENLABS_API_KEY` | [ElevenLabs](https://elevenlabs.io/app/settings/api-keys) | ElevenLabs TTS |
 
@@ -553,3 +627,17 @@ Complete reference for all 31 nodes, their inputs, outputs, parameters, and API 
 | SVG | #795548 (brown) | SVG, Any |
 | Array | #2196F3 (blue) | Array, Any |
 | Any | #9E9E9E (gray) | All types |
+
+---
+
+## Architecture Notes
+
+### Dual-Param System
+Nodes with both FAL and direct API support use three param arrays:
+- **`sharedParams`** — always shown regardless of route
+- **`directParams`** — shown when `directKeyName` API key is configured
+- **`falParams`** — shown when only `FAL_KEY` is available
+
+The Inspector auto-detects which route is active based on the settings cache. Handlers similarly check for the direct key first and fall back to FAL.
+
+**Current dual-param nodes:** FLUX 1.1 Ultra, Veo 3.1, Meshy 6 Text-to-3D, Meshy 6 Image-to-3D
