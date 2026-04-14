@@ -6,6 +6,7 @@ from models.graph import GraphNode, PortValueDict
 from models.events import ExecutionEvent
 from handlers.openai_image import handle_openai_image_generate
 from handlers.google_gemini import handle_imagen4, handle_nano_banana
+from handlers.elevenlabs import handle_elevenlabs_tts
 
 
 SYNC_HANDLERS: dict[
@@ -19,6 +20,7 @@ SYNC_HANDLERS: dict[
     "dalle-3-generate": handle_openai_image_generate,
     "imagen-4-generate": handle_imagen4,
     "nano-banana": handle_nano_banana,
+    "elevenlabs-tts": handle_elevenlabs_tts,
 }
 
 

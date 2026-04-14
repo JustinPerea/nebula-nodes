@@ -195,6 +195,14 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         max: 1,
         step: 0.05,
       },
+      {
+        key: 'voice_id',
+        label: 'Voice ID',
+        type: 'string',
+        required: false,
+        default: '21m00Tcm4TlvDq8ikWAM',
+        placeholder: 'Rachel (default)',
+      },
     ],
   },
 
