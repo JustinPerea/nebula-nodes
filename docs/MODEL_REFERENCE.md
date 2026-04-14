@@ -1,6 +1,6 @@
 # Nebula Node — Model Reference
 
-Complete reference for all 51 nodes. Nodes with dual-provider support show separate parameter tables for each API route.
+Complete reference for all 60 nodes. Nodes with dual-provider support show separate parameter tables for each API route.
 
 **Dual-param nodes** (marked with `[dual]`) show different parameters depending on which API key is configured. The Inspector automatically selects the right set.
 
@@ -699,6 +699,40 @@ No parameters.
 
 ---
 
+### Grok Imagine Video
+| | |
+|---|---|
+| **ID** | `grok-imagine-video` |
+| **Provider** | xAI |
+| **API Key** | `XAI_API_KEY` |
+| **Execution** | Async-poll |
+| **Input** | Prompt (Text, required), Image (optional) |
+| **Output** | Video |
+
+| Parameter | Type | Default | Options |
+|-----------|------|---------|---------|
+| Duration | int (1-15) | 5 | — |
+| Aspect Ratio | enum | 16:9 | 16:9, 9:16, 1:1, 4:3, 3:4 |
+
+---
+
+### Higgsfield
+| | |
+|---|---|
+| **ID** | `higgsfield` |
+| **Provider** | Higgsfield |
+| **API Key** | `HIGGSFIELD_API_KEY` |
+| **Execution** | Async-poll |
+| **Input** | Prompt (Text) |
+| **Output** | Video |
+
+| Parameter | Type | Default | Options |
+|-----------|------|---------|---------|
+| Model | enum | higgsfield-native | Higgsfield Native |
+| Duration | int (1-15) | 5 | — |
+
+---
+
 ## Audio Generation
 
 ### ElevenLabs TTS
@@ -962,6 +996,55 @@ No parameters.
 | **Output** | — |
 | **Params** | Content (textarea), Color (yellow, blue, green, pink, grey) |
 
+### Frame Extractor
+| **ID** | `frame-extractor` |
+|---|---|
+| **Category** | Transform |
+| **Input** | Video (required) |
+| **Output** | Image |
+| **Params** | Mode (First Frame, Last Frame, Middle Frame, At Timestamp), Timestamp (float) |
+
+### SVG Rasterize
+| **ID** | `svg-rasterize` |
+|---|---|
+| **Category** | Transform |
+| **Input** | SVG (required) |
+| **Output** | Image |
+| **Params** | Width (64-4096, default 1024), Height (64-4096, default 1024), Background (Transparent, White) |
+
+### Array Builder
+| **ID** | `array-builder` |
+|---|---|
+| **Input** | Item 1 (Any, required), Item 2-4 (Any, optional) |
+| **Output** | Array |
+
+### Array Selector
+| **ID** | `array-selector` |
+|---|---|
+| **Input** | Array (required) |
+| **Output** | Item (Any) |
+| **Params** | Mode (First, Last, Random, By Index), Index (int, default 0) |
+
+### Image Compare
+| **ID** | `image-compare` |
+|---|---|
+| **Input** | Image A (required), Image B (required) |
+| **Output** | — |
+
+### Image Iterator
+| **ID** | `iterator-image` |
+|---|---|
+| **Input** | Images (Array, required) |
+| **Output** | Image (emits per item) |
+| **Params** | Batch Size Cap (1-25, default 10) |
+
+### Text Iterator
+| **ID** | `iterator-text` |
+|---|---|
+| **Input** | Texts (Array, required) |
+| **Output** | Text (emits per item) |
+| **Params** | Batch Size Cap (1-25, default 10) |
+
 ---
 
 ## API Key Summary
@@ -979,6 +1062,8 @@ No parameters.
 | `RUNWAY_API_KEY` | [Runway](https://app.runwayml.com/settings/api-keys) | Runway Gen-4 |
 | `ELEVENLABS_API_KEY` | [ElevenLabs](https://elevenlabs.io/app/settings/api-keys) | ElevenLabs TTS |
 | `MINIMAX_API_KEY` | [MiniMax](https://www.minimaxi.com/platform) | MiniMax T2V/I2V/S2V |
+| `XAI_API_KEY` | [xAI](https://console.x.ai) | Grok Imagine Video |
+| `HIGGSFIELD_API_KEY` | [Higgsfield](https://app.higgsfield.ai/settings) | Higgsfield |
 
 ---
 
