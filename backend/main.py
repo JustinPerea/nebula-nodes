@@ -194,7 +194,7 @@ async def update_settings(body: dict[str, Any]) -> dict:
             if v and not v.startswith("***"):
                 current_keys[k] = v
         current["apiKeys"] = current_keys
-    for key in ("routing", "outputPath", "executionMode", "batchSizeCap"):
+    for key in ("routing", "outputPath", "executionMode", "batchSizeCap", "favorites"):
         if key in body:
             current[key] = body[key]
     save_settings(current)

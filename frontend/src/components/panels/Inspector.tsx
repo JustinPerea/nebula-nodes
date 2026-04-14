@@ -4,7 +4,7 @@ import { useGraphStore } from '../../store/graphStore';
 import { NODE_DEFINITIONS } from '../../constants/nodeDefinitions';
 import { CATEGORY_COLORS } from '../../constants/ports';
 import type { NodeData, DynamicNodeData, ParamDefinition } from '../../types';
-import { fetchOpenRouterModels, type OpenRouterModel } from '../../lib/api';
+import { fetchOpenRouterModels, getSettings, updateSettings, type OpenRouterModel } from '../../lib/api';
 import '../../styles/panels.css';
 
 export function Inspector() {
@@ -29,6 +29,16 @@ export function Inspector() {
 
   // Replicate schema fetch state
   const [schemaLoading, setSchemaLoading] = useState(false);
+
+  // Favorites state
+  const [favorites, setFavorites] = useState<Record<string, string[]>>({});
+
+  // Load favorites from settings
+  useEffect(() => {
+    getSettings().then((settings: any) => {
+      setFavorites(settings.favorites ?? {});
+    }).catch(() => {});
+  }, []);
 
   const selectedNode = nodes.find((n) => n.id === selectedNodeId);
   const nodeData = selectedNode?.data as NodeData | undefined;
@@ -60,14 +70,21 @@ export function Inspector() {
       .finally(() => setModelsLoading(false));
   }, [nodeData?.definitionId]);
 
-  // Filter models by search query — cap at 50 to avoid huge dropdowns
+  // Filter models by search query — cap at 50 to avoid huge dropdowns, favorites sorted to top
   const filteredModels = useMemo(() => {
-    if (!modelSearch.trim()) return openRouterModels.slice(0, 50);
-    const lower = modelSearch.toLowerCase();
-    return openRouterModels
-      .filter((m) => m.id.toLowerCase().includes(lower) || m.name.toLowerCase().includes(lower))
-      .slice(0, 50);
-  }, [openRouterModels, modelSearch]);
+    const favIds = favorites.openrouter ?? [];
+    let models = openRouterModels;
+    if (modelSearch.trim()) {
+      const lower = modelSearch.toLowerCase();
+      models = models.filter((m) => m.id.toLowerCase().includes(lower) || m.name.toLowerCase().includes(lower));
+    }
+    const sorted = [...models].sort((a, b) => {
+      const aFav = favIds.includes(a.id) ? 0 : 1;
+      const bFav = favIds.includes(b.id) ? 0 : 1;
+      return aFav - bFav;
+    });
+    return sorted.slice(0, 50);
+  }, [openRouterModels, modelSearch, favorites.openrouter]);
 
   useEffect(() => {
     function onMouseMove(e: MouseEvent) {
@@ -168,13 +185,36 @@ export function Inspector() {
                   <option value="">-- Select a model --</option>
                   {filteredModels.map((m) => (
                     <option key={m.id} value={m.id}>
-                      {m.name} ({m.id})
+                      {(favorites.openrouter ?? []).includes(m.id) ? '★ ' : ''}{m.name} ({m.id})
                     </option>
                   ))}
                 </select>
                 {nodeData.params.model && (
-                  <div style={{ fontSize: 10, color: '#666', marginTop: 2 }}>
-                    Selected: {String(nodeData.params.model)}
+                  <div style={{ fontSize: 10, color: '#666', marginTop: 2, display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <span>Selected: {String(nodeData.params.model)}</span>
+                    <button
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        fontSize: 14,
+                        padding: 0,
+                        color: (favorites.openrouter ?? []).includes(String(nodeData.params.model)) ? '#FFC107' : '#555',
+                      }}
+                      title="Toggle favorite"
+                      onClick={() => {
+                        const modelId = String(nodeData.params.model);
+                        const current = favorites.openrouter ?? [];
+                        const updated = current.includes(modelId)
+                          ? current.filter((m: string) => m !== modelId)
+                          : [...current, modelId];
+                        const newFavorites = { ...favorites, openrouter: updated };
+                        setFavorites(newFavorites);
+                        updateSettings({ favorites: newFavorites }).catch(() => {});
+                      }}
+                    >
+                      {(favorites.openrouter ?? []).includes(String(nodeData.params.model)) ? '★' : '☆'}
+                    </button>
                   </div>
                 )}
               </div>
