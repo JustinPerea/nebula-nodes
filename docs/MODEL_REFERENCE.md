@@ -179,6 +179,9 @@ Complete reference for all 31 nodes. Nodes with dual-provider support show separ
 | Temperature | float (0-1) | 1 | — |
 | System Prompt | textarea | — | — |
 | Top P | float (0-1) | default | — |
+| Stop Sequences | string | — | Comma-separated |
+| Extended Thinking | bool | false | — |
+| Thinking Budget | int (1024-200000) | default | Shown when Extended Thinking is on |
 
 ---
 
@@ -222,6 +225,8 @@ Complete reference for all 31 nodes. Nodes with dual-provider support show separ
 | Thinking Budget | int (0-65536) | default | — |
 | Top P | float (0-1) | default | — |
 | Top K | int | 64 | — |
+| Stop Sequences | string | — | Comma-separated |
+| Response Format | enum | text/plain | Text, JSON |
 
 ---
 
@@ -569,8 +574,8 @@ Complete reference for all 31 nodes. Nodes with dual-provider support show separ
 | **Provider** | FAL (any endpoint) |
 | **API Key** | `FAL_KEY` |
 | **Execution** | Async-poll |
-| **Input** | Prompt (Text) |
-| **Output** | Image |
+| **Input** | Prompt (Text), Image (optional) |
+| **Output** | Image, Video, Audio, Mesh (all available — handler auto-detects output type) |
 
 | Parameter | Type | Default | Options |
 |-----------|------|---------|---------|
