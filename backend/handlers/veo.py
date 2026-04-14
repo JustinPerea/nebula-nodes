@@ -77,7 +77,7 @@ async def handle_veo(
         parameters["aspectRatio"] = str(aspect_ratio)
     duration = node.params.get("duration")
     if duration:
-        parameters["durationSeconds"] = str(duration).replace("s", "")
+        parameters["durationSeconds"] = int(str(duration).replace("s", ""))
     resolution = node.params.get("resolution")
     if resolution:
         parameters["resolution"] = str(resolution)
