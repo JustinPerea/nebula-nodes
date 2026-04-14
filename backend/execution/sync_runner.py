@@ -253,6 +253,14 @@ def get_handler_registry(
             node.params.setdefault("endpoint_id", "fal-ai/wan/v2.6/image-to-video")
             return await handle_fal_universal(node, inputs, api_keys, emit=emit)
 
+        async def _minimax_handler(
+            node: GraphNode,
+            inputs: dict[str, PortValueDict],
+            api_keys: dict[str, str],
+        ) -> dict[str, Any]:
+            from handlers.minimax import handle_minimax_video
+            return await handle_minimax_video(node, inputs, api_keys, emit=emit)
+
         registry["runway-gen4-turbo"] = _runway_handler
         registry["claude-chat"] = _claude_handler
         registry["gpt-4o-chat"] = _openai_chat_handler
@@ -278,5 +286,8 @@ def get_handler_registry(
         registry["kling-v3"] = _kling_v3_handler
         registry["luma-ray2-i2v"] = _luma_ray2_i2v_handler
         registry["wan-2-6-i2v"] = _wan26_i2v_handler
+        registry["minimax-t2v"] = _minimax_handler
+        registry["minimax-i2v"] = _minimax_handler
+        registry["minimax-s2v"] = _minimax_handler
 
     return registry

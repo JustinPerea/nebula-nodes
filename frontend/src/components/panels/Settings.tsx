@@ -21,6 +21,7 @@ const API_KEY_FIELDS: ApiKeyField[] = [
   { key: 'BFL_API_KEY', label: 'Black Forest Labs', placeholder: 'bfl-...', url: 'https://api.bfl.ml/auth/profile' },
   { key: 'RUNWAY_API_KEY', label: 'Runway', placeholder: 'key_...', url: 'https://app.runwayml.com/settings/api-keys' },
   { key: 'ELEVENLABS_API_KEY', label: 'ElevenLabs', placeholder: 'el_...', url: 'https://elevenlabs.io/app/settings/api-keys' },
+  { key: 'MINIMAX_API_KEY', label: 'MiniMax', placeholder: 'eyJ...', url: 'https://www.minimaxi.com/platform' },
 ];
 
 interface RoutingOption {
