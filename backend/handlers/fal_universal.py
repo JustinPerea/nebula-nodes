@@ -42,9 +42,10 @@ async def handle_fal_universal(
         fal_input["image_url"] = str(image_input.value)
 
     # Multi-image inputs for 3D models (Hunyuan3D V3 Image-to-3D)
+    # Hunyuan3D uses "input_image_url" for the primary image
     front_image = inputs.get("front_image")
     if front_image and front_image.value:
-        fal_input["image_url"] = str(front_image.value)
+        fal_input["input_image_url"] = str(front_image.value)
 
     back_image = inputs.get("back_image")
     if back_image and back_image.value:

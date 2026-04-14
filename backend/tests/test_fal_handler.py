@@ -198,7 +198,7 @@ async def test_multi_image_inputs_mapped():
         # Verify the submit payload included all images
         call_args = mock_client.post.call_args
         payload = call_args.kwargs.get("json") or call_args[1].get("json")
-        assert payload["image_url"] == "https://example.com/front.png"
+        assert payload["input_image_url"] == "https://example.com/front.png"
         assert payload["back_image_url"] == "https://example.com/back.png"
         assert payload["left_image_url"] == "https://example.com/left.png"
         assert payload["right_image_url"] == "https://example.com/right.png"
