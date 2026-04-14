@@ -402,7 +402,7 @@ async def execute_graph(
                         raise ValueError("ffmpeg not found — install ffmpeg to use Frame Extractor")
                 elif node.definition_id == "array-builder":
                     items = []
-                    for port_id in ("item1", "item2", "item3", "item4"):
+                    for port_id in ("item1", "item2", "item3", "item4", "item5", "item6", "item7", "item8"):
                         if port_id in resolved_inputs and resolved_inputs[port_id].value is not None:
                             items.append(resolved_inputs[port_id].value)
                     node_outputs = {"array": {"type": "Array", "value": items}}

@@ -2138,6 +2138,13 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: false,
         placeholder: 'Custom style UUID',
       },
+      {
+        key: 'colors',
+        label: 'Color Palette',
+        type: 'string',
+        required: false,
+        placeholder: '#FF0000,#00FF00,#0000FF',
+      },
     ],
   },
 
@@ -2189,6 +2196,13 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         type: 'string',
         required: false,
         placeholder: 'Custom style UUID',
+      },
+      {
+        key: 'colors',
+        label: 'Color Palette',
+        type: 'string',
+        required: false,
+        placeholder: '#FF0000,#00FF00,#0000FF',
       },
     ],
   },
@@ -2941,6 +2955,9 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     inputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: true },
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
+      { id: 'ref_video1', label: 'Ref Video 1', dataType: 'Video', required: false },
+      { id: 'ref_video2', label: 'Ref Video 2', dataType: 'Video', required: false },
+      { id: 'ref_video3', label: 'Ref Video 3', dataType: 'Video', required: false },
     ],
     outputPorts: [
       { id: 'video', label: 'Video', dataType: 'Video', required: false },
@@ -3114,6 +3131,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       { id: 'item2', label: 'Item 2', dataType: 'Any', required: false },
       { id: 'item3', label: 'Item 3', dataType: 'Any', required: false },
       { id: 'item4', label: 'Item 4', dataType: 'Any', required: false },
+      { id: 'item5', label: 'Item 5', dataType: 'Any', required: false },
+      { id: 'item6', label: 'Item 6', dataType: 'Any', required: false },
+      { id: 'item7', label: 'Item 7', dataType: 'Any', required: false },
+      { id: 'item8', label: 'Item 8', dataType: 'Any', required: false },
     ],
     outputPorts: [
       { id: 'array', label: 'Array', dataType: 'Array', required: false },
@@ -3241,6 +3262,9 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         default: 'higgsfield-native',
         options: [
           { label: 'Higgsfield Native', value: 'higgsfield-native' },
+          { label: 'Kling 2.6', value: 'kling-2.6' },
+          { label: 'Sora 2', value: 'sora-2' },
+          { label: 'Veo 3.1', value: 'veo-3.1' },
         ],
       },
       {
