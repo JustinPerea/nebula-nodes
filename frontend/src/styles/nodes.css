@@ -227,3 +227,91 @@
   white-space: nowrap;
   font-family: 'SF Mono', 'Menlo', monospace;
 }
+
+/* Mesh 3D Preview */
+.mesh-preview {
+  cursor: pointer;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+/* Full-screen modal overlay */
+.mesh-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.85);
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mesh-modal {
+  position: relative;
+  width: 80vw;
+  height: 80vh;
+  background: #1a1a1a;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid #333;
+}
+
+.mesh-modal__close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 10001;
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid #555;
+  color: #fff;
+  font-size: 24px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.mesh-modal__close:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.mesh-modal__info {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 12px 16px;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.mesh-modal__format {
+  color: #999;
+  font-size: 13px;
+  font-family: monospace;
+}
+
+.mesh-modal__download {
+  padding: 6px 16px;
+  background: #00BCD4;
+  color: #000;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.mesh-modal__download:hover {
+  background: #00E5FF;
+}
