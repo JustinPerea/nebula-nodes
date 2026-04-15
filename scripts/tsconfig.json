@@ -1,0 +1,10 @@
+{
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "target": "ESNext",
+    "esModuleInterop": true,
+    "strict": true
+  },
+  "include": ["*.ts", "../frontend/src/**/*.ts"]
+}
