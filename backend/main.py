@@ -12,11 +12,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from models import ExecuteRequest, ExecuteNodeRequest, ValidationErrorEvent
-from models.events import ExecutionEvent
+from models import ExecuteRequest, ExecuteNodeRequest, ValidationErrorEvent, GraphNode, GraphEdge
+from models.events import ExecutionEvent, ExecutedEvent, ErrorEvent
 from execution.engine import execute_graph, validate_graph, topological_sort, get_subgraph, CycleError
 from execution.sync_runner import get_handler_registry
 from services.settings import load_settings, save_settings, get_api_key
+from services.node_registry import NodeRegistry
+from services.cli_graph import CLIGraph
 from services.output import OUTPUT_ROOT
 from services.cache import ExecutionCache
 from routes.openrouter_proxy import router as openrouter_router
@@ -24,6 +26,8 @@ from routes.replicate_proxy import router as replicate_router
 from routes.fal_proxy import router as fal_router
 
 execution_cache = ExecutionCache(ttl=3600)
+node_registry = NodeRegistry()
+cli_graph = CLIGraph()
 
 app = FastAPI(title="Nebula Node Backend", version="0.1.0")
 
@@ -305,6 +309,212 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
     asyncio.create_task(_run())
 
     return {"status": "started", "nodeCount": len(sub_nodes)}
+
+
+# ---------- CLI: Node discovery ----------
+
+@app.get("/api/nodes")
+async def list_nodes() -> dict:
+    all_nodes = node_registry.get_all()
+    nodes_list = list(all_nodes.values())
+    categories = node_registry.get_categories()
+    return {"nodes": nodes_list, "categories": categories}
+
+
+@app.get("/api/nodes/{node_id}")
+async def get_node(node_id: str) -> dict:
+    node = node_registry.get(node_id)
+    if node is None:
+        raise HTTPException(status_code=404, detail=f"Node '{node_id}' not found")
+    return node
+
+
+# ---------- CLI: Graph management ----------
+
+@app.post("/api/graph/node")
+async def create_graph_node(body: dict[str, Any]) -> dict:
+    definition_id = body.get("definitionId", "")
+    params = body.get("params", {})
+    short_id = cli_graph.add_node(definition_id, params)
+    return cli_graph.nodes[short_id]
+
+
+@app.post("/api/graph/connect")
+async def connect_graph_nodes(body: dict[str, Any]) -> dict:
+    try:
+        edge = cli_graph.connect(
+            body["source"], body["sourceHandle"],
+            body["target"], body["targetHandle"],
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"connection": f"{edge['source']}:{edge['sourceHandle']} -> {edge['target']}:{edge['targetHandle']}"}
+
+
+@app.get("/api/graph")
+async def get_graph() -> dict:
+    return cli_graph.get_state()
+
+
+@app.put("/api/graph/node/{node_id}")
+async def update_graph_node(node_id: str, body: dict[str, Any]) -> dict:
+    try:
+        cli_graph.update_params(node_id, body.get("params", {}))
+    except ValueError:
+        raise HTTPException(status_code=404, detail=f"Node '{node_id}' not found")
+    return cli_graph.nodes[node_id]
+
+
+@app.delete("/api/graph")
+async def clear_graph() -> dict:
+    cli_graph.clear()
+    return {"status": "cleared"}
+
+
+# ---------- CLI: Synchronous execution ----------
+
+@app.post("/api/graph/run")
+async def run_graph(body: dict[str, Any] | None = None) -> dict:
+    """Execute the CLI graph synchronously and return results."""
+    if not cli_graph.nodes:
+        raise HTTPException(status_code=400, detail="Graph is empty")
+
+    settings = load_settings()
+    api_keys = settings.get("apiKeys", {})
+    nodes_list, edges_list = cli_graph.to_execute_format()
+
+    target = body.get("targetNodeId") if body else None
+    if target:
+        sub_nodes, sub_edges = get_subgraph(
+            [GraphNode.model_validate(n) for n in nodes_list],
+            [GraphEdge.model_validate(e) for e in edges_list],
+            target,
+        )
+        if not sub_nodes:
+            raise HTTPException(status_code=404, detail=f"Node '{target}' not found in graph")
+    else:
+        sub_nodes = [GraphNode.model_validate(n) for n in nodes_list]
+        sub_edges = [GraphEdge.model_validate(e) for e in edges_list]
+
+    results: dict[str, Any] = {}
+    errors: dict[str, str] = {}
+
+    import time
+
+    async def collect_events(event: ExecutionEvent) -> None:
+        if isinstance(event, ExecutedEvent):
+            results[event.node_id] = event.outputs
+        elif isinstance(event, ErrorEvent):
+            errors[event.node_id] = event.error
+
+    handler_registry = get_handler_registry(emit=collect_events)
+
+    start = time.time()
+    await execute_graph(
+        nodes=sub_nodes,
+        edges=sub_edges,
+        api_keys=api_keys,
+        handler_registry=handler_registry,
+        emit=collect_events,
+        cache=execution_cache,
+    )
+    duration = time.time() - start
+
+    # Update CLI graph node outputs
+    for node_id, outputs in results.items():
+        if node_id in cli_graph.nodes:
+            cli_graph.nodes[node_id]["outputs"] = (
+                {k: v if isinstance(v, dict) else {"type": "Any", "value": v} for k, v in outputs.items()}
+                if isinstance(outputs, dict) else {}
+            )
+
+    return {
+        "results": results,
+        "errors": errors,
+        "duration": round(duration, 2),
+        "nodesExecuted": len(results) + len(errors),
+    }
+
+
+@app.post("/api/quick")
+async def quick_execute(body: dict[str, Any]) -> dict:
+    """One-shot: create a temp node, execute, return output."""
+    definition_id = body.get("definitionId", "")
+    inputs = body.get("inputs", {})
+    params = body.get("params", {})
+
+    settings = load_settings()
+    api_keys = settings.get("apiKeys", {})
+
+    temp_nodes = []
+    temp_edges = []
+    node_counter = 0
+
+    for port_id, value in inputs.items():
+        node_counter += 1
+        input_node_id = f"_quick_input_{node_counter}"
+        if isinstance(value, str) and value.endswith(('.png', '.jpg', '.jpeg', '.webp')):
+            input_type = "image-input"
+            port_type = "Image"
+        elif isinstance(value, str) and value.endswith(('.mp4', '.mov', '.webm')):
+            input_type = "video-input"
+            port_type = "Video"
+        elif isinstance(value, str) and value.endswith(('.mp3', '.wav', '.m4a')):
+            input_type = "audio-input"
+            port_type = "Audio"
+        else:
+            input_type = "text-input"
+            port_type = "Text"
+
+        temp_nodes.append(GraphNode(
+            id=input_node_id,
+            definition_id=input_type,
+            params={"value": value},
+            outputs={},
+        ))
+        temp_edges.append(GraphEdge(
+            id=f"_quick_edge_{node_counter}",
+            source=input_node_id,
+            source_handle="value" if input_type == "text-input" else port_type.lower(),
+            target="_quick_main",
+            target_handle=port_id,
+        ))
+
+    temp_nodes.append(GraphNode(
+        id="_quick_main",
+        definition_id=definition_id,
+        params=params,
+        outputs={},
+    ))
+
+    results: dict[str, Any] = {}
+    errors: dict[str, str] = {}
+
+    async def collect_events(event: ExecutionEvent) -> None:
+        if isinstance(event, ExecutedEvent):
+            results[event.node_id] = event.outputs
+        elif isinstance(event, ErrorEvent):
+            errors[event.node_id] = event.error
+
+    handler_registry = get_handler_registry(emit=collect_events)
+
+    import time
+    start = time.time()
+    await execute_graph(
+        nodes=temp_nodes,
+        edges=temp_edges,
+        api_keys=api_keys,
+        handler_registry=handler_registry,
+        emit=collect_events,
+        cache=execution_cache,
+    )
+    duration = time.time() - start
+
+    if "_quick_main" in errors:
+        raise HTTPException(status_code=500, detail=errors["_quick_main"])
+
+    main_outputs = results.get("_quick_main", {})
+    return {"outputs": main_outputs, "duration": round(duration, 2)}
 
 
 # Static mount MUST come after all dynamic routes — it is a catch-all for /api/outputs
