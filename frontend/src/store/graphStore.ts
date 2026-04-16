@@ -174,13 +174,50 @@ interface GraphState {
 wsClient.connect();
 wsClient.subscribe((event) => {
   if (event.type === 'graphSync') {
-    // Real-time sync: CLI graph pushed to frontend canvas
+    // Real-time sync: merge CLI graph into frontend canvas
+    // Preserves existing node positions and outputs that the CLI hasn't updated
     const { nodes: cliNodes, edges: cliEdges, empty } = event as {
       type: 'graphSync'; nodes: Node<NodeData>[]; edges: Edge[]; empty: boolean;
     };
-    if (!empty && cliNodes.length > 0) {
-      useGraphStore.getState().loadGraph(cliNodes as Node<NodeData>[], cliEdges);
+    if (empty) {
+      useGraphStore.getState().loadGraph([], []);
+      return;
     }
+    if (cliNodes.length === 0) return;
+
+    const state = useGraphStore.getState();
+    const existingById = new Map(state.nodes.map((n) => [n.id, n]));
+
+    const merged = (cliNodes as Node<NodeData>[]).map((cliNode) => {
+      const existing = existingById.get(cliNode.id);
+      if (existing) {
+        // Preserve position from canvas (user may have dragged)
+        // Merge outputs: keep existing outputs if CLI node has none
+        const cliOutputs = cliNode.data?.outputs ?? {};
+        const hasCliOutputs = Object.keys(cliOutputs).length > 0;
+        return {
+          ...cliNode,
+          position: existing.position,
+          data: {
+            ...cliNode.data,
+            outputs: hasCliOutputs ? cliOutputs : existing.data.outputs,
+            state: hasCliOutputs ? cliNode.data.state : existing.data.state,
+          },
+        };
+      }
+      // New node from CLI — auto-layout to the right of existing nodes
+      const maxX = state.nodes.reduce((mx, n) => Math.max(mx, n.position.x), -300);
+      return {
+        ...cliNode,
+        position: { x: maxX + 300, y: cliNode.position?.y ?? 100 },
+      };
+    });
+
+    useGraphStore.setState({
+      nodes: merged,
+      edges: cliEdges,
+      isExecuting: false,
+    });
     return;
   }
   useGraphStore.getState().handleExecutionEvent(event);
