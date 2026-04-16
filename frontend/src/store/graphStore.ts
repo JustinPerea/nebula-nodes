@@ -173,6 +173,16 @@ interface GraphState {
 
 wsClient.connect();
 wsClient.subscribe((event) => {
+  if (event.type === 'graphSync') {
+    // Real-time sync: CLI graph pushed to frontend canvas
+    const { nodes: cliNodes, edges: cliEdges, empty } = event as {
+      type: 'graphSync'; nodes: Node<NodeData>[]; edges: Edge[]; empty: boolean;
+    };
+    if (!empty && cliNodes.length > 0) {
+      useGraphStore.getState().loadGraph(cliNodes as Node<NodeData>[], cliEdges);
+    }
+    return;
+  }
   useGraphStore.getState().handleExecutionEvent(event);
 });
 
@@ -775,7 +785,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         const outputs: Record<string, { type: string; value: string | null }> = {};
         for (const [key, val] of Object.entries(event.outputs)) {
           const outputVal = val as { type: string; value: string | null };
-          if ((outputVal.type === 'Image' || outputVal.type === 'Video' || outputVal.type === 'Mesh') && outputVal.value && typeof outputVal.value === 'string') {
+          if ((outputVal.type === 'Image' || outputVal.type === 'Video' || outputVal.type === 'Mesh' || outputVal.type === 'Audio') && outputVal.value && typeof outputVal.value === 'string') {
             // Skip rewriting for external URLs — only rewrite local filesystem paths
             if (outputVal.value.startsWith('http://') || outputVal.value.startsWith('https://')) {
               outputs[key] = outputVal;

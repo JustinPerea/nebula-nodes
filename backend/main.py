@@ -113,6 +113,9 @@ class ConnectionManager:
 
     async def broadcast(self, event: ExecutionEvent) -> None:
         data = _event_to_camel(event)
+        await self.broadcast_raw(data)
+
+    async def broadcast_raw(self, data: dict[str, Any]) -> None:
         message = json.dumps(data)
         disconnected: list[WebSocket] = []
         for connection in self.active_connections:
@@ -331,11 +334,18 @@ async def get_node(node_id: str) -> dict:
 
 # ---------- CLI: Graph management ----------
 
+async def _broadcast_graph_sync() -> None:
+    """Push the current CLI graph to all connected frontends via WebSocket."""
+    export = await export_graph_for_frontend()
+    await manager.broadcast_raw({"type": "graphSync", **export})
+
+
 @app.post("/api/graph/node")
 async def create_graph_node(body: dict[str, Any]) -> dict:
     definition_id = body.get("definitionId", "")
     params = body.get("params", {})
     short_id = cli_graph.add_node(definition_id, params)
+    await _broadcast_graph_sync()
     return cli_graph.nodes[short_id]
 
 
@@ -348,6 +358,7 @@ async def connect_graph_nodes(body: dict[str, Any]) -> dict:
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    await _broadcast_graph_sync()
     return {"connection": f"{edge['source']}:{edge['sourceHandle']} -> {edge['target']}:{edge['targetHandle']}"}
 
 
@@ -362,13 +373,32 @@ async def update_graph_node(node_id: str, body: dict[str, Any]) -> dict:
         cli_graph.update_params(node_id, body.get("params", {}))
     except ValueError:
         raise HTTPException(status_code=404, detail=f"Node '{node_id}' not found")
+    await _broadcast_graph_sync()
     return cli_graph.nodes[node_id]
 
 
 @app.delete("/api/graph")
 async def clear_graph() -> dict:
     cli_graph.clear()
+    await _broadcast_graph_sync()
     return {"status": "cleared"}
+
+
+def _rewrite_output_paths(outputs: dict[str, Any]) -> dict[str, Any]:
+    """Convert local file paths in outputs to /api/outputs/ URLs for the frontend."""
+    rewritten: dict[str, Any] = {}
+    for port_id, port_val in outputs.items():
+        if isinstance(port_val, dict) and isinstance(port_val.get("value"), str):
+            val = port_val["value"]
+            # Convert absolute paths under OUTPUT_ROOT to relative URLs
+            try:
+                rel = Path(val).relative_to(OUTPUT_ROOT)
+                rewritten[port_id] = {**port_val, "value": f"/api/outputs/{rel}"}
+            except (ValueError, TypeError):
+                rewritten[port_id] = port_val
+        else:
+            rewritten[port_id] = port_val
+    return rewritten
 
 
 @app.get("/api/graph/export")
@@ -385,6 +415,8 @@ async def export_graph_for_frontend() -> dict:
     for i, n in enumerate(state["nodes"]):
         defn = all_defs.get(n["definitionId"], {})
         node_type = "reroute-node" if n["definitionId"] == "reroute" else "model-node"
+        outputs = _rewrite_output_paths(n.get("outputs", {}))
+        node_state = "complete" if outputs else "idle"
         rf_nodes.append({
             "id": n["id"],
             "type": node_type,
@@ -393,8 +425,8 @@ async def export_graph_for_frontend() -> dict:
                 "label": defn.get("displayName", n["definitionId"]),
                 "definitionId": n["definitionId"],
                 "params": n.get("params", {}),
-                "state": "idle",
-                "outputs": n.get("outputs", {}),
+                "state": node_state,
+                "outputs": outputs,
             },
         })
 
@@ -478,6 +510,9 @@ async def run_graph(body: dict[str, Any] | None = None) -> dict:
                 {k: v if isinstance(v, dict) else {"type": "Any", "value": v} for k, v in outputs.items()}
                 if isinstance(outputs, dict) else {}
             )
+
+    # Sync outputs to frontend canvas
+    await _broadcast_graph_sync()
 
     return {
         "results": results,
