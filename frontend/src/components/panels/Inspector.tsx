@@ -3,6 +3,7 @@ import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
 import { NODE_DEFINITIONS } from '../../constants/nodeDefinitions';
 import { CATEGORY_COLORS } from '../../constants/ports';
+import { PORT_COLORS } from '../../lib/portCompatibility';
 import type { NodeData, DynamicNodeData, ParamDefinition } from '../../types';
 import { fetchOpenRouterModels, getSettings, updateSettings, type OpenRouterModel } from '../../lib/api';
 import '../../styles/panels.css';
@@ -29,6 +30,9 @@ export function Inspector() {
 
   // Replicate schema fetch state
   const [schemaLoading, setSchemaLoading] = useState(false);
+
+  // Info panel toggle
+  const [showInfo, setShowInfo] = useState(false);
 
   // Favorites state
   const [favorites, setFavorites] = useState<Record<string, string[]>>({});
@@ -59,6 +63,20 @@ export function Inspector() {
     }
     return definition.params;
   }, [definition, settingsCache.loaded, settingsCache.apiKeys, definition?.directKeyName]);
+
+  // Filter params by visibleWhen conditions
+  const visibleParams = useMemo(() => {
+    if (!nodeData) return resolvedParams;
+    return resolvedParams.filter((param) => {
+      if (!param.visibleWhen) return true;
+      return Object.entries(param.visibleWhen).every(([key, allowedValues]) => {
+        const currentValue = nodeData.params[key];
+        // If the controlling param isn't set (e.g. model in directParams when using FAL), pass through
+        if (currentValue === undefined || currentValue === null) return true;
+        return allowedValues.includes(currentValue as string | number | boolean);
+      });
+    });
+  }, [resolvedParams, nodeData?.params]);
 
   // Fetch OpenRouter models when an OpenRouter node is selected
   useEffect(() => {
@@ -153,12 +171,72 @@ export function Inspector() {
               flexShrink: 0,
             }}
           />
-          <span style={{ color: '#eee', fontWeight: 500, fontSize: 13 }}>
+          <span style={{ color: '#eee', fontWeight: 500, fontSize: 13, flex: 1 }}>
             {nodeData.label}
           </span>
+          {definition && (
+            <button
+              className="inspector__info-button"
+              onClick={() => setShowInfo(!showInfo)}
+              title="Node info — inputs, outputs, and settings"
+            >
+              {showInfo ? '✕' : 'i'}
+            </button>
+          )}
         </div>
 
-        {resolvedParams.map((param) => (
+        {showInfo && definition && (
+          <div className="inspector__info-panel">
+            <div className="inspector__info-section">
+              <div className="inspector__info-heading">Inputs</div>
+              {definition.inputPorts.length === 0 ? (
+                <div className="inspector__info-row">None</div>
+              ) : (
+                definition.inputPorts.map((p) => (
+                  <div key={p.id} className="inspector__info-row">
+                    <span className="inspector__info-dot" style={{ backgroundColor: PORT_COLORS[p.dataType as keyof typeof PORT_COLORS] ?? '#9E9E9E' }} />
+                    <span className="inspector__info-name">{p.label}</span>
+                    <span className="inspector__info-type">{p.dataType}{p.required ? '' : ' (optional)'}{p.multiple ? ' +' : ''}</span>
+                  </div>
+                ))
+              )}
+            </div>
+            <div className="inspector__info-section">
+              <div className="inspector__info-heading">Outputs</div>
+              {definition.outputPorts.length === 0 ? (
+                <div className="inspector__info-row">None</div>
+              ) : (
+                definition.outputPorts.map((p) => (
+                  <div key={p.id} className="inspector__info-row">
+                    <span className="inspector__info-dot" style={{ backgroundColor: PORT_COLORS[p.dataType as keyof typeof PORT_COLORS] ?? '#9E9E9E' }} />
+                    <span className="inspector__info-name">{p.label}</span>
+                    <span className="inspector__info-type">{p.dataType}</span>
+                  </div>
+                ))
+              )}
+            </div>
+            <div className="inspector__info-section">
+              <div className="inspector__info-heading">Settings</div>
+              {visibleParams.length === 0 ? (
+                <div className="inspector__info-row">None</div>
+              ) : (
+                visibleParams.map((p) => (
+                  <div key={p.key} className="inspector__info-row">
+                    <span className="inspector__info-name">{p.label}</span>
+                    <span className="inspector__info-type">
+                      {p.type}{p.default !== undefined && p.default !== '' ? ` = ${p.default}` : ''}
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+            <div className="inspector__info-meta">
+              Provider: {definition.apiProvider} &middot; {definition.executionPattern}
+            </div>
+          </div>
+        )}
+
+        {visibleParams.map((param) => (
           <div key={param.key} className="inspector__section">
             <div className="inspector__label">{param.label}</div>
             {/* OpenRouter: replace the 'model' param with a searchable dropdown */}
@@ -224,7 +302,16 @@ export function Inspector() {
                 value={String(nodeData.params[param.key] ?? param.default ?? '')}
                 onChange={(e) => onParamChange(param.key, e.target.value)}
               >
-                {param.options.map((opt) => (
+                {param.options
+                  .filter((opt) => {
+                    if (!opt.visibleWhen) return true;
+                    return Object.entries(opt.visibleWhen).every(([k, allowed]) => {
+                      const val = nodeData.params[k];
+                      if (val === undefined || val === null) return true;
+                      return allowed.includes(val as string | number | boolean);
+                    });
+                  })
+                  .map((opt) => (
                   <option key={String(opt.value)} value={String(opt.value)}>
                     {opt.label}
                   </option>

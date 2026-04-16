@@ -5,6 +5,14 @@ interface PanelState {
   position: { x: number; y: number };
 }
 
+interface ConnectionPopupState {
+  visible: boolean;
+  position: { x: number; y: number };
+  nodeId: string;
+  handleId: string;
+  handleType: 'source' | 'target';
+}
+
 interface UIState {
   selectedNodeId: string | null;
   panels: {
@@ -18,6 +26,7 @@ interface UIState {
     position: { x: number; y: number };
     nodeId: string | null;
   };
+  connectionPopup: ConnectionPopupState;
   settingsCache: {
     apiKeys: Record<string, string>;
     loaded: boolean;
@@ -29,6 +38,8 @@ interface UIState {
   setLibrarySearch: (search: string) => void;
   showContextMenu: (position: { x: number; y: number }, nodeId: string | null) => void;
   hideContextMenu: () => void;
+  showConnectionPopup: (popup: Omit<ConnectionPopupState, 'visible'>) => void;
+  hideConnectionPopup: () => void;
   setSettingsCache: (apiKeys: Record<string, string>) => void;
 }
 
@@ -44,6 +55,13 @@ export const useUIStore = create<UIState>((set) => ({
     visible: false,
     position: { x: 0, y: 0 },
     nodeId: null,
+  },
+  connectionPopup: {
+    visible: false,
+    position: { x: 0, y: 0 },
+    nodeId: '',
+    handleId: '',
+    handleType: 'source',
   },
   settingsCache: { apiKeys: {}, loaded: false },
 
@@ -83,6 +101,16 @@ export const useUIStore = create<UIState>((set) => ({
     set({
       contextMenu: { visible: false, position: { x: 0, y: 0 }, nodeId: null },
     }),
+
+  showConnectionPopup: (popup) =>
+    set({
+      connectionPopup: { ...popup, visible: true },
+    }),
+
+  hideConnectionPopup: () =>
+    set((state) => ({
+      connectionPopup: { ...state.connectionPopup, visible: false },
+    })),
 
   setSettingsCache: (apiKeys) =>
     set({ settingsCache: { apiKeys, loaded: true } }),

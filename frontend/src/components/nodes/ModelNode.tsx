@@ -33,6 +33,7 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
   const textOutput = Object.values(nodeData.outputs).find((o) => o.type === 'Text' && o.value);
   const videoOutput = Object.values(nodeData.outputs).find((o) => o.type === 'Video' && o.value);
   const meshOutput = Object.values(nodeData.outputs).find((o) => o.type === 'Mesh' && o.value);
+  const audioOutput = Object.values(nodeData.outputs).find((o) => o.type === 'Audio' && o.value);
 
   const displayText = nodeData.streamingText ?? (textOutput && typeof textOutput.value === 'string' ? textOutput.value : null);
   const isStreaming = nodeData.state === 'executing' && nodeData.streamingText != null;
@@ -129,7 +130,19 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
         </div>
       )}
 
-      {nodeData.state === 'complete' && !imageOutput && !textOutput && !videoOutput && !meshOutput && Object.keys(nodeData.outputs).length > 0 && (
+      {nodeData.state === 'complete' && audioOutput && typeof audioOutput.value === 'string' && (
+        <div className="model-node__preview">
+          <audio
+            src={audioOutput.value}
+            controls
+            className="model-node__preview-audio nodrag nowheel"
+            style={{ width: '100%', borderRadius: 4 }}
+            onMouseDown={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
+
+      {nodeData.state === 'complete' && !imageOutput && !textOutput && !videoOutput && !meshOutput && !audioOutput && Object.keys(nodeData.outputs).length > 0 && (
         <div className="model-node__preview">
           <div className="model-node__preview-placeholder">Output ready</div>
         </div>

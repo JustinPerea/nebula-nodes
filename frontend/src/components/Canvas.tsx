@@ -1,10 +1,11 @@
-import { useCallback } from 'react';
+import { useCallback, useRef } from 'react';
 import {
   ReactFlow,
   Background,
   BackgroundVariant,
   type NodeTypes,
   type EdgeTypes,
+  type OnConnectStart,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useGraphStore } from '../store/graphStore';
@@ -15,6 +16,7 @@ import { DynamicNode } from './nodes/DynamicNode';
 import { RerouteNode } from './nodes/RerouteNode';
 import { TypedEdge } from './edges/TypedEdge';
 import { ContextMenu } from './ContextMenu';
+import { ConnectionPopup } from './ConnectionPopup';
 import '../styles/canvas.css';
 
 const nodeTypes: NodeTypes = {
@@ -38,6 +40,39 @@ export function Canvas() {
   const isValidConnection = useIsValidConnection();
   const showContextMenu = useUIStore((s) => s.showContextMenu);
   const hideContextMenu = useUIStore((s) => s.hideContextMenu);
+  const showConnectionPopup = useUIStore((s) => s.showConnectionPopup);
+  const hideConnectionPopup = useUIStore((s) => s.hideConnectionPopup);
+
+  // Track the connection being dragged so onConnectEnd knows what port it came from
+  const connectStartRef = useRef<{ nodeId: string; handleId: string; handleType: 'source' | 'target' } | null>(null);
+
+  const onConnectStart: OnConnectStart = useCallback((_event, params) => {
+    connectStartRef.current = {
+      nodeId: params.nodeId ?? '',
+      handleId: params.handleId ?? '',
+      handleType: (params.handleType ?? 'source') as 'source' | 'target',
+    };
+  }, []);
+
+  const onConnectEnd = useCallback((event: MouseEvent | TouchEvent) => {
+    const info = connectStartRef.current;
+    connectStartRef.current = null;
+    if (!info || !info.nodeId || !info.handleId) return;
+
+    // Only show popup if the drag ended on empty space (not on a handle/node)
+    const target = event.target as HTMLElement;
+    if (target.closest('.react-flow__handle') || target.closest('.react-flow__node')) return;
+
+    const clientX = 'clientX' in event ? event.clientX : event.touches[0].clientX;
+    const clientY = 'clientY' in event ? event.clientY : event.touches[0].clientY;
+
+    showConnectionPopup({
+      position: { x: clientX, y: clientY },
+      nodeId: info.nodeId,
+      handleId: info.handleId,
+      handleType: info.handleType,
+    });
+  }, [showConnectionPopup]);
 
   const onDrop = useCallback(
     (event: React.DragEvent) => {
@@ -199,6 +234,8 @@ export function Canvas() {
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
+        onConnectStart={onConnectStart}
+        onConnectEnd={onConnectEnd}
         isValidConnection={isValidConnection}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
@@ -226,6 +263,7 @@ export function Canvas() {
         />
       </ReactFlow>
       <ContextMenu />
+      <ConnectionPopup />
     </div>
   );
 }
