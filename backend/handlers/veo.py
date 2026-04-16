@@ -81,8 +81,12 @@ async def handle_veo(
     resolution = node.params.get("resolution")
     if resolution:
         parameters["resolution"] = str(resolution)
-    # Note: generateAudio is NOT a Veo API parameter — audio is always on
-    # for 3.1 models and always off for Veo 2. Controlled via prompt only.
+    person_gen = node.params.get("personGeneration")
+    if person_gen:
+        parameters["personGeneration"] = str(person_gen)
+    seed = node.params.get("seed")
+    if seed is not None and seed != "":
+        parameters["seed"] = int(seed)
 
     request_body: dict[str, Any] = {
         "instances": [instance],

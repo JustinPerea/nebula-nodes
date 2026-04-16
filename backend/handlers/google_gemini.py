@@ -9,6 +9,8 @@ import httpx
 from models.graph import GraphNode, PortValueDict
 from models.events import ExecutionEvent
 from execution.stream_runner import StreamConfig, stream_execute
+from uuid import uuid4
+
 from services.output import get_run_dir, save_base64_image
 
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
@@ -137,7 +139,7 @@ async def handle_nano_banana(
     if not api_key:
         raise ValueError("GOOGLE_API_KEY is required")
 
-    model = node.params.get("model", "gemini-2.5-flash-image")
+    model = node.params.get("model", "gemini-3.1-flash-image-preview")
 
     contents = [{"parts": [{"text": str(prompt_input.value)}]}]
 
@@ -166,8 +168,14 @@ async def handle_nano_banana(
     }
 
     aspect = node.params.get("aspect_ratio")
-    if aspect:
-        body["generationConfig"]["imageConfig"] = {"aspectRatio": aspect}
+    image_size = node.params.get("imageSize")
+    if aspect or image_size:
+        image_config: dict[str, Any] = {}
+        if aspect:
+            image_config["aspectRatio"] = aspect
+        if image_size:
+            image_config["imageSize"] = image_size
+        body["generationConfig"]["imageConfig"] = image_config
 
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 
@@ -240,7 +248,11 @@ async def handle_imagen4(
     if person_gen:
         request_body["parameters"]["personGeneration"] = str(person_gen)
 
-    url = f"{IMAGEN_BASE_URL}/{model}:generateImages"
+    image_size = node.params.get("imageSize")
+    if image_size:
+        request_body["parameters"]["imageSize"] = str(image_size)
+
+    url = f"{IMAGEN_BASE_URL}/{model}:predict"
 
     async with httpx.AsyncClient(timeout=120.0) as client:
         response = await client.post(
@@ -271,4 +283,225 @@ async def handle_imagen4(
             "type": "Image",
             "value": str(file_path),
         }
+    }
+
+
+async def handle_lyria3(
+    node: GraphNode,
+    inputs: dict[str, PortValueDict],
+    api_keys: dict[str, str],
+) -> dict[str, Any]:
+    prompt_input = inputs.get("prompt")
+    if not prompt_input or not prompt_input.value:
+        raise ValueError("Prompt input is required for Lyria 3")
+
+    api_key = api_keys.get("GOOGLE_API_KEY")
+    if not api_key:
+        raise ValueError("GOOGLE_API_KEY is required")
+
+    model = node.params.get("model", "lyria-3-clip-preview")
+
+    parts: list[dict[str, Any]] = [{"text": str(prompt_input.value)}]
+
+    # Support image inputs for mood-based music generation
+    images_input = inputs.get("images")
+    if images_input and images_input.value:
+        image_values = images_input.value if isinstance(images_input.value, list) else [images_input.value]
+        for img_val in image_values:
+            img_str = str(img_val)
+            if img_str.startswith("data:"):
+                header, b64_data = img_str.split(",", 1)
+                mime_type = header.split(":")[1].split(";")[0]
+                parts.append({"inlineData": {"mimeType": mime_type, "data": b64_data}})
+            elif img_str.startswith(("http://", "https://")):
+                parts.append({"fileData": {"fileUri": img_str}})
+            else:
+                img_path = Path(img_str)
+                if img_path.exists():
+                    b64 = base64.b64encode(img_path.read_bytes()).decode("ascii")
+                    suffix = img_path.suffix.lstrip(".").lower()
+                    mime = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg", "webp": "image/webp"}.get(suffix, "image/png")
+                    parts.append({"inlineData": {"mimeType": mime, "data": b64}})
+
+    generation_config: dict[str, Any] = {
+        "responseModalities": ["AUDIO", "TEXT"],
+    }
+
+    # WAV output for Pro model
+    output_format = node.params.get("outputFormat")
+    if output_format == "wav" and "pro" in model:
+        generation_config["responseMimeType"] = "audio/wav"
+
+    body: dict[str, Any] = {
+        "contents": [{"parts": parts}],
+        "generationConfig": generation_config,
+    }
+
+    url = f"{GEMINI_BASE_URL}/{model}:generateContent"
+
+    async with httpx.AsyncClient(timeout=180.0) as client:
+        response = await client.post(
+            url,
+            headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
+            json=body,
+        )
+        if response.status_code != 200:
+            raise RuntimeError(f"Lyria 3 API error {response.status_code}: {response.text}")
+
+    data = response.json()
+    resp_parts = data.get("candidates", [{}])[0].get("content", {}).get("parts", [])
+
+    result: dict[str, Any] = {}
+    run_dir = get_run_dir()
+
+    for part in resp_parts:
+        if "inlineData" in part:
+            b64_audio = part["inlineData"]["data"]
+            mime = part["inlineData"].get("mimeType", "audio/mpeg")
+            ext = "wav" if "wav" in mime else "mp3"
+            audio_bytes = base64.b64decode(b64_audio)
+            filename = f"{uuid4().hex[:12]}.{ext}"
+            file_path = run_dir / filename
+            file_path.write_bytes(audio_bytes)
+            result["audio"] = {"type": "Audio", "value": str(file_path)}
+        elif "text" in part:
+            if "text" in result:
+                result["text"]["value"] += "\n" + part["text"]
+            else:
+                result["text"] = {"type": "Text", "value": part["text"]}
+
+    if not result:
+        raise RuntimeError(f"Lyria 3 returned no audio or text content: {data}")
+
+    return result
+
+
+async def handle_gemini_tts(
+    node: GraphNode,
+    inputs: dict[str, PortValueDict],
+    api_keys: dict[str, str],
+) -> dict[str, Any]:
+    text_input = inputs.get("text")
+    if not text_input or not text_input.value:
+        raise ValueError("Text input is required for Gemini TTS")
+
+    api_key = api_keys.get("GOOGLE_API_KEY")
+    if not api_key:
+        raise ValueError("GOOGLE_API_KEY is required")
+
+    model = node.params.get("model", "gemini-2.5-flash-preview-tts")
+    voice_name = node.params.get("voiceName", "Kore")
+
+    body: dict[str, Any] = {
+        "contents": [{"parts": [{"text": str(text_input.value)}]}],
+        "generationConfig": {
+            "responseModalities": ["AUDIO"],
+            "speechConfig": {
+                "voiceConfig": {
+                    "prebuiltVoiceConfig": {
+                        "voiceName": voice_name,
+                    }
+                }
+            },
+        },
+    }
+
+    url = f"{GEMINI_BASE_URL}/{model}:generateContent"
+
+    async with httpx.AsyncClient(timeout=120.0) as client:
+        response = await client.post(
+            url,
+            headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
+            json=body,
+        )
+        if response.status_code != 200:
+            raise RuntimeError(f"Gemini TTS API error {response.status_code}: {response.text}")
+
+    data = response.json()
+    resp_parts = data.get("candidates", [{}])[0].get("content", {}).get("parts", [])
+
+    for part in resp_parts:
+        if "inlineData" in part:
+            b64_audio = part["inlineData"]["data"]
+            audio_bytes = base64.b64decode(b64_audio)
+
+            # TTS returns raw PCM (24kHz, 16-bit, mono) — wrap in WAV
+            import wave
+            import io
+
+            run_dir = get_run_dir()
+            filename = f"{uuid4().hex[:12]}.wav"
+            file_path = run_dir / filename
+
+            with wave.open(str(file_path), "wb") as wf:
+                wf.setnchannels(1)
+                wf.setsampwidth(2)
+                wf.setframerate(24000)
+                wf.writeframes(audio_bytes)
+
+            return {
+                "audio": {
+                    "type": "Audio",
+                    "value": str(file_path),
+                }
+            }
+
+    raise RuntimeError(f"Gemini TTS returned no audio content: {data}")
+
+
+async def handle_gemini_embeddings(
+    node: GraphNode,
+    inputs: dict[str, PortValueDict],
+    api_keys: dict[str, str],
+) -> dict[str, Any]:
+    text_input = inputs.get("text")
+    if not text_input or not text_input.value:
+        raise ValueError("Text input is required for embeddings")
+
+    api_key = api_keys.get("GOOGLE_API_KEY")
+    if not api_key:
+        raise ValueError("GOOGLE_API_KEY is required")
+
+    model = node.params.get("model", "gemini-embedding-001")
+
+    body: dict[str, Any] = {
+        "model": f"models/{model}",
+        "content": {
+            "parts": [{"text": str(text_input.value)}],
+        },
+    }
+
+    task_type = node.params.get("taskType")
+    if task_type:
+        body["taskType"] = task_type
+
+    output_dim = node.params.get("outputDimensionality")
+    if output_dim:
+        body["output_dimensionality"] = int(output_dim)
+
+    url = f"{GEMINI_BASE_URL}/{model}:embedContent"
+
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        response = await client.post(
+            url,
+            headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
+            json=body,
+        )
+        if response.status_code != 200:
+            raise RuntimeError(f"Gemini Embeddings API error {response.status_code}: {response.text}")
+
+    data = response.json()
+    embedding = data.get("embedding", {})
+    values = embedding.get("values", [])
+
+    import json
+    return {
+        "embedding": {
+            "type": "Text",
+            "value": json.dumps(values),
+        },
+        "dimensions": {
+            "type": "Text",
+            "value": str(len(values)),
+        },
     }

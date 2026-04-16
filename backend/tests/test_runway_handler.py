@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from handlers.runway import handle_runway_gen4_turbo
+from handlers.runway import handle_runway_video
 from models.graph import GraphNode, PortValueDict
 from services.output import OUTPUT_ROOT
 
@@ -19,7 +19,7 @@ FAKE_VIDEO_BYTES = b"\x00\x00\x00\x20ftypisom\x00\x00\x02\x00"
 
 
 def _make_node(params=None):
-    return GraphNode(id="test-runway-1", definitionId="runway-gen4-turbo", params=params or {"model": "gen4_turbo", "duration": 5})
+    return GraphNode(id="test-runway-1", definitionId="runway-video", params=params or {"model": "gen4.5", "duration": 5})
 
 
 def _create_test_image(tmp_path):
@@ -47,7 +47,7 @@ async def test_submits_job_and_returns_video(tmp_path):
             video_path.write_bytes(FAKE_VIDEO_BYTES)
             mock_save.return_value = video_path
 
-            result = await handle_runway_gen4_turbo(
+            result = await handle_runway_video(
                 _make_node(), {"image": PortValueDict(type="Image", value=str(img_path))},
                 {"RUNWAY_API_KEY": "rw-test"}, emit=AsyncMock()
             )
@@ -65,7 +65,7 @@ async def test_includes_text_prompt(tmp_path):
         with patch("handlers.runway.save_video_from_url", new_callable=AsyncMock) as mock_save:
             mock_save.return_value = tmp_path / "v.mp4"
             (tmp_path / "v.mp4").write_bytes(FAKE_VIDEO_BYTES)
-            await handle_runway_gen4_turbo(
+            await handle_runway_video(
                 _make_node(),
                 {"image": PortValueDict(type="Image", value=str(img_path)), "prompt": PortValueDict(type="Text", value="Zoom in")},
                 {"RUNWAY_API_KEY": "rw-test"},
@@ -74,16 +74,16 @@ async def test_includes_text_prompt(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_missing_image_raises():
-    with pytest.raises(ValueError, match="[Ii]mage.*required"):
-        await handle_runway_gen4_turbo(_make_node(), {}, {"RUNWAY_API_KEY": "rw-test"})
+async def test_missing_image_and_prompt_raises():
+    with pytest.raises(ValueError, match="[Ii]mage|prompt"):
+        await handle_runway_video(_make_node(), {}, {"RUNWAY_API_KEY": "rw-test"})
 
 
 @pytest.mark.asyncio
 async def test_missing_api_key_raises(tmp_path):
     img_path = _create_test_image(tmp_path)
     with pytest.raises(ValueError, match="RUNWAY_API_KEY"):
-        await handle_runway_gen4_turbo(_make_node(), {"image": PortValueDict(type="Image", value=str(img_path))}, {})
+        await handle_runway_video(_make_node(), {"image": PortValueDict(type="Image", value=str(img_path))}, {})
 
 
 @pytest.mark.asyncio
@@ -92,6 +92,6 @@ async def test_poll_failure_propagates(tmp_path):
     with patch("handlers.runway.async_poll_execute", new_callable=AsyncMock) as mock_poll:
         mock_poll.side_effect = RuntimeError("Async job failed: moderation")
         with pytest.raises(RuntimeError, match="moderation"):
-            await handle_runway_gen4_turbo(
+            await handle_runway_video(
                 _make_node(), {"image": PortValueDict(type="Image", value=str(img_path))}, {"RUNWAY_API_KEY": "rw-test"}
             )

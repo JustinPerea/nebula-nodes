@@ -195,7 +195,7 @@ async def test_imagen4_generates_image_and_saves_file():
 
     call_kwargs = mock_client_instance.post.call_args
     url = call_kwargs.args[0] if call_kwargs.args else call_kwargs.kwargs.get("url", "")
-    assert "generateImages" in url
+    assert ":predict" in url
     # Auth is via x-goog-api-key header, not query param
     headers = call_kwargs.kwargs.get("headers", {})
     assert headers.get("x-goog-api-key") == "test-google-key"
