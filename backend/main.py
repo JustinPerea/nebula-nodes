@@ -475,7 +475,7 @@ async def quick_execute(body: dict[str, Any]) -> dict:
         temp_edges.append(GraphEdge(
             id=f"_quick_edge_{node_counter}",
             source=input_node_id,
-            source_handle="value" if input_type == "text-input" else port_type.lower(),
+            source_handle="text" if input_type == "text-input" else port_type.lower(),
             target="_quick_main",
             target_handle=port_id,
         ))
