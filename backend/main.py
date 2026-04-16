@@ -371,6 +371,57 @@ async def clear_graph() -> dict:
     return {"status": "cleared"}
 
 
+@app.get("/api/graph/export")
+async def export_graph_for_frontend() -> dict:
+    """Export CLI graph in React Flow format for the frontend canvas."""
+    state = cli_graph.get_state()
+    if not state["nodes"]:
+        return {"nodes": [], "edges": [], "empty": True}
+
+    all_defs = node_registry.get_all()
+    rf_nodes = []
+    y_offset = 100
+
+    for i, n in enumerate(state["nodes"]):
+        defn = all_defs.get(n["definitionId"], {})
+        node_type = "reroute-node" if n["definitionId"] == "reroute" else "model-node"
+        rf_nodes.append({
+            "id": n["id"],
+            "type": node_type,
+            "position": {"x": 300 * i, "y": y_offset},
+            "data": {
+                "label": defn.get("displayName", n["definitionId"]),
+                "definitionId": n["definitionId"],
+                "params": n.get("params", {}),
+                "state": "idle",
+                "outputs": n.get("outputs", {}),
+            },
+        })
+
+    rf_edges = []
+    for e in state["edges"]:
+        # Determine data type for edge styling
+        src_node = cli_graph.nodes.get(e["source"], {})
+        src_def = all_defs.get(src_node.get("definitionId", ""), {})
+        data_type = "Any"
+        for port in src_def.get("outputPorts", []):
+            if port["id"] == e["sourceHandle"]:
+                data_type = port["dataType"]
+                break
+
+        rf_edges.append({
+            "id": e["id"],
+            "source": e["source"],
+            "sourceHandle": e["sourceHandle"],
+            "target": e["target"],
+            "targetHandle": e["targetHandle"],
+            "type": "typed-edge",
+            "data": {"dataType": data_type},
+        })
+
+    return {"nodes": rf_nodes, "edges": rf_edges, "empty": False}
+
+
 # ---------- CLI: Synchronous execution ----------
 
 @app.post("/api/graph/run")

@@ -3,6 +3,7 @@ import { useReactFlow } from '@xyflow/react';
 import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
 import { saveToFile, loadFromFile } from '../../lib/graphFile';
+import { fetchCLIGraph } from '../../lib/api';
 import type { NodeData } from '../../types';
 import type { Node } from '@xyflow/react';
 import '../../styles/panels.css';
@@ -36,6 +37,23 @@ export function Toolbar() {
 
     // Fit to loaded graph after a tick
     setTimeout(() => fitView({ padding: 0.2, duration: 300 }), 50);
+  }, [fitView]);
+
+  const handleImportCLI = useCallback(async () => {
+    try {
+      const data = await fetchCLIGraph();
+      if (data.empty) {
+        alert('CLI graph is empty — build one with the nebula CLI first.');
+        return;
+      }
+      useGraphStore.getState().loadGraph(
+        data.nodes as Node<NodeData>[],
+        data.edges,
+      );
+      setTimeout(() => fitView({ padding: 0.2, duration: 300 }), 50);
+    } catch {
+      alert('Could not fetch CLI graph — is the backend running?');
+    }
   }, [fitView]);
 
   // Listen for custom events from keyboard shortcuts (Ctrl+S, Ctrl+O)
@@ -77,6 +95,7 @@ export function Toolbar() {
       <div className="toolbar__divider" />
       <button className="toolbar__button" onClick={handleSave} title="Save graph (Ctrl+S)">Save</button>
       <button className="toolbar__button" onClick={handleLoad} title="Load graph (Ctrl+O)">Load</button>
+      <button className="toolbar__button" onClick={handleImportCLI} title="Import graph built by nebula CLI">CLI</button>
       <div className="toolbar__divider" />
       <button className="toolbar__button" onClick={() => fitView({ padding: 0.2, duration: 300 })} title="Fit to screen">Fit</button>
       <div className="toolbar__divider" />

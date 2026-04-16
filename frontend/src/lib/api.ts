@@ -66,6 +66,12 @@ export interface ReplicateSchema {
   description: string;
 }
 
+export async function fetchCLIGraph(): Promise<{ nodes: unknown[]; edges: unknown[]; empty: boolean }> {
+  const response = await fetch(`${API_BASE}/graph/export`);
+  if (!response.ok) throw new Error(`Fetch CLI graph failed: ${response.status}`);
+  return response.json();
+}
+
 export async function fetchReplicateSchema(owner: string, name: string): Promise<ReplicateSchema> {
   const response = await fetch(`${API_BASE}/replicate/schema/${encodeURIComponent(owner)}/${encodeURIComponent(name)}`);
   if (!response.ok) throw new Error(`Fetch Replicate schema failed: ${response.status}`);
