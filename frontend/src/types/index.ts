@@ -52,18 +52,28 @@ export interface PortDefinition {
   maxConnections?: number;
 }
 
+export interface ParamOption {
+  label: string;
+  value: string | number;
+  /** Show this option only when another param's value is in the given list. */
+  visibleWhen?: Record<string, (string | number | boolean)[]>;
+}
+
 export interface ParamDefinition {
   key: string;
   label: string;
   type: 'string' | 'integer' | 'float' | 'boolean' | 'enum' | 'textarea' | 'file';
   required: boolean;
   default?: unknown;
-  options?: Array<{ label: string; value: string | number }>;
+  options?: ParamOption[];
   min?: number;
   max?: number;
   step?: number;
   placeholder?: string;
   condition?: string;
+  /** Show this param only when another param's value is in the given list.
+   *  e.g. { model: ['gemini-3.1-flash-image-preview', 'gemini-3-pro-image-preview'] } */
+  visibleWhen?: Record<string, (string | number | boolean)[]>;
 }
 
 export interface ModelNodeDefinition {
