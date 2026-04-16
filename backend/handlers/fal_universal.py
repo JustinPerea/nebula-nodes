@@ -13,6 +13,27 @@ from services.output import get_run_dir, save_base64_image
 FAL_QUEUE_BASE = "https://queue.fal.run"
 
 
+def _to_fal_url(value: str) -> str:
+    """Convert a local file path to a data URI, or pass URLs through."""
+    if value.startswith(("http://", "https://", "data:")):
+        return value
+    # Local file path — convert to data URI
+    import base64
+    from pathlib import Path
+    p = Path(value)
+    if not p.exists():
+        return value  # Let FAL handle the error
+    suffix = p.suffix.lstrip(".").lower()
+    mime_map = {
+        "png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg",
+        "webp": "image/webp", "gif": "image/gif", "mp4": "video/mp4",
+        "mp3": "audio/mpeg", "wav": "audio/wav",
+    }
+    mime = mime_map.get(suffix, "application/octet-stream")
+    b64 = base64.b64encode(p.read_bytes()).decode()
+    return f"data:{mime};base64,{b64}"
+
+
 async def handle_fal_universal(
     node: GraphNode,
     inputs: dict[str, PortValueDict],
@@ -39,25 +60,25 @@ async def handle_fal_universal(
 
     image_input = inputs.get("image")
     if image_input and image_input.value:
-        fal_input["image_url"] = str(image_input.value)
+        fal_input["image_url"] = _to_fal_url(str(image_input.value))
 
     # Multi-image inputs for 3D models (Hunyuan3D V3 Image-to-3D)
     # Hunyuan3D uses "input_image_url" for the primary image
     front_image = inputs.get("front_image")
     if front_image and front_image.value:
-        fal_input["input_image_url"] = str(front_image.value)
+        fal_input["input_image_url"] = _to_fal_url(str(front_image.value))
 
     back_image = inputs.get("back_image")
     if back_image and back_image.value:
-        fal_input["back_image_url"] = str(back_image.value)
+        fal_input["back_image_url"] = _to_fal_url(str(back_image.value))
 
     left_image = inputs.get("left_image")
     if left_image and left_image.value:
-        fal_input["left_image_url"] = str(left_image.value)
+        fal_input["left_image_url"] = _to_fal_url(str(left_image.value))
 
     right_image = inputs.get("right_image")
     if right_image and right_image.value:
-        fal_input["right_image_url"] = str(right_image.value)
+        fal_input["right_image_url"] = _to_fal_url(str(right_image.value))
 
     # Map node params (excluding our internal keys)
     INTERNAL_KEYS = {"endpoint_id"}
@@ -92,8 +113,9 @@ async def handle_fal_universal(
             return _parse_fal_output(submit_data)
 
         # Step 2: Poll for status
-        status_url = f"{FAL_QUEUE_BASE}/{endpoint_id}/requests/{request_id}/status"
-        result_url = f"{FAL_QUEUE_BASE}/{endpoint_id}/requests/{request_id}"
+        # Use URLs from FAL response (canonical), fall back to constructed URLs
+        status_url = submit_data.get("status_url") or f"{FAL_QUEUE_BASE}/{endpoint_id}/requests/{request_id}/status"
+        result_url = submit_data.get("response_url") or f"{FAL_QUEUE_BASE}/{endpoint_id}/requests/{request_id}"
 
         max_polls = 300
         poll_interval = 2.0
@@ -102,7 +124,7 @@ async def handle_fal_universal(
             await asyncio.sleep(poll_interval)
 
             status_resp = await client.get(status_url, headers=headers)
-            if status_resp.status_code != 200:
+            if status_resp.status_code not in (200, 202):
                 raise RuntimeError(f"FAL status poll failed ({status_resp.status_code}): {status_resp.text}")
 
             status_data = status_resp.json()
