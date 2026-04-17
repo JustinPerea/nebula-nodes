@@ -489,6 +489,14 @@ def get_handler_registry(
             node.params.setdefault("endpoint_id", "bytedance/seedance-2.0/reference-to-video")
             return await handle_fal_universal(node, inputs, api_keys, emit=emit)
 
+        async def _seedance2_fast_t2v_handler(node, inputs, api_keys):
+            node.params.setdefault("endpoint_id", "bytedance/seedance-2.0/fast/text-to-video")
+            return await handle_fal_universal(node, inputs, api_keys, emit=emit)
+
+        async def _seedance2_fast_i2v_handler(node, inputs, api_keys):
+            node.params.setdefault("endpoint_id", "bytedance/seedance-2.0/fast/image-to-video")
+            return await handle_fal_universal(node, inputs, api_keys, emit=emit)
+
         async def _flux_kontext_handler(node, inputs, api_keys):
             node.params.setdefault("endpoint_id", "fal-ai/flux-pro/kontext")
             return await handle_fal_universal(node, inputs, api_keys, emit=emit)
@@ -516,6 +524,8 @@ def get_handler_registry(
         registry["seedance-2-t2v"] = _seedance2_t2v_handler
         registry["seedance-2-i2v"] = _seedance2_i2v_handler
         registry["seedance-2-r2v"] = _seedance2_r2v_handler
+        registry["seedance-2-fast-t2v"] = _seedance2_fast_t2v_handler
+        registry["seedance-2-fast-i2v"] = _seedance2_fast_i2v_handler
         registry["flux-kontext"] = _flux_kontext_handler
         registry["flux-2-pro"] = _flux2_pro_handler
         registry["gpt-image-1-5"] = _gpt_image_15_handler

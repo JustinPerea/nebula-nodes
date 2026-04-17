@@ -64,6 +64,8 @@ The source of truth for this routing is `backend/execution/sync_runner.py`. Each
 | `seedance-2-t2v` | `bytedance/seedance-2.0/text-to-video` | Text-to-Video | [`skills/bytedance__seedance-2.0__text-to-video.md`](skills/bytedance__seedance-2.0__text-to-video.md) |
 | `seedance-2-i2v` | `bytedance/seedance-2.0/image-to-video` | Image-to-Video | [`skills/bytedance__seedance-2.0__image-to-video.md`](skills/bytedance__seedance-2.0__image-to-video.md) |
 | `seedance-2-r2v` | `bytedance/seedance-2.0/reference-to-video` | Reference-to-Video | [`skills/bytedance__seedance-2.0__reference-to-video.md`](skills/bytedance__seedance-2.0__reference-to-video.md) |
+| `seedance-2-fast-t2v` | `bytedance/seedance-2.0/fast/text-to-video` | Text-to-Video | [`skills/bytedance__seedance-2.0__fast__text-to-video.md`](skills/bytedance__seedance-2.0__fast__text-to-video.md) |
+| `seedance-2-fast-i2v` | `bytedance/seedance-2.0/fast/image-to-video` | Image-to-Video | [`skills/bytedance__seedance-2.0__fast__image-to-video.md`](skills/bytedance__seedance-2.0__fast__image-to-video.md) |
 | `moonvalley` | `fal-ai/moonvalley/image-to-video` | Image-to-Video | — |
 | `meshy-text-to-3d` (FAL route) | `fal-ai/meshy/v6/text-to-3d` | Text-to-3D | [`skills/fal-ai__meshy__v6__text-to-3d.md`](skills/fal-ai__meshy__v6__text-to-3d.md) |
 | `meshy-image-to-3d` (FAL route) | `fal-ai/meshy/v6/image-to-3d` | Image-to-3D | [`skills/fal-ai__meshy__v6__image-to-3d.md`](skills/fal-ai__meshy__v6__image-to-3d.md) |

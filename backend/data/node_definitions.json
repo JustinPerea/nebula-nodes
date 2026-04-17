@@ -8556,6 +8556,290 @@
       }
     ]
   },
+  "seedance-2-fast-t2v": {
+    "id": "seedance-2-fast-t2v",
+    "displayName": "Seedance 2.0 Fast T2V",
+    "category": "video-gen",
+    "apiProvider": "fal",
+    "apiEndpoint": "bytedance/seedance-2.0/fast/text-to-video",
+    "envKeyName": "FAL_KEY",
+    "executionPattern": "async-poll",
+    "inputPorts": [
+      {
+        "id": "prompt",
+        "label": "Prompt",
+        "dataType": "Text",
+        "required": true
+      }
+    ],
+    "outputPorts": [
+      {
+        "id": "video",
+        "label": "Video",
+        "dataType": "Video",
+        "required": false
+      }
+    ],
+    "params": [
+      {
+        "key": "aspect_ratio",
+        "label": "Aspect Ratio",
+        "type": "enum",
+        "required": false,
+        "default": "16:9",
+        "options": [
+          {
+            "label": "Auto",
+            "value": "auto"
+          },
+          {
+            "label": "21:9",
+            "value": "21:9"
+          },
+          {
+            "label": "16:9",
+            "value": "16:9"
+          },
+          {
+            "label": "4:3",
+            "value": "4:3"
+          },
+          {
+            "label": "1:1",
+            "value": "1:1"
+          },
+          {
+            "label": "3:4",
+            "value": "3:4"
+          },
+          {
+            "label": "9:16",
+            "value": "9:16"
+          }
+        ]
+      },
+      {
+        "key": "duration",
+        "label": "Duration",
+        "type": "enum",
+        "required": false,
+        "default": "10",
+        "options": [
+          {
+            "label": "Auto",
+            "value": "auto"
+          },
+          {
+            "label": "4s",
+            "value": "4"
+          },
+          {
+            "label": "5s",
+            "value": "5"
+          },
+          {
+            "label": "6s",
+            "value": "6"
+          },
+          {
+            "label": "8s",
+            "value": "8"
+          },
+          {
+            "label": "10s",
+            "value": "10"
+          },
+          {
+            "label": "12s",
+            "value": "12"
+          },
+          {
+            "label": "15s",
+            "value": "15"
+          }
+        ]
+      },
+      {
+        "key": "resolution",
+        "label": "Resolution",
+        "type": "enum",
+        "required": false,
+        "default": "720p",
+        "options": [
+          {
+            "label": "480p",
+            "value": "480p"
+          },
+          {
+            "label": "720p",
+            "value": "720p"
+          }
+        ]
+      },
+      {
+        "key": "generate_audio",
+        "label": "Generate Audio",
+        "type": "boolean",
+        "required": false,
+        "default": true
+      },
+      {
+        "key": "seed",
+        "label": "Seed",
+        "type": "integer",
+        "required": false,
+        "placeholder": "Random"
+      }
+    ]
+  },
+  "seedance-2-fast-i2v": {
+    "id": "seedance-2-fast-i2v",
+    "displayName": "Seedance 2.0 Fast I2V",
+    "category": "video-gen",
+    "apiProvider": "fal",
+    "apiEndpoint": "bytedance/seedance-2.0/fast/image-to-video",
+    "envKeyName": "FAL_KEY",
+    "executionPattern": "async-poll",
+    "inputPorts": [
+      {
+        "id": "image",
+        "label": "Image",
+        "dataType": "Image",
+        "required": true
+      },
+      {
+        "id": "prompt",
+        "label": "Prompt",
+        "dataType": "Text",
+        "required": true
+      },
+      {
+        "id": "end_image",
+        "label": "End Frame",
+        "dataType": "Image",
+        "required": false
+      }
+    ],
+    "outputPorts": [
+      {
+        "id": "video",
+        "label": "Video",
+        "dataType": "Video",
+        "required": false
+      }
+    ],
+    "params": [
+      {
+        "key": "aspect_ratio",
+        "label": "Aspect Ratio",
+        "type": "enum",
+        "required": false,
+        "default": "auto",
+        "options": [
+          {
+            "label": "Auto",
+            "value": "auto"
+          },
+          {
+            "label": "21:9",
+            "value": "21:9"
+          },
+          {
+            "label": "16:9",
+            "value": "16:9"
+          },
+          {
+            "label": "4:3",
+            "value": "4:3"
+          },
+          {
+            "label": "1:1",
+            "value": "1:1"
+          },
+          {
+            "label": "3:4",
+            "value": "3:4"
+          },
+          {
+            "label": "9:16",
+            "value": "9:16"
+          }
+        ]
+      },
+      {
+        "key": "duration",
+        "label": "Duration",
+        "type": "enum",
+        "required": false,
+        "default": "10",
+        "options": [
+          {
+            "label": "Auto",
+            "value": "auto"
+          },
+          {
+            "label": "4s",
+            "value": "4"
+          },
+          {
+            "label": "5s",
+            "value": "5"
+          },
+          {
+            "label": "6s",
+            "value": "6"
+          },
+          {
+            "label": "8s",
+            "value": "8"
+          },
+          {
+            "label": "10s",
+            "value": "10"
+          },
+          {
+            "label": "12s",
+            "value": "12"
+          },
+          {
+            "label": "15s",
+            "value": "15"
+          }
+        ]
+      },
+      {
+        "key": "resolution",
+        "label": "Resolution",
+        "type": "enum",
+        "required": false,
+        "default": "720p",
+        "options": [
+          {
+            "label": "480p",
+            "value": "480p"
+          },
+          {
+            "label": "720p",
+            "value": "720p"
+          }
+        ]
+      },
+      {
+        "key": "generate_audio",
+        "label": "Generate Audio",
+        "type": "boolean",
+        "required": false,
+        "default": true
+      },
+      {
+        "key": "seed",
+        "label": "Seed",
+        "type": "integer",
+        "required": false,
+        "placeholder": "Random"
+      }
+    ]
+  },
   "flux-kontext": {
     "id": "flux-kontext",
     "displayName": "FLUX Kontext",
