@@ -3091,6 +3091,23 @@
     ],
     "params": [
       {
+        "key": "model",
+        "label": "Model",
+        "type": "enum",
+        "required": false,
+        "default": "standard",
+        "options": [
+          {
+            "label": "Sora 2 Standard",
+            "value": "standard"
+          },
+          {
+            "label": "Sora 2 Pro",
+            "value": "pro"
+          }
+        ]
+      },
+      {
         "key": "resolution",
         "label": "Resolution",
         "type": "enum",
@@ -3744,23 +3761,6 @@
     "params": [],
     "sharedParams": [
       {
-        "key": "aspectRatio",
-        "label": "Aspect Ratio",
-        "type": "enum",
-        "required": false,
-        "default": "16:9",
-        "options": [
-          {
-            "label": "16:9",
-            "value": "16:9"
-          },
-          {
-            "label": "9:16",
-            "value": "9:16"
-          }
-        ]
-      },
-      {
         "key": "duration",
         "label": "Duration",
         "type": "enum",
@@ -3894,6 +3894,23 @@
         ]
       },
       {
+        "key": "aspectRatio",
+        "label": "Aspect Ratio",
+        "type": "enum",
+        "required": false,
+        "default": "16:9",
+        "options": [
+          {
+            "label": "16:9",
+            "value": "16:9"
+          },
+          {
+            "label": "9:16",
+            "value": "9:16"
+          }
+        ]
+      },
+      {
         "key": "seed",
         "label": "Seed",
         "type": "integer",
@@ -3911,6 +3928,37 @@
       }
     ],
     "falParams": [
+      {
+        "key": "aspect_ratio",
+        "label": "Aspect Ratio",
+        "type": "enum",
+        "required": false,
+        "default": "16:9",
+        "options": [
+          {
+            "label": "16:9",
+            "value": "16:9"
+          },
+          {
+            "label": "9:16",
+            "value": "9:16"
+          }
+        ]
+      },
+      {
+        "key": "generate_audio",
+        "label": "Generate Audio",
+        "type": "boolean",
+        "required": false,
+        "default": true
+      },
+      {
+        "key": "auto_fix",
+        "label": "Auto-Fix Prompt",
+        "type": "boolean",
+        "required": false,
+        "default": true
+      },
       {
         "key": "negative_prompt",
         "label": "Negative Prompt",
@@ -3986,33 +4034,55 @@
     ],
     "params": [
       {
-        "key": "aspect_ratio",
-        "label": "Aspect Ratio",
+        "key": "image_size",
+        "label": "Image Size",
         "type": "enum",
         "required": false,
-        "default": "16:9",
+        "default": "landscape_16_9",
         "options": [
           {
-            "label": "1:1",
-            "value": "1:1"
+            "label": "Square HD (1024×1024)",
+            "value": "square_hd"
           },
           {
-            "label": "16:9",
-            "value": "16:9"
+            "label": "Square (512×512)",
+            "value": "square"
           },
           {
-            "label": "9:16",
-            "value": "9:16"
+            "label": "Landscape 4:3",
+            "value": "landscape_4_3"
           },
           {
-            "label": "4:3",
-            "value": "4:3"
+            "label": "Landscape 16:9",
+            "value": "landscape_16_9"
           },
           {
-            "label": "3:4",
-            "value": "3:4"
+            "label": "Portrait 4:3",
+            "value": "portrait_4_3"
+          },
+          {
+            "label": "Portrait 16:9",
+            "value": "portrait_16_9"
           }
         ]
+      },
+      {
+        "key": "num_inference_steps",
+        "label": "Steps",
+        "type": "integer",
+        "required": false,
+        "default": 4,
+        "min": 1,
+        "max": 4
+      },
+      {
+        "key": "guidance_scale",
+        "label": "Guidance Scale",
+        "type": "float",
+        "required": false,
+        "default": 3.5,
+        "min": 1.0,
+        "max": 5.0
       },
       {
         "key": "num_images",
@@ -4022,6 +4092,55 @@
         "default": 1,
         "min": 1,
         "max": 4
+      },
+      {
+        "key": "output_format",
+        "label": "Format",
+        "type": "enum",
+        "required": false,
+        "default": "webp",
+        "options": [
+          {
+            "label": "WebP",
+            "value": "webp"
+          },
+          {
+            "label": "PNG",
+            "value": "png"
+          },
+          {
+            "label": "JPEG",
+            "value": "jpeg"
+          }
+        ]
+      },
+      {
+        "key": "acceleration",
+        "label": "Acceleration",
+        "type": "enum",
+        "required": false,
+        "default": "none",
+        "options": [
+          {
+            "label": "None",
+            "value": "none"
+          },
+          {
+            "label": "Regular",
+            "value": "regular"
+          },
+          {
+            "label": "High",
+            "value": "high"
+          }
+        ]
+      },
+      {
+        "key": "enable_safety_checker",
+        "label": "Safety Checker",
+        "type": "boolean",
+        "required": false,
+        "default": true
       },
       {
         "key": "seed",
@@ -4101,6 +4220,15 @@
         "max": 4
       },
       {
+        "key": "num_inference_steps",
+        "label": "Steps",
+        "type": "integer",
+        "required": false,
+        "default": 25,
+        "min": 1,
+        "max": 50
+      },
+      {
         "key": "guidance_scale",
         "label": "Guidance Scale",
         "type": "float",
@@ -4117,6 +4245,61 @@
         "required": false,
         "default": "",
         "placeholder": "What to avoid in the image..."
+      },
+      {
+        "key": "expand_prompt",
+        "label": "Expand Prompt",
+        "type": "boolean",
+        "required": false,
+        "default": false
+      },
+      {
+        "key": "loras",
+        "label": "LoRAs (JSON)",
+        "type": "textarea",
+        "required": false,
+        "default": "",
+        "placeholder": "[{\"path\":\"https://...safetensors\",\"scale\":1.0}]"
+      },
+      {
+        "key": "embeddings",
+        "label": "Embeddings (JSON)",
+        "type": "textarea",
+        "required": false,
+        "default": "",
+        "placeholder": "[{\"path\":\"https://...\",\"tokens\":[\"<s0>\"]}]"
+      },
+      {
+        "key": "format",
+        "label": "Format",
+        "type": "enum",
+        "required": false,
+        "default": "jpeg",
+        "options": [
+          {
+            "label": "JPEG",
+            "value": "jpeg"
+          },
+          {
+            "label": "PNG",
+            "value": "png"
+          }
+        ]
+      },
+      {
+        "key": "enable_safety_checker",
+        "label": "Safety Checker",
+        "type": "boolean",
+        "required": false,
+        "default": true
+      },
+      {
+        "key": "seed",
+        "label": "Seed",
+        "type": "integer",
+        "required": false,
+        "min": 0,
+        "max": 4294967295
       }
     ]
   },
@@ -4421,6 +4604,12 @@
         "label": "Prompt",
         "dataType": "Text",
         "required": true
+      },
+      {
+        "id": "texture_image",
+        "label": "Texture Reference",
+        "dataType": "Image",
+        "required": false
       }
     ],
     "outputPorts": [
@@ -4583,11 +4772,65 @@
     ],
     "falParams": [
       {
+        "key": "art_style",
+        "label": "Art Style",
+        "type": "enum",
+        "required": false,
+        "default": "realistic",
+        "options": [
+          {
+            "label": "Realistic",
+            "value": "realistic"
+          },
+          {
+            "label": "Sculpture",
+            "value": "sculpture"
+          }
+        ]
+      },
+      {
         "key": "texture_prompt",
         "label": "Texture Prompt",
         "type": "string",
         "required": false,
         "placeholder": "Guide the texturing process"
+      },
+      {
+        "key": "enable_rigging",
+        "label": "Auto-Rig (Humanoid)",
+        "type": "boolean",
+        "required": false,
+        "default": false
+      },
+      {
+        "key": "rigging_height_meters",
+        "label": "Rig Height (m)",
+        "type": "float",
+        "required": false,
+        "default": 1.7,
+        "visibleWhen": {
+          "enable_rigging": [true]
+        }
+      },
+      {
+        "key": "enable_animation",
+        "label": "Apply Animation",
+        "type": "boolean",
+        "required": false,
+        "default": false,
+        "visibleWhen": {
+          "enable_rigging": [true]
+        }
+      },
+      {
+        "key": "animation_action_id",
+        "label": "Animation ID",
+        "type": "integer",
+        "required": false,
+        "default": 1001,
+        "visibleWhen": {
+          "enable_animation": [true]
+        }
       },
       {
         "key": "enable_prompt_expansion",
@@ -4630,6 +4873,12 @@
         "label": "Image",
         "dataType": "Image",
         "required": true
+      },
+      {
+        "id": "texture_image",
+        "label": "Texture Reference",
+        "dataType": "Image",
+        "required": false
       }
     ],
     "outputPorts": [
@@ -4801,6 +5050,43 @@
         "type": "string",
         "required": false,
         "placeholder": "Guide the texturing process"
+      },
+      {
+        "key": "enable_rigging",
+        "label": "Auto-Rig (Humanoid)",
+        "type": "boolean",
+        "required": false,
+        "default": false
+      },
+      {
+        "key": "rigging_height_meters",
+        "label": "Rig Height (m)",
+        "type": "float",
+        "required": false,
+        "default": 1.7,
+        "visibleWhen": {
+          "enable_rigging": [true]
+        }
+      },
+      {
+        "key": "enable_animation",
+        "label": "Apply Animation",
+        "type": "boolean",
+        "required": false,
+        "default": false,
+        "visibleWhen": {
+          "enable_rigging": [true]
+        }
+      },
+      {
+        "key": "animation_action_id",
+        "label": "Animation ID",
+        "type": "integer",
+        "required": false,
+        "default": 1001,
+        "visibleWhen": {
+          "enable_animation": [true]
+        }
       },
       {
         "key": "enable_safety_checker",
@@ -5944,6 +6230,13 @@
         "type": "string",
         "required": false,
         "placeholder": "#FF0000,#00FF00,#0000FF"
+      },
+      {
+        "key": "enable_safety_checker",
+        "label": "Safety Checker",
+        "type": "boolean",
+        "required": false,
+        "default": true
       }
     ]
   },
@@ -6383,6 +6676,31 @@
         "type": "string",
         "required": false,
         "placeholder": "What to avoid"
+      },
+      {
+        "key": "shot_type",
+        "label": "Shot Type",
+        "type": "enum",
+        "required": false,
+        "default": "customize",
+        "options": [
+          {
+            "label": "Customize",
+            "value": "customize"
+          },
+          {
+            "label": "Intelligent (auto)",
+            "value": "intelligent"
+          }
+        ]
+      },
+      {
+        "key": "multi_prompt",
+        "label": "Multi-Shot (JSON)",
+        "type": "textarea",
+        "required": false,
+        "default": "",
+        "placeholder": "[{\"prompt\":\"shot 1\",\"duration\":3},{\"prompt\":\"shot 2\",\"duration\":4}]"
       },
       {
         "key": "generate_audio",
@@ -7079,10 +7397,10 @@
   },
   "seedance-v1-5": {
     "id": "seedance-v1-5",
-    "displayName": "Seedance V1.5",
+    "displayName": "Seedance V1.5 Pro (I2V)",
     "category": "video-gen",
     "apiProvider": "fal",
-    "apiEndpoint": "fal-ai/seedance/v1.5/text-to-video",
+    "apiEndpoint": "fal-ai/bytedance/seedance/v1.5/pro/image-to-video",
     "envKeyName": "FAL_KEY",
     "executionPattern": "async-poll",
     "inputPorts": [
@@ -7095,6 +7413,12 @@
       {
         "id": "image",
         "label": "Image",
+        "dataType": "Image",
+        "required": true
+      },
+      {
+        "id": "end_image",
+        "label": "End Image",
         "dataType": "Image",
         "required": false
       }
@@ -8309,6 +8633,15 @@
         ]
       },
       {
+        "key": "num_images",
+        "label": "Count",
+        "type": "integer",
+        "required": false,
+        "default": 1,
+        "min": 1,
+        "max": 4
+      },
+      {
         "key": "guidance_scale",
         "label": "Guidance Scale",
         "type": "float",
@@ -8460,6 +8793,15 @@
         ]
       },
       {
+        "key": "num_images",
+        "label": "Count",
+        "type": "integer",
+        "required": false,
+        "default": 1,
+        "min": 1,
+        "max": 4
+      },
+      {
         "key": "safety_tolerance",
         "label": "Safety",
         "type": "enum",
@@ -8487,6 +8829,13 @@
             "value": "5"
           }
         ]
+      },
+      {
+        "key": "enable_safety_checker",
+        "label": "Safety Checker",
+        "type": "boolean",
+        "required": false,
+        "default": true
       },
       {
         "key": "seed",
@@ -8584,6 +8933,15 @@
             "value": "opaque"
           }
         ]
+      },
+      {
+        "key": "num_images",
+        "label": "Count",
+        "type": "integer",
+        "required": false,
+        "default": 1,
+        "min": 1,
+        "max": 4
       },
       {
         "key": "output_format",
@@ -8723,6 +9081,15 @@
             "value": "opaque"
           }
         ]
+      },
+      {
+        "key": "num_images",
+        "label": "Count",
+        "type": "integer",
+        "required": false,
+        "default": 1,
+        "min": 1,
+        "max": 4
       },
       {
         "key": "output_format",
@@ -8934,12 +9301,28 @@
       },
       {
         "key": "num_images",
-        "label": "Count",
+        "label": "Generations",
         "type": "integer",
         "required": false,
         "default": 1,
         "min": 1,
-        "max": 4
+        "max": 15
+      },
+      {
+        "key": "max_images",
+        "label": "Images per Generation",
+        "type": "integer",
+        "required": false,
+        "default": 1,
+        "min": 1,
+        "max": 15
+      },
+      {
+        "key": "enable_safety_checker",
+        "label": "Safety Checker",
+        "type": "boolean",
+        "required": false,
+        "default": true
       },
       {
         "key": "seed",

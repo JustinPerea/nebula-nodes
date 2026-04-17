@@ -31,3 +31,6 @@ Thumbs.db
 # SQLite (future)
 *.db
 .firecrawl/
+
+# Private planning docs (proprietary Mac app spec etc.) — NOT for public repo
+.planning/private/

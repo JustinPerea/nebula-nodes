@@ -1,0 +1,1634 @@
+{
+  "audio-to-audio": [
+    {
+      "name": "fal-ai/chatterbox/speech-to-speech",
+      "display_name": "Chatterbox Speech-to-Speech",
+      "category": "audio-to-audio",
+      "creator": "Resemble AI",
+      "fal_docs": "https://fal.ai/models/fal-ai/chatterbox/speech-to-speech",
+      "original_source": "https://docs.resemble.ai/voice-generation/speech-to-speech, https://github.com/resemble-ai/chatterbox",
+      "summary": "A professional-grade voice conversion model from Resemble AI that clones a target voice while preserving the original audio's timing and delivery.",
+      "filename": "fal-ai__chatterbox__speech-to-speech.md"
+    },
+    {
+      "name": "fal-ai/deepfilternet3",
+      "display_name": "DeepFilterNet 3",
+      "category": "audio-to-audio",
+      "creator": "Hendrik Schr\u00f6ter (Rikorose) / FAU Erlangen-N\u00fcrnberg",
+      "fal_docs": "https://fal.ai/models/fal-ai/deepfilternet3/api",
+      "original_source": "https://github.com/Rikorose/DeepFilterNet",
+      "summary": "A high-efficiency, low-latency speech enhancement model that removes background noise and upsamples audio to 48kHz.",
+      "filename": "fal-ai__deepfilternet3.md"
+    },
+    {
+      "name": "fal-ai/demucs",
+      "display_name": "Demucs (Source Separation)",
+      "category": "audio-to-audio",
+      "creator": "Meta AI Research (Facebook Research)",
+      "fal_docs": "https://fal.ai/models/fal-ai/demucs",
+      "original_source": "https://github.com/facebookresearch/demucs",
+      "summary": "State-of-the-art music source separation (stemming) for vocals, drums, bass, guitar, and piano.",
+      "filename": "fal-ai__demucs.md"
+    },
+    {
+      "name": "fal-ai/elevenlabs/audio-isolation",
+      "display_name": "ElevenLabs Audio Isolation",
+      "category": "audio-to-audio",
+      "creator": "ElevenLabs",
+      "fal_docs": "https://fal.ai/models/fal-ai/elevenlabs/audio-isolation",
+      "original_source": "https://elevenlabs.io/voice-isolator",
+      "summary": "Professional-grade AI tool that extracts clean voice tracks by removing background noise, music, and ambient interference from audio and video files.",
+      "filename": "fal-ai__elevenlabs__audio-isolation.md"
+    },
+    {
+      "name": "fal-ai/elevenlabs/voice-changer",
+      "display_name": "ElevenLabs Voice Changer",
+      "category": "audio-to-audio",
+      "creator": "ElevenLabs",
+      "fal_docs": "https://fal.ai/models/fal-ai/elevenlabs/voice-changer",
+      "original_source": "https://elevenlabs.io/docs/api-reference/speech-to-speech/convert",
+      "summary": "Transform any voice audio into a different, high-quality ElevenLabs voice while preserving the original performance's emotion and nuance.",
+      "filename": "fal-ai__elevenlabs__voice-changer.md"
+    },
+    {
+      "name": "fal-ai/minimax/voice-clone",
+      "display_name": "MiniMax Voice Cloning",
+      "category": "audio-to-audio",
+      "creator": "MiniMax (MiniMax Group Inc.)",
+      "fal_docs": "https://fal.ai/models/fal-ai/minimax/voice-clone",
+      "original_source": "https://platform.minimax.io/docs/guides/speech-voice-clone",
+      "summary": "A high-fidelity voice cloning model that creates digital twins from 10+ seconds of audio for use with MiniMax's advanced TTS engines.",
+      "filename": "fal-ai__minimax__voice-clone.md"
+    }
+  ],
+  "audio-to-video": [
+    {
+      "name": "fal-ai/elevenlabs/dubbing",
+      "display_name": "ElevenLabs Dubbing",
+      "category": "audio-to-video",
+      "creator": "ElevenLabs",
+      "fal_docs": "https://fal.ai/models/fal-ai/elevenlabs/dubbing",
+      "original_source": "https://elevenlabs.io/dubbing",
+      "summary": "High-fidelity AI video and audio localization that preserves original voices, emotions, and timing across 30+ languages.",
+      "filename": "fal-ai__elevenlabs__dubbing.md"
+    },
+    {
+      "name": "fal-ai/ltx-2.3/audio-to-video",
+      "display_name": "LTX-2.3 Audio-to-Video",
+      "category": "audio-to-video",
+      "creator": "Lightricks",
+      "fal_docs": "https://fal.ai/models/fal-ai/ltx-2.3/audio-to-video",
+      "original_source": "https://ltx.video/",
+      "summary": "A high-fidelity DiT-based model that generates synchronized video from audio clips, supporting text and image-driven animation.",
+      "filename": "fal-ai__ltx-2.3__audio-to-video.md"
+    }
+  ],
+  "image-to-3d": [
+    {
+      "name": "fal-ai/hunyuan-3d/v3.1/pro/image-to-3d",
+      "display_name": "Hunyuan 3D v3.1 Pro Image-to-3D",
+      "category": "image-to-3d",
+      "creator": "Tencent",
+      "fal_docs": "https://fal.ai/models/fal-ai/hunyuan-3d/v3.1/pro/image-to-3d/api",
+      "original_source": "https://3d.hunyuanglobal.com",
+      "summary": "A professional-grade generative AI model by Tencent that transforms single or multi-view images into high-fidelity, textured 3D assets with PBR materials.",
+      "filename": "fal-ai__hunyuan-3d__v3.1__pro__image-to-3d.md"
+    },
+    {
+      "name": "fal-ai/hunyuan3d-v3/image-to-3d",
+      "display_name": "Hunyuan3D-v3 Image-to-3D",
+      "category": "image-to-3d",
+      "creator": "Tencent",
+      "fal_docs": "https://fal.ai/models/fal-ai/hunyuan3d-v3/image-to-3d",
+      "original_source": "https://github.com/Tencent-Hunyuan/Hunyuan3D-2, https://www.tencentcloud.com/document/product/1281/74125",
+      "summary": "Transform single or multi-view images into ultra-high-resolution 3D models with optional PBR textures and custom polygon counts.",
+      "filename": "fal-ai__hunyuan3d-v3__image-to-3d.md"
+    },
+    {
+      "name": "fal-ai/hyper3d/rodin/v2",
+      "display_name": "Hyper3D Rodin v2",
+      "category": "image-to-3d",
+      "creator": "Hyper3D (Deemos Technology)",
+      "fal_docs": "https://fal.ai/models/fal-ai/hyper3d/rodin/v2",
+      "original_source": "https://developer.hyper3d.ai/api-specification/rodin-generation-gen2",
+      "summary": "Generate production-ready 3D assets with clean topology, UVs, and textures from single or multi-view images and text prompts.",
+      "filename": "fal-ai__hyper3d__rodin__v2.md"
+    },
+    {
+      "name": "fal-ai/meshy/v6/image-to-3d",
+      "display_name": "Meshy-6 Image to 3D",
+      "category": "image-to-3d",
+      "creator": "Meshy LLC",
+      "fal_docs": "https://fal.ai/models/fal-ai/meshy/v6/image-to-3d",
+      "original_source": "https://docs.meshy.ai/api/image-to-3d",
+      "summary": "Convert 2D images into high-quality, production-ready 3D models with support for rigging and animation.",
+      "filename": "fal-ai__meshy__v6__image-to-3d.md"
+    },
+    {
+      "name": "fal-ai/meshy/v6/text-to-3d",
+      "display_name": "Meshy-6 Text to 3D",
+      "category": "image-to-3d",
+      "creator": "Meshy (Meshy.ai)",
+      "fal_docs": "https://fal.ai/models/fal-ai/meshy/v6/text-to-3d",
+      "original_source": "https://docs.meshy.ai/api/text-to-3d",
+      "summary": "A state-of-the-art AI model that converts text descriptions into high-quality, production-ready 3D models with PBR textures and auto-rigging capabilities.",
+      "filename": "fal-ai__meshy__v6__text-to-3d.md"
+    },
+    {
+      "name": "fal-ai/sam-3/3d-objects",
+      "display_name": "SAM 3D: Single-Image 3D Object Reconstruction",
+      "category": "image-to-3d",
+      "creator": "Meta AI (facebookresearch)",
+      "fal_docs": "https://fal.ai/models/fal-ai/sam-3/3d-objects",
+      "original_source": "https://github.com/facebookresearch/sam-3d-objects",
+      "summary": "High-fidelity single-image 3D object reconstruction producing both GLB meshes and Gaussian splats.",
+      "filename": "fal-ai__sam-3__3d-objects.md"
+    },
+    {
+      "name": "fal-ai/trellis-2",
+      "display_name": "Trellis 2",
+      "category": "image-to-3d",
+      "creator": "Microsoft Research",
+      "fal_docs": "https://fal.ai/models/fal-ai/trellis-2",
+      "original_source": "https://github.com/microsoft/TRELLIS.2",
+      "summary": "A state-of-the-art 4B parameter image-to-3D model generating high-fidelity assets with PBR textures and arbitrary topology support.",
+      "filename": "fal-ai__trellis-2.md"
+    },
+    {
+      "name": "fal-ai/trellis",
+      "display_name": "Trellis",
+      "category": "image-to-3d",
+      "creator": "Microsoft Research",
+      "fal_docs": "https://fal.ai/models/fal-ai/trellis",
+      "original_source": "https://github.com/microsoft/TRELLIS",
+      "summary": "State-of-the-art image-to-3D model by Microsoft Research using Structured LATents (SLAT) for high-fidelity assets.",
+      "filename": "fal-ai__trellis.md"
+    },
+    {
+      "name": "fal-ai/triposr",
+      "display_name": "TripoSR",
+      "category": "image-to-3d",
+      "creator": "Stability AI & Tripo AI",
+      "fal_docs": "https://fal.ai/models/fal-ai/triposr",
+      "original_source": "https://github.com/VAST-AI-Research/TripoSR, https://platform.tripo3d.ai/docs/introduction",
+      "summary": "A high-speed feed-forward model that generates 3D meshes from single images in under 0.5 seconds.",
+      "filename": "fal-ai__triposr.md"
+    },
+    {
+      "name": "tripo3d/h3.1/image-to-3d",
+      "display_name": "Tripo H3.1 Image to 3D",
+      "category": "image-to-3d",
+      "creator": "Tripo AI (VAST-AI-Research)",
+      "fal_docs": "https://fal.ai/models/tripo3d/h3.1/image-to-3d",
+      "original_source": "https://platform.tripo3d.ai/docs/generation",
+      "summary": "Generate production-ready, high-fidelity 3D models with PBR textures and quad topology from a single 2D image.",
+      "filename": "tripo3d__h3.1__image-to-3d.md"
+    },
+    {
+      "name": "tripo3d/tripo/v2.5/image-to-3d",
+      "display_name": "Tripo3D v2.5 Image-to-3D",
+      "category": "image-to-3d",
+      "creator": "Tripo AI",
+      "fal_docs": "https://fal.ai/models/tripo3d/tripo/v2.5/image-to-3d",
+      "original_source": "https://www.tripo3d.ai/",
+      "summary": "A state-of-the-art AI model that generates high-fidelity 3D meshes with PBR textures from a single 2D image in seconds.",
+      "filename": "tripo3d__tripo__v2.5__image-to-3d.md"
+    }
+  ],
+  "image-to-image": [
+    {
+      "name": "fal-ai/birefnet/v2",
+      "display_name": "BiRefNet v2",
+      "category": "image-to-image",
+      "creator": "Zheng Peng et al. (Nankai University)",
+      "fal_docs": "https://fal.ai/models/fal-ai/birefnet/v2",
+      "original_source": "https://github.com/ZhengPeng7/BiRefNet",
+      "summary": "A high-resolution background removal model using bilateral reference for pixel-perfect edge segmentation.",
+      "filename": "fal-ai__birefnet__v2.md"
+    },
+    {
+      "name": "fal-ai/bria/background/remove",
+      "display_name": "Bria RMBG 2.0",
+      "category": "image-to-image",
+      "creator": "Bria AI",
+      "fal_docs": "https://fal.ai/models/fal-ai/bria/background/remove",
+      "original_source": "https://docs.bria.ai/image-editing/v2-endpoints/background-remove",
+      "summary": "Production-grade, commercially-safe background removal tool optimized for e-commerce and professional asset workflows.",
+      "filename": "fal-ai__bria__background__remove.md"
+    },
+    {
+      "name": "fal-ai/bria/background/replace",
+      "display_name": "Bria Background Replace",
+      "category": "image-to-image",
+      "creator": "Bria AI",
+      "fal_docs": "https://fal.ai/models/fal-ai/bria/background/replace",
+      "original_source": "https://docs.bria.ai/image-editing/v2-endpoints/background-replace",
+      "summary": "A commercially-safe generative background replacement model trained on 100% licensed data, capable of swapping backgrounds via text prompts or reference images.",
+      "filename": "fal-ai__bria__background__replace.md"
+    },
+    {
+      "name": "fal-ai/bytedance/seedream/v4.5/edit",
+      "display_name": "ByteDance Seedream v4.5 Edit",
+      "category": "image-to-image",
+      "creator": "ByteDance",
+      "fal_docs": "https://fal.ai/models/fal-ai/bytedance/seedream/v4.5/edit",
+      "original_source": "https://seed.bytedance.com/en/seedream4_5",
+      "summary": "A professional-grade image editing and creation model optimized for multi-image consistency and exceptional typography.",
+      "filename": "fal-ai__bytedance__seedream__v4.5__edit.md"
+    },
+    {
+      "name": "fal-ai/bytedance/seedream/v4/edit",
+      "display_name": "Bytedance Seedream v4 Edit",
+      "category": "image-to-image",
+      "creator": "ByteDance (Seed Team)",
+      "fal_docs": "https://fal.ai/models/fal-ai/bytedance/seedream/v4/edit",
+      "original_source": "https://seed.bytedance.com/en/seedream4_0, https://docs.byteplus.com/en/docs/ModelArk/1824718",
+      "summary": "A unified image creation and editing model by ByteDance featuring 4K resolution, multi-reference consistency, and 1.8-second 2K generation.",
+      "filename": "fal-ai__bytedance__seedream__v4__edit.md"
+    },
+    {
+      "name": "fal-ai/esrgan",
+      "display_name": "Real-ESRGAN (Upscale Images)",
+      "category": "image-to-image",
+      "creator": "Xintao Wang (Tencent ARC Lab)",
+      "fal_docs": "https://fal.ai/models/fal-ai/esrgan",
+      "original_source": "https://github.com/xinntao/Real-ESRGAN",
+      "summary": "A practical and powerful image restoration model designed to upscale images by simulating complex real-world degradations.",
+      "filename": "fal-ai__esrgan.md"
+    },
+    {
+      "name": "fal-ai/flux-2-pro/edit",
+      "display_name": "FLUX.2 [pro] Edit",
+      "category": "image-to-image",
+      "creator": "Black Forest Labs",
+      "fal_docs": "https://fal.ai/models/fal-ai/flux-2-pro/edit",
+      "original_source": "https://docs.bfl.ml/flux_2/flux2_image_editing",
+      "summary": "A state-of-the-art multi-reference image editor powered by a 24B parameter flow transformer, capable of precise object manipulation and color control via natural language.",
+      "filename": "fal-ai__flux-2-pro__edit.md"
+    },
+    {
+      "name": "fal-ai/flux-2/edit",
+      "display_name": "FLUX.2 [dev] Edit",
+      "category": "image-to-image",
+      "creator": "Black Forest Labs",
+      "fal_docs": "https://fal.ai/models/fal-ai/flux-2/edit",
+      "original_source": "https://blackforestlabs.ai/",
+      "summary": "A 32B parameter image-to-image editor from Black Forest Labs supporting multi-reference editing and natural language control.",
+      "filename": "fal-ai__flux-2__edit.md"
+    },
+    {
+      "name": "fal-ai/flux-pro/kontext",
+      "display_name": "FLUX.1 Kontext [pro]",
+      "category": "image-to-image",
+      "creator": "Black Forest Labs",
+      "fal_docs": "https://fal.ai/models/fal-ai/flux-pro/kontext",
+      "original_source": "https://bfl.ai/models/flux-kontext",
+      "summary": "A unified model for high-fidelity in-context image generation and editing that preserves character and style consistency.",
+      "filename": "fal-ai__flux-pro__kontext.md"
+    },
+    {
+      "name": "fal-ai/flux-pro/kontext/max",
+      "display_name": "FLUX.1 Kontext [max]",
+      "category": "image-to-image",
+      "creator": "Black Forest Labs (BFL)",
+      "fal_docs": "https://fal.ai/models/fal-ai/flux-pro/kontext/max",
+      "original_source": "https://docs.bfl.ml/api-reference/models/create-an-image-with-flux1-kontext-[max]-legacy-use-flux2-[pro]-for-editing",
+      "summary": "A 12B parameter frontier image editing model by Black Forest Labs optimized for prompt adherence, typography, and visual consistency across edits.",
+      "filename": "fal-ai__flux-pro__kontext__max.md"
+    },
+    {
+      "name": "fal-ai/flux-pro/v1/fill",
+      "display_name": "FLUX.1 [pro] Fill",
+      "category": "image-to-image",
+      "creator": "Black Forest Labs",
+      "fal_docs": "https://fal.ai/models/fal-ai/flux-pro/v1/fill",
+      "original_source": "https://blackforestlabs.ai/",
+      "summary": "Professional-grade inpainting and outpainting model for surgical image edits and scene expansion.",
+      "filename": "fal-ai__flux-pro__v1__fill.md"
+    },
+    {
+      "name": "fal-ai/flux-pulid",
+      "display_name": "PuLID Flux (fal-ai/flux-pulid)",
+      "category": "image-to-image",
+      "creator": "Yanze Wu (PuLID) / Black Forest Labs (FLUX.1) GitHub",
+      "fal_docs": "https://fal.ai/models/fal-ai/flux-pulid",
+      "original_source": "https://github.com/ToTheBeginning/PuLID/blob/main/docs/pulid_for_flux.md",
+      "summary": "A tuning-free identity-preserving image generation model that applies a reference face to FLUX.1-dev outputs with high fidelity.",
+      "filename": "fal-ai__flux-pulid.md"
+    },
+    {
+      "name": "fal-ai/flux/dev/image-to-image",
+      "display_name": "FLUX.1 [dev] Image-to-Image",
+      "category": "image-to-image",
+      "creator": "Black Forest Labs",
+      "fal_docs": "https://fal.ai/models/fal-ai/flux/dev/image-to-image",
+      "original_source": "https://blackforestlabs.ai/",
+      "summary": "A high-performance 12B parameter transformer model for professional-grade image-to-image transformations and style transfers.",
+      "filename": "fal-ai__flux__dev__image-to-image.md"
+    },
+    {
+      "name": "fal-ai/gemini-25-flash-image/edit",
+      "display_name": "Gemini 2.5 Flash Image Edit",
+      "category": "image-to-image",
+      "creator": "Google",
+      "fal_docs": "https://fal.ai/models/fal-ai/gemini-25-flash-image/edit",
+      "original_source": "https://ai.google.dev/gemini-api/docs/models/gemini-2.5-flash-image",
+      "summary": "A fast, natively multimodal image editing model capable of conversational refinement, object addition/removal, and high-quality text rendering.",
+      "filename": "fal-ai__gemini-25-flash-image__edit.md"
+    },
+    {
+      "name": "fal-ai/gpt-image-1.5/edit",
+      "display_name": "GPT Image 1.5 Edit",
+      "category": "image-to-image",
+      "creator": "OpenAI",
+      "fal_docs": "https://fal.ai/models/fal-ai/gpt-image-1.5/edit",
+      "original_source": "https://openai.com/index/new-chatgpt-images-is-here/",
+      "summary": "OpenAI's state-of-the-art natively multimodal model for precise, high-fidelity image editing and natural language modifications.",
+      "filename": "fal-ai__gpt-image-1.5__edit.md"
+    },
+    {
+      "name": "fal-ai/imageutils/rembg",
+      "display_name": "Remove Background (Rembg)",
+      "category": "image-to-image",
+      "creator": "Daniel Gatis (Rembg)",
+      "fal_docs": "https://fal.ai/models/fal-ai/imageutils/rembg",
+      "original_source": "https://github.com/danielgatis/rembg",
+      "summary": "A high-performance utility for removing image backgrounds using the Rembg library.",
+      "filename": "fal-ai__imageutils__rembg.md"
+    },
+    {
+      "name": "fal-ai/nano-banana-2/edit",
+      "display_name": "Nano Banana 2 [Edit]",
+      "category": "image-to-image",
+      "creator": "Google DeepMind",
+      "fal_docs": "https://fal.ai/models/fal-ai/nano-banana-2/edit",
+      "original_source": "https://ai.google.dev/gemini-api/docs/models/gemini-3.1-flash-image-preview",
+      "summary": "Google's Gemini 3.1 Flash-powered image editor for high-speed, mask-free semantic transformations and multi-image compositing.",
+      "filename": "fal-ai__nano-banana-2__edit.md"
+    },
+    {
+      "name": "fal-ai/nano-banana-pro/edit",
+      "display_name": "Google Nano Banana Pro [Edit]",
+      "category": "image-to-image",
+      "creator": "Google DeepMind",
+      "fal_docs": "https://fal.ai/models/fal-ai/nano-banana-pro/edit",
+      "original_source": "https://deepmind.google/models/gemini-image/pro/",
+      "summary": "State-of-the-art reasoning-driven AI image editor built on Gemini 3 Pro, capable of physics-aware scene manipulation and high-fidelity text rendering.",
+      "filename": "fal-ai__nano-banana-pro__edit.md"
+    },
+    {
+      "name": "fal-ai/nano-banana/edit",
+      "display_name": "Nano Banana [image-editing]",
+      "category": "image-to-image",
+      "creator": "Google (DeepMind)",
+      "fal_docs": "https://fal.ai/models/fal-ai/nano-banana/edit",
+      "original_source": "https://developers.googleblog.com/en/introducing-gemini-2-5-flash-image/",
+      "summary": "Google's Gemini 2.5 Flash Image model for precise, mask-free semantic image editing using natural language.",
+      "filename": "fal-ai__nano-banana__edit.md"
+    },
+    {
+      "name": "fal-ai/topaz/upscale/image",
+      "display_name": "Topaz Image Upscale",
+      "category": "image-to-image",
+      "creator": "Topaz Labs",
+      "fal_docs": "https://fal.ai/models/fal-ai/topaz/upscale/image",
+      "original_source": "https://www.topazlabs.com/api",
+      "summary": "Professional-grade AI image upscaling and enhancement with face restoration and generative detail recovery.",
+      "filename": "fal-ai__topaz__upscale__image.md"
+    },
+    {
+      "name": "xai/grok-imagine-image/edit",
+      "display_name": "Grok Imagine Image Edit",
+      "category": "image-to-image",
+      "creator": "xAI",
+      "fal_docs": "https://fal.ai/models/xai/grok-imagine-image/edit",
+      "original_source": "https://docs.x.ai/developers/model-capabilities/images/generation",
+      "summary": "A high-speed, precision image editing model by xAI that follows natural language instructions to modify existing images.",
+      "filename": "xai__grok-imagine-image__edit.md"
+    }
+  ],
+  "image-to-video": [
+    {
+      "name": "bytedance/seedance-2.0/fast/image-to-video",
+      "display_name": "Seedance 2.0 Fast Image to Video",
+      "category": "image-to-video",
+      "creator": "ByteDance",
+      "fal_docs": "https://fal.ai/models/bytedance/seedance-2.0/fast/image-to-video",
+      "original_source": "https://docs.byteplus.com/en/docs/ModelArk/2291680",
+      "summary": "ByteDance's high-speed multimodal video model generating cinematic 720p video with synchronized audio and precise start/end frame control.",
+      "filename": "bytedance__seedance-2.0__fast__image-to-video.md"
+    },
+    {
+      "name": "bytedance/seedance-2.0/image-to-video",
+      "display_name": "Seedance 2.0 Image-to-Video",
+      "category": "image-to-video",
+      "creator": "ByteDance",
+      "fal_docs": "https://fal.ai/models/bytedance/seedance-2.0/image-to-video",
+      "original_source": "https://seed.bytedance.com/en/seedance2_0",
+      "summary": "ByteDance's premium image-to-video model featuring synchronized audio, precise start/end frame control, and a unified multimodal architecture.",
+      "filename": "bytedance__seedance-2.0__image-to-video.md"
+    },
+    {
+      "name": "bytedance/seedance-2.0/reference-to-video",
+      "display_name": "Seedance 2.0 Reference to Video",
+      "category": "image-to-video",
+      "creator": "ByteDance",
+      "fal_docs": "https://fal.ai/models/bytedance/seedance-2.0/reference-to-video, https://fal.ai/learn/tools/how-to-use-seedance-2-0",
+      "original_source": "https://seed.bytedance.com/en/seedance2_0, https://www.volcengine.com/experience/ark",
+      "summary": "ByteDance's unified audio-video model that generates cinematic sequences using multiple image, video, and audio references with native sound and physics.",
+      "filename": "bytedance__seedance-2.0__reference-to-video.md"
+    },
+    {
+      "name": "fal-ai/bytedance/seedance/v1/pro/image-to-video",
+      "display_name": "Seedance 1.0 Pro (Image-to-Video)",
+      "category": "image-to-video",
+      "creator": "ByteDance",
+      "fal_docs": "https://fal.ai/models/fal-ai/bytedance/seedance/v1/pro/image-to-video",
+      "original_source": "https://seed.bytedance.com/en/seedance",
+      "summary": "High-performance video generation model by ByteDance featuring superior spatiotemporal fluidity and cinematic consistency.",
+      "filename": "fal-ai__bytedance__seedance__v1__pro__image-to-video.md"
+    },
+    {
+      "name": "fal-ai/kling-video/o3/pro/image-to-video",
+      "display_name": "Kling O3 Image to Video [Pro]",
+      "category": "image-to-video",
+      "creator": "Kuaishou Technology",
+      "fal_docs": "https://fal.ai/models/fal-ai/kling-video/o3/pro/image-to-video",
+      "original_source": "https://kling.ai/",
+      "summary": "Professional-grade image-to-video model supporting 3-15s clips with start/end frame control, native audio, and 1080p output.",
+      "filename": "fal-ai__kling-video__o3__pro__image-to-video.md"
+    },
+    {
+      "name": "fal-ai/kling-video/o3/pro/reference-to-video",
+      "display_name": "Kling O3 Pro Reference to Video",
+      "category": "image-to-video",
+      "creator": "Kuaishou Technology (Kling AI)",
+      "fal_docs": "https://fal.ai/models/fal-ai/kling-video/o3/pro/reference-to-video",
+      "original_source": "https://klingai.com/",
+      "summary": "A state-of-the-art multimodal video generation model that preserves character and object identity using multiple reference images and precise prompt control.",
+      "filename": "fal-ai__kling-video__o3__pro__reference-to-video.md"
+    },
+    {
+      "name": "fal-ai/kling-video/v1.6/pro/image-to-video",
+      "display_name": "Kling v1.6 Pro (Image-to-Video)",
+      "category": "image-to-video",
+      "creator": "Kuaishou Technology (Kling AI)",
+      "fal_docs": "https://fal.ai/models/fal-ai/kling-video/v1.6/pro/image-to-video",
+      "original_source": "https://klingai.com/",
+      "summary": "State-of-the-art image-to-video model from Kuaishou, featuring high-fidelity 1080p generation and precise motion control.",
+      "filename": "fal-ai__kling-video__v1.6__pro__image-to-video.md"
+    },
+    {
+      "name": "fal-ai/kling-video/v2.5-turbo/pro/image-to-video",
+      "display_name": "Kling 2.5 Turbo Pro (Image to Video)",
+      "category": "image-to-video",
+      "creator": "Kuaishou (Kling AI)",
+      "fal_docs": "https://fal.ai/models/fal-ai/kling-video/v2.5-turbo/pro/image-to-video",
+      "original_source": "https://klingai.com/",
+      "summary": "High-performance image-to-video model delivering 1080p cinematic results with fluid motion and precise start-to-end frame control.",
+      "filename": "fal-ai__kling-video__v2.5-turbo__pro__image-to-video.md"
+    },
+    {
+      "name": "fal-ai/kling-video/v2.6/pro/image-to-video",
+      "display_name": "Kling 2.6 Pro Image-to-Video",
+      "category": "image-to-video",
+      "creator": "Kuaishou",
+      "fal_docs": "https://fal.ai/models/fal-ai/kling-video/v2.6/pro/image-to-video",
+      "original_source": "https://kling.ai/",
+      "summary": "Professional-grade image-to-video model with 1080p cinematic visuals, physics-aware motion, and native synchronized audio generation.",
+      "filename": "fal-ai__kling-video__v2.6__pro__image-to-video.md"
+    },
+    {
+      "name": "fal-ai/kling-video/v2.6/pro/motion-control",
+      "display_name": "Kling Video v2.6 Motion Control [Pro]",
+      "category": "image-to-video",
+      "creator": "Kling AI (Kuaishou Technology)",
+      "fal_docs": "https://fal.ai/models/fal-ai/kling-video/v2.6/pro/motion-control",
+      "original_source": "https://klingai.com",
+      "summary": "High-fidelity motion transfer model that applies movements from a reference video to a static character image.",
+      "filename": "fal-ai__kling-video__v2.6__pro__motion-control.md"
+    },
+    {
+      "name": "fal-ai/kling-video/v3/pro/image-to-video",
+      "display_name": "Kling Video v3 Image to Video [Pro]",
+      "category": "image-to-video",
+      "creator": "Kling AI (Kuaishou)",
+      "fal_docs": "https://fal.ai/models/fal-ai/kling-video/v3/pro/image-to-video",
+      "original_source": "https://kling.ai/quickstart/klingai-video-3-model-user-guide",
+      "summary": "Top-tier image-to-video model with cinematic visuals, fluid motion, native audio generation, and advanced subject consistency support.",
+      "filename": "fal-ai__kling-video__v3__pro__image-to-video.md"
+    },
+    {
+      "name": "fal-ai/kling-video/v3/standard/image-to-video",
+      "display_name": "Kling Video v3 Standard (Image-to-Video)",
+      "category": "image-to-video",
+      "creator": "Kling AI (Kuaishou)",
+      "fal_docs": "https://fal.ai/models/fal-ai/kling-video/v3/standard/image-to-video",
+      "original_source": "https://klingai.com/",
+      "summary": "A top-tier image-to-video model with cinematic visuals, fluid motion, native audio generation, and custom element support.",
+      "filename": "fal-ai__kling-video__v3__standard__image-to-video.md"
+    },
+    {
+      "name": "fal-ai/ltx-2.3/image-to-video",
+      "display_name": "LTX-2.3: Image-to-Video AI Generator",
+      "category": "image-to-video",
+      "creator": "Lightricks",
+      "fal_docs": "[FAL.ai LTX-2.3 Image-to-Video](https://fal.ai/models/fal-ai/ltx-2.3/image-to-video)",
+      "original_source": "[LTX.io](https://ltx.io/model), [Lightricks on Hugging Face](https://huggingface.co/Lightricks)",
+      "summary": "A 22B parameter Diffusion Transformer (DiT) model by Lightricks that generates high-fidelity 1080p-4K video with synchronized native audio from a single image and prompt.",
+      "filename": "fal-ai__ltx-2.3__image-to-video.md"
+    },
+    {
+      "name": "fal-ai/luma-dream-machine/image-to-video",
+      "display_name": "Luma Dream Machine (Image to Video)",
+      "category": "image-to-video",
+      "creator": "Luma AI",
+      "fal_docs": "https://fal.ai/models/fal-ai/luma-dream-machine/image-to-video",
+      "original_source": "https://lumalabs.ai/dream-machine, https://docs.lumalabs.ai/docs/api",
+      "summary": "A high-fidelity image-to-video model capable of generating realistic visuals with natural motion physics from static images.",
+      "filename": "fal-ai__luma-dream-machine__image-to-video.md"
+    },
+    {
+      "name": "fal-ai/pika/v2.2/image-to-video",
+      "display_name": "Pika 2.2 Image-to-Video",
+      "category": "image-to-video",
+      "creator": "Pika Labs",
+      "fal_docs": "https://fal.ai/models/fal-ai/pika/v2.2/image-to-video",
+      "original_source": "https://pika.art",
+      "summary": "A high-fidelity image-to-video model capable of generating up to 10-second cinematic clips in 1080p resolution.",
+      "filename": "fal-ai__pika__v2.2__image-to-video.md"
+    },
+    {
+      "name": "fal-ai/veo3.1/fast/image-to-video",
+      "display_name": "Veo 3.1 Fast | Image to Video",
+      "category": "image-to-video",
+      "creator": "Google DeepMind",
+      "fal_docs": "https://fal.ai/models/fal-ai/veo3.1/fast/image-to-video",
+      "original_source": "https://ai.google.dev/gemini-api/docs/models/veo-3.1-generate-preview",
+      "summary": "Google's premier video generation model on FAL.ai, featuring native audio, 4K support, and cinematic narrative control.",
+      "filename": "fal-ai__veo3.1__fast__image-to-video.md"
+    },
+    {
+      "name": "fal-ai/veo3.1/first-last-frame-to-video",
+      "display_name": "Google Veo 3.1 First-Last Frame to Video",
+      "category": "image-to-video",
+      "creator": "Google DeepMind",
+      "fal_docs": "https://fal.ai/models/fal-ai/veo3.1/first-last-frame-to-video",
+      "original_source": "https://ai.google.dev/gemini-api/docs/video",
+      "summary": "A high-fidelity video generation model that creates seamless transitions between two provided image frames with native audio and up to 4K resolution.",
+      "filename": "fal-ai__veo3.1__first-last-frame-to-video.md"
+    },
+    {
+      "name": "fal-ai/veo3.1/image-to-video",
+      "display_name": "Google Veo 3.1 (Image to Video)",
+      "category": "image-to-video",
+      "creator": "Google DeepMind",
+      "fal_docs": "https://fal.ai/models/fal-ai/veo3.1/image-to-video",
+      "original_source": "https://deepmind.google/models/veo/",
+      "summary": "Google DeepMind's flagship cinematic video generation model, optimized for high-fidelity animation of still images with native audio.",
+      "filename": "fal-ai__veo3.1__image-to-video.md"
+    },
+    {
+      "name": "fal-ai/wan/v2.2-14b/animate/move",
+      "display_name": "Wan-2.2 Animate Move (14B)",
+      "category": "image-to-video",
+      "creator": "Alibaba (Tongyi Lab)",
+      "fal_docs": "https://fal.ai/models/fal-ai/wan/v2.2-14b/animate/move",
+      "original_source": "https://github.com/Wan-Video/Wan2.1, https://huggingface.co/Wan-AI/Wan2.2-Animate-14B",
+      "summary": "A high-fidelity character animation model by Alibaba that replicates expressions and movements from reference videos onto static images using a Mixture-of-Experts architecture.",
+      "filename": "fal-ai__wan__v2.2-14b__animate__move.md"
+    },
+    {
+      "name": "xai/grok-imagine-video/image-to-video",
+      "display_name": "Grok Imagine Video (Image to Video)",
+      "category": "image-to-video",
+      "creator": "xAI",
+      "fal_docs": "https://fal.ai/models/xai/grok-imagine-video/image-to-video",
+      "original_source": "https://docs.x.ai/developers/model-capabilities/video/generation",
+      "summary": "A high-performance image-to-video model by xAI that generates cinematic 6\u201315 second clips with native audio and exceptional subject consistency.",
+      "filename": "xai__grok-imagine-video__image-to-video.md"
+    }
+  ],
+  "llm": [
+    {
+      "name": "fal-ai/qwen-3-guard",
+      "display_name": "Qwen 3 Guard [8B]",
+      "category": "llm",
+      "creator": "Alibaba Cloud (Qwen Team)",
+      "fal_docs": "https://fal.ai/models/fal-ai/qwen-3-guard",
+      "original_source": "https://github.com/QwenLM/Qwen3Guard",
+      "summary": "A high-performance multilingual safety guardrail model for detecting harmful content across 119 languages.",
+      "filename": "fal-ai__qwen-3-guard.md"
+    },
+    {
+      "name": "openrouter/router",
+      "display_name": "OpenRouter Router",
+      "category": "llm",
+      "creator": "OpenRouter",
+      "fal_docs": "https://fal.ai/models/openrouter/router",
+      "original_source": "https://openrouter.ai/docs",
+      "summary": "A unified API gateway providing access to 300+ LLMs from OpenAI, Anthropic, Google, and more with intelligent routing and fallbacks.",
+      "filename": "openrouter__router.md"
+    }
+  ],
+  "speech-to-text": [
+    {
+      "name": "fal-ai/elevenlabs/speech-to-text/scribe-v2",
+      "display_name": "ElevenLabs Scribe V2 (via FAL.ai)",
+      "category": "speech-to-text",
+      "creator": "ElevenLabs",
+      "fal_docs": "https://fal.ai/models/fal-ai/elevenlabs/speech-to-text/scribe-v2",
+      "original_source": "https://elevenlabs.io/speech-to-text",
+      "summary": "The world's most accurate batch transcription model featuring 98%+ accuracy, multi-speaker diarization, and intelligent keyterm biasing.",
+      "filename": "fal-ai__elevenlabs__speech-to-text__scribe-v2.md"
+    },
+    {
+      "name": "fal-ai/speech-to-text/turbo",
+      "display_name": "Speech-to-Text (Turbo)",
+      "category": "speech-to-text",
+      "creator": "NVIDIA (NeMo Canary family)",
+      "fal_docs": "https://fal.ai/models/fal-ai/speech-to-text/turbo",
+      "original_source": "https://huggingface.co/nvidia/canary-1b",
+      "summary": "An ultra-fast, real-time speech-to-text model powered by NVIDIA Canary-1B for high-accuracy transcription.",
+      "filename": "fal-ai__speech-to-text__turbo.md"
+    },
+    {
+      "name": "fal-ai/whisper",
+      "display_name": "Whisper (OpenAI)",
+      "category": "speech-to-text",
+      "creator": "OpenAI",
+      "fal_docs": "https://fal.ai/models/fal-ai/whisper",
+      "original_source": "https://github.com/openai/whisper, https://huggingface.co/openai/whisper-large-v3",
+      "summary": "A state-of-the-art speech recognition and translation model by OpenAI, optimized for high-speed inference on fal.ai.",
+      "filename": "fal-ai__whisper.md"
+    },
+    {
+      "name": "fal-ai/wizper",
+      "display_name": "Wizper (Whisper v3)",
+      "category": "speech-to-text",
+      "creator": "OpenAI",
+      "fal_docs": "https://fal.ai/models/fal-ai/wizper",
+      "original_source": "https://github.com/openai/whisper",
+      "summary": "An optimized version of OpenAI's Whisper v3 Large for high-performance transcription and translation.",
+      "filename": "fal-ai__wizper.md"
+    }
+  ],
+  "text-to-3d": [
+    {
+      "name": "fal-ai/hunyuan-3d/v3.1/pro/text-to-3d",
+      "display_name": "Hunyuan 3D Pro Text to 3D",
+      "category": "text-to-3d",
+      "creator": "Tencent Hunyuan Team",
+      "fal_docs": "https://fal.ai/models/fal-ai/hunyuan-3d/v3.1/pro/text-to-3d",
+      "original_source": "https://github.com/Tencent-Hunyuan/Hunyuan3D-1, https://www.tencentcloud.com/product/hunyuan-3d",
+      "summary": "A professional-grade 3D asset generation model by Tencent that creates high-fidelity textured meshes from text descriptions.",
+      "filename": "fal-ai__hunyuan-3d__v3.1__pro__text-to-3d.md"
+    }
+  ],
+  "text-to-audio": [
+    {
+      "name": "fal-ai/ace-step",
+      "display_name": "ACE-Step",
+      "category": "text-to-audio",
+      "creator": "ACE Studio & StepFun",
+      "fal_docs": "https://fal.ai/models/fal-ai/ace-step",
+      "original_source": "https://github.com/ACE-Step/ACE-Step-1.5",
+      "summary": "A high-fidelity music generation foundation model capable of producing full songs with lyrics and vocals from text descriptions.",
+      "filename": "fal-ai__ace-step.md"
+    },
+    {
+      "name": "fal-ai/elevenlabs/music",
+      "display_name": "ElevenLabs Music",
+      "category": "text-to-audio",
+      "creator": "ElevenLabs",
+      "fal_docs": "https://fal.ai/models/fal-ai/elevenlabs/music",
+      "original_source": "https://elevenlabs.io/music",
+      "summary": "A professional-grade text-to-music model capable of generating full tracks with lyrics, vocals, and structural control.",
+      "filename": "fal-ai__elevenlabs__music.md"
+    },
+    {
+      "name": "fal-ai/elevenlabs/sound-effects/v2",
+      "display_name": "ElevenLabs Sound Effects V2",
+      "category": "text-to-audio",
+      "creator": "ElevenLabs",
+      "fal_docs": "https://fal.ai/models/fal-ai/elevenlabs/sound-effects/v2/api",
+      "original_source": "https://elevenlabs.io/docs/overview/capabilities/sound-effects, https://elevenlabs.io/docs/api-reference/text-to-sound-effects/convert",
+      "summary": "High-fidelity generative AI model for creating cinematic sound effects, foley, and ambient textures from natural language descriptions.",
+      "filename": "fal-ai__elevenlabs__sound-effects__v2.md"
+    },
+    {
+      "name": "fal-ai/elevenlabs/tts/multilingual-v2",
+      "display_name": "ElevenLabs TTS Multilingual v2",
+      "category": "text-to-audio",
+      "creator": "ElevenLabs",
+      "fal_docs": "https://fal.ai/models/fal-ai/elevenlabs/tts/multilingual-v2/api",
+      "original_source": "https://elevenlabs.io/docs/overview/models#multilingual-v2",
+      "summary": "State-of-the-art multilingual speech synthesis model providing lifelike, emotionally rich audio in 29+ languages.",
+      "filename": "fal-ai__elevenlabs__tts__multilingual-v2.md"
+    },
+    {
+      "name": "fal-ai/gemini-tts",
+      "display_name": "Gemini TTS",
+      "category": "text-to-audio",
+      "creator": "Google DeepMind / Google Cloud",
+      "fal_docs": "https://fal.ai/models/fal-ai/gemini-tts",
+      "original_source": "https://cloud.google.com/text-to-speech/docs/gemini-tts",
+      "summary": "High-fidelity, prompt-steerable speech synthesis supporting multi-speaker conversations and expressive delivery.",
+      "filename": "fal-ai__gemini-tts.md"
+    },
+    {
+      "name": "fal-ai/lyria2",
+      "display_name": "Lyria 2",
+      "category": "text-to-audio",
+      "creator": "Google DeepMind",
+      "fal_docs": "https://fal.ai/models/fal-ai/lyria2",
+      "original_source": "https://docs.cloud.google.com/vertex-ai/generative-ai/docs/models/lyria/lyria-002",
+      "summary": "Google's professional-grade 48kHz music generation model for creating high-fidelity instrumental tracks from text.",
+      "filename": "fal-ai__lyria2.md"
+    },
+    {
+      "name": "fal-ai/minimax-music/v2.6",
+      "display_name": "MiniMax Music 2.6",
+      "category": "text-to-audio",
+      "creator": "MiniMax (Hailuo AI)",
+      "fal_docs": "https://fal.ai/models/fal-ai/minimax-music/v2.6",
+      "original_source": "https://platform.minimax.io/docs/guides/music-generation",
+      "summary": "A professional-grade text-to-music model that generates full-length studio-quality songs with high-fidelity vocals, instrumentals, and complex arrangements.",
+      "filename": "fal-ai__minimax-music__v2.6.md"
+    },
+    {
+      "name": "fal-ai/minimax/voice-design",
+      "display_name": "MiniMax Voice Design",
+      "category": "text-to-audio",
+      "creator": "MiniMax",
+      "fal_docs": "https://fal.ai/models/fal-ai/minimax/voice-design",
+      "original_source": "https://platform.minimax.io/docs/api-reference/voice-design-design",
+      "summary": "Generate unique, personalized AI voices from text descriptions without reference audio.",
+      "filename": "fal-ai__minimax__voice-design.md"
+    },
+    {
+      "name": "fal-ai/mmaudio-v2",
+      "display_name": "MMAudio V2",
+      "category": "text-to-audio",
+      "creator": "Sony AI & University of Illinois Urbana-Champaign (UIUC)",
+      "fal_docs": "https://fal.ai/models/fal-ai/mmaudio-v2",
+      "original_source": "https://github.com/hkchengrex/MMAudio",
+      "summary": "A state-of-the-art multimodal audio generation model that synthesizes high-quality, synchronized soundtracks and sound effects for video or text inputs.",
+      "filename": "fal-ai__mmaudio-v2.md"
+    },
+    {
+      "name": "fal-ai/mmaudio-v2/text-to-audio",
+      "display_name": "MMAudio V2 Text to Audio",
+      "category": "text-to-audio",
+      "creator": "Ho Kei Cheng (University of Illinois Urbana-Champaign), Sony AI, and Sony Group Corporation",
+      "fal_docs": "https://fal.ai/models/fal-ai/mmaudio-v2/text-to-audio",
+      "original_source": "https://github.com/hkchengrex/MMAudio",
+      "summary": "A high-quality 44.1kHz text-to-audio generation model based on multimodal flow matching, capable of generating professional sound effects and ambient soundscapes.",
+      "filename": "fal-ai__mmaudio-v2__text-to-audio.md"
+    },
+    {
+      "name": "fal-ai/stable-audio-25/text-to-audio",
+      "display_name": "Stable Audio 2.5 (Text to Audio)",
+      "category": "text-to-audio",
+      "creator": "Stability AI",
+      "fal_docs": "https://fal.ai/models/fal-ai/stable-audio-25/text-to-audio",
+      "original_source": "https://stability.ai/news-updates/stability-ai-introduces-stable-audio-25-the-first-audio-model-built-for-enterprise-sound-production-at-scale, https://stability.ai/guides/stable-audio-25-prompt-guide",
+      "summary": "A high-fidelity text-to-audio model by Stability AI capable of generating up to 3-minute structured musical compositions and sound effects.",
+      "filename": "fal-ai__stable-audio-25__text-to-audio.md"
+    },
+    {
+      "name": "fal-ai/stable-audio",
+      "display_name": "Stable Audio Open",
+      "category": "text-to-audio",
+      "creator": "Stability AI",
+      "fal_docs": "https://fal.ai/models/fal-ai/stable-audio",
+      "original_source": "https://huggingface.co/stabilityai/stable-audio-open-1.0",
+      "summary": "An open-weights text-to-audio model by Stability AI that generates high-fidelity 44.1kHz stereo audio clips up to 47 seconds long.",
+      "filename": "fal-ai__stable-audio.md"
+    },
+    {
+      "name": "xai/tts/v1",
+      "display_name": "xAI Text to Speech (v1)",
+      "category": "text-to-audio",
+      "creator": "xAI",
+      "fal_docs": "[FAL.ai Docs](https://fal.ai/models/xai/tts/v1)",
+      "original_source": "[xAI Official Docs](https://docs.x.ai/developers/model-capabilities/audio/text-to-speech)",
+      "summary": "High-fidelity, expressive text-to-speech with fine-grained emotional control via inline tags.",
+      "filename": "xai__tts__v1.md"
+    }
+  ],
+  "text-to-image": [
+    {
+      "name": "fal-ai/bytedance/seedream/v4.5/text-to-image",
+      "display_name": "ByteDance Seedream 4.5 (Text-to-Image)",
+      "category": "text-to-image",
+      "creator": "ByteDance (Volcano Engine / BytePlus)",
+      "fal_docs": "https://fal.ai/models/fal-ai/bytedance/seedream/v4.5/text-to-image",
+      "original_source": "https://seed.bytedance.com/en/seedream4_5, https://docs.byteplus.com/en/docs/ModelArk/1824121",
+      "summary": "A next-generation 1.2B parameter 4K image generator by ByteDance featuring a unified architecture for superior text rendering and compositional consistency.",
+      "filename": "fal-ai__bytedance__seedream__v4.5__text-to-image.md"
+    },
+    {
+      "name": "fal-ai/bytedance/seedream/v4/text-to-image",
+      "display_name": "Bytedance Seedream v4",
+      "category": "text-to-image",
+      "creator": "ByteDance Seed Team",
+      "fal_docs": "https://fal.ai/models/fal-ai/bytedance/seedream/v4/text-to-image",
+      "original_source": "https://seed.bytedance.com/en/seedream4_0",
+      "summary": "A professional-grade, ultra-fast multimodal image generation model by ByteDance capable of native 4K resolution and superior typography rendering.",
+      "filename": "fal-ai__bytedance__seedream__v4__text-to-image.md"
+    },
+    {
+      "name": "fal-ai/bytedance/seedream/v5/lite/text-to-image",
+      "display_name": "Seedream 5.0 Lite: Text-to-Image AI with Web Search & Reasoning",
+      "category": "text-to-image",
+      "creator": "ByteDance (Seed Team)",
+      "fal_docs": "https://fal.ai/models/fal-ai/bytedance/seedream/v5/lite/text-to-image",
+      "original_source": "https://seed.bytedance.com/en/seedream5_0_lite",
+      "summary": "ByteDance's unified multimodal image generation model featuring deep thinking, online search, and superior spatial reasoning.",
+      "filename": "fal-ai__bytedance__seedream__v5__lite__text-to-image.md"
+    },
+    {
+      "name": "fal-ai/fast-sdxl",
+      "display_name": "Stable Diffusion XL (Fast)",
+      "category": "text-to-image",
+      "creator": "Stability AI",
+      "fal_docs": "https://fal.ai/models/fal-ai/fast-sdxl",
+      "original_source": "https://stability.ai/stable-diffusion",
+      "summary": "A highly optimized, sub-second inference implementation of SDXL 1.0 for professional-grade 1MP image generation.",
+      "filename": "fal-ai__fast-sdxl.md"
+    },
+    {
+      "name": "fal-ai/flux-2-max",
+      "display_name": "FLUX.2 [max]",
+      "category": "text-to-image",
+      "creator": "Black Forest Labs",
+      "fal_docs": "https://fal.ai/models/fal-ai/flux-2-max",
+      "original_source": "https://bfl.ai/",
+      "summary": "The most capable FLUX.2 model for professional-grade photorealistic image generation and editing, featuring real-time web-grounded search.",
+      "filename": "fal-ai__flux-2-max.md"
+    },
+    {
+      "name": "fal-ai/flux-2-pro",
+      "display_name": "FLUX.2 [pro]",
+      "category": "text-to-image",
+      "creator": "Black Forest Labs",
+      "fal_docs": "https://fal.ai/models/fal-ai/flux-2-pro",
+      "original_source": "https://docs.bfl.ml/flux_2/flux2_overview",
+      "summary": "The flagship professional text-to-image model by Black Forest Labs, optimized for zero-config production-grade quality and precise text rendering.",
+      "filename": "fal-ai__flux-2-pro.md"
+    },
+    {
+      "name": "fal-ai/flux-2",
+      "display_name": "FLUX.2 [dev]",
+      "category": "text-to-image",
+      "creator": "Black Forest Labs",
+      "fal_docs": "https://fal.ai/models/fal-ai/flux-2",
+      "original_source": "https://bfl.ai/blog/flux-2",
+      "summary": "A 32B parameter frontier-quality text-to-image model with advanced typography and multi-reference capabilities.",
+      "filename": "fal-ai__flux-2.md"
+    },
+    {
+      "name": "fal-ai/flux-2/flash",
+      "display_name": "FLUX.2 Flash",
+      "category": "text-to-image",
+      "creator": "Black Forest Labs",
+      "fal_docs": "https://fal.ai/models/fal-ai/flux-2/flash",
+      "original_source": "https://docs.bfl.ml/flux_2/flux2_overview",
+      "summary": "A lightning-fast, high-fidelity text-to-image model by Black Forest Labs, optimized for sub-second generation with precise prompt following and 4MP output.",
+      "filename": "fal-ai__flux-2__flash.md"
+    },
+    {
+      "name": "fal-ai/flux-lora",
+      "display_name": "FLUX.1 [dev] with LoRAs",
+      "category": "text-to-image",
+      "creator": "Black Forest Labs (BFL)",
+      "fal_docs": "https://fal.ai/models/fal-ai/flux-lora",
+      "original_source": "https://bfl.ai/",
+      "summary": "The industry-leading 12B parameter transformer model by Black Forest Labs, optimized by FAL for rapid LoRA-enhanced image generation.",
+      "filename": "fal-ai__flux-lora.md"
+    },
+    {
+      "name": "fal-ai/flux-pro/v1.1-ultra",
+      "display_name": "FLUX 1.1 [pro] ultra",
+      "category": "text-to-image",
+      "creator": "Black Forest Labs",
+      "fal_docs": "https://fal.ai/models/fal-ai/flux-pro/v1.1-ultra",
+      "original_source": "https://bfl.ai/flux-1-1-ultra/, https://docs.bfl.ml/flux_models/flux_1_1_pro_ultra_raw",
+      "summary": "FLUX 1.1 [pro] ultra is a state-of-the-art text-to-image model by Black Forest Labs, capable of generating high-fidelity 4MP (2K) images with professional-grade realism and prompt adherence.",
+      "filename": "fal-ai__flux-pro__v1.1-ultra.md"
+    },
+    {
+      "name": "fal-ai/flux-pro/v1.1",
+      "display_name": "FLUX1.1 [pro]",
+      "category": "text-to-image",
+      "creator": "Black Forest Labs",
+      "fal_docs": "https://fal.ai/models/fal-ai/flux-pro/v1.1",
+      "original_source": "https://blackforestlabs.ai/",
+      "summary": "State-of-the-art flagship text-to-image model by Black Forest Labs, featuring 10x faster speeds, exceptional prompt adherence, and photorealistic output.",
+      "filename": "fal-ai__flux-pro__v1.1.md"
+    },
+    {
+      "name": "fal-ai/flux/dev",
+      "display_name": "FLUX.1 [dev]",
+      "category": "text-to-image",
+      "creator": "Black Forest Labs (BFL)",
+      "fal_docs": "https://fal.ai/models/fal-ai/flux/dev",
+      "original_source": "https://blackforestlabs.ai, https://huggingface.co/black-forest-labs/FLUX.1-dev",
+      "summary": "A 12-billion parameter rectified flow transformer designed for high-fidelity image generation and superior prompt following.",
+      "filename": "fal-ai__flux__dev.md"
+    },
+    {
+      "name": "fal-ai/flux/schnell",
+      "display_name": "FLUX.1 [schnell]",
+      "category": "text-to-image",
+      "creator": "Black Forest Labs",
+      "fal_docs": "https://fal.ai/models/fal-ai/flux/schnell",
+      "original_source": "https://blackforestlabs.ai/",
+      "summary": "A 12B parameter ultra-fast text-to-image model by Black Forest Labs, optimized for 1-4 step generation with commercial-ready licensing.",
+      "filename": "fal-ai__flux__schnell.md"
+    },
+    {
+      "name": "fal-ai/gemini-25-flash-image",
+      "display_name": "Gemini 2.5 Flash Image (Nano Banana)",
+      "category": "text-to-image",
+      "creator": "Google DeepMind",
+      "fal_docs": "[FAL.ai Docs](https://fal.ai/models/fal-ai/gemini-25-flash-image)",
+      "original_source": "[Google AI for Developers](https://ai.google.dev/gemini-api/docs/models/gemini-2.5-flash-image), [Google Cloud Vertex AI](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/models/gemini/2-5-flash-image)",
+      "summary": "Google's high-speed, natively multimodal image generation and editing model with advanced character consistency and world knowledge.",
+      "filename": "fal-ai__gemini-25-flash-image.md"
+    },
+    {
+      "name": "fal-ai/gemini-3-pro-image-preview",
+      "display_name": "Gemini 3 Pro Image (Nano Banana Pro)",
+      "category": "text-to-image",
+      "creator": "Google DeepMind",
+      "fal_docs": "https://fal.ai/models/fal-ai/gemini-3-pro-image-preview",
+      "original_source": "https://ai.google.dev/gemini-api/docs/image-generation",
+      "summary": "Google's flagship reasoning-based image model capable of 4K resolution, precise text rendering, and real-world grounding.",
+      "filename": "fal-ai__gemini-3-pro-image-preview.md"
+    },
+    {
+      "name": "fal-ai/gpt-image-1.5",
+      "display_name": "GPT-Image 1.5",
+      "category": "text-to-image",
+      "creator": "OpenAI",
+      "fal_docs": "https://fal.ai/models/fal-ai/gpt-image-1.5",
+      "original_source": "https://openai.com/index/new-chatgpt-images-is-here/",
+      "summary": "OpenAI's state-of-the-art multimodal image generation and editing model with superior prompt adherence and text rendering.",
+      "filename": "fal-ai__gpt-image-1.5.md"
+    },
+    {
+      "name": "fal-ai/hidream-i1-full",
+      "display_name": "HiDream-I1 Full",
+      "category": "text-to-image",
+      "creator": "HiDream.ai (Vivago.ai)",
+      "fal_docs": "https://fal.ai/models/fal-ai/hidream-i1-full",
+      "original_source": "https://github.com/HiDream-ai/HiDream-I1, https://vivago.ai/platform",
+      "summary": "A massive 17B parameter sparse DiT model with Llama-3.1 reasoning for state-of-the-art prompt following and image quality.",
+      "filename": "fal-ai__hidream-i1-full.md"
+    },
+    {
+      "name": "fal-ai/ideogram/v3",
+      "display_name": "Ideogram v3.0",
+      "category": "text-to-image",
+      "creator": "Ideogram AI",
+      "fal_docs": "https://fal.ai/models/fal-ai/ideogram/v3",
+      "original_source": "https://ideogram.ai",
+      "summary": "State-of-the-art text-to-image model specializing in exceptional typography, graphic design, and photorealistic accuracy.",
+      "filename": "fal-ai__ideogram__v3.md"
+    },
+    {
+      "name": "fal-ai/imagen4/preview",
+      "display_name": "Imagen 4 (Preview)",
+      "category": "text-to-image",
+      "creator": "Google DeepMind",
+      "fal_docs": "https://fal.ai/models/fal-ai/imagen4/preview",
+      "original_source": "https://docs.cloud.google.com/vertex-ai/generative-ai/docs/models/imagen/4-0-generate",
+      "summary": "Google's flagship text-to-image model featuring state-of-the-art photorealism, fine-detail rendering, and exceptional typography.",
+      "filename": "fal-ai__imagen4__preview.md"
+    },
+    {
+      "name": "fal-ai/nano-banana-2",
+      "display_name": "Nano Banana 2 (Gemini 3.1 Flash Image)",
+      "category": "text-to-image",
+      "creator": "Google DeepMind",
+      "fal_docs": "https://fal.ai/models/fal-ai/nano-banana-2",
+      "original_source": "https://ai.google.dev/gemini-api/docs/image-generation",
+      "summary": "A high-speed, logical image generation model by Google featuring 4K resolution, web search grounding, and a multi-step 'thinking' process.",
+      "filename": "fal-ai__nano-banana-2.md"
+    },
+    {
+      "name": "fal-ai/nano-banana-pro",
+      "display_name": "Nano Banana Pro (Gemini 3 Pro Image)",
+      "category": "text-to-image",
+      "creator": "Google (DeepMind)",
+      "fal_docs": "https://fal.ai/models/fal-ai/nano-banana-pro",
+      "original_source": "https://docs.cloud.google.com/vertex-ai/generative-ai/docs/models/gemini/3-pro-image",
+      "summary": "Google's flagship multimodal image generation and editing model featuring advanced reasoning, 4K resolution, and industry-leading text rendering.",
+      "filename": "fal-ai__nano-banana-pro.md"
+    },
+    {
+      "name": "fal-ai/nano-banana",
+      "display_name": "Nano Banana (Gemini 2.5 Flash Image)",
+      "category": "text-to-image",
+      "creator": "Google",
+      "fal_docs": "https://fal.ai/models/fal-ai/nano-banana",
+      "original_source": "https://developers.googleblog.com/en/introducing-gemini-2-5-flash-image/",
+      "summary": "Google's lightning-fast multimodal reasoning model for high-fidelity image generation and semantic editing.",
+      "filename": "fal-ai__nano-banana.md"
+    },
+    {
+      "name": "fal-ai/recraft/v3/text-to-image",
+      "display_name": "Recraft V3",
+      "category": "text-to-image",
+      "creator": "Recraft AI",
+      "fal_docs": "https://fal.ai/models/fal-ai/recraft/v3/text-to-image",
+      "original_source": "https://www.recraft.ai/docs/api-reference/endpoints",
+      "summary": "A state-of-the-art text-to-image model specializing in accurate long-form text rendering and scalable vector art generation.",
+      "filename": "fal-ai__recraft__v3__text-to-image.md"
+    },
+    {
+      "name": "fal-ai/recraft/v4/text-to-image",
+      "display_name": "Recraft V4 (Standard)",
+      "category": "text-to-image",
+      "creator": "Recraft AI",
+      "fal_docs": "https://fal.ai/models/fal-ai/recraft/v4/text-to-image",
+      "original_source": "https://www.recraft.ai/docs",
+      "summary": "A design-centric text-to-image model optimized for brand systems, precise color control, and professional composition.",
+      "filename": "fal-ai__recraft__v4__text-to-image.md"
+    },
+    {
+      "name": "fal-ai/stable-diffusion-xl",
+      "display_name": "Stable Diffusion XL (SDXL)",
+      "category": "text-to-image",
+      "creator": "Stability AI",
+      "fal_docs": "https://fal.ai/models/fal-ai/fast-sdxl/api",
+      "original_source": "https://stability.ai/stable-diffusion, https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0",
+      "summary": "Stability AI's flagship high-resolution latent diffusion model, featuring dual text encoders and a 1024x1024 native resolution.",
+      "filename": "fal-ai__stable-diffusion-xl.md"
+    },
+    {
+      "name": "fal-ai/z-image/turbo",
+      "display_name": "Z-Image Turbo",
+      "category": "text-to-image",
+      "creator": "Alibaba Tongyi-MAI",
+      "fal_docs": "https://fal.ai/models/fal-ai/z-image/turbo",
+      "original_source": "https://github.com/Tongyi-MAI/Z-Image",
+      "summary": "A lightning-fast 6B-parameter text-to-image model by Alibaba optimized for sub-second generation and bilingual text rendering.",
+      "filename": "fal-ai__z-image__turbo.md"
+    },
+    {
+      "name": "xai/grok-imagine-image",
+      "display_name": "Grok Imagine Image",
+      "category": "text-to-image",
+      "creator": "xAI",
+      "fal_docs": "https://fal.ai/models/xai/grok-imagine-image",
+      "original_source": "https://docs.x.ai/developers/model-capabilities/images/generation",
+      "summary": "High-fidelity image generation model by xAI, optimized for aesthetic quality, text rendering, and high-resolution output up to 2K.",
+      "filename": "xai__grok-imagine-image.md"
+    }
+  ],
+  "text-to-speech": [
+    {
+      "name": "fal-ai/chatterbox/text-to-speech",
+      "display_name": "Chatterbox (Resemble AI)",
+      "category": "text-to-speech",
+      "creator": "Resemble AI",
+      "fal_docs": "https://fal.ai/models/fal-ai/chatterbox/text-to-speech/api",
+      "original_source": "https://docs.resemble.ai/getting-started/model-versions",
+      "summary": "A production-grade, open-source TTS model by Resemble AI featuring zero-shot voice cloning, emotive tags, and precise expressivity controls.",
+      "filename": "fal-ai__chatterbox__text-to-speech.md"
+    },
+    {
+      "name": "fal-ai/dia-tts",
+      "display_name": "Dia TTS",
+      "category": "text-to-speech",
+      "creator": "Nari Labs",
+      "fal_docs": "https://fal.ai/models/fal-ai/dia-tts",
+      "original_source": "https://github.com/nari-labs/dia",
+      "summary": "An advanced 1.6B parameter dialogue-centric text-to-speech model capable of generating natural multi-speaker conversations with non-verbal cues.",
+      "filename": "fal-ai__dia-tts.md"
+    },
+    {
+      "name": "fal-ai/elevenlabs/tts/eleven-v3",
+      "display_name": "ElevenLabs Eleven-v3",
+      "category": "text-to-speech",
+      "creator": "ElevenLabs",
+      "fal_docs": "https://fal.ai/models/fal-ai/elevenlabs/tts/eleven-v3",
+      "original_source": "https://elevenlabs.io/v3",
+      "summary": "State-of-the-art text-to-speech model featuring fine-grained emotional control via audio tags and support for 70+ languages.",
+      "filename": "fal-ai__elevenlabs__tts__eleven-v3.md"
+    },
+    {
+      "name": "fal-ai/elevenlabs/tts/turbo-v2.5",
+      "display_name": "ElevenLabs TTS Turbo v2.5",
+      "category": "text-to-speech",
+      "creator": "ElevenLabs",
+      "fal_docs": "https://fal.ai/models/fal-ai/elevenlabs/tts/turbo-v2.5",
+      "original_source": "https://elevenlabs.io/docs/overview/models#eleven-flash-v2-5",
+      "summary": "A high-speed, low-latency text-to-speech model supporting 32 languages, optimized for real-time conversational AI and interactive applications.",
+      "filename": "fal-ai__elevenlabs__tts__turbo-v2.5.md"
+    },
+    {
+      "name": "fal-ai/f5-tts",
+      "display_name": "F5-TTS",
+      "category": "text-to-speech",
+      "creator": "SWivid (X-LANCE Lab)",
+      "fal_docs": "https://fal.ai/models/fal-ai/f5-tts",
+      "original_source": "https://github.com/swivid/f5-tts",
+      "summary": "A state-of-the-art non-autoregressive TTS model using flow matching and Diffusion Transformers for high-quality zero-shot voice cloning.",
+      "filename": "fal-ai__f5-tts.md"
+    },
+    {
+      "name": "fal-ai/kokoro/american-english",
+      "display_name": "Kokoro TTS (American English)",
+      "category": "text-to-speech",
+      "creator": "hexgrad",
+      "fal_docs": "https://fal.ai/models/fal-ai/kokoro/american-english",
+      "original_source": "https://huggingface.co/hexgrad/Kokoro-82M",
+      "summary": "A lightweight, 82M-parameter text-to-speech model delivering human-level quality with extreme efficiency.",
+      "filename": "fal-ai__kokoro__american-english.md"
+    },
+    {
+      "name": "fal-ai/minimax/speech-02-hd",
+      "display_name": "MiniMax Speech-02 HD",
+      "category": "text-to-speech",
+      "creator": "MiniMax",
+      "fal_docs": "https://fal.ai/models/fal-ai/minimax/speech-02-hd",
+      "original_source": "https://platform.minimax.io/docs/api-reference/speech-t2a-intro",
+      "summary": "A high-fidelity text-to-speech model by MiniMax offering expressive, human-like voice synthesis with advanced emotion control and zero-shot voice cloning.",
+      "filename": "fal-ai__minimax__speech-02-hd.md"
+    },
+    {
+      "name": "fal-ai/minimax/speech-02-turbo",
+      "display_name": "MiniMax Speech-02 Turbo",
+      "category": "text-to-speech",
+      "creator": "MiniMax",
+      "fal_docs": "https://fal.ai/models/fal-ai/minimax/speech-02-turbo",
+      "original_source": "https://platform.minimax.io/docs/api-reference/speech-t2a-intro",
+      "summary": "A high-speed, low-latency text-to-speech model by MiniMax offering human-like expressiveness and multilingual support across 300+ voices.",
+      "filename": "fal-ai__minimax__speech-02-turbo.md"
+    }
+  ],
+  "text-to-video": [
+    {
+      "name": "bytedance/seedance-2.0/fast/text-to-video",
+      "display_name": "Seedance 2.0 Fast Text to Video",
+      "category": "text-to-video",
+      "creator": "ByteDance (Seed Team)",
+      "fal_docs": "https://fal.ai/models/bytedance/seedance-2.0/fast/text-to-video",
+      "original_source": "https://seed.bytedance.com/en/seedance2_0",
+      "summary": "ByteDance's high-speed, cinematic text-to-video model featuring native audio-visual joint generation and professional camera control.",
+      "filename": "bytedance__seedance-2.0__fast__text-to-video.md"
+    },
+    {
+      "name": "bytedance/seedance-2.0/text-to-video",
+      "display_name": "Seedance 2.0 (Text-to-Video)",
+      "category": "text-to-video",
+      "creator": "ByteDance",
+      "fal_docs": "https://fal.ai/models/bytedance/seedance-2.0/text-to-video",
+      "original_source": "https://seed.bytedance.com/en/seedance2_0",
+      "summary": "ByteDance's flagship multimodal model for cinematic, physics-accurate video with native synchronized audio.",
+      "filename": "bytedance__seedance-2.0__text-to-video.md"
+    },
+    {
+      "name": "fal-ai/bytedance/seedance/v1/pro/text-to-video",
+      "display_name": "Seedance 1.0 Pro (Text-to-Video)",
+      "category": "text-to-video",
+      "creator": "ByteDance",
+      "fal_docs": "https://fal.ai/models/fal-ai/bytedance/seedance/v1/pro/text-to-video",
+      "original_source": "https://docs.byteplus.com/en/docs/ModelArk/2291680",
+      "summary": "High-fidelity text-to-video model from ByteDance with professional motion control and native multi-shot storytelling capabilities.",
+      "filename": "fal-ai__bytedance__seedance__v1__pro__text-to-video.md"
+    },
+    {
+      "name": "fal-ai/hunyuan-video",
+      "display_name": "HunyuanVideo (Tencent)",
+      "category": "text-to-video",
+      "creator": "Tencent Hunyuan Team",
+      "fal_docs": "https://fal.ai/models/fal-ai/hunyuan-video",
+      "original_source": "https://github.com/Tencent-Hunyuan/HunyuanVideo, [Hugging Face](https://huggingface.co/tencent/HunyuanVideo)",
+      "summary": "A high-performance open-source video foundation model by Tencent featuring a dual-stream DiT architecture for high-fidelity 720p video generation.",
+      "filename": "fal-ai__hunyuan-video.md"
+    },
+    {
+      "name": "fal-ai/kling-video/v2.1/master/text-to-video",
+      "display_name": "Kling 2.1 Master (Text-to-Video)",
+      "category": "text-to-video",
+      "creator": "Kuaishou AI Team (Kling AI)",
+      "fal_docs": "https://fal.ai/models/fal-ai/kling-video/v2.1/master/text-to-video",
+      "original_source": "https://klingai.com/document-api/apiReference/model/textToVideo",
+      "summary": "The premium endpoint for Kling 2.1, delivering 1080p cinematic video generation with unparalleled motion fluidity and professional-grade prompt adherence.",
+      "filename": "fal-ai__kling-video__v2.1__master__text-to-video.md"
+    },
+    {
+      "name": "fal-ai/kling-video/v3/pro/text-to-video",
+      "display_name": "Kling Video v3 Text to Video [Pro]",
+      "category": "text-to-video",
+      "creator": "Kuaishou Technology",
+      "fal_docs": "https://fal.ai/models/fal-ai/kling-video/v3/pro/text-to-video",
+      "original_source": "https://klingai.com/",
+      "summary": "Top-tier AI video generator featuring 1080p resolution, multi-shot storyboarding, and native synchronized audio.",
+      "filename": "fal-ai__kling-video__v3__pro__text-to-video.md"
+    },
+    {
+      "name": "fal-ai/kling-video/v3/standard/text-to-video",
+      "display_name": "Kling Video v3 Standard (Text-to-Video)",
+      "category": "text-to-video",
+      "creator": "Kuaishou (Kling AI)",
+      "fal_docs": "https://fal.ai/models/fal-ai/kling-video/v3/standard/text-to-video",
+      "original_source": "https://klingai.com/document-api/apiReference/model/textToVideo",
+      "summary": "A state-of-the-art text-to-video model by Kuaishou featuring cinematic quality, multi-shot storyboard control, and native audio-visual synchronization.",
+      "filename": "fal-ai__kling-video__v3__standard__text-to-video.md"
+    },
+    {
+      "name": "fal-ai/ltx-2.3/text-to-video/fast",
+      "display_name": "LTX-2.3 Fast (Text-to-Video)",
+      "category": "text-to-video",
+      "creator": "Lightricks",
+      "fal_docs": "https://fal.ai/models/fal-ai/ltx-2.3/text-to-video/fast",
+      "original_source": "https://ltx.io/model, https://github.com/Lightricks/LTX-2, https://huggingface.co/Lightricks/LTX-2.3",
+      "summary": "A high-speed, 22B parameter Diffusion Transformer model by Lightricks that generates synchronized 1080p-4K video and audio in seconds.",
+      "filename": "fal-ai__ltx-2.3__text-to-video__fast.md"
+    },
+    {
+      "name": "fal-ai/minimax/hailuo-02/standard/image-to-video",
+      "display_name": "MiniMax Hailuo-02 [Standard] (Image to Video)",
+      "category": "text-to-video",
+      "creator": "MiniMax",
+      "fal_docs": "https://fal.ai/models/fal-ai/minimax/hailuo-02/standard/image-to-video/api",
+      "original_source": "https://platform.minimax.io/docs/api-reference/video-generation-i2v",
+      "summary": "A professional-grade cinematic image-to-video model by MiniMax featuring extreme physics simulation and advanced director-level camera controls.",
+      "filename": "fal-ai__minimax__hailuo-02__standard__image-to-video.md"
+    },
+    {
+      "name": "fal-ai/minimax/hailuo-2.3/standard/text-to-video",
+      "display_name": "MiniMax Hailuo 2.3 [Standard] (Text to Video)",
+      "category": "text-to-video",
+      "creator": "MiniMax",
+      "fal_docs": "https://fal.ai/models/fal-ai/minimax/hailuo-2.3/standard/text-to-video",
+      "original_source": "https://platform.minimax.io/docs/api-reference/video-generation-intro",
+      "summary": "A state-of-the-art text-to-video model by MiniMax offering cinematic motion, high realism, and advanced camera control.",
+      "filename": "fal-ai__minimax__hailuo-2.3__standard__text-to-video.md"
+    },
+    {
+      "name": "fal-ai/sora-2/image-to-video",
+      "display_name": "Sora 2 Image-to-Video",
+      "category": "text-to-video",
+      "creator": "OpenAI",
+      "fal_docs": "https://fal.ai/models/fal-ai/sora-2/image-to-video",
+      "original_source": "https://openai.com/sora",
+      "summary": "OpenAI's state-of-the-art video generation model capable of animating images with physics-aware motion and synchronized audio.",
+      "filename": "fal-ai__sora-2__image-to-video.md"
+    },
+    {
+      "name": "fal-ai/sora-2/text-to-video",
+      "display_name": "OpenAI Sora 2 (via FAL)",
+      "category": "text-to-video",
+      "creator": "OpenAI",
+      "fal_docs": "https://fal.ai/models/fal-ai/sora-2/text-to-video",
+      "original_source": "https://openai.com/index/sora-2/",
+      "summary": "OpenAI's flagship video generation model featuring state-of-the-art physics, synchronized audio, and character consistency.",
+      "filename": "fal-ai__sora-2__text-to-video.md"
+    },
+    {
+      "name": "fal-ai/sora-2/text-to-video/pro",
+      "display_name": "OpenAI Sora 2 Pro",
+      "category": "text-to-video",
+      "creator": "OpenAI",
+      "fal_docs": "https://fal.ai/models/fal-ai/sora-2/text-to-video/pro",
+      "original_source": "https://openai.com/index/sora-2/",
+      "summary": "OpenAI's flagship text-to-video model with native synchronized audio, cinematic 1080p quality, and up to 25-second durations.",
+      "filename": "fal-ai__sora-2__text-to-video__pro.md"
+    },
+    {
+      "name": "fal-ai/veo3.1",
+      "display_name": "Google Veo 3.1 (via FAL.ai)",
+      "category": "text-to-video",
+      "creator": "Google DeepMind",
+      "fal_docs": "https://fal.ai/models/fal-ai/veo3.1",
+      "original_source": "https://deepmind.google/models/veo/",
+      "summary": "Google's flagship generative video model featuring native high-fidelity audio, cinematic control, and multi-modal animation capabilities.",
+      "filename": "fal-ai__veo3.1.md"
+    },
+    {
+      "name": "fal-ai/veo3.1/fast",
+      "display_name": "Veo 3.1 Fast (Google)",
+      "category": "text-to-video",
+      "creator": "Google (DeepMind)",
+      "fal_docs": "https://fal.ai/models/fal-ai/veo3.1/fast",
+      "original_source": "https://deepmind.google/models/veo/, https://ai.google.dev/gemini-api/docs/video",
+      "summary": "A high-performance, cost-effective video generation model by Google featuring native audio synchronization and cinematic control.",
+      "filename": "fal-ai__veo3.1__fast.md"
+    },
+    {
+      "name": "fal-ai/veo3",
+      "display_name": "Google Veo 3",
+      "category": "text-to-video",
+      "creator": "Google DeepMind",
+      "fal_docs": "https://fal.ai/models/fal-ai/veo3",
+      "original_source": "https://deepmind.google/models/veo/",
+      "summary": "Google's flagship video generation model featuring native synchronized audio, cinematic physics, and 1080p resolution.",
+      "filename": "fal-ai__veo3.md"
+    },
+    {
+      "name": "fal-ai/veo3/fast",
+      "display_name": "Veo 3 Fast (Google)",
+      "category": "text-to-video",
+      "creator": "Google DeepMind",
+      "fal_docs": "https://fal.ai/models/fal-ai/veo3/fast",
+      "original_source": "https://ai.google.dev/gemini-api/docs/video, https://cloud.google.com/vertex-ai/generative-ai/docs/models/veo/3-0-generate",
+      "summary": "A high-speed, cost-effective version of Google's flagship Veo 3 video generation model with synchronized audio.",
+      "filename": "fal-ai__veo3__fast.md"
+    },
+    {
+      "name": "fal-ai/wan/v2.7/text-to-video",
+      "display_name": "Wan v2.7 Text to Video",
+      "category": "text-to-video",
+      "creator": "Alibaba (Tongyi Lab)",
+      "fal_docs": "https://fal.ai/models/fal-ai/wan/v2.7/text-to-video",
+      "original_source": "https://wan.video/, https://github.com/Wan-Video",
+      "summary": "Alibaba's 27B parameter MoE model for cinematic 1080p video generation with optional audio synchronization and thinking-mode prompt logic.",
+      "filename": "fal-ai__wan__v2.7__text-to-video.md"
+    },
+    {
+      "name": "wan/v2.6/image-to-video",
+      "display_name": "Wan v2.6 Image to Video",
+      "category": "text-to-video",
+      "creator": "Alibaba (Wan-AI)",
+      "fal_docs": "https://fal.ai/models/wan/v2.6/image-to-video",
+      "original_source": "https://www.alibabacloud.com/help/en/model-studio/image-to-video-api-reference",
+      "summary": "A high-fidelity image-to-video model by Alibaba featuring native audio synchronization and multi-shot narrative capabilities.",
+      "filename": "wan__v2.6__image-to-video.md"
+    },
+    {
+      "name": "wan/v2.6/text-to-video",
+      "display_name": "Wan v2.6 Text-to-Video",
+      "category": "text-to-video",
+      "creator": "Alibaba Cloud (DashScope)",
+      "fal_docs": "https://fal.ai/models/wan/v2.6/text-to-video",
+      "original_source": "https://www.alibabacloud.com/help/en/model-studio/text-to-video-api-reference",
+      "summary": "Alibaba's advanced cinematic video model supporting 1080p multi-shot narratives and native audio synchronization.",
+      "filename": "wan__v2.6__text-to-video.md"
+    },
+    {
+      "name": "xai/grok-imagine-video/text-to-video",
+      "display_name": "Grok Imagine Video (Text-to-Video)",
+      "category": "text-to-video",
+      "creator": "xAI",
+      "fal_docs": "https://fal.ai/models/xai/grok-imagine-video/text-to-video/api",
+      "original_source": "https://docs.x.ai/developers/model-capabilities/video/generation",
+      "summary": "High-speed cinematic video generation with native synchronized audio powered by xAI's Aurora engine.",
+      "filename": "xai__grok-imagine-video__text-to-video.md"
+    }
+  ],
+  "training": [
+    {
+      "name": "fal-ai/flux-2-trainer",
+      "display_name": "FLUX.2 [dev] Trainer",
+      "category": "training",
+      "creator": "Black Forest Labs",
+      "fal_docs": "https://fal.ai/models/fal-ai/flux-2-trainer",
+      "original_source": "https://bfl.ai/blog/flux-2",
+      "summary": "A professional LoRA fine-tuning model for Black Forest Labs' FLUX.2 [dev], optimized for character, style, and object specialization.",
+      "filename": "fal-ai__flux-2-trainer.md"
+    },
+    {
+      "name": "fal-ai/flux-kontext-trainer",
+      "display_name": "Flux Kontext Trainer",
+      "category": "training",
+      "creator": "Black Forest Labs (BFL)",
+      "fal_docs": "https://fal.ai/models/fal-ai/flux-kontext-trainer",
+      "original_source": "https://huggingface.co/black-forest-labs/FLUX.1-Kontext-dev",
+      "summary": "A specialized LoRA trainer for the FLUX.1 Kontext [dev] model, enabling custom image-to-image editing and character consistency workflows.",
+      "filename": "fal-ai__flux-kontext-trainer.md"
+    },
+    {
+      "name": "fal-ai/flux-lora-fast-training",
+      "display_name": "FLUX LoRA Fast Training",
+      "category": "training",
+      "creator": "Black Forest Labs",
+      "fal_docs": "https://fal.ai/models/fal-ai/flux-lora-fast-training/api",
+      "original_source": "https://docs.bfl.ml/",
+      "summary": "High-speed training for custom FLUX LoRA models for styles, characters, and subjects.",
+      "filename": "fal-ai__flux-lora-fast-training.md"
+    },
+    {
+      "name": "fal-ai/flux-lora-portrait-trainer",
+      "display_name": "Train Flux LoRAs For Portraits",
+      "category": "training",
+      "creator": "Black Forest Labs / fal.ai R&D",
+      "fal_docs": "https://fal.ai/models/fal-ai/flux-lora-portrait-trainer/api",
+      "original_source": "https://bfl.ml/",
+      "summary": "A specialized FLUX LoRA training model optimized for high-fidelity portraits with vivid highlights and intricate facial details.",
+      "filename": "fal-ai__flux-lora-portrait-trainer.md"
+    },
+    {
+      "name": "fal-ai/hunyuan-video-lora-training",
+      "display_name": "Hunyuan Video LoRA Training",
+      "category": "training",
+      "creator": "Tencent",
+      "fal_docs": "https://fal.ai/models/fal-ai/hunyuan-video-lora-training",
+      "original_source": "https://github.com/Tencent-Hunyuan/HunyuanVideo",
+      "summary": "Fine-tune the state-of-the-art HunyuanVideo model on your own characters, objects, or styles using LoRA.",
+      "filename": "fal-ai__hunyuan-video-lora-training.md"
+    },
+    {
+      "name": "fal-ai/ltx2-video-trainer",
+      "display_name": "LTX-2 Video Trainer",
+      "category": "training",
+      "creator": "Lightricks",
+      "fal_docs": "https://fal.ai/models/fal-ai/ltx2-video-trainer",
+      "original_source": "https://ltx.io/model/ltx-2",
+      "summary": "High-performance LoRA trainer for the LTX-2 DiT video foundation model, supporting synchronized audio-video training.",
+      "filename": "fal-ai__ltx2-video-trainer.md"
+    }
+  ],
+  "upscaling": [
+    {
+      "name": "fal-ai/clarity-upscaler",
+      "display_name": "Clarity Upscaler",
+      "category": "upscaling",
+      "creator": "philz1337x (Clarity AI)",
+      "fal_docs": "https://fal.ai/models/fal-ai/clarity-upscaler",
+      "original_source": "https://github.com/philz1337x/clarity-upscaler",
+      "summary": "A high-fidelity image upscaler and enhancer based on Stable Diffusion and ControlNet, designed as a powerful alternative to Magnific AI.",
+      "filename": "fal-ai__clarity-upscaler.md"
+    },
+    {
+      "name": "fal-ai/recraft/upscale/crisp",
+      "display_name": "Recraft Crisp Upscale",
+      "category": "upscaling",
+      "creator": "Recraft.ai",
+      "fal_docs": "https://fal.ai/models/fal-ai/recraft/upscale/crisp",
+      "original_source": "https://www.recraft.ai/docs/api-reference/endpoints#crisp-upscale",
+      "summary": "A high-fidelity image upscaler designed to enhance resolution while maintaining sharpness and refining fine details and faces.",
+      "filename": "fal-ai__recraft__upscale__crisp.md"
+    },
+    {
+      "name": "fal-ai/seedvr/upscale/image",
+      "display_name": "SeedVR2 Image Upscale",
+      "category": "upscaling",
+      "creator": "ByteDance Seed",
+      "fal_docs": "https://fal.ai/models/fal-ai/seedvr/upscale/image",
+      "original_source": "https://github.com/ByteDance-Seed/SeedVR, https://iceclear.github.io/projects/seedvr2/",
+      "summary": "A high-performance one-step diffusion-based upscaler by ByteDance that enhances image resolution up to 10K with exceptional speed and detail preservation.",
+      "filename": "fal-ai__seedvr__upscale__image.md"
+    }
+  ],
+  "video-to-video": [
+    {
+      "name": "fal-ai/ffmpeg-api/compose",
+      "display_name": "FFmpeg API Compose",
+      "category": "video-to-video",
+      "creator": "FAL.ai",
+      "fal_docs": "https://fal.ai/models/fal-ai/ffmpeg-api/compose",
+      "original_source": "https://ffmpeg.org/",
+      "summary": "A programmatic video composition tool that combines multiple video, audio, and image tracks using the FFmpeg engine.",
+      "filename": "fal-ai__ffmpeg-api__compose.md"
+    },
+    {
+      "name": "fal-ai/ffmpeg-api/merge-audio-video",
+      "display_name": "Ffmpeg Api Merge Audio-Video",
+      "category": "video-to-video",
+      "creator": "FFmpeg (Open Source) / FAL.ai (API Provider)",
+      "fal_docs": "https://fal.ai/models/fal-ai/ffmpeg-api/merge-audio-video",
+      "original_source": "https://ffmpeg.org/documentation.html",
+      "summary": "A high-performance cloud API for merging audio tracks into video files using FFmpeg.",
+      "filename": "fal-ai__ffmpeg-api__merge-audio-video.md"
+    },
+    {
+      "name": "fal-ai/kling-video/video-to-audio",
+      "display_name": "Kling Video-to-Audio",
+      "category": "video-to-video",
+      "creator": "Kuaishou Technology (Kling AI)",
+      "fal_docs": "https://fal.ai/models/fal-ai/kling-video/video-to-audio",
+      "original_source": "https://klingai.com/",
+      "summary": "Generates context-aware, synchronized audio soundtracks and sound effects for existing silent videos.",
+      "filename": "fal-ai__kling-video__video-to-audio.md"
+    },
+    {
+      "name": "fal-ai/seedvr/upscale/video",
+      "display_name": "SeedVR2 Video Upscale (ByteDance)",
+      "category": "video-to-video",
+      "creator": "ByteDance Seed",
+      "fal_docs": "https://fal.ai/models/fal-ai/seedvr/upscale/video",
+      "original_source": "https://iceclear.github.io/projects/seedvr2/",
+      "summary": "A high-performance, one-step video restoration model by ByteDance that upscales video to 4K with exceptional temporal consistency.",
+      "filename": "fal-ai__seedvr__upscale__video.md"
+    },
+    {
+      "name": "fal-ai/sync-lipsync/v2/pro",
+      "display_name": "Sync Lipsync v2 Pro",
+      "category": "video-to-video",
+      "creator": "Sync Labs",
+      "fal_docs": "https://fal.ai/models/fal-ai/sync-lipsync/v2/pro",
+      "original_source": "https://sync.so/docs/models/lipsync",
+      "summary": "Studio-grade AI lip synchronization model that uses diffusion-based super-resolution to align video mouth movements with new audio tracks while preserving fine facial details.",
+      "filename": "fal-ai__sync-lipsync__v2__pro.md"
+    },
+    {
+      "name": "fal-ai/sync-lipsync/v3",
+      "display_name": "sync-3 Lipsync",
+      "category": "video-to-video",
+      "creator": "Sync Labs",
+      "fal_docs": "https://fal.ai/models/fal-ai/sync-lipsync/v3",
+      "original_source": "https://sync.so/docs/models/sync-3",
+      "summary": "A studio-grade, 16B-parameter lipsync model that provides 4K native output and handles extreme angles and obstructions.",
+      "filename": "fal-ai__sync-lipsync__v3.md"
+    },
+    {
+      "name": "fal-ai/topaz/upscale/video",
+      "display_name": "Topaz Video Upscale",
+      "category": "video-to-video",
+      "creator": "Topaz Labs",
+      "fal_docs": "https://fal.ai/models/fal-ai/topaz/upscale/video",
+      "original_source": "https://www.topazlabs.com/topaz-video, https://developer.topazlabs.com/",
+      "summary": "Professional-grade AI video enhancement and upscaling for high-fidelity restoration, frame interpolation, and noise reduction.",
+      "filename": "fal-ai__topaz__upscale__video.md"
+    },
+    {
+      "name": "fal-ai/wan/v2.2-14b/animate/replace",
+      "display_name": "Wan-2.2 Animate Replace (14B)",
+      "category": "video-to-video",
+      "creator": "Alibaba Cloud (Tongyi Lab)",
+      "fal_docs": "https://fal.ai/models/fal-ai/wan/v2.2-14b/animate/replace",
+      "original_source": "https://huggingface.co/Wan-AI/Wan2.2-Animate-14B, https://www.alibabacloud.com/help/en/model-studio/use-video-generation",
+      "summary": "Unified AI model for character replacement in existing videos with high motion fidelity and temporal consistency.",
+      "filename": "fal-ai__wan__v2.2-14b__animate__replace.md"
+    },
+    {
+      "name": "veed/lipsync",
+      "display_name": "VEED Lipsync",
+      "category": "video-to-video",
+      "creator": "VEED.io",
+      "fal_docs": "https://fal.ai/models/veed/lipsync",
+      "original_source": "https://www.veed.io/tools/lip-sync-api",
+      "summary": "A high-performance video-to-video model that remaps speaker lip movements to match any provided audio track with natural facial dynamics.",
+      "filename": "veed__lipsync.md"
+    }
+  ],
+  "vision": [
+    {
+      "name": "fal-ai/florence-2-large/detailed-caption",
+      "display_name": "Florence-2 Large | Detailed Caption",
+      "category": "vision",
+      "creator": "Microsoft",
+      "fal_docs": "https://fal.ai/models/fal-ai/florence-2-large/detailed-caption",
+      "original_source": "https://huggingface.co/microsoft/Florence-2-large",
+      "summary": "An advanced vision foundation model from Microsoft optimized for generating comprehensive, detailed descriptions of images.",
+      "filename": "fal-ai__florence-2-large__detailed-caption.md"
+    },
+    {
+      "name": "fal-ai/got-ocr/v2",
+      "display_name": "GOT-OCR2 (General OCR Theory)",
+      "category": "vision",
+      "creator": "Stepfun-ai (Haoran Wei, Chenglong Liu, et al.)",
+      "fal_docs": "[FAL.ai Model Page](https://fal.ai/models/fal-ai/got-ocr/v2), [FAL.ai API Docs](https://fal.ai/models/fal-ai/got-ocr/v2/api)",
+      "original_source": "[GitHub Repository](https://github.com/Ucas-HaoranWei/GOT), [HuggingFace Model Card](https://huggingface.co/stepfun-ai/GOT-OCR2_0)",
+      "summary": "An advanced 580M parameter OCR model that handles everything from plain text and scene text to complex charts, formulas, and sheet music.",
+      "filename": "fal-ai__got-ocr__v2.md"
+    },
+    {
+      "name": "fal-ai/moondream3-preview/caption",
+      "display_name": "Moondream3 Preview [Caption]",
+      "category": "vision",
+      "creator": "Moondream AI (M87 Labs)",
+      "fal_docs": "https://fal.ai/models/fal-ai/moondream3-preview/caption",
+      "original_source": "https://moondream.ai/",
+      "summary": "A high-efficiency 9B Mixture-of-Experts vision language model capable of high-speed image captioning and visual reasoning.",
+      "filename": "fal-ai__moondream3-preview__caption.md"
+    },
+    {
+      "name": "fal-ai/moondream3-preview/query",
+      "display_name": "Moondream 3 Preview [Query]",
+      "category": "vision",
+      "creator": "M87 Labs / Moondream AI",
+      "fal_docs": "https://fal.ai/models/fal-ai/moondream3-preview/query",
+      "original_source": "https://huggingface.co/moondream/moondream3-preview",
+      "summary": "A state-of-the-art vision language model with mixture-of-experts architecture for visual reasoning, object detection, and OCR.",
+      "filename": "fal-ai__moondream3-preview__query.md"
+    },
+    {
+      "name": "fal-ai/sam-3/image",
+      "display_name": "SAM 3 (Segment Anything Model 3)",
+      "category": "vision",
+      "creator": "Meta AI",
+      "fal_docs": "https://fal.ai/models/fal-ai/sam-3/image",
+      "original_source": "https://github.com/facebookresearch/sam3, https://ai.meta.com/research/publications/sam-3-segment-anything-with-concepts/",
+      "summary": "Meta's unified foundation model for open-vocabulary object detection, segmentation, and tracking across images and videos.",
+      "filename": "fal-ai__sam-3__image.md"
+    },
+    {
+      "name": "fal-ai/video-understanding",
+      "display_name": "Video Understanding",
+      "category": "vision",
+      "creator": "Alibaba Cloud (Qwen2-VL)",
+      "fal_docs": "https://fal.ai/models/fal-ai/video-understanding",
+      "original_source": "https://qwenlm.github.io/blog/qwen2-vl/",
+      "summary": "Analyze video content and answer descriptive questions or provide summaries using advanced vision-language processing.",
+      "filename": "fal-ai__video-understanding.md"
+    }
+  ]
+}

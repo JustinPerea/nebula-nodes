@@ -62,6 +62,18 @@ async def handle_fal_universal(
     if image_input and image_input.value:
         fal_input["image_url"] = _to_fal_url(str(image_input.value))
 
+    texture_image_input = inputs.get("texture_image")
+    if texture_image_input and texture_image_input.value:
+        fal_input["texture_image_url"] = _to_fal_url(str(texture_image_input.value))
+
+    end_image_input = inputs.get("end_image")
+    if end_image_input and end_image_input.value:
+        fal_input["end_image_url"] = _to_fal_url(str(end_image_input.value))
+
+    tail_image_input = inputs.get("tail_image")
+    if tail_image_input and tail_image_input.value:
+        fal_input["tail_image_url"] = _to_fal_url(str(tail_image_input.value))
+
     # Multi-image inputs for 3D models (Hunyuan3D V3 Image-to-3D)
     # Hunyuan3D uses "input_image_url" for the primary image
     front_image = inputs.get("front_image")

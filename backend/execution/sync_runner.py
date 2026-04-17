@@ -153,8 +153,13 @@ def get_handler_registry(
             inputs: dict[str, PortValueDict],
             api_keys: dict[str, str],
         ) -> dict[str, Any]:
-            # Pre-configured FAL node: inject the endpoint_id into params and route to fal-universal
-            node.params.setdefault("endpoint_id", "fal-ai/sora-2/text-to-video")
+            # Route to Standard or Pro endpoint based on `model` param.
+            # Pop `model` so FAL doesn't receive an unknown value (FAL's inner model key uses different values).
+            tier = node.params.pop("model", "standard")
+            if str(tier).lower() == "pro":
+                node.params.setdefault("endpoint_id", "fal-ai/sora-2/text-to-video/pro")
+            else:
+                node.params.setdefault("endpoint_id", "fal-ai/sora-2/text-to-video")
             return await handle_fal_universal(node, inputs, api_keys, emit=emit)
 
         async def _veo3_handler(
@@ -183,6 +188,18 @@ def get_handler_registry(
             api_keys: dict[str, str],
         ) -> dict[str, Any]:
             node.params.setdefault("endpoint_id", "fal-ai/fast-sdxl")
+            import json as _json
+            for array_key in ("loras", "embeddings"):
+                raw = node.params.get(array_key)
+                if isinstance(raw, str):
+                    stripped = raw.strip()
+                    if not stripped:
+                        node.params.pop(array_key, None)
+                    else:
+                        try:
+                            node.params[array_key] = _json.loads(stripped)
+                        except _json.JSONDecodeError:
+                            node.params.pop(array_key, None)
             return await handle_fal_universal(node, inputs, api_keys, emit=emit)
 
         async def _wan26_t2v_handler(
@@ -311,6 +328,15 @@ def get_handler_registry(
             api_keys: dict[str, str],
         ) -> dict[str, Any]:
             node.params.setdefault("endpoint_id", "fal-ai/kling-video/v3/standard/text-to-video")
+            mp = node.params.get("multi_prompt")
+            if isinstance(mp, str) and mp.strip():
+                import json as _json
+                try:
+                    node.params["multi_prompt"] = _json.loads(mp)
+                except _json.JSONDecodeError:
+                    node.params.pop("multi_prompt", None)
+            elif mp == "":
+                node.params.pop("multi_prompt", None)
             return await handle_fal_universal(node, inputs, api_keys, emit=emit)
 
         async def _luma_ray2_i2v_handler(
@@ -326,7 +352,7 @@ def get_handler_registry(
             inputs: dict[str, PortValueDict],
             api_keys: dict[str, str],
         ) -> dict[str, Any]:
-            node.params.setdefault("endpoint_id", "fal-ai/wan/v2.6/image-to-video")
+            node.params.setdefault("endpoint_id", "wan/v2.6/image-to-video")
             return await handle_fal_universal(node, inputs, api_keys, emit=emit)
 
         async def _minimax_handler(
@@ -342,7 +368,7 @@ def get_handler_registry(
             return await handle_fal_universal(node, inputs, api_keys, emit=emit)
 
         async def _wan26_r2v_handler(node, inputs, api_keys):
-            node.params.setdefault("endpoint_id", "fal-ai/wan/v2.6/reference-to-video")
+            node.params.setdefault("endpoint_id", "wan/v2.6/reference-to-video")
             return await handle_fal_universal(node, inputs, api_keys, emit=emit)
 
         async def _pixverse_handler(node, inputs, api_keys):
@@ -350,7 +376,7 @@ def get_handler_registry(
             return await handle_fal_universal(node, inputs, api_keys, emit=emit)
 
         async def _seedance_handler(node, inputs, api_keys):
-            node.params.setdefault("endpoint_id", "fal-ai/seedance/v1.5/text-to-video")
+            node.params.setdefault("endpoint_id", "fal-ai/bytedance/seedance/v1.5/pro/image-to-video")
             return await handle_fal_universal(node, inputs, api_keys, emit=emit)
 
         async def _moonvalley_handler(node, inputs, api_keys):
