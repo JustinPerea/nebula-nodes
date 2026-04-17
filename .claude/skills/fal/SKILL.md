@@ -49,25 +49,25 @@ The source of truth for this routing is `backend/execution/sync_runner.py`. Each
 | `kling-v2-1` | `fal-ai/kling-video/v2.1/pro/image-to-video` | Image-to-Video | [`skills/fal-ai__kling-video__v2.1__master__text-to-video.md`](skills/fal-ai__kling-video__v2.1__master__text-to-video.md) |
 | `kling-v3` | `fal-ai/kling-video/v3/standard/text-to-video` | Text-to-Video | [`skills/fal-ai__kling-video__v3__standard__text-to-video.md`](skills/fal-ai__kling-video__v3__standard__text-to-video.md) |
 | `kling-o3` | `fal-ai/kling-video/o3/standard/image-to-video` | Image-to-Video | [`skills/fal-ai__kling-video__o3__pro__image-to-video.md`](skills/fal-ai__kling-video__o3__pro__image-to-video.md) |
-| `sora-2` | `fal-ai/sora-2/text-to-video` | Text-to-Video | [`skills/fal-ai__sora-2__text-to-video.md`](skills/fal-ai__sora-2__text-to-video.md) |
+| `sora-2` | `fal-ai/sora-2/text-to-video` (standard) or `.../pro` (when `model=pro`) | Text-to-Video | [`skills/fal-ai__sora-2__text-to-video.md`](skills/fal-ai__sora-2__text-to-video.md), [`skills/fal-ai__sora-2__text-to-video__pro.md`](skills/fal-ai__sora-2__text-to-video__pro.md) |
 | `veo-3` | `fal-ai/veo3` | Text-to-Video | [`skills/fal-ai__veo3.md`](skills/fal-ai__veo3.md) |
 | `wan-2-6-t2v` | `wan/v2.6/text-to-video` | Text-to-Video | [`skills/wan__v2.6__text-to-video.md`](skills/wan__v2.6__text-to-video.md) |
-| `wan-2-6-i2v` | `fal-ai/wan/v2.6/image-to-video` | Image-to-Video | [`skills/wan__v2.6__image-to-video.md`](skills/wan__v2.6__image-to-video.md) |
-| `wan-2-6-r2v` | `fal-ai/wan/v2.6/reference-to-video` | Reference-to-Video | — |
-| `luma-ray2-t2v` | `fal-ai/luma-dream-machine/ray-2` | Text-to-Video | — |
-| `luma-ray2-i2v` | `fal-ai/luma-dream-machine/ray-2/image-to-video` | Image-to-Video | [`skills/fal-ai__luma-dream-machine__image-to-video.md`](skills/fal-ai__luma-dream-machine__image-to-video.md) |
+| `wan-2-6-i2v` | `wan/v2.6/image-to-video` | Image-to-Video | [`skills/wan__v2.6__image-to-video.md`](skills/wan__v2.6__image-to-video.md) |
+| `wan-2-6-r2v` | `wan/v2.6/reference-to-video` | Reference-to-Video | [`skills/wan__v2.6__reference-to-video.md`](skills/wan__v2.6__reference-to-video.md) |
+| `luma-ray2-t2v` | `fal-ai/luma-dream-machine/ray-2` | Text-to-Video | [`skills/fal-ai__luma-dream-machine__ray-2.md`](skills/fal-ai__luma-dream-machine__ray-2.md) |
+| `luma-ray2-i2v` | `fal-ai/luma-dream-machine/ray-2/image-to-video` | Image-to-Video | [`skills/fal-ai__luma-dream-machine__ray-2__image-to-video.md`](skills/fal-ai__luma-dream-machine__ray-2__image-to-video.md) |
 | `luma-ray2-flash-modify` | `fal-ai/luma-dream-machine/ray-2-flash/modify` | Video-to-Video | — |
-| `ltx-video-2` | `fal-ai/ltx-2/image-to-video` | Image-to-Video | — |
+| `ltx-video-2` | `fal-ai/ltx-2/image-to-video` | Image-to-Video | [`skills/fal-ai__ltx-2__image-to-video.md`](skills/fal-ai__ltx-2__image-to-video.md) |
 | `ltx-2-3` | `fal-ai/ltx-2.3/image-to-video` | Image-to-Video | [`skills/fal-ai__ltx-2.3__image-to-video.md`](skills/fal-ai__ltx-2.3__image-to-video.md) |
-| `pixverse-v4-5` | `fal-ai/pixverse/v4.5/text-to-video` | Text-to-Video | — |
-| `seedance-v1-5` | `fal-ai/seedance/v1.5/text-to-video` | Text-to-Video | [`skills/fal-ai__bytedance__seedance__v1__pro__text-to-video.md`](skills/fal-ai__bytedance__seedance__v1__pro__text-to-video.md) |
+| `pixverse-v4-5` | `fal-ai/pixverse/v4.5/text-to-video` | Text-to-Video | [`skills/fal-ai__pixverse__v4.5__text-to-video.md`](skills/fal-ai__pixverse__v4.5__text-to-video.md) |
+| `seedance-v1-5` | `fal-ai/bytedance/seedance/v1.5/pro/image-to-video` | Image-to-Video | [`skills/fal-ai__bytedance__seedance__v1.5__pro__image-to-video.md`](skills/fal-ai__bytedance__seedance__v1.5__pro__image-to-video.md) |
 | `seedance-2-t2v` | `bytedance/seedance-2.0/text-to-video` | Text-to-Video | [`skills/bytedance__seedance-2.0__text-to-video.md`](skills/bytedance__seedance-2.0__text-to-video.md) |
 | `seedance-2-i2v` | `bytedance/seedance-2.0/image-to-video` | Image-to-Video | [`skills/bytedance__seedance-2.0__image-to-video.md`](skills/bytedance__seedance-2.0__image-to-video.md) |
 | `seedance-2-r2v` | `bytedance/seedance-2.0/reference-to-video` | Reference-to-Video | [`skills/bytedance__seedance-2.0__reference-to-video.md`](skills/bytedance__seedance-2.0__reference-to-video.md) |
 | `moonvalley` | `fal-ai/moonvalley/image-to-video` | Image-to-Video | — |
 | `meshy-text-to-3d` (FAL route) | `fal-ai/meshy/v6/text-to-3d` | Text-to-3D | [`skills/fal-ai__meshy__v6__text-to-3d.md`](skills/fal-ai__meshy__v6__text-to-3d.md) |
 | `meshy-image-to-3d` (FAL route) | `fal-ai/meshy/v6/image-to-3d` | Image-to-3D | [`skills/fal-ai__meshy__v6__image-to-3d.md`](skills/fal-ai__meshy__v6__image-to-3d.md) |
-| `hunyuan3d-text-to-3d` | `fal-ai/hunyuan3d-v3/text-to-3d` | Text-to-3D | — |
+| `hunyuan3d-text-to-3d` | `fal-ai/hunyuan3d-v3/text-to-3d` | Text-to-3D | [`skills/fal-ai__hunyuan3d-v3__text-to-3d.md`](skills/fal-ai__hunyuan3d-v3__text-to-3d.md) |
 | `hunyuan3d-image-to-3d` | `fal-ai/hunyuan3d-v3/image-to-3d` | Image-to-3D | [`skills/fal-ai__hunyuan3d-v3__image-to-3d.md`](skills/fal-ai__hunyuan3d-v3__image-to-3d.md) |
 | `remove-background` | `fal-ai/imageutils/rembg` | Transform | [`skills/fal-ai__imageutils__rembg.md`](skills/fal-ai__imageutils__rembg.md) |
 | `seedvr2-upscale` | `fal-ai/seedvr/upscale/image` | Upscaling | [`skills/fal-ai__seedvr__upscale__image.md`](skills/fal-ai__seedvr__upscale__image.md) |
