@@ -118,6 +118,7 @@ The model is natively hosted on ByteDance's cloud platforms: **BytePlus** (Inter
 - **Resolution Limit:** On FAL, the Fast tier is capped at 720p. For 1080p+, users must use the Standard tier or the native BytePlus API.
 - **Safety:** Content follows ByteDance's safety policy; explicit violence or NSFW content will trigger a filter.
 - **Rate Limits:** As a "Fast" tier model, it typically has higher concurrency limits than the Standard tier.
+- **Source-image compatibility (verified live 2026-04-17):** Not every publicly-hosted JPG works as `image_url`. Specifically, `https://storage.googleapis.com/falserverless/example_inputs/ltxv-2-i2v-input.jpg` (the LTX-2 I2V example) returned HTTP 422 at the response-URL stage even after status reached `COMPLETED`. Swapping to a FAL-hosted WebP (`https://v3.fal.media/files/...`) succeeded. Symptom: status → `COMPLETED` in ~6s (vs. real gens take 60–120s), then a 422 on the response fetch. If you see that pattern, suspect the source image — try a different format/aspect or re-host the image through FAL's `/v1/uploads`.
 
 ## Sources
 - [FAL.ai Seedance 2.0 API Reference](https://fal.ai/models/bytedance/seedance-2.0/fast/image-to-video/api)
