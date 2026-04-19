@@ -223,11 +223,15 @@ wsClient.subscribe((event) => {
           },
         };
       }
-      // New cli node — place to the right of whatever's currently on the canvas.
-      const maxX = state.nodes.reduce((mx, n) => Math.max(mx, n.position.x), -300);
+      // New cli node: trust the position the backend sent. It already handles
+      // auto-layout for nodes without a stored position (Claude's `nebula
+      // create`) and round-trips user-saved positions for imported graphs.
       return {
         ...cliNode,
-        position: { x: maxX + 300, y: cliNode.position?.y ?? 100 },
+        position: {
+          x: cliNode.position?.x ?? 0,
+          y: cliNode.position?.y ?? 100,
+        },
       };
     });
 

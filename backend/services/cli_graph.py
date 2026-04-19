@@ -22,16 +22,34 @@ class CLIGraph:
     # ------------------------------------------------------------------
     # Mutation
 
-    def add_node(self, definition_id: str, params: dict[str, Any]) -> str:
-        """Add a node and return its short sequential ID (e.g. 'n1')."""
+    def add_node(
+        self,
+        definition_id: str,
+        params: dict[str, Any],
+        position: dict[str, float] | None = None,
+        outputs: dict[str, Any] | None = None,
+    ) -> str:
+        """Add a node and return its short sequential ID (e.g. 'n1').
+
+        *position* and *outputs* are optional carry-ins used by the /api/graph/import
+        path so loaded graphs preserve their layout and any previously-generated
+        results. Nodes created through `nebula create` omit both and get
+        auto-laid-out by the export function.
+        """
         self._counter += 1
         short_id = f"n{self._counter}"
-        self.nodes[short_id] = {
+        node: dict[str, Any] = {
             "id": short_id,
             "definitionId": definition_id,
             "params": dict(params),
-            "outputs": {},
+            "outputs": dict(outputs) if outputs else {},
         }
+        if position is not None:
+            node["position"] = {
+                "x": float(position.get("x", 0)),
+                "y": float(position.get("y", 0)),
+            }
+        self.nodes[short_id] = node
         return short_id
 
     def connect(

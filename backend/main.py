@@ -441,6 +441,48 @@ async def clear_graph() -> dict:
     return {"status": "cleared"}
 
 
+@app.post("/api/graph/import")
+async def import_graph(body: dict[str, Any]) -> dict:
+    """Atomically replace cli_graph from a file-loaded graph.
+
+    Body: {nodes: [{id, definitionId, params, outputs?, position?}], edges: [...]}
+    Remaps incoming node IDs (typically UUIDs from the .nebula file) to fresh
+    short IDs so the rest of the system treats the loaded graph like any other
+    CLI-created graph — including Claude's `nebula graph` view.
+    """
+    cli_graph.clear()
+    id_map: dict[str, str] = {}
+    for n in body.get("nodes", []):
+        if "definitionId" not in n:
+            continue
+        new_id = cli_graph.add_node(
+            n["definitionId"],
+            n.get("params", {}) or {},
+            position=n.get("position"),
+            outputs=n.get("outputs"),
+        )
+        old_id = n.get("id")
+        if old_id:
+            id_map[old_id] = new_id
+    for e in body.get("edges", []):
+        src = id_map.get(e.get("source"))
+        dst = id_map.get(e.get("target"))
+        if not src or not dst:
+            continue
+        try:
+            cli_graph.connect(src, e.get("sourceHandle", ""), dst, e.get("targetHandle", ""))
+        except ValueError:
+            # Skip malformed edges rather than failing the whole import
+            continue
+    await _broadcast_graph_sync()
+    return {
+        "status": "imported",
+        "idMap": id_map,
+        "nodeCount": len(cli_graph.nodes),
+        "edgeCount": len(cli_graph.edges),
+    }
+
+
 def _rewrite_output_paths(outputs: dict[str, Any]) -> dict[str, Any]:
     """Convert local file paths in outputs to /api/outputs/ URLs for the frontend."""
     rewritten: dict[str, Any] = {}
@@ -469,6 +511,26 @@ async def export_graph_for_frontend() -> dict:
     rf_nodes = []
     y_offset = 100
 
+    # Pre-compute positions. Nodes with a stored position (imported from a
+    # saved file) keep it. Nodes without one (created through `nebula create`)
+    # get placed to the right of any positioned node so Claude's new additions
+    # don't pile on top of existing work.
+    stored_positions: dict[str, dict[str, float]] = {}
+    max_x: float = -300.0
+    for n in state["nodes"]:
+        pos = n.get("position")
+        if isinstance(pos, dict) and "x" in pos and "y" in pos:
+            stored_positions[n["id"]] = {"x": float(pos["x"]), "y": float(pos["y"])}
+            if pos["x"] > max_x:
+                max_x = float(pos["x"])
+    computed_positions: dict[str, dict[str, float]] = {}
+    for n in state["nodes"]:
+        if n["id"] in stored_positions:
+            computed_positions[n["id"]] = stored_positions[n["id"]]
+        else:
+            max_x += 300.0
+            computed_positions[n["id"]] = {"x": max_x, "y": float(y_offset)}
+
     for i, n in enumerate(state["nodes"]):
         defn = all_defs.get(n["definitionId"], {})
         node_type = "reroute-node" if n["definitionId"] == "reroute" else "model-node"
@@ -491,7 +553,7 @@ async def export_graph_for_frontend() -> dict:
         rf_nodes.append({
             "id": n["id"],
             "type": node_type,
-            "position": {"x": 300 * i, "y": y_offset},
+            "position": computed_positions[n["id"]],
             "data": {
                 "label": defn.get("displayName", n["definitionId"]),
                 "definitionId": n["definitionId"],

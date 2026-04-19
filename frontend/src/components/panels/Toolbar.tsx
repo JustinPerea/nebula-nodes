@@ -30,13 +30,42 @@ export function Toolbar() {
       console.warn('[nebula] Load warnings:', result.warnings);
     }
 
-    useGraphStore.getState().loadGraph(
-      result.nodes as Node<NodeData>[],
-      result.edges,
-    );
+    // Push the loaded graph into cli_graph on the backend so Claude's
+    // `nebula graph` can see it. The incoming graphSync will repopulate the
+    // canvas with fresh short IDs at the positions we send. Clear local state
+    // first so the merge starts from a blank slate.
+    useGraphStore.getState().loadGraph([], []);
+    try {
+      const res = await fetch('http://localhost:8000/api/graph/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nodes: result.nodes.map((n) => ({
+            id: n.id,
+            definitionId: (n.data as { definitionId: string }).definitionId,
+            params: (n.data as { params?: Record<string, unknown> }).params ?? {},
+            outputs: (n.data as { outputs?: Record<string, unknown> }).outputs ?? {},
+            position: { x: n.position.x, y: n.position.y },
+          })),
+          edges: result.edges.map((e) => ({
+            source: e.source,
+            sourceHandle: e.sourceHandle ?? '',
+            target: e.target,
+            targetHandle: e.targetHandle ?? '',
+          })),
+        }),
+      });
+      if (!res.ok) throw new Error(`Import failed: ${res.status}`);
+    } catch (err) {
+      console.error('Graph import failed, falling back to frontend-only load:', err);
+      useGraphStore.getState().loadGraph(
+        result.nodes as Node<NodeData>[],
+        result.edges,
+      );
+    }
 
     // Fit to loaded graph after a tick
-    setTimeout(() => fitView({ padding: 0.2, duration: 300 }), 50);
+    setTimeout(() => fitView({ padding: 0.2, duration: 300 }), 120);
   }, [fitView]);
 
   const handleClear = useCallback(() => {
