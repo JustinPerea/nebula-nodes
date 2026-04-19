@@ -116,7 +116,10 @@ async def handle_meshy_image_to_3d(
                     run_dir = get_run_dir()
                     local_path = await save_mesh_from_url(glb_url, run_dir)
                     _log(f"downloaded to {local_path}")
-                    return {"mesh": {"type": "Mesh", "value": str(local_path)}}
+                    return {
+                        "mesh": {"type": "Mesh", "value": str(local_path)},
+                        "model_url": {"type": "Text", "value": glb_url},
+                    }
                 _log(f"no glb_url found, full data keys: {list(poll_data.keys())}")
                 return {"mesh": {"type": "Mesh", "value": str(poll_data)}}
 
@@ -235,7 +238,10 @@ async def handle_meshy_text_to_3d(
             from services.output import save_mesh_from_url, get_run_dir
             run_dir = get_run_dir()
             local_path = await save_mesh_from_url(glb_url, run_dir)
-            return {"mesh": {"type": "Mesh", "value": str(local_path)}}
+            return {
+                "mesh": {"type": "Mesh", "value": str(local_path)},
+                "model_url": {"type": "Text", "value": glb_url},
+            }
         return {"mesh": {"type": "Mesh", "value": str(result_data)}}
 
 
