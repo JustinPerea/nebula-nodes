@@ -4,12 +4,14 @@ Items deferred during the chat panel build (2026-04-16). Not urgent; park here u
 
 ---
 
-## 1. Helper library — reusable assets (color palettes, prompt templates, reference images)
+## 1. Helper / reference library — assets that Claude AND nodes can consume
 
 ### Problem
 Users want a library of reusable assets they can plug into graphs. First example: color palettes. The user shared a reference showing a workspace with "Color Palette Extraction" / "Color Palette Blocks" tooling where palettes can be fed into an image-generation pipeline as either a text string (hex codes + weights) or a rendered image.
 
 The shape generalizes beyond palettes — likely also prompt templates, reference images, saved style blocks, logo marks. A single "Helpers" library with typed entries that know how to render themselves into multiple input formats.
+
+**Re-confirmed 2026-04-19:** user restated this as "a reference section of images and notes that both claude and nodes can see as reference". Key insight that sharpens the design: **Claude needs read access too, not just node inputs**. So the store needs a CLI/skill surface Claude can query (`nebula helpers list`, `nebula helpers show <id>`) in addition to the node-drop UX, and images must be addressable as vision blocks Claude can read inside a chat turn.
 
 ### Design sketch
 - **Data model:** each helper has `{id, kind, label, tags, assets}` where `assets` is a map of output form → value. E.g. a palette entry has `assets.text = "#F5F4E3 60%, #B2B3B3 15%, …"` and `assets.image = "<url to rendered palette PNG>"`.
@@ -69,5 +71,6 @@ Medium. Most cost is in decision-making and position-stability edge cases. Imple
 | Date | Item | Status |
 |------|------|--------|
 | 2026-04-16 | Helper library | Parked. Need design spike. |
+| 2026-04-19 | Helper library | Re-confirmed by user; sharpened scope (Claude must read too, not just nodes). Still parked pending design spike. |
 | 2026-04-16 | Drag-to-chat v2 (UUID + vision) | Parked. v1 shipped with short-ID-only. |
 | 2026-04-16 | Auto-layout | Parked. Needs research on position stability + layout algo choice. |
