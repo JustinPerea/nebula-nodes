@@ -401,7 +401,8 @@ async def _broadcast_graph_sync() -> None:
 async def create_graph_node(body: dict[str, Any]) -> dict:
     definition_id = body.get("definitionId", "")
     params = body.get("params", {})
-    short_id = cli_graph.add_node(definition_id, params)
+    position = body.get("position")
+    short_id = cli_graph.add_node(definition_id, params, position=position)
     await _broadcast_graph_sync()
     return cli_graph.nodes[short_id]
 
@@ -417,6 +418,42 @@ async def connect_graph_nodes(body: dict[str, Any]) -> dict:
         raise HTTPException(status_code=400, detail=str(e))
     await _broadcast_graph_sync()
     return {"connection": f"{edge['source']}:{edge['sourceHandle']} -> {edge['target']}:{edge['targetHandle']}"}
+
+
+@app.post("/api/graph/node-and-connect")
+async def create_node_and_connect(body: dict[str, Any]) -> dict:
+    """Create a node and wire it to an existing node in a single atomic call.
+
+    The ConnectionPopup flow needs both — otherwise the caller races against
+    graphSync to find the freshly-created node's short ID before connecting.
+    Body: {definitionId, params, position?, connect: {source, sourceHandle,
+    target, targetHandle, newNodeIs: 'source' | 'target'}}. The `newNodeIs`
+    field tells us which port on the `connect` spec should be filled in with
+    the new node's id (the other side is the existing node).
+    """
+    definition_id = body.get("definitionId", "")
+    params = body.get("params", {})
+    position = body.get("position")
+    short_id = cli_graph.add_node(definition_id, params, position=position)
+
+    connect_spec = body.get("connect") or {}
+    if connect_spec:
+        is_target = connect_spec.get("newNodeIs") == "target"
+        src = connect_spec.get("source") if is_target else short_id
+        dst = short_id if is_target else connect_spec.get("target")
+        try:
+            cli_graph.connect(
+                src,
+                connect_spec.get("sourceHandle", ""),
+                dst,
+                connect_spec.get("targetHandle", ""),
+            )
+        except ValueError:
+            # Connection failed but node was created — let the caller decide.
+            pass
+
+    await _broadcast_graph_sync()
+    return cli_graph.nodes[short_id]
 
 
 @app.get("/api/graph")

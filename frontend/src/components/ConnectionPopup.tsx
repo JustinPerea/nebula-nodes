@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
+import { useReactFlow } from '@xyflow/react';
 import { useUIStore } from '../store/uiStore';
 import { useGraphStore } from '../store/graphStore';
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
@@ -28,8 +29,10 @@ export function ConnectionPopup() {
   const { visible, position, nodeId, handleId, handleType } = useUIStore((s) => s.connectionPopup);
   const hideConnectionPopup = useUIStore((s) => s.hideConnectionPopup);
   const addNode = useGraphStore((s) => s.addNode);
+  const addNodeAndConnect = useGraphStore((s) => s.addNodeAndConnect);
   const onConnect = useGraphStore((s) => s.onConnect);
   const nodes = useGraphStore((s) => s.nodes);
+  const { screenToFlowPosition } = useReactFlow();
 
   const [search, setSearch] = useState('');
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
@@ -139,38 +142,33 @@ export function ConnectionPopup() {
     return groups;
   }, [compatibleNodes, search]);
 
-  const handleSelect = (node: CompatibleNode) => {
-    // Create the node at the popup position, offset to account for viewport
-    const reactFlowBounds = document.querySelector('.react-flow')?.getBoundingClientRect();
-    if (!reactFlowBounds) return;
+  const handleSelect = async (node: CompatibleNode) => {
+    // Pop position is in screen coords — map to flow space so the node lands
+    // under the cursor at any zoom/pan.
+    const nodePosition = screenToFlowPosition({ x: position.x, y: position.y });
 
-    const nodePosition = {
-      x: position.x - reactFlowBounds.left,
-      y: position.y - reactFlowBounds.top,
-    };
-
-    addNode(node.definition.id, nodePosition);
-
-    // Find the newly added node (last node in the list)
-    const allNodes = useGraphStore.getState().nodes;
-    const newNode = allNodes[allNodes.length - 1];
-
-    if (newNode) {
-      // Auto-connect: figure out which is source and which is target
-      if (handleType === 'source') {
-        onConnect({
-          source: nodeId,
-          sourceHandle: handleId,
-          target: newNode.id,
-          targetHandle: node.matchingPortId,
-        });
-      } else {
-        onConnect({
-          source: newNode.id,
-          sourceHandle: node.matchingPortId,
-          target: nodeId,
-          targetHandle: handleId,
-        });
+    const originIsCli = /^n\d+$/.test(nodeId);
+    if (originIsCli) {
+      // Atomic create+connect on the backend — avoids racing graphSync to
+      // find the new node's short id before wiring the edge.
+      await addNodeAndConnect(node.definition.id, nodePosition, {
+        source: handleType === 'source' ? nodeId : '',
+        sourceHandle: handleType === 'source' ? handleId : node.matchingPortId,
+        target: handleType === 'source' ? '' : nodeId,
+        targetHandle: handleType === 'source' ? node.matchingPortId : handleId,
+        newNodeIs: handleType === 'source' ? 'target' : 'source',
+      });
+    } else {
+      // Origin is a frontend-only UUID node. Create the new node through the
+      // store (which will push to cli_graph) but wire the edge locally since
+      // the other endpoint isn't in cli_graph.
+      const newId = await addNode(node.definition.id, nodePosition);
+      if (newId) {
+        onConnect(
+          handleType === 'source'
+            ? { source: nodeId, sourceHandle: handleId, target: newId, targetHandle: node.matchingPortId }
+            : { source: newId, sourceHandle: node.matchingPortId, target: nodeId, targetHandle: handleId },
+        );
       }
     }
 

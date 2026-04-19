@@ -152,9 +152,23 @@ interface GraphState {
   selectAll: () => void;
   duplicateSelected: () => void;
 
-  // Existing methods
-  addNode: (definitionId: string, position: { x: number; y: number }) => void;
-  addDynamicNode: (definitionId: string, position: { x: number; y: number }) => void;
+  // Existing methods. addNode/addDynamicNode are async because static nodes
+  // round-trip through cli_graph on the backend so Claude's `nebula graph` sees
+  // them; they resolve to the short id (n1, n2, ...) on success, or a UUID on
+  // backend failure (local-only fallback).
+  addNode: (definitionId: string, position: { x: number; y: number }) => Promise<string | null>;
+  addDynamicNode: (definitionId: string, position: { x: number; y: number }) => string | null;
+  addNodeAndConnect: (
+    definitionId: string,
+    position: { x: number; y: number },
+    connect: {
+      source: string;
+      sourceHandle: string;
+      target: string;
+      targetHandle: string;
+      newNodeIs: 'source' | 'target';
+    },
+  ) => Promise<string | null>;
   onNodesChange: (changes: NodeChange[]) => void;
   onEdgesChange: (changes: EdgeChange[]) => void;
   onConnect: (connection: Connection) => void;
@@ -175,6 +189,11 @@ interface GraphState {
 // nodes use UUIDs. This regex lets graphSync distinguish them so we can preserve
 // frontend-only work when cli_graph changes.
 const CLI_ID_RE = /^n\d+$/;
+
+// Per-node timers for debounced param-sync to the backend. Keyed by node id
+// so one node's typing never stalls another node's flush.
+const paramPushTimers: Record<string, number> = {};
+const PARAM_PUSH_DEBOUNCE_MS = 250;
 
 wsClient.connect();
 wsClient.subscribe((event) => {
@@ -238,11 +257,16 @@ wsClient.subscribe((event) => {
     const merged = [...frontendOnlyNodes, ...cliMerged];
     const mergedIds = new Set(merged.map((n) => n.id));
 
-    // Preserve frontend-only edges whose endpoints are still present. A
-    // frontend-only edge is one whose id isn't in the incoming cli edge set.
-    const cliEdgeIds = new Set((cliEdges as Edge[]).map((e) => e.id));
+    // Preserve frontend-only edges whose endpoints are still present. We dedupe
+    // by connection identity (source:handle -> target:handle) rather than edge
+    // id because onConnect issues a UUID edge optimistically and the cli
+    // version that comes back via graphSync has a different id. Using
+    // connection identity means the cli edge wins silently.
+    const edgeKey = (e: Edge): string =>
+      `${e.source}:${e.sourceHandle ?? ''}->${e.target}:${e.targetHandle ?? ''}`;
+    const cliEdgeKeys = new Set((cliEdges as Edge[]).map(edgeKey));
     const frontendOnlyEdges = state.edges.filter(
-      (e) => !cliEdgeIds.has(e.id) && mergedIds.has(e.source) && mergedIds.has(e.target),
+      (e) => !cliEdgeKeys.has(edgeKey(e)) && mergedIds.has(e.source) && mergedIds.has(e.target),
     );
     const mergedEdges = [...frontendOnlyEdges, ...cliEdges];
 
@@ -438,16 +462,13 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   // Node management
   // ---------------------------------------------------------------------------
 
-  addNode: (definitionId, position) => {
+  addNode: async (definitionId, position) => {
     const DYNAMIC_IDS = ['openrouter-universal', 'replicate-universal', 'fal-universal'];
     if (DYNAMIC_IDS.includes(definitionId)) {
-      get().addDynamicNode(definitionId, position);
-      return;
+      return get().addDynamicNode(definitionId, position);
     }
     const definition = NODE_DEFINITIONS[definitionId];
-    if (!definition) return;
-
-    pushUndo(set, get);
+    if (!definition) return null;
 
     // Build defaults from all param sources (shared + route-specific + legacy params)
     const defaults: Record<string, unknown> = {};
@@ -458,33 +479,77 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       if (param.default !== undefined) defaults[param.key] = param.default;
     }
 
-    // Determine node type — reroute gets its own minimal dot renderer
-    const nodeType = definitionId === 'reroute' ? 'reroute-node' : 'model-node';
-
-    // Check API key status from settings cache
-    let keyStatus: 'missing' | undefined;
-    const { settingsCache } = useUIStore.getState();
-    if (settingsCache.loaded && definition.envKeyName) {
-      const keyNames = Array.isArray(definition.envKeyName)
-        ? definition.envKeyName
-        : [definition.envKeyName];
-      if (keyNames.length > 0 && !keyNames.some((k) => Boolean(settingsCache.apiKeys[k]))) {
-        keyStatus = 'missing';
+    // Push into cli_graph on the backend so `nebula graph` shows the node to
+    // Claude. graphSync will bring it into the canvas with its cli short id.
+    try {
+      const res = await fetch('http://localhost:8000/api/graph/node', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ definitionId, params: defaults, position }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const node = (await res.json()) as { id?: string };
+      return node.id ?? null;
+    } catch (err) {
+      console.warn('[nebula] addNode backend push failed — adding locally only:', err);
+      // Fallback: frontend-only UUID node. Claude won't see it until the
+      // backend comes back and /api/graph/import or equivalent is called.
+      pushUndo(set, get);
+      const nodeType = definitionId === 'reroute' ? 'reroute-node' : 'model-node';
+      let keyStatus: 'missing' | undefined;
+      const { settingsCache } = useUIStore.getState();
+      if (settingsCache.loaded && definition.envKeyName) {
+        const keyNames = Array.isArray(definition.envKeyName)
+          ? definition.envKeyName
+          : [definition.envKeyName];
+        if (keyNames.length > 0 && !keyNames.some((k) => Boolean(settingsCache.apiKeys[k]))) {
+          keyStatus = 'missing';
+        }
       }
+      const newNode: Node<NodeData> = {
+        id: uuidv4(),
+        type: nodeType,
+        position,
+        data: { label: definition.displayName, definitionId, params: defaults, state: 'idle', outputs: {}, keyStatus },
+      };
+      set((state) => ({ nodes: [...state.nodes, newNode] }));
+      return newNode.id;
+    }
+  },
+
+  addNodeAndConnect: async (definitionId, position, connect) => {
+    // Like addNode but also wires the new node to an existing one atomically
+    // on the backend. Used by ConnectionPopup, which otherwise races with
+    // graphSync to find the new node's short id before connecting.
+    const definition = NODE_DEFINITIONS[definitionId];
+    if (!definition) return null;
+
+    const defaults: Record<string, unknown> = {};
+    const allParamSources = definition.sharedParams
+      ? [...definition.sharedParams, ...(definition.falParams ?? []), ...(definition.directParams ?? [])]
+      : definition.params;
+    for (const param of allParamSources) {
+      if (param.default !== undefined) defaults[param.key] = param.default;
     }
 
-    const newNode: Node<NodeData> = {
-      id: uuidv4(),
-      type: nodeType,
-      position,
-      data: { label: definition.displayName, definitionId, params: defaults, state: 'idle', outputs: {}, keyStatus },
-    };
-    set((state) => ({ nodes: [...state.nodes, newNode] }));
+    try {
+      const res = await fetch('http://localhost:8000/api/graph/node-and-connect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ definitionId, params: defaults, position, connect }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const node = (await res.json()) as { id?: string };
+      return node.id ?? null;
+    } catch (err) {
+      console.warn('[nebula] addNodeAndConnect backend push failed:', err);
+      return null;
+    }
   },
 
   addDynamicNode: (definitionId, position) => {
     const definition = NODE_DEFINITIONS[definitionId];
-    if (!definition) return;
+    if (!definition) return null;
 
     pushUndo(set, get);
 
@@ -541,6 +606,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       },
     };
     set((state) => ({ nodes: [...state.nodes, newNode as unknown as Node<NodeData>] }));
+    return newNode.id;
   },
 
   onNodesChange: (changes) => {
@@ -587,6 +653,10 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       }
     }
 
+    // Optimistic local edge so the user sees it immediately. If both endpoints
+    // are cli-origin nodes, push the edge to cli_graph too — graphSync will
+    // bring back the authoritative version (the id may differ) and the merge
+    // logic dedupes by source/target/handle.
     const newEdge: Edge = {
       id: uuidv4(),
       source: connection.source,
@@ -597,6 +667,19 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       data: { dataType },
     };
     set((state) => ({ edges: [...state.edges, newEdge] }));
+
+    if (CLI_ID_RE.test(connection.source) && CLI_ID_RE.test(connection.target)) {
+      fetch('http://localhost:8000/api/graph/connect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          source: connection.source,
+          sourceHandle: connection.sourceHandle,
+          target: connection.target,
+          targetHandle: connection.targetHandle,
+        }),
+      }).catch((err) => console.warn('[nebula] onConnect backend push failed:', err));
+    }
   },
 
   updateNodeData: (nodeId, data) => {
@@ -610,6 +693,29 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         node.id === nodeId ? { ...node, data: { ...node.data, ...data } } : node
       ),
     }));
+
+    // Param changes on cli-origin nodes (n1, n2, ...) need to flow back to
+    // cli_graph so Claude's `nebula graph` reflects user edits. Debounce so
+    // rapid typing in a text-input doesn't hammer the backend — the final
+    // value is what matters. Execution state updates (outputs/state/progress)
+    // don't need to sync.
+    if (isParamChange && CLI_ID_RE.test(nodeId)) {
+      if (paramPushTimers[nodeId] !== undefined) {
+        window.clearTimeout(paramPushTimers[nodeId]);
+      }
+      paramPushTimers[nodeId] = window.setTimeout(() => {
+        delete paramPushTimers[nodeId];
+        const node = useGraphStore.getState().nodes.find((n) => n.id === nodeId);
+        if (!node) return;
+        fetch(`http://localhost:8000/api/graph/node/${nodeId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ params: node.data.params }),
+        }).catch((err) => {
+          console.warn(`[nebula] Param sync for ${nodeId} failed:`, err);
+        });
+      }, PARAM_PUSH_DEBOUNCE_MS);
+    }
   },
 
   resetExecution: () => {
