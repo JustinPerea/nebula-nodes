@@ -77,6 +77,30 @@ class CLIGraph:
             raise ValueError(f"Node '{node_id}' not found")
         self.nodes[node_id]["params"].update(params)
 
+    def remove_node(self, node_id: str) -> None:
+        """Remove a node and any edges touching it. Raises if node_id is unknown."""
+        if node_id not in self.nodes:
+            raise ValueError(f"Node '{node_id}' not found")
+        del self.nodes[node_id]
+        self.edges = [
+            e for e in self.edges if e["source"] != node_id and e["target"] != node_id
+        ]
+
+    def remove_edge(
+        self, source: str, source_handle: str, target: str, target_handle: str
+    ) -> bool:
+        """Remove the edge matching all four endpoints. Returns True if one was removed."""
+        for i, e in enumerate(self.edges):
+            if (
+                e["source"] == source
+                and e["sourceHandle"] == source_handle
+                and e["target"] == target
+                and e["targetHandle"] == target_handle
+            ):
+                self.edges.pop(i)
+                return True
+        return False
+
     def clear(self) -> None:
         """Remove all nodes and edges and reset the ID counter."""
         self.nodes.clear()

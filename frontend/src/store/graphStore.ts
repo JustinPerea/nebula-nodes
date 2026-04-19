@@ -225,20 +225,38 @@ wsClient.subscribe((event) => {
     const existingById = new Map(state.nodes.map((n) => [n.id, n]));
     const frontendOnlyNodes = state.nodes.filter((n) => !CLI_ID_RE.test(n.id));
 
+    // Compute keyStatus for a node given its definition. Used for both new and
+    // existing cli nodes so the "missing API key" badge shows up consistently.
+    const { settingsCache } = useUIStore.getState();
+    const keyStatusFor = (definitionId: string): 'missing' | undefined => {
+      const def = NODE_DEFINITIONS[definitionId];
+      if (!def?.envKeyName || !settingsCache.loaded) return undefined;
+      const keyNames = Array.isArray(def.envKeyName) ? def.envKeyName : [def.envKeyName];
+      if (keyNames.length === 0) return undefined;
+      return keyNames.some((k) => Boolean(settingsCache.apiKeys[k])) ? undefined : 'missing';
+    };
+
     const cliMerged = (cliNodes as Node<NodeData>[]).map((cliNode) => {
       const existing = existingById.get(cliNode.id);
+      const keyStatus = keyStatusFor(cliNode.data.definitionId);
       if (existing) {
         // Preserve position (user may have dragged) and existing outputs when
-        // the CLI side doesn't have newer ones.
+        // the CLI side doesn't have newer ones. Spread existing.data FIRST so
+        // frontend-only fields (dynamicInputPorts, dynamicParams, providerMeta,
+        // modelId on universal nodes) survive the merge — cliNode.data then
+        // overrides common keys like label/definitionId/params.
         const cliOutputs = cliNode.data?.outputs ?? {};
         const hasCliOutputs = Object.keys(cliOutputs).length > 0;
         return {
           ...cliNode,
+          type: existing.type ?? cliNode.type,
           position: existing.position,
           data: {
+            ...existing.data,
             ...cliNode.data,
             outputs: hasCliOutputs ? cliOutputs : existing.data.outputs,
             state: hasCliOutputs ? cliNode.data.state : existing.data.state,
+            keyStatus,
           },
         };
       }
@@ -250,6 +268,10 @@ wsClient.subscribe((event) => {
         position: {
           x: cliNode.position?.x ?? 0,
           y: cliNode.position?.y ?? 100,
+        },
+        data: {
+          ...cliNode.data,
+          keyStatus,
         },
       };
     });
@@ -576,8 +598,12 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       }
     }
 
-    const newNode: Node<DynamicNodeData> = {
-      id: uuidv4(),
+    // Optimistic local node with dynamic fields (ports/params/provider meta).
+    // We assign a UUID up front; if the backend push succeeds, we'll renumber
+    // the node to the short id so Claude can reference it.
+    const tempId = uuidv4();
+    const buildNode = (id: string): Node<DynamicNodeData> => ({
+      id,
       type: 'dynamic-node',
       position,
       data: {
@@ -604,9 +630,36 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         dynamicParams: [],
         providerMeta: {},
       },
-    };
-    set((state) => ({ nodes: [...state.nodes, newNode as unknown as Node<NodeData>] }));
-    return newNode.id;
+    });
+    set((state) => ({ nodes: [...state.nodes, buildNode(tempId) as unknown as Node<NodeData>] }));
+
+    // Fire-and-forget push to cli_graph. When it returns, swap the UUID for
+    // the short id so subsequent edits flow through the usual cli path.
+    fetch('http://localhost:8000/api/graph/node', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ definitionId, params: defaults, position }),
+    })
+      .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`HTTP ${res.status}`))))
+      .then((body: { id?: string }) => {
+        const shortId = body.id;
+        if (!shortId) return;
+        // Remap edges too so any connections drawn during the race window
+        // keep pointing at the renamed node.
+        set((state) => ({
+          nodes: state.nodes.map((n) => (n.id === tempId ? { ...n, id: shortId } : n)),
+          edges: state.edges.map((e) => ({
+            ...e,
+            source: e.source === tempId ? shortId : e.source,
+            target: e.target === tempId ? shortId : e.target,
+          })),
+        }));
+      })
+      .catch((err) => {
+        console.warn('[nebula] addDynamicNode backend push failed — staying frontend-only:', err);
+      });
+
+    return tempId;
   },
 
   onNodesChange: (changes) => {
@@ -614,6 +667,15 @@ export const useGraphStore = create<GraphState>((set, get) => ({
 
     if (removedIds.length > 0) {
       pushUndo(set, get);
+      // Push cli-origin deletions to the backend so cli_graph doesn't resurrect
+      // them on the next graphSync. Frontend-only UUIDs have no backend twin.
+      for (const id of removedIds) {
+        if (CLI_ID_RE.test(id)) {
+          fetch(`http://localhost:8000/api/graph/node/${id}`, { method: 'DELETE' }).catch((err) =>
+            console.warn(`[nebula] DELETE node ${id} failed:`, err),
+          );
+        }
+      }
       set((state) => ({
         nodes: applyNodeChanges(changes, state.nodes),
         edges: state.edges.filter((e) => !removedIds.includes(e.source) && !removedIds.includes(e.target)),
@@ -627,6 +689,29 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     const hasRemove = changes.some((c) => c.type === 'remove');
     if (hasRemove) {
       pushUndo(set, get);
+      // Mirror cli-connected edge deletions to the backend. We resolve the edge
+      // to its endpoints from current state BEFORE applying the change so we
+      // can still find it.
+      const removedIds = changes
+        .filter((c): c is EdgeChange & { type: 'remove' } => c.type === 'remove')
+        .map((c) => c.id);
+      const currentEdges = get().edges;
+      for (const id of removedIds) {
+        const edge = currentEdges.find((e) => e.id === id);
+        if (!edge) continue;
+        if (CLI_ID_RE.test(edge.source) && CLI_ID_RE.test(edge.target)) {
+          fetch('http://localhost:8000/api/graph/edge', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              source: edge.source,
+              sourceHandle: edge.sourceHandle ?? '',
+              target: edge.target,
+              targetHandle: edge.targetHandle ?? '',
+            }),
+          }).catch((err) => console.warn('[nebula] DELETE edge failed:', err));
+        }
+      }
     }
     set((state) => ({ edges: applyEdgeChanges(changes, state.edges) }));
   },
@@ -806,6 +891,11 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       nodes: state.nodes.filter((n) => n.id !== nodeId),
       edges: state.edges.filter((e) => e.source !== nodeId && e.target !== nodeId),
     }));
+    if (CLI_ID_RE.test(nodeId)) {
+      fetch(`http://localhost:8000/api/graph/node/${nodeId}`, { method: 'DELETE' }).catch((err) =>
+        console.warn(`[nebula] DELETE node ${nodeId} failed:`, err),
+      );
+    }
   },
 
   loadGraph: (nodes, edges) => {

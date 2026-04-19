@@ -478,6 +478,31 @@ async def clear_graph() -> dict:
     return {"status": "cleared"}
 
 
+@app.delete("/api/graph/node/{node_id}")
+async def delete_graph_node(node_id: str) -> dict:
+    """Remove a node and any edges touching it from cli_graph."""
+    try:
+        cli_graph.remove_node(node_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail=f"Node '{node_id}' not found")
+    await _broadcast_graph_sync()
+    return {"status": "deleted", "id": node_id}
+
+
+@app.delete("/api/graph/edge")
+async def delete_graph_edge(body: dict[str, Any]) -> dict:
+    """Remove the edge matching source/sourceHandle/target/targetHandle."""
+    removed = cli_graph.remove_edge(
+        body.get("source", ""),
+        body.get("sourceHandle", ""),
+        body.get("target", ""),
+        body.get("targetHandle", ""),
+    )
+    if removed:
+        await _broadcast_graph_sync()
+    return {"status": "deleted" if removed else "not_found"}
+
+
 @app.post("/api/graph/import")
 async def import_graph(body: dict[str, Any]) -> dict:
     """Atomically replace cli_graph from a file-loaded graph.
