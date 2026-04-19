@@ -21,6 +21,7 @@ from services.node_registry import NodeRegistry
 from services.cli_graph import CLIGraph
 from services.output import OUTPUT_ROOT
 from services.cache import ExecutionCache
+from services.chat_session import run_claude
 from routes.openrouter_proxy import router as openrouter_router
 from routes.replicate_proxy import router as replicate_router
 from routes.fal_proxy import router as fal_router
@@ -171,6 +172,62 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
             await websocket.receive_text()
     except WebSocketDisconnect:
         manager.disconnect(websocket)
+
+
+# ---------- Chat WebSocket (/ws/chat) ----------
+
+@app.websocket("/ws/chat")
+async def chat_websocket(websocket: WebSocket) -> None:
+    """Chat WebSocket — one message per turn, streams claude -p output.
+
+    Client sends: {type: "send", message: str, sessionId: str|null, model: str}
+    Server sends: session | text | tool_use | tool_result | result | error | done
+    """
+    await websocket.accept()
+    current_task: asyncio.Task[None] | None = None
+
+    async def stream_response(message: str, session_id: str | None, model: str) -> None:
+        try:
+            async for event in run_claude(message, session_id, model):
+                await websocket.send_text(json.dumps(event))
+        except Exception as exc:
+            try:
+                await websocket.send_text(json.dumps({"type": "error", "message": str(exc)}))
+                await websocket.send_text(json.dumps({"type": "done"}))
+            except Exception:
+                pass
+
+    try:
+        while True:
+            raw = await websocket.receive_text()
+            try:
+                payload = json.loads(raw)
+            except json.JSONDecodeError:
+                await websocket.send_text(json.dumps({"type": "error", "message": "invalid JSON"}))
+                continue
+
+            msg_type = payload.get("type")
+            if msg_type == "cancel":
+                if current_task and not current_task.done():
+                    current_task.cancel()
+                continue
+            if msg_type != "send":
+                continue
+
+            user_message = payload.get("message", "")
+            session_id = payload.get("sessionId") or None
+            model = payload.get("model") or "sonnet"
+            if not user_message.strip():
+                continue
+
+            if current_task and not current_task.done():
+                current_task.cancel()
+            current_task = asyncio.create_task(
+                stream_response(user_message, session_id, model)
+            )
+    except WebSocketDisconnect:
+        if current_task and not current_task.done():
+            current_task.cancel()
 
 
 # ---------- REST endpoints ----------
@@ -417,6 +474,20 @@ async def export_graph_for_frontend() -> dict:
         node_type = "reroute-node" if n["definitionId"] == "reroute" else "model-node"
         outputs = _rewrite_output_paths(n.get("outputs", {}))
         node_state = "complete" if outputs else "idle"
+
+        # For image-input nodes: derive _previewUrl from filePath if the file is
+        # under OUTPUT_ROOT and no preview URL was stored. This makes CLI-created
+        # image-input nodes render a real preview instead of the broken fallback.
+        params = dict(n.get("params", {}))
+        if n["definitionId"] == "image-input" and not params.get("_previewUrl"):
+            fp = params.get("filePath")
+            if isinstance(fp, str) and fp:
+                try:
+                    rel = Path(fp).resolve().relative_to(OUTPUT_ROOT.resolve())
+                    params["_previewUrl"] = f"/api/outputs/{rel}"
+                except ValueError:
+                    pass
+
         rf_nodes.append({
             "id": n["id"],
             "type": node_type,
@@ -424,7 +495,7 @@ async def export_graph_for_frontend() -> dict:
             "data": {
                 "label": defn.get("displayName", n["definitionId"]),
                 "definitionId": n["definitionId"],
-                "params": n.get("params", {}),
+                "params": params,
                 "state": node_state,
                 "outputs": outputs,
             },
