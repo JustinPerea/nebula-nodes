@@ -397,11 +397,63 @@ async def _broadcast_graph_sync() -> None:
     await manager.broadcast_raw({"type": "graphSync", **export})
 
 
+def _valid_param_keys(definition_id: str) -> set[str] | None:
+    """Gather the set of param keys declared by a node definition.
+
+    Returns None for nodes whose definition isn't found or for universal/dynamic
+    nodes — those accept provider-supplied params we don't know up front, so we
+    skip key validation rather than produce false negatives.
+    """
+    defn = node_registry.get(definition_id)
+    if not defn:
+        return None
+    if definition_id in {"openrouter-universal", "replicate-universal", "fal-universal"}:
+        return None
+    keys: set[str] = set()
+    for source_key in ("params", "sharedParams", "falParams", "directParams"):
+        for p in defn.get(source_key, []) or []:
+            if isinstance(p, dict) and p.get("key"):
+                keys.add(p["key"])
+    return keys
+
+
+def _validate_params(definition_id: str, params: dict[str, Any]) -> None:
+    """Raise 400 if params contain keys the definition doesn't declare.
+
+    Keys starting with `_` are treated as frontend-internal state (e.g.
+    `_previewUrl`, `_output_image`) and always allowed. Unknown keys usually
+    mean a typo (e.g. `aspectRatio` vs `aspect_ratio`) that would otherwise
+    silently fall back to defaults — surfacing it loudly here lets Claude
+    correct mid-turn instead of producing an image with wrong settings.
+    """
+    valid = _valid_param_keys(definition_id)
+    if valid is None:
+        return
+    unknown = [k for k in params if not k.startswith("_") and k not in valid]
+    if unknown:
+        suggestions: list[str] = []
+        for u in unknown:
+            u_low = u.lower()
+            close = [v for v in valid if v.lower() == u_low or v.lower().replace("_", "") == u_low.replace("_", "")]
+            if close:
+                suggestions.append(f"{u} (did you mean {', '.join(close)}?)")
+            else:
+                suggestions.append(u)
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Unknown param(s) for {definition_id}: {suggestions}. "
+                f"Valid keys: {sorted(valid)}"
+            ),
+        )
+
+
 @app.post("/api/graph/node")
 async def create_graph_node(body: dict[str, Any]) -> dict:
     definition_id = body.get("definitionId", "")
-    params = body.get("params", {})
+    params = body.get("params", {}) or {}
     position = body.get("position")
+    _validate_params(definition_id, params)
     short_id = cli_graph.add_node(definition_id, params, position=position)
     await _broadcast_graph_sync()
     return cli_graph.nodes[short_id]
@@ -432,8 +484,9 @@ async def create_node_and_connect(body: dict[str, Any]) -> dict:
     the new node's id (the other side is the existing node).
     """
     definition_id = body.get("definitionId", "")
-    params = body.get("params", {})
+    params = body.get("params", {}) or {}
     position = body.get("position")
+    _validate_params(definition_id, params)
     short_id = cli_graph.add_node(definition_id, params, position=position)
 
     connect_spec = body.get("connect") or {}
@@ -463,8 +516,13 @@ async def get_graph() -> dict:
 
 @app.put("/api/graph/node/{node_id}")
 async def update_graph_node(node_id: str, body: dict[str, Any]) -> dict:
+    node = cli_graph.nodes.get(node_id)
+    if not node:
+        raise HTTPException(status_code=404, detail=f"Node '{node_id}' not found")
+    params = body.get("params", {}) or {}
+    _validate_params(node.get("definitionId", ""), params)
     try:
-        cli_graph.update_params(node_id, body.get("params", {}))
+        cli_graph.update_params(node_id, params)
     except ValueError:
         raise HTTPException(status_code=404, detail=f"Node '{node_id}' not found")
     await _broadcast_graph_sync()
