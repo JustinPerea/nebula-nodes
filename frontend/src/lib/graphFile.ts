@@ -5,15 +5,15 @@ import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 /**
  * .nebula file format — versioned JSON for graph persistence.
  *
- * Design decisions:
- * - Outputs and execution state are stripped on save (don't persist generated images)
- * - Node state is reset to 'idle' on save
- * - Version field allows future format migrations
- * - Viewport is optional (defaults to fit-all on load)
+ * v2 (current): persists outputs + state so generated results survive save/load.
+ * v1: structure + params only; outputs were stripped.
+ *
+ * Output values are URLs under /api/outputs — they stay valid as long as the
+ * backend's output/ directory still has the files.
  */
 
 export interface NebulaFile {
-  version: 1;
+  version: 1 | 2;
   name: string;
   createdAt: string;
   nodes: NebulaNode[];
@@ -29,6 +29,8 @@ interface NebulaNode {
     label: string;
     definitionId: string;
     params: Record<string, unknown>;
+    outputs?: Record<string, unknown>;
+    state?: 'idle' | 'executing' | 'complete' | 'error';
   };
 }
 
@@ -53,19 +55,24 @@ export function serializeGraph(
   name?: string,
 ): NebulaFile {
   return {
-    version: 1,
+    version: 2,
     name: name ?? 'Untitled Graph',
     createdAt: new Date().toISOString(),
-    nodes: nodes.map((n) => ({
-      id: n.id,
-      type: n.type ?? 'model-node',
-      position: { x: n.position.x, y: n.position.y },
-      data: {
-        label: n.data.label,
-        definitionId: n.data.definitionId,
-        params: { ...n.data.params },
-      },
-    })),
+    nodes: nodes.map((n) => {
+      const hasOutputs = n.data.outputs && Object.keys(n.data.outputs).length > 0;
+      return {
+        id: n.id,
+        type: n.type ?? 'model-node',
+        position: { x: n.position.x, y: n.position.y },
+        data: {
+          label: n.data.label,
+          definitionId: n.data.definitionId,
+          params: { ...n.data.params },
+          outputs: hasOutputs ? { ...n.data.outputs } : undefined,
+          state: hasOutputs ? 'complete' : 'idle',
+        },
+      };
+    }),
     edges: edges.map((e) => ({
       id: e.id,
       source: e.source,
@@ -96,6 +103,10 @@ export function deserializeGraph(
     if (!definition) {
       warnings.push(`Unknown node definition: "${n.data.definitionId}" (node ${n.id})`);
     }
+    const outputs = (n.data.outputs ?? {}) as Record<string, unknown>;
+    const hasOutputs = Object.keys(outputs).length > 0;
+    // v2+: trust saved state (complete if outputs present). v1: always idle, no outputs.
+    const state = hasOutputs ? (n.data.state ?? 'complete') : 'idle';
     return {
       id: n.id,
       type: n.type,
@@ -104,8 +115,8 @@ export function deserializeGraph(
         label: n.data.label,
         definitionId: n.data.definitionId,
         params: n.data.params,
-        state: 'idle' as const,
-        outputs: {},
+        state,
+        outputs,
       },
     };
   });
@@ -231,8 +242,8 @@ export async function loadFromFile(): Promise<{
   try {
     const parsed = JSON.parse(text) as NebulaFile;
 
-    // Basic validation
-    if (parsed.version !== 1) {
+    // Basic validation — accept v1 (outputs stripped) and v2 (outputs persisted)
+    if (parsed.version !== 1 && parsed.version !== 2) {
       throw new Error(`Unsupported .nebula file version: ${parsed.version}`);
     }
     if (!Array.isArray(parsed.nodes) || !Array.isArray(parsed.edges)) {
