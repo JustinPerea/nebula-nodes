@@ -5,6 +5,7 @@ import { NodeLibrary } from './components/panels/NodeLibrary';
 import { Inspector } from './components/panels/Inspector';
 import { Settings } from './components/panels/Settings';
 import { Toolbar } from './components/panels/Toolbar';
+import { ChatPanel } from './components/panels/ChatPanel';
 import { getSettings } from './lib/api';
 import { useUIStore } from './store/uiStore';
 import { useGraphStore } from './store/graphStore';
@@ -61,6 +62,7 @@ export default function App() {
       <NodeLibrary />
       <Inspector />
       <Settings />
+      <ChatPanel />
       <Toolbar />
     </ReactFlowProvider>
   );

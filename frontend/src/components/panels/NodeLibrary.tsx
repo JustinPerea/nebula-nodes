@@ -5,6 +5,10 @@ import { getNodesByCategory } from '../../constants/nodeDefinitions';
 import { CATEGORY_COLORS } from '../../constants/ports';
 import '../../styles/panels.css';
 
+// Initial collapsed state — all categories start collapsed on first render so
+// the user sees a scannable list of category headers, not a long node wall.
+const INITIAL_COLLAPSE_KEY = '__nebulaLibraryInit';
+
 const CATEGORY_LABELS: Record<string, string> = {
   'image-gen': 'Image Generation',
   'video-gen': 'Video Generation',
@@ -23,10 +27,21 @@ export function NodeLibrary() {
   const setSearch = useUIStore((s) => s.setLibrarySearch);
   const togglePanel = useUIStore((s) => s.togglePanel);
   const addNode = useGraphStore((s) => s.addNode);
+  const collapsed = useUIStore((s) => s.libraryCollapsed);
+  const toggleCategory = useUIStore((s) => s.toggleLibraryCategory);
+  const setAllLibraryCategories = useUIStore((s) => s.setAllLibraryCategories);
   const dragRef = useRef<{ startX: number; startY: number; panelX: number; panelY: number } | null>(null);
   const setPanelPosition = useUIStore((s) => s.setPanelPosition);
 
   const grouped = useMemo(() => getNodesByCategory(), []);
+
+  // Collapse all categories on first mount if we haven't initialized yet.
+  useEffect(() => {
+    if (!collapsed[INITIAL_COLLAPSE_KEY]) {
+      const all = Object.keys(grouped);
+      setAllLibraryCategories(true, [...all, INITIAL_COLLAPSE_KEY]);
+    }
+  }, [collapsed, grouped, setAllLibraryCategories]);
 
   const filtered = useMemo(() => {
     if (!search.trim()) return grouped;
@@ -102,28 +117,39 @@ export function NodeLibrary() {
           onChange={(e) => setSearch(e.target.value)}
         />
 
-        {Object.entries(filtered).map(([category, defs]) => (
-          <div key={category} className="panel__group">
-            <div className="panel__group-label">
-              <span
-                className="panel__group-dot"
-                style={{ backgroundColor: CATEGORY_COLORS[category] }}
-              />
-              {CATEGORY_LABELS[category] ?? category}
-            </div>
-            {defs.map((def) => (
-              <div
-                key={def.id}
-                className="panel__item"
-                draggable
-                onDragStart={(e) => onDragStart(e, def.id)}
-                onDoubleClick={() => onDoubleClick(def.id)}
+        {Object.entries(filtered).map(([category, defs]) => {
+          // When searching, always expand matching categories so results are visible.
+          const isSearching = search.trim().length > 0;
+          const isCollapsed = !isSearching && (collapsed[category] ?? true);
+          return (
+            <div key={category} className="panel__group">
+              <button
+                className="panel__group-label panel__group-label--button"
+                onClick={() => toggleCategory(category)}
+                type="button"
               >
-                {def.displayName}
-              </div>
-            ))}
-          </div>
-        ))}
+                <span className="panel__group-chevron">{isCollapsed ? '\u25B8' : '\u25BE'}</span>
+                <span
+                  className="panel__group-dot"
+                  style={{ backgroundColor: CATEGORY_COLORS[category] }}
+                />
+                <span className="panel__group-text">{CATEGORY_LABELS[category] ?? category}</span>
+                <span className="panel__group-count">{defs.length}</span>
+              </button>
+              {!isCollapsed && defs.map((def) => (
+                <div
+                  key={def.id}
+                  className="panel__item"
+                  draggable
+                  onDragStart={(e) => onDragStart(e, def.id)}
+                  onDoubleClick={() => onDoubleClick(def.id)}
+                >
+                  {def.displayName}
+                </div>
+              ))}
+            </div>
+          );
+        })}
       </div>
     </div>
   );

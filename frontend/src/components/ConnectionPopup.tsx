@@ -32,14 +32,16 @@ export function ConnectionPopup() {
   const nodes = useGraphStore((s) => s.nodes);
 
   const [search, setSearch] = useState('');
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const inputRef = useRef<HTMLInputElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  // Reset search when popup opens
+  // Reset search and collapse everything each time the popup opens — otherwise
+  // the user sees a wall of nodes from the last session and has to scroll.
   useEffect(() => {
     if (visible) {
       setSearch('');
-      // Auto-focus search input
+      setExpanded({});
       setTimeout(() => inputRef.current?.focus(), 0);
     }
   }, [visible]);
@@ -200,32 +202,57 @@ export function ConnectionPopup() {
           onKeyDown={(e) => e.stopPropagation()}
           onMouseDown={(e) => e.stopPropagation()}
         />
+        <button
+          type="button"
+          className="connection-popup__close"
+          onClick={hideConnectionPopup}
+          title="Close (Esc)"
+          aria-label="Close"
+        >
+          ×
+        </button>
       </div>
       <div className="connection-popup__list">
         {totalCount === 0 && (
           <div className="connection-popup__empty">No compatible nodes found</div>
         )}
-        {Object.entries(grouped).map(([category, nodes]) => (
-          <div key={category} className="connection-popup__category">
-            <div className="connection-popup__category-label">
-              {CATEGORY_LABELS[category] ?? category}
-            </div>
-            {nodes.map((node) => (
+        {Object.entries(grouped).map(([category, nodes]) => {
+          const isSearching = search.trim().length > 0;
+          // While searching, always show matches. Otherwise start collapsed so
+          // users see a scannable list of category headers, not a scroll wall.
+          const isOpen = isSearching || (expanded[category] ?? false);
+          return (
+            <div key={category} className="connection-popup__category">
               <button
-                key={node.definition.id}
-                className="connection-popup__item"
-                onClick={() => handleSelect(node)}
+                type="button"
+                className="connection-popup__category-label connection-popup__category-label--button"
+                onClick={() =>
+                  setExpanded((s) => ({ ...s, [category]: !(s[category] ?? false) }))
+                }
               >
-                <span
-                  className="connection-popup__item-dot"
-                  style={{ backgroundColor: CATEGORY_COLORS[node.definition.category] ?? '#424242' }}
-                />
-                <span className="connection-popup__item-name">{node.definition.displayName}</span>
-                <span className="connection-popup__item-port">{node.matchingPortLabel}</span>
+                <span className="connection-popup__category-chevron">{isOpen ? '\u25BE' : '\u25B8'}</span>
+                <span className="connection-popup__category-text">
+                  {CATEGORY_LABELS[category] ?? category}
+                </span>
+                <span className="connection-popup__category-count">{nodes.length}</span>
               </button>
-            ))}
-          </div>
-        ))}
+              {isOpen && nodes.map((node) => (
+                <button
+                  key={node.definition.id}
+                  className="connection-popup__item"
+                  onClick={() => handleSelect(node)}
+                >
+                  <span
+                    className="connection-popup__item-dot"
+                    style={{ backgroundColor: CATEGORY_COLORS[node.definition.category] ?? '#424242' }}
+                  />
+                  <span className="connection-popup__item-name">{node.definition.displayName}</span>
+                  <span className="connection-popup__item-port">{node.matchingPortLabel}</span>
+                </button>
+              ))}
+            </div>
+          );
+        })}
       </div>
     </div>
   );

@@ -5,6 +5,15 @@ interface PanelState {
   position: { x: number; y: number };
 }
 
+interface ChatPanelState extends PanelState {
+  width: number;
+  height?: number;
+  // When the user drags the panel, we switch from the default top-right
+  // anchoring to explicit left/top coordinates. Until then these are null.
+  left?: number | null;
+  top?: number | null;
+}
+
 interface ConnectionPopupState {
   visible: boolean;
   position: { x: number; y: number };
@@ -19,8 +28,10 @@ interface UIState {
     library: PanelState;
     inspector: PanelState;
     settings: PanelState;
+    chat: ChatPanelState;
   };
   librarySearch: string;
+  libraryCollapsed: Record<string, boolean>;
   contextMenu: {
     visible: boolean;
     position: { x: number; y: number };
@@ -33,9 +44,14 @@ interface UIState {
   };
 
   selectNode: (nodeId: string | null) => void;
-  togglePanel: (panel: 'library' | 'inspector' | 'settings') => void;
-  setPanelPosition: (panel: 'library' | 'inspector' | 'settings', position: { x: number; y: number }) => void;
+  togglePanel: (panel: 'library' | 'inspector' | 'settings' | 'chat') => void;
+  setPanelPosition: (panel: 'library' | 'inspector' | 'settings' | 'chat', position: { x: number; y: number }) => void;
   setLibrarySearch: (search: string) => void;
+  toggleLibraryCategory: (category: string) => void;
+  setAllLibraryCategories: (collapsed: boolean, categories: string[]) => void;
+  setChatWidth: (width: number) => void;
+  setChatHeight: (height: number) => void;
+  setChatPosition: (left: number, top: number) => void;
   showContextMenu: (position: { x: number; y: number }, nodeId: string | null) => void;
   hideContextMenu: () => void;
   showConnectionPopup: (popup: Omit<ConnectionPopupState, 'visible'>) => void;
@@ -49,8 +65,10 @@ export const useUIStore = create<UIState>((set) => ({
     library: { visible: true, position: { x: 16, y: 16 } },
     inspector: { visible: false, position: { x: -280, y: 16 } },
     settings: { visible: false, position: { x: -340, y: 60 } },
+    chat: { visible: false, position: { x: 16, y: 16 }, width: 300 },
   },
   librarySearch: '',
+  libraryCollapsed: {},
   contextMenu: {
     visible: false,
     position: { x: 0, y: 0 },
@@ -91,6 +109,49 @@ export const useUIStore = create<UIState>((set) => ({
     })),
 
   setLibrarySearch: (search) => set({ librarySearch: search }),
+
+  toggleLibraryCategory: (category) =>
+    set((state) => ({
+      libraryCollapsed: {
+        ...state.libraryCollapsed,
+        [category]: !state.libraryCollapsed[category],
+      },
+    })),
+
+  setAllLibraryCategories: (collapsed, categories) =>
+    set(() => ({
+      libraryCollapsed: Object.fromEntries(categories.map((c) => [c, collapsed])),
+    })),
+
+  setChatWidth: (width) =>
+    set((state) => ({
+      panels: {
+        ...state.panels,
+        chat: { ...state.panels.chat, width: Math.max(260, Math.min(720, width)) },
+      },
+    })),
+
+  setChatHeight: (height) =>
+    set((state) => ({
+      panels: {
+        ...state.panels,
+        chat: { ...state.panels.chat, height: Math.max(240, Math.min(2000, height)) },
+      },
+    })),
+
+  setChatPosition: (left, top) =>
+    set((state) => {
+      // Keep at least 40px of the panel inside the viewport on each side
+      // so the user can always grab it back.
+      const clampedLeft = Math.max(-state.panels.chat.width + 40, Math.min(window.innerWidth - 40, left));
+      const clampedTop = Math.max(0, Math.min(window.innerHeight - 40, top));
+      return {
+        panels: {
+          ...state.panels,
+          chat: { ...state.panels.chat, left: clampedLeft, top: clampedTop },
+        },
+      };
+    }),
 
   showContextMenu: (position, nodeId) =>
     set({

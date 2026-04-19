@@ -5483,6 +5483,19 @@ export function getNodeDefinition(definitionId: string): ModelNodeDefinition | u
   return NODE_DEFINITIONS[definitionId];
 }
 
+// Display order for categories in the node library panel. Categories not listed
+// here fall to the bottom in the order they're first encountered.
+const CATEGORY_ORDER: readonly string[] = [
+  'utility',
+  'text-gen',
+  'image-gen',
+  'video-gen',
+  'audio-gen',
+  'transform',
+  'analyzer',
+  'universal',
+];
+
 export function getNodesByCategory(): Record<string, ModelNodeDefinition[]> {
   const grouped: Record<string, ModelNodeDefinition[]> = {};
   for (const def of Object.values(NODE_DEFINITIONS)) {
@@ -5491,5 +5504,13 @@ export function getNodesByCategory(): Record<string, ModelNodeDefinition[]> {
     }
     grouped[def.category].push(def);
   }
-  return grouped;
+  // Rebuild the object so Object.entries iterates in CATEGORY_ORDER.
+  const ordered: Record<string, ModelNodeDefinition[]> = {};
+  for (const cat of CATEGORY_ORDER) {
+    if (grouped[cat]) ordered[cat] = grouped[cat];
+  }
+  for (const [cat, defs] of Object.entries(grouped)) {
+    if (!(cat in ordered)) ordered[cat] = defs;
+  }
+  return ordered;
 }

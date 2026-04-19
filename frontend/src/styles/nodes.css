@@ -56,6 +56,29 @@
 .model-node__badge { font-size: 11px; flex-shrink: 0; }
 .model-node__badge--warning { color: #FFC107; }
 
+.model-node__id-chip {
+  flex-shrink: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  font-weight: 500;
+  color: #777;
+  background: #252525;
+  border: 1px solid #333;
+  border-radius: 3px;
+  padding: 1px 5px;
+  cursor: grab;
+  user-select: none;
+  transition: color 0.1s, background 0.1s, border-color 0.1s;
+}
+
+.model-node__id-chip:hover {
+  color: #d8e8f5;
+  background: #2a3b4f;
+  border-color: #3a5070;
+}
+
+.model-node__id-chip:active { cursor: grabbing; }
+
 .model-node__ports { padding: 6px 0; }
 
 .model-node__port-row {
@@ -81,8 +104,41 @@
 .model-node__handle:hover { transform: scale(1.4); }
 
 .model-node__preview {
+  position: relative;
   padding: 6px 10px;
   border-top: 1px solid #2a2a2a;
+}
+
+.model-node__download {
+  position: absolute;
+  top: 12px;
+  right: 16px;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: rgba(20, 20, 20, 0.85);
+  backdrop-filter: blur(4px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  color: #ccc;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s, background 0.12s, color 0.12s;
+  z-index: 2;
+}
+
+.model-node__preview:hover .model-node__download {
+  opacity: 1;
+}
+
+.model-node__download:hover {
+  background: rgba(40, 40, 40, 0.95);
+  color: #fff;
 }
 
 .model-node__preview-placeholder {
@@ -222,6 +278,29 @@
 
 .model-node__textarea::placeholder {
   color: #444;
+}
+
+.model-node__enhance {
+  margin-top: 6px;
+  width: 100%;
+  padding: 5px 0;
+  background: #1e1e1e;
+  border: 1px solid #2a2a2a;
+  border-radius: 4px;
+  color: #999;
+  font-size: 10px;
+  font-family: inherit;
+  font-weight: 500;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s, border-color 0.1s;
+}
+
+.model-node__enhance:hover {
+  background: #242424;
+  border-color: #3a3a3a;
+  color: #ddd;
 }
 
 /* ---------- Reroute node (minimal dot) ---------- */

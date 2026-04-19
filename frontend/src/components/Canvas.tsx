@@ -1,8 +1,9 @@
-import { useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import {
   ReactFlow,
   Background,
   BackgroundVariant,
+  useReactFlow,
   type NodeTypes,
   type EdgeTypes,
   type OnConnectStart,
@@ -42,6 +43,20 @@ export function Canvas() {
   const hideContextMenu = useUIStore((s) => s.hideContextMenu);
   const showConnectionPopup = useUIStore((s) => s.showConnectionPopup);
   const hideConnectionPopup = useUIStore((s) => s.hideConnectionPopup);
+
+  const { fitView, screenToFlowPosition } = useReactFlow();
+
+  // Auto-fit the viewport when Claude (or any CLI) adds nodes via graphSync.
+  // Small delay gives React Flow a tick to measure the newly rendered nodes.
+  useEffect(() => {
+    function onNodesAdded() {
+      setTimeout(() => {
+        fitView({ padding: 0.25, duration: 400 });
+      }, 80);
+    }
+    window.addEventListener('nebula:graph-nodes-added', onNodesAdded);
+    return () => window.removeEventListener('nebula:graph-nodes-added', onNodesAdded);
+  }, [fitView]);
 
   // Track the connection being dragged so onConnectEnd knows what port it came from
   const connectStartRef = useRef<{ nodeId: string; handleId: string; handleType: 'source' | 'target' } | null>(null);
@@ -88,28 +103,25 @@ export function Canvas() {
             ?.getBoundingClientRect();
           if (!reactFlowBounds) return;
 
-          imageFiles.forEach((file, idx) => {
-            const position = {
-              x: event.clientX - reactFlowBounds.left + idx * 40,
-              y: event.clientY - reactFlowBounds.top + idx * 40,
-            };
-            // Upload file then create node
+          imageFiles.forEach((file) => {
+            // Upload then register the node in cli_graph so Claude's `nebula graph`
+            // sees it with a short ID. graphSync will push it back to the canvas.
+            // Position from the drop event is discarded — cli_graph export auto-lays-out.
             const formData = new FormData();
             formData.append('file', file);
             fetch('http://localhost:8000/api/upload', { method: 'POST', body: formData })
               .then((r) => r.json())
-              .then((data: { path: string; url: string }) => {
-                useGraphStore.getState().addNode('image-input', position);
-                // Find the node that was just added (last node)
-                const nodes = useGraphStore.getState().nodes;
-                const newNode = nodes[nodes.length - 1];
-                if (newNode) {
-                  useGraphStore.getState().updateNodeData(newNode.id, {
+              .then((data: { path: string; url: string }) =>
+                fetch('http://localhost:8000/api/graph/node', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    definitionId: 'image-input',
                     params: { filePath: data.path, _previewUrl: data.url },
-                  });
-                }
-              })
-              .catch((err) => console.error('Upload failed:', err));
+                  }),
+                }),
+              )
+              .catch((err) => console.error('Upload/create failed:', err));
           });
           return;
         }
@@ -118,19 +130,14 @@ export function Canvas() {
       const definitionId = event.dataTransfer.getData('application/nebula-node');
       if (!definitionId) return;
 
-      const reactFlowBounds = (event.target as HTMLElement)
-        .closest('.react-flow')
-        ?.getBoundingClientRect();
-      if (!reactFlowBounds) return;
-
-      const position = {
-        x: event.clientX - reactFlowBounds.left,
-        y: event.clientY - reactFlowBounds.top,
-      };
+      // screenToFlowPosition maps the cursor into React Flow's coordinate space
+      // so the node appears under the cursor at any zoom/pan. Using raw clientX/Y
+      // minus bounds only works at zoom=1 and pan=(0,0).
+      const position = screenToFlowPosition({ x: event.clientX, y: event.clientY });
 
       useGraphStore.getState().addNode(definitionId, position);
     },
-    []
+    [screenToFlowPosition]
   );
 
   const onDragOver = useCallback((event: React.DragEvent) => {

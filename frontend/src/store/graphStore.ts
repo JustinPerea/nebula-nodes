@@ -171,28 +171,46 @@ interface GraphState {
   fetchReplicateSchemaAndConfigure: (nodeId: string, owner: string, name: string) => Promise<void>;
 }
 
+// CLI nodes use short sequential IDs like n1, n2. Frontend-only (library-dragged)
+// nodes use UUIDs. This regex lets graphSync distinguish them so we can preserve
+// frontend-only work when cli_graph changes.
+const CLI_ID_RE = /^n\d+$/;
+
 wsClient.connect();
 wsClient.subscribe((event) => {
   if (event.type === 'graphSync') {
-    // Real-time sync: merge CLI graph into frontend canvas
-    // Preserves existing node positions and outputs that the CLI hasn't updated
+    // Real-time sync: MERGE cli_graph into the canvas. Key invariant: frontend-only
+    // nodes (library drags, undo'd results, etc.) must survive graphSync — only
+    // cli-origin nodes are authoritative from the server. Same for edges.
     const { nodes: cliNodes, edges: cliEdges, empty } = event as {
       type: 'graphSync'; nodes: Node<NodeData>[]; edges: Edge[]; empty: boolean;
     };
-    if (empty) {
-      useGraphStore.getState().loadGraph([], []);
-      return;
-    }
-    if (cliNodes.length === 0) return;
 
     const state = useGraphStore.getState();
-    const existingById = new Map(state.nodes.map((n) => [n.id, n]));
 
-    const merged = (cliNodes as Node<NodeData>[]).map((cliNode) => {
+    if (empty) {
+      // cli_graph was cleared — drop only cli-origin nodes/edges; keep frontend work.
+      const remainingNodes = state.nodes.filter((n) => !CLI_ID_RE.test(n.id));
+      const remainingIds = new Set(remainingNodes.map((n) => n.id));
+      const remainingEdges = state.edges.filter(
+        (e) => remainingIds.has(e.source) && remainingIds.has(e.target),
+      );
+      useGraphStore.setState({
+        nodes: remainingNodes,
+        edges: remainingEdges,
+        isExecuting: false,
+      });
+      return;
+    }
+
+    const existingById = new Map(state.nodes.map((n) => [n.id, n]));
+    const frontendOnlyNodes = state.nodes.filter((n) => !CLI_ID_RE.test(n.id));
+
+    const cliMerged = (cliNodes as Node<NodeData>[]).map((cliNode) => {
       const existing = existingById.get(cliNode.id);
       if (existing) {
-        // Preserve position from canvas (user may have dragged)
-        // Merge outputs: keep existing outputs if CLI node has none
+        // Preserve position (user may have dragged) and existing outputs when
+        // the CLI side doesn't have newer ones.
         const cliOutputs = cliNode.data?.outputs ?? {};
         const hasCliOutputs = Object.keys(cliOutputs).length > 0;
         return {
@@ -205,7 +223,7 @@ wsClient.subscribe((event) => {
           },
         };
       }
-      // New node from CLI — auto-layout to the right of existing nodes
+      // New cli node — place to the right of whatever's currently on the canvas.
       const maxX = state.nodes.reduce((mx, n) => Math.max(mx, n.position.x), -300);
       return {
         ...cliNode,
@@ -213,11 +231,34 @@ wsClient.subscribe((event) => {
       };
     });
 
+    const merged = [...frontendOnlyNodes, ...cliMerged];
+    const mergedIds = new Set(merged.map((n) => n.id));
+
+    // Preserve frontend-only edges whose endpoints are still present. A
+    // frontend-only edge is one whose id isn't in the incoming cli edge set.
+    const cliEdgeIds = new Set((cliEdges as Edge[]).map((e) => e.id));
+    const frontendOnlyEdges = state.edges.filter(
+      (e) => !cliEdgeIds.has(e.id) && mergedIds.has(e.source) && mergedIds.has(e.target),
+    );
+    const mergedEdges = [...frontendOnlyEdges, ...cliEdges];
+
     useGraphStore.setState({
       nodes: merged,
-      edges: cliEdges,
+      edges: mergedEdges,
       isExecuting: false,
     });
+
+    // Only fire the auto-fit event when cli_graph actually added nodes we didn't
+    // already have — otherwise every graphSync (including output updates) would
+    // re-fit and steal the user's viewport.
+    const newCliCount = cliMerged.filter((n) => !existingById.has(n.id)).length;
+    if (newCliCount > 0) {
+      window.dispatchEvent(
+        new CustomEvent('nebula:graph-nodes-added', {
+          detail: { addedCount: newCliCount, totalCount: merged.length },
+        }),
+      );
+    }
     return;
   }
   useGraphStore.getState().handleExecutionEvent(event);

@@ -39,6 +39,19 @@ export function Toolbar() {
     setTimeout(() => fitView({ padding: 0.2, duration: 300 }), 50);
   }, [fitView]);
 
+  const handleClear = useCallback(() => {
+    const { nodes } = useGraphStore.getState();
+    const msg =
+      nodes.length > 0
+        ? `Clear the canvas and wipe cli_graph? ${nodes.length} node${nodes.length === 1 ? '' : 's'} will be removed. This can't be undone from here (save first if you want a copy).`
+        : `Wipe cli_graph? This removes any phantom nodes from prior sessions.`;
+    if (!window.confirm(msg)) return;
+    useGraphStore.getState().clearGraph();
+    // Also wipe the backend's in-memory cli_graph so Claude starts fresh and
+    // nothing from prior sessions comes back on the next graphSync.
+    fetch('http://localhost:8000/api/graph', { method: 'DELETE' }).catch(() => {});
+  }, []);
+
   const handleImportCLI = useCallback(async () => {
     try {
       const data = await fetchCLIGraph();
@@ -96,10 +109,12 @@ export function Toolbar() {
       <button className="toolbar__button" onClick={handleSave} title="Save graph (Ctrl+S)">Save</button>
       <button className="toolbar__button" onClick={handleLoad} title="Load graph (Ctrl+O)">Load</button>
       <button className="toolbar__button" onClick={handleImportCLI} title="Import graph built by nebula CLI">CLI</button>
+      <button className="toolbar__button" onClick={handleClear} title="Clear canvas and backend cli_graph">Clear</button>
       <div className="toolbar__divider" />
       <button className="toolbar__button" onClick={() => fitView({ padding: 0.2, duration: 300 })} title="Fit to screen">Fit</button>
       <div className="toolbar__divider" />
       <button className="toolbar__button" onClick={() => togglePanel('library')} title="Toggle node library">Nodes</button>
+      <button className="toolbar__button" onClick={() => togglePanel('chat')} title="Toggle chat panel">Chat</button>
       <div className="toolbar__divider" />
       <button className="toolbar__button" onClick={() => togglePanel('settings')} title="Settings">{'\u2699'}</button>
     </div>
