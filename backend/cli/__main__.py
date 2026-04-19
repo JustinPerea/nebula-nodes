@@ -30,8 +30,15 @@ def build_parser() -> argparse.ArgumentParser:
     # -- Graph --
     create_p = sub.add_parser("create", help="Create a node in the graph")
     create_p.add_argument("node_id", help="Node definition ID")
-    create_p.add_argument("--param", nargs="*", default=[], metavar="key=value",
-                          help="Set params (e.g. --param model=v1 size=1024x1024)")
+    # action='append' + nargs='*' lets the user combine styles:
+    #   --param a=1 --param b=2 --param c=3       (one k=v per flag, repeated)
+    #   --param a=1 b=2 c=3                       (multiple k=v per flag, single use)
+    # We flatten the list-of-lists downstream. With bare nargs='*' alone, each
+    # subsequent --param OVERWROTE the previous one — so only the last k=v made
+    # it through. That silently dropped model= and aspect_ratio= when callers
+    # followed the documented `--param k=v --param k=v` style.
+    create_p.add_argument("--param", action="append", nargs="*", default=[], metavar="key=value",
+                          help="Set params (repeat flag or pass multiple k=v per flag)")
 
     connect_p = sub.add_parser("connect", help="Connect two ports")
     connect_p.add_argument("src", help="Source (e.g. n1:image)")
@@ -40,7 +47,7 @@ def build_parser() -> argparse.ArgumentParser:
     set_p = sub.add_parser("set", help="Update params on a node")
     set_p.add_argument("node_ref", help="Node reference (e.g. n1)")
     set_p.add_argument("params", nargs="+", metavar="key=value",
-                       help="Params to set (e.g. aspectRatio=16:9)")
+                       help="Params to set (e.g. aspect_ratio=9:16)")
 
     sub.add_parser("graph", help="Show current graph state")
 
@@ -63,18 +70,29 @@ def build_parser() -> argparse.ArgumentParser:
     # -- Quick --
     quick_p = sub.add_parser("quick", help="One-shot: create, execute, output")
     quick_p.add_argument("node_id", help="Node definition ID")
-    quick_p.add_argument("--input", nargs="*", default=[], metavar="key=value",
+    quick_p.add_argument("--input", action="append", nargs="*", default=[], metavar="key=value",
                          help="Input values (e.g. --input prompt='a cat')")
-    quick_p.add_argument("--param", nargs="*", default=[], metavar="key=value",
-                         help="Params (e.g. --param aspectRatio=16:9)")
+    quick_p.add_argument("--param", action="append", nargs="*", default=[], metavar="key=value",
+                         help="Params (e.g. --param aspect_ratio=9:16)")
 
     return parser
 
 
-def parse_kv_list(items: list[str]) -> dict[str, str]:
-    """Parse ['key=value', ...] into a dict."""
-    result: dict[str, str] = {}
+def _flatten(items: list) -> list[str]:
+    """Flatten the list-of-lists argparse produces with action='append' nargs='*'."""
+    out: list[str] = []
     for item in items:
+        if isinstance(item, list):
+            out.extend(item)
+        else:
+            out.append(item)
+    return out
+
+
+def parse_kv_list(items: list) -> dict[str, str]:
+    """Parse ['key=value', ...] into a dict. Accepts list-of-lists from argparse."""
+    result: dict[str, str] = {}
+    for item in _flatten(items):
         if "=" not in item:
             print(f"error: invalid key=value pair: {item}", file=sys.stderr)
             sys.exit(1)
