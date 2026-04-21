@@ -62,6 +62,23 @@ class NebulaClient:
     def update_node(self, node_id: str, params: dict[str, Any]) -> dict[str, Any]:
         return self._request("PUT", f"/api/graph/node/{node_id}", json={"params": params})
 
+    def get_node_image_path(self, node_id: str) -> dict[str, Any]:
+        """Call GET /api/graph/node/{id}/path. Raises RuntimeError on HTTP error
+        with a message suitable for stderr."""
+        try:
+            resp = self._client.request("GET", f"/api/graph/node/{node_id}/path", timeout=10)
+        except httpx.ConnectError:
+            raise RuntimeError(
+                f"cannot connect to Nebula backend at {self.base_url} — is the server running?"
+            )
+        if resp.status_code == 200:
+            return resp.json()
+        try:
+            detail = resp.json().get("detail", resp.text)
+        except Exception:
+            detail = resp.text
+        raise RuntimeError(detail or f"HTTP {resp.status_code}")
+
     def clear_graph(self) -> dict[str, Any]:
         return self._request("DELETE", "/api/graph")
 

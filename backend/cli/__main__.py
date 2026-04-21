@@ -59,6 +59,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("clear", help="Clear the current graph")
 
+    path_p = sub.add_parser("path", help="Print local file path of a node's primary image")
+    path_p.add_argument("node_ref", help="Node reference (e.g. n1)")
+
     # -- Execution --
     run_p = sub.add_parser("run", help="Execute a node and its dependencies")
     run_p.add_argument("node_ref", help="Node reference (e.g. n2)")
@@ -111,7 +114,7 @@ def main() -> None:
 
     client = NebulaClient(args.url)
 
-    from .commands import context, nodes, keys, graph, execute, quick
+    from .commands import context, nodes, keys, graph, execute, quick, path
 
     dispatch = {
         "context": lambda: context.run(client),
@@ -125,6 +128,7 @@ def main() -> None:
         "save": lambda: graph.run_save(client, args.file),
         "load": lambda: graph.run_load(client, args.file),
         "clear": lambda: graph.run_clear(client),
+        "path": lambda: path.run(client, args.node_ref),
         "run": lambda: execute.run_node(client, args.node_ref),
         "run-all": lambda: execute.run_all(client),
         "status": lambda: execute.run_status(client),
