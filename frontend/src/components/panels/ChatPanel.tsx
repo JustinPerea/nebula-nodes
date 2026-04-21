@@ -37,6 +37,28 @@ type ChatMessage =
       enhanceTargetId?: string;
     };
 
+type PendingImage =
+  | {
+      id: string;
+      status: 'uploading';
+      thumbUrl: string;
+      label?: string;
+    }
+  | {
+      id: string;
+      status: 'ready';
+      nodeId: string;
+      thumbUrl: string;
+      label?: string;
+    }
+  | {
+      id: string;
+      status: 'error';
+      error: string;
+      thumbUrl?: string;
+      label?: string;
+    };
+
 // Splits streamed text into alternating prose and fenced-code segments. Only
 // closed fences match, so a half-streamed block still renders as text until it
 // lands. Strips a single leading language hint (```ts, ```plaintext, etc).
@@ -187,6 +209,7 @@ export function ChatPanel() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [pendingImages, setPendingImages] = useState<PendingImage[]>([]);
 
   const wsRef = useRef<WebSocket | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -196,6 +219,27 @@ export function ChatPanel() {
   // Enhance button just before send. Cleared when the message leaves so it
   // only attaches to the one assistant response it triggered.
   const pendingEnhanceTargetRef = useRef<string | null>(null);
+
+  // Remove a chip and strip the first matching `@nX` marker from the textarea.
+  // If the chip never reached `ready` (no nodeId), just drops the chip — there's
+  // no marker to strip.
+  const removeChip = useCallback((id: string) => {
+    setPendingImages((prev) => {
+      const chip = prev.find((p) => p.id === id);
+      if (chip && chip.status === 'ready') {
+        const token = `@${chip.nodeId}`;
+        setInput((curr) => {
+          const idx = curr.indexOf(token);
+          if (idx === -1) return curr;
+          // Strip the token plus one trailing space if present, so we don't
+          // leave a dangling double-space.
+          const endIdx = idx + token.length + (curr[idx + token.length] === ' ' ? 1 : 0);
+          return curr.slice(0, idx) + curr.slice(endIdx);
+        });
+      }
+      return prev.filter((p) => p.id !== id);
+    });
+  }, []);
 
   const upsertAssistant = useCallback(
     (updater: (msg: Extract<ChatMessage, { role: 'assistant' }>) => Extract<ChatMessage, { role: 'assistant' }>) => {
@@ -617,6 +661,43 @@ export function ChatPanel() {
       </div>
 
       <div className="chat-panel__input">
+        {pendingImages.length > 0 && (
+          <div className="chat-panel__chips">
+            {pendingImages.map((chip) => (
+              <div
+                key={chip.id}
+                className={`chat-panel__chip chat-panel__chip--${chip.status}`}
+                title={chip.label}
+              >
+                {chip.status === 'uploading' && (
+                  <>
+                    {chip.thumbUrl && (
+                      <img src={chip.thumbUrl} alt="" className="chat-panel__chip-thumb" />
+                    )}
+                    <div className="chat-panel__chip-spinner" />
+                  </>
+                )}
+                {chip.status === 'ready' && (
+                  <>
+                    <img src={chip.thumbUrl} alt="" className="chat-panel__chip-thumb" />
+                    <div className="chat-panel__chip-label">@{chip.nodeId}</div>
+                  </>
+                )}
+                {chip.status === 'error' && (
+                  <div className="chat-panel__chip-error">{chip.error}</div>
+                )}
+                <button
+                  type="button"
+                  className="chat-panel__chip-close"
+                  onClick={() => removeChip(chip.id)}
+                  aria-label="Remove image"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
         <textarea
           className="chat-panel__textarea"
           placeholder={connected ? 'Type a message… (drag a node in to reference it)' : 'Connecting…'}

@@ -1140,3 +1140,99 @@
 .chat-panel__send--stop:hover {
   background: #5a2a2a;
 }
+
+.chat-panel__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px 8px 0;
+}
+
+.chat-panel__chip {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.chat-panel__chip--error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border-color: rgba(255, 99, 99, 0.6);
+}
+
+.chat-panel__chip-thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.chat-panel__chip-label {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  font-size: 10px;
+  padding: 1px 4px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  text-align: center;
+  pointer-events: none;
+}
+
+.chat-panel__chip-spinner {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.chat-panel__chip-spinner::after {
+  content: '';
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: chat-chip-spin 0.8s linear infinite;
+}
+@keyframes chat-chip-spin {
+  to { transform: rotate(360deg); }
+}
+
+.chat-panel__chip-error {
+  font-size: 9px;
+  color: #ffb3b3;
+  text-align: center;
+  line-height: 1.1;
+  padding: 2px;
+}
+
+.chat-panel__chip-close {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: rgba(0, 0, 0, 0.8);
+  color: #fff;
+  font-size: 12px;
+  line-height: 14px;
+  padding: 0;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 80ms ease;
+}
+.chat-panel__chip:hover .chat-panel__chip-close {
+  opacity: 1;
+}
