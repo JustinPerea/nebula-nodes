@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import io
 from pathlib import Path
 
 import pytest
@@ -9,7 +8,6 @@ from fastapi.testclient import TestClient
 import main as main_module
 from main import app
 from services.cli_graph import CLIGraph
-from services.output import OUTPUT_ROOT
 
 
 @pytest.fixture(autouse=True)
@@ -40,7 +38,6 @@ def _make_png_bytes() -> bytes:
 
 def test_node_path_for_image_input(client):
     # Seed a minimal image-input node pointing at a file under OUTPUT_ROOT.
-    test_file = OUTPUT_ROOT / "chat-uploads" / "ff.png"
     main_module.cli_graph.add_node(
         "image-input",
         {"file": "/api/outputs/chat-uploads/ff.png",
@@ -50,6 +47,24 @@ def test_node_path_for_image_input(client):
     assert resp.status_code == 200
     body = resp.json()
     assert body["path"].endswith("chat-uploads/ff.png")
+    assert Path(body["path"]).is_absolute()
+
+
+def test_node_path_for_model_output(client):
+    """A model node with an image output should resolve via outputs['image'],
+    which is the shape real handlers produce."""
+    main_module.cli_graph.add_node(
+        "nano-banana",
+        {"model": "nano-banana"},
+    )
+    # Mutate the seeded node to carry an output in the shape handlers produce.
+    main_module.cli_graph.nodes["n1"]["outputs"] = {
+        "image": {"type": "Image", "value": "/api/outputs/generated/xyz.png"}
+    }
+    resp = client.get("/api/graph/node/n1/path")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["path"].endswith("generated/xyz.png")
     assert Path(body["path"]).is_absolute()
 
 

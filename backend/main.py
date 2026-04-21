@@ -555,9 +555,10 @@ async def get_node_image_path(node_id: str) -> dict:
     """Resolve a node's primary image file to an absolute local path.
 
     Only works for image-input nodes (via their `file` or `_previewUrl`) or
-    model nodes with an `_output_image` output. External URLs (anything not
-    served from OUTPUT_ROOT) are rejected. Used by `nebula path` so Claude
-    can Read node images as vision content.
+    model nodes with an image output (produced as `outputs['image']` by real
+    handlers). External URLs (anything not served from OUTPUT_ROOT) are
+    rejected. Used by `nebula path` so Claude can Read node images as vision
+    content.
     """
     node = cli_graph.nodes.get(node_id)
     if not node:
@@ -589,14 +590,17 @@ def _resolve_primary_image_url(node: dict[str, Any]) -> str | None:
         value = params.get("file") or params.get("_previewUrl")
         return str(value) if value else None
 
-    out_image = outputs.get("_output_image")
-    if isinstance(out_image, dict):
-        value = out_image.get("value")
-        if value:
-            return str(value)
-    elif isinstance(out_image, str):
-        return out_image
+    # Model nodes with an image output produce {"image": {"type": "Image", "value": "..."}}
+    # Walk outputs looking for any entry tagged as an Image with a value, preferring
+    # the conventional "image" port name.
+    preferred = outputs.get("image")
+    if isinstance(preferred, dict) and preferred.get("value"):
+        return str(preferred["value"])
+    for out in outputs.values():
+        if isinstance(out, dict) and out.get("type") == "Image" and out.get("value"):
+            return str(out["value"])
 
+    # Fallback: _previewUrl is currently only populated for image-input nodes.
     preview = params.get("_previewUrl")
     return str(preview) if preview else None
 
