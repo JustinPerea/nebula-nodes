@@ -238,6 +238,12 @@ export function ChatPanel() {
   const [connected, setConnected] = useState(false);
   const [busy, setBusy] = useState(false);
   const [pendingImages, setPendingImages] = useState<PendingImage[]>([]);
+  const [notice, setNotice] = useState<string | null>(null);
+  useEffect(() => {
+    if (!notice) return;
+    const t = window.setTimeout(() => setNotice(null), 3000);
+    return () => window.clearTimeout(t);
+  }, [notice]);
 
   const wsRef = useRef<WebSocket | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -778,7 +784,20 @@ export function ChatPanel() {
         {messages.map((m) =>
           m.role === 'user' ? (
             <div key={m.id} className="chat__bubble chat__bubble--user">
-              {m.text}
+              {m.images && m.images.length > 0 && (
+                <div className="chat__bubble-thumbs">
+                  {m.images.map((img) => (
+                    <img
+                      key={img.nodeId}
+                      src={img.thumbUrl}
+                      alt=""
+                      className="chat__bubble-thumb"
+                      loading="lazy"
+                    />
+                  ))}
+                </div>
+              )}
+              <div className="chat__bubble-text">{m.text}</div>
             </div>
           ) : (
             <AssistantBubble key={m.id} message={m} />
@@ -787,6 +806,7 @@ export function ChatPanel() {
       </div>
 
       <div className="chat-panel__input">
+        {notice && <div className="chat-panel__notice">{notice}</div>}
         {pendingImages.length > 0 && (
           <div className="chat-panel__chips">
             {pendingImages.map((chip) => (
@@ -859,7 +879,7 @@ export function ChatPanel() {
                   const parsed = JSON.parse(imageRefRaw) as { nodeId: string; url: string };
                   setPendingImages((prev) => {
                     if (prev.length >= 4) {
-                      // Over-limit notice surfaces in Task 9; silent reject for now.
+                      setNotice('4 images max per message — remove one to add another.');
                       return prev;
                     }
                     if (prev.some((p) => p.status === 'ready' && p.nodeId === parsed.nodeId)) {
@@ -887,7 +907,10 @@ export function ChatPanel() {
                 e.preventDefault();
                 const files = Array.from(e.dataTransfer.files);
                 const imageFiles = files.filter((f) => f.type.startsWith('image/'));
-                if (imageFiles.length === 0) return;
+                if (imageFiles.length === 0) {
+                  setNotice(`Skipped: ${files.length} not an image.`);
+                  return;
+                }
 
                 // Compute chips OUTSIDE the state updater so React StrictMode's
                 // double-invocation of the updater doesn't double-fire uploads.
@@ -895,6 +918,18 @@ export function ChatPanel() {
                 // coalesced updates and guarantees stored chips never exceed 4.
                 const roomLeft = Math.max(0, 4 - pendingImages.length);
                 const accepted = imageFiles.slice(0, roomLeft);
+                const rejectedForLimit = imageFiles.length - accepted.length;
+                const rejectedForNonImage = files.length - imageFiles.length;
+                if (rejectedForLimit > 0 || rejectedForNonImage > 0) {
+                  const parts: string[] = [];
+                  if (rejectedForLimit > 0) {
+                    parts.push(`${rejectedForLimit} over the 4-image limit`);
+                  }
+                  if (rejectedForNonImage > 0) {
+                    parts.push(`${rejectedForNonImage} not an image`);
+                  }
+                  setNotice(`Skipped: ${parts.join(', ')}.`);
+                }
                 if (accepted.length === 0) return;
                 const newChips: PendingImage[] = accepted.map((f) => ({
                   id: newId(),
