@@ -16,6 +16,7 @@ The approved spec (`docs/superpowers/specs/2026-04-21-drag-image-to-chat-design.
 
 1. **CLI command name.** Spec proposed `nebula show <node_id> --path`. There is no `show` subcommand in the current CLI. This plan adds a single-purpose `nebula path <node_id>` command instead — focused, no additional default behavior to specify or test. The primer rule is updated to match.
 2. **Static file mount.** Spec proposed a new `/api/uploads/` mount. The backend already mounts static outputs from `OUTPUT_ROOT` (via `services/output.py`); serving chat uploads under `OUTPUT_ROOT/chat-uploads/` through the existing mount path (`/api/outputs/chat-uploads/<hash>.<ext>`) avoids introducing a second `StaticFiles` mount and keeps lifecycle tooling unified. No behavior change from the user or Claude's perspective.
+3. **Canonical image-input schema key is `filePath`, not `file`.** The initial plan and spec used `file` in example code; `backend/data/node_definitions.json` declares the canonical key as `filePath`. Task 1's resolver accepts all three names (`filePath`, `file`, `_previewUrl`) for backward compatibility, but Task 3's upload endpoint creates nodes using the canonical `filePath` so they're indistinguishable from UI-created ones. Caught during Task 3 implementation.
 
 All other spec decisions carry forward unchanged.
 
@@ -404,7 +405,7 @@ def test_upload_valid_png_creates_node_and_file(client, monkeypatch):
     # Node exists in cli_graph with expected params.
     node = main_module.cli_graph.nodes[body["nodeId"]]
     assert node["definitionId"] == "image-input"
-    assert node["params"]["file"] == body["url"]
+    assert node["params"]["filePath"] == body["url"]
     assert node["params"]["_previewUrl"] == body["url"]
 
 
@@ -536,9 +537,12 @@ async def chat_upload(file: UploadFile) -> dict:
     max_x = max((p.get("x", 0) for p in positions), default=-300)
     new_position = {"x": float(max_x) + 300.0, "y": 100.0}
 
+    # image-input's canonical schema key is `filePath` (see
+    # backend/data/node_definitions.json). Using it keeps chat-uploaded nodes
+    # identical in shape to UI-created ones and resolvable by Task 1's endpoint.
     node_id = cli_graph.add_node(
         "image-input",
-        {"file": url, "_previewUrl": url},
+        {"filePath": url, "_previewUrl": url},
         position=new_position,
     )
     await _broadcast_graph_sync()

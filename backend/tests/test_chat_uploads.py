@@ -185,3 +185,16 @@ def test_upload_rejects_fake_png(client):
     )
     assert resp.status_code == 415
     assert len(list(main_module.CHAT_UPLOADS_DIR.iterdir())) == 0
+
+
+def test_upload_rejects_tiny_signature_match(client):
+    """A 3-byte payload that happens to match the JPEG signature prefix must
+    be rejected. Otherwise we'd write a 3-byte file to disk and create a
+    broken image-input node."""
+    resp = client.post(
+        "/api/chat/uploads",
+        files={"file": ("tiny.jpg", b"\xff\xd8\xff", "image/jpeg")},
+    )
+    assert resp.status_code == 415
+    assert len(list(main_module.CHAT_UPLOADS_DIR.iterdir())) == 0
+    assert len(main_module.cli_graph.nodes) == 0

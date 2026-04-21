@@ -101,14 +101,19 @@ async def chat_upload(file: UploadFile) -> dict:
     content = await file.read()
     if len(content) > MAX_CHAT_UPLOAD_BYTES:
         raise HTTPException(status_code=413, detail="Image exceeds 20 MB limit")
+    if len(content) < 12:
+        raise HTTPException(status_code=415, detail="File is too small to be a valid image")
 
     sniffed = _sniff_image_type(content[:16])
     if sniffed is None:
         raise HTTPException(status_code=415, detail="Only image files are accepted")
-    mime, ext = sniffed
+    _, ext = sniffed
 
     digest = hashlib.sha256(content).hexdigest()
     saved_path = CHAT_UPLOADS_DIR / f"{digest}{ext}"
+    # Dedup by content hash: the file on disk is keyed on its own bytes, so
+    # a concurrent write-after-write writes identical bytes at the same path
+    # and is benign (no lock needed).
     if not saved_path.exists():
         saved_path.write_bytes(content)
 
@@ -132,6 +137,9 @@ async def chat_upload(file: UploadFile) -> dict:
     )
     await _broadcast_graph_sync()
 
+    # `filename` in the response is a display-only label echoed back to the
+    # chat chip. It is never used as a filesystem path segment — the on-disk
+    # name is derived from the sha256 digest plus the sniffed extension.
     return {
         "nodeId": node_id,
         "url": url,
