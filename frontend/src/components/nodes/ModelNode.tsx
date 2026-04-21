@@ -56,6 +56,20 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
     [id, nodeData.params, updateNodeData]
   );
 
+  const startImageDrag = useCallback(
+    (url: string) => (e: React.DragEvent<HTMLImageElement>) => {
+      const token = `@${id}`;
+      e.dataTransfer.setData(
+        'application/nebula-image-ref',
+        JSON.stringify({ nodeId: id, url }),
+      );
+      e.dataTransfer.setData('application/nebula-node-ref', token);
+      e.dataTransfer.setData('text/plain', token);
+      e.dataTransfer.effectAllowed = 'copy';
+    },
+    [id],
+  );
+
   // "Enhance" button on text-input: composes a chat message that asks Claude to
   // rewrite the prompt for whatever downstream node(s) this one feeds into, then
   // hands the message to the chat panel via a custom event. No direct chat
@@ -177,7 +191,14 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
 
       {imageInputPreview && (
         <div className="model-node__preview">
-          <img src={imageInputPreview} alt="Image input" className="model-node__preview-image" loading="lazy" />
+          <img
+            src={imageInputPreview}
+            alt="Image input"
+            className="model-node__preview-image"
+            loading="lazy"
+            draggable
+            onDragStart={startImageDrag(imageInputPreview)}
+          />
         </div>
       )}
 
@@ -197,7 +218,14 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
 
       {nodeData.state === 'complete' && imageOutput && typeof imageOutput.value === 'string' && !imageInputPreview && (
         <div className="model-node__preview">
-          <img src={imageOutput.value} alt="Generated output" className="model-node__preview-image" loading="lazy" />
+          <img
+            src={imageOutput.value as string}
+            alt="Generated output"
+            className="model-node__preview-image"
+            loading="lazy"
+            draggable
+            onDragStart={startImageDrag(imageOutput.value as string)}
+          />
           <button
             type="button"
             className="model-node__download nodrag"

@@ -165,6 +165,14 @@
   display: block;
 }
 
+.model-node__preview-image[draggable='true'] {
+  cursor: grab;
+}
+
+.model-node__preview-image[draggable='true']:active {
+  cursor: grabbing;
+}
+
 /* Loading indicator */
 .model-node__loading {
   padding: 8px 10px;
