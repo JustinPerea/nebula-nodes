@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
@@ -46,6 +47,31 @@ OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
 CHAT_UPLOADS_DIR = OUTPUT_ROOT / "chat-uploads"
 CHAT_UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 
+_SUPPORTED_IMAGE_TYPES = {
+    b"\x89PNG\r\n\x1a\n": ("image/png", ".png"),
+    b"\xff\xd8\xff": ("image/jpeg", ".jpg"),
+    b"GIF87a": ("image/gif", ".gif"),
+    b"GIF89a": ("image/gif", ".gif"),
+}
+
+MAX_CHAT_UPLOAD_BYTES = 20 * 1024 * 1024  # 20 MB
+
+
+def _sniff_image_type(data: bytes) -> tuple[str, str] | None:
+    """Return (mime, ext) if *data* starts with a supported image signature.
+
+    Also handles WebP (RIFF....WEBP). Returns None for anything else so the
+    caller can reject with 415.
+    """
+    for sig, pair in _SUPPORTED_IMAGE_TYPES.items():
+        if data.startswith(sig):
+            return pair
+    # WebP has a variable prefix: "RIFF" then 4 size bytes then "WEBP".
+    if len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return ("image/webp", ".webp")
+    return None
+
+
 app.include_router(openrouter_router)
 app.include_router(replicate_router)
 app.include_router(fal_router)
@@ -64,6 +90,53 @@ async def upload_file(file: UploadFile) -> dict:
     return {
         "path": str(file_path.resolve()),
         "url": f"/api/outputs/uploads/{filename}",
+    }
+
+
+@app.post("/api/chat/uploads")
+async def chat_upload(file: UploadFile) -> dict:
+    """Accept an image drop from the chat panel, save to disk keyed on its
+    content hash, create an image-input node so it becomes a canvas asset,
+    and return references the frontend can attach to the message."""
+    content = await file.read()
+    if len(content) > MAX_CHAT_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="Image exceeds 20 MB limit")
+
+    sniffed = _sniff_image_type(content[:16])
+    if sniffed is None:
+        raise HTTPException(status_code=415, detail="Only image files are accepted")
+    mime, ext = sniffed
+
+    digest = hashlib.sha256(content).hexdigest()
+    saved_path = CHAT_UPLOADS_DIR / f"{digest}{ext}"
+    if not saved_path.exists():
+        saved_path.write_bytes(content)
+
+    url = f"/api/outputs/chat-uploads/{saved_path.name}"
+
+    # Position: reuse the "maxX + 300" heuristic from existing node creation.
+    positions = [
+        n.get("position", {}) for n in cli_graph.nodes.values()
+    ]
+    max_x = max((p.get("x", 0) for p in positions), default=-300)
+    new_position = {"x": float(max_x) + 300.0, "y": 100.0}
+
+    # IMPORTANT: image-input canonical schema key is `filePath` (see
+    # backend/data/node_definitions.json). Using `filePath` here so nodes
+    # created by chat-drop are identical in shape to UI-created ones and
+    # are resolvable by GET /api/graph/node/{id}/path's canonical lookup.
+    node_id = cli_graph.add_node(
+        "image-input",
+        {"filePath": url, "_previewUrl": url},
+        position=new_position,
+    )
+    await _broadcast_graph_sync()
+
+    return {
+        "nodeId": node_id,
+        "url": url,
+        "thumbUrl": url,
+        "filename": file.filename or f"{digest}{ext}",
     }
 
 

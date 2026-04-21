@@ -104,3 +104,84 @@ def test_node_path_for_external_url_rejects(client):
     resp = client.get("/api/graph/node/n1/path")
     assert resp.status_code == 400
     assert "not local" in resp.json()["detail"].lower()
+
+
+def test_upload_valid_png_creates_node_and_file(client, monkeypatch):
+    png_bytes = _make_png_bytes()
+    resp = client.post(
+        "/api/chat/uploads",
+        files={"file": ("example.png", png_bytes, "image/png")},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["nodeId"].startswith("n")
+    assert body["url"].startswith("/api/outputs/chat-uploads/")
+    assert body["url"].endswith(".png")
+    assert body["thumbUrl"] == body["url"]
+    assert body["filename"] == "example.png"
+
+    # File exists on disk under our patched chat-uploads dir.
+    hash_name = body["url"].split("/")[-1]
+    saved = main_module.CHAT_UPLOADS_DIR / hash_name
+    assert saved.exists()
+    assert saved.read_bytes() == png_bytes
+
+    # Node exists in cli_graph with expected params (canonical `filePath` key).
+    node = main_module.cli_graph.nodes[body["nodeId"]]
+    assert node["definitionId"] == "image-input"
+    assert node["params"]["filePath"] == body["url"]
+    assert node["params"]["_previewUrl"] == body["url"]
+
+
+def test_upload_dedup_by_content_hash(client):
+    png_bytes = _make_png_bytes()
+    resp1 = client.post(
+        "/api/chat/uploads",
+        files={"file": ("a.png", png_bytes, "image/png")},
+    )
+    resp2 = client.post(
+        "/api/chat/uploads",
+        files={"file": ("b.png", png_bytes, "image/png")},
+    )
+    assert resp1.status_code == 200
+    assert resp2.status_code == 200
+
+    # Two distinct nodes in the graph...
+    assert resp1.json()["nodeId"] != resp2.json()["nodeId"]
+
+    # ...but the same file on disk.
+    assert resp1.json()["url"] == resp2.json()["url"]
+    saved_files = list(main_module.CHAT_UPLOADS_DIR.iterdir())
+    assert len(saved_files) == 1
+
+
+def test_upload_rejects_oversize(client):
+    big = b"\x00" * (21 * 1024 * 1024)  # 21 MB
+    resp = client.post(
+        "/api/chat/uploads",
+        files={"file": ("big.png", big, "image/png")},
+    )
+    assert resp.status_code == 413
+    assert len(list(main_module.CHAT_UPLOADS_DIR.iterdir())) == 0
+    assert len(main_module.cli_graph.nodes) == 0
+
+
+def test_upload_rejects_non_image(client):
+    resp = client.post(
+        "/api/chat/uploads",
+        files={"file": ("note.txt", b"hello world", "text/plain")},
+    )
+    assert resp.status_code == 415
+    assert len(list(main_module.CHAT_UPLOADS_DIR.iterdir())) == 0
+    assert len(main_module.cli_graph.nodes) == 0
+
+
+def test_upload_rejects_fake_png(client):
+    """A file claiming Content-Type: image/png but whose bytes aren't a PNG.
+    Server-side MIME sniff must catch this."""
+    resp = client.post(
+        "/api/chat/uploads",
+        files={"file": ("fake.png", b"not really a png", "image/png")},
+    )
+    assert resp.status_code == 415
+    assert len(list(main_module.CHAT_UPLOADS_DIR.iterdir())) == 0
