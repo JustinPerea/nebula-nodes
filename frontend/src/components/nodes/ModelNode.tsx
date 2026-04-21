@@ -194,7 +194,7 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
           <img
             src={imageInputPreview}
             alt="Image input"
-            className="model-node__preview-image"
+            className="model-node__preview-image nodrag"
             loading="lazy"
             draggable
             onDragStart={startImageDrag(imageInputPreview)}
@@ -221,7 +221,7 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
           <img
             src={imageOutput.value as string}
             alt="Generated output"
-            className="model-node__preview-image"
+            className="model-node__preview-image nodrag"
             loading="lazy"
             draggable
             onDragStart={startImageDrag(imageOutput.value as string)}
