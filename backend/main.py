@@ -43,6 +43,9 @@ app.add_middleware(
 # Serve output files as static assets (mounted after dynamic routes — mounts are catch-all)
 OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
 
+CHAT_UPLOADS_DIR = OUTPUT_ROOT / "chat-uploads"
+CHAT_UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+
 app.include_router(openrouter_router)
 app.include_router(replicate_router)
 app.include_router(fal_router)
@@ -545,6 +548,75 @@ async def delete_graph_node(node_id: str) -> dict:
         raise HTTPException(status_code=404, detail=f"Node '{node_id}' not found")
     await _broadcast_graph_sync()
     return {"status": "deleted", "id": node_id}
+
+
+@app.get("/api/graph/node/{node_id}/path")
+async def get_node_image_path(node_id: str) -> dict:
+    """Resolve a node's primary image file to an absolute local path.
+
+    Only works for image-input nodes (via their `file` or `_previewUrl`) or
+    model nodes with an `_output_image` output. External URLs (anything not
+    served from OUTPUT_ROOT) are rejected. Used by `nebula path` so Claude
+    can Read node images as vision content.
+    """
+    node = cli_graph.nodes.get(node_id)
+    if not node:
+        raise HTTPException(status_code=404, detail=f"Node '{node_id}' not found")
+
+    url = _resolve_primary_image_url(node)
+    if url is None:
+        raise HTTPException(
+            status_code=400,
+            detail=f"No image file for node '{node_id}'",
+        )
+
+    local_path = _url_to_output_path(url)
+    if local_path is None:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Image for node '{node_id}' is not local (external URL)",
+        )
+    return {"path": str(local_path.resolve())}
+
+
+def _resolve_primary_image_url(node: dict[str, Any]) -> str | None:
+    """Return the best URL to read for this node, or None if it has no image."""
+    params = node.get("params") or {}
+    outputs = node.get("outputs") or {}
+    definition_id = node.get("definitionId", "")
+
+    if definition_id == "image-input":
+        value = params.get("file") or params.get("_previewUrl")
+        return str(value) if value else None
+
+    out_image = outputs.get("_output_image")
+    if isinstance(out_image, dict):
+        value = out_image.get("value")
+        if value:
+            return str(value)
+    elif isinstance(out_image, str):
+        return out_image
+
+    preview = params.get("_previewUrl")
+    return str(preview) if preview else None
+
+
+def _url_to_output_path(url: str) -> Path | None:
+    """Map an /api/outputs/... URL to the local filesystem path under
+    OUTPUT_ROOT. External URLs (http://, https://, non-outputs paths) return
+    None so callers can reject them with a clear error."""
+    if url.startswith(("http://", "https://")):
+        return None
+    prefix = "/api/outputs/"
+    if not url.startswith(prefix):
+        return None
+    relative = url[len(prefix):]
+    candidate = (OUTPUT_ROOT / relative).resolve()
+    try:
+        candidate.relative_to(OUTPUT_ROOT.resolve())
+    except ValueError:
+        return None
+    return candidate
 
 
 @app.delete("/api/graph/edge")
