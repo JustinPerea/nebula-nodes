@@ -66,6 +66,19 @@ Medium. Most cost is in decision-making and position-stability edge cases. Imple
 
 ---
 
+## 4. File upload → chat → canvas (reverse of drag-image-to-chat)
+
+### Problem
+Complement to drag-image-to-chat. Once Claude can *see* images dropped into chat, the next loop is: user drags a local file (or uses an Add Files button) into the chat panel → Claude receives it → Claude can place it on the canvas as the right kind of input node (image-input, mesh-input, audio-input, etc.) AND save the file under the project's asset area so it persists across sessions.
+
+### Notes
+- Use cases: user wants to start a graph from a reference they have locally, without manually dragging the file to canvas and figuring out which input-node type to create.
+- Requires chat → canvas direction of the same attachment pipeline we're building for drag-image-to-chat.
+- Needs a persistence decision (copy into `backend/data/uploads/`? reference in place?) and a tool Claude can call to place the file on canvas (`nebula create image-input --file <path>`).
+- Captured 2026-04-20 during the drag-image-to-chat design spike. Defer until v1 of that ships.
+
+---
+
 ## Disposition log
 
 | Date | Item | Status |
@@ -74,3 +87,4 @@ Medium. Most cost is in decision-making and position-stability edge cases. Imple
 | 2026-04-19 | Helper library | Re-confirmed by user; sharpened scope (Claude must read too, not just nodes). Still parked pending design spike. |
 | 2026-04-16 | Drag-to-chat v2 (UUID + vision) | Parked. v1 shipped with short-ID-only. |
 | 2026-04-16 | Auto-layout | Parked. Needs research on position stability + layout algo choice. |
+| 2026-04-20 | File upload → chat → canvas (#4) | Parked. Captured during drag-image-to-chat design; depends on that pipeline. |
