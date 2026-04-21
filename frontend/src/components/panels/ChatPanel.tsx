@@ -265,13 +265,19 @@ export function ChatPanel() {
               : resp.status === 415
               ? 'Not an image'
               : (detail || `Upload failed (${resp.status})`);
-          setPendingImages((prev) =>
-            prev.map((p) =>
+          setPendingImages((prev) => {
+            const prior = prev.find((p) => p.id === chipId);
+            // URL.revokeObjectURL is idempotent — safe inside a StrictMode-
+            // double-invoked updater.
+            if (prior && prior.status === 'uploading' && prior.thumbUrl.startsWith('blob:')) {
+              URL.revokeObjectURL(prior.thumbUrl);
+            }
+            return prev.map((p) =>
               p.id === chipId
                 ? { id: chipId, status: 'error', error: errMsg, label: file.name }
                 : p,
-            ),
-          );
+            );
+          });
           return;
         }
         const body = (await resp.json()) as {
@@ -280,8 +286,14 @@ export function ChatPanel() {
           thumbUrl: string;
           filename: string;
         };
-        setPendingImages((prev) =>
-          prev.map((p) =>
+        setPendingImages((prev) => {
+          const prior = prev.find((p) => p.id === chipId);
+          // URL.revokeObjectURL is idempotent — safe inside a StrictMode-
+          // double-invoked updater.
+          if (prior && prior.status === 'uploading' && prior.thumbUrl.startsWith('blob:')) {
+            URL.revokeObjectURL(prior.thumbUrl);
+          }
+          return prev.map((p) =>
             p.id === chipId
               ? {
                   id: chipId,
@@ -291,19 +303,30 @@ export function ChatPanel() {
                   label: body.filename,
                 }
               : p,
-          ),
-        );
-        // Insert @nX only after the server confirms the node exists.
+          );
+        });
+        // Edge case: if the user closed the chat panel while upload was in
+        // flight, .chat-panel__textarea is unmounted and the marker insertion
+        // is a no-op. The chip still transitions to ready so reopening the
+        // panel shows a ready chip without a marker — user can re-type or
+        // remove. Task 9 surfaces the attachment in the message-log
+        // thumbnail row, so nothing is truly lost.
         const textarea = document.querySelector<HTMLTextAreaElement>('.chat-panel__textarea');
         if (textarea) insertAtCaret(textarea, `@${body.nodeId}`);
       } catch (err) {
-        setPendingImages((prev) =>
-          prev.map((p) =>
+        setPendingImages((prev) => {
+          const prior = prev.find((p) => p.id === chipId);
+          // URL.revokeObjectURL is idempotent — safe inside a StrictMode-
+          // double-invoked updater.
+          if (prior && prior.status === 'uploading' && prior.thumbUrl.startsWith('blob:')) {
+            URL.revokeObjectURL(prior.thumbUrl);
+          }
+          return prev.map((p) =>
             p.id === chipId
               ? { id: chipId, status: 'error', error: 'Network error', label: file.name }
               : p,
-          ),
-        );
+          );
+        });
       }
     },
     [],
@@ -325,6 +348,9 @@ export function ChatPanel() {
           const endIdx = idx + token.length + (curr[idx + token.length] === ' ' ? 1 : 0);
           return curr.slice(0, idx) + curr.slice(endIdx);
         });
+      }
+      if (chip && chip.status === 'uploading' && chip.thumbUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(chip.thumbUrl);
       }
       return prev.filter((p) => p.id !== id);
     });
@@ -863,21 +889,39 @@ export function ChatPanel() {
                 const imageFiles = files.filter((f) => f.type.startsWith('image/'));
                 if (imageFiles.length === 0) return;
 
+                // Compute chips OUTSIDE the state updater so React StrictMode's
+                // double-invocation of the updater doesn't double-fire uploads.
+                // The 4-cap re-check inside the updater keeps us correct under
+                // coalesced updates and guarantees stored chips never exceed 4.
+                const roomLeft = Math.max(0, 4 - pendingImages.length);
+                const accepted = imageFiles.slice(0, roomLeft);
+                if (accepted.length === 0) return;
+                const newChips: PendingImage[] = accepted.map((f) => ({
+                  id: newId(),
+                  status: 'uploading',
+                  thumbUrl: URL.createObjectURL(f),
+                  label: f.name,
+                }));
+
+                // Pure updater — no side effects.
                 setPendingImages((prev) => {
-                  const roomLeft = 4 - prev.length;
-                  const accepted = imageFiles.slice(0, Math.max(0, roomLeft));
-                  const newChips: PendingImage[] = accepted.map((f) => ({
-                    id: newId(),
-                    status: 'uploading',
-                    thumbUrl: URL.createObjectURL(f),
-                    label: f.name,
-                  }));
-                  // Kick off uploads for each accepted file. We pair by index
-                  // against the pre-state chip ids we just generated.
-                  accepted.forEach((f, i) => {
-                    void uploadFile(f, newChips[i].id);
-                  });
-                  return [...prev, ...newChips];
+                  const available = Math.max(0, 4 - prev.length);
+                  // If another drop landed between our closure read and this
+                  // reducer run, honour the current cap by admitting only as
+                  // many as fit. Revoke any chips we drop on the floor so we
+                  // don't leak object URLs.
+                  if (available < newChips.length) {
+                    for (let i = available; i < newChips.length; i++) {
+                      URL.revokeObjectURL(newChips[i].thumbUrl);
+                    }
+                  }
+                  return [...prev, ...newChips.slice(0, available)];
+                });
+
+                // Fire uploads AFTER the pure state update. Side effects live
+                // outside the reducer.
+                accepted.slice(0, newChips.length).forEach((f, i) => {
+                  void uploadFile(f, newChips[i].id);
                 });
                 return;
               }
