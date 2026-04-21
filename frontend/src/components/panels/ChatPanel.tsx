@@ -25,7 +25,12 @@ type SystemLine = {
 type MessagePart = TextChunk | ToolCall | SystemLine;
 
 type ChatMessage =
-  | { role: 'user'; text: string; id: string }
+  | {
+      role: 'user';
+      text: string;
+      id: string;
+      images?: Array<{ nodeId: string; thumbUrl: string }>;
+    }
   | {
       role: 'assistant';
       parts: MessagePart[];
@@ -242,6 +247,67 @@ export function ChatPanel() {
   // Enhance button just before send. Cleared when the message leaves so it
   // only attaches to the one assistant response it triggered.
   const pendingEnhanceTargetRef = useRef<string | null>(null);
+
+  const uploadFile = useCallback(
+    async (file: File, chipId: string) => {
+      const form = new FormData();
+      form.append('file', file);
+      try {
+        const resp = await fetch(
+          `http://${window.location.hostname}:8000/api/chat/uploads`,
+          { method: 'POST', body: form },
+        );
+        if (!resp.ok) {
+          const detail = await resp.text().catch(() => '');
+          const errMsg =
+            resp.status === 413
+              ? 'Image > 20MB'
+              : resp.status === 415
+              ? 'Not an image'
+              : (detail || `Upload failed (${resp.status})`);
+          setPendingImages((prev) =>
+            prev.map((p) =>
+              p.id === chipId
+                ? { id: chipId, status: 'error', error: errMsg, label: file.name }
+                : p,
+            ),
+          );
+          return;
+        }
+        const body = (await resp.json()) as {
+          nodeId: string;
+          url: string;
+          thumbUrl: string;
+          filename: string;
+        };
+        setPendingImages((prev) =>
+          prev.map((p) =>
+            p.id === chipId
+              ? {
+                  id: chipId,
+                  status: 'ready',
+                  nodeId: body.nodeId,
+                  thumbUrl: body.thumbUrl,
+                  label: body.filename,
+                }
+              : p,
+          ),
+        );
+        // Insert @nX only after the server confirms the node exists.
+        const textarea = document.querySelector<HTMLTextAreaElement>('.chat-panel__textarea');
+        if (textarea) insertAtCaret(textarea, `@${body.nodeId}`);
+      } catch (err) {
+        setPendingImages((prev) =>
+          prev.map((p) =>
+            p.id === chipId
+              ? { id: chipId, status: 'error', error: 'Network error', label: file.name }
+              : p,
+          ),
+        );
+      }
+    },
+    [],
+  );
 
   // Remove a chip and strip the first matching `@nX` marker from the textarea.
   // If the chip never reached `ready` (no nodeId), just drops the chip — there's
@@ -468,9 +534,20 @@ export function ChatPanel() {
 
     const enhanceTargetId = pendingEnhanceTargetRef.current ?? undefined;
     pendingEnhanceTargetRef.current = null;
+    // Stash thumbs for the user-message bubble history rendering (Task 9
+    // will make the bubble actually render them).
+    const attachedImages = pendingImages
+      .filter((p): p is Extract<PendingImage, { status: 'ready' }> => p.status === 'ready')
+      .map((p) => ({ nodeId: p.nodeId, thumbUrl: p.thumbUrl }));
+    setPendingImages([]);
     setMessages((prev) => [
       ...prev,
-      { role: 'user', text: raw, id: newId() },
+      {
+        role: 'user',
+        text: raw,
+        id: newId(),
+        images: attachedImages.length ? attachedImages : undefined,
+      },
       { role: 'assistant', id: newId(), streaming: true, parts: [], enhanceTargetId },
     ]);
     setBusy(true);
@@ -484,7 +561,7 @@ export function ChatPanel() {
         model,
       }),
     );
-  }, [input, model, sessionId]);
+  }, [input, model, sessionId, pendingImages]);
 
   // Keep sendRef pointing at the latest `send` so the chat-send event listener
   // always calls the current closure (input/model/sessionId are captured fresh).
@@ -779,10 +856,29 @@ export function ChatPanel() {
                 return;
               }
 
-              // Branch 2: OS file drop (Task 8 wires this fully). For now,
-              // preventing default so the browser doesn't navigate to the file.
+              // Branch 2: OS file drop — upload, create node, attach chip.
               if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
                 e.preventDefault();
+                const files = Array.from(e.dataTransfer.files);
+                const imageFiles = files.filter((f) => f.type.startsWith('image/'));
+                if (imageFiles.length === 0) return;
+
+                setPendingImages((prev) => {
+                  const roomLeft = 4 - prev.length;
+                  const accepted = imageFiles.slice(0, Math.max(0, roomLeft));
+                  const newChips: PendingImage[] = accepted.map((f) => ({
+                    id: newId(),
+                    status: 'uploading',
+                    thumbUrl: URL.createObjectURL(f),
+                    label: f.name,
+                  }));
+                  // Kick off uploads for each accepted file. We pair by index
+                  // against the pre-state chip ids we just generated.
+                  accepted.forEach((f, i) => {
+                    void uploadFile(f, newChips[i].id);
+                  });
+                  return [...prev, ...newChips];
+                });
                 return;
               }
 
@@ -803,7 +899,15 @@ export function ChatPanel() {
               Stop
             </button>
           ) : (
-            <button className="chat-panel__send" onClick={send} disabled={!connected || !input.trim()}>
+            <button
+              className="chat-panel__send"
+              onClick={send}
+              disabled={
+                !connected ||
+                !input.trim() ||
+                pendingImages.some((p) => p.status === 'uploading')
+              }
+            >
               Send
             </button>
           )}
