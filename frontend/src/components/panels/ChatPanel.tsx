@@ -192,6 +192,29 @@ function AssistantBubble({ message }: { message: Extract<ChatMessage, { role: 'a
   );
 }
 
+function insertAtCaret(target: HTMLTextAreaElement, token: string): void {
+  const start = target.selectionStart ?? target.value.length;
+  const end = target.selectionEnd ?? target.value.length;
+  const before = target.value.slice(0, start);
+  const after = target.value.slice(end);
+  const needsLeadingSpace = before.length > 0 && !/\s$/.test(before);
+  const needsTrailingSpace = after.length > 0 && !/^\s/.test(after);
+  const insert = `${needsLeadingSpace ? ' ' : ''}${token}${needsTrailingSpace ? ' ' : ''}`;
+  const next = before + insert + after;
+  // Fire the React onChange via a synthetic input event so state stays in sync.
+  const nativeSetter = Object.getOwnPropertyDescriptor(
+    window.HTMLTextAreaElement.prototype,
+    'value',
+  )?.set;
+  nativeSetter?.call(target, next);
+  target.dispatchEvent(new Event('input', { bubbles: true }));
+  requestAnimationFrame(() => {
+    const caret = before.length + insert.length;
+    target.focus();
+    target.setSelectionRange(caret, caret);
+  });
+}
+
 export function ChatPanel() {
   const visible = useUIStore((s) => s.panels.chat.visible);
   const width = useUIStore((s) => s.panels.chat.width) ?? 300;
@@ -711,32 +734,66 @@ export function ChatPanel() {
               }
             }}
             onDragOver={(e) => {
-              if (e.dataTransfer.types.includes('application/nebula-node-ref')) {
+              const types = e.dataTransfer.types;
+              const accepts =
+                types.includes('application/nebula-image-ref') ||
+                types.includes('application/nebula-node-ref') ||
+                (e.dataTransfer.files && e.dataTransfer.files.length > 0 &&
+                 Array.from(e.dataTransfer.items).some(
+                   (it) => it.kind === 'file' && it.type.startsWith('image/'),
+                 ));
+              if (accepts) {
                 e.preventDefault();
                 e.dataTransfer.dropEffect = 'copy';
               }
             }}
             onDrop={(e) => {
+              // Branch 1: canvas-node image (new feature — creates a chip).
+              const imageRefRaw = e.dataTransfer.getData('application/nebula-image-ref');
+              if (imageRefRaw) {
+                e.preventDefault();
+                try {
+                  const parsed = JSON.parse(imageRefRaw) as { nodeId: string; url: string };
+                  setPendingImages((prev) => {
+                    if (prev.length >= 4) {
+                      // Over-limit notice surfaces in Task 9; silent reject for now.
+                      return prev;
+                    }
+                    if (prev.some((p) => p.status === 'ready' && p.nodeId === parsed.nodeId)) {
+                      return prev;
+                    }
+                    return [
+                      ...prev,
+                      {
+                        id: newId(),
+                        status: 'ready',
+                        nodeId: parsed.nodeId,
+                        thumbUrl: parsed.url,
+                      },
+                    ];
+                  });
+                  insertAtCaret(e.currentTarget, `@${parsed.nodeId}`);
+                } catch {
+                  /* malformed payload; ignore */
+                }
+                return;
+              }
+
+              // Branch 2: OS file drop (Task 8 wires this fully). For now,
+              // preventing default so the browser doesn't navigate to the file.
+              if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                e.preventDefault();
+                return;
+              }
+
+              // Branch 3: existing @nX text-ref drop (unchanged behavior, now
+              // using the shared insertAtCaret helper).
               const token =
                 e.dataTransfer.getData('application/nebula-node-ref') ||
                 e.dataTransfer.getData('text/plain');
               if (!token) return;
               e.preventDefault();
-              const target = e.currentTarget;
-              const start = target.selectionStart ?? input.length;
-              const end = target.selectionEnd ?? input.length;
-              const before = input.slice(0, start);
-              const after = input.slice(end);
-              const needsLeadingSpace = before.length > 0 && !/\s$/.test(before);
-              const needsTrailingSpace = after.length > 0 && !/^\s/.test(after);
-              const insert = `${needsLeadingSpace ? ' ' : ''}${token}${needsTrailingSpace ? ' ' : ''}`;
-              const next = before + insert + after;
-              setInput(next);
-              requestAnimationFrame(() => {
-                const caret = before.length + insert.length;
-                target.focus();
-                target.setSelectionRange(caret, caret);
-              });
+              insertAtCaret(e.currentTarget, token);
             }}
             rows={2}
             disabled={!connected}
