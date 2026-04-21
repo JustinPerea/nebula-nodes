@@ -698,57 +698,59 @@ export function ChatPanel() {
             ))}
           </div>
         )}
-        <textarea
-          className="chat-panel__textarea"
-          placeholder={connected ? 'Type a message… (drag a node in to reference it)' : 'Connecting…'}
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
+        <div className="chat-panel__input-row">
+          <textarea
+            className="chat-panel__textarea"
+            placeholder={connected ? 'Type a message… (drag a node in to reference it)' : 'Connecting…'}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                send();
+              }
+            }}
+            onDragOver={(e) => {
+              if (e.dataTransfer.types.includes('application/nebula-node-ref')) {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'copy';
+              }
+            }}
+            onDrop={(e) => {
+              const token =
+                e.dataTransfer.getData('application/nebula-node-ref') ||
+                e.dataTransfer.getData('text/plain');
+              if (!token) return;
               e.preventDefault();
-              send();
-            }
-          }}
-          onDragOver={(e) => {
-            if (e.dataTransfer.types.includes('application/nebula-node-ref')) {
-              e.preventDefault();
-              e.dataTransfer.dropEffect = 'copy';
-            }
-          }}
-          onDrop={(e) => {
-            const token =
-              e.dataTransfer.getData('application/nebula-node-ref') ||
-              e.dataTransfer.getData('text/plain');
-            if (!token) return;
-            e.preventDefault();
-            const target = e.currentTarget;
-            const start = target.selectionStart ?? input.length;
-            const end = target.selectionEnd ?? input.length;
-            const before = input.slice(0, start);
-            const after = input.slice(end);
-            const needsLeadingSpace = before.length > 0 && !/\s$/.test(before);
-            const needsTrailingSpace = after.length > 0 && !/^\s/.test(after);
-            const insert = `${needsLeadingSpace ? ' ' : ''}${token}${needsTrailingSpace ? ' ' : ''}`;
-            const next = before + insert + after;
-            setInput(next);
-            requestAnimationFrame(() => {
-              const caret = before.length + insert.length;
-              target.focus();
-              target.setSelectionRange(caret, caret);
-            });
-          }}
-          rows={2}
-          disabled={!connected}
-        />
-        {busy ? (
-          <button className="chat-panel__send chat-panel__send--stop" onClick={cancel}>
-            Stop
-          </button>
-        ) : (
-          <button className="chat-panel__send" onClick={send} disabled={!connected || !input.trim()}>
-            Send
-          </button>
-        )}
+              const target = e.currentTarget;
+              const start = target.selectionStart ?? input.length;
+              const end = target.selectionEnd ?? input.length;
+              const before = input.slice(0, start);
+              const after = input.slice(end);
+              const needsLeadingSpace = before.length > 0 && !/\s$/.test(before);
+              const needsTrailingSpace = after.length > 0 && !/^\s/.test(after);
+              const insert = `${needsLeadingSpace ? ' ' : ''}${token}${needsTrailingSpace ? ' ' : ''}`;
+              const next = before + insert + after;
+              setInput(next);
+              requestAnimationFrame(() => {
+                const caret = before.length + insert.length;
+                target.focus();
+                target.setSelectionRange(caret, caret);
+              });
+            }}
+            rows={2}
+            disabled={!connected}
+          />
+          {busy ? (
+            <button className="chat-panel__send chat-panel__send--stop" onClick={cancel}>
+              Stop
+            </button>
+          ) : (
+            <button className="chat-panel__send" onClick={send} disabled={!connected || !input.trim()}>
+              Send
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );

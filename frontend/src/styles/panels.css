@@ -1081,10 +1081,17 @@
 
 .chat-panel__input {
   display: flex;
-  gap: 6px;
+  flex-direction: column;
+  gap: 0;
   padding: 8px;
   border-top: 1px solid #2a2a2a;
   background: #151515;
+}
+
+.chat-panel__input-row {
+  display: flex;
+  gap: 6px;
+  align-items: stretch;
 }
 
 .chat-panel__textarea {
@@ -1145,7 +1152,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  padding: 6px 8px 0;
+  padding: 0 0 6px 0;
 }
 
 .chat-panel__chip {
@@ -1235,4 +1242,10 @@
 }
 .chat-panel__chip:hover .chat-panel__chip-close {
   opacity: 1;
+}
+.chat-panel__chip:focus-within .chat-panel__chip-close,
+.chat-panel__chip-close:focus-visible {
+  opacity: 1;
+  outline: 2px solid rgba(255, 255, 255, 0.6);
+  outline-offset: 1px;
 }
