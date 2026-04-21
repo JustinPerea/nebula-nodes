@@ -50,6 +50,20 @@ def test_node_path_for_image_input(client):
     assert Path(body["path"]).is_absolute()
 
 
+def test_node_path_for_image_input_via_filepath(client):
+    """image-input nodes created via the canonical `filePath` schema param
+    must resolve. This is the shape CLI creation and the Inspector UI use."""
+    main_module.cli_graph.add_node(
+        "image-input",
+        {"filePath": "/api/outputs/chat-uploads/via-filepath.png"},
+    )
+    resp = client.get("/api/graph/node/n1/path")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["path"].endswith("chat-uploads/via-filepath.png")
+    assert Path(body["path"]).is_absolute()
+
+
 def test_node_path_for_model_output(client):
     """A model node with an image output should resolve via outputs['image'],
     which is the shape real handlers produce."""

@@ -554,11 +554,10 @@ async def delete_graph_node(node_id: str) -> dict:
 async def get_node_image_path(node_id: str) -> dict:
     """Resolve a node's primary image file to an absolute local path.
 
-    Only works for image-input nodes (via their `file` or `_previewUrl`) or
-    model nodes with an image output (produced as `outputs['image']` by real
-    handlers). External URLs (anything not served from OUTPUT_ROOT) are
-    rejected. Used by `nebula path` so Claude can Read node images as vision
-    content.
+    Only works for image-input nodes (via their `filePath`, `file`, or
+    `_previewUrl` param) or model nodes with an image-typed output.
+    External URLs (anything not served from OUTPUT_ROOT) are rejected.
+    Used by `nebula path` so Claude can Read node images as vision content.
     """
     node = cli_graph.nodes.get(node_id)
     if not node:
@@ -587,7 +586,15 @@ def _resolve_primary_image_url(node: dict[str, Any]) -> str | None:
     definition_id = node.get("definitionId", "")
 
     if definition_id == "image-input":
-        value = params.get("file") or params.get("_previewUrl")
+        # filePath is the canonical schema key (see node_definitions.json).
+        # `file` is accepted as a fallback because some backend code paths
+        # (including the existing /api/upload endpoint and Task 3's new
+        # chat-uploads endpoint) set that key alongside _previewUrl.
+        value = (
+            params.get("filePath")
+            or params.get("file")
+            or params.get("_previewUrl")
+        )
         return str(value) if value else None
 
     # Model nodes with an image output produce {"image": {"type": "Image", "value": "..."}}
