@@ -1,4 +1,4 @@
-import { memo, useCallback } from 'react';
+import { memo, useCallback, useState } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import type { NodeData } from '../../types';
 import { NODE_DEFINITIONS } from '../../constants/nodeDefinitions';
@@ -45,6 +45,7 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
   const definition = NODE_DEFINITIONS[nodeData.definitionId];
   const selectNode = useUIStore((s) => s.selectNode);
   const updateNodeData = useGraphStore((s) => s.updateNodeData);
+  const [videoLoop, setVideoLoop] = useState<boolean>(true);
 
   const handleTextChange = useCallback(
     (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -254,10 +255,25 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
           <video
             src={videoOutput.value}
             controls
+            loop={videoLoop}
             className="model-node__preview-video nodrag nowheel"
             style={{ width: '100%', borderRadius: 4, display: 'block' }}
             onMouseDown={(e) => e.stopPropagation()}
           />
+          <button
+            type="button"
+            className={`model-node__loop-toggle nodrag ${videoLoop ? 'model-node__loop-toggle--on' : ''}`}
+            title={videoLoop ? 'Loop: on (click to stop looping)' : 'Loop: off (click to loop)'}
+            onClick={(e) => {
+              e.stopPropagation();
+              setVideoLoop((v) => !v);
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
+            aria-pressed={videoLoop}
+            aria-label="Toggle video loop"
+          >
+            &#x21BB;
+          </button>
           <button
             type="button"
             className="model-node__download nodrag"

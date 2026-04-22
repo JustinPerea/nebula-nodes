@@ -1,4 +1,4 @@
-import { memo } from 'react';
+import { memo, useState } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import type { NodeData, DynamicNodeData, PortDataType } from '../../types';
 import { NODE_DEFINITIONS } from '../../constants/nodeDefinitions';
@@ -15,6 +15,7 @@ function isDynamicData(data: NodeData): data is DynamicNodeData {
 function DynamicNodeComponent({ id, data, selected }: NodeProps) {
   const nodeData = data as unknown as NodeData;
   const selectNode = useUIStore((s) => s.selectNode);
+  const [videoLoop, setVideoLoop] = useState<boolean>(true);
 
   const definition = NODE_DEFINITIONS[nodeData.definitionId];
   const categoryColor = CATEGORY_COLORS[definition?.category ?? 'universal'] ?? '#E65100';
@@ -118,10 +119,25 @@ function DynamicNodeComponent({ id, data, selected }: NodeProps) {
           <video
             src={videoOutput.value}
             controls
+            loop={videoLoop}
             className="model-node__preview-video nodrag nowheel"
             style={{ width: '100%', borderRadius: 4, display: 'block' }}
             onMouseDown={(e) => e.stopPropagation()}
           />
+          <button
+            type="button"
+            className={`model-node__loop-toggle nodrag ${videoLoop ? 'model-node__loop-toggle--on' : ''}`}
+            title={videoLoop ? 'Loop: on (click to stop looping)' : 'Loop: off (click to loop)'}
+            onClick={(e) => {
+              e.stopPropagation();
+              setVideoLoop((v) => !v);
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
+            aria-pressed={videoLoop}
+            aria-label="Toggle video loop"
+          >
+            &#x21BB;
+          </button>
         </div>
       )}
 
