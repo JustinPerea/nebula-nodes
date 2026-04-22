@@ -11,7 +11,7 @@ from services.output import get_run_dir
 
 OPENAI_GENERATIONS_URL = "https://api.openai.com/v1/images/generations"
 OPENAI_EDITS_URL = "https://api.openai.com/v1/images/edits"
-DEFAULT_PARTIAL_IMAGES = 2
+DEFAULT_PARTIAL_IMAGES = 0  # Node def no longer exposes this; small/fast jobs never emit partials anyway.
 
 
 def _guess_mime(path: Path) -> str:

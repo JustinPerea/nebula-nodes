@@ -25,7 +25,7 @@ def test_build_generate_body_minimal() -> None:
     assert body["model"] == "gpt-image-2"
     assert body["prompt"] == "hello"
     assert body["stream"] is True
-    assert body["partial_images"] == 2  # default
+    assert body["partial_images"] == 0  # default — node def no longer exposes this param
 
 
 def test_build_generate_body_omits_unsupported_params() -> None:

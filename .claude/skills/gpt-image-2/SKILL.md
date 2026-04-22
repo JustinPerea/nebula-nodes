@@ -27,7 +27,6 @@ All four use `executionPattern: "stream"`. Partial previews render in the canvas
 | `output_format` | `png`, `jpeg`, `webp` | `png` | |
 | `output_compression` | 0–100 | 90 | Only applied when format != png |
 | `moderation` | `auto`, `low` | `auto` | `low` is less restrictive |
-| `partial_images` | 0–3 | 2 | Each partial adds ~100 output tokens |
 
 Edit node also accepts: `images` (Image, multiple, up to 10), `mask` (alpha-channel PNG, same size + format as first image).
 
@@ -40,6 +39,7 @@ FAL uses slightly different naming: `image_size` (not `size`), `num_images` (not
 - `background: transparent` — v1 supported it, v2 does not. If a user asks for transparent backgrounds, suggest chaining a `remove-background` node downstream instead.
 - `input_fidelity` — gpt-image-2 always processes inputs at high fidelity; the param must be omitted.
 - `n > 1` — OpenAI rejects `n > 1` when `stream=true`, and our nodes always stream. The `n`/Count param is not exposed on the OpenAI-direct nodes. Run the node multiple times for multiple images. (FAL nodes expose `num_images` because FAL may handle this differently — verify during UAT.)
+- `partial_images` (Preview Frames) — removed from the OpenAI-direct node defs. Small/fast generations rarely emit partials (OpenAI docs: "you may not receive the full number of partial images you requested"), and we defaulted to none anyway. FAL nodes still expose it for now pending UAT.
 
 ## Cost guidance
 
