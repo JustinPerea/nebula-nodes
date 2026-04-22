@@ -32,6 +32,13 @@ function DynamicNodeComponent({ id, data, selected }: NodeProps) {
   const displayText = nodeData.streamingText ?? (textOutput && typeof textOutput.value === 'string' ? textOutput.value : null);
   const isStreaming = nodeData.state === 'executing' && nodeData.streamingText != null;
 
+  // Streaming image partial preview
+  const partials = nodeData.streamingPartials;
+  const latestPartial = partials && partials.length > 0 ? partials[partials.length - 1] : null;
+  const finalImageSrc = imageOutput && typeof imageOutput.value === 'string' ? imageOutput.value : null;
+  const previewImageSrc = finalImageSrc ?? latestPartial?.src ?? null;
+  const isStreamingImage = nodeData.state === 'executing' && partials != null && partials.length > 0 && finalImageSrc == null;
+
   // Model badge: show selected model compactly
   const modelBadge = dynData?.modelId || (nodeData.params.model as string) || (nodeData.params.model_id as string) || (nodeData.params.endpoint_id as string) || null;
 
@@ -81,9 +88,14 @@ function DynamicNodeComponent({ id, data, selected }: NodeProps) {
         </div>
       )}
 
-      {nodeData.state === 'complete' && imageOutput && typeof imageOutput.value === 'string' && (
+      {previewImageSrc && (
         <div className="model-node__preview">
-          <img src={imageOutput.value} alt="Generated output" className="model-node__preview-image" loading="lazy" />
+          <img
+            src={previewImageSrc}
+            className={isStreamingImage ? 'model-node__preview-image--streaming' : 'model-node__preview-image'}
+            alt={isStreamingImage ? 'Streaming preview' : 'Generated image'}
+            loading="lazy"
+          />
         </div>
       )}
 

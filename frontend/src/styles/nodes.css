@@ -160,9 +160,19 @@
 }
 
 .model-node__preview-image {
-  width: 100%;
+  max-width: 100%;
+  height: auto;
   border-radius: 4px;
   display: block;
+}
+
+.model-node__preview-image--streaming {
+  max-width: 100%;
+  height: auto;
+  border-radius: 4px;
+  display: block;
+  opacity: 0.85;
+  outline: 1px dashed var(--accent, #888);
 }
 
 .model-node__preview-image[draggable='true'] {
