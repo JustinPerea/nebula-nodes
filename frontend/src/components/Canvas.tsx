@@ -92,7 +92,6 @@ export function Canvas() {
   const onDrop = useCallback(
     (event: React.DragEvent) => {
       event.preventDefault();
-      console.log('[canvas-drop] fired. files:', event.dataTransfer.files.length, 'types:', Array.from(event.dataTransfer.types));
 
       // Check for image file drops first
       const files = event.dataTransfer.files;
