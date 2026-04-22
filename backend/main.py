@@ -375,7 +375,7 @@ async def execute(request: ExecuteRequest) -> dict:
         )
         return {"status": "cycle_error"}
 
-    handler_registry = get_handler_registry(emit=manager.broadcast)
+    handler_registry = get_handler_registry(emit=_emit_and_sync)
 
     async def _run() -> None:
         import traceback, sys
@@ -386,7 +386,7 @@ async def execute(request: ExecuteRequest) -> dict:
                 edges=request.edges,
                 api_keys=api_keys,
                 handler_registry=handler_registry,
-                emit=manager.broadcast,
+                emit=_emit_and_sync,
                 cache=execution_cache,
             )
             print("[exec] _run completed successfully", file=sys.stderr, flush=True)
@@ -434,7 +434,7 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
         )
         return {"status": "cycle_error"}
 
-    handler_registry = get_handler_registry(emit=manager.broadcast)
+    handler_registry = get_handler_registry(emit=_emit_and_sync)
 
     async def _run() -> None:
         import traceback
@@ -444,7 +444,7 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
                 edges=sub_edges,
                 api_keys=api_keys,
                 handler_registry=handler_registry,
-                emit=manager.broadcast,
+                emit=_emit_and_sync,
                 cache=execution_cache,
             )
         except Exception:
@@ -479,6 +479,32 @@ async def _broadcast_graph_sync() -> None:
     """Push the current CLI graph to all connected frontends via WebSocket."""
     export = await export_graph_for_frontend()
     await manager.broadcast_raw({"type": "graphSync", **export})
+
+
+def _sync_outputs_to_cli_graph(node_id: str, outputs: dict[str, Any]) -> None:
+    """Mirror an ExecutedEvent's outputs into cli_graph so endpoints like
+    /api/graph/node/{id}/path can resolve to real values. Shape-matches the
+    pattern used by /api/graph/run so every execution path converges on the
+    same stored shape."""
+    if node_id not in cli_graph.nodes:
+        return
+    if not isinstance(outputs, dict):
+        cli_graph.nodes[node_id]["outputs"] = {}
+        return
+    cli_graph.nodes[node_id]["outputs"] = {
+        k: v if isinstance(v, dict) else {"type": "Any", "value": v}
+        for k, v in outputs.items()
+    }
+
+
+async def _emit_and_sync(event: ExecutionEvent) -> None:
+    """Wrap manager.broadcast so ExecutedEvents also mirror their outputs
+    into cli_graph. Used by /api/execute and /api/execute-node so the
+    frontend-driven execution paths keep cli_graph in sync with what the
+    user sees in the canvas."""
+    if isinstance(event, ExecutedEvent):
+        _sync_outputs_to_cli_graph(event.node_id, event.outputs)
+    await manager.broadcast(event)
 
 
 def _valid_param_keys(definition_id: str) -> set[str] | None:

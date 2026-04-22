@@ -198,3 +198,34 @@ def test_upload_rejects_tiny_signature_match(client):
     assert resp.status_code == 415
     assert len(list(main_module.CHAT_UPLOADS_DIR.iterdir())) == 0
     assert len(main_module.cli_graph.nodes) == 0
+
+
+def test_sync_outputs_to_cli_graph_populates_image_output(client):
+    """When /api/execute emits an ExecutedEvent, the node's outputs should
+    land in cli_graph so GET /api/graph/node/{id}/path can resolve them."""
+    main_module.cli_graph.add_node("nano-banana", {"model": "nano-banana"})
+    # Simulate the handler's emit payload.
+    main_module._sync_outputs_to_cli_graph(
+        "n1",
+        {"image": {"type": "Image", "value": "/api/outputs/generated/run-output.png"}},
+    )
+    resp = client.get("/api/graph/node/n1/path")
+    assert resp.status_code == 200
+    assert resp.json()["path"].endswith("generated/run-output.png")
+
+
+def test_sync_outputs_to_cli_graph_wraps_bare_values(client):
+    """Handlers that emit raw string values get wrapped in the {type, value}
+    shape expected by the resolver, matching /api/graph/run's post-hoc loop."""
+    main_module.cli_graph.add_node("some-model", {})
+    main_module._sync_outputs_to_cli_graph("n1", {"image": "/api/outputs/bare.png"})
+    node = main_module.cli_graph.nodes["n1"]
+    assert node["outputs"] == {"image": {"type": "Any", "value": "/api/outputs/bare.png"}}
+
+
+def test_sync_outputs_to_cli_graph_missing_node_noops(client):
+    """Syncing outputs for a node that isn't in cli_graph (e.g. a temp
+    _quick_input_ node) should silently no-op, not raise."""
+    main_module._sync_outputs_to_cli_graph("n999", {"image": "/api/outputs/x.png"})
+    # No exception, no nodes added.
+    assert "n999" not in main_module.cli_graph.nodes
