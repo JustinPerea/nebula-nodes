@@ -117,3 +117,68 @@ async def test_edit_requires_at_least_one_image() -> None:
             node, inputs=inputs, api_keys={"OPENAI_API_KEY": "k"},
             emit=None, run_dir=Path("/tmp"),
         )
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_edit_streams_partial_and_returns_final_image(tmp_path: Path) -> None:
+    # Minimal 1x1 PNG base64
+    b64_1x1_png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="
+    sse = (
+        f"event: image_generation.partial_image\n"
+        f'data: {{"partial_image_index": 0, "b64_json": "{b64_1x1_png}"}}\n\n'
+        f"event: image_generation.completed\n"
+        f'data: {{"b64_json": "{b64_1x1_png}"}}\n\n'
+        f"data: [DONE]\n\n"
+    ).encode()
+
+    respx.post("https://api.openai.com/v1/images/edits").mock(
+        return_value=Response(200, content=sse, headers={"content-type": "text/event-stream"})
+    )
+
+    img = tmp_path / "input.png"
+    img.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 16)
+
+    emitted = []
+
+    async def emit(event: object) -> None:
+        emitted.append(event)
+
+    node = _node({})
+    inputs = {
+        "image": PortValueDict(type="Image", value=[str(img)]),
+        "prompt": PortValueDict(type="Text", value="make it blue"),
+    }
+    out = await handle_gpt_image_2_edit(
+        node, inputs=inputs, api_keys={"OPENAI_API_KEY": "k"},
+        emit=emit, run_dir=tmp_path,
+    )
+    assert out["image"]["type"] == "Image"
+    assert Path(out["image"]["value"]).exists()
+    assert out["image"]["value"].endswith(".png")
+    partials = [e for e in emitted if e.__class__.__name__ == "StreamPartialImageEvent"]
+    assert len(partials) == 1
+    assert partials[0].partial_index == 0
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_edit_org_verification_error_returns_friendly_message(tmp_path: Path) -> None:
+    respx.post("https://api.openai.com/v1/images/edits").mock(
+        return_value=Response(
+            403,
+            json={"error": {"code": "organization_must_be_verified", "message": "verify"}},
+        )
+    )
+    img = tmp_path / "input.png"
+    img.write_bytes(b"x")
+    node = _node({})
+    inputs = {
+        "image": PortValueDict(type="Image", value=[str(img)]),
+        "prompt": PortValueDict(type="Text", value="hi"),
+    }
+    with pytest.raises(RuntimeError, match="org isn't verified"):
+        await handle_gpt_image_2_edit(
+            node, inputs=inputs, api_keys={"OPENAI_API_KEY": "k"},
+            emit=None, run_dir=tmp_path,
+        )

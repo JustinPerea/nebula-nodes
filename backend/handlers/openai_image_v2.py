@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import mimetypes
 from pathlib import Path
 from typing import Any, Awaitable, Callable
 
@@ -11,6 +12,24 @@ from services.output import get_run_dir
 OPENAI_GENERATIONS_URL = "https://api.openai.com/v1/images/generations"
 OPENAI_EDITS_URL = "https://api.openai.com/v1/images/edits"
 DEFAULT_PARTIAL_IMAGES = 2
+
+
+def _guess_mime(path: Path) -> str:
+    guessed, _ = mimetypes.guess_type(path.name)
+    if guessed and guessed.startswith("image/"):
+        return guessed
+    return "image/png"
+
+
+def _is_org_verification_error(body: str) -> bool:
+    return "organization_must_be_verified" in body or "must be verified" in body.lower()
+
+
+def _raise_org_verification_error() -> None:
+    raise RuntimeError(
+        "Your OpenAI org isn't verified for gpt-image-2. "
+        "Visit https://platform.openai.com/settings/organization/general to verify."
+    )
 
 
 def build_generate_body(node: GraphNode, prompt_text: str) -> dict[str, Any]:
@@ -80,11 +99,8 @@ async def handle_gpt_image_2_generate(
         )
     except RuntimeError as exc:
         msg = str(exc)
-        if "organization_must_be_verified" in msg or "must be verified" in msg.lower():
-            raise RuntimeError(
-                "Your OpenAI org isn't verified for gpt-image-2. "
-                "Visit https://platform.openai.com/settings/organization/general to verify."
-            ) from exc
+        if _is_org_verification_error(msg):
+            _raise_org_verification_error()
         raise
 
     return {"image": {"type": "Image", "value": final_path}}
@@ -134,7 +150,7 @@ async def handle_gpt_image_2_edit(
     files: list[tuple[str, tuple[str, bytes, str]]] = []
     for path in image_paths:
         p = Path(path)
-        files.append(("image[]", (p.name, p.read_bytes(), "image/png")))
+        files.append(("image[]", (p.name, p.read_bytes(), _guess_mime(p))))
     mask_input = inputs.get("mask")
     if mask_input and mask_input.value:
         mp = Path(str(mask_input.value))
@@ -175,11 +191,8 @@ async def handle_gpt_image_2_edit(
                 error_body = ""
                 async for chunk in response.aiter_text():
                     error_body += chunk
-                if "organization_must_be_verified" in error_body or "must be verified" in error_body.lower():
-                    raise RuntimeError(
-                        "Your OpenAI org isn't verified for gpt-image-2. "
-                        "Visit https://platform.openai.com/settings/organization/general to verify."
-                    )
+                if _is_org_verification_error(error_body):
+                    _raise_org_verification_error()
                 raise RuntimeError(f"Image edit failed ({response.status_code}): {error_body}")
             async for line in response.aiter_lines():
                 line = line.strip()
