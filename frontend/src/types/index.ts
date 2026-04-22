@@ -114,6 +114,7 @@ export interface NodeData {
   error?: string;
   keyStatus?: 'ok' | 'missing';
   streamingText?: string;
+  streamingPartials?: { index: number; src: string }[];
 }
 
 export interface DynamicPortDefinition {

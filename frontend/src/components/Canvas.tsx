@@ -142,7 +142,10 @@ export function Canvas() {
 
   const onDragOver = useCallback((event: React.DragEvent) => {
     event.preventDefault();
-    event.dataTransfer.dropEffect = 'move';
+    // Match dropEffect to the drag source's effectAllowed, otherwise browser
+    // refuses the drop. Library-node drags use 'move'; OS file drags use 'copy'.
+    const types = event.dataTransfer.types;
+    event.dataTransfer.dropEffect = types.includes('Files') ? 'copy' : 'move';
   }, []);
 
   const onNodeContextMenu = useCallback(
@@ -234,7 +237,13 @@ export function Canvas() {
   );
 
   return (
-    <div className="canvas-wrapper" onKeyDown={onKeyDown} tabIndex={0}>
+    <div
+      className="canvas-wrapper"
+      onKeyDown={onKeyDown}
+      tabIndex={0}
+      onDrop={onDrop}
+      onDragOver={onDragOver}
+    >
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -246,8 +255,6 @@ export function Canvas() {
         isValidConnection={isValidConnection}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
-        onDrop={onDrop}
-        onDragOver={onDragOver}
         onNodeContextMenu={onNodeContextMenu}
         onPaneClick={onPaneClick}
         fitView

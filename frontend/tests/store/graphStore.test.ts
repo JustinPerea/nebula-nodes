@@ -390,3 +390,62 @@ describe('duplicateSelected', () => {
     expect(useGraphStore.getState().nodes).toHaveLength(beforeCount);
   });
 });
+
+describe('graphStore streamPartialImage', () => {
+  beforeEach(() => {
+    useGraphStore.setState({
+      nodes: [
+        {
+          id: 'n1',
+          type: 'default',
+          position: { x: 0, y: 0 },
+          data: { definitionId: 'gpt-image-2-generate', params: {}, state: 'executing' },
+        } as any,
+      ],
+      edges: [],
+    });
+  });
+
+  it('appends partials in index order', () => {
+    const store = useGraphStore.getState();
+    store.handleExecutionEvent({ type: 'streamPartialImage', nodeId: 'n1', partialIndex: 0, src: '/a.png', isFinal: false });
+    store.handleExecutionEvent({ type: 'streamPartialImage', nodeId: 'n1', partialIndex: 1, src: '/b.png', isFinal: false });
+    const node = useGraphStore.getState().nodes.find((n) => n.id === 'n1')!;
+    expect(node.data.streamingPartials).toEqual([
+      { index: 0, src: '/a.png' },
+      { index: 1, src: '/b.png' },
+    ]);
+  });
+
+  it('replaces partial at same index instead of appending duplicate', () => {
+    const store = useGraphStore.getState();
+    store.handleExecutionEvent({ type: 'streamPartialImage', nodeId: 'n1', partialIndex: 0, src: '/a.png', isFinal: false });
+    store.handleExecutionEvent({ type: 'streamPartialImage', nodeId: 'n1', partialIndex: 0, src: '/a2.png', isFinal: false });
+    const node = useGraphStore.getState().nodes.find((n) => n.id === 'n1')!;
+    expect(node.data.streamingPartials).toEqual([{ index: 0, src: '/a2.png' }]);
+  });
+
+  it('clears partials on executed event', () => {
+    const store = useGraphStore.getState();
+    store.handleExecutionEvent({ type: 'streamPartialImage', nodeId: 'n1', partialIndex: 0, src: '/a.png', isFinal: false });
+    store.handleExecutionEvent({ type: 'executed', nodeId: 'n1', outputs: { image: { type: 'Image', value: '/final.png' } } });
+    const node = useGraphStore.getState().nodes.find((n) => n.id === 'n1')!;
+    expect(node.data.streamingPartials).toBeUndefined();
+  });
+
+  it('sorts out-of-order partials by index', () => {
+    const store = useGraphStore.getState();
+    store.handleExecutionEvent({ type: 'streamPartialImage', nodeId: 'n1', partialIndex: 2, src: '/c.png', isFinal: false });
+    store.handleExecutionEvent({ type: 'streamPartialImage', nodeId: 'n1', partialIndex: 0, src: '/a.png', isFinal: false });
+    const node = useGraphStore.getState().nodes.find((n) => n.id === 'n1')!;
+    expect(node.data.streamingPartials?.map(p => p.index)).toEqual([0, 2]);
+  });
+
+  it('clears partials on error event', () => {
+    const store = useGraphStore.getState();
+    store.handleExecutionEvent({ type: 'streamPartialImage', nodeId: 'n1', partialIndex: 0, src: '/a.png', isFinal: false });
+    store.handleExecutionEvent({ type: 'error', nodeId: 'n1', error: 'test error' });
+    const node = useGraphStore.getState().nodes.find((n) => n.id === 'n1')!;
+    expect(node.data.streamingPartials).toBeUndefined();
+  });
+});

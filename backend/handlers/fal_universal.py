@@ -11,6 +11,7 @@ from models.events import ExecutionEvent, ProgressEvent
 from services.output import get_run_dir, save_base64_image
 
 FAL_QUEUE_BASE = "https://queue.fal.run"
+STREAMING_FAL_ENDPOINTS = {"openai/gpt-image-2", "openai/gpt-image-2/edit"}
 
 
 def _to_fal_url(value: str) -> str:
@@ -34,6 +35,46 @@ def _to_fal_url(value: str) -> str:
     return f"data:{mime};base64,{b64}"
 
 
+def _build_fal_stream_body(node: GraphNode, inputs: dict[str, PortValueDict]) -> dict[str, Any]:
+    """Build the JSON request body for FAL streaming gpt-image-2 endpoints."""
+    endpoint_id = str(node.params.get("endpoint_id", "")).strip("/")
+
+    # Validate: edit endpoint requires at least one reference image.
+    if endpoint_id == "openai/gpt-image-2/edit":
+        images_val = inputs.get("images")
+        valid = False
+        if images_val and images_val.value:
+            raw = images_val.value
+            if isinstance(raw, list):
+                valid = any(v for v in raw)
+            else:
+                valid = bool(raw)
+        if not valid:
+            raise ValueError("At least one reference image is required for gpt-image-2 edit")
+
+    body: dict[str, Any] = {}
+
+    prompt_input = inputs.get("prompt")
+    if prompt_input and prompt_input.value:
+        body["prompt"] = str(prompt_input.value)
+
+    # Edit endpoint: accept multiple images via the "images" input port
+    images_input = inputs.get("images")
+    if images_input and images_input.value:
+        raw = images_input.value
+        if isinstance(raw, list):
+            body["image_urls"] = [_to_fal_url(str(v)) for v in raw if v]
+        else:
+            body["image_urls"] = [_to_fal_url(str(raw))]
+
+    INTERNAL_KEYS = {"endpoint_id"}
+    for param_key, param_val in node.params.items():
+        if param_key not in INTERNAL_KEYS and param_val is not None and param_val != "":
+            body[param_key] = param_val
+
+    return body
+
+
 async def handle_fal_universal(
     node: GraphNode,
     inputs: dict[str, PortValueDict],
@@ -49,6 +90,31 @@ async def handle_fal_universal(
         raise ValueError("FAL endpoint ID is required (e.g. fal-ai/flux-pro/v1.1-ultra)")
 
     endpoint_id = str(endpoint_id).strip("/")
+
+    # Route gpt-image-2 endpoints through the SSE streaming path
+    if endpoint_id in STREAMING_FAL_ENDPOINTS and emit is not None:
+        from execution.stream_runner import StreamConfig, stream_execute_image
+
+        request_body = _build_fal_stream_body(node, inputs)
+        run_dir = get_run_dir()
+        config = StreamConfig(
+            url=f"{FAL_QUEUE_BASE}/{endpoint_id}/stream",
+            headers={
+                "Authorization": f"Key {api_key}",
+                "Accept": "text/event-stream",
+                "Content-Type": "application/json",
+            },
+            timeout=180.0,
+        )
+        final = await stream_execute_image(
+            config=config,
+            request_body=request_body,
+            node_id=node.id,
+            emit=emit,
+            run_dir=run_dir,
+            provider="fal",
+        )
+        return {"image": {"type": "Image", "value": final}}
 
     # Build input payload
     fal_input: dict[str, Any] = {}

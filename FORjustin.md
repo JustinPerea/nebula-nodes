@@ -126,6 +126,30 @@ Early on, if the WS connection dropped mid-run and reconnected, the `graphComple
 
 ---
 
+## GPT Image 2 — What Shipped and What We Learned
+
+OpenAI released `gpt-image-2` on 2026-04-21 — a new image model with text-first design, image editing capability, and a streaming API. We shipped it the same day: four new nodes (`gpt-image-2-generate`, `gpt-image-2-edit`, plus FAL variants), image-mode streaming in the execution engine, and BYOK support for both routes.
+
+### Four Nodes Instead of One
+
+The project memory rule says nodes with dual providers (OpenAI-direct + FAL) need `sharedParams/falParams/directParams` machinery. We did something simpler: four dedicated nodes instead of one dual-path node. The user picks their provider at placement time; the node just does one thing. No parameter merging, no conditional logic. Sometimes duplication is cheaper than the abstraction — especially when the nodes only differ in `definitionId` and handler route.
+
+### Defense-in-Depth on Removed Parameters
+
+gpt-image-2 doesn't accept `background` or `input_fidelity` — both present on v1. The node defs don't expose them, but the handler also strips them before sending the request upstream. If someone later adds an enum option by mistake, the handler won't leak an invalid param. This saved a future debugging session. We learned it watching v1 break when we forgot to remove `response_format` from `gpt-image-1`.
+
+### Extending the Stream Runner Instead of Forking
+
+The existing `stream_execute` streams text chunks. Instead of forking to a new file, we added `stream_execute_image` as a sibling function with OpenAI + FAL dialect branches. Text mode is untouched; image mode gets the base64-partial SSE parse loop. The frontend's `DynamicNode.tsx` now renders the latest partial frame during execution, swapping to the final image on completion — no frontend flicker. Reuse won this time — see "Generic runners pay off" above.
+
+### Subagent-Driven TDD Catches Real Bugs Before They Ship
+
+The whole integration was built with the `superpowers` skill chain — brainstorming, writing plans, and dispatching fresh subagents per task with two-stage review. During Task 5 (edit handler), the first draft had three real issues we would have shipped otherwise: hard-coded `image/png` MIME (would silently mangle JPEG uploads), duplicated 403-error logic, and zero happy-path test coverage for the 60-line SSE parse loop. All three caught by a fresh code reviewer looking at the diff. Cost: roughly 15 minutes of re-dispatch. Compare that to debugging user-reported bugs days later. This pattern is reusable for future big integrations.
+
+One rough edge we deferred: the error-rewrap for OpenAI's org-verification check searches `"organization_must_be_verified" in error_body`. Works today because `stream_execute_image` embeds the raw response body in its RuntimeError. But if that error-wrapping format changes later, the match silently stops working. We deferred the structured-exception refactor to when FAL streaming lands as a second caller — fixing it then earns the test coverage from both paths.
+
+---
+
 ## What's Next
 
 - **Favorites / Recents** — a pinned node list in the Node Library so you don't scroll to find FLUX every time.

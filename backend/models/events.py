@@ -58,6 +58,14 @@ class StreamDeltaEvent(BaseModel):
     accumulated: str
 
 
+class StreamPartialImageEvent(BaseModel):
+    type: Literal["stream_partial_image"] = "stream_partial_image"
+    node_id: str
+    partial_index: int
+    src: str  # server-relative file path
+    is_final: bool = False
+
+
 ExecutionEvent = Union[
     QueuedEvent,
     ExecutingEvent,
@@ -67,4 +75,5 @@ ExecutionEvent = Union[
     ValidationErrorEvent,
     GraphCompleteEvent,
     StreamDeltaEvent,
+    StreamPartialImageEvent,
 ]
