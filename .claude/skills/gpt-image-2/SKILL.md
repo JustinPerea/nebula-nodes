@@ -59,3 +59,4 @@ If the user asks Claude to write or refine a prompt that will feed into `gpt-ima
 - Mask is prompt-guided — the prompt must describe the **full** desired image, not just the masked region.
 - Up to 10 reference images in the edit endpoint; the mask applies to the **first** image when supplied.
 - Streaming: enable `partial_images` (default 2) to see preview frames in the canvas as the image renders. Set to 0 for final-only.
+- SSE event namespaces differ by endpoint: `/v1/images/generations` emits `image_generation.completed` / `image_generation.partial_image`, but `/v1/images/edits` emits `image_edit.completed` / `image_edit.partial_image`. Our parser accepts both. OpenAI's docs don't highlight this distinction — discovered during UAT 2026-04-22.
