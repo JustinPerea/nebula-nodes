@@ -174,4 +174,10 @@ def _parse_image_event(
             return ("partial", int(idx), b64)
         if ev_type == "image.completed":
             return ("final", 0, b64)
+        import logging
+        logging.getLogger(__name__).debug(
+            "Unrecognized FAL image stream event: type=%r, has_b64=%r",
+            data.get("type"),
+            isinstance((data.get("image") or {}).get("b64_json"), str),
+        )
     return None

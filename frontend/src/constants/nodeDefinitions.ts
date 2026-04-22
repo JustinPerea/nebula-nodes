@@ -5352,7 +5352,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     envKeyName: 'OPENAI_API_KEY',
     executionPattern: 'stream',
     inputPorts: [
-      { id: 'image', label: 'Image', dataType: 'Image', required: true, multiple: true },
+      { id: 'images', label: 'Images', dataType: 'Image', required: true, multiple: true },
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
       { id: 'mask', label: 'Mask', dataType: 'Mask', required: false },
     ],

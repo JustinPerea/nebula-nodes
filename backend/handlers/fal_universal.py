@@ -37,6 +37,21 @@ def _to_fal_url(value: str) -> str:
 
 def _build_fal_stream_body(node: GraphNode, inputs: dict[str, PortValueDict]) -> dict[str, Any]:
     """Build the JSON request body for FAL streaming gpt-image-2 endpoints."""
+    endpoint_id = str(node.params.get("endpoint_id", "")).strip("/")
+
+    # Validate: edit endpoint requires at least one reference image.
+    if endpoint_id == "openai/gpt-image-2/edit":
+        images_val = inputs.get("images")
+        valid = False
+        if images_val and images_val.value:
+            raw = images_val.value
+            if isinstance(raw, list):
+                valid = any(v for v in raw)
+            else:
+                valid = bool(raw)
+        if not valid:
+            raise ValueError("At least one reference image is required for gpt-image-2 edit")
+
     body: dict[str, Any] = {}
 
     prompt_input = inputs.get("prompt")
@@ -79,7 +94,6 @@ async def handle_fal_universal(
     # Route gpt-image-2 endpoints through the SSE streaming path
     if endpoint_id in STREAMING_FAL_ENDPOINTS and emit is not None:
         from execution.stream_runner import StreamConfig, stream_execute_image
-        from services.output import get_run_dir
 
         request_body = _build_fal_stream_body(node, inputs)
         run_dir = get_run_dir()

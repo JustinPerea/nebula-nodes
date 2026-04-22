@@ -124,7 +124,7 @@ async def handle_gpt_image_2_edit(
     emit: Callable[[ExecutionEvent], Awaitable[None]] | None,
     run_dir: Path | None = None,
 ) -> dict[str, Any]:
-    image_input = inputs.get("image")
+    image_input = inputs.get("images")
     if not image_input or not image_input.value:
         raise ValueError("Image input is required but was not provided")
     prompt_input = inputs.get("prompt")

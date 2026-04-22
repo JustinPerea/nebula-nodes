@@ -98,7 +98,7 @@ async def test_edit_rejects_more_than_10_images(tmp_path: Path) -> None:
         img_paths.append(str(p))
     node = _node({})
     inputs = {
-        "image": PortValueDict(type="Image", value=img_paths),
+        "images": PortValueDict(type="Image", value=img_paths),
         "prompt": PortValueDict(type="Text", value="edit please"),
     }
     with pytest.raises(ValueError, match="up to 10"):
@@ -146,7 +146,7 @@ async def test_edit_streams_partial_and_returns_final_image(tmp_path: Path) -> N
 
     node = _node({})
     inputs = {
-        "image": PortValueDict(type="Image", value=[str(img)]),
+        "images": PortValueDict(type="Image", value=[str(img)]),
         "prompt": PortValueDict(type="Text", value="make it blue"),
     }
     out = await handle_gpt_image_2_edit(
@@ -174,7 +174,7 @@ async def test_edit_org_verification_error_returns_friendly_message(tmp_path: Pa
     img.write_bytes(b"x")
     node = _node({})
     inputs = {
-        "image": PortValueDict(type="Image", value=[str(img)]),
+        "images": PortValueDict(type="Image", value=[str(img)]),
         "prompt": PortValueDict(type="Text", value="hi"),
     }
     with pytest.raises(RuntimeError, match="org isn't verified"):
