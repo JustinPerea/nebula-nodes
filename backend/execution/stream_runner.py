@@ -149,17 +149,26 @@ async def stream_execute_image(
     return str(final_path)
 
 
+_OPENAI_PARTIAL_EVENTS = {"image_generation.partial_image", "image_edit.partial_image"}
+_OPENAI_COMPLETED_EVENTS = {"image_generation.completed", "image_edit.completed"}
+
+
 def _parse_image_event(
     provider: str, event_type: str | None, data: dict[str, Any]
 ) -> tuple[str, int, str] | None:
-    """Return (kind, index, b64_json) or None. kind = 'partial' | 'final'."""
+    """Return (kind, index, b64_json) or None. kind = 'partial' | 'final'.
+
+    OpenAI uses image_generation.* for the generate endpoint and image_edit.*
+    for the edit endpoint. Accept both namespaces since they're structurally
+    identical (same b64_json + partial_image_index fields).
+    """
     if provider == "openai":
-        if event_type == "image_generation.partial_image":
+        if event_type in _OPENAI_PARTIAL_EVENTS:
             idx = data.get("partial_image_index", 0)
             b64 = data.get("b64_json")
             if isinstance(b64, str):
                 return ("partial", int(idx), b64)
-        elif event_type == "image_generation.completed":
+        elif event_type in _OPENAI_COMPLETED_EVENTS:
             b64 = data.get("b64_json")
             if isinstance(b64, str):
                 return ("final", 0, b64)
@@ -169,10 +178,13 @@ def _parse_image_event(
         b64 = image.get("b64_json")
         if not isinstance(b64, str):
             return None
-        if ev_type == "image.partial":
+        # Speculative — also accept image_edit.* variants in case FAL mirrors
+        # OpenAI's namespace split for its /edit/stream endpoint. Real format
+        # will be confirmed during FAL UAT via the debug log below.
+        if ev_type in {"image.partial", "image_edit.partial", "image_edit.partial_image"}:
             idx = image.get("partial_index", 0)
             return ("partial", int(idx), b64)
-        if ev_type == "image.completed":
+        if ev_type in {"image.completed", "image_edit.completed"}:
             return ("final", 0, b64)
         import logging
         logging.getLogger(__name__).debug(

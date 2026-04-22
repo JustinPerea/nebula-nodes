@@ -125,10 +125,12 @@ async def test_edit_requires_at_least_one_image() -> None:
 async def test_edit_streams_partial_and_returns_final_image(tmp_path: Path) -> None:
     # Minimal 1x1 PNG base64
     b64_1x1_png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="
+    # Use the real OpenAI event names for the edit endpoint (image_edit.*),
+    # not image_generation.* — confirmed during UAT on 2026-04-22.
     sse = (
-        f"event: image_generation.partial_image\n"
+        f"event: image_edit.partial_image\n"
         f'data: {{"partial_image_index": 0, "b64_json": "{b64_1x1_png}"}}\n\n'
-        f"event: image_generation.completed\n"
+        f"event: image_edit.completed\n"
         f'data: {{"b64_json": "{b64_1x1_png}"}}\n\n'
         f"data: [DONE]\n\n"
     ).encode()
