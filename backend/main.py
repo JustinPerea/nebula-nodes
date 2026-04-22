@@ -8,7 +8,7 @@ from typing import Any
 
 from uuid import uuid4
 
-from fastapi import FastAPI, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -78,27 +78,21 @@ app.include_router(replicate_router)
 app.include_router(fal_router)
 
 
-@app.post("/api/upload")
-async def upload_file(file: UploadFile) -> dict:
-    """Upload a file (image, etc.) and return its path and URL."""
-    uploads_dir = OUTPUT_ROOT / "uploads"
-    uploads_dir.mkdir(parents=True, exist_ok=True)
-    ext = Path(file.filename or "file").suffix or ".png"
-    filename = f"{uuid4().hex[:12]}{ext}"
-    file_path = uploads_dir / filename
-    content = await file.read()
-    file_path.write_bytes(content)
-    return {
-        "path": str(file_path.resolve()),
-        "url": f"/api/outputs/uploads/{filename}",
-    }
+@app.post("/api/uploads")
+async def upload_file_consolidated(
+    file: UploadFile,
+    create_node: str = Form("false"),
+) -> dict:
+    """Accept an image upload with strict validation and content-hash dedup.
 
+    When `create_node` is truthy, atomically creates an image-input node in
+    cli_graph and broadcasts graphSync. When absent or falsy, returns only
+    the upload metadata so callers can handle node creation themselves (or
+    use the URL for an existing node).
 
-@app.post("/api/chat/uploads")
-async def chat_upload(file: UploadFile) -> dict:
-    """Accept an image drop from the chat panel, save to disk keyed on its
-    content hash, create an image-input node so it becomes a canvas asset,
-    and return references the frontend can attach to the message."""
+    Supersedes the deprecated /api/upload and /api/chat/uploads endpoints;
+    both shapes of caller can migrate to this one.
+    """
     content = await file.read()
     if len(content) > MAX_CHAT_UPLOAD_BYTES:
         raise HTTPException(status_code=413, detail="Image exceeds 20 MB limit")
@@ -112,41 +106,38 @@ async def chat_upload(file: UploadFile) -> dict:
 
     digest = hashlib.sha256(content).hexdigest()
     saved_path = CHAT_UPLOADS_DIR / f"{digest}{ext}"
-    # Dedup by content hash: the file on disk is keyed on its own bytes, so
-    # a concurrent write-after-write writes identical bytes at the same path
-    # and is benign (no lock needed).
     if not saved_path.exists():
+        # Dedup by content hash: identical bytes collapse to one file on disk.
+        # Concurrent write-after-write writes the same bytes and is benign.
         saved_path.write_bytes(content)
 
     url = f"/api/outputs/chat-uploads/{saved_path.name}"
+    filename = file.filename or f"{digest}{ext}"
 
-    # Position: reuse the "maxX + 300" heuristic from existing node creation.
-    positions = [
-        n.get("position", {}) for n in cli_graph.nodes.values()
-    ]
-    max_x = max((p.get("x", 0) for p in positions), default=-300)
-    new_position = {"x": float(max_x) + 300.0, "y": 100.0}
-
-    # IMPORTANT: image-input canonical schema key is `filePath` (see
-    # backend/data/node_definitions.json). Using `filePath` here so nodes
-    # created by chat-drop are identical in shape to UI-created ones and
-    # are resolvable by GET /api/graph/node/{id}/path's canonical lookup.
-    node_id = cli_graph.add_node(
-        "image-input",
-        {"filePath": url, "_previewUrl": url},
-        position=new_position,
-    )
-    await _broadcast_graph_sync()
-
-    # `filename` in the response is a display-only label echoed back to the
-    # chat chip. It is never used as a filesystem path segment — the on-disk
-    # name is derived from the sha256 digest plus the sniffed extension.
-    return {
-        "nodeId": node_id,
+    # Base response — present for every caller.
+    response: dict[str, Any] = {
         "url": url,
-        "thumbUrl": url,
-        "filename": file.filename or f"{digest}{ext}",
+        "filePath": str(saved_path.resolve()),
+        "filename": filename,
     }
+
+    # Opt-in node creation: parse create_node laxly so any reasonable truthy
+    # string works (supports callers composing forms in different tools).
+    if create_node.strip().lower() in ("true", "1", "yes"):
+        positions = [n.get("position", {}) for n in cli_graph.nodes.values()]
+        max_x = max((p.get("x", 0) for p in positions), default=-300)
+        new_position = {"x": float(max_x) + 300.0, "y": 100.0}
+
+        node_id = cli_graph.add_node(
+            "image-input",
+            {"filePath": url, "_previewUrl": url},
+            position=new_position,
+        )
+        await _broadcast_graph_sync()
+        response["nodeId"] = node_id
+        response["thumbUrl"] = url
+
+    return response
 
 
 @app.get("/api/convert-to-glb")

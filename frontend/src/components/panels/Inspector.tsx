@@ -356,12 +356,12 @@ export function Inspector() {
                       if (!file) return;
                       const formData = new FormData();
                       formData.append('file', file);
-                      fetch('http://localhost:8000/api/upload', { method: 'POST', body: formData })
+                      fetch('http://localhost:8000/api/uploads', { method: 'POST', body: formData })
                         .then((r) => r.json())
-                        .then((data: { path: string; url: string }) => {
+                        .then((data: { filePath: string; url: string }) => {
                           if (!selectedNodeId) return;
                           updateNodeData(selectedNodeId, {
-                            params: { ...nodeData!.params, [param.key]: data.path, _previewUrl: data.url },
+                            params: { ...nodeData!.params, [param.key]: data.filePath, _previewUrl: data.url },
                           });
                         })
                         .catch((err) => console.error('Upload failed:', err));

@@ -258,9 +258,10 @@ export function ChatPanel() {
     async (file: File, chipId: string) => {
       const form = new FormData();
       form.append('file', file);
+      form.append('create_node', 'true');
       try {
         const resp = await fetch(
-          `http://${window.location.hostname}:8000/api/chat/uploads`,
+          `http://${window.location.hostname}:8000/api/uploads`,
           { method: 'POST', body: form },
         );
         if (!resp.ok) {

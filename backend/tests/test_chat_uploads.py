@@ -109,8 +109,9 @@ def test_node_path_for_external_url_rejects(client):
 def test_upload_valid_png_creates_node_and_file(client, monkeypatch):
     png_bytes = _make_png_bytes()
     resp = client.post(
-        "/api/chat/uploads",
+        "/api/uploads",
         files={"file": ("example.png", png_bytes, "image/png")},
+        data={"create_node": "true"},
     )
     assert resp.status_code == 200
     body = resp.json()
@@ -136,12 +137,14 @@ def test_upload_valid_png_creates_node_and_file(client, monkeypatch):
 def test_upload_dedup_by_content_hash(client):
     png_bytes = _make_png_bytes()
     resp1 = client.post(
-        "/api/chat/uploads",
+        "/api/uploads",
         files={"file": ("a.png", png_bytes, "image/png")},
+        data={"create_node": "true"},
     )
     resp2 = client.post(
-        "/api/chat/uploads",
+        "/api/uploads",
         files={"file": ("b.png", png_bytes, "image/png")},
+        data={"create_node": "true"},
     )
     assert resp1.status_code == 200
     assert resp2.status_code == 200
@@ -158,7 +161,7 @@ def test_upload_dedup_by_content_hash(client):
 def test_upload_rejects_oversize(client):
     big = b"\x00" * (21 * 1024 * 1024)  # 21 MB
     resp = client.post(
-        "/api/chat/uploads",
+        "/api/uploads",
         files={"file": ("big.png", big, "image/png")},
     )
     assert resp.status_code == 413
@@ -168,7 +171,7 @@ def test_upload_rejects_oversize(client):
 
 def test_upload_rejects_non_image(client):
     resp = client.post(
-        "/api/chat/uploads",
+        "/api/uploads",
         files={"file": ("note.txt", b"hello world", "text/plain")},
     )
     assert resp.status_code == 415
@@ -180,7 +183,7 @@ def test_upload_rejects_fake_png(client):
     """A file claiming Content-Type: image/png but whose bytes aren't a PNG.
     Server-side MIME sniff must catch this."""
     resp = client.post(
-        "/api/chat/uploads",
+        "/api/uploads",
         files={"file": ("fake.png", b"not really a png", "image/png")},
     )
     assert resp.status_code == 415
@@ -192,12 +195,85 @@ def test_upload_rejects_tiny_signature_match(client):
     be rejected. Otherwise we'd write a 3-byte file to disk and create a
     broken image-input node."""
     resp = client.post(
-        "/api/chat/uploads",
+        "/api/uploads",
         files={"file": ("tiny.jpg", b"\xff\xd8\xff", "image/jpeg")},
     )
     assert resp.status_code == 415
     assert len(list(main_module.CHAT_UPLOADS_DIR.iterdir())) == 0
     assert len(main_module.cli_graph.nodes) == 0
+
+
+def test_upload_no_create_node(client):
+    """Default (no create_node flag) uploads and returns paths without
+    creating a graph node."""
+    png_bytes = _make_png_bytes()
+    resp = client.post(
+        "/api/uploads",
+        files={"file": ("example.png", png_bytes, "image/png")},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["url"].startswith("/api/outputs/chat-uploads/")
+    assert body["url"].endswith(".png")
+    assert "filePath" in body
+    assert Path(body["filePath"]).is_absolute()
+    assert body["filename"] == "example.png"
+    # No nodeId / thumbUrl in the default response.
+    assert "nodeId" not in body
+    assert "thumbUrl" not in body
+    # And no node in cli_graph.
+    assert len(main_module.cli_graph.nodes) == 0
+
+
+def test_upload_create_node_false_explicit(client):
+    """Explicit create_node=false matches the default no-create behavior."""
+    png_bytes = _make_png_bytes()
+    resp = client.post(
+        "/api/uploads",
+        files={"file": ("example.png", png_bytes, "image/png")},
+        data={"create_node": "false"},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert "nodeId" not in body
+    assert len(main_module.cli_graph.nodes) == 0
+
+
+def test_upload_create_node_truthy_variants(client):
+    """create_node accepts 'true', '1', 'yes' case-insensitively."""
+    for variant in ["true", "TRUE", "True", "1", "yes", "YES"]:
+        main_module.cli_graph = CLIGraph()  # reset between iterations
+        resp = client.post(
+            "/api/uploads",
+            files={"file": ("x.png", _make_png_bytes(), "image/png")},
+            data={"create_node": variant},
+        )
+        assert resp.status_code == 200, f"failed for {variant!r}"
+        assert "nodeId" in resp.json(), f"no nodeId for {variant!r}"
+        assert len(main_module.cli_graph.nodes) == 1
+
+
+def test_upload_no_create_still_validates(client):
+    """Upload-only path still enforces MIME sniff, size cap, and min size."""
+    # Wrong MIME.
+    resp = client.post(
+        "/api/uploads",
+        files={"file": ("fake.png", b"not a real image", "image/png")},
+    )
+    assert resp.status_code == 415
+    # Oversize.
+    big = b"\x00" * (21 * 1024 * 1024)
+    resp = client.post(
+        "/api/uploads",
+        files={"file": ("big.png", big, "image/png")},
+    )
+    assert resp.status_code == 413
+    # Too small.
+    resp = client.post(
+        "/api/uploads",
+        files={"file": ("tiny.jpg", b"\xff\xd8\xff", "image/jpeg")},
+    )
+    assert resp.status_code == 415
 
 
 def test_sync_outputs_to_cli_graph_populates_image_output(client):

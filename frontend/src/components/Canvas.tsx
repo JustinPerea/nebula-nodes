@@ -109,18 +109,9 @@ export function Canvas() {
             // Position from the drop event is discarded — cli_graph export auto-lays-out.
             const formData = new FormData();
             formData.append('file', file);
-            fetch('http://localhost:8000/api/upload', { method: 'POST', body: formData })
+            formData.append('create_node', 'true');
+            fetch('http://localhost:8000/api/uploads', { method: 'POST', body: formData })
               .then((r) => r.json())
-              .then((data: { path: string; url: string }) =>
-                fetch('http://localhost:8000/api/graph/node', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    definitionId: 'image-input',
-                    params: { filePath: data.path, _previewUrl: data.url },
-                  }),
-                }),
-              )
               .catch((err) => console.error('Upload/create failed:', err));
           });
           return;
