@@ -23,6 +23,15 @@ def save_base64_image(b64_data: str, run_dir: Path, extension: str = "png") -> P
     return file_path
 
 
+def save_base64_image_named(
+    b64_data: str, run_dir: Path, name: str, extension: str = "png"
+) -> Path:
+    image_bytes = base64.b64decode(b64_data)
+    file_path = run_dir / f"{name}.{extension}"
+    file_path.write_bytes(image_bytes)
+    return file_path
+
+
 async def save_video_from_url(url: str, run_dir: Path, extension: str = "mp4") -> Path:
     import httpx
     filename = f"{uuid4().hex[:12]}.{extension}"
