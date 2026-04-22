@@ -331,6 +331,14 @@ export function Inspector() {
                 type="number"
                 value={String(nodeData.params[param.key] ?? param.default ?? '')}
                 onChange={(e) => onParamChange(param.key, Number(e.target.value))}
+                onBlur={(e) => {
+                  const raw = Number(e.target.value);
+                  if (Number.isNaN(raw)) return;
+                  let clamped = raw;
+                  if (typeof param.min === 'number' && clamped < param.min) clamped = param.min;
+                  if (typeof param.max === 'number' && clamped > param.max) clamped = param.max;
+                  if (clamped !== raw) onParamChange(param.key, clamped);
+                }}
                 min={param.min}
                 max={param.max}
                 step={param.step ?? (param.type === 'float' ? 0.1 : 1)}
@@ -434,6 +442,14 @@ export function Inspector() {
                   type="number"
                   value={String(nodeData.params[param.key] ?? param.default ?? '')}
                   onChange={(e) => onParamChange(param.key, Number(e.target.value))}
+                  onBlur={(e) => {
+                    const raw = Number(e.target.value);
+                    if (Number.isNaN(raw)) return;
+                    let clamped = raw;
+                    if (typeof param.min === 'number' && clamped < param.min) clamped = param.min;
+                    if (typeof param.max === 'number' && clamped > param.max) clamped = param.max;
+                    if (clamped !== raw) onParamChange(param.key, clamped);
+                  }}
                   min={param.min}
                   max={param.max}
                   step={param.step ?? (param.type === 'float' ? 0.1 : 1)}

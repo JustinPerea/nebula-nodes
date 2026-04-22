@@ -74,8 +74,17 @@ def format_node_detail(node: dict[str, Any]) -> str:
             detail = f"{p['key']:<20}{ptype:<10}{default}"
             opts = p.get("options", [])
             if opts:
-                opt_labels = [o.get("label", o.get("value", "")) for o in opts]
-                detail += f"  [{', '.join(opt_labels)}]"
+                # Show values (what `nebula set` accepts), not labels (UI display strings).
+                # If label differs from value, annotate as "value (label)" so both are visible.
+                parts = []
+                for o in opts:
+                    val = o.get("value", "")
+                    lbl = o.get("label", "")
+                    if lbl and lbl != val:
+                        parts.append(f"{val} ({lbl})")
+                    else:
+                        parts.append(str(val))
+                detail += f"  [{', '.join(parts)}]"
             if p.get("min") is not None or p.get("max") is not None:
                 lo = p.get("min", "")
                 hi = p.get("max", "")
