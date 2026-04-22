@@ -70,3 +70,13 @@ def test_search_by_name(registry):
 def test_search_case_insensitive(registry):
     results = registry.search("GPT")
     assert len(results) > 0
+
+
+@pytest.mark.asyncio
+async def test_gpt_image_2_nodes_registered() -> None:
+    async def fake_emit(_e):
+        return None
+    from execution.sync_runner import get_handler_registry
+    registry = get_handler_registry(emit=fake_emit)
+    assert "gpt-image-2-generate" in registry
+    assert "gpt-image-2-edit" in registry
