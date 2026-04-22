@@ -1055,7 +1055,11 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   handleExecutionEvent: (event) => {
     switch (event.type) {
       case 'queued':
-        get().updateNodeData(event.nodeId, { state: 'queued' });
+        get().updateNodeData(event.nodeId, {
+          state: 'queued',
+          streamingText: undefined,
+          streamingPartials: undefined,
+        });
         break;
       case 'executing':
         get().updateNodeData(event.nodeId, { state: 'executing', progress: 0, streamingText: undefined, streamingPartials: undefined });
@@ -1098,7 +1102,13 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         break;
       }
       case 'error':
-        get().updateNodeData(event.nodeId, { state: 'error', error: event.error, progress: undefined });
+        get().updateNodeData(event.nodeId, {
+          state: 'error',
+          error: event.error,
+          progress: undefined,
+          streamingText: undefined,
+          streamingPartials: undefined,
+        });
         break;
       case 'validationError':
         for (const err of event.errors) {

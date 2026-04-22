@@ -432,4 +432,20 @@ describe('graphStore streamPartialImage', () => {
     const node = useGraphStore.getState().nodes.find((n) => n.id === 'n1')!;
     expect(node.data.streamingPartials).toBeUndefined();
   });
+
+  it('sorts out-of-order partials by index', () => {
+    const store = useGraphStore.getState();
+    store.handleExecutionEvent({ type: 'streamPartialImage', nodeId: 'n1', partialIndex: 2, src: '/c.png', isFinal: false });
+    store.handleExecutionEvent({ type: 'streamPartialImage', nodeId: 'n1', partialIndex: 0, src: '/a.png', isFinal: false });
+    const node = useGraphStore.getState().nodes.find((n) => n.id === 'n1')!;
+    expect(node.data.streamingPartials?.map(p => p.index)).toEqual([0, 2]);
+  });
+
+  it('clears partials on error event', () => {
+    const store = useGraphStore.getState();
+    store.handleExecutionEvent({ type: 'streamPartialImage', nodeId: 'n1', partialIndex: 0, src: '/a.png', isFinal: false });
+    store.handleExecutionEvent({ type: 'error', nodeId: 'n1', error: 'test error' });
+    const node = useGraphStore.getState().nodes.find((n) => n.id === 'n1')!;
+    expect(node.data.streamingPartials).toBeUndefined();
+  });
 });
