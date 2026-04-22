@@ -142,7 +142,10 @@ export function Canvas() {
 
   const onDragOver = useCallback((event: React.DragEvent) => {
     event.preventDefault();
-    event.dataTransfer.dropEffect = 'copy';
+    // Match dropEffect to the drag source's effectAllowed, otherwise browser
+    // refuses the drop. Library-node drags use 'move'; OS file drags use 'copy'.
+    const types = event.dataTransfer.types;
+    event.dataTransfer.dropEffect = types.includes('Files') ? 'copy' : 'move';
   }, []);
 
   const onNodeContextMenu = useCallback(
