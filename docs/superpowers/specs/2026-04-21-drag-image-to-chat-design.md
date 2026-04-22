@@ -26,12 +26,14 @@ This direct hit on v1 pillar #3 (Claude chat fluency) unlocks visual iteration l
 | Delivery mechanism | `@nX` refs in message text → Claude calls `nebula show nX --path` → Read | Uses documented tools on both transports. Sidesteps undocumented image-content-block paths in both `claude -p` stdin and the Agent SDK. |
 | Chat transport | Stay on `claude -p` subprocess | Preserves subscription auth. Agent SDK migration is orthogonal and deferred. |
 | External-file drop → node creation | Synchronous on drop, before Send | User sees their action land on the canvas immediately. |
-| File storage | `backend/data/chat-uploads/<sha256>.<ext>`, served at `/api/uploads/` | Hash filenames give free dedup; separate mount keeps input/output semantics distinct. |
+| File storage | `OUTPUT_ROOT/chat-uploads/<sha256>.<ext>`, served via the existing `/api/outputs/chat-uploads/` mount | Hash filenames give free dedup; reusing the existing static mount avoids duplication and keeps lifecycle policies unified. |
 | File lifecycle | Persist indefinitely in v1 | "I lost my uploaded image when I deleted a node" is worse than disk bloat. GC deferred. |
 | Thumbnail generation | None | Browser scales full-res; sizes involved don't justify a thumb pipeline. |
 | WebSocket payload | Unchanged — `{ type, message, sessionId, model }` | All image refs go through `@nX` in the message text; no new field needed. |
 | Message-log bubble | Thumbnails rendered above the text | Matches ChatGPT / Claude.ai history layout; visually anchors the text to the images it's about. |
 | Chip × behavior | Removes chip AND the first matching `@nX` marker from the textarea | Chip and marker exist together; removing only one is a footgun. |
+
+> Implementation note: during execution the backend already mounted `OUTPUT_ROOT` at `/api/outputs/`. To avoid a second `StaticFiles` mount, chat-uploads were filed under `OUTPUT_ROOT/chat-uploads/` and served through the existing mount. User-facing behavior identical; internal detail differs from the original spec.
 
 ---
 
@@ -67,7 +69,7 @@ This direct hit on v1 pillar #3 (Claude chat fluency) unlocks visual iteration l
 
 1. `ChatPanel` textarea drop handler detects `dataTransfer.files.length > 0` and an image MIME.
 2. For each accepted file (up to `4 - pendingImages.length`), frontend POSTs `multipart/form-data` to `POST /api/chat/uploads`. Shows a transient "Uploading…" chip with spinner per file.
-3. Backend validates (content-type, size), hashes to `sha256`, writes to `backend/data/chat-uploads/<sha256>.<ext>` if new, calls `CLIGraph.add_node("image-input", params={ file, _previewUrl }, position={ x: maxX+300, y: 100 })`, broadcasts `graphSync`, returns `{ nodeId, url, thumbUrl, filename }`.
+3. Backend validates (content-type, size), hashes to `sha256`, writes to `OUTPUT_ROOT/chat-uploads/<sha256>.<ext>` if new, calls `CLIGraph.add_node("image-input", params={ filePath, _previewUrl }, position={ x: maxX+300, y: 100 })` where `_previewUrl` and `filePath` are the served URL (`/api/outputs/chat-uploads/<hash>.<ext>`), broadcasts `graphSync`, returns `{ nodeId, url, thumbUrl, filename }`.
 4. Canvas receives `graphSync` and renders the new image-input node automatically (existing pipeline).
 5. Composer chip swaps from "Uploading…" placeholder to real thumbnail + `@nX` label. Frontend inserts `@<nodeId>` at the caret.
 6. On Send, behavior is identical to the canvas-node drop case.
@@ -169,14 +171,14 @@ User bubbles render the thumbnail row above the text when `images?.length > 0`.
 - Body: `multipart/form-data` with one `file` field.
 - Validate content-type against `{ image/jpeg, image/png, image/webp, image/gif }`. Reject with 415 otherwise. Sniff first 512 bytes — don't trust the client-provided MIME.
 - Validate size ≤ 20 MB. Reject with 413 otherwise.
-- Compute `sha256` of bytes. Save to `backend/data/chat-uploads/<sha256>.<ext>`. Skip write if file already exists (dedup).
+- Compute `sha256` of bytes. Save to `OUTPUT_ROOT/chat-uploads/<sha256>.<ext>`. If the file already exists (hash collision = same bytes), skip the write — dedup for free.
 - Call `CLIGraph.add_node("image-input", params={ file: serving_url, _previewUrl: serving_url }, position={ x: max_x + 300, y: 100 })`. Auto-layout mirrors the frontend's existing heuristic.
 - Broadcast `graphSync` via the existing mechanism.
 - Return `200 { nodeId, url, thumbUrl, filename }`. `thumbUrl == url` in v1.
 
 ### Static file serving
 
-Mount `backend/data/chat-uploads/` at `/api/uploads/` via FastAPI `StaticFiles`, parallel to the existing `/api/outputs/` mount. Separate mount = explicit input/output semantic boundary and divergent lifecycle policies later.
+`OUTPUT_ROOT/chat-uploads/` is served via the existing `/api/outputs/` `StaticFiles` mount (URLs are `/api/outputs/chat-uploads/<hash>.<ext>`). Reusing the existing mount avoids adding a second static-files mount and keeps lifecycle tooling unified. If later we need a separate lifecycle policy for chat-uploaded files, the subdirectory layout makes that refactor straightforward.
 
 ### New CLI flag: `nebula show <nodeId> --path`
 
@@ -186,7 +188,7 @@ Mount `backend/data/chat-uploads/` at `/api/uploads/` via FastAPI `StaticFiles`,
   1. Image-input node: `file` param (or `_previewUrl` if `file` is absent).
   2. Model node with image output: `_output_image` output value.
   3. Otherwise: exit 1 with `no image file for node <id>` on stderr.
-- URL → path resolution: serving URLs under `/api/uploads/` or `/api/outputs/` map to their filesystem roots. External URLs (http/https not matching those prefixes) exit 1 with `image not local` on stderr.
+- URL → path resolution: serving URLs under `/api/outputs/` (including `/api/outputs/chat-uploads/`) map to their filesystem roots. External URLs (http/https not matching those prefixes) exit 1 with `image not local` on stderr.
 - Safety: always assert the resolved path has the expected root prefix to prevent path traversal if the cli_graph state is ever tampered with.
 
 ### Chat session bridge — no changes
@@ -195,7 +197,7 @@ Mount `backend/data/chat-uploads/` at `/api/uploads/` via FastAPI `StaticFiles`,
 
 ### Files touched on the backend
 
-- `backend/main.py` — add `POST /api/chat/uploads`, mount `/api/uploads/`.
+- `backend/main.py` — add `POST /api/chat/uploads` (files land in `OUTPUT_ROOT/chat-uploads/`, served via the existing `/api/outputs/` mount).
 - `backend/services/cli_graph.py` — verify `add_node` supports the image-input case (likely already works; validate during implementation).
 - `backend/cli/__main__.py` — add `--path` flag to the `show` subcommand.
 - `backend/services/chat_session.py` — update the primer text only.
@@ -255,7 +257,7 @@ Add the following rule block to `NEBULA_SYSTEM_PRIMER` in `backend/services/chat
 **Security / correctness:**
 
 - Server-side MIME sniff (first 512 bytes) is authoritative. Don't trust client-provided `Content-Type`.
-- `nebula show --path` asserts resolved path prefix is inside `/api/uploads/` or `/api/outputs/` filesystem roots; other origins exit 1. Prevents enumeration via tampered cli_graph state.
+- `nebula show --path` asserts resolved path prefix is inside the `/api/outputs/` filesystem root (covers both generated outputs and `chat-uploads/`); other origins exit 1. Prevents enumeration via tampered cli_graph state.
 - Hash-based filenames eliminate path traversal via user-controlled filenames.
 - Original filename is never written to disk or returned verbatim to Claude in path form — only shown in the chip UI label.
 
@@ -302,7 +304,7 @@ Drop-and-drop behavior is dominated by DOM events and visual feedback. Better ve
 | `frontend/src/components/panels/ChatPanel.tsx` | Add `pendingImages` state, chip row, extended drop handler, message-log bubble thumbs. |
 | `frontend/src/components/nodes/ModelNode.tsx` | Make `imageOutput` and `imageInputPreview` `<img>` elements draggable with new `dataTransfer` payload. |
 | `frontend/src/styles/panels.css` (or equivalent) | Chip row styles, thumbnail sizing, upload/error states. |
-| `backend/main.py` | Add `POST /api/chat/uploads`, mount `/api/uploads/` static. |
+| `backend/main.py` | Add `POST /api/chat/uploads` (files land in `OUTPUT_ROOT/chat-uploads/`, served via the existing `/api/outputs/` mount). |
 | `backend/services/cli_graph.py` | Verify image-input `add_node` path; extend if needed. |
 | `backend/cli/__main__.py` | Add `--path` flag to the `show` subcommand with resolution + safety logic. |
 | `backend/services/chat_session.py` | Primer text update (no mechanism changes). |
@@ -332,7 +334,7 @@ Drop-and-drop behavior is dominated by DOM events and visual feedback. Better ve
 | Delivery mechanism | `@nX` refs + Read tool via primer, not content blocks. |
 | External-file drop timing | Synchronous, creates node before Send. |
 | Transport (SDK vs CLI) | Stay on `claude -p` for this feature. |
-| File storage | Hash-named files under `backend/data/chat-uploads/`, served at `/api/uploads/`. |
+| File storage | Hash-named files under `OUTPUT_ROOT/chat-uploads/`, served via the existing `/api/outputs/` mount. |
 | File lifecycle | Persist in v1; GC deferred. |
 | Thumbnail generation | None in v1. |
 | WebSocket payload shape | Unchanged. |

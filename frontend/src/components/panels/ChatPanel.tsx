@@ -878,7 +878,11 @@ export function ChatPanel() {
                 try {
                   const parsed = JSON.parse(imageRefRaw) as { nodeId: string; url: string };
                   setPendingImages((prev) => {
-                    if (prev.length >= 4) {
+                    // Only count chips that carry or will carry an attachment
+                    // against the 4-image cap. Error chips stay visible as a
+                    // reminder but don't lock the user out.
+                    const activeCount = prev.filter((p) => p.status !== 'error').length;
+                    if (activeCount >= 4) {
                       setNotice('4 images max per message — remove one to add another.');
                       return prev;
                     }
@@ -916,7 +920,10 @@ export function ChatPanel() {
                 // double-invocation of the updater doesn't double-fire uploads.
                 // The 4-cap re-check inside the updater keeps us correct under
                 // coalesced updates and guarantees stored chips never exceed 4.
-                const roomLeft = Math.max(0, 4 - pendingImages.length);
+                // Error chips don't count against the cap — they're reminders,
+                // not reservations.
+                const activeCountNow = pendingImages.filter((p) => p.status !== 'error').length;
+                const roomLeft = Math.max(0, 4 - activeCountNow);
                 const accepted = imageFiles.slice(0, roomLeft);
                 const rejectedForLimit = imageFiles.length - accepted.length;
                 const rejectedForNonImage = files.length - imageFiles.length;
@@ -940,7 +947,8 @@ export function ChatPanel() {
 
                 // Pure updater — no side effects.
                 setPendingImages((prev) => {
-                  const available = Math.max(0, 4 - prev.length);
+                  const activeInPrev = prev.filter((p) => p.status !== 'error').length;
+                  const available = Math.max(0, 4 - activeInPrev);
                   // If another drop landed between our closure read and this
                   // reducer run, honour the current cap by admitting only as
                   // many as fit. Revoke any chips we drop on the floor so we
