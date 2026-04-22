@@ -543,8 +543,18 @@ def get_handler_registry(
         registry["flux-2-pro"] = _flux2_pro_handler
         registry["gpt-image-1-5"] = _gpt_image_15_handler
         registry["gpt-image-1-5-edit"] = _gpt_image_15_edit_handler
+        async def _gpt_image_2_fal_generate_handler(node, inputs, api_keys):
+            node.params.setdefault("endpoint_id", "openai/gpt-image-2")
+            return await handle_fal_universal(node, inputs, api_keys, emit=emit)
+
+        async def _gpt_image_2_fal_edit_handler(node, inputs, api_keys):
+            node.params.setdefault("endpoint_id", "openai/gpt-image-2/edit")
+            return await handle_fal_universal(node, inputs, api_keys, emit=emit)
+
         registry["gpt-image-2-generate"] = _openai_image_2_generate_handler
         registry["gpt-image-2-edit"] = _openai_image_2_edit_handler
+        registry["gpt-image-2-fal-generate"] = _gpt_image_2_fal_generate_handler
+        registry["gpt-image-2-fal-edit"] = _gpt_image_2_fal_edit_handler
         registry["seedvr2-upscale"] = _seedvr2_upscale_handler
         registry["seedream-4-5"] = _seedream45_handler
 

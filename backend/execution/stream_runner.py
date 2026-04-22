@@ -164,6 +164,14 @@ def _parse_image_event(
             if isinstance(b64, str):
                 return ("final", 0, b64)
     elif provider == "fal":
-        # FAL dialect wired up in Task 13.
-        pass
+        ev_type = data.get("type")
+        image = data.get("image") or {}
+        b64 = image.get("b64_json")
+        if not isinstance(b64, str):
+            return None
+        if ev_type == "image.partial":
+            idx = image.get("partial_index", 0)
+            return ("partial", int(idx), b64)
+        if ev_type == "image.completed":
+            return ("final", 0, b64)
     return None

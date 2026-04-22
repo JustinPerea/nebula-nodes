@@ -46,3 +46,23 @@ async def test_image_stream_emits_partials_and_returns_final(tmp_path: Path) -> 
     assert all(not p.is_final for p in partials)
     assert Path(final_path).exists()
     assert final_path.endswith(".png")
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_fal_image_stream_parses_partials(tmp_path: Path) -> None:
+    fixture = Path(__file__).parent / "fixtures" / "fal_image_v2_sse.txt"
+    respx.post("https://queue.fal.run/openai/gpt-image-2/stream").mock(
+        return_value=Response(200, content=fixture.read_bytes(), headers={"content-type": "text/event-stream"})
+    )
+    emitted: list = []
+    async def emit(e):
+        emitted.append(e)
+    config = StreamConfig(url="https://queue.fal.run/openai/gpt-image-2/stream", headers={"Authorization": "Key k"})
+    final = await stream_execute_image(
+        config=config, request_body={"prompt": "hi"}, node_id="n", emit=emit,
+        run_dir=tmp_path, provider="fal",
+    )
+    partials = [e for e in emitted if e.__class__.__name__ == "StreamPartialImageEvent"]
+    assert [p.partial_index for p in partials] == [0, 1]
+    assert Path(final).exists()

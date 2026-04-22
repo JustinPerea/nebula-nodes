@@ -80,3 +80,13 @@ async def test_gpt_image_2_nodes_registered() -> None:
     registry = get_handler_registry(emit=fake_emit)
     assert "gpt-image-2-generate" in registry
     assert "gpt-image-2-edit" in registry
+
+
+@pytest.mark.asyncio
+async def test_gpt_image_2_fal_nodes_registered() -> None:
+    async def fake_emit(_e):
+        return None
+    from execution.sync_runner import get_handler_registry
+    registry = get_handler_registry(emit=fake_emit)
+    assert "gpt-image-2-fal-generate" in registry
+    assert "gpt-image-2-fal-edit" in registry
