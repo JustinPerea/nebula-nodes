@@ -24,7 +24,6 @@ All four use `executionPattern: "stream"`. Partial previews render in the canvas
 |---|---|---|---|
 | `size` | `auto`, `1024x1024`, `1536x1024`, `1024x1536`, `2048x2048`, `2048x1152`, `3840x2160`, `2160x3840` | `auto` | 4K sizes cost significantly more |
 | `quality` | `auto`, `low`, `medium`, `high` | `auto` | ~$0.006 / $0.053 / $0.211 at 1024² |
-| `n` | 1–10 | 1 | |
 | `output_format` | `png`, `jpeg`, `webp` | `png` | |
 | `output_compression` | 0–100 | 90 | Only applied when format != png |
 | `moderation` | `auto`, `low` | `auto` | `low` is less restrictive |
@@ -40,6 +39,7 @@ FAL uses slightly different naming: `image_size` (not `size`), `num_images` (not
 
 - `background: transparent` — v1 supported it, v2 does not. If a user asks for transparent backgrounds, suggest chaining a `remove-background` node downstream instead.
 - `input_fidelity` — gpt-image-2 always processes inputs at high fidelity; the param must be omitted.
+- `n > 1` — OpenAI rejects `n > 1` when `stream=true`, and our nodes always stream. The `n`/Count param is not exposed on the OpenAI-direct nodes. Run the node multiple times for multiple images. (FAL nodes expose `num_images` because FAL may handle this differently — verify during UAT.)
 
 ## Cost guidance
 

@@ -38,6 +38,7 @@ def test_build_generate_body_omits_unsupported_params() -> None:
 
 
 def test_build_generate_body_passes_quality_format_moderation() -> None:
+    # n=2 is silently dropped — OpenAI streaming requires n=1.
     node = _node({
         "size": "3840x2160", "quality": "high", "output_format": "jpeg",
         "output_compression": 80, "moderation": "low", "n": 2, "partial_images": 3,
@@ -48,7 +49,7 @@ def test_build_generate_body_passes_quality_format_moderation() -> None:
     assert body["output_format"] == "jpeg"
     assert body["output_compression"] == 80
     assert body["moderation"] == "low"
-    assert body["n"] == 2
+    assert "n" not in body
     assert body["partial_images"] == 3
 
 

@@ -55,15 +55,6 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         ],
       },
       {
-        key: 'n',
-        label: 'Count',
-        type: 'integer',
-        required: false,
-        default: 1,
-        min: 1,
-        max: 10,
-      },
-      {
         key: 'output_format',
         label: 'Format',
         type: 'enum',
@@ -5291,15 +5282,6 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         ],
       },
       {
-        key: 'n',
-        label: 'Count',
-        type: 'integer',
-        required: false,
-        default: 1,
-        min: 1,
-        max: 10,
-      },
-      {
         key: 'output_format',
         label: 'Format',
         type: 'enum',
@@ -5389,15 +5371,6 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
           { label: 'Medium', value: 'medium' },
           { label: 'High', value: 'high' },
         ],
-      },
-      {
-        key: 'n',
-        label: 'Count',
-        type: 'integer',
-        required: false,
-        default: 1,
-        min: 1,
-        max: 10,
       },
       {
         key: 'output_format',

@@ -44,9 +44,8 @@ def build_generate_body(node: GraphNode, prompt_text: str) -> dict[str, Any]:
         value = params.get(key)
         if value and value != "auto":
             body[key] = value
-    n_value = params.get("n")
-    if n_value and int(n_value) > 1:
-        body["n"] = int(n_value)
+    # OpenAI rejects n>1 when stream=true. We always stream, so we never forward n.
+    # If a legacy saved graph has n in params, it's silently dropped.
     fmt = params.get("output_format", "png")
     if fmt and fmt != "png":
         body["output_format"] = fmt
