@@ -215,7 +215,11 @@ async def handle_gpt_image_2_edit(
                     data = json.loads(data_str)
                 except (ValueError, TypeError):
                     continue
-                if current_event_type == "image_generation.partial_image":
+                # OpenAI uses image_edit.* for edit endpoint, image_generation.* for generate.
+                # Accept both so this parser works for either.
+                PARTIAL_EVENTS = {"image_generation.partial_image", "image_edit.partial_image"}
+                COMPLETED_EVENTS = {"image_generation.completed", "image_edit.completed"}
+                if current_event_type in PARTIAL_EVENTS:
                     idx = int(data.get("partial_image_index", 0))
                     b64 = data.get("b64_json")
                     if isinstance(b64, str):
@@ -225,7 +229,7 @@ async def handle_gpt_image_2_edit(
                         await _emit(StreamPartialImageEvent(
                             node_id=node.id, partial_index=idx, src=str(path), is_final=False,
                         ))
-                elif current_event_type == "image_generation.completed":
+                elif current_event_type in COMPLETED_EVENTS:
                     b64 = data.get("b64_json")
                     if isinstance(b64, str):
                         final_path = save_base64_image_named(b64, effective_run_dir, name=f"{node.id}_final")
