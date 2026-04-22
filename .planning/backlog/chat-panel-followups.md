@@ -31,6 +31,8 @@ Medium. New backend resource, new panel component, drop handler. Design thinking
 
 ## 2. Drag-node-to-chat — richer reference than plain ID (follow-up)
 
+**Status: Vision portion shipped 2026-04-22.** Drag image → chat now attaches pixels Claude can Read. See `docs/superpowers/plans/2026-04-21-drag-image-to-chat.md`. UUID-node portion still open — frontend-created (non-CLI) nodes don't yet sync into cli_graph, so @uuid references still don't resolve.
+
 ### What shipped in v1 (2026-04-16)
 Drag the `@n1` chip on a node header into the chat textarea → inserts `@n1` as text. Claude resolves the short ID via the nebula CLI. Works for all CLI-created nodes.
 
@@ -68,6 +70,8 @@ Medium. Most cost is in decision-making and position-stability edge cases. Imple
 
 ## 4. File upload → chat → canvas (reverse of drag-image-to-chat)
 
+**Status: Shipped 2026-04-22.** OS-file drops into the chat composer upload to `POST /api/chat/uploads`, create an `image-input` node atomically, and broadcast `graphSync` so the canvas updates live. Implemented as part of `docs/superpowers/plans/2026-04-21-drag-image-to-chat.md` Tasks 3 + 8.
+
 ### Problem
 Complement to drag-image-to-chat. Once Claude can *see* images dropped into chat, the next loop is: user drags a local file (or uses an Add Files button) into the chat panel → Claude receives it → Claude can place it on the canvas as the right kind of input node (image-input, mesh-input, audio-input, etc.) AND save the file under the project's asset area so it persists across sessions.
 
@@ -88,3 +92,5 @@ Complement to drag-image-to-chat. Once Claude can *see* images dropped into chat
 | 2026-04-16 | Drag-to-chat v2 (UUID + vision) | Parked. v1 shipped with short-ID-only. |
 | 2026-04-16 | Auto-layout | Parked. Needs research on position stability + layout algo choice. |
 | 2026-04-20 | File upload → chat → canvas (#4) | Parked. Captured during drag-image-to-chat design; depends on that pipeline. |
+| 2026-04-22 | Drag-to-chat v2 (vision portion of #2) | Shipped via 2026-04-21-drag-image-to-chat plan. UUID-node resolution portion still open. |
+| 2026-04-22 | File upload → chat → canvas (#4) | Shipped as part of drag-image-to-chat (POST /api/chat/uploads atomically creates image-input nodes). Closed. |
