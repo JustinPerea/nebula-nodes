@@ -128,9 +128,12 @@ async def upload_file_consolidated(
         max_x = max((p.get("x", 0) for p in positions), default=-300)
         new_position = {"x": float(max_x) + 300.0, "y": 100.0}
 
+        # filePath is the absolute local path (handlers open() this), _previewUrl
+        # is the served URL (frontend <img> displays this). Same shape Inspector
+        # and legacy Canvas file-drop always used.
         node_id = cli_graph.add_node(
             "image-input",
-            {"filePath": url, "_previewUrl": url},
+            {"filePath": str(saved_path.resolve()), "_previewUrl": url},
             position=new_position,
         )
         await _broadcast_graph_sync()
@@ -711,17 +714,24 @@ def _resolve_primary_image_url(node: dict[str, Any]) -> str | None:
     return str(preview) if preview else None
 
 
-def _url_to_output_path(url: str) -> Path | None:
-    """Map an /api/outputs/... URL to the local filesystem path under
-    OUTPUT_ROOT. External URLs (http://, https://, non-outputs paths) return
-    None so callers can reject them with a clear error."""
-    if url.startswith(("http://", "https://")):
+def _url_to_output_path(value: str) -> Path | None:
+    """Resolve a node's image reference to a local filesystem path under
+    OUTPUT_ROOT. Accepts either a served URL (`/api/outputs/...`) or an
+    absolute local filesystem path. External URLs (http://, https://) and
+    paths outside OUTPUT_ROOT return None so callers reject with a clear
+    error."""
+    if not value:
         return None
+    if value.startswith(("http://", "https://")):
+        return None
+
     prefix = "/api/outputs/"
-    if not url.startswith(prefix):
-        return None
-    relative = url[len(prefix):]
-    candidate = (OUTPUT_ROOT / relative).resolve()
+    if value.startswith(prefix):
+        candidate = (OUTPUT_ROOT / value[len(prefix):]).resolve()
+    else:
+        # Treat as a filesystem path (absolute or relative).
+        candidate = Path(value).resolve()
+
     try:
         candidate.relative_to(OUTPUT_ROOT.resolve())
     except ValueError:

@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 import main as main_module
 from main import app
 from services.cli_graph import CLIGraph
+from services.output import OUTPUT_ROOT
 
 
 @pytest.fixture(autouse=True)
@@ -62,6 +63,21 @@ def test_node_path_for_image_input_via_filepath(client):
     body = resp.json()
     assert body["path"].endswith("chat-uploads/via-filepath.png")
     assert Path(body["path"]).is_absolute()
+
+
+def test_node_path_for_image_input_with_absolute_filepath(client):
+    """Nodes created by /api/uploads?create_node=true store filePath as an
+    absolute local path. The node-path endpoint must resolve that directly
+    (it's already under OUTPUT_ROOT) rather than returning 'not local'."""
+    # Construct a path under OUTPUT_ROOT.
+    test_abs_path = str((OUTPUT_ROOT / "chat-uploads" / "absolute.png").resolve())
+    main_module.cli_graph.add_node(
+        "image-input",
+        {"filePath": test_abs_path, "_previewUrl": "/api/outputs/chat-uploads/absolute.png"},
+    )
+    resp = client.get("/api/graph/node/n1/path")
+    assert resp.status_code == 200
+    assert resp.json()["path"] == test_abs_path
 
 
 def test_node_path_for_model_output(client):
@@ -130,7 +146,10 @@ def test_upload_valid_png_creates_node_and_file(client, monkeypatch):
     # Node exists in cli_graph with expected params (canonical `filePath` key).
     node = main_module.cli_graph.nodes[body["nodeId"]]
     assert node["definitionId"] == "image-input"
-    assert node["params"]["filePath"] == body["url"]
+    # filePath is the absolute local path handlers open(); _previewUrl is the URL
+    # the frontend displays. The URL also appears in the response body for the
+    # frontend to use.
+    assert node["params"]["filePath"] == str(saved.resolve())
     assert node["params"]["_previewUrl"] == body["url"]
 
 
@@ -305,3 +324,23 @@ def test_sync_outputs_to_cli_graph_missing_node_noops(client):
     main_module._sync_outputs_to_cli_graph("n999", {"image": "/api/outputs/x.png"})
     # No exception, no nodes added.
     assert "n999" not in main_module.cli_graph.nodes
+
+
+def test_upload_create_node_filepath_is_openable(client):
+    """Regression: filePath on a chat-upload-created image-input node must be
+    a real local path that handlers can open(), not the served URL."""
+    png_bytes = _make_png_bytes()
+    resp = client.post(
+        "/api/uploads",
+        files={"file": ("readable.png", png_bytes, "image/png")},
+        data={"create_node": "true"},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    node = main_module.cli_graph.nodes[body["nodeId"]]
+    node_file_path = node["params"]["filePath"]
+    # Must be absolute and openable.
+    assert Path(node_file_path).is_absolute()
+    assert Path(node_file_path).is_file()
+    # And the bytes must round-trip.
+    assert Path(node_file_path).read_bytes() == png_bytes
