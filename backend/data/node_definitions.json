@@ -6108,6 +6108,114 @@
       }
     ]
   },
+  "gpt-image-2-generate": {
+    "id": "gpt-image-2-generate",
+    "displayName": "GPT Image 2",
+    "category": "image-gen",
+    "apiProvider": "openai",
+    "apiEndpoint": "/v1/images/generations",
+    "envKeyName": "OPENAI_API_KEY",
+    "executionPattern": "stream",
+    "inputPorts": [
+      { "id": "prompt", "label": "Prompt", "dataType": "Text", "required": true }
+    ],
+    "outputPorts": [
+      { "id": "image", "label": "Image", "dataType": "Image", "required": false }
+    ],
+    "params": [
+      { "key": "size", "label": "Size", "type": "enum", "required": false, "default": "auto",
+        "options": [
+          { "label": "Auto", "value": "auto" },
+          { "label": "1024x1024", "value": "1024x1024" },
+          { "label": "1536x1024", "value": "1536x1024" },
+          { "label": "1024x1536", "value": "1024x1536" },
+          { "label": "2048x2048", "value": "2048x2048" },
+          { "label": "2048x1152", "value": "2048x1152" },
+          { "label": "3840x2160 (4K landscape)", "value": "3840x2160" },
+          { "label": "2160x3840 (4K portrait)", "value": "2160x3840" }
+        ]
+      },
+      { "key": "quality", "label": "Quality", "type": "enum", "required": false, "default": "auto",
+        "options": [
+          { "label": "Auto", "value": "auto" },
+          { "label": "Low", "value": "low" },
+          { "label": "Medium", "value": "medium" },
+          { "label": "High", "value": "high" }
+        ]
+      },
+      { "key": "n", "label": "Count", "type": "integer", "required": false, "default": 1, "min": 1, "max": 10 },
+      { "key": "output_format", "label": "Format", "type": "enum", "required": false, "default": "png",
+        "options": [
+          { "label": "PNG", "value": "png" },
+          { "label": "JPEG", "value": "jpeg" },
+          { "label": "WebP", "value": "webp" }
+        ]
+      },
+      { "key": "output_compression", "label": "Compression", "type": "integer", "required": false, "default": 90, "min": 0, "max": 100 },
+      { "key": "moderation", "label": "Moderation", "type": "enum", "required": false, "default": "auto",
+        "options": [
+          { "label": "Auto", "value": "auto" },
+          { "label": "Low", "value": "low" }
+        ]
+      },
+      { "key": "partial_images", "label": "Preview Frames", "type": "integer", "required": false, "default": 2, "min": 0, "max": 3 }
+    ]
+  },
+  "gpt-image-2-edit": {
+    "id": "gpt-image-2-edit",
+    "displayName": "GPT Image 2 Edit",
+    "category": "image-gen",
+    "apiProvider": "openai",
+    "apiEndpoint": "/v1/images/edits",
+    "envKeyName": "OPENAI_API_KEY",
+    "executionPattern": "stream",
+    "inputPorts": [
+      { "id": "image", "label": "Image", "dataType": "Image", "required": true, "multiple": true },
+      { "id": "prompt", "label": "Prompt", "dataType": "Text", "required": true },
+      { "id": "mask", "label": "Mask", "dataType": "Mask", "required": false }
+    ],
+    "outputPorts": [
+      { "id": "image", "label": "Image", "dataType": "Image", "required": false }
+    ],
+    "params": [
+      { "key": "size", "label": "Size", "type": "enum", "required": false, "default": "auto",
+        "options": [
+          { "label": "Auto", "value": "auto" },
+          { "label": "1024x1024", "value": "1024x1024" },
+          { "label": "1536x1024", "value": "1536x1024" },
+          { "label": "1024x1536", "value": "1024x1536" },
+          { "label": "2048x2048", "value": "2048x2048" },
+          { "label": "2048x1152", "value": "2048x1152" },
+          { "label": "3840x2160 (4K landscape)", "value": "3840x2160" },
+          { "label": "2160x3840 (4K portrait)", "value": "2160x3840" }
+        ]
+      },
+      { "key": "quality", "label": "Quality", "type": "enum", "required": false, "default": "auto",
+        "options": [
+          { "label": "Auto", "value": "auto" },
+          { "label": "Low", "value": "low" },
+          { "label": "Medium", "value": "medium" },
+          { "label": "High", "value": "high" }
+        ]
+      },
+      { "key": "n", "label": "Count", "type": "integer", "required": false, "default": 1, "min": 1, "max": 10 },
+      { "key": "output_format", "label": "Format", "type": "enum", "required": false, "default": "png",
+        "options": [
+          { "label": "PNG", "value": "png" },
+          { "label": "JPEG", "value": "jpeg" },
+          { "label": "WebP", "value": "webp" }
+        ]
+      },
+      { "key": "output_compression", "label": "Compression", "type": "integer", "required": false, "default": 90, "min": 0, "max": 100 },
+      { "key": "moderation", "label": "Moderation", "type": "enum", "required": false, "default": "auto",
+        "options": [
+          { "label": "Auto", "value": "auto" },
+          { "label": "Low", "value": "low" }
+        ]
+      },
+      { "key": "partial_images", "label": "Preview Frames", "type": "integer", "required": false, "default": 2, "min": 0, "max": 3 }
+    ]
+  },
   "remove-background": {
     "id": "remove-background",
     "displayName": "Remove Background",
