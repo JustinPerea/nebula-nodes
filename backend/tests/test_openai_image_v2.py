@@ -7,7 +7,7 @@ import pytest
 import respx
 from httpx import Response
 
-from handlers.openai_image_v2 import handle_gpt_image_2_generate, build_generate_body
+from handlers.openai_image_v2 import handle_gpt_image_2_generate, build_generate_body, handle_gpt_image_2_edit
 from models.graph import GraphNode, PortValueDict
 
 
@@ -85,4 +85,35 @@ async def test_handle_generate_org_verification_error_returns_friendly_message()
         await handle_gpt_image_2_generate(
             node, inputs=inputs, api_keys={"OPENAI_API_KEY": "k"}, emit=None,
             run_dir=Path("/tmp"),
+        )
+
+
+@pytest.mark.asyncio
+async def test_edit_rejects_more_than_10_images(tmp_path: Path) -> None:
+    # 11 image values
+    img_paths = []
+    for i in range(11):
+        p = tmp_path / f"in{i}.png"
+        p.write_bytes(b"x")
+        img_paths.append(str(p))
+    node = _node({})
+    inputs = {
+        "image": PortValueDict(type="Image", value=img_paths),
+        "prompt": PortValueDict(type="Text", value="edit please"),
+    }
+    with pytest.raises(ValueError, match="up to 10"):
+        await handle_gpt_image_2_edit(
+            node, inputs=inputs, api_keys={"OPENAI_API_KEY": "k"},
+            emit=None, run_dir=tmp_path,
+        )
+
+
+@pytest.mark.asyncio
+async def test_edit_requires_at_least_one_image() -> None:
+    node = _node({})
+    inputs = {"prompt": PortValueDict(type="Text", value="hi")}
+    with pytest.raises(ValueError, match="Image input is required"):
+        await handle_gpt_image_2_edit(
+            node, inputs=inputs, api_keys={"OPENAI_API_KEY": "k"},
+            emit=None, run_dir=Path("/tmp"),
         )
