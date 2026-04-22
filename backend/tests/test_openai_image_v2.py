@@ -182,3 +182,29 @@ async def test_edit_org_verification_error_returns_friendly_message(tmp_path: Pa
             node, inputs=inputs, api_keys={"OPENAI_API_KEY": "k"},
             emit=None, run_dir=tmp_path,
         )
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_e2e_generate_emits_partials_and_returns_image(tmp_path: Path) -> None:
+    fixture = Path(__file__).parent / "fixtures" / "openai_image_v2_sse.txt"
+    respx.post("https://api.openai.com/v1/images/generations").mock(
+        return_value=Response(200, content=fixture.read_bytes(), headers={"content-type": "text/event-stream"})
+    )
+
+    emitted: list = []
+
+    async def emit(event) -> None:
+        emitted.append(event)
+
+    node = _node({"size": "1024x1024", "quality": "low"})
+    inputs = {"prompt": PortValueDict(type="Text", value="a cat")}
+    out = await handle_gpt_image_2_generate(
+        node, inputs=inputs, api_keys={"OPENAI_API_KEY": "k"},
+        emit=emit, run_dir=tmp_path,
+    )
+    assert out["image"]["type"] == "Image"
+    assert Path(out["image"]["value"]).exists()
+    partials = [e for e in emitted if e.__class__.__name__ == "StreamPartialImageEvent"]
+    assert len(partials) == 2
+    assert [p.partial_index for p in partials] == [0, 1]
