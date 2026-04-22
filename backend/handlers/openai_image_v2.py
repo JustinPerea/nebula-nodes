@@ -177,8 +177,12 @@ async def handle_gpt_image_2_edit(
         return None
 
     _emit = emit or _noop
+    import logging
+    logger = logging.getLogger(__name__)
     final_path: Path | None = None
     current_event_type: str | None = None
+    seen_event_types: list[str] = []
+    seen_data_snippets: list[str] = []  # short snippets of unrecognized data for diagnostics
 
     async with httpx.AsyncClient(timeout=httpx.Timeout(180.0, read=None)) as client:
         async with client.stream(
@@ -200,6 +204,7 @@ async def handle_gpt_image_2_edit(
                     continue
                 if line.startswith("event:"):
                     current_event_type = line[len("event:"):].strip()
+                    seen_event_types.append(current_event_type)
                     continue
                 if not line.startswith("data:"):
                     continue
@@ -224,7 +229,19 @@ async def handle_gpt_image_2_edit(
                     b64 = data.get("b64_json")
                     if isinstance(b64, str):
                         final_path = save_base64_image_named(b64, effective_run_dir, name=f"{node.id}_final")
+                else:
+                    # Unrecognized event — capture for diagnostic error message
+                    keys = list(data.keys())[:5] if isinstance(data, dict) else []
+                    seen_data_snippets.append(f"event={current_event_type} keys={keys}")
+                    logger.warning(
+                        "gpt-image-2-edit: unrecognized SSE event type=%r keys=%s",
+                        current_event_type, keys,
+                    )
 
     if final_path is None:
-        raise RuntimeError("Image edit stream ended without a final image event")
+        # Include diagnostic info so the user sees what OpenAI actually sent
+        diag = f"seen event types: {seen_event_types[:10]}"
+        if seen_data_snippets:
+            diag += f"; unrecognized: {seen_data_snippets[:5]}"
+        raise RuntimeError(f"Image edit stream ended without a final image event. {diag}")
     return {"image": {"type": "Image", "value": str(final_path)}}
