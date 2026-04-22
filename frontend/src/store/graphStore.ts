@@ -47,6 +47,7 @@ function createSnapshot(nodes: Node<NodeData>[], edges: Edge[]): UndoSnapshot {
         error: undefined,
         progress: undefined,
         streamingText: undefined,
+        streamingPartials: undefined,
       },
     })),
     edges: edges.map((e) => ({ ...e })),
@@ -401,6 +402,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
           error: undefined,
           progress: undefined,
           streamingText: undefined,
+          streamingPartials: undefined,
         },
       };
     });
@@ -456,6 +458,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
           error: undefined,
           progress: undefined,
           streamingText: undefined,
+          streamingPartials: undefined,
         },
       };
     });
@@ -880,6 +883,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         error: undefined,
         progress: undefined,
         streamingText: undefined,
+        streamingPartials: undefined,
       },
     };
     set((state) => ({ nodes: [...state.nodes, newNode] }));
@@ -1054,7 +1058,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         get().updateNodeData(event.nodeId, { state: 'queued' });
         break;
       case 'executing':
-        get().updateNodeData(event.nodeId, { state: 'executing', progress: 0, streamingText: undefined });
+        get().updateNodeData(event.nodeId, { state: 'executing', progress: 0, streamingText: undefined, streamingPartials: undefined });
         break;
       case 'progress':
         get().updateNodeData(event.nodeId, { progress: event.value });
@@ -1080,12 +1084,19 @@ export const useGraphStore = create<GraphState>((set, get) => ({
             outputs[key] = outputVal;
           }
         }
-        get().updateNodeData(event.nodeId, { state: 'complete', outputs: outputs as NodeData['outputs'], progress: undefined, streamingText: undefined });
+        get().updateNodeData(event.nodeId, { state: 'complete', outputs: outputs as NodeData['outputs'], progress: undefined, streamingText: undefined, streamingPartials: undefined });
         break;
       }
       case 'streamDelta':
         get().updateNodeData(event.nodeId, { streamingText: event.accumulated });
         break;
+      case 'streamPartialImage': {
+        const existing = get().nodes.find((n) => n.id === event.nodeId)?.data.streamingPartials ?? [];
+        const filtered = existing.filter((p) => p.index !== event.partialIndex);
+        const next = [...filtered, { index: event.partialIndex, src: event.src }].sort((a, b) => a.index - b.index);
+        get().updateNodeData(event.nodeId, { streamingPartials: next });
+        break;
+      }
       case 'error':
         get().updateNodeData(event.nodeId, { state: 'error', error: event.error, progress: undefined });
         break;
