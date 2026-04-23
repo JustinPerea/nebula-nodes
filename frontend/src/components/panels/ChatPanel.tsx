@@ -826,7 +826,7 @@ export function ChatPanel() {
   };
 
   return (
-    <div className="chat-panel" style={panelStyle}>
+    <div className={`chat-panel chat-panel--agent-${agent}`} style={panelStyle}>
       {/* Edges */}
       <div className="chat-panel__resize-handle chat-panel__resize-handle--left" onMouseDown={(e) => startResize(e, 'l')} title="Drag to resize width" />
       <div className="chat-panel__resize-handle chat-panel__resize-handle--right" onMouseDown={(e) => startResize(e, 'r')} title="Drag to resize width" />

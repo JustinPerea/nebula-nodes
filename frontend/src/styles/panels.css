@@ -1299,7 +1299,8 @@
 }
 
 .chat-panel__agent-btn--active {
-  background: rgba(255, 255, 255, 0.15);
+  background: var(--chat-accent, rgba(255, 255, 255, 0.15));
+  color: white;
   font-weight: 600;
 }
 
@@ -1324,16 +1325,17 @@
 }
 
 .chat-panel__autonomy-btn--active {
-  background: rgba(255, 255, 255, 0.15);
+  background: var(--chat-accent, rgba(255, 255, 255, 0.15));
+  color: white;
   font-weight: 600;
 }
 
 .chat-panel__approval {
   margin: 8px 0;
   padding: 12px;
-  border: 1px solid rgba(184, 115, 51, 0.4); /* copper accent */
+  border: 1px solid var(--chat-accent-border, rgba(184, 115, 51, 0.4));
   border-radius: 8px;
-  background: rgba(184, 115, 51, 0.08);
+  background: var(--chat-accent-bg, rgba(184, 115, 51, 0.08));
   font-size: 13px;
 }
 
@@ -1358,7 +1360,7 @@
 }
 
 .chat-panel__approval-btn--approve {
-  background: #b87333; /* copper */
+  background: var(--chat-accent, #b87333); /* copper */
   color: white;
 }
 
@@ -1373,4 +1375,20 @@
   font-size: 11px;
   color: rgba(255, 255, 255, 0.5);
   font-style: italic;
+}
+
+/* Per-agent accent palette. --chat-accent drives the agent-selector active
+ * state, autonomy-toggle active state, approval-bubble border/background,
+ * and the Approve button. Swaps based on the chat-panel--agent-* modifier
+ * class on the panel root. */
+.chat-panel--agent-claude {
+  --chat-accent: #7c6bef; /* indigo */
+  --chat-accent-bg: rgba(124, 107, 239, 0.08);
+  --chat-accent-border: rgba(124, 107, 239, 0.4);
+}
+
+.chat-panel--agent-hephaestus {
+  --chat-accent: #b87333; /* copper */
+  --chat-accent-bg: rgba(184, 115, 51, 0.08);
+  --chat-accent-border: rgba(184, 115, 51, 0.4);
 }
