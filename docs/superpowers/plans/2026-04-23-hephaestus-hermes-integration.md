@@ -197,12 +197,13 @@ async def run_hermes(
     autonomy: str = "auto",
 ) -> AsyncIterator[dict[str, Any]]:
     """Run a single Hephaestus turn via `hermes chat -q -Q` and yield events."""
+    # Note (from Task 0 fixture): `hermes chat -Q` emits `session_id: <id>` on
+    # its own first line automatically — no `--pass-session-id` flag needed.
     args = [
         "hermes", "chat", "-q", message, "-Q",
         "--provider", DEFAULT_PROVIDER,
         "--model", model,
         "--skills", DEFAULT_SKILLS,
-        "--pass-session-id",
     ]
     if session_id:
         args.extend(["--resume", session_id])
@@ -272,10 +273,9 @@ Add to `backend/tests/test_hermes_session.py`:
 ```python
 @pytest.mark.asyncio
 async def test_emits_session_event_when_session_id_present():
-    """Hermes --pass-session-id prints the session ID on stdout; we emit it as an event."""
-    # Format per Task 0 fixtures — adjust if Hermes prints it differently
-    # (e.g. JSON line, trailing line, header). Assumption: trailing marker line.
-    fake_stdout = b"Some response text.\nSESSION_ID: 01HXYZ123\n"
+    """Hermes -Q mode prints `session_id: <id>` on the first stdout line automatically.
+    Format verified from Task 0 fixture: session_id is lowercase, leading line."""
+    fake_stdout = b"session_id: 20260423_095548_a2985d\nSome response text.\n"
 
     proc = AsyncMock()
     proc.stdout.read = AsyncMock(return_value=fake_stdout)
@@ -289,10 +289,11 @@ async def test_emits_session_event_when_session_id_present():
 
     session_events = [e for e in events if e["type"] == "session"]
     assert len(session_events) == 1
-    assert session_events[0]["sessionId"] == "01HXYZ123"
+    assert session_events[0]["sessionId"] == "20260423_095548_a2985d"
     # Session marker stripped from text
     text_event = next(e for e in events if e["type"] == "text")
-    assert "SESSION_ID" not in text_event["text"]
+    assert "session_id" not in text_event["text"].lower()
+    assert "Some response text." in text_event["text"]
 
 
 @pytest.mark.asyncio
@@ -324,7 +325,7 @@ async def test_resume_flag_passed_when_session_id_given():
 cd backend && python -m pytest tests/test_hermes_session.py -v -k "session"
 ```
 
-Expected: FAIL — session event not emitted; text includes `SESSION_ID:` line.
+Expected: FAIL — session event not emitted; text includes `session_id:` line.
 
 - [ ] **Step 3: Parse session ID marker in implementation**
 
@@ -333,13 +334,14 @@ In `backend/services/hermes_session.py`, replace the last block (after `proc.wai
 ```python
     text = stdout_bytes.decode("utf-8", errors="replace")
 
-    # Extract session ID marker (format assumed from Task 0 fixtures).
-    # Hermes --pass-session-id prints `SESSION_ID: <ulid>` on its own line.
+    # Extract session ID marker (format verified via Task 0 fixture).
+    # Hermes `-Q` mode prints `session_id: <timestamp_id>` on the FIRST line.
+    # Example: `session_id: 20260423_095548_a2985d`. Lowercase marker.
     session_id_emitted: str | None = None
     filtered_lines: list[str] = []
     for line in text.splitlines():
         stripped = line.strip()
-        if stripped.startswith("SESSION_ID:"):
+        if stripped.lower().startswith("session_id:"):
             session_id_emitted = stripped.split(":", 1)[1].strip()
         else:
             filtered_lines.append(line)
@@ -392,11 +394,11 @@ Add to `backend/tests/test_hermes_session.py`:
 async def test_parses_approval_required_marker():
     """When Hephaestus prints APPROVAL_REQUIRED, emit approval_request event."""
     fake_stdout = (
+        b"session_id: 20260423_095548_a2985d\n"
         b"Planning the render.\n"
         b"APPROVAL_REQUIRED: Run Veo 3.1 on n4 (est $0.15, ~60s)\n"
         b"PLAN: connect n2:image -> n4:first_frame + n4:last_frame; run n4\n"
         b"COST: $0.15\n"
-        b"SESSION_ID: 01HZZ123\n"
     )
 
     proc = AsyncMock()
@@ -446,7 +448,7 @@ Replace the parsing block in `backend/services/hermes_session.py` with:
 
     for line in text.splitlines():
         stripped = line.strip()
-        if stripped.startswith("SESSION_ID:"):
+        if stripped.lower().startswith("session_id:"):
             session_id_emitted = stripped.split(":", 1)[1].strip()
         elif stripped.startswith("APPROVAL_REQUIRED:"):
             approval_summary = stripped.split(":", 1)[1].strip()
@@ -513,9 +515,9 @@ Add to `backend/tests/test_hermes_session.py`:
 async def test_parses_learning_saved_marker():
     """LEARNING_SAVED: <slug> on stdout becomes a learning_saved event."""
     fake_stdout = (
+        b"session_id: 20260423_095548_a2985d\n"
         b"Loops cleanly now.\n"
         b"LEARNING_SAVED: loop-color-grade-drift\n"
-        b"SESSION_ID: 01HXYZ\n"
     )
 
     proc = AsyncMock()
@@ -581,7 +583,7 @@ Full updated parsing block:
 
     for line in text.splitlines():
         stripped = line.strip()
-        if stripped.startswith("SESSION_ID:"):
+        if stripped.lower().startswith("session_id:"):
             session_id_emitted = stripped.split(":", 1)[1].strip()
         elif stripped.startswith("APPROVAL_REQUIRED:"):
             approval_summary = stripped.split(":", 1)[1].strip()
@@ -1343,13 +1345,13 @@ From inside the nebula-nodes directory:
 hermes chat -q "Introduce yourself and list your opinions about image models." -Q \
   --provider openrouter \
   --model moonshotai/kimi-k2.6 \
-  --skills hephaestus-core \
-  --pass-session-id
+  --skills hephaestus-core
 ```
 
 Expected: Hephaestus responds in the forge-god voice, names specific models
-with opinions (Imagen cleaner than Nano Banana for faces, etc.), and prints a
-`SESSION_ID: <ulid>` on its own line at the end.
+with opinions (Imagen cleaner than Nano Banana for faces, etc.). Output starts
+with `session_id: <timestamp_id>` on the first line (e.g.
+`session_id: 20260423_095548_a2985d`), followed by the response body.
 
 If you see "hermes: command not found," check that Hermes is installed and
 that `~/.local/bin` is in your PATH.
