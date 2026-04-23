@@ -235,6 +235,7 @@ export function ChatPanel() {
   const [input, setInput] = useState('');
   const [model, setModel] = useState<string>(DEFAULT_MODEL);
   const [agent, setAgent] = useState<'claude' | 'hephaestus'>('claude');
+  const [autonomy, setAutonomy] = useState<'auto' | 'step'>('auto');
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -605,10 +606,10 @@ export function ChatPanel() {
         sessionId,
         model,
         agent,
-        autonomy: 'auto', // Task 12 will add a proper toggle for this
+        autonomy,
       }),
     );
-  }, [input, model, sessionId, pendingImages, agent]);
+  }, [input, model, sessionId, pendingImages, agent, autonomy]);
 
   // Keep sendRef pointing at the latest `send` so the chat-send event listener
   // always calls the current closure (input/model/sessionId are captured fresh).
@@ -800,6 +801,37 @@ export function ChatPanel() {
               Hephaestus
             </button>
           </div>
+          {agent === 'hephaestus' && (
+            <div
+              className="chat-panel__autonomy-toggle"
+              onMouseDown={(e) => e.stopPropagation()}
+            >
+              <button
+                type="button"
+                className={
+                  autonomy === 'auto'
+                    ? 'chat-panel__autonomy-btn--active'
+                    : 'chat-panel__autonomy-btn'
+                }
+                onClick={() => setAutonomy('auto')}
+                title="Auto-pilot: Hephaestus runs the full pipeline"
+              >
+                Auto ▶
+              </button>
+              <button
+                type="button"
+                className={
+                  autonomy === 'step'
+                    ? 'chat-panel__autonomy-btn--active'
+                    : 'chat-panel__autonomy-btn'
+                }
+                onClick={() => setAutonomy('step')}
+                title="Step Approval: Hephaestus pauses before expensive operations"
+              >
+                Step ⏸
+              </button>
+            </div>
+          )}
           <div className="chat-panel__meta">
             {model} · {status}
             {sessionId && (
