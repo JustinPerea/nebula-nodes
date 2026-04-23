@@ -4,7 +4,7 @@ output into the same event dict contract as run_claude.
 Yields dicts with a `type` field:
   - session          — {sessionId}
   - text             — {text}
-  - approval_request — {summary, plan, cost}
+  - approval_request — {summary, plan?, cost?}  (plan/cost omitted if absent)
   - learning_saved   — {topic, entry_preview}
   - error            — {message}
   - done             — {}
@@ -94,29 +94,68 @@ async def run_hermes(
 
     # Step-approval markers: APPROVAL_REQUIRED / PLAN / COST.
     # Emitted by Hephaestus when HEPHAESTUS_APPROVAL=step; SKILL.md directives
-    # instruct the model to pause before expensive ops and print these three
-    # structured lines. We consolidate them into a single approval_request event.
-    for line in lines:
-        stripped = line.strip()
-        if stripped.startswith("APPROVAL_REQUIRED:"):
-            approval_summary = stripped.split(":", 1)[1].strip()
-        elif stripped.startswith("PLAN:"):
-            approval_plan = stripped.split(":", 1)[1].strip()
-        elif stripped.startswith("COST:"):
-            approval_cost = stripped.split(":", 1)[1].strip()
-        else:
-            filtered_lines.append(line)
+    # (Task 8) will instruct the model to pause before expensive ops, print
+    # these three structured lines AT THE END of the response, then WAIT
+    # without acting. We consolidate them into a single approval_request event.
+    #
+    # Contract (referenced by Task 8 SKILL.md): markers must appear as a
+    # contiguous block at the END of stdout, after the response body.
+    # This prevents mid-response collisions — e.g. if the model quotes a
+    # previous turn ("Earlier I said APPROVAL_REQUIRED: ...") or writes a
+    # markdown heading like "PLAN: Next steps", those lines stay in the text
+    # body instead of being parsed as markers. Only a true end-of-response
+    # marker block triggers an approval event.
+    def _is_marker(s: str) -> bool:
+        return (
+            s.startswith("APPROVAL_REQUIRED:")
+            or s.startswith("PLAN:")
+            or s.startswith("COST:")
+        )
+
+    # Walk backward from the end, collecting contiguous marker lines.
+    # Skip trailing blank lines before starting the walk.
+    end = len(lines)
+    while end > 0 and not lines[end - 1].strip():
+        end -= 1
+
+    tail_start = end
+    while tail_start > 0 and _is_marker(lines[tail_start - 1].strip()):
+        tail_start -= 1
+
+    tail_lines = lines[tail_start:end]
+    tail_has_approval = any(
+        ln.strip().startswith("APPROVAL_REQUIRED:") for ln in tail_lines
+    )
+
+    if tail_has_approval:
+        # Tail block is the marker block; everything before it is body.
+        body_lines = lines[:tail_start]
+        for line in tail_lines:
+            stripped = line.strip()
+            if stripped.startswith("APPROVAL_REQUIRED:"):
+                approval_summary = stripped.split(":", 1)[1].strip()
+            elif stripped.startswith("PLAN:"):
+                approval_plan = stripped.split(":", 1)[1].strip()
+            elif stripped.startswith("COST:"):
+                approval_cost = stripped.split(":", 1)[1].strip()
+        filtered_lines = body_lines
+    else:
+        # No marker tail block — all lines are body.
+        filtered_lines = lines
 
     if session_id_emitted:
         yield {"type": "session", "sessionId": session_id_emitted}
 
     if approval_summary:
-        yield {
+        event: dict[str, Any] = {
             "type": "approval_request",
             "summary": approval_summary,
-            "plan": approval_plan or "",
-            "cost": approval_cost or "",
         }
+        if approval_plan is not None:
+            event["plan"] = approval_plan
+        if approval_cost is not None:
+            event["cost"] = approval_cost
+        yield event
 
     body = "\n".join(filtered_lines).strip()
     if body:

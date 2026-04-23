@@ -120,3 +120,57 @@ async def test_parses_approval_required_marker():
         assert "APPROVAL_REQUIRED" not in text["text"]
         assert "PLAN:" not in text["text"]
         assert "COST:" not in text["text"]
+
+
+@pytest.mark.asyncio
+async def test_approval_marker_mid_response_is_not_parsed():
+    """Markers only count when they form a contiguous END-of-response block.
+    Mid-response quotes or headings should NOT trigger a fake approval."""
+    fake_stdout = (
+        b"session_id: 20260423_095548_a2985d\n"
+        b"Earlier I said APPROVAL_REQUIRED: run this.\n"
+        b"But I've changed my plan.\n"
+        b"Here is the final result with no pending approval.\n"
+    )
+
+    proc = AsyncMock()
+    proc.stdout.read = AsyncMock(return_value=fake_stdout)
+    proc.stderr.read = AsyncMock(return_value=b"")
+    proc.wait = AsyncMock(return_value=0)
+    proc.returncode = 0
+
+    with patch("services.hermes_session.asyncio.create_subprocess_exec",
+               return_value=proc):
+        events = await _collect(run_hermes("hi", None, autonomy="auto"))
+
+    approval = [e for e in events if e["type"] == "approval_request"]
+    assert len(approval) == 0  # no false approval
+    text = next(e for e in events if e["type"] == "text")
+    assert "Earlier I said APPROVAL_REQUIRED: run this." in text["text"]
+
+
+@pytest.mark.asyncio
+async def test_approval_summary_only_no_plan_cost_omits_those_keys():
+    """When only APPROVAL_REQUIRED is present (no PLAN, no COST), the event
+    should NOT have plan/cost keys — not empty strings."""
+    fake_stdout = (
+        b"session_id: 20260423_095548_a2985d\n"
+        b"Planning.\n"
+        b"APPROVAL_REQUIRED: Run expensive op\n"
+    )
+
+    proc = AsyncMock()
+    proc.stdout.read = AsyncMock(return_value=fake_stdout)
+    proc.stderr.read = AsyncMock(return_value=b"")
+    proc.wait = AsyncMock(return_value=0)
+    proc.returncode = 0
+
+    with patch("services.hermes_session.asyncio.create_subprocess_exec",
+               return_value=proc):
+        events = await _collect(run_hermes("hi", None, autonomy="step"))
+
+    approval = [e for e in events if e["type"] == "approval_request"]
+    assert len(approval) == 1
+    assert approval[0]["summary"] == "Run expensive op"
+    assert "plan" not in approval[0]
+    assert "cost" not in approval[0]
