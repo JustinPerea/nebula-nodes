@@ -38,3 +38,6 @@ Thumbs.db
 
 # Private planning docs (proprietary Mac app spec etc.) — NOT for public repo
 .planning/private/
+
+# Personal learning doc — local only, per CLAUDE.md convention
+FORjustin.md
