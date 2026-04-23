@@ -25,6 +25,10 @@ output/
 .DS_Store
 Thumbs.db
 
+# macOS iCloud/Finder duplicates ("filename 2.ext")
+* 2.*
+* 2
+
 # Superpowers brainstorm sessions
 .superpowers/
 
