@@ -47,29 +47,38 @@ hermes config get model
 
 Expected: shows `provider: openrouter, name: moonshotai/kimi-k2.6`.
 
-## 3. Link the repo-shipped hephaestus-core skill
+## 3. Install the repo-shipped hephaestus-core skill
 
 nebula-nodes ships Hephaestus's persona + playbook at
-`.hermes/skills/hephaestus-core/`. Tell Hermes to load skills from this
-directory:
+`.hermes/skills/hephaestus-core/`. Hermes discovers skills from its active
+profile's skills directory — copy (don't symlink; Hermes doesn't follow
+symlinks for discovery) into the right category folder:
 
-Edit `~/.hermes/config.yaml`, add or update:
+```bash
+# Find your active profile
+ACTIVE_PROFILE=$(cat ~/.hermes/active_profile)
+echo "Active profile: $ACTIVE_PROFILE"
 
-```yaml
-skills:
-  external_directories:
-    - /path/to/nebula-nodes/.hermes/skills
+# Copy the skill into the profile's creative category
+mkdir -p ~/.hermes/profiles/$ACTIVE_PROFILE/skills/creative
+cp -R .hermes/skills/hephaestus-core \
+  ~/.hermes/profiles/$ACTIVE_PROFILE/skills/creative/hephaestus-core
 ```
-
-(Replace `/path/to/nebula-nodes` with your actual clone path.)
 
 Verify:
 
 ```bash
-hermes skills ls | grep hephaestus-core
+hermes skills list | grep hephaestus-core
 ```
 
-Expected: shows `hephaestus-core` as an available skill.
+Expected: shows `hephaestus-core` as a local skill under the `creative`
+category. If nothing prints, check the skill is at
+`~/.hermes/profiles/<profile>/skills/creative/hephaestus-core/SKILL.md`.
+
+**Re-install after repo updates:** if we ship a new version of
+`hephaestus-core/SKILL.md` upstream, re-run the `cp` to refresh your
+local copy. A future version of this guide may ship a one-shot install
+script that handles this.
 
 ## 4. One-turn smoke test
 
