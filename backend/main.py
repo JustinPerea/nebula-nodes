@@ -257,17 +257,45 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
 
 @app.websocket("/ws/chat")
 async def chat_websocket(websocket: WebSocket) -> None:
-    """Chat WebSocket — one message per turn, streams claude -p output.
+    """Chat WebSocket — one message per turn, streams agent output.
 
-    Client sends: {type: "send", message: str, sessionId: str|null, model: str}
-    Server sends: session | text | tool_use | tool_result | result | error | done
+    Client sends: {
+        type: "send",
+        message: str,
+        sessionId: str|null,
+        model: str,
+        agent: "claude" | "hephaestus" (default "claude"),
+        autonomy: "auto" | "step" (default "auto", hephaestus-only)
+    }
+    Server sends events matching AGENT_RUNNERS' event contract.
     """
+    from services.chat_session import AGENT_RUNNERS
+
     await websocket.accept()
     current_task: asyncio.Task[None] | None = None
 
-    async def stream_response(message: str, session_id: str | None, model: str) -> None:
+    async def stream_response(
+        message: str,
+        session_id: str | None,
+        model: str,
+        agent: str,
+        autonomy: str,
+    ) -> None:
+        runner = AGENT_RUNNERS.get(agent)
+        if runner is None:
+            await websocket.send_text(json.dumps({
+                "type": "error",
+                "message": f"Unknown agent '{agent}'. Valid: {sorted(AGENT_RUNNERS.keys())}",
+            }))
+            await websocket.send_text(json.dumps({"type": "done"}))
+            return
+
         try:
-            async for event in run_claude(message, session_id, model):
+            if agent == "hephaestus":
+                agen = runner(message, session_id, model, autonomy)
+            else:
+                agen = runner(message, session_id, model)
+            async for event in agen:
                 await websocket.send_text(json.dumps(event))
         except Exception as exc:
             try:
@@ -295,14 +323,16 @@ async def chat_websocket(websocket: WebSocket) -> None:
 
             user_message = payload.get("message", "")
             session_id = payload.get("sessionId") or None
-            model = payload.get("model") or "sonnet"
+            model = payload.get("model") or "claude-sonnet-4-6"
+            agent = payload.get("agent") or "claude"
+            autonomy = payload.get("autonomy") or "auto"
             if not user_message.strip():
                 continue
 
             if current_task and not current_task.done():
                 current_task.cancel()
             current_task = asyncio.create_task(
-                stream_response(user_message, session_id, model)
+                stream_response(user_message, session_id, model, agent, autonomy)
             )
     except WebSocketDisconnect:
         if current_task and not current_task.done():
