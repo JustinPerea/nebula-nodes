@@ -234,6 +234,7 @@ export function ChatPanel() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [model, setModel] = useState<string>(DEFAULT_MODEL);
+  const [agent, setAgent] = useState<'claude' | 'hephaestus'>('claude');
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -244,6 +245,17 @@ export function ChatPanel() {
     const t = window.setTimeout(() => setNotice(null), 3000);
     return () => window.clearTimeout(t);
   }, [notice]);
+
+  // Switch the active agent. Each agent has its own session thread, so we
+  // clear sessionId on change — the next turn starts fresh on the new agent.
+  const handleAgentChange = useCallback(
+    (next: 'claude' | 'hephaestus') => {
+      if (next === agent) return;
+      setAgent(next);
+      setSessionId(null);
+    },
+    [agent],
+  );
 
   const wsRef = useRef<WebSocket | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -592,9 +604,11 @@ export function ChatPanel() {
         message: raw,
         sessionId,
         model,
+        agent,
+        autonomy: 'auto', // Task 12 will add a proper toggle for this
       }),
     );
-  }, [input, model, sessionId, pendingImages]);
+  }, [input, model, sessionId, pendingImages, agent]);
 
   // Keep sendRef pointing at the latest `send` so the chat-send event listener
   // always calls the current closure (input/model/sessionId are captured fresh).
@@ -759,6 +773,33 @@ export function ChatPanel() {
       <div className="chat-panel__header" onMouseDown={startPanelDrag} title="Drag to move">
         <div>
           <div className="chat-panel__title">Chat</div>
+          <div
+            className="chat-panel__agent-selector"
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              className={
+                agent === 'claude'
+                  ? 'chat-panel__agent-btn--active'
+                  : 'chat-panel__agent-btn'
+              }
+              onClick={() => handleAgentChange('claude')}
+            >
+              Claude
+            </button>
+            <button
+              type="button"
+              className={
+                agent === 'hephaestus'
+                  ? 'chat-panel__agent-btn--active'
+                  : 'chat-panel__agent-btn'
+              }
+              onClick={() => handleAgentChange('hephaestus')}
+            >
+              Hephaestus
+            </button>
+          </div>
           <div className="chat-panel__meta">
             {model} · {status}
             {sessionId && (
