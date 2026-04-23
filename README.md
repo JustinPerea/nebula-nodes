@@ -108,4 +108,4 @@ The frontend is a React 19 + Vite SPA using `@xyflow/react` for the canvas and Z
 
 ## License
 
-MIT
+[AGPL-3.0](LICENSE). You can use, modify, and self-host Nebula Node freely. If you distribute a modified version — including running it as a network service — you must make your source available under the same license.
