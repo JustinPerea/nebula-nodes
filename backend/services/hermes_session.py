@@ -74,6 +74,7 @@ async def run_hermes(
     approval_summary: str | None = None
     approval_plan: str | None = None
     approval_cost: str | None = None
+    learning_topic: str | None = None
     filtered_lines: list[str] = []
 
     lines = text.splitlines()
@@ -92,24 +93,29 @@ async def run_hermes(
             # Drop the session line from downstream processing.
             lines = lines[:first_non_empty_idx] + lines[first_non_empty_idx + 1:]
 
-    # Step-approval markers: APPROVAL_REQUIRED / PLAN / COST.
-    # Emitted by Hephaestus when HEPHAESTUS_APPROVAL=step; SKILL.md directives
-    # (Task 8) will instruct the model to pause before expensive ops, print
-    # these three structured lines AT THE END of the response, then WAIT
-    # without acting. We consolidate them into a single approval_request event.
+    # Structured markers: APPROVAL_REQUIRED / PLAN / COST / LEARNING_SAVED.
+    # Emitted by Hephaestus per SKILL.md directives (Task 8) AT THE END of the
+    # response. APPROVAL_REQUIRED + PLAN + COST consolidate into one
+    # approval_request event; LEARNING_SAVED emits its own learning_saved event.
     #
-    # Contract (referenced by Task 8 SKILL.md): markers must appear as a
-    # contiguous block at the END of stdout, after the response body.
-    # This prevents mid-response collisions — e.g. if the model quotes a
-    # previous turn ("Earlier I said APPROVAL_REQUIRED: ...") or writes a
-    # markdown heading like "PLAN: Next steps", those lines stay in the text
-    # body instead of being parsed as markers. Only a true end-of-response
-    # marker block triggers an approval event.
+    # Contract: markers must appear as a contiguous block at the END of stdout,
+    # after the response body. This prevents mid-response collisions — e.g. if
+    # the model quotes a previous turn ("Earlier I said APPROVAL_REQUIRED: ...")
+    # or writes a markdown heading like "PLAN: Next steps", those lines stay in
+    # the text body instead of being parsed as markers.
+    #
+    # "Anchor" markers signal a real end-of-response marker block.
+    # PLAN:/COST: on their own (without an anchor) likely come from narrative
+    # text (markdown headings, quoted planning discussion) and stay in body.
+    # Either APPROVAL_REQUIRED or LEARNING_SAVED serves as a valid anchor.
+    ANCHOR_MARKERS = ("APPROVAL_REQUIRED:", "LEARNING_SAVED:")
+
     def _is_marker(s: str) -> bool:
         return (
             s.startswith("APPROVAL_REQUIRED:")
             or s.startswith("PLAN:")
             or s.startswith("COST:")
+            or s.startswith("LEARNING_SAVED:")
         )
 
     # Walk backward from the end, collecting contiguous marker lines.
@@ -123,11 +129,13 @@ async def run_hermes(
         tail_start -= 1
 
     tail_lines = lines[tail_start:end]
-    tail_has_approval = any(
-        ln.strip().startswith("APPROVAL_REQUIRED:") for ln in tail_lines
+    has_anchor = any(
+        ln.strip().startswith(m)
+        for ln in tail_lines
+        for m in ANCHOR_MARKERS
     )
 
-    if tail_has_approval:
+    if has_anchor:
         # Tail block is the marker block; everything before it is body.
         body_lines = lines[:tail_start]
         for line in tail_lines:
@@ -138,6 +146,8 @@ async def run_hermes(
                 approval_plan = stripped.split(":", 1)[1].strip()
             elif stripped.startswith("COST:"):
                 approval_cost = stripped.split(":", 1)[1].strip()
+            elif stripped.startswith("LEARNING_SAVED:"):
+                learning_topic = stripped.split(":", 1)[1].strip()
         filtered_lines = body_lines
     else:
         # No marker tail block — all lines are body.
@@ -156,6 +166,9 @@ async def run_hermes(
         if approval_cost is not None:
             event["cost"] = approval_cost
         yield event
+
+    if learning_topic is not None:
+        yield {"type": "learning_saved", "topic": learning_topic, "entry_preview": ""}
 
     body = "\n".join(filtered_lines).strip()
     if body:

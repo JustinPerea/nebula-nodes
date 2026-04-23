@@ -174,3 +174,56 @@ async def test_approval_summary_only_no_plan_cost_omits_those_keys():
     assert approval[0]["summary"] == "Run expensive op"
     assert "plan" not in approval[0]
     assert "cost" not in approval[0]
+
+
+@pytest.mark.asyncio
+async def test_parses_learning_saved_marker():
+    """LEARNING_SAVED: <slug> on stdout becomes a learning_saved event."""
+    fake_stdout = (
+        b"session_id: 20260423_095548_a2985d\n"
+        b"Loops cleanly now.\n"
+        b"LEARNING_SAVED: loop-color-grade-drift\n"
+    )
+
+    proc = AsyncMock()
+    proc.stdout.read = AsyncMock(return_value=fake_stdout)
+    proc.stderr.read = AsyncMock(return_value=b"")
+    proc.wait = AsyncMock(return_value=0)
+    proc.returncode = 0
+
+    with patch("services.hermes_session.asyncio.create_subprocess_exec",
+               return_value=proc):
+        events = await _collect(run_hermes("render", None, autonomy="auto"))
+
+    learn = [e for e in events if e["type"] == "learning_saved"]
+    assert len(learn) == 1
+    assert learn[0]["topic"] == "loop-color-grade-drift"
+
+    text = next((e for e in events if e["type"] == "text"), None)
+    if text:
+        assert "LEARNING_SAVED" not in text["text"]
+
+
+@pytest.mark.asyncio
+async def test_learning_marker_mid_response_is_not_parsed():
+    """LEARNING_SAVED only counts when it's in the contiguous end-of-response tail block."""
+    fake_stdout = (
+        b"session_id: 20260423_095548_a2985d\n"
+        b"I previously noted LEARNING_SAVED: some-slug was useful.\n"
+        b"But here is my response.\n"
+    )
+
+    proc = AsyncMock()
+    proc.stdout.read = AsyncMock(return_value=fake_stdout)
+    proc.stderr.read = AsyncMock(return_value=b"")
+    proc.wait = AsyncMock(return_value=0)
+    proc.returncode = 0
+
+    with patch("services.hermes_session.asyncio.create_subprocess_exec",
+               return_value=proc):
+        events = await _collect(run_hermes("hi", None, autonomy="auto"))
+
+    learn = [e for e in events if e["type"] == "learning_saved"]
+    assert len(learn) == 0  # mid-response mention should not fire
+    text = next(e for e in events if e["type"] == "text")
+    assert "LEARNING_SAVED" in text["text"]  # stays in body
