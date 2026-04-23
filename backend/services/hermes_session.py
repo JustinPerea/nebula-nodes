@@ -67,20 +67,56 @@ async def run_hermes(
 
     text = stdout_bytes.decode("utf-8", errors="replace")
 
-    # Extract session ID marker (format verified via Task 0 fixture).
-    # Hermes `-Q` mode prints `session_id: <timestamp_id>` on the FIRST line.
-    # Example: `session_id: 20260423_095548_a2985d`. Lowercase marker.
+    # Event accumulators.
+    # Session ID format verified via Task 0 fixture: Hermes `-Q` mode prints
+    # `session_id: <timestamp_id>` on the first line (e.g. `session_id: 20260423_095548_a2985d`).
     session_id_emitted: str | None = None
+    approval_summary: str | None = None
+    approval_plan: str | None = None
+    approval_cost: str | None = None
     filtered_lines: list[str] = []
-    for line in text.splitlines():
+
+    lines = text.splitlines()
+
+    # Session ID only appears as a first-line marker in hermes -Q mode.
+    # Restrict the check to the first non-empty line to avoid false positives
+    # if a model echoes "session_id" mid-response.
+    first_non_empty_idx = next(
+        (i for i, ln in enumerate(lines) if ln.strip()),
+        None,
+    )
+    if first_non_empty_idx is not None:
+        first = lines[first_non_empty_idx].strip()
+        if first.lower().startswith("session_id:"):
+            session_id_emitted = first.split(":", 1)[1].strip()
+            # Drop the session line from downstream processing.
+            lines = lines[:first_non_empty_idx] + lines[first_non_empty_idx + 1:]
+
+    # Step-approval markers: APPROVAL_REQUIRED / PLAN / COST.
+    # Emitted by Hephaestus when HEPHAESTUS_APPROVAL=step; SKILL.md directives
+    # instruct the model to pause before expensive ops and print these three
+    # structured lines. We consolidate them into a single approval_request event.
+    for line in lines:
         stripped = line.strip()
-        if stripped.lower().startswith("session_id:"):
-            session_id_emitted = stripped.split(":", 1)[1].strip()
+        if stripped.startswith("APPROVAL_REQUIRED:"):
+            approval_summary = stripped.split(":", 1)[1].strip()
+        elif stripped.startswith("PLAN:"):
+            approval_plan = stripped.split(":", 1)[1].strip()
+        elif stripped.startswith("COST:"):
+            approval_cost = stripped.split(":", 1)[1].strip()
         else:
             filtered_lines.append(line)
 
     if session_id_emitted:
         yield {"type": "session", "sessionId": session_id_emitted}
+
+    if approval_summary:
+        yield {
+            "type": "approval_request",
+            "summary": approval_summary,
+            "plan": approval_plan or "",
+            "cost": approval_cost or "",
+        }
 
     body = "\n".join(filtered_lines).strip()
     if body:

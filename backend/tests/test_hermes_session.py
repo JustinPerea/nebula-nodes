@@ -85,3 +85,38 @@ async def test_resume_flag_passed_when_session_id_given():
     assert "--resume" in captured_args
     idx = captured_args.index("--resume")
     assert captured_args[idx + 1] == "01HEXISTING"
+
+
+@pytest.mark.asyncio
+async def test_parses_approval_required_marker():
+    """When Hephaestus prints APPROVAL_REQUIRED, emit approval_request event."""
+    fake_stdout = (
+        b"session_id: 20260423_095548_a2985d\n"
+        b"Planning the render.\n"
+        b"APPROVAL_REQUIRED: Run Veo 3.1 on n4 (est $0.15, ~60s)\n"
+        b"PLAN: connect n2:image -> n4:first_frame + n4:last_frame; run n4\n"
+        b"COST: $0.15\n"
+    )
+
+    proc = AsyncMock()
+    proc.stdout.read = AsyncMock(return_value=fake_stdout)
+    proc.stderr.read = AsyncMock(return_value=b"")
+    proc.wait = AsyncMock(return_value=0)
+    proc.returncode = 0
+
+    with patch("services.hermes_session.asyncio.create_subprocess_exec",
+               return_value=proc):
+        events = await _collect(run_hermes("render it", None, autonomy="step"))
+
+    approval = [e for e in events if e["type"] == "approval_request"]
+    assert len(approval) == 1
+    assert "Veo 3.1" in approval[0]["summary"]
+    assert "connect n2:image" in approval[0]["plan"]
+    assert approval[0]["cost"] == "$0.15"
+
+    # Markers stripped from the free-text event
+    text = next((e for e in events if e["type"] == "text"), None)
+    if text:
+        assert "APPROVAL_REQUIRED" not in text["text"]
+        assert "PLAN:" not in text["text"]
+        assert "COST:" not in text["text"]
