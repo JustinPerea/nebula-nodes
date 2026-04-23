@@ -66,6 +66,24 @@ async def run_hermes(
     await proc.wait()
 
     text = stdout_bytes.decode("utf-8", errors="replace")
-    if text.strip():
-        yield {"type": "text", "text": text.rstrip("\n")}
+
+    # Extract session ID marker (format verified via Task 0 fixture).
+    # Hermes `-Q` mode prints `session_id: <timestamp_id>` on the FIRST line.
+    # Example: `session_id: 20260423_095548_a2985d`. Lowercase marker.
+    session_id_emitted: str | None = None
+    filtered_lines: list[str] = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.lower().startswith("session_id:"):
+            session_id_emitted = stripped.split(":", 1)[1].strip()
+        else:
+            filtered_lines.append(line)
+
+    if session_id_emitted:
+        yield {"type": "session", "sessionId": session_id_emitted}
+
+    body = "\n".join(filtered_lines).strip()
+    if body:
+        yield {"type": "text", "text": body}
+
     yield {"type": "done"}

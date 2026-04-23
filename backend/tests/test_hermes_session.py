@@ -1,7 +1,6 @@
 """Tests for run_hermes — mirrors the run_claude event contract."""
 from __future__ import annotations
 
-import asyncio
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -38,3 +37,51 @@ async def test_happy_path_yields_text_and_done():
     assert events[-1]["type"] == "done"
     text_event = next(e for e in events if e["type"] == "text")
     assert "HELLO" in text_event["text"]
+
+
+@pytest.mark.asyncio
+async def test_emits_session_event_when_session_id_present():
+    """Hermes -Q mode prints `session_id: <id>` on the first stdout line automatically.
+    Format verified from Task 0 fixture: session_id is lowercase, leading line."""
+    fake_stdout = b"session_id: 20260423_095548_a2985d\nSome response text.\n"
+
+    proc = AsyncMock()
+    proc.stdout.read = AsyncMock(return_value=fake_stdout)
+    proc.stderr.read = AsyncMock(return_value=b"")
+    proc.wait = AsyncMock(return_value=0)
+    proc.returncode = 0
+
+    with patch("services.hermes_session.asyncio.create_subprocess_exec",
+               return_value=proc):
+        events = await _collect(run_hermes("hi", None, autonomy="auto"))
+
+    session_events = [e for e in events if e["type"] == "session"]
+    assert len(session_events) == 1
+    assert session_events[0]["sessionId"] == "20260423_095548_a2985d"
+    # Session marker stripped from text
+    text_event = next(e for e in events if e["type"] == "text")
+    assert "session_id" not in text_event["text"].lower()
+    assert "Some response text." in text_event["text"]
+
+
+@pytest.mark.asyncio
+async def test_resume_flag_passed_when_session_id_given():
+    """When session_id arg is provided, --resume is in the subprocess args."""
+    captured_args = []
+
+    async def fake_create(*args, **kwargs):
+        captured_args.extend(args)
+        proc = AsyncMock()
+        proc.stdout.read = AsyncMock(return_value=b"ok\n")
+        proc.stderr.read = AsyncMock(return_value=b"")
+        proc.wait = AsyncMock(return_value=0)
+        proc.returncode = 0
+        return proc
+
+    with patch("services.hermes_session.asyncio.create_subprocess_exec",
+               side_effect=fake_create):
+        _ = await _collect(run_hermes("hi", "01HEXISTING", autonomy="auto"))
+
+    assert "--resume" in captured_args
+    idx = captured_args.index("--resume")
+    assert captured_args[idx + 1] == "01HEXISTING"
