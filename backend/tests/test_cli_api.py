@@ -188,16 +188,30 @@ class TestParamCoercion:
 class TestChatAgentDispatch:
     """WebSocket /ws/chat accepts an 'agent' field and routes to the right runner."""
 
-    def test_chat_payload_schema_accepts_agent_field(self):
-        """Smoke test: the payload schema doesn't reject agent/autonomy fields.
+    def test_dispatch_registers_both_agents(self):
+        """The dispatch table exposes both claude and hephaestus."""
+        import sys
+        from pathlib import Path
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+        from services.chat_session import AGENT_RUNNERS
+        assert "claude" in AGENT_RUNNERS
+        assert "hephaestus" in AGENT_RUNNERS
 
-        Real end-to-end testing of agent dispatch requires a running Hermes
-        binary and is done manually per spec §8.
-        """
-        # Pure schema-level regression — if main.py rejects the agent field,
-        # the WebSocket handler would drop the message. Verified by reading
-        # the source; this test documents the required fields.
-        import main  # noqa: F401 — import for side-effects
-        # The websocket handler in main.py must read payload["agent"] and
-        # payload.get("autonomy", "auto"); see chat_websocket in main.py.
-        assert True  # schema is at the handler level, not Pydantic
+    def test_unknown_agent_returns_error_event(self, client):
+        """Sending a send payload with an unknown agent surfaces an error + done."""
+        with client.websocket_connect("/ws/chat") as ws:
+            ws.send_json({
+                "type": "send",
+                "message": "hi",
+                "sessionId": None,
+                "model": "claude-sonnet-4-6",
+                "agent": "bogus",
+                "autonomy": "auto",
+            })
+            first = ws.receive_json()
+            assert first["type"] == "error"
+            assert "bogus" in first["message"]
+            assert "Valid:" in first["message"]
+
+            second = ws.receive_json()
+            assert second["type"] == "done"

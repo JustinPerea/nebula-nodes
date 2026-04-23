@@ -73,22 +73,32 @@ async def run_hermes(
         yield {"type": "done"}
         return
 
-    stdout_bytes = await proc.stdout.read()
-    stderr_bytes = await proc.stderr.read()
-    await proc.wait()
+    try:
+        stdout_bytes = await proc.stdout.read()
+        stderr_bytes = await proc.stderr.read()
+        await proc.wait()
 
-    if proc.returncode != 0:
-        stderr_tail = stderr_bytes.decode("utf-8", errors="replace").strip()
-        # Trim to last 500 chars so a noisy stderr doesn't bloat the chat bubble.
-        tail = stderr_tail[-500:] if len(stderr_tail) > 500 else stderr_tail
-        yield {
-            "type": "error",
-            "message": f"hermes exited {proc.returncode}: {tail}" if tail else f"hermes exited {proc.returncode} with no output",
-        }
-        yield {"type": "done"}
-        return
+        if proc.returncode != 0:
+            stderr_tail = stderr_bytes.decode("utf-8", errors="replace").strip()
+            # Trim to last 500 chars so a noisy stderr doesn't bloat the chat bubble.
+            tail = stderr_tail[-500:] if len(stderr_tail) > 500 else stderr_tail
+            yield {
+                "type": "error",
+                "message": f"hermes exited {proc.returncode}: {tail}" if tail else f"hermes exited {proc.returncode} with no output",
+            }
+            yield {"type": "done"}
+            return
 
-    text = stdout_bytes.decode("utf-8", errors="replace")
+        text = stdout_bytes.decode("utf-8", errors="replace")
+    finally:
+        # If the task was cancelled mid-read, the subprocess is still alive.
+        # Kill it to prevent orphaned hermes processes.
+        if proc.returncode is None:
+            try:
+                proc.kill()
+                await proc.wait()
+            except Exception:
+                pass
 
     # Event accumulators.
     # Session ID format verified via Task 0 fixture: Hermes `-Q` mode prints

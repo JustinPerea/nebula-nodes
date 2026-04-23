@@ -259,3 +259,37 @@ async def test_non_zero_exit_surfaces_stderr_tail():
     assert len(error_events) == 1
     assert "auth failed" in error_events[0]["message"]
     assert events[-1]["type"] == "done"
+
+
+@pytest.mark.asyncio
+async def test_cancelled_task_kills_subprocess():
+    """If stdout.read is interrupted (cancellation), the subprocess is killed via finally."""
+    import asyncio as _asyncio
+
+    killed = {"value": False}
+
+    class FakeProc:
+        def __init__(self):
+            self.returncode = None
+            self.stdout = AsyncMock()
+            self.stderr = AsyncMock()
+            # Simulate the task being cancelled mid-read.
+            self.stdout.read = AsyncMock(side_effect=_asyncio.CancelledError)
+            self.stderr.read = AsyncMock(return_value=b"")
+
+        async def wait(self):
+            return 0
+
+        def kill(self):
+            killed["value"] = True
+            self.returncode = -9
+
+    proc = FakeProc()
+    with patch("services.hermes_session.asyncio.create_subprocess_exec",
+               return_value=proc):
+        agen = run_hermes("hi", None, autonomy="auto")
+        with pytest.raises(_asyncio.CancelledError):
+            async for _ in agen:
+                pass
+
+    assert killed["value"], "subprocess should have been killed on cancellation"

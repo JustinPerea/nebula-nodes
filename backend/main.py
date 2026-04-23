@@ -291,10 +291,7 @@ async def chat_websocket(websocket: WebSocket) -> None:
             return
 
         try:
-            if agent == "hephaestus":
-                agen = runner(message, session_id, model, autonomy)
-            else:
-                agen = runner(message, session_id, model)
+            agen = runner(message, session_id, model, autonomy)
             async for event in agen:
                 await websocket.send_text(json.dumps(event))
         except Exception as exc:

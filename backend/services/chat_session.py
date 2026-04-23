@@ -173,6 +173,7 @@ async def run_claude(
     message: str,
     session_id: str | None,
     model: str,
+    autonomy: str = "auto",
 ) -> AsyncIterator[dict[str, Any]]:
     """Run `claude -p` once and yield normalized events.
 
@@ -185,6 +186,9 @@ async def run_claude(
       - error         — {message}
       - done          — {}
     """
+    # `autonomy` is accepted for signature parity with run_hermes but ignored;
+    # Claude doesn't implement the step-approval contract.
+    del autonomy
     args = ["claude", "-p", "--dangerously-skip-permissions",
             "--output-format", "stream-json", "--verbose",
             "--model", model,
