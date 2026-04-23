@@ -1327,3 +1327,42 @@
   background: rgba(255, 255, 255, 0.15);
   font-weight: 600;
 }
+
+.chat-panel__approval {
+  margin: 8px 0;
+  padding: 12px;
+  border: 1px solid rgba(184, 115, 51, 0.4); /* copper accent */
+  border-radius: 8px;
+  background: rgba(184, 115, 51, 0.08);
+  font-size: 13px;
+}
+
+.chat-panel__approval-summary,
+.chat-panel__approval-plan,
+.chat-panel__approval-cost {
+  margin-bottom: 6px;
+}
+
+.chat-panel__approval-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.chat-panel__approval-btn {
+  padding: 6px 14px;
+  border-radius: 4px;
+  border: none;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.chat-panel__approval-btn--approve {
+  background: #b87333; /* copper */
+  color: white;
+}
+
+.chat-panel__approval-btn--reject {
+  background: rgba(255, 255, 255, 0.1);
+  color: inherit;
+}

@@ -40,6 +40,13 @@ type ChatMessage =
       // id of the text-input node so we can render "Apply to this node"
       // buttons next to any code blocks in the reply.
       enhanceTargetId?: string;
+    }
+  | {
+      role: 'approval';
+      id: string;
+      summary: string;
+      plan: string;
+      cost: string;
     };
 
 type PendingImage =
@@ -419,6 +426,19 @@ export function ChatPanel() {
         setSessionId(String(event.sessionId));
         return;
       }
+      if (type === 'approval_request') {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: newId(),
+            role: 'approval',
+            summary: String(event.summary ?? ''),
+            plan: String(event.plan ?? ''),
+            cost: String(event.cost ?? ''),
+          },
+        ]);
+        return;
+      }
       if (type === 'text') {
         const text = String(event.text ?? '');
         upsertAssistant((msg) => {
@@ -616,6 +636,36 @@ export function ChatPanel() {
   useEffect(() => {
     sendRef.current = send;
   }, [send]);
+
+  // Sends a new turn whose text starts with 'APPROVED:' or 'REJECTED:'.
+  // Hephaestus's SKILL.md tells the agent to recognize these prefixes and
+  // either proceed with the paused plan or pivot. Mirrors the WS-send flow
+  // in `send()` — appends user + assistant placeholder, flips busy, posts
+  // the JSON envelope with agent/autonomy/sessionId/model.
+  const handleApprovalResponse = useCallback(
+    (response: string) => {
+      const ws = wsRef.current;
+      if (!ws || ws.readyState !== WebSocket.OPEN) return;
+      if (busyRef.current) return;
+      setMessages((prev) => [
+        ...prev,
+        { role: 'user', text: response, id: newId() },
+        { role: 'assistant', id: newId(), streaming: true, parts: [] },
+      ]);
+      setBusy(true);
+      ws.send(
+        JSON.stringify({
+          type: 'send',
+          message: response,
+          sessionId,
+          model,
+          agent,
+          autonomy,
+        }),
+      );
+    },
+    [sessionId, model, agent, autonomy],
+  );
 
   const cancel = useCallback(() => {
     const ws = wsRef.current;
@@ -855,28 +905,64 @@ export function ChatPanel() {
             </p>
           </div>
         )}
-        {messages.map((m) =>
-          m.role === 'user' ? (
-            <div key={m.id} className="chat__bubble chat__bubble--user">
-              {m.images && m.images.length > 0 && (
-                <div className="chat__bubble-thumbs">
-                  {m.images.map((img) => (
-                    <img
-                      key={img.nodeId}
-                      src={img.thumbUrl}
-                      alt=""
-                      className="chat__bubble-thumb"
-                      loading="lazy"
-                    />
-                  ))}
+        {messages.map((m) => {
+          if (m.role === 'user') {
+            return (
+              <div key={m.id} className="chat__bubble chat__bubble--user">
+                {m.images && m.images.length > 0 && (
+                  <div className="chat__bubble-thumbs">
+                    {m.images.map((img) => (
+                      <img
+                        key={img.nodeId}
+                        src={img.thumbUrl}
+                        alt=""
+                        className="chat__bubble-thumb"
+                        loading="lazy"
+                      />
+                    ))}
+                  </div>
+                )}
+                <div className="chat__bubble-text">{m.text}</div>
+              </div>
+            );
+          }
+          if (m.role === 'approval') {
+            return (
+              <div key={m.id} className="chat-panel__approval">
+                <div className="chat-panel__approval-summary">
+                  <strong>Approval required:</strong> {m.summary}
                 </div>
-              )}
-              <div className="chat__bubble-text">{m.text}</div>
-            </div>
-          ) : (
-            <AssistantBubble key={m.id} message={m} />
-          ),
-        )}
+                {m.plan && (
+                  <div className="chat-panel__approval-plan">
+                    <strong>Plan:</strong> {m.plan}
+                  </div>
+                )}
+                {m.cost && (
+                  <div className="chat-panel__approval-cost">
+                    <strong>Cost:</strong> {m.cost}
+                  </div>
+                )}
+                <div className="chat-panel__approval-actions">
+                  <button
+                    type="button"
+                    className="chat-panel__approval-btn chat-panel__approval-btn--approve"
+                    onClick={() => handleApprovalResponse('APPROVED: continue')}
+                  >
+                    Approve
+                  </button>
+                  <button
+                    type="button"
+                    className="chat-panel__approval-btn chat-panel__approval-btn--reject"
+                    onClick={() => handleApprovalResponse('REJECTED: please revise')}
+                  >
+                    Reject
+                  </button>
+                </div>
+              </div>
+            );
+          }
+          return <AssistantBubble key={m.id} message={m} />;
+        })}
       </div>
 
       <div className="chat-panel__input">
