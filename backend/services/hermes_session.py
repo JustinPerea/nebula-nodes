@@ -22,6 +22,18 @@ DEFAULT_MODEL = "moonshotai/kimi-k2.6"
 DEFAULT_PROVIDER = "openrouter"
 DEFAULT_SKILLS = "hephaestus-core"
 
+# Structured markers emitted by Hephaestus per SKILL.md directives (Task 8).
+# ALL_MARKERS — every line prefix we recognize as a structured marker.
+# ANCHOR_MARKERS — subset that signal a real end-of-response marker block.
+# PLAN:/COST: alone are ambiguous (could be markdown headings or quoted text);
+# they only count as markers when they appear alongside an anchor in the tail.
+ALL_MARKERS = ("APPROVAL_REQUIRED:", "PLAN:", "COST:", "LEARNING_SAVED:")
+ANCHOR_MARKERS = ("APPROVAL_REQUIRED:", "LEARNING_SAVED:")
+
+
+def _is_marker(s: str) -> bool:
+    return s.startswith(ALL_MARKERS)
+
 
 async def run_hermes(
     message: str,
@@ -57,13 +69,24 @@ async def run_hermes(
             limit=64 * 1024 * 1024,
         )
     except FileNotFoundError:
-        yield {"type": "error", "message": "`hermes` binary not found in PATH. See docs/HERMES-SETUP.md."}
+        yield {"type": "error", "message": "`hermes` binary not found in PATH. See docs/HERMES-SETUP.md for install instructions."}
         yield {"type": "done"}
         return
 
     stdout_bytes = await proc.stdout.read()
-    _ = await proc.stderr.read()
+    stderr_bytes = await proc.stderr.read()
     await proc.wait()
+
+    if proc.returncode != 0:
+        stderr_tail = stderr_bytes.decode("utf-8", errors="replace").strip()
+        # Trim to last 500 chars so a noisy stderr doesn't bloat the chat bubble.
+        tail = stderr_tail[-500:] if len(stderr_tail) > 500 else stderr_tail
+        yield {
+            "type": "error",
+            "message": f"hermes exited {proc.returncode}: {tail}" if tail else f"hermes exited {proc.returncode} with no output",
+        }
+        yield {"type": "done"}
+        return
 
     text = stdout_bytes.decode("utf-8", errors="replace")
 
@@ -104,19 +127,8 @@ async def run_hermes(
     # or writes a markdown heading like "PLAN: Next steps", those lines stay in
     # the text body instead of being parsed as markers.
     #
-    # "Anchor" markers signal a real end-of-response marker block.
-    # PLAN:/COST: on their own (without an anchor) likely come from narrative
-    # text (markdown headings, quoted planning discussion) and stay in body.
-    # Either APPROVAL_REQUIRED or LEARNING_SAVED serves as a valid anchor.
-    ANCHOR_MARKERS = ("APPROVAL_REQUIRED:", "LEARNING_SAVED:")
-
-    def _is_marker(s: str) -> bool:
-        return (
-            s.startswith("APPROVAL_REQUIRED:")
-            or s.startswith("PLAN:")
-            or s.startswith("COST:")
-            or s.startswith("LEARNING_SAVED:")
-        )
+    # ALL_MARKERS and ANCHOR_MARKERS are defined at module scope — they are
+    # part of the external contract with Hephaestus.
 
     # Walk backward from the end, collecting contiguous marker lines.
     # Skip trailing blank lines before starting the walk.
@@ -167,7 +179,9 @@ async def run_hermes(
             event["cost"] = approval_cost
         yield event
 
-    if learning_topic is not None:
+    if learning_topic:
+        # entry_preview hardcoded empty for MVP; later task can parse preview
+        # text from SKILL.md emission if Hephaestus starts surfacing it.
         yield {"type": "learning_saved", "topic": learning_topic, "entry_preview": ""}
 
     body = "\n".join(filtered_lines).strip()

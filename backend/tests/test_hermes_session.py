@@ -227,3 +227,35 @@ async def test_learning_marker_mid_response_is_not_parsed():
     assert len(learn) == 0  # mid-response mention should not fire
     text = next(e for e in events if e["type"] == "text")
     assert "LEARNING_SAVED" in text["text"]  # stays in body
+
+
+@pytest.mark.asyncio
+async def test_binary_missing_yields_error_event():
+    """When hermes binary isn't in PATH, emit error + done gracefully."""
+    with patch("services.hermes_session.asyncio.create_subprocess_exec",
+               side_effect=FileNotFoundError("no such file")):
+        events = await _collect(run_hermes("hi", None, autonomy="auto"))
+
+    assert events[0]["type"] == "error"
+    assert "hermes" in events[0]["message"].lower()
+    assert "HERMES-SETUP" in events[0]["message"]
+    assert events[-1]["type"] == "done"
+
+
+@pytest.mark.asyncio
+async def test_non_zero_exit_surfaces_stderr_tail():
+    """If hermes subprocess exits non-zero, emit error with stderr tail."""
+    proc = AsyncMock()
+    proc.stdout.read = AsyncMock(return_value=b"")
+    proc.stderr.read = AsyncMock(return_value=b"auth failed: no API key configured\n")
+    proc.wait = AsyncMock(return_value=1)
+    proc.returncode = 1
+
+    with patch("services.hermes_session.asyncio.create_subprocess_exec",
+               return_value=proc):
+        events = await _collect(run_hermes("hi", None, autonomy="auto"))
+
+    error_events = [e for e in events if e["type"] == "error"]
+    assert len(error_events) == 1
+    assert "auth failed" in error_events[0]["message"]
+    assert events[-1]["type"] == "done"
