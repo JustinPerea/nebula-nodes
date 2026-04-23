@@ -927,12 +927,14 @@
 .chat__bubble--assistant {
   background: #1e1e1e;
   border: 1px solid #2a2a2a;
+  border-left: 3px solid var(--chat-accent);
   color: #ccc;
   align-self: flex-start;
   max-width: 100%;
   display: flex;
   flex-direction: column;
   gap: 6px;
+  padding-left: 10px;
 }
 
 .chat__text {
@@ -1367,6 +1369,11 @@
 .chat-panel__approval-btn--reject {
   background: rgba(255, 255, 255, 0.1);
   color: inherit;
+}
+
+.chat-panel__approval-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .chat-panel__system-line {

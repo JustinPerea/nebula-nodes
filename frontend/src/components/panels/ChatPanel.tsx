@@ -47,6 +47,7 @@ type ChatMessage =
       summary: string;
       plan: string;
       cost: string;
+      responded?: boolean;
     }
   | {
       role: 'system';
@@ -663,11 +664,25 @@ export function ChatPanel() {
       const ws = wsRef.current;
       if (!ws || ws.readyState !== WebSocket.OPEN) return;
       if (busyRef.current) return;
-      setMessages((prev) => [
-        ...prev,
-        { role: 'user', text: response, id: newId() },
-        { role: 'assistant', id: newId(), streaming: true, parts: [] },
-      ]);
+      setMessages((prev) => {
+        // Mark the most recent approval message as responded so its
+        // Approve/Reject buttons disable + dim during streaming.
+        let markedLatest = false;
+        const updated = [...prev];
+        for (let i = updated.length - 1; i >= 0; i -= 1) {
+          const msg = updated[i];
+          if (msg.role === 'approval' && !msg.responded && !markedLatest) {
+            updated[i] = { ...msg, responded: true };
+            markedLatest = true;
+            break;
+          }
+        }
+        return [
+          ...updated,
+          { role: 'user', text: response, id: newId() },
+          { role: 'assistant', id: newId(), streaming: true, parts: [] },
+        ];
+      });
       setBusy(true);
       ws.send(
         JSON.stringify({
@@ -915,7 +930,11 @@ export function ChatPanel() {
       <div className="chat-panel__messages" ref={scrollRef}>
         {messages.length === 0 && (
           <div className="chat__empty">
-            <p>Talk to Claude Code. It has access to the nebula skill — ask it to build a graph.</p>
+            {agent === 'hephaestus' ? (
+              <p>Talk to Hephaestus. It plans multi-stage creative pipelines, builds them as nebula nodes, inspects outputs, and iterates until they're right.</p>
+            ) : (
+              <p>Talk to Claude Code. It has access to the nebula skill — ask it to build a graph.</p>
+            )}
             <p className="chat__empty-hint">
               <code>/model sonnet|opus|haiku</code> · <code>/clear</code>
             </p>
@@ -970,6 +989,7 @@ export function ChatPanel() {
                     type="button"
                     className="chat-panel__approval-btn chat-panel__approval-btn--approve"
                     onClick={() => handleApprovalResponse('APPROVED: continue')}
+                    disabled={m.responded}
                   >
                     Approve
                   </button>
@@ -977,6 +997,7 @@ export function ChatPanel() {
                     type="button"
                     className="chat-panel__approval-btn chat-panel__approval-btn--reject"
                     onClick={() => handleApprovalResponse('REJECTED: please revise')}
+                    disabled={m.responded}
                   >
                     Reject
                   </button>
