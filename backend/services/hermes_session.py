@@ -44,6 +44,15 @@ async def run_hermes(
     """Run a single Hephaestus turn via `hermes chat -q -Q` and yield events."""
     # Note (from Task 0 fixture): `hermes chat -Q` emits `session_id: <id>` on
     # its own first line automatically — no `--pass-session-id` flag needed.
+    #
+    # Model override: the frontend's model picker is Claude-specific (defaults
+    # to claude-sonnet-4-6). Hephaestus must run on Kimi K2.6 for (a) the
+    # Hermes Agent Creative Hackathon Kimi-track qualification and (b) because
+    # Hermes is configured for OpenRouter and wouldn't recognize Claude Code
+    # model slugs. Silently swap any non-OpenRouter-slug model for the Kimi
+    # default.
+    if "/" not in model:
+        model = DEFAULT_MODEL
     args = [
         "hermes", "chat", "-q", message, "-Q",
         "--provider", DEFAULT_PROVIDER,
@@ -62,6 +71,7 @@ async def run_hermes(
     try:
         proc = await asyncio.create_subprocess_exec(
             *args,
+            stdin=asyncio.subprocess.DEVNULL,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             cwd=str(PROJECT_ROOT),
@@ -79,9 +89,18 @@ async def run_hermes(
         await proc.wait()
 
         if proc.returncode != 0:
-            stderr_tail = stderr_bytes.decode("utf-8", errors="replace").strip()
+            stderr_full = stderr_bytes.decode("utf-8", errors="replace").strip()
+            stdout_full = stdout_bytes.decode("utf-8", errors="replace").strip()
+            # Print the full diagnostics to server logs so we can debug why
+            # hermes exits non-zero even when standalone CLI invocations succeed.
+            print("=" * 60, flush=True)
+            print(f"[hermes_session] hermes exited {proc.returncode}", flush=True)
+            print(f"[hermes_session] ARGS: {args}", flush=True)
+            print(f"[hermes_session] STDERR ({len(stderr_full)} chars):\n{stderr_full}", flush=True)
+            print(f"[hermes_session] STDOUT ({len(stdout_full)} chars):\n{stdout_full}", flush=True)
+            print("=" * 60, flush=True)
             # Trim to last 500 chars so a noisy stderr doesn't bloat the chat bubble.
-            tail = stderr_tail[-500:] if len(stderr_tail) > 500 else stderr_tail
+            tail = stderr_full[-500:] if len(stderr_full) > 500 else stderr_full
             yield {
                 "type": "error",
                 "message": f"hermes exited {proc.returncode}: {tail}" if tail else f"hermes exited {proc.returncode} with no output",
