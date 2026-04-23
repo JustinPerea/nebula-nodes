@@ -1,0 +1,11 @@
+{
+  "name": "hephaestus-core",
+  "description": "Hephaestus's iterative-artist playbook for the Hephaestus chat agent in nebula-nodes. Persona + pipeline stage tracing + vision QA rules + nebula CLI cookbook + learnings discipline + autonomy modes.",
+  "category": "agent-persona",
+  "version": "1.0.0",
+  "author": "nebula-nodes + Hephaestus (Nous Hermes Agent Creative Hackathon 2026)",
+  "platforms": ["hermes-cli"],
+  "required_environment_variables": {
+    "HEPHAESTUS_APPROVAL": "'auto' (default) or 'step' — controls whether Hephaestus pauses before expensive operations for user approval."
+  }
+}
