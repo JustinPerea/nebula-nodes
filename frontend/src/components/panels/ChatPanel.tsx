@@ -47,6 +47,11 @@ type ChatMessage =
       summary: string;
       plan: string;
       cost: string;
+    }
+  | {
+      role: 'system';
+      id: string;
+      text: string;
     };
 
 type PendingImage =
@@ -435,6 +440,17 @@ export function ChatPanel() {
             summary: String(event.summary ?? ''),
             plan: String(event.plan ?? ''),
             cost: String(event.cost ?? ''),
+          },
+        ]);
+        return;
+      }
+      if (type === 'learning_saved') {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: newId(),
+            role: 'system',
+            text: `→ Saved learning: ${String(event.topic ?? '')}`,
           },
         ]);
         return;
@@ -923,6 +939,13 @@ export function ChatPanel() {
                   </div>
                 )}
                 <div className="chat__bubble-text">{m.text}</div>
+              </div>
+            );
+          }
+          if (m.role === 'system') {
+            return (
+              <div key={m.id} className="chat-panel__system-line">
+                {m.text}
               </div>
             );
           }
