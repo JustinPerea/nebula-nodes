@@ -145,7 +145,17 @@ NEBULA_SYSTEM_PRIMER = (
     "image to BOTH ports. Matching endpoint to starting frame is what "
     "makes the clip loop cleanly. If the user explicitly provides two "
     "different keyframes (e.g. 'morph from A to B'), use those instead. "
-    "Do NOT leave `last_frame` unconnected when the user asked for a loop."
+    "Do NOT leave `last_frame` unconnected when the user asked for a loop.\n\n"
+    "SINGLE IMAGE → 3D. When the user wants a 3D model from ONE image, "
+    "use `meshy-image-to-3d` or `hunyuan3d-image-to-3d` directly. Do NOT "
+    "wrap the image in `array-builder` to feed `meshy-multi-image-to-3d` "
+    "— that endpoint expects MULTIPLE distinct views of the same subject "
+    "(front, side, back), not one image repeated. If the user needs T-pose "
+    "or A-pose for rigging and the single-image node doesn't expose "
+    "`pose_mode`, tell them that up front as a known limitation — don't "
+    "work around it by misusing the multi-image endpoint. Only use "
+    "`meshy-multi-image-to-3d` when the user actually provides multiple "
+    "reference views of the same subject."
 )
 
 
