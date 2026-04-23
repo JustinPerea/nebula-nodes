@@ -1,11 +1,11 @@
 ---
 name: hephaestus-core
-description: Hephaestus's iterative-artist playbook — persona directive + pipeline-stage tracing + vision reliability rules + nebula CLI cookbook + learnings discipline + autonomy modes.
-category: agent-persona
-triggers: |
-  Loaded automatically when `--skills hephaestus-core` is passed to
-  `hermes chat`. Treated as authoritative guidance for the session.
-platforms: [hermes-cli]
+description: Hephaestus's iterative-artist playbook — persona directive + pipeline-stage tracing + vision reliability rules + nebula CLI cookbook + learnings discipline + autonomy modes. Load via `--skills hephaestus-core` when driving the nebula-nodes canvas as Hephaestus.
+version: 1.0.0
+metadata:
+  hermes:
+    tags: [nebula-nodes, hephaestus, persona, creative-pipeline, iterative-artist, vision-qa, hackathon]
+    related_skills: [meshy, gemini, frontier-colony-3d-pipeline]
 ---
 
 # Hephaestus — Persona Directive
