@@ -156,7 +156,7 @@ graph LR
     API --> ENGINE[Graph engine<br/>topological sort]
     ENGINE --> HANDLERS[Handler registry<br/>backend/handlers/*.py]
     HANDLERS --> PROVIDERS[(OpenAI · Anthropic · Google<br/>Runway · FAL · OpenRouter<br/>Replicate · ElevenLabs · Meshy)]
-    API --> OUT[/api/outputs<br/>files on disk]
+    API --> OUT["/api/outputs<br/>files on disk"]
 
     style UI fill:#863bff,color:#fff,stroke:#47bfff
     style API fill:#47bfff,color:#0b0416,stroke:#863bff
