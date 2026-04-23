@@ -522,6 +522,78 @@ def _valid_param_keys(definition_id: str) -> set[str] | None:
     return keys
 
 
+def _to_bool(v: Any) -> bool:
+    if isinstance(v, bool):
+        return v
+    if isinstance(v, (int, float)):
+        return bool(v)
+    s = str(v).strip().lower()
+    if s in ("true", "1", "yes", "on"):
+        return True
+    if s in ("false", "0", "no", "off", ""):
+        return False
+    raise ValueError(f"cannot interpret {v!r} as boolean")
+
+
+def _to_int(v: Any) -> int:
+    if isinstance(v, bool):
+        raise ValueError(f"refusing to coerce bool {v!r} to integer")
+    if isinstance(v, int):
+        return v
+    if isinstance(v, float):
+        if v.is_integer():
+            return int(v)
+        raise ValueError(f"cannot coerce non-integer float {v!r} to integer")
+    return int(str(v).strip())
+
+
+def _to_float(v: Any) -> float:
+    if isinstance(v, bool):
+        raise ValueError(f"refusing to coerce bool {v!r} to float")
+    if isinstance(v, (int, float)):
+        return float(v)
+    return float(str(v).strip())
+
+
+def _coerce_params(definition_id: str, params: dict[str, Any]) -> dict[str, Any]:
+    """Coerce param values to the types declared in the node definition.
+
+    The CLI sends every `--param k=v` as a string, and some providers (Meshy,
+    for one) reject string values where booleans or ints are expected. Normalise
+    here so handlers always receive correctly-typed params regardless of the
+    caller's transport.
+    """
+    defn = node_registry.get(definition_id)
+    if not defn:
+        return dict(params)
+    type_map: dict[str, str] = {}
+    for source_key in ("params", "sharedParams", "falParams", "directParams"):
+        for p in defn.get(source_key, []) or []:
+            if isinstance(p, dict) and p.get("key") and p.get("type"):
+                type_map[p["key"]] = p["type"]
+    result: dict[str, Any] = {}
+    for k, v in params.items():
+        if k.startswith("_") or v is None:
+            result[k] = v
+            continue
+        t = type_map.get(k)
+        try:
+            if t == "boolean":
+                result[k] = _to_bool(v)
+            elif t == "integer":
+                result[k] = _to_int(v)
+            elif t == "float":
+                result[k] = _to_float(v)
+            else:
+                result[k] = v
+        except (ValueError, TypeError) as e:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid value for param '{k}' ({t}): {e}",
+            )
+    return result
+
+
 def _validate_params(definition_id: str, params: dict[str, Any]) -> None:
     """Raise 400 if params contain keys the definition doesn't declare.
 
@@ -559,6 +631,7 @@ async def create_graph_node(body: dict[str, Any]) -> dict:
     params = body.get("params", {}) or {}
     position = body.get("position")
     _validate_params(definition_id, params)
+    params = _coerce_params(definition_id, params)
     short_id = cli_graph.add_node(definition_id, params, position=position)
     await _broadcast_graph_sync()
     return cli_graph.nodes[short_id]
@@ -592,6 +665,7 @@ async def create_node_and_connect(body: dict[str, Any]) -> dict:
     params = body.get("params", {}) or {}
     position = body.get("position")
     _validate_params(definition_id, params)
+    params = _coerce_params(definition_id, params)
     short_id = cli_graph.add_node(definition_id, params, position=position)
 
     connect_spec = body.get("connect") or {}
@@ -626,6 +700,7 @@ async def update_graph_node(node_id: str, body: dict[str, Any]) -> dict:
         raise HTTPException(status_code=404, detail=f"Node '{node_id}' not found")
     params = body.get("params", {}) or {}
     _validate_params(node.get("definitionId", ""), params)
+    params = _coerce_params(node.get("definitionId", ""), params)
     try:
         cli_graph.update_params(node_id, params)
     except ValueError:

@@ -115,3 +115,71 @@ class TestGraphEndpoints:
         assert resp.status_code == 200
         graph = client.get("/api/graph").json()
         assert len(graph["nodes"]) == 0
+
+
+class TestParamCoercion:
+    """CLI sends every --param k=v as a string; coerce to declared types.
+
+    Regression test for a real bug: Meshy rejected graphs because
+    should_remesh="true" arrived at the provider API instead of
+    should_remesh=True.
+    """
+
+    def test_string_true_coerces_to_bool(self, client):
+        resp = client.post("/api/graph/node", json={
+            "definitionId": "meshy-multi-image-to-3d",
+            "params": {"should_remesh": "true", "should_texture": "false"},
+        })
+        assert resp.status_code == 200
+        node = resp.json()
+        assert node["params"]["should_remesh"] is True
+        assert node["params"]["should_texture"] is False
+
+    def test_string_integer_coerces_to_int(self, client):
+        resp = client.post("/api/graph/node", json={
+            "definitionId": "meshy-multi-image-to-3d",
+            "params": {"target_polycount": "30000"},
+        })
+        assert resp.status_code == 200
+        assert resp.json()["params"]["target_polycount"] == 30000
+        assert isinstance(resp.json()["params"]["target_polycount"], int)
+
+    def test_enum_and_string_pass_through(self, client):
+        resp = client.post("/api/graph/node", json={
+            "definitionId": "meshy-multi-image-to-3d",
+            "params": {"pose_mode": "t-pose", "topology": "quad"},
+        })
+        assert resp.status_code == 200
+        assert resp.json()["params"]["pose_mode"] == "t-pose"
+
+    def test_native_bool_passes_through(self, client):
+        """Frontend Inspector sends typed values; don't mangle them."""
+        resp = client.post("/api/graph/node", json={
+            "definitionId": "meshy-multi-image-to-3d",
+            "params": {"should_remesh": True, "target_polycount": 50000},
+        })
+        assert resp.status_code == 200
+        node = resp.json()
+        assert node["params"]["should_remesh"] is True
+        assert node["params"]["target_polycount"] == 50000
+
+    def test_invalid_bool_returns_400(self, client):
+        resp = client.post("/api/graph/node", json={
+            "definitionId": "meshy-multi-image-to-3d",
+            "params": {"should_remesh": "maybe"},
+        })
+        assert resp.status_code == 400
+        assert "should_remesh" in resp.json()["detail"]
+
+    def test_update_coerces_params(self, client):
+        client.post("/api/graph/node", json={
+            "definitionId": "meshy-multi-image-to-3d",
+            "params": {},
+        })
+        resp = client.put("/api/graph/node/n1", json={
+            "params": {"should_remesh": "true", "target_polycount": "45000"},
+        })
+        assert resp.status_code == 200
+        node = resp.json()
+        assert node["params"]["should_remesh"] is True
+        assert node["params"]["target_polycount"] == 45000
