@@ -334,3 +334,13 @@ async def run_claude(
             except ProcessLookupError:
                 pass
         yield {"type": "done"}
+
+
+# Agent dispatch registry — keyed by the 'agent' field on /ws/chat payloads.
+# Keep this at the bottom so both run_claude and run_hermes are in scope.
+from services.hermes_session import run_hermes as _run_hermes  # noqa: E402
+
+AGENT_RUNNERS: dict[str, Any] = {
+    "claude": run_claude,
+    "hephaestus": _run_hermes,
+}
