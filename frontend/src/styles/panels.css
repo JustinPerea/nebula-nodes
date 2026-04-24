@@ -1416,10 +1416,15 @@
 }
 
 .chat-panel__thinking--completed {
-  opacity: 0.65;
+  opacity: 0.78;
   border-width: 1px;
   border-color: var(--chat-accent-border);
   box-shadow: none;
+  transition: opacity 140ms ease;
+}
+
+.chat-panel__thinking--completed:hover {
+  opacity: 1;
 }
 
 @keyframes chat-thinking-pulse {

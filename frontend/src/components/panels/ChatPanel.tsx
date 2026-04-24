@@ -119,12 +119,15 @@ function newId(): string {
 // completed. Called whenever a non-thinking event arrives (text / approval /
 // done / error) so the next batch of thinking events starts a fresh bubble
 // on the next turn instead of appending to this turn's finished stream.
+// Also collapses the bubble so the final response anchors the eye and the
+// thinking becomes a clickable disclosure — the body is still there if you
+// want to scrub back, it's just folded by default.
 function markThinkingCompleted(msgs: ChatMessage[]): ChatMessage[] {
   let changed = false;
   const next = msgs.map((m) => {
     if (m.role === 'thinking' && !m.completed) {
       changed = true;
-      return { ...m, completed: true };
+      return { ...m, completed: true, collapsed: true };
     }
     return m;
   });
