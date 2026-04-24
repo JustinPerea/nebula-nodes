@@ -1,6 +1,7 @@
 """Tests for run_hermes — mirrors the run_claude event contract."""
 from __future__ import annotations
 
+import asyncio
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -294,3 +295,125 @@ async def test_cancelled_task_kills_subprocess():
                 pass
 
     assert killed["value"], "subprocess should have been killed on cancellation"
+
+
+@pytest.mark.asyncio
+async def test_thinking_events_emitted_from_log_tail(tmp_path, monkeypatch):
+    """A simulated log file with INFO lines should produce thinking events.
+
+    The tailer watches `LOG_PATH` and surfaces human-readable log messages
+    as `thinking` events in parallel with the (slow) subprocess read.
+    """
+    from services import hermes_session
+
+    log_file = tmp_path / "agent.log"
+    log_file.write_text("")
+    monkeypatch.setattr(hermes_session, "LOG_PATH", log_file)
+
+    # Subprocess takes 1s before returning stdout, giving the tailer time to
+    # observe log writes. Stdout has an actual response so the turn completes
+    # with a text event too (sanity).
+    async def fake_read_stdout():
+        await asyncio.sleep(1.0)
+        return b"done.\n"
+
+    async def fake_read_stderr():
+        return b""
+
+    proc = AsyncMock()
+    proc.stdout.read = AsyncMock(side_effect=fake_read_stdout)
+    proc.stderr.read = AsyncMock(side_effect=fake_read_stderr)
+    proc.wait = AsyncMock(return_value=0)
+    proc.returncode = 0
+
+    async def fake_create(*args, **kwargs):
+        async def write_log_entries():
+            await asyncio.sleep(0.3)
+            log_file.write_text(
+                "2026-01-01 00:00:00,000 INFO agent.auxiliary_client: "
+                "Vision auto-detect: using main provider openrouter (moonshotai/kimi-k2.6)\n"
+            )
+        asyncio.create_task(write_log_entries())
+        return proc
+
+    with patch(
+        "services.hermes_session.asyncio.create_subprocess_exec",
+        side_effect=fake_create,
+    ):
+        events = await _collect(run_hermes("hi", None, autonomy="auto"))
+
+    thinking = [e for e in events if e["type"] == "thinking"]
+    assert len(thinking) >= 1
+    assert any("Vision auto-detect" in e["text"] for e in thinking)
+    # Sanity: the rest of the event contract still fires.
+    assert events[-1]["type"] == "done"
+
+
+@pytest.mark.asyncio
+async def test_thinking_noise_lines_filtered(tmp_path, monkeypatch):
+    """Plugin-discovery / env-load noise should NOT produce thinking events."""
+    from services import hermes_session
+
+    log_file = tmp_path / "agent.log"
+    log_file.write_text("")
+    monkeypatch.setattr(hermes_session, "LOG_PATH", log_file)
+
+    async def fake_read_stdout():
+        await asyncio.sleep(0.8)
+        return b"done.\n"
+
+    proc = AsyncMock()
+    proc.stdout.read = AsyncMock(side_effect=fake_read_stdout)
+    proc.stderr.read = AsyncMock(return_value=b"")
+    proc.wait = AsyncMock(return_value=0)
+    proc.returncode = 0
+
+    async def fake_create(*args, **kwargs):
+        async def write_noise():
+            await asyncio.sleep(0.2)
+            log_file.write_text(
+                "2026-01-01 00:00:00,000 INFO hermes_cli.plugins: scanning entry points\n"
+                "2026-01-01 00:00:00,001 INFO run_agent: Loaded environment from .env\n"
+                "2026-01-01 00:00:00,002 INFO run_agent: No .env found\n"
+            )
+        asyncio.create_task(write_noise())
+        return proc
+
+    with patch(
+        "services.hermes_session.asyncio.create_subprocess_exec",
+        side_effect=fake_create,
+    ):
+        events = await _collect(run_hermes("hi", None, autonomy="auto"))
+
+    thinking = [e for e in events if e["type"] == "thinking"]
+    assert all("hermes_cli.plugins" not in e["text"] for e in thinking)
+    assert all("run_agent" not in e["text"] for e in thinking)
+
+
+def test_extract_log_message_happy_path():
+    """`_extract_log_message` keeps only the prose body after `module: `."""
+    from services.hermes_session import _extract_log_message
+
+    line = (
+        "2026-04-23 20:33:52,916 INFO agent.auxiliary_client: "
+        "Vision auto-detect: using main provider openrouter (moonshotai/kimi-k2.6)"
+    )
+    out = _extract_log_message(line)
+    assert out is not None
+    # Keeps the "Vision auto-detect: ..." body, strips the timestamp + module.
+    assert out.startswith("Vision auto-detect")
+    assert "agent.auxiliary_client" not in out
+
+
+def test_extract_log_message_skips_non_info_lines():
+    from services.hermes_session import _extract_log_message
+    assert _extract_log_message("") is None
+    assert _extract_log_message("some debug output") is None
+    # DEBUG-level lines pass through the INFO/ERROR filter → dropped.
+    assert _extract_log_message("2026-04-23 DEBUG foo: bar") is None
+
+
+def test_extract_log_message_skips_plugin_noise():
+    from services.hermes_session import _extract_log_message
+    line = "2026-04-23 20:33:52,000 INFO hermes_cli.plugins: loaded"
+    assert _extract_log_message(line) is None

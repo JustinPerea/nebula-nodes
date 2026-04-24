@@ -1399,3 +1399,73 @@
   --chat-accent-bg: rgba(74, 124, 89, 0.08);
   --chat-accent-border: rgba(74, 124, 89, 0.4);
 }
+
+/* Thinking-progress stream (Daedalus log tail + heartbeats).
+ * One bubble per turn; collapsible; auto-scrolls to newest line. */
+.chat-panel__thinking {
+  margin: 4px 0 8px;
+  padding: 0;
+  border: 1px solid var(--chat-accent-border);
+  border-radius: 6px;
+  background: var(--chat-accent-bg);
+  font-size: 12px;
+  overflow: hidden;
+}
+
+.chat-panel__thinking--completed {
+  opacity: 0.65;
+}
+
+.chat-panel__thinking-header {
+  width: 100%;
+  padding: 6px 10px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: inherit;
+  font-size: 12px;
+  font-family: inherit;
+  text-align: left;
+}
+
+.chat-panel__thinking-header:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.chat-panel__thinking-indicator {
+  font-family: monospace;
+  opacity: 0.8;
+}
+
+.chat-panel__thinking-label {
+  flex: 1;
+  font-style: italic;
+  opacity: 0.75;
+}
+
+.chat-panel__thinking-caret {
+  opacity: 0.6;
+  font-size: 10px;
+}
+
+.chat-panel__thinking-body {
+  max-height: 180px;
+  overflow-y: auto;
+  padding: 4px 12px 8px;
+  border-top: 1px solid var(--chat-accent-border);
+  font-family: 'SFMono-Regular', Menlo, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.chat-panel__thinking-line {
+  padding: 2px 0;
+  color: rgba(230, 230, 230, 0.75);
+}
+
+.chat-panel__thinking-line:last-child {
+  color: inherit; /* brighten most recent line */
+}

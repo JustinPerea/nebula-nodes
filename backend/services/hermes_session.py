@@ -4,6 +4,8 @@ output into the same event dict contract as run_claude.
 Yields dicts with a `type` field:
   - session          — {sessionId}
   - text             — {text}
+  - thinking         — {text}   progress message from the daedalus agent log
+                                or a heartbeat when the log has been quiet
   - approval_request — {summary, plan?, cost?}  (plan/cost omitted if absent)
   - learning_saved   — {topic, entry_preview}
   - error            — {message}
@@ -21,6 +23,11 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 DEFAULT_MODEL = "moonshotai/kimi-k2.6"
 DEFAULT_PROVIDER = "openrouter"
 DEFAULT_SKILLS = "daedalus-core"
+
+# Path to the Daedalus profile's agent log. We tail this in parallel with the
+# subprocess so users see "thinking…" progress updates during multi-minute
+# Kimi-powered turns (hermes -Q is non-streaming — stdout only arrives at end).
+LOG_PATH = Path.home() / ".hermes" / "profiles" / "daedalus" / "logs" / "agent.log"
 
 # We invoke Hermes through the `hermes-daedalus` profile-alias wrapper instead
 # of plain `hermes`. Hermes has no `--profile` flag on `chat`, so the only way
@@ -40,6 +47,94 @@ ANCHOR_MARKERS = ("APPROVAL_REQUIRED:", "LEARNING_SAVED:")
 
 def _is_marker(s: str) -> bool:
     return s.startswith(ALL_MARKERS)
+
+
+def _extract_log_message(line: str) -> str | None:
+    """Extract human-readable message from a Hermes log line, or None to skip.
+
+    Lines look like:
+      2026-04-23 20:33:52,916 INFO agent.auxiliary_client: Vision auto-detect: using main provider openrouter (moonshotai/kimi-k2.6)
+      2026-04-23 20:08:46,643 ERROR [20260423_200844_b6be84] root: Non-retryable client error: Error code: 400 - {...}
+
+    We keep only the message body (everything after the final `module: `) so
+    the thinking-stream reads as prose, not logs.
+    """
+    if " INFO " not in line and " ERROR " not in line:
+        return None
+    # Skip plugin-discovery / env-load noise that fires on every invocation
+    # and adds no signal for the user watching the stream.
+    if (
+        "hermes_cli.plugins:" in line
+        or "run_agent: Loaded environment" in line
+        or "run_agent: No .env" in line
+    ):
+        return None
+    # Format: `YYYY-MM-DD HH:MM:SS,ms LEVEL [session_id]? module.name: message body`.
+    # The message body itself may contain ": " (e.g. "Vision auto-detect: ..."),
+    # so we locate the FIRST `: ` that appears AFTER the level keyword, which
+    # is always the module/message boundary.
+    for level in (" INFO ", " ERROR "):
+        level_idx = line.find(level)
+        if level_idx == -1:
+            continue
+        after_level = line[level_idx + len(level):]
+        sep_idx = after_level.find(": ")
+        if sep_idx == -1:
+            return after_level.strip() or None
+        body = after_level[sep_idx + 2:].strip()
+        return body or None
+    return None
+
+
+async def _tail_log(
+    start_offset: int,
+    stop_event: asyncio.Event,
+    queue: "asyncio.Queue[str]",
+    started_at: float,
+) -> None:
+    """Tail the daedalus agent log, pushing human-readable messages onto queue.
+
+    Emits:
+      - One message per new INFO/ERROR line appended to the log.
+      - A heartbeat ("thinking... (Ns elapsed)") every 5s when the log is quiet,
+        so the user sees *something* even during long provider calls that
+        don't log intermediate progress.
+    """
+    last_log_time = started_at
+    current_offset = start_offset
+    while not stop_event.is_set():
+        try:
+            if LOG_PATH.exists():
+                size = LOG_PATH.stat().st_size
+                if size > current_offset:
+                    with LOG_PATH.open("r", encoding="utf-8", errors="replace") as f:
+                        f.seek(current_offset)
+                        new = f.read()
+                    current_offset = size
+                    for line in new.splitlines():
+                        msg = _extract_log_message(line)
+                        if msg:
+                            await queue.put(msg)
+                            last_log_time = asyncio.get_event_loop().time()
+                elif size < current_offset:
+                    # Log rotated / truncated under us — restart from 0 so we
+                    # don't miss fresh entries.
+                    current_offset = 0
+        except Exception:
+            # Tailer must never break the turn; swallow I/O errors silently.
+            pass
+
+        now = asyncio.get_event_loop().time()
+        if now - last_log_time > 5.0:
+            elapsed = int(now - started_at)
+            await queue.put(f"thinking... ({elapsed}s elapsed)")
+            last_log_time = now
+
+        # Sleep ~300ms, but exit promptly if stop_event fires.
+        try:
+            await asyncio.wait_for(stop_event.wait(), timeout=0.3)
+        except asyncio.TimeoutError:
+            pass
 
 
 async def run_hermes(
@@ -75,6 +170,14 @@ async def run_hermes(
         "DAEDALUS_APPROVAL": autonomy,
     }
 
+    # Capture the log's current size BEFORE spawn so the tailer only surfaces
+    # lines from *this* turn, not stale entries from previous runs.
+    try:
+        log_start_offset = LOG_PATH.stat().st_size if LOG_PATH.exists() else 0
+    except Exception:
+        log_start_offset = 0
+    started_at = asyncio.get_event_loop().time()
+
     try:
         proc = await asyncio.create_subprocess_exec(
             *args,
@@ -97,10 +200,55 @@ async def run_hermes(
         yield {"type": "done"}
         return
 
+    # Start the log-tailer task in parallel with the subprocess so we can emit
+    # `thinking` events while stdout is still buffering.
+    thinking_queue: asyncio.Queue[str] = asyncio.Queue()
+    stop_tail = asyncio.Event()
+    tail_task = asyncio.create_task(
+        _tail_log(log_start_offset, stop_tail, thinking_queue, started_at)
+    )
+
     try:
-        stdout_bytes = await proc.stdout.read()
-        stderr_bytes = await proc.stderr.read()
-        await proc.wait()
+        # Kick stdout+stderr reads off as tasks so we can interleave thinking
+        # events from the queue without blocking on the full stdout read.
+        stdout_task = asyncio.create_task(proc.stdout.read())
+        stderr_task = asyncio.create_task(proc.stderr.read())
+
+        try:
+            # Race stdout completion against queue arrivals so we (a) yield
+            # thinking events the instant they arrive and (b) exit the loop
+            # as soon as stdout is done, without a 500ms lag.
+            while not stdout_task.done():
+                queue_task = asyncio.create_task(thinking_queue.get())
+                done, _pending = await asyncio.wait(
+                    {stdout_task, queue_task},
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+                if queue_task in done:
+                    yield {"type": "thinking", "text": queue_task.result()}
+                else:
+                    # stdout finished first; cancel the pending queue get.
+                    queue_task.cancel()
+                    try:
+                        await queue_task
+                    except (asyncio.CancelledError, Exception):
+                        pass
+            # Drain any thinking events that landed in the queue between the
+            # last await and the subprocess finishing.
+            while not thinking_queue.empty():
+                try:
+                    yield {"type": "thinking", "text": thinking_queue.get_nowait()}
+                except asyncio.QueueEmpty:
+                    break
+            stdout_bytes = stdout_task.result()
+            stderr_bytes = await stderr_task
+            await proc.wait()
+        except BaseException:
+            # Cancel outstanding reads so they don't linger on CancelledError.
+            stdout_task.cancel()
+            stderr_task.cancel()
+            raise
+        # (the rest of the original happy-path continues below)
 
         if proc.returncode != 0:
             stderr_full = stderr_bytes.decode("utf-8", errors="replace").strip()
@@ -124,6 +272,14 @@ async def run_hermes(
 
         text = stdout_bytes.decode("utf-8", errors="replace")
     finally:
+        # Stop the log tailer before touching the subprocess so it doesn't
+        # keep spinning on a file we no longer care about.
+        stop_tail.set()
+        tail_task.cancel()
+        try:
+            await tail_task
+        except (asyncio.CancelledError, Exception):
+            pass
         # If the task was cancelled mid-read, the subprocess is still alive.
         # Kill it to prevent orphaned hermes processes.
         if proc.returncode is None:

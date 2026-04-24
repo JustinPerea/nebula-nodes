@@ -53,6 +53,14 @@ type ChatMessage =
       role: 'system';
       id: string;
       text: string;
+    }
+  | {
+      role: 'thinking';
+      id: string;
+      lines: string[];
+      collapsed: boolean;
+      startedAt: number;
+      completed: boolean;
     };
 
 type PendingImage =
@@ -105,6 +113,22 @@ const DEFAULT_MODEL = 'claude-sonnet-4-6';
 
 function newId(): string {
   return Math.random().toString(36).slice(2, 10);
+}
+
+// Walk the messages list, marking any not-yet-completed thinking bubble as
+// completed. Called whenever a non-thinking event arrives (text / approval /
+// done / error) so the next batch of thinking events starts a fresh bubble
+// on the next turn instead of appending to this turn's finished stream.
+function markThinkingCompleted(msgs: ChatMessage[]): ChatMessage[] {
+  let changed = false;
+  const next = msgs.map((m) => {
+    if (m.role === 'thinking' && !m.completed) {
+      changed = true;
+      return { ...m, completed: true };
+    }
+    return m;
+  });
+  return changed ? next : msgs;
 }
 
 function formatToolInput(input: unknown): string {
@@ -275,6 +299,21 @@ export function ChatPanel() {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const busyRef = useRef(false);
   busyRef.current = busy;
+
+  // Ref callback that scrolls the thinking-body to its bottom on every
+  // re-render. Combined with `key={lines.length}` on the body element, this
+  // fires each time a new line arrives so the newest entry stays visible.
+  const thinkingBodyRef = useCallback((el: HTMLDivElement | null) => {
+    if (el) el.scrollTop = el.scrollHeight;
+  }, []);
+
+  const toggleThinkingCollapsed = useCallback((id: string) => {
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.role === 'thinking' && m.id === id ? { ...m, collapsed: !m.collapsed } : m,
+      ),
+    );
+  }, []);
   // Holds the text-input node id for the next outgoing message, set by the
   // Enhance button just before send. Cleared when the message leaves so it
   // only attaches to the one assistant response it triggered.
@@ -432,9 +471,31 @@ export function ChatPanel() {
         setSessionId(String(event.sessionId));
         return;
       }
+      if (type === 'thinking') {
+        const line = String(event.text ?? '');
+        setMessages((prev) => {
+          const last = prev[prev.length - 1];
+          if (last && last.role === 'thinking' && !last.completed) {
+            const updated = { ...last, lines: [...last.lines, line] };
+            return [...prev.slice(0, -1), updated];
+          }
+          return [
+            ...prev,
+            {
+              id: newId(),
+              role: 'thinking',
+              lines: [line],
+              collapsed: false,
+              startedAt: Date.now(),
+              completed: false,
+            },
+          ];
+        });
+        return;
+      }
       if (type === 'approval_request') {
         setMessages((prev) => [
-          ...prev,
+          ...markThinkingCompleted(prev),
           {
             id: newId(),
             role: 'approval',
@@ -447,7 +508,7 @@ export function ChatPanel() {
       }
       if (type === 'learning_saved') {
         setMessages((prev) => [
-          ...prev,
+          ...markThinkingCompleted(prev),
           {
             id: newId(),
             role: 'system',
@@ -458,6 +519,7 @@ export function ChatPanel() {
       }
       if (type === 'text') {
         const text = String(event.text ?? '');
+        setMessages((prev) => markThinkingCompleted(prev));
         upsertAssistant((msg) => {
           const parts = [...msg.parts];
           const last = parts[parts.length - 1];
@@ -500,6 +562,7 @@ export function ChatPanel() {
       }
       if (type === 'error') {
         const errText = String(event.message ?? 'unknown error');
+        setMessages((prev) => markThinkingCompleted(prev));
         upsertAssistant((msg) => ({
           ...msg,
           parts: [
@@ -516,6 +579,7 @@ export function ChatPanel() {
       }
       if (type === 'done') {
         setBusy(false);
+        setMessages((prev) => markThinkingCompleted(prev));
         upsertAssistant((msg) => ({
           ...msg,
           streaming: false,
@@ -965,6 +1029,44 @@ export function ChatPanel() {
             return (
               <div key={m.id} className="chat-panel__system-line">
                 {m.text}
+              </div>
+            );
+          }
+          if (m.role === 'thinking') {
+            return (
+              <div
+                key={m.id}
+                className={`chat-panel__thinking ${m.completed ? 'chat-panel__thinking--completed' : ''}`}
+              >
+                <button
+                  type="button"
+                  className="chat-panel__thinking-header"
+                  onClick={() => toggleThinkingCollapsed(m.id)}
+                >
+                  <span className="chat-panel__thinking-indicator">
+                    {m.completed ? '✓' : '…'}
+                  </span>
+                  <span className="chat-panel__thinking-label">
+                    {m.completed ? 'thinking complete' : 'thinking'} · {m.lines.length} update
+                    {m.lines.length === 1 ? '' : 's'}
+                  </span>
+                  <span className="chat-panel__thinking-caret">
+                    {m.collapsed ? '▸' : '▾'}
+                  </span>
+                </button>
+                {!m.collapsed && (
+                  <div
+                    ref={thinkingBodyRef}
+                    key={m.lines.length}
+                    className="chat-panel__thinking-body"
+                  >
+                    {m.lines.map((line, i) => (
+                      <div key={i} className="chat-panel__thinking-line">
+                        {line}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             );
           }
