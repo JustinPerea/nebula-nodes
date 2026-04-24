@@ -12,6 +12,7 @@
   "dependencies": {
     "@google/model-viewer": "^4.2.0",
     "@xyflow/react": "^12.10.2",
+    "jszip": "^3.10.1",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "uuid": "^13.0.0",

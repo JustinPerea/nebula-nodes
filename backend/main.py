@@ -4,6 +4,8 @@ import asyncio
 import difflib
 import hashlib
 import json
+import os
+import re
 from pathlib import Path
 from typing import Any
 
@@ -31,7 +33,27 @@ from routes.fal_proxy import router as fal_router
 
 execution_cache = ExecutionCache(ttl=3600)
 node_registry = NodeRegistry()
-cli_graph = CLIGraph()
+
+# Persist the CLI graph to ~/.nebula/state.json on every mutation and reload
+# it on boot. Survives uvicorn restart so a crash or `kill` no longer wipes
+# the canvas. Per-user state dir keeps different projects on the same machine
+# isolated; override with NEBULA_STATE_DIR if you need a project-scoped file.
+_STATE_DIR = Path(os.environ.get("NEBULA_STATE_DIR", Path.home() / ".nebula"))
+try:
+    _STATE_DIR.mkdir(parents=True, exist_ok=True)
+except Exception as exc:
+    print(f"[main] cannot create state dir {_STATE_DIR}: {exc} — persistence disabled", flush=True)
+    _STATE_PATH: Path | None = None
+else:
+    _STATE_PATH = _STATE_DIR / "state.json"
+
+cli_graph = CLIGraph(persist_path=_STATE_PATH)
+if _STATE_PATH is not None and _STATE_PATH.exists():
+    try:
+        cli_graph.load(_STATE_PATH)
+        print(f"[main] restored graph from {_STATE_PATH} — {len(cli_graph.nodes)} nodes, {len(cli_graph.edges)} edges", flush=True)
+    except Exception as exc:
+        print(f"[main] failed to restore graph from {_STATE_PATH}: {exc} — starting fresh", flush=True)
 
 app = FastAPI(title="Nebula Node Backend", version="0.1.0")
 
@@ -49,6 +71,115 @@ OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
 
 CHAT_UPLOADS_DIR = OUTPUT_ROOT / "chat-uploads"
 CHAT_UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _restore_zip_bundle(zip_bytes: bytes) -> dict[str, str]:
+    """Extract a frontend-produced .nebula.zip (from Save) into a fresh
+    output/<timestamp>/restored-<id>/ directory. Returns a mapping of the
+    original asset path inside the zip (without the 'assets/' prefix) to
+    the URL under which the restored file is served.
+
+    A zip entry '<path>' at 'assets/<path>' is extracted to
+    OUTPUT_ROOT / <timestamp> / restored-<id> / <path>. Path-traversal
+    attempts ('..') are skipped silently — the caller can't escape
+    OUTPUT_ROOT even with a hostile zip.
+    """
+    import io
+    import zipfile
+    from datetime import datetime, timezone
+    from uuid import uuid4
+
+    try:
+        zf = zipfile.ZipFile(io.BytesIO(zip_bytes))
+    except zipfile.BadZipFile as exc:
+        raise HTTPException(status_code=400, detail=f"Not a valid zip bundle: {exc}")
+
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H-%M-%S")
+    restore_dir = OUTPUT_ROOT / timestamp / f"restored-{uuid4().hex[:8]}"
+    restore_dir.mkdir(parents=True, exist_ok=True)
+    restore_root = restore_dir.resolve()
+
+    url_mapping: dict[str, str] = {}
+    rel_prefix = f"{timestamp}/{restore_dir.name}"
+
+    for member in zf.namelist():
+        # Only restore entries under the 'assets/' prefix the frontend uses.
+        if not member.startswith("assets/") or member.endswith("/"):
+            continue
+        inner_path = member[len("assets/"):]
+        # Reject path traversal — '..' segments or absolute-looking paths.
+        if ".." in inner_path.split("/") or inner_path.startswith("/"):
+            continue
+        dest = (restore_dir / inner_path).resolve()
+        try:
+            dest.relative_to(restore_root)
+        except ValueError:
+            # Sneaked out of restore_dir via symlink-style trickery — skip.
+            continue
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        with zf.open(member) as src, dest.open("wb") as out:
+            out.write(src.read())
+        url_mapping[inner_path] = f"/api/outputs/{rel_prefix}/{inner_path}"
+
+    return url_mapping
+
+
+_OUTPUT_DIR_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}$")
+
+
+@app.post("/api/outputs/archive")
+async def archive_outputs(older_than_days: int = 30) -> dict:
+    """Move `output/YYYY-MM-DD_*` directories older than `older_than_days`
+    to `output/.archive/`. Explicit-only — the backend NEVER runs this on
+    its own. Nothing is deleted; archived directories can be moved back
+    manually if needed.
+
+    Only directories matching the canonical timestamp pattern are considered.
+    chat-uploads, .archive, restored-* subfolders, and any ad-hoc directory
+    are left untouched regardless of age."""
+    import shutil
+    import time
+
+    if older_than_days < 0:
+        raise HTTPException(status_code=400, detail="older_than_days must be >= 0")
+
+    cutoff = time.time() - older_than_days * 86400
+    archive_root = OUTPUT_ROOT / ".archive"
+    archive_root.mkdir(parents=True, exist_ok=True)
+    archived: list[str] = []
+
+    for entry in OUTPUT_ROOT.iterdir():
+        if not entry.is_dir():
+            continue
+        if not _OUTPUT_DIR_PATTERN.match(entry.name):
+            continue  # chat-uploads, .archive, restored-*, etc. never archived
+        try:
+            if entry.stat().st_mtime > cutoff:
+                continue
+        except OSError:
+            continue
+        dest = archive_root / entry.name
+        if dest.exists():
+            # Don't clobber an existing archive slot — append a uuid suffix.
+            from uuid import uuid4
+            dest = archive_root / f"{entry.name}-{uuid4().hex[:6]}"
+        shutil.move(str(entry), str(dest))
+        archived.append(entry.name)
+
+    return {"archived": archived, "archive_dir": str(archive_root)}
+
+
+@app.post("/api/outputs/restore")
+async def restore_outputs(request: Request) -> dict:
+    """Accept a .nebula.zip body, extract assets into a fresh output/
+    subdirectory, and return the old-path → served-URL mapping. The frontend
+    uses the mapping to rewrite graph JSON so loaded nodes point at the
+    restored files instead of the vanished originals."""
+    body = await request.body()
+    if not body:
+        raise HTTPException(status_code=400, detail="Empty request body")
+    url_mapping = _restore_zip_bundle(body)
+    return {"urlMapping": url_mapping}
 
 _SUPPORTED_IMAGE_TYPES = {
     b"\x89PNG\r\n\x1a\n": ("image/png", ".png"),

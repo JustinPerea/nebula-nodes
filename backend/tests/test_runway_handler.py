@@ -30,9 +30,10 @@ def _create_test_image(tmp_path):
 
 @pytest.fixture(autouse=True)
 def cleanup_output():
+    """OUTPUT_ROOT is sandboxed via NEBULA_OUTPUT_ROOT in tests/conftest.py;
+    the old whole-tree rmtree was dangerous without the sandbox (wipes the
+    user's real output/). No-op hook kept for potential per-test isolation."""
     yield
-    if OUTPUT_ROOT.exists():
-        shutil.rmtree(OUTPUT_ROOT)
 
 
 @pytest.mark.asyncio

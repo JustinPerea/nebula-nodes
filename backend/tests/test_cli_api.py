@@ -376,6 +376,159 @@ class TestRunGraphIterationGuard:
         assert resp.status_code == 200
 
 
+class TestOutputsRestore:
+    """POST /api/outputs/restore accepts a zip bundle exported by the frontend
+    Save action, extracts assets to a fresh output/<timestamp>/restored-<id>/
+    dir, and returns a mapping so the frontend can rewrite URLs in the loaded
+    graph JSON. The whole point: a .nebula.zip is portable — open it on any
+    machine and the images come back."""
+
+    def _make_zip(self, files: dict[str, bytes]) -> bytes:
+        import io, zipfile
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            for name, data in files.items():
+                zf.writestr(name, data)
+        return buf.getvalue()
+
+    def test_restore_writes_files_and_returns_mapping(self, client):
+        """Upload a zip with two asset files, confirm both are extracted and
+        the mapping points at URLs the frontend can use verbatim."""
+        zip_bytes = self._make_zip({
+            "assets/2026-04-24_22-10-51/n20_final.png": b"\x89PNG\r\n\x1a\nFAKE",
+            "assets/2026-04-24_22-11-02/n21_final.png": b"\x89PNG\r\n\x1a\nFAKE2",
+        })
+        resp = client.post(
+            "/api/outputs/restore",
+            content=zip_bytes,
+            headers={"content-type": "application/zip"},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "urlMapping" in data
+        mapping = data["urlMapping"]
+        # Each original asset path maps to a new served URL
+        assert "2026-04-24_22-10-51/n20_final.png" in mapping
+        assert "2026-04-24_22-11-02/n21_final.png" in mapping
+        # URLs are under /api/outputs/ so the frontend can use them directly
+        for new_url in mapping.values():
+            assert new_url.startswith("/api/outputs/")
+
+    def test_restore_files_are_actually_served(self, client, tmp_path):
+        """End-to-end: after restore, GET the returned URL returns the bytes."""
+        original_bytes = b"\x89PNG\r\n\x1a\nRESTORED_PIXEL_DATA"
+        zip_bytes = self._make_zip({
+            "assets/demo/sample.png": original_bytes,
+        })
+        resp = client.post(
+            "/api/outputs/restore",
+            content=zip_bytes,
+            headers={"content-type": "application/zip"},
+        )
+        assert resp.status_code == 200
+        new_url = resp.json()["urlMapping"]["demo/sample.png"]
+        # Fetch via the served URL — should return original bytes unchanged
+        fetch = client.get(new_url)
+        assert fetch.status_code == 200
+        assert fetch.content == original_bytes
+
+    def test_restore_rejects_non_zip_body(self, client):
+        resp = client.post(
+            "/api/outputs/restore",
+            content=b"not a zip",
+            headers={"content-type": "application/zip"},
+        )
+        assert resp.status_code == 400
+
+    def test_restore_rejects_path_traversal(self, client):
+        """A zip with ../ in its paths must not escape OUTPUT_ROOT."""
+        zip_bytes = self._make_zip({
+            "assets/../../escape.png": b"evil",
+            "../escape2.png": b"evil",
+        })
+        resp = client.post(
+            "/api/outputs/restore",
+            content=zip_bytes,
+            headers={"content-type": "application/zip"},
+        )
+        # Either reject outright (400) or quietly skip the traversal entries;
+        # must not create files outside OUTPUT_ROOT. Accept either; the mapping
+        # should be empty (or not include escape paths).
+        assert resp.status_code in (200, 400)
+        if resp.status_code == 200:
+            for key in resp.json().get("urlMapping", {}).keys():
+                assert ".." not in key
+
+
+class TestOutputsArchive:
+    """POST /api/outputs/archive moves timestamped output/<YYYY-MM-DD_*>
+    directories older than N days into output/.archive/. Explicit-only: the
+    backend never auto-runs this. Users who want disk savings call it via
+    Settings UI or curl, and they can always recover by moving the archived
+    dirs back (nothing is deleted)."""
+
+    def _setup_output_dirs(self, client):
+        """Create two timestamped output dirs: one old, one recent."""
+        import sys, time, os
+        from pathlib import Path
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+        from services.output import OUTPUT_ROOT
+
+        old_dir = OUTPUT_ROOT / "2024-01-01_00-00-00"
+        old_dir.mkdir(parents=True, exist_ok=True)
+        (old_dir / "n1_final.png").write_bytes(b"old")
+        # Back-date the mtime so the "older than N days" filter catches it.
+        long_ago = time.time() - 60 * 60 * 24 * 100  # 100 days
+        os.utime(old_dir, (long_ago, long_ago))
+
+        recent_dir = OUTPUT_ROOT / "2026-04-24_12-00-00"
+        recent_dir.mkdir(parents=True, exist_ok=True)
+        (recent_dir / "n2_final.png").write_bytes(b"recent")
+
+        return OUTPUT_ROOT, old_dir, recent_dir
+
+    def test_archive_moves_old_dirs(self, client):
+        OUTPUT_ROOT, old_dir, recent_dir = self._setup_output_dirs(client)
+        resp = client.post("/api/outputs/archive?older_than_days=30")
+        assert resp.status_code == 200
+        data = resp.json()
+        # Old dir moved, recent dir untouched.
+        assert not old_dir.exists()
+        assert recent_dir.exists()
+        # Archived into output/.archive/
+        archived = OUTPUT_ROOT / ".archive" / "2024-01-01_00-00-00"
+        assert archived.exists()
+        assert (archived / "n1_final.png").read_bytes() == b"old"
+        assert data["archived"] == ["2024-01-01_00-00-00"]
+
+    def test_archive_never_auto_runs(self, client):
+        """Sanity: hitting the healthcheck or any read endpoint must not
+        trigger archiving. Cleanup is explicit-only."""
+        OUTPUT_ROOT, old_dir, _ = self._setup_output_dirs(client)
+        # Random reads
+        client.get("/api/nodes")
+        client.get("/api/graph")
+        assert old_dir.exists(), "archive must never run automatically"
+
+    def test_archive_skips_special_dirs(self, client):
+        """chat-uploads, .archive, and anything not matching YYYY-MM-DD_ must
+        be left alone regardless of age."""
+        import sys, time, os
+        from pathlib import Path
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+        from services.output import OUTPUT_ROOT
+
+        chat_uploads = OUTPUT_ROOT / "chat-uploads"
+        chat_uploads.mkdir(parents=True, exist_ok=True)
+        long_ago = time.time() - 60 * 60 * 24 * 365  # 1 year
+        os.utime(chat_uploads, (long_ago, long_ago))
+
+        resp = client.post("/api/outputs/archive?older_than_days=30")
+        assert resp.status_code == 200
+        assert chat_uploads.exists(), "chat-uploads must never be archived"
+        assert "chat-uploads" not in resp.json()["archived"]
+
+
 class TestChatAgentDispatch:
     """WebSocket /ws/chat accepts an 'agent' field and routes to the right runner."""
 

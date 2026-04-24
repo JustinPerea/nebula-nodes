@@ -98,3 +98,64 @@ def test_save_and_load(graph, tmp_path):
     assert len(new_graph.nodes) == 2
     assert len(new_graph.edges) == 1
     assert new_graph.nodes["n1"]["params"] == {"x": 1}
+
+
+class TestAutoPersist:
+    """CLIGraph(persist_path=...) writes to disk after every mutation so
+    uvicorn restart doesn't wipe the canvas. The previous session lost hours
+    of Daedalus work on restart; this hardens against it."""
+
+    def test_mutations_persist_automatically(self, tmp_path):
+        p = tmp_path / "state.json"
+        g = CLIGraph(persist_path=p)
+        g.add_node("node-a", {})
+        assert p.exists(), "add_node must persist"
+        g.add_node("node-b", {})
+        g.connect("n1", "out", "n2", "in")
+        g.update_params("n1", {"tweaked": True})
+        # Reload and verify the file reflects state after the last mutation.
+        restored = CLIGraph()
+        restored.load(p)
+        assert len(restored.nodes) == 2
+        assert restored.nodes["n1"]["params"]["tweaked"] is True
+        assert len(restored.edges) == 1
+
+    def test_clear_persists_empty_state(self, tmp_path):
+        p = tmp_path / "state.json"
+        g = CLIGraph(persist_path=p)
+        g.add_node("node-a", {})
+        g.clear()
+        restored = CLIGraph()
+        restored.load(p)
+        assert restored.nodes == {}
+        assert restored.edges == []
+
+    def test_remove_and_edge_removal_persist(self, tmp_path):
+        p = tmp_path / "state.json"
+        g = CLIGraph(persist_path=p)
+        g.add_node("node-a", {})
+        g.add_node("node-b", {})
+        g.connect("n1", "out", "n2", "in")
+        g.remove_edge("n1", "out", "n2", "in")
+        restored = CLIGraph()
+        restored.load(p)
+        assert len(restored.nodes) == 2
+        assert restored.edges == []
+        g.remove_node("n1")
+        restored2 = CLIGraph()
+        restored2.load(p)
+        assert "n1" not in restored2.nodes
+
+    def test_persist_failures_dont_break_mutations(self, tmp_path):
+        """A write failure (e.g. missing parent dir) must not prevent the
+        in-memory mutation from succeeding — graph state stays consistent
+        even if the file system is hostile."""
+        g = CLIGraph(persist_path=tmp_path / "nonexistent-dir" / "state.json")
+        g.add_node("node-a", {})
+        assert "n1" in g.nodes
+
+    def test_no_persist_without_path(self, tmp_path):
+        """Default (no persist_path) behaves exactly like today — no writes."""
+        g = CLIGraph()
+        g.add_node("node-a", {})
+        assert list(tmp_path.iterdir()) == []

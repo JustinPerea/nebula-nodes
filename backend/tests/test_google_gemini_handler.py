@@ -78,9 +78,11 @@ def _make_gemini_sse_lines(text_chunks):
 
 @pytest.fixture(autouse=True)
 def cleanup_output():
+    """OUTPUT_ROOT is sandboxed via NEBULA_OUTPUT_ROOT in tests/conftest.py,
+    so wholesale rmtree is both unnecessary and dangerous (it would wipe the
+    user's real output/ if the env var ever got lost). No-op hook kept for
+    future per-test isolation."""
     yield
-    if OUTPUT_ROOT.exists():
-        shutil.rmtree(OUTPUT_ROOT)
 
 
 # --- Gemini chat tests ---
