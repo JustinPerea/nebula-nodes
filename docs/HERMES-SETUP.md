@@ -112,7 +112,38 @@ category. If nothing prints, check the skill is at
 copy. A future version of this guide may ship a one-shot install script
 that handles this.
 
-## 5. One-turn smoke test
+## 5. Install the `nebula` CLI wrapper
+
+Daedalus drives the canvas via the `nebula` CLI, invoked through Hermes's
+`terminal` tool. The `nebula` command isn't a shell binary by default — it's
+a Python package invoked as `python3 -m nebula`. We install a small wrapper
+at `~/.local/bin/nebula` so the subprocess environment (and your terminal)
+can call `nebula` directly.
+
+```bash
+cat > ~/.local/bin/nebula <<'EOF'
+#!/bin/bash
+# nebula CLI wrapper — invokes `python3 -m nebula`. Adjust the cd path to
+# your nebula-nodes clone if it lives somewhere else.
+cd "$HOME/Documents/Projects/nebula_nodes" 2>/dev/null || true
+exec python3 -m nebula "$@"
+EOF
+chmod +x ~/.local/bin/nebula
+```
+
+Verify (with the backend running — see step 7):
+
+```bash
+nebula nodes | head -5
+```
+
+Expected: prints a list of available node types.
+
+**Note:** the wrapper hardcodes the nebula-nodes clone path to
+`~/Documents/Projects/nebula_nodes`. Edit the `cd` line in the wrapper if
+you cloned elsewhere. A future version of this guide may use an env var.
+
+## 6. One-turn smoke test
 
 From inside the nebula-nodes directory:
 
