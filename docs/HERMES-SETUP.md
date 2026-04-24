@@ -84,11 +84,32 @@ Verify:
 hermes-daedalus config get model
 ```
 
-## 4. Install the daedalus-core skill
+## 4. Install Daedalus's SOUL.md
 
-nebula-nodes ships Daedalus's persona + playbook at
-`.hermes/skills/daedalus-core/`. Copy (don't symlink; Hermes doesn't follow
-symlinks for discovery) into the daedalus profile's `creative` category:
+`hermes profile create daedalus` populates the profile with a generic
+"You are Hermes Agent…" SOUL.md. Left as-is, Kimi will introduce itself as
+Hermes Agent in any non-tool-calling turn — identity claims in SOUL.md
+outweigh the persona directive in a loaded skill. Overwrite with the
+repo-shipped Daedalus SOUL.md:
+
+```bash
+# From inside the nebula-nodes clone
+cp .hermes/profiles/daedalus/SOUL.md ~/.hermes/profiles/daedalus/SOUL.md
+```
+
+Verify:
+
+```bash
+head -1 ~/.hermes/profiles/daedalus/SOUL.md
+```
+
+Expected: the first line starts with `You are Daedalus`.
+
+## 5. Install the daedalus-core skill
+
+nebula-nodes ships Daedalus's playbook at `.hermes/skills/daedalus-core/`.
+Copy (don't symlink; Hermes doesn't follow symlinks for discovery) into the
+daedalus profile's `creative` category:
 
 ```bash
 # From inside the nebula-nodes clone
@@ -112,7 +133,7 @@ category. If nothing prints, check the skill is at
 copy. A future version of this guide may ship a one-shot install script
 that handles this.
 
-## 5. Install the `nebula` CLI wrapper
+## 6. Install the `nebula` CLI wrapper
 
 Daedalus drives the canvas via the `nebula` CLI, invoked through Hermes's
 `terminal` tool. The `nebula` command isn't a shell binary by default — it's
@@ -131,7 +152,7 @@ EOF
 chmod +x ~/.local/bin/nebula
 ```
 
-Verify (with the backend running — see step 7):
+Verify (with the backend running — see step 8):
 
 ```bash
 nebula nodes | head -5
@@ -143,7 +164,7 @@ Expected: prints a list of available node types.
 `~/Documents/Projects/nebula_nodes`. Edit the `cd` line in the wrapper if
 you cloned elsewhere. A future version of this guide may use an env var.
 
-## 6. One-turn smoke test
+## 7. One-turn smoke test
 
 From inside the nebula-nodes directory:
 
@@ -161,7 +182,7 @@ Nano Banana Pro for multi-reference character sheets). Output starts with
 If you see "hermes-daedalus: command not found," re-run
 `hermes profile alias daedalus` and ensure `~/.local/bin` is in your PATH.
 
-## 6. Launch the nebula backend + frontend
+## 8. Launch the nebula backend + frontend
 
 Same as before — Hermes integration reuses the existing dev setup.
 

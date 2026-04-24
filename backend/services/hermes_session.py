@@ -168,6 +168,12 @@ async def run_hermes(
         **os.environ,
         "NEBULA_DISABLE_QUICK": "1",
         "DAEDALUS_APPROVAL": autonomy,
+        # Force Python-CLI Hermes to flush stdout after every print so the
+        # line-by-line `readline()` reader sees intermediate narration in real
+        # time. Without this, Python block-buffers stdout when the descriptor
+        # is a pipe — the whole response arrives as a burst at exit, defeating
+        # the streaming reader.
+        "PYTHONUNBUFFERED": "1",
     }
 
     # Capture the log's current size BEFORE spawn so the tailer only surfaces
@@ -213,10 +219,35 @@ async def run_hermes(
         _tail_log(log_start_offset, stop_tail, thinking_queue, started_at)
     )
 
+    # Accumulate stdout lines as they arrive so the live streamer and the
+    # end-of-turn marker parser share the same source of truth.
+    stdout_lines: list[str] = []
+
+    async def _stream_stdout() -> None:
+        """Read hermes stdout line-by-line and push non-empty lines onto the
+        thinking queue as they arrive. This gives us real-time narration when
+        hermes -Q flushes its stdout incrementally. If hermes buffers stdout
+        until exit, all lines will still be accumulated for the final parse —
+        they just arrive as a burst at the end instead of streaming."""
+        while True:
+            line_bytes = await proc.stdout.readline()
+            if not line_bytes:
+                break
+            line = line_bytes.decode("utf-8", errors="replace").rstrip("\n")
+            stdout_lines.append(line)
+            stripped = line.strip()
+            if not stripped:
+                continue
+            # Skip the session_id handshake line — it's an internal protocol
+            # message, not something the user should see in narration.
+            if stripped.lower().startswith("session_id:"):
+                continue
+            thinking_queue.put_nowait(line)
+
     try:
         # Kick stdout+stderr reads off as tasks so we can interleave thinking
         # events from the queue without blocking on the full stdout read.
-        stdout_task = asyncio.create_task(proc.stdout.read())
+        stdout_task = asyncio.create_task(_stream_stdout())
         stderr_task = asyncio.create_task(proc.stderr.read())
 
         try:
@@ -245,7 +276,8 @@ async def run_hermes(
                     yield {"type": "thinking", "text": thinking_queue.get_nowait()}
                 except asyncio.QueueEmpty:
                     break
-            stdout_bytes = stdout_task.result()
+            # Surface any exception from the stdout streamer.
+            stdout_task.result()
             stderr_bytes = await stderr_task
             await proc.wait()
         except BaseException:
@@ -257,7 +289,7 @@ async def run_hermes(
 
         if proc.returncode != 0:
             stderr_full = stderr_bytes.decode("utf-8", errors="replace").strip()
-            stdout_full = stdout_bytes.decode("utf-8", errors="replace").strip()
+            stdout_full = "\n".join(stdout_lines).strip()
             # Print the full diagnostics to server logs so we can debug why
             # hermes exits non-zero even when standalone CLI invocations succeed.
             print("=" * 60, flush=True)
@@ -275,7 +307,7 @@ async def run_hermes(
             yield {"type": "done"}
             return
 
-        text = stdout_bytes.decode("utf-8", errors="replace")
+        text = "\n".join(stdout_lines)
     finally:
         # Stop the log tailer before touching the subprocess so it doesn't
         # keep spinning on a file we no longer care about.

@@ -978,7 +978,7 @@ export function ChatPanel() {
             </div>
           )}
           <div className="chat-panel__meta">
-            {model} · {status}
+            {agent === 'daedalus' ? 'kimi-k2.6 · Hermes' : model} · {status}
             {sessionId && (
               <span className="chat-panel__session" title={sessionId}>
                 · {sessionId.slice(0, 8)}
@@ -1000,7 +1000,13 @@ export function ChatPanel() {
               <p>Talk to Claude Code. It has access to the nebula skill — ask it to build a graph.</p>
             )}
             <p className="chat__empty-hint">
-              <code>/model sonnet|opus|haiku</code> · <code>/clear</code>
+              {agent === 'daedalus' ? (
+                <code>/clear</code>
+              ) : (
+                <>
+                  <code>/model sonnet|opus|haiku</code> · <code>/clear</code>
+                </>
+              )}
             </p>
           </div>
         )}

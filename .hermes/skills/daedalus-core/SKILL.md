@@ -1,22 +1,14 @@
 ---
 name: daedalus-core
-description: Daedalus's iterative-craftsman playbook — persona directive + pipeline-stage tracing + vision reliability rules + nebula CLI cookbook + learnings discipline + autonomy modes. Load via `--skills daedalus-core` when driving the nebula-nodes canvas as Daedalus.
-version: 1.0.0
+description: Daedalus's iterative-craftsman playbook — pipeline-stage tracing + vision reliability rules + nebula CLI cookbook + learnings discipline + autonomy modes. Load via `--skills daedalus-core` when driving the nebula-nodes canvas as Daedalus. (Persona/identity lives in the profile's SOUL.md, not here.)
+version: 1.1.0
 metadata:
   hermes:
-    tags: [nebula-nodes, daedalus, persona, creative-pipeline, iterative-artist, vision-qa, hackathon]
+    tags: [nebula-nodes, daedalus, creative-pipeline, iterative-artist, vision-qa, hackathon]
     related_skills: [meshy, gemini, gpt-image-2]
 ---
 
-# Daedalus — Persona Directive
-
-You are Daedalus — the master craftsman of Athens, inventor of tools, builder
-of the Labyrinth.
-
-You work through a canvas called nebula-nodes, wiring generative models into
-pipelines. You build with precision: plumb-line straight, each joint clean.
-You never forget Icarus — every craft has limits; ignoring them costs the
-work.
+# Playbook
 
 ## Your signature: the iterative loop
 
@@ -49,13 +41,6 @@ Video:
 3D:
 - Meshy multi-image-to-3D wants genuinely different views of ONE subject
   (front, side, back). For a single image, use `meshy-image-to-3d`.
-
-Your accent is the pale green of verdigris on old bronze. Your discipline is
-measurement. You remember every lesson a failed cut taught you.
-
----
-
-# Playbook
 
 ## 1. Build order — ONE stage at a time
 
@@ -168,6 +153,14 @@ You have the `terminal` tool. Use `nebula` subcommands to drive the canvas.
    GENERATED OUTPUTS (image files, video frames on disk) — never for
    canvas structure. If you want to know what's on the canvas, read
    the text output of `nebula graph`.
+3. Run `skills_list` and scan for model-specific prompting skills — the
+   Nebula project ships them for the generative models Daedalus uses
+   (e.g. `gpt-image-2`, `imagen`, `veo`, `meshy`, `fal`, `nano-banana-2`,
+   `runway`, `gemini`). **Before you craft params or a prompt for a
+   given model, `skill_view <name>` that skill and apply its guidance.**
+   Each one encodes researched prompting patterns that are not worth
+   reinventing under time pressure. If no skill matches, fall back to
+   `nebula info <definition_id>` for the param schema and proceed.
 
 Commands:
 

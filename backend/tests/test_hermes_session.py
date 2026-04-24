@@ -17,6 +17,25 @@ async def _collect(agen):
     return [event async for event in agen]
 
 
+def _readline_chunks(data: bytes) -> list[bytes]:
+    """Split bytes into stdout.readline()-style chunks for AsyncMock side_effect.
+
+    Each chunk is one line with trailing `\\n` preserved; the final chunk is
+    `b''` signalling EOF. `run_hermes` calls `proc.stdout.readline()` in a loop
+    and breaks on empty bytes, so this mirrors real subprocess behavior.
+    """
+    chunks: list[bytes] = []
+    start = 0
+    for i in range(len(data)):
+        if data[i:i + 1] == b"\n":
+            chunks.append(data[start:i + 1])
+            start = i + 1
+    if start < len(data):
+        chunks.append(data[start:])
+    chunks.append(b"")
+    return chunks
+
+
 @pytest.mark.asyncio
 async def test_happy_path_yields_text_and_done():
     """Minimal successful turn: Hermes prints a response, wrapper emits text + done."""
@@ -24,7 +43,7 @@ async def test_happy_path_yields_text_and_done():
     fake_stderr = b""
 
     proc = AsyncMock()
-    proc.stdout.read = AsyncMock(return_value=fake_stdout)
+    proc.stdout.readline = AsyncMock(side_effect=_readline_chunks(fake_stdout))
     proc.stderr.read = AsyncMock(return_value=fake_stderr)
     proc.wait = AsyncMock(return_value=0)
     proc.returncode = 0
@@ -47,7 +66,7 @@ async def test_emits_session_event_when_session_id_present():
     fake_stdout = b"session_id: 20260423_095548_a2985d\nSome response text.\n"
 
     proc = AsyncMock()
-    proc.stdout.read = AsyncMock(return_value=fake_stdout)
+    proc.stdout.readline = AsyncMock(side_effect=_readline_chunks(fake_stdout))
     proc.stderr.read = AsyncMock(return_value=b"")
     proc.wait = AsyncMock(return_value=0)
     proc.returncode = 0
@@ -73,7 +92,7 @@ async def test_resume_flag_passed_when_session_id_given():
     async def fake_create(*args, **kwargs):
         captured_args.extend(args)
         proc = AsyncMock()
-        proc.stdout.read = AsyncMock(return_value=b"ok\n")
+        proc.stdout.readline = AsyncMock(side_effect=_readline_chunks(b"ok\n"))
         proc.stderr.read = AsyncMock(return_value=b"")
         proc.wait = AsyncMock(return_value=0)
         proc.returncode = 0
@@ -100,7 +119,7 @@ async def test_parses_approval_required_marker():
     )
 
     proc = AsyncMock()
-    proc.stdout.read = AsyncMock(return_value=fake_stdout)
+    proc.stdout.readline = AsyncMock(side_effect=_readline_chunks(fake_stdout))
     proc.stderr.read = AsyncMock(return_value=b"")
     proc.wait = AsyncMock(return_value=0)
     proc.returncode = 0
@@ -135,7 +154,7 @@ async def test_approval_marker_mid_response_is_not_parsed():
     )
 
     proc = AsyncMock()
-    proc.stdout.read = AsyncMock(return_value=fake_stdout)
+    proc.stdout.readline = AsyncMock(side_effect=_readline_chunks(fake_stdout))
     proc.stderr.read = AsyncMock(return_value=b"")
     proc.wait = AsyncMock(return_value=0)
     proc.returncode = 0
@@ -161,7 +180,7 @@ async def test_approval_summary_only_no_plan_cost_omits_those_keys():
     )
 
     proc = AsyncMock()
-    proc.stdout.read = AsyncMock(return_value=fake_stdout)
+    proc.stdout.readline = AsyncMock(side_effect=_readline_chunks(fake_stdout))
     proc.stderr.read = AsyncMock(return_value=b"")
     proc.wait = AsyncMock(return_value=0)
     proc.returncode = 0
@@ -187,7 +206,7 @@ async def test_parses_learning_saved_marker():
     )
 
     proc = AsyncMock()
-    proc.stdout.read = AsyncMock(return_value=fake_stdout)
+    proc.stdout.readline = AsyncMock(side_effect=_readline_chunks(fake_stdout))
     proc.stderr.read = AsyncMock(return_value=b"")
     proc.wait = AsyncMock(return_value=0)
     proc.returncode = 0
@@ -215,7 +234,7 @@ async def test_learning_marker_mid_response_is_not_parsed():
     )
 
     proc = AsyncMock()
-    proc.stdout.read = AsyncMock(return_value=fake_stdout)
+    proc.stdout.readline = AsyncMock(side_effect=_readline_chunks(fake_stdout))
     proc.stderr.read = AsyncMock(return_value=b"")
     proc.wait = AsyncMock(return_value=0)
     proc.returncode = 0
@@ -248,7 +267,7 @@ async def test_binary_missing_yields_error_event():
 async def test_non_zero_exit_surfaces_stderr_tail():
     """If hermes subprocess exits non-zero, emit error with stderr tail."""
     proc = AsyncMock()
-    proc.stdout.read = AsyncMock(return_value=b"")
+    proc.stdout.readline = AsyncMock(side_effect=_readline_chunks(b""))
     proc.stderr.read = AsyncMock(return_value=b"auth failed: no API key configured\n")
     proc.wait = AsyncMock(return_value=1)
     proc.returncode = 1
@@ -276,7 +295,7 @@ async def test_cancelled_task_kills_subprocess():
             self.stdout = AsyncMock()
             self.stderr = AsyncMock()
             # Simulate the task being cancelled mid-read.
-            self.stdout.read = AsyncMock(side_effect=_asyncio.CancelledError)
+            self.stdout.readline = AsyncMock(side_effect=_asyncio.CancelledError)
             self.stderr.read = AsyncMock(return_value=b"")
 
         async def wait(self):
@@ -313,15 +332,20 @@ async def test_thinking_events_emitted_from_log_tail(tmp_path, monkeypatch):
     # Subprocess takes 1s before returning stdout, giving the tailer time to
     # observe log writes. Stdout has an actual response so the turn completes
     # with a text event too (sanity).
-    async def fake_read_stdout():
-        await asyncio.sleep(1.0)
-        return b"done.\n"
+    readline_calls = {"n": 0}
+
+    async def fake_readline_stdout():
+        readline_calls["n"] += 1
+        if readline_calls["n"] == 1:
+            await asyncio.sleep(1.0)
+            return b"done.\n"
+        return b""
 
     async def fake_read_stderr():
         return b""
 
     proc = AsyncMock()
-    proc.stdout.read = AsyncMock(side_effect=fake_read_stdout)
+    proc.stdout.readline = AsyncMock(side_effect=fake_readline_stdout)
     proc.stderr.read = AsyncMock(side_effect=fake_read_stderr)
     proc.wait = AsyncMock(return_value=0)
     proc.returncode = 0
@@ -358,12 +382,17 @@ async def test_thinking_noise_lines_filtered(tmp_path, monkeypatch):
     log_file.write_text("")
     monkeypatch.setattr(hermes_session, "LOG_PATH", log_file)
 
-    async def fake_read_stdout():
-        await asyncio.sleep(0.8)
-        return b"done.\n"
+    readline_calls = {"n": 0}
+
+    async def fake_readline_stdout():
+        readline_calls["n"] += 1
+        if readline_calls["n"] == 1:
+            await asyncio.sleep(0.8)
+            return b"done.\n"
+        return b""
 
     proc = AsyncMock()
-    proc.stdout.read = AsyncMock(side_effect=fake_read_stdout)
+    proc.stdout.readline = AsyncMock(side_effect=fake_readline_stdout)
     proc.stderr.read = AsyncMock(return_value=b"")
     proc.wait = AsyncMock(return_value=0)
     proc.returncode = 0
