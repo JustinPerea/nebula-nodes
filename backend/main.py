@@ -264,8 +264,8 @@ async def chat_websocket(websocket: WebSocket) -> None:
         message: str,
         sessionId: str|null,
         model: str,
-        agent: "claude" | "hephaestus" (default "claude"),
-        autonomy: "auto" | "step" (default "auto", hephaestus-only)
+        agent: "claude" | "daedalus" (default "claude"),
+        autonomy: "auto" | "step" (default "auto", daedalus-only)
     }
     Server sends events matching AGENT_RUNNERS' event contract.
     """

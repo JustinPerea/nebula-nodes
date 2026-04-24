@@ -9,6 +9,6 @@ from services.hermes_session import run_hermes
 
 def test_dispatch_registers_both_agents():
     assert "claude" in AGENT_RUNNERS
-    assert "hephaestus" in AGENT_RUNNERS
+    assert "daedalus" in AGENT_RUNNERS
     assert AGENT_RUNNERS["claude"] is run_claude
-    assert AGENT_RUNNERS["hephaestus"] is run_hermes
+    assert AGENT_RUNNERS["daedalus"] is run_hermes

@@ -1335,9 +1335,9 @@
 .chat-panel__approval {
   margin: 8px 0;
   padding: 12px;
-  border: 1px solid var(--chat-accent-border, rgba(184, 115, 51, 0.4));
+  border: 1px solid var(--chat-accent-border, rgba(74, 124, 89, 0.4));
   border-radius: 8px;
-  background: var(--chat-accent-bg, rgba(184, 115, 51, 0.08));
+  background: var(--chat-accent-bg, rgba(74, 124, 89, 0.08));
   font-size: 13px;
 }
 
@@ -1362,7 +1362,7 @@
 }
 
 .chat-panel__approval-btn--approve {
-  background: var(--chat-accent, #b87333); /* copper */
+  background: var(--chat-accent, #4a7c59); /* verdigris */
   color: white;
 }
 
@@ -1394,8 +1394,8 @@
   --chat-accent-border: rgba(124, 107, 239, 0.4);
 }
 
-.chat-panel--agent-hephaestus {
-  --chat-accent: #b87333; /* copper */
-  --chat-accent-bg: rgba(184, 115, 51, 0.08);
-  --chat-accent-border: rgba(184, 115, 51, 0.4);
+.chat-panel--agent-daedalus {
+  --chat-accent: #4a7c59; /* verdigris — pale green of patinated bronze */
+  --chat-accent-bg: rgba(74, 124, 89, 0.08);
+  --chat-accent-border: rgba(74, 124, 89, 0.4);
 }

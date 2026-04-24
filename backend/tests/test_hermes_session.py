@@ -89,7 +89,7 @@ async def test_resume_flag_passed_when_session_id_given():
 
 @pytest.mark.asyncio
 async def test_parses_approval_required_marker():
-    """When Hephaestus prints APPROVAL_REQUIRED, emit approval_request event."""
+    """When Daedalus prints APPROVAL_REQUIRED, emit approval_request event."""
     fake_stdout = (
         b"session_id: 20260423_095548_a2985d\n"
         b"Planning the render.\n"
@@ -231,14 +231,15 @@ async def test_learning_marker_mid_response_is_not_parsed():
 
 @pytest.mark.asyncio
 async def test_binary_missing_yields_error_event():
-    """When hermes binary isn't in PATH, emit error + done gracefully."""
+    """When hermes-daedalus wrapper isn't in PATH, emit error + done gracefully."""
     with patch("services.hermes_session.asyncio.create_subprocess_exec",
                side_effect=FileNotFoundError("no such file")):
         events = await _collect(run_hermes("hi", None, autonomy="auto"))
 
     assert events[0]["type"] == "error"
-    assert "hermes" in events[0]["message"].lower()
-    assert "HERMES-SETUP" in events[0]["message"]
+    assert "hermes-daedalus" in events[0]["message"].lower()
+    # Message points the user at the profile-alias setup flow.
+    assert "profile alias daedalus" in events[0]["message"]
     assert events[-1]["type"] == "done"
 
 

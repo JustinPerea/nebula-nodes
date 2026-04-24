@@ -28,10 +28,10 @@ format is `session_id: <timestamp_id>` on the **leading** line. Parser should:
 - Strip the first-line marker from the response body before emitting as `text`
 - Do not pass `--pass-session-id` to the subprocess (superfluous)
 
-Marker lines Hephaestus's SKILL.md emits (still upper-case, per our convention,
+Marker lines Daedalus's SKILL.md emits (still upper-case, per our convention,
 since those are prints inside the response body, not Hermes's own session line):
 
 - `SESSION_ID:` — NOT used; Hermes already handles this natively as `session_id:`
-- `APPROVAL_REQUIRED:`, `PLAN:`, `COST:` — Hephaestus emits these inside the
+- `APPROVAL_REQUIRED:`, `PLAN:`, `COST:` — Daedalus emits these inside the
   response body when step-approval mode pauses
-- `LEARNING_SAVED:` — Hephaestus emits this after `skill_manage patch`
+- `LEARNING_SAVED:` — Daedalus emits this after `skill_manage patch`

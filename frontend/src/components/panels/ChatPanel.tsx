@@ -247,7 +247,7 @@ export function ChatPanel() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [model, setModel] = useState<string>(DEFAULT_MODEL);
-  const [agent, setAgent] = useState<'claude' | 'hephaestus'>('claude');
+  const [agent, setAgent] = useState<'claude' | 'daedalus'>('claude');
   const [autonomy, setAutonomy] = useState<'auto' | 'step'>('auto');
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
@@ -263,7 +263,7 @@ export function ChatPanel() {
   // Switch the active agent. Each agent has its own session thread, so we
   // clear sessionId on change — the next turn starts fresh on the new agent.
   const handleAgentChange = useCallback(
-    (next: 'claude' | 'hephaestus') => {
+    (next: 'claude' | 'daedalus') => {
       if (next === agent) return;
       setAgent(next);
       setSessionId(null);
@@ -655,7 +655,7 @@ export function ChatPanel() {
   }, [send]);
 
   // Sends a new turn whose text starts with 'APPROVED:' or 'REJECTED:'.
-  // Hephaestus's SKILL.md tells the agent to recognize these prefixes and
+  // Daedalus's SKILL.md tells the agent to recognize these prefixes and
   // either proceed with the paused plan or pivot. Mirrors the WS-send flow
   // in `send()` — appends user + assistant placeholder, flips busy, posts
   // the JSON envelope with agent/autonomy/sessionId/model.
@@ -873,16 +873,16 @@ export function ChatPanel() {
             <button
               type="button"
               className={
-                agent === 'hephaestus'
+                agent === 'daedalus'
                   ? 'chat-panel__agent-btn--active'
                   : 'chat-panel__agent-btn'
               }
-              onClick={() => handleAgentChange('hephaestus')}
+              onClick={() => handleAgentChange('daedalus')}
             >
-              Hephaestus
+              Daedalus
             </button>
           </div>
-          {agent === 'hephaestus' && (
+          {agent === 'daedalus' && (
             <div
               className="chat-panel__autonomy-toggle"
               onMouseDown={(e) => e.stopPropagation()}
@@ -895,7 +895,7 @@ export function ChatPanel() {
                     : 'chat-panel__autonomy-btn'
                 }
                 onClick={() => setAutonomy('auto')}
-                title="Auto-pilot: Hephaestus runs the full pipeline"
+                title="Auto-pilot: Daedalus runs the full pipeline"
               >
                 Auto ▶
               </button>
@@ -907,7 +907,7 @@ export function ChatPanel() {
                     : 'chat-panel__autonomy-btn'
                 }
                 onClick={() => setAutonomy('step')}
-                title="Step Approval: Hephaestus pauses before expensive operations"
+                title="Step Approval: Daedalus pauses before expensive operations"
               >
                 Step ⏸
               </button>
@@ -930,8 +930,8 @@ export function ChatPanel() {
       <div className="chat-panel__messages" ref={scrollRef}>
         {messages.length === 0 && (
           <div className="chat__empty">
-            {agent === 'hephaestus' ? (
-              <p>Talk to Hephaestus. It plans multi-stage creative pipelines, builds them as nebula nodes, inspects outputs, and iterates until they're right.</p>
+            {agent === 'daedalus' ? (
+              <p>Talk to Daedalus. Master craftsman, labyrinth-builder — it plans pipelines with precision, measures twice before each cut, and remembers every lesson a bad joint taught it.</p>
             ) : (
               <p>Talk to Claude Code. It has access to the nebula skill — ask it to build a graph.</p>
             )}

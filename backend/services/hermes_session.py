@@ -1,4 +1,4 @@
-"""Hephaestus runtime — wraps `hermes chat -q -Q` subprocess and normalizes
+"""Daedalus runtime — wraps `hermes-daedalus chat -q -Q` subprocess and normalizes
 output into the same event dict contract as run_claude.
 
 Yields dicts with a `type` field:
@@ -20,9 +20,16 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 DEFAULT_MODEL = "moonshotai/kimi-k2.6"
 DEFAULT_PROVIDER = "openrouter"
-DEFAULT_SKILLS = "hephaestus-core"
+DEFAULT_SKILLS = "daedalus-core"
 
-# Structured markers emitted by Hephaestus per SKILL.md directives (Task 8).
+# We invoke Hermes through the `hermes-daedalus` profile-alias wrapper instead
+# of plain `hermes`. Hermes has no `--profile` flag on `chat`, so the only way
+# to guarantee Daedalus uses its own isolated profile (SOUL.md, memories,
+# skills) — independent of whatever the user has set as their globally active
+# profile — is the alias wrapper. See docs/HERMES-SETUP.md §3 for setup.
+HERMES_BIN = "hermes-daedalus"
+
+# Structured markers emitted by Daedalus per SKILL.md directives (Task 8).
 # ALL_MARKERS — every line prefix we recognize as a structured marker.
 # ANCHOR_MARKERS — subset that signal a real end-of-response marker block.
 # PLAN:/COST: alone are ambiguous (could be markdown headings or quoted text);
@@ -41,12 +48,12 @@ async def run_hermes(
     model: str = DEFAULT_MODEL,
     autonomy: str = "auto",
 ) -> AsyncIterator[dict[str, Any]]:
-    """Run a single Hephaestus turn via `hermes chat -q -Q` and yield events."""
+    """Run a single Daedalus turn via `hermes-daedalus chat -q -Q` and yield events."""
     # Note (from Task 0 fixture): `hermes chat -Q` emits `session_id: <id>` on
     # its own first line automatically — no `--pass-session-id` flag needed.
     #
     # Model override: the frontend's model picker is Claude-specific (defaults
-    # to claude-sonnet-4-6). Hephaestus must run on Kimi K2.6 for (a) the
+    # to claude-sonnet-4-6). Daedalus must run on Kimi K2.6 for (a) the
     # Hermes Agent Creative Hackathon Kimi-track qualification and (b) because
     # Hermes is configured for OpenRouter and wouldn't recognize Claude Code
     # model slugs. Silently swap any non-OpenRouter-slug model for the Kimi
@@ -54,7 +61,7 @@ async def run_hermes(
     if "/" not in model:
         model = DEFAULT_MODEL
     args = [
-        "hermes", "chat", "-q", message, "-Q",
+        HERMES_BIN, "chat", "-q", message, "-Q",
         "--provider", DEFAULT_PROVIDER,
         "--model", model,
         "--skills", DEFAULT_SKILLS,
@@ -65,7 +72,7 @@ async def run_hermes(
     env = {
         **os.environ,
         "NEBULA_DISABLE_QUICK": "1",
-        "HEPHAESTUS_APPROVAL": autonomy,
+        "DAEDALUS_APPROVAL": autonomy,
     }
 
     try:
@@ -79,7 +86,14 @@ async def run_hermes(
             limit=64 * 1024 * 1024,
         )
     except FileNotFoundError:
-        yield {"type": "error", "message": "`hermes` binary not found in PATH. See docs/HERMES-SETUP.md for install instructions."}
+        yield {
+            "type": "error",
+            "message": (
+                "`hermes-daedalus` wrapper not found in PATH. Create it with "
+                "`hermes profile create daedalus && hermes profile alias daedalus --name hermes-daedalus`, "
+                "then install the skill per docs/HERMES-SETUP.md."
+            ),
+        }
         yield {"type": "done"}
         return
 
@@ -146,7 +160,7 @@ async def run_hermes(
             lines = lines[:first_non_empty_idx] + lines[first_non_empty_idx + 1:]
 
     # Structured markers: APPROVAL_REQUIRED / PLAN / COST / LEARNING_SAVED.
-    # Emitted by Hephaestus per SKILL.md directives (Task 8) AT THE END of the
+    # Emitted by Daedalus per SKILL.md directives (Task 8) AT THE END of the
     # response. APPROVAL_REQUIRED + PLAN + COST consolidate into one
     # approval_request event; LEARNING_SAVED emits its own learning_saved event.
     #
@@ -157,7 +171,7 @@ async def run_hermes(
     # the text body instead of being parsed as markers.
     #
     # ALL_MARKERS and ANCHOR_MARKERS are defined at module scope — they are
-    # part of the external contract with Hephaestus.
+    # part of the external contract with Daedalus.
 
     # Walk backward from the end, collecting contiguous marker lines.
     # Skip trailing blank lines before starting the walk.
@@ -210,7 +224,7 @@ async def run_hermes(
 
     if learning_topic:
         # entry_preview hardcoded empty for MVP; later task can parse preview
-        # text from SKILL.md emission if Hephaestus starts surfacing it.
+        # text from SKILL.md emission if Daedalus starts surfacing it.
         yield {"type": "learning_saved", "topic": learning_topic, "entry_preview": ""}
 
     body = "\n".join(filtered_lines).strip()

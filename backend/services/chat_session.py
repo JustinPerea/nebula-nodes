@@ -346,5 +346,5 @@ from services.hermes_session import run_hermes as _run_hermes  # noqa: E402
 
 AGENT_RUNNERS: dict[str, Any] = {
     "claude": run_claude,
-    "hephaestus": _run_hermes,
+    "daedalus": _run_hermes,
 }

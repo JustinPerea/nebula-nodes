@@ -189,13 +189,13 @@ class TestChatAgentDispatch:
     """WebSocket /ws/chat accepts an 'agent' field and routes to the right runner."""
 
     def test_dispatch_registers_both_agents(self):
-        """The dispatch table exposes both claude and hephaestus."""
+        """The dispatch table exposes both claude and daedalus."""
         import sys
         from pathlib import Path
         sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
         from services.chat_session import AGENT_RUNNERS
         assert "claude" in AGENT_RUNNERS
-        assert "hephaestus" in AGENT_RUNNERS
+        assert "daedalus" in AGENT_RUNNERS
 
     def test_unknown_agent_returns_error_event(self, client):
         """Sending a send payload with an unknown agent surfaces an error + done."""
