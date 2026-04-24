@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import difflib
 import hashlib
 import json
 from pathlib import Path
@@ -520,11 +521,37 @@ async def list_nodes() -> dict:
     return {"nodes": nodes_list, "categories": categories}
 
 
+def _suggest_node_ids(query: str, all_ids: list[str]) -> list[str]:
+    """Find candidate definition ids for a failed `nebula info` lookup.
+
+    Prefix match first (catches family names: `gpt-image-2` → four variants);
+    falls back to difflib close matches for typos. Returns [] if nothing is
+    close enough — callers should skip the 'Did you mean:' block in that case
+    rather than pad the 404 with noise.
+    """
+    prefix = sorted(nid for nid in all_ids if nid.startswith(query) and nid != query)
+    if prefix:
+        return prefix
+    return difflib.get_close_matches(query, all_ids, n=5, cutoff=0.6)
+
+
 @app.get("/api/nodes/{node_id}")
 async def get_node(node_id: str) -> dict:
     node = node_registry.get(node_id)
     if node is None:
-        raise HTTPException(status_code=404, detail=f"Node '{node_id}' not found")
+        all_nodes = node_registry.get_all()
+        suggestions = _suggest_node_ids(node_id, list(all_nodes.keys()))
+        if suggestions:
+            lines = [f"Node '{node_id}' not found. Did you mean:"]
+            for nid in suggestions:
+                meta = all_nodes.get(nid, {})
+                display = meta.get("displayName", "")
+                category = meta.get("category", "")
+                lines.append(f"  - {nid:32s} {display:24s} {category}")
+            detail = "\n".join(lines)
+        else:
+            detail = f"Node '{node_id}' not found"
+        raise HTTPException(status_code=404, detail=detail)
     return node
 
 

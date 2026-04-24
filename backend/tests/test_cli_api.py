@@ -47,6 +47,55 @@ class TestNodeEndpoints:
         resp = client.get("/api/nodes/nonexistent")
         assert resp.status_code == 404
 
+    def test_family_name_404_suggests_prefix_matches(self, client):
+        """Asking for a family name like 'gpt-image-2' (which isn't a real
+        definition id but is the natural way to reach for the family) should
+        return 404 with a 'Did you mean:' list of the actual variants.
+
+        This removes a friction point Daedalus hit in live dogfood — he ran
+        `nebula info gpt-image-2`, got a hard "not found", then had to
+        `nebula nodes | grep gpt` to discover the real ids. One round-trip
+        instead of three.
+        """
+        resp = client.get("/api/nodes/gpt-image-2")
+        assert resp.status_code == 404
+        detail = resp.json()["detail"]
+        assert "gpt-image-2" in detail
+        assert "Did you mean" in detail
+        # All four gpt-image-2 variants should be listed.
+        assert "gpt-image-2-generate" in detail
+        assert "gpt-image-2-edit" in detail
+        assert "gpt-image-2-fal-generate" in detail
+        assert "gpt-image-2-fal-edit" in detail
+
+    def test_family_name_404_suggests_single_variant(self, client):
+        """Family with one variant (e.g. 'veo' → 'veo-3') still gets a
+        suggestion — user learns the real id without a second lookup."""
+        resp = client.get("/api/nodes/veo")
+        assert resp.status_code == 404
+        detail = resp.json()["detail"]
+        assert "Did you mean" in detail
+        assert "veo-3" in detail
+
+    def test_typo_404_falls_back_to_close_matches(self, client):
+        """When the query doesn't prefix-match anything, fall back to
+        difflib close matches so typos still get useful suggestions."""
+        resp = client.get("/api/nodes/meshy-animat")  # missing final 'e'
+        assert resp.status_code == 404
+        detail = resp.json()["detail"]
+        assert "Did you mean" in detail
+        assert "meshy-animate" in detail
+
+    def test_totally_unknown_node_404_plain_message(self, client):
+        """When nothing matches at all, keep the terse original message —
+        don't pad the 404 with an empty 'Did you mean:' block."""
+        resp = client.get("/api/nodes/xyzzy-quux-nothing")
+        assert resp.status_code == 404
+        detail = resp.json()["detail"]
+        assert "xyzzy-quux-nothing" in detail
+        assert "not found" in detail
+        assert "Did you mean" not in detail
+
 
 class TestGraphEndpoints:
     def test_create_node(self, client):
