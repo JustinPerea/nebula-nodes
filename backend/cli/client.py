@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sys
 from typing import Any
 
@@ -17,6 +18,14 @@ class NebulaClient:
         self._client = httpx.Client(base_url=self.base_url, timeout=300.0)
 
     def _request(self, method: str, path: str, **kwargs: Any) -> Any:
+        # When the CLI is invoked from inside a Daedalus subprocess, the parent
+        # hermes runtime sets DAEDALUS_APPROVAL in env. Pass that through as a
+        # header so backend guards (e.g. the §1.5 iteration-integrity check on
+        # /api/graph/run) can distinguish agent callers from human callers.
+        if os.environ.get("DAEDALUS_APPROVAL"):
+            headers = dict(kwargs.pop("headers", {}) or {})
+            headers.setdefault("X-Daedalus-Caller", "1")
+            kwargs["headers"] = headers
         try:
             resp = self._client.request(method, path, **kwargs)
         except httpx.ConnectError:

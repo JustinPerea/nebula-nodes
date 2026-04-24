@@ -305,6 +305,77 @@ class TestParamCoercion:
         assert node["params"]["target_polycount"] == 45000
 
 
+class TestRunGraphIterationGuard:
+    """SKILL.md §1.5 says Daedalus must ADD a new node to iterate, never re-run
+    an existing populated one in place. We enforce this at the backend so a
+    §1.5 violation fails loudly instead of silently clobbering iteration
+    history. The guard is gated on the X-Daedalus-Caller header so a human
+    clicking Run in the frontend (or any other API consumer) is unaffected."""
+
+    DAEDALUS_HEADERS = {"X-Daedalus-Caller": "1"}
+
+    def _make_and_populate(self, client, node_id: str = "n1"):
+        """Create a node and fake an execution result so outputs look 'populated'."""
+        client.post("/api/graph/node", json={"definitionId": "text-input", "params": {}})
+        import sys
+        from pathlib import Path
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+        from main import cli_graph
+        cli_graph.nodes[node_id]["outputs"] = {"text": {"type": "String", "value": "stale"}}
+
+    def test_run_on_populated_node_blocked_for_daedalus(self, client):
+        """Daedalus-called /api/graph/run targeting a node that already has
+        outputs gets 400 with the §1.5 reminder — forces him to ADD a new
+        node instead of clobbering iteration history."""
+        self._make_and_populate(client, "n1")
+        resp = client.post(
+            "/api/graph/run",
+            json={"targetNodeId": "n1"},
+            headers=self.DAEDALUS_HEADERS,
+        )
+        assert resp.status_code == 400
+        detail = resp.json()["detail"]
+        assert "n1" in detail
+        assert "1.5" in detail or "add a new node" in detail.lower()
+
+    def test_run_on_empty_node_allowed_for_daedalus(self, client):
+        """Running a node that has no outputs yet is fine — that's the normal
+        first execution path."""
+        client.post("/api/graph/node", json={"definitionId": "text-input", "params": {}})
+        resp = client.post(
+            "/api/graph/run",
+            json={"targetNodeId": "n1"},
+            headers=self.DAEDALUS_HEADERS,
+        )
+        # 200 on execution; guard isn't triggered because outputs are empty
+        assert resp.status_code == 200
+
+    def test_run_on_populated_node_allowed_for_human(self, client):
+        """Without the X-Daedalus-Caller header (frontend user, curl, etc.),
+        the guard doesn't fire — people can re-run a node in place if they
+        want to."""
+        self._make_and_populate(client, "n1")
+        resp = client.post(
+            "/api/graph/run",
+            json={"targetNodeId": "n1"},
+            # no headers — human caller
+        )
+        # 200 on execution; no guard
+        assert resp.status_code == 200
+
+    def test_run_whole_graph_allowed_for_daedalus(self, client):
+        """Guard only fires when Daedalus targets a specific populated node.
+        A whole-graph run (no targetNodeId) is always allowed — that's the
+        batch-execution path."""
+        self._make_and_populate(client, "n1")
+        resp = client.post(
+            "/api/graph/run",
+            json={},  # no targetNodeId
+            headers=self.DAEDALUS_HEADERS,
+        )
+        assert resp.status_code == 200
+
+
 class TestChatAgentDispatch:
     """WebSocket /ws/chat accepts an 'agent' field and routes to the right runner."""
 

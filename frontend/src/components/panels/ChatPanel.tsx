@@ -132,15 +132,31 @@ function newId(): string {
 // completed. Called whenever a non-thinking event arrives (text / approval /
 // done / error) so the next batch of thinking events starts a fresh bubble
 // on the next turn instead of appending to this turn's finished stream.
-// Also collapses the bubble so the final response anchors the eye and the
-// thinking becomes a clickable disclosure — the body is still there if you
-// want to scrub back, it's just folded by default.
+// Does NOT collapse — collapse happens once at turn end via the done handler,
+// because collapsing mid-turn caused bubbles to flash-and-fold in interleaved
+// thinking/text streams. A past turn's worth of craft notes should stay
+// readable while Daedalus is still working.
 function markThinkingCompleted(msgs: ChatMessage[]): ChatMessage[] {
   let changed = false;
   const next = msgs.map((m) => {
     if (m.role === 'thinking' && !m.completed) {
       changed = true;
-      return { ...m, completed: true, collapsed: true };
+      return { ...m, completed: true };
+    }
+    return m;
+  });
+  return changed ? next : msgs;
+}
+
+// Collapse every completed thinking bubble in one pass. Called only on `done`
+// so the final response anchors the eye after the turn wraps, but nothing
+// collapses mid-stream.
+function collapseAllThinking(msgs: ChatMessage[]): ChatMessage[] {
+  let changed = false;
+  const next = msgs.map((m) => {
+    if (m.role === 'thinking' && !m.collapsed) {
+      changed = true;
+      return { ...m, collapsed: true, completed: true };
     }
     return m;
   });
@@ -619,7 +635,7 @@ export function ChatPanel() {
       }
       if (type === 'done') {
         setBusy(false);
-        setMessages((prev) => markThinkingCompleted(prev));
+        setMessages((prev) => collapseAllThinking(prev));
         upsertAssistant((msg) => ({
           ...msg,
           streaming: false,

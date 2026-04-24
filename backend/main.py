@@ -9,7 +9,7 @@ from typing import Any
 
 from uuid import uuid4
 
-from fastapi import FastAPI, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Form, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -1150,8 +1150,15 @@ async def export_graph_for_frontend() -> dict:
 # ---------- CLI: Synchronous execution ----------
 
 @app.post("/api/graph/run")
-async def run_graph(body: dict[str, Any] | None = None) -> dict:
-    """Execute the CLI graph synchronously and return results."""
+async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dict:
+    """Execute the CLI graph synchronously and return results.
+
+    §1.5 guard: when called BY Daedalus (header X-Daedalus-Caller set) and
+    TARGETING a specific node that already has outputs, block with 400 and
+    point him at the rule. Iteration must ADD a new node — re-running the
+    same node in place overwrites the craft log we want on the canvas. The
+    header gate lets humans (frontend Run button, curl, tests) keep the
+    rerun-in-place affordance; only the agent is disciplined here."""
     if not cli_graph.nodes:
         raise HTTPException(status_code=400, detail="Graph is empty")
 
@@ -1160,6 +1167,22 @@ async def run_graph(body: dict[str, Any] | None = None) -> dict:
     nodes_list, edges_list = cli_graph.to_execute_format()
 
     target = body.get("targetNodeId") if body else None
+
+    if target and request.headers.get("x-daedalus-caller"):
+        existing_outputs = cli_graph.nodes.get(target, {}).get("outputs")
+        if isinstance(existing_outputs, dict) and len(existing_outputs) > 0:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Node '{target}' already has output. Per SKILL.md §1.5, "
+                    "add a new node instead of re-running in place — the canvas "
+                    "should keep every iteration visible as craft history. "
+                    "Use `nebula add <family>-<variant>` to create the next cut, "
+                    "wire it from the corrected upstream, then `nebula run` the "
+                    "new node id."
+                ),
+            )
+
     if target:
         sub_nodes, sub_edges = get_subgraph(
             [GraphNode.model_validate(n) for n in nodes_list],
