@@ -36,10 +36,63 @@ def _readline_chunks(data: bytes) -> list[bytes]:
     return chunks
 
 
+# --- Verbose-mode fixture builder -------------------------------------------
+# run_hermes now invokes `hermes chat` WITHOUT -Q; Hermes emits a banner,
+# Query echo, `╭─ ⚕ Hermes ─╮` prose boxes interleaved with `┊ 💻` tool
+# previews, and a footer containing `Session: <id>`. Tests feed this shape
+# through proc.stdout so the verbose-mode parser exercises end-to-end.
+
+_BOX_TOP = "╭──── ⚕ Hermes ────────────────────────╮"
+_BOX_BOT = "╰──────────────────────────────────────╯"
+
+
+def _verbose_bytes(
+    *,
+    query: str = "hi",
+    prose_boxes: list[list[str]],
+    session_id: str = "20260424_120000_abcdef",
+    tool_previews: list[list[str]] | None = None,
+) -> bytes:
+    """Build synthetic verbose-mode stdout bytes.
+
+    `prose_boxes` is a list of prose-box contents (each a list of lines).
+    `tool_previews` is an optional list of tool-preview line groups, one per
+    gap between prose boxes.
+    """
+    tool_previews = tool_previews or []
+    lines: list[str] = [
+        # Banner chrome — parser skips until `Query:` appears.
+        "╭─ banner ─╮",
+        "│ Hermes Agent v0.10.0 │",
+        "╰──────────╯",
+        f"Query: {query}",
+        "Initializing agent...",
+        "─" * 40,
+        "",
+    ]
+    for i, box in enumerate(prose_boxes):
+        lines.append(_BOX_TOP)
+        for bl in box:
+            lines.append(f"│    {bl}    │")
+        lines.append(_BOX_BOT)
+        if i < len(tool_previews):
+            lines.extend(tool_previews[i])
+        lines.append("")
+    lines.extend([
+        "Resume this session with:",
+        f"  hermes --resume {session_id}",
+        "",
+        f"Session:        {session_id}",
+        "Duration:       1m 2s",
+        "Messages:       4 (1 user, 2 tool calls)",
+    ])
+    return ("\n".join(lines) + "\n").encode("utf-8")
+
+
 @pytest.mark.asyncio
 async def test_happy_path_yields_text_and_done():
     """Minimal successful turn: Hermes prints a response, wrapper emits text + done."""
-    fake_stdout = b"HELLO\n"
+    fake_stdout = _verbose_bytes(prose_boxes=[["HELLO"]])
     fake_stderr = b""
 
     proc = AsyncMock()
@@ -63,7 +116,10 @@ async def test_happy_path_yields_text_and_done():
 async def test_emits_session_event_when_session_id_present():
     """Hermes -Q mode prints `session_id: <id>` on the first stdout line automatically.
     Format verified from Task 0 fixture: session_id is lowercase, leading line."""
-    fake_stdout = b"session_id: 20260423_095548_a2985d\nSome response text.\n"
+    fake_stdout = _verbose_bytes(
+        prose_boxes=[["Some response text."]],
+        session_id="20260423_095548_a2985d",
+    )
 
     proc = AsyncMock()
     proc.stdout.readline = AsyncMock(side_effect=_readline_chunks(fake_stdout))
@@ -110,12 +166,14 @@ async def test_resume_flag_passed_when_session_id_given():
 @pytest.mark.asyncio
 async def test_parses_approval_required_marker():
     """When Daedalus prints APPROVAL_REQUIRED, emit approval_request event."""
-    fake_stdout = (
-        b"session_id: 20260423_095548_a2985d\n"
-        b"Planning the render.\n"
-        b"APPROVAL_REQUIRED: Run Veo 3.1 on n4 (est $0.15, ~60s)\n"
-        b"PLAN: connect n2:image -> n4:first_frame + n4:last_frame; run n4\n"
-        b"COST: $0.15\n"
+    fake_stdout = _verbose_bytes(
+        prose_boxes=[[
+            "Planning the render.",
+            "APPROVAL_REQUIRED: Run Veo 3.1 on n4 (est $0.15, ~60s)",
+            "PLAN: connect n2:image -> n4:first_frame + n4:last_frame; run n4",
+            "COST: $0.15",
+        ]],
+        session_id="20260423_095548_a2985d",
     )
 
     proc = AsyncMock()
@@ -146,11 +204,13 @@ async def test_parses_approval_required_marker():
 async def test_approval_marker_mid_response_is_not_parsed():
     """Markers only count when they form a contiguous END-of-response block.
     Mid-response quotes or headings should NOT trigger a fake approval."""
-    fake_stdout = (
-        b"session_id: 20260423_095548_a2985d\n"
-        b"Earlier I said APPROVAL_REQUIRED: run this.\n"
-        b"But I've changed my plan.\n"
-        b"Here is the final result with no pending approval.\n"
+    fake_stdout = _verbose_bytes(
+        prose_boxes=[[
+            "Earlier I said APPROVAL_REQUIRED: run this.",
+            "But I've changed my plan.",
+            "Here is the final result with no pending approval.",
+        ]],
+        session_id="20260423_095548_a2985d",
     )
 
     proc = AsyncMock()
@@ -173,10 +233,12 @@ async def test_approval_marker_mid_response_is_not_parsed():
 async def test_approval_summary_only_no_plan_cost_omits_those_keys():
     """When only APPROVAL_REQUIRED is present (no PLAN, no COST), the event
     should NOT have plan/cost keys — not empty strings."""
-    fake_stdout = (
-        b"session_id: 20260423_095548_a2985d\n"
-        b"Planning.\n"
-        b"APPROVAL_REQUIRED: Run expensive op\n"
+    fake_stdout = _verbose_bytes(
+        prose_boxes=[[
+            "Planning.",
+            "APPROVAL_REQUIRED: Run expensive op",
+        ]],
+        session_id="20260423_095548_a2985d",
     )
 
     proc = AsyncMock()
@@ -199,10 +261,12 @@ async def test_approval_summary_only_no_plan_cost_omits_those_keys():
 @pytest.mark.asyncio
 async def test_parses_learning_saved_marker():
     """LEARNING_SAVED: <slug> on stdout becomes a learning_saved event."""
-    fake_stdout = (
-        b"session_id: 20260423_095548_a2985d\n"
-        b"Loops cleanly now.\n"
-        b"LEARNING_SAVED: loop-color-grade-drift\n"
+    fake_stdout = _verbose_bytes(
+        prose_boxes=[[
+            "Loops cleanly now.",
+            "LEARNING_SAVED: loop-color-grade-drift",
+        ]],
+        session_id="20260423_095548_a2985d",
     )
 
     proc = AsyncMock()
@@ -227,10 +291,12 @@ async def test_parses_learning_saved_marker():
 @pytest.mark.asyncio
 async def test_learning_marker_mid_response_is_not_parsed():
     """LEARNING_SAVED only counts when it's in the contiguous end-of-response tail block."""
-    fake_stdout = (
-        b"session_id: 20260423_095548_a2985d\n"
-        b"I previously noted LEARNING_SAVED: some-slug was useful.\n"
-        b"But here is my response.\n"
+    fake_stdout = _verbose_bytes(
+        prose_boxes=[[
+            "I previously noted LEARNING_SAVED: some-slug was useful.",
+            "But here is my response.",
+        ]],
+        session_id="20260423_095548_a2985d",
     )
 
     proc = AsyncMock()

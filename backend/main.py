@@ -23,6 +23,7 @@ from services.cli_graph import CLIGraph
 from services.output import OUTPUT_ROOT
 from services.cache import ExecutionCache
 from services.chat_session import run_claude
+from services.chat_actions import publish_action
 from routes.openrouter_proxy import router as openrouter_router
 from routes.replicate_proxy import router as replicate_router
 from routes.fal_proxy import router as fal_router
@@ -270,6 +271,7 @@ async def chat_websocket(websocket: WebSocket) -> None:
     Server sends events matching AGENT_RUNNERS' event contract.
     """
     from services.chat_session import AGENT_RUNNERS
+    from services.chat_actions import register_action_handler, unregister_action_handler
 
     await websocket.accept()
     current_task: asyncio.Task[None] | None = None
@@ -281,23 +283,54 @@ async def chat_websocket(websocket: WebSocket) -> None:
         agent: str,
         autonomy: str,
     ) -> None:
-        runner = AGENT_RUNNERS.get(agent)
-        if runner is None:
-            await websocket.send_text(json.dumps({
-                "type": "error",
-                "message": f"Unknown agent '{agent}'. Valid: {sorted(AGENT_RUNNERS.keys())}",
-            }))
-            await websocket.send_text(json.dumps({"type": "done"}))
-            return
+        # Single outbound queue so every send path (agent events + canvas-
+        # action events from the graph API) is serialized through one drainer
+        # task — WebSocket.send_text is not safe to call from two tasks at
+        # once.
+        outbound: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
+
+        def enqueue(event: dict[str, Any]) -> None:
+            outbound.put_nowait(event)
+
+        async def drain() -> None:
+            while True:
+                event = await outbound.get()
+                if event is None:
+                    return
+                try:
+                    await websocket.send_text(json.dumps(event))
+                except Exception:
+                    return
+
+        drainer = asyncio.create_task(drain())
+        # Graph mutation routes publish thinking events via chat_actions —
+        # register the enqueuer so they flow through the same outbound queue
+        # as the agent's own events.
+        register_action_handler(enqueue)
 
         try:
-            agen = runner(message, session_id, model, autonomy)
-            async for event in agen:
-                await websocket.send_text(json.dumps(event))
-        except Exception as exc:
+            runner = AGENT_RUNNERS.get(agent)
+            if runner is None:
+                enqueue({
+                    "type": "error",
+                    "message": f"Unknown agent '{agent}'. Valid: {sorted(AGENT_RUNNERS.keys())}",
+                })
+                enqueue({"type": "done"})
+                return
+
             try:
-                await websocket.send_text(json.dumps({"type": "error", "message": str(exc)}))
-                await websocket.send_text(json.dumps({"type": "done"}))
+                agen = runner(message, session_id, model, autonomy)
+                async for event in agen:
+                    enqueue(event)
+            except Exception as exc:
+                enqueue({"type": "error", "message": str(exc)})
+                enqueue({"type": "done"})
+        finally:
+            unregister_action_handler()
+            # Sentinel stops the drainer; wait for it so remaining events flush.
+            outbound.put_nowait(None)
+            try:
+                await drainer
             except Exception:
                 pass
 
@@ -661,6 +694,7 @@ async def create_graph_node(body: dict[str, Any]) -> dict:
     params = _coerce_params(definition_id, params)
     short_id = cli_graph.add_node(definition_id, params, position=position)
     await _broadcast_graph_sync()
+    publish_action(f"Added {definition_id} ({short_id})")
     return cli_graph.nodes[short_id]
 
 
@@ -674,6 +708,10 @@ async def connect_graph_nodes(body: dict[str, Any]) -> dict:
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     await _broadcast_graph_sync()
+    publish_action(
+        f"Wired {edge['source']}:{edge['sourceHandle']} → "
+        f"{edge['target']}:{edge['targetHandle']}"
+    )
     return {"connection": f"{edge['source']}:{edge['sourceHandle']} -> {edge['target']}:{edge['targetHandle']}"}
 
 
@@ -707,11 +745,20 @@ async def create_node_and_connect(body: dict[str, Any]) -> dict:
                 dst,
                 connect_spec.get("targetHandle", ""),
             )
+            connected = True
         except ValueError:
             # Connection failed but node was created — let the caller decide.
-            pass
+            connected = False
+    else:
+        connected = False
 
     await _broadcast_graph_sync()
+    publish_action(f"Added {definition_id} ({short_id})")
+    if connected:
+        publish_action(
+            f"Wired {src}:{connect_spec.get('sourceHandle', '')} → "
+            f"{dst}:{connect_spec.get('targetHandle', '')}"
+        )
     return cli_graph.nodes[short_id]
 
 
@@ -733,6 +780,7 @@ async def update_graph_node(node_id: str, body: dict[str, Any]) -> dict:
     except ValueError:
         raise HTTPException(status_code=404, detail=f"Node '{node_id}' not found")
     await _broadcast_graph_sync()
+    publish_action(f"Updated {node_id} params")
     return cli_graph.nodes[node_id]
 
 
@@ -740,6 +788,7 @@ async def update_graph_node(node_id: str, body: dict[str, Any]) -> dict:
 async def clear_graph() -> dict:
     cli_graph.clear()
     await _broadcast_graph_sync()
+    publish_action("Cleared the canvas")
     return {"status": "cleared"}
 
 
@@ -751,6 +800,7 @@ async def delete_graph_node(node_id: str) -> dict:
     except ValueError:
         raise HTTPException(status_code=404, detail=f"Node '{node_id}' not found")
     await _broadcast_graph_sync()
+    publish_action(f"Removed {node_id}")
     return {"status": "deleted", "id": node_id}
 
 
@@ -852,6 +902,10 @@ async def delete_graph_edge(body: dict[str, Any]) -> dict:
     )
     if removed:
         await _broadcast_graph_sync()
+        publish_action(
+            f"Unwired {body.get('source', '')}:{body.get('sourceHandle', '')} → "
+            f"{body.get('target', '')}:{body.get('targetHandle', '')}"
+        )
     return {"status": "deleted" if removed else "not_found"}
 
 
@@ -889,6 +943,9 @@ async def import_graph(body: dict[str, Any]) -> dict:
             # Skip malformed edges rather than failing the whole import
             continue
     await _broadcast_graph_sync()
+    publish_action(
+        f"Loaded graph ({len(cli_graph.nodes)} nodes, {len(cli_graph.edges)} edges)"
+    )
     return {
         "status": "imported",
         "idMap": id_map,
@@ -1039,6 +1096,10 @@ async def run_graph(body: dict[str, Any] | None = None) -> dict:
 
     handler_registry = get_handler_registry(emit=collect_events)
 
+    publish_action(
+        f"Running {target}..." if target else f"Running {len(sub_nodes)} node(s)..."
+    )
+
     start = time.time()
     await execute_graph(
         nodes=sub_nodes,
@@ -1060,6 +1121,16 @@ async def run_graph(body: dict[str, Any] | None = None) -> dict:
 
     # Sync outputs to frontend canvas
     await _broadcast_graph_sync()
+
+    if errors:
+        publish_action(
+            f"Ran {len(results) + len(errors)} node(s) in {duration:.1f}s — "
+            f"{len(errors)} errored: {', '.join(errors.keys())}"
+        )
+    else:
+        publish_action(
+            f"Ran {len(results)} node(s) cleanly in {duration:.1f}s"
+        )
 
     return {
         "results": results,

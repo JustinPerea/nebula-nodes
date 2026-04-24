@@ -18,6 +18,19 @@ import os
 from pathlib import Path
 from typing import Any, AsyncIterator
 
+from services.chat_actions import (
+    mark_activity,
+    reset_activity,
+    seconds_since_activity,
+)
+from services.hermes_verbose_parser import HermesVerboseParser
+
+# Fire a heartbeat only when nothing user-visible has happened for this long.
+# 20s is a balance: short enough to reassure users the turn is still alive
+# during Kimi's long silent stretches, long enough to not spam the thinking
+# box when canvas actions are firing every few seconds.
+HEARTBEAT_QUIET_WINDOW = 20.0
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 DEFAULT_MODEL = "moonshotai/kimi-k2.6"
@@ -96,11 +109,13 @@ async def _tail_log(
 
     Emits:
       - One message per new INFO/ERROR line appended to the log.
-      - A heartbeat ("thinking... (Ns elapsed)") every 5s when the log is quiet,
-        so the user sees *something* even during long provider calls that
-        don't log intermediate progress.
+      - A heartbeat ("thinking... (Ns elapsed)") every HEARTBEAT_QUIET_WINDOW
+        seconds when NOTHING user-visible has fired (log line, stdout line, or
+        canvas action from chat_actions). The activity time is shared across
+        all three sources via the chat_actions module, so heartbeats naturally
+        suppress themselves when canvas actions are streaming in.
     """
-    last_log_time = started_at
+    last_heartbeat_time = started_at
     current_offset = start_offset
     while not stop_event.is_set():
         try:
@@ -115,7 +130,7 @@ async def _tail_log(
                         msg = _extract_log_message(line)
                         if msg:
                             await queue.put(msg)
-                            last_log_time = asyncio.get_event_loop().time()
+                            mark_activity()
                 elif size < current_offset:
                     # Log rotated / truncated under us — restart from 0 so we
                     # don't miss fresh entries.
@@ -125,10 +140,18 @@ async def _tail_log(
             pass
 
         now = asyncio.get_event_loop().time()
-        if now - last_log_time > 5.0:
+        # Fire a heartbeat only if (a) nothing user-visible has emitted in the
+        # quiet window AND (b) we haven't just fired one. Both guards are
+        # needed — (a) handles the "canvas actions are streaming" case;
+        # (b) handles the "activity tracker just rolled past the window so
+        # now we'd fire twice in quick succession" case.
+        if (
+            seconds_since_activity() >= HEARTBEAT_QUIET_WINDOW
+            and (now - last_heartbeat_time) >= HEARTBEAT_QUIET_WINDOW
+        ):
             elapsed = int(now - started_at)
             await queue.put(f"thinking... ({elapsed}s elapsed)")
-            last_log_time = now
+            last_heartbeat_time = now
 
         # Sleep ~300ms, but exit promptly if stop_event fires.
         try:
@@ -143,10 +166,13 @@ async def run_hermes(
     model: str = DEFAULT_MODEL,
     autonomy: str = "auto",
 ) -> AsyncIterator[dict[str, Any]]:
-    """Run a single Daedalus turn via `hermes-daedalus chat -q -Q` and yield events."""
-    # Note (from Task 0 fixture): `hermes chat -Q` emits `session_id: <id>` on
-    # its own first line automatically — no `--pass-session-id` flag needed.
-    #
+    """Run a single Daedalus turn via `hermes-daedalus chat -q` and yield events.
+
+    Verbose mode (no `-Q` flag) is used so we can stream pre-tool and post-tool
+    narration out of the `╭─ ⚕ Hermes ─...─╯` prose boxes as they arrive. The
+    quiet-mode first-line `session_id:` handshake is replaced by parsing
+    `Session: <id>` from the footer that prints at the end of the turn.
+    """
     # Model override: the frontend's model picker is Claude-specific (defaults
     # to claude-sonnet-4-6). Daedalus must run on Kimi K2.6 for (a) the
     # Hermes Agent Creative Hackathon Kimi-track qualification and (b) because
@@ -156,7 +182,7 @@ async def run_hermes(
     if "/" not in model:
         model = DEFAULT_MODEL
     args = [
-        HERMES_BIN, "chat", "-q", message, "-Q",
+        HERMES_BIN, "chat", "-q", message,
         "--provider", DEFAULT_PROVIDER,
         "--model", model,
         "--skills", DEFAULT_SKILLS,
@@ -210,39 +236,45 @@ async def run_hermes(
     # `thinking` events while stdout is still buffering.
     thinking_queue: asyncio.Queue[str] = asyncio.Queue()
     stop_tail = asyncio.Event()
-    # Prime the queue with an immediate heartbeat so the thinking box appears
-    # within the first second — the log tailer's default 5s quiet threshold
-    # would otherwise leave the user staring at a blank panel while Hermes
-    # boots up. Seen during live dogfood: "I can't see its thinking."
+    # Reset the activity clock so the heartbeat waits the full quiet window
+    # before firing instead of piggy-backing on a stale timestamp from the
+    # previous turn.
+    reset_activity()
+    # Prime the queue with an immediate "starting..." so the thinking box
+    # appears within the first second — gives the user a liveness signal
+    # while Hermes boots. Counts as activity (delays the first heartbeat).
     thinking_queue.put_nowait("starting...")
+    mark_activity()
     tail_task = asyncio.create_task(
         _tail_log(log_start_offset, stop_tail, thinking_queue, started_at)
     )
 
-    # Accumulate stdout lines as they arrive so the live streamer and the
-    # end-of-turn marker parser share the same source of truth.
-    stdout_lines: list[str] = []
+    # Raw stdout buffer — kept only for diagnostic tail on non-zero exit.
+    # Parsed content (session id, final prose box for the assistant bubble,
+    # streamed thinking events) comes from the parser, not this list.
+    raw_stdout_lines: list[str] = []
+    parser = HermesVerboseParser()
 
     async def _stream_stdout() -> None:
-        """Read hermes stdout line-by-line and push non-empty lines onto the
-        thinking queue as they arrive. This gives us real-time narration when
-        hermes -Q flushes its stdout incrementally. If hermes buffers stdout
-        until exit, all lines will still be accumulated for the final parse —
-        they just arrive as a burst at the end instead of streaming."""
+        """Read hermes verbose-mode stdout line-by-line and feed it through the
+        parser. Parser emits `thinking` events for prose-box content (which
+        we push onto the thinking queue) and a `session` event when the footer
+        announces the session id (captured into the parser instance)."""
         while True:
             line_bytes = await proc.stdout.readline()
             if not line_bytes:
                 break
-            line = line_bytes.decode("utf-8", errors="replace").rstrip("\n")
-            stdout_lines.append(line)
-            stripped = line.strip()
-            if not stripped:
-                continue
-            # Skip the session_id handshake line — it's an internal protocol
-            # message, not something the user should see in narration.
-            if stripped.lower().startswith("session_id:"):
-                continue
-            thinking_queue.put_nowait(line)
+            # Strip both CR and LF — hermes's spinner frames use \r, and we
+            # don't want a trailing \r leaking into emitted text.
+            line = line_bytes.decode("utf-8", errors="replace").rstrip("\n").rstrip("\r")
+            raw_stdout_lines.append(line)
+            for evt in parser.feed(line):
+                if evt.kind == "thinking":
+                    thinking_queue.put_nowait(evt.text)
+                    mark_activity()
+                # session events are captured into parser.session_id; no need
+                # to queue — they're read after stream close.
+        parser.finalize()
 
     try:
         # Kick stdout+stderr reads off as tasks so we can interleave thinking
@@ -289,7 +321,7 @@ async def run_hermes(
 
         if proc.returncode != 0:
             stderr_full = stderr_bytes.decode("utf-8", errors="replace").strip()
-            stdout_full = "\n".join(stdout_lines).strip()
+            stdout_full = "\n".join(raw_stdout_lines).strip()
             # Print the full diagnostics to server logs so we can debug why
             # hermes exits non-zero even when standalone CLI invocations succeed.
             print("=" * 60, flush=True)
@@ -307,7 +339,7 @@ async def run_hermes(
             yield {"type": "done"}
             return
 
-        text = "\n".join(stdout_lines)
+        # No-op — session_id and final text come from the parser now.
     finally:
         # Stop the log tailer before touching the subprocess so it doesn't
         # keep spinning on a file we no longer care about.
@@ -327,30 +359,19 @@ async def run_hermes(
                 pass
 
     # Event accumulators.
-    # Session ID format verified via Task 0 fixture: Hermes `-Q` mode prints
-    # `session_id: <timestamp_id>` on the first line (e.g. `session_id: 20260423_095548_a2985d`).
-    session_id_emitted: str | None = None
+    # Session ID in verbose mode comes from the footer's `Session: <id>` line,
+    # captured by the parser during streaming.
+    session_id_emitted: str | None = parser.session_id
     approval_summary: str | None = None
     approval_plan: str | None = None
     approval_cost: str | None = None
     learning_topic: str | None = None
     filtered_lines: list[str] = []
 
-    lines = text.splitlines()
-
-    # Session ID only appears as a first-line marker in hermes -Q mode.
-    # Restrict the check to the first non-empty line to avoid false positives
-    # if a model echoes "session_id" mid-response.
-    first_non_empty_idx = next(
-        (i for i, ln in enumerate(lines) if ln.strip()),
-        None,
-    )
-    if first_non_empty_idx is not None:
-        first = lines[first_non_empty_idx].strip()
-        if first.lower().startswith("session_id:"):
-            session_id_emitted = first.split(":", 1)[1].strip()
-            # Drop the session line from downstream processing.
-            lines = lines[:first_non_empty_idx] + lines[first_non_empty_idx + 1:]
+    # Final response text is the content of the LAST prose Hermes box. Earlier
+    # prose boxes are mid-turn narration and were already streamed as thinking
+    # events — they don't belong in the persistent assistant bubble.
+    lines = list(parser.final_box_lines)
 
     # Structured markers: APPROVAL_REQUIRED / PLAN / COST / LEARNING_SAVED.
     # Emitted by Daedalus per SKILL.md directives (Task 8) AT THE END of the
