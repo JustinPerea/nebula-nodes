@@ -133,6 +133,49 @@ category. If nothing prints, check the skill is at
 copy. A future version of this guide may ship a one-shot install script
 that handles this.
 
+## 5.5 Install the model-family skills
+
+Daedalus's playbook (`daedalus-core/SKILL.md`) refers to model-specific
+skills — gpt-image-2, gemini (umbrella for Imagen/Veo/Nano Banana 1),
+nano-banana-2, meshy, runway, fal. Each skill contains real-world
+prompting tips, the quirks of a given provider, and the parameter shapes
+Daedalus needs to reach for when building graphs. Without them installed,
+`skill_view <name>` fails mid-turn and Daedalus has to guess.
+
+Most of these skills ship inside the nebula-nodes repo at
+`.claude/skills/<name>/`. `nano-banana-2` lives in the global Claude Code
+skill library (`~/.claude/skills/nano-banana-2`) and is a symlink there
+— so we dereference it on copy with `cp -RL` to install the real contents.
+`gpt-image-2` was installed alongside `daedalus-core` in earlier versions
+of this guide; include it here for clarity if you're setting up fresh.
+
+```bash
+# From inside the nebula-nodes clone
+DAEDALUS=~/.hermes/profiles/daedalus/skills/creative
+
+# Repo-local skills — plain directories
+cp -R .claude/skills/gpt-image-2 "$DAEDALUS/gpt-image-2"
+cp -R .claude/skills/gemini      "$DAEDALUS/gemini"
+cp -R .claude/skills/meshy       "$DAEDALUS/meshy"
+cp -R .claude/skills/runway      "$DAEDALUS/runway"
+cp -R .claude/skills/fal         "$DAEDALUS/fal"
+
+# Global skill — resolve the symlink with cp -RL or the install breaks
+cp -RL ~/.claude/skills/nano-banana-2 "$DAEDALUS/nano-banana-2"
+```
+
+Verify:
+
+```bash
+hermes-daedalus skills list | grep -E "gpt-image-2|gemini|meshy|runway|fal|nano-banana-2"
+```
+
+Expected: six rows, all `local`/`creative`. If `nano-banana-2` is missing,
+the symlink didn't dereference — re-run with `cp -RL`, not plain `cp -R`.
+
+If you only want a subset (e.g. you never touch 3D), skip the skills you
+won't use. Daedalus will just not try `skill_view meshy` — no crash.
+
 ## 6. Install the `nebula` CLI wrapper
 
 Daedalus drives the canvas via the `nebula` CLI, invoked through Hermes's
