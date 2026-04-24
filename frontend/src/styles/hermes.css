@@ -454,13 +454,13 @@ body.app-hermes .chat-panel--agent-daedalus .chat__bubble--user,
 body.app-hermes .chat-panel--agent-daedalus .chat-panel__bubble--user {
   background: transparent;
   border: 1px solid var(--h-rule-strong);
-  border-left: 2px solid var(--h-parchment);
+  border-top: 2px solid var(--h-parchment);
   border-radius: 0;
   color: var(--h-parchment);
   font-family: 'IBM Plex Mono', monospace;
   font-size: 12px;
   line-height: 1.55;
-  padding: 10px 14px;
+  padding: 12px 14px 10px;
   max-width: 90%;
   position: relative;
 }
