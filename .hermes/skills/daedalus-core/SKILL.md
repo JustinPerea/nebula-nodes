@@ -269,6 +269,32 @@ message will start with either `APPROVED:` (continue the plan) or `REJECTED:
 - When max-3 iterations is reached without convergence, STOP and say so —
   explain what you tried and ask the user to adjust the brief.
 
+## 7.5 Graph persistence — save the craft log
+
+Every canvas you build is a work of craft. Save the graph as JSON so the
+work survives a server restart, browser reload, or session timeout — and so
+the user can `nebula load` it back later to continue or audit.
+
+Save at these points:
+
+1. **After each successful `nebula run`** — the canvas has new outputs
+   worth preserving.
+2. **At turn end, before your final summary** — the final state of this
+   turn's craft.
+
+Path convention: `output/canvas-<session-id>.json`, where `<session-id>` is
+the Hermes session id for this turn (e.g.
+`output/canvas-20260424_094436_7b56da.json`). One file per turn, overwritten
+on each save; the graph itself contains the iteration history (all the
+n1/n3/n5 nodes you kept per §1.5), so one file captures the whole craft log.
+
+Example narration line:
+
+> "Saving the canvas at this checkpoint — `nebula save output/canvas-<session-id>.json`."
+
+If the user asks to resume a past turn, they can `nebula load <file>` to
+restore the graph exactly.
+
 ## 8. Narration — say it BEFORE you do it
 
 Before every meaningful tool call (node creation, run, `vision_analyze`,
