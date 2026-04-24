@@ -152,7 +152,24 @@ Rules:
 
 ## 4. Nebula CLI cookbook
 
-You have the `terminal` tool. Use `nebula` subcommands to drive the canvas:
+You have the `terminal` tool. Use `nebula` subcommands to drive the canvas.
+
+**CRITICAL — ALWAYS at turn start, before touching the canvas:**
+1. Run `nebula nodes` and read the output. It lists every valid
+   `definition_id`. **Node IDs use hyphens, never underscores** —
+   e.g. `text-input` (NOT `text_input`), `gpt-image-2-generate`
+   (NOT `gpt_image_2_generate`), `veo-3` (NOT `veo_3`). If you invent
+   an ID without checking, `nebula create` rejects it and the canvas
+   gets an "Unknown node type" placeholder. Don't guess — copy the
+   exact string from `nebula nodes` output.
+2. Run `nebula graph` (or `nebula context` for a compact view) to see
+   the current canvas state as structured text. **Use this, not
+   `vision_analyze`, for canvas inspection.** Vision is for inspecting
+   GENERATED OUTPUTS (image files, video frames on disk) — never for
+   canvas structure. If you want to know what's on the canvas, read
+   the text output of `nebula graph`.
+
+Commands:
 
 - `nebula nodes` — list available node types
 - `nebula info <node_id>` — full params / IO for one node type
