@@ -95,59 +95,45 @@ body.app-hermes ::selection {
  * TOOLBAR — reskin the existing .toolbar as a Hermes masthead strip
  * ═══════════════════════════════════════════════════════════════════ */
 
+/* Keep the original floating-pill position (fixed, bottom-centered).
+ * Hermes just reskins colors + typography + squares the corners. */
 body.app-hermes .toolbar {
   background: var(--h-ink-2);
   border: 1px solid var(--h-rule-strong);
   border-radius: 0;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
   font-family: 'IBM Plex Mono', monospace;
-  padding: 0;
-  overflow: hidden;
-  position: relative;
+  padding: 4px 0 4px 0;
+  gap: 0;
 }
 
+/* Small DAEDALUS wordmark sits at the left, flush inside the pill —
+ * keeps the eye-catch from the design system without widening the bar. */
 body.app-hermes .toolbar::before {
   content: 'DAEDALUS';
   font-family: 'Cormorant Garamond', serif;
   font-weight: 600;
-  font-size: 18px;
+  font-size: 15px;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--h-parchment);
-  padding: 0 18px;
-  display: inline-flex;
-  align-items: center;
+  padding: 0 14px 0 16px;
+  align-self: center;
   border-right: 1px solid var(--h-rule-soft);
   font-feature-settings: "smcp" on, "liga" on;
-  line-height: 1;
-}
-
-body.app-hermes .toolbar::after {
-  content: 'NEBULA · UNDER DAEDALUS';
-  font-size: 8px;
-  letter-spacing: 0.3em;
-  color: var(--h-parchment-faint);
-  padding: 0 14px;
-  display: inline-flex;
-  align-items: center;
-  border-left: 1px solid var(--h-rule-soft);
-  margin-left: auto;
-  text-transform: uppercase;
   line-height: 1;
 }
 
 body.app-hermes .toolbar__button {
   background: transparent;
   border: none;
-  border-right: 1px solid var(--h-rule-soft);
   color: var(--h-parchment-dim);
   font-family: 'IBM Plex Mono', monospace;
   font-size: 9px;
   letter-spacing: 0.2em;
   text-transform: uppercase;
   border-radius: 0;
-  padding: 0 14px;
-  align-self: stretch;
+  padding: 5px 12px;
   transition: background 120ms cubic-bezier(.2,0,0,1), color 120ms;
 }
 
@@ -159,7 +145,8 @@ body.app-hermes .toolbar__button:hover {
 body.app-hermes .toolbar__divider {
   background: var(--h-rule-soft);
   width: 1px;
-  margin: 0;
+  height: 16px;
+  margin: 0 4px;
 }
 
 /* ═══════════════════════════════════════════════════════════════════
