@@ -562,6 +562,48 @@ async def _emit_and_sync(event: ExecutionEvent) -> None:
     await manager.broadcast(event)
 
 
+def _validate_connect_handles(
+    src_node_id: str, src_port: str, dst_node_id: str, dst_port: str
+) -> None:
+    """Reject a connect() when either handle doesn't exist on its node.
+
+    Raises HTTPException(400). Exists because without this, an agent (or UI)
+    can POST an edge wired to a nonexistent port id — the backend stores it,
+    the graph executes fine (the receiving node just sees no input), but
+    React Flow warns on *every* render, producing thousands of console
+    entries that choke the main thread and freeze the chat panel.
+
+    We check against the node's registered `outputPorts[].id` for the source
+    and `inputPorts[].id` for the target. Universal/dynamic nodes are skipped
+    (their ports are provider-driven and not known up front).
+    """
+    universal_defs = {"openrouter-universal", "replicate-universal", "fal-universal"}
+    for node_id, port, direction, port_key in [
+        (src_node_id, src_port, "source", "outputPorts"),
+        (dst_node_id, dst_port, "target", "inputPorts"),
+    ]:
+        node = cli_graph.nodes.get(node_id)
+        if not node:
+            # Missing-node error is surfaced by cli_graph.connect itself.
+            continue
+        definition_id = node.get("definitionId", "")
+        if definition_id in universal_defs:
+            continue
+        defn = node_registry.get(definition_id)
+        if not defn:
+            continue
+        valid = [p["id"] for p in defn.get(port_key, []) if isinstance(p, dict) and "id" in p]
+        if port not in valid:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Invalid {direction} handle '{port}' on node '{node_id}' "
+                    f"(definition '{definition_id}'). Valid {port_key}: "
+                    f"{valid if valid else '(none)'}"
+                ),
+            )
+
+
 def _valid_param_keys(definition_id: str) -> set[str] | None:
     """Gather the set of param keys declared by a node definition.
 
@@ -700,6 +742,12 @@ async def create_graph_node(body: dict[str, Any]) -> dict:
 
 @app.post("/api/graph/connect")
 async def connect_graph_nodes(body: dict[str, Any]) -> dict:
+    _validate_connect_handles(
+        body.get("source", ""),
+        body.get("sourceHandle", ""),
+        body.get("target", ""),
+        body.get("targetHandle", ""),
+    )
     try:
         edge = cli_graph.connect(
             body["source"], body["sourceHandle"],
@@ -739,6 +787,12 @@ async def create_node_and_connect(body: dict[str, Any]) -> dict:
         src = connect_spec.get("source") if is_target else short_id
         dst = short_id if is_target else connect_spec.get("target")
         try:
+            _validate_connect_handles(
+                src,
+                connect_spec.get("sourceHandle", ""),
+                dst,
+                connect_spec.get("targetHandle", ""),
+            )
             cli_graph.connect(
                 src,
                 connect_spec.get("sourceHandle", ""),
@@ -746,8 +800,16 @@ async def create_node_and_connect(body: dict[str, Any]) -> dict:
                 connect_spec.get("targetHandle", ""),
             )
             connected = True
+        except HTTPException:
+            # Invalid handle — roll back the just-created node so the graph
+            # doesn't end up with a dangling node the caller didn't ask for
+            # standalone. Re-raise so the client sees the handle error.
+            cli_graph.remove_node(short_id)
+            raise
         except ValueError:
-            # Connection failed but node was created — let the caller decide.
+            # Connection failed (e.g. unknown node id in connect_spec) but
+            # node was created — leave the node in place, let the caller
+            # decide.
             connected = False
     else:
         connected = False

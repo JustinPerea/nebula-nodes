@@ -83,6 +83,77 @@ class TestGraphEndpoints:
         })
         assert resp.status_code == 400
 
+    def test_connect_invalid_source_handle_400(self, client):
+        """Real definitions: reject connect calls whose sourceHandle isn't in
+        the source node's outputPorts. Prevents the React Flow render-storm
+        bug where invalid edges warn on every re-render and freeze the panel.
+
+        text-input's only output port is "text"; "value" is a param KEY, not
+        an output. An agent that wires `n1:value -> n2:prompt` should get 400
+        with a message listing the valid port ids."""
+        client.post("/api/graph/node", json={"definitionId": "text-input", "params": {}})
+        client.post("/api/graph/node", json={"definitionId": "gpt-image-2-generate", "params": {}})
+        resp = client.post("/api/graph/connect", json={
+            "source": "n1", "sourceHandle": "value",
+            "target": "n2", "targetHandle": "prompt",
+        })
+        assert resp.status_code == 400
+        msg = resp.json()["detail"]
+        assert "value" in msg
+        assert "outputPorts" in msg
+        # Valid ports should be listed so the agent can retry.
+        assert "text" in msg
+
+    def test_connect_invalid_target_handle_400(self, client):
+        """Same check for the target side — targetHandle must exist in the
+        target node's inputPorts."""
+        client.post("/api/graph/node", json={"definitionId": "text-input", "params": {}})
+        client.post("/api/graph/node", json={"definitionId": "gpt-image-2-generate", "params": {}})
+        resp = client.post("/api/graph/connect", json={
+            "source": "n1", "sourceHandle": "text",
+            "target": "n2", "targetHandle": "nonexistent_port",
+        })
+        assert resp.status_code == 400
+        assert "nonexistent_port" in resp.json()["detail"]
+        assert "inputPorts" in resp.json()["detail"]
+
+    def test_connect_valid_real_handles_200(self, client):
+        """Happy path with real definitions: text-input:text → gpt-image-2:prompt."""
+        client.post("/api/graph/node", json={"definitionId": "text-input", "params": {}})
+        client.post("/api/graph/node", json={"definitionId": "gpt-image-2-generate", "params": {}})
+        resp = client.post("/api/graph/connect", json={
+            "source": "n1", "sourceHandle": "text",
+            "target": "n2", "targetHandle": "prompt",
+        })
+        assert resp.status_code == 200
+
+    def test_node_and_connect_invalid_handle_rolls_back_new_node(self, client):
+        """node-and-connect creates the new node FIRST, then connects. If the
+        handle is invalid, the new node should NOT survive — otherwise the
+        endpoint leaves a dangling node the caller didn't ask for standalone."""
+        # Create an anchor node to connect TO.
+        client.post("/api/graph/node", json={"definitionId": "gpt-image-2-generate", "params": {}})
+        # Try to add a text-input and wire its (nonexistent) "value" port.
+        resp = client.post("/api/graph/node-and-connect", json={
+            "definitionId": "text-input",
+            "params": {},
+            "connect": {
+                "source": "",  # filled in as newNodeIs=source
+                "sourceHandle": "value",  # INVALID — text-input has no "value" output
+                "target": "n1",
+                "targetHandle": "prompt",
+                "newNodeIs": "source",
+            },
+        })
+        assert resp.status_code == 400
+        # Graph should still only have the anchor node — the new text-input
+        # must have been rolled back.
+        graph = client.get("/api/graph").json()
+        defs = [n["definitionId"] for n in graph["nodes"]]
+        assert "text-input" not in defs
+        assert "gpt-image-2-generate" in defs
+        assert len(graph["nodes"]) == 1
+
     def test_update_node_params(self, client):
         client.post("/api/graph/node", json={"definitionId": "node-a", "params": {"x": 1}})
         resp = client.put("/api/graph/node/n1", json={"params": {"x": 2, "y": 3}})
