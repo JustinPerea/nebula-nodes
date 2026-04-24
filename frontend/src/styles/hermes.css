@@ -1,0 +1,643 @@
+/* ═══════════════════════════════════════════════════════════════════
+ * Hermes design system — Daedalus-mode skin
+ *
+ * Activated by adding .app-hermes to <body> (plus .tone-verdant or
+ * .tone-obsidian for the palette variant). Everything here is scoped
+ * under body.app-hermes so Claude mode is completely untouched — no
+ * styles leak when the selected agent is 'claude'.
+ *
+ * Tokens come straight from the Hermes Brand Guidelines export; see
+ * docs/HERMES-SETUP.md for the design-system origin.
+ * ═══════════════════════════════════════════════════════════════════ */
+
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=IBM+Plex+Mono:wght@300;400;500;600&display=swap');
+
+/* ── Palette tokens (scoped to .app-hermes so they don't leak) ───── */
+
+body.app-hermes.tone-verdant {
+  --h-ink:             #0a1612;
+  --h-ink-2:           #0e1c18;
+  --h-ink-3:           #13231e;
+  --h-ink-4:           #1a2b25;
+  --h-parchment:       #f3e6c4;
+  --h-parchment-dim:   #cdbf9c;
+  --h-parchment-faint: #8a826b;
+  --h-rule-soft:       rgba(243, 230, 196, 0.12);
+  --h-rule-strong:     rgba(243, 230, 196, 0.28);
+  --h-cyanotype:       #6ba8d6;
+  --h-cyanotype-deep:  #1e4a6e;
+  --h-verdigris:       #8fb39a;
+  --h-amber:           #e7a84a;
+  --h-coral:           #c58b3a;
+  --h-rust:            #b86b4a;
+}
+
+body.app-hermes.tone-obsidian {
+  --h-ink:             #050505;
+  --h-ink-2:           #0b0b0b;
+  --h-ink-3:           #141414;
+  --h-ink-4:           #1c1c1c;
+  --h-parchment:       #e8e0d0;
+  --h-parchment-dim:   #a89e88;
+  --h-parchment-faint: #6e6658;
+  --h-rule-soft:       rgba(232, 224, 208, 0.10);
+  --h-rule-strong:     rgba(232, 224, 208, 0.25);
+  --h-cyanotype:       #b89a5a;
+  --h-cyanotype-deep:  #6e5020;
+  --h-verdigris:       #8a8466;
+  --h-amber:           #c89858;
+  --h-coral:           #a47a3a;
+  --h-rust:            #966446;
+}
+
+/* Default to verdant if only .app-hermes is set (belt + braces). */
+body.app-hermes:not(.tone-obsidian) {
+  --h-ink:             #0a1612;
+  --h-ink-2:           #0e1c18;
+  --h-ink-3:           #13231e;
+  --h-ink-4:           #1a2b25;
+  --h-parchment:       #f3e6c4;
+  --h-parchment-dim:   #cdbf9c;
+  --h-parchment-faint: #8a826b;
+  --h-rule-soft:       rgba(243, 230, 196, 0.12);
+  --h-rule-strong:     rgba(243, 230, 196, 0.28);
+  --h-cyanotype:       #6ba8d6;
+  --h-cyanotype-deep:  #1e4a6e;
+  --h-verdigris:       #8fb39a;
+  --h-amber:           #e7a84a;
+  --h-coral:           #c58b3a;
+  --h-rust:            #b86b4a;
+}
+
+/* ── Global body palette shift while Hermes is active ─────────────── */
+
+body.app-hermes {
+  background: var(--h-ink);
+  color: var(--h-parchment);
+  font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace;
+}
+
+body.app-hermes #root { background: var(--h-ink); }
+
+body.app-hermes *::-webkit-scrollbar-thumb {
+  background: rgba(243, 230, 196, 0.10);
+}
+body.app-hermes *::-webkit-scrollbar-thumb:hover {
+  background: rgba(243, 230, 196, 0.22);
+}
+
+body.app-hermes ::selection {
+  background: var(--h-parchment);
+  color: var(--h-ink);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+ * TOOLBAR — reskin the existing .toolbar as a Hermes masthead strip
+ * ═══════════════════════════════════════════════════════════════════ */
+
+body.app-hermes .toolbar {
+  background: var(--h-ink-2);
+  border: 1px solid var(--h-rule-strong);
+  border-radius: 0;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  font-family: 'IBM Plex Mono', monospace;
+  padding: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+body.app-hermes .toolbar::before {
+  content: 'DAEDALUS';
+  font-family: 'Cormorant Garamond', serif;
+  font-weight: 600;
+  font-size: 18px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--h-parchment);
+  padding: 0 18px;
+  display: inline-flex;
+  align-items: center;
+  border-right: 1px solid var(--h-rule-soft);
+  font-feature-settings: "smcp" on, "liga" on;
+  line-height: 1;
+}
+
+body.app-hermes .toolbar::after {
+  content: 'NEBULA · UNDER DAEDALUS';
+  font-size: 8px;
+  letter-spacing: 0.3em;
+  color: var(--h-parchment-faint);
+  padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  border-left: 1px solid var(--h-rule-soft);
+  margin-left: auto;
+  text-transform: uppercase;
+  line-height: 1;
+}
+
+body.app-hermes .toolbar__button {
+  background: transparent;
+  border: none;
+  border-right: 1px solid var(--h-rule-soft);
+  color: var(--h-parchment-dim);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  border-radius: 0;
+  padding: 0 14px;
+  align-self: stretch;
+  transition: background 120ms cubic-bezier(.2,0,0,1), color 120ms;
+}
+
+body.app-hermes .toolbar__button:hover {
+  background: var(--h-ink-3);
+  color: var(--h-parchment);
+}
+
+body.app-hermes .toolbar__divider {
+  background: var(--h-rule-soft);
+  width: 1px;
+  margin: 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+ * NODE LIBRARY — reskin as a "registry manuscript"
+ * ═══════════════════════════════════════════════════════════════════ */
+
+body.app-hermes .node-library {
+  background: var(--h-ink-2);
+  border: 1px solid var(--h-rule-strong);
+  border-radius: 0;
+  color: var(--h-parchment);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  font-family: 'IBM Plex Mono', monospace;
+}
+
+body.app-hermes .node-library__header,
+body.app-hermes .node-library__title {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--h-parchment);
+  border-bottom: 1px solid var(--h-rule-soft);
+  font-feature-settings: "smcp" on;
+}
+
+body.app-hermes .node-library__search,
+body.app-hermes .node-library input[type="text"] {
+  background: var(--h-ink);
+  border: 1px solid var(--h-rule-soft);
+  border-radius: 0;
+  color: var(--h-parchment);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+}
+body.app-hermes .node-library__search::placeholder,
+body.app-hermes .node-library input::placeholder {
+  color: var(--h-parchment-faint);
+  font-style: italic;
+}
+body.app-hermes .node-library__search:focus,
+body.app-hermes .node-library input:focus {
+  border-color: var(--h-parchment);
+  outline: none;
+}
+
+body.app-hermes .node-library__category,
+body.app-hermes .node-library__group {
+  border-bottom: 1px solid var(--h-rule-soft);
+}
+
+body.app-hermes .node-library__category-header,
+body.app-hermes .node-library__group-label {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--h-parchment-dim);
+  border-bottom: 1px solid var(--h-rule-soft);
+}
+
+body.app-hermes .node-library__item {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  color: var(--h-parchment-dim);
+  border-radius: 0;
+  letter-spacing: 0.02em;
+}
+body.app-hermes .node-library__item:hover {
+  background: var(--h-ink-3);
+  color: var(--h-parchment);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+ * CHAT PANEL — the star of the skin
+ * ═══════════════════════════════════════════════════════════════════ */
+
+body.app-hermes .chat-panel.chat-panel--agent-daedalus {
+  background: var(--h-ink);
+  border: 1px solid var(--h-rule-soft);
+  border-radius: 0;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.4),
+    0 20px 60px rgba(0, 0, 0, 0.6);
+  color: var(--h-parchment);
+
+  /* Remap the existing chat-accent CSS vars so downstream components
+   * (thinking bubble, approval, textarea focus) inherit Hermes colors
+   * without needing per-class overrides. */
+  --chat-accent:        var(--h-parchment);
+  --chat-accent-bg:     rgba(243, 230, 196, 0.04);
+  --chat-accent-border: rgba(243, 230, 196, 0.25);
+}
+
+/* Aged-paper vignette overlay */
+body.app-hermes .chat-panel.chat-panel--agent-daedalus::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse at 50% 0%,   rgba(107, 168, 214, 0.06), transparent 60%),
+    radial-gradient(ellipse at 50% 100%, rgba(0, 0, 0, 0.40),       transparent 60%);
+  z-index: 1;
+}
+
+/* Header — classical masthead */
+body.app-hermes .chat-panel--agent-daedalus .chat-panel__header {
+  background: var(--h-ink);
+  border-bottom: 1px solid var(--h-rule-strong);
+  padding: 16px 20px 14px;
+  position: relative;
+  z-index: 2;
+}
+
+/* Replace the plain "Chat" title with the DAEDALUS wordmark + sigil */
+body.app-hermes .chat-panel--agent-daedalus .chat-panel__title {
+  font-family: 'Cormorant Garamond', 'Times New Roman', serif;
+  font-weight: 600;
+  font-size: 26px;
+  line-height: 0.95;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--h-parchment);
+  font-feature-settings: "smcp" on, "liga" on;
+  padding-left: 58px;           /* space for the sigil */
+  position: relative;
+  min-height: 46px;
+  display: flex;
+  align-items: center;
+}
+
+/* Hide the runtime "Chat" text — we render via ::after instead so the
+ * same element can carry both the wordmark and the sigil visual. */
+body.app-hermes .chat-panel--agent-daedalus .chat-panel__title {
+  font-size: 0;  /* squash the original text node */
+}
+body.app-hermes .chat-panel--agent-daedalus .chat-panel__title::after {
+  content: 'DAEDALUS';
+  font-size: 26px;
+}
+
+/* Cyanotype sigil portrait */
+body.app-hermes .chat-panel--agent-daedalus .chat-panel__title::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 46px;
+  height: 46px;
+  border: 1px solid var(--h-rule-strong);
+  background-image: url('/hermes/hermes-figure.jpeg');
+  background-size: cover;
+  background-position: center 20%;
+  filter: contrast(1.1) brightness(0.95);
+}
+
+/* Agent selector — classical bracketed frame */
+body.app-hermes .chat-panel--agent-daedalus .chat-panel__agent-selector {
+  display: inline-flex;
+  background: var(--h-ink-2);
+  border: 1px solid var(--h-rule-strong);
+  border-radius: 0;
+  padding: 0;
+  gap: 0;
+  margin: 10px 0 6px;
+}
+body.app-hermes .chat-panel--agent-daedalus .chat-panel__agent-btn,
+body.app-hermes .chat-panel--agent-daedalus .chat-panel__agent-btn--active {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  padding: 6px 14px;
+  border: none;
+  border-right: 1px solid var(--h-rule-soft);
+  border-radius: 0;
+  background: transparent;
+  color: var(--h-parchment-dim);
+  cursor: pointer;
+  font-weight: 400;
+}
+body.app-hermes .chat-panel--agent-daedalus .chat-panel__agent-btn:last-child,
+body.app-hermes .chat-panel--agent-daedalus .chat-panel__agent-btn--active:last-child {
+  border-right: none;
+}
+body.app-hermes .chat-panel--agent-daedalus .chat-panel__agent-btn:hover {
+  color: var(--h-parchment);
+}
+body.app-hermes .chat-panel--agent-daedalus .chat-panel__agent-btn--active {
+  background: var(--h-parchment);
+  color: var(--h-ink);
+  font-weight: 600;
+}
+
+/* Autonomy toggle — matches the agent selector vocabulary */
+body.app-hermes .chat-panel--agent-daedalus .chat-panel__autonomy-toggle {
+  display: inline-flex;
+  background: transparent;
+  border: 1px solid var(--h-rule-soft);
+  border-radius: 0;
+  padding: 0;
+  gap: 0;
+  margin-left: 8px;
+}
+body.app-hermes .chat-panel--agent-daedalus .chat-panel__autonomy-btn,
+body.app-hermes .chat-panel--agent-daedalus .chat-panel__autonomy-btn--active {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  padding: 5px 10px;
+  border: none;
+  border-right: 1px solid var(--h-rule-soft);
+  border-radius: 0;
+  background: transparent;
+  color: var(--h-parchment-faint);
+  cursor: pointer;
+}
+body.app-hermes .chat-panel--agent-daedalus .chat-panel__autonomy-btn:last-child,
+body.app-hermes .chat-panel--agent-daedalus .chat-panel__autonomy-btn--active:last-child {
+  border-right: none;
+}
+body.app-hermes .chat-panel--agent-daedalus .chat-panel__autonomy-btn:hover {
+  color: var(--h-parchment-dim);
+}
+body.app-hermes .chat-panel--agent-daedalus .chat-panel__autonomy-btn--active {
+  color: var(--h-parchment);
+  background: var(--h-ink-3);
+}
+
+/* Tone toggle (new control, rendered by ChatPanel.tsx when Daedalus active) */
+body.app-hermes .chat-panel--agent-daedalus .chat-panel__tone-toggle {
+  display: inline-flex;
+  background: transparent;
+  border: 1px solid var(--h-rule-soft);
+  border-radius: 0;
+  margin-left: 8px;
+}
+body.app-hermes .chat-panel--agent-daedalus .chat-panel__tone-btn,
+body.app-hermes .chat-panel--agent-daedalus .chat-panel__tone-btn--active {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  padding: 5px 10px;
+  border: none;
+  border-right: 1px solid var(--h-rule-soft);
+  border-radius: 0;
+  background: transparent;
+  color: var(--h-parchment-faint);
+  cursor: pointer;
+}
+body.app-hermes .chat-panel--agent-daedalus .chat-panel__tone-btn:last-child,
+body.app-hermes .chat-panel--agent-daedalus .chat-panel__tone-btn--active:last-child {
+  border-right: none;
+}
+body.app-hermes .chat-panel--agent-daedalus .chat-panel__tone-btn:hover {
+  color: var(--h-parchment-dim);
+}
+body.app-hermes .chat-panel--agent-daedalus .chat-panel__tone-btn--active {
+  color: var(--h-parchment);
+  background: var(--h-ink-3);
+}
+
+/* Meta line */
+body.app-hermes .chat-panel--agent-daedalus .chat-panel__meta {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: var(--h-parchment-faint);
+  margin-top: 6px;
+}
+body.app-hermes .chat-panel--agent-daedalus .chat-panel__session {
+  color: var(--h-cyanotype);
+}
+
+/* Messages area — parchment vellum */
+body.app-hermes .chat-panel--agent-daedalus .chat-panel__messages {
+  padding: 18px 20px 8px;
+  background:
+    radial-gradient(ellipse at top, rgba(107, 168, 214, 0.04), transparent 50%),
+    var(--h-ink);
+  position: relative;
+  z-index: 2;
+}
+
+/* User bubble — framed manuscript block with "YOU" eyebrow */
+body.app-hermes .chat-panel--agent-daedalus .chat__bubble--user,
+body.app-hermes .chat-panel--agent-daedalus .chat-panel__bubble--user {
+  background: transparent;
+  border: 1px solid var(--h-rule-strong);
+  border-left: 2px solid var(--h-parchment);
+  border-radius: 0;
+  color: var(--h-parchment);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px;
+  line-height: 1.55;
+  padding: 10px 14px;
+  max-width: 90%;
+  position: relative;
+}
+body.app-hermes .chat-panel--agent-daedalus .chat__bubble--user::before,
+body.app-hermes .chat-panel--agent-daedalus .chat-panel__bubble--user::before {
+  content: 'YOU';
+  position: absolute;
+  top: -8px;
+  left: 10px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 8px;
+  letter-spacing: 0.25em;
+  color: var(--h-parchment-faint);
+  background: var(--h-ink);
+  padding: 0 6px;
+}
+
+/* Assistant bubble — parchment prose */
+body.app-hermes .chat-panel--agent-daedalus .chat__bubble--assistant,
+body.app-hermes .chat-panel--agent-daedalus .chat-panel__bubble--assistant {
+  padding: 0;
+  max-width: 100%;
+  color: var(--h-parchment);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px;
+  line-height: 1.65;
+  background: transparent;
+}
+
+body.app-hermes .chat-panel--agent-daedalus .chat__bubble--assistant code,
+body.app-hermes .chat-panel--agent-daedalus .chat-panel__bubble--assistant code {
+  background: var(--h-ink-3);
+  border: 1px solid var(--h-rule-soft);
+  padding: 1px 6px;
+  font-size: 11px;
+  color: var(--h-cyanotype);
+  border-radius: 0;
+}
+
+/* Thinking bubble — oracle scroll */
+body.app-hermes .chat-panel--agent-daedalus .chat-panel__thinking {
+  border: 1px solid var(--h-rule-strong);
+  border-radius: 0;
+  background: var(--h-ink-2);
+  box-shadow: none;
+}
+body.app-hermes .chat-panel--agent-daedalus .chat-panel__thinking--completed {
+  border-color: var(--h-rule-soft);
+  opacity: 0.7;
+}
+body.app-hermes .chat-panel--agent-daedalus .chat-panel__thinking-header {
+  padding: 8px 12px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--h-parchment-dim);
+}
+body.app-hermes .chat-panel--agent-daedalus .chat-panel__thinking-header:hover {
+  background: rgba(243, 230, 196, 0.03);
+}
+body.app-hermes .chat-panel--agent-daedalus .chat-panel__thinking-indicator {
+  color: var(--h-cyanotype);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+}
+body.app-hermes .chat-panel--agent-daedalus .chat-panel__thinking-label {
+  color: var(--h-parchment);
+  font-weight: 500;
+  font-size: 10px;
+  letter-spacing: 0.15em;
+}
+body.app-hermes .chat-panel--agent-daedalus .chat-panel__thinking-caret {
+  color: var(--h-parchment-faint);
+}
+body.app-hermes .chat-panel--agent-daedalus .chat-panel__thinking-body {
+  border-top: 1px solid var(--h-rule-soft);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10.5px;
+  color: var(--h-parchment-dim);
+  padding: 8px 12px 10px;
+  background: var(--h-ink);
+}
+body.app-hermes .chat-panel--agent-daedalus .chat-panel__thinking-line {
+  color: var(--h-parchment-faint);
+  padding: 3px 0 3px 14px;
+  position: relative;
+}
+body.app-hermes .chat-panel--agent-daedalus .chat-panel__thinking-line::before {
+  content: '›';
+  position: absolute;
+  left: 0;
+  top: 3px;
+  color: var(--h-cyanotype);
+  opacity: 0.6;
+}
+body.app-hermes .chat-panel--agent-daedalus .chat-panel__thinking-line:last-child {
+  color: var(--h-parchment);
+}
+body.app-hermes .chat-panel--agent-daedalus .chat-panel__thinking-line:last-child::before {
+  opacity: 1;
+  animation: hermes-cursor 0.8s steps(2) infinite;
+}
+@keyframes hermes-cursor {
+  50% { opacity: 0; }
+}
+
+/* Approval — ornate decree */
+body.app-hermes .chat-panel--agent-daedalus .chat-panel__approval {
+  border: 1px solid var(--h-amber);
+  border-radius: 0;
+  background: rgba(231, 168, 74, 0.05);
+  padding: 0;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11.5px;
+}
+body.app-hermes .chat-panel--agent-daedalus .chat-panel__approval-summary {
+  padding: 10px 14px 12px;
+  color: var(--h-parchment);
+  border-bottom: 1px solid rgba(231, 168, 74, 0.25);
+}
+body.app-hermes .chat-panel--agent-daedalus .chat-panel__approval-summary strong {
+  display: block;
+  font-size: 9px;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--h-amber);
+  margin-bottom: 6px;
+  font-weight: 500;
+}
+
+/* Input — classical composition frame */
+body.app-hermes .chat-panel--agent-daedalus .chat-panel__input {
+  background: var(--h-ink-2);
+  border-top: 1px solid var(--h-rule-strong);
+  padding: 14px;
+  position: relative;
+  z-index: 2;
+}
+body.app-hermes .chat-panel--agent-daedalus .chat-panel__textarea,
+body.app-hermes .chat-panel--agent-daedalus textarea {
+  background: var(--h-ink);
+  border: 1px solid var(--h-rule-strong);
+  border-radius: 0;
+  color: var(--h-parchment);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px;
+  padding: 10px 12px;
+  line-height: 1.5;
+  transition: border-color 120ms ease;
+}
+body.app-hermes .chat-panel--agent-daedalus .chat-panel__textarea::placeholder,
+body.app-hermes .chat-panel--agent-daedalus textarea::placeholder {
+  color: var(--h-parchment-faint);
+  font-style: italic;
+}
+body.app-hermes .chat-panel--agent-daedalus .chat-panel__textarea:focus,
+body.app-hermes .chat-panel--agent-daedalus textarea:focus {
+  border-color: var(--h-parchment);
+  outline: none;
+}
+body.app-hermes .chat-panel--agent-daedalus .chat-panel__send {
+  background: var(--h-parchment);
+  color: var(--h-ink);
+  border: none;
+  border-radius: 0;
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 0 18px;
+}
+body.app-hermes .chat-panel--agent-daedalus .chat-panel__send:hover {
+  background: #fff6dc;
+}
+body.app-hermes .chat-panel--agent-daedalus .chat-panel__send:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}

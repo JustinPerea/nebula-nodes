@@ -2,6 +2,19 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
 import '../../styles/panels.css';
+import '../../styles/hermes.css';
+
+// Daedalus mode palette. Persisted so the user's choice survives reloads.
+type HermesTone = 'verdant' | 'obsidian';
+const HERMES_TONE_KEY = 'nebula:hermes-tone';
+function loadHermesTone(): HermesTone {
+  try {
+    const v = window.localStorage.getItem(HERMES_TONE_KEY);
+    return v === 'obsidian' ? 'obsidian' : 'verdant';
+  } catch {
+    return 'verdant';
+  }
+}
 
 type ToolCall = {
   kind: 'tool';
@@ -276,6 +289,30 @@ export function ChatPanel() {
   const [model, setModel] = useState<string>(DEFAULT_MODEL);
   const [agent, setAgent] = useState<'claude' | 'daedalus'>('claude');
   const [autonomy, setAutonomy] = useState<'auto' | 'step'>('auto');
+  const [hermesTone, setHermesTone] = useState<HermesTone>(loadHermesTone);
+
+  // Drive the Hermes skin off the selected agent. While Daedalus is active,
+  // .app-hermes + the current tone class live on <body> so CSS scoped under
+  // them can reskin every panel (chat, toolbar, node library) in lockstep.
+  // When Claude is selected we strip both classes — zero leakage.
+  useEffect(() => {
+    const body = document.body;
+    if (agent === 'daedalus') {
+      body.classList.add('app-hermes');
+      body.classList.toggle('tone-verdant', hermesTone === 'verdant');
+      body.classList.toggle('tone-obsidian', hermesTone === 'obsidian');
+    } else {
+      body.classList.remove('app-hermes', 'tone-verdant', 'tone-obsidian');
+    }
+    return () => {
+      body.classList.remove('app-hermes', 'tone-verdant', 'tone-obsidian');
+    };
+  }, [agent, hermesTone]);
+
+  const changeHermesTone = useCallback((next: HermesTone) => {
+    setHermesTone(next);
+    try { window.localStorage.setItem(HERMES_TONE_KEY, next); } catch {}
+  }, []);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -977,6 +1014,36 @@ export function ChatPanel() {
                 title="Step Approval: Daedalus pauses before expensive operations"
               >
                 Step ⏸
+              </button>
+            </div>
+          )}
+          {agent === 'daedalus' && (
+            <div
+              className="chat-panel__tone-toggle"
+              onMouseDown={(e) => e.stopPropagation()}
+              title="Daedalus palette: Verdant (deep green-black) or Obsidian (pure black + muted gold)"
+            >
+              <button
+                type="button"
+                className={
+                  hermesTone === 'verdant'
+                    ? 'chat-panel__tone-btn--active'
+                    : 'chat-panel__tone-btn'
+                }
+                onClick={() => changeHermesTone('verdant')}
+              >
+                Verdant
+              </button>
+              <button
+                type="button"
+                className={
+                  hermesTone === 'obsidian'
+                    ? 'chat-panel__tone-btn--active'
+                    : 'chat-panel__tone-btn'
+                }
+                onClick={() => changeHermesTone('obsidian')}
+              >
+                Obsidian
               </button>
             </div>
           )}
