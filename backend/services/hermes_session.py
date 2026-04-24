@@ -204,6 +204,11 @@ async def run_hermes(
     # `thinking` events while stdout is still buffering.
     thinking_queue: asyncio.Queue[str] = asyncio.Queue()
     stop_tail = asyncio.Event()
+    # Prime the queue with an immediate heartbeat so the thinking box appears
+    # within the first second — the log tailer's default 5s quiet threshold
+    # would otherwise leave the user staring at a blank panel while Hermes
+    # boots up. Seen during live dogfood: "I can't see its thinking."
+    thinking_queue.put_nowait("starting...")
     tail_task = asyncio.create_task(
         _tail_log(log_start_offset, stop_tail, thinking_queue, started_at)
     )
