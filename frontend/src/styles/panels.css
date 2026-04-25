@@ -1413,6 +1413,11 @@
   font-size: 12px;
   overflow: hidden;
   box-shadow: 0 0 0 1px var(--chat-accent-border);
+  /* The messages container is a flex column. With overflow:hidden above,
+   * thinking bubbles would otherwise be shrunk to their border (2px) once
+   * the list outgrows the panel — flex children default to flex-shrink:1.
+   * Pin shrink to 0 so the parent scrolls instead. */
+  flex-shrink: 0;
 }
 
 .chat-panel__thinking--completed {
