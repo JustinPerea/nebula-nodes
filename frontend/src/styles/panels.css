@@ -144,6 +144,27 @@
 
 .panel__item:active { cursor: grabbing; }
 
+.inspector__node-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.inspector__node-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.inspector__node-name {
+  flex: 1;
+  color: #eee;
+  font-weight: 500;
+  font-size: 13px;
+}
+
 .inspector__section { margin-bottom: 12px; }
 
 .inspector__label {
@@ -927,12 +948,14 @@
 .chat__bubble--assistant {
   background: #1e1e1e;
   border: 1px solid #2a2a2a;
+  border-left: 3px solid var(--chat-accent);
   color: #ccc;
   align-self: flex-start;
   max-width: 100%;
   display: flex;
   flex-direction: column;
   gap: 6px;
+  padding-left: 10px;
 }
 
 .chat__text {
@@ -1276,4 +1299,234 @@
   padding: 4px 8px;
   background: rgba(255, 210, 122, 0.08);
   border-top: 1px solid rgba(255, 210, 122, 0.15);
+}
+
+.chat-panel__agent-selector {
+  display: inline-flex;
+  gap: 2px;
+  margin: 2px 0 4px;
+  padding: 2px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.chat-panel__agent-btn,
+.chat-panel__agent-btn--active {
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  border: none;
+  cursor: pointer;
+  background: transparent;
+  color: inherit;
+}
+
+.chat-panel__agent-btn--active {
+  background: var(--chat-accent, rgba(255, 255, 255, 0.15));
+  color: white;
+  font-weight: 600;
+}
+
+.chat-panel__autonomy-toggle {
+  display: inline-flex;
+  gap: 2px;
+  margin-right: 8px;
+  padding: 2px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.chat-panel__autonomy-btn,
+.chat-panel__autonomy-btn--active {
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  border: none;
+  cursor: pointer;
+  background: transparent;
+  color: inherit;
+}
+
+.chat-panel__autonomy-btn--active {
+  background: var(--chat-accent, rgba(255, 255, 255, 0.15));
+  color: white;
+  font-weight: 600;
+}
+
+.chat-panel__approval {
+  margin: 8px 0;
+  padding: 12px;
+  border: 1px solid var(--chat-accent-border, rgba(74, 124, 89, 0.4));
+  border-radius: 8px;
+  background: var(--chat-accent-bg, rgba(74, 124, 89, 0.08));
+  font-size: 13px;
+}
+
+.chat-panel__approval-summary,
+.chat-panel__approval-plan,
+.chat-panel__approval-cost {
+  margin-bottom: 6px;
+}
+
+.chat-panel__approval-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.chat-panel__approval-btn {
+  padding: 6px 14px;
+  border-radius: 4px;
+  border: none;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.chat-panel__approval-btn--approve {
+  background: var(--chat-accent, #4a7c59); /* verdigris */
+  color: white;
+}
+
+.chat-panel__approval-btn--reject {
+  background: rgba(255, 255, 255, 0.1);
+  color: inherit;
+}
+
+.chat-panel__approval-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.chat-panel__system-line {
+  margin: 4px 0;
+  padding: 4px 8px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+  font-style: italic;
+}
+
+/* Per-agent accent palette. --chat-accent drives the agent-selector active
+ * state, autonomy-toggle active state, approval-bubble border/background,
+ * and the Approve button. Swaps based on the chat-panel--agent-* modifier
+ * class on the panel root. */
+.chat-panel--agent-claude {
+  --chat-accent: #7c6bef; /* indigo */
+  --chat-accent-bg: rgba(124, 107, 239, 0.08);
+  --chat-accent-border: rgba(124, 107, 239, 0.4);
+}
+
+.chat-panel--agent-daedalus {
+  --chat-accent: #4a7c59; /* verdigris — pale green of patinated bronze */
+  --chat-accent-bg: rgba(74, 124, 89, 0.08);
+  --chat-accent-border: rgba(74, 124, 89, 0.4);
+}
+
+/* Thinking-progress stream (Daedalus log tail + heartbeats).
+ * One bubble per turn; collapsible; auto-scrolls to newest line.
+ * While ACTIVE the border is thicker + more opaque so the user can see
+ * Daedalus is working. Completed bubbles shrink back to subtle. */
+.chat-panel__thinking {
+  margin: 4px 0 8px;
+  padding: 0;
+  border: 2px solid var(--chat-accent);
+  border-radius: 6px;
+  background: var(--chat-accent-bg);
+  font-size: 12px;
+  overflow: hidden;
+  box-shadow: 0 0 0 1px var(--chat-accent-border);
+  /* The messages container is a flex column. With overflow:hidden above,
+   * thinking bubbles would otherwise be shrunk to their border (2px) once
+   * the list outgrows the panel — flex children default to flex-shrink:1.
+   * Pin shrink to 0 so the parent scrolls instead. */
+  flex-shrink: 0;
+}
+
+.chat-panel__thinking--completed {
+  opacity: 0.78;
+  border-width: 1px;
+  border-color: var(--chat-accent-border);
+  box-shadow: none;
+  transition: opacity 140ms ease;
+}
+
+.chat-panel__thinking--completed:hover {
+  opacity: 1;
+}
+
+@keyframes chat-thinking-pulse {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 1; }
+}
+
+.chat-panel__thinking-header {
+  width: 100%;
+  padding: 6px 10px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: inherit;
+  font-size: 12px;
+  font-family: inherit;
+  text-align: left;
+}
+
+.chat-panel__thinking-header:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.chat-panel__thinking-indicator {
+  font-family: monospace;
+  opacity: 0.8;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--chat-accent);
+}
+
+/* Pulse the indicator while ACTIVE so the user can see the box is live.
+ * The completed modifier on the parent stops the animation (no selector
+ * under --completed includes .chat-panel__thinking-indicator). */
+.chat-panel__thinking:not(.chat-panel__thinking--completed)
+  .chat-panel__thinking-indicator {
+  animation: chat-thinking-pulse 1.4s ease-in-out infinite;
+}
+
+.chat-panel__thinking-label {
+  flex: 1;
+  font-style: normal;
+  opacity: 1;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--chat-accent);
+}
+
+.chat-panel__thinking--completed .chat-panel__thinking-label {
+  font-weight: 500;
+  opacity: 0.75;
+}
+
+.chat-panel__thinking-caret {
+  opacity: 0.6;
+  font-size: 10px;
+}
+
+.chat-panel__thinking-body {
+  max-height: 180px;
+  overflow-y: auto;
+  padding: 4px 12px 8px;
+  border-top: 1px solid var(--chat-accent-border);
+  font-family: 'SFMono-Regular', Menlo, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.chat-panel__thinking-line {
+  padding: 2px 0;
+  color: rgba(230, 230, 230, 0.75);
+}
+
+.chat-panel__thinking-line:last-child {
+  color: inherit; /* brighten most recent line */
 }

@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 import asyncio
+import difflib
 import hashlib
 import json
+import os
+import re
 from pathlib import Path
 from typing import Any
 
 from uuid import uuid4
 
-from fastapi import FastAPI, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Form, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -23,13 +26,35 @@ from services.cli_graph import CLIGraph
 from services.output import OUTPUT_ROOT
 from services.cache import ExecutionCache
 from services.chat_session import run_claude
+from services.chat_actions import publish_action
 from routes.openrouter_proxy import router as openrouter_router
 from routes.replicate_proxy import router as replicate_router
 from routes.fal_proxy import router as fal_router
+from routes.nous_proxy import router as nous_router
 
 execution_cache = ExecutionCache(ttl=3600)
 node_registry = NodeRegistry()
-cli_graph = CLIGraph()
+
+# Persist the CLI graph to ~/.nebula/state.json on every mutation and reload
+# it on boot. Survives uvicorn restart so a crash or `kill` no longer wipes
+# the canvas. Per-user state dir keeps different projects on the same machine
+# isolated; override with NEBULA_STATE_DIR if you need a project-scoped file.
+_STATE_DIR = Path(os.environ.get("NEBULA_STATE_DIR", Path.home() / ".nebula"))
+try:
+    _STATE_DIR.mkdir(parents=True, exist_ok=True)
+except Exception as exc:
+    print(f"[main] cannot create state dir {_STATE_DIR}: {exc} — persistence disabled", flush=True)
+    _STATE_PATH: Path | None = None
+else:
+    _STATE_PATH = _STATE_DIR / "state.json"
+
+cli_graph = CLIGraph(persist_path=_STATE_PATH)
+if _STATE_PATH is not None and _STATE_PATH.exists():
+    try:
+        cli_graph.load(_STATE_PATH)
+        print(f"[main] restored graph from {_STATE_PATH} — {len(cli_graph.nodes)} nodes, {len(cli_graph.edges)} edges", flush=True)
+    except Exception as exc:
+        print(f"[main] failed to restore graph from {_STATE_PATH}: {exc} — starting fresh", flush=True)
 
 app = FastAPI(title="Nebula Node Backend", version="0.1.0")
 
@@ -47,6 +72,115 @@ OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
 
 CHAT_UPLOADS_DIR = OUTPUT_ROOT / "chat-uploads"
 CHAT_UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _restore_zip_bundle(zip_bytes: bytes) -> dict[str, str]:
+    """Extract a frontend-produced .nebula.zip (from Save) into a fresh
+    output/<timestamp>/restored-<id>/ directory. Returns a mapping of the
+    original asset path inside the zip (without the 'assets/' prefix) to
+    the URL under which the restored file is served.
+
+    A zip entry '<path>' at 'assets/<path>' is extracted to
+    OUTPUT_ROOT / <timestamp> / restored-<id> / <path>. Path-traversal
+    attempts ('..') are skipped silently — the caller can't escape
+    OUTPUT_ROOT even with a hostile zip.
+    """
+    import io
+    import zipfile
+    from datetime import datetime, timezone
+    from uuid import uuid4
+
+    try:
+        zf = zipfile.ZipFile(io.BytesIO(zip_bytes))
+    except zipfile.BadZipFile as exc:
+        raise HTTPException(status_code=400, detail=f"Not a valid zip bundle: {exc}")
+
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H-%M-%S")
+    restore_dir = OUTPUT_ROOT / timestamp / f"restored-{uuid4().hex[:8]}"
+    restore_dir.mkdir(parents=True, exist_ok=True)
+    restore_root = restore_dir.resolve()
+
+    url_mapping: dict[str, str] = {}
+    rel_prefix = f"{timestamp}/{restore_dir.name}"
+
+    for member in zf.namelist():
+        # Only restore entries under the 'assets/' prefix the frontend uses.
+        if not member.startswith("assets/") or member.endswith("/"):
+            continue
+        inner_path = member[len("assets/"):]
+        # Reject path traversal — '..' segments or absolute-looking paths.
+        if ".." in inner_path.split("/") or inner_path.startswith("/"):
+            continue
+        dest = (restore_dir / inner_path).resolve()
+        try:
+            dest.relative_to(restore_root)
+        except ValueError:
+            # Sneaked out of restore_dir via symlink-style trickery — skip.
+            continue
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        with zf.open(member) as src, dest.open("wb") as out:
+            out.write(src.read())
+        url_mapping[inner_path] = f"/api/outputs/{rel_prefix}/{inner_path}"
+
+    return url_mapping
+
+
+_OUTPUT_DIR_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}$")
+
+
+@app.post("/api/outputs/archive")
+async def archive_outputs(older_than_days: int = 30) -> dict:
+    """Move `output/YYYY-MM-DD_*` directories older than `older_than_days`
+    to `output/.archive/`. Explicit-only — the backend NEVER runs this on
+    its own. Nothing is deleted; archived directories can be moved back
+    manually if needed.
+
+    Only directories matching the canonical timestamp pattern are considered.
+    chat-uploads, .archive, restored-* subfolders, and any ad-hoc directory
+    are left untouched regardless of age."""
+    import shutil
+    import time
+
+    if older_than_days < 0:
+        raise HTTPException(status_code=400, detail="older_than_days must be >= 0")
+
+    cutoff = time.time() - older_than_days * 86400
+    archive_root = OUTPUT_ROOT / ".archive"
+    archive_root.mkdir(parents=True, exist_ok=True)
+    archived: list[str] = []
+
+    for entry in OUTPUT_ROOT.iterdir():
+        if not entry.is_dir():
+            continue
+        if not _OUTPUT_DIR_PATTERN.match(entry.name):
+            continue  # chat-uploads, .archive, restored-*, etc. never archived
+        try:
+            if entry.stat().st_mtime > cutoff:
+                continue
+        except OSError:
+            continue
+        dest = archive_root / entry.name
+        if dest.exists():
+            # Don't clobber an existing archive slot — append a uuid suffix.
+            from uuid import uuid4
+            dest = archive_root / f"{entry.name}-{uuid4().hex[:6]}"
+        shutil.move(str(entry), str(dest))
+        archived.append(entry.name)
+
+    return {"archived": archived, "archive_dir": str(archive_root)}
+
+
+@app.post("/api/outputs/restore")
+async def restore_outputs(request: Request) -> dict:
+    """Accept a .nebula.zip body, extract assets into a fresh output/
+    subdirectory, and return the old-path → served-URL mapping. The frontend
+    uses the mapping to rewrite graph JSON so loaded nodes point at the
+    restored files instead of the vanished originals."""
+    body = await request.body()
+    if not body:
+        raise HTTPException(status_code=400, detail="Empty request body")
+    url_mapping = _restore_zip_bundle(body)
+    return {"urlMapping": url_mapping}
 
 _SUPPORTED_IMAGE_TYPES = {
     b"\x89PNG\r\n\x1a\n": ("image/png", ".png"),
@@ -76,6 +210,7 @@ def _sniff_image_type(data: bytes) -> tuple[str, str] | None:
 app.include_router(openrouter_router)
 app.include_router(replicate_router)
 app.include_router(fal_router)
+app.include_router(nous_router)
 
 
 @app.post("/api/uploads")
@@ -257,22 +392,80 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
 
 @app.websocket("/ws/chat")
 async def chat_websocket(websocket: WebSocket) -> None:
-    """Chat WebSocket — one message per turn, streams claude -p output.
+    """Chat WebSocket — one message per turn, streams agent output.
 
-    Client sends: {type: "send", message: str, sessionId: str|null, model: str}
-    Server sends: session | text | tool_use | tool_result | result | error | done
+    Client sends: {
+        type: "send",
+        message: str,
+        sessionId: str|null,
+        model: str,
+        agent: "claude" | "daedalus" (default "claude"),
+        autonomy: "auto" | "step" (default "auto", daedalus-only)
+    }
+    Server sends events matching AGENT_RUNNERS' event contract.
     """
+    from services.chat_session import AGENT_RUNNERS
+    from services.chat_actions import register_action_handler, unregister_action_handler
+
     await websocket.accept()
     current_task: asyncio.Task[None] | None = None
 
-    async def stream_response(message: str, session_id: str | None, model: str) -> None:
+    async def stream_response(
+        message: str,
+        session_id: str | None,
+        model: str,
+        agent: str,
+        autonomy: str,
+        provider: str | None,
+    ) -> None:
+        # Single outbound queue so every send path (agent events + canvas-
+        # action events from the graph API) is serialized through one drainer
+        # task — WebSocket.send_text is not safe to call from two tasks at
+        # once.
+        outbound: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
+
+        def enqueue(event: dict[str, Any]) -> None:
+            outbound.put_nowait(event)
+
+        async def drain() -> None:
+            while True:
+                event = await outbound.get()
+                if event is None:
+                    return
+                try:
+                    await websocket.send_text(json.dumps(event))
+                except Exception:
+                    return
+
+        drainer = asyncio.create_task(drain())
+        # Graph mutation routes publish thinking events via chat_actions —
+        # register the enqueuer so they flow through the same outbound queue
+        # as the agent's own events.
+        register_action_handler(enqueue)
+
         try:
-            async for event in run_claude(message, session_id, model):
-                await websocket.send_text(json.dumps(event))
-        except Exception as exc:
+            runner = AGENT_RUNNERS.get(agent)
+            if runner is None:
+                enqueue({
+                    "type": "error",
+                    "message": f"Unknown agent '{agent}'. Valid: {sorted(AGENT_RUNNERS.keys())}",
+                })
+                enqueue({"type": "done"})
+                return
+
             try:
-                await websocket.send_text(json.dumps({"type": "error", "message": str(exc)}))
-                await websocket.send_text(json.dumps({"type": "done"}))
+                agen = runner(message, session_id, model, autonomy, provider=provider)
+                async for event in agen:
+                    enqueue(event)
+            except Exception as exc:
+                enqueue({"type": "error", "message": str(exc)})
+                enqueue({"type": "done"})
+        finally:
+            unregister_action_handler()
+            # Sentinel stops the drainer; wait for it so remaining events flush.
+            outbound.put_nowait(None)
+            try:
+                await drainer
             except Exception:
                 pass
 
@@ -295,14 +488,20 @@ async def chat_websocket(websocket: WebSocket) -> None:
 
             user_message = payload.get("message", "")
             session_id = payload.get("sessionId") or None
-            model = payload.get("model") or "sonnet"
+            model = payload.get("model") or "claude-sonnet-4-6"
+            agent = payload.get("agent") or "claude"
+            autonomy = payload.get("autonomy") or "auto"
+            # Optional per-turn provider override (e.g. "nous" / "openrouter").
+            # When omitted, the runner falls back to its default provider.
+            provider_raw = payload.get("provider")
+            provider = str(provider_raw) if provider_raw else None
             if not user_message.strip():
                 continue
 
             if current_task and not current_task.done():
                 current_task.cancel()
             current_task = asyncio.create_task(
-                stream_response(user_message, session_id, model)
+                stream_response(user_message, session_id, model, agent, autonomy, provider)
             )
     except WebSocketDisconnect:
         if current_task and not current_task.done():
@@ -460,11 +659,37 @@ async def list_nodes() -> dict:
     return {"nodes": nodes_list, "categories": categories}
 
 
+def _suggest_node_ids(query: str, all_ids: list[str]) -> list[str]:
+    """Find candidate definition ids for a failed `nebula info` lookup.
+
+    Prefix match first (catches family names: `gpt-image-2` → four variants);
+    falls back to difflib close matches for typos. Returns [] if nothing is
+    close enough — callers should skip the 'Did you mean:' block in that case
+    rather than pad the 404 with noise.
+    """
+    prefix = sorted(nid for nid in all_ids if nid.startswith(query) and nid != query)
+    if prefix:
+        return prefix
+    return difflib.get_close_matches(query, all_ids, n=5, cutoff=0.6)
+
+
 @app.get("/api/nodes/{node_id}")
 async def get_node(node_id: str) -> dict:
     node = node_registry.get(node_id)
     if node is None:
-        raise HTTPException(status_code=404, detail=f"Node '{node_id}' not found")
+        all_nodes = node_registry.get_all()
+        suggestions = _suggest_node_ids(node_id, list(all_nodes.keys()))
+        if suggestions:
+            lines = [f"Node '{node_id}' not found. Did you mean:"]
+            for nid in suggestions:
+                meta = all_nodes.get(nid, {})
+                display = meta.get("displayName", "")
+                category = meta.get("category", "")
+                lines.append(f"  - {nid:32s} {display:24s} {category}")
+            detail = "\n".join(lines)
+        else:
+            detail = f"Node '{node_id}' not found"
+        raise HTTPException(status_code=404, detail=detail)
     return node
 
 
@@ -502,6 +727,53 @@ async def _emit_and_sync(event: ExecutionEvent) -> None:
     await manager.broadcast(event)
 
 
+def _validate_connect_handles(
+    src_node_id: str, src_port: str, dst_node_id: str, dst_port: str
+) -> None:
+    """Reject a connect() when either handle doesn't exist on its node.
+
+    Raises HTTPException(400). Exists because without this, an agent (or UI)
+    can POST an edge wired to a nonexistent port id — the backend stores it,
+    the graph executes fine (the receiving node just sees no input), but
+    React Flow warns on *every* render, producing thousands of console
+    entries that choke the main thread and freeze the chat panel.
+
+    We check against the node's registered `outputPorts[].id` for the source
+    and `inputPorts[].id` for the target. Universal/dynamic nodes are skipped
+    (their ports are provider-driven and not known up front).
+    """
+    universal_defs = {
+        "openrouter-universal",
+        "replicate-universal",
+        "fal-universal",
+        "nous-portal-universal",
+    }
+    for node_id, port, direction, port_key in [
+        (src_node_id, src_port, "source", "outputPorts"),
+        (dst_node_id, dst_port, "target", "inputPorts"),
+    ]:
+        node = cli_graph.nodes.get(node_id)
+        if not node:
+            # Missing-node error is surfaced by cli_graph.connect itself.
+            continue
+        definition_id = node.get("definitionId", "")
+        if definition_id in universal_defs:
+            continue
+        defn = node_registry.get(definition_id)
+        if not defn:
+            continue
+        valid = [p["id"] for p in defn.get(port_key, []) if isinstance(p, dict) and "id" in p]
+        if port not in valid:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Invalid {direction} handle '{port}' on node '{node_id}' "
+                    f"(definition '{definition_id}'). Valid {port_key}: "
+                    f"{valid if valid else '(none)'}"
+                ),
+            )
+
+
 def _valid_param_keys(definition_id: str) -> set[str] | None:
     """Gather the set of param keys declared by a node definition.
 
@@ -512,7 +784,12 @@ def _valid_param_keys(definition_id: str) -> set[str] | None:
     defn = node_registry.get(definition_id)
     if not defn:
         return None
-    if definition_id in {"openrouter-universal", "replicate-universal", "fal-universal"}:
+    if definition_id in {
+        "openrouter-universal",
+        "replicate-universal",
+        "fal-universal",
+        "nous-portal-universal",
+    }:
         return None
     keys: set[str] = set()
     for source_key in ("params", "sharedParams", "falParams", "directParams"):
@@ -634,11 +911,18 @@ async def create_graph_node(body: dict[str, Any]) -> dict:
     params = _coerce_params(definition_id, params)
     short_id = cli_graph.add_node(definition_id, params, position=position)
     await _broadcast_graph_sync()
+    publish_action(f"Added {definition_id} ({short_id})")
     return cli_graph.nodes[short_id]
 
 
 @app.post("/api/graph/connect")
 async def connect_graph_nodes(body: dict[str, Any]) -> dict:
+    _validate_connect_handles(
+        body.get("source", ""),
+        body.get("sourceHandle", ""),
+        body.get("target", ""),
+        body.get("targetHandle", ""),
+    )
     try:
         edge = cli_graph.connect(
             body["source"], body["sourceHandle"],
@@ -647,6 +931,10 @@ async def connect_graph_nodes(body: dict[str, Any]) -> dict:
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     await _broadcast_graph_sync()
+    publish_action(
+        f"Wired {edge['source']}:{edge['sourceHandle']} → "
+        f"{edge['target']}:{edge['targetHandle']}"
+    )
     return {"connection": f"{edge['source']}:{edge['sourceHandle']} -> {edge['target']}:{edge['targetHandle']}"}
 
 
@@ -674,17 +962,40 @@ async def create_node_and_connect(body: dict[str, Any]) -> dict:
         src = connect_spec.get("source") if is_target else short_id
         dst = short_id if is_target else connect_spec.get("target")
         try:
+            _validate_connect_handles(
+                src,
+                connect_spec.get("sourceHandle", ""),
+                dst,
+                connect_spec.get("targetHandle", ""),
+            )
             cli_graph.connect(
                 src,
                 connect_spec.get("sourceHandle", ""),
                 dst,
                 connect_spec.get("targetHandle", ""),
             )
+            connected = True
+        except HTTPException:
+            # Invalid handle — roll back the just-created node so the graph
+            # doesn't end up with a dangling node the caller didn't ask for
+            # standalone. Re-raise so the client sees the handle error.
+            cli_graph.remove_node(short_id)
+            raise
         except ValueError:
-            # Connection failed but node was created — let the caller decide.
-            pass
+            # Connection failed (e.g. unknown node id in connect_spec) but
+            # node was created — leave the node in place, let the caller
+            # decide.
+            connected = False
+    else:
+        connected = False
 
     await _broadcast_graph_sync()
+    publish_action(f"Added {definition_id} ({short_id})")
+    if connected:
+        publish_action(
+            f"Wired {src}:{connect_spec.get('sourceHandle', '')} → "
+            f"{dst}:{connect_spec.get('targetHandle', '')}"
+        )
     return cli_graph.nodes[short_id]
 
 
@@ -706,6 +1017,7 @@ async def update_graph_node(node_id: str, body: dict[str, Any]) -> dict:
     except ValueError:
         raise HTTPException(status_code=404, detail=f"Node '{node_id}' not found")
     await _broadcast_graph_sync()
+    publish_action(f"Updated {node_id} params")
     return cli_graph.nodes[node_id]
 
 
@@ -713,6 +1025,7 @@ async def update_graph_node(node_id: str, body: dict[str, Any]) -> dict:
 async def clear_graph() -> dict:
     cli_graph.clear()
     await _broadcast_graph_sync()
+    publish_action("Cleared the canvas")
     return {"status": "cleared"}
 
 
@@ -724,6 +1037,7 @@ async def delete_graph_node(node_id: str) -> dict:
     except ValueError:
         raise HTTPException(status_code=404, detail=f"Node '{node_id}' not found")
     await _broadcast_graph_sync()
+    publish_action(f"Removed {node_id}")
     return {"status": "deleted", "id": node_id}
 
 
@@ -825,6 +1139,10 @@ async def delete_graph_edge(body: dict[str, Any]) -> dict:
     )
     if removed:
         await _broadcast_graph_sync()
+        publish_action(
+            f"Unwired {body.get('source', '')}:{body.get('sourceHandle', '')} → "
+            f"{body.get('target', '')}:{body.get('targetHandle', '')}"
+        )
     return {"status": "deleted" if removed else "not_found"}
 
 
@@ -862,6 +1180,9 @@ async def import_graph(body: dict[str, Any]) -> dict:
             # Skip malformed edges rather than failing the whole import
             continue
     await _broadcast_graph_sync()
+    publish_action(
+        f"Loaded graph ({len(cli_graph.nodes)} nodes, {len(cli_graph.edges)} edges)"
+    )
     return {
         "status": "imported",
         "idMap": id_map,
@@ -977,8 +1298,15 @@ async def export_graph_for_frontend() -> dict:
 # ---------- CLI: Synchronous execution ----------
 
 @app.post("/api/graph/run")
-async def run_graph(body: dict[str, Any] | None = None) -> dict:
-    """Execute the CLI graph synchronously and return results."""
+async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dict:
+    """Execute the CLI graph synchronously and return results.
+
+    §1.5 guard: when called BY Daedalus (header X-Daedalus-Caller set) and
+    TARGETING a specific node that already has outputs, block with 400 and
+    point him at the rule. Iteration must ADD a new node — re-running the
+    same node in place overwrites the craft log we want on the canvas. The
+    header gate lets humans (frontend Run button, curl, tests) keep the
+    rerun-in-place affordance; only the agent is disciplined here."""
     if not cli_graph.nodes:
         raise HTTPException(status_code=400, detail="Graph is empty")
 
@@ -987,6 +1315,22 @@ async def run_graph(body: dict[str, Any] | None = None) -> dict:
     nodes_list, edges_list = cli_graph.to_execute_format()
 
     target = body.get("targetNodeId") if body else None
+
+    if target and request.headers.get("x-daedalus-caller"):
+        existing_outputs = cli_graph.nodes.get(target, {}).get("outputs")
+        if isinstance(existing_outputs, dict) and len(existing_outputs) > 0:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Node '{target}' already has output. Per SKILL.md §1.5, "
+                    "add a new node instead of re-running in place — the canvas "
+                    "should keep every iteration visible as craft history. "
+                    "Use `nebula add <family>-<variant>` to create the next cut, "
+                    "wire it from the corrected upstream, then `nebula run` the "
+                    "new node id."
+                ),
+            )
+
     if target:
         sub_nodes, sub_edges = get_subgraph(
             [GraphNode.model_validate(n) for n in nodes_list],
@@ -1012,6 +1356,10 @@ async def run_graph(body: dict[str, Any] | None = None) -> dict:
 
     handler_registry = get_handler_registry(emit=collect_events)
 
+    publish_action(
+        f"Running {target}..." if target else f"Running {len(sub_nodes)} node(s)..."
+    )
+
     start = time.time()
     await execute_graph(
         nodes=sub_nodes,
@@ -1033,6 +1381,16 @@ async def run_graph(body: dict[str, Any] | None = None) -> dict:
 
     # Sync outputs to frontend canvas
     await _broadcast_graph_sync()
+
+    if errors:
+        publish_action(
+            f"Ran {len(results) + len(errors)} node(s) in {duration:.1f}s — "
+            f"{len(errors)} errored: {', '.join(errors.keys())}"
+        )
+    else:
+        publish_action(
+            f"Ran {len(results)} node(s) cleanly in {duration:.1f}s"
+        )
 
     return {
         "results": results,

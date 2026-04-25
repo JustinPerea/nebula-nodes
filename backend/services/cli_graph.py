@@ -12,12 +12,29 @@ class CLIGraph:
     The graph has no dependency on the node registry — it is pure data and
     stores definition IDs, params, and edges. It can export to the format
     expected by the existing execution engine via to_execute_format().
+
+    Optional persistence: pass *persist_path* to persist state to disk on every
+    mutation. If the write fails (missing parent dir, permission denied, etc.)
+    the in-memory mutation still succeeds — persistence is best-effort, never
+    authoritative. Load the persisted state at boot via `load(persist_path)`.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, persist_path: Path | None = None) -> None:
         self.nodes: dict[str, dict[str, Any]] = {}
         self.edges: list[dict[str, str]] = []
         self._counter: int = 0
+        self._persist_path: Path | None = persist_path
+
+    def _maybe_persist(self) -> None:
+        """Best-effort save — swallow errors so a hostile filesystem never
+        breaks an otherwise-valid mutation. Errors get surfaced via print so
+        server operators can diagnose, but the API call succeeds regardless."""
+        if self._persist_path is None:
+            return
+        try:
+            self.save(self._persist_path)
+        except Exception as exc:
+            print(f"[cli_graph] persist failed: {exc}", flush=True)
 
     # ------------------------------------------------------------------
     # Mutation
@@ -50,6 +67,7 @@ class CLIGraph:
                 "y": float(position.get("y", 0)),
             }
         self.nodes[short_id] = node
+        self._maybe_persist()
         return short_id
 
     def connect(
@@ -69,6 +87,7 @@ class CLIGraph:
             "targetHandle": dst_port,
         }
         self.edges.append(edge)
+        self._maybe_persist()
         return edge
 
     def update_params(self, node_id: str, params: dict[str, Any]) -> None:
@@ -76,6 +95,7 @@ class CLIGraph:
         if node_id not in self.nodes:
             raise ValueError(f"Node '{node_id}' not found")
         self.nodes[node_id]["params"].update(params)
+        self._maybe_persist()
 
     def remove_node(self, node_id: str) -> None:
         """Remove a node and any edges touching it. Raises if node_id is unknown."""
@@ -85,6 +105,7 @@ class CLIGraph:
         self.edges = [
             e for e in self.edges if e["source"] != node_id and e["target"] != node_id
         ]
+        self._maybe_persist()
 
     def remove_edge(
         self, source: str, source_handle: str, target: str, target_handle: str
@@ -98,6 +119,7 @@ class CLIGraph:
                 and e["targetHandle"] == target_handle
             ):
                 self.edges.pop(i)
+                self._maybe_persist()
                 return True
         return False
 
@@ -106,6 +128,7 @@ class CLIGraph:
         self.nodes.clear()
         self.edges.clear()
         self._counter = 0
+        self._maybe_persist()
 
     # ------------------------------------------------------------------
     # Read / export

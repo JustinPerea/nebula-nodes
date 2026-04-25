@@ -39,9 +39,12 @@ def _mock_response(b64_data: str) -> MagicMock:
 
 @pytest.fixture(autouse=True)
 def cleanup_output():
+    """OUTPUT_ROOT is sandboxed to a tmp dir by tests/conftest.py
+    (NEBULA_OUTPUT_ROOT env var), so the whole-tree rmtree that previously
+    lived here is no longer necessary — and is dangerous without the
+    sandbox, because it would wipe the user's real output/. Left as a
+    no-op hook in case per-test isolation is needed later."""
     yield
-    if OUTPUT_ROOT.exists():
-        shutil.rmtree(OUTPUT_ROOT)
 
 
 @pytest.mark.asyncio

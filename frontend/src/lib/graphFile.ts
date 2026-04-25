@@ -1,19 +1,25 @@
+import JSZip from 'jszip';
 import type { Node, Edge, Viewport } from '@xyflow/react';
 import type { NodeData } from '../types';
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 
 /**
- * .nebula file format — versioned JSON for graph persistence.
+ * .nebula.zip / .nebula file format — graph persistence.
  *
- * v2 (current): persists outputs + state so generated results survive save/load.
- * v1: structure + params only; outputs were stripped.
+ * v3 (current): zip bundle containing `graph.json` plus every referenced
+ * asset under `assets/<original-relative-path>`. Self-contained — the file
+ * survives the backend purging output/ or being moved to another machine.
+ * On load the frontend uploads the zip to POST /api/outputs/restore which
+ * extracts assets to a fresh output dir and returns a URL mapping; we then
+ * rewrite each output URL in graph.json in-place before hydrating the canvas.
  *
- * Output values are URLs under /api/outputs — they stay valid as long as the
- * backend's output/ directory still has the files.
+ * v2: plain JSON with URL references to output/. Still loadable (backward-
+ * compat path) — just shows broken images if the referenced files are gone.
+ * v1: structure + params only, no outputs.
  */
 
 export interface NebulaFile {
-  version: 1 | 2;
+  version: 1 | 2 | 3;
   name: string;
   createdAt: string;
   nodes: NebulaNode[];
@@ -139,8 +145,42 @@ export function deserializeGraph(
 }
 
 /**
- * Save graph to a file using the File System Access API.
- * Falls back to download-link approach if the API is not available.
+ * Walk a serialized graph and collect every `/api/outputs/<path>` URL that
+ * appears in node outputs OR in params (image-input nodes hold upload paths).
+ * Returns a map of `<path>` (no prefix) → absolute URL we'll fetch.
+ */
+function collectAssetPaths(file: NebulaFile): Map<string, string> {
+  const paths = new Map<string, string>();
+  const PREFIX = '/api/outputs/';
+
+  const record = (value: unknown) => {
+    if (typeof value !== 'string' || !value.startsWith(PREFIX)) return;
+    const rel = value.slice(PREFIX.length);
+    if (rel && !paths.has(rel)) paths.set(rel, value);
+  };
+
+  const walk = (v: unknown) => {
+    if (v == null) return;
+    if (typeof v === 'string') return record(v);
+    if (Array.isArray(v)) return v.forEach(walk);
+    if (typeof v === 'object') Object.values(v as Record<string, unknown>).forEach(walk);
+  };
+
+  for (const node of file.nodes) {
+    if (node.data.outputs) walk(node.data.outputs);
+    if (node.data.params) walk(node.data.params);
+  }
+  return paths;
+}
+
+/**
+ * Save the graph as a `.nebula.zip` bundle: graph.json plus every referenced
+ * asset under assets/. Self-contained and portable — the file reloads cleanly
+ * even after output/ is purged or on a fresh checkout.
+ *
+ * Fetch errors (vanished asset between Save click and fetch) are logged and
+ * the asset is skipped; the rest of the bundle still saves. Load will show
+ * a broken-image placeholder for the missing one, same as today.
  */
 export async function saveToFile(
   nodes: Node<NodeData>[],
@@ -148,8 +188,33 @@ export async function saveToFile(
   viewport?: Viewport,
 ): Promise<void> {
   const file = serializeGraph(nodes, edges, viewport);
-  const json = JSON.stringify(file, null, 2);
-  const blob = new Blob([json], { type: 'application/json' });
+  file.version = 3;
+
+  const zip = new JSZip();
+  zip.file('graph.json', JSON.stringify(file, null, 2));
+
+  const assetPaths = collectAssetPaths(file);
+  const assetsFolder = zip.folder('assets');
+  if (assetsFolder) {
+    await Promise.all(
+      Array.from(assetPaths.entries()).map(async ([rel, url]) => {
+        try {
+          const resp = await fetch(url);
+          if (!resp.ok) {
+            console.warn(`[save] ${url} → HTTP ${resp.status}, skipping`);
+            return;
+          }
+          const bytes = await resp.arrayBuffer();
+          assetsFolder.file(rel, bytes);
+        } catch (err) {
+          console.warn(`[save] failed to fetch ${url}:`, err);
+        }
+      }),
+    );
+  }
+
+  const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
+  const suggestedName = `${file.name.replace(/[^a-zA-Z0-9-_ ]/g, '')}.nebula.zip`;
 
   // Try File System Access API first (Chrome/Edge)
   if ('showSaveFilePicker' in window) {
@@ -163,11 +228,11 @@ export async function saveToFile(
           }>;
         }) => Promise<FileSystemFileHandle>;
       }).showSaveFilePicker({
-        suggestedName: `${file.name.replace(/[^a-zA-Z0-9-_ ]/g, '')}.nebula`,
+        suggestedName,
         types: [
           {
-            description: 'Nebula Node Graph',
-            accept: { 'application/json': ['.nebula'] },
+            description: 'Nebula Node Graph Bundle',
+            accept: { 'application/zip': ['.nebula.zip', '.zip'] },
           },
         ],
       });
@@ -176,7 +241,6 @@ export async function saveToFile(
       await writable.close();
       return;
     } catch (err) {
-      // User cancelled the picker — this is expected, not an error
       if ((err as DOMException).name === 'AbortError') return;
       console.warn('File System Access API failed, falling back to download:', err);
     }
@@ -186,7 +250,7 @@ export async function saveToFile(
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `${file.name.replace(/[^a-zA-Z0-9-_ ]/g, '')}.nebula`;
+  a.download = suggestedName;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -194,9 +258,58 @@ export async function saveToFile(
 }
 
 /**
+ * Walk a loaded graph and rewrite every `/api/outputs/<old-rel>` URL it
+ * contains, using the mapping returned by POST /api/outputs/restore. Mutates
+ * nodes/params/outputs in place. Entries without a mapping entry stay as-is
+ * (they'll render broken images, same as loading a pre-v3 file today).
+ */
+function rewriteAssetUrls(
+  nodes: NebulaNode[],
+  mapping: Record<string, string>,
+): void {
+  const PREFIX = '/api/outputs/';
+  const remap = (v: unknown): unknown => {
+    if (typeof v === 'string' && v.startsWith(PREFIX)) {
+      const rel = v.slice(PREFIX.length);
+      return mapping[rel] ?? v;
+    }
+    if (Array.isArray(v)) return v.map(remap);
+    if (v && typeof v === 'object') {
+      const out: Record<string, unknown> = {};
+      for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
+        out[k] = remap(val);
+      }
+      return out;
+    }
+    return v;
+  };
+  for (const node of nodes) {
+    if (node.data.outputs) {
+      node.data.outputs = remap(node.data.outputs) as Record<string, unknown>;
+    }
+    if (node.data.params) {
+      node.data.params = remap(node.data.params) as Record<string, unknown>;
+    }
+  }
+}
+
+/** Zip magic bytes: "PK\x03\x04". */
+function isZipBuffer(buf: ArrayBuffer): boolean {
+  if (buf.byteLength < 4) return false;
+  const b = new Uint8Array(buf, 0, 4);
+  return b[0] === 0x50 && b[1] === 0x4b && b[2] === 0x03 && b[3] === 0x04;
+}
+
+/**
  * Load graph from a file using the File System Access API.
  * Falls back to <input type="file"> if the API is not available.
- * Returns the deserialized result, or null if the user cancelled.
+ *
+ * Detects .nebula.zip bundles (v3) vs plain JSON (v1/v2). Zips get
+ * restored via POST /api/outputs/restore so asset URLs point at the freshly
+ * extracted files; plain JSON files load as before (backward compat — assets
+ * will render broken if the referenced output/ files are gone).
+ *
+ * Returns null on user cancellation or hard parse failure.
  */
 export async function loadFromFile(): Promise<{
   nodes: Node<NodeData>[];
@@ -204,7 +317,7 @@ export async function loadFromFile(): Promise<{
   viewport?: Viewport;
   warnings: string[];
 } | null> {
-  let text: string;
+  let buffer: ArrayBuffer | null = null;
 
   // Try File System Access API first
   if ('showOpenFilePicker' in window) {
@@ -221,60 +334,97 @@ export async function loadFromFile(): Promise<{
         types: [
           {
             description: 'Nebula Node Graph',
-            accept: { 'application/json': ['.nebula', '.json'] },
+            accept: {
+              'application/zip': ['.nebula.zip', '.zip'],
+              'application/json': ['.nebula', '.json'],
+            },
           },
         ],
         multiple: false,
       });
       const file = await handle.getFile();
-      text = await file.text();
+      buffer = await file.arrayBuffer();
     } catch (err) {
       if ((err as DOMException).name === 'AbortError') return null;
       console.warn('File System Access API failed, falling back to input:', err);
-      text = await loadViaInput();
-      if (!text) return null;
+      buffer = await loadViaInput();
+      if (!buffer) return null;
     }
   } else {
-    text = await loadViaInput();
-    if (!text) return null;
+    buffer = await loadViaInput();
+    if (!buffer) return null;
   }
 
   try {
-    const parsed = JSON.parse(text) as NebulaFile;
+    const warnings: string[] = [];
+    let parsed: NebulaFile;
 
-    // Basic validation — accept v1 (outputs stripped) and v2 (outputs persisted)
-    if (parsed.version !== 1 && parsed.version !== 2) {
+    if (isZipBuffer(buffer)) {
+      const zip = await JSZip.loadAsync(buffer);
+      const graphEntry = zip.file('graph.json');
+      if (!graphEntry) {
+        throw new Error('Bundle missing graph.json');
+      }
+      parsed = JSON.parse(await graphEntry.async('string')) as NebulaFile;
+
+      // Re-export the zip as bytes for the restore endpoint. Using the
+      // original buffer directly also works — but re-generating ensures we
+      // send exactly what JSZip already decompressed / normalized.
+      const blob = new Blob([buffer], { type: 'application/zip' });
+      try {
+        const resp = await fetch('http://localhost:8000/api/outputs/restore', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/zip' },
+          body: blob,
+        });
+        if (!resp.ok) {
+          warnings.push(`Asset restore failed (HTTP ${resp.status}) — images may appear broken.`);
+        } else {
+          const { urlMapping } = (await resp.json()) as { urlMapping: Record<string, string> };
+          rewriteAssetUrls(parsed.nodes, urlMapping);
+        }
+      } catch (err) {
+        warnings.push(`Asset restore failed: ${(err as Error).message}`);
+      }
+    } else {
+      // Plain JSON — v1/v2 backward compat.
+      const text = new TextDecoder('utf-8').decode(buffer);
+      parsed = JSON.parse(text) as NebulaFile;
+    }
+
+    if (parsed.version !== 1 && parsed.version !== 2 && parsed.version !== 3) {
       throw new Error(`Unsupported .nebula file version: ${parsed.version}`);
     }
     if (!Array.isArray(parsed.nodes) || !Array.isArray(parsed.edges)) {
       throw new Error('Invalid .nebula file: missing nodes or edges arrays');
     }
 
-    return deserializeGraph(parsed);
+    const result = deserializeGraph(parsed);
+    return { ...result, warnings: [...warnings, ...result.warnings] };
   } catch (err) {
-    console.error('Failed to parse .nebula file:', err);
+    console.error('Failed to load graph file:', err);
     alert(`Failed to load graph: ${(err as Error).message}`);
     return null;
   }
 }
 
-/** Fallback file picker using a hidden <input> element. */
-function loadViaInput(): Promise<string> {
+/** Fallback file picker using a hidden <input> element. Returns the file
+ * contents as an ArrayBuffer so the caller can detect zip vs JSON itself. */
+function loadViaInput(): Promise<ArrayBuffer | null> {
   return new Promise((resolve) => {
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = '.nebula,.json';
+    input.accept = '.nebula,.nebula.zip,.zip,.json';
     input.onchange = async () => {
       const file = input.files?.[0];
       if (!file) {
-        resolve('');
+        resolve(null);
         return;
       }
-      const text = await file.text();
-      resolve(text);
+      resolve(await file.arrayBuffer());
     };
-    // If the user cancels, onchange never fires — resolve empty after timeout
-    input.oncancel = () => resolve('');
+    // If the user cancels, onchange never fires — resolve null after cancel
+    input.oncancel = () => resolve(null);
     input.click();
   });
 }

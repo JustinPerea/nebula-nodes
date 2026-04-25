@@ -2,6 +2,47 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
 import '../../styles/panels.css';
+import '../../styles/hermes.css';
+import { fetchNousModels, type NousModel } from '../../lib/api';
+
+// Daedalus mode palette. Persisted so the user's choice survives reloads.
+type HermesTone = 'verdant' | 'obsidian';
+const HERMES_TONE_KEY = 'nebula:hermes-tone';
+function loadHermesTone(): HermesTone {
+  try {
+    const v = window.localStorage.getItem(HERMES_TONE_KEY);
+    return v === 'obsidian' ? 'obsidian' : 'verdant';
+  } catch {
+    return 'verdant';
+  }
+}
+
+// Daedalus model picker — separate from Claude's `model` state because the
+// frontend chat panel reuses the same WS for both agents and we want each
+// agent to remember its own pick. localStorage-backed.
+const DAEDALUS_MODEL_KEY = 'nebula:daedalus-model';
+const DAEDALUS_PROVIDER_KEY = 'nebula:daedalus-provider';
+const DEFAULT_DAEDALUS_MODEL = 'moonshotai/kimi-k2.6';
+// Default to OpenRouter — works out-of-the-box with the user's existing
+// Hermes setup. Only flips to "nous" once the user actively picks a model
+// from the Nous catalog (which means they've authed via `hermes-daedalus
+// model`). This keeps fresh users from hitting a 401 on their first turn.
+type DaedalusProvider = 'openrouter' | 'nous';
+function loadDaedalusModel(): string {
+  try {
+    return window.localStorage.getItem(DAEDALUS_MODEL_KEY) || DEFAULT_DAEDALUS_MODEL;
+  } catch {
+    return DEFAULT_DAEDALUS_MODEL;
+  }
+}
+function loadDaedalusProvider(): DaedalusProvider {
+  try {
+    const v = window.localStorage.getItem(DAEDALUS_PROVIDER_KEY);
+    return v === 'nous' ? 'nous' : 'openrouter';
+  } catch {
+    return 'openrouter';
+  }
+}
 
 type ToolCall = {
   kind: 'tool';
@@ -40,6 +81,27 @@ type ChatMessage =
       // id of the text-input node so we can render "Apply to this node"
       // buttons next to any code blocks in the reply.
       enhanceTargetId?: string;
+    }
+  | {
+      role: 'approval';
+      id: string;
+      summary: string;
+      plan: string;
+      cost: string;
+      responded?: boolean;
+    }
+  | {
+      role: 'system';
+      id: string;
+      text: string;
+    }
+  | {
+      role: 'thinking';
+      id: string;
+      lines: string[];
+      collapsed: boolean;
+      startedAt: number;
+      completed: boolean;
     };
 
 type PendingImage =
@@ -92,6 +154,41 @@ const DEFAULT_MODEL = 'claude-sonnet-4-6';
 
 function newId(): string {
   return Math.random().toString(36).slice(2, 10);
+}
+
+// Walk the messages list, marking any not-yet-completed thinking bubble as
+// completed. Called whenever a non-thinking event arrives (text / approval /
+// done / error) so the next batch of thinking events starts a fresh bubble
+// on the next turn instead of appending to this turn's finished stream.
+// Does NOT collapse — collapse happens once at turn end via the done handler,
+// because collapsing mid-turn caused bubbles to flash-and-fold in interleaved
+// thinking/text streams. A past turn's worth of craft notes should stay
+// readable while Daedalus is still working.
+function markThinkingCompleted(msgs: ChatMessage[]): ChatMessage[] {
+  let changed = false;
+  const next = msgs.map((m) => {
+    if (m.role === 'thinking' && !m.completed) {
+      changed = true;
+      return { ...m, completed: true };
+    }
+    return m;
+  });
+  return changed ? next : msgs;
+}
+
+// Collapse every completed thinking bubble in one pass. Called only on `done`
+// so the final response anchors the eye after the turn wraps, but nothing
+// collapses mid-stream.
+function collapseAllThinking(msgs: ChatMessage[]): ChatMessage[] {
+  let changed = false;
+  const next = msgs.map((m) => {
+    if (m.role === 'thinking' && !m.collapsed) {
+      changed = true;
+      return { ...m, collapsed: true, completed: true };
+    }
+    return m;
+  });
+  return changed ? next : msgs;
 }
 
 function formatToolInput(input: unknown): string {
@@ -234,6 +331,115 @@ export function ChatPanel() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [model, setModel] = useState<string>(DEFAULT_MODEL);
+  const [agent, setAgent] = useState<'claude' | 'daedalus'>('claude');
+  const [autonomy, setAutonomy] = useState<'auto' | 'step'>('auto');
+  const [hermesTone, setHermesTone] = useState<HermesTone>(loadHermesTone);
+
+  // Drive the Hermes skin off the selected agent. While Daedalus is active,
+  // .app-hermes + the current tone class live on <body> so CSS scoped under
+  // them can reskin every panel (chat, toolbar, node library) in lockstep.
+  // When Claude is selected we strip both classes — zero leakage.
+  useEffect(() => {
+    const body = document.body;
+    if (agent === 'daedalus') {
+      body.classList.add('app-hermes');
+      body.classList.toggle('tone-verdant', hermesTone === 'verdant');
+      body.classList.toggle('tone-obsidian', hermesTone === 'obsidian');
+    } else {
+      body.classList.remove('app-hermes', 'tone-verdant', 'tone-obsidian');
+    }
+    return () => {
+      body.classList.remove('app-hermes', 'tone-verdant', 'tone-obsidian');
+    };
+  }, [agent, hermesTone]);
+
+  const changeHermesTone = useCallback((next: HermesTone) => {
+    setHermesTone(next);
+    try { window.localStorage.setItem(HERMES_TONE_KEY, next); } catch {}
+  }, []);
+
+  // Daedalus model picker state
+  const [daedalusModel, setDaedalusModel] = useState<string>(loadDaedalusModel);
+  const [daedalusProvider, setDaedalusProvider] = useState<DaedalusProvider>(loadDaedalusProvider);
+  const [daedalusModelPickerOpen, setDaedalusModelPickerOpen] = useState(false);
+  const [nousModels, setNousModels] = useState<NousModel[]>([]);
+  const [nousModelsLoading, setNousModelsLoading] = useState(false);
+  const [nousModelsError, setNousModelsError] = useState<string | null>(null);
+  const [daedalusModelSearch, setDaedalusModelSearch] = useState('');
+
+  const changeDaedalusModel = useCallback((modelId: string, fromProvider: DaedalusProvider = 'nous') => {
+    setDaedalusModel(modelId);
+    setDaedalusProvider(fromProvider);
+    try {
+      window.localStorage.setItem(DAEDALUS_MODEL_KEY, modelId);
+      window.localStorage.setItem(DAEDALUS_PROVIDER_KEY, fromProvider);
+    } catch {}
+    setDaedalusModelPickerOpen(false);
+  }, []);
+
+  // Lazy-load Nous models on first picker open, then cache. Use a ref-flag
+  // (instead of state-derived guards) because a failed fetch leaves
+  // `loading=false` and `models.length=0`, which would otherwise re-trigger
+  // the effect on every render and create an infinite retry loop.
+  const nousModelsFetchedRef = useRef(false);
+  useEffect(() => {
+    // Trigger fetch when EITHER the picker opens OR the user is sitting on
+    // a Nous-pinned Daedalus session — the latter so the smart-default
+    // validator below can run on first paint without waiting for the user
+    // to open the picker.
+    const shouldFetch =
+      daedalusModelPickerOpen || (agent === 'daedalus' && daedalusProvider === 'nous');
+    if (!shouldFetch || nousModelsFetchedRef.current) return;
+    nousModelsFetchedRef.current = true;
+    setNousModelsLoading(true);
+    setNousModelsError(null);
+    fetchNousModels()
+      .then((data) => setNousModels(data.models))
+      .catch((err: unknown) => {
+        // Reset the ref so the user can retry by closing + reopening the
+        // picker after running `hermes auth`.
+        nousModelsFetchedRef.current = false;
+        setNousModelsError(err instanceof Error ? err.message : String(err));
+      })
+      .finally(() => setNousModelsLoading(false));
+  }, [daedalusModelPickerOpen, agent, daedalusProvider]);
+
+  // Daedalus is a text-out chat agent. Drop models whose only output is
+  // speech / image / something else — they'd accept a turn but return
+  // nothing the chat panel knows how to render.
+  const chatCapableNousModels = useMemo(
+    () => nousModels.filter((m) => (m.output_modalities ?? ['text']).includes('text')),
+    [nousModels],
+  );
+
+  const filteredDaedalusModels = useMemo(() => {
+    let list = chatCapableNousModels;
+    if (daedalusModelSearch.trim()) {
+      const q = daedalusModelSearch.toLowerCase();
+      list = list.filter(
+        (m) => m.id.toLowerCase().includes(q) || m.name.toLowerCase().includes(q),
+      );
+    }
+    return list.slice(0, 80);
+  }, [chatCapableNousModels, daedalusModelSearch]);
+
+  // Smart default: once the Nous catalog loads, validate the persisted
+  // daedalusModel still exists on the current provider. If the user is
+  // pinned to nous but the model is gone (e.g. retired, or a stale TTS
+  // pick), quietly swap to the first chat-capable Nous model. We only
+  // do this for Nous-pinned users — OpenRouter users keep their pick
+  // regardless because we don't have an OpenRouter catalog to validate
+  // against here.
+  useEffect(() => {
+    if (daedalusProvider !== 'nous') return;
+    if (chatCapableNousModels.length === 0) return;
+    const current = chatCapableNousModels.find((m) => m.id === daedalusModel);
+    if (current) return;
+    const fallback = chatCapableNousModels[0];
+    setDaedalusModel(fallback.id);
+    try { window.localStorage.setItem(DAEDALUS_MODEL_KEY, fallback.id); } catch {}
+  }, [daedalusProvider, chatCapableNousModels, daedalusModel]);
+
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -245,10 +451,36 @@ export function ChatPanel() {
     return () => window.clearTimeout(t);
   }, [notice]);
 
+  // Switch the active agent. Each agent has its own session thread, so we
+  // clear sessionId on change — the next turn starts fresh on the new agent.
+  const handleAgentChange = useCallback(
+    (next: 'claude' | 'daedalus') => {
+      if (next === agent) return;
+      setAgent(next);
+      setSessionId(null);
+    },
+    [agent],
+  );
+
   const wsRef = useRef<WebSocket | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const busyRef = useRef(false);
   busyRef.current = busy;
+
+  // Ref callback that scrolls the thinking-body to its bottom on every
+  // re-render. Combined with `key={lines.length}` on the body element, this
+  // fires each time a new line arrives so the newest entry stays visible.
+  const thinkingBodyRef = useCallback((el: HTMLDivElement | null) => {
+    if (el) el.scrollTop = el.scrollHeight;
+  }, []);
+
+  const toggleThinkingCollapsed = useCallback((id: string) => {
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.role === 'thinking' && m.id === id ? { ...m, collapsed: !m.collapsed } : m,
+      ),
+    );
+  }, []);
   // Holds the text-input node id for the next outgoing message, set by the
   // Enhance button just before send. Cleared when the message leaves so it
   // only attaches to the one assistant response it triggered.
@@ -406,8 +638,55 @@ export function ChatPanel() {
         setSessionId(String(event.sessionId));
         return;
       }
+      if (type === 'thinking') {
+        const line = String(event.text ?? '');
+        setMessages((prev) => {
+          const last = prev[prev.length - 1];
+          if (last && last.role === 'thinking' && !last.completed) {
+            const updated = { ...last, lines: [...last.lines, line] };
+            return [...prev.slice(0, -1), updated];
+          }
+          return [
+            ...prev,
+            {
+              id: newId(),
+              role: 'thinking',
+              lines: [line],
+              collapsed: false,
+              startedAt: Date.now(),
+              completed: false,
+            },
+          ];
+        });
+        return;
+      }
+      if (type === 'approval_request') {
+        setMessages((prev) => [
+          ...markThinkingCompleted(prev),
+          {
+            id: newId(),
+            role: 'approval',
+            summary: String(event.summary ?? ''),
+            plan: String(event.plan ?? ''),
+            cost: String(event.cost ?? ''),
+          },
+        ]);
+        return;
+      }
+      if (type === 'learning_saved') {
+        setMessages((prev) => [
+          ...markThinkingCompleted(prev),
+          {
+            id: newId(),
+            role: 'system',
+            text: `→ Saved learning: ${String(event.topic ?? '')}`,
+          },
+        ]);
+        return;
+      }
       if (type === 'text') {
         const text = String(event.text ?? '');
+        setMessages((prev) => markThinkingCompleted(prev));
         upsertAssistant((msg) => {
           const parts = [...msg.parts];
           const last = parts[parts.length - 1];
@@ -450,6 +729,7 @@ export function ChatPanel() {
       }
       if (type === 'error') {
         const errText = String(event.message ?? 'unknown error');
+        setMessages((prev) => markThinkingCompleted(prev));
         upsertAssistant((msg) => ({
           ...msg,
           parts: [
@@ -466,6 +746,7 @@ export function ChatPanel() {
       }
       if (type === 'done') {
         setBusy(false);
+        setMessages((prev) => collapseAllThinking(prev));
         upsertAssistant((msg) => ({
           ...msg,
           streaming: false,
@@ -527,9 +808,17 @@ export function ChatPanel() {
 
     // Client-side command interception.
     if (raw.startsWith('/model ')) {
-      const name = raw.slice(7).trim().toLowerCase();
-      const alias = MODEL_ALIASES[name] ?? name;
-      setModel(alias);
+      // Preserve case for Daedalus models (some Hermes / Nous IDs are case-sensitive).
+      const rawName = raw.slice(7).trim();
+      let resolved: string;
+      if (agent === 'daedalus') {
+        resolved = rawName;
+        changeDaedalusModel(resolved);
+      } else {
+        const lower = rawName.toLowerCase();
+        resolved = MODEL_ALIASES[lower] ?? lower;
+        setModel(resolved);
+      }
       setMessages((prev) => [
         ...prev,
         { role: 'user', text: raw, id: newId() },
@@ -537,7 +826,7 @@ export function ChatPanel() {
           role: 'assistant',
           id: newId(),
           streaming: false,
-          parts: [{ kind: 'system', text: `Model set to: ${alias}` }],
+          parts: [{ kind: 'system', text: `Model set to: ${resolved}` }],
         },
       ]);
       setInput('');
@@ -591,16 +880,67 @@ export function ChatPanel() {
         type: 'send',
         message: raw,
         sessionId,
-        model,
+        model: agent === 'daedalus' ? daedalusModel : model,
+        agent,
+        autonomy,
+        // Provider is only meaningful for Daedalus turns. Backend treats
+        // null as "use default" (currently `nous`). Sending `openrouter`
+        // explicitly is the fresh-user fallback path.
+        provider: agent === 'daedalus' ? daedalusProvider : null,
       }),
     );
-  }, [input, model, sessionId, pendingImages]);
+  }, [input, model, daedalusModel, daedalusProvider, sessionId, pendingImages, agent, autonomy]);
 
   // Keep sendRef pointing at the latest `send` so the chat-send event listener
   // always calls the current closure (input/model/sessionId are captured fresh).
   useEffect(() => {
     sendRef.current = send;
   }, [send]);
+
+  // Sends a new turn whose text starts with 'APPROVED:' or 'REJECTED:'.
+  // Daedalus's SKILL.md tells the agent to recognize these prefixes and
+  // either proceed with the paused plan or pivot. Mirrors the WS-send flow
+  // in `send()` — appends user + assistant placeholder, flips busy, posts
+  // the JSON envelope with agent/autonomy/sessionId/model.
+  const handleApprovalResponse = useCallback(
+    (response: string) => {
+      const ws = wsRef.current;
+      if (!ws || ws.readyState !== WebSocket.OPEN) return;
+      if (busyRef.current) return;
+      setMessages((prev) => {
+        // Mark the most recent approval message as responded so its
+        // Approve/Reject buttons disable + dim during streaming.
+        let markedLatest = false;
+        const updated = [...prev];
+        for (let i = updated.length - 1; i >= 0; i -= 1) {
+          const msg = updated[i];
+          if (msg.role === 'approval' && !msg.responded && !markedLatest) {
+            updated[i] = { ...msg, responded: true };
+            markedLatest = true;
+            break;
+          }
+        }
+        return [
+          ...updated,
+          { role: 'user', text: response, id: newId() },
+          { role: 'assistant', id: newId(), streaming: true, parts: [] },
+        ];
+      });
+      setBusy(true);
+      ws.send(
+        JSON.stringify({
+          type: 'send',
+          message: response,
+          sessionId,
+          model: agent === 'daedalus' ? daedalusModel : model,
+          agent,
+          autonomy,
+          provider: agent === 'daedalus' ? daedalusProvider : null,
+        }),
+      );
+    },
+    [sessionId, model, daedalusModel, daedalusProvider, agent, autonomy],
+  );
 
   const cancel = useCallback(() => {
     const ws = wsRef.current;
@@ -745,7 +1085,7 @@ export function ChatPanel() {
   };
 
   return (
-    <div className="chat-panel" style={panelStyle}>
+    <div className={`chat-panel chat-panel--agent-${agent}`} style={panelStyle}>
       {/* Edges */}
       <div className="chat-panel__resize-handle chat-panel__resize-handle--left" onMouseDown={(e) => startResize(e, 'l')} title="Drag to resize width" />
       <div className="chat-panel__resize-handle chat-panel__resize-handle--right" onMouseDown={(e) => startResize(e, 'r')} title="Drag to resize width" />
@@ -759,14 +1099,158 @@ export function ChatPanel() {
       <div className="chat-panel__header" onMouseDown={startPanelDrag} title="Drag to move">
         <div>
           <div className="chat-panel__title">Chat</div>
-          <div className="chat-panel__meta">
-            {model} · {status}
+          <div
+            className="chat-panel__agent-selector"
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              className={
+                agent === 'claude'
+                  ? 'chat-panel__agent-btn--active'
+                  : 'chat-panel__agent-btn'
+              }
+              onClick={() => handleAgentChange('claude')}
+            >
+              Claude
+            </button>
+            <button
+              type="button"
+              className={
+                agent === 'daedalus'
+                  ? 'chat-panel__agent-btn--active'
+                  : 'chat-panel__agent-btn'
+              }
+              onClick={() => handleAgentChange('daedalus')}
+            >
+              Daedalus
+            </button>
+          </div>
+          {agent === 'daedalus' && (
+            <div
+              className="chat-panel__autonomy-toggle"
+              onMouseDown={(e) => e.stopPropagation()}
+            >
+              <button
+                type="button"
+                className={
+                  autonomy === 'auto'
+                    ? 'chat-panel__autonomy-btn--active'
+                    : 'chat-panel__autonomy-btn'
+                }
+                onClick={() => setAutonomy('auto')}
+                title="Auto-pilot: Daedalus runs the full pipeline"
+              >
+                Auto ▶
+              </button>
+              <button
+                type="button"
+                className={
+                  autonomy === 'step'
+                    ? 'chat-panel__autonomy-btn--active'
+                    : 'chat-panel__autonomy-btn'
+                }
+                onClick={() => setAutonomy('step')}
+                title="Step Approval: Daedalus pauses before expensive operations"
+              >
+                Step ⏸
+              </button>
+            </div>
+          )}
+          {agent === 'daedalus' && (
+            <div
+              className="chat-panel__tone-toggle"
+              onMouseDown={(e) => e.stopPropagation()}
+              title="Daedalus palette: Verdant (deep green-black) or Obsidian (pure black + muted gold)"
+            >
+              <button
+                type="button"
+                className={
+                  hermesTone === 'verdant'
+                    ? 'chat-panel__tone-btn--active'
+                    : 'chat-panel__tone-btn'
+                }
+                onClick={() => changeHermesTone('verdant')}
+              >
+                Verdant
+              </button>
+              <button
+                type="button"
+                className={
+                  hermesTone === 'obsidian'
+                    ? 'chat-panel__tone-btn--active'
+                    : 'chat-panel__tone-btn'
+                }
+                onClick={() => changeHermesTone('obsidian')}
+              >
+                Obsidian
+              </button>
+            </div>
+          )}
+          <div className="chat-panel__meta" onMouseDown={(e) => e.stopPropagation()}>
+            {agent === 'daedalus' ? (
+              <button
+                type="button"
+                className="chat-panel__model-trigger"
+                onClick={() => setDaedalusModelPickerOpen((v) => !v)}
+                title="Switch model — fetches the live list from Nous Portal"
+              >
+                {daedalusModel} · Hermes <span className="chat-panel__model-caret">{daedalusModelPickerOpen ? '▾' : '▸'}</span>
+              </button>
+            ) : (
+              <span>{model}</span>
+            )}
+            <span> · {status}</span>
             {sessionId && (
               <span className="chat-panel__session" title={sessionId}>
                 · {sessionId.slice(0, 8)}
               </span>
             )}
           </div>
+          {agent === 'daedalus' && daedalusModelPickerOpen && (
+            <div
+              className="chat-panel__model-picker"
+              onMouseDown={(e) => e.stopPropagation()}
+            >
+              <input
+                type="text"
+                className="chat-panel__model-search"
+                placeholder={
+                  nousModelsLoading
+                    ? 'Loading models…'
+                    : nousModelsError
+                      ? 'Could not load — see error below'
+                      : `Search ${nousModels.length} models…`
+                }
+                value={daedalusModelSearch}
+                onChange={(e) => setDaedalusModelSearch(e.target.value)}
+                autoFocus
+              />
+              {nousModelsError && (
+                <div className="chat-panel__model-error">{nousModelsError}</div>
+              )}
+              <div className="chat-panel__model-list">
+                {filteredDaedalusModels.map((m) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    className={
+                      m.id === daedalusModel
+                        ? 'chat-panel__model-row chat-panel__model-row--active'
+                        : 'chat-panel__model-row'
+                    }
+                    onClick={() => changeDaedalusModel(m.id)}
+                  >
+                    <span className="chat-panel__model-row-name">{m.name}</span>
+                    <span className="chat-panel__model-row-id">{m.id}</span>
+                  </button>
+                ))}
+                {!nousModelsLoading && !nousModelsError && filteredDaedalusModels.length === 0 && nousModels.length > 0 && (
+                  <div className="chat-panel__model-empty">No matches</div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
         <button className="panel__close" onClick={() => togglePanel('chat')}>
           ×
@@ -776,34 +1260,127 @@ export function ChatPanel() {
       <div className="chat-panel__messages" ref={scrollRef}>
         {messages.length === 0 && (
           <div className="chat__empty">
-            <p>Talk to Claude Code. It has access to the nebula skill — ask it to build a graph.</p>
+            {agent === 'daedalus' ? (
+              <p>Talk to Daedalus. Master craftsman, labyrinth-builder — it plans pipelines with precision, measures twice before each cut, and remembers every lesson a bad joint taught it.</p>
+            ) : (
+              <p>Talk to Claude Code. It has access to the nebula skill — ask it to build a graph.</p>
+            )}
             <p className="chat__empty-hint">
-              <code>/model sonnet|opus|haiku</code> · <code>/clear</code>
+              {agent === 'daedalus' ? (
+                <code>/clear</code>
+              ) : (
+                <>
+                  <code>/model sonnet|opus|haiku</code> · <code>/clear</code>
+                </>
+              )}
             </p>
           </div>
         )}
-        {messages.map((m) =>
-          m.role === 'user' ? (
-            <div key={m.id} className="chat__bubble chat__bubble--user">
-              {m.images && m.images.length > 0 && (
-                <div className="chat__bubble-thumbs">
-                  {m.images.map((img) => (
-                    <img
-                      key={img.nodeId}
-                      src={img.thumbUrl}
-                      alt=""
-                      className="chat__bubble-thumb"
-                      loading="lazy"
-                    />
-                  ))}
+        {messages.map((m) => {
+          if (m.role === 'user') {
+            return (
+              <div key={m.id} className="chat__bubble chat__bubble--user">
+                {m.images && m.images.length > 0 && (
+                  <div className="chat__bubble-thumbs">
+                    {m.images.map((img) => (
+                      <img
+                        key={img.nodeId}
+                        src={img.thumbUrl}
+                        alt=""
+                        className="chat__bubble-thumb"
+                        loading="lazy"
+                      />
+                    ))}
+                  </div>
+                )}
+                <div className="chat__bubble-text">{m.text}</div>
+              </div>
+            );
+          }
+          if (m.role === 'system') {
+            return (
+              <div key={m.id} className="chat-panel__system-line">
+                {m.text}
+              </div>
+            );
+          }
+          if (m.role === 'thinking') {
+            return (
+              <div
+                key={m.id}
+                className={`chat-panel__thinking ${m.completed ? 'chat-panel__thinking--completed' : ''}`}
+              >
+                <button
+                  type="button"
+                  className="chat-panel__thinking-header"
+                  onClick={() => toggleThinkingCollapsed(m.id)}
+                >
+                  <span className="chat-panel__thinking-indicator">
+                    {m.completed ? '✓' : '…'}
+                  </span>
+                  <span className="chat-panel__thinking-label">
+                    {m.completed ? 'thinking complete' : 'thinking'} · {m.lines.length} update
+                    {m.lines.length === 1 ? '' : 's'}
+                  </span>
+                  <span className="chat-panel__thinking-caret">
+                    {m.collapsed ? '▸' : '▾'}
+                  </span>
+                </button>
+                {!m.collapsed && (
+                  <div
+                    ref={thinkingBodyRef}
+                    key={m.lines.length}
+                    className="chat-panel__thinking-body"
+                  >
+                    {m.lines.map((line, i) => (
+                      <div key={i} className="chat-panel__thinking-line">
+                        {line}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          }
+          if (m.role === 'approval') {
+            return (
+              <div key={m.id} className="chat-panel__approval">
+                <div className="chat-panel__approval-summary">
+                  <strong>Approval required:</strong> {m.summary}
                 </div>
-              )}
-              <div className="chat__bubble-text">{m.text}</div>
-            </div>
-          ) : (
-            <AssistantBubble key={m.id} message={m} />
-          ),
-        )}
+                {m.plan && (
+                  <div className="chat-panel__approval-plan">
+                    <strong>Plan:</strong> {m.plan}
+                  </div>
+                )}
+                {m.cost && (
+                  <div className="chat-panel__approval-cost">
+                    <strong>Cost:</strong> {m.cost}
+                  </div>
+                )}
+                <div className="chat-panel__approval-actions">
+                  <button
+                    type="button"
+                    className="chat-panel__approval-btn chat-panel__approval-btn--approve"
+                    onClick={() => handleApprovalResponse('APPROVED: continue')}
+                    disabled={m.responded}
+                  >
+                    Approve
+                  </button>
+                  <button
+                    type="button"
+                    className="chat-panel__approval-btn chat-panel__approval-btn--reject"
+                    onClick={() => handleApprovalResponse('REJECTED: please revise')}
+                    disabled={m.responded}
+                  >
+                    Reject
+                  </button>
+                </div>
+              </div>
+            );
+          }
+          return <AssistantBubble key={m.id} message={m} />;
+        })}
       </div>
 
       <div className="chat-panel__input">

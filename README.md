@@ -48,7 +48,7 @@ There's a cambrian explosion of image, video, audio, and text models happening r
 Nebula Nodes is a **visual programming environment** for that stitching. Everything runs locally against your own API keys, so there is no platform markup, no data leaving your machine to a middleman, and no rate-limited hosted tier. You see the graph, you see the outputs, you own the keys.
 
 > [!NOTE]
-> Nebula Nodes is **BYOK (bring your own keys)** by design. The app proxies calls from your local backend to OpenAI, Anthropic, Google, Runway, FAL, OpenRouter, Replicate, and ElevenLabs using keys you paste into the settings panel. They never touch a Nebula-hosted server because there isn't one.
+> Nebula Nodes is **BYOK (bring your own keys)** by design. The app proxies calls from your local backend to OpenAI, Anthropic, Google, Runway, FAL, OpenRouter, Replicate, ElevenLabs, and **Nous Portal** using keys you paste into the settings panel — or, in the case of Nous Portal, the OAuth credential the [Hermes Agent](https://hermes-agent.nousresearch.com) CLI already manages on your machine. They never touch a Nebula-hosted server because there isn't one.
 
 ## Features
 
@@ -57,7 +57,7 @@ Nebula Nodes is a **visual programming environment** for that stitching. Everyth
 | **Visual canvas** | React Flow graph editor with typed, color-coded ports |
 | **Streaming outputs** | Token-by-token text, live video/audio previews |
 | **Smart caching** | Unchanged subgraphs skip re-computation automatically |
-| **Universal nodes** | One node each for OpenRouter, Replicate, and FAL — reach any model on those platforms |
+| **Universal nodes** | One node each for OpenRouter, Nous Portal, Replicate, and FAL — reach any model on those platforms |
 | **Run what you need** | Execute the full graph, or just a node's upstream subgraph |
 | **Undo that sticks** | 50-step history, and outputs survive undo |
 | **Copy / paste / duplicate** | UUIDs regenerate so duplicates are first-class nodes, not aliases |
@@ -144,6 +144,7 @@ npm run dev
 | Node | Platform | What it gives you |
 |------|----------|-------------------|
 | **OpenRouter** | OpenRouter | Any model in the OpenRouter catalog; schema fetched at configuration time |
+| **Nous Portal** | Nous Portal | Any model in the Nous Portal catalog (300+); auth via the Hermes Agent CLI's OAuth (no API key field) |
 | **Replicate** | Replicate | Any versioned model on Replicate; ports built from the model's JSON schema |
 | **FAL** | FAL | Any FAL endpoint via the submit/poll async pattern |
 
@@ -155,7 +156,7 @@ graph LR
     UI <-->|WebSocket /ws| WS[Execution stream]
     API --> ENGINE[Graph engine<br/>topological sort]
     ENGINE --> HANDLERS[Handler registry<br/>backend/handlers/*.py]
-    HANDLERS --> PROVIDERS[(OpenAI · Anthropic · Google<br/>Runway · FAL · OpenRouter<br/>Replicate · ElevenLabs · Meshy)]
+    HANDLERS --> PROVIDERS[(OpenAI · Anthropic · Google<br/>Runway · FAL · OpenRouter · Nous Portal<br/>Replicate · ElevenLabs · Meshy)]
     API --> OUT["/api/outputs<br/>files on disk"]
 
     style UI fill:#863bff,color:#fff,stroke:#47bfff

@@ -58,6 +58,22 @@ export async function fetchOpenRouterModels(): Promise<{ models: OpenRouterModel
   return response.json();
 }
 
+// Nous Portal models share the OpenRouter shape after the backend slims them.
+// Reuse the type alias instead of duplicating the interface.
+export type NousModel = OpenRouterModel;
+
+export async function fetchNousModels(): Promise<{ models: NousModel[]; count: number }> {
+  const response = await fetch(`${API_BASE}/nous/models`);
+  if (!response.ok) {
+    // Surface the backend's auth message verbatim — usually instructs the
+    // user to run `hermes auth`.
+    let detail = '';
+    try { detail = (await response.json()).detail ?? ''; } catch {}
+    throw new Error(detail || `Fetch Nous models failed: ${response.status}`);
+  }
+  return response.json();
+}
+
 export interface ReplicateSchema {
   version_id: string;
   model_id: string;

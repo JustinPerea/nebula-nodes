@@ -5,7 +5,7 @@ import { NODE_DEFINITIONS } from '../../constants/nodeDefinitions';
 import { CATEGORY_COLORS } from '../../constants/ports';
 import { PORT_COLORS } from '../../lib/portCompatibility';
 import type { NodeData, DynamicNodeData, ParamDefinition } from '../../types';
-import { fetchOpenRouterModels, getSettings, updateSettings, type OpenRouterModel } from '../../lib/api';
+import { fetchOpenRouterModels, fetchNousModels, getSettings, updateSettings, type OpenRouterModel } from '../../lib/api';
 import '../../styles/panels.css';
 
 export function Inspector() {
@@ -78,19 +78,39 @@ export function Inspector() {
     });
   }, [resolvedParams, nodeData?.params]);
 
-  // Fetch OpenRouter models when an OpenRouter node is selected
+  // Universal-model nodes (OpenRouter, Nous Portal) share the modality-driven
+  // model-picker UX. Map definitionId → favorites bucket + loader so we can
+  // drive both with one effect and one render branch.
+  const universalProvider: 'openrouter' | 'nous' | null =
+    nodeData?.definitionId === 'openrouter-universal'
+      ? 'openrouter'
+      : nodeData?.definitionId === 'nous-portal-universal'
+        ? 'nous'
+        : null;
+  const [modelLoadError, setModelLoadError] = useState<string | null>(null);
+
+  // Fetch the right model list for the selected universal node
   useEffect(() => {
-    if (!nodeData || nodeData.definitionId !== 'openrouter-universal') return;
+    if (!universalProvider) {
+      setModelLoadError(null);
+      return;
+    }
     setModelsLoading(true);
-    fetchOpenRouterModels()
+    setModelLoadError(null);
+    const loader = universalProvider === 'openrouter' ? fetchOpenRouterModels : fetchNousModels;
+    loader()
       .then((data) => setOpenRouterModels(data.models))
-      .catch((err) => console.error('Failed to load OpenRouter models:', err))
+      .catch((err: unknown) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        setModelLoadError(msg);
+        setOpenRouterModels([]);
+      })
       .finally(() => setModelsLoading(false));
-  }, [nodeData?.definitionId]);
+  }, [universalProvider]);
 
   // Filter models by search query — cap at 50 to avoid huge dropdowns, favorites sorted to top
   const filteredModels = useMemo(() => {
-    const favIds = favorites.openrouter ?? [];
+    const favIds = (universalProvider && favorites[universalProvider]) ?? [];
     let models = openRouterModels;
     if (modelSearch.trim()) {
       const lower = modelSearch.toLowerCase();
@@ -102,7 +122,7 @@ export function Inspector() {
       return aFav - bFav;
     });
     return sorted.slice(0, 50);
-  }, [openRouterModels, modelSearch, favorites.openrouter]);
+  }, [openRouterModels, modelSearch, favorites, universalProvider]);
 
   useEffect(() => {
     function onMouseMove(e: MouseEvent) {
@@ -161,19 +181,14 @@ export function Inspector() {
       </div>
 
       <div className="panel__body">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
+        <div className="inspector__node-header">
           <span
+            className="inspector__node-dot"
             style={{
-              width: 8,
-              height: 8,
-              borderRadius: '50%',
               backgroundColor: CATEGORY_COLORS[definition?.category ?? 'universal'],
-              flexShrink: 0,
             }}
           />
-          <span style={{ color: '#eee', fontWeight: 500, fontSize: 13, flex: 1 }}>
-            {nodeData.label}
-          </span>
+          <span className="inspector__node-name">{nodeData.label}</span>
           {definition && (
             <button
               className="inspector__info-button"
@@ -239,13 +254,21 @@ export function Inspector() {
         {visibleParams.map((param) => (
           <div key={param.key} className="inspector__section">
             <div className="inspector__label">{param.label}</div>
-            {/* OpenRouter: replace the 'model' param with a searchable dropdown */}
-            {nodeData.definitionId === 'openrouter-universal' && param.key === 'model' ? (
+            {/* Universal models (OpenRouter, Nous Portal): searchable dropdown
+                with favorites scoped per provider. configureOpenRouterModel
+                is provider-agnostic — it shapes ports from modalities. */}
+            {universalProvider && param.key === 'model' ? (
               <div>
                 <input
                   className="inspector__field"
                   type="text"
-                  placeholder={modelsLoading ? 'Loading models...' : 'Search models...'}
+                  placeholder={
+                    modelsLoading
+                      ? 'Loading models…'
+                      : modelLoadError
+                        ? 'Could not load models'
+                        : 'Search models…'
+                  }
                   value={modelSearch}
                   onChange={(e) => setModelSearch(e.target.value)}
                 />
@@ -263,10 +286,15 @@ export function Inspector() {
                   <option value="">-- Select a model --</option>
                   {filteredModels.map((m) => (
                     <option key={m.id} value={m.id}>
-                      {(favorites.openrouter ?? []).includes(m.id) ? '★ ' : ''}{m.name} ({m.id})
+                      {(favorites[universalProvider] ?? []).includes(m.id) ? '★ ' : ''}{m.name} ({m.id})
                     </option>
                   ))}
                 </select>
+                {modelLoadError && universalProvider === 'nous' && (
+                  <div style={{ fontSize: 10, color: '#c58b3a', marginTop: 4, lineHeight: 1.4 }}>
+                    {modelLoadError}
+                  </div>
+                )}
                 {nodeData.params.model && (
                   <div style={{ fontSize: 10, color: '#666', marginTop: 2, display: 'flex', alignItems: 'center', gap: 4 }}>
                     <span>Selected: {String(nodeData.params.model)}</span>
@@ -277,21 +305,21 @@ export function Inspector() {
                         cursor: 'pointer',
                         fontSize: 14,
                         padding: 0,
-                        color: (favorites.openrouter ?? []).includes(String(nodeData.params.model)) ? '#FFC107' : '#555',
+                        color: (favorites[universalProvider] ?? []).includes(String(nodeData.params.model)) ? '#FFC107' : '#555',
                       }}
                       title="Toggle favorite"
                       onClick={() => {
                         const modelId = String(nodeData.params.model);
-                        const current = favorites.openrouter ?? [];
+                        const current = favorites[universalProvider] ?? [];
                         const updated = current.includes(modelId)
                           ? current.filter((m: string) => m !== modelId)
                           : [...current, modelId];
-                        const newFavorites = { ...favorites, openrouter: updated };
+                        const newFavorites = { ...favorites, [universalProvider]: updated };
                         setFavorites(newFavorites);
                         updateSettings({ favorites: newFavorites }).catch(() => {});
                       }}
                     >
-                      {(favorites.openrouter ?? []).includes(String(nodeData.params.model)) ? '★' : '☆'}
+                      {(favorites[universalProvider] ?? []).includes(String(nodeData.params.model)) ? '★' : '☆'}
                     </button>
                   </div>
                 )}

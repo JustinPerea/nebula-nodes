@@ -407,6 +407,14 @@ def get_handler_registry(
             from handlers.higgsfield import handle_higgsfield
             return await handle_higgsfield(node, inputs, api_keys, emit=emit)
 
+        async def _nous_portal_handler(
+            node: GraphNode,
+            inputs: dict[str, PortValueDict],
+            api_keys: dict[str, str],
+        ) -> dict[str, Any]:
+            from handlers.nous_portal import handle_nous_portal_universal
+            return await handle_nous_portal_universal(node, inputs, api_keys, emit=emit)
+
         registry["runway-video"] = _runway_video_handler
         registry["runway-aleph"] = _runway_aleph_handler
         registry["runway-image"] = _runway_image_handler
@@ -420,6 +428,7 @@ def get_handler_registry(
         registry["openrouter-universal"] = _openrouter_handler
         registry["replicate-universal"] = _replicate_handler
         registry["fal-universal"] = _fal_handler
+        registry["nous-portal-universal"] = _nous_portal_handler
         registry["kling-v2-1"] = _kling_handler
         registry["sora-2"] = _sora2_handler
         registry["veo-3"] = _veo3_handler
