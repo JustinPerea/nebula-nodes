@@ -419,9 +419,13 @@ async def test_thinking_events_emitted_from_log_tail(tmp_path, monkeypatch):
     async def fake_create(*args, **kwargs):
         async def write_log_entries():
             await asyncio.sleep(0.3)
+            # Use a non-noise log line — `agent.auxiliary_client: Vision
+            # auto-detect: …` lines are filtered as startup chatter (see
+            # `test_extract_log_message_filters_auxiliary_noise`), so the
+            # log-tail emission path needs a fixture that survives the filter.
             log_file.write_text(
-                "2026-01-01 00:00:00,000 INFO agent.auxiliary_client: "
-                "Vision auto-detect: using main provider openrouter (moonshotai/kimi-k2.6)\n"
+                "2026-01-01 00:00:00,000 INFO agent.runtime: "
+                "Pipeline ready\n"
             )
         asyncio.create_task(write_log_entries())
         return proc
@@ -434,7 +438,7 @@ async def test_thinking_events_emitted_from_log_tail(tmp_path, monkeypatch):
 
     thinking = [e for e in events if e["type"] == "thinking"]
     assert len(thinking) >= 1
-    assert any("Vision auto-detect" in e["text"] for e in thinking)
+    assert any("Pipeline ready" in e["text"] for e in thinking)
     # Sanity: the rest of the event contract still fires.
     assert events[-1]["type"] == "done"
 
@@ -489,15 +493,46 @@ def test_extract_log_message_happy_path():
     """`_extract_log_message` keeps only the prose body after `module: `."""
     from services.hermes_session import _extract_log_message
 
+    # Using a non-auxiliary_client line because lines from that module that
+    # match the auto-detect / title_generation patterns are explicitly
+    # filtered (see `test_extract_log_message_filters_auxiliary_noise`).
     line = (
-        "2026-04-23 20:33:52,916 INFO agent.auxiliary_client: "
-        "Vision auto-detect: using main provider openrouter (moonshotai/kimi-k2.6)"
+        "2026-04-23 20:33:52,916 INFO agent.runtime: "
+        "Pipeline ready — 3 nodes, 2 edges"
     )
     out = _extract_log_message(line)
     assert out is not None
-    # Keeps the "Vision auto-detect: ..." body, strips the timestamp + module.
-    assert out.startswith("Vision auto-detect")
-    assert "agent.auxiliary_client" not in out
+    # Keeps the body, strips the timestamp + module.
+    assert out.startswith("Pipeline ready")
+    assert "agent.runtime" not in out
+
+
+def test_extract_log_message_filters_auxiliary_noise():
+    """`agent.auxiliary_client` lines that are pure provider auto-detection
+    or post-turn title generation should be dropped — they fire every turn
+    before any real work happens and only add noise to the thinking stream.
+    """
+    from services.hermes_session import _extract_log_message
+
+    noise_lines = [
+        "2026-04-23 20:33:52 INFO agent.auxiliary_client: "
+        "Vision auto-detect: using main provider nous (google/gemini-3-flash-preview)",
+        "2026-04-23 20:33:53 INFO agent.auxiliary_client: "
+        "Auxiliary auto-detect: using main provider nous (moonshotai/kimi-k2.6)",
+        "2026-04-23 20:33:54 INFO agent.auxiliary_client: "
+        "Auxiliary title_generation: using auto (moonshotai/kimi-k2.6) at https://...",
+    ]
+    for line in noise_lines:
+        assert _extract_log_message(line) is None, f"should drop: {line[:80]}"
+
+    # Non-noise auxiliary_client lines (e.g. real call results) still pass.
+    real_call = (
+        "2026-04-23 20:33:55 INFO agent.auxiliary_client: "
+        "Vision call returned 1 description"
+    )
+    out = _extract_log_message(real_call)
+    assert out is not None
+    assert "Vision call" in out
 
 
 def test_extract_log_message_skips_non_info_lines():
