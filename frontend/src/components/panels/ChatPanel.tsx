@@ -21,12 +21,26 @@ function loadHermesTone(): HermesTone {
 // frontend chat panel reuses the same WS for both agents and we want each
 // agent to remember its own pick. localStorage-backed.
 const DAEDALUS_MODEL_KEY = 'nebula:daedalus-model';
+const DAEDALUS_PROVIDER_KEY = 'nebula:daedalus-provider';
 const DEFAULT_DAEDALUS_MODEL = 'moonshotai/kimi-k2.6';
+// Default to OpenRouter — works out-of-the-box with the user's existing
+// Hermes setup. Only flips to "nous" once the user actively picks a model
+// from the Nous catalog (which means they've authed via `hermes-daedalus
+// model`). This keeps fresh users from hitting a 401 on their first turn.
+type DaedalusProvider = 'openrouter' | 'nous';
 function loadDaedalusModel(): string {
   try {
     return window.localStorage.getItem(DAEDALUS_MODEL_KEY) || DEFAULT_DAEDALUS_MODEL;
   } catch {
     return DEFAULT_DAEDALUS_MODEL;
+  }
+}
+function loadDaedalusProvider(): DaedalusProvider {
+  try {
+    const v = window.localStorage.getItem(DAEDALUS_PROVIDER_KEY);
+    return v === 'nous' ? 'nous' : 'openrouter';
+  } catch {
+    return 'openrouter';
   }
 }
 
@@ -346,15 +360,20 @@ export function ChatPanel() {
 
   // Daedalus model picker state
   const [daedalusModel, setDaedalusModel] = useState<string>(loadDaedalusModel);
+  const [daedalusProvider, setDaedalusProvider] = useState<DaedalusProvider>(loadDaedalusProvider);
   const [daedalusModelPickerOpen, setDaedalusModelPickerOpen] = useState(false);
   const [nousModels, setNousModels] = useState<NousModel[]>([]);
   const [nousModelsLoading, setNousModelsLoading] = useState(false);
   const [nousModelsError, setNousModelsError] = useState<string | null>(null);
   const [daedalusModelSearch, setDaedalusModelSearch] = useState('');
 
-  const changeDaedalusModel = useCallback((modelId: string) => {
+  const changeDaedalusModel = useCallback((modelId: string, fromProvider: DaedalusProvider = 'nous') => {
     setDaedalusModel(modelId);
-    try { window.localStorage.setItem(DAEDALUS_MODEL_KEY, modelId); } catch {}
+    setDaedalusProvider(fromProvider);
+    try {
+      window.localStorage.setItem(DAEDALUS_MODEL_KEY, modelId);
+      window.localStorage.setItem(DAEDALUS_PROVIDER_KEY, fromProvider);
+    } catch {}
     setDaedalusModelPickerOpen(false);
   }, []);
 
@@ -364,7 +383,13 @@ export function ChatPanel() {
   // the effect on every render and create an infinite retry loop.
   const nousModelsFetchedRef = useRef(false);
   useEffect(() => {
-    if (!daedalusModelPickerOpen || nousModelsFetchedRef.current) return;
+    // Trigger fetch when EITHER the picker opens OR the user is sitting on
+    // a Nous-pinned Daedalus session — the latter so the smart-default
+    // validator below can run on first paint without waiting for the user
+    // to open the picker.
+    const shouldFetch =
+      daedalusModelPickerOpen || (agent === 'daedalus' && daedalusProvider === 'nous');
+    if (!shouldFetch || nousModelsFetchedRef.current) return;
     nousModelsFetchedRef.current = true;
     setNousModelsLoading(true);
     setNousModelsError(null);
@@ -377,10 +402,18 @@ export function ChatPanel() {
         setNousModelsError(err instanceof Error ? err.message : String(err));
       })
       .finally(() => setNousModelsLoading(false));
-  }, [daedalusModelPickerOpen]);
+  }, [daedalusModelPickerOpen, agent, daedalusProvider]);
+
+  // Daedalus is a text-out chat agent. Drop models whose only output is
+  // speech / image / something else — they'd accept a turn but return
+  // nothing the chat panel knows how to render.
+  const chatCapableNousModels = useMemo(
+    () => nousModels.filter((m) => (m.output_modalities ?? ['text']).includes('text')),
+    [nousModels],
+  );
 
   const filteredDaedalusModels = useMemo(() => {
-    let list = nousModels;
+    let list = chatCapableNousModels;
     if (daedalusModelSearch.trim()) {
       const q = daedalusModelSearch.toLowerCase();
       list = list.filter(
@@ -388,7 +421,24 @@ export function ChatPanel() {
       );
     }
     return list.slice(0, 80);
-  }, [nousModels, daedalusModelSearch]);
+  }, [chatCapableNousModels, daedalusModelSearch]);
+
+  // Smart default: once the Nous catalog loads, validate the persisted
+  // daedalusModel still exists on the current provider. If the user is
+  // pinned to nous but the model is gone (e.g. retired, or a stale TTS
+  // pick), quietly swap to the first chat-capable Nous model. We only
+  // do this for Nous-pinned users — OpenRouter users keep their pick
+  // regardless because we don't have an OpenRouter catalog to validate
+  // against here.
+  useEffect(() => {
+    if (daedalusProvider !== 'nous') return;
+    if (chatCapableNousModels.length === 0) return;
+    const current = chatCapableNousModels.find((m) => m.id === daedalusModel);
+    if (current) return;
+    const fallback = chatCapableNousModels[0];
+    setDaedalusModel(fallback.id);
+    try { window.localStorage.setItem(DAEDALUS_MODEL_KEY, fallback.id); } catch {}
+  }, [daedalusProvider, chatCapableNousModels, daedalusModel]);
 
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
@@ -833,9 +883,13 @@ export function ChatPanel() {
         model: agent === 'daedalus' ? daedalusModel : model,
         agent,
         autonomy,
+        // Provider is only meaningful for Daedalus turns. Backend treats
+        // null as "use default" (currently `nous`). Sending `openrouter`
+        // explicitly is the fresh-user fallback path.
+        provider: agent === 'daedalus' ? daedalusProvider : null,
       }),
     );
-  }, [input, model, daedalusModel, sessionId, pendingImages, agent, autonomy]);
+  }, [input, model, daedalusModel, daedalusProvider, sessionId, pendingImages, agent, autonomy]);
 
   // Keep sendRef pointing at the latest `send` so the chat-send event listener
   // always calls the current closure (input/model/sessionId are captured fresh).
@@ -881,10 +935,11 @@ export function ChatPanel() {
           model: agent === 'daedalus' ? daedalusModel : model,
           agent,
           autonomy,
+          provider: agent === 'daedalus' ? daedalusProvider : null,
         }),
       );
     },
-    [sessionId, model, daedalusModel, agent, autonomy],
+    [sessionId, model, daedalusModel, daedalusProvider, agent, autonomy],
   );
 
   const cancel = useCallback(() => {

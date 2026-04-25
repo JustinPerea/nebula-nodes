@@ -4,7 +4,15 @@ Daedalus is nebula-nodes' creative-craftsman agent — a master builder that
 plans multi-stage creative pipelines on the canvas, measures every output,
 and learns from every failed cut. It's powered by
 [Hermes Agent](https://github.com/NousResearch/hermes-agent) from Nous
-Research, running Kimi K2.6 via OpenRouter.
+Research.
+
+You can run Daedalus's brain through either:
+- **OpenRouter** with Kimi K2.6 — pay-per-use, BYO API key. Default for
+  fresh installs.
+- **Nous Portal** — Nous Research's flagship subscription. One auth gives
+  you 300+ models (Hermes 4 / DeepSeek V4 / Kimi K2.6 / Gemini 3 Flash /
+  GPT-5.5 / etc.), all swappable from the chat-header model picker without
+  leaving the app.
 
 Claude remains the default chat agent. Daedalus is opt-in.
 
@@ -47,6 +55,40 @@ hermes config get model
 ```
 
 Expected: shows `provider: openrouter, name: moonshotai/kimi-k2.6`.
+
+## 2.5. Nous Portal (alternative — recommended for the full Hermes stack)
+
+If you have a [Nous Research subscription](https://portal.nousresearch.com),
+you can route Daedalus through it instead of (or in addition to) OpenRouter.
+One OAuth login covers 300+ models served via the Nous Portal gateway, and
+the chat header in nebula-nodes exposes a live model picker so you can swap
+mid-session without editing config files.
+
+OAuth into Nous Portal — done **after** you create the Daedalus profile in
+section 3, since auth is per-profile:
+
+```bash
+hermes-daedalus model
+# Select "Nous Portal (Nous Research subscription)" when prompted.
+# Hermes opens a browser for OAuth and writes the credential into
+# ~/.hermes/profiles/daedalus/auth.json.
+```
+
+In the nebula-nodes chat panel:
+
+- Switch the agent to **Daedalus**.
+- Click the model trigger in the chat header (shows `<model> · Hermes`)
+  to open the picker.
+- Pick a model — selection persists across reloads via localStorage. The
+  app pins `provider: nous` for that and subsequent turns. Switching back
+  to OpenRouter is a matter of clearing the picker (or `localStorage.removeItem('nebula:daedalus-provider')`).
+
+The same OAuth credential also unlocks the **Nous Portal universal node**
+on the canvas (Library → Universal → Nous Portal) — drag it onto a graph
+and call any of the same 300+ models from a wired pipeline.
+
+If you don't have a Nous Portal subscription, skip this section. The
+OpenRouter setup above works on its own.
 
 ## 3. Create the Daedalus Hermes profile
 
@@ -303,9 +345,20 @@ hermes-daedalus config set model.name moonshotai/kimi-k2
 ## Kimi track evidence (for hackathon submission)
 
 For the Nous Research Creative Hackathon, Daedalus running on Kimi K2.6 is
-provable:
+provable. Two paths:
+
+**Via OpenRouter (default for fresh installs)**
 
 - `hermes-daedalus config get model` → shows `moonshotai/kimi-k2.6`
 - `hermes-daedalus insights` after a demo run → shows Kimi token usage
-- `backend/services/hermes_session.py` hardcodes `--provider openrouter
-  --model moonshotai/kimi-k2.6` and invokes via `hermes-daedalus`
+- In `frontend/src/components/panels/ChatPanel.tsx`, `daedalusProvider`
+  starts at `'openrouter'` and `daedalusModel` at `'moonshotai/kimi-k2.6'`
+  for users who haven't picked from the Nous catalog.
+
+**Via Nous Portal (when the user has authed via §2.5)**
+
+- The chat-header picker shows the active model (e.g. `moonshotai/kimi-k2.6 · Hermes`)
+- `~/.hermes/profiles/daedalus/auth.json` contains a `nous` credential and
+  Hermes routes the inference call to `https://inference-api.nousresearch.com/v1`
+- Either path keeps Daedalus running on a Hermes-compatible Kimi K2.6
+  endpoint — the hackathon's substantive requirement.

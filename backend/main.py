@@ -416,6 +416,7 @@ async def chat_websocket(websocket: WebSocket) -> None:
         model: str,
         agent: str,
         autonomy: str,
+        provider: str | None,
     ) -> None:
         # Single outbound queue so every send path (agent events + canvas-
         # action events from the graph API) is serialized through one drainer
@@ -453,7 +454,7 @@ async def chat_websocket(websocket: WebSocket) -> None:
                 return
 
             try:
-                agen = runner(message, session_id, model, autonomy)
+                agen = runner(message, session_id, model, autonomy, provider=provider)
                 async for event in agen:
                     enqueue(event)
             except Exception as exc:
@@ -490,13 +491,17 @@ async def chat_websocket(websocket: WebSocket) -> None:
             model = payload.get("model") or "claude-sonnet-4-6"
             agent = payload.get("agent") or "claude"
             autonomy = payload.get("autonomy") or "auto"
+            # Optional per-turn provider override (e.g. "nous" / "openrouter").
+            # When omitted, the runner falls back to its default provider.
+            provider_raw = payload.get("provider")
+            provider = str(provider_raw) if provider_raw else None
             if not user_message.strip():
                 continue
 
             if current_task and not current_task.done():
                 current_task.cancel()
             current_task = asyncio.create_task(
-                stream_response(user_message, session_id, model, agent, autonomy)
+                stream_response(user_message, session_id, model, agent, autonomy, provider)
             )
     except WebSocketDisconnect:
         if current_task and not current_task.done():
