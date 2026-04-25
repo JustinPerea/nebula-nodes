@@ -465,16 +465,39 @@ body.app-hermes .chat-panel--agent-daedalus .chat-panel__bubble--user::before {
   padding: 0 6px;
 }
 
-/* Assistant bubble — parchment prose */
+/* Assistant bubble — Daedalus's craft notes. Visually distinct from the
+ * user bubble via (a) a subtle ink-2 manuscript-parchment wash background,
+ * (b) a cyanotype top-rule + "DAEDALUS" eyebrow label, (c) warmer inner
+ * padding. NO side-accent bars — the base Claude rule puts a 3px parchment
+ * left border here via --chat-accent which we explicitly clear. */
 body.app-hermes .chat-panel--agent-daedalus .chat__bubble--assistant,
 body.app-hermes .chat-panel--agent-daedalus .chat-panel__bubble--assistant {
-  padding: 0;
+  padding: 12px 14px 12px;
   max-width: 100%;
   color: var(--h-parchment);
   font-family: 'IBM Plex Mono', monospace;
   font-size: 12px;
   line-height: 1.65;
-  background: transparent;
+  background: var(--h-ink-2);
+  border: 1px solid var(--h-rule-soft);
+  border-top: 2px solid var(--h-cyanotype);
+  border-radius: 0;
+  position: relative;
+  margin-top: 18px; /* room for the DAEDALUS eyebrow that sits above */
+}
+
+body.app-hermes .chat-panel--agent-daedalus .chat__bubble--assistant::before,
+body.app-hermes .chat-panel--agent-daedalus .chat-panel__bubble--assistant::before {
+  content: 'DAEDALUS';
+  position: absolute;
+  top: -9px;
+  left: 12px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 8px;
+  letter-spacing: 0.28em;
+  color: var(--h-cyanotype);
+  background: var(--h-ink);
+  padding: 0 6px;
 }
 
 body.app-hermes .chat-panel--agent-daedalus .chat__bubble--assistant code,
