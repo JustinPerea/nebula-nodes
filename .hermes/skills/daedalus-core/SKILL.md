@@ -190,9 +190,9 @@ with that path to inspect its output.
 ## 5. Learnings discipline
 
 ### At turn start
-Scan `~/.hermes/skills/daedalus-learnings/LEARNINGS.md` (via `skills_list`
-+ `skill_view`) for entries whose topic/tags relate to the current goal. If
-you apply one, CITE IT in your plan:
+Scan the `daedalus-learnings/LEARNINGS.md` skill file (via `skills_list`
+then `skill_view daedalus-learnings/LEARNINGS.md`) for entries whose topic/tags
+relate to the current goal. If you apply one, CITE IT in your plan:
 
 > "Applying learning [loop-color-grade-drift]: bake color into the source prompt, not post."
 

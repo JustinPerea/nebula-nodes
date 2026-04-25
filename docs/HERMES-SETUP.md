@@ -253,13 +253,25 @@ agent's SKILL.md can switch modes.
 
 ## Learnings
 
-Daedalus saves what it learns to
-`~/.hermes/skills/daedalus-learnings/LEARNINGS.md` on your machine. This is
-YOUR Daedalus's memory — personal, user-local, privacy-friendly. When a
-learning in your LEARNINGS.md has been confirmed multiple times and seems
-generally applicable, you can promote it upstream by opening a PR on
-nebula-nodes that adds it to `daedalus-core/SKILL.md` — your local lesson
-becomes every future user's baseline.
+Daedalus saves what it learns into the `daedalus-learnings` skill via the
+Hermes `skill_manage patch` tool. This is YOUR Daedalus's memory — personal,
+user-local, privacy-friendly. When a learning has been confirmed multiple
+times and seems generally applicable, you can promote it upstream by opening
+a PR on nebula-nodes that adds it to `daedalus-core/SKILL.md` — your local
+lesson becomes every future user's baseline.
+
+**Where the file actually lives on your disk:** Hermes runs Daedalus inside
+a `$HOME`-jailed sandbox (the profile dir), so its skill writes land at the
+nested path:
+
+```
+~/.hermes/profiles/daedalus/home/.hermes/profiles/daedalus/skills/daedalus-learnings/LEARNINGS.md
+```
+
+That nesting is intentional (Hermes's sandbox doubles the prefix); from
+inside the agent it's just `~/.hermes/skills/daedalus-learnings/LEARNINGS.md`.
+Use the host path above when you want to `cat` / `grep` the file from
+outside Daedalus's session.
 
 ## Troubleshooting
 
