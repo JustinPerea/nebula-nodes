@@ -30,6 +30,7 @@ from services.chat_actions import publish_action
 from routes.openrouter_proxy import router as openrouter_router
 from routes.replicate_proxy import router as replicate_router
 from routes.fal_proxy import router as fal_router
+from routes.nous_proxy import router as nous_router
 
 execution_cache = ExecutionCache(ttl=3600)
 node_registry = NodeRegistry()
@@ -209,6 +210,7 @@ def _sniff_image_type(data: bytes) -> tuple[str, str] | None:
 app.include_router(openrouter_router)
 app.include_router(replicate_router)
 app.include_router(fal_router)
+app.include_router(nous_router)
 
 
 @app.post("/api/uploads")
@@ -735,7 +737,12 @@ def _validate_connect_handles(
     and `inputPorts[].id` for the target. Universal/dynamic nodes are skipped
     (their ports are provider-driven and not known up front).
     """
-    universal_defs = {"openrouter-universal", "replicate-universal", "fal-universal"}
+    universal_defs = {
+        "openrouter-universal",
+        "replicate-universal",
+        "fal-universal",
+        "nous-portal-universal",
+    }
     for node_id, port, direction, port_key in [
         (src_node_id, src_port, "source", "outputPorts"),
         (dst_node_id, dst_port, "target", "inputPorts"),
@@ -772,7 +779,12 @@ def _valid_param_keys(definition_id: str) -> set[str] | None:
     defn = node_registry.get(definition_id)
     if not defn:
         return None
-    if definition_id in {"openrouter-universal", "replicate-universal", "fal-universal"}:
+    if definition_id in {
+        "openrouter-universal",
+        "replicate-universal",
+        "fal-universal",
+        "nous-portal-universal",
+    }:
         return None
     keys: set[str] = set()
     for source_key in ("params", "sharedParams", "falParams", "directParams"):

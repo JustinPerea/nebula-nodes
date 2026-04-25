@@ -1372,6 +1372,54 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     ],
   },
 
+  'nous-portal-universal': {
+    id: 'nous-portal-universal',
+    displayName: 'Nous Portal',
+    category: 'universal',
+    apiProvider: 'nous',
+    apiEndpoint: 'https://inference-api.nousresearch.com/v1/chat/completions',
+    // No env-key field — auth is OAuth, stored in ~/.hermes/auth.json after
+    // `hermes auth`. The backend reads it; the frontend doesn't need a key.
+    envKeyName: [],
+    executionPattern: 'stream',
+    inputPorts: [
+      { id: 'messages', label: 'Messages', dataType: 'Text', required: true },
+      { id: 'images', label: 'Images', dataType: 'Image', required: false, multiple: true },
+    ],
+    outputPorts: [
+      { id: 'text', label: 'Text', dataType: 'Text', required: false },
+    ],
+    params: [
+      {
+        key: 'model',
+        label: 'Model',
+        type: 'string',
+        required: true,
+        default: '',
+        placeholder: 'Loading models…',
+      },
+      {
+        key: 'temperature',
+        label: 'Temperature',
+        type: 'float',
+        required: false,
+        default: 1.0,
+        min: 0,
+        max: 2,
+        step: 0.1,
+      },
+      {
+        key: 'max_tokens',
+        label: 'Max Tokens',
+        type: 'integer',
+        required: false,
+        default: 4096,
+        min: 1,
+        max: 200000,
+      },
+    ],
+  },
+
   'replicate-universal': {
     id: 'replicate-universal',
     displayName: 'Replicate',
