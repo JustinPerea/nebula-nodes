@@ -1142,3 +1142,210 @@ body.app-hermes .reroute-node:hover {
   background: var(--h-parchment);
   border-color: var(--h-cyanotype);
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+ * SETTINGS — API key ledger (the smith's tool roster)
+ * Inherits .panel + .inspector__label + .inspector__field overrides.
+ * ═══════════════════════════════════════════════════════════════════ */
+
+body.app-hermes .settings__section-label {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: var(--h-parchment);
+  border-top: 1px solid var(--h-rule-soft);
+  padding-top: 8px;
+  margin-top: 16px;
+  margin-bottom: 10px;
+}
+body.app-hermes .settings__section-label:first-child {
+  border-top: none;
+  padding-top: 0;
+  margin-top: 0;
+}
+
+body.app-hermes .settings__key-link {
+  color: var(--h-parchment-dim);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+body.app-hermes .settings__key-link:hover {
+  color: var(--h-cyanotype);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* The reveal eye-button next to the masked key field */
+body.app-hermes .settings__reveal-button {
+  background: transparent;
+  border: 1px solid var(--h-rule-soft);
+  border-radius: 0;
+  color: var(--h-parchment-faint);
+}
+body.app-hermes .settings__reveal-button:hover {
+  border-color: var(--h-cyanotype);
+  color: var(--h-cyanotype);
+}
+
+/* Save button — cream parchment fill, the ritual finale of the form */
+body.app-hermes .settings__save-button {
+  background: var(--h-parchment);
+  color: var(--h-ink);
+  border: none;
+  border-radius: 0;
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 10px 0;
+}
+body.app-hermes .settings__save-button:hover {
+  background: #fff6dc;
+}
+body.app-hermes .settings__save-button:disabled {
+  opacity: 0.4;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+ * CONNECTION POPUP — when wiring a node, pick the next joint
+ * ═══════════════════════════════════════════════════════════════════ */
+
+body.app-hermes .connection-popup {
+  background: var(--h-ink-2);
+  border: 1px solid var(--h-rule-strong);
+  border-radius: 0;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  font-family: 'IBM Plex Mono', monospace;
+  color: var(--h-parchment);
+}
+
+body.app-hermes .connection-popup__header {
+  border-bottom: 1px solid var(--h-rule-soft);
+  padding: 9px 12px;
+}
+
+/* Square the port-type dot — keep its color, lose the circle */
+body.app-hermes .connection-popup__type-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 0;
+  box-shadow: 0 0 0 1px var(--h-rule-soft);
+}
+
+body.app-hermes .connection-popup__search {
+  color: var(--h-parchment);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+}
+body.app-hermes .connection-popup__search::placeholder {
+  color: var(--h-parchment-faint);
+  font-style: italic;
+}
+
+body.app-hermes .connection-popup__close {
+  color: var(--h-parchment-faint);
+  border-radius: 0;
+}
+body.app-hermes .connection-popup__close:hover {
+  background: rgba(243, 230, 196, 0.06);
+  color: var(--h-parchment);
+}
+
+body.app-hermes .connection-popup__empty {
+  color: var(--h-parchment-faint);
+  font-family: 'Cormorant Garamond', serif;
+  font-style: italic;
+  font-size: 12px;
+}
+
+body.app-hermes .connection-popup__category-label--button {
+  border-radius: 0;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--h-parchment-dim);
+}
+body.app-hermes .connection-popup__category-label--button:hover {
+  background: rgba(243, 230, 196, 0.04);
+  color: var(--h-parchment);
+}
+body.app-hermes .connection-popup__category-chevron {
+  color: var(--h-parchment-faint);
+}
+body.app-hermes .connection-popup__category-count {
+  color: var(--h-parchment-faint);
+}
+
+/* Item row — node candidate offered for connection */
+body.app-hermes .connection-popup__item {
+  border-radius: 0;
+  font-family: 'IBM Plex Mono', monospace;
+  color: var(--h-parchment-dim);
+}
+body.app-hermes .connection-popup__item:hover {
+  background: rgba(243, 230, 196, 0.04);
+  color: var(--h-parchment);
+}
+body.app-hermes .connection-popup__item-dot {
+  border-radius: 0;
+  box-shadow: 0 0 0 1px var(--h-rule-soft);
+}
+body.app-hermes .connection-popup__item-name {
+  font-family: 'Cormorant Garamond', serif;
+  font-style: italic;
+  font-size: 13px;
+  color: var(--h-parchment);
+}
+body.app-hermes .connection-popup__item-port {
+  color: var(--h-parchment-faint);
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+ * CONTEXT MENU — right-click decree
+ * ═══════════════════════════════════════════════════════════════════ */
+
+body.app-hermes .context-menu {
+  background: var(--h-ink-2);
+  border: 1px solid var(--h-rule-strong);
+  border-radius: 0;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  font-family: 'IBM Plex Mono', monospace;
+  padding: 4px;
+  color: var(--h-parchment);
+}
+
+body.app-hermes .context-menu__item {
+  border-radius: 0;
+  color: var(--h-parchment-dim);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  padding: 7px 12px;
+}
+body.app-hermes .context-menu__item:hover {
+  background: rgba(243, 230, 196, 0.05);
+  color: var(--h-parchment);
+}
+
+/* Destructive items — rust ink, not bright red */
+body.app-hermes .context-menu__item--danger:hover {
+  background: rgba(184, 107, 74, 0.1);
+  color: #c58b3a;
+}
+
+body.app-hermes .context-menu__shortcut {
+  color: var(--h-parchment-faint);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
