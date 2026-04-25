@@ -144,6 +144,27 @@
 
 .panel__item:active { cursor: grabbing; }
 
+.inspector__node-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.inspector__node-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.inspector__node-name {
+  flex: 1;
+  color: #eee;
+  font-weight: 500;
+  font-size: 13px;
+}
+
 .inspector__section { margin-bottom: 12px; }
 
 .inspector__label {

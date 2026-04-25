@@ -161,19 +161,14 @@ export function Inspector() {
       </div>
 
       <div className="panel__body">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
+        <div className="inspector__node-header">
           <span
+            className="inspector__node-dot"
             style={{
-              width: 8,
-              height: 8,
-              borderRadius: '50%',
               backgroundColor: CATEGORY_COLORS[definition?.category ?? 'universal'],
-              flexShrink: 0,
             }}
           />
-          <span style={{ color: '#eee', fontWeight: 500, fontSize: 13, flex: 1 }}>
-            {nodeData.label}
-          </span>
+          <span className="inspector__node-name">{nodeData.label}</span>
           {definition && (
             <button
               className="inspector__info-button"

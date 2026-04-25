@@ -150,10 +150,12 @@ body.app-hermes .toolbar__divider {
 }
 
 /* ═══════════════════════════════════════════════════════════════════
- * NODE LIBRARY — reskin as a "registry manuscript"
+ * PANELS — shared chrome (Inspector / Node Library / Settings)
+ * Each component renders <div class="panel"> at its root, so this
+ * one block reskins all three at once.
  * ═══════════════════════════════════════════════════════════════════ */
 
-body.app-hermes .node-library {
+body.app-hermes .panel {
   background: var(--h-ink-2);
   border: 1px solid var(--h-rule-strong);
   border-radius: 0;
@@ -162,63 +164,237 @@ body.app-hermes .node-library {
   font-family: 'IBM Plex Mono', monospace;
 }
 
-body.app-hermes .node-library__header,
-body.app-hermes .node-library__title {
-  font-family: 'Cormorant Garamond', serif;
-  font-size: 16px;
+body.app-hermes .panel__header {
+  border-bottom: 1px solid var(--h-rule-soft);
+  padding: 10px 14px;
+}
+body.app-hermes .panel__title {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px;
   font-weight: 600;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.28em;
   text-transform: uppercase;
   color: var(--h-parchment);
-  border-bottom: 1px solid var(--h-rule-soft);
-  font-feature-settings: "smcp" on;
+}
+body.app-hermes .panel__close {
+  color: var(--h-parchment-faint);
+  font-size: 18px;
+}
+body.app-hermes .panel__close:hover {
+  color: var(--h-parchment);
 }
 
-body.app-hermes .node-library__search,
-body.app-hermes .node-library input[type="text"] {
+body.app-hermes .panel__body {
+  padding: 12px 14px;
+}
+
+/* Search field — manuscript margin entry */
+body.app-hermes .panel__search {
   background: var(--h-ink);
   border: 1px solid var(--h-rule-soft);
   border-radius: 0;
   color: var(--h-parchment);
   font-family: 'IBM Plex Mono', monospace;
   font-size: 11px;
+  padding: 8px 10px;
 }
-body.app-hermes .node-library__search::placeholder,
-body.app-hermes .node-library input::placeholder {
+body.app-hermes .panel__search::placeholder {
   color: var(--h-parchment-faint);
   font-style: italic;
 }
-body.app-hermes .node-library__search:focus,
-body.app-hermes .node-library input:focus {
+body.app-hermes .panel__search:focus {
   border-color: var(--h-parchment);
   outline: none;
 }
 
-body.app-hermes .node-library__category,
-body.app-hermes .node-library__group {
-  border-bottom: 1px solid var(--h-rule-soft);
-}
-
-body.app-hermes .node-library__category-header,
-body.app-hermes .node-library__group-label {
+/* Group label / category header — eyebrow rule */
+body.app-hermes .panel__group-label {
   font-family: 'IBM Plex Mono', monospace;
   font-size: 9px;
-  letter-spacing: 0.2em;
+  letter-spacing: 0.22em;
   text-transform: uppercase;
   color: var(--h-parchment-dim);
-  border-bottom: 1px solid var(--h-rule-soft);
+}
+body.app-hermes .panel__group-label--button {
+  border-radius: 0;
+}
+body.app-hermes .panel__group-label--button:hover {
+  background: rgba(243, 230, 196, 0.04);
+  color: var(--h-parchment);
+}
+body.app-hermes .panel__group-chevron {
+  color: var(--h-parchment-faint);
+}
+body.app-hermes .panel__group-text {
+  color: inherit;
+}
+body.app-hermes .panel__group-count {
+  background: transparent;
+  border: 1px solid var(--h-rule-soft);
+  border-radius: 0;
+  color: var(--h-parchment-faint);
+  font-family: 'IBM Plex Mono', monospace;
+}
+/* Category color dots — keep the type-color info, square the shape so
+ * they read as manuscript bullets rather than Material chips. */
+body.app-hermes .panel__group-dot {
+  border-radius: 0;
+  width: 5px;
+  height: 5px;
+  box-shadow: 0 0 0 1px var(--h-rule-soft);
 }
 
-body.app-hermes .node-library__item {
+/* Library items — a roster of named tools */
+body.app-hermes .panel__item {
   font-family: 'IBM Plex Mono', monospace;
   font-size: 11px;
   color: var(--h-parchment-dim);
   border-radius: 0;
   letter-spacing: 0.02em;
+  padding: 6px 8px;
 }
-body.app-hermes .node-library__item:hover {
-  background: var(--h-ink-3);
+body.app-hermes .panel__item:hover {
+  background: rgba(243, 230, 196, 0.04);
   color: var(--h-parchment);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+ * INSPECTOR — ledger of node parameters
+ * ═══════════════════════════════════════════════════════════════════ */
+
+body.app-hermes .inspector__section {
+  margin-bottom: 14px;
+}
+
+body.app-hermes .inspector__label {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--h-parchment-dim);
+  margin-bottom: 6px;
+}
+
+/* Selected-node header — colored manuscript bullet + serif italic name */
+body.app-hermes .inspector__node-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 0;
+  box-shadow: 0 0 0 1px var(--h-rule-soft);
+}
+body.app-hermes .inspector__node-name {
+  font-family: 'Cormorant Garamond', 'Times New Roman', serif;
+  font-style: italic;
+  font-weight: 500;
+  font-size: 15px;
+  color: var(--h-parchment);
+}
+
+/* Param input fields (text, number, select) */
+body.app-hermes .inspector__field {
+  background: var(--h-ink);
+  border: 1px solid var(--h-rule-soft);
+  border-radius: 0;
+  color: var(--h-parchment);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  padding: 7px 9px;
+}
+body.app-hermes .inspector__field:focus {
+  border-color: var(--h-parchment);
+  outline: none;
+}
+body.app-hermes .inspector__field::placeholder {
+  color: var(--h-parchment-faint);
+  font-style: italic;
+}
+/* Native dropdown arrow inherits color from `color` — set explicitly so
+ * the chevron reads on dark ink (Chromium ignores `color` for select
+ * arrows in some versions, but Firefox + Safari respect it). */
+body.app-hermes select.inspector__field {
+  color-scheme: dark;
+}
+
+/* Action buttons (Run, Duplicate, Delete) */
+body.app-hermes .inspector__action-button {
+  background: transparent;
+  border: 1px solid var(--h-rule-strong);
+  border-radius: 0;
+  color: var(--h-parchment-dim);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  padding: 7px 0;
+}
+body.app-hermes .inspector__action-button:hover {
+  background: rgba(243, 230, 196, 0.05);
+  border-color: var(--h-cyanotype);
+  color: var(--h-cyanotype);
+}
+body.app-hermes .inspector__action-button--danger:hover {
+  background: rgba(184, 107, 74, 0.08);
+  border-color: #b86b4a;
+  color: #c58b3a;
+}
+
+/* Info button — small italic 'i' that opens the I/O reference */
+body.app-hermes .inspector__info-button {
+  font-family: 'Cormorant Garamond', serif;
+  font-style: italic;
+  font-weight: 600;
+  border-color: var(--h-rule-strong);
+  color: var(--h-parchment-dim);
+}
+body.app-hermes .inspector__info-button:hover {
+  border-color: var(--h-cyanotype);
+  color: var(--h-cyanotype);
+}
+
+/* Info panel — folded reference card with rules */
+body.app-hermes .inspector__info-panel {
+  background: var(--h-ink);
+  border: 1px solid var(--h-rule-soft);
+  border-radius: 0;
+}
+body.app-hermes .inspector__info-section {
+  margin-bottom: 10px;
+}
+body.app-hermes .inspector__info-heading {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--h-parchment-faint);
+  border-bottom: 1px solid var(--h-rule-soft);
+  padding-bottom: 4px;
+  margin-bottom: 6px;
+}
+body.app-hermes .inspector__info-row {
+  color: var(--h-parchment-dim);
+  padding: 3px 0;
+}
+body.app-hermes .inspector__info-dot {
+  border-radius: 0; /* manuscript bullet, square not round */
+  width: 5px;
+  height: 5px;
+}
+body.app-hermes .inspector__info-name {
+  color: var(--h-parchment);
+}
+body.app-hermes .inspector__info-type {
+  color: var(--h-parchment-faint);
+  font-style: italic;
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 11px;
+}
+body.app-hermes .inspector__info-meta {
+  color: var(--h-parchment-faint);
+  border-top: 1px solid var(--h-rule-soft);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.15em;
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -650,4 +826,319 @@ body.app-hermes .chat-panel--agent-daedalus .chat-panel__send:hover {
 body.app-hermes .chat-panel--agent-daedalus .chat-panel__send:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   CANVAS CHROME — manuscript page beneath the work
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* Canvas page is pinned to the obsidian palette regardless of tone — the
+ * green cast looked muddy as a full-bleed background, while pure black
+ * lets the parchment node cards read as illuminated leaves on a dark
+ * desk. Tone toggle still drives chat / panels / handles / edges. */
+body.app-hermes .canvas-wrapper {
+  background: #050505;
+}
+body.app-hermes .react-flow {
+  --xy-background-color: #050505;
+  --xy-background-pattern-dots-color-default: rgba(232, 224, 208, 0.1);
+  --xy-edge-stroke-default: var(--h-rule-hard);
+  --xy-edge-stroke-selected-default: var(--h-cyanotype);
+  --xy-handle-background-color-default: var(--h-cyanotype);
+  --xy-handle-border-color-default: var(--h-rule-strong);
+  --xy-minimap-mask-background-color-default: rgba(0, 0, 0, 0.55);
+}
+
+/* Selection rectangle — a hairline-pen outline, not a wash */
+body.app-hermes .react-flow__selection {
+  background: rgba(243, 230, 196, 0.04) !important;
+  border: 1px solid var(--h-rule-strong) !important;
+}
+
+/* React Flow zoom/fit controls (bottom-left) */
+body.app-hermes .react-flow__controls {
+  border: 1px solid var(--h-rule-strong);
+  background: var(--h-ink-2);
+  box-shadow: none;
+}
+body.app-hermes .react-flow__controls button {
+  background: var(--h-ink-2) !important;
+  border-color: var(--h-rule-soft) !important;
+  color: var(--h-parchment-dim) !important;
+  fill: var(--h-parchment-dim) !important;
+}
+body.app-hermes .react-flow__controls button:hover {
+  background: var(--h-ink-3) !important;
+  color: var(--h-parchment) !important;
+  fill: var(--h-parchment) !important;
+}
+
+/* Minimap — corner-of-page reference */
+body.app-hermes .react-flow__minimap {
+  background: var(--h-ink-2) !important;
+  border: 1px solid var(--h-rule-strong);
+}
+
+/* Animated edges — keep the dash-flow, just retoned */
+body.app-hermes .react-flow__edge.animated path {
+  stroke: var(--h-cyanotype);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   NODE CARDS — manuscript leaves
+   Each node becomes a small ruled card: square corners, hairline
+   border, parchment label in serif italic, mono ID footnote.
+   ═══════════════════════════════════════════════════════════════════ */
+
+body.app-hermes .model-node {
+  background: var(--h-ink-2);
+  border: 1px solid var(--h-rule-strong);
+  border-radius: 0;
+  color: var(--h-parchment);
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4);
+}
+
+/* States — keep the same semantics, retoned for parchment palette */
+body.app-hermes .model-node--selected {
+  border-color: var(--h-parchment);
+  box-shadow:
+    0 0 0 1px var(--h-cyanotype),
+    0 4px 18px rgba(0, 0, 0, 0.55);
+}
+body.app-hermes .model-node--queued {
+  border-color: var(--h-rule-strong);
+  border-style: dashed;
+}
+body.app-hermes .model-node--executing {
+  border-color: var(--h-cyanotype);
+  animation: hermes-node-pulse 1.6s ease-in-out infinite;
+}
+body.app-hermes .model-node--error {
+  border-color: #b86b4a; /* rust */
+}
+@keyframes hermes-node-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(107, 168, 214, 0.0); }
+  50%      { box-shadow: 0 0 0 3px rgba(107, 168, 214, 0.18); }
+}
+
+/* Header — eyebrow rule + serif italic name, mono ID footnote */
+body.app-hermes .model-node__header {
+  border-bottom: 1px solid var(--h-rule-soft);
+  padding: 8px 12px 7px;
+  gap: 8px;
+}
+body.app-hermes .model-node__category-dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 0; /* manuscript bullet, not Material dot */
+  box-shadow: 0 0 0 1px var(--h-rule-soft);
+}
+body.app-hermes .model-node__label {
+  font-family: 'Cormorant Garamond', 'Times New Roman', serif;
+  font-style: italic;
+  font-weight: 500;
+  font-size: 14px;
+  letter-spacing: 0.01em;
+  color: var(--h-parchment);
+  text-transform: none;
+}
+body.app-hermes .model-node__id-chip {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--h-parchment-faint);
+  background: transparent;
+  border: 1px solid var(--h-rule-soft);
+  border-radius: 0;
+  padding: 2px 5px;
+}
+body.app-hermes .model-node__id-chip:hover {
+  color: var(--h-cyanotype);
+  background: rgba(107, 168, 214, 0.05);
+  border-color: var(--h-cyanotype);
+}
+body.app-hermes .model-node__badge--warning {
+  color: var(--h-amber);
+}
+
+/* Ports — system labels, mono uppercase footnote */
+body.app-hermes .model-node__ports {
+  padding: 8px 0;
+}
+body.app-hermes .model-node__port-row {
+  padding: 4px 12px;
+}
+body.app-hermes .model-node__port-label {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--h-parchment-faint);
+}
+
+/* Handles — cyanotype dot on hairline ring */
+body.app-hermes .model-node__handle {
+  background: var(--h-cyanotype) !important;
+  border: 1px solid var(--h-ink) !important;
+  box-shadow: 0 0 0 1px var(--h-rule-strong);
+}
+body.app-hermes .model-node__handle:hover {
+  box-shadow: 0 0 0 2px var(--h-cyanotype);
+}
+
+/* Preview area — hairline divider, no rounded corners */
+body.app-hermes .model-node__preview {
+  border-top: 1px solid var(--h-rule-soft);
+  padding: 8px 12px;
+}
+body.app-hermes .model-node__preview-image,
+body.app-hermes .model-node__preview-image--streaming {
+  border-radius: 0;
+  border: 1px solid var(--h-rule-soft);
+}
+body.app-hermes .model-node__preview-image--streaming {
+  outline-color: var(--h-cyanotype);
+}
+body.app-hermes .model-node__preview-placeholder {
+  background: var(--h-ink);
+  border: 1px solid var(--h-rule-soft);
+  border-radius: 0;
+  color: var(--h-parchment-faint);
+  font-family: 'Cormorant Garamond', serif;
+  font-style: italic;
+  font-size: 12px;
+  padding: 12px 8px;
+}
+body.app-hermes .model-node__preview-text {
+  background: var(--h-ink);
+  border: 1px solid var(--h-rule-soft);
+  border-radius: 0;
+  color: var(--h-parchment-dim);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10.5px;
+}
+body.app-hermes .model-node__preview-text--streaming {
+  border-color: var(--h-cyanotype);
+  color: var(--h-parchment);
+}
+body.app-hermes .model-node__preview-text--streaming::after {
+  color: var(--h-cyanotype);
+}
+
+/* Hover-revealed buttons (download, loop) — manuscript chips */
+body.app-hermes .model-node__download,
+body.app-hermes .model-node__loop-toggle {
+  background: rgba(10, 22, 18, 0.85);
+  border: 1px solid var(--h-rule-strong);
+  border-radius: 0;
+  color: var(--h-parchment-dim);
+  backdrop-filter: blur(4px);
+}
+body.app-hermes .model-node__download:hover,
+body.app-hermes .model-node__loop-toggle:hover {
+  background: var(--h-ink-3);
+  color: var(--h-parchment);
+}
+body.app-hermes .model-node__loop-toggle--on {
+  color: var(--h-cyanotype);
+  border-color: var(--h-cyanotype);
+}
+
+/* Error band — rust ink wash, not bright red */
+body.app-hermes .model-node__error {
+  color: #c58b3a;
+  background: rgba(184, 107, 74, 0.1);
+  border-top: 1px solid var(--h-rule-soft);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+
+/* Loading row */
+body.app-hermes .model-node__loading {
+  border-top: 1px solid var(--h-rule-soft);
+}
+body.app-hermes .model-node__loading-spinner {
+  border-color: var(--h-rule-strong);
+  border-top-color: var(--h-cyanotype);
+}
+body.app-hermes .model-node__loading-text {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: var(--h-parchment-dim);
+}
+
+/* Progress bar — cyanotype rule */
+body.app-hermes .model-node__progress {
+  border-top: 1px solid var(--h-rule-soft);
+}
+body.app-hermes .model-node__progress-bar {
+  background: var(--h-cyanotype);
+  border-radius: 0;
+}
+
+/* Inline textarea (text-input nodes) — parchment quill on ink */
+body.app-hermes .model-node__inline-textarea {
+  border-top: 1px solid var(--h-rule-soft);
+  padding: 8px 10px;
+}
+body.app-hermes .model-node__textarea {
+  background: var(--h-ink);
+  border: 1px solid var(--h-rule-soft);
+  border-radius: 0;
+  color: var(--h-parchment);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  line-height: 1.55;
+}
+body.app-hermes .model-node__textarea:focus {
+  border-color: var(--h-parchment);
+}
+body.app-hermes .model-node__textarea::placeholder {
+  color: var(--h-parchment-faint);
+  font-style: italic;
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 12px;
+}
+
+/* Enhance — small serif button to "ask the oracle" */
+body.app-hermes .model-node__enhance {
+  background: transparent;
+  border: 1px solid var(--h-rule-strong);
+  border-radius: 0;
+  color: var(--h-parchment-dim);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.22em;
+  font-weight: 500;
+}
+body.app-hermes .model-node__enhance:hover {
+  background: rgba(243, 230, 196, 0.04);
+  border-color: var(--h-cyanotype);
+  color: var(--h-cyanotype);
+}
+
+/* Model badge inside dynamic-node header */
+body.app-hermes .dynamic-node__model-badge {
+  background: rgba(243, 230, 196, 0.04);
+  border-radius: 0;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--h-parchment-dim);
+}
+
+/* Reroute node — cyanotype waystone */
+body.app-hermes .reroute-node {
+  background: var(--h-cyanotype);
+  border-color: var(--h-parchment);
+}
+body.app-hermes .reroute-node:hover {
+  background: var(--h-parchment);
+  border-color: var(--h-cyanotype);
 }
