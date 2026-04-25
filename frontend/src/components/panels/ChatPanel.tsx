@@ -3,6 +3,7 @@ import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
 import '../../styles/panels.css';
 import '../../styles/hermes.css';
+import { fetchNousModels, type NousModel } from '../../lib/api';
 
 // Daedalus mode palette. Persisted so the user's choice survives reloads.
 type HermesTone = 'verdant' | 'obsidian';
@@ -13,6 +14,19 @@ function loadHermesTone(): HermesTone {
     return v === 'obsidian' ? 'obsidian' : 'verdant';
   } catch {
     return 'verdant';
+  }
+}
+
+// Daedalus model picker — separate from Claude's `model` state because the
+// frontend chat panel reuses the same WS for both agents and we want each
+// agent to remember its own pick. localStorage-backed.
+const DAEDALUS_MODEL_KEY = 'nebula:daedalus-model';
+const DEFAULT_DAEDALUS_MODEL = 'moonshotai/kimi-k2.6';
+function loadDaedalusModel(): string {
+  try {
+    return window.localStorage.getItem(DAEDALUS_MODEL_KEY) || DEFAULT_DAEDALUS_MODEL;
+  } catch {
+    return DEFAULT_DAEDALUS_MODEL;
   }
 }
 
@@ -329,6 +343,53 @@ export function ChatPanel() {
     setHermesTone(next);
     try { window.localStorage.setItem(HERMES_TONE_KEY, next); } catch {}
   }, []);
+
+  // Daedalus model picker state
+  const [daedalusModel, setDaedalusModel] = useState<string>(loadDaedalusModel);
+  const [daedalusModelPickerOpen, setDaedalusModelPickerOpen] = useState(false);
+  const [nousModels, setNousModels] = useState<NousModel[]>([]);
+  const [nousModelsLoading, setNousModelsLoading] = useState(false);
+  const [nousModelsError, setNousModelsError] = useState<string | null>(null);
+  const [daedalusModelSearch, setDaedalusModelSearch] = useState('');
+
+  const changeDaedalusModel = useCallback((modelId: string) => {
+    setDaedalusModel(modelId);
+    try { window.localStorage.setItem(DAEDALUS_MODEL_KEY, modelId); } catch {}
+    setDaedalusModelPickerOpen(false);
+  }, []);
+
+  // Lazy-load Nous models on first picker open, then cache. Use a ref-flag
+  // (instead of state-derived guards) because a failed fetch leaves
+  // `loading=false` and `models.length=0`, which would otherwise re-trigger
+  // the effect on every render and create an infinite retry loop.
+  const nousModelsFetchedRef = useRef(false);
+  useEffect(() => {
+    if (!daedalusModelPickerOpen || nousModelsFetchedRef.current) return;
+    nousModelsFetchedRef.current = true;
+    setNousModelsLoading(true);
+    setNousModelsError(null);
+    fetchNousModels()
+      .then((data) => setNousModels(data.models))
+      .catch((err: unknown) => {
+        // Reset the ref so the user can retry by closing + reopening the
+        // picker after running `hermes auth`.
+        nousModelsFetchedRef.current = false;
+        setNousModelsError(err instanceof Error ? err.message : String(err));
+      })
+      .finally(() => setNousModelsLoading(false));
+  }, [daedalusModelPickerOpen]);
+
+  const filteredDaedalusModels = useMemo(() => {
+    let list = nousModels;
+    if (daedalusModelSearch.trim()) {
+      const q = daedalusModelSearch.toLowerCase();
+      list = list.filter(
+        (m) => m.id.toLowerCase().includes(q) || m.name.toLowerCase().includes(q),
+      );
+    }
+    return list.slice(0, 80);
+  }, [nousModels, daedalusModelSearch]);
+
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -697,9 +758,17 @@ export function ChatPanel() {
 
     // Client-side command interception.
     if (raw.startsWith('/model ')) {
-      const name = raw.slice(7).trim().toLowerCase();
-      const alias = MODEL_ALIASES[name] ?? name;
-      setModel(alias);
+      // Preserve case for Daedalus models (some Hermes / Nous IDs are case-sensitive).
+      const rawName = raw.slice(7).trim();
+      let resolved: string;
+      if (agent === 'daedalus') {
+        resolved = rawName;
+        changeDaedalusModel(resolved);
+      } else {
+        const lower = rawName.toLowerCase();
+        resolved = MODEL_ALIASES[lower] ?? lower;
+        setModel(resolved);
+      }
       setMessages((prev) => [
         ...prev,
         { role: 'user', text: raw, id: newId() },
@@ -707,7 +776,7 @@ export function ChatPanel() {
           role: 'assistant',
           id: newId(),
           streaming: false,
-          parts: [{ kind: 'system', text: `Model set to: ${alias}` }],
+          parts: [{ kind: 'system', text: `Model set to: ${resolved}` }],
         },
       ]);
       setInput('');
@@ -761,12 +830,12 @@ export function ChatPanel() {
         type: 'send',
         message: raw,
         sessionId,
-        model,
+        model: agent === 'daedalus' ? daedalusModel : model,
         agent,
         autonomy,
       }),
     );
-  }, [input, model, sessionId, pendingImages, agent, autonomy]);
+  }, [input, model, daedalusModel, sessionId, pendingImages, agent, autonomy]);
 
   // Keep sendRef pointing at the latest `send` so the chat-send event listener
   // always calls the current closure (input/model/sessionId are captured fresh).
@@ -809,13 +878,13 @@ export function ChatPanel() {
           type: 'send',
           message: response,
           sessionId,
-          model,
+          model: agent === 'daedalus' ? daedalusModel : model,
           agent,
           autonomy,
         }),
       );
     },
-    [sessionId, model, agent, autonomy],
+    [sessionId, model, daedalusModel, agent, autonomy],
   );
 
   const cancel = useCallback(() => {
@@ -1063,14 +1132,70 @@ export function ChatPanel() {
               </button>
             </div>
           )}
-          <div className="chat-panel__meta">
-            {agent === 'daedalus' ? 'kimi-k2.6 · Hermes' : model} · {status}
+          <div className="chat-panel__meta" onMouseDown={(e) => e.stopPropagation()}>
+            {agent === 'daedalus' ? (
+              <button
+                type="button"
+                className="chat-panel__model-trigger"
+                onClick={() => setDaedalusModelPickerOpen((v) => !v)}
+                title="Switch model — fetches the live list from Nous Portal"
+              >
+                {daedalusModel} · Hermes <span className="chat-panel__model-caret">{daedalusModelPickerOpen ? '▾' : '▸'}</span>
+              </button>
+            ) : (
+              <span>{model}</span>
+            )}
+            <span> · {status}</span>
             {sessionId && (
               <span className="chat-panel__session" title={sessionId}>
                 · {sessionId.slice(0, 8)}
               </span>
             )}
           </div>
+          {agent === 'daedalus' && daedalusModelPickerOpen && (
+            <div
+              className="chat-panel__model-picker"
+              onMouseDown={(e) => e.stopPropagation()}
+            >
+              <input
+                type="text"
+                className="chat-panel__model-search"
+                placeholder={
+                  nousModelsLoading
+                    ? 'Loading models…'
+                    : nousModelsError
+                      ? 'Could not load — see error below'
+                      : `Search ${nousModels.length} models…`
+                }
+                value={daedalusModelSearch}
+                onChange={(e) => setDaedalusModelSearch(e.target.value)}
+                autoFocus
+              />
+              {nousModelsError && (
+                <div className="chat-panel__model-error">{nousModelsError}</div>
+              )}
+              <div className="chat-panel__model-list">
+                {filteredDaedalusModels.map((m) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    className={
+                      m.id === daedalusModel
+                        ? 'chat-panel__model-row chat-panel__model-row--active'
+                        : 'chat-panel__model-row'
+                    }
+                    onClick={() => changeDaedalusModel(m.id)}
+                  >
+                    <span className="chat-panel__model-row-name">{m.name}</span>
+                    <span className="chat-panel__model-row-id">{m.id}</span>
+                  </button>
+                ))}
+                {!nousModelsLoading && !nousModelsError && filteredDaedalusModels.length === 0 && nousModels.length > 0 && (
+                  <div className="chat-panel__model-empty">No matches</div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
         <button className="panel__close" onClick={() => togglePanel('chat')}>
           ×

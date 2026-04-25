@@ -1349,3 +1349,130 @@ body.app-hermes .context-menu__shortcut {
   letter-spacing: 0.15em;
   text-transform: uppercase;
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+ * MODEL PICKER — header dropdown for switching Daedalus's brain
+ * Lives below the meta line. Click the model trigger button to expand.
+ * ═══════════════════════════════════════════════════════════════════ */
+
+/* Trigger — looks like a link, mono uppercase + caret. Active background
+ * on hover so it reads as interactive without competing with the bigger
+ * agent / autonomy / tone toggles. */
+body.app-hermes .chat-panel--agent-daedalus .chat-panel__model-trigger {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 0;
+  padding: 2px 6px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: var(--h-parchment-dim);
+  cursor: pointer;
+  margin-right: 4px;
+}
+body.app-hermes .chat-panel--agent-daedalus .chat-panel__model-trigger:hover {
+  border-color: var(--h-rule-soft);
+  color: var(--h-parchment);
+}
+body.app-hermes .chat-panel--agent-daedalus .chat-panel__model-caret {
+  color: var(--h-parchment-faint);
+  margin-left: 4px;
+  font-size: 9px;
+}
+
+/* Picker — small panel below the meta line */
+body.app-hermes .chat-panel--agent-daedalus .chat-panel__model-picker {
+  margin-top: 8px;
+  background: var(--h-ink);
+  border: 1px solid var(--h-rule-strong);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  display: flex;
+  flex-direction: column;
+  max-height: 320px;
+}
+
+body.app-hermes .chat-panel--agent-daedalus .chat-panel__model-search {
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--h-rule-soft);
+  border-radius: 0;
+  color: var(--h-parchment);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  padding: 8px 10px;
+  outline: none;
+}
+body.app-hermes .chat-panel--agent-daedalus .chat-panel__model-search::placeholder {
+  color: var(--h-parchment-faint);
+  font-style: italic;
+}
+
+body.app-hermes .chat-panel--agent-daedalus .chat-panel__model-error {
+  color: #c58b3a;
+  background: rgba(184, 107, 74, 0.06);
+  border-bottom: 1px solid var(--h-rule-soft);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  padding: 8px 10px;
+  line-height: 1.4;
+}
+
+body.app-hermes .chat-panel--agent-daedalus .chat-panel__model-list {
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+body.app-hermes .chat-panel--agent-daedalus .chat-panel__model-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--h-rule-soft);
+  border-radius: 0;
+  text-align: left;
+  padding: 7px 10px;
+  cursor: pointer;
+  font-family: inherit;
+  flex-shrink: 0; /* protect against the same flex-shrink bug we hit on .chat-panel__thinking */
+}
+body.app-hermes .chat-panel--agent-daedalus .chat-panel__model-row:last-child {
+  border-bottom: none;
+}
+body.app-hermes .chat-panel--agent-daedalus .chat-panel__model-row:hover {
+  background: rgba(243, 230, 196, 0.05);
+}
+body.app-hermes .chat-panel--agent-daedalus .chat-panel__model-row--active {
+  background: rgba(107, 168, 214, 0.08);
+}
+body.app-hermes .chat-panel--agent-daedalus .chat-panel__model-row--active::before {
+  content: '› ';
+  color: var(--h-cyanotype);
+}
+body.app-hermes .chat-panel--agent-daedalus .chat-panel__model-row-name {
+  font-family: 'Cormorant Garamond', serif;
+  font-style: italic;
+  font-size: 13px;
+  color: var(--h-parchment);
+  line-height: 1.2;
+}
+body.app-hermes .chat-panel--agent-daedalus .chat-panel__model-row-id {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  color: var(--h-parchment-faint);
+  text-transform: lowercase;
+}
+
+body.app-hermes .chat-panel--agent-daedalus .chat-panel__model-empty {
+  color: var(--h-parchment-faint);
+  font-family: 'Cormorant Garamond', serif;
+  font-style: italic;
+  font-size: 12px;
+  padding: 12px 10px;
+  text-align: center;
+}

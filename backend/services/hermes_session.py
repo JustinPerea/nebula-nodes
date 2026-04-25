@@ -34,7 +34,12 @@ HEARTBEAT_QUIET_WINDOW = 20.0
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 DEFAULT_MODEL = "moonshotai/kimi-k2.6"
-DEFAULT_PROVIDER = "openrouter"
+# Daedalus's brain routes through Nous Portal (the Hermes Agent's home
+# subscription). Auth lives in `~/.hermes/auth.json` after `hermes auth` —
+# users pick which provider to bind in that flow. The frontend chat header
+# also exposes a model picker; whatever string it sends is forwarded
+# verbatim to `hermes chat --model`.
+DEFAULT_PROVIDER = "nous"
 DEFAULT_SKILLS = "daedalus-core"
 
 # Path to the Daedalus profile's agent log. We tail this in parallel with the
@@ -80,6 +85,16 @@ def _extract_log_message(line: str) -> str | None:
         "hermes_cli.plugins:" in line
         or "run_agent: Loaded environment" in line
         or "run_agent: No .env" in line
+    ):
+        return None
+    # Skip Hermes's auxiliary_client startup chatter — these fire every turn
+    # before any real work happens (vision/aux provider auto-detection,
+    # post-turn title generation). Real vision/aux calls produce different
+    # messages from the same module and stay visible.
+    if "agent.auxiliary_client:" in line and (
+        "Vision auto-detect:" in line
+        or "Auxiliary auto-detect:" in line
+        or "Auxiliary title_generation:" in line
     ):
         return None
     # Format: `YYYY-MM-DD HH:MM:SS,ms LEVEL [session_id]? module.name: message body`.
@@ -173,13 +188,15 @@ async def run_hermes(
     quiet-mode first-line `session_id:` handshake is replaced by parsing
     `Session: <id>` from the footer that prints at the end of the turn.
     """
-    # Model override: the frontend's model picker is Claude-specific (defaults
-    # to claude-sonnet-4-6). Daedalus must run on Kimi K2.6 for (a) the
-    # Hermes Agent Creative Hackathon Kimi-track qualification and (b) because
-    # Hermes is configured for OpenRouter and wouldn't recognize Claude Code
-    # model slugs. Silently swap any non-OpenRouter-slug model for the Kimi
-    # default.
-    if "/" not in model:
+    # Model handoff: the frontend chat panel sends a single `model` field,
+    # but its meaning depends on the active agent. For Daedalus turns (the
+    # only path that hits this function), we want whatever Nous-Portal model
+    # the user picked in the chat header — could be slugged (`moonshotai/...`)
+    # or a Hermes-Research short ID (`Hermes-4-405B-FP8`). The legacy guard
+    # used `/` presence to filter out Claude-style slugs (`claude-sonnet-4-6`),
+    # so we keep that specific check: anything that LOOKS like a Claude model
+    # ID (literal "claude-" prefix) falls back to the default.
+    if not model or model.startswith("claude-"):
         model = DEFAULT_MODEL
     args = [
         HERMES_BIN, "chat", "-q", message,

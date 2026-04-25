@@ -42,8 +42,27 @@ _ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[a-zA-Z]")
 _ANSI_OSC_RE = re.compile(r"\x1b\][^\x07]*\x07")
 
 # Unicode characters used in hermes's box drawing.
+#
+# Hermes's verbose-mode prose box has two render forms:
+#
+#   1. TTY (corner-style):
+#        ╭─ ⚕ Hermes ──────────────────────╮
+#        │     Plan: I'm going to ...      │
+#        ╰──────────────────────────────────╯
+#
+#   2. Non-TTY (rule-only — emitted when stdout is a pipe):
+#         ─  ⚕ Hermes  ─────────────────────
+#             Plan: I'm going to ...
+#         ──────────────────────────────────
+#
+# Form 1 is detectable via the corner glyphs alone. Form 2 has no corners,
+# so we identify open by the "⚕ Hermes" header text and close by a line
+# made entirely of horizontal-rule characters (whitespace-trimmed). Both
+# forms coexist in the wild — Hermes picks based on isatty() at startup.
 _BOX_OPEN_CHAR = "╭"
 _BOX_CLOSE_CHAR = "╰"
+_BOX_HEADER_TEXT = "⚕ Hermes"
+_HORIZONTAL_RULE_CHARS = "─━═-"
 _BOX_VERTICAL_CHARS = "│┃"
 # Hermes tool-preview lines start with one of these icons after their indent.
 # Examples seen in practice: "┊ 💻 $ nebula ...", "├ 🔲 preparing terminal",
@@ -81,11 +100,21 @@ def strip_box_chrome(line: str) -> str:
 
 
 def _is_box_open(line: str) -> bool:
-    return _BOX_OPEN_CHAR in line
+    # TTY form has the corner glyph; non-TTY form just carries the header text.
+    return _BOX_OPEN_CHAR in line or _BOX_HEADER_TEXT in line
 
 
 def _is_box_close(line: str) -> bool:
-    return _BOX_CLOSE_CHAR in line
+    if _BOX_CLOSE_CHAR in line:
+        return True
+    # Non-TTY form: a line made entirely of horizontal-rule chars (and
+    # whitespace) acts as the close. Only consulted from the in_box state,
+    # so banner separators and inter-box rules don't cause false closes.
+    # Min length 4 keeps stray "---" markers in prose from triggering.
+    stripped = line.strip()
+    if len(stripped) < 4:
+        return False
+    return all(ch in _HORIZONTAL_RULE_CHARS for ch in stripped)
 
 
 def _is_tool_preview(line: str) -> bool:
