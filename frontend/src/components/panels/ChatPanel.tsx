@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
 import '../../styles/panels.css';
@@ -339,6 +340,30 @@ export function ChatPanel() {
   const [agent, setAgent] = useState<'claude' | 'daedalus'>('claude');
   const [autonomy, setAutonomy] = useState<'auto' | 'step'>('auto');
   const [hermesTone, setHermesTone] = useState<HermesTone>(loadHermesTone);
+  // Bumped on every claude→daedalus transition so the sigil-bloom FX
+  // remounts via React key and replays the keyframe animation cleanly.
+  const [bloomKey, setBloomKey] = useState(0);
+  // Center of the chat panel at FX-fire time, captured so the portalled
+  // bloom can position itself relative to the panel even though it
+  // renders in document.body and escapes the panel's overflow:hidden.
+  const [bloomCenter, setBloomCenter] = useState<{ x: number; y: number } | null>(null);
+  const chatPanelRef = useRef<HTMLDivElement | null>(null);
+
+  // Toggle a body-level class while the sigil bloom is firing so a
+  // full-screen veil can dim everything except the chat panel for the
+  // duration of the FX. Auto-clears after the animation completes.
+  useEffect(() => {
+    if (bloomKey === 0) return;
+    const body = document.body;
+    body.classList.add('chat-bloom-active');
+    const t = window.setTimeout(() => {
+      body.classList.remove('chat-bloom-active');
+    }, 2750);
+    return () => {
+      window.clearTimeout(t);
+      body.classList.remove('chat-bloom-active');
+    };
+  }, [bloomKey]);
 
   // Drive the Hermes skin off the selected agent. While Daedalus is active,
   // .app-hermes + the current tone class live on <body> so CSS scoped under
@@ -463,6 +488,19 @@ export function ChatPanel() {
       if (next === agent) return;
       setAgent(next);
       setSessionId(null);
+      // Fire the sigil-bloom only on the awakening transition, not when
+      // returning to plain Claude. Capture chat panel center so the
+      // portalled bloom can radiate outward from the panel's midpoint.
+      if (next === 'daedalus') {
+        const rect = chatPanelRef.current?.getBoundingClientRect();
+        if (rect) {
+          setBloomCenter({
+            x: rect.left + rect.width / 2,
+            y: rect.top + rect.height / 2,
+          });
+        }
+        setBloomKey((k) => k + 1);
+      }
     },
     [agent],
   );
@@ -644,25 +682,16 @@ export function ChatPanel() {
         return;
       }
       if (type === 'thinking') {
-        const line = String(event.text ?? '');
-        setMessages((prev) => {
-          const last = prev[prev.length - 1];
-          if (last && last.role === 'thinking' && !last.completed) {
-            const updated = { ...last, lines: [...last.lines, line] };
-            return [...prev.slice(0, -1), updated];
-          }
-          return [
-            ...prev,
-            {
-              id: newId(),
-              role: 'thinking',
-              lines: [line],
-              collapsed: false,
-              startedAt: Date.now(),
-              completed: false,
-            },
-          ];
-        });
+        // Route thinking stream into the Agent Log instead of cluttering
+        // the chat. AgentLog listens for nebula:agent-log-entry events.
+        const line = String(event.text ?? '').trim();
+        if (line) {
+          window.dispatchEvent(
+            new CustomEvent('nebula:agent-log-entry', {
+              detail: { source: 'hermes', message: line },
+            }),
+          );
+        }
         return;
       }
       if (type === 'approval_request') {
@@ -1098,7 +1127,28 @@ export function ChatPanel() {
       };
 
   return (
-    <div className={`chat-panel chat-panel--agent-${agent}`} style={panelStyle}>
+    <div ref={chatPanelRef} className={`chat-panel chat-panel--agent-${agent}`} style={panelStyle}>
+      {/* Daedalus sigil-bloom FX — Hermes-only, fires on agent transition.
+       * Rendered via portal to document.body so the rings/glow can
+       * radiate beyond the chat panel's overflow:hidden clipping
+       * boundary. Centered on the chat panel via captured rect. */}
+      {agent === 'daedalus' && bloomKey > 0 && bloomCenter && createPortal(
+        <div
+          className="hermes-bloom-portal"
+          key={bloomKey}
+          aria-hidden="true"
+          style={{
+            ['--bloom-x' as never]: `${bloomCenter.x}px`,
+            ['--bloom-y' as never]: `${bloomCenter.y}px`,
+          }}
+        >
+          <span className="hermes-bloom-portal__glow" />
+          <span className="hermes-bloom-portal__ring" />
+          <span className="hermes-bloom-portal__ring hermes-bloom-portal__ring--late" />
+          <span className="hermes-bloom-portal__sigil" />
+        </div>,
+        document.body,
+      )}
       {/* Edges */}
       <div className="chat-panel__resize-handle chat-panel__resize-handle--left" onMouseDown={(e) => startResize(e, 'l')} title="Drag to resize width" />
       <div className="chat-panel__resize-handle chat-panel__resize-handle--right" onMouseDown={(e) => startResize(e, 'r')} title="Drag to resize width" />
@@ -1317,44 +1367,8 @@ export function ChatPanel() {
               </div>
             );
           }
-          if (m.role === 'thinking') {
-            return (
-              <div
-                key={m.id}
-                className={`chat-panel__thinking ${m.completed ? 'chat-panel__thinking--completed' : ''}`}
-              >
-                <button
-                  type="button"
-                  className="chat-panel__thinking-header"
-                  onClick={() => toggleThinkingCollapsed(m.id)}
-                >
-                  <span className="chat-panel__thinking-indicator">
-                    {m.completed ? '✓' : '…'}
-                  </span>
-                  <span className="chat-panel__thinking-label">
-                    {m.completed ? 'thinking complete' : 'thinking'} · {m.lines.length} update
-                    {m.lines.length === 1 ? '' : 's'}
-                  </span>
-                  <span className="chat-panel__thinking-caret">
-                    {m.collapsed ? '▸' : '▾'}
-                  </span>
-                </button>
-                {!m.collapsed && (
-                  <div
-                    ref={thinkingBodyRef}
-                    key={m.lines.length}
-                    className="chat-panel__thinking-body"
-                  >
-                    {m.lines.map((line, i) => (
-                      <div key={i} className="chat-panel__thinking-line">
-                        {line}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            );
-          }
+          // Thinking events are routed to the Agent Log, not rendered in chat.
+          if (m.role === 'thinking') return null;
           if (m.role === 'approval') {
             return (
               <div key={m.id} className="chat-panel__approval">

@@ -93,6 +93,31 @@ export function AgentLog() {
     ]);
   }, [isExecuting, nodeCount]);
 
+  // Subscribe to nebula:agent-log-entry events so any component can stream
+  // entries into this log without coupling. ChatPanel dispatches these
+  // for Daedalus thinking lines so they live here instead of in chat.
+  useEffect(() => {
+    function handleEntry(e: Event) {
+      const detail = (e as CustomEvent).detail as
+        | { source?: 'graph' | 'hermes' | 'system'; message?: string }
+        | undefined;
+      if (!detail) return;
+      const msg = String(detail.message ?? '').trim();
+      if (!msg) return;
+      setEntries((prev) => [
+        ...prev.slice(-49),
+        {
+          id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          ts: Date.now(),
+          source: detail.source ?? 'system',
+          message: msg,
+        },
+      ]);
+    }
+    window.addEventListener('nebula:agent-log-entry', handleEntry);
+    return () => window.removeEventListener('nebula:agent-log-entry', handleEntry);
+  }, []);
+
   function persistOpen(next: boolean) {
     try {
       window.localStorage.setItem(OPEN_STORAGE_KEY, next ? '1' : '0');
