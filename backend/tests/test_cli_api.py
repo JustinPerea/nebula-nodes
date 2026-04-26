@@ -376,6 +376,68 @@ class TestRunGraphIterationGuard:
         assert resp.status_code == 200
 
 
+class TestSetParamsIterationGuard:
+    """SKILL.md §1.5 also forbids `nebula set` as an iteration mechanism: once
+    a node has outputs, mutating its params clobbers the craft log just as
+    surely as re-running the same node would. Without this guard, Daedalus
+    could route around the run-target guard via `set` + a follow-up
+    `run-all` (cache-bypassed because params changed). Same X-Daedalus-Caller
+    gate as the run guard so humans can still tweak params freely."""
+
+    DAEDALUS_HEADERS = {"X-Daedalus-Caller": "1"}
+
+    def _make_and_populate(self, client, node_id: str = "n1"):
+        # Mirrors the existing test_update_coerces_params shape (line 294)
+        # so we know the PUT body is valid and won't 400 on schema grounds.
+        client.post("/api/graph/node", json={
+            "definitionId": "meshy-multi-image-to-3d", "params": {}
+        })
+        import sys
+        from pathlib import Path
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+        from main import cli_graph
+        cli_graph.nodes[node_id]["outputs"] = {"mesh": {"type": "Any", "value": "stale"}}
+
+    def test_set_on_populated_node_blocked_for_daedalus(self, client):
+        """Daedalus PUT /api/graph/node/n1 with new params, where n1 already
+        has outputs → 400 with the §1.5 reminder. Forces him to ADD a new
+        node instead of mutating the existing one."""
+        self._make_and_populate(client, "n1")
+        resp = client.put(
+            "/api/graph/node/n1",
+            json={"params": {"target_polycount": 60000}},
+            headers=self.DAEDALUS_HEADERS,
+        )
+        assert resp.status_code == 400
+        detail = resp.json()["detail"]
+        assert "n1" in detail
+        assert "1.5" in detail or "add a new node" in detail.lower()
+
+    def test_set_on_empty_node_allowed_for_daedalus(self, client):
+        """Pre-first-run config is the normal path — Daedalus creates a node
+        and dials params before executing it. Outputs are still empty here."""
+        client.post("/api/graph/node", json={
+            "definitionId": "meshy-multi-image-to-3d", "params": {}
+        })
+        resp = client.put(
+            "/api/graph/node/n1",
+            json={"params": {"target_polycount": 50000}},
+            headers=self.DAEDALUS_HEADERS,
+        )
+        assert resp.status_code == 200
+
+    def test_set_on_populated_node_allowed_for_human(self, client):
+        """Human users (frontend Inspector edits, curl, etc.) keep the freedom
+        to retune in place. Guard only disciplines Daedalus."""
+        self._make_and_populate(client, "n1")
+        resp = client.put(
+            "/api/graph/node/n1",
+            json={"params": {"target_polycount": 60000}},
+            # no X-Daedalus-Caller header
+        )
+        assert resp.status_code == 200
+
+
 class TestOutputsRestore:
     """POST /api/outputs/restore accepts a zip bundle exported by the frontend
     Save action, extracts assets to a fresh output/<timestamp>/restored-<id>/

@@ -1005,10 +1005,30 @@ async def get_graph() -> dict:
 
 
 @app.put("/api/graph/node/{node_id}")
-async def update_graph_node(node_id: str, body: dict[str, Any]) -> dict:
+async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]) -> dict:
     node = cli_graph.nodes.get(node_id)
     if not node:
         raise HTTPException(status_code=404, detail=f"Node '{node_id}' not found")
+
+    # §1.5 guard (mirrors /api/graph/run): when called BY Daedalus, refuse to
+    # mutate params on a node that already has outputs. Without this, Daedalus
+    # could route around the run-target guard via `nebula set` + `run-all`
+    # (cache-bypassed because params changed). The X-Daedalus-Caller header
+    # gate keeps frontend Inspector edits and curl/tests unaffected.
+    if request.headers.get("x-daedalus-caller"):
+        existing_outputs = node.get("outputs")
+        if isinstance(existing_outputs, dict) and len(existing_outputs) > 0:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Node '{node_id}' already has output. Per SKILL.md §1.5, "
+                    "add a new node instead of mutating params on this one — the "
+                    "canvas should keep every iteration visible as craft history. "
+                    "Use `nebula create <definition_id>` to start the next cut, "
+                    "wire it from the corrected upstream, then `nebula run` it."
+                ),
+            )
+
     params = body.get("params", {}) or {}
     _validate_params(node.get("definitionId", ""), params)
     params = _coerce_params(node.get("definitionId", ""), params)
