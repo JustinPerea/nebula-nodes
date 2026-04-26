@@ -88,8 +88,8 @@ export function NodeLibrary() {
 
   return (
     <div
-      className="panel"
-      style={{ left: position.x, top: position.y, width: 220 }}
+      className="panel panel--library"
+      style={{ left: position.x, top: position.y }}
     >
       <div
         className="panel__header"

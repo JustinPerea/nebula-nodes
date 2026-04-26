@@ -24,6 +24,11 @@ interface ConnectionPopupState {
 
 interface UIState {
   selectedNodeId: string | null;
+  // True after the user manually resizes/drags the chat panel. While false,
+  // ChatPanel skips its inline width/height so CSS-driven sizing
+  // (clamp + viewport units) drives the chat width and lines it up with the
+  // agent log. Cleared by the toolbar's Reset button.
+  chatResized: boolean;
   panels: {
     library: PanelState;
     inspector: PanelState;
@@ -61,11 +66,15 @@ interface UIState {
 
 export const useUIStore = create<UIState>((set) => ({
   selectedNodeId: null,
+  chatResized: false,
   panels: {
     library: { visible: true, position: { x: 16, y: 16 } },
     inspector: { visible: false, position: { x: -280, y: 16 } },
     settings: { visible: false, position: { x: -340, y: 60 } },
-    chat: { visible: false, position: { x: 16, y: 16 }, width: 300 },
+    // Chat is the dominant right-column surface in the new layout — visible
+    // by default. Width seed (300) is ignored until chatResized flips, so
+    // the CSS clamp drives the actual rendered width.
+    chat: { visible: true, position: { x: 16, y: 16 }, width: 300 },
   },
   librarySearch: '',
   libraryCollapsed: {},
@@ -125,6 +134,7 @@ export const useUIStore = create<UIState>((set) => ({
 
   setChatWidth: (width) =>
     set((state) => ({
+      chatResized: true,
       panels: {
         ...state.panels,
         chat: { ...state.panels.chat, width: Math.max(260, Math.min(720, width)) },
@@ -133,6 +143,7 @@ export const useUIStore = create<UIState>((set) => ({
 
   setChatHeight: (height) =>
     set((state) => ({
+      chatResized: true,
       panels: {
         ...state.panels,
         chat: { ...state.panels.chat, height: Math.max(240, Math.min(2000, height)) },

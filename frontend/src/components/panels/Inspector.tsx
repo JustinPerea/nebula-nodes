@@ -160,8 +160,8 @@ export function Inspector() {
 
   return (
     <div
-      className="panel"
-      style={{ left: resolvedX, top: position.y, width: 260 }}
+      className="panel panel--inspector"
+      style={{ left: resolvedX, top: position.y }}
     >
       <div
         className="panel__header"

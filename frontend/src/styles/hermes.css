@@ -1476,3 +1476,94 @@ body.app-hermes .chat-panel--agent-daedalus .chat-panel__model-empty {
   padding: 12px 10px;
   text-align: center;
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+ * AGENT LOG — Hermes treatment (Daedalus mode only)
+ * Square corners, hairline borders, Cormorant for display, IBM Plex Mono
+ * for system labels. No L/R side accents (use top rules / eyebrows).
+ * ═══════════════════════════════════════════════════════════════════ */
+
+body.app-hermes .chat-panel--agent-daedalus ~ .agent-log,
+body.app-hermes .agent-log {
+  background: var(--h-ink);
+  border: 1px solid var(--h-rule-soft);
+  border-radius: 0;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.4),
+    0 12px 32px rgba(0, 0, 0, 0.55);
+  color: var(--h-parchment);
+  backdrop-filter: none;
+}
+
+body.app-hermes .agent-log__header {
+  border-bottom: 1px solid var(--h-rule-soft);
+  padding: 12px 16px;
+}
+
+body.app-hermes .agent-log--open .agent-log__header {
+  border-bottom-color: var(--h-rule-strong);
+}
+
+body.app-hermes .agent-log__title {
+  font-family: 'Cormorant Garamond', 'Times New Roman', serif;
+  font-weight: 600;
+  font-size: 16px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--h-parchment);
+  font-feature-settings: "smcp" on, "liga" on;
+  gap: 10px;
+}
+
+body.app-hermes .agent-log__icon {
+  color: var(--h-cyanotype);
+  transform: rotate(-15deg);
+  font-size: 13px;
+}
+
+body.app-hermes .agent-log__chevron {
+  color: var(--h-parchment-dim);
+  font-size: 12px;
+}
+
+body.app-hermes .agent-log__body {
+  border-top: 1px solid var(--h-rule-soft);
+  padding: 12px 16px 16px;
+}
+
+body.app-hermes .agent-log__empty {
+  color: var(--h-parchment-faint);
+  font-family: 'Cormorant Garamond', serif;
+  font-style: italic;
+  font-size: 12px;
+}
+
+body.app-hermes .agent-log__entry {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  color: var(--h-parchment-dim);
+  padding: 5px 0;
+  border-top: 1px solid var(--h-rule-soft);
+}
+
+body.app-hermes .agent-log__entry:first-child {
+  border-top: none;
+}
+
+body.app-hermes .agent-log__time {
+  color: var(--h-parchment-faint);
+  letter-spacing: 0.04em;
+}
+
+body.app-hermes .agent-log__source {
+  color: var(--h-cyanotype);
+  font-size: 9px;
+  letter-spacing: 0.18em;
+}
+
+body.app-hermes .agent-log__msg {
+  color: var(--h-parchment);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.02em;
+}

@@ -1,0 +1,278 @@
+/* Nebula default layout
+ *
+ * The whole app uses one layout shape:
+ *   top-left      → Nodes panel
+ *   bottom-left   → Inspector (only renders when a node is selected)
+ *   right side    → Chat (top:gutter to above the agent log)
+ *   bottom-right  → Agent log accordion (sits below the chat)
+ *   bottom-center → Toolbar pill (text labels)
+ *
+ * Every panel uses clamp() with viewport units so it reflows on window
+ * resize. User resize via the chat's edge handles or the native CSS
+ * resize corners on the side panels writes inline width/height and
+ * overrides these defaults — the toolbar's Reset button clears those
+ * back to the defaults.
+ */
+
+:root {
+  /* Spacing scale */
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+
+  /* Page-level rhythm */
+  --page-gutter: var(--space-4);
+
+  /* Reservation for the bottom-center toolbar pill (pill height + bottom
+   * margin + small buffer). Side panels and agent log anchor above this. */
+  --toolbar-pad: 56px;
+
+  /* Width tokens — one per column so panels in the same column align */
+  --col-left-w:  clamp(220px, 16vw, 300px);
+  --col-right-w: clamp(340px, 26vw, 460px);
+
+  /* Right-column reservations: collapsed vs expanded agent log */
+  --agent-h-closed: 44px;
+  --agent-h-open:   clamp(180px, 22vh, 280px);
+  --stack-gap-sm:   var(--space-2);
+  --stack-gap-lg:   var(--space-6);
+}
+
+/* =============== Toolbar: icon-only bottom-center pill =============== */
+/*
+ * Icons are hidden by default at the panels.css level (.toolbar__icon
+ * { display: none }) and labels show. Here we flip both — icons shown,
+ * labels hidden — so the pill stays narrow enough to never collide
+ * horizontally with the agent log on small viewports. */
+
+.toolbar__icon {
+  display: inline-block !important;
+  flex-shrink: 0;
+}
+
+.toolbar__label {
+  display: none !important;
+}
+
+.toolbar__button {
+  /* Tighter icon-only buttons */
+  padding: 6px 8px !important;
+  min-width: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+}
+
+.toolbar__divider {
+  margin: 0 2px !important;
+}
+
+/* The Hermes "DAEDALUS" wordmark fits a roomier text-label pill; in the
+ * compact icon-only mode it eats most of the width and forces the pill
+ * to collide with the agent log. Hide it here — the chat panel's own
+ * Hermes header still carries the wordmark prominently. */
+body.app-hermes .toolbar::before {
+  display: none !important;
+}
+
+/* =============== Chat panel: right column =============== */
+
+.chat-panel {
+  top: var(--page-gutter) !important;
+  right: var(--page-gutter) !important;
+  left: auto !important;
+  /* Closed-log default: clear the toolbar + collapsed log + small gap. */
+  bottom: calc(var(--toolbar-pad) + var(--agent-h-closed) + var(--stack-gap-sm)) !important;
+  width: var(--col-right-w);
+  min-width: 280px;
+  max-width: 720px;
+  height: auto;
+}
+
+/* When agent log is expanded, push chat up to clear the full reservation */
+body.agent-log-open .chat-panel {
+  bottom: calc(var(--toolbar-pad) + var(--agent-h-open) + var(--stack-gap-lg)) !important;
+}
+
+/* Hide the chat panel's visual corner resize markers — the L-shape ::before
+ * pseudo-elements draw inset from the border and make the chat look ~10px
+ * narrower than the agent log. The drag regions stay active so resizing
+ * still works. */
+.chat-panel__resize-handle::before {
+  display: none;
+}
+
+/* =============== Left column: Nodes top, Inspector bottom ===============
+ * Equal heights from a 50/50 split of the available vertical space:
+ *   available = 100vh - top - toolbar-pad - inter-panel-gap
+ *   per panel = available / 2 */
+
+/* Width / height drop !important here so the browser's CSS-resize gesture
+ * (it writes inline width/height on drag) actually takes effect. The
+ * Reset toolbar button clears the inline values to revert to defaults. */
+.panel--library {
+  position: fixed !important;
+  top: var(--page-gutter) !important;
+  left: var(--page-gutter) !important;
+  right: auto !important;
+  bottom: auto !important;
+  width: var(--col-left-w);
+  height: calc((100vh - var(--page-gutter) - var(--toolbar-pad) - var(--space-4)) / 2);
+  max-height: none;
+}
+
+.panel--inspector {
+  position: fixed !important;
+  bottom: var(--toolbar-pad) !important;
+  left: var(--page-gutter) !important;
+  right: auto !important;
+  top: auto !important;
+  width: var(--col-left-w);
+  height: calc((100vh - var(--page-gutter) - var(--toolbar-pad) - var(--space-4)) / 2);
+  max-height: none;
+}
+
+/* Native CSS resize on the side panels and agent log so each can be
+ * dragged at the bottom-right corner. The chat panel has its own custom
+ * resize handles already, so we don't double up there. */
+.panel--library,
+.panel--inspector,
+.agent-log {
+  resize: both;
+  overflow: auto;
+  min-width: 200px;
+  min-height: 80px;
+  max-width: 600px;
+  max-height: 80vh;
+}
+
+/* =============== Agent log accordion =============== */
+
+.agent-log {
+  position: fixed;
+  z-index: 11;
+  right: var(--page-gutter);
+  bottom: var(--toolbar-pad);
+  left: auto;
+  width: var(--col-right-w);
+  background: rgba(20, 20, 20, 0.92);
+  border: 1px solid #2a2a2a;
+  border-radius: 12px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 12px;
+  color: #ccc;
+  overflow: hidden;
+  backdrop-filter: blur(8px);
+}
+
+/* When open, fill the full reservation so the gap above (chat-bottom)
+ * stays consistent regardless of how much content is inside. */
+body.agent-log-open .agent-log {
+  height: var(--agent-h-open);
+}
+
+.agent-log__drag-row {
+  cursor: grab;
+}
+
+.agent-log__drag-row:active {
+  cursor: grabbing;
+}
+
+.agent-log__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 10px 14px;
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12px;
+}
+
+.agent-log__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  letter-spacing: 0.4px;
+  color: #ddd;
+}
+
+.agent-log__icon {
+  display: inline-block;
+  color: #7aa9ff;
+  transform: rotate(-15deg);
+}
+
+.agent-log__chevron {
+  display: inline-block;
+  color: #888;
+  transition: transform 0.18s ease;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.agent-log__chevron--open {
+  transform: rotate(180deg);
+}
+
+.agent-log--open {
+  padding-bottom: 0;
+}
+
+.agent-log__body {
+  max-height: 240px;
+  overflow-y: auto;
+  border-top: 1px solid #222;
+  padding: 8px 12px 12px;
+}
+
+.agent-log__empty {
+  color: #666;
+  font-style: italic;
+  padding: 14px 4px;
+  text-align: center;
+}
+
+.agent-log__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.agent-log__entry {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  gap: 8px;
+  align-items: baseline;
+  padding: 4px 0;
+  font-size: 11px;
+  color: #bbb;
+}
+
+.agent-log__time {
+  color: #666;
+  font-variant-numeric: tabular-nums;
+}
+
+.agent-log__source {
+  color: #888;
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: 0.4px;
+}
+
+.agent-log__msg {
+  color: #ddd;
+  word-break: break-word;
+}

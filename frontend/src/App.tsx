@@ -7,12 +7,14 @@ import { Inspector } from './components/panels/Inspector';
 import { Settings } from './components/panels/Settings';
 import { Toolbar } from './components/panels/Toolbar';
 import { ChatPanel } from './components/panels/ChatPanel';
+import { AgentLog } from './components/panels/AgentLog';
 import { getSettings, fetchCLIGraph } from './lib/api';
 import { useUIStore } from './store/uiStore';
 import { useGraphStore } from './store/graphStore';
 import { NODE_DEFINITIONS } from './constants/nodeDefinitions';
 import type { NodeData } from './types';
 import './App.css';
+import './styles/layouts.css';
 
 /** Pull the backend's in-memory cli_graph onto the canvas on first mount —
  * saves a CLI-button click every time the user refreshes during a Daedalus
@@ -106,6 +108,7 @@ export default function App() {
       <Settings />
       <ChatPanel />
       <Toolbar />
+      <AgentLog />
     </ReactFlowProvider>
   );
 }

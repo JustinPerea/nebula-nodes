@@ -327,6 +327,11 @@ export function ChatPanel() {
   const setChatHeight = useUIStore((s) => s.setChatHeight);
   const setChatPosition = useUIStore((s) => s.setChatPosition);
   const togglePanel = useUIStore((s) => s.togglePanel);
+  const chatResized = useUIStore((s) => s.chatResized);
+  // Default sizing is CSS-driven (clamp + viewport units) so chat width
+  // matches the agent log next to it. Once the user resizes, chatResized
+  // flips and inline width/height take over.
+  const useCssSizing = !chatResized;
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
@@ -1076,13 +1081,21 @@ export function ChatPanel() {
   // - Default: top-right anchored, stretched from top to bottom.
   // - After height set: top-right anchored, explicit height.
   // - After drag: top-left anchored at user's position.
-  const panelStyle: React.CSSProperties = {
-    width,
-    ...(height ? { height, bottom: 'auto' } : {}),
-    ...(left != null && top != null
-      ? { left, top, right: 'auto', bottom: height ? 'auto' : 'auto' }
-      : {}),
-  };
+  // - In experiment layouts, skip width/height until the user has resized so
+  //   CSS clamp drives sizing (matching agent log width).
+  const panelStyle: React.CSSProperties = useCssSizing
+    ? {
+        ...(left != null && top != null
+          ? { left, top, right: 'auto' }
+          : {}),
+      }
+    : {
+        width,
+        ...(height ? { height, bottom: 'auto' } : {}),
+        ...(left != null && top != null
+          ? { left, top, right: 'auto', bottom: height ? 'auto' : 'auto' }
+          : {}),
+      };
 
   return (
     <div className={`chat-panel chat-panel--agent-${agent}`} style={panelStyle}>
