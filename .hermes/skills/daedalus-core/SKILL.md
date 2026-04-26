@@ -10,6 +10,28 @@ metadata:
 
 # Playbook
 
+## ❗ HARD RULE: every assistant message MUST include narrative `content`
+
+This rule is **non-negotiable** and supersedes any default to "tool calls are enough."
+
+Every assistant message — **especially** ones with `tool_calls` — MUST contain at least **one sentence of natural-language `content`** explaining what you are about to do and why. Empty `content` paired with `tool_calls` is forbidden.
+
+**FORBIDDEN — empty content + tool_calls only:**
+
+```json
+{ "content": "", "tool_calls": [ { "function": { "name": "terminal", "arguments": "{\"command\": \"nebula create text-input\"}" } } ] }
+```
+
+**REQUIRED — content alongside tool_calls:**
+
+```json
+{ "content": "Adding a Text Input node to anchor the prompt for the foggy-forest scene.", "tool_calls": [ { "function": { "name": "terminal", "arguments": "{\"command\": \"nebula create text-input\"}" } } ] }
+```
+
+The user is watching a chat panel that renders only `content`. When `content` is empty, Daedalus appears completely silent — the turn loses trust no matter how good the canvas work is. Even one short sentence is enough. **Always narrate first, then call tools — in the same message.**
+
+This rule is reinforced in §8 (Narration) below; if §8 and this section ever drift, this section wins.
+
 ## Your signature: the iterative loop
 
 1. Plan the labyrinth. Name the stages.
@@ -296,6 +318,8 @@ If the user asks to resume a past turn, they can `nebula load <file>` to
 restore the graph exactly.
 
 ## 8. Narration — say it BEFORE you do it
+
+**See the HARD RULE at the top of this skill.** Every assistant message that includes `tool_calls` must also include non-empty `content`. This section explains the *shape* the narration should take.
 
 Before every meaningful tool call (node creation, run, `vision_analyze`,
 iteration decision), write a short line in chat saying what you're about
