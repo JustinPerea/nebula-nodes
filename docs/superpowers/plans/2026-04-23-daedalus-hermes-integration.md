@@ -1,14 +1,14 @@
-# Hephaestus — Hermes Agent Integration Implementation Plan
+# Daedalus — Hermes Agent Integration Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Ship Hephaestus as a user-selectable alt-agent in the nebula-nodes chat panel, powered by Hermes Agent + Kimi K2.6, ready for demo video recording by day 8 of the Nous Research Creative Hackathon (submission due 2026-05-03).
+**Goal:** Ship Daedalus as a user-selectable alt-agent in the nebula-nodes chat panel, powered by Hermes Agent + Kimi K2.6, ready for demo video recording by day 8 of the Nous Research Creative Hackathon (submission due 2026-05-03).
 
-**Architecture:** Backend wrapper `run_hermes()` mirrors existing `run_claude()` event contract; spawns `hermes chat -q MSG -Q --resume SESSION` subprocess per turn; parses stdout for structured markers (`APPROVAL_REQUIRED:`, `LEARNING_SAVED:`). Hephaestus persona + playbook ride inside a repo-shipped skill at `.hermes/skills/hephaestus-core/SKILL.md`, loaded via `--skills hephaestus-core`. Chat panel gets agent selector + autonomy toggle; approval/learning events render as interactive bubbles.
+**Architecture:** Backend wrapper `run_hermes()` mirrors existing `run_claude()` event contract; spawns `hermes chat -q MSG -Q --resume SESSION` subprocess per turn; parses stdout for structured markers (`APPROVAL_REQUIRED:`, `LEARNING_SAVED:`). Daedalus persona + playbook ride inside a repo-shipped skill at `.hermes/skills/daedalus-core/SKILL.md`, loaded via `--skills daedalus-core`. Chat panel gets agent selector + autonomy toggle; approval/learning events render as interactive bubbles.
 
 **Tech Stack:** Python 3.12 (FastAPI + asyncio subprocess), React 19 + TypeScript, Hermes Agent v0.10 CLI, Kimi K2.6 via OpenRouter.
 
-**Reference spec:** `docs/superpowers/specs/2026-04-23-hephaestus-hermes-integration-design.md`
+**Reference spec:** `docs/superpowers/specs/2026-04-23-daedalus-hermes-integration-design.md`
 
 ---
 
@@ -165,7 +165,7 @@ Expected: FAIL with `ModuleNotFoundError: services.hermes_session`.
 Create `backend/services/hermes_session.py`:
 
 ```python
-"""Hephaestus runtime — wraps `hermes chat -q -Q` subprocess and normalizes
+"""Daedalus runtime — wraps `hermes chat -q -Q` subprocess and normalizes
 output into the same event dict contract as run_claude.
 
 Yields dicts with a `type` field:
@@ -187,7 +187,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 DEFAULT_MODEL = "moonshotai/kimi-k2.6"
 DEFAULT_PROVIDER = "openrouter"
-DEFAULT_SKILLS = "hephaestus-core"
+DEFAULT_SKILLS = "daedalus-core"
 
 
 async def run_hermes(
@@ -196,7 +196,7 @@ async def run_hermes(
     model: str = DEFAULT_MODEL,
     autonomy: str = "auto",
 ) -> AsyncIterator[dict[str, Any]]:
-    """Run a single Hephaestus turn via `hermes chat -q -Q` and yield events."""
+    """Run a single Daedalus turn via `hermes chat -q -Q` and yield events."""
     # Note (from Task 0 fixture): `hermes chat -Q` emits `session_id: <id>` on
     # its own first line automatically — no `--pass-session-id` flag needed.
     args = [
@@ -211,7 +211,7 @@ async def run_hermes(
     env = {
         **os.environ,
         "NEBULA_DISABLE_QUICK": "1",
-        "HEPHAESTUS_APPROVAL": autonomy,
+        "DAEDALUS_APPROVAL": autonomy,
     }
 
     try:
@@ -253,7 +253,7 @@ git add backend/services/hermes_session.py backend/tests/test_hermes_session.py
 git commit -m "feat(hermes): run_hermes skeleton + happy-path test
 
 Mirrors run_claude's AsyncIterator[dict] event contract. Subprocess
-spawns hermes chat -q MSG -Q with Kimi K2.6 and hephaestus-core skill
+spawns hermes chat -q MSG -Q with Kimi K2.6 and daedalus-core skill
 preloaded. Basic happy path: stdout text emitted as 'text' event,
 followed by 'done'."
 ```
@@ -392,7 +392,7 @@ Add to `backend/tests/test_hermes_session.py`:
 ```python
 @pytest.mark.asyncio
 async def test_parses_approval_required_marker():
-    """When Hephaestus prints APPROVAL_REQUIRED, emit approval_request event."""
+    """When Daedalus prints APPROVAL_REQUIRED, emit approval_request event."""
     fake_stdout = (
         b"session_id: 20260423_095548_a2985d\n"
         b"Planning the render.\n"
@@ -491,7 +491,7 @@ Expected: all 4 tests pass.
 git add backend/services/hermes_session.py backend/tests/test_hermes_session.py
 git commit -m "feat(hermes): parse APPROVAL_REQUIRED/PLAN/COST markers
 
-When Hephaestus is in step-approval mode (HEPHAESTUS_APPROVAL=step),
+When Daedalus is in step-approval mode (DAEDALUS_APPROVAL=step),
 SKILL.md directives tell it to pause before expensive ops and print
 three structured marker lines. Parser extracts them into a single
 approval_request event for the frontend to render as Approve/Reject
@@ -631,7 +631,7 @@ Expected: all 5 tests pass.
 git add backend/services/hermes_session.py backend/tests/test_hermes_session.py
 git commit -m "feat(hermes): parse LEARNING_SAVED marker
 
-SKILL.md directs Hephaestus to print LEARNING_SAVED: <slug> after
+SKILL.md directs Daedalus to print LEARNING_SAVED: <slug> after
 appending to LEARNINGS.md via skill_manage. Wrapper converts the
 marker to a learning_saved event so the frontend can render a subtle
 'Saved learning' system line in the chat."
@@ -769,9 +769,9 @@ from services.hermes_session import run_hermes
 
 def test_dispatch_registers_both_agents():
     assert "claude" in AGENT_RUNNERS
-    assert "hephaestus" in AGENT_RUNNERS
+    assert "daedalus" in AGENT_RUNNERS
     assert AGENT_RUNNERS["claude"] is run_claude
-    assert AGENT_RUNNERS["hephaestus"] is run_hermes
+    assert AGENT_RUNNERS["daedalus"] is run_hermes
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -793,7 +793,7 @@ from services.hermes_session import run_hermes as _run_hermes  # noqa: E402
 
 AGENT_RUNNERS: dict[str, Any] = {
     "claude": run_claude,
-    "hephaestus": _run_hermes,
+    "daedalus": _run_hermes,
 }
 ```
 
@@ -809,7 +809,7 @@ Expected: PASS.
 
 ```bash
 git add backend/services/chat_session.py backend/tests/test_chat_session_dispatch.py
-git commit -m "feat(chat): AGENT_RUNNERS dispatch for claude + hephaestus
+git commit -m "feat(chat): AGENT_RUNNERS dispatch for claude + daedalus
 
 Single lookup table so /ws/chat can route per-turn to the right runner
 without branching in main.py. Both runners share the same event
@@ -870,8 +870,8 @@ async def chat_websocket(websocket: WebSocket) -> None:
         message: str,
         sessionId: str|null,
         model: str,
-        agent: "claude" | "hephaestus" (default "claude"),
-        autonomy: "auto" | "step" (default "auto", hephaestus-only)
+        agent: "claude" | "daedalus" (default "claude"),
+        autonomy: "auto" | "step" (default "auto", daedalus-only)
     }
     Server sends events matching AGENT_RUNNERS' event contract.
     """
@@ -897,7 +897,7 @@ async def chat_websocket(websocket: WebSocket) -> None:
             return
 
         try:
-            if agent == "hephaestus":
+            if agent == "daedalus":
                 agen = runner(message, session_id, model, autonomy)  # type: ignore[call-arg]
             else:
                 agen = runner(message, session_id, model)
@@ -958,39 +958,39 @@ git add backend/main.py backend/tests/test_cli_api.py
 git commit -m "feat(chat): /ws/chat dispatches to agent runner via AGENT_RUNNERS
 
 Payload now carries agent (default 'claude') and autonomy (default
-'auto'). Unknown agent names surface as error events. Hephaestus gets
+'auto'). Unknown agent names surface as error events. Daedalus gets
 the autonomy arg; Claude ignores it."
 ```
 
 ---
 
-## Task 8: Write `.hermes/skills/hephaestus-core/SKILL.md` (persona + playbook)
+## Task 8: Write `.hermes/skills/daedalus-core/SKILL.md` (persona + playbook)
 
 **Files:**
-- Create: `.hermes/skills/hephaestus-core/SKILL.md`
+- Create: `.hermes/skills/daedalus-core/SKILL.md`
 
 - [ ] **Step 1: Create the skill file**
 
 ```bash
-mkdir -p .hermes/skills/hephaestus-core
+mkdir -p .hermes/skills/daedalus-core
 ```
 
-Create `.hermes/skills/hephaestus-core/SKILL.md`:
+Create `.hermes/skills/daedalus-core/SKILL.md`:
 
 ```markdown
 ---
-name: hephaestus-core
-description: Hephaestus's iterative-artist playbook — persona directive + pipeline-stage tracing + vision reliability rules + nebula CLI cookbook + learnings discipline + autonomy modes.
+name: daedalus-core
+description: Daedalus's iterative-artist playbook — persona directive + pipeline-stage tracing + vision reliability rules + nebula CLI cookbook + learnings discipline + autonomy modes.
 category: agent-persona
 triggers: |
-  Loaded automatically when `--skills hephaestus-core` is passed to
+  Loaded automatically when `--skills daedalus-core` is passed to
   `hermes chat`. Treated as authoritative guidance for the session.
 platforms: [hermes-cli]
 ---
 
-# Hephaestus — Persona Directive
+# Daedalus — Persona Directive
 
-You are Hephaestus — the forge-god made into a creative agent.
+You are Daedalus — the forge-god made into a creative agent.
 
 You build through a canvas called nebula-nodes. You speak concisely, name your
 tools by reputation, and never ship a flawed artifact without saying so.
@@ -1109,7 +1109,7 @@ with that path to inspect its output.
 ## 4. Learnings discipline
 
 ### At turn start
-Scan `~/.hermes/skills/hephaestus-learnings/LEARNINGS.md` (via `skills_list`
+Scan `~/.hermes/skills/daedalus-learnings/LEARNINGS.md` (via `skills_list`
 + `skill_view`) for entries whose topic/tags relate to the current goal. If
 you apply one, CITE IT in your plan:
 
@@ -1121,7 +1121,7 @@ and proves the loop is working.
 ### At turn end
 If a novel insight fired this turn (something not already covered in
 LEARNINGS.md), APPEND an entry via `skill_manage patch
-hephaestus-learnings/LEARNINGS.md` with this format:
+daedalus-learnings/LEARNINGS.md` with this format:
 
 ```
 ## [YYYY-MM-DD slug] Short title
@@ -1145,14 +1145,14 @@ graduating it into the shipped playbook via a PR to the repo.
 
 ## 5. Autonomy modes
 
-The env var `HEPHAESTUS_APPROVAL` controls your pacing.
+The env var `DAEDALUS_APPROVAL` controls your pacing.
 
-### `HEPHAESTUS_APPROVAL=auto` (default)
+### `DAEDALUS_APPROVAL=auto` (default)
 Run the full pipeline through to a clean output. Iterate per §1–§2 as needed,
 cap at 3 iterations per turn. Summarize at the end: what ran, what passed
 vision QA, cost / time.
 
-### `HEPHAESTUS_APPROVAL=step`
+### `DAEDALUS_APPROVAL=step`
 Before any of these MATERIAL actions, pause and print three marker lines:
 
 - Executing a node with estimated cost > $0.01 (e.g. Veo, Imagen, Meshy, etc.)
@@ -1189,7 +1189,7 @@ message will start with either `APPROVED:` (continue the plan) or `REJECTED:
 ```bash
 python3 -c "
 import re
-with open('.hermes/skills/hephaestus-core/SKILL.md') as f:
+with open('.hermes/skills/daedalus-core/SKILL.md') as f:
     content = f.read()
 match = re.match(r'^---\n(.*?)\n---', content, re.DOTALL)
 assert match, 'missing frontmatter'
@@ -1203,37 +1203,37 @@ Expected: prints the frontmatter block without errors.
 - [ ] **Step 3: Commit**
 
 ```bash
-git add .hermes/skills/hephaestus-core/SKILL.md
-git commit -m "feat(hephaestus): ship hephaestus-core skill with persona + playbook
+git add .hermes/skills/daedalus-core/SKILL.md
+git commit -m "feat(daedalus): ship daedalus-core skill with persona + playbook
 
 Contains: persona directive (iterative-artist voice), pipeline-stage
 tracing (generalized from pipeline_3d to image/video/audio/3D), vision
-reliability rules (verbatim from hephaestus.html learnings), nebula
+reliability rules (verbatim from daedalus.html learnings), nebula
 CLI cookbook, learnings discipline (cite-when-applying, save-at-end),
 autonomy-mode directives (auto vs step with cost/time gating).
 
-Loaded via --skills hephaestus-core from hermes chat subprocess."
+Loaded via --skills daedalus-core from hermes chat subprocess."
 ```
 
 ---
 
-## Task 9: Write `.hermes/skills/hephaestus-core/metadata.json`
+## Task 9: Write `.hermes/skills/daedalus-core/metadata.json`
 
 **Files:**
-- Create: `.hermes/skills/hephaestus-core/metadata.json`
+- Create: `.hermes/skills/daedalus-core/metadata.json`
 
 - [ ] **Step 1: Create the metadata file**
 
 ```json
 {
-  "name": "hephaestus-core",
-  "description": "Hephaestus's iterative-artist playbook for the Hephaestus chat agent in nebula-nodes. Persona + pipeline stage tracing + vision QA rules + nebula CLI cookbook + learnings discipline + autonomy modes.",
+  "name": "daedalus-core",
+  "description": "Daedalus's iterative-artist playbook for the Daedalus chat agent in nebula-nodes. Persona + pipeline stage tracing + vision QA rules + nebula CLI cookbook + learnings discipline + autonomy modes.",
   "category": "agent-persona",
   "version": "1.0.0",
-  "author": "nebula-nodes + Hephaestus (Nous Hermes Agent Creative Hackathon 2026)",
+  "author": "nebula-nodes + Daedalus (Nous Hermes Agent Creative Hackathon 2026)",
   "platforms": ["hermes-cli"],
   "required_environment_variables": {
-    "HEPHAESTUS_APPROVAL": "'auto' (default) or 'step' — controls whether Hephaestus pauses before expensive operations for user approval."
+    "DAEDALUS_APPROVAL": "'auto' (default) or 'step' — controls whether Daedalus pauses before expensive operations for user approval."
   }
 }
 ```
@@ -1241,7 +1241,7 @@ Loaded via --skills hephaestus-core from hermes chat subprocess."
 - [ ] **Step 2: Verify JSON is valid**
 
 ```bash
-python3 -m json.tool .hermes/skills/hephaestus-core/metadata.json > /dev/null
+python3 -m json.tool .hermes/skills/daedalus-core/metadata.json > /dev/null
 echo "metadata.json valid"
 ```
 
@@ -1250,8 +1250,8 @@ Expected: "metadata.json valid"
 - [ ] **Step 3: Commit**
 
 ```bash
-git add .hermes/skills/hephaestus-core/metadata.json
-git commit -m "feat(hephaestus): metadata.json for hephaestus-core skill"
+git add .hermes/skills/daedalus-core/metadata.json
+git commit -m "feat(daedalus): metadata.json for daedalus-core skill"
 ```
 
 ---
@@ -1264,14 +1264,14 @@ git commit -m "feat(hephaestus): metadata.json for hephaestus-core skill"
 - [ ] **Step 1: Create the setup doc**
 
 ```markdown
-# Setting up Hephaestus (Hermes Agent + Kimi K2.6)
+# Setting up Daedalus (Hermes Agent + Kimi K2.6)
 
-Hephaestus is nebula-nodes' creative-generalist agent — an iterative artist
+Daedalus is nebula-nodes' creative-generalist agent — an iterative artist
 that plans, builds, and QAs multi-stage creative pipelines on the canvas.
 It's powered by [Hermes Agent](https://github.com/NousResearch/hermes-agent)
 from Nous Research, running Kimi K2.6 via OpenRouter.
 
-Claude remains the default chat agent. Hephaestus is opt-in.
+Claude remains the default chat agent. Daedalus is opt-in.
 
 ## 1. Install Hermes Agent
 
@@ -1298,7 +1298,7 @@ hermes login
 # Paste your OpenRouter key when asked
 ```
 
-Set Kimi K2.6 as Hephaestus's default model:
+Set Kimi K2.6 as Daedalus's default model:
 
 ```bash
 hermes config set model.provider openrouter
@@ -1313,10 +1313,10 @@ hermes config get model
 
 Expected: shows `provider: openrouter, name: moonshotai/kimi-k2.6`.
 
-## 3. Link the repo-shipped hephaestus-core skill
+## 3. Link the repo-shipped daedalus-core skill
 
-nebula-nodes ships Hephaestus's persona + playbook at
-`.hermes/skills/hephaestus-core/`. Tell Hermes to load skills from this
+nebula-nodes ships Daedalus's persona + playbook at
+`.hermes/skills/daedalus-core/`. Tell Hermes to load skills from this
 directory:
 
 Edit `~/.hermes/config.yaml`, add or update:
@@ -1332,10 +1332,10 @@ skills:
 Verify:
 
 ```bash
-hermes skills ls | grep hephaestus-core
+hermes skills ls | grep daedalus-core
 ```
 
-Expected: shows `hephaestus-core` as an available skill.
+Expected: shows `daedalus-core` as an available skill.
 
 ## 4. One-turn smoke test
 
@@ -1345,10 +1345,10 @@ From inside the nebula-nodes directory:
 hermes chat -q "Introduce yourself and list your opinions about image models." -Q \
   --provider openrouter \
   --model moonshotai/kimi-k2.6 \
-  --skills hephaestus-core
+  --skills daedalus-core
 ```
 
-Expected: Hephaestus responds in the forge-god voice, names specific models
+Expected: Daedalus responds in the forge-god voice, names specific models
 with opinions (Imagen cleaner than Nano Banana for faces, etc.). Output starts
 with `session_id: <timestamp_id>` on the first line (e.g.
 `session_id: 20260423_095548_a2985d`), followed by the response body.
@@ -1369,24 +1369,24 @@ cd frontend && npm run dev
 ```
 
 Open http://localhost:5173, open the chat panel, switch agent selector to
-**Hephaestus**, and send a message.
+**Daedalus**, and send a message.
 
 ## Autonomy modes
 
 The header toggle in the chat panel has two positions:
 
-- **Auto-pilot (▶):** Hephaestus runs the full pipeline without asking.
+- **Auto-pilot (▶):** Daedalus runs the full pipeline without asking.
 - **Step Approval (⏸):** before expensive operations (>$0.01 or >30s), it
   pauses and shows you a plan. Click Approve or Reject + add notes.
 
 ## Learnings
 
-Hephaestus saves what it learns to
-`~/.hermes/skills/hephaestus-learnings/LEARNINGS.md` on your machine.
-This is YOUR Hephaestus's memory — personal, user-local, privacy-friendly.
+Daedalus saves what it learns to
+`~/.hermes/skills/daedalus-learnings/LEARNINGS.md` on your machine.
+This is YOUR Daedalus's memory — personal, user-local, privacy-friendly.
 When a learning in your LEARNINGS.md has been confirmed multiple times and
 seems generally applicable, you can promote it upstream by opening a PR on
-nebula-nodes that adds it to `hephaestus-core/SKILL.md` — your local lesson
+nebula-nodes that adds it to `daedalus-core/SKILL.md` — your local lesson
 becomes every future user's baseline.
 
 ## Troubleshooting
@@ -1399,7 +1399,7 @@ https://openrouter.ai/keys.
 OpenRouter's rate limits vary per model. Wait ~30 seconds and retry, or
 switch models temporarily via the model-selector in the chat panel.
 
-**"Hephaestus keeps re-introducing itself mid-conversation"**
+**"Daedalus keeps re-introducing itself mid-conversation"**
 The session ID may not be threading correctly. Check that the chat panel
 shows a session pill (short ID after your model name) — if not, open the
 browser console and look for WebSocket errors.
@@ -1414,7 +1414,7 @@ hermes config set model.name moonshotai/kimi-k2
 
 ## Kimi track evidence (for hackathon submission)
 
-For the Nous Research Creative Hackathon, Hephaestus running on Kimi K2.6 is
+For the Nous Research Creative Hackathon, Daedalus running on Kimi K2.6 is
 provable:
 
 - `hermes config get model` → shows `moonshotai/kimi-k2.6`
@@ -1430,7 +1430,7 @@ git add docs/HERMES-SETUP.md
 git commit -m "docs: HERMES-SETUP.md — user install + config guide
 
 Covers Hermes install, OpenRouter + Kimi K2.6 setup, linking the
-repo-shipped hephaestus-core skill via external_directories,
+repo-shipped daedalus-core skill via external_directories,
 smoke-test command, autonomy modes, learnings location, troubleshooting,
 and Kimi track evidence trail."
 ```
@@ -1449,7 +1449,7 @@ an `agent` state. Example insertion point after `setModel`:
 
 ```tsx
   const [model, setModel] = useState<string>(DEFAULT_MODEL);
-  const [agent, setAgent] = useState<'claude' | 'hephaestus'>('claude');
+  const [agent, setAgent] = useState<'claude' | 'daedalus'>('claude');
   const [sessionId, setSessionId] = useState<string | null>(null);
 ```
 
@@ -1459,7 +1459,7 @@ Each agent has its own session thread — switching should NOT resume the
 other agent's session. Add a handler:
 
 ```tsx
-  const handleAgentChange = useCallback((next: 'claude' | 'hephaestus') => {
+  const handleAgentChange = useCallback((next: 'claude' | 'daedalus') => {
     if (next === agent) return;
     setAgent(next);
     setSessionId(null);  // clear so next turn starts fresh on the new agent
@@ -1482,10 +1482,10 @@ indicator (around `ChatPanel.tsx:763` where `{model} · {status}` is rendered):
   </button>
   <button
     type="button"
-    className={agent === 'hephaestus' ? 'chat-panel__agent-btn--active' : 'chat-panel__agent-btn'}
-    onClick={() => handleAgentChange('hephaestus')}
+    className={agent === 'daedalus' ? 'chat-panel__agent-btn--active' : 'chat-panel__agent-btn'}
+    onClick={() => handleAgentChange('daedalus')}
   >
-    Hephaestus
+    Daedalus
   </button>
 </div>
 ```
@@ -1549,12 +1549,12 @@ Expected: exits 0, no errors.
 
 ```bash
 git add frontend/src/components/panels/ChatPanel.tsx frontend/src/styles/panels.css
-git commit -m "feat(chat): agent selector (Claude | Hephaestus) in chat header
+git commit -m "feat(chat): agent selector (Claude | Daedalus) in chat header
 
 State + selector UI + WebSocket payload carry the 'agent' field.
 Switching agents clears the session ID so each agent keeps its own
 session thread. Styling is neutral placeholder; copper accent for
-Hephaestus comes in Task 15."
+Daedalus comes in Task 15."
 ```
 
 ---
@@ -1575,16 +1575,16 @@ After the agent state declaration, add:
 
 - [ ] **Step 2: Render the toggle in the chat panel header (next to agent selector)**
 
-Add next to the agent selector. Show only when Hephaestus is active:
+Add next to the agent selector. Show only when Daedalus is active:
 
 ```tsx
-{agent === 'hephaestus' && (
+{agent === 'daedalus' && (
   <div className="chat-panel__autonomy-toggle">
     <button
       type="button"
       className={autonomy === 'auto' ? 'chat-panel__autonomy-btn--active' : 'chat-panel__autonomy-btn'}
       onClick={() => setAutonomy('auto')}
-      title="Auto-pilot: Hephaestus runs the full pipeline"
+      title="Auto-pilot: Daedalus runs the full pipeline"
     >
       Auto ▶
     </button>
@@ -1592,7 +1592,7 @@ Add next to the agent selector. Show only when Hephaestus is active:
       type="button"
       className={autonomy === 'step' ? 'chat-panel__autonomy-btn--active' : 'chat-panel__autonomy-btn'}
       onClick={() => setAutonomy('step')}
-      title="Step Approval: Hephaestus pauses before expensive operations"
+      title="Step Approval: Daedalus pauses before expensive operations"
     >
       Step ⏸
     </button>
@@ -1652,9 +1652,9 @@ Append to `frontend/src/styles/panels.css`:
 cd frontend && ./node_modules/.bin/tsc --noEmit
 cd ..
 git add frontend/src/components/panels/ChatPanel.tsx frontend/src/styles/panels.css
-git commit -m "feat(chat): autonomy toggle (Auto | Step) shown for Hephaestus only
+git commit -m "feat(chat): autonomy toggle (Auto | Step) shown for Daedalus only
 
-Maps to HEPHAESTUS_APPROVAL env var via the WebSocket payload, which
+Maps to DAEDALUS_APPROVAL env var via the WebSocket payload, which
 hermes_session.py passes to the hermes chat subprocess. Hidden for
 Claude since claude -p doesn't honor this contract."
 ```
@@ -1820,11 +1820,11 @@ cd ..
 git add frontend/src/components/panels/ChatPanel.tsx frontend/src/styles/panels.css
 git commit -m "feat(chat): render approval_request events with Approve/Reject buttons
 
-When Hephaestus is in Step mode and hits an expensive op, it prints
+When Daedalus is in Step mode and hits an expensive op, it prints
 APPROVAL_REQUIRED/PLAN/COST markers. Backend emits approval_request;
 frontend renders an interactive bubble with copper-accented buttons.
 Clicking Approve/Reject sends a new turn starting with 'APPROVED:' or
-'REJECTED:' which Hephaestus's SKILL.md tells it to recognize."
+'REJECTED:' which Daedalus's SKILL.md tells it to recognize."
 ```
 
 ---
@@ -1902,7 +1902,7 @@ without interrupting the flow."
 
 ---
 
-## Task 15: Hephaestus visual treatment — copper accent variant
+## Task 15: Daedalus visual treatment — copper accent variant
 
 **Files:**
 - Modify: `frontend/src/components/panels/ChatPanel.tsx`
@@ -1921,12 +1921,12 @@ return (
 );
 ```
 
-- [ ] **Step 2: Add CSS variables for the Hephaestus variant**
+- [ ] **Step 2: Add CSS variables for the Daedalus variant**
 
 Append to `frontend/src/styles/panels.css`:
 
 ```css
-.chat-panel--agent-hephaestus {
+.chat-panel--agent-daedalus {
   --chat-accent: #b87333;       /* copper */
   --chat-accent-bg: rgba(184, 115, 51, 0.08);
   --chat-accent-border: rgba(184, 115, 51, 0.4);
@@ -1941,7 +1941,7 @@ Append to `frontend/src/styles/panels.css`:
 
 Then update any existing Claude-specific accent references in `panels.css` to
 use the variable (`var(--chat-accent)`), and apply the same variable where
-Hephaestus should pick up the accent — e.g. the agent-selector active state,
+Daedalus should pick up the accent — e.g. the agent-selector active state,
 the user message bubbles, the assistant message bubble border, the session pill.
 
 Example search-and-replace targets (adjust based on what's in the existing file):
@@ -1964,22 +1964,22 @@ Example search-and-replace targets (adjust based on what's in the existing file)
 ```bash
 cd frontend && npm run dev
 # open http://localhost:5173, open chat panel
-# switch between Claude and Hephaestus — accent color should flip
+# switch between Claude and Daedalus — accent color should flip
 ```
 
 Expected: switching agent selector visibly changes the accent color from
-indigo (Claude) to copper (Hephaestus) across the relevant chrome.
+indigo (Claude) to copper (Daedalus) across the relevant chrome.
 
 - [ ] **Step 4: Commit**
 
 ```bash
 git add frontend/src/components/panels/ChatPanel.tsx frontend/src/styles/panels.css
-git commit -m "feat(chat): Hephaestus copper accent variant via CSS variable
+git commit -m "feat(chat): Daedalus copper accent variant via CSS variable
 
 Chat panel root gets a per-agent modifier class. CSS variables swap
 accent colors for agent-selector, autonomy toggle, approval bubble,
 and other chrome. Profile picture + full Hermes-style theme are
-tracked in .planning/backlog/hephaestus-chat-ui-theme.md (scope beyond
+tracked in .planning/backlog/daedalus-chat-ui-theme.md (scope beyond
 MVP)."
 ```
 
@@ -1990,17 +1990,17 @@ MVP)."
 **Files:**
 - Modify: `docs/HERMES-SETUP.md` (add troubleshooting findings if any surface)
 
-- [ ] **Step 1: Verify Hermes is installed, Kimi K2.6 is configured, hephaestus-core skill is linked**
+- [ ] **Step 1: Verify Hermes is installed, Kimi K2.6 is configured, daedalus-core skill is linked**
 
 ```bash
 hermes --version
 hermes config get model
-hermes skills ls | grep hephaestus-core
+hermes skills ls | grep daedalus-core
 ```
 
-Expected: version shown, provider=openrouter name=moonshotai/kimi-k2.6, hephaestus-core visible.
+Expected: version shown, provider=openrouter name=moonshotai/kimi-k2.6, daedalus-core visible.
 
-If hephaestus-core is missing, add it to `~/.hermes/config.yaml`:
+If daedalus-core is missing, add it to `~/.hermes/config.yaml`:
 
 ```yaml
 skills:
@@ -2023,11 +2023,11 @@ Expected: backend listening on :8000, frontend on :5173.
 
 Open http://localhost:5173.
 
-1. Switch agent selector to **Hephaestus** (copper accent should apply).
+1. Switch agent selector to **Daedalus** (copper accent should apply).
 2. Keep autonomy on **Auto ▶**.
 3. Send: `Build me a looping scene: foggy forest at dawn, camera drifts through. Cinematic.`
 4. Watch the canvas. Nodes should appear (text-input, Imagen, Veo 3.1, Preview). Edges should connect.
-5. First generation runs. Hephaestus should report vision findings in chat.
+5. First generation runs. Daedalus should report vision findings in chat.
 6. If a defect is detected, iteration should fire. Observe the "Applying learning [slug]..." citation if LEARNINGS.md has relevant entries.
 7. A `→ Saved learning: <slug>` system line should appear if a novel insight fired.
 
@@ -2073,7 +2073,7 @@ git add docs/hackathon-submission/evidence/
 git commit -m "docs: Kimi track evidence package for Nous hackathon
 
 config + insights + session DB excerpts captured after demo-scenario
-dogfood run. Screenshots attached. Proves Hephaestus runs on Kimi
+dogfood run. Screenshots attached. Proves Daedalus runs on Kimi
 K2.6 end-to-end."
 ```
 
@@ -2111,7 +2111,7 @@ Expected:
 
 ## Follow-on work (post-hackathon, out of scope for this plan)
 
-- Hephaestus profile picture + full Hermes-style theme swap → `.planning/backlog/hephaestus-chat-ui-theme.md`
+- Daedalus profile picture + full Hermes-style theme swap → `.planning/backlog/daedalus-chat-ui-theme.md`
 - Meshy single-image node full param surface → `.planning/backlog/meshy-single-image-params.md`
 - Gateway PlatformAdapter for streaming output → spec §12 post-hackathon roadmap
 - `nebula_*` typed tools via Hermes `tools/registry.py` → spec §12
