@@ -1,0 +1,28 @@
+{
+  "_doc": "Voiceover for section 05 (fan-out: style remix + 3D mesh + Veo video). Camera holds on v2 briefly for fanout intro voice, then pans to overview while spawning all 3 fan-out nodes + edges. Each output reveal gets its own one-word voice callout: Watercolor / Sculpture / Motion. No music — added at final stitch.",
+
+  "provider": "elevenlabs",
+  "voice": "Brian",
+  "model": "eleven_multilingual_v2",
+  "speed": 0.92,
+  "voiceSettings": {
+    "stability": 0.65,
+    "similarity_boost": 0.92,
+    "style": 0.40,
+    "use_speaker_boost": true
+  },
+  "postFilter": "rubberband=pitch=0.90,equalizer=f=60:t=h:w=80:g=3,equalizer=f=80:t=h:w=140:g=6,equalizer=f=200:t=h:w=300:g=2.5,equalizer=f=4000:t=h:w=1500:g=-1.5,volume=1.15",
+  "reverbFilter": "aecho=0.85:0.65:80|180|360:0.30|0.20|0.10",
+  "reverbMix": 0.35,
+
+  "sfx": [],
+
+  "segments": [
+    { "startSec": 0.5,  "text": "Now — let me show you what else this canvas can hold." },
+    { "startSec": 4.2,  "text": "Let me wire these up real quick." },
+    { "startSec": 7.3,  "text": "Watercolor." },
+    { "startSec": 10.1, "text": "Sculpture." },
+    { "startSec": 15.2, "text": "Motion." },
+    { "startSec": 17.8, "text": "All this — from one image." }
+  ]
+}

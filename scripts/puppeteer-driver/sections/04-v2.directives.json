@@ -1,0 +1,42 @@
+[
+  {
+    "startSec": 0.0, "endSec": 0.9,
+    "kind": "hold-chibi-carryover",
+    "focusStart": { "cx": 0.40, "cy": 0.50, "scale": 1.6 },
+    "focusEnd":   { "cx": 0.40, "cy": 0.50, "scale": 1.6 },
+    "ease": "linear",
+    "labels": ["chibi carry-over"]
+  },
+  {
+    "startSec": 0.9, "endSec": 1.9,
+    "kind": "ease-chibi-to-textinput2",
+    "focusStart": { "cx": 0.40, "cy": 0.50, "scale": 1.6 },
+    "focusEnd":   { "cx": 0.40, "cy": 0.78, "scale": 2.0 },
+    "ease": "easeInOutCubic",
+    "labels": ["Text Input (refined)"]
+  },
+  {
+    "startSec": 1.9, "endSec": 5.0,
+    "kind": "hold-textinput2",
+    "focusStart": { "cx": 0.40, "cy": 0.78, "scale": 2.0 },
+    "focusEnd":   { "cx": 0.40, "cy": 0.78, "scale": 2.0 },
+    "ease": "linear",
+    "labels": ["Text Input (refined)", "REFINED prompt stream"]
+  },
+  {
+    "startSec": 5.0, "endSec": 5.9,
+    "kind": "ease-textinput2-to-v2",
+    "focusStart": { "cx": 0.40, "cy": 0.78, "scale": 2.0 },
+    "focusEnd":   { "cx": 0.49, "cy": 0.61, "scale": 1.7 },
+    "ease": "easeInOutCubic",
+    "labels": ["GPT Image 2 Edit"]
+  },
+  {
+    "startSec": 5.9, "endSec": 99.0,
+    "kind": "hold-v2",
+    "focusStart": { "cx": 0.49, "cy": 0.61, "scale": 1.7 },
+    "focusEnd":   { "cx": 0.49, "cy": 0.61, "scale": 1.7 },
+    "ease": "linear",
+    "labels": ["GPT Image 2 Edit", "edges", "execute", "v2 reveal"]
+  }
+]

@@ -1,0 +1,74 @@
+[
+  {
+    "startSec": 0.0, "endSec": 0.3,
+    "kind": "hold-v1-carryover",
+    "focusStart": { "cx": 0.49, "cy": 0.42, "scale": 1.7 },
+    "focusEnd":   { "cx": 0.49, "cy": 0.42, "scale": 1.7 },
+    "ease": "linear",
+    "labels": ["v1 carry-over"]
+  },
+  {
+    "startSec": 0.3, "endSec": 1.3,
+    "kind": "ease-v1-to-chatbox",
+    "focusStart": { "cx": 0.49,   "cy": 0.42, "scale": 1.7 },
+    "focusEnd":   { "cx": 0.8719, "cy": 0.55, "scale": 1.7 },
+    "ease": "easeInOutCubic",
+    "labels": ["chatbox", "tip"]
+  },
+  {
+    "startSec": 1.3, "endSec": 4.3,
+    "kind": "chatbox-hold-tip",
+    "focusStart": { "cx": 0.8719, "cy": 0.55, "scale": 1.7 },
+    "focusEnd":   { "cx": 0.8719, "cy": 0.55, "scale": 1.7 },
+    "ease": "linear",
+    "labels": ["chatbox", "tip"]
+  },
+  {
+    "startSec": 4.3, "endSec": 5.0,
+    "kind": "chatbox-pan-to-textarea",
+    "focusStart": { "cx": 0.8719, "cy": 0.55, "scale": 1.7 },
+    "focusEnd":   { "cx": 0.8719, "cy": 0.78, "scale": 1.7 },
+    "ease": "easeInOutCubic",
+    "labels": ["chatbox", "textarea"]
+  },
+  {
+    "startSec": 5.0, "endSec": 7.5,
+    "kind": "chatbox-hold-typing-ack",
+    "focusStart": { "cx": 0.8719, "cy": 0.78, "scale": 1.7 },
+    "focusEnd":   { "cx": 0.8719, "cy": 0.78, "scale": 1.7 },
+    "ease": "linear",
+    "labels": ["chatbox", "typing", "chibiAck"]
+  },
+  {
+    "startSec": 7.5, "endSec": 8.5,
+    "kind": "ease-chatbox-to-overview-finder",
+    "focusStart": { "cx": 0.8719, "cy": 0.78, "scale": 1.7 },
+    "focusEnd":   { "cx": 0.5,    "cy": 0.5,  "scale": 1.0 },
+    "ease": "easeInOutCubic",
+    "labels": ["overview", "finder"]
+  },
+  {
+    "startSec": 8.5, "endSec": 10.8,
+    "kind": "overview-finder-drag",
+    "focusStart": { "cx": 0.5, "cy": 0.5, "scale": 1.0 },
+    "focusEnd":   { "cx": 0.5, "cy": 0.5, "scale": 1.0 },
+    "ease": "linear",
+    "labels": ["overview", "finder", "drag"]
+  },
+  {
+    "startSec": 10.8, "endSec": 11.8,
+    "kind": "ease-overview-to-chibi",
+    "focusStart": { "cx": 0.5,  "cy": 0.5, "scale": 1.0 },
+    "focusEnd":   { "cx": 0.40, "cy": 0.50, "scale": 1.6 },
+    "ease": "easeInOutCubic",
+    "labels": ["Image Input"]
+  },
+  {
+    "startSec": 11.8, "endSec": 99.0,
+    "kind": "hold-chibi",
+    "focusStart": { "cx": 0.40, "cy": 0.50, "scale": 1.6 },
+    "focusEnd":   { "cx": 0.40, "cy": 0.50, "scale": 1.6 },
+    "ease": "linear",
+    "labels": ["Image Input", "refReact"]
+  }
+]

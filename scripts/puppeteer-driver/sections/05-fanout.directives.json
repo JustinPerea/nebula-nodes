@@ -1,0 +1,74 @@
+[
+  {
+    "startSec": 0.0, "endSec": 1.0,
+    "kind": "hold-v2-carryover",
+    "focusStart": { "cx": 0.49, "cy": 0.61, "scale": 1.7 },
+    "focusEnd":   { "cx": 0.49, "cy": 0.61, "scale": 1.7 },
+    "ease": "linear",
+    "labels": ["v2 carry-over", "fanout intro"]
+  },
+  {
+    "startSec": 1.0, "endSec": 2.5,
+    "kind": "ease-v2-to-fanout-overview",
+    "focusStart": { "cx": 0.49, "cy": 0.61, "scale": 1.7 },
+    "focusEnd":   { "cx": 0.55, "cy": 0.46, "scale": 1.15 },
+    "ease": "easeInOutCubic",
+    "labels": ["fan-out overview"]
+  },
+  {
+    "startSec": 2.5, "endSec": 7.0,
+    "kind": "hold-fanout-overview",
+    "focusStart": { "cx": 0.55, "cy": 0.46, "scale": 1.15 },
+    "focusEnd":   { "cx": 0.55, "cy": 0.46, "scale": 1.15 },
+    "ease": "linear",
+    "labels": ["fan-out spawn", "edges", "executing"]
+  },
+  {
+    "startSec": 7.0, "endSec": 7.6,
+    "kind": "ease-overview-to-style",
+    "focusStart": { "cx": 0.55, "cy": 0.46, "scale": 1.15 },
+    "focusEnd":   { "cx": 0.64, "cy": 0.42, "scale": 2.5 },
+    "ease": "easeInOutCubic",
+    "labels": ["style close-up"]
+  },
+  {
+    "startSec": 7.6, "endSec": 9.0,
+    "kind": "hold-style",
+    "focusStart": { "cx": 0.64, "cy": 0.42, "scale": 2.5 },
+    "focusEnd":   { "cx": 0.64, "cy": 0.42, "scale": 2.5 },
+    "ease": "linear",
+    "labels": ["Watercolor reveal"]
+  },
+  {
+    "startSec": 9.0, "endSec": 10.0,
+    "kind": "ease-style-to-mesh",
+    "focusStart": { "cx": 0.64, "cy": 0.42, "scale": 2.5 },
+    "focusEnd":   { "cx": 0.64, "cy": 0.64, "scale": 2.5 },
+    "ease": "easeInOutCubic",
+    "labels": ["mesh close-up"]
+  },
+  {
+    "startSec": 10.0, "endSec": 14.2,
+    "kind": "hold-mesh",
+    "focusStart": { "cx": 0.64, "cy": 0.64, "scale": 2.5 },
+    "focusEnd":   { "cx": 0.64, "cy": 0.64, "scale": 2.5 },
+    "ease": "linear",
+    "labels": ["Sculpture reveal", "mesh rotate"]
+  },
+  {
+    "startSec": 14.2, "endSec": 15.1,
+    "kind": "ease-mesh-to-video",
+    "focusStart": { "cx": 0.64, "cy": 0.64, "scale": 2.5 },
+    "focusEnd":   { "cx": 0.64, "cy": 0.79, "scale": 2.5 },
+    "ease": "easeInOutCubic",
+    "labels": ["video close-up"]
+  },
+  {
+    "startSec": 15.1, "endSec": 99.0,
+    "kind": "hold-video",
+    "focusStart": { "cx": 0.64, "cy": 0.79, "scale": 2.5 },
+    "focusEnd":   { "cx": 0.64, "cy": 0.79, "scale": 2.5 },
+    "ease": "linear",
+    "labels": ["Motion reveal", "press play", "Veo clip"]
+  }
+]

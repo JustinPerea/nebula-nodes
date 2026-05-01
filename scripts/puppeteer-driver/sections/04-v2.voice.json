@@ -1,0 +1,26 @@
+{
+  "_doc": "Voiceover for section 04 (refined Text Input + V2 via gpt-image-2-edit). Camera mirrors section 02: tight on TI for prompt streaming → pan to v2 → hold for execute + reveal. No music — added at final stitch.",
+
+  "provider": "elevenlabs",
+  "voice": "Brian",
+  "model": "eleven_multilingual_v2",
+  "speed": 0.92,
+  "voiceSettings": {
+    "stability": 0.65,
+    "similarity_boost": 0.92,
+    "style": 0.40,
+    "use_speaker_boost": true
+  },
+  "postFilter": "rubberband=pitch=0.90,equalizer=f=60:t=h:w=80:g=3,equalizer=f=80:t=h:w=140:g=6,equalizer=f=200:t=h:w=300:g=2.5,equalizer=f=4000:t=h:w=1500:g=-1.5,volume=1.15",
+  "reverbFilter": "aecho=0.85:0.65:80|180|360:0.30|0.20|0.10",
+  "reverbMix": 0.35,
+
+  "sfx": [],
+
+  "segments": [
+    { "startSec": 1.5,  "text": "Let me try this again." },
+    { "startSec": 3.5,  "text": "Adding the chibi cues — cream, blush, gold." },
+    { "startSec": 7.0,  "text": "Wiring it to gpt-image-2-edit." },
+    { "startSec": 10.3, "text": "Yes. Look at me fly. Now that is handsome." }
+  ]
+}

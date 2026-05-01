@@ -1,0 +1,42 @@
+{
+  "_doc": "Voiceover for section 03 (reference + chibi reactions). chibiAck fires while user is typing (Daedalus reads the typed text). 'Oh — there I am' fires when camera pans to canvas chibi. No music — added at final stitch.",
+
+  "provider": "elevenlabs",
+  "voice": "Brian",
+  "model": "eleven_multilingual_v2",
+  "speed": 0.92,
+  "voiceSettings": {
+    "stability": 0.65,
+    "similarity_boost": 0.92,
+    "style": 0.40,
+    "use_speaker_boost": true
+  },
+  "postFilter": "rubberband=pitch=0.90,equalizer=f=60:t=h:w=80:g=3,equalizer=f=80:t=h:w=140:g=6,equalizer=f=200:t=h:w=300:g=2.5,equalizer=f=4000:t=h:w=1500:g=-1.5,volume=1.15",
+  "reverbFilter": "aecho=0.85:0.65:80|180|360:0.30|0.20|0.10",
+  "reverbMix": 0.35,
+
+  "sfx": [
+    {
+      "_note": "typing burst — typing happens ~5.2-5.9s",
+      "startSec": 5.2,
+      "prompt": "short burst of mechanical keyboard typing, realistic, dry studio recording, no music",
+      "durationSec": 1.0,
+      "volume": 0.32
+    },
+    {
+      "_note": "drop sound when chibi image lands in chat — visual drop is ~t=10.8s",
+      "startSec": 10.8,
+      "prompt": "soft thump of a small object dropping on a desk, dry close-mic recording, isolated",
+      "durationSec": 0.5,
+      "volume": 0.45
+    }
+  ],
+
+  "segments": [
+    { "startSec": 1.5,  "text": "If you want a specific style, give me an image to reference." },
+    { "startSec": 5.7,  "text": "Chibi. Got it." },
+    { "startSec": 11.8, "text": "Oh — there I am. Handsome devil." },
+    { "startSec": 14.5, "text": "Soft cream, blush, gold accents." },
+    { "startSec": 17.3, "text": "Let me try again." }
+  ]
+}
