@@ -57,15 +57,17 @@ https://github.com/user-attachments/assets/3a83187d-e186-4378-8a36-822b0a4055cb
 
 ## ◆ DEMO SCRUB GUIDE &nbsp;&nbsp;//&nbsp;&nbsp; what to look for at each beat
 
+> The video is a *scripted* demo of capabilities the user is asking for. Daedalus does what you tell him to do — the fan-out, the iteration, the model choices in this cut were all directed by the prompt. In normal use he stays inside the request you give him.
+
 | Time | Beat | What's happening |
 |------|------|------------------|
-| **0:00** | INTRO | Daedalus introduces himself; the canvas wakes up — sigil-bloom toggle FX fires when the agent picker switches `claude → daedalus` |
-| **0:09** | OVERVIEW | Drag-or-chat affordance — pull a node in by hand, OR talk to Daedalus. Two front doors, same canvas. |
-| **0:18** | PROMPT | Real plain-language prompt typed into the chat panel. No commands, no syntax. |
-| **0:23** | V1 | Daedalus narrates each step into `content` (Kimi K2.6 narrator-fallback in action), wires the graph, runs v1 — watercolor portrait |
-| **0:44** | REFERENCE | Daedalus pulls a reference image into the graph and re-prompts to match the style |
-| **1:03** | V2 | Improved cut, Daedalus comments on what changed |
-| **1:16** | FAN-OUT | The thesis shot — same source seeds a stylized image, a 3D mesh, AND a video, in parallel |
+| **0:00** | INTRO | Daedalus introduces himself; sigil-bloom toggle FX fires when the agent picker switches `claude → daedalus` |
+| **0:09** | OVERVIEW | Drag-or-chat affordance — pull a node in by hand, OR talk to Daedalus. Two front doors, same canvas |
+| **0:18** | PROMPT | Plain-language prompt typed into the chat panel. No commands, no syntax |
+| **0:23** | V1 | Daedalus reaches for a model from the catalog (skill graph in action), wires the graph, runs v1 |
+| **0:44** | REFERENCE | User asks Daedalus to bring in a reference; Daedalus drags it into the graph and re-prompts to match the style |
+| **1:03** | V2 | Iteration with the user's feedback. Daedalus's output-quality awareness lives in the daedalus-core playbook |
+| **1:16** | FAN-OUT | User asks Daedalus to take the result and ALSO produce a stylized still + a 3D mesh + a video. *Daedalus doesn't autonomously decide to fan out — the prompt asked for it.* |
 | **1:36** | MODELS | Library walk: every supported provider (300+ via the universal Nous/OpenRouter/Replicate/FAL nodes) |
 | **2:00** | TAGLINE | "Let me be your guide to artistic creativity." |
 
@@ -95,14 +97,18 @@ There's a cambrian explosion of image, video, audio, and text models happening r
 │                                                                  │
 │   "Tell me what to build."                                       │
 │                                                                  │
-│   Talk to Daedalus. Master craftsman, labyrinth-builder — it     │
-│   plans pipelines with precision, measures twice before each     │
-│   cut, and remembers every lesson a bad joint taught it.         │
+│   A master-craftsman agent for creative AI. Tell him what to     │
+│   build; he picks the right model for the job from the catalog  │
+│   (image, video, 3D, audio), wires it on a node canvas, and     │
+│   iterates with you.                                             │
 │                                                                  │
-│   Wire the prompt, pick the right image model for the look you   │
-│   want, generate references, run v1, take notes, run v2, then    │
-│   fan it out to a video, a 3D pass, and a stylized still — all   │
-│   in front of you, on the canvas, narrating every step.          │
+│   He has a skill for each model so he knows how to reach a      │
+│   goal you give him. Run him hands-off toward a goal where he   │
+│   judges every output himself, OR let him pause and ask for     │
+│   your opinion at each step.                                    │
+│                                                                  │
+│   Full context awareness of what's on the canvas + what's       │
+│   wired. Learns your style across sessions through Hermes.      │
 │                                                                  │
 │                                          ▪ moonshotai/kimi-k2.6  │
 └──────────────────────────────────────────────────────────────────┘
@@ -121,9 +127,12 @@ SPEC // ATELIER
 
 | | |
 |---|---|
-| **DAEDALUS — chat agent** | Hermes Agent persona on Kimi K2.6 — narrates as it builds, fan-outs creative pipelines, learns per-user via Hermes skill memory |
-| **VISUAL CANVAS** | React Flow graph editor with typed, color-coded ports — drop, wire, run |
-| **STREAMING OUTPUTS** | Token-by-token text, live video/audio previews, prose narration mid-pipeline |
+| **DAEDALUS — chat agent** | Hermes Agent persona on Kimi K2.6. Builds what you ask on the same canvas you can drive yourself; reaches for the right model via per-model skills; learns your style across sessions via Hermes skill memory |
+| **CONTEXT AWARENESS** | Daedalus sees the live canvas — every node, every wire, every output. Drag in a node and ask him about it; he already knows what it is and what it's connected to |
+| **AUTONOMY MODES** | Auto-pilot (he judges outputs himself and continues) or Step-Approval (he pauses for your call before expensive ops). Toggle live in the chat header |
+| **LEARNINGS DISCIPLINE** | Hits a bug or a model quirk? It writes itself into Daedalus's memory via the `daedalus-learnings` skill. Next session loads the lesson |
+| **VISUAL CANVAS** | React Flow graph editor with typed, color-coded ports — drop, wire, run, with or without Daedalus in the loop |
+| **STREAMING OUTPUTS** | Token-by-token text, live video/audio previews |
 | **SMART CACHING** | Unchanged subgraphs skip re-computation automatically |
 | **UNIVERSAL NODES** | One node each for OpenRouter, **Nous Portal**, Replicate, FAL — reach any model on those platforms |
 | **PARTIAL EXECUTION** | Execute the full graph, or just a node's upstream subgraph |
