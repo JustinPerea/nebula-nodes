@@ -1,80 +1,90 @@
 <div align="center">
-  <img src="docs/assets/banner.svg" alt="Nebula Nodes" width="900">
+  <img src="docs/assets/banner.svg" alt="Nebula Nodes / Daedalus — a node-based canvas for artistic AI, spoken to in plain language" width="900">
+</div>
 
-  <p><strong>Visual AI pipelines. Your keys. Your machine.</strong></p>
-  <p>Drop nodes onto a canvas, wire them up, run a graph. Images flow into video models, text flows into image models, audio emerges from LLMs — all computed through your own API accounts on your own hardware.</p>
+```
+╋━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╋
+   STATION-04 // ATELIER          NEBULA NODES // DAEDALUS
+   HERMES AGENT — CREATIVE HACKATHON 2026                       ◆
+╋━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╋
+```
 
-  <p>
-    <a href="#quick-start">Quick Start</a> ·
-    <a href="#supported-models">Models</a> ·
-    <a href="#architecture">Architecture</a> ·
-    <a href="https://github.com/JustinPerea/nebula-nodes/issues">Report Bug</a>
-  </p>
+<div align="center">
+  <a href="#quickstart">QUICKSTART</a> · <a href="#daedalus--hermes-agent">DAEDALUS</a> · <a href="#supported-models">MODELS</a> · <a href="#architecture">ARCHITECTURE</a> · <a href="https://github.com/JustinPerea/nebula-nodes/issues">ISSUES</a>
+</div>
 
-  <p>
-    <a href="LICENSE"><img alt="License: AGPL-3.0" src="https://img.shields.io/badge/license-AGPL--3.0-863bff?style=flat-square&labelColor=1a1033"></a>
-    <img alt="Python 3.12+" src="https://img.shields.io/badge/python-3.12+-863bff?style=flat-square&labelColor=1a1033">
-    <img alt="Node 18+" src="https://img.shields.io/badge/node-18+-863bff?style=flat-square&labelColor=1a1033">
-    <img alt="React 19" src="https://img.shields.io/badge/react-19-47bfff?style=flat-square&labelColor=1a1033">
-    <img alt="FastAPI" src="https://img.shields.io/badge/fastapi-backend-47bfff?style=flat-square&labelColor=1a1033">
-    <img alt="BYOK" src="https://img.shields.io/badge/BYOK-bring_your_own_keys-863bff?style=flat-square&labelColor=1a1033">
-  </p>
+<div align="center">
+
+  <a href="LICENSE"><img alt="LICENSE — AGPL-3.0" src="https://img.shields.io/badge/LICENSE-AGPL--3.0-DCFF00?style=flat-square&labelColor=0A0A0A"></a>
+  <img alt="HACKATHON — HERMES AGENT" src="https://img.shields.io/badge/HACKATHON-HERMES%20AGENT-DCFF00?style=flat-square&labelColor=0A0A0A">
+  <img alt="MODEL — KIMI K2.6" src="https://img.shields.io/badge/MODEL-KIMI%20K2.6-E8E2D2?style=flat-square&labelColor=0A0A0A">
+  <img alt="GATEWAY — NOUS PORTAL" src="https://img.shields.io/badge/GATEWAY-NOUS%20PORTAL-E8E2D2?style=flat-square&labelColor=0A0A0A">
+  <br>
+  <img alt="PYTHON 3.12+" src="https://img.shields.io/badge/PYTHON-3.12%2B-E8E2D2?style=flat-square&labelColor=0A0A0A">
+  <img alt="NODE 18+" src="https://img.shields.io/badge/NODE-18%2B-E8E2D2?style=flat-square&labelColor=0A0A0A">
+  <img alt="REACT 19" src="https://img.shields.io/badge/REACT-19-E8E2D2?style=flat-square&labelColor=0A0A0A">
+  <img alt="FASTAPI" src="https://img.shields.io/badge/FASTAPI-BACKEND-E8E2D2?style=flat-square&labelColor=0A0A0A">
+  <img alt="BYOK — BRING YOUR OWN KEYS" src="https://img.shields.io/badge/BYOK-BRING%20YOUR%20OWN%20KEYS-DCFF00?style=flat-square&labelColor=0A0A0A">
+
 </div>
 
 ---
 
-<!--
-  README-ASSET-TODO: Hero demo visual needed
+> **◆ ENTRY-CLASS // HERMES AGENT CREATIVE HACKATHON 2026.** This repo is the codebase
+> behind the demo video showing **Daedalus**, a Hermes Agent–powered chat agent that
+> drives a node-based AI canvas in plain language. Daedalus runs on **Kimi K2.6** via
+> [Hermes Agent](https://github.com/NousResearch/hermes-agent) and **Nous Portal**;
+> the canvas is the visual workspace it operates on.
+> Setup steps: [`docs/HERMES-SETUP.md`](docs/HERMES-SETUP.md).
 
-  What to capture: A short screen recording of the Nebula Nodes canvas with a
-  small pipeline running — e.g. a Text Input → GPT Image → Kling v2.1 → Preview
-  chain, with wires connecting and the video preview appearing at the end.
-
-  Recommended format: GIF (<15s, <5MB) — optimize with gifski
-  Recommended size: ~1200px wide
-  Tools: Kap (macOS), ScreenToGif (Windows), Peek (Linux), then gifski for size
-  Save to: docs/assets/demo.gif
-
-  Then replace this comment with:
-    <div align="center">
-      <img src="docs/assets/demo.gif" alt="Nebula Nodes in action" width="900">
-    </div>
--->
-
-> **Hermes Agent Creative Hackathon submission.** This repo is the codebase
-> behind the demo video showing **Daedalus**, a Hermes Agent–powered chat
-> agent that drives a node-based AI canvas in natural language. Daedalus runs
-> on Kimi K2.6 via [Hermes Agent](https://github.com/NousResearch/hermes-agent)
-> and the Nous Portal; the canvas is the visual workspace it operates on.
-> Setup steps: see [`docs/HERMES-SETUP.md`](docs/HERMES-SETUP.md).
-
-## Why Nebula Nodes
+## ◆ THESIS &nbsp;&nbsp;//&nbsp;&nbsp; why this exists
 
 There's a cambrian explosion of image, video, audio, and text models happening right now — every week brings a new provider with a new endpoint. Stitching them together today means writing throwaway scripts, juggling API docs, and rebuilding the same plumbing for every idea.
 
-Nebula Nodes is a **visual programming environment** for that stitching. Everything runs locally against your own API keys, so there is no platform markup, no data leaving your machine to a middleman, and no rate-limited hosted tier. You see the graph, you see the outputs, you own the keys.
+**Nebula Nodes** is a visual programming environment for that stitching. **Daedalus** is the chat side of it — a Hermes Agent persona, master craftsman lineage, who builds the pipeline for you when you describe what you want. Same canvas. Same outputs. Your keys.
 
-The chat side is **Daedalus**, a master-builder persona running on top of Hermes Agent. Drop nodes by hand, or describe a creative pipeline in plain language and let Daedalus wire it up — same canvas, same outputs, your keys.
+```
+┌─ DAEDALUS ──────────────────────────────────────────────────────┐
+│                                                                  │
+│   "Tell me what to build."                                       │
+│                                                                  │
+│   I'll wire the prompt, pick the right image model for the       │
+│   look you want, generate references, run a v1, take a look,     │
+│   take notes, run a v2, and fan it out to a video, a 3D pass,    │
+│   and a stylized still — all in front of you, on the canvas,     │
+│   speaking through every step.                                   │
+│                                                                  │
+│                            ◆ master craftsman, daughter of Athena │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+Everything runs locally against your own API keys, so there is no platform markup, no data leaving your machine to a middleman, and no rate-limited hosted tier. You see the graph, you see the outputs, you own the keys.
 
 > [!NOTE]
-> Nebula Nodes is **BYOK (bring your own keys)** by design. The app proxies calls from your local backend to OpenAI, Anthropic, Google, Runway, FAL, OpenRouter, Replicate, ElevenLabs, and **Nous Portal** using keys you paste into the settings panel — or, in the case of Nous Portal, the OAuth credential the [Hermes Agent](https://hermes-agent.nousresearch.com) CLI already manages on your machine. They never touch a Nebula-hosted server because there isn't one.
+> **BYOK ◆ BRING YOUR OWN KEYS.** The app proxies calls from your local backend to OpenAI, Anthropic, Google, Runway, FAL, OpenRouter, Replicate, ElevenLabs, and **Nous Portal** using keys you paste into the settings panel — or, in the case of Nous Portal, the OAuth credential [Hermes Agent](https://github.com/NousResearch/hermes-agent) already manages on your machine. They never touch a Nebula-hosted server because there isn't one.
 
-## Features
+## ◆ FEATURES
+
+```
+SPEC // ATELIER
+```
 
 | | |
 |---|---|
-| **Visual canvas** | React Flow graph editor with typed, color-coded ports |
-| **Streaming outputs** | Token-by-token text, live video/audio previews |
-| **Smart caching** | Unchanged subgraphs skip re-computation automatically |
-| **Universal nodes** | One node each for OpenRouter, Nous Portal, Replicate, and FAL — reach any model on those platforms |
-| **Run what you need** | Execute the full graph, or just a node's upstream subgraph |
-| **Undo that sticks** | 50-step history, and outputs survive undo |
-| **Copy / paste / duplicate** | UUIDs regenerate so duplicates are first-class nodes, not aliases |
-| **Save / load graphs** | Graphs serialize to JSON; outputs written to disk and served via `/api/outputs` |
+| **DAEDALUS — chat agent** | Hermes Agent persona on Kimi K2.6 — narrates as it builds, fan-outs creative pipelines, learns per-user via Hermes skill memory |
+| **VISUAL CANVAS** | React Flow graph editor with typed, color-coded ports — drop, wire, run |
+| **STREAMING OUTPUTS** | Token-by-token text, live video/audio previews, prose narration mid-pipeline |
+| **SMART CACHING** | Unchanged subgraphs skip re-computation automatically |
+| **UNIVERSAL NODES** | One node each for OpenRouter, **Nous Portal**, Replicate, FAL — reach any model on those platforms |
+| **PARTIAL EXECUTION** | Execute the full graph, or just a node's upstream subgraph |
+| **UNDO THAT STICKS** | 50-step history, outputs survive undo |
+| **SAVE / LOAD** | Graphs serialize to JSON; outputs written to disk and served via `/api/outputs` |
 
-## Quick Start
+## ◆ QUICKSTART
 
-**Requirements:** Python 3.12+, Node.js 18+
+```
+SPEC // CANVAS — REQUIRES Python 3.12+, Node.js 18+
+```
 
 ```bash
 # 1. Clone
@@ -95,9 +105,13 @@ npm run dev
 ```
 
 > [!TIP]
-> Drop a **Text Input** node on the canvas, wire it into a **GPT Image** node, wire that into a **Preview** node, and hit **Run**. That's the whole mental model.
+> Drop a **Text Input** node on the canvas, wire it into a **GPT Image** node, wire that into a **Preview** node, and hit **Run**. That's the whole mental model. Or — open the chat panel, switch to **Daedalus**, and ask for what you want.
 
-## Talking to Daedalus (Hermes Agent)
+## ◆ DAEDALUS — HERMES AGENT
+
+```
+SPEC // ATELIER — KIMI K2.6 · OPENROUTER OR NOUS PORTAL
+```
 
 Daedalus is the chat side of the canvas — a Hermes Agent persona that builds graphs from natural-language prompts. It runs as a subprocess of [Hermes Agent](https://github.com/NousResearch/hermes-agent) on your machine, against either OpenRouter (Kimi K2.6) or Nous Portal (300+ models, one OAuth).
 
@@ -130,9 +144,21 @@ In the running app: open the chat panel, switch the agent picker to **Daedalus**
 
 Full step-by-step setup (model-family skills, the `nebula` CLI wrapper, troubleshooting): **[`docs/HERMES-SETUP.md`](docs/HERMES-SETUP.md)**.
 
-## Adding API Keys
+## ◆ KEYS
+
+```
+SPEC // BYOK — keys live on YOUR disk, never on a server we run
+```
 
 **Via the Settings panel** (recommended) — click the gear icon in the toolbar, paste your keys into the relevant fields, hit Save. Keys are masked on read; the backend stores the raw value but never logs it.
+
+| | |
+|---|---|
+| **Storage** | `settings.json` at the project root, gitignored, plaintext, owned by you |
+| **Read API** | `GET /api/settings` returns `***` + last 4 chars only — real key never crosses the wire |
+| **Write API** | `PUT /api/settings` short-circuits on `***`-prefixed values — masked round-trip preserves the real key |
+| **Egress** | Each handler hits exactly one provider URL — no analytics, no telemetry, no aggregator |
+| **CORS** | `localhost`/`127.0.0.1` origin only — a malicious tab cannot read your keys |
 
 <details>
 <summary><strong>Via settings.json</strong> — manual alternative, edit the file at the project root</summary>
@@ -156,9 +182,11 @@ Full step-by-step setup (model-family skills, the `nebula` CLI wrapper, troubles
 
 </details>
 
-## Supported Models
+## ◆ MODELS
 
-### Built-in Nodes
+```
+SPEC // BUILT-IN NODES — first-class handlers, schema-typed ports
+```
 
 | Node | Provider | Output |
 |------|----------|--------|
@@ -181,16 +209,18 @@ Full step-by-step setup (model-family skills, the `nebula` CLI wrapper, troubles
 | Text / Image Input | Utility | — |
 | Preview | Utility | — |
 
-### Universal Nodes
+```
+SPEC // UNIVERSAL NODES — one node, every model on the platform
+```
 
 | Node | Platform | What it gives you |
 |------|----------|-------------------|
-| **OpenRouter** | OpenRouter | Any model in the OpenRouter catalog; schema fetched at configuration time |
-| **Nous Portal** | Nous Portal | Any model in the Nous Portal catalog (300+); auth via the Hermes Agent CLI's OAuth (no API key field) |
-| **Replicate** | Replicate | Any versioned model on Replicate; ports built from the model's JSON schema |
+| **OPENROUTER** | OpenRouter | Any model in the OpenRouter catalog; schema fetched at configuration time |
+| **◆ NOUS PORTAL** | Nous Portal | Any model in the Nous Portal catalog (300+); auth via Hermes Agent OAuth — no API key field |
+| **REPLICATE** | Replicate | Any versioned model on Replicate; ports built from the model's JSON schema |
 | **FAL** | FAL | Any FAL endpoint via the submit/poll async pattern |
 
-## Architecture
+## ◆ ARCHITECTURE
 
 ```mermaid
 graph LR
@@ -200,39 +230,56 @@ graph LR
     ENGINE --> HANDLERS[Handler registry<br/>backend/handlers/*.py]
     HANDLERS --> PROVIDERS[(OpenAI · Anthropic · Google<br/>Runway · FAL · OpenRouter · Nous Portal<br/>Replicate · ElevenLabs · Meshy)]
     API --> OUT["/api/outputs<br/>files on disk"]
+    UI <-->|WebSocket /chat| CHAT[Daedalus session]
+    CHAT --> HERMES[hermes-daedalus subprocess<br/>Kimi K2.6]
+    HERMES -->|terminal tool| CLI[nebula CLI]
+    CLI --> API
 
-    style UI fill:#863bff,color:#fff,stroke:#47bfff
-    style API fill:#47bfff,color:#0b0416,stroke:#863bff
-    style ENGINE fill:#1a1033,color:#ede6ff,stroke:#863bff
-    style HANDLERS fill:#1a1033,color:#ede6ff,stroke:#863bff
-    style PROVIDERS fill:#ede6ff,color:#1a1033,stroke:#863bff
-    style OUT fill:#1a1033,color:#ede6ff,stroke:#47bfff
-    style WS fill:#47bfff,color:#0b0416,stroke:#863bff
+    style UI fill:#0A0A0A,color:#E8E2D2,stroke:#DCFF00
+    style API fill:#0A0A0A,color:#E8E2D2,stroke:#E8E2D2
+    style ENGINE fill:#111111,color:#E8E2D2,stroke:#E8E2D2
+    style HANDLERS fill:#111111,color:#E8E2D2,stroke:#E8E2D2
+    style PROVIDERS fill:#181818,color:#E8E2D2,stroke:#E8E2D2
+    style OUT fill:#111111,color:#E8E2D2,stroke:#E8E2D2
+    style WS fill:#111111,color:#E8E2D2,stroke:#E8E2D2
+    style CHAT fill:#0A0A0A,color:#0A0A0A,stroke:#DCFF00
+    style CHAT color:#DCFF00
+    style HERMES fill:#0A0A0A,color:#DCFF00,stroke:#DCFF00
+    style CLI fill:#111111,color:#E8E2D2,stroke:#E8E2D2
 ```
 
-- **Frontend** — React 19 + Vite SPA. `@xyflow/react` powers the canvas. [Zustand](https://github.com/pmndrs/zustand) holds all graph and UI state, with `node.data` as the single source of truth for params, outputs, and execution status.
-- **Backend** — FastAPI. REST endpoints for execution and a WebSocket at `/ws` that streams per-node events (started, progress, output, error) back to the UI in real time.
-- **Execution engine** — topologically sorts the graph, dispatches handlers in dependency order, passes outputs forward through the edge graph, and short-circuits when a subgraph's inputs haven't changed since the last run.
-- **Handlers** — one function per provider in `backend/handlers/` (e.g., `openai_image.py`, `runway.py`, `fal_universal.py`). Each handler receives typed params, returns a typed output, and is unit-tested in isolation.
-- **Proxy routes** — `/api/openrouter/*`, `/api/replicate/*`, `/api/fal/*` let the frontend browse available models and fetch schemas without shipping API keys to the browser.
+- **FRONTEND** — React 19 + Vite SPA. `@xyflow/react` powers the canvas. [Zustand](https://github.com/pmndrs/zustand) holds all graph and UI state, with `node.data` as the single source of truth for params, outputs, and execution status.
+- **BACKEND** — FastAPI. REST endpoints for execution and a WebSocket at `/ws` that streams per-node events (started, progress, output, error) back to the UI in real time.
+- **EXECUTION ENGINE** — topologically sorts the graph, dispatches handlers in dependency order, passes outputs forward through the edge graph, and short-circuits when a subgraph's inputs haven't changed since the last run.
+- **HANDLERS** — one function per provider in `backend/handlers/` (e.g., `openai_image.py`, `runway.py`, `fal_universal.py`). Each handler receives typed params, returns a typed output, and is unit-tested in isolation.
+- **DAEDALUS BRIDGE** — `backend/services/hermes_session.py` wraps the `hermes-daedalus chat` subprocess per turn, parses Hermes verbose-mode events, narrates canvas actions live to the chat panel via WebSocket, and falls back to a Kimi K2.6 narrator (`backend/services/narrator.py`) when the model emits empty `content` alongside `tool_calls`.
 
-## Project Layout
+## ◆ PROJECT LAYOUT
 
 ```
 nebula-nodes/
-├── backend/           FastAPI app
-│   ├── handlers/      one file per provider
-│   ├── execution/     topological graph runner + caching
-│   ├── routes/        REST + WS + provider proxies
-│   └── cli/           scriptable pipelines (nebula CLI)
-├── frontend/          React 19 + Vite canvas UI
-│   ├── src/components canvas, nodes, edges, panels
-│   └── src/store      Zustand graph + UI state
-├── docs/              model reference, FAL schemas, research notes
-└── scripts/           dev utilities
+├─ backend/                FastAPI app
+│  ├─ handlers/            one file per provider
+│  ├─ execution/           topological graph runner + caching
+│  ├─ routes/              REST + WS + provider proxies
+│  ├─ services/
+│  │  ├─ hermes_session.py Daedalus subprocess bridge
+│  │  ├─ narrator.py       Kimi K2.6 fallback narrator
+│  │  ├─ chat_actions.py   per-turn action buffer
+│  │  └─ nous_auth.py      Nous Portal OAuth from ~/.hermes/
+│  └─ cli/                 scriptable pipelines (nebula CLI)
+├─ frontend/               React 19 + Vite canvas UI
+│  ├─ src/components/      canvas, nodes, edges, panels
+│  └─ src/store/           Zustand graph + UI state
+├─ .hermes/
+│  ├─ profiles/daedalus/   SOUL.md — Daedalus persona contract
+│  └─ skills/daedalus-core/ SKILL.md — playbook + cookbook
+├─ themes/daedalus/        Hermes Agent dashboard theme (TDR × Marathon)
+├─ docs/                   HERMES-SETUP.md, model reference, plans
+└─ scripts/                demo recording pipeline + dev utilities
 ```
 
-## Contributing
+## ◆ CONTRIBUTING
 
 Issues and pull requests are welcome. Before opening a PR, please run the frontend and backend test suites:
 
@@ -246,6 +293,17 @@ cd frontend && npm test
 
 If you are adding a new model, the smallest useful contribution is a single handler in `backend/handlers/` plus a node definition in `frontend/src/components/nodes/`. Existing nodes are good templates — copy the closest match and adjust.
 
-## License
+If you are extending **Daedalus**, the playbook lives at `.hermes/skills/daedalus-core/SKILL.md`. The persona contract is `.hermes/profiles/daedalus/SOUL.md`. Both are copied into the user's Hermes profile during setup — see [`docs/HERMES-SETUP.md`](docs/HERMES-SETUP.md).
+
+## ◆ LICENSE
 
 [AGPL-3.0](LICENSE). You may use, modify, and self-host Nebula Nodes freely. If you distribute a modified version — including running it as a network service — you must make your source available under the same license.
+
+---
+
+```
+╋━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╋
+   ◆ DAEDALUS // ATELIER                            BUILT WITH PURPOSE
+   STATION-04                                      © 2026 JUSTIN PEREA
+╋━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╋
+```
