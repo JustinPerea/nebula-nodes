@@ -1,25 +1,21 @@
-// Section 04 — Refined Text Input + V2 (gpt-image-2-edit).
+// Section 07 — Tagline pull-back ("This is Nebula.").
 //
-// Picks up from section 03's end (canvas has TI + v1Gen + Image Input;
-// chat history through refReact; camera at hold-chibi pose).
+// Picks up from section 06's end (full graph: 9 nodes + 7 edges; chat
+// history through fanout; camera tight on library at cx=0.086 cy=0.244
+// scale=2.18). Pulls the camera all the way out to show the whole graph
+// composition while Daedalus delivers the final tagline.
 //
 // Sequence:
-//  1. Brief hold on chibi (carry-over).
-//  2. Pan from chibi to where textInput2 will spawn.
-//  3. Spawn textInput2 (empty, widened) below imageInput.
-//  4. Stream REFINED_PROMPT into textInput2.
-//  5. Pan to where v2 will spawn, spawn v2Edit (gpt-image-2-edit).
-//  6. Wire imageInput → v2.images, textInput2 → v2.prompt.
-//  7. Execute v2 (fake progress) → inject v2.png.
-//  8. Daedalus v2React in chat: "Yes. Look at me fly. Now that is handsome."
+//  1. Brief carry-over hold on library.
+//  2. Smooth pull-back to wide overview that frames the entire canvas.
+//  3. "This is Nebula." voice + chat bubble lands as the camera arrives
+//     at the wide shot.
+//  4. Hold final overview for a beat.
 //
 // Voice (per-section build-vo, no music):
-//   ~1.5s   Let me try this again.
-//   ~3.5s   Adding the chibi cues — cream, blush, gold.
-//   ~7.0s   Wiring it to gpt-image-2-edit.
-//   ~10.3s  Yes. Look at me fly. Now that is handsome.
+//   ~3.0s   This is Nebula.
 //
-// Duration target: ~15s.
+// Duration target: ~6s.
 
 import { mkdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -32,7 +28,7 @@ import {
   saveSnapshot,
 } from './lib.mjs';
 
-const SECTION = '04-v2';
+const SECTION = '07-tagline';
 const runId = nowSlug();
 const RUN_DIR = join(SECTIONS_OUT, SECTION, runId);
 const STATE_OUT = join(SECTIONS_OUT, SECTION, 'state-out.json');
@@ -43,12 +39,16 @@ const V1_ENHANCED_PROMPT =
   'Daedalus the Greek inventor mid-flight, mechanical feathered wings spread wide, dramatic dynamic pose, sunset Aegean sky, cinematic composition, golden hour lighting, photorealistic cinematic detail';
 const REFINED_PROMPT =
   'Daedalus mid-flight, mechanical feathered wings spread wide, dynamic flying pose, matching reference figurine style — soft cream background, chibi proportions, blush cheeks, gold accents on wing struts, smooth sculpted aesthetic';
-const DEMO_V1 = '/demo/outputs/v1.png';
-const DEMO_V2 = '/demo/outputs/v2.png';
+const STYLE_PROMPT = 'watercolor remix — soft pastel washes, paper grain';
+const DEMO = {
+  v1:    '/demo/outputs/v1.png',
+  v2:    '/demo/outputs/v2.png',
+  style: '/demo/outputs/style.png',
+  mesh:  '/demo/outputs/mesh.glb',
+  video: '/demo/outputs/video.mp4',
+};
 
-// Chat history at start of section 04 (everything through section 03's
-// refReact). The user-with-image bubble is pushed separately after the
-// reference upload so it carries the image attachment.
+// Chat history at start of section 07 (everything through section 05's fanout).
 const CHAT_HISTORY_PRE_USER = [
   { role: 'user',      text: 'show yourself flying' },
   { role: 'assistant', text: 'Showing myself flying — one moment.' },
@@ -61,6 +61,9 @@ const CHAT_HISTORY_PRE_USER = [
 ];
 const REFREACT_TEXT =
   'Oh — there I am. Handsome devil. Soft cream, blush, gold accents. Let me try again.';
+const V2REACT_TEXT = 'Yes. Look at me fly. Now that is handsome.';
+const FANOUT_TEXT = 'Now — let me show you what else this canvas can hold.';
+const TAGLINE_TEXT = 'This is Nebula Nodes. Let me be your guide to artistic creativity.';
 
 const POS = {
   textInput1: { x: -700, y: -200 },
@@ -68,6 +71,10 @@ const POS = {
   imageInput: { x: -700, y:   80 },
   textInput2: { x: -700, y:  580 },
   v2Edit:     { x:  -60, y:  340 },
+  styleText:  { x:  340, y: -440 },
+  style:      { x:  340, y: -200 },
+  mesh:       { x:  340, y:  240 },
+  video:      { x:  340, y:  540 },
 };
 
 async function widenNode(page, nodeId, widthPx) {
@@ -127,7 +134,7 @@ async function main() {
     });
     await sleep(300);
 
-    // Restore chat (everything before the user's image message).
+    // Restore chat (everything section 05 pushed).
     for (const msg of CHAT_HISTORY_PRE_USER) {
       if (msg.role === 'user') {
         await page.evaluate((t) => window.__nebulaChat.pushUser(t), msg.text);
@@ -135,15 +142,15 @@ async function main() {
         await page.evaluate((t) => window.__nebulaChat.pushAssistant(t), msg.text);
       }
     }
-    await sleep(150);
+    await sleep(120);
 
-    // Restore canvas: TI (with V1 prompt) + v1Gen (with v1 output) + edge.
+    // Restore canvas: TI + v1Gen + edge.
     const tiId = await page.evaluate(async (cfg) => {
       const id = await window.__nebulaGraphStore.getState().addNode('text-input', cfg.pos);
       window.__nebulaGraphStore.getState().updateNodeData(id, { params: { value: cfg.value } });
       return id;
     }, { pos: POS.textInput1, value: V1_ENHANCED_PROMPT });
-    await sleep(220);
+    await sleep(140);
     await widenNode(page, tiId, 380);
 
     const v1Id = await page.evaluate(async (cfg) => {
@@ -153,44 +160,150 @@ async function main() {
         outputs: { image: { type: 'Image', value: cfg.url } },
       });
       return id;
-    }, { pos: POS.v1Gen, url: DEMO_V1 });
-    await sleep(220);
+    }, { pos: POS.v1Gen, url: DEMO.v1 });
+    await sleep(140);
 
     await page.evaluate(({ s, t }) => {
       window.__nebulaGraphStore.getState().onConnect({
         source: s, sourceHandle: 'text', target: t, targetHandle: 'prompt',
       });
     }, { s: tiId, t: v1Id });
-    await sleep(220);
+    await sleep(140);
 
-    // Upload chibi reference (creates Image Input node) + position it.
+    // Upload chibi reference + position imageInput.
     const refUpload = await uploadReference(page, REFERENCE_IMAGE_PATH);
     log('upload', `imageInput nodeId=${refUpload.nodeId}`);
+    await sleep(500);
     await page.evaluate(({ id, pos }) => {
       window.__nebulaCanvas.setNodePosition(id, pos);
     }, { id: refUpload.nodeId, pos: POS.imageInput });
-    await sleep(220);
+    await sleep(140);
 
-    // Push the user's image message + refReact bubble (section 03's tail).
+    // Push the user's image message + refReact + v2React.
     await page.evaluate((upload) => {
       window.__nebulaChat.pushUser('I want this chibi style', {
         images: [{ nodeId: upload.nodeId, thumbUrl: upload.thumbUrl }],
       });
     }, refUpload);
-    await sleep(120);
+    await sleep(80);
     await page.evaluate((t) => window.__nebulaChat.pushAssistant(t), REFREACT_TEXT);
-    await sleep(220);
+    await sleep(80);
 
-    // Camera at section 03's hold-chibi pose.
+    // Restore textInput2 + v2Edit + edges.
+    const ti2Id = await page.evaluate(async (cfg) => {
+      const id = await window.__nebulaGraphStore.getState().addNode('text-input', cfg.pos);
+      window.__nebulaGraphStore.getState().updateNodeData(id, { params: { value: cfg.value } });
+      return id;
+    }, { pos: POS.textInput2, value: REFINED_PROMPT });
+    await sleep(140);
+    await widenNode(page, ti2Id, 380);
+
+    const v2Id = await page.evaluate(async (cfg) => {
+      const id = await window.__nebulaGraphStore.getState().addNode('gpt-image-2-edit', cfg.pos);
+      window.__nebulaGraphStore.getState().updateNodeData(id, {
+        state: 'complete',
+        outputs: { image: { type: 'Image', value: cfg.url } },
+      });
+      return id;
+    }, { pos: POS.v2Edit, url: DEMO.v2 });
+    await sleep(140);
+
+    await page.evaluate(({ s, t }) => {
+      window.__nebulaGraphStore.getState().onConnect({
+        source: s, sourceHandle: 'image', target: t, targetHandle: 'images',
+      });
+    }, { s: refUpload.nodeId, t: v2Id });
+    await sleep(80);
+    await page.evaluate(({ s, t }) => {
+      window.__nebulaGraphStore.getState().onConnect({
+        source: s, sourceHandle: 'text', target: t, targetHandle: 'prompt',
+      });
+    }, { s: ti2Id, t: v2Id });
+    await sleep(140);
+
+    await page.evaluate((t) => window.__nebulaChat.pushAssistant(t), V2REACT_TEXT);
+    await sleep(80);
+
+    // Restore fan-out: styleText + style, mesh, video, with all edges.
+    const styleTiId = await page.evaluate(async ({ pos, prompt }) => {
+      const id = await window.__nebulaGraphStore.getState().addNode('text-input', pos);
+      window.__nebulaGraphStore.getState().updateNodeData(id, { params: { value: prompt } });
+      return id;
+    }, { pos: POS.styleText, prompt: STYLE_PROMPT });
+    await sleep(140);
+
+    const styleId = await page.evaluate(async (cfg) => {
+      const id = await window.__nebulaGraphStore.getState().addNode('gpt-image-2-edit', cfg.pos);
+      window.__nebulaGraphStore.getState().updateNodeData(id, {
+        state: 'complete',
+        outputs: { image: { type: 'Image', value: cfg.url } },
+      });
+      return id;
+    }, { pos: POS.style, url: DEMO.style });
+    await sleep(140);
+
+    await page.evaluate(({ s, t }) => {
+      window.__nebulaGraphStore.getState().onConnect({
+        source: s, sourceHandle: 'image', target: t, targetHandle: 'images',
+      });
+    }, { s: v2Id, t: styleId });
+    await sleep(80);
+    await page.evaluate(({ s, t }) => {
+      window.__nebulaGraphStore.getState().onConnect({
+        source: s, sourceHandle: 'text', target: t, targetHandle: 'prompt',
+      });
+    }, { s: styleTiId, t: styleId });
+    await sleep(80);
+
+    const meshId = await page.evaluate(async (cfg) => {
+      const id = await window.__nebulaGraphStore.getState().addNode('meshy-image-to-3d', cfg.pos);
+      window.__nebulaGraphStore.getState().updateNodeData(id, {
+        state: 'complete',
+        outputs: { mesh: { type: 'Mesh', value: cfg.url } },
+      });
+      return id;
+    }, { pos: POS.mesh, url: DEMO.mesh });
+    await sleep(140);
+
+    await page.evaluate(({ s, t }) => {
+      window.__nebulaGraphStore.getState().onConnect({
+        source: s, sourceHandle: 'image', target: t, targetHandle: 'image',
+      });
+    }, { s: v2Id, t: meshId });
+    await sleep(80);
+
+    const videoId = await page.evaluate(async (cfg) => {
+      const id = await window.__nebulaGraphStore.getState().addNode('veo-3', cfg.pos);
+      window.__nebulaGraphStore.getState().updateNodeData(id, {
+        state: 'complete',
+        outputs: { video: { type: 'Video', value: cfg.url } },
+      });
+      return id;
+    }, { pos: POS.video, url: DEMO.video });
+    await sleep(140);
+
+    await page.evaluate(({ s, t }) => {
+      window.__nebulaGraphStore.getState().onConnect({
+        source: s, sourceHandle: 'image', target: t, targetHandle: 'image',
+      });
+    }, { s: v2Id, t: videoId });
+    await sleep(140);
+
+    // Push fanout chat (the last bubble before this section).
+    await page.evaluate((t) => window.__nebulaChat.pushAssistant(t), FANOUT_TEXT);
+    await sleep(180);
+
+    // Camera at section 06's hold-library pose (carry-over).
     await page.evaluate(() => {
       window.__nebulaSuppressFitView = true;
       window.__nebulaCanvas.centerOn(-180, 130, 0.55, 0, { x: 880, y: 540 });
     });
-    await sleep(220);
+    await sleep(180);
 
     await injectCursor(page);
     log('cursor', 'virtual cursor injected');
-    await page.evaluate(() => window.__nebulaCursor.moveTo(900, 500, 0));
+    // Cursor was on library at end of section 06.
+    await page.evaluate(() => window.__nebulaCursor.moveTo(166, 264, 0));
 
     // ----- Begin recording -----
     const recorder = await startRecorder(page, RUN_DIR, { quality: 100 });
@@ -199,100 +312,17 @@ async function main() {
     const phases = { recordStart: Date.now() };
     const { events, edges, captureNode, captureEdge } = makeCaptureHelpers(page, phases.recordStart);
 
-    // Brief carry-over hold on chibi.
-    await sleep(900);
+    // Wait through carry-over hold (0-1.0s) + camera pull-back (1.0-3.0s).
+    await sleep(3000);
+    phases.b7_overviewArrived = Date.now();
 
-    // ===== Spawn refined Text Input =====
-    log('beat-4', 'spawn refined TI');
-    const ti2Id = await page.evaluate(async (pos) => {
-      const id = await window.__nebulaGraphStore.getState().addNode('text-input', pos);
-      window.__nebulaGraphStore.getState().updateNodeData(id, { params: { value: '' } });
-      return id;
-    }, POS.textInput2);
-    await sleep(380);
-    await widenNode(page, ti2Id, 380);
-    await captureNode(ti2Id, 'Text Input (refined)');
-    phases.b4_ti2Spawn = Date.now();
-    await sleep(700);
+    // Push the tagline as a final assistant bubble. Voice fires at 3.0s
+    // (matches camera arrival) so chat lands as the wide shot reveals the
+    // whole graph.
+    await page.evaluate((t) => window.__nebulaChat.pushAssistant(t), TAGLINE_TEXT);
 
-    // ===== Stream REFINED_PROMPT into textInput2 =====
-    {
-      const prompt = REFINED_PROMPT;
-      const chunkSize = 10;
-      for (let i = 0; i < prompt.length; i += chunkSize) {
-        const acc = prompt.slice(0, i + chunkSize);
-        await page.evaluate(({ id, value }) => {
-          window.__nebulaGraphStore.getState().updateNodeData(id, { params: { value } });
-        }, { id: ti2Id, value: acc });
-        await sleep(85);
-      }
-      await sleep(500);
-    }
-    phases.b4_promptStreamed = Date.now();
-
-    // ===== Spawn v2 (gpt-image-2-edit) =====
-    const v2Id = await page.evaluate(async (pos) =>
-      window.__nebulaGraphStore.getState().addNode('gpt-image-2-edit', pos),
-    POS.v2Edit);
-    await sleep(420);
-    await captureNode(v2Id, 'GPT Image 2 Edit');
-    await sleep(500);
-
-    // Edge: imageInput → v2.images
-    await page.evaluate(({ s, t }) => {
-      window.__nebulaGraphStore.getState().onConnect({
-        source: s, sourceHandle: 'image', target: t, targetHandle: 'images',
-      });
-    }, { s: refUpload.nodeId, t: v2Id });
-    await sleep(300);
-    await captureEdge(`${refUpload.nodeId}->${v2Id}`, refUpload.nodeId, v2Id);
-
-    // Edge: textInput2 → v2.prompt
-    await page.evaluate(({ s, t }) => {
-      window.__nebulaGraphStore.getState().onConnect({
-        source: s, sourceHandle: 'text', target: t, targetHandle: 'prompt',
-      });
-    }, { s: ti2Id, t: v2Id });
-    await sleep(300);
-    await captureEdge(`${ti2Id}->${v2Id}`, ti2Id, v2Id);
-    await sleep(500);
-
-    // ===== Execute v2 =====
-    await page.evaluate((id) => {
-      window.__nebulaGraphStore.getState().updateNodeData(id, { state: 'executing', progress: 0.1 });
-    }, v2Id);
-    for (const p of [0.3, 0.55, 0.78, 0.95]) {
-      await sleep(380);
-      await page.evaluate(({ id, val }) => {
-        window.__nebulaGraphStore.getState().updateNodeData(id, { progress: val });
-      }, { id: v2Id, val: p });
-    }
-    await sleep(280);
-
-    await page.evaluate(({ id, url }) => {
-      window.__nebulaGraphStore.getState().updateNodeData(id, {
-        state: 'complete',
-        progress: undefined,
-        outputs: { image: { type: 'Image', value: url } },
-      });
-    }, { id: v2Id, url: DEMO_V2 });
-    phases.b4_v2Done = Date.now();
-
-    // ===== v2React chat — voice fires at ~10.3s, text streams just after.
-    await sleep(800);
-    const reactId = await page.evaluate(() =>
-      window.__nebulaChat.pushAssistant('', { streaming: true }),
-    );
-    for (const chunk of ['Yes. ', 'Look at me fly. ', 'Now that is handsome.']) {
-      await page.evaluate(({ id, c }) => window.__nebulaChat.appendAssistant(id, c), {
-        id: reactId, c: chunk,
-      });
-      await sleep(700);
-    }
-    await page.evaluate((id) => window.__nebulaChat.endAssistant(id), reactId);
-
-    // Tail hold so the v2React voice fully clears.
-    await sleep(1500);
+    // Hold final overview for the long tagline voice (~6s) to clear.
+    await sleep(7000);
     phases.recordEnd = Date.now();
 
     // ----- Stop recording -----

@@ -1,0 +1,42 @@
+[
+  {
+    "startSec": 0.0, "endSec": 3.3,
+    "kind": "chatbox-hold-reaction",
+    "focusStart": { "cx": 0.8719, "cy": 0.55, "scale": 1.7 },
+    "focusEnd":   { "cx": 0.8719, "cy": 0.55, "scale": 1.7 },
+    "ease": "linear",
+    "labels": ["chatbox", "reaction"]
+  },
+  {
+    "startSec": 3.3, "endSec": 4.4,
+    "kind": "ease-chatbox-to-textinput1",
+    "focusStart": { "cx": 0.8719, "cy": 0.55, "scale": 1.7 },
+    "focusEnd":   { "cx": 0.40,   "cy": 0.385, "scale": 2.0 },
+    "ease": "easeInOutCubic",
+    "labels": ["chatbox", "Text Input"]
+  },
+  {
+    "startSec": 4.4, "endSec": 16.5,
+    "kind": "hold-textinput1",
+    "focusStart": { "cx": 0.40, "cy": 0.385, "scale": 2.0 },
+    "focusEnd":   { "cx": 0.40, "cy": 0.385, "scale": 2.0 },
+    "ease": "linear",
+    "labels": ["Text Input", "placeText", "favoriteModel", "v1Gen", "edge", "skills", "V1 stream"]
+  },
+  {
+    "startSec": 16.5, "endSec": 17.4,
+    "kind": "pan-textinput1-to-v1",
+    "focusStart": { "cx": 0.40, "cy": 0.385, "scale": 2.0 },
+    "focusEnd":   { "cx": 0.49, "cy": 0.42, "scale": 1.7 },
+    "ease": "easeInOutCubic",
+    "labels": ["GPT Image 2 Generate"]
+  },
+  {
+    "startSec": 17.4, "endSec": 99.0,
+    "kind": "hold-v1",
+    "focusStart": { "cx": 0.49, "cy": 0.42, "scale": 1.7 },
+    "focusEnd":   { "cx": 0.49, "cy": 0.42, "scale": 1.7 },
+    "ease": "linear",
+    "labels": ["GPT Image 2 Generate", "v1 reveal"]
+  }
+]

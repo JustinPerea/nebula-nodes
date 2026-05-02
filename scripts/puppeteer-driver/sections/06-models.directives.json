@@ -1,0 +1,26 @@
+[
+  {
+    "startSec": 0.0, "endSec": 1.0,
+    "kind": "hold-video-carryover",
+    "focusStart": { "cx": 0.64, "cy": 0.79, "scale": 2.5 },
+    "focusEnd":   { "cx": 0.64, "cy": 0.79, "scale": 2.5 },
+    "ease": "linear",
+    "labels": ["video carry-over"]
+  },
+  {
+    "startSec": 1.0, "endSec": 2.5,
+    "kind": "ease-video-to-library",
+    "focusStart": { "cx": 0.64, "cy": 0.79, "scale": 2.5 },
+    "focusEnd":   { "cx": 0.086, "cy": 0.244, "scale": 2.18 },
+    "ease": "easeInOutCubic",
+    "labels": ["library zoom-in"]
+  },
+  {
+    "startSec": 2.5, "endSec": 99.0,
+    "kind": "hold-library",
+    "focusStart": { "cx": 0.086, "cy": 0.244, "scale": 2.18 },
+    "focusEnd":   { "cx": 0.086, "cy": 0.244, "scale": 2.18 },
+    "ease": "linear",
+    "labels": ["library scroll", "modelsIntro"]
+  }
+]

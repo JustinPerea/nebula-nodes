@@ -1,5 +1,5 @@
 {
-  "_doc": "Voiceover for section 04 (refined Text Input + V2 via gpt-image-2-edit). Camera mirrors section 02: tight on TI for prompt streaming → pan to v2 → hold for execute + reveal. No music — added at final stitch.",
+  "_doc": "Voiceover for section 07 — tagline pull-back. Camera pulls back from library close-up to wide overview that frames the entire graph composition. Daedalus delivers the closing line. No music — added at final stitch.",
 
   "provider": "elevenlabs",
   "voice": "Brian",
@@ -18,8 +18,6 @@
   "sfx": [],
 
   "segments": [
-    { "startSec": 3.5,  "text": "Adding the chibi cues — cream, blush, gold." },
-    { "startSec": 7.0,  "text": "Wiring it to gpt-image-2-edit." },
-    { "startSec": 10.3, "text": "Yes. Look at me fly. Now that is handsome." }
+    { "startSec": 3.0, "text": "This is Nebula Nodes. Let me be your guide to artistic creativity." }
   ]
 }

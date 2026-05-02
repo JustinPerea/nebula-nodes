@@ -11,6 +11,7 @@ import { AgentLog } from './components/panels/AgentLog';
 import { getSettings, fetchCLIGraph } from './lib/api';
 import { useUIStore } from './store/uiStore';
 import { useGraphStore } from './store/graphStore';
+import { useZoomManifest } from './hooks/useZoomManifest';
 import { NODE_DEFINITIONS } from './constants/nodeDefinitions';
 import type { NodeData } from './types';
 import './App.css';
@@ -52,6 +53,13 @@ function GraphHydrator() {
     };
   }, [fitView]);
 
+  return null;
+}
+
+/** Headless component that wires the zoom-manifest recorder. Lives inside
+ * ReactFlowProvider because the hook uses `useReactFlow` for node lookups. */
+function ZoomManifestRecorder() {
+  useZoomManifest();
   return null;
 }
 
@@ -102,6 +110,7 @@ export default function App() {
   return (
     <ReactFlowProvider>
       <GraphHydrator />
+      <ZoomManifestRecorder />
       <Canvas />
       <NodeLibrary />
       <Inspector />

@@ -1,27 +1,22 @@
-// Section 05 — Fan-out beat: style remix + Meshy 3D + Veo video.
+// Section 06 — Models-list beat: pull camera wide, highlight library panel.
 //
-// Picks up from section 04's end (canvas has full pipeline through v2;
-// chat history ending in v2React; camera at hold-v2 pose).
+// Picks up from section 05's end (full graph: TI + v1Gen + imageInput +
+// ti2 + v2 + style + mesh + video, all populated; chat ending in
+// fanout narration; camera tight on video at cx=0.64, cy=0.79, scale=2.5).
 //
 // Sequence:
-//  1. Brief carry-over hold on v2 while fanout narration plays.
-//  2. Pan to fanout overview (shows v2 + right column for fan-out targets).
-//  3. Spawn styleText + style (gpt-image-2-edit), wire v2→style.images
-//     and styleText→style.prompt.
-//  4. Spawn mesh (meshy-image-to-3d), wire v2→mesh.image.
-//  5. Spawn video (veo-3), wire v2→video.image.
-//  6. Kick all 3 to executing simultaneously.
-//  7. Resolve style with "Watercolor." voice.
-//  8. Resolve mesh with "Sculpture." voice + cursor mouse-rotate gesture.
-//  9. Resolve video with "Motion." voice + 4s dwell so the clip plays.
+//  1. Brief carry-over hold on video.
+//  2. Pan camera out to a wide overview that fits library panel, canvas,
+//     and chat panel.
+//  3. Cursor moves from video region to library panel center (~40% from
+//     top of panel).
+//  4. Push modelsIntro chat as voice plays.
+//  5. Hold wide while modelsIntro voice clears.
 //
 // Voice (per-section build-vo, no music):
-//   ~0.5s   Now — let me show you what else this canvas can hold.
-//   ~7.3s   Watercolor.
-//   ~10.1s  Sculpture.
-//   ~14.8s  Motion.
+//   ~2.5s   Each model has its own skill. They get better with every run.
 //
-// Duration target: ~20s.
+// Duration target: ~8s.
 
 import { mkdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -34,7 +29,7 @@ import {
   saveSnapshot,
 } from './lib.mjs';
 
-const SECTION = '05-fanout';
+const SECTION = '06-models';
 const runId = nowSlug();
 const RUN_DIR = join(SECTIONS_OUT, SECTION, runId);
 const STATE_OUT = join(SECTIONS_OUT, SECTION, 'state-out.json');
@@ -54,7 +49,7 @@ const DEMO = {
   video: '/demo/outputs/video.mp4',
 };
 
-// Chat history at start of section 05 (everything through section 04's v2React).
+// Chat history at start of section 06 (everything section 05 pushed).
 const CHAT_HISTORY_PRE_USER = [
   { role: 'user',      text: 'show yourself flying' },
   { role: 'assistant', text: 'Showing myself flying — one moment.' },
@@ -110,82 +105,6 @@ async function uploadReference(page, localPath) {
   return result;
 }
 
-// Drag-rotate the model-viewer canvas in the mesh node so the viewer sees
-// the 3D mesh from multiple angles. Three sweeps: right, down, left.
-async function rotateMeshNode(page, nodeId) {
-  const center = await page.evaluate((id) => {
-    const wrap = document.querySelector(`.react-flow__node[data-id="${id}"]`);
-    if (!wrap) return null;
-    const mv = wrap.querySelector('model-viewer');
-    if (!mv) return null;
-    const r = mv.getBoundingClientRect();
-    return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
-  }, nodeId);
-  if (!center) return;
-  await page.evaluate(({ x, y }) => window.__nebulaCursor.moveTo(x, y, 600), center);
-  await sleep(650);
-  const cx = center.x;
-  const cy = center.y;
-  await page.mouse.move(cx, cy);
-  await page.mouse.down();
-  for (let i = 1; i <= 14; i++) {
-    const t = i / 14;
-    await page.evaluate(({ x, y }) => window.__nebulaCursor.moveTo(x, y, 70), { x: cx + t * 130, y: cy });
-    await page.mouse.move(cx + t * 130, cy);
-    await sleep(60);
-  }
-  for (let i = 1; i <= 10; i++) {
-    const t = i / 10;
-    const x = cx + 130;
-    const y = cy + t * 90;
-    await page.evaluate((p) => window.__nebulaCursor.moveTo(p.x, p.y, 70), { x, y });
-    await page.mouse.move(x, y);
-    await sleep(60);
-  }
-  for (let i = 1; i <= 16; i++) {
-    const t = i / 16;
-    const x = cx + 130 - t * 260;
-    const y = cy + 90;
-    await page.evaluate((p) => window.__nebulaCursor.moveTo(p.x, p.y, 70), { x, y });
-    await page.mouse.move(x, y);
-    await sleep(60);
-  }
-  await page.mouse.up();
-}
-
-// Move cursor onto the video element + click to grant user-gesture, then
-// explicitly call .play() (Veo videos render with controls but no autoplay
-// attribute — browser autoplay policy needs the click to allow play()).
-async function pressPlayOnVideo(page, nodeId) {
-  const center = await page.evaluate((id) => {
-    const wrap = document.querySelector(`.react-flow__node[data-id="${id}"]`);
-    if (!wrap) return null;
-    const video = wrap.querySelector('video');
-    if (!video) return null;
-    const r = video.getBoundingClientRect();
-    return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
-  }, nodeId);
-  if (!center) return;
-  await page.evaluate(({ x, y }) => window.__nebulaCursor.moveTo(x, y, 700), center);
-  await sleep(750);
-  await page.mouse.click(center.x, center.y);
-  await page.evaluate((id) => {
-    const wrap = document.querySelector(`.react-flow__node[data-id="${id}"]`);
-    const video = wrap?.querySelector('video');
-    if (video) {
-      video.currentTime = 0;
-      video.play().catch(() => {});
-    }
-  }, nodeId);
-  // Move both the virtual cursor + real mouse off the video so the
-  // browser's hover controls / timeline scrubber don't cover the playback.
-  await sleep(350);
-  const offX = 1300;
-  const offY = 950;
-  await page.evaluate(({ x, y }) => window.__nebulaCursor.moveTo(x, y, 600), { x: offX, y: offY });
-  await page.mouse.move(offX, offY);
-}
-
 async function main() {
   await mkdir(RUN_DIR, { recursive: true });
   log('start', `runDir=${RUN_DIR}`);
@@ -215,7 +134,7 @@ async function main() {
     });
     await sleep(300);
 
-    // Restore chat (everything before the user's image message).
+    // Restore chat (8 pre-user messages).
     for (const msg of CHAT_HISTORY_PRE_USER) {
       if (msg.role === 'user') {
         await page.evaluate((t) => window.__nebulaChat.pushUser(t), msg.text);
@@ -223,15 +142,15 @@ async function main() {
         await page.evaluate((t) => window.__nebulaChat.pushAssistant(t), msg.text);
       }
     }
-    await sleep(150);
+    await sleep(120);
 
-    // Restore canvas: TI + v1Gen (with v1.png) + edge.
+    // Restore canvas: TI + v1Gen + edge.
     const tiId = await page.evaluate(async (cfg) => {
       const id = await window.__nebulaGraphStore.getState().addNode('text-input', cfg.pos);
       window.__nebulaGraphStore.getState().updateNodeData(id, { params: { value: cfg.value } });
       return id;
     }, { pos: POS.textInput1, value: V1_ENHANCED_PROMPT });
-    await sleep(180);
+    await sleep(140);
     await widenNode(page, tiId, 380);
 
     const v1Id = await page.evaluate(async (cfg) => {
@@ -242,40 +161,44 @@ async function main() {
       });
       return id;
     }, { pos: POS.v1Gen, url: DEMO.v1 });
-    await sleep(180);
+    await sleep(140);
 
     await page.evaluate(({ s, t }) => {
       window.__nebulaGraphStore.getState().onConnect({
         source: s, sourceHandle: 'text', target: t, targetHandle: 'prompt',
       });
     }, { s: tiId, t: v1Id });
-    await sleep(180);
+    await sleep(140);
 
     // Upload chibi reference (creates Image Input node) + position it.
+    // Settle sleep before setNodePosition so the WebSocket state sync has
+    // time to register the upload node — without this, page.evaluate hits
+    // a "Promise was collected" GC flake here in this section.
     const refUpload = await uploadReference(page, REFERENCE_IMAGE_PATH);
     log('upload', `imageInput nodeId=${refUpload.nodeId}`);
+    await sleep(500);
     await page.evaluate(({ id, pos }) => {
       window.__nebulaCanvas.setNodePosition(id, pos);
     }, { id: refUpload.nodeId, pos: POS.imageInput });
-    await sleep(180);
+    await sleep(140);
 
-    // Push the user's image message + refReact + v2React (section 03/04 tail).
+    // Push the user's image message + refReact + v2React + fanout.
     await page.evaluate((upload) => {
       window.__nebulaChat.pushUser('I want this chibi style', {
         images: [{ nodeId: upload.nodeId, thumbUrl: upload.thumbUrl }],
       });
     }, refUpload);
-    await sleep(120);
+    await sleep(80);
     await page.evaluate((t) => window.__nebulaChat.pushAssistant(t), REFREACT_TEXT);
-    await sleep(120);
+    await sleep(80);
 
-    // Restore textInput2 + v2Edit (with v2.png) + edges.
+    // Restore textInput2 + v2Edit + edges.
     const ti2Id = await page.evaluate(async (cfg) => {
       const id = await window.__nebulaGraphStore.getState().addNode('text-input', cfg.pos);
       window.__nebulaGraphStore.getState().updateNodeData(id, { params: { value: cfg.value } });
       return id;
     }, { pos: POS.textInput2, value: REFINED_PROMPT });
-    await sleep(180);
+    await sleep(140);
     await widenNode(page, ti2Id, 380);
 
     const v2Id = await page.evaluate(async (cfg) => {
@@ -286,50 +209,122 @@ async function main() {
       });
       return id;
     }, { pos: POS.v2Edit, url: DEMO.v2 });
-    await sleep(180);
+    await sleep(140);
 
     await page.evaluate(({ s, t }) => {
       window.__nebulaGraphStore.getState().onConnect({
         source: s, sourceHandle: 'image', target: t, targetHandle: 'images',
       });
     }, { s: refUpload.nodeId, t: v2Id });
-    await sleep(120);
+    await sleep(80);
     await page.evaluate(({ s, t }) => {
       window.__nebulaGraphStore.getState().onConnect({
         source: s, sourceHandle: 'text', target: t, targetHandle: 'prompt',
       });
     }, { s: ti2Id, t: v2Id });
-    await sleep(180);
+    await sleep(140);
 
     await page.evaluate((t) => window.__nebulaChat.pushAssistant(t), V2REACT_TEXT);
-    await sleep(220);
+    await sleep(80);
 
-    // Camera at section 04's hold-v2 pose.
+    // Restore fan-out: styleText + style + edges, mesh + edge, video + edge.
+    const styleTiId = await page.evaluate(async ({ pos, prompt }) => {
+      const id = await window.__nebulaGraphStore.getState().addNode('text-input', pos);
+      window.__nebulaGraphStore.getState().updateNodeData(id, { params: { value: prompt } });
+      return id;
+    }, { pos: POS.styleText, prompt: STYLE_PROMPT });
+    await sleep(140);
+
+    const styleId = await page.evaluate(async (cfg) => {
+      const id = await window.__nebulaGraphStore.getState().addNode('gpt-image-2-edit', cfg.pos);
+      window.__nebulaGraphStore.getState().updateNodeData(id, {
+        state: 'complete',
+        outputs: { image: { type: 'Image', value: cfg.url } },
+      });
+      return id;
+    }, { pos: POS.style, url: DEMO.style });
+    await sleep(140);
+
+    await page.evaluate(({ s, t }) => {
+      window.__nebulaGraphStore.getState().onConnect({
+        source: s, sourceHandle: 'image', target: t, targetHandle: 'images',
+      });
+    }, { s: v2Id, t: styleId });
+    await sleep(80);
+    await page.evaluate(({ s, t }) => {
+      window.__nebulaGraphStore.getState().onConnect({
+        source: s, sourceHandle: 'text', target: t, targetHandle: 'prompt',
+      });
+    }, { s: styleTiId, t: styleId });
+    await sleep(80);
+
+    const meshId = await page.evaluate(async (cfg) => {
+      const id = await window.__nebulaGraphStore.getState().addNode('meshy-image-to-3d', cfg.pos);
+      window.__nebulaGraphStore.getState().updateNodeData(id, {
+        state: 'complete',
+        outputs: { mesh: { type: 'Mesh', value: cfg.url } },
+      });
+      return id;
+    }, { pos: POS.mesh, url: DEMO.mesh });
+    await sleep(140);
+
+    await page.evaluate(({ s, t }) => {
+      window.__nebulaGraphStore.getState().onConnect({
+        source: s, sourceHandle: 'image', target: t, targetHandle: 'image',
+      });
+    }, { s: v2Id, t: meshId });
+    await sleep(80);
+
+    const videoId = await page.evaluate(async (cfg) => {
+      const id = await window.__nebulaGraphStore.getState().addNode('veo-3', cfg.pos);
+      window.__nebulaGraphStore.getState().updateNodeData(id, {
+        state: 'complete',
+        outputs: { video: { type: 'Video', value: cfg.url } },
+      });
+      return id;
+    }, { pos: POS.video, url: DEMO.video });
+    await sleep(140);
+
+    await page.evaluate(({ s, t }) => {
+      window.__nebulaGraphStore.getState().onConnect({
+        source: s, sourceHandle: 'image', target: t, targetHandle: 'image',
+      });
+    }, { s: v2Id, t: videoId });
+    await sleep(140);
+
+    // Push fanout chat (last bubble before this section).
+    await page.evaluate((t) => window.__nebulaChat.pushAssistant(t), FANOUT_TEXT);
+    await sleep(180);
+
+    // Camera at section 05's hold-video pose.
     await page.evaluate(() => {
       window.__nebulaSuppressFitView = true;
       window.__nebulaCanvas.centerOn(-180, 130, 0.55, 0, { x: 880, y: 540 });
     });
-    await sleep(220);
+    await sleep(180);
 
     await injectCursor(page);
     log('cursor', 'virtual cursor injected');
-    await page.evaluate(() => window.__nebulaCursor.moveTo(940, 600, 0));
+    // Cursor starts where section 05 left it (offset from video, below).
+    await page.evaluate(() => window.__nebulaCursor.moveTo(1300, 950, 0));
 
-    // Hide the mesh-preview modal that .mesh-preview's onClick triggers —
-    // the rotation drag's mouse.up fires a click on the parent div, which
-    // sets React state showModal=true and renders an overlay portal that
-    // covers the whole frame. CSS injection bypasses the React state.
+
+    // Make sure all categories start COLLAPSED so the cursor can click each
+    // one in turn during the recording (viewer sees the expansion happen).
+    // Reset any state from prior runs.
     await page.evaluate(() => {
-      const styleEl = document.createElement('style');
-      styleEl.id = '__nebula-demo-no-mesh-modal';
-      styleEl.textContent = `
-        .mesh-modal-overlay,
-        .mesh-modal {
-          display: none !important;
+      const labels = Array.from(document.querySelectorAll('.panel--library .panel__group-label--button'));
+      for (const label of labels) {
+        const chevron = label.querySelector('.panel__group-chevron');
+        // If currently expanded (▾), click to collapse.
+        if (chevron && /▾/.test(chevron.textContent || '')) {
+          label.click();
         }
-      `;
-      document.head.appendChild(styleEl);
+      }
+      const body = document.querySelector('.panel--library .panel__body');
+      if (body) body.scrollTop = 0;
     });
+    await sleep(200);
 
     // ----- Begin recording -----
     const recorder = await startRecorder(page, RUN_DIR, { quality: 100 });
@@ -338,152 +333,75 @@ async function main() {
     const phases = { recordStart: Date.now() };
     const { events, edges, captureNode, captureEdge } = makeCaptureHelpers(page, phases.recordStart);
 
-    // Brief carry-over hold on v2 — fanout voice "Now — let me show you
-    // what else this canvas can hold." plays here.
-    await sleep(800);
+    // Wait through carry-over hold (0-1.0s) + camera zoom to library
+    // (1.0-2.5s). Total 2.5s.
+    await sleep(2500);
+    phases.b6_libraryArrived = Date.now();
 
-    // Push fanout chat narration as a streaming bubble (3 chunks paced
-    // to roughly match the voice cadence).
-    const fanoutId = await page.evaluate(() =>
-      window.__nebulaChat.pushAssistant('', { streaming: true }),
-    );
-    for (const chunk of ['Now — ', 'let me show you what else ', 'this canvas can hold.']) {
-      await page.evaluate(({ id, c }) => window.__nebulaChat.appendAssistant(id, c), {
-        id: fanoutId, c: chunk,
-      });
-      await sleep(700);
-    }
-    await page.evaluate((id) => window.__nebulaChat.endAssistant(id), fanoutId);
-    phases.b5_fanoutChat = Date.now();
-    await sleep(400);
+    // Hold during the long intro voice (2.5-8.5s). Cursor stays parked
+    // off-frame; the click cycle starts as the intro voice ends.
+    await sleep(6000);
+    phases.b6_clicksStart = Date.now();
 
-    // ===== Spawn style remix (text input + edit node) =====
-    log('beat-5', 'spawn style remix');
-    const styleTiId = await page.evaluate(async ({ pos, prompt }) => {
-      const id = await window.__nebulaGraphStore.getState().addNode('text-input', pos);
-      window.__nebulaGraphStore.getState().updateNodeData(id, { params: { value: prompt } });
-      return id;
-    }, { pos: POS.styleText, prompt: STYLE_PROMPT });
-    await sleep(220);
-    await captureNode(styleTiId, 'Text Input (style)');
-    await sleep(180);
-
-    const styleId = await page.evaluate(async (pos) =>
-      window.__nebulaGraphStore.getState().addNode('gpt-image-2-edit', pos),
-    POS.style);
-    await sleep(280);
-    await captureNode(styleId, 'GPT Image 2 Edit (style)');
-    await sleep(180);
-
-    // Wire v2 → style.images, styleText → style.prompt
-    await page.evaluate(({ s, t }) => {
-      window.__nebulaGraphStore.getState().onConnect({
-        source: s, sourceHandle: 'image', target: t, targetHandle: 'images',
-      });
-    }, { s: v2Id, t: styleId });
-    await sleep(180);
-    await captureEdge(`${v2Id}->${styleId}`, v2Id, styleId);
-
-    await page.evaluate(({ s, t }) => {
-      window.__nebulaGraphStore.getState().onConnect({
-        source: s, sourceHandle: 'text', target: t, targetHandle: 'prompt',
-      });
-    }, { s: styleTiId, t: styleId });
-    await sleep(180);
-    await captureEdge(`${styleTiId}->${styleId}`, styleTiId, styleId);
-    await sleep(220);
-
-    // ===== Spawn mesh =====
-    log('beat-5', 'spawn mesh');
-    const meshId = await page.evaluate(async (pos) =>
-      window.__nebulaGraphStore.getState().addNode('meshy-image-to-3d', pos),
-    POS.mesh);
-    await sleep(280);
-    await captureNode(meshId, 'Meshy 6 Image-to-3D');
-    await sleep(180);
-
-    await page.evaluate(({ s, t }) => {
-      window.__nebulaGraphStore.getState().onConnect({
-        source: s, sourceHandle: 'image', target: t, targetHandle: 'image',
-      });
-    }, { s: v2Id, t: meshId });
-    await sleep(180);
-    await captureEdge(`${v2Id}->${meshId}`, v2Id, meshId);
-    await sleep(220);
-
-    // ===== Spawn video =====
-    log('beat-5', 'spawn video');
-    const videoId = await page.evaluate(async (pos) =>
-      window.__nebulaGraphStore.getState().addNode('veo-3', pos),
-    POS.video);
-    await sleep(280);
-    await captureNode(videoId, 'Veo 3.1');
-    await sleep(180);
-
-    await page.evaluate(({ s, t }) => {
-      window.__nebulaGraphStore.getState().onConnect({
-        source: s, sourceHandle: 'image', target: t, targetHandle: 'image',
-      });
-    }, { s: v2Id, t: videoId });
-    await sleep(180);
-    await captureEdge(`${v2Id}->${videoId}`, v2Id, videoId);
-    await sleep(400);
-
-    // ===== Kick all 3 to executing simultaneously =====
-    for (const id of [styleId, meshId, videoId]) {
-      await page.evaluate((nid) => {
-        window.__nebulaGraphStore.getState().updateNodeData(nid, {
-          state: 'executing', progress: 0.2,
-        });
-      }, id);
-    }
-    phases.b5_executing = Date.now();
-    await sleep(700);
-
-    // ===== Resolve style — "Watercolor." voice fires at ~7.3s =====
-    await page.evaluate(({ id, url }) => {
-      window.__nebulaGraphStore.getState().updateNodeData(id, {
-        state: 'complete',
-        progress: undefined,
-        outputs: { image: { type: 'Image', value: url } },
-      });
-    }, { id: styleId, url: DEMO.style });
-    await sleep(2700);
-
-    // ===== Resolve mesh + rotate gesture — "Sculpture." voice at ~10.1s
-    await page.evaluate(({ id, url }) => {
-      window.__nebulaGraphStore.getState().updateNodeData(id, {
-        state: 'complete',
-        progress: undefined,
-        outputs: { mesh: { type: 'Mesh', value: url } },
-      });
-    }, { id: meshId, url: DEMO.mesh });
-    await sleep(900);
-    await rotateMeshNode(page, meshId);
-    // Re-anchor the canvas — rotateMeshNode's mouse events can bubble up
-    // to react-flow and pan the viewport, which shifts the video node
-    // out of the camera's planned focal point.
-    await page.evaluate(() => {
-      window.__nebulaSuppressFitView = true;
-      window.__nebulaCanvas.centerOn(-180, 130, 0.55, 0, { x: 880, y: 540 });
+    // Click through each category at exactly 1.4s intervals so the
+    // category-name voice lines (8.6, 10.0, 11.4, 12.8, 14.2, 15.6, 17.0,
+    // 18.4) land just before each click. Querying fresh each iteration
+    // since DOM positions shift as earlier categories expand.
+    const catCount = await page.evaluate(() => {
+      return document.querySelectorAll('.panel--library .panel__group-label--button').length;
     });
-    // Hold + give the camera time to pan from mesh down to video before
-    // the video reveal lands.
-    await sleep(1100);
+    log('beat-6', `clicking through ${catCount} categories`);
 
-    // ===== Resolve video — "Motion." voice at ~15.2s, then cursor presses
-    // play. Hold for clip playback.
-    await page.evaluate(({ id, url }) => {
-      window.__nebulaGraphStore.getState().updateNodeData(id, {
-        state: 'complete',
-        progress: undefined,
-        outputs: { video: { type: 'Video', value: url } },
+    for (let i = 0; i < catCount; i++) {
+      const center = await page.evaluate((idx) => {
+        const labels = document.querySelectorAll('.panel--library .panel__group-label--button');
+        const el = labels[idx];
+        if (!el) return null;
+        const r = el.getBoundingClientRect();
+        return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+      }, i);
+      if (!center) continue;
+      // Move cursor to the category label (200ms hop).
+      await page.evaluate(({ x, y }) => window.__nebulaCursor.moveTo(x, y, 200), {
+        x: center.x, y: center.y,
       });
-    }, { id: videoId, url: DEMO.video });
-    await sleep(400);
-    await pressPlayOnVideo(page, videoId);
-    // Dwell so the Veo clip plays through (~3.5s after press-play gesture).
-    await sleep(3500);
+      await sleep(200);
+      // Click to expand — voice for this category fires ~100ms before this.
+      await page.evaluate((idx) => {
+        const labels = document.querySelectorAll('.panel--library .panel__group-label--button');
+        const el = labels[idx];
+        if (el) el.click();
+      }, i);
+      // Brief beat for the expansion to start.
+      await sleep(150);
+
+      // Auto-scroll if next cat off-screen (smooth scroll happens during
+      // the dwell that follows).
+      if (i + 1 < catCount) {
+        await page.evaluate((nextIdx) => {
+          const labels = document.querySelectorAll('.panel--library .panel__group-label--button');
+          const next = labels[nextIdx];
+          const body = document.querySelector('.panel--library .panel__body');
+          if (!next || !body) return;
+          const nextRect = next.getBoundingClientRect();
+          const bodyRect = body.getBoundingClientRect();
+          if (nextRect.bottom > bodyRect.bottom - 40) {
+            const delta = nextRect.bottom - (bodyRect.bottom - 40);
+            body.scrollTo({ top: body.scrollTop + delta, behavior: 'smooth' });
+          }
+        }, i + 1);
+      }
+
+      // Remaining dwell so total cycle = 1600ms (200 move + 150 + 1250).
+      // Wider 1.6s spacing prevents voice overlap on the longer category
+      // names like "Video generation." (1.49s).
+      await sleep(1250);
+    }
+    phases.b6_categoriesDone = Date.now();
+
+    // Tail hold so closing voice "Pick one. Drag it in." (fires at 21.4s)
+    // can clear before recording stops.
+    await sleep(2400);
     phases.recordEnd = Date.now();
 
     // ----- Stop recording -----

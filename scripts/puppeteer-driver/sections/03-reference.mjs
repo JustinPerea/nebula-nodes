@@ -372,7 +372,7 @@ async function main() {
     await page.evaluate(() => window.__nebulaCursor.moveTo(900, 500, 0));
 
     // ----- Begin recording -----
-    const recorder = await startRecorder(page, RUN_DIR, { quality: 80 });
+    const recorder = await startRecorder(page, RUN_DIR, { quality: 100 });
     log('record', `screencast started → ${recorder.framesDir}`);
 
     const phases = { recordStart: Date.now() };

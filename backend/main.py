@@ -27,6 +27,7 @@ from services.output import OUTPUT_ROOT
 from services.cache import ExecutionCache
 from services.chat_session import run_claude
 from services.chat_actions import publish_action
+from services.zoom_manifest import init_manifest, append_entry
 from routes.openrouter_proxy import router as openrouter_router
 from routes.replicate_proxy import router as replicate_router
 from routes.fal_proxy import router as fal_router
@@ -513,6 +514,23 @@ async def chat_websocket(websocket: WebSocket) -> None:
 @app.get("/api/health")
 async def health() -> dict:
     return {"status": "ok", "version": "0.1.0"}
+
+
+# ---------- Zoom manifest (demo-video editing chain telemetry) ----------
+# Frontend calls /init on page load, then POSTs entries on every
+# canvas-mutation event with the node's screen-space bounds + timestamp.
+# Manifest JSON is consumed post-recording by a custom editing-chain step
+# to drive auto-zoom on the right pixel region at the right moment.
+
+@app.post("/api/zoom-manifest/init")
+async def zoom_manifest_init() -> dict:
+    return init_manifest()
+
+
+@app.post("/api/zoom-manifest/entry")
+async def zoom_manifest_entry(body: dict[str, Any]) -> dict:
+    appended = append_entry(body)
+    return {"ok": appended}
 
 
 @app.get("/api/settings")

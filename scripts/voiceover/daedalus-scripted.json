@@ -1,0 +1,82 @@
+{
+  "_doc": "Voiceover for scripted-build cut, re-timed to actual phase data from 2026-04-30T13-21-51 take. Welcome → Daedalus identity → tell-me pan → casual ask → skill split → favorite model → v1 fail → tip → typed input → drop → react → v2 → fanout (with mesh rotate + full video) → models-list → tagline.",
+
+  "provider": "elevenlabs",
+  "voice": "Brian",
+  "model": "eleven_multilingual_v2",
+  "voiceSettings": {
+    "stability": 0.65,
+    "similarity_boost": 0.92,
+    "style": 0.40,
+    "use_speaker_boost": true
+  },
+  "postFilter": "rubberband=pitch=0.90,equalizer=f=60:t=h:w=80:g=3,equalizer=f=80:t=h:w=140:g=6,equalizer=f=200:t=h:w=300:g=2.5,equalizer=f=4000:t=h:w=1500:g=-1.5,volume=1.15",
+  "reverbFilter": "aecho=0.85:0.65:80|180|360:0.30|0.20|0.10",
+  "reverbMix": 0.35,
+
+  "music": {
+    "prompt": "cinematic orchestral underscore, deep sub-bass drone, slow swelling strings, ethereal choir pad, distant taiko heartbeat, mythic and patient, modern film score, 65 bpm, instrumental, no vocals",
+    "forceInstrumental": true,
+    "volume": 0.18,
+    "fadeInSec": 1.5,
+    "fadeOutSec": 2.5,
+    "duckThreshold": 0.03,
+    "duckRatio": 12,
+    "duckAttack": 4,
+    "duckRelease": 300
+  },
+
+  "sfx": [
+    {
+      "_note": "first typing burst — 'show yourself flying' (b1_typeStart=4.46s)",
+      "startSec": 5.0,
+      "prompt": "short burst of mechanical keyboard typing, realistic, dry studio recording, no music",
+      "durationSec": 0.8,
+      "volume": 0.32
+    },
+    {
+      "_note": "send click (b1_send=9.42s)",
+      "startSec": 9.5,
+      "prompt": "single mouse button click, brief snappy click, isolated, dry recording",
+      "durationSec": 0.6,
+      "volume": 0.55
+    },
+    {
+      "_note": "second typing burst — 'I want this chibi style' (typing ~31.4s)",
+      "startSec": 31.8,
+      "prompt": "short burst of mechanical keyboard typing, realistic, dry studio recording, no music",
+      "durationSec": 1.0,
+      "volume": 0.32
+    },
+    {
+      "_note": "drop sound when chibi image lands in chat (Image Input lands at 36.02s)",
+      "startSec": 36.2,
+      "prompt": "soft thump of a small object dropping on a desk, dry close-mic recording, isolated",
+      "durationSec": 0.5,
+      "volume": 0.45
+    }
+  ],
+
+  "segments": [
+    { "startSec": 0.5,  "text": "Welcome to Nebula Nodes." },
+    { "startSec": 2.0,  "text": "I am Daedalus." },
+    { "startSec": 5.0,  "text": "Tell me what to build." },
+    { "startSec": 9.6,  "text": "A casual ask." },
+    { "startSec": 12.8, "text": "I have a skill for this model." },
+    { "startSec": 14.9, "text": "Let me re-prompt it the way gpt-image-2 likes." },
+    { "startSec": 18.9, "text": "Now I'll wire it to my favorite — gpt-image-2." },
+    { "startSec": 22.0, "text": "And here is what comes when I'm given only words." },
+    { "startSec": 26.5, "text": "If you want a specific style, give me an image to reference." },
+    { "startSec": 33.2, "text": "Chibi. Got it." },
+    { "startSec": 36.5, "text": "Oh — there I am. Handsome devil." },
+    { "startSec": 38.9, "text": "Soft cream, blush, gold accents." },
+    { "startSec": 41.5, "text": "Let me try again." },
+    { "startSec": 49.5, "text": "Yes. Look at me fly. Now that is handsome." },
+    { "startSec": 53.0, "text": "Now — what else this canvas can hold." },
+    { "startSec": 56.0, "text": "Watercolor." },
+    { "startSec": 58.7, "text": "Sculpture." },
+    { "startSec": 64.5, "text": "Motion." },
+    { "startSec": 69.7, "text": "Each model has its own skill. They get better with every run." },
+    { "startSec": 75.0, "text": "This is Nebula." }
+  ]
+}

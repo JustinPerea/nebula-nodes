@@ -1,0 +1,63 @@
+{
+  "provider": "elevenlabs",
+  "voice": "Brian",
+  "model": "eleven_multilingual_v2",
+  "voiceSettings": {
+    "stability": 0.65,
+    "similarity_boost": 0.92,
+    "style": 0.40,
+    "use_speaker_boost": true
+  },
+  "postFilter": "rubberband=pitch=0.90,equalizer=f=60:t=h:w=80:g=3,equalizer=f=80:t=h:w=140:g=6,equalizer=f=200:t=h:w=300:g=2.5,equalizer=f=4000:t=h:w=1500:g=-1.5,volume=1.15",
+  "reverbFilter": "aecho=0.85:0.65:80|180|360:0.30|0.20|0.10",
+  "reverbMix": 0.35,
+  "music": {
+    "prompt": "cinematic orchestral underscore, deep sub-bass drone, slow swelling strings, ethereal choir pad, distant taiko heartbeat, mythic and patient, modern film score, 65 bpm, instrumental, no vocals",
+    "forceInstrumental": true,
+    "volume": 0.18,
+    "fadeInSec": 1.5,
+    "fadeOutSec": 2.5,
+    "duckThreshold": 0.03,
+    "duckRatio": 12,
+    "duckAttack": 4,
+    "duckRelease": 300
+  },
+  "sfx": [
+    {
+      "startSec": 0.30,
+      "prompt": "single quick mouse click on a trackpad, soft and clean, isolated",
+      "durationSec": 0.6,
+      "volume": 0.55
+    },
+    {
+      "startSec": 6.39,
+      "prompt": "fast mechanical keyboard typing, realistic, multiple keys per second, dry studio recording, no music",
+      "durationSec": 5.6,
+      "volume": 0.32
+    },
+    {
+      "startSec": 12.63,
+      "prompt": "single mouse button click, brief snappy click, isolated, dry recording",
+      "durationSec": 0.6,
+      "volume": 0.55
+    }
+  ],
+  "segments": [
+    {
+      "startSec": 0.4,
+      "text": "I am Daedalus. The labyrinth-builder."
+    },
+    {
+      "startSec": 5.7,
+      "text": "Tell me your blueprint — text into image, video into sound, anything woven together."
+    },
+    {
+      "startSec": 14.5,
+      "text": "Read my thoughts as I prepare your canvas. I measure twice before each cut."
+    },
+    {
+      "startSec": 20.5,
+      "text": "And the pipeline appears, wired exactly as you asked. This is Nebula."
+    }
+  ]
+}

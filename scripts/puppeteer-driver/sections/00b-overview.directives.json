@@ -1,0 +1,26 @@
+[
+  {
+    "startSec": 0.0, "endSec": 5.5,
+    "kind": "hold-overview-carryover",
+    "focusStart": { "cx": 0.50, "cy": 0.50, "scale": 1.0 },
+    "focusEnd":   { "cx": 0.50, "cy": 0.50, "scale": 1.0 },
+    "ease": "linear",
+    "labels": ["overview carry-over", "library", "drag-to-canvas"]
+  },
+  {
+    "startSec": 5.5, "endSec": 7.0,
+    "kind": "ease-overview-to-textarea",
+    "focusStart": { "cx": 0.50,   "cy": 0.50, "scale": 1.0 },
+    "focusEnd":   { "cx": 0.8719, "cy": 0.78, "scale": 1.7 },
+    "ease": "easeInOutCubic",
+    "labels": ["chatbox return"]
+  },
+  {
+    "startSec": 7.0, "endSec": 99.0,
+    "kind": "hold-textarea",
+    "focusStart": { "cx": 0.8719, "cy": 0.78, "scale": 1.7 },
+    "focusEnd":   { "cx": 0.8719, "cy": 0.78, "scale": 1.7 },
+    "ease": "linear",
+    "labels": ["textarea ready for section 01"]
+  }
+]

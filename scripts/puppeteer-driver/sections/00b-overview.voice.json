@@ -1,0 +1,25 @@
+{
+  "_doc": "Voiceover for section 00b — canvas + chat overview. Camera pulls back from chatbox to wide overview, cursor drags a node from library to canvas, then pulls back to chatbox. Two voice beats: 'You can drag in nodes yourself' as the overview reveals + drag begins, and 'Or just chat with me' as the cursor returns to chat. No music — added at final stitch.",
+
+  "provider": "elevenlabs",
+  "voice": "Brian",
+  "model": "eleven_multilingual_v2",
+  "speed": 0.92,
+  "voiceSettings": {
+    "stability": 0.65,
+    "similarity_boost": 0.92,
+    "style": 0.40,
+    "use_speaker_boost": true
+  },
+  "postFilter": "rubberband=pitch=0.90,equalizer=f=60:t=h:w=80:g=3,equalizer=f=80:t=h:w=140:g=6,equalizer=f=200:t=h:w=300:g=2.5,equalizer=f=4000:t=h:w=1500:g=-1.5,volume=1.15",
+  "reverbFilter": "aecho=0.85:0.65:80|180|360:0.30|0.20|0.10",
+  "reverbMix": 0.35,
+
+  "sfx": [],
+
+  "segments": [
+    { "startSec": 0.5, "text": "You can drag nodes in yourself." },
+    { "startSec": 5.5, "text": "Or just chat with me." },
+    { "startSec": 7.5, "text": "Tell me what to build." }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "_doc": "Voiceover for section 06 (models-list beat). Camera pulls back from video close-up to wide overview while cursor highlights the library panel. Daedalus delivers the modelsIntro line — single line, no SFX. No music — added at final stitch.",
+
+  "provider": "elevenlabs",
+  "voice": "Brian",
+  "model": "eleven_multilingual_v2",
+  "speed": 0.92,
+  "voiceSettings": {
+    "stability": 0.65,
+    "similarity_boost": 0.92,
+    "style": 0.40,
+    "use_speaker_boost": true
+  },
+  "postFilter": "rubberband=pitch=0.90,equalizer=f=60:t=h:w=80:g=3,equalizer=f=80:t=h:w=140:g=6,equalizer=f=200:t=h:w=300:g=2.5,equalizer=f=4000:t=h:w=1500:g=-1.5,volume=1.15",
+  "reverbFilter": "aecho=0.85:0.65:80|180|360:0.30|0.20|0.10",
+  "reverbMix": 0.35,
+
+  "sfx": [],
+
+  "segments": [
+    { "startSec": 2.5,  "text": "I have been trained on each model — to know how and when to best use each one for my work." },
+    { "startSec": 8.6,  "text": "Utility." },
+    { "startSec": 10.2, "text": "Text generation." },
+    { "startSec": 11.8, "text": "Image generation." },
+    { "startSec": 13.4, "text": "Video generation." },
+    { "startSec": 15.0, "text": "Audio generation." },
+    { "startSec": 16.6, "text": "Transform." },
+    { "startSec": 18.2, "text": "Universal." },
+    { "startSec": 19.8, "text": "3D generation." },
+    { "startSec": 21.4, "text": "Pick one. Drag it in." }
+  ]
+}

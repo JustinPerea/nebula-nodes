@@ -1,0 +1,26 @@
+[
+  {
+    "startSec": 0.0, "endSec": 3.0,
+    "kind": "chatbox-hold-textarea",
+    "focusStart": { "cx": 0.8719, "cy": 0.78, "scale": 1.7 },
+    "focusEnd":   { "cx": 0.8719, "cy": 0.78, "scale": 1.7 },
+    "ease": "linear",
+    "labels": ["chatbox", "typing", "send"]
+  },
+  {
+    "startSec": 3.0, "endSec": 4.0,
+    "kind": "chatbox-pan-up-replies",
+    "focusStart": { "cx": 0.8719, "cy": 0.78, "scale": 1.7 },
+    "focusEnd":   { "cx": 0.8719, "cy": 0.55, "scale": 1.7 },
+    "ease": "easeInOutCubic",
+    "labels": ["chatbox", "pan-up"]
+  },
+  {
+    "startSec": 4.0, "endSec": 99.0,
+    "kind": "chatbox-hold-replies",
+    "focusStart": { "cx": 0.8719, "cy": 0.55, "scale": 1.7 },
+    "focusEnd":   { "cx": 0.8719, "cy": 0.55, "scale": 1.7 },
+    "ease": "linear",
+    "labels": ["chatbox", "Daedalus reply"]
+  }
+]

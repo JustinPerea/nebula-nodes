@@ -1,0 +1,13 @@
+{
+  "name": "nebula-puppeteer-driver",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "Claude-as-operator driver for nebula UI demo recording.",
+  "scripts": {
+    "drive": "node drive.mjs"
+  },
+  "dependencies": {
+    "puppeteer": "^24.5.0"
+  }
+}

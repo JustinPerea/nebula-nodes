@@ -1,0 +1,27 @@
+{
+  "_doc": "Voiceover for section 02 (V1 generation). Reaction in chatbox → pan to canvas → TI + v1Gen placed → favorite-model line names the picked model → camera focuses on TI for skills line + V1 prompt streaming → execute → v1 reveal. No music — added at final stitch.",
+
+  "provider": "elevenlabs",
+  "voice": "Brian",
+  "model": "eleven_multilingual_v2",
+  "speed": 0.92,
+  "voiceSettings": {
+    "stability": 0.65,
+    "similarity_boost": 0.92,
+    "style": 0.40,
+    "use_speaker_boost": true
+  },
+  "postFilter": "rubberband=pitch=0.90,equalizer=f=60:t=h:w=80:g=3,equalizer=f=80:t=h:w=140:g=6,equalizer=f=200:t=h:w=300:g=2.5,equalizer=f=4000:t=h:w=1500:g=-1.5,volume=1.15",
+  "reverbFilter": "aecho=0.85:0.65:80|180|360:0.30|0.20|0.10",
+  "reverbMix": 0.35,
+
+  "sfx": [],
+
+  "segments": [
+    { "startSec": 0.5,  "text": "Ah — you want to see me. How cute." },
+    { "startSec": 4.0,  "text": "Let me place down a text node first." },
+    { "startSec": 7.6,  "text": "And my favorite image model — gpt-image-2." },
+    { "startSec": 12.0, "text": "I have skills tuned for every model. Let me dial this one in." },
+    { "startSec": 18.0, "text": "And here is what comes when I'm given only words." }
+  ]
+}
