@@ -348,6 +348,17 @@ export function ChatPanel() {
   // renders in document.body and escapes the panel's overflow:hidden.
   const [bloomCenter, setBloomCenter] = useState<{ x: number; y: number } | null>(null);
   const chatPanelRef = useRef<HTMLDivElement | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  // Auto-grow the textarea as the user types so the full prompt is visible
+  // (instead of scrolling inside a fixed 2-row box). Capped at 200px so a
+  // very long prompt doesn't push into the AGENT LOG area below.
+  useEffect(() => {
+    const ta = textareaRef.current;
+    if (!ta) return;
+    ta.style.height = 'auto';
+    ta.style.height = `${Math.min(ta.scrollHeight, 200)}px`;
+  }, [input]);
 
   // Toggle a body-level class while the sigil bloom is firing so a
   // full-screen veil can dim everything except the chat panel for the
@@ -834,6 +845,97 @@ export function ChatPanel() {
     }
     window.addEventListener('nebula:chat-send', onChatSend);
     return () => window.removeEventListener('nebula:chat-send', onChatSend);
+  }, []);
+
+  // DEV-only window bridge for the Puppeteer driver. Lets scripted-build runs
+  // inject pre-recorded user + assistant messages directly into the chat panel
+  // for deterministic narration, bypassing the real LLM. The bridge mirrors
+  // the message shapes the WS event stream produces, so rendering is identical
+  // to a real conversation. Functional setMessages keeps closures correct
+  // without retriggering the effect on every message.
+  useEffect(() => {
+    if (typeof window === 'undefined' || !import.meta.env?.DEV) return;
+    (window as unknown as { __nebulaChat?: unknown }).__nebulaChat = {
+      // setInput lets the driver clear (or pre-fill) the textarea after a fake
+      // type-then-pretend-send beat — without it the textarea still shows the
+      // typed prompt after pushUser injects the user bubble, which reads as a
+      // bug to viewers.
+      setInput: (text: string) => setInput(text),
+      pushUser: (text: string, opts?: { images?: Array<{ nodeId: string; thumbUrl: string }> }) => {
+        const id = newId();
+        setMessages((prev) => [
+          ...prev,
+          { role: 'user', text, id, images: opts?.images },
+        ]);
+        return id;
+      },
+      pushAssistant: (text: string, opts?: { streaming?: boolean }) => {
+        const id = newId();
+        const parts = text ? [{ kind: 'text' as const, text }] : [];
+        setMessages((prev) => [
+          ...prev,
+          { role: 'assistant', id, streaming: !!opts?.streaming, parts },
+        ]);
+        return id;
+      },
+      appendAssistant: (id: string, text: string) => {
+        if (!text) return;
+        setMessages((prev) =>
+          prev.map((m) => {
+            if (m.id !== id || m.role !== 'assistant') return m;
+            const parts = [...m.parts];
+            const last = parts[parts.length - 1];
+            if (last && last.kind === 'text') {
+              parts[parts.length - 1] = { kind: 'text', text: last.text + text };
+            } else {
+              parts.push({ kind: 'text', text });
+            }
+            return { ...m, parts };
+          }),
+        );
+      },
+      endAssistant: (id: string) => {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === id && m.role === 'assistant' ? { ...m, streaming: false } : m,
+          ),
+        );
+      },
+      pushThinking: (lines: string[]) => {
+        const id = newId();
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: 'thinking',
+            id,
+            lines: [...lines],
+            collapsed: false,
+            startedAt: Date.now(),
+            completed: false,
+          },
+        ]);
+        return id;
+      },
+      appendThinkingLine: (id: string, line: string) => {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === id && m.role === 'thinking'
+              ? { ...m, lines: [...m.lines, line] }
+              : m,
+          ),
+        );
+      },
+      endThinking: (id: string) => {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === id && m.role === 'thinking'
+              ? { ...m, completed: true, collapsed: true }
+              : m,
+          ),
+        );
+      },
+      clear: () => setMessages([]),
+    };
   }, []);
 
   const send = useCallback(() => {
@@ -1451,6 +1553,7 @@ export function ChatPanel() {
         )}
         <div className="chat-panel__input-row">
           <textarea
+            ref={textareaRef}
             className="chat-panel__textarea"
             placeholder={connected ? 'Type a message… (drag a node in to reference it)' : 'Connecting…'}
             value={input}

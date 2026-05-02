@@ -84,8 +84,10 @@ body.app-hermes .toolbar::before {
   top: var(--page-gutter) !important;
   right: var(--page-gutter) !important;
   left: auto !important;
-  /* Closed-log default: clear the toolbar + collapsed log + small gap. */
-  bottom: calc(var(--toolbar-pad) + var(--agent-h-closed) + var(--stack-gap-sm)) !important;
+  /* Closed-log default: clear the toolbar + collapsed log + breathing-room
+   * gap. Use stack-gap-lg (24px) so the agent log header and the chat panel
+   * never feel cramped, especially when the textarea auto-grows. */
+  bottom: calc(var(--toolbar-pad) + var(--agent-h-closed) + var(--stack-gap-lg)) !important;
   width: var(--col-right-w);
   min-width: 280px;
   max-width: 720px;

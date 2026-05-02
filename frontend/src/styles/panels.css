@@ -1114,7 +1114,7 @@
 .chat-panel__input-row {
   display: flex;
   gap: 6px;
-  align-items: stretch;
+  align-items: flex-end;
 }
 
 .chat-panel__textarea {
@@ -1149,7 +1149,10 @@
   font-size: 12px;
   font-family: inherit;
   transition: background 0.1s;
-  align-self: stretch;
+  /* Fixed height so the button stays compact when the textarea auto-grows. */
+  align-self: flex-end;
+  height: 38px;
+  flex: 0 0 auto;
 }
 
 .chat-panel__send:hover:not(:disabled) {

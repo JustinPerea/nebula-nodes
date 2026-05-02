@@ -19,11 +19,14 @@ from pathlib import Path
 from typing import Any, AsyncIterator
 
 from services.chat_actions import (
+    consume_actions,
     mark_activity,
+    reset_actions,
     reset_activity,
     seconds_since_activity,
 )
 from services.hermes_verbose_parser import HermesVerboseParser
+from services.narrator import narrate_actions
 
 # Fire a heartbeat only when nothing user-visible has happened for this long.
 # 20s is a balance: short enough to reassure users the turn is still alive
@@ -117,7 +120,7 @@ def _extract_log_message(line: str) -> str | None:
 async def _tail_log(
     start_offset: int,
     stop_event: asyncio.Event,
-    queue: "asyncio.Queue[str]",
+    queue: "asyncio.Queue[tuple[str, str]]",
     started_at: float,
 ) -> None:
     """Tail the daedalus agent log, pushing human-readable messages onto queue.
@@ -144,7 +147,7 @@ async def _tail_log(
                     for line in new.splitlines():
                         msg = _extract_log_message(line)
                         if msg:
-                            await queue.put(msg)
+                            await queue.put(("log", msg))
                             mark_activity()
                 elif size < current_offset:
                     # Log rotated / truncated under us — restart from 0 so we
@@ -165,7 +168,7 @@ async def _tail_log(
             and (now - last_heartbeat_time) >= HEARTBEAT_QUIET_WINDOW
         ):
             elapsed = int(now - started_at)
-            await queue.put(f"thinking... ({elapsed}s elapsed)")
+            await queue.put(("log", f"thinking... ({elapsed}s elapsed)"))
             last_heartbeat_time = now
 
         # Sleep ~300ms, but exit promptly if stop_event fires.
@@ -256,16 +259,31 @@ async def run_hermes(
 
     # Start the log-tailer task in parallel with the subprocess so we can emit
     # `thinking` events while stdout is still buffering.
-    thinking_queue: asyncio.Queue[str] = asyncio.Queue()
+    #
+    # Queue items are (kind, text) tuples. `kind` is one of:
+    #   - "prose" — Hermes verbose-mode prose box content (Daedalus' own
+    #     narration). Emitted to BOTH `thinking` (agent log) and `text`
+    #     (chat bubble) so the chat fills live as Daedalus talks rather
+    #     than dumping in one burst at end-of-turn.
+    #   - "log"   — heartbeats, log-tailer messages, "starting..." status.
+    #     Emitted to `thinking` only (agent log). Not chat-worthy.
+    thinking_queue: asyncio.Queue[tuple[str, str]] = asyncio.Queue()
     stop_tail = asyncio.Event()
+    # Tracks whether any prose was streamed mid-turn. If True, the final
+    # body emission below is skipped (chat already populated incrementally;
+    # emitting body would duplicate the last prose box).
+    prose_streamed_any = False
     # Reset the activity clock so the heartbeat waits the full quiet window
     # before firing instead of piggy-backing on a stale timestamp from the
     # previous turn.
     reset_activity()
+    # Also clear the action buffer so the narrator-fallback path doesn't see
+    # stale actions from a prior turn that died before draining them.
+    reset_actions()
     # Prime the queue with an immediate "starting..." so the thinking box
     # appears within the first second — gives the user a liveness signal
     # while Hermes boots. Counts as activity (delays the first heartbeat).
-    thinking_queue.put_nowait("starting...")
+    thinking_queue.put_nowait(("log", "starting..."))
     mark_activity()
     tail_task = asyncio.create_task(
         _tail_log(log_start_offset, stop_tail, thinking_queue, started_at)
@@ -292,7 +310,7 @@ async def run_hermes(
             raw_stdout_lines.append(line)
             for evt in parser.feed(line):
                 if evt.kind == "thinking":
-                    thinking_queue.put_nowait(evt.text)
+                    thinking_queue.put_nowait(("prose", evt.text))
                     mark_activity()
                 # session events are captured into parser.session_id; no need
                 # to queue — they're read after stream close.
@@ -315,7 +333,15 @@ async def run_hermes(
                     return_when=asyncio.FIRST_COMPLETED,
                 )
                 if queue_task in done:
-                    yield {"type": "thinking", "text": queue_task.result()}
+                    kind, text = queue_task.result()
+                    yield {"type": "thinking", "text": text}
+                    if kind == "prose":
+                        prose_streamed_any = True
+                        # Also stream prose into the chat bubble live, so
+                        # Daedalus' narration appears as he speaks rather
+                        # than dumping at end-of-turn. Trailing newline so
+                        # successive deltas don't run together.
+                        yield {"type": "text", "text": text + "\n"}
                 else:
                     # stdout finished first; cancel the pending queue get.
                     queue_task.cancel()
@@ -327,7 +353,11 @@ async def run_hermes(
             # last await and the subprocess finishing.
             while not thinking_queue.empty():
                 try:
-                    yield {"type": "thinking", "text": thinking_queue.get_nowait()}
+                    kind, text = thinking_queue.get_nowait()
+                    yield {"type": "thinking", "text": text}
+                    if kind == "prose":
+                        prose_streamed_any = True
+                        yield {"type": "text", "text": text + "\n"}
                 except asyncio.QueueEmpty:
                     break
             # Surface any exception from the stdout streamer.
@@ -464,7 +494,29 @@ async def run_hermes(
         yield {"type": "learning_saved", "topic": learning_topic, "entry_preview": ""}
 
     body = "\n".join(filtered_lines).strip()
-    if body:
+    print(
+        f"[hermes_session] body length={len(body)} prose_streamed_any={prose_streamed_any}",
+        flush=True,
+    )
+    if prose_streamed_any:
+        # Chat bubble already filled live during the turn. Skip the final
+        # body dump — emitting it would duplicate the last prose box's text.
+        pass
+    elif body:
+        # Defensive: shouldn't happen since `body` is sourced from prose box
+        # content that flows through the queue. If somehow content lives only
+        # in the final box and was never streamed, this is the safety net.
         yield {"type": "text", "text": body}
+    else:
+        # Kimi K2.6 commonly emits empty `content` alongside `tool_calls`
+        # (prose routed to `reasoning_content` instead — three rule-prompt
+        # variants failed to shift the channel). Fall back to a single-shot
+        # narration call that translates the buffered canvas actions into
+        # Daedalus' voice. See services/narrator.py for the rationale.
+        actions = consume_actions()
+        print(f"[hermes_session] empty body → narrator with {len(actions)} actions", flush=True)
+        if actions:
+            async for delta in narrate_actions(actions):
+                yield {"type": "text", "text": delta}
 
     yield {"type": "done"}

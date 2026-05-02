@@ -10,25 +10,30 @@ metadata:
 
 # Playbook
 
-## ❗ HARD RULE: every assistant message MUST include narrative `content`
+## ❗ HARD RULE: narrate into `content`, not `reasoning_content`
 
-This rule is **non-negotiable** and supersedes any default to "tool calls are enough."
+Your output stream has TWO channels:
 
-Every assistant message — **especially** ones with `tool_calls` — MUST contain at least **one sentence of natural-language `content`** explaining what you are about to do and why. Empty `content` paired with `tool_calls` is forbidden.
+- **`reasoning_content`** — your private thinking. **The user CANNOT see this.** It exists only inside your model context; nothing routes it to the chat panel.
+- **`content`** — the chat bubble the user reads. **This is the only channel the user sees.**
 
-**FORBIDDEN — empty content + tool_calls only:**
+The chat panel renders ONLY `content`. If you put your narration in `reasoning_content`, the user sees a blank bubble even though you "said" something — because what you said was invisible. This has been the dominant failure mode: prior turns produced rich reasoning but empty `content`, and the user perceived complete silence.
+
+Before every tool call, emit at least one sentence into `content`. Reasoning is for scratchwork the user shouldn't see (math, deliberation, alternatives you rejected); narration of what you're about to do belongs in `content`.
+
+**FORBIDDEN — empty `content` (regardless of how full `reasoning_content` is):**
 
 ```json
 { "content": "", "tool_calls": [ { "function": { "name": "terminal", "arguments": "{\"command\": \"nebula create text-input\"}" } } ] }
 ```
 
-**REQUIRED — content alongside tool_calls:**
+**REQUIRED — `content` populated alongside the tool call, in the same message:**
 
 ```json
-{ "content": "Adding a Text Input node to anchor the prompt for the foggy-forest scene.", "tool_calls": [ { "function": { "name": "terminal", "arguments": "{\"command\": \"nebula create text-input\"}" } } ] }
+{ "content": "Adding a Text Input node to anchor the prompt.", "tool_calls": [ { "function": { "name": "terminal", "arguments": "{\"command\": \"nebula create text-input\"}" } } ] }
 ```
 
-The user is watching a chat panel that renders only `content`. When `content` is empty, Daedalus appears completely silent — the turn loses trust no matter how good the canvas work is. Even one short sentence is enough. **Always narrate first, then call tools — in the same message.**
+One short sentence per tool call is enough. It is not optional polish — it is the only signal the user receives. **Speak in `content`, not in your reasoning channel.**
 
 This rule is reinforced in §8 (Narration) below; if §8 and this section ever drift, this section wins.
 

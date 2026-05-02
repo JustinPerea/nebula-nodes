@@ -187,3 +187,10 @@ export const useUIStore = create<UIState>((set) => ({
   setSettingsCache: (apiKeys) =>
     set({ settingsCache: { apiKeys, loaded: true } }),
 }));
+
+// Expose store globally for puppeteer-driven demo scripts (mirrors the
+// __nebulaGraphStore + __nebulaCanvas + __nebulaChat exports). Lets demo
+// scripts move panels, toggle visibility, etc. without simulated drag.
+if (typeof window !== 'undefined') {
+  (window as unknown as { __nebulaUIStore?: typeof useUIStore }).__nebulaUIStore = useUIStore;
+}

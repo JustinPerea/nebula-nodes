@@ -26,6 +26,12 @@ _active_handler: Callable[[dict[str, Any]], None] | None = None
 # heartbeat reads `seconds_since_activity()` before firing.
 _last_activity_monotonic: float = 0.0
 
+# Per-turn buffer of action text — captures every prose line published this
+# turn so the narrator (services.narrator) can synthesize a chat-bubble
+# fallback when Kimi K2.6 emits empty content alongside tool_calls. Single
+# slot, same single-active-turn constraint as `_active_handler`.
+_action_buffer: list[str] = []
+
 
 def register_action_handler(handler: Callable[[dict[str, Any]], None]) -> None:
     """Install the single active handler. Called by the chat WS at turn start."""
@@ -70,8 +76,14 @@ def publish_action(text: str) -> None:
     Safe to call from any HTTP handler — silently drops when no chat turn
     is active. `text` should read as prose ("Added text-input as n1"),
     not as debug output.
+
+    Also appends to `_action_buffer` so the narrator can synthesize a
+    chat-bubble fallback if Kimi K2.6 emits empty content. The buffer is
+    reset at turn start by `reset_actions()` and drained at turn end by
+    `consume_actions()`, so cross-turn leakage is bounded.
     """
     mark_activity()
+    _action_buffer.append(text)
     h = _active_handler
     if h is None:
         return
@@ -80,3 +92,21 @@ def publish_action(text: str) -> None:
     except Exception:
         # Never break the calling route on a publish failure.
         pass
+
+
+def reset_actions() -> None:
+    """Clear the per-turn action buffer. Called at turn start in hermes_session."""
+    global _action_buffer
+    _action_buffer = []
+
+
+def consume_actions() -> list[str]:
+    """Return and clear the per-turn action buffer.
+
+    Called at turn end by the narrator-fallback path in hermes_session when
+    Kimi's `content` came back empty.
+    """
+    global _action_buffer
+    out = list(_action_buffer)
+    _action_buffer = []
+    return out

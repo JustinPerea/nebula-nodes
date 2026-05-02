@@ -1123,3 +1123,9 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     }
   },
 }));
+
+// Dev-only window bridge so the Puppeteer driver in scripts/puppeteer-driver/
+// can call clearGraph() between automated demo runs.
+if (typeof window !== 'undefined' && import.meta.env?.DEV) {
+  (window as unknown as { __nebulaGraphStore?: typeof useGraphStore }).__nebulaGraphStore = useGraphStore;
+}

@@ -26,6 +26,47 @@ const nodeTypes: NodeTypes = {
   'reroute-node': RerouteNode,
 };
 
+// fitView padding that reserves space for every floating panel that overlaps
+// the canvas. Returns explicit px values (React Flow's `Padding` accepts
+// `${number}px` strings per side). Numeric padding takes a different formula
+// in React Flow that does NOT correspond to "fraction of viewport", so px is
+// the only way to guarantee content lands clear of the panels.
+function computeChatAwarePadding(): { top: string; right: string; bottom: string; left: string } {
+  const base = { top: '40px', right: '40px', bottom: '40px', left: '40px' };
+  if (typeof window === 'undefined') return base;
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+
+  // Track furthest panel intrusion on each side, in pixels.
+  const intrusion = { top: 0, right: 0, bottom: 0, left: 0 };
+  const SAFETY = 24; // breathing room beyond the panel edge
+
+  const PANEL_SELECTORS = ['.chat-panel', '.panel--library', '.panel--inspector', '.panel--settings'];
+  for (const sel of PANEL_SELECTORS) {
+    const el = document.querySelector(sel);
+    if (!el) continue;
+    const rect = (el as HTMLElement).getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) continue;
+    // Decide which viewport edge this panel hugs by min-distance.
+    const dLeft = rect.left;
+    const dRight = vw - rect.right;
+    const dTop = rect.top;
+    const dBottom = vh - rect.bottom;
+    const minD = Math.min(dLeft, dRight, dTop, dBottom);
+    if (minD === dLeft) intrusion.left = Math.max(intrusion.left, rect.right);
+    else if (minD === dRight) intrusion.right = Math.max(intrusion.right, vw - rect.left);
+    else if (minD === dTop) intrusion.top = Math.max(intrusion.top, rect.bottom);
+    else intrusion.bottom = Math.max(intrusion.bottom, vh - rect.top);
+  }
+
+  return {
+    top: `${Math.max(40, intrusion.top + SAFETY)}px`,
+    right: `${Math.max(40, intrusion.right + SAFETY)}px`,
+    bottom: `${Math.max(40, intrusion.bottom + SAFETY)}px`,
+    left: `${Math.max(40, intrusion.left + SAFETY)}px`,
+  };
+}
+
 const edgeTypes: EdgeTypes = {
   'typed-edge': TypedEdge,
 };
@@ -44,14 +85,70 @@ export function Canvas() {
   const showConnectionPopup = useUIStore((s) => s.showConnectionPopup);
   const hideConnectionPopup = useUIStore((s) => s.hideConnectionPopup);
 
-  const { fitView, screenToFlowPosition } = useReactFlow();
+  const reactFlow = useReactFlow();
+  const { fitView, screenToFlowPosition } = reactFlow;
+
+  // Dev-only window bridge for the Puppeteer driver. Exposes React Flow
+  // viewport controls (setViewport / getViewport) so demo runs can zoom out
+  // the canvas in-app, separate from the post-process camera zoom in
+  // apply-zoom.mjs. Also exposes setNodePosition for choreographed node
+  // moves between recording beats.
+  useEffect(() => {
+    if (typeof window === 'undefined' || !import.meta.env?.DEV) return;
+    (window as unknown as { __nebulaCanvas?: unknown }).__nebulaCanvas = {
+      getViewport: () => reactFlow.getViewport(),
+      setViewport: (v: { x: number; y: number; zoom: number }, duration = 0) =>
+        reactFlow.setViewport(v, duration > 0 ? { duration } : undefined),
+      zoomTo: (zoom: number, duration = 0) =>
+        reactFlow.zoomTo(zoom, duration > 0 ? { duration } : undefined),
+      // Center a flow-coord point at the React Flow container's screen
+      // center (or any container-relative anchor). Driver uses this to
+      // place demo nodes at predictable composed positions without doing
+      // viewport math by hand.
+      centerOn: (
+        cx: number,
+        cy: number,
+        zoom = 0.85,
+        duration = 700,
+        anchor?: { x: number; y: number },
+      ) => {
+        const containerEl = document.querySelector('.react-flow') as HTMLElement | null;
+        if (!containerEl) return;
+        const r = containerEl.getBoundingClientRect();
+        const ax = anchor?.x ?? r.width / 2;
+        const ay = anchor?.y ?? r.height / 2;
+        reactFlow.setViewport(
+          { x: ax - cx * zoom, y: ay - cy * zoom, zoom },
+          duration > 0 ? { duration } : undefined,
+        );
+      },
+      setNodePosition: (nodeId: string, position: { x: number; y: number }) => {
+        reactFlow.setNodes((nodes) =>
+          nodes.map((n) => (n.id === nodeId ? { ...n, position } : n)),
+        );
+      },
+      getNode: (nodeId: string) => reactFlow.getNode(nodeId),
+    };
+  }, [reactFlow]);
 
   // Auto-fit the viewport when Claude (or any CLI) adds nodes via graphSync.
-  // Small delay gives React Flow a tick to measure the newly rendered nodes.
+  // Padding is asymmetric and chat-panel-aware: the chat panel floats above
+  // the canvas, so nodes laid out without right-padding render behind it.
+  // We measure the panel's actual position at fit-time so users who moved or
+  // resized it still get a clean fit. Falls back to symmetric padding when
+  // the panel is hidden.
   useEffect(() => {
     function onNodesAdded() {
+      // Driver-side flag (DEV demo runs only) to suppress the auto-fit
+      // when subsequent nodes arrive. Lets the driver own the post-first-
+      // node layout instead of getting clobbered by every fitView call.
+      const suppressed =
+        typeof window !== 'undefined' &&
+        (window as unknown as { __nebulaSuppressFitView?: boolean }).__nebulaSuppressFitView;
+      if (suppressed) return;
       setTimeout(() => {
-        fitView({ padding: 0.25, duration: 400 });
+        const padding = computeChatAwarePadding();
+        fitView({ padding, duration: 400 });
       }, 80);
     }
     window.addEventListener('nebula:graph-nodes-added', onNodesAdded);
