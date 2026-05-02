@@ -3,10 +3,10 @@
 </div>
 
 ```
-╋━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╋
-   STATION-04 // ATELIER          NEBULA NODES // DAEDALUS
-   HERMES AGENT — CREATIVE HACKATHON 2026                       ◆
-╋━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╋
+┌──────────────────────────────────────────────────────────────────┐
+│  STATION-04 // VERDANT          NEBULA NODES — DAEDALUS          │
+│  HERMES AGENT · CREATIVE HACKATHON 2026                        ▪ │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
 <div align="center">
@@ -15,16 +15,16 @@
 
 <div align="center">
 
-  <a href="LICENSE"><img alt="LICENSE — AGPL-3.0" src="https://img.shields.io/badge/LICENSE-AGPL--3.0-DCFF00?style=flat-square&labelColor=0A0A0A"></a>
-  <img alt="HACKATHON — HERMES AGENT" src="https://img.shields.io/badge/HACKATHON-HERMES%20AGENT-DCFF00?style=flat-square&labelColor=0A0A0A">
-  <img alt="MODEL — KIMI K2.6" src="https://img.shields.io/badge/MODEL-KIMI%20K2.6-E8E2D2?style=flat-square&labelColor=0A0A0A">
-  <img alt="GATEWAY — NOUS PORTAL" src="https://img.shields.io/badge/GATEWAY-NOUS%20PORTAL-E8E2D2?style=flat-square&labelColor=0A0A0A">
+  <a href="LICENSE"><img alt="LICENSE — AGPL-3.0" src="https://img.shields.io/badge/LICENSE-AGPL--3.0-6ba8d6?style=flat-square&labelColor=0a1612"></a>
+  <img alt="HACKATHON — HERMES AGENT" src="https://img.shields.io/badge/HACKATHON-HERMES%20AGENT-6ba8d6?style=flat-square&labelColor=0a1612">
+  <img alt="MODEL — KIMI K2.6" src="https://img.shields.io/badge/MODEL-KIMI%20K2.6-f3e6c4?style=flat-square&labelColor=0a1612">
+  <img alt="GATEWAY — NOUS PORTAL" src="https://img.shields.io/badge/GATEWAY-NOUS%20PORTAL-f3e6c4?style=flat-square&labelColor=0a1612">
   <br>
-  <img alt="PYTHON 3.12+" src="https://img.shields.io/badge/PYTHON-3.12%2B-E8E2D2?style=flat-square&labelColor=0A0A0A">
-  <img alt="NODE 18+" src="https://img.shields.io/badge/NODE-18%2B-E8E2D2?style=flat-square&labelColor=0A0A0A">
-  <img alt="REACT 19" src="https://img.shields.io/badge/REACT-19-E8E2D2?style=flat-square&labelColor=0A0A0A">
-  <img alt="FASTAPI" src="https://img.shields.io/badge/FASTAPI-BACKEND-E8E2D2?style=flat-square&labelColor=0A0A0A">
-  <img alt="BYOK — BRING YOUR OWN KEYS" src="https://img.shields.io/badge/BYOK-BRING%20YOUR%20OWN%20KEYS-DCFF00?style=flat-square&labelColor=0A0A0A">
+  <img alt="PYTHON 3.12+" src="https://img.shields.io/badge/PYTHON-3.12%2B-f3e6c4?style=flat-square&labelColor=0a1612">
+  <img alt="NODE 18+" src="https://img.shields.io/badge/NODE-18%2B-f3e6c4?style=flat-square&labelColor=0a1612">
+  <img alt="REACT 19" src="https://img.shields.io/badge/REACT-19-f3e6c4?style=flat-square&labelColor=0a1612">
+  <img alt="FASTAPI" src="https://img.shields.io/badge/FASTAPI-BACKEND-f3e6c4?style=flat-square&labelColor=0a1612">
+  <img alt="BYOK — BRING YOUR OWN KEYS" src="https://img.shields.io/badge/BYOK-BRING%20YOUR%20OWN%20KEYS-6ba8d6?style=flat-square&labelColor=0a1612">
 
 </div>
 
@@ -48,13 +48,16 @@ There's a cambrian explosion of image, video, audio, and text models happening r
 │                                                                  │
 │   "Tell me what to build."                                       │
 │                                                                  │
-│   I'll wire the prompt, pick the right image model for the       │
-│   look you want, generate references, run a v1, take a look,     │
-│   take notes, run a v2, and fan it out to a video, a 3D pass,    │
-│   and a stylized still — all in front of you, on the canvas,     │
-│   speaking through every step.                                   │
+│   Talk to Daedalus. Master craftsman, labyrinth-builder — it     │
+│   plans pipelines with precision, measures twice before each     │
+│   cut, and remembers every lesson a bad joint taught it.         │
 │                                                                  │
-│                            ◆ master craftsman, daughter of Athena │
+│   Wire the prompt, pick the right image model for the look you   │
+│   want, generate references, run v1, take notes, run v2, then    │
+│   fan it out to a video, a 3D pass, and a stylized still — all   │
+│   in front of you, on the canvas, narrating every step.          │
+│                                                                  │
+│                                          ▪ moonshotai/kimi-k2.6  │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
@@ -235,17 +238,16 @@ graph LR
     HERMES -->|terminal tool| CLI[nebula CLI]
     CLI --> API
 
-    style UI fill:#0A0A0A,color:#E8E2D2,stroke:#DCFF00
-    style API fill:#0A0A0A,color:#E8E2D2,stroke:#E8E2D2
-    style ENGINE fill:#111111,color:#E8E2D2,stroke:#E8E2D2
-    style HANDLERS fill:#111111,color:#E8E2D2,stroke:#E8E2D2
-    style PROVIDERS fill:#181818,color:#E8E2D2,stroke:#E8E2D2
-    style OUT fill:#111111,color:#E8E2D2,stroke:#E8E2D2
-    style WS fill:#111111,color:#E8E2D2,stroke:#E8E2D2
-    style CHAT fill:#0A0A0A,color:#0A0A0A,stroke:#DCFF00
-    style CHAT color:#DCFF00
-    style HERMES fill:#0A0A0A,color:#DCFF00,stroke:#DCFF00
-    style CLI fill:#111111,color:#E8E2D2,stroke:#E8E2D2
+    style UI fill:#0a1612,color:#f3e6c4,stroke:#6ba8d6
+    style API fill:#0a1612,color:#f3e6c4,stroke:#f3e6c4
+    style ENGINE fill:#0e1c18,color:#f3e6c4,stroke:#f3e6c4
+    style HANDLERS fill:#0e1c18,color:#f3e6c4,stroke:#f3e6c4
+    style PROVIDERS fill:#13231e,color:#f3e6c4,stroke:#f3e6c4
+    style OUT fill:#0e1c18,color:#f3e6c4,stroke:#f3e6c4
+    style WS fill:#0e1c18,color:#f3e6c4,stroke:#f3e6c4
+    style CHAT fill:#0a1612,color:#6ba8d6,stroke:#6ba8d6
+    style HERMES fill:#0a1612,color:#6ba8d6,stroke:#6ba8d6
+    style CLI fill:#0e1c18,color:#f3e6c4,stroke:#f3e6c4
 ```
 
 - **FRONTEND** — React 19 + Vite SPA. `@xyflow/react` powers the canvas. [Zustand](https://github.com/pmndrs/zustand) holds all graph and UI state, with `node.data` as the single source of truth for params, outputs, and execution status.
@@ -302,8 +304,8 @@ If you are extending **Daedalus**, the playbook lives at `.hermes/skills/daedalu
 ---
 
 ```
-╋━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╋
-   ◆ DAEDALUS // ATELIER                            BUILT WITH PURPOSE
-   STATION-04                                      © 2026 JUSTIN PEREA
-╋━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╋
+┌──────────────────────────────────────────────────────────────────┐
+│  ▪ DAEDALUS — ATELIER VERDANT              MEASURE TWICE, CUT ONCE │
+│  STATION-04                                  © 2026 JUSTIN PEREA  │
+└──────────────────────────────────────────────────────────────────┘
 ```
