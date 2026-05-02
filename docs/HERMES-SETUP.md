@@ -6,15 +6,32 @@ and learns from every failed cut. It's powered by
 [Hermes Agent](https://github.com/NousResearch/hermes-agent) from Nous
 Research.
 
-You can run Daedalus's brain through either:
-- **OpenRouter** with Kimi K2.6 — pay-per-use, BYO API key. Default for
-  fresh installs.
-- **Nous Portal** — Nous Research's flagship subscription. One auth gives
-  you 300+ models (Hermes 4 / DeepSeek V4 / Kimi K2.6 / Gemini 3 Flash /
-  GPT-5.5 / etc.), all swappable from the chat-header model picker without
-  leaving the app.
+**Daedalus runs on any provider Hermes Agent supports.** Hermes is
+provider-agnostic, and Daedalus inherits whatever you configure. There
+are three reasonable paths — pick the one that matches what you already
+have:
 
-Claude remains the default chat agent. Daedalus is opt-in.
+- **Path A — Nous Portal.** Single browser OAuth → 300+ models (Hermes 4 /
+  DeepSeek V4 / Kimi K2.6 / Gemini 3 Flash / GPT-5.5 / etc.), swappable
+  mid-session via the chat-header model picker. Best if you already have a
+  [Nous Research subscription](https://portal.nousresearch.com) or want
+  the full catalog without juggling separate keys. **(See §2.5.)**
+- **Path B — OpenRouter + Kimi K2.6.** Pay-per-use, BYO API key. The
+  default fresh-install path; this is what makes Daedalus eligible for the
+  hackathon's Kimi Track. **(See §2.)**
+- **Path C — Anything else Hermes supports.** Anthropic direct, OpenAI
+  direct, local Ollama, etc. — if `hermes-daedalus login` lists it, Daedalus
+  will use it. Substitute the provider/model in §2 below. No new account
+  required if you already pay Anthropic / OpenAI / run local models.
+
+All three paths land on the same Daedalus runtime. The backend
+(`backend/services/hermes_session.py`) doesn't care which provider Hermes
+is wired to — it just spawns `hermes-daedalus chat …` and streams prose
++ canvas actions back. Switch any time with `hermes-daedalus model`; the
+chat header reflects the active model live.
+
+Claude remains the default chat agent in nebula-nodes; Daedalus is opt-in
+via the agent picker in the chat panel.
 
 ## 1. Install Hermes Agent
 

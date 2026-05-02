@@ -161,26 +161,46 @@ npm run dev
 ## ◆ DAEDALUS — HERMES AGENT
 
 ```
-SPEC // ATELIER — KIMI K2.6 · OPENROUTER OR NOUS PORTAL
+SPEC // ATELIER — DAEDALUS RUNS ON ANY HERMES-SUPPORTED PROVIDER
 ```
 
-Daedalus is the chat side of the canvas — a Hermes Agent persona that builds graphs from natural-language prompts. It runs as a subprocess of [Hermes Agent](https://github.com/NousResearch/hermes-agent) on your machine, against either OpenRouter (Kimi K2.6) or Nous Portal (300+ models, one OAuth).
+Daedalus is the chat side of the canvas — a Hermes Agent persona that builds graphs from natural-language prompts. It runs as a subprocess of [Hermes Agent](https://github.com/NousResearch/hermes-agent) on your machine. **Hermes is provider-agnostic, and Daedalus inherits whatever you set it up with.** Pick the auth path that matches what you already have.
+
+### Pick how Daedalus reaches its brain
+
+| Path | What you need | What you get | Best for |
+|------|---------------|--------------|----------|
+| **▪ Nous Portal** | A [Nous Research subscription](https://portal.nousresearch.com) | Single browser OAuth → 300+ models. Switchable mid-session via the in-app model picker (`<model> · Hermes` trigger in the chat header). | Anyone who already pays Nous, or wants the full Hermes/Kimi/DeepSeek/etc. catalog without juggling separate keys. |
+| **▪ OpenRouter** | An [OpenRouter API key](https://openrouter.ai/keys) | Pay-per-use BYOK. Daedalus defaults to `moonshotai/kimi-k2.6` here. Fresh-install default. | $0 monthly baseline. The Kimi-track default. |
+| **▪ Anything else Hermes supports** | Whatever credential that provider needs (Anthropic key, OpenAI key, local Ollama, etc.) | Daedalus runs on it. Hermes Agent is provider-agnostic; if you can do `hermes-daedalus login` for it, Daedalus will use it. | Already paying Anthropic / OpenAI / running local models — no new account needed. |
+
+> [!NOTE]
+> **All three paths land on the same Daedalus runtime.** The backend (`backend/services/hermes_session.py`) doesn't care which provider Hermes is wired to — it just spawns `hermes-daedalus chat …` and streams prose + canvas actions back. Switch providers any time with `hermes-daedalus model`; the chat header reflects the active model live.
+
+### Setup
 
 ```bash
-# 1. Install Hermes Agent (Nous Research)
+# 1. Install Hermes Agent (Nous Research) — one-time
 curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash
 
 # 2. Create the Daedalus profile + alias the wrapper the backend looks for
 hermes profile create daedalus
 hermes profile alias daedalus --name hermes-daedalus
 
-# 3. Authenticate — pick ONE:
-#    a) OpenRouter (BYO key, $0 baseline)
+# 3. Authenticate — pick ONE of the three paths above:
+
+#    PATH A — Nous Portal (subscription, OAuth)
+hermes-daedalus model              # pick "Nous Portal" → browser OAuth
+
+#    PATH B — OpenRouter (BYO key, $0 baseline; the Kimi-track default)
 hermes-daedalus login              # select 'openrouter', paste key
 hermes-daedalus config set model.provider openrouter
 hermes-daedalus config set model.name moonshotai/kimi-k2.6
-#    b) Nous Portal (subscription, OAuth)
-hermes-daedalus model              # pick "Nous Portal", browser OAuth
+
+#    PATH C — Anything else Hermes supports (Anthropic / OpenAI / Ollama / …)
+hermes-daedalus login              # select the provider, paste key
+hermes-daedalus config set model.provider <provider>
+hermes-daedalus config set model.name <model-id>
 
 # 4. Install Daedalus's persona + skills (from inside this repo clone)
 cp .hermes/profiles/daedalus/SOUL.md ~/.hermes/profiles/daedalus/SOUL.md
