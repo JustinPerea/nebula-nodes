@@ -18,7 +18,7 @@ https://github.com/user-attachments/assets/3a83187d-e186-4378-8a36-822b0a4055cb
 </div>
 
 <div align="center">
-  <a href="#quickstart">QUICKSTART</a> · <a href="#daedalus--hermes-agent">DAEDALUS</a> · <a href="#supported-models">MODELS</a> · <a href="#architecture">ARCHITECTURE</a> · <a href="https://github.com/JustinPerea/nebula-nodes/issues">ISSUES</a>
+  <a href="#-quickstart">QUICKSTART</a> · <a href="#-daedalus--hermes-agent">DAEDALUS</a> · <a href="#-models">MODELS</a> · <a href="#-architecture">ARCHITECTURE</a> · <a href="https://github.com/JustinPerea/nebula-nodes/issues">ISSUES</a>
 </div>
 
 <div align="center">
@@ -355,10 +355,10 @@ Issues and pull requests are welcome. Before opening a PR, please run the fronte
 
 ```bash
 # backend
-cd backend && pytest
+cd backend && python -m pytest
 
 # frontend
-cd frontend && npm test
+cd frontend && npm run lint && npm run build
 ```
 
 If you are adding a new model, the smallest useful contribution is a single handler in `backend/handlers/` plus a node definition in `frontend/src/components/nodes/`. Existing nodes are good templates — copy the closest match and adjust.
