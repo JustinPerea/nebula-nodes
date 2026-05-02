@@ -45,6 +45,45 @@ https://github.com/user-attachments/assets/3a83187d-e186-4378-8a36-822b0a4055cb
 > the canvas is the visual workspace it operates on.
 > Setup steps: [`docs/HERMES-SETUP.md`](docs/HERMES-SETUP.md).
 
+> ### ▪ SUBMITTING TO &nbsp;&nbsp;//&nbsp;&nbsp; **Kimi Track** + Main Track
+>
+> **Primary entry: Kimi Track.** Daedalus's brain is `moonshotai/kimi-k2.6`,
+> hard-coded as the default model in [`frontend/src/components/panels/ChatPanel.tsx`](frontend/src/components/panels/ChatPanel.tsx)
+> and confirmable via `hermes-daedalus config get model` after setup.
+> Kimi-track evidence package: [`docs/HERMES-SETUP.md` § "Kimi track evidence"](docs/HERMES-SETUP.md#kimi-track-evidence-for-hackathon-submission).
+>
+> Also eligible for the Main Track — the same Daedalus runtime works against any model in
+> the Nous Portal catalog (300+) via the in-app model picker.
+
+## ◆ DEMO SCRUB GUIDE &nbsp;&nbsp;//&nbsp;&nbsp; what to look for at each beat
+
+| Time | Beat | What's happening |
+|------|------|------------------|
+| **0:00** | INTRO | Daedalus introduces himself; the canvas wakes up — sigil-bloom toggle FX fires when the agent picker switches `claude → daedalus` |
+| **0:09** | OVERVIEW | Drag-or-chat affordance — pull a node in by hand, OR talk to Daedalus. Two front doors, same canvas. |
+| **0:18** | PROMPT | Real plain-language prompt typed into the chat panel. No commands, no syntax. |
+| **0:23** | V1 | Daedalus narrates each step into `content` (Kimi K2.6 narrator-fallback in action), wires the graph, runs v1 — watercolor portrait |
+| **0:44** | REFERENCE | Daedalus pulls a reference image into the graph and re-prompts to match the style |
+| **1:03** | V2 | Improved cut, Daedalus comments on what changed |
+| **1:16** | FAN-OUT | The thesis shot — same source seeds a stylized image, a 3D mesh, AND a video, in parallel |
+| **1:36** | MODELS | Library walk: every supported provider (300+ via the universal Nous/OpenRouter/Replicate/FAL nodes) |
+| **2:00** | TAGLINE | "Let me be your guide to artistic creativity." |
+
+## ◆ WHAT'S NEW IN THIS ENTRY &nbsp;&nbsp;//&nbsp;&nbsp; the hackathon contribution
+
+The visual-canvas codebase pre-existed the hackathon (a personal BYOK project for stitching multi-provider AI pipelines). **Everything below is what was built specifically to enter Daedalus into the Hermes Agent Creative Hackathon:**
+
+| Layer | What landed | Files |
+|---|---|---|
+| **Daedalus persona** | SOUL.md, skill playbook, hard rule that narrative belongs in `content` not `reasoning_content`, model-family skill cookbook | `.hermes/profiles/daedalus/SOUL.md` · `.hermes/skills/daedalus-core/SKILL.md` |
+| **Hermes session bridge** | Subprocess wrapper for `hermes-daedalus chat`, verbose-mode parser, prose-stream-to-chat-bubble pipeline, log tailer with heartbeats | `backend/services/hermes_session.py` · `hermes_verbose_parser.py` |
+| **Kimi K2.6 narrator-fallback** | Catches the empty-`content`+`tool_calls` failure mode and re-narrates buffered canvas actions in Daedalus's voice via a single-shot OpenRouter call | `backend/services/narrator.py` · `chat_actions.py` |
+| **Nous Portal universal node** | Auth from `~/.hermes/profiles/daedalus/auth.json`, model proxy, dynamic schema-typed ports, in-app model picker (300+ models) | `backend/services/nous_auth.py` · `handlers/nous_portal.py` · `routes/nous_proxy.py` |
+| **Daedalus skin** | Dual-tone (Verdant + Obsidian), Hermes design system applied to chat panel, node cards, inspector, settings — sigil-bloom transition FX | `frontend/src/styles/hermes.css` · `components/panels/ChatPanel.tsx` · `AgentLog.tsx` |
+| **Workspace polish** | Chat-aware fitView padding (nodes never render behind the chat overlay), auto-grow textarea, prose live-streaming during turn | `frontend/src/components/Canvas.tsx` · `panels/ChatPanel.tsx` |
+| **Standalone Hermes theme** | TDR × Marathon dashboard reskin for Hermes Agent itself (separate deliverable, ships as a `themes/daedalus/` drop-in) | `themes/daedalus/` |
+| **Demo recording pipeline** | Section-by-section puppeteer driver with synchronized voiceover, zoom directives, music ducking — 9 beats stitched to 2:07 | `scripts/puppeteer-driver/` · `scripts/voiceover/` |
+
 ## ◆ THESIS &nbsp;&nbsp;//&nbsp;&nbsp; why this exists
 
 There's a cambrian explosion of image, video, audio, and text models happening right now — every week brings a new provider with a new endpoint. Stitching them together today means writing throwaway scripts, juggling API docs, and rebuilding the same plumbing for every idea.
@@ -104,6 +143,7 @@ cd nebula-nodes
 
 # 2. Backend (terminal 1)
 cd backend
+python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 uvicorn main:app --reload --port 8000
 
@@ -304,6 +344,24 @@ cd frontend && npm test
 If you are adding a new model, the smallest useful contribution is a single handler in `backend/handlers/` plus a node definition in `frontend/src/components/nodes/`. Existing nodes are good templates — copy the closest match and adjust.
 
 If you are extending **Daedalus**, the playbook lives at `.hermes/skills/daedalus-core/SKILL.md`. The persona contract is `.hermes/profiles/daedalus/SOUL.md`. Both are copied into the user's Hermes profile during setup — see [`docs/HERMES-SETUP.md`](docs/HERMES-SETUP.md).
+
+## ◆ LIMITATIONS &nbsp;&nbsp;//&nbsp;&nbsp; known gaps
+
+- **Kimi K2.6 verbose-mode quirk.** The model occasionally emits empty `content` alongside `tool_calls` even with the SKILL.md hard rule asserted. The narrator-fallback (`backend/services/narrator.py`) catches this and re-narrates from the buffered canvas actions, so the user always sees a chat bubble — but a clean upstream fix would be preferable. This is the failure mode the hackathon entry most directly addresses.
+- **Hermes verbose parser is fragile to format drift.** If Nous Research changes the verbose-mode output format, `hermes_verbose_parser.py` will need updating. Pinned to the format observed in Hermes ≥ v0.10.
+- **Mac app deferred.** The Mac-app v1 scope is parked until the OSS web version reaches a "good spot" (ref: project memory). Web-only for now.
+- **Not every provider is dual-route.** Some handlers (Higgsfield, Grok Video, MiniMax) are direct-only — they don't have a FAL fallback yet. If the direct API is down, those nodes are too.
+- **Demo recording pipeline is opinionated.** `scripts/puppeteer-driver/` assumes 1920×1080 @ DPR=2 capture, ffmpeg/x264, and ElevenLabs for voice/SFX/music. Reasonable defaults but not yet parameterized.
+
+## ◆ ACKNOWLEDGMENTS &nbsp;&nbsp;//&nbsp;&nbsp; standing on giants
+
+- **[Hermes Agent](https://github.com/NousResearch/hermes-agent)** — Nous Research's open-source agent runtime. Daedalus is a profile + skill on top of it. The whole entry exists because Hermes Agent does.
+- **[Kimi K2.6](https://moonshotai.github.io/Kimi-K2/)** — Moonshot AI. Daedalus's brain on the Kimi track. Routes via OpenRouter or Nous Portal.
+- **[Nous Portal](https://portal.nousresearch.com)** — single-OAuth gateway to 300+ models. Powers the universal Nous node and the in-app model picker.
+- **Provider APIs** — OpenAI, Anthropic, Google (Gemini / Imagen / Veo), Runway, FAL, OpenRouter, Replicate, ElevenLabs, MiniMax, Higgsfield, Meshy, Black Forest Labs, ByteDance, xAI, Recraft, Ideogram. BYOK against each.
+- **Demo voice + music** — both generated with ElevenLabs (voice = Brian, music = the v1 music API). Voiceover scripts live in `scripts/voiceover/`.
+- **Open-source frontend stack** — [React Flow / @xyflow](https://github.com/xyflow/xyflow), [Zustand](https://github.com/pmndrs/zustand), [Vite](https://vitejs.dev), [FastAPI](https://fastapi.tiangolo.com).
+- **Theme lineage** — the `themes/daedalus/` Hermes dashboard skin is a tribute to [The Designers Republic](https://thedesignersrepublic.com) × [Kurppa Hosk's Marathon (Bungie 2026)](https://www.kurppahosk.com/) brand system.
 
 ## ◆ LICENSE
 
