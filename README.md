@@ -9,20 +9,13 @@
 └──────────────────────────────────────────────────────────────────┘
 ```
 
-<p align="center">
-  <a href="https://github.com/JustinPerea/nebula-nodes/releases/download/v0.1.0-hackathon/stitched-with-music.mp4">
-    <img src="docs/assets/demo-poster.jpg" alt="Watch the 2:07 demo — Daedalus on Kimi K2.6 building a creative pipeline from a plain-language prompt" width="900">
-  </a>
-  <br>
-  <sub><em>▶ <a href="https://github.com/JustinPerea/nebula-nodes/releases/download/v0.1.0-hackathon/stitched-with-music.mp4"><strong>Watch the 2:07 demo</strong></a> — Daedalus on Kimi K2.6 building a creative pipeline from a plain-language prompt.</em></sub>
-</p>
+<div align="center">
 
-<details>
-<summary><sub><em>Or play it inline (some clients only)</em></sub></summary>
+https://github.com/user-attachments/assets/3a83187d-e186-4378-8a36-822b0a4055cb
 
-<video src="https://github.com/JustinPerea/nebula-nodes/releases/download/v0.1.0-hackathon/stitched-with-music.mp4" poster="docs/assets/demo-poster.jpg" controls width="900"></video>
+<sub><em>2:07 — Daedalus on Kimi K2.6 building a creative pipeline from a plain-language prompt. <a href="https://github.com/JustinPerea/nebula-nodes/releases/download/v0.1.0-hackathon/stitched-with-music.mp4">Download the full-quality 1080p MP4</a> from the v0.1.0-hackathon release.</em></sub>
 
-</details>
+</div>
 
 <div align="center">
   <a href="#quickstart">QUICKSTART</a> · <a href="#daedalus--hermes-agent">DAEDALUS</a> · <a href="#supported-models">MODELS</a> · <a href="#architecture">ARCHITECTURE</a> · <a href="https://github.com/JustinPerea/nebula-nodes/issues">ISSUES</a>
