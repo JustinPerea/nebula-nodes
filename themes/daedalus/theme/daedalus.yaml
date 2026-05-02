@@ -1,0 +1,878 @@
+# DAEDALUS // ATELIER
+# A Hermes Agent dashboard reskin in the spirit of The Designers Republic
+# and the Marathon (Kurppa Hosk × Bungie 2026) brand system.
+#
+# Where the default theme is teal-and-cream, Daedalus is near-black with
+# bone-white text, radioactive-yellow primary marks, and instrument-spec
+# typography — Geist Mono Bold for display, IBM Plex Sans for body, IBM
+# Plex Mono for every label and metric. Square corners, hairline rules,
+# diamond ornaments, no decorative gradients.
+#
+# Built for the Hermes Agent Theme Hackathon, April 2026.
+#
+# INSTALL:
+#   cp daedalus.yaml ~/.hermes/profiles/<active-profile>/dashboard-themes/
+#   # If you don't use profiles:
+#   # cp daedalus.yaml ~/.hermes/dashboard-themes/
+#   curl http://127.0.0.1:9119/api/dashboard/plugins/rescan
+#   # or restart `hermes dashboard`
+#
+# Then pick "Daedalus" from the theme selector.
+name: daedalus
+label: "Daedalus"
+description: "TDR × Marathon — near-black, bone, radioactive yellow. Built with purpose."
+
+# ─── PALETTE — two-material discipline (3-layer + warm glow + grain) ──
+# background: pure near-black ground
+# midground:  bone parchment, used for primary text
+# foreground: white at 0 alpha — glints lift off glass
+palette:
+  background: "#0A0A0A"
+  midground: "#E8E2D2"
+  foreground:
+    hex: "#FFFFFF"
+    alpha: 0
+  warmGlow: "rgba(220, 255, 0, 0.06)"
+  noiseOpacity: 0
+
+# ─── TYPOGRAPHY — three-tier Marathon font combo ──────────────────────
+# Display:  Geist Mono Bold — extruded headlines, oversized hero stats
+# Body:     IBM Plex Sans — prose, descriptions, table data
+# Mono:     IBM Plex Mono — every label, badge, metric, nav item, code
+# JP:       Noto Sans JP — bilingual katakana sub-labels
+typography:
+  fontSans: '"IBM Plex Sans", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
+  fontMono: '"IBM Plex Mono", "JetBrains Mono", ui-monospace, "SF Mono", monospace'
+  fontDisplay: '"Geist Mono", "IBM Plex Mono", ui-monospace, monospace'
+  fontUrl: "https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;600;700;800;900&family=IBM+Plex+Mono:wght@300;400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=Noto+Sans+JP:wght@400;500&display=swap"
+  baseSize: "14px"
+  lineHeight: "1.55"
+  letterSpacing: "0"
+
+# ─── LAYOUT — square, comfortable, instrument-grade ──────────────────
+layout:
+  radius: "0"
+  density: "comfortable"
+
+# ─── ASSETS — embedded sigil for sidebar wordmark + watermark ─────────
+# 128px cyanotype hermes-figure portrait, base64-embedded so the theme
+# stays a single self-contained YAML. Used in the DAEDALUS sidebar
+# wordmark and as a faint bottom-right watermark on every page.
+assets:
+  custom:
+    sigil: "url(data:image/jpeg;base64,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)"
+
+# ─── COLOR OVERRIDES — radioactive yellow primary, status escalation ─
+colorOverrides:
+  primary: "#DCFF00"             # radioactive yellow — CTAs, brand mark, active nav
+  primaryForeground: "#0A0A0A"   # ink — readable on yellow
+  accent: "#4AC4F8"              # cyan — secondary highlights
+  accentForeground: "#0A0A0A"
+  secondary: "#181818"           # ink-elevated — chip / pill bg
+  secondaryForeground: "#E8E2D2"
+  muted: "#111111"               # ink-surface
+  mutedForeground: "#6B6558"     # bone-faint
+  ring: "#DCFF00"                # focus ring matches the filament
+  border: "rgba(232, 226, 210, 0.18)"
+  input: "rgba(232, 226, 210, 0.06)"
+  card: "#111111"
+  cardForeground: "#E8E2D2"
+  popover: "#181818"
+  popoverForeground: "#E8E2D2"
+  success: "#7FFF7F"             # lime — gateway online
+  warning: "#DCFF00"             # radioactive yellow
+  destructive: "#F84A8C"         # magenta
+
+# ─── COMPONENT CHROME ────────────────────────────────────────────────
+# HARD RULE: no thick L/R side-accent bars. Cards are spec plates with
+# hairlines top + bottom and a faint inset light from above, like a
+# pressed metal panel. The corner ornaments (diamond filaments) live
+# in customCSS so they can be tuned without normaliser interference.
+componentStyles:
+  card:
+    background: "#111111"
+    boxShadow: "0 0 0 1px rgba(232, 226, 210, 0.08), inset 0 1px 0 rgba(232, 226, 210, 0.16), inset 0 -1px 0 rgba(232, 226, 210, 0.06)"
+  header:
+    background: "#0A0A0A"
+    boxShadow: "inset 0 -1px 0 rgba(232, 226, 210, 0.20)"
+  footer:
+    background: "#0A0A0A"
+    boxShadow: "inset 0 1px 0 rgba(232, 226, 210, 0.14)"
+  sidebar:
+    background: "#0A0A0A"
+    boxShadow: "inset -1px 0 0 rgba(232, 226, 210, 0.16)"
+  tab:
+    background: "transparent"
+  badge:
+    background: "rgba(220, 255, 0, 0.10)"
+  backdrop:
+    backgroundSize: "auto"
+    backgroundPosition: "center"
+    fillerOpacity: "0"
+    fillerBlendMode: "normal"
+
+# ─── customCSS ────────────────────────────────────────────────────────
+# Selector-level treatment of typography, signature elements, charts,
+# and the instrument-spec vocabulary. Bounded to 32 KiB; this fits.
+customCSS: |
+  /* ════════════════════════════════════════════════════════════════════
+   * DAEDALUS // ATELIER · v1.0 MMXXVI
+   * The Designers Republic × Marathon brutalist instrument-spec reskin.
+   * Yellow is structural material, not accent. Type is loud. Hash marks
+   * everywhere. Cards are coded plates. The whole thing is wired.
+   * ════════════════════════════════════════════════════════════════════ */
+
+  /* ─── -1. NUKE THE PARCHMENT BACKDROP ────────────────────────────── */
+  /* Hermes ships a 4-layer Backdrop component: solid bg, parchment-grunge
+   * filler jpeg, warm radial glow, and an animated noise turbulence svg.
+   * The filler bleeds parchment texture across every surface — the look
+   * we are explicitly killing. We hide the filler <img>, force the
+   * filler <div>'s opacity to zero, and dial the noise turbulence down. */
+  img.theme-default-filler,
+  [class*="theme-default-filler"] {
+    display: none !important;
+  }
+  /* Belt-and-suspenders: even if our componentStyles.backdrop didn't take,
+   * force the filler-opacity CSS var to zero. */
+  :root {
+    --component-backdrop-filler-opacity: 0 !important;
+    --noise-opacity-mul: 0 !important;
+  }
+
+  /* ─── 0.0 DESIGN TOKENS — type · tracking · line-height · spacing ─
+   * The Daedalus design system. Component rules in this file should
+   * reach for these custom properties; new sizes go here first, never
+   * inline. Snapping a stray value to the nearest token is preferable
+   * to widening the system.
+   *
+   * TYPE       stamp(8) · eyebrow(9) · micro(11) · body(14) · h2(32) · display(56)
+   * TRACKING   display(-0.03) · tight(-0.02) · label(0.18) · control(0.22) · eyebrow(0.32)
+   * LINE-HT    display(0.9) · tight(1.0) · body(1.4) · prose(1.55)
+   * SPACING    1(4) · 2(8) · 3(12) · 4(16) · 5(20) · 6(24) · 8(32) · 9(36)  — 4-base grid
+   *
+   * NOTE: the existing :root block above sets Hermes runtime overrides
+   * (backdrop-filler-opacity etc.); we add the design tokens here as a
+   * second :root rule so the two intents stay readable. */
+  :root {
+    --type-stamp:    8px;
+    --type-eyebrow:  9px;
+    --type-micro:   11px;
+    --type-body:    14px;
+    --type-h2:      32px;
+    --type-display: 56px;
+    --type-metric:  48px;  /* hero metric numerals (between h2 and display) */
+
+    --track-display: -0.03em;
+    --track-tight:   -0.02em;
+    --track-label:    0.18em;
+    --track-control:  0.22em;
+    --track-eyebrow:  0.32em;
+
+    --lh-display:  0.9;
+    --lh-tight:    1.0;
+    --lh-body:     1.4;
+    --lh-prose:    1.55;
+
+    --space-1:  4px;
+    --space-2:  8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-5: 20px;
+    --space-6: 24px;
+    --space-8: 32px;
+    --space-9: 36px;
+  }
+
+  /* ─── 0. FONT NUKES + BLEND MODE KILLS (override Hermes utilities) ─ */
+  .font-expanded,
+  [class*="font-expanded"] {
+    font-family: "Geist Mono", "IBM Plex Mono", ui-monospace, monospace !important;
+    font-weight: 900 !important;
+    font-style: normal !important;
+    text-transform: uppercase !important;
+    letter-spacing: var(--track-tight) !important;
+  }
+  .font-mondwest,
+  [class*="font-mondwest"] {
+    font-family: "IBM Plex Mono", "JetBrains Mono", monospace !important;
+    font-weight: 500 !important;
+    letter-spacing: var(--track-label) !important;
+    text-transform: uppercase !important;
+  }
+  [style*="plus-lighter"] {
+    mix-blend-mode: normal !important;
+  }
+  /* Hermes' .blend-lighter class (used on CardTitle, sidebar wordmark)
+   * applies mix-blend-mode: plus-lighter — which renders ink (#0A0A0A) as
+   * transparent on yellow surfaces (yellow + black = yellow). Kill it. */
+  .blend-lighter,
+  [class*="blend-lighter"] {
+    mix-blend-mode: normal !important;
+  }
+  .font-courier,
+  .font-serif {
+    font-family: "IBM Plex Mono", monospace !important;
+  }
+
+  /* ─── 1. MASSIVE DISPLAY TYPE ───────────────────────────────────── */
+  h1 {
+    font-family: "Geist Mono", monospace !important;
+    font-weight: 900 !important;
+    font-size: var(--type-display) !important;
+    line-height: var(--lh-display) !important;
+    letter-spacing: var(--track-display) !important;
+    text-transform: uppercase !important;
+    color: var(--color-foreground, #E8E2D2) !important;
+    mix-blend-mode: normal !important;
+  }
+  h2 {
+    font-family: "Geist Mono", monospace !important;
+    font-weight: 900 !important;
+    font-size: var(--type-h2) !important;
+    line-height: var(--lh-tight) !important;
+    letter-spacing: var(--track-tight) !important;
+    text-transform: uppercase !important;
+    color: var(--color-foreground, #E8E2D2);
+  }
+  h3,
+  [class*="text-card-foreground"] h3 {
+    font-family: "Geist Mono", monospace !important;
+    font-weight: 800 !important;
+    font-size: var(--type-body) !important;
+    line-height: var(--lh-tight) !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0 !important;
+    color: var(--color-foreground, #E8E2D2) !important;
+  }
+
+  /* ─── 2. TOP STATUS STRIP — fixed yellow band across viewport ──── */
+  /* The signature TDR move: a solid radioactive-yellow strip that runs
+   * the full width of the viewport at the very top, with running mono
+   * data text. Reads as the brand-system manifest header. */
+  html::before {
+    content: "HERMES AGENT ⌬ STATUS·OPERATIONAL ⌬ SECTOR·OPS ⌬ DAEDALUS THEME // v1.0 MMXXVI ⌬ BUILT WITH PURPOSE ⌬ ENGINEERED TO ELEVATE ⌬ ◆◆◆";
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 22px;
+    line-height: 22px;
+    z-index: 100;
+    background: var(--color-primary, #DCFF00);
+    color: var(--color-primary-foreground, #0A0A0A);
+    font-family: "IBM Plex Mono", monospace;
+    font-size: var(--type-eyebrow);
+    font-weight: 600;
+    letter-spacing: var(--track-eyebrow);
+    text-transform: uppercase;
+    text-align: center;
+    padding: 0 var(--space-4);
+    overflow: hidden;
+    white-space: nowrap;
+    pointer-events: none;
+    border-bottom: 1px solid #0A0A0A;
+  }
+
+  /* ─── 3. CORNER BRACKETS — instrument-panel rivets ─────────────── */
+  html::after {
+    content: "";
+    position: fixed;
+    inset: 22px 0 32px 0;
+    pointer-events: none;
+    z-index: 95;
+    background:
+      linear-gradient(to right,  var(--color-primary, #DCFF00) 0, var(--color-primary, #DCFF00) 16px, transparent 16px, transparent calc(100% - 16px), var(--color-primary, #DCFF00) calc(100% - 16px), var(--color-primary, #DCFF00) 100%) top / 100% 2px no-repeat,
+      linear-gradient(to right,  var(--color-destructive, #F84A8C) 0, var(--color-destructive, #F84A8C) 16px, transparent 16px, transparent calc(100% - 16px), var(--color-destructive, #F84A8C) calc(100% - 16px), var(--color-destructive, #F84A8C) 100%) bottom / 100% 2px no-repeat,
+      linear-gradient(to bottom, var(--color-primary, #DCFF00) 0, var(--color-primary, #DCFF00) 16px, transparent 16px, transparent calc(100% - 16px), var(--color-primary, #DCFF00) calc(100% - 16px), var(--color-primary, #DCFF00) 100%) left / 2px 100% no-repeat,
+      linear-gradient(to bottom, var(--color-primary, #DCFF00) 0, var(--color-primary, #DCFF00) 16px, transparent 16px, transparent calc(100% - 16px), var(--color-primary, #DCFF00) calc(100% - 16px), var(--color-primary, #DCFF00) 100%) right / 2px 100% no-repeat;
+  }
+
+  /* Push the app down to make room for the status strip + bottom ticker. */
+  body {
+    padding-top: 22px !important;
+    padding-bottom: 32px !important;
+  }
+
+  /* ─── 4. SIDEBAR HEADER — keep "Hermes Agent" wordmark, restyle ──── */
+  /* Daedalus is the theme, not a renaming of the product. The sidebar
+   * still says HERMES AGENT — we just restyle it in Geist Mono Bold
+   * with a yellow rule below + a small theme-credit caption. */
+  aside#app-sidebar > div:first-of-type {
+    position: relative !important;
+    border-bottom: 2px solid var(--color-primary, #DCFF00) !important;
+    background: var(--color-background, #0A0A0A) !important;
+  }
+  /* Tiny mono-caps theme credit pinned to the bottom-right of the
+   * sidebar header — reads as a small "DAEDALUS / v1.0" stamp without
+   * touching the brand wordmark. */
+  aside#app-sidebar > div:first-of-type::after {
+    content: "DAEDALUS · v1.0";
+    position: absolute;
+    right: 16px;
+    bottom: 4px;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: var(--type-stamp);
+    letter-spacing: var(--track-label);
+    color: var(--color-primary, #DCFF00);
+    text-transform: uppercase;
+    pointer-events: none;
+  }
+
+  /* ─── 5. SIDEBAR NAV — solid yellow bar on active ───────────────── */
+  aside nav a,
+  aside nav button {
+    font-family: "IBM Plex Mono", monospace !important;
+    font-size: var(--type-micro) !important;
+    letter-spacing: var(--track-label) !important;
+    text-transform: uppercase !important;
+    font-weight: 500 !important;
+    padding: var(--space-3) var(--space-5) !important;
+    border-bottom: 1px solid rgba(232, 226, 210, 0.06) !important;
+  }
+  /* Active nav = solid yellow bar with ink text. The signature loud move. */
+  aside nav a[aria-current="page"],
+  aside nav [data-active="true"] {
+    background: var(--color-primary, #DCFF00) !important;
+    color: var(--color-primary-foreground, #0A0A0A) !important;
+    font-weight: 700 !important;
+    opacity: 1 !important;
+  }
+  aside nav a[aria-current="page"] *,
+  aside nav [data-active="true"] * {
+    color: var(--color-primary-foreground, #0A0A0A) !important;
+    opacity: 1 !important;
+  }
+  /* Hermes ships an aria-hidden <span class="bg-midground"> overlay on
+   * every nav link that fades to opacity-5 on hover and ramps higher on
+   * active state. With our solid yellow active background that overlay
+   * paints a parchment block over our text. Kill it everywhere. */
+  aside nav span[aria-hidden],
+  aside nav [aria-hidden][class*="bg-midground"] {
+    display: none !important;
+  }
+  /* Number every nav item: 01, 02, 03... in cyan mono caps.
+   * Counter resets on each <ul> so plugins that inject nav lists
+   * get their own series. The number flips to ink on the active
+   * yellow row for legibility. */
+  aside nav ul {
+    counter-reset: nav-counter;
+  }
+  aside nav ul > li {
+    counter-increment: nav-counter;
+  }
+  aside nav ul > li > a::before,
+  aside nav ul > li > button::before {
+    content: counter(nav-counter, decimal-leading-zero) "  ";
+    color: var(--color-accent, #4AC4F8);
+    font-weight: 700;
+    margin-right: 6px;
+    letter-spacing: var(--track-label);
+    display: inline-block;
+  }
+  aside nav a[aria-current="page"]::before,
+  aside nav [data-active="true"]::before {
+    color: var(--color-primary-foreground, #0A0A0A) !important;
+  }
+
+  /* ─── 6. PAGE HEADER — sector strip + huge title ─────────────────── */
+  header[role="banner"] {
+    position: relative !important;
+    background: var(--color-background, #0A0A0A) !important;
+    border-bottom: 2px solid var(--color-primary, #DCFF00) !important;
+    height: auto !important;
+    min-height: 124px !important;
+    padding: var(--space-6) var(--space-8) var(--space-4) !important;
+  }
+  header[role="banner"] h1 {
+    font-family: "Geist Mono", monospace !important;
+    font-weight: 900 !important;
+    font-size: var(--type-display) !important;
+    letter-spacing: var(--track-display) !important;
+    line-height: var(--lh-display) !important;
+    color: var(--color-foreground, #E8E2D2) !important;
+    text-transform: uppercase !important;
+    mix-blend-mode: normal !important;
+  }
+  header[role="banner"]::before {
+    content: "/// SEC ░░ // SECTION";
+    position: absolute;
+    left: 32px;
+    top: 8px;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: var(--type-eyebrow);
+    letter-spacing: var(--track-eyebrow);
+    color: var(--color-destructive, #F84A8C);
+    z-index: 2;
+  }
+  header[role="banner"]::after {
+    content: "PG ░░/░░ ↗";
+    position: absolute;
+    right: 32px;
+    top: 8px;
+    font-family: "IBM Plex Mono", monospace;
+    font-weight: 600;
+    font-size: var(--type-eyebrow);
+    letter-spacing: var(--track-eyebrow);
+    color: var(--color-accent, #4AC4F8);
+    z-index: 2;
+  }
+
+  /* ─── 6.5 REGISTRATION MARKS — instrument-grid texture ──────── */
+  /* Tiny `+` crosshairs scattered across <main> at very low opacity.
+   * Reads as the printed-spec-sheet background of a TDR poster. The
+   * SVG tile is 80x80 with 4 marks per tile, low-alpha bone strokes. */
+  main {
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='80' height='80' viewBox='0 0 80 80'><g stroke='%23E8E2D2' stroke-opacity='0.07' stroke-width='1' fill='none'><path d='M10 6v8M6 10h8'/><path d='M50 26v8M46 30h8'/><path d='M30 50v8M26 54h8'/><path d='M70 70v8M66 74h8'/></g></svg>") !important;
+    background-repeat: repeat !important;
+  }
+
+  /* ─── 7. CARDS — chunky yellow top edge + corner block ─────────── */
+  [class*="text-card-foreground"] {
+    border: 0 !important;
+    position: relative !important;
+    background: var(--color-card, #111111) !important;
+    background-clip: padding-box;
+    box-shadow:
+      inset 0 3px 0 var(--color-primary, #DCFF00),
+      0 0 0 1px rgba(232, 226, 210, 0.10) !important;
+    padding-top: var(--space-3);
+  }
+  /* 12px solid yellow corner block at top-right — reads as the card's
+   * faction/category stamp. */
+  [class*="text-card-foreground"]::before {
+    content: "";
+    position: absolute;
+    top: 3px;
+    right: 0;
+    width: 18px;
+    height: 18px;
+    background: var(--color-primary, #DCFF00);
+  }
+  /* Mono "MTRC ░░" stamp on every card — auto-spec serial. */
+  [class*="text-card-foreground"]::after {
+    content: "MTRC ░░";
+    position: absolute;
+    bottom: 8px;
+    right: 12px;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: var(--type-stamp);
+    letter-spacing: var(--track-eyebrow);
+    color: rgba(232, 226, 210, 0.24);
+    text-transform: uppercase;
+    pointer-events: none;
+  }
+
+
+  /* ─── 7.5 CARD VARIANTS — color-rotating filament + hover ─────── */
+  /* The :first-of-type hero (yellow plate) variant was removed in v6i —
+   * it picked up the wrong element on Cron/Skills/Config (forms become
+   * yellow → unreadable). Cards now stay dark; yellow loudness comes
+   * from chrome (status strip, sidebar nav, page H1) plus the corner
+   * filament rotation below. */
+
+  /* Color-rotating corner filament — yellow (default 4n+1) · cyan · magenta
+   * · lime cycle. Adds tri-color presence across long card lists without
+   * overwhelming. Default rule (yellow) lives in section 7. */
+  [class*="text-card-foreground"]:nth-of-type(4n+2)::before {
+    background: var(--color-accent, #4AC4F8);
+  }
+  [class*="text-card-foreground"]:nth-of-type(4n+3)::before {
+    background: var(--color-destructive, #F84A8C);
+  }
+  [class*="text-card-foreground"]:nth-of-type(4n+4)::before {
+    background: var(--color-success, #7FFF7F);
+  }
+
+  /* Card hover — faint yellow tint on background. */
+  [class*="text-card-foreground"]:hover {
+    background: rgba(220, 255, 0, 0.06) !important;
+  }
+
+  /* ─── 8. CARD METRIC NUMERALS — extruded ─────────────────────────── */
+  .text-3xl,
+  .text-4xl,
+  .text-5xl,
+  [class*="text-card-foreground"] .tabular-nums {
+    font-family: "Geist Mono", monospace !important;
+    font-weight: 900 !important;
+    font-size: var(--type-metric) !important;
+    letter-spacing: var(--track-display) !important;
+    color: var(--color-foreground, #E8E2D2) !important;
+    font-variant-numeric: tabular-nums !important;
+    line-height: var(--lh-tight) !important;
+  }
+
+
+  /* ─── 9. EYEBROW LABELS — mono caps ─────────────────────────────── */
+  [class*="text-card-foreground"] p,
+  .text-xs.uppercase,
+  .text-muted-foreground.uppercase {
+    font-family: "IBM Plex Mono", monospace !important;
+    font-size: var(--type-eyebrow) !important;
+    letter-spacing: var(--track-control) !important;
+    text-transform: uppercase !important;
+    font-weight: 500 !important;
+    color: var(--color-muted-foreground, #6B6558) !important;
+  }
+  [class*="text-card-foreground"] p::before {
+    content: "▸ ";
+    color: var(--color-primary, #DCFF00);
+    margin-right: 4px;
+  }
+
+  /* ─── 10. BUTTONS — solid yellow plate on default ───────────────── */
+  /* Hermes' Button has no data-slot. Identifier: `gap-2 + font-mondwest`.
+   * Variants detected via Tailwind class substring. FRAGILE — see
+   * DESIGN.md "Selector stability tiers". Degrades to Hermes default
+   * if class names change. */
+  button[class*="gap-2"][class*="font-mondwest"] {
+    font-family: "IBM Plex Mono", monospace !important;
+    font-size: var(--type-micro) !important;
+    letter-spacing: var(--track-control) !important;
+    text-transform: uppercase !important;
+    border-radius: 0 !important;
+    font-weight: 700 !important;
+    transition: background 0.12s, color 0.12s, border-color 0.12s;
+  }
+  /* Default — solid yellow plate, ink text. */
+  button[class*="gap-2"][class*="bg-foreground/90"] {
+    background: var(--color-primary, #DCFF00) !important;
+    color: var(--color-primary-foreground, #0A0A0A) !important;
+    border: 0 !important;
+  }
+  button[class*="gap-2"][class*="bg-foreground/90"]:hover {
+    background: var(--color-foreground, #E8E2D2) !important;
+    color: var(--color-background, #0A0A0A) !important;
+  }
+  /* Ghost — transparent fill, bone text, yellow on hover. */
+  button[class*="gap-2"]:not([class*="bg-"]):not([class*="border-border"]) {
+    color: var(--color-foreground, #E8E2D2) !important;
+    background: transparent !important;
+  }
+  button[class*="gap-2"]:not([class*="bg-"]):not([class*="border-border"]):hover {
+    background: var(--color-primary, #DCFF00) !important;
+    color: var(--color-primary-foreground, #0A0A0A) !important;
+  }
+  /* Outline — yellow border + text, transparent fill. */
+  button[class*="gap-2"][class*="border-border"][class*="bg-transparent"] {
+    border: 1px solid var(--color-primary, #DCFF00) !important;
+    color: var(--color-primary, #DCFF00) !important;
+    background: transparent !important;
+  }
+  button[class*="gap-2"][class*="border-border"][class*="bg-transparent"]:hover {
+    background: var(--color-primary, #DCFF00) !important;
+    color: var(--color-primary-foreground, #0A0A0A) !important;
+  }
+  /* Destructive — solid magenta plate. */
+  button[class*="gap-2"][class~="bg-destructive"] {
+    background: var(--color-destructive, #F84A8C) !important;
+    color: var(--color-primary-foreground, #0A0A0A) !important;
+    border: 0 !important;
+  }
+  /* Bracket plates on default buttons: [ EXECUTE ] */
+  button[class*="gap-2"][class*="bg-foreground/90"]::before {
+    content: "[";
+    margin-right: 6px;
+    color: var(--color-primary-foreground, #0A0A0A);
+    font-weight: 400;
+  }
+  button[class*="gap-2"][class*="bg-foreground/90"]::after {
+    content: "]";
+    margin-left: 6px;
+    color: var(--color-primary-foreground, #0A0A0A);
+    font-weight: 400;
+  }
+  /* ─── 11. INPUTS ─────────────────────────────────────────────────── */
+  /* Hermes' Input has no data-slot. Identifier: `font-courier`. */
+  input[class*="font-courier"] {
+    background: rgba(232, 226, 210, 0.04) !important;
+    border: 1px solid rgba(232, 226, 210, 0.20) !important;
+    border-radius: 0 !important;
+    font-family: "IBM Plex Mono", monospace !important;
+    font-size: var(--type-micro) !important;
+    color: var(--color-foreground, #E8E2D2) !important;
+  }
+  input[class*="font-courier"]:focus-visible {
+    border-color: var(--color-primary, #DCFF00) !important;
+    box-shadow: 0 0 0 2px var(--color-primary, #DCFF00) !important;
+    outline: none;
+  }
+  input[class*="font-courier"]::placeholder {
+    color: rgba(232, 226, 210, 0.32);
+  }
+  /* No Textarea component in Hermes web — skip. */
+  /* ─── 12. TABLES — mono rows with hash-stripe headers ────────────── */
+  table {
+    font-family: "IBM Plex Mono", monospace !important;
+    font-size: var(--type-micro);
+  }
+  table thead {
+    border-bottom: 2px solid var(--color-primary, #DCFF00) !important;
+    background:
+      repeating-linear-gradient(
+        135deg,
+        transparent 0,
+        transparent 6px,
+        rgba(220, 255, 0, 0.04) 6px,
+        rgba(220, 255, 0, 0.04) 8px
+      );
+  }
+  table thead th {
+    font-size: var(--type-eyebrow) !important;
+    letter-spacing: var(--track-eyebrow) !important;
+    text-transform: uppercase !important;
+    color: var(--color-primary, #DCFF00) !important;
+    font-weight: 700 !important;
+    padding: var(--space-3) var(--space-4) !important;
+    text-align: left;
+  }
+  table tbody tr {
+    border-bottom: 1px solid rgba(232, 226, 210, 0.06) !important;
+  }
+  table tbody tr:hover {
+    background: rgba(220, 255, 0, 0.06) !important;
+  }
+  table td {
+    padding: var(--space-3) var(--space-4) !important;
+  }
+
+  /* ─── 13. TABS ───────────────────────────────────────────────────── */
+  /* Hermes' TabsTrigger has no data-slot. Identifier: `relative +
+   * font-mondwest + px-3` (distinguishes from Button which has `gap-2`).
+   * Active state detected via the `after:bg-foreground` indicator class
+   * that the trigger adds when `active` prop is true. */
+  button[class*="relative"][class*="font-mondwest"][class*="px-3"] {
+    font-family: "IBM Plex Mono", monospace !important;
+    font-size: var(--type-eyebrow) !important;
+    letter-spacing: var(--track-control) !important;
+    text-transform: uppercase !important;
+    border-radius: 0 !important;
+    color: var(--color-muted-foreground, #6B6558) !important;
+    border-bottom: 3px solid transparent !important;
+    padding: var(--space-3) var(--space-5) !important;
+    background: transparent !important;
+    font-weight: 600 !important;
+  }
+  button[class*="relative"][class*="font-mondwest"][class*="after:bg-foreground"] {
+    color: var(--color-primary-foreground, #0A0A0A) !important;
+    background: var(--color-primary, #DCFF00) !important;
+    border-bottom-color: var(--color-primary, #DCFF00) !important;
+  }
+  /* ─── 14. CHARTS — div-based, Tailwind class targeting ─────────── */
+  /* Hermes does NOT use recharts. Daily token chart is rendered as plain
+   * <div> bars with Tailwind arbitrary-value classes:
+   *   input bar  → `bg-[#ffe6cb]/70` (parchment cream from default theme)
+   *   output bar → `bg-emerald-500/70`
+   * Recolor both via class-substring to align with our palette: input stays
+   * bone (already close), output flips to magenta. FRAGILE — see DESIGN.md. */
+  div[class*="ffe6cb"] {
+    background-color: var(--color-foreground, #E8E2D2) !important;
+    opacity: 1 !important;
+  }
+  div[class*="emerald-500"] {
+    background-color: var(--color-destructive, #F84A8C) !important;
+    opacity: 1 !important;
+  }
+  /* Legend swatches use the same colors — recolor to match. */
+  .h-2\\.5.w-2\\.5[class*="bg-emerald"] {
+    background-color: var(--color-destructive, #F84A8C) !important;
+  }
+
+  /* ─── 15. BADGES — mini yellow stamps ────────────────────────────── */
+  /* Hermes' Badge has no data-slot. Identifier: `font-compressed`.
+   * Variants detected via the bg-* class. */
+  div[class*="font-compressed"] {
+    font-family: "IBM Plex Mono", monospace !important;
+    font-size: var(--type-eyebrow) !important;
+    letter-spacing: var(--track-label) !important;
+    text-transform: uppercase !important;
+    border-radius: 0 !important;
+    padding: var(--space-1) var(--space-2) !important;
+    border: 0 !important;
+    font-weight: 700 !important;
+  }
+  /* Default — solid yellow stamp. */
+  div[class*="font-compressed"][class*="bg-foreground/10"] {
+    background: var(--color-primary, #DCFF00) !important;
+    color: var(--color-primary-foreground, #0A0A0A) !important;
+  }
+  /* Outline / muted variants — yellow border + text on transparent. */
+  div[class*="font-compressed"][class*="text-muted-foreground"],
+  div[class*="font-compressed"][class*="bg-secondary"] {
+    background: transparent !important;
+    border: 1px solid var(--color-primary, #DCFF00) !important;
+    color: var(--color-primary, #DCFF00) !important;
+  }
+  /* Destructive — magenta stamp. */
+  div[class*="font-compressed"][class*="bg-destructive"] {
+    background: var(--color-destructive, #F84A8C) !important;
+    color: var(--color-primary-foreground, #0A0A0A) !important;
+  }
+  /* ─── 16. PLUGIN BANNERS / ALERT BLOCKS ──────────────────────────── */
+  /* Catch the example plugin's banner + any similar full-width strip:
+   * make it a yellow alert bar with bold mono text. */
+  [data-plugin-banner],
+  .border-dashed {
+    background: var(--color-primary, #DCFF00) !important;
+    color: var(--color-primary-foreground, #0A0A0A) !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    padding: var(--space-3) var(--space-4) !important;
+    font-family: "IBM Plex Mono", monospace !important;
+    font-size: var(--type-micro) !important;
+    letter-spacing: var(--track-control) !important;
+    text-transform: uppercase !important;
+    font-weight: 700 !important;
+  }
+  /* Plugin banner descendant overrides — specific enough to beat the
+   * badge-variant rules that would otherwise paint badges yellow-on-yellow. */
+  .border-dashed p,
+  .border-dashed span,
+  .border-dashed code,
+  .border-dashed [class*="text-muted-foreground"],
+  .border-dashed [class*="text-foreground"] {
+    color: var(--color-primary-foreground, #0A0A0A) !important;
+  }
+  .border-dashed div[class*="font-compressed"] {
+    background: rgba(10, 10, 10, 0.15) !important;
+    border: 1px solid rgba(10, 10, 10, 0.30) !important;
+    color: var(--color-primary-foreground, #0A0A0A) !important;
+  }
+  .border-dashed svg {
+    color: var(--color-primary-foreground, #0A0A0A) !important;
+    stroke: var(--color-primary-foreground, #0A0A0A) !important;
+  }
+
+  /* ─── 16.6 PRIORITY CALLOUT — magenta plate for critical state ─── */
+  /* Use [data-priority="critical"] on any element that needs to stop
+   * the operator. Renders as the "NOTHING ESCAPES" / "3 ACTIVE ALERTS"
+   * plate from TDR/Marathon mockups. Bracket-wrapped via ::before. */
+  [data-priority="critical"] {
+    background: var(--color-destructive, #F84A8C) !important;
+    color: var(--color-primary-foreground, #0A0A0A) !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    padding: var(--space-3) var(--space-4) !important;
+    font-family: "IBM Plex Mono", monospace !important;
+    font-weight: 700 !important;
+    letter-spacing: var(--track-control) !important;
+    text-transform: uppercase !important;
+    position: relative;
+  }
+  [data-priority="critical"]::before {
+    content: "⚠ CRITICAL  ";
+    margin-right: 6px;
+    font-weight: 900;
+  }
+
+  /* ─── 16.5 ⚠ CONTRAST GUARD — strong-color surfaces ─────────────── */
+  /* THE YELLOW CONTRACT: every surface painted with --color-primary or
+   * --color-destructive as background MUST also force its descendants to
+   * --color-primary-foreground (#0A0A0A). Without this, child elements
+   * carrying their own Tailwind text-* class (e.g. .text-muted-foreground
+   * → bone) render near-white on yellow and fail contrast.
+   *
+   * Add any new strong-color surface to this guard list. Pseudo-element
+   * surfaces (html::before, etc.) and decorative blocks with no children
+   * do NOT need to be listed. */
+  button[class*="gap-2"][class*="bg-foreground/90"] *,
+  button[class*="gap-2"]:not([class*="bg-"]):not([class*="border-border"]):hover *,
+  button[class*="gap-2"][class*="border-border"][class*="bg-transparent"]:hover *,
+  button[class*="gap-2"][class~="bg-destructive"] *,
+  div[class*="font-compressed"][class*="bg-foreground/10"] *,
+  div[class*="font-compressed"][class*="bg-destructive"] *,
+  button[class*="relative"][class*="font-mondwest"][class*="after:bg-foreground"] *,
+  [data-plugin-banner] *,
+  .border-dashed *,
+  [data-priority="critical"] *,
+  a:not([data-slot]):hover * {
+    color: var(--color-primary-foreground, #0A0A0A) !important;
+  }
+
+  /* ─── 17. SCROLLBARS ─────────────────────────────────────────────── */
+  *::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  *::-webkit-scrollbar-track {
+    background: rgba(10, 10, 10, 0.6);
+  }
+  *::-webkit-scrollbar-thumb {
+    background: var(--color-primary, #DCFF00);
+    border: 1px solid rgba(10, 10, 10, 0.6);
+  }
+
+  /* ─── 18. SELECTION + LINKS ──────────────────────────────────────── */
+  ::selection {
+    background: var(--color-primary, #DCFF00);
+    color: var(--color-primary-foreground, #0A0A0A);
+  }
+  a:not([data-slot]) {
+    color: var(--color-primary, #DCFF00);
+    text-decoration: none;
+    border-bottom: 2px solid var(--color-primary, #DCFF00);
+    font-weight: 600;
+  }
+  a:not([data-slot]):hover {
+    background: var(--color-primary, #DCFF00);
+    color: var(--color-primary-foreground, #0A0A0A);
+  }
+
+  /* ─── 19. CODE ───────────────────────────────────────────────────── */
+  code,
+  pre {
+    font-family: "IBM Plex Mono", monospace !important;
+    background: rgba(10, 10, 10, 0.8);
+    border-left: 3px solid var(--color-primary, #DCFF00);
+    border-radius: 0;
+    padding: var(--space-1) var(--space-2);
+  }
+  :not(pre) > code {
+    color: var(--color-primary, #DCFF00);
+    font-size: 0.92em;
+  }
+
+  /* ─── 21. FOOTER TICKER ──────────────────────────────────────────── */
+  body::after {
+    content: "HERMES AGENT // DAEDALUS THEME ⌬ BUILT WITH PURPOSE ⌬ ENGINEERED TO ELEVATE ⌬ v1.0 MMXXVI ⌬ ◆◆◆";
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 26px;
+    line-height: 26px;
+    text-align: center;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: var(--type-eyebrow);
+    letter-spacing: var(--track-eyebrow);
+    text-transform: uppercase;
+    color: rgba(232, 226, 210, 0.42);
+    background: var(--color-background, #0A0A0A);
+    border-top: 1px solid var(--color-primary, #DCFF00);
+    pointer-events: none;
+    z-index: 90;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+
+  /* ─── 22. SIDEBAR FOOTER STATUS ─────────────────────────────────── */
+  aside#app-sidebar > div:last-child {
+    border-top: 2px solid var(--color-primary, #DCFF00) !important;
+    background: rgba(10, 10, 10, 0.96) !important;
+  }
+
+  /* ─── 22.5 SIDEBAR FRAME FIT ────────────────────────────────────
+   * Hermes' sidebar uses `flex h-dvh max-h-dvh` — fills the full
+   * viewport height. But body has padding-top: 22px (top status
+   * strip) + padding-bottom: 32px (bottom bracket + ticker), so
+   * 100dvh inside body overflows the visible area by 54px and the
+   * sidebar's last children (version + credit row) end up under
+   * the footer ticker.
+   *
+   * Cap the sidebar to body's actual content area so its bottom
+   * edge lands above the bracket+ticker. A small inner padding
+   * gives a hair of breathing room. */
+  aside#app-sidebar {
+    max-height: calc(100dvh - 54px) !important;
+    padding-bottom: var(--space-2) !important;
+  }
