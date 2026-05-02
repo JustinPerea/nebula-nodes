@@ -41,3 +41,14 @@ Thumbs.db
 
 # Personal learning doc — local only, per CLAUDE.md convention
 FORjustin.md
+
+# Demo recording artifacts (caches + generated assets)
+scripts/voiceover/tts-cache/
+scripts/voiceover/sfx-cache/
+scripts/voiceover/music-cache/
+scripts/puppeteer-driver/_assets/
+scripts/remotion-demo/
+
+# Demo-only static assets (heavy, not required for app to run)
+frontend/public/demo/
+*.bak

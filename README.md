@@ -41,11 +41,20 @@
     </div>
 -->
 
+> **Hermes Agent Creative Hackathon submission.** This repo is the codebase
+> behind the demo video showing **Daedalus**, a Hermes Agent–powered chat
+> agent that drives a node-based AI canvas in natural language. Daedalus runs
+> on Kimi K2.6 via [Hermes Agent](https://github.com/NousResearch/hermes-agent)
+> and the Nous Portal; the canvas is the visual workspace it operates on.
+> Setup steps: see [`docs/HERMES-SETUP.md`](docs/HERMES-SETUP.md).
+
 ## Why Nebula Nodes
 
 There's a cambrian explosion of image, video, audio, and text models happening right now — every week brings a new provider with a new endpoint. Stitching them together today means writing throwaway scripts, juggling API docs, and rebuilding the same plumbing for every idea.
 
 Nebula Nodes is a **visual programming environment** for that stitching. Everything runs locally against your own API keys, so there is no platform markup, no data leaving your machine to a middleman, and no rate-limited hosted tier. You see the graph, you see the outputs, you own the keys.
+
+The chat side is **Daedalus**, a master-builder persona running on top of Hermes Agent. Drop nodes by hand, or describe a creative pipeline in plain language and let Daedalus wire it up — same canvas, same outputs, your keys.
 
 > [!NOTE]
 > Nebula Nodes is **BYOK (bring your own keys)** by design. The app proxies calls from your local backend to OpenAI, Anthropic, Google, Runway, FAL, OpenRouter, Replicate, ElevenLabs, and **Nous Portal** using keys you paste into the settings panel — or, in the case of Nous Portal, the OAuth credential the [Hermes Agent](https://hermes-agent.nousresearch.com) CLI already manages on your machine. They never touch a Nebula-hosted server because there isn't one.
@@ -87,6 +96,39 @@ npm run dev
 
 > [!TIP]
 > Drop a **Text Input** node on the canvas, wire it into a **GPT Image** node, wire that into a **Preview** node, and hit **Run**. That's the whole mental model.
+
+## Talking to Daedalus (Hermes Agent)
+
+Daedalus is the chat side of the canvas — a Hermes Agent persona that builds graphs from natural-language prompts. It runs as a subprocess of [Hermes Agent](https://github.com/NousResearch/hermes-agent) on your machine, against either OpenRouter (Kimi K2.6) or Nous Portal (300+ models, one OAuth).
+
+```bash
+# 1. Install Hermes Agent (Nous Research)
+curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash
+
+# 2. Create the Daedalus profile + alias the wrapper the backend looks for
+hermes profile create daedalus
+hermes profile alias daedalus --name hermes-daedalus
+
+# 3. Authenticate — pick ONE:
+#    a) OpenRouter (BYO key, $0 baseline)
+hermes-daedalus login              # select 'openrouter', paste key
+hermes-daedalus config set model.provider openrouter
+hermes-daedalus config set model.name moonshotai/kimi-k2.6
+#    b) Nous Portal (subscription, OAuth)
+hermes-daedalus model              # pick "Nous Portal", browser OAuth
+
+# 4. Install Daedalus's persona + skills (from inside this repo clone)
+cp .hermes/profiles/daedalus/SOUL.md ~/.hermes/profiles/daedalus/SOUL.md
+mkdir -p ~/.hermes/profiles/daedalus/skills/creative
+cp -R .hermes/skills/daedalus-core ~/.hermes/profiles/daedalus/skills/creative/
+
+# 5. Smoke test
+hermes-daedalus chat -q "Introduce yourself." -Q --skills daedalus-core
+```
+
+In the running app: open the chat panel, switch the agent picker to **Daedalus**, send a message. The backend spawns `hermes-daedalus chat …` per turn and streams Daedalus's prose + canvas actions back over WebSocket.
+
+Full step-by-step setup (model-family skills, the `nebula` CLI wrapper, troubleshooting): **[`docs/HERMES-SETUP.md`](docs/HERMES-SETUP.md)**.
 
 ## Adding API Keys
 
