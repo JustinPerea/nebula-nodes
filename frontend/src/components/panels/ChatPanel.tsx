@@ -521,20 +521,22 @@ export function ChatPanel() {
   const busyRef = useRef(false);
   busyRef.current = busy;
 
+  // TODO(thinking-collapse): wire up — scaffolded 2026-05-04
   // Ref callback that scrolls the thinking-body to its bottom on every
   // re-render. Combined with `key={lines.length}` on the body element, this
   // fires each time a new line arrives so the newest entry stays visible.
-  const thinkingBodyRef = useCallback((el: HTMLDivElement | null) => {
-    if (el) el.scrollTop = el.scrollHeight;
-  }, []);
+  // const thinkingBodyRef = useCallback((el: HTMLDivElement | null) => {
+  //   if (el) el.scrollTop = el.scrollHeight;
+  // }, []);
 
-  const toggleThinkingCollapsed = useCallback((id: string) => {
-    setMessages((prev) =>
-      prev.map((m) =>
-        m.role === 'thinking' && m.id === id ? { ...m, collapsed: !m.collapsed } : m,
-      ),
-    );
-  }, []);
+  // TODO(thinking-collapse): wire up — scaffolded 2026-05-04
+  // const toggleThinkingCollapsed = useCallback((id: string) => {
+  //   setMessages((prev) =>
+  //     prev.map((m) =>
+  //       m.role === 'thinking' && m.id === id ? { ...m, collapsed: !m.collapsed } : m,
+  //     ),
+  //   );
+  // }, []);
   // Holds the text-input node id for the next outgoing message, set by the
   // Enhance button just before send. Cleared when the message leaves so it
   // only attaches to the one assistant response it triggered.
@@ -1663,7 +1665,9 @@ export function ChatPanel() {
                   // don't leak object URLs.
                   if (available < newChips.length) {
                     for (let i = available; i < newChips.length; i++) {
-                      URL.revokeObjectURL(newChips[i].thumbUrl);
+                      // reason: newChips are created with status:'uploading' and a guaranteed
+                      // URL.createObjectURL result — thumbUrl is always a string here.
+                      URL.revokeObjectURL(newChips[i].thumbUrl!);
                     }
                   }
                   return [...prev, ...newChips.slice(0, available)];
