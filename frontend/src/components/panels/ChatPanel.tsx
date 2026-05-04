@@ -432,7 +432,7 @@ export function ChatPanel() {
       daedalusModelPickerOpen || (agent === 'daedalus' && daedalusProvider === 'nous');
     if (!shouldFetch || nousModelsFetchedRef.current) return;
     nousModelsFetchedRef.current = true;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reason: async data-fetching initiator. setLoading(true) before .then() is the canonical fetch pattern; nousModelsFetchedRef guards against re-trigger.
     setNousModelsLoading(true);
     setNousModelsError(null);
     fetchNousModels()
@@ -478,7 +478,7 @@ export function ChatPanel() {
     const current = chatCapableNousModels.find((m) => m.id === daedalusModel);
     if (current) return;
     const fallback = chatCapableNousModels[0];
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reason: validates persisted localStorage selection against catalog. TODO(post-baseline): move into the catalog fetch .then() so validation happens at load time, not in a watcher effect.
     setDaedalusModel(fallback.id);
     try { window.localStorage.setItem(DAEDALUS_MODEL_KEY, fallback.id); } catch { /* swallowed: localStorage may be unavailable in private browsing */ }
   }, [daedalusProvider, chatCapableNousModels, daedalusModel]);
@@ -523,6 +523,9 @@ export function ChatPanel() {
   const busyRef = useRef(false);
   // Sync busyRef after each render so async callbacks (WebSocket handlers,
   // send()) always see the latest value without a ref-during-render violation.
+  // Note: small stale window between render and post-commit effect is safe here
+  // because all consumers of busyRef.current (lines 847, 997, 1051) are async
+  // event handlers that always run after commit.
   useEffect(() => { busyRef.current = busy; });
 
   // TODO(thinking-collapse): wire up — scaffolded 2026-05-04

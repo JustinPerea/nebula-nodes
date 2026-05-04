@@ -79,10 +79,12 @@ export function AgentLog() {
     };
   }, [open]);
 
-  // Sample graph executions as a placeholder feed.
+  // TODO(post-baseline): placeholder log-feed scaffolding. Dispatch log entry
+  // from the same store action that sets isExecuting, OR consume
+  // nebula:agent-log-entry custom event path already used at line 100.
   useEffect(() => {
     if (!isExecuting) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reason: placeholder log-feed scaffolding. TODO(post-baseline): dispatch log entry from the same store action that sets isExecuting, OR consume nebula:agent-log-entry custom event path already used at line 100.
     setEntries((prev) => [
       ...prev.slice(-49),
       {

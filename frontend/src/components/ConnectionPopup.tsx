@@ -43,7 +43,7 @@ export function ConnectionPopup() {
   // the user sees a wall of nodes from the last session and has to scroll.
   useEffect(() => {
     if (visible) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- reason: intentional reset-on-open; setState here clears search/expanded state when popup opens. (key-based remount alternative considered but rejected to preserve focus setup.)
       setSearch('');
       setExpanded({});
       setTimeout(() => inputRef.current?.focus(), 0);
