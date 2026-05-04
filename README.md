@@ -152,7 +152,7 @@ cd nebula-nodes
 
 # 2. Backend (terminal 1)
 cd backend
-python3 -m venv .venv && source .venv/bin/activate
+python3.12 -m venv .venv && source .venv/bin/activate     # 3.13 also works; pydantic-core lacks 3.14 wheels
 pip install -r requirements.txt
 uvicorn main:app --reload --port 8000
 
