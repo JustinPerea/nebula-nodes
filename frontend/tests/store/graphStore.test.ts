@@ -13,6 +13,8 @@ vi.mock('../../src/lib/wsClient', () => ({
 globalThis.fetch = vi.fn();
 
 import { useGraphStore } from '../../src/store/graphStore';
+import type { Node } from '@xyflow/react';
+import type { NodeData } from '../../src/types';
 
 function resetStore() {
   useGraphStore.setState({
@@ -400,7 +402,7 @@ describe('graphStore streamPartialImage', () => {
           type: 'default',
           position: { x: 0, y: 0 },
           data: { definitionId: 'gpt-image-2-generate', params: {}, state: 'executing' },
-        } as any,
+        } as Node<NodeData>,
       ],
       edges: [],
     });

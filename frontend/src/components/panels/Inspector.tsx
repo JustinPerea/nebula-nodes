@@ -39,8 +39,8 @@ export function Inspector() {
 
   // Load favorites from settings
   useEffect(() => {
-    getSettings().then((settings: any) => {
-      setFavorites(settings.favorites ?? {});
+    getSettings().then((settings: Record<string, unknown>) => {
+      setFavorites(settings.favorites as Record<string, string[]> ?? {});
     }).catch(() => {});
   }, []);
 
