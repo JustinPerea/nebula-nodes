@@ -32,6 +32,9 @@ Thumbs.db
 # Superpowers brainstorm sessions
 .superpowers/
 
+# Git worktrees (feature isolation, never tracked)
+.worktrees/
+
 # SQLite (future)
 *.db
 .firecrawl/
