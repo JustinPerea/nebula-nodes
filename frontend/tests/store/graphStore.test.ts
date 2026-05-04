@@ -92,7 +92,7 @@ describe('graphStore', () => {
     const { nodes } = useGraphStore.getState();
     const [textNode, gptNode, previewNode] = nodes;
 
-    useGraphStore.setState((state) => ({
+    useGraphStore.setState(() => ({
       edges: [
         {
           id: 'edge-1',

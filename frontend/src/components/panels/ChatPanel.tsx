@@ -608,7 +608,7 @@ export function ChatPanel() {
         // thumbnail row, so nothing is truly lost.
         const textarea = document.querySelector<HTMLTextAreaElement>('.chat-panel__textarea');
         if (textarea) insertAtCaret(textarea, `@${body.nodeId}`);
-      } catch (err) {
+      } catch {
         setPendingImages((prev) => {
           const prior = prev.find((p) => p.id === chipId);
           // URL.revokeObjectURL is idempotent — safe inside a StrictMode-
