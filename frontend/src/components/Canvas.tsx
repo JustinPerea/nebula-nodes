@@ -3,6 +3,7 @@ import {
   ReactFlow,
   Background,
   BackgroundVariant,
+  SelectionMode,
   useReactFlow,
   type NodeTypes,
   type EdgeTypes,
@@ -19,6 +20,7 @@ import { TypedEdge } from './edges/TypedEdge';
 import { ContextMenu } from './ContextMenu';
 import { ConnectionPopup } from './ConnectionPopup';
 import '../styles/canvas.css';
+import type { IsValidConnection, Padding } from '@xyflow/system';
 
 const nodeTypes: NodeTypes = {
   'model-node': ModelNode,
@@ -31,8 +33,8 @@ const nodeTypes: NodeTypes = {
 // `${number}px` strings per side). Numeric padding takes a different formula
 // in React Flow that does NOT correspond to "fraction of viewport", so px is
 // the only way to guarantee content lands clear of the panels.
-function computeChatAwarePadding(): { top: string; right: string; bottom: string; left: string } {
-  const base = { top: '40px', right: '40px', bottom: '40px', left: '40px' };
+function computeChatAwarePadding(): Padding {
+  const base: Padding = { top: '40px', right: '40px', bottom: '40px', left: '40px' };
   if (typeof window === 'undefined') return base;
   const vw = window.innerWidth;
   const vh = window.innerHeight;
@@ -79,11 +81,13 @@ export function Canvas() {
   const onConnect = useGraphStore((s) => s.onConnect);
   const executeGraph = useGraphStore((s) => s.executeGraph);
   const isExecuting = useGraphStore((s) => s.isExecuting);
-  const isValidConnection = useIsValidConnection();
+  // reason: useIsValidConnection returns (Connection) => boolean; IsValidConnection<Edge>
+  // accepts (Edge | Connection) => boolean — our impl only needs Connection, so the
+  // narrower signature is runtime-correct but requires a cast for TS.
+  const isValidConnection = useIsValidConnection() as IsValidConnection;
   const showContextMenu = useUIStore((s) => s.showContextMenu);
   const hideContextMenu = useUIStore((s) => s.hideContextMenu);
   const showConnectionPopup = useUIStore((s) => s.showConnectionPopup);
-  const hideConnectionPopup = useUIStore((s) => s.hideConnectionPopup);
 
   const reactFlow = useReactFlow();
   const { fitView, screenToFlowPosition } = reactFlow;
@@ -355,7 +359,7 @@ export function Canvas() {
         selectionKeyCode={null}
         selectionOnDrag
         panOnScroll={false}
-        selectionMode={1}
+        selectionMode={SelectionMode.Full}
       >
         <Background
           variant={BackgroundVariant.Lines}
