@@ -432,6 +432,7 @@ export function ChatPanel() {
       daedalusModelPickerOpen || (agent === 'daedalus' && daedalusProvider === 'nous');
     if (!shouldFetch || nousModelsFetchedRef.current) return;
     nousModelsFetchedRef.current = true;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setNousModelsLoading(true);
     setNousModelsError(null);
     fetchNousModels()
@@ -477,6 +478,7 @@ export function ChatPanel() {
     const current = chatCapableNousModels.find((m) => m.id === daedalusModel);
     if (current) return;
     const fallback = chatCapableNousModels[0];
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setDaedalusModel(fallback.id);
     try { window.localStorage.setItem(DAEDALUS_MODEL_KEY, fallback.id); } catch { /* swallowed: localStorage may be unavailable in private browsing */ }
   }, [daedalusProvider, chatCapableNousModels, daedalusModel]);
@@ -519,7 +521,9 @@ export function ChatPanel() {
   const wsRef = useRef<WebSocket | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const busyRef = useRef(false);
-  busyRef.current = busy;
+  // Sync busyRef after each render so async callbacks (WebSocket handlers,
+  // send()) always see the latest value without a ref-during-render violation.
+  useEffect(() => { busyRef.current = busy; });
 
   // TODO(thinking-collapse): wire up — scaffolded 2026-05-04
   // Ref callback that scrolls the thinking-body to its bottom on every

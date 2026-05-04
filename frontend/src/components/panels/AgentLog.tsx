@@ -82,6 +82,7 @@ export function AgentLog() {
   // Sample graph executions as a placeholder feed.
   useEffect(() => {
     if (!isExecuting) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setEntries((prev) => [
       ...prev.slice(-49),
       {

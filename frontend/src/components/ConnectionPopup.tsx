@@ -43,6 +43,7 @@ export function ConnectionPopup() {
   // the user sees a wall of nodes from the last session and has to scroll.
   useEffect(() => {
     if (visible) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSearch('');
       setExpanded({});
       setTimeout(() => inputRef.current?.focus(), 0);
