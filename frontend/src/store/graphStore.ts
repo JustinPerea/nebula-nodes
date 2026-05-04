@@ -14,7 +14,6 @@ import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 import {
   executeGraph as apiExecuteGraph,
   executeNode as apiExecuteNode,
-  fetchOpenRouterModels,
   fetchReplicateSchema,
   type OpenRouterModel,
 } from '../lib/api';
@@ -680,11 +679,13 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         }
       }
       set((state) => ({
-        nodes: applyNodeChanges(changes, state.nodes),
+        // reason: applyNodeChanges returns NodeBase[] but input nodes are Node<NodeData>[] — cast is safe
+        nodes: applyNodeChanges(changes, state.nodes) as Node<NodeData>[],
         edges: state.edges.filter((e) => !removedIds.includes(e.source) && !removedIds.includes(e.target)),
       }));
     } else {
-      set((state) => ({ nodes: applyNodeChanges(changes, state.nodes) }));
+      // reason: applyNodeChanges returns NodeBase[] but input nodes are Node<NodeData>[] — cast is safe
+      set((state) => ({ nodes: applyNodeChanges(changes, state.nodes) as Node<NodeData>[] }));
     }
   },
 
