@@ -295,7 +295,7 @@ export function Inspector() {
                     {modelLoadError}
                   </div>
                 )}
-                {nodeData.params.model && (
+                {Boolean(nodeData.params.model) && (
                   <div style={{ fontSize: 10, color: '#666', marginTop: 2, display: 'flex', alignItems: 'center', gap: 4 }}>
                     <span>Selected: {String(nodeData.params.model)}</span>
                     <button
@@ -396,7 +396,7 @@ export function Inspector() {
                     }}
                   />
                 </label>
-                {nodeData.params._previewUrl && (
+                {Boolean(nodeData.params._previewUrl) && (
                   <img
                     src={String(nodeData.params._previewUrl)}
                     alt="Preview"
