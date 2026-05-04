@@ -115,6 +115,9 @@ export interface NodeData {
   keyStatus?: 'ok' | 'missing';
   streamingText?: string;
   streamingPartials?: { index: number; src: string }[];
+  // Index signature satisfies @xyflow/react's Node<T extends Record<string, unknown>>.
+  // Keeps strong typing on declared properties while permitting the structural constraint.
+  [key: string]: unknown;
 }
 
 export interface DynamicPortDefinition {
