@@ -1,6 +1,6 @@
 import JSZip from 'jszip';
 import type { Node, Edge, Viewport } from '@xyflow/react';
-import type { NodeData } from '../types';
+import type { NodeData, PortValue } from '../types';
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 
 /**
@@ -109,7 +109,8 @@ export function deserializeGraph(
     if (!definition) {
       warnings.push(`Unknown node definition: "${n.data.definitionId}" (node ${n.id})`);
     }
-    const outputs = (n.data.outputs ?? {}) as Record<string, unknown>;
+    // reason: saved outputs are serialized PortValue objects; cast is safe for deserialization
+    const outputs = (n.data.outputs ?? {}) as Record<string, PortValue>;
     const hasOutputs = Object.keys(outputs).length > 0;
     // v2+: trust saved state (complete if outputs present). v1: always idle, no outputs.
     const state = hasOutputs ? (n.data.state ?? 'complete') : 'idle';

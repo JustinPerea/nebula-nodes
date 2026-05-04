@@ -5,7 +5,7 @@ import { useGraphStore } from '../../store/graphStore';
 import { saveToFile, loadFromFile } from '../../lib/graphFile';
 import { fetchCLIGraph } from '../../lib/api';
 import type { NodeData } from '../../types';
-import type { Node } from '@xyflow/react';
+import type { Node, Edge } from '@xyflow/react';
 import '../../styles/panels.css';
 
 export function Toolbar() {
@@ -124,7 +124,8 @@ export function Toolbar() {
       }
       useGraphStore.getState().loadGraph(
         data.nodes as Node<NodeData>[],
-        data.edges,
+        // reason: fetchCLIGraph returns unknown[] but backend always sends valid Edge objects
+        data.edges as Edge[],
       );
       setTimeout(() => fitView({ padding: 0.2, duration: 300 }), 50);
     } catch {
