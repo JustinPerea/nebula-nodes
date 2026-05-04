@@ -41,7 +41,9 @@ export type APIProvider =
   | 'ideogram'
   | 'openrouter'
   | 'bfl'
-  | 'higgsfield';
+  | 'higgsfield'
+  | 'meshy'
+  | 'nous';
 
 export interface PortDefinition {
   id: string;
