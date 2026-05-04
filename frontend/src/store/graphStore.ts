@@ -679,12 +679,12 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         }
       }
       set((state) => ({
-        // reason: applyNodeChanges returns NodeBase[] but input nodes are Node<NodeData>[] — cast is safe
+        // reason: TS infers applyNodeChanges return as NodeBase[] inside the Zustand set callback — cast preserves Node<NodeData>[]
         nodes: applyNodeChanges(changes, state.nodes) as Node<NodeData>[],
         edges: state.edges.filter((e) => !removedIds.includes(e.source) && !removedIds.includes(e.target)),
       }));
     } else {
-      // reason: applyNodeChanges returns NodeBase[] but input nodes are Node<NodeData>[] — cast is safe
+      // reason: TS infers applyNodeChanges return as NodeBase[] inside the Zustand set callback — cast preserves Node<NodeData>[]
       set((state) => ({ nodes: applyNodeChanges(changes, state.nodes) as Node<NodeData>[] }));
     }
   },
