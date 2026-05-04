@@ -396,7 +396,7 @@ export function ChatPanel() {
 
   const changeHermesTone = useCallback((next: HermesTone) => {
     setHermesTone(next);
-    try { window.localStorage.setItem(HERMES_TONE_KEY, next); } catch {}
+    try { window.localStorage.setItem(HERMES_TONE_KEY, next); } catch { /* swallowed: localStorage may be unavailable in private browsing */ }
   }, []);
 
   // Daedalus model picker state
@@ -414,7 +414,7 @@ export function ChatPanel() {
     try {
       window.localStorage.setItem(DAEDALUS_MODEL_KEY, modelId);
       window.localStorage.setItem(DAEDALUS_PROVIDER_KEY, fromProvider);
-    } catch {}
+    } catch { /* swallowed: localStorage may be unavailable in private browsing */ }
     setDaedalusModelPickerOpen(false);
   }, []);
 
@@ -478,7 +478,7 @@ export function ChatPanel() {
     if (current) return;
     const fallback = chatCapableNousModels[0];
     setDaedalusModel(fallback.id);
-    try { window.localStorage.setItem(DAEDALUS_MODEL_KEY, fallback.id); } catch {}
+    try { window.localStorage.setItem(DAEDALUS_MODEL_KEY, fallback.id); } catch { /* swallowed: localStorage may be unavailable in private browsing */ }
   }, [daedalusProvider, chatCapableNousModels, daedalusModel]);
 
   const [sessionId, setSessionId] = useState<string | null>(null);

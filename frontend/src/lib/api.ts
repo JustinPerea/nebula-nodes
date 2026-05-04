@@ -68,7 +68,7 @@ export async function fetchNousModels(): Promise<{ models: NousModel[]; count: n
     // Surface the backend's auth message verbatim — usually instructs the
     // user to run `hermes auth`.
     let detail = '';
-    try { detail = (await response.json()).detail ?? ''; } catch {}
+    try { detail = (await response.json()).detail ?? ''; } catch { /* swallowed: response may not be JSON */ }
     throw new Error(detail || `Fetch Nous models failed: ${response.status}`);
   }
   return response.json();
