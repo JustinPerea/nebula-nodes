@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useGraphStore } from '../../store/graphStore';
+import { useUIStore } from '../../store/uiStore';
 
 interface LogEntry {
   id: string;
@@ -42,6 +43,7 @@ function readInitialPosition(): Position | null {
 export function AgentLog() {
   const isExecuting = useGraphStore((s) => s.isExecuting);
   const nodeCount = useGraphStore((s) => s.nodes.length);
+  const enabled = useUIStore((s) => s.agentLogEnabled);
 
   const [open, setOpen] = useState<boolean>(readInitialOpen);
   const [entries, setEntries] = useState<LogEntry[]>([]);
@@ -70,14 +72,15 @@ export function AgentLog() {
     return () => window.removeEventListener('nebula:layout-reset', handleReset);
   }, []);
 
-  // Mirror open-state onto <body> so layouts.css can shrink the chat
-  // panel's bottom reservation when the agent log is collapsed.
+  // Mirror visibility/open-state onto <body> so layouts.css only reserves
+  // space for the log when the user explicitly enables it in Settings.
   useEffect(() => {
-    document.body.classList.toggle('agent-log-open', open);
+    document.body.classList.toggle('agent-log-enabled', enabled);
+    document.body.classList.toggle('agent-log-open', enabled && open);
     return () => {
-      document.body.classList.remove('agent-log-open');
+      document.body.classList.remove('agent-log-enabled', 'agent-log-open');
     };
-  }, [open]);
+  }, [enabled, open]);
 
   // Sample graph executions as a placeholder feed.
   useEffect(() => {
@@ -197,6 +200,8 @@ export function AgentLog() {
   const containerStyle: React.CSSProperties = position
     ? { left: position.left, top: position.top, bottom: 'auto' }
     : {};
+
+  if (!enabled) return null;
 
   return (
     <div

@@ -84,18 +84,20 @@ body.app-hermes .toolbar::before {
   top: var(--page-gutter) !important;
   right: var(--page-gutter) !important;
   left: auto !important;
-  /* Closed-log default: clear the toolbar + collapsed log + breathing-room
-   * gap. Use stack-gap-lg (24px) so the agent log header and the chat panel
-   * never feel cramped, especially when the textarea auto-grows. */
-  bottom: calc(var(--toolbar-pad) + var(--agent-h-closed) + var(--stack-gap-lg)) !important;
+  bottom: var(--toolbar-pad) !important;
   width: var(--col-right-w);
   min-width: 280px;
   max-width: 720px;
   height: auto;
 }
 
+/* When the user enables the agent log, reserve space for its collapsed row. */
+body.agent-log-enabled .chat-panel {
+  bottom: calc(var(--toolbar-pad) + var(--agent-h-closed) + var(--stack-gap-lg)) !important;
+}
+
 /* When agent log is expanded, push chat up to clear the full reservation */
-body.agent-log-open .chat-panel {
+body.agent-log-enabled.agent-log-open .chat-panel {
   bottom: calc(var(--toolbar-pad) + var(--agent-h-open) + var(--stack-gap-lg)) !important;
 }
 
@@ -111,7 +113,7 @@ body.agent-log-open .chat-panel {
   height: var(--chat-panel-height, auto) !important;
 }
 
-body.agent-log-open .chat-panel.chat-panel--free {
+body.agent-log-enabled.agent-log-open .chat-panel.chat-panel--free {
   bottom: auto !important;
 }
 

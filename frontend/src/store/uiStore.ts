@@ -1,6 +1,18 @@
 import { create } from 'zustand';
 import { type SkinId, loadSkin, persistSkin, applySkinBodyClass } from '../lib/skins';
 
+const AGENT_LOG_ENABLED_KEY = 'nebula:agentLog:enabled';
+
+function loadAgentLogEnabled(): boolean {
+  if (typeof window === 'undefined') return false;
+  return window.localStorage.getItem(AGENT_LOG_ENABLED_KEY) === '1';
+}
+
+function persistAgentLogEnabled(enabled: boolean): void {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(AGENT_LOG_ENABLED_KEY, enabled ? '1' : '0');
+}
+
 interface PanelState {
   visible: boolean;
   position: { x: number; y: number };
@@ -49,6 +61,7 @@ interface UIState {
     loaded: boolean;
   };
   skin: SkinId;
+  agentLogEnabled: boolean;
 
   selectNode: (nodeId: string | null) => void;
   togglePanel: (panel: 'library' | 'inspector' | 'settings' | 'chat') => void;
@@ -65,6 +78,7 @@ interface UIState {
   hideConnectionPopup: () => void;
   setSettingsCache: (apiKeys: Record<string, string>) => void;
   setSkin: (skin: SkinId) => void;
+  setAgentLogEnabled: (enabled: boolean) => void;
 }
 
 export const useUIStore = create<UIState>((set) => ({
@@ -95,6 +109,7 @@ export const useUIStore = create<UIState>((set) => ({
   },
   settingsCache: { apiKeys: {}, loaded: false },
   skin: loadSkin(),
+  agentLogEnabled: loadAgentLogEnabled(),
 
   selectNode: (nodeId) =>
     set((state) => ({
@@ -195,6 +210,11 @@ export const useUIStore = create<UIState>((set) => ({
     persistSkin(skin);
     applySkinBodyClass(skin);
     set({ skin });
+  },
+
+  setAgentLogEnabled: (enabled) => {
+    persistAgentLogEnabled(enabled);
+    set({ agentLogEnabled: enabled });
   },
 }));
 

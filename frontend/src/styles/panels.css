@@ -290,6 +290,42 @@
   color: #ccc;
 }
 
+.settings__toggle-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 10px;
+  padding: 8px;
+  border: 1px solid #2a2a2a;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.02);
+  cursor: pointer;
+}
+
+.settings__toggle-input {
+  margin: 2px 0 0;
+  flex-shrink: 0;
+}
+
+.settings__toggle-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.settings__toggle-title {
+  color: #ccc;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.settings__toggle-description {
+  color: #777;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
 .settings__save-button {
   width: 100%;
   margin-top: 16px;

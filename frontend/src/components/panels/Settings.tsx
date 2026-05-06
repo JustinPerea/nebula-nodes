@@ -51,6 +51,8 @@ export function Settings() {
   const position = useUIStore((s) => s.panels.settings.position);
   const togglePanel = useUIStore((s) => s.togglePanel);
   const setPanelPosition = useUIStore((s) => s.setPanelPosition);
+  const agentLogEnabled = useUIStore((s) => s.agentLogEnabled);
+  const setAgentLogEnabled = useUIStore((s) => s.setAgentLogEnabled);
   const dragRef = useRef<{ startX: number; startY: number; panelX: number; panelY: number } | null>(null);
 
   const [apiKeys, setApiKeys] = useState<Record<string, string>>({});
@@ -227,6 +229,25 @@ export function Settings() {
               Skin
             </div>
             <SkinPicker />
+
+            {/* Interface Section */}
+            <div className="settings__section-label" style={{ marginTop: 16 }}>
+              Interface
+            </div>
+            <label className="settings__toggle-row">
+              <input
+                className="settings__toggle-input"
+                type="checkbox"
+                checked={agentLogEnabled}
+                onChange={(e) => setAgentLogEnabled(e.target.checked)}
+              />
+              <span className="settings__toggle-copy">
+                <span className="settings__toggle-title">Agent log</span>
+                <span className="settings__toggle-description">
+                  Show the execution log panel on the canvas.
+                </span>
+              </span>
+            </label>
 
             {/* Output Path Section */}
             <div className="settings__section-label" style={{ marginTop: 16 }}>

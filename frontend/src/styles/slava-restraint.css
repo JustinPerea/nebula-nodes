@@ -1369,6 +1369,35 @@ body.app-slava-restraint .settings__save-button:disabled {
   cursor: default;
 }
 
+body.app-slava-restraint .settings__toggle-row {
+  border: 1px solid var(--sr-edge);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+
+body.app-slava-restraint .settings__toggle-row:hover {
+  border-color: var(--sr-edge-strong);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+body.app-slava-restraint .settings__toggle-title {
+  color: var(--sr-ink);
+  font-family: var(--sr-ui);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+body.app-slava-restraint .settings__toggle-description {
+  color: var(--sr-ink-meta);
+  font-family: var(--sr-ui);
+  font-size: 11px;
+}
+
+body.app-slava-restraint .settings__toggle-input {
+  accent-color: var(--sr-accent);
+}
+
 /* ─────────────────────────────────────────────────────────────────────
  * Toolbar — translucent rounded pill (keeps default position)
  * ───────────────────────────────────────────────────────────────────── */
