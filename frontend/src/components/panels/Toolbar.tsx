@@ -11,6 +11,7 @@ import '../../styles/panels.css';
 export function Toolbar() {
   const { fitView, getViewport } = useReactFlow();
   const togglePanel = useUIStore((s) => s.togglePanel);
+  const panels = useUIStore((s) => s.panels);
   const executeGraph = useGraphStore((s) => s.executeGraph);
   const resetExecution = useGraphStore((s) => s.resetExecution);
   const isExecuting = useGraphStore((s) => s.isExecuting);
@@ -197,17 +198,34 @@ export function Toolbar() {
         <span className="toolbar__label">Reset</span>
       </button>
       <div className="toolbar__divider" />
-      <button className="toolbar__button" onClick={() => togglePanel('library')} title="Toggle node library">
+      <button
+        className={`toolbar__button${panels.library.visible ? ' toolbar__button--active' : ''}`}
+        onClick={() => togglePanel('library')}
+        title="Toggle node library"
+        aria-pressed={panels.library.visible}
+      >
         <ToolbarIcon name="nodes" />
         <span className="toolbar__label">Nodes</span>
       </button>
-      <button className="toolbar__button" onClick={() => togglePanel('chat')} title="Toggle chat panel">
+      <button
+        className={`toolbar__button${panels.chat.visible ? ' toolbar__button--active' : ''}`}
+        onClick={() => togglePanel('chat')}
+        title="Toggle chat panel"
+        aria-pressed={panels.chat.visible}
+      >
         <ToolbarIcon name="chat" />
         <span className="toolbar__label">Chat</span>
       </button>
       <div className="toolbar__divider" />
-      <button className="toolbar__button" onClick={() => togglePanel('settings')} title="Settings"><ToolbarIcon name="settings" />
-          <span className="toolbar__label">{'\u2699'}</span></button>
+      <button
+        className={`toolbar__button${panels.settings.visible ? ' toolbar__button--active' : ''}`}
+        onClick={() => togglePanel('settings')}
+        title="Settings"
+        aria-pressed={panels.settings.visible}
+      >
+        <ToolbarIcon name="settings" />
+        <span className="toolbar__label">{'\u2699'}</span>
+      </button>
     </div>
   );
 }

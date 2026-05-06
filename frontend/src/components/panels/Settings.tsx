@@ -59,6 +59,7 @@ export function Settings() {
   const [routing, setRouting] = useState<Record<string, string>>({});
   const [outputPath, setOutputPath] = useState('');
   const [revealedKeys, setRevealedKeys] = useState<Set<string>>(new Set());
+  const [apiKeysOpen, setApiKeysOpen] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [loading, setLoading] = useState(false);
 
@@ -66,6 +67,8 @@ export function Settings() {
   useEffect(() => {
     if (!visible) return;
     setLoading(true);
+    setApiKeysOpen(false);
+    setRevealedKeys(new Set());
     getSettings()
       .then((data) => {
         const settings = data as {
@@ -76,7 +79,6 @@ export function Settings() {
         setApiKeys(settings.apiKeys ?? {});
         setRouting(settings.routing ?? {});
         setOutputPath(settings.outputPath ?? '');
-        setRevealedKeys(new Set());
         setSaveStatus('idle');
       })
       .catch((err) => {
@@ -137,9 +139,13 @@ export function Settings() {
   if (!shouldRender) return null;
 
   const resolvedX = position.x < 0 ? window.innerWidth + position.x : position.x;
+  const configuredApiKeyCount = API_KEY_FIELDS.reduce(
+    (count, field) => count + (apiKeys[field.key]?.trim() ? 1 : 0),
+    0,
+  );
 
   return (
-    <div className={`panel${exiting ? ' panel--exiting' : ''}`} style={{ left: resolvedX, top: position.y, width: 320 }}>
+    <div className={`panel panel--settings${exiting ? ' panel--exiting' : ''}`} style={{ left: resolvedX, top: position.y, width: 320 }}>
       <div
         className="panel__header"
         onMouseDown={(e) => {
@@ -163,39 +169,56 @@ export function Settings() {
         ) : (
           <>
             {/* API Keys Section */}
-            <div className="settings__section-label">API Keys</div>
-            {API_KEY_FIELDS.map((field) => (
-              <div key={field.key} className="settings__key-row">
-                <a
-                  className="inspector__label settings__key-link"
-                  href={field.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  title={`Get ${field.label} API key`}
-                >{field.label}</a>
-                <div className="settings__key-input-wrapper">
-                  <input
-                    className="inspector__field settings__key-input"
-                    type={revealedKeys.has(field.key) ? 'text' : 'password'}
-                    value={apiKeys[field.key] ?? ''}
-                    onChange={(e) =>
-                      setApiKeys((prev) => ({ ...prev, [field.key]: e.target.value }))
-                    }
-                    placeholder={field.placeholder}
-                    autoComplete="off"
-                    spellCheck={false}
-                  />
-                  <button
-                    className="settings__reveal-button"
-                    onClick={() => toggleReveal(field.key)}
-                    title={revealedKeys.has(field.key) ? 'Hide' : 'Show'}
-                    type="button"
-                  >
-                    {revealedKeys.has(field.key) ? '\u{1F441}' : '\u25CF'}
-                  </button>
-                </div>
+            <button
+              className="settings__section-toggle"
+              type="button"
+              aria-expanded={apiKeysOpen}
+              onClick={() => setApiKeysOpen((open) => !open)}
+            >
+              <span className="settings__section-toggle-title">API Keys</span>
+              <span className="settings__section-toggle-count">
+                {configuredApiKeyCount}/{API_KEY_FIELDS.length}
+              </span>
+              <span className="settings__section-toggle-chevron">
+                {apiKeysOpen ? '\u25BE' : '\u25B8'}
+              </span>
+            </button>
+            {apiKeysOpen && (
+              <div className="settings__collapsible-body">
+                {API_KEY_FIELDS.map((field) => (
+                  <div key={field.key} className="settings__key-row">
+                    <a
+                      className="inspector__label settings__key-link"
+                      href={field.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title={`Get ${field.label} API key`}
+                    >{field.label}</a>
+                    <div className="settings__key-input-wrapper">
+                      <input
+                        className="inspector__field settings__key-input"
+                        type={revealedKeys.has(field.key) ? 'text' : 'password'}
+                        value={apiKeys[field.key] ?? ''}
+                        onChange={(e) =>
+                          setApiKeys((prev) => ({ ...prev, [field.key]: e.target.value }))
+                        }
+                        placeholder={field.placeholder}
+                        autoComplete="off"
+                        spellCheck={false}
+                      />
+                      <button
+                        className="settings__reveal-button"
+                        onClick={() => toggleReveal(field.key)}
+                        title={revealedKeys.has(field.key) ? 'Hide' : 'Show'}
+                        type="button"
+                      >
+                        {revealedKeys.has(field.key) ? '\u{1F441}' : '\u25CF'}
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
-            ))}
+            )}
 
             {/* Routing Section */}
             {ROUTING_OPTIONS.length > 0 && (

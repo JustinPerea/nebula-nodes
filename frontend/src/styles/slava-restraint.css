@@ -688,23 +688,38 @@ body.app-slava-restraint .chat__tool--error .chat__tool-output {
 }
 
 body.app-slava-restraint .chat-panel__input {
+  --chat-composer-gap: 8px;
+  --chat-composer-control: 42px;
+  --chat-composer-action: 32px;
+  --chat-composer-pad-x: 12px;
+  --chat-composer-pad-y: 10px;
   gap: 0;
-  padding: 10px 12px 12px;
+  padding: var(--chat-composer-pad-y) var(--chat-composer-pad-x) 12px;
   border-top: 1px solid var(--sr-edge);
   background: rgba(0, 0, 0, 0.16);
 }
 
 body.app-slava-restraint .chat-panel__input-row {
-  gap: 8px;
+  border: 1px solid var(--sr-edge-strong);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.32);
+  transition:
+    border-color 120ms ease,
+    background-color 120ms ease;
+}
+
+body.app-slava-restraint .chat-panel__input-row:focus-within {
+  border-color: var(--sr-accent);
+  background: rgba(0, 0, 0, 0.42);
 }
 
 body.app-slava-restraint .chat-panel__textarea {
-  min-height: 44px;
-  padding: 9px 12px;
-  border: 1px solid var(--sr-edge-strong);
-  border-radius: 8px;
+  min-height: calc(var(--chat-composer-control) - 8px);
+  padding: 7px 8px;
+  border: none;
+  border-radius: 0;
   outline: none;
-  background: rgba(0, 0, 0, 0.32);
+  background: transparent;
   color: var(--sr-ink);
   font-family: var(--sr-ui);
   font-size: 13px;
@@ -716,8 +731,8 @@ body.app-slava-restraint .chat-panel__textarea::placeholder {
 }
 
 body.app-slava-restraint .chat-panel__textarea:focus {
-  border-color: var(--sr-accent);
-  background: rgba(0, 0, 0, 0.42);
+  border-color: transparent;
+  background: transparent;
 }
 
 body.app-slava-restraint .chat-panel__textarea:disabled {
@@ -725,10 +740,10 @@ body.app-slava-restraint .chat-panel__textarea:disabled {
 }
 
 body.app-slava-restraint .chat-panel__send {
-  height: 44px;
+  height: var(--chat-composer-action);
   padding: 0 16px;
   border: 1px solid transparent;
-  border-radius: 10px;
+  border-radius: 9px;
   background: var(--sr-accent);
   color: #080808;
   cursor: pointer;
@@ -742,6 +757,17 @@ body.app-slava-restraint .chat-panel__send {
     background-color 120ms ease,
     border-color 120ms ease,
     color 120ms ease;
+}
+
+body.app-slava-restraint .chat-panel__send--submit {
+  width: var(--chat-composer-action);
+  min-width: var(--chat-composer-action);
+  padding: 0;
+}
+
+body.app-slava-restraint .chat-panel__send-icon {
+  font-size: 18px;
+  line-height: 1;
 }
 
 body.app-slava-restraint .chat-panel__send:hover:not(:disabled) {
@@ -1313,6 +1339,38 @@ body.app-slava-restraint .settings__section-label {
   margin-bottom: 4px;
 }
 
+body.app-slava-restraint .settings__section-toggle {
+  border: 1px solid var(--sr-edge);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--sr-ink);
+  font-family: var(--sr-ui);
+  padding: 9px 10px;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+
+body.app-slava-restraint .settings__section-toggle:hover {
+  border-color: var(--sr-edge-strong);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+body.app-slava-restraint .settings__section-toggle:focus-visible {
+  outline: 2px solid var(--sr-accent-soft);
+  outline-offset: 2px;
+}
+
+body.app-slava-restraint .settings__section-toggle-title {
+  color: var(--sr-ink-light);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+body.app-slava-restraint .settings__section-toggle-count,
+body.app-slava-restraint .settings__section-toggle-chevron {
+  color: var(--sr-ink-meta);
+}
+
 body.app-slava-restraint .inspector__label {
   font-family: var(--sr-ui);
   font-weight: 500;
@@ -1457,6 +1515,11 @@ body.app-slava-restraint .toolbar__button:hover {
   color: var(--sr-ink-bold);
   background: rgba(255, 255, 255, 0.05);
   border-color: transparent;
+}
+body.app-slava-restraint .toolbar__button--active,
+body.app-slava-restraint .toolbar__button--active:hover {
+  color: var(--sr-ink-bold);
+  background: rgba(255, 255, 255, 0.08);
 }
 body.app-slava-restraint .toolbar__button:active {
   transform: scale(0.96);

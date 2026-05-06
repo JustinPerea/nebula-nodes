@@ -1616,7 +1616,7 @@ export function ChatPanel() {
           <textarea
             ref={textareaRef}
             className="chat-panel__textarea"
-            placeholder={connected ? 'Type a message… (drag a node in to reference it)' : 'Connecting…'}
+            placeholder={connected ? 'Message…' : 'Connecting…'}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
@@ -1747,24 +1747,29 @@ export function ChatPanel() {
               e.preventDefault();
               insertAtCaret(e.currentTarget, token);
             }}
-            rows={2}
+            rows={1}
             disabled={!connected}
           />
           {busy ? (
-            <button className="chat-panel__send chat-panel__send--stop" onClick={cancel}>
+            <button type="button" className="chat-panel__send chat-panel__send--stop" onClick={cancel}>
               Stop
             </button>
           ) : (
             <button
-              className="chat-panel__send"
+              type="button"
+              className="chat-panel__send chat-panel__send--submit"
               onClick={send}
+              aria-label="Send message"
+              title="Send message"
               disabled={
                 !connected ||
                 !input.trim() ||
                 pendingImages.some((p) => p.status === 'uploading')
               }
             >
-              Send
+              <span className="chat-panel__send-icon" aria-hidden="true">
+                ↑
+              </span>
             </button>
           )}
         </div>

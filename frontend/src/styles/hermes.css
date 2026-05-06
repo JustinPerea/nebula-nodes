@@ -142,6 +142,12 @@ body.app-hermes .toolbar__button:hover {
   color: var(--h-parchment);
 }
 
+body.app-hermes .toolbar__button--active,
+body.app-hermes .toolbar__button--active:hover {
+  background: rgba(243, 230, 196, 0.08);
+  color: var(--h-parchment);
+}
+
 body.app-hermes .toolbar__divider {
   background: var(--h-rule-soft);
   width: 1px;
@@ -780,16 +786,29 @@ body.app-hermes .chat-panel--agent-daedalus .chat-panel__approval-summary strong
 
 /* Input — classical composition frame */
 body.app-hermes .chat-panel--agent-daedalus .chat-panel__input {
+  --chat-composer-gap: 8px;
+  --chat-composer-control: 40px;
+  --chat-composer-action: 32px;
+  --chat-composer-pad-x: 14px;
+  --chat-composer-pad-y: 14px;
   background: var(--h-ink-2);
   border-top: 1px solid var(--h-rule-strong);
-  padding: 14px;
+  padding: var(--chat-composer-pad-y) var(--chat-composer-pad-x);
   position: relative;
   z-index: 2;
 }
+body.app-hermes .chat-panel--agent-daedalus .chat-panel__input-row {
+  border: 1px solid var(--h-rule-strong);
+  border-radius: 0;
+  background: var(--h-ink);
+}
+body.app-hermes .chat-panel--agent-daedalus .chat-panel__input-row:focus-within {
+  border-color: var(--h-parchment);
+}
 body.app-hermes .chat-panel--agent-daedalus .chat-panel__textarea,
 body.app-hermes .chat-panel--agent-daedalus textarea {
-  background: var(--h-ink);
-  border: 1px solid var(--h-rule-strong);
+  background: transparent;
+  border: none;
   border-radius: 0;
   color: var(--h-parchment);
   font-family: 'IBM Plex Mono', monospace;
@@ -805,7 +824,7 @@ body.app-hermes .chat-panel--agent-daedalus textarea::placeholder {
 }
 body.app-hermes .chat-panel--agent-daedalus .chat-panel__textarea:focus,
 body.app-hermes .chat-panel--agent-daedalus textarea:focus {
-  border-color: var(--h-parchment);
+  border-color: transparent;
   outline: none;
 }
 body.app-hermes .chat-panel--agent-daedalus .chat-panel__send {
@@ -819,6 +838,15 @@ body.app-hermes .chat-panel--agent-daedalus .chat-panel__send {
   letter-spacing: 0.1em;
   text-transform: uppercase;
   padding: 0 18px;
+}
+body.app-hermes .chat-panel--agent-daedalus .chat-panel__send--submit {
+  width: var(--chat-composer-action);
+  min-width: var(--chat-composer-action);
+  padding: 0;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 16px;
+  letter-spacing: 0;
+  text-transform: none;
 }
 body.app-hermes .chat-panel--agent-daedalus .chat-panel__send:hover {
   background: #fff6dc;
@@ -1166,6 +1194,27 @@ body.app-hermes .settings__section-label:first-child {
   margin-top: 0;
 }
 
+body.app-hermes .settings__section-toggle {
+  border: 1px solid var(--h-rule-soft);
+  border-radius: 0;
+  background: rgba(243, 230, 196, 0.04);
+  color: var(--h-parchment);
+  font-family: 'IBM Plex Mono', monospace;
+}
+body.app-hermes .settings__section-toggle:hover {
+  border-color: var(--h-cyanotype);
+  background: rgba(119, 168, 182, 0.08);
+}
+body.app-hermes .settings__section-toggle-title {
+  color: var(--h-parchment);
+  font-size: 9px;
+  letter-spacing: 0.28em;
+}
+body.app-hermes .settings__section-toggle-count,
+body.app-hermes .settings__section-toggle-chevron {
+  color: var(--h-parchment-faint);
+}
+
 body.app-hermes .settings__key-link {
   color: var(--h-parchment-dim);
   font-family: 'IBM Plex Mono', monospace;
@@ -1209,6 +1258,10 @@ body.app-hermes .settings__save-button:hover {
 }
 body.app-hermes .settings__save-button:disabled {
   opacity: 0.4;
+}
+
+body.app-hermes.chat-bloom-active .panel--settings {
+  z-index: 1000;
 }
 
 /* ═══════════════════════════════════════════════════════════════════
