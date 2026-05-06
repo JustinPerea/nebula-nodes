@@ -99,6 +99,22 @@ body.agent-log-open .chat-panel {
   bottom: calc(var(--toolbar-pad) + var(--agent-h-open) + var(--stack-gap-lg)) !important;
 }
 
+/* Once the user drags/resizes chat into an explicit position, it must escape
+ * the right-column layout's important anchors. The actual numbers come from
+ * ChatPanel inline CSS variables so React state can continue to own them. */
+.chat-panel.chat-panel--free {
+  top: var(--chat-panel-top, var(--page-gutter)) !important;
+  right: auto !important;
+  bottom: auto !important;
+  left: var(--chat-panel-left, var(--page-gutter)) !important;
+  width: var(--chat-panel-width, var(--col-right-w));
+  height: var(--chat-panel-height, auto) !important;
+}
+
+body.agent-log-open .chat-panel.chat-panel--free {
+  bottom: auto !important;
+}
+
 /* Hide the chat panel's visual corner resize markers — the L-shape ::before
  * pseudo-elements draw inset from the border and make the chat look ~10px
  * narrower than the agent log. The drag regions stay active so resizing

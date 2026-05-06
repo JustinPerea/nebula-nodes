@@ -71,7 +71,104 @@ const edgeTypes: EdgeTypes = {
   'typed-edge': TypedEdge,
 };
 
+function useSlavaHandleMagnetism() {
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const MAX_PULL = 3;
+    const PULL_FACTOR = 0.28;
+    let activeHandle: HTMLElement | null = null;
+    let raf = 0;
+    let magnetX = 0;
+    let magnetY = 0;
+
+    const isSlavaSkin = () => document.body.classList.contains('app-slava-restraint');
+
+    const resetHandle = (handle: HTMLElement | null) => {
+      if (!handle) return;
+      handle.style.setProperty('--sr-handle-magnet-x', '0px');
+      handle.style.setProperty('--sr-handle-magnet-y', '0px');
+    };
+
+    const commitMagnet = () => {
+      if (activeHandle) {
+        activeHandle.style.setProperty('--sr-handle-magnet-x', `${magnetX.toFixed(2)}px`);
+        activeHandle.style.setProperty('--sr-handle-magnet-y', `${magnetY.toFixed(2)}px`);
+      }
+      raf = 0;
+    };
+
+    const scheduleMagnet = (handle: HTMLElement, x: number, y: number) => {
+      activeHandle = handle;
+      magnetX = x;
+      magnetY = y;
+      if (!raf) raf = window.requestAnimationFrame(commitMagnet);
+    };
+
+    const onPointerMove = (event: PointerEvent) => {
+      if (!isSlavaSkin()) {
+        resetHandle(activeHandle);
+        activeHandle = null;
+        return;
+      }
+
+      const target = event.target instanceof Element ? event.target : null;
+      const handle = target?.closest('.react-flow__handle') as HTMLElement | null;
+      if (!handle) {
+        resetHandle(activeHandle);
+        activeHandle = null;
+        return;
+      }
+
+      if (activeHandle && activeHandle !== handle) resetHandle(activeHandle);
+
+      const rect = handle.getBoundingClientRect();
+      const dx = event.clientX - (rect.left + rect.width / 2);
+      const dy = event.clientY - (rect.top + rect.height / 2);
+      const distance = Math.hypot(dx, dy);
+      if (distance === 0) {
+        scheduleMagnet(handle, 0, 0);
+        return;
+      }
+
+      const pull = Math.min(MAX_PULL, distance * PULL_FACTOR);
+      scheduleMagnet(handle, (dx / distance) * pull, (dy / distance) * pull);
+    };
+
+    const onPointerOut = (event: PointerEvent) => {
+      const target = event.target instanceof Element ? event.target : null;
+      const handle = target?.closest('.react-flow__handle') as HTMLElement | null;
+      if (!handle) return;
+
+      const related = event.relatedTarget instanceof Element ? event.relatedTarget : null;
+      if (related && handle.contains(related)) return;
+
+      resetHandle(handle);
+      if (activeHandle === handle) activeHandle = null;
+    };
+
+    const onBlur = () => {
+      resetHandle(activeHandle);
+      activeHandle = null;
+    };
+
+    document.addEventListener('pointermove', onPointerMove, { passive: true });
+    document.addEventListener('pointerout', onPointerOut, { passive: true });
+    window.addEventListener('blur', onBlur);
+
+    return () => {
+      document.removeEventListener('pointermove', onPointerMove);
+      document.removeEventListener('pointerout', onPointerOut);
+      window.removeEventListener('blur', onBlur);
+      if (raf) window.cancelAnimationFrame(raf);
+      resetHandle(activeHandle);
+    };
+  }, []);
+}
+
 export function Canvas() {
+  useSlavaHandleMagnetism();
+
   const nodes = useGraphStore((s) => s.nodes);
   const edges = useGraphStore((s) => s.edges);
   const onNodesChange = useGraphStore((s) => s.onNodesChange);

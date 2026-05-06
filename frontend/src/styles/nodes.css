@@ -101,7 +101,7 @@
   transition: transform 0.15s ease;
 }
 
-.model-node__handle:hover { transform: scale(1.4); }
+body:not(.app-slava-restraint) .model-node__handle:hover { transform: scale(1.4); }
 
 .model-node__preview {
   position: relative;
@@ -488,4 +488,25 @@
 
 .mesh-modal__download:hover {
   background: #00E5FF;
+}
+
+/* ---------- New structural wrappers (Flora-paradigm shells) ----------
+ * Added 2026-05-04 alongside the Slava — Restraint skin exploration.
+ * These elements are present on every node but invisible by default —
+ * skins that want them (currently slava-restraint) opt into rendering
+ * them. The .model-node__card wrapper exists so a skin can move the
+ * card visual onto a child element instead of .model-node directly,
+ * letting the type label and settings bar float OUTSIDE the card.
+ *
+ * Default + Hermes skins are unchanged: type-label and settings-bar
+ * stay hidden, .model-node__card is transparent (the existing .model-node
+ * background still paints the card). */
+.model-node__type-label,
+.model-node__settings-bar,
+.model-node__media-toolbar {
+  display: none;
+}
+
+.model-node__card {
+  display: contents;  /* skipped in layout — children participate in .model-node's flow */
 }

@@ -1,7 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useUIStore } from '../../store/uiStore';
 import { getSettings, updateSettings } from '../../lib/api';
+import { SkinPicker } from '../SkinPicker';
+import { useDelayedUnmount } from '../../hooks/useDelayedUnmount';
 import '../../styles/panels.css';
+import '../../styles/skin-picker.css';
 
 interface ApiKeyField {
   key: string;
@@ -128,12 +131,13 @@ export function Settings() {
     });
   }, []);
 
-  if (!visible) return null;
+  const { shouldRender, exiting } = useDelayedUnmount(visible, 500);
+  if (!shouldRender) return null;
 
   const resolvedX = position.x < 0 ? window.innerWidth + position.x : position.x;
 
   return (
-    <div className="panel" style={{ left: resolvedX, top: position.y, width: 320 }}>
+    <div className={`panel${exiting ? ' panel--exiting' : ''}`} style={{ left: resolvedX, top: position.y, width: 320 }}>
       <div
         className="panel__header"
         onMouseDown={(e) => {
@@ -217,6 +221,12 @@ export function Settings() {
                 ))}
               </>
             )}
+
+            {/* Skin Section */}
+            <div className="settings__section-label" style={{ marginTop: 16 }}>
+              Skin
+            </div>
+            <SkinPicker />
 
             {/* Output Path Section */}
             <div className="settings__section-label" style={{ marginTop: 16 }}>

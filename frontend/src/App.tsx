@@ -16,6 +16,10 @@ import { NODE_DEFINITIONS } from './constants/nodeDefinitions';
 import type { NodeData } from './types';
 import './App.css';
 import './styles/layouts.css';
+// Skin stylesheets — each scoped under its own body class so multiple can
+// coexist without leakage. Loaded once at the app root so the active skin's
+// CSS is always available the moment uiStore.setSkin flips the body class.
+import './styles/slava-restraint.css';
 
 /** Pull the backend's in-memory cli_graph onto the canvas on first mount —
  * saves a CLI-button click every time the user refreshes during a Daedalus

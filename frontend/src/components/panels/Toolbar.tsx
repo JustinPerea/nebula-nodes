@@ -152,7 +152,7 @@ export function Toolbar() {
     <div className="toolbar">
       {isExecuting ? (
         <button
-          className="toolbar__button"
+          className="toolbar__button toolbar__button--executing"
           onClick={() => resetExecution()}
           title="Cancel execution"
         >

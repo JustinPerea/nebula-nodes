@@ -6,6 +6,7 @@ import { PORT_COLORS } from '../../lib/portCompatibility';
 import { CATEGORY_COLORS } from '../../constants/ports';
 import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
+import { useSlavaNodeEntranceClass } from '../../hooks/useSlavaNodeEntrance';
 import { MeshPreview } from './MeshPreview';
 import '../../styles/nodes.css';
 
@@ -44,7 +45,9 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
   const nodeData = data as unknown as NodeData;
   const definition = NODE_DEFINITIONS[nodeData.definitionId];
   const selectNode = useUIStore((s) => s.selectNode);
+  const isSlavaSkin = useUIStore((s) => s.skin === 'slava-restraint');
   const updateNodeData = useGraphStore((s) => s.updateNodeData);
+  const entranceClass = useSlavaNodeEntranceClass();
   const [videoLoop, setVideoLoop] = useState<boolean>(true);
 
   const handleTextChange = useCallback(
@@ -125,9 +128,65 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
   const isTextInput = nodeData.definitionId === 'text-input';
   const isImageInput = nodeData.definitionId === 'image-input';
   const imageInputPreview = isImageInput && nodeData.params._previewUrl ? String(nodeData.params._previewUrl) : null;
+  const finalImageOutput = nodeData.state === 'complete' && imageOutput && typeof imageOutput.value === 'string'
+    ? imageOutput.value
+    : null;
+  const isImageSurface = Boolean(imageInputPreview || finalImageOutput);
+  const imageClassName = isSlavaSkin ? 'model-node__preview-image' : 'model-node__preview-image nodrag';
 
   return (
-    <div className={`model-node ${stateClass} ${selected ? 'model-node--selected' : ''}`} onClick={() => selectNode(id)}>
+    <div
+      className={`model-node ${stateClass}${isImageSurface ? ' model-node--image-surface' : ''} ${selected ? 'model-node--selected' : ''}${entranceClass}`}
+      onClick={() => selectNode(id)}
+      style={{ ['--node-category-color' as string]: categoryColor }}
+    >
+      {finalImageOutput && (
+        <div className="model-node__media-toolbar nodrag" onMouseDown={(e) => e.stopPropagation()}>
+          <button
+            type="button"
+            className="model-node__media-action"
+            title="Download image"
+            onClick={(e) => {
+              e.stopPropagation();
+              downloadOutput(finalImageOutput, filenameFor(nodeData.label, id, finalImageOutput, 'png'));
+            }}
+          >
+            &#x2913;
+          </button>
+        </div>
+      )}
+
+      {/* Type label — floats above the card; small and quiet (Slava Restraint
+       * style). Default + Hermes skins hide it via display:none in their CSS. */}
+      <div className="model-node__type-label">{definition.category}</div>
+
+      {/* Settings bar — floats above the card when selected; renders model
+       * name + an "Edit" affordance that opens the existing Inspector panel. */}
+      {selected && (
+        <div className="model-node__settings-bar">
+          <span className="model-node__settings-model">{definition.displayName}</span>
+          <button
+            type="button"
+            className="model-node__settings-edit nodrag"
+            onClick={(e) => {
+              e.stopPropagation();
+              // Inspector panel is already visible whenever a node is selected
+              // (uiStore.selectNode toggles it on). This button is a hint
+              // that the full editor lives in the side panel.
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
+            title="Open Inspector"
+          >
+            …
+          </button>
+        </div>
+      )}
+
+      {/* Card — the visible content surface. Default + Hermes skins style
+       * .model-node directly (this wrapper inherits transparency); Slava
+       * Restraint skin moves the dark-glass surface here so the type label
+       * and settings bar can float above the card cleanly. */}
+      <div className="model-node__card">
       <div className="model-node__header">
         <span className="model-node__category-dot" style={{ backgroundColor: categoryColor }} />
         <span className="model-node__label">{nodeData.label}</span>
@@ -195,10 +254,10 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
           <img
             src={imageInputPreview}
             alt="Image input"
-            className="model-node__preview-image nodrag"
+            className={imageClassName}
             loading="lazy"
-            draggable
-            onDragStart={startImageDrag(imageInputPreview)}
+            draggable={!isSlavaSkin}
+            onDragStart={isSlavaSkin ? undefined : startImageDrag(imageInputPreview)}
           />
         </div>
       )}
@@ -217,15 +276,15 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
         </div>
       )}
 
-      {nodeData.state === 'complete' && imageOutput && typeof imageOutput.value === 'string' && !imageInputPreview && (
+      {finalImageOutput && !imageInputPreview && (
         <div className="model-node__preview">
           <img
-            src={imageOutput.value as string}
+            src={finalImageOutput}
             alt="Generated output"
-            className="model-node__preview-image nodrag"
+            className={imageClassName}
             loading="lazy"
-            draggable
-            onDragStart={startImageDrag(imageOutput.value as string)}
+            draggable={!isSlavaSkin}
+            onDragStart={isSlavaSkin ? undefined : startImageDrag(finalImageOutput)}
           />
           <button
             type="button"
@@ -234,7 +293,7 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
             onMouseDown={(e) => e.stopPropagation()}
             onClick={(e) => {
               e.stopPropagation();
-              downloadOutput(imageOutput.value as string, filenameFor(nodeData.label, id, imageOutput.value as string, 'png'));
+              downloadOutput(finalImageOutput, filenameFor(nodeData.label, id, finalImageOutput, 'png'));
             }}
           >
             &#x2913;
@@ -351,6 +410,7 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
           ))}
         </div>
       )}
+      </div>
     </div>
   );
 }

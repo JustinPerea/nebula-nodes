@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { type SkinId, loadSkin, persistSkin, applySkinBodyClass } from '../lib/skins';
 
 interface PanelState {
   visible: boolean;
@@ -47,6 +48,7 @@ interface UIState {
     apiKeys: Record<string, string>;
     loaded: boolean;
   };
+  skin: SkinId;
 
   selectNode: (nodeId: string | null) => void;
   togglePanel: (panel: 'library' | 'inspector' | 'settings' | 'chat') => void;
@@ -62,6 +64,7 @@ interface UIState {
   showConnectionPopup: (popup: Omit<ConnectionPopupState, 'visible'>) => void;
   hideConnectionPopup: () => void;
   setSettingsCache: (apiKeys: Record<string, string>) => void;
+  setSkin: (skin: SkinId) => void;
 }
 
 export const useUIStore = create<UIState>((set) => ({
@@ -91,6 +94,7 @@ export const useUIStore = create<UIState>((set) => ({
     handleType: 'source',
   },
   settingsCache: { apiKeys: {}, loaded: false },
+  skin: loadSkin(),
 
   selectNode: (nodeId) =>
     set((state) => ({
@@ -186,7 +190,20 @@ export const useUIStore = create<UIState>((set) => ({
 
   setSettingsCache: (apiKeys) =>
     set({ settingsCache: { apiKeys, loaded: true } }),
+
+  setSkin: (skin) => {
+    persistSkin(skin);
+    applySkinBodyClass(skin);
+    set({ skin });
+  },
 }));
+
+// Apply the persisted skin's body class on module load so the first paint
+// is already correct (no flash of unskinned content). The store's setSkin
+// keeps it in sync after that.
+if (typeof document !== 'undefined') {
+  applySkinBodyClass(useUIStore.getState().skin, { animate: false });
+}
 
 // Expose store globally for puppeteer-driven demo scripts (mirrors the
 // __nebulaGraphStore + __nebulaCanvas + __nebulaChat exports). Lets demo

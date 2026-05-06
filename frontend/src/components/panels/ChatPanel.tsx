@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
+import { useDelayedUnmount } from '../../hooks/useDelayedUnmount';
 import '../../styles/panels.css';
 import '../../styles/hermes.css';
 import { fetchNousModels, type NousModel } from '../../lib/api';
@@ -320,6 +321,7 @@ function insertAtCaret(target: HTMLTextAreaElement, token: string): void {
 
 export function ChatPanel() {
   const visible = useUIStore((s) => s.panels.chat.visible);
+  const { shouldRender, exiting } = useDelayedUnmount(visible, 500);
   const width = useUIStore((s) => s.panels.chat.width) ?? 300;
   const height = useUIStore((s) => s.panels.chat.height);
   const left = useUIStore((s) => s.panels.chat.left);
@@ -376,23 +378,25 @@ export function ChatPanel() {
     };
   }, [bloomKey]);
 
-  // Drive the Hermes skin off the selected agent. While Daedalus is active,
-  // .app-hermes + the current tone class live on <body> so CSS scoped under
-  // them can reskin every panel (chat, toolbar, node library) in lockstep.
-  // When Claude is selected we strip both classes — zero leakage.
+  // Hermes tone (Verdant/Obsidian) is a sub-option of the Hermes skin.
+  // The skin itself is now selected via the SkinPicker in Settings — body
+  // class application lives in the store (uiStore.setSkin / applySkinBodyClass),
+  // decoupled from the agent picker. We only manage the tone class here when
+  // the active skin is Hermes; otherwise we strip both tone classes so they
+  // can't leak into other skins.
+  const activeSkin = useUIStore((s) => s.skin);
   useEffect(() => {
     const body = document.body;
-    if (agent === 'daedalus') {
-      body.classList.add('app-hermes');
+    if (activeSkin === 'hermes') {
       body.classList.toggle('tone-verdant', hermesTone === 'verdant');
       body.classList.toggle('tone-obsidian', hermesTone === 'obsidian');
     } else {
-      body.classList.remove('app-hermes', 'tone-verdant', 'tone-obsidian');
+      body.classList.remove('tone-verdant', 'tone-obsidian');
     }
     return () => {
-      body.classList.remove('app-hermes', 'tone-verdant', 'tone-obsidian');
+      body.classList.remove('tone-verdant', 'tone-obsidian');
     };
-  }, [agent, hermesTone]);
+  }, [activeSkin, hermesTone]);
 
   const changeHermesTone = useCallback((next: HermesTone) => {
     setHermesTone(next);
@@ -1113,6 +1117,7 @@ export function ChatPanel() {
   const startResize = useCallback(
     (e: React.MouseEvent<HTMLDivElement>, edgesStr: string) => {
       e.preventDefault();
+      e.stopPropagation();
       const panel = (e.currentTarget.parentElement as HTMLElement) ?? null;
       const rect = panel?.getBoundingClientRect();
       const startX = e.clientX;
@@ -1177,17 +1182,57 @@ export function ChatPanel() {
 
   const startPanelDrag = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
-      // Don't hijack clicks on the close button or other header children.
-      if ((e.target as HTMLElement).closest('.panel__close')) return;
+      const target = e.target as HTMLElement;
+      const blockedTarget = target.closest(
+        [
+          '.chat-panel__resize-handle',
+          '.chat-panel__input',
+          '.chat-panel__agent-selector',
+          '.chat-panel__autonomy-toggle',
+          '.chat-panel__tone-toggle',
+          '.chat-panel__meta',
+          '.chat-panel__model-picker',
+          '.panel__close',
+          'button',
+          'input',
+          'textarea',
+          'select',
+          'a',
+          '[role="button"]',
+        ].join(', '),
+      );
+      if (blockedTarget) return;
       e.preventDefault();
-      const panel = e.currentTarget.parentElement as HTMLElement | null;
+      const panel = e.currentTarget;
       const rect = panel?.getBoundingClientRect();
       const startX = e.clientX;
       const startY = e.clientY;
       const startLeft = rect?.left ?? left ?? 0;
       const startTop = rect?.top ?? top ?? 0;
+      const startW = rect?.width ?? width;
+      const startH = rect?.height ?? height ?? 400;
+      const clampLeft = (nextLeft: number) => Math.max(-startW + 40, Math.min(window.innerWidth - 40, nextLeft));
+      const clampTop = (nextTop: number) => Math.max(0, Math.min(window.innerHeight - 40, nextTop));
+      const applyFreePosition = (nextLeft: number, nextTop: number) => {
+        const clampedLeft = clampLeft(nextLeft);
+        const clampedTop = clampTop(nextTop);
+        panel.classList.add('chat-panel--free');
+        panel.style.setProperty('--chat-panel-left', `${clampedLeft}px`);
+        panel.style.setProperty('--chat-panel-top', `${clampedTop}px`);
+        panel.style.setProperty('--chat-panel-width', `${startW}px`);
+        panel.style.setProperty('--chat-panel-height', `${startH}px`);
+        setChatPosition(clampedLeft, clampedTop);
+      };
+
+      // Default chat layout is top/right/bottom anchored. The first drag needs
+      // to freeze the rendered box size so subsequent left/top coordinates move
+      // the panel instead of stretching it.
+      setChatWidth(startW);
+      setChatHeight(startH);
+      applyFreePosition(startLeft, startTop);
+
       const onMove = (ev: MouseEvent) => {
-        setChatPosition(
+        applyFreePosition(
           startLeft + (ev.clientX - startX),
           startTop + (ev.clientY - startY),
         );
@@ -1203,10 +1248,10 @@ export function ChatPanel() {
       window.addEventListener('mousemove', onMove);
       window.addEventListener('mouseup', onUp);
     },
-    [left, top, setChatPosition],
+    [height, left, top, width, setChatHeight, setChatPosition, setChatWidth],
   );
 
-  if (!visible) return null;
+  if (!shouldRender) return null;
 
   // Compose inline style based on which anchors the user has set.
   // - Default: top-right anchored, stretched from top to bottom.
@@ -1214,11 +1259,20 @@ export function ChatPanel() {
   // - After drag: top-left anchored at user's position.
   // - In experiment layouts, skip width/height until the user has resized so
   //   CSS clamp drives sizing (matching agent log width).
+  const freePanelVars: React.CSSProperties = left != null && top != null
+    ? ({
+        ['--chat-panel-left' as never]: `${left}px`,
+        ['--chat-panel-top' as never]: `${top}px`,
+        ['--chat-panel-width' as never]: `${width}px`,
+        ...(height ? { ['--chat-panel-height' as never]: `${height}px` } : {}),
+      } as React.CSSProperties)
+    : {};
   const panelStyle: React.CSSProperties = useCssSizing
     ? {
         ...(left != null && top != null
           ? { left, top, right: 'auto' }
           : {}),
+        ...freePanelVars,
       }
     : {
         width,
@@ -1226,10 +1280,17 @@ export function ChatPanel() {
         ...(left != null && top != null
           ? { left, top, right: 'auto', bottom: height ? 'auto' : 'auto' }
           : {}),
+        ...freePanelVars,
       };
+  const isFreePositioned = left != null && top != null;
 
   return (
-    <div ref={chatPanelRef} className={`chat-panel chat-panel--agent-${agent}`} style={panelStyle}>
+    <div
+      ref={chatPanelRef}
+      className={`chat-panel chat-panel--agent-${agent}${isFreePositioned ? ' chat-panel--free' : ''}${exiting ? ' chat-panel--exiting' : ''}`}
+      style={panelStyle}
+      onMouseDown={startPanelDrag}
+    >
       {/* Daedalus sigil-bloom FX — Hermes-only, fires on agent transition.
        * Rendered via portal to document.body so the rings/glow can
        * radiate beyond the chat panel's overflow:hidden clipping
@@ -1261,7 +1322,7 @@ export function ChatPanel() {
       <div className="chat-panel__resize-handle chat-panel__resize-handle--tr" onMouseDown={(e) => startResize(e, 'tr')} title="Drag to resize" />
       <div className="chat-panel__resize-handle chat-panel__resize-handle--bl" onMouseDown={(e) => startResize(e, 'bl')} title="Drag to resize" />
       <div className="chat-panel__resize-handle chat-panel__resize-handle--br" onMouseDown={(e) => startResize(e, 'br')} title="Drag to resize" />
-      <div className="chat-panel__header" onMouseDown={startPanelDrag} title="Drag to move">
+      <div className="chat-panel__header" title="Drag to move">
         <div>
           <div className="chat-panel__title">Chat</div>
           <div

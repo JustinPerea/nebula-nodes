@@ -1,0 +1,2457 @@
+/*
+ * SLAVA — RESTRAINT (Direction A v0.1)
+ *
+ * Anchored on Slava Kornilov's Nothing OS Concept (#221) + MIX №1 (#224).
+ *
+ * Principle: less, not more. The graph and nodes are the heroes; the chrome
+ * disappears into the background. Where Editorial leaned on saturated color
+ * and heavy display type EVERYWHERE, Restraint dials all of that down to
+ * "barely there" and lets the working surface breathe.
+ *
+ * Signature moves:
+ *   • Translucent dark-glass panels (backdrop-filter blur) — chrome reads
+ *     as a quiet overlay on the canvas, not as opaque slabs
+ *   • Single accent color — used ONLY for focus rings, primary CTA,
+ *     selected state. Everything else is monochrome.
+ *   • Clean grotesk for body text + headers; NOT extreme weight
+ *   • Bold-then-light same-paragraph two-tone in headlines (Slava's
+ *     characteristic Nothing-OS hierarchy)
+ *   • Gently rounded corners (Nothing's soft glass shape — 12px panels,
+ *     8px nodes), distinct from Editorial's sharp editorial poster
+ *   • Dot-matrix-style display reserved ONLY for the wordmark + a few
+ *     tabular numeric readouts. Never on body text or headers.
+ *   • Category colors stay quiet — small 3px left-edge stripe on nodes,
+ *     not a full flood
+ *   • Round handles (returns the Nothing soft-glass language)
+ *
+ * Scope: every selector starts with `body.app-slava-restraint`. Shared
+ * tokens (App.css, layouts.css, panels.css base) are NOT touched.
+ */
+
+/* ─────────────────────────────────────────────────────────────────────
+ * Palette tokens (scoped — do not leak)
+ * ───────────────────────────────────────────────────────────────────── */
+body.app-slava-restraint {
+  /* Canvas — true black (Flora-influenced v0.2). The dot-grid texture
+   * is barely visible against this; the visual heroes are the nodes
+   * (with their preview content) and their connections. */
+  --sr-canvas: #000000;
+  --sr-canvas-elevated: #060607;
+
+  /* Glass surfaces — transparent enough that the canvas shows through
+   * with the backdrop-filter blur. */
+  --sr-glass: rgba(22, 22, 24, 0.66);
+  --sr-glass-raised: rgba(28, 28, 31, 0.78);
+  --sr-glass-strong: rgba(36, 36, 40, 0.86);
+
+  /* Hairline edges — very low alpha white for definition. */
+  --sr-edge: rgba(255, 255, 255, 0.06);
+  --sr-edge-strong: rgba(255, 255, 255, 0.12);
+
+  /* Inks (text on dark surfaces) — bold + light pair drives the two-tone
+   * same-paragraph hierarchy from Nothing OS. */
+  --sr-ink: rgba(255, 255, 255, 0.92);          /* primary type */
+  --sr-ink-bold: #FFFFFF;                       /* the BOLD half of two-tone */
+  --sr-ink-light: rgba(255, 255, 255, 0.55);    /* the LIGHT half of two-tone */
+  --sr-ink-meta: rgba(255, 255, 255, 0.40);     /* metadata, secondary */
+  --sr-ink-faint: rgba(255, 255, 255, 0.20);    /* footers, tertiary */
+
+  /* Single accent — Nothing-orange placeholder. Used only for focus,
+   * primary CTA, selected state. Never as a ground. */
+  --sr-accent: #FF5A1F;
+  --sr-accent-soft: rgba(255, 90, 31, 0.10);
+
+  /* Type system — clean grotesk only, no display heavy. The dot-matrix
+   * face is reserved for the wordmark and tabular numerics. */
+  --sr-ui: 'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  --sr-mono: 'JetBrains Mono', 'IBM Plex Mono', 'SF Mono', Menlo, monospace;
+
+  /* Soft-glass corner radii — Nothing's signature gentle rounding. */
+  --sr-radius-panel: 12px;
+  --sr-radius-node: 8px;
+  --sr-radius-pill: 999px;
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+ * App-level surfaces — body, canvas
+ * ───────────────────────────────────────────────────────────────────── */
+body.app-slava-restraint {
+  background: var(--sr-canvas);
+  color: var(--sr-ink);
+  font-family: var(--sr-ui);
+  /* Subtle radial vignette gives the canvas a center of gravity without
+   * adding visual weight. */
+  background-image: radial-gradient(
+    ellipse at center,
+    rgba(255, 255, 255, 0.018) 0%,
+    transparent 60%
+  );
+}
+
+@keyframes slava-skin-switch-mask {
+  0% {
+    opacity: 1;
+    filter: none;
+  }
+  45% {
+    opacity: 0.78;
+    filter: blur(8px) brightness(0.7);
+  }
+  100% {
+    opacity: 1;
+    filter: none;
+  }
+}
+
+/* Transient class is added only for transitions where Slava is the previous
+ * or next skin. It is intentionally not nested under .app-slava-restraint so
+ * the mask survives the frame where the Slava body class is being removed. */
+body.app-skin-switching-slava #root {
+  animation: slava-skin-switch-mask 220ms cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.app-skin-switching-slava #root {
+    animation: none;
+  }
+}
+
+body.app-slava-restraint .react-flow,
+body.app-slava-restraint .react-flow__pane {
+  background: transparent;
+}
+
+body.app-slava-restraint .react-flow__background {
+  background: transparent;
+}
+body.app-slava-restraint .react-flow__background pattern circle {
+  fill: rgba(255, 255, 255, 0.04);
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+ * Panels — translucent glass, soft rounded corners, very quiet
+ *
+ * Mount entrance: every panel slides up + scales in on mount via a
+ * 500ms one-shot animation (Drawer preset — Vaul curve from the
+ * motion-design skill). Direction-agnostic (panels are draggable so
+ * we can't assume a fixed side); fade + slight scale + 8px lift gives
+ * "emerging from the surface" without committing to left/right/top
+ * choreography.
+ *
+ * Panels are conditionally rendered (`if (!visible) return null;` in
+ * each panel component) — so animation runs on every fresh mount.
+ * Hide is asymmetric (instant unmount); symmetric exit can be a
+ * follow-up that requires an `exiting` state in the store.
+ *
+ * Panels live OUTSIDE React Flow, so animating `transform` is safe.
+ * ───────────────────────────────────────────────────────────────────── */
+@keyframes slava-panel-enter {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+@keyframes slava-panel-exit {
+  from {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.96) translateY(8px);
+  }
+}
+
+/* Exit animation — applied via .panel--exiting class, set by the
+ * useDelayedUnmount hook for the post-hide window. Uses the same Vaul
+ * curve / 500ms duration as the entrance for symmetric feel. */
+body.app-slava-restraint .panel.panel--exiting,
+body.app-slava-restraint .chat-panel.chat-panel--exiting {
+  animation: slava-panel-exit 500ms cubic-bezier(0.32, 0.72, 0, 1) forwards;
+  pointer-events: none;
+}
+
+body.app-slava-restraint .panel {
+  background: var(--sr-glass);
+  backdrop-filter: blur(24px) saturate(140%);
+  -webkit-backdrop-filter: blur(24px) saturate(140%);
+  border: 1px solid var(--sr-edge);
+  border-radius: var(--sr-radius-panel);
+  color: var(--sr-ink);
+  box-shadow:
+    0 1px 0 0 rgba(255, 255, 255, 0.05) inset,
+    0 12px 36px rgba(0, 0, 0, 0.55);
+  font-family: var(--sr-ui);
+  /* Drawer preset — 500ms, Vaul's iOS-style ease-out heavy curve. */
+  animation: slava-panel-enter 500ms cubic-bezier(0.32, 0.72, 0, 1) backwards;
+  /* `backwards` keeps the from-state applied during animation-delay (none here)
+   * and ensures the start-frame is rendered before the animation begins —
+   * avoids a one-frame flash of the to-state in some browsers. */
+  transform-origin: center center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.app-slava-restraint .panel {
+    animation: none;
+  }
+}
+
+body.app-slava-restraint .panel__header {
+  padding: 14px 16px 10px;
+  border-bottom: 1px solid var(--sr-edge);
+  background: transparent;
+}
+
+/* Panel title — quiet header. Clean grotesk, medium weight, normal case.
+ * NOT a poster headline. The title is a label, not a moment. */
+body.app-slava-restraint .panel__title {
+  font-family: var(--sr-ui);
+  font-weight: 600;
+  font-size: 15px;
+  line-height: 1;
+  letter-spacing: -0.01em;
+  color: var(--sr-ink);
+  text-transform: none;
+}
+
+body.app-slava-restraint .panel__close {
+  color: var(--sr-ink-light);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--sr-radius-pill);
+  padding: 2px 8px;
+  font-size: 16px;
+  line-height: 1;
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 120ms ease, background-color 120ms ease;
+}
+body.app-slava-restraint .panel__close:hover {
+  color: var(--sr-ink-bold);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+body.app-slava-restraint .panel__body {
+  padding: 12px 16px 16px;
+  background: transparent;
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+ * Chat panel — same glass system as nodes/panels, scoped to Slava
+ * ───────────────────────────────────────────────────────────────────── */
+body.app-slava-restraint .chat-panel {
+  --chat-accent: var(--sr-accent);
+  --chat-accent-bg: var(--sr-accent-soft);
+  --chat-accent-border: rgba(255, 90, 31, 0.34);
+
+  background: var(--sr-glass);
+  backdrop-filter: blur(24px) saturate(140%);
+  -webkit-backdrop-filter: blur(24px) saturate(140%);
+  border: 1px solid var(--sr-edge);
+  border-radius: var(--sr-radius-panel);
+  color: var(--sr-ink);
+  box-shadow:
+    0 1px 0 0 rgba(255, 255, 255, 0.05) inset,
+    0 12px 36px rgba(0, 0, 0, 0.55);
+  font-family: var(--sr-ui);
+  font-size: 12px;
+  animation: slava-panel-enter 500ms cubic-bezier(0.32, 0.72, 0, 1) backwards;
+  transform-origin: center center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.app-slava-restraint .chat-panel {
+    animation: none;
+  }
+}
+
+body.app-slava-restraint .chat-panel__resize-handle--left::before,
+body.app-slava-restraint .chat-panel__resize-handle--right::before,
+body.app-slava-restraint .chat-panel__resize-handle--top::before,
+body.app-slava-restraint .chat-panel__resize-handle--bottom::before {
+  background: var(--sr-edge-strong);
+}
+
+body.app-slava-restraint .chat-panel__resize-handle--left:hover::before,
+body.app-slava-restraint .chat-panel__resize-handle--left:active::before,
+body.app-slava-restraint .chat-panel__resize-handle--right:hover::before,
+body.app-slava-restraint .chat-panel__resize-handle--right:active::before {
+  background: var(--sr-accent);
+  height: 56px;
+}
+
+body.app-slava-restraint .chat-panel__resize-handle--top:hover::before,
+body.app-slava-restraint .chat-panel__resize-handle--top:active::before,
+body.app-slava-restraint .chat-panel__resize-handle--bottom:hover::before,
+body.app-slava-restraint .chat-panel__resize-handle--bottom:active::before {
+  background: var(--sr-accent);
+  width: 56px;
+}
+
+body.app-slava-restraint .chat-panel__resize-handle--tl::before,
+body.app-slava-restraint .chat-panel__resize-handle--tr::before,
+body.app-slava-restraint .chat-panel__resize-handle--bl::before,
+body.app-slava-restraint .chat-panel__resize-handle--br::before,
+body.app-slava-restraint .chat-panel__resize-handle--corner::before {
+  border-color: var(--sr-edge-strong);
+}
+
+body.app-slava-restraint .chat-panel__resize-handle--tl:hover::before,
+body.app-slava-restraint .chat-panel__resize-handle--tl:active::before,
+body.app-slava-restraint .chat-panel__resize-handle--tr:hover::before,
+body.app-slava-restraint .chat-panel__resize-handle--tr:active::before,
+body.app-slava-restraint .chat-panel__resize-handle--bl:hover::before,
+body.app-slava-restraint .chat-panel__resize-handle--bl:active::before,
+body.app-slava-restraint .chat-panel__resize-handle--br:hover::before,
+body.app-slava-restraint .chat-panel__resize-handle--br:active::before,
+body.app-slava-restraint .chat-panel__resize-handle--corner:hover::before,
+body.app-slava-restraint .chat-panel__resize-handle--corner:active::before {
+  border-color: var(--sr-accent);
+}
+
+body.app-slava-restraint .chat-panel__header {
+  align-items: flex-start;
+  padding: 14px 16px 12px;
+  border-bottom: 1px solid var(--sr-edge);
+  background: transparent;
+  cursor: grab;
+}
+
+body.app-slava-restraint .chat-panel__header:active {
+  cursor: grabbing;
+}
+
+body.app-slava-restraint .chat-panel__header > div {
+  min-width: 0;
+}
+
+body.app-slava-restraint .chat-panel__title {
+  margin-bottom: 8px;
+  color: var(--sr-ink);
+  font-family: var(--sr-ui);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+body.app-slava-restraint .chat-panel__agent-selector,
+body.app-slava-restraint .chat-panel__autonomy-toggle,
+body.app-slava-restraint .chat-panel__tone-toggle {
+  display: inline-flex;
+  gap: 3px;
+  margin: 0 6px 8px 0;
+  padding: 3px;
+  border: 1px solid var(--sr-edge);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.24);
+}
+
+body.app-slava-restraint .chat-panel__agent-btn,
+body.app-slava-restraint .chat-panel__agent-btn--active,
+body.app-slava-restraint .chat-panel__autonomy-btn,
+body.app-slava-restraint .chat-panel__autonomy-btn--active,
+body.app-slava-restraint .chat-panel__tone-btn,
+body.app-slava-restraint .chat-panel__tone-btn--active {
+  min-height: 28px;
+  padding: 5px 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--sr-ink-light);
+  cursor: pointer;
+  font-family: var(--sr-ui);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 1;
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease;
+}
+
+body.app-slava-restraint .chat-panel__agent-btn:hover,
+body.app-slava-restraint .chat-panel__autonomy-btn:hover,
+body.app-slava-restraint .chat-panel__tone-btn:hover {
+  color: var(--sr-ink);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+body.app-slava-restraint .chat-panel__agent-btn--active,
+body.app-slava-restraint .chat-panel__autonomy-btn--active,
+body.app-slava-restraint .chat-panel__tone-btn--active {
+  border-color: var(--sr-edge-strong);
+  background: rgba(255, 255, 255, 0.10);
+  color: var(--sr-ink-bold);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.05) inset;
+}
+
+body.app-slava-restraint .chat-panel__agent-btn:focus-visible,
+body.app-slava-restraint .chat-panel__agent-btn--active:focus-visible,
+body.app-slava-restraint .chat-panel__autonomy-btn:focus-visible,
+body.app-slava-restraint .chat-panel__autonomy-btn--active:focus-visible,
+body.app-slava-restraint .chat-panel__tone-btn:focus-visible,
+body.app-slava-restraint .chat-panel__tone-btn--active:focus-visible,
+body.app-slava-restraint .chat-panel__model-trigger:focus-visible,
+body.app-slava-restraint .chat-panel__model-search:focus-visible,
+body.app-slava-restraint .chat-panel__model-row:focus-visible,
+body.app-slava-restraint .chat-panel__textarea:focus-visible,
+body.app-slava-restraint .chat-panel__send:focus-visible,
+body.app-slava-restraint .chat-panel__approval-btn:focus-visible,
+body.app-slava-restraint .chat__codeblock-apply:focus-visible,
+body.app-slava-restraint .chat__tool-header:focus-visible {
+  outline: 2px solid var(--sr-accent-soft);
+  outline-offset: 2px;
+  border-color: var(--sr-accent);
+}
+
+body.app-slava-restraint .chat-panel__meta,
+body.app-slava-restraint .chat-panel__session {
+  color: var(--sr-ink-meta);
+  font-family: var(--sr-mono);
+  font-size: 10px;
+  letter-spacing: 0;
+}
+
+body.app-slava-restraint .chat-panel__model-trigger {
+  margin-right: 4px;
+  padding: 2px 6px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--sr-ink-light);
+  cursor: pointer;
+  font-family: var(--sr-mono);
+  font-size: 10px;
+  letter-spacing: 0;
+}
+
+body.app-slava-restraint .chat-panel__model-trigger:hover {
+  border-color: var(--sr-edge);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--sr-ink);
+}
+
+body.app-slava-restraint .chat-panel__model-caret {
+  margin-left: 4px;
+  color: var(--sr-ink-faint);
+  font-size: 9px;
+}
+
+body.app-slava-restraint .chat-panel__model-picker {
+  display: flex;
+  flex-direction: column;
+  max-height: 320px;
+  margin-top: 8px;
+  overflow: hidden;
+  border: 1px solid var(--sr-edge);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.34);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.36);
+  font-family: var(--sr-ui);
+}
+
+body.app-slava-restraint .chat-panel__model-search {
+  padding: 9px 10px;
+  border: none;
+  border-bottom: 1px solid var(--sr-edge);
+  border-radius: 0;
+  outline: none;
+  background: transparent;
+  color: var(--sr-ink);
+  font-family: var(--sr-mono);
+  font-size: 11px;
+}
+
+body.app-slava-restraint .chat-panel__model-search::placeholder {
+  color: var(--sr-ink-faint);
+}
+
+body.app-slava-restraint .chat-panel__model-error {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--sr-edge);
+  background: var(--sr-accent-soft);
+  color: var(--sr-accent);
+  font-family: var(--sr-mono);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+body.app-slava-restraint .chat-panel__model-list {
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+body.app-slava-restraint .chat-panel__model-row {
+  display: flex;
+  flex-shrink: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 8px 10px;
+  border: none;
+  border-bottom: 1px solid var(--sr-edge);
+  background: transparent;
+  color: var(--sr-ink-light);
+  cursor: pointer;
+  font-family: var(--sr-ui);
+  text-align: left;
+}
+
+body.app-slava-restraint .chat-panel__model-row:last-child {
+  border-bottom: none;
+}
+
+body.app-slava-restraint .chat-panel__model-row:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--sr-ink);
+}
+
+body.app-slava-restraint .chat-panel__model-row--active {
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: 2px 0 0 var(--sr-accent) inset;
+}
+
+body.app-slava-restraint .chat-panel__model-row-name {
+  color: var(--sr-ink);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+body.app-slava-restraint .chat-panel__model-row-id {
+  color: var(--sr-ink-meta);
+  font-family: var(--sr-mono);
+  font-size: 9px;
+  letter-spacing: 0;
+  text-transform: lowercase;
+}
+
+body.app-slava-restraint .chat-panel__model-empty {
+  padding: 12px 10px;
+  color: var(--sr-ink-meta);
+  font-size: 12px;
+  text-align: center;
+}
+
+body.app-slava-restraint .chat-panel__messages {
+  gap: 10px;
+  padding: 14px;
+  background: transparent;
+  cursor: grab;
+}
+
+body.app-slava-restraint .chat-panel__messages:active {
+  cursor: grabbing;
+}
+
+body.app-slava-restraint .chat-panel__input {
+  cursor: auto;
+}
+
+body.app-slava-restraint .chat-panel__messages::-webkit-scrollbar,
+body.app-slava-restraint .chat-panel__model-list::-webkit-scrollbar,
+body.app-slava-restraint .chat__codeblock-body::-webkit-scrollbar,
+body.app-slava-restraint .chat__tool-input::-webkit-scrollbar,
+body.app-slava-restraint .chat__tool-output::-webkit-scrollbar,
+body.app-slava-restraint .chat-panel__thinking-body::-webkit-scrollbar {
+  width: 8px;
+}
+
+body.app-slava-restraint .chat-panel__messages::-webkit-scrollbar-thumb,
+body.app-slava-restraint .chat-panel__model-list::-webkit-scrollbar-thumb,
+body.app-slava-restraint .chat__codeblock-body::-webkit-scrollbar-thumb,
+body.app-slava-restraint .chat__tool-input::-webkit-scrollbar-thumb,
+body.app-slava-restraint .chat__tool-output::-webkit-scrollbar-thumb,
+body.app-slava-restraint .chat-panel__thinking-body::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: var(--sr-radius-pill);
+  background: rgba(255, 255, 255, 0.18);
+  background-clip: padding-box;
+}
+
+body.app-slava-restraint .chat__empty {
+  color: var(--sr-ink-light);
+  font-size: 12px;
+}
+
+body.app-slava-restraint .chat__empty-hint {
+  color: var(--sr-ink-meta);
+}
+
+body.app-slava-restraint .chat__empty code {
+  border: 1px solid var(--sr-edge);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--sr-ink);
+  font-family: var(--sr-mono);
+}
+
+body.app-slava-restraint .chat__bubble {
+  border-radius: 10px;
+  line-height: 1.48;
+}
+
+body.app-slava-restraint .chat__bubble--user {
+  max-width: 85%;
+  border: 1px solid var(--sr-edge-strong);
+  background: rgba(255, 255, 255, 0.10);
+  color: var(--sr-ink-bold);
+}
+
+body.app-slava-restraint .chat__bubble--assistant {
+  max-width: 100%;
+  padding-left: 10px;
+  border: 1px solid var(--sr-edge);
+  border-left: 1px solid var(--sr-edge-strong);
+  background: rgba(0, 0, 0, 0.26);
+  color: var(--sr-ink);
+}
+
+body.app-slava-restraint .chat__bubble-thumb {
+  border: 1px solid var(--sr-edge);
+  border-radius: 6px;
+}
+
+body.app-slava-restraint .chat__codeblock,
+body.app-slava-restraint .chat__tool {
+  border: 1px solid var(--sr-edge);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.32);
+}
+
+body.app-slava-restraint .chat__codeblock-body,
+body.app-slava-restraint .chat__tool-input,
+body.app-slava-restraint .chat__tool-output {
+  border-color: var(--sr-edge);
+  background: rgba(0, 0, 0, 0.24);
+  color: var(--sr-ink);
+  font-family: var(--sr-mono);
+}
+
+body.app-slava-restraint .chat__codeblock-apply {
+  border-top: 1px solid var(--sr-edge);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--sr-ink-light);
+  font-family: var(--sr-ui);
+  letter-spacing: 0;
+}
+
+body.app-slava-restraint .chat__codeblock-apply:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--sr-ink-bold);
+}
+
+body.app-slava-restraint .chat__system,
+body.app-slava-restraint .chat-panel__system-line,
+body.app-slava-restraint .chat__cursor,
+body.app-slava-restraint .chat__tool-icon,
+body.app-slava-restraint .chat__tool-status {
+  color: var(--sr-ink-meta);
+}
+
+body.app-slava-restraint .chat__tool-header {
+  color: var(--sr-ink-light);
+}
+
+body.app-slava-restraint .chat__tool-header:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--sr-ink);
+}
+
+body.app-slava-restraint .chat__tool-name {
+  color: var(--sr-ink-bold);
+  font-weight: 600;
+}
+
+body.app-slava-restraint .chat__tool-body {
+  border-top: 1px solid var(--sr-edge);
+}
+
+body.app-slava-restraint .chat__tool--error,
+body.app-slava-restraint .chat__tool--error .chat__tool-output {
+  border-color: rgba(255, 90, 31, 0.34);
+}
+
+body.app-slava-restraint .chat__tool--error .chat__tool-output {
+  color: var(--sr-accent);
+}
+
+body.app-slava-restraint .chat-panel__input {
+  gap: 0;
+  padding: 10px 12px 12px;
+  border-top: 1px solid var(--sr-edge);
+  background: rgba(0, 0, 0, 0.16);
+}
+
+body.app-slava-restraint .chat-panel__input-row {
+  gap: 8px;
+}
+
+body.app-slava-restraint .chat-panel__textarea {
+  min-height: 44px;
+  padding: 9px 12px;
+  border: 1px solid var(--sr-edge-strong);
+  border-radius: 8px;
+  outline: none;
+  background: rgba(0, 0, 0, 0.32);
+  color: var(--sr-ink);
+  font-family: var(--sr-ui);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+body.app-slava-restraint .chat-panel__textarea::placeholder {
+  color: var(--sr-ink-meta);
+}
+
+body.app-slava-restraint .chat-panel__textarea:focus {
+  border-color: var(--sr-accent);
+  background: rgba(0, 0, 0, 0.42);
+}
+
+body.app-slava-restraint .chat-panel__textarea:disabled {
+  opacity: 0.48;
+}
+
+body.app-slava-restraint .chat-panel__send {
+  height: 44px;
+  padding: 0 16px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: var(--sr-accent);
+  color: #080808;
+  cursor: pointer;
+  font-family: var(--sr-ui);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0;
+  transition:
+    opacity 120ms ease,
+    transform 120ms ease,
+    background-color 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease;
+}
+
+body.app-slava-restraint .chat-panel__send:hover:not(:disabled) {
+  background: #ff6b34;
+  transform: translateY(-1px);
+}
+
+body.app-slava-restraint .chat-panel__send:disabled {
+  opacity: 0.36;
+  cursor: default;
+}
+
+body.app-slava-restraint .chat-panel__send--stop {
+  border-color: rgba(255, 90, 31, 0.36);
+  background: var(--sr-accent-soft);
+  color: var(--sr-accent);
+}
+
+body.app-slava-restraint .chat-panel__send--stop:hover {
+  border-color: var(--sr-accent);
+  background: rgba(255, 90, 31, 0.16);
+  color: var(--sr-ink-bold);
+}
+
+body.app-slava-restraint .chat-panel__chips {
+  gap: 8px;
+  padding-bottom: 8px;
+}
+
+body.app-slava-restraint .chat-panel__chip {
+  border: 1px solid var(--sr-edge);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+body.app-slava-restraint .chat-panel__chip--error {
+  border-color: rgba(255, 90, 31, 0.45);
+}
+
+body.app-slava-restraint .chat-panel__chip-label {
+  background: rgba(0, 0, 0, 0.66);
+  color: var(--sr-ink-bold);
+  font-family: var(--sr-mono);
+  font-size: 9px;
+}
+
+body.app-slava-restraint .chat-panel__chip-error {
+  color: var(--sr-accent);
+}
+
+body.app-slava-restraint .chat-panel__chip-close {
+  border: 1px solid var(--sr-edge-strong);
+  background: rgba(0, 0, 0, 0.78);
+  color: var(--sr-ink-bold);
+}
+
+body.app-slava-restraint .chat-panel__notice {
+  margin: 0 0 8px;
+  padding: 7px 10px;
+  border: 1px solid rgba(255, 90, 31, 0.28);
+  border-radius: 8px;
+  background: var(--sr-accent-soft);
+  color: var(--sr-accent);
+  font-size: 11px;
+}
+
+body.app-slava-restraint .chat-panel__approval {
+  border: 1px solid rgba(255, 90, 31, 0.32);
+  border-radius: 10px;
+  background: var(--sr-accent-soft);
+  color: var(--sr-ink);
+}
+
+body.app-slava-restraint .chat-panel__approval-btn {
+  min-height: 32px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  font-family: var(--sr-ui);
+}
+
+body.app-slava-restraint .chat-panel__approval-btn--approve {
+  background: var(--sr-accent);
+  color: #080808;
+}
+
+body.app-slava-restraint .chat-panel__approval-btn--reject {
+  border-color: var(--sr-edge-strong);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--sr-ink);
+}
+
+body.app-slava-restraint .chat-panel__thinking {
+  border: 1px solid rgba(255, 90, 31, 0.34);
+  border-radius: 10px;
+  background: var(--sr-accent-soft);
+  box-shadow: none;
+}
+
+body.app-slava-restraint .chat-panel__thinking--completed {
+  border-color: var(--sr-edge);
+  background: rgba(255, 255, 255, 0.04);
+  opacity: 0.82;
+}
+
+body.app-slava-restraint .chat-panel__thinking-header {
+  color: var(--sr-ink);
+}
+
+body.app-slava-restraint .chat-panel__thinking-header:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+body.app-slava-restraint .chat-panel__thinking-indicator,
+body.app-slava-restraint .chat-panel__thinking-label {
+  color: var(--sr-accent);
+}
+
+body.app-slava-restraint .chat-panel__thinking-caret,
+body.app-slava-restraint .chat-panel__thinking-line {
+  color: var(--sr-ink-light);
+}
+
+body.app-slava-restraint .chat-panel__thinking-body {
+  border-top: 1px solid rgba(255, 90, 31, 0.22);
+  font-family: var(--sr-mono);
+}
+
+/* Inspector content swap — when the user clicks a different node, the
+ * inspector body remounts (key={selectedNodeId} on the body div in
+ * Inspector.tsx) and this animation fires. 120ms M3 emphasized-decel
+ * gives a quick crossfade with a subtle 4px lift — enough to read as
+ * "new content arriving" without slowing the user. The Inspector panel
+ * itself doesn't unmount across node-selection changes, so the panel
+ * mount animation (slava-panel-enter) only fires on first open. */
+@keyframes slava-inspector-swap {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+body.app-slava-restraint .panel--inspector .panel__body {
+  animation: slava-inspector-swap 120ms cubic-bezier(0.05, 0.7, 0.1, 1) backwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  body.app-slava-restraint .panel--inspector .panel__body {
+    animation: none;
+  }
+}
+
+/* No footer signature, no eyebrow strips — Restraint means restraint. */
+
+/* ─────────────────────────────────────────────────────────────────────
+ * Library — search + category groups
+ * ───────────────────────────────────────────────────────────────────── */
+body.app-slava-restraint .panel__search {
+  background: rgba(0, 0, 0, 0.30);
+  border: 1px solid var(--sr-edge);
+  color: var(--sr-ink);
+  font-family: var(--sr-ui);
+  font-size: 13px;
+  border-radius: var(--sr-radius-pill);
+  padding: 8px 14px;
+}
+body.app-slava-restraint .panel__search:focus {
+  outline: none;
+  border-color: var(--sr-accent);
+  background: rgba(0, 0, 0, 0.45);
+}
+body.app-slava-restraint .panel__search::placeholder {
+  color: var(--sr-ink-faint);
+}
+
+body.app-slava-restraint .panel__group-label {
+  font-family: var(--sr-ui);
+  font-weight: 500;
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--sr-ink-light);
+}
+body.app-slava-restraint .panel__group-label--button {
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 4px;
+}
+body.app-slava-restraint .panel__group-label--button:hover {
+  color: var(--sr-ink-bold);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+body.app-slava-restraint .panel__group-chevron {
+  color: var(--sr-ink-faint);
+  font-size: 9px;
+}
+
+body.app-slava-restraint .panel__group-text {
+  font-family: var(--sr-ui);
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+body.app-slava-restraint .panel__group-count {
+  font-family: var(--sr-mono);
+  font-weight: 400;
+  font-size: 10px;
+  color: var(--sr-ink-meta);
+  background: transparent;
+  border: none;
+  padding: 0 4px;
+  text-transform: none;
+}
+
+body.app-slava-restraint .panel__group-dot {
+  /* Quiet round dot — the only place category color shows in the chrome. */
+  border-radius: 50%;
+  width: 6px;
+  height: 6px;
+  opacity: 0.85;
+}
+
+body.app-slava-restraint .panel__item {
+  font-family: var(--sr-ui);
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--sr-ink);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 6px 10px;
+  margin: 1px 0;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+body.app-slava-restraint .panel__item:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--sr-ink-bold);
+}
+
+body.app-slava-restraint .panel__items {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition:
+    grid-template-rows 240ms cubic-bezier(0.32, 0.72, 0, 1),
+    opacity 160ms ease;
+}
+
+body.app-slava-restraint .panel__items-inner {
+  min-height: 0;
+  overflow: hidden;
+}
+
+body.app-slava-restraint .panel__items--expanded {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+
+body.app-slava-restraint .panel__items--collapsed {
+  pointer-events: none;
+}
+
+body.app-slava-restraint .panel__items .panel__item {
+  opacity: 0;
+  transform: translateY(-3px);
+  transition:
+    opacity 160ms ease,
+    transform 180ms cubic-bezier(0.05, 0.7, 0.1, 1),
+    background-color 120ms ease,
+    color 120ms ease;
+}
+
+body.app-slava-restraint .panel__items--expanded .panel__item {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+body.app-slava-restraint .panel__items--expanded .panel__item:nth-child(2) {
+  transition-delay: 30ms, 30ms, 0ms, 0ms;
+}
+
+body.app-slava-restraint .panel__items--expanded .panel__item:nth-child(3) {
+  transition-delay: 60ms, 60ms, 0ms, 0ms;
+}
+
+body.app-slava-restraint .panel__items--expanded .panel__item:nth-child(4) {
+  transition-delay: 90ms, 90ms, 0ms, 0ms;
+}
+
+body.app-slava-restraint .panel__items--expanded .panel__item:nth-child(5) {
+  transition-delay: 120ms, 120ms, 0ms, 0ms;
+}
+
+body.app-slava-restraint .panel__items--expanded .panel__item:nth-child(n+6) {
+  transition-delay: 150ms, 150ms, 0ms, 0ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.app-slava-restraint .panel__items,
+  body.app-slava-restraint .panel__items .panel__item {
+    transition: none;
+  }
+
+  body.app-slava-restraint .panel__items .panel__item {
+    transform: none;
+  }
+}
+
+/* Loading indicators — replace stock border-rotate spinners with a quiet
+ * dot-matrix beam. The model-node version only animates color/box-shadow on
+ * a child pseudo-element so it stays inside the React Flow safe-property rule. */
+@keyframes slava-dot-matrix-beam {
+  0%, 100% {
+    background-color: rgba(255, 255, 255, 0.92);
+    box-shadow:
+      5px 0 rgba(255, 255, 255, 0.48),
+      10px 0 rgba(255, 255, 255, 0.22),
+      15px 0 rgba(255, 255, 255, 0.14),
+      0 5px rgba(255, 255, 255, 0.92),
+      5px 5px rgba(255, 255, 255, 0.48),
+      10px 5px rgba(255, 255, 255, 0.22),
+      15px 5px rgba(255, 255, 255, 0.14),
+      0 10px rgba(255, 255, 255, 0.92),
+      5px 10px rgba(255, 255, 255, 0.48),
+      10px 10px rgba(255, 255, 255, 0.22),
+      15px 10px rgba(255, 255, 255, 0.14),
+      0 15px rgba(255, 255, 255, 0.92),
+      5px 15px rgba(255, 255, 255, 0.48),
+      10px 15px rgba(255, 255, 255, 0.22),
+      15px 15px rgba(255, 255, 255, 0.14);
+  }
+  25% {
+    background-color: rgba(255, 255, 255, 0.14);
+    box-shadow:
+      5px 0 rgba(255, 255, 255, 0.92),
+      10px 0 rgba(255, 255, 255, 0.48),
+      15px 0 rgba(255, 255, 255, 0.22),
+      0 5px rgba(255, 255, 255, 0.14),
+      5px 5px rgba(255, 255, 255, 0.92),
+      10px 5px rgba(255, 255, 255, 0.48),
+      15px 5px rgba(255, 255, 255, 0.22),
+      0 10px rgba(255, 255, 255, 0.14),
+      5px 10px rgba(255, 255, 255, 0.92),
+      10px 10px rgba(255, 255, 255, 0.48),
+      15px 10px rgba(255, 255, 255, 0.22),
+      0 15px rgba(255, 255, 255, 0.14),
+      5px 15px rgba(255, 255, 255, 0.92),
+      10px 15px rgba(255, 255, 255, 0.48),
+      15px 15px rgba(255, 255, 255, 0.22);
+  }
+  50% {
+    background-color: rgba(255, 255, 255, 0.22);
+    box-shadow:
+      5px 0 rgba(255, 255, 255, 0.14),
+      10px 0 rgba(255, 255, 255, 0.92),
+      15px 0 rgba(255, 255, 255, 0.48),
+      0 5px rgba(255, 255, 255, 0.22),
+      5px 5px rgba(255, 255, 255, 0.14),
+      10px 5px rgba(255, 255, 255, 0.92),
+      15px 5px rgba(255, 255, 255, 0.48),
+      0 10px rgba(255, 255, 255, 0.22),
+      5px 10px rgba(255, 255, 255, 0.14),
+      10px 10px rgba(255, 255, 255, 0.92),
+      15px 10px rgba(255, 255, 255, 0.48),
+      0 15px rgba(255, 255, 255, 0.22),
+      5px 15px rgba(255, 255, 255, 0.14),
+      10px 15px rgba(255, 255, 255, 0.92),
+      15px 15px rgba(255, 255, 255, 0.48);
+  }
+  75% {
+    background-color: rgba(255, 255, 255, 0.48);
+    box-shadow:
+      5px 0 rgba(255, 255, 255, 0.22),
+      10px 0 rgba(255, 255, 255, 0.14),
+      15px 0 rgba(255, 255, 255, 0.92),
+      0 5px rgba(255, 255, 255, 0.48),
+      5px 5px rgba(255, 255, 255, 0.22),
+      10px 5px rgba(255, 255, 255, 0.14),
+      15px 5px rgba(255, 255, 255, 0.92),
+      0 10px rgba(255, 255, 255, 0.48),
+      5px 10px rgba(255, 255, 255, 0.22),
+      10px 10px rgba(255, 255, 255, 0.14),
+      15px 10px rgba(255, 255, 255, 0.92),
+      0 15px rgba(255, 255, 255, 0.48),
+      5px 15px rgba(255, 255, 255, 0.22),
+      10px 15px rgba(255, 255, 255, 0.14),
+      15px 15px rgba(255, 255, 255, 0.92);
+  }
+}
+
+body.app-slava-restraint .model-node__loading {
+  border-top-color: var(--sr-edge);
+}
+
+body.app-slava-restraint .model-node__loading-spinner {
+  position: relative;
+  flex: 0 0 22px;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  animation: none;
+}
+
+body.app-slava-restraint .model-node__loading-spinner::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background-color: rgba(255, 255, 255, 0.92);
+  animation: slava-dot-matrix-beam 960ms steps(4, end) infinite;
+}
+
+body.app-slava-restraint .model-node__loading-text {
+  color: var(--sr-ink-light);
+  font-family: var(--sr-mono);
+  font-size: 10px;
+}
+
+body.app-slava-restraint .chat-panel__chip-spinner {
+  background: rgba(0, 0, 0, 0.48);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+body.app-slava-restraint .chat-panel__chip-spinner::after {
+  content: none;
+}
+
+body.app-slava-restraint .chat-panel__chip-spinner::before {
+  content: '';
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background-color: rgba(255, 255, 255, 0.92);
+  transform: translate(-9.5px, -9.5px);
+  animation: slava-dot-matrix-beam 960ms steps(4, end) infinite;
+}
+
+body.app-slava-restraint .toolbar__button--executing {
+  position: relative;
+}
+
+body.app-slava-restraint .toolbar__button--executing .toolbar__icon {
+  opacity: 0;
+}
+
+body.app-slava-restraint .toolbar__button--executing::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 4px;
+  height: 4px;
+  margin-left: -9.5px;
+  margin-top: -9.5px;
+  border-radius: 50%;
+  background-color: rgba(255, 255, 255, 0.92);
+  animation: slava-dot-matrix-beam 960ms steps(4, end) infinite;
+}
+
+body.app-slava-restraint .model-node__loading-spinner::before,
+body.app-slava-restraint .chat-panel__chip-spinner::before,
+body.app-slava-restraint .toolbar__button--executing::before {
+  box-shadow:
+    5px 0 rgba(255, 255, 255, 0.48),
+    10px 0 rgba(255, 255, 255, 0.22),
+    15px 0 rgba(255, 255, 255, 0.14),
+    0 5px rgba(255, 255, 255, 0.92),
+    5px 5px rgba(255, 255, 255, 0.48),
+    10px 5px rgba(255, 255, 255, 0.22),
+    15px 5px rgba(255, 255, 255, 0.14),
+    0 10px rgba(255, 255, 255, 0.92),
+    5px 10px rgba(255, 255, 255, 0.48),
+    10px 10px rgba(255, 255, 255, 0.22),
+    15px 10px rgba(255, 255, 255, 0.14),
+    0 15px rgba(255, 255, 255, 0.92),
+    5px 15px rgba(255, 255, 255, 0.48),
+    10px 15px rgba(255, 255, 255, 0.22),
+    15px 15px rgba(255, 255, 255, 0.14);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.app-slava-restraint .model-node__loading-spinner::before,
+  body.app-slava-restraint .chat-panel__chip-spinner::before,
+  body.app-slava-restraint .toolbar__button--executing::before {
+    animation: none;
+  }
+}
+
+@keyframes slava-library-drag-preview-in {
+  from {
+    opacity: 0;
+    transform: translate3d(var(--drag-x), var(--drag-y), 0) scale(0.94);
+    filter: blur(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(var(--drag-x), var(--drag-y), 0) scale(1);
+    filter: none;
+  }
+}
+
+body.app-slava-restraint .slava-library-drag-preview {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 10000;
+  pointer-events: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  max-width: 220px;
+  padding: 8px 10px;
+  color: var(--sr-ink-bold);
+  background: rgba(24, 24, 27, 0.88);
+  border: 1px solid var(--sr-edge-strong);
+  border-radius: 8px;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.06) inset,
+    0 10px 28px rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  font-family: var(--sr-ui);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+  transform: translate3d(var(--drag-x), var(--drag-y), 0) scale(1);
+  transition: transform 80ms cubic-bezier(0.32, 0.72, 0, 1);
+  animation: slava-library-drag-preview-in 140ms cubic-bezier(0.05, 0.7, 0.1, 1) both;
+}
+
+body.app-slava-restraint .slava-library-drag-preview__dot {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--category-color, var(--sr-accent));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--category-color, var(--sr-accent)) 18%, transparent);
+}
+
+body.app-slava-restraint .slava-library-drag-preview__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.app-slava-restraint .slava-library-drag-preview {
+    transition: none;
+    animation: none;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+ * Settings — section labels are quiet metadata, not editorial chapters
+ * ───────────────────────────────────────────────────────────────────── */
+body.app-slava-restraint .settings__section-label {
+  font-family: var(--sr-ui);
+  font-weight: 500;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--sr-ink-light);
+  margin-top: 18px;
+  margin-bottom: 4px;
+}
+
+body.app-slava-restraint .inspector__label {
+  font-family: var(--sr-ui);
+  font-weight: 500;
+  font-size: 11px;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--sr-ink-light);
+}
+
+body.app-slava-restraint .inspector__field {
+  background: rgba(0, 0, 0, 0.30);
+  border: 1px solid var(--sr-edge);
+  color: var(--sr-ink);
+  font-family: var(--sr-mono);
+  font-size: 12px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  transition: border-color 120ms ease, background-color 120ms ease;
+}
+body.app-slava-restraint .inspector__field:focus {
+  outline: none;
+  border-color: var(--sr-accent);
+  background: rgba(0, 0, 0, 0.45);
+}
+body.app-slava-restraint .inspector__field::placeholder {
+  color: var(--sr-ink-faint);
+}
+
+body.app-slava-restraint select.inspector__field {
+  appearance: none;
+}
+
+/* Settings save — primary CTA pill. Single place orange shows up in chrome. */
+body.app-slava-restraint .settings__save-button {
+  background: var(--sr-accent);
+  color: #0A0A0B;
+  border: none;
+  padding: 10px 18px;
+  font-family: var(--sr-ui);
+  font-weight: 600;
+  font-size: 13px;
+  letter-spacing: 0;
+  text-transform: none;
+  border-radius: var(--sr-radius-pill);
+  cursor: pointer;
+  margin-top: 18px;
+  transition: filter 120ms ease;
+}
+body.app-slava-restraint .settings__save-button:hover {
+  filter: brightness(1.08);
+}
+body.app-slava-restraint .settings__save-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+ * Toolbar — translucent rounded pill (keeps default position)
+ * ───────────────────────────────────────────────────────────────────── */
+body.app-slava-restraint .toolbar {
+  background: var(--sr-glass-raised);
+  backdrop-filter: blur(24px) saturate(140%);
+  -webkit-backdrop-filter: blur(24px) saturate(140%);
+  border: 1px solid var(--sr-edge);
+  border-radius: var(--sr-radius-pill);
+  font-family: var(--sr-ui);
+  box-shadow:
+    0 1px 0 0 rgba(255, 255, 255, 0.06) inset,
+    0 8px 24px rgba(0, 0, 0, 0.55);
+}
+
+/* Wordmark — the ONE place dot-matrix-style display shows up. Sits
+ * quietly above the toolbar. Tabular numerics in mono carry the same DNA. */
+body.app-slava-restraint .toolbar::before {
+  content: 'NEBULA(NODES)';
+  position: absolute;
+  top: -22px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--sr-mono);
+  font-weight: 500;
+  font-size: 10px;
+  letter-spacing: 0.30em;
+  color: var(--sr-ink-faint);
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+body.app-slava-restraint .toolbar__button {
+  background: transparent;
+  color: var(--sr-ink-light);
+  border: 1px solid transparent;
+  font-family: var(--sr-ui);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 6px 10px;
+  border-radius: 6px;
+  letter-spacing: 0;
+  /* On RELEASE: scale back to 1 via back-ease that briefly overshoots —
+   * gives a "pop" feel without explicitly keyframing past 1.0. The
+   * cubic-bezier(0.34, 1.56, 0.64, 1) curve briefly exceeds 1 around
+   * 65% progress before settling. Use this longer 220ms duration for
+   * the release; the press itself uses the shorter 80ms below.
+   *
+   * Toolbar lives outside React Flow, so animating `transform` is safe
+   * (no xyflow inline-transform conflict). */
+  transition:
+    color 120ms ease,
+    background-color 120ms ease,
+    transform 220ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+body.app-slava-restraint .toolbar__button:hover {
+  color: var(--sr-ink-bold);
+  background: rgba(255, 255, 255, 0.05);
+  border-color: transparent;
+}
+body.app-slava-restraint .toolbar__button:active {
+  transform: scale(0.96);
+  /* On press DOWN: snap fast (80ms ease-out) so the press feels
+   * immediate and tactile. The longer back-ease above only kicks in
+   * on release when :active drops. */
+  transition:
+    color 120ms ease,
+    background-color 120ms ease,
+    transform 80ms ease-out;
+}
+
+body.app-slava-restraint .toolbar__divider {
+  width: 1px;
+  background: var(--sr-edge);
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+ * Agent log — same translucent treatment. Source-tinted left borders kept
+ * (small functional color use is allowed where it reads as data, not deco).
+ * ───────────────────────────────────────────────────────────────────── */
+body.app-slava-restraint .agent-log {
+  background: var(--sr-glass);
+  backdrop-filter: blur(24px) saturate(140%);
+  -webkit-backdrop-filter: blur(24px) saturate(140%);
+  border: 1px solid var(--sr-edge);
+  border-radius: var(--sr-radius-panel);
+  color: var(--sr-ink);
+  font-family: var(--sr-ui);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+body.app-slava-restraint .agent-log__drag-row,
+body.app-slava-restraint .agent-log__header {
+  background: transparent;
+  border-bottom: 1px solid transparent;
+  padding: 10px 14px;
+}
+
+body.app-slava-restraint .agent-log--open .agent-log__header {
+  border-bottom-color: var(--sr-edge);
+}
+
+body.app-slava-restraint .agent-log__title {
+  font-family: var(--sr-ui);
+  font-weight: 500;
+  font-size: 13px;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--sr-ink);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+body.app-slava-restraint .agent-log__icon {
+  color: var(--sr-ink-light);
+}
+
+body.app-slava-restraint .agent-log__chevron {
+  color: var(--sr-ink-light);
+  transition: color 120ms ease;
+}
+
+body.app-slava-restraint .agent-log__body {
+  background: transparent;
+  padding: 6px 14px 12px;
+}
+
+body.app-slava-restraint .agent-log__empty {
+  color: var(--sr-ink-faint);
+  font-family: var(--sr-ui);
+  font-size: 12px;
+  padding: 8px 0;
+}
+
+body.app-slava-restraint .agent-log__entry {
+  display: grid;
+  grid-template-columns: 64px 80px 1fr;
+  gap: 10px;
+  align-items: baseline;
+  padding: 5px 0;
+  border-bottom: 1px solid transparent;
+  font-family: var(--sr-mono);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+body.app-slava-restraint .agent-log__time {
+  color: var(--sr-ink-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+body.app-slava-restraint .agent-log__source {
+  color: var(--sr-ink-meta);
+  text-transform: lowercase;
+  letter-spacing: 0;
+  font-size: 10px;
+}
+
+body.app-slava-restraint .agent-log__msg {
+  color: var(--sr-ink);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+ * Nodes — Flora-influenced (v0.2)
+ *
+ * The preview is the card. Title sits as a transparent overlay strip
+ * at the top of the card with a subtle dark gradient for legibility on
+ * light images; below the strip the .model-node__preview content (image,
+ * video, 3D render) bleeds edge-to-edge to the rounded corners.
+ *
+ * Category color encoding is preserved but quieter — 20% alpha border
+ * tint at rest (was 40% in v0.1), full saturation only on selection.
+ *
+ * --node-category-color is set as an inline CSS variable on .model-node
+ * by ModelNode.tsx / DynamicNode.tsx (one-liner React change made earlier).
+ * ───────────────────────────────────────────────────────────────────── */
+body.app-slava-restraint .react-flow__node {
+  font-family: var(--sr-ui);
+}
+
+/* Outer node wrapper — transparent. The visible card is .model-node__card.
+ * The type-label and settings-bar float ABOVE the card; positioning them
+ * outside the card requires the wrapper itself to NOT clip overflow. */
+body.app-slava-restraint .model-node {
+  position: relative;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  color: var(--sr-ink);
+  font-family: var(--sr-ui);
+  overflow: visible;
+  /* Top padding leaves room for the floating settings-bar + type-label
+   * to sit above the card without being clipped or overlapping it. */
+  padding-top: 38px;
+}
+
+/* Type label — small, quiet, sits in the upper-left ABOVE the card.
+ * Identifies the category in plain text ("text-gen", "image-gen", etc.). */
+body.app-slava-restraint .model-node__type-label {
+  display: block;
+  position: absolute;
+  top: 14px;
+  left: 4px;
+  font-family: var(--sr-ui);
+  font-weight: 400;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: lowercase;
+  color: var(--sr-ink-light);
+  pointer-events: none;
+}
+
+/* Settings bar — floating dark-glass pill above the card, ONLY when selected.
+ * COMPACT BY DEFAULT: just a tiny `…` button (~22px circle). Expands to a
+ * full pill with the model name on hover. Stays out of the way until you
+ * actually want it; doesn't push the right edge of the canvas around when
+ * a node is positioned near the viewport edge. */
+body.app-slava-restraint .model-node__settings-bar {
+  display: inline-flex;
+  position: absolute;
+  top: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+  align-items: center;
+  gap: 0;  /* expands to 8px on hover */
+  padding: 0;
+  background: rgba(20, 20, 22, 0.78);
+  backdrop-filter: blur(20px) saturate(140%);
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
+  border: 1px solid var(--sr-edge);
+  border-radius: var(--sr-radius-pill);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.55);
+  white-space: nowrap;
+  z-index: 3;
+  transition: padding 180ms ease, gap 180ms ease;
+  cursor: default;
+}
+
+/* Model name — hidden in compact state, fades in on hover. */
+body.app-slava-restraint .model-node__settings-model {
+  font-family: var(--sr-ui);
+  font-weight: 500;
+  font-size: 11px;
+  color: var(--sr-ink-bold);
+  letter-spacing: -0.005em;
+  max-width: 0;
+  opacity: 0;
+  overflow: hidden;
+  margin-left: 0;
+  transition: max-width 200ms ease, opacity 160ms ease 40ms, margin-left 200ms ease;
+  pointer-events: none;
+}
+
+/* Edit button — visible in BOTH states; in compact it IS the bar. */
+body.app-slava-restraint .model-node__settings-edit {
+  background: transparent;
+  border: none;
+  border-radius: 50%;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  color: var(--sr-ink-light);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: color 120ms ease, background-color 120ms ease;
+}
+body.app-slava-restraint .model-node__settings-edit:hover {
+  color: var(--sr-ink-bold);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* Expanded state — triggered ONLY by hovering the bar itself or focusing
+ * its button. Hovering anywhere on the node body does NOT expand it —
+ * the card is large and would keep the bar permanently expanded. */
+body.app-slava-restraint .model-node__settings-bar:hover,
+body.app-slava-restraint .model-node__settings-bar:focus-within {
+  padding: 3px 4px 3px 12px;
+  gap: 8px;
+}
+body.app-slava-restraint .model-node__settings-bar:hover .model-node__settings-model,
+body.app-slava-restraint .model-node__settings-bar:focus-within .model-node__settings-model {
+  max-width: 220px;
+  opacity: 1;
+  margin-left: 0;
+}
+
+/* THE CARD — visible content surface. overflow:visible so handles can
+ * escape outside the card edge. The image preview clips itself to
+ * matching rounded corners (set on .model-node__preview below). */
+body.app-slava-restraint .model-node__card {
+  display: block;
+  position: relative;
+  background: var(--sr-glass-strong);
+  backdrop-filter: blur(20px) saturate(140%);
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
+  border: 1px solid color-mix(in srgb, var(--node-category-color, rgba(255,255,255,0.40)) 20%, transparent);
+  border-radius: var(--sr-radius-node);
+  /* Soft inner highlight (1px white at 6% inset) — Flora's quiet halo. */
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.06) inset,
+    0 8px 24px rgba(0, 0, 0, 0.65);
+  overflow: visible;  /* let handles escape; preview clips itself */
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+
+@keyframes slava-node-enter-opacity {
+  from {
+    opacity: 0;
+    filter: blur(3px);
+  }
+  to {
+    opacity: 1;
+    filter: none;
+  }
+}
+
+@keyframes slava-node-enter-bloom {
+  from {
+    opacity: 1;
+    box-shadow:
+      0 0 0 10px color-mix(in srgb, var(--node-category-color, var(--sr-accent)) 20%, transparent),
+      0 0 34px color-mix(in srgb, var(--node-category-color, var(--sr-accent)) 32%, transparent);
+  }
+  to {
+    opacity: 0;
+    box-shadow:
+      0 0 0 0 transparent,
+      0 0 0 transparent;
+  }
+}
+
+body.app-slava-restraint .model-node--entering {
+  animation: slava-node-enter-opacity 220ms cubic-bezier(0.05, 0.7, 0.1, 1) both;
+}
+
+body.app-slava-restraint .model-node__card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+}
+
+body.app-slava-restraint .model-node--entering .model-node__card::after {
+  animation: slava-node-enter-bloom 220ms cubic-bezier(0.05, 0.7, 0.1, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.app-slava-restraint .model-node--entering,
+  body.app-slava-restraint .model-node--entering .model-node__card::after {
+    animation: none;
+  }
+}
+
+/* Selected state — applies to the card child.
+ *
+ * Box-shadow breathes 1.6s on a sine-ish ease — the halo expands from
+ * 18px / 28% to 30px / 65% and back, giving a subtle "this node is
+ * alive" pulse. Only animates `box-shadow` (safest property inside a
+ * .react-flow__node — never animate transform here). The ring at 0 0 0
+ * 1px and the inner highlight + drop-shadow stay static so the card's
+ * fundamental geometry doesn't move.
+ *
+ * Reduced-motion: pinned to the static mid-point (24px / 45%) so users
+ * with motion sensitivity still see a clear selected affordance.
+ */
+@keyframes slava-select-breathe {
+  0%, 100% {
+    box-shadow:
+      0 0 0 1px var(--node-category-color, var(--sr-accent)),
+      0 0 18px color-mix(in srgb, var(--node-category-color, var(--sr-accent)) 28%, transparent),
+      0 0 0 1px rgba(255, 255, 255, 0.06) inset,
+      0 8px 24px rgba(0, 0, 0, 0.65);
+  }
+  50% {
+    box-shadow:
+      0 0 0 1px var(--node-category-color, var(--sr-accent)),
+      0 0 30px color-mix(in srgb, var(--node-category-color, var(--sr-accent)) 65%, transparent),
+      0 0 0 1px rgba(255, 255, 255, 0.06) inset,
+      0 8px 24px rgba(0, 0, 0, 0.65);
+  }
+}
+
+body.app-slava-restraint .model-node--selected .model-node__card {
+  border-color: var(--node-category-color, var(--sr-accent));
+  border-width: 1.5px;
+  animation: slava-select-breathe 1600ms ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.app-slava-restraint .model-node--selected .model-node__card {
+    animation: none;
+    box-shadow:
+      0 0 0 1px var(--node-category-color, var(--sr-accent)),
+      0 0 24px color-mix(in srgb, var(--node-category-color, var(--sr-accent)) 45%, transparent),
+      0 0 0 1px rgba(255, 255, 255, 0.06) inset,
+      0 8px 24px rgba(0, 0, 0, 0.65);
+  }
+}
+
+/* Header — transparent overlay strip at the top of the card, sitting
+ * OVER any preview content underneath. A subtle dark gradient ensures
+ * label legibility even on light images. Floats on top of preview via
+ * z-index, not pushed-above-the-card via absolute positioning (keeps
+ * the React Flow handle anchoring intact). */
+body.app-slava-restraint .model-node__header {
+  position: relative;
+  z-index: 2;
+  padding: 8px 12px 8px 12px;
+  border-bottom: none;
+  background: transparent;
+  align-items: center;
+  gap: 8px;
+  /* Tiny dark gradient overlay for label legibility on light previews. */
+  background-image: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.45) 0%,
+    rgba(0, 0, 0, 0.0) 100%
+  );
+}
+
+/* The 6px round dot is hidden — the border tint + model name carry the
+ * category. No extra decorative element. */
+body.app-slava-restraint .model-node__category-dot {
+  display: none;
+}
+
+/* Title — small, quiet. Sits in the upper-left of the overlay strip.
+ * Flora's title scale: 11-12px, weight 500, white. Small enough to not
+ * compete with the preview underneath. */
+body.app-slava-restraint .model-node__label {
+  color: var(--sr-ink-bold);
+  font-family: var(--sr-ui);
+  font-weight: 500;
+  font-size: 12px;
+  line-height: 1.2;
+  letter-spacing: -0.005em;
+}
+
+body.app-slava-restraint .model-node__badge--warning {
+  color: #F5C518;
+}
+
+/* Id-chip — sits in the upper-right, mono, faint. Reads as model
+ * identifier (Flora-style "Flux Dev" / "Nano Banana" upper-right tag).
+ * Smaller and quieter than the title. */
+body.app-slava-restraint .model-node__id-chip {
+  background: transparent;
+  color: var(--sr-ink-light);
+  border: none;
+  border-radius: 0;
+  font-family: var(--sr-mono);
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 0;
+  padding: 0;
+  text-transform: none;
+}
+
+body.app-slava-restraint .model-node__ports {
+  padding: 6px 0 10px;
+}
+
+body.app-slava-restraint .model-node__port-row {
+  padding: 3px 14px;
+}
+
+body.app-slava-restraint .model-node__port-label {
+  color: var(--sr-ink-light);
+  font-family: var(--sr-ui);
+  font-weight: 400;
+  font-size: 11px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+/* Handles — Flora-style circular `+` buttons floating OUTSIDE the card.
+ *
+ * v4 (2026-05-05): clip-path-driven dot-to-circle reveal.
+ *
+ * RESTING: a 9px white dot (visually a small filled circle). The
+ * handle layout box stays 20×20 but the visible region is masked to a
+ * `circle(4.5px at center)` clip-path. Since clip-path is paint-only
+ * (NOT a transform), it doesn't interact with React Flow's inline
+ * transform: matrix() on the handle — sidesteps the gotcha that bit
+ * the v1/v2/v3 attempts.
+ *
+ * EXPANDED (on hover or active connection): clip-path opens to
+ * `circle(10px at center)` revealing the full 20×20 handle: dark glass
+ * fill, white 1px ring, drop-shadow, and the `+` glyph (twin pseudo
+ * lines) fading in. Reads as "this is a connector — click and drag."
+ *
+ * Coordinated transitions: clip-path / bg-color / border-color /
+ * box-shadow / `+` opacity all animate on the same 220ms Vaul curve so
+ * the dot doesn't "lurch" — it transforms as a unified shape change.
+ *
+ * Hit area trade-off: clip-path DOES restrict pointer events, so at
+ * rest the click target is the 9px dot. That's smaller than ideal
+ * (Apple recommends 44px), but matches the "small mark, intentional
+ * click" aesthetic the user is going for; full handle is reachable
+ * by approaching from any direction since hover triggers as soon as
+ * cursor enters the visible region.
+ */
+/* Dot-to-circle connector reveal. The handle itself is only the 20x20
+ * hit target; ::before paints the resting dot and ::after paints the
+ * full glass circle + plus. Both pseudos are centered off the same
+ * 50%/50% point, so the visual center cannot drift. */
+body.app-slava-restraint .model-node__handle,
+body.app-slava-restraint .react-flow__handle {
+  --sr-handle-rest-x: 0px;
+  --sr-handle-rest-y: 0px;
+  --sr-handle-magnet-x: 0px;
+  --sr-handle-magnet-y: 0px;
+  width: 20px !important;
+  height: 20px !important;
+  border-radius: 50% !important;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none;
+  opacity: 1;
+  transition: none;
+}
+
+/* Rest dot. */
+body.app-slava-restraint .model-node__handle::before,
+body.app-slava-restraint .react-flow__handle::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 9px;
+  height: 9px;
+  background: rgba(255, 255, 255, 0.85);
+  border-radius: 50%;
+  opacity: 1;
+  transform:
+    translate(-50%, -50%)
+    translate(var(--sr-handle-rest-x), var(--sr-handle-rest-y))
+    scale(1);
+  transform-origin: center;
+  transition:
+    opacity 220ms cubic-bezier(0.32, 0.72, 0, 1),
+    transform 220ms cubic-bezier(0.32, 0.72, 0, 1);
+  pointer-events: none;
+}
+
+/* Hover/active full circle. The plus glyph is two centered linear gradients
+ * on the same 20x20 pseudo-element as the glass circle. */
+body.app-slava-restraint .model-node__handle::after,
+body.app-slava-restraint .react-flow__handle::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 20px;
+  height: 20px;
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.95)) center / 9px 1.5px no-repeat,
+    linear-gradient(rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.95)) center / 1.5px 9px no-repeat,
+    rgba(20, 20, 22, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  border-radius: 50%;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+  opacity: 0;
+  transform:
+    translate(-50%, -50%)
+    translate(var(--sr-handle-rest-x), var(--sr-handle-rest-y))
+    scale(0.45);
+  transform-origin: center;
+  transition:
+    opacity 220ms cubic-bezier(0.32, 0.72, 0, 1),
+    transform 220ms cubic-bezier(0.32, 0.72, 0, 1),
+    border-color 220ms cubic-bezier(0.32, 0.72, 0, 1),
+    box-shadow 220ms cubic-bezier(0.32, 0.72, 0, 1);
+  pointer-events: none;
+}
+
+/* Push the handles WELL outside the card edge so they read as floating
+ * connector points in the gap between nodes (Flora pattern), not as
+ * decorations stuck to the card border. */
+body.app-slava-restraint .react-flow__handle-left {
+  margin-left: -14px;
+  --sr-handle-rest-x: 4px;
+}
+body.app-slava-restraint .react-flow__handle-right {
+  margin-right: -14px;
+  --sr-handle-rest-x: -4px;
+}
+body.app-slava-restraint .react-flow__handle-top {
+  margin-top: -14px;
+  --sr-handle-rest-y: 4px;
+}
+body.app-slava-restraint .react-flow__handle-bottom {
+  margin-bottom: -14px;
+  --sr-handle-rest-y: -4px;
+}
+
+/* React Flow centers handles with transform: translate(...). Preserve that
+ * anchoring in this skin so hover/connect states cannot replace the
+ * positioning transform. */
+body.app-slava-restraint .react-flow__handle-left,
+body.app-slava-restraint .react-flow__handle-left:hover,
+body.app-slava-restraint .react-flow__handle-left.connectingfrom,
+body.app-slava-restraint .react-flow__handle-left.connecting,
+body.app-slava-restraint .react-flow__handle-left.connectingto {
+  transform: translate(-50%, -50%) !important;
+}
+body.app-slava-restraint .react-flow__handle-right,
+body.app-slava-restraint .react-flow__handle-right:hover,
+body.app-slava-restraint .react-flow__handle-right.connectingfrom,
+body.app-slava-restraint .react-flow__handle-right.connecting,
+body.app-slava-restraint .react-flow__handle-right.connectingto {
+  transform: translate(50%, -50%) !important;
+}
+body.app-slava-restraint .react-flow__handle-top,
+body.app-slava-restraint .react-flow__handle-top:hover,
+body.app-slava-restraint .react-flow__handle-top.connectingfrom,
+body.app-slava-restraint .react-flow__handle-top.connecting,
+body.app-slava-restraint .react-flow__handle-top.connectingto {
+  transform: translate(-50%, -50%) !important;
+}
+body.app-slava-restraint .react-flow__handle-bottom,
+body.app-slava-restraint .react-flow__handle-bottom:hover,
+body.app-slava-restraint .react-flow__handle-bottom.connectingfrom,
+body.app-slava-restraint .react-flow__handle-bottom.connecting,
+body.app-slava-restraint .react-flow__handle-bottom.connectingto {
+  transform: translate(-50%, 50%) !important;
+}
+
+body.app-slava-restraint .react-flow__handle:hover::before,
+body.app-slava-restraint .react-flow__handle.connectingfrom::before,
+body.app-slava-restraint .react-flow__handle.connecting::before,
+body.app-slava-restraint .react-flow__handle.connectingto::before {
+  opacity: 0;
+  transform:
+    translate(-50%, -50%)
+    translate(0, 0)
+    translate(var(--sr-handle-magnet-x), var(--sr-handle-magnet-y))
+    scale(0.7);
+}
+body.app-slava-restraint .react-flow__handle:hover::after,
+body.app-slava-restraint .react-flow__handle.connectingfrom::after,
+body.app-slava-restraint .react-flow__handle.connecting::after,
+body.app-slava-restraint .react-flow__handle.connectingto::after {
+  opacity: 1;
+  transform:
+    translate(-50%, -50%)
+    translate(0, 0)
+    translate(var(--sr-handle-magnet-x), var(--sr-handle-magnet-y))
+    scale(1);
+}
+
+/* Active-connection accent — orange ring during drag-from / hover-target. */
+body.app-slava-restraint .react-flow__handle.connectingfrom::after,
+body.app-slava-restraint .react-flow__handle.connecting::after,
+body.app-slava-restraint .react-flow__handle.connectingto::after {
+  box-shadow: 0 0 0 4px var(--sr-accent-soft), 0 1px 4px rgba(0, 0, 0, 0.6);
+  border-color: var(--sr-accent);
+  transition:
+    opacity 140ms cubic-bezier(0.05, 0.7, 0.1, 1),
+    transform 140ms cubic-bezier(0.05, 0.7, 0.1, 1),
+    border-color 140ms cubic-bezier(0.05, 0.7, 0.1, 1),
+    box-shadow 140ms cubic-bezier(0.05, 0.7, 0.1, 1);
+}
+
+/* ─── DEBUG: handle alignment overlay ────────────────────────────────
+ * Toggle in DevTools console:
+ *   document.body.classList.toggle('debug-handles')
+ *
+ * When enabled:
+ *   - Red outline shows the handle's 20×20 layout box.
+ *   - Green dot at the geometric center (parent's 50% / 50%).
+ *   - Both ::before (rest dot) AND ::after (hover circle) painted at
+ *     50% opacity simultaneously, so misalignment between them is
+ *     immediately visible.
+ * If the rest dot, the hover circle, AND the green center marker all
+ * sit on top of each other, the alignment is correct. If any are
+ * offset, the offset is the bug.
+ * ──────────────────────────────────────────────────────────────────── */
+body.app-slava-restraint.debug-handles .react-flow__handle {
+  outline: 1px solid red !important;
+  outline-offset: 0 !important;
+}
+body.app-slava-restraint.debug-handles .react-flow__handle::before {
+  opacity: 0.5 !important;
+}
+body.app-slava-restraint.debug-handles .react-flow__handle::after {
+  opacity: 0.5 !important;
+}
+body.app-slava-restraint.debug-handles .react-flow__handle .debug-center,
+body.app-slava-restraint.debug-handles .react-flow__handle::marker { /* placeholder */ }
+/* Use a separate ::backdrop-equivalent via background-image for the
+ * center marker since both pseudos are taken. A radial gradient on the
+ * parent paints a 2px green dot exactly at 50%/50%. */
+body.app-slava-restraint.debug-handles .react-flow__handle {
+  background-image: radial-gradient(circle at center, lime 0, lime 1px, transparent 1.5px) !important;
+}
+
+/* Edges — subtle white with a soft glow halo (Flora's connector lines).
+ * SVG drop-shadow on the edge stroke creates the halo without a heavier
+ * stroke weight; readable on pure black without being aggressive.
+ *
+ * Mount animation: each edge draws from source to target on first mount.
+ * `pathLength="100"` (set on the BaseEdge in TypedEdge.tsx) normalizes
+ * every path to 100 units regardless of actual length, so a single
+ * `stroke-dasharray: 100` works universally. The keyframes interpolate
+ * `stroke-dashoffset` from 100 (line invisible) to 0 (fully drawn),
+ * then jump `stroke-dasharray` to `none` at the end so any subsequent
+ * `.animated` (executing edges marching-ants) state isn't blocked.
+ *
+ * One-shot per edge instance — xyflow keeps DOM identity stable by
+ * edge ID, so the animation does NOT replay on node-drag re-renders.
+ *
+ * Curve: M3 emphasized-decelerate `cubic-bezier(0.05, 0.7, 0.1, 1)` —
+ * the right curve for an "incoming element" per Material 3 motion. */
+@keyframes slava-edge-draw {
+  0%   { stroke-dasharray: 100; stroke-dashoffset: 100; }
+  99%  { stroke-dasharray: 100; stroke-dashoffset: 0; }
+  100% { stroke-dasharray: none; stroke-dashoffset: 0; }
+}
+
+body.app-slava-restraint .react-flow__edge-path {
+  stroke: rgba(255, 255, 255, 0.55);
+  stroke-width: 1.5;
+  filter: drop-shadow(0 0 4px rgba(255, 255, 255, 0.18));
+  animation: slava-edge-draw 280ms cubic-bezier(0.05, 0.7, 0.1, 1) forwards;
+}
+
+@keyframes slava-edge-dash-march {
+  to { stroke-dashoffset: -16; }
+}
+
+body.app-slava-restraint .react-flow__edge.animated .react-flow__edge-path {
+  stroke-dasharray: 6 4 2 4;
+  animation: slava-edge-dash-march 900ms cubic-bezier(0.42, 0, 0.2, 1) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.app-slava-restraint .react-flow__edge-path,
+  body.app-slava-restraint .react-flow__edge.animated .react-flow__edge-path {
+    animation: none;
+    stroke-dasharray: none;
+  }
+}
+body.app-slava-restraint .react-flow__edge.selected .react-flow__edge-path {
+  stroke: var(--sr-accent);
+  stroke-width: 2;
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--sr-accent) 50%, transparent));
+}
+
+/* Preview area — fills card edge-to-edge (Flora's image-fills-card move).
+ * Negative top margin pulls the preview up beneath the floating header
+ * overlay so the image extends behind the title gradient. Border-radius
+ * matches the card's interior corners; overflow:hidden clips the image
+ * (the card itself is overflow:visible to let handles escape). */
+body.app-slava-restraint .model-node__preview,
+body.app-slava-restraint .model-node__preview-placeholder {
+  background: rgba(0, 0, 0, 0.55);
+  border-radius: var(--sr-radius-node);
+  margin: -32px 0 0 0;  /* pull up under the absolute-positioned header */
+  overflow: hidden;
+  position: relative;
+  z-index: 1;
+}
+/* Image / video preview fills the area completely. */
+body.app-slava-restraint .model-node__preview img,
+body.app-slava-restraint .model-node__preview video {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: 0;
+}
+
+/* Image surface nodes — Flora reference: the image is the object, not a
+ * preview nested inside a larger card. Chrome moves above the image and only
+ * appears when the user approaches the node. */
+body.app-slava-restraint .model-node--image-surface {
+  padding-top: 70px;
+}
+
+body.app-slava-restraint .model-node--image-surface .model-node__type-label,
+body.app-slava-restraint .model-node--image-surface .model-node__settings-bar {
+  display: none;
+}
+
+body.app-slava-restraint .model-node--image-surface .model-node__media-toolbar {
+  display: inline-flex;
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  z-index: 7;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  padding: 5px;
+  border: 1px solid var(--sr-edge);
+  border-radius: var(--sr-radius-pill);
+  background: rgba(20, 20, 22, 0.78);
+  backdrop-filter: blur(20px) saturate(140%);
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.05) inset,
+    0 10px 26px rgba(0, 0, 0, 0.55);
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, 8px) scale(0.98);
+  transform-origin: center;
+  transition:
+    opacity 180ms cubic-bezier(0.32, 0.72, 0, 1),
+    transform 180ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+body.app-slava-restraint .model-node--image-surface:hover .model-node__media-toolbar,
+body.app-slava-restraint .model-node--image-surface:focus-within .model-node__media-toolbar,
+body.app-slava-restraint .model-node--image-surface.model-node--selected .model-node__media-toolbar {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translate(-50%, 0) scale(1);
+}
+
+body.app-slava-restraint .model-node__media-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--sr-radius-pill);
+  background: transparent;
+  color: var(--sr-ink-light);
+  cursor: pointer;
+  font-family: var(--sr-mono);
+  font-size: 14px;
+  line-height: 1;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease;
+}
+
+body.app-slava-restraint .model-node__media-action:hover {
+  border-color: var(--sr-edge-strong);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--sr-ink-bold);
+}
+
+body.app-slava-restraint .model-node__media-action:focus-visible {
+  outline: 2px solid var(--sr-accent-soft);
+  outline-offset: 2px;
+  border-color: var(--sr-accent);
+}
+
+body.app-slava-restraint .model-node--image-surface .model-node__card {
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border: none;
+  border-radius: 14px;
+  box-shadow: none;
+  overflow: visible;
+  animation: none;
+}
+
+body.app-slava-restraint .model-node--image-surface.model-node--selected .model-node__card {
+  border: none;
+  box-shadow: none;
+  animation: none;
+}
+
+body.app-slava-restraint .model-node--image-surface .model-node__header {
+  position: absolute;
+  top: -28px;
+  left: 0;
+  right: 0;
+  z-index: 6;
+  min-height: 22px;
+  padding: 0 2px;
+  border: none;
+  background: transparent;
+  background-image: none;
+  gap: 8px;
+  pointer-events: auto;
+}
+
+body.app-slava-restraint .model-node--image-surface .model-node__header::before {
+  content: '';
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+  border: 1.5px solid var(--sr-ink-light);
+  border-radius: 3px;
+  background:
+    linear-gradient(135deg, transparent 48%, var(--sr-ink-light) 50%, transparent 54%) 3px 7px / 8px 5px no-repeat;
+  opacity: 0.82;
+}
+
+body.app-slava-restraint .model-node--image-surface .model-node__label {
+  color: var(--sr-ink-light);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+body.app-slava-restraint .model-node--image-surface .model-node__id-chip {
+  color: var(--sr-ink-meta);
+  opacity: 0;
+  transition: opacity 140ms ease, color 140ms ease;
+}
+
+body.app-slava-restraint .model-node--image-surface:hover .model-node__id-chip,
+body.app-slava-restraint .model-node--image-surface:focus-within .model-node__id-chip,
+body.app-slava-restraint .model-node--image-surface.model-node--selected .model-node__id-chip {
+  opacity: 1;
+}
+
+body.app-slava-restraint .model-node--image-surface .dynamic-node__model-badge {
+  display: none;
+}
+
+body.app-slava-restraint .model-node--image-surface .model-node__preview {
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 14px;
+  background: transparent;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.05) inset,
+    0 10px 30px rgba(0, 0, 0, 0.62);
+  line-height: 0;
+  overflow: visible;
+  cursor: grab;
+}
+
+body.app-slava-restraint .model-node--image-surface:active .model-node__preview {
+  cursor: grabbing;
+}
+
+body.app-slava-restraint .model-node--image-surface.model-node--selected .model-node__preview {
+  box-shadow:
+    0 0 0 1.5px var(--node-category-color, var(--sr-accent)),
+    0 0 22px color-mix(in srgb, var(--node-category-color, var(--sr-accent)) 36%, transparent),
+    0 10px 30px rgba(0, 0, 0, 0.62);
+}
+
+body.app-slava-restraint .model-node--image-surface .model-node__preview-image,
+body.app-slava-restraint .model-node--image-surface .model-node__preview-image--streaming,
+body.app-slava-restraint .model-node--image-surface .model-node__preview img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+  box-shadow: none;
+  -webkit-user-drag: none;
+  user-select: none;
+}
+
+body.app-slava-restraint .model-node--image-surface .model-node__preview-image--streaming {
+  outline: 1px dashed rgba(255, 255, 255, 0.32);
+  outline-offset: -1px;
+}
+
+body.app-slava-restraint .model-node--image-surface .model-node__preview > .model-node__download {
+  display: none;
+}
+
+body.app-slava-restraint .model-node--image-surface .model-node__ports {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  padding: 0;
+  pointer-events: none;
+}
+
+body.app-slava-restraint .model-node--image-surface .model-node__port-row {
+  position: absolute;
+  top: 50%;
+  width: 0;
+  height: 0;
+  padding: 0;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+body.app-slava-restraint .model-node--image-surface .model-node__ports--input .model-node__port-row {
+  left: 0;
+}
+
+body.app-slava-restraint .model-node--image-surface .model-node__ports--output .model-node__port-row {
+  right: 0;
+}
+
+body.app-slava-restraint .model-node--image-surface .model-node__port-label {
+  display: none;
+}
+
+body.app-slava-restraint .model-node--image-surface .react-flow__handle {
+  pointer-events: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.app-slava-restraint .model-node--image-surface .model-node__media-toolbar,
+  body.app-slava-restraint .model-node--image-surface .model-node__id-chip {
+    transition: none;
+  }
+}
+
+body.app-slava-restraint .model-node__error {
+  color: #F5C518;
+  background: rgba(0, 0, 0, 0.40);
+  border: none;
+  border-left: 2px solid var(--sr-accent);
+  font-family: var(--sr-mono);
+  font-size: 11px;
+  padding: 6px 10px;
+  margin: 0 14px 8px;
+  border-radius: 4px;
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+ * Skin picker overrides — match the restraint palette
+ * ───────────────────────────────────────────────────────────────────── */
+body.app-slava-restraint .skin-picker__option {
+  border: 1px solid var(--sr-edge);
+  border-radius: 8px;
+  background: transparent;
+}
+body.app-slava-restraint .skin-picker__option:hover {
+  border-color: var(--sr-edge-strong);
+  background: rgba(255, 255, 255, 0.03);
+}
+body.app-slava-restraint .skin-picker__option--active {
+  border-color: var(--sr-accent);
+  background: var(--sr-accent-soft);
+}
+body.app-slava-restraint .skin-picker__radio { border-color: var(--sr-ink-light); }
+body.app-slava-restraint .skin-picker__option--active .skin-picker__radio { border-color: var(--sr-accent); }
+body.app-slava-restraint .skin-picker__option--active .skin-picker__radio-dot { background: var(--sr-accent); }
+body.app-slava-restraint .skin-picker__label {
+  color: var(--sr-ink-bold);
+  font-family: var(--sr-ui);
+  font-weight: 600;
+  font-size: 13px;
+  letter-spacing: 0;
+}
+body.app-slava-restraint .skin-picker__description {
+  color: var(--sr-ink-light);
+  font-family: var(--sr-ui);
+  font-size: 11px;
+  letter-spacing: 0;
+  line-height: 1.4;
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+ * Selection + scrollbars
+ * ───────────────────────────────────────────────────────────────────── */
+body.app-slava-restraint ::selection {
+  background: var(--sr-accent);
+  color: #0A0A0B;
+}
+
+body.app-slava-restraint ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+body.app-slava-restraint ::-webkit-scrollbar-track {
+  background: transparent;
+}
+body.app-slava-restraint ::-webkit-scrollbar-thumb {
+  background: var(--sr-edge-strong);
+  border-radius: 4px;
+}
+body.app-slava-restraint ::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.20);
+}

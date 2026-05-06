@@ -5,6 +5,7 @@ import { NODE_DEFINITIONS } from '../../constants/nodeDefinitions';
 import { PORT_COLORS } from '../../lib/portCompatibility';
 import { CATEGORY_COLORS } from '../../constants/ports';
 import { useUIStore } from '../../store/uiStore';
+import { useSlavaNodeEntranceClass } from '../../hooks/useSlavaNodeEntrance';
 import { MeshPreview } from './MeshPreview';
 import '../../styles/nodes.css';
 
@@ -15,6 +16,7 @@ function isDynamicData(data: NodeData): data is DynamicNodeData {
 function DynamicNodeComponent({ id, data, selected }: NodeProps) {
   const nodeData = data as unknown as NodeData;
   const selectNode = useUIStore((s) => s.selectNode);
+  const entranceClass = useSlavaNodeEntranceClass();
   const [videoLoop, setVideoLoop] = useState<boolean>(true);
 
   const definition = NODE_DEFINITIONS[nodeData.definitionId];
@@ -39,12 +41,40 @@ function DynamicNodeComponent({ id, data, selected }: NodeProps) {
   const finalImageSrc = imageOutput && typeof imageOutput.value === 'string' ? imageOutput.value : null;
   const previewImageSrc = finalImageSrc ?? latestPartial?.src ?? null;
   const isStreamingImage = nodeData.state === 'executing' && partials != null && partials.length > 0 && finalImageSrc == null;
+  const isImageSurface = Boolean(previewImageSrc);
 
   // Model badge: show selected model compactly
   const modelBadge = dynData?.modelId || (nodeData.params.model as string) || (nodeData.params.model_id as string) || (nodeData.params.endpoint_id as string) || null;
 
   return (
-    <div className={`model-node ${stateClass} ${selected ? 'model-node--selected' : ''}`} onClick={() => selectNode(id)}>
+    <div
+      className={`model-node ${stateClass}${isImageSurface ? ' model-node--image-surface' : ''} ${selected ? 'model-node--selected' : ''}${entranceClass}`}
+      onClick={() => selectNode(id)}
+      style={{ ['--node-category-color' as string]: categoryColor }}
+    >
+      {/* Type label — floats above the card; hidden in default + Hermes skins. */}
+      <div className="model-node__type-label">{definition?.category ?? 'universal'}</div>
+
+      {/* Settings bar — floats above the card when selected. */}
+      {selected && (
+        <div className="model-node__settings-bar">
+          <span className="model-node__settings-model">
+            {definition?.displayName ?? nodeData.label}
+          </span>
+          <button
+            type="button"
+            className="model-node__settings-edit nodrag"
+            onClick={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+            title="Open Inspector"
+          >
+            …
+          </button>
+        </div>
+      )}
+
+      {/* Card — visible content surface, only target of skin background/border. */}
+      <div className="model-node__card">
       <div className="model-node__header">
         <span className="model-node__category-dot" style={{ backgroundColor: categoryColor }} />
         <span className="model-node__label">{nodeData.label}</span>
@@ -161,6 +191,7 @@ function DynamicNodeComponent({ id, data, selected }: NodeProps) {
           ))}
         </div>
       )}
+      </div>
     </div>
   );
 }

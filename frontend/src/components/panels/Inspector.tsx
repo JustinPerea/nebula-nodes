@@ -6,6 +6,7 @@ import { CATEGORY_COLORS } from '../../constants/ports';
 import { PORT_COLORS } from '../../lib/portCompatibility';
 import type { NodeData, DynamicNodeData, ParamDefinition } from '../../types';
 import { fetchOpenRouterModels, fetchNousModels, getSettings, updateSettings, type OpenRouterModel } from '../../lib/api';
+import { useDelayedUnmount } from '../../hooks/useDelayedUnmount';
 import '../../styles/panels.css';
 
 export function Inspector() {
@@ -22,6 +23,7 @@ export function Inspector() {
   const configureOpenRouterModel = useGraphStore((s) => s.configureOpenRouterModel);
   const fetchReplicateSchemaAndConfigure = useGraphStore((s) => s.fetchReplicateSchemaAndConfigure);
   const dragRef = useRef<{ startX: number; startY: number; panelX: number; panelY: number } | null>(null);
+  const { shouldRender, exiting } = useDelayedUnmount(visible, 500);
 
   // OpenRouter model selector state
   const [openRouterModels, setOpenRouterModels] = useState<OpenRouterModel[]>([]);
@@ -45,7 +47,13 @@ export function Inspector() {
   }, []);
 
   const selectedNode = nodes.find((n) => n.id === selectedNodeId);
-  const nodeData = selectedNode?.data as NodeData | undefined;
+  const selectedNodeData = selectedNode?.data as NodeData | undefined;
+  const lastSelectionRef = useRef<{ node: NonNullable<typeof selectedNode>; data: NodeData } | null>(null);
+  if (selectedNode && selectedNodeData) {
+    lastSelectionRef.current = { node: selectedNode, data: selectedNodeData };
+  }
+  const renderNode = selectedNode ?? (exiting ? lastSelectionRef.current?.node : undefined);
+  const nodeData = selectedNodeData ?? (exiting ? lastSelectionRef.current?.data : undefined);
   const definition = nodeData ? NODE_DEFINITIONS[nodeData.definitionId] : undefined;
 
   // Resolve params: dual-param nodes use sharedParams + (falParams or directParams)
@@ -145,22 +153,23 @@ export function Inspector() {
     };
   }, [setPanelPosition]);
 
-  if (!visible || !selectedNode || !nodeData) return null;
+  if (!shouldRender || !renderNode || !nodeData) return null;
   // For dynamic nodes, definition may be a shell — that's fine
   if (!definition && !(nodeData as unknown as DynamicNodeData)?.isDynamic) return null;
 
   const resolvedX = position.x < 0 ? window.innerWidth + position.x : position.x;
+  const activeNode = renderNode;
+  const activeNodeData = nodeData;
 
   function onParamChange(key: string, value: unknown) {
-    if (!selectedNodeId) return;
-    updateNodeData(selectedNodeId, {
-      params: { ...nodeData!.params, [key]: value },
+    updateNodeData(activeNode.id, {
+      params: { ...activeNodeData.params, [key]: value },
     });
   }
 
   return (
     <div
-      className="panel panel--inspector"
+      className={`panel panel--inspector${exiting ? ' panel--exiting' : ''}`}
       style={{ left: resolvedX, top: position.y }}
     >
       <div
@@ -180,7 +189,7 @@ export function Inspector() {
         </button>
       </div>
 
-      <div className="panel__body">
+      <div className="panel__body" key={renderNode.id}>
         <div className="inspector__node-header">
           <span
             className="inspector__node-dot"
@@ -278,8 +287,8 @@ export function Inspector() {
                   value={String(nodeData.params.model ?? '')}
                   onChange={(e) => {
                     const selected = openRouterModels.find((m) => m.id === e.target.value);
-                    if (selected && selectedNodeId) {
-                      configureOpenRouterModel(selectedNodeId, selected.id, selected);
+                    if (selected) {
+                      configureOpenRouterModel(renderNode.id, selected.id, selected);
                     }
                   }}
                 >
@@ -387,9 +396,8 @@ export function Inspector() {
                       fetch('http://localhost:8000/api/uploads', { method: 'POST', body: formData })
                         .then((r) => r.json())
                         .then((data: { filePath: string; url: string }) => {
-                          if (!selectedNodeId) return;
-                          updateNodeData(selectedNodeId, {
-                            params: { ...nodeData!.params, [param.key]: data.filePath, _previewUrl: data.url },
+                          updateNodeData(renderNode.id, {
+                            params: { ...nodeData.params, [param.key]: data.filePath, _previewUrl: data.url },
                           });
                         })
                         .catch((err) => console.error('Upload failed:', err));
@@ -434,7 +442,7 @@ export function Inspector() {
                   const [owner, name] = modelId.split('/', 2);
                   setSchemaLoading(true);
                   try {
-                    await fetchReplicateSchemaAndConfigure(selectedNodeId!, owner, name);
+                    await fetchReplicateSchemaAndConfigure(renderNode.id, owner, name);
                   } finally {
                     setSchemaLoading(false);
                   }
@@ -513,21 +521,21 @@ export function Inspector() {
         <div className="inspector__section" style={{ marginTop: 12, borderTop: '1px solid #2a2a2a', paddingTop: 8, display: 'flex', gap: 6 }}>
           <button
             className="inspector__action-button"
-            onClick={() => selectedNodeId && executeNode(selectedNodeId)}
+            onClick={() => executeNode(renderNode.id)}
             title="Run this node and its dependencies"
           >
             ▶ Run
           </button>
           <button
             className="inspector__action-button"
-            onClick={() => selectedNodeId && duplicateNode(selectedNodeId)}
+            onClick={() => duplicateNode(renderNode.id)}
             title="Duplicate this node"
           >
             Duplicate
           </button>
           <button
             className="inspector__action-button inspector__action-button--danger"
-            onClick={() => selectedNodeId && deleteNode(selectedNodeId)}
+            onClick={() => deleteNode(renderNode.id)}
             title="Delete this node"
           >
             Delete
