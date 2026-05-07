@@ -21,8 +21,13 @@ export function useDelayedUnmount(visible: boolean, duration = 500) {
 
   useEffect(() => {
     if (visible) {
-      setShouldRender(true);
-      return;
+      let cancelled = false;
+      queueMicrotask(() => {
+        if (!cancelled) setShouldRender(true);
+      });
+      return () => {
+        cancelled = true;
+      };
     }
     const t = setTimeout(() => setShouldRender(false), duration);
     return () => clearTimeout(t);

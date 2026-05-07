@@ -1,17 +1,15 @@
-declare namespace JSX {
-  interface IntrinsicElements {
-    'model-viewer': React.DetailedHTMLProps<
-      React.HTMLAttributes<HTMLElement> & {
+import type { DetailedHTMLProps, HTMLAttributes } from 'react';
+
+declare module 'react' {
+  namespace JSX {
+    interface IntrinsicElements {
+      'model-viewer': DetailedHTMLProps<HTMLAttributes<HTMLElement>, HTMLElement> & {
         src?: string;
         alt?: string;
-        'camera-controls'?: boolean;
-        'auto-rotate'?: boolean;
+        'camera-controls'?: boolean | string;
+        'auto-rotate'?: boolean | string;
         'shadow-intensity'?: string;
-        'environment-image'?: string;
-        poster?: string;
-        style?: React.CSSProperties;
-      },
-      HTMLElement
-    >;
+      };
+    }
   }
 }

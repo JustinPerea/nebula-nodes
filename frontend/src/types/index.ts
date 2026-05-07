@@ -41,7 +41,9 @@ export type APIProvider =
   | 'ideogram'
   | 'openrouter'
   | 'bfl'
-  | 'higgsfield';
+  | 'higgsfield'
+  | 'meshy'
+  | 'nous';
 
 export interface PortDefinition {
   id: string;
@@ -105,6 +107,7 @@ export interface PortValue {
 }
 
 export interface NodeData {
+  [key: string]: unknown;
   label: string;
   definitionId: string;
   params: Record<string, unknown>;
@@ -138,6 +141,7 @@ export interface DynamicParamDefinition {
 }
 
 export interface DynamicNodeData extends NodeData {
+  [key: string]: unknown;
   isDynamic: true;
   providerType: 'openrouter' | 'replicate' | 'fal';
   modelId?: string;

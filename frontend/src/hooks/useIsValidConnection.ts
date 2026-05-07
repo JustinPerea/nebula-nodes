@@ -35,7 +35,7 @@ export function useIsValidConnection() {
   const { getNodes, getEdges } = useReactFlow();
 
   return useCallback(
-    (connection: Connection) => {
+    (connection: Connection | Edge) => {
       if (!connection.source || !connection.target) return false;
 
       const nodes = getNodes();

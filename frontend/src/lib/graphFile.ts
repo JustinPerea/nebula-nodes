@@ -1,6 +1,6 @@
 import JSZip from 'jszip';
 import type { Node, Edge, Viewport } from '@xyflow/react';
-import type { NodeData } from '../types';
+import type { NodeData, NodeState } from '../types';
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 
 /**
@@ -35,8 +35,8 @@ interface NebulaNode {
     label: string;
     definitionId: string;
     params: Record<string, unknown>;
-    outputs?: Record<string, unknown>;
-    state?: 'idle' | 'executing' | 'complete' | 'error';
+    outputs?: NodeData['outputs'];
+    state?: NodeState;
   };
 }
 
@@ -109,7 +109,7 @@ export function deserializeGraph(
     if (!definition) {
       warnings.push(`Unknown node definition: "${n.data.definitionId}" (node ${n.id})`);
     }
-    const outputs = (n.data.outputs ?? {}) as Record<string, unknown>;
+    const outputs = (n.data.outputs ?? {}) as NodeData['outputs'];
     const hasOutputs = Object.keys(outputs).length > 0;
     // v2+: trust saved state (complete if outputs present). v1: always idle, no outputs.
     const state = hasOutputs ? (n.data.state ?? 'complete') : 'idle';
@@ -285,7 +285,7 @@ function rewriteAssetUrls(
   };
   for (const node of nodes) {
     if (node.data.outputs) {
-      node.data.outputs = remap(node.data.outputs) as Record<string, unknown>;
+      node.data.outputs = remap(node.data.outputs) as NodeData['outputs'];
     }
     if (node.data.params) {
       node.data.params = remap(node.data.params) as Record<string, unknown>;

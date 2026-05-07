@@ -14,7 +14,6 @@ import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 import {
   executeGraph as apiExecuteGraph,
   executeNode as apiExecuteNode,
-  fetchOpenRouterModels,
   fetchReplicateSchema,
   type OpenRouterModel,
 } from '../lib/api';
@@ -66,7 +65,7 @@ function restoreWithOutputs(
   const currentOutputs = new Map<
     string,
     {
-      outputs: Record<string, { type: string; value: string | null }>;
+      outputs: NodeData['outputs'];
       state: NodeData['state'];
       streamingText?: string;
     }
@@ -74,7 +73,7 @@ function restoreWithOutputs(
   for (const n of currentNodes) {
     if (Object.keys(n.data.outputs).length > 0) {
       currentOutputs.set(n.id, {
-        outputs: n.data.outputs as Record<string, { type: string; value: string | null }>,
+        outputs: n.data.outputs,
         state: n.data.state,
         streamingText: n.data.streamingText,
       });
@@ -680,11 +679,11 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         }
       }
       set((state) => ({
-        nodes: applyNodeChanges(changes, state.nodes),
+        nodes: applyNodeChanges(changes, state.nodes) as Node<NodeData>[],
         edges: state.edges.filter((e) => !removedIds.includes(e.source) && !removedIds.includes(e.target)),
       }));
     } else {
-      set((state) => ({ nodes: applyNodeChanges(changes, state.nodes) }));
+      set((state) => ({ nodes: applyNodeChanges(changes, state.nodes) as Node<NodeData>[] }));
     }
   },
 
