@@ -197,7 +197,10 @@ export function ConnectionPopup() {
           placeholder={`Search ${compatibleNodes.length} compatible nodes...`}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          onKeyDown={(e) => e.stopPropagation()}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') hideConnectionPopup();
+            e.stopPropagation();
+          }}
           onMouseDown={(e) => e.stopPropagation()}
         />
         <button

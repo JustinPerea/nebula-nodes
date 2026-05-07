@@ -62,6 +62,7 @@ try {
   await screenshot(cdp, '01-slava-desktop.png');
 
   await runSlavaInteractionChecks(cdp);
+  await runSlavaPersistenceChecks(cdp);
   await setupSlavaScene(cdp);
   await waitForRuntime(cdp, 'document.body.classList.contains("app-slava-restraint") && document.querySelectorAll(".react-flow__node").length >= 4');
 
@@ -95,6 +96,7 @@ try {
   });
   await sleep(300);
   await screenshot(cdp, '04-mobile-slava.png');
+  await runSlavaMobileLayoutChecks(cdp);
 
   const assertions = await evaluate(cdp, () => {
     const required = {
@@ -269,6 +271,7 @@ async function setupSlavaScene(cdp) {
 }
 
 async function runSlavaInteractionChecks(cdp) {
+  debugStep('interaction: start');
   await waitForRuntime(cdp, 'document.querySelector(".settings__section-toggle") && !document.querySelector(".settings__loading")');
 
   const chromeAssertions = await evaluate(cdp, () => {
@@ -327,9 +330,32 @@ async function runSlavaInteractionChecks(cdp) {
   assertSlavaCheck(agentLogAssertions.persisted, 'agent log setting persists to localStorage');
   assertSlavaCheck(agentLogAssertions.openEmptyText === 'No events yet', 'agent log opens with empty state');
 
+  debugStep('interaction: agent log drag/reset');
+  const agentLogRectBeforeDrag = await getRect(cdp, '.agent-log');
+  await dragSelector(cdp, '.agent-log__drag-row', -84, -38);
+  await waitForRuntime(cdp, 'Boolean(window.localStorage.getItem("nebula:agentLog:pos"))');
+  const agentLogRectAfterDrag = await getRect(cdp, '.agent-log');
+  assertSlavaCheck(
+    Math.abs(agentLogRectAfterDrag.left - agentLogRectBeforeDrag.left) >= 30
+      || Math.abs(agentLogRectAfterDrag.top - agentLogRectBeforeDrag.top) >= 20,
+    'agent log moves after header drag',
+  );
+
+  await clickSelector(cdp, 'button[title="Reset panel positions and sizes"]');
+  await waitForRuntime(cdp, '!window.localStorage.getItem("nebula:agentLog:pos") && !document.querySelector(".agent-log")?.style.left');
+  const agentLogResetAssertions = await evaluate(cdp, () => ({
+    persistedPositionCleared: !window.localStorage.getItem('nebula:agentLog:pos'),
+    inlinePositionCleared:
+      !document.querySelector('.agent-log')?.style.left
+      && !document.querySelector('.agent-log')?.style.top,
+  }));
+  assertSlavaCheck(agentLogResetAssertions.persistedPositionCleared, 'layout reset clears persisted agent log position');
+  assertSlavaCheck(agentLogResetAssertions.inlinePositionCleared, 'layout reset clears visible agent log position');
+
   await clickSelector(cdp, '.settings__toggle-row');
   await waitForRuntime(cdp, '!document.querySelector(".agent-log") && !document.body.classList.contains("agent-log-enabled")');
 
+  debugStep('interaction: image drag');
   await evaluate(cdp, () => {
     window.__nebulaUIStore.setState((state) => ({
       panels: {
@@ -364,6 +390,7 @@ async function runSlavaInteractionChecks(cdp) {
     'dragging the image surface moves the node',
   );
 
+  debugStep('interaction: chat drag/resize');
   const chatRectBeforeDrag = await getRect(cdp, '.chat-panel');
   await dragSelector(cdp, '.chat-panel__header', -120, 42);
   await waitForRuntime(cdp, 'window.__nebulaUIStore.getState().panels.chat.left !== null && window.__nebulaUIStore.getState().panels.chat.top !== null');
@@ -387,16 +414,16 @@ async function runSlavaInteractionChecks(cdp) {
   await waitForRuntime(cdp, 'document.querySelector(".chat-panel__textarea") && !document.querySelector(".chat-panel__textarea").disabled');
   await evaluate(cdp, () => {
     window.__nebulaChat?.clear?.();
-    const textarea = document.querySelector('.chat-panel__textarea');
-    textarea?.focus();
+    window.__nebulaChat?.setInput?.('hello from slava check');
   });
-  await cdp.send('Input.insertText', { text: 'hello from slava check' });
-  await key(cdp, 'Enter');
+  await waitForRuntime(cdp, 'document.querySelector(".chat-panel__textarea")?.value === "hello from slava check"');
+  await dispatchDomKey(cdp, '.chat-panel__textarea', 'Enter');
   await waitForRuntime(cdp, 'Array.from(document.querySelectorAll(".chat__bubble--user")).some((el) => el.textContent.includes("hello from slava check"))');
   await waitForRuntime(cdp, 'document.querySelector(".chat-panel__send--stop")');
   await clickSelector(cdp, '.chat-panel__send--stop');
   await waitForRuntime(cdp, 'Array.from(document.querySelectorAll(".chat__system")).some((el) => el.textContent.includes("Cancelled."))');
 
+  debugStep('interaction: chat send assertions');
   const chatSendAssertions = await evaluate(cdp, () => {
     const sockets = window.__slavaMockChatSockets ?? [];
     return {
@@ -412,6 +439,71 @@ async function runSlavaInteractionChecks(cdp) {
   assertSlavaCheck(chatSendAssertions.sentMessage, 'chat Enter key sends message envelope');
   assertSlavaCheck(chatSendAssertions.sentCancel, 'chat Stop sends cancel envelope');
   assertSlavaCheck(chatSendAssertions.stopReturnedToSubmit, 'chat Stop returns input to send mode');
+
+  debugStep('interaction: shift enter');
+  await evaluate(cdp, () => {
+    window.__nebulaChat?.clear?.();
+    window.__nebulaChat?.setInput?.('line one');
+  });
+  await waitForRuntime(cdp, 'document.querySelector(".chat-panel__textarea")?.value === "line one"');
+  await dispatchDomKey(cdp, '.chat-panel__textarea', 'Enter', { shiftKey: true });
+  await sleep(100);
+  const shiftEnterAssertions = await evaluate(cdp, () => {
+    const sockets = window.__slavaMockChatSockets ?? [];
+    return {
+      noUserBubble: !Array.from(document.querySelectorAll('.chat__bubble--user')).some((el) =>
+        el.textContent.includes('line one'),
+      ),
+      noSendEnvelope: !sockets.some((socket) =>
+        socket.sent?.some((msg) => msg.type === 'send' && msg.message === 'line one'),
+      ),
+    };
+  });
+  assertSlavaCheck(shiftEnterAssertions.noUserBubble, 'Shift+Enter does not submit chat input');
+  assertSlavaCheck(shiftEnterAssertions.noSendEnvelope, 'Shift+Enter does not send a chat envelope');
+
+  debugStep('interaction: connection popup escape');
+  await evaluate(cdp, () => {
+    const textarea = document.querySelector('.chat-panel__textarea');
+    if (textarea instanceof HTMLTextAreaElement) {
+      textarea.value = '';
+      textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    window.__nebulaUIStore.getState().showConnectionPopup({
+      position: { x: 620, y: 430 },
+      nodeId: 'n1',
+      handleId: 'text',
+      handleType: 'source',
+    });
+  });
+  await waitForRuntime(cdp, 'document.querySelector(".connection-popup") && document.activeElement?.classList.contains("connection-popup__search")');
+  await dispatchDomKey(cdp, '.connection-popup__search', 'Escape');
+  await waitForRuntime(cdp, '!document.querySelector(".connection-popup")');
+
+  debugStep('interaction: tab focus');
+  await evaluate(cdp, () => {
+    const focusable = Array.from(document.querySelectorAll('button, input, textarea, select, a[href], [tabindex]:not([tabindex="-1"])'));
+    const target = focusable.find((el) => {
+      const rect = el.getBoundingClientRect();
+      const style = getComputedStyle(el);
+      return rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden' && style.display !== 'none';
+    });
+    target?.focus();
+  });
+  await sleep(80);
+  const focusAssertions = await evaluate(cdp, () => {
+    const active = document.activeElement;
+    const rect = active?.getBoundingClientRect();
+    return {
+      activeTag: active?.tagName ?? '',
+      isInteractive: Boolean(
+        active?.matches('button, input, textarea, select, a[href], [tabindex]:not([tabindex="-1"])'),
+      ),
+      isVisible: Boolean(rect && rect.width > 0 && rect.height > 0),
+    };
+  });
+  assertSlavaCheck(focusAssertions.isInteractive, `Slava exposes a visible focus target, got ${focusAssertions.activeTag}`);
+  assertSlavaCheck(focusAssertions.isVisible, 'focused Slava element is visible');
 
   await evaluate(cdp, () => {
     window.__nebulaUIStore.setState((state) => ({
@@ -432,6 +524,89 @@ async function runSlavaInteractionChecks(cdp) {
     }));
   });
   await sleep(250);
+  debugStep('interaction: complete');
+}
+
+async function runSlavaPersistenceChecks(cdp) {
+  await evaluate(cdp, () => {
+    window.__nebulaUIStore.getState().setSkin('slava-restraint');
+    window.__nebulaUIStore.getState().setAgentLogEnabled(true);
+    window.localStorage.setItem('nebula:agentLog:pos', JSON.stringify({ left: 84, top: 120 }));
+  });
+
+  const loadEvent = cdp.waitForEvent('Page.loadEventFired', 10000).catch(() => null);
+  await cdp.send('Page.reload', { ignoreCache: true });
+  await loadEvent;
+  await waitForRuntime(cdp, 'window.__nebulaUIStore && window.__nebulaGraphStore && document.body.classList.contains("app-slava-restraint")');
+  await waitForRuntime(cdp, 'document.querySelector(".agent-log")');
+
+  const persistenceAssertions = await evaluate(cdp, () => {
+    const agentLog = document.querySelector('.agent-log');
+    const rect = agentLog?.getBoundingClientRect();
+    return {
+      storedSkin: window.localStorage.getItem('nebula:skin'),
+      storeSkin: window.__nebulaUIStore.getState().skin,
+      bodySkin: document.body.classList.contains('app-slava-restraint'),
+      storedAgentLog: window.localStorage.getItem('nebula:agentLog:enabled'),
+      storeAgentLog: window.__nebulaUIStore.getState().agentLogEnabled,
+      renderedAgentLog: Boolean(agentLog),
+      persistedAgentLogPosition: Boolean(rect && Math.abs(rect.left - 84) <= 1 && Math.abs(rect.top - 120) <= 1),
+    };
+  });
+
+  assertSlavaCheck(persistenceAssertions.storedSkin === 'slava-restraint', 'Slava skin persists to localStorage');
+  assertSlavaCheck(persistenceAssertions.storeSkin === 'slava-restraint', 'Slava skin rehydrates into UI store');
+  assertSlavaCheck(persistenceAssertions.bodySkin, 'Slava body class rehydrates after reload');
+  assertSlavaCheck(persistenceAssertions.storedAgentLog === '1', 'agent log enabled preference persists to localStorage');
+  assertSlavaCheck(persistenceAssertions.storeAgentLog, 'agent log enabled preference rehydrates into UI store');
+  assertSlavaCheck(persistenceAssertions.renderedAgentLog, 'agent log renders from persisted preference');
+  assertSlavaCheck(persistenceAssertions.persistedAgentLogPosition, 'agent log drag position rehydrates after reload');
+
+  await evaluate(cdp, () => {
+    window.__nebulaUIStore.getState().setAgentLogEnabled(false);
+    window.localStorage.removeItem('nebula:agentLog:pos');
+  });
+}
+
+async function runSlavaMobileLayoutChecks(cdp) {
+  const mobileAssertions = await evaluate(cdp, () => {
+    const selectors = ['.chat-panel', '.toolbar', '.panel--library', '.panel--inspector', '.panel--settings', '.agent-log'];
+    const overflow = [];
+    for (const selector of selectors) {
+      for (const el of document.querySelectorAll(selector)) {
+        const style = getComputedStyle(el);
+        if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0) continue;
+        const rect = el.getBoundingClientRect();
+        if (rect.width === 0 || rect.height === 0) continue;
+        if (
+          rect.left < -1
+          || rect.top < -1
+          || rect.right > window.innerWidth + 1
+          || rect.bottom > window.innerHeight + 1
+        ) {
+          overflow.push({
+            selector,
+            left: rect.left,
+            top: rect.top,
+            right: rect.right,
+            bottom: rect.bottom,
+            viewportWidth: window.innerWidth,
+            viewportHeight: window.innerHeight,
+          });
+        }
+      }
+    }
+    return {
+      overflow,
+      hasHorizontalDocumentOverflow: document.documentElement.scrollWidth > window.innerWidth + 1,
+    };
+  });
+
+  assertSlavaCheck(
+    mobileAssertions.overflow.length === 0,
+    `mobile Slava fixed surfaces stay inside the viewport: ${JSON.stringify(mobileAssertions.overflow)}`,
+  );
+  assertSlavaCheck(!mobileAssertions.hasHorizontalDocumentOverflow, 'mobile Slava page has no document-level horizontal overflow');
 }
 
 async function installDeterministicChatMock(cdp) {
@@ -517,6 +692,12 @@ function assertSlavaCheck(value, message) {
   if (!value) throw new Error(`Slava interaction check failed: ${message}`);
 }
 
+function debugStep(message) {
+  if (process.env.SLAVA_CHECK_DEBUG_STEPS === '1') {
+    console.log(`[slava-check] ${message}`);
+  }
+}
+
 async function getRect(cdp, selector) {
   const rect = await evaluate(cdp, (targetSelector) => {
     const el = document.querySelector(targetSelector);
@@ -570,26 +751,18 @@ async function dragSelector(cdp, selector, deltaX, deltaY) {
   });
 }
 
-async function key(cdp, keyName, modifiers = 0) {
-  const keyCodes = {
-    Enter: { code: 'Enter', windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13 },
-    Escape: { code: 'Escape', windowsVirtualKeyCode: 27, nativeVirtualKeyCode: 27 },
-  };
-  const keyInfo = keyCodes[keyName] ?? { code: keyName, windowsVirtualKeyCode: keyName.charCodeAt(0), nativeVirtualKeyCode: keyName.charCodeAt(0) };
-  await cdp.send('Input.dispatchKeyEvent', {
-    type: 'keyDown',
-    key: keyName,
-    text: keyName.length === 1 ? keyName : '',
-    unmodifiedText: keyName.length === 1 ? keyName : '',
-    modifiers,
-    ...keyInfo,
-  });
-  await cdp.send('Input.dispatchKeyEvent', {
-    type: 'keyUp',
-    key: keyName,
-    modifiers,
-    ...keyInfo,
-  });
+async function dispatchDomKey(cdp, selector, keyName, init = {}) {
+  await evaluate(cdp, (targetSelector, key, eventInit) => {
+    const target = document.querySelector(targetSelector);
+    if (!target) throw new Error(`Element not found: ${targetSelector}`);
+    target.dispatchEvent(new KeyboardEvent('keydown', {
+      key,
+      code: key,
+      bubbles: true,
+      cancelable: true,
+      ...eventInit,
+    }));
+  }, selector, keyName, init);
 }
 
 async function screenshot(cdp, filename) {
@@ -620,7 +793,7 @@ async function waitForRuntime(cdp, expression, timeout = 10000) {
   throw new Error(`Timed out waiting for ${expression}`);
 }
 
-async function waitForPageWebSocket(remotePort, timeout = 10000) {
+async function waitForPageWebSocket(remotePort, timeout = 30000) {
   const started = Date.now();
   while (Date.now() - started < timeout) {
     try {
@@ -638,45 +811,82 @@ async function waitForPageWebSocket(remotePort, timeout = 10000) {
 function connectCdp(url) {
   const ws = new WebSocket(url);
   let id = 0;
+  let opened = false;
   const pending = new Map();
   const events = new Map();
+
+  function rejectAll(error) {
+    for (const { reject, timer } of pending.values()) {
+      clearTimeout(timer);
+      reject(error);
+    }
+    pending.clear();
+
+    for (const waiters of events.values()) {
+      for (const { reject, timer } of waiters) {
+        clearTimeout(timer);
+        reject(error);
+      }
+    }
+    events.clear();
+  }
 
   ws.addEventListener('message', (event) => {
     const msg = JSON.parse(event.data);
     if (msg.id && pending.has(msg.id)) {
-      const { resolve, reject } = pending.get(msg.id);
+      const { resolve, reject, timer } = pending.get(msg.id);
+      clearTimeout(timer);
       pending.delete(msg.id);
       if (msg.error) reject(new Error(msg.error.message));
       else resolve(msg.result ?? {});
       return;
     }
     if (msg.method && events.has(msg.method)) {
-      for (const resolve of events.get(msg.method)) resolve(msg.params ?? {});
+      for (const { resolve, timer } of events.get(msg.method)) {
+        clearTimeout(timer);
+        resolve(msg.params ?? {});
+      }
       events.delete(msg.method);
     }
   });
 
   return new Promise((resolve, reject) => {
-    ws.addEventListener('open', () => resolve({
-      send(method, params = {}) {
-        const callId = ++id;
-        ws.send(JSON.stringify({ id: callId, method, params }));
-        return new Promise((callResolve, callReject) => {
-          pending.set(callId, { resolve: callResolve, reject: callReject });
-        });
-      },
-      waitForEvent(method, timeout = 10000) {
-        return new Promise((eventResolve, eventReject) => {
-          const timer = setTimeout(() => eventReject(new Error(`Timed out waiting for ${method}`)), timeout);
-          const wrapped = (params) => {
-            clearTimeout(timer);
-            eventResolve(params);
-          };
-          events.set(method, [...(events.get(method) ?? []), wrapped]);
-        });
-      },
-    }));
-    ws.addEventListener('error', reject);
+    ws.addEventListener('open', () => {
+      opened = true;
+      resolve({
+        send(method, params = {}, timeout = 30000) {
+          const callId = ++id;
+          ws.send(JSON.stringify({ id: callId, method, params }));
+          return new Promise((callResolve, callReject) => {
+            const timer = setTimeout(() => {
+              pending.delete(callId);
+              callReject(new Error(`Timed out waiting for CDP command ${method}`));
+            }, timeout);
+            pending.set(callId, { resolve: callResolve, reject: callReject, timer });
+          });
+        },
+        waitForEvent(method, timeout = 10000) {
+          return new Promise((eventResolve, eventReject) => {
+            const timer = setTimeout(() => eventReject(new Error(`Timed out waiting for ${method}`)), timeout);
+            const wrapped = (params) => {
+              clearTimeout(timer);
+              eventResolve(params);
+            };
+            events.set(method, [...(events.get(method) ?? []), { resolve: wrapped, reject: eventReject, timer }]);
+          });
+        },
+      });
+    });
+    ws.addEventListener('error', () => {
+      const error = new Error('CDP WebSocket error');
+      if (!opened) reject(error);
+      rejectAll(error);
+    });
+    ws.addEventListener('close', () => {
+      const error = new Error('CDP WebSocket closed');
+      if (!opened) reject(error);
+      rejectAll(error);
+    });
   });
 }
 

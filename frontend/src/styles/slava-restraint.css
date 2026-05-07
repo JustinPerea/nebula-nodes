@@ -1537,6 +1537,30 @@ body.app-slava-restraint .toolbar__divider {
   background: var(--sr-edge);
 }
 
+@media (max-width: 520px) {
+  body.app-slava-restraint .toolbar {
+    max-width: calc(100vw - var(--sr-space-4, 16px));
+    gap: 2px;
+    padding: 5px 6px;
+  }
+
+  body.app-slava-restraint .toolbar__button {
+    width: 26px;
+    min-width: 26px;
+    min-height: 28px;
+    padding: 5px 4px !important;
+  }
+
+  body.app-slava-restraint .toolbar__divider {
+    margin: 0 1px !important;
+  }
+
+  body.app-slava-restraint .toolbar::before {
+    font-size: 9px;
+    letter-spacing: 0.22em;
+  }
+}
+
 /* ─────────────────────────────────────────────────────────────────────
  * Agent log — same translucent treatment. Source-tinted left borders kept
  * (small functional color use is allowed where it reads as data, not deco).
