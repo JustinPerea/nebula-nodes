@@ -35,6 +35,7 @@
 
   /* Right-column reservations: collapsed vs expanded agent log */
   --agent-h-closed: 44px;
+  --agent-h-empty: 108px;
   --agent-h-open:   clamp(180px, 22vh, 280px);
   --stack-gap-sm:   var(--space-2);
   --stack-gap-lg:   var(--space-6);
@@ -96,11 +97,6 @@ body.agent-log-enabled .chat-panel {
   bottom: calc(var(--toolbar-pad) + var(--agent-h-closed) + var(--stack-gap-lg)) !important;
 }
 
-/* When agent log is expanded, push chat up to clear the full reservation */
-body.agent-log-enabled.agent-log-open .chat-panel {
-  bottom: calc(var(--toolbar-pad) + var(--agent-h-open) + var(--stack-gap-lg)) !important;
-}
-
 /* Once the user drags/resizes chat into an explicit position, it must escape
  * the right-column layout's important anchors. The actual numbers come from
  * ChatPanel inline CSS variables so React state can continue to own them. */
@@ -111,10 +107,6 @@ body.agent-log-enabled.agent-log-open .chat-panel {
   left: var(--chat-panel-left, var(--page-gutter)) !important;
   width: var(--chat-panel-width, var(--col-right-w));
   height: var(--chat-panel-height, auto) !important;
-}
-
-body.agent-log-enabled.agent-log-open .chat-panel.chat-panel--free {
-  bottom: auto !important;
 }
 
 /* Hide the chat panel's visual corner resize markers — the L-shape ::before
@@ -193,6 +185,10 @@ body.agent-log-enabled.agent-log-open .chat-panel.chat-panel--free {
  * stays consistent regardless of how much content is inside. */
 body.agent-log-open .agent-log {
   height: var(--agent-h-open);
+}
+
+body.app-slava-restraint.agent-log-open.agent-log-empty .agent-log {
+  height: var(--agent-h-empty);
 }
 
 .agent-log__drag-row {

@@ -1,5 +1,6 @@
 import { memo, useState } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
+import { Repeat2 } from 'lucide-react';
 import type { NodeData, DynamicNodeData, PortDataType } from '../../types';
 import { NODE_DEFINITIONS } from '../../constants/nodeDefinitions';
 import { PORT_COLORS } from '../../lib/portCompatibility';
@@ -42,13 +43,14 @@ function DynamicNodeComponent({ id, data, selected }: NodeProps) {
   const previewImageSrc = finalImageSrc ?? latestPartial?.src ?? null;
   const isStreamingImage = nodeData.state === 'executing' && partials != null && partials.length > 0 && finalImageSrc == null;
   const isImageSurface = Boolean(previewImageSrc);
+  const isTextSurface = Boolean(displayText);
 
   // Model badge: show selected model compactly
   const modelBadge = dynData?.modelId || (nodeData.params.model as string) || (nodeData.params.model_id as string) || (nodeData.params.endpoint_id as string) || null;
 
   return (
     <div
-      className={`model-node ${stateClass}${isImageSurface ? ' model-node--image-surface' : ''} ${selected ? 'model-node--selected' : ''}${entranceClass}`}
+      className={`model-node ${stateClass}${isImageSurface ? ' model-node--image-surface' : ''}${isTextSurface ? ' model-node--text-surface' : ''} ${selected ? 'model-node--selected' : ''}${entranceClass}`}
       onClick={() => selectNode(id)}
       style={{ ['--node-category-color' as string]: categoryColor }}
     >
@@ -151,7 +153,6 @@ function DynamicNodeComponent({ id, data, selected }: NodeProps) {
             controls
             loop={videoLoop}
             className="model-node__preview-video nodrag nowheel"
-            style={{ width: '100%', borderRadius: 4, display: 'block' }}
             onMouseDown={(e) => e.stopPropagation()}
           />
           <button
@@ -166,7 +167,13 @@ function DynamicNodeComponent({ id, data, selected }: NodeProps) {
             aria-pressed={videoLoop}
             aria-label="Toggle video loop"
           >
-            &#x21BB;
+            <Repeat2
+              className="model-node__loop-icon"
+              size={14}
+              strokeWidth={1.75}
+              aria-hidden="true"
+              focusable="false"
+            />
           </button>
         </div>
       )}

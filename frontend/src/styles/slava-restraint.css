@@ -37,6 +37,11 @@ body.app-slava-restraint {
    * (with their preview content) and their connections. */
   --sr-canvas: #000000;
   --sr-canvas-elevated: #060607;
+  --sr-canvas-phosphor: #C9CAC8;
+  --sr-canvas-dot-color: rgba(201, 202, 200, 0.15);
+  --sr-canvas-dot-color-soft: rgba(201, 202, 200, 0.075);
+  --sr-canvas-dot-step: 16px;
+  --sr-canvas-dot-size: 1.2px;
 
   /* Glass surfaces — transparent enough that the canvas shows through
    * with the backdrop-filter blur. */
@@ -59,17 +64,258 @@ body.app-slava-restraint {
   /* Single accent — Nothing-orange placeholder. Used only for focus,
    * primary CTA, selected state. Never as a ground. */
   --sr-accent: #FF5A1F;
+  --sr-accent-hover: #ff6b34;
   --sr-accent-soft: rgba(255, 90, 31, 0.10);
+  --sr-accent-border-soft: rgba(255, 90, 31, 0.22);
+  --sr-accent-border-muted: rgba(255, 90, 31, 0.28);
+  --sr-accent-border: rgba(255, 90, 31, 0.34);
+  --sr-accent-border-medium: rgba(255, 90, 31, 0.36);
+  --sr-accent-border-strong: rgba(255, 90, 31, 0.45);
+  --sr-accent-hover-soft: rgba(255, 90, 31, 0.16);
+  --sr-on-accent: #0A0A0B;
+
+  --sr-warning: #F5C518;
+  --sr-warning-soft: rgba(245, 197, 24, 0.12);
+  --sr-error: var(--sr-accent);
+  --sr-error-soft: var(--sr-accent-soft);
+  --sr-error-border: var(--sr-accent-border);
+  --sr-danger: var(--sr-error);
+  --sr-danger-soft: var(--sr-error-soft);
+  --sr-danger-border: var(--sr-error-border);
+  --sr-success: rgba(110, 231, 183, 0.90);
+  --sr-success-soft: rgba(110, 231, 183, 0.12);
+  --sr-pending: var(--sr-ink-light);
+  --sr-pending-soft: rgba(255, 255, 255, 0.06);
+  --sr-disabled-opacity: 0.48;
+  --sr-disabled-opacity-strong: 0.36;
+  --sr-disabled-opacity-muted: 0.50;
 
   /* Type system — clean grotesk only, no display heavy. The dot-matrix
    * face is reserved for the wordmark and tabular numerics. */
   --sr-ui: 'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif;
   --sr-mono: 'JetBrains Mono', 'IBM Plex Mono', 'SF Mono', Menlo, monospace;
+  --sr-type-micro: 9px;
+  --sr-type-meta: 10px;
+  --sr-type-label: 11px;
+  --sr-type-body: 12px;
+  --sr-type-control: 13px;
+  --sr-type-action: 14px;
+  --sr-type-title: 15px;
+  --sr-icon-size-sm: 12px;
+  --sr-icon-size: 16px;
+  --sr-icon-size-lg: 18px;
+  --sr-icon-stroke: 1.75;
+  --sr-type-icon: var(--sr-icon-size);
+  --sr-type-icon-lg: var(--sr-icon-size-lg);
+  --sr-line-tight: 1;
+  --sr-line-compact: 1.2;
+  --sr-line-meta: 1.4;
+  --sr-line-body: 1.45;
+  --sr-line-bubble: 1.48;
+  --sr-line-relaxed: 1.5;
+
+  /* Slava layout contract — shared across panels, chat, settings, toolbar,
+   * inspector, and node chrome. Component rules consume these instead of
+   * inventing one-off sizes. */
+  --toolbar-pad: 64px;
+  --sr-space-1: 4px;
+  --sr-space-2: 8px;
+  --sr-space-3: 12px;
+  --sr-space-4: 16px;
+  --sr-space-5: 20px;
+  --sr-space-6: 24px;
 
   /* Soft-glass corner radii — Nothing's signature gentle rounding. */
   --sr-radius-panel: 12px;
   --sr-radius-node: 8px;
+  --sr-radius-control: 8px;
+  --sr-radius-control-lg: 10px;
   --sr-radius-pill: 999px;
+
+  --sr-control-h-xs: 24px;
+  --sr-control-h-sm: 28px;
+  --sr-control-h-md: 34px;
+  --sr-control-h-lg: 42px;
+  --sr-control-pad-x: 10px;
+  --sr-control-pad-y: 7px;
+
+  --sr-surface-control: rgba(0, 0, 0, 0.30);
+  --sr-surface-control-hover: rgba(255, 255, 255, 0.05);
+  --sr-surface-control-active: rgba(255, 255, 255, 0.10);
+  --sr-surface-control-focus: rgba(0, 0, 0, 0.45);
+
+  --sr-blur-panel: blur(24px) saturate(140%);
+  --sr-blur-pill: blur(20px) saturate(140%);
+  --sr-shadow-panel:
+    0 1px 0 0 rgba(255, 255, 255, 0.05) inset,
+    0 12px 36px rgba(0, 0, 0, 0.55);
+  --sr-shadow-panel-sm:
+    0 1px 0 0 rgba(255, 255, 255, 0.06) inset,
+    0 8px 24px rgba(0, 0, 0, 0.55);
+  --sr-shadow-popover: 0 12px 28px rgba(0, 0, 0, 0.36);
+  --sr-blur-node: blur(20px) saturate(140%);
+  --sr-shadow-node:
+    0 0 0 1px rgba(255, 255, 255, 0.06) inset,
+    0 8px 24px rgba(0, 0, 0, 0.65);
+  --sr-shadow-node-media:
+    0 1px 0 rgba(255, 255, 255, 0.05) inset,
+    0 10px 30px rgba(0, 0, 0, 0.62);
+  --sr-shadow-node-media-selected:
+    0 0 0 1.5px var(--node-category-color, var(--sr-accent)),
+    0 0 22px color-mix(in srgb, var(--node-category-color, var(--sr-accent)) 36%, transparent),
+    0 10px 30px rgba(0, 0, 0, 0.62);
+
+  --sr-node-pad-top: 38px;
+  --sr-node-type-label-top: 14px;
+  --sr-node-card-border-mix: 20%;
+  --sr-node-category-fallback: rgba(255, 255, 255, 0.40);
+  --sr-node-card-selected-border-width: 1.5px;
+  --sr-node-ring-width: 1px;
+  --sr-node-header-padding: var(--sr-space-2) var(--sr-space-3);
+  --sr-node-header-gap: var(--sr-space-2);
+  --sr-node-header-gradient: linear-gradient(to bottom, rgba(0, 0, 0, 0.45) 0%, rgba(0, 0, 0, 0) 100%);
+  --sr-node-port-padding: 6px 0 10px;
+  --sr-node-port-row-padding: 3px 14px;
+  --sr-node-preview-bg: rgba(0, 0, 0, 0.55);
+  --sr-node-preview-overlap: -32px;
+  --sr-node-media-radius: 14px;
+  --sr-node-media-bg: rgba(255, 255, 255, 0.04);
+  --sr-node-streaming-outline: 1px dashed rgba(255, 255, 255, 0.32);
+  --sr-node-streaming-outline-offset: -1px;
+  --sr-node-scrollbar-color: rgba(255, 255, 255, 0.18);
+
+  --sr-node-pill-top: var(--sr-space-1);
+  --sr-node-pill-button-size: 22px;
+  --sr-node-pill-expanded-gap: var(--sr-space-2);
+  --sr-node-pill-expanded-padding: 3px 4px 3px 12px;
+  --sr-node-pill-label-max: 220px;
+  --sr-node-pill-bg: rgba(20, 20, 22, 0.78);
+  --sr-node-pill-shadow: 0 2px 8px rgba(0, 0, 0, 0.55);
+  --sr-node-pill-motion: 180ms ease;
+  --sr-node-pill-label-motion: 200ms ease;
+  --sr-node-pill-label-opacity-motion: 160ms ease 40ms;
+
+  --sr-node-enter-duration: 220ms;
+  --sr-node-enter-blur: 3px;
+  --sr-node-enter-ring-size: 10px;
+  --sr-node-enter-glow-size: 34px;
+  --sr-node-enter-ring-mix: 20%;
+  --sr-node-enter-glow-mix: 32%;
+  --sr-node-selected-duration: 1600ms;
+  --sr-node-selected-glow-rest-size: 18px;
+  --sr-node-selected-glow-rest-mix: 28%;
+  --sr-node-selected-glow-peak-size: 30px;
+  --sr-node-selected-glow-peak-mix: 65%;
+  --sr-node-selected-glow-reduced-size: 24px;
+  --sr-node-selected-glow-reduced-mix: 45%;
+
+  --sr-node-text-min-width: 220px;
+  --sr-node-text-max-width: 300px;
+  --sr-node-text-card-min-height: 240px;
+  --sr-node-text-header-min-height: 40px;
+  --sr-node-text-header-padding: 11px 14px 8px;
+  --sr-node-text-content-min-height: 170px;
+  --sr-node-text-content-padding: 4px 14px 14px;
+  --sr-node-text-inner-padding: 10px 0;
+
+  --sr-node-image-pad-top: 70px;
+  --sr-node-image-header-offset: -28px;
+  --sr-node-image-header-min-height: 22px;
+  --sr-node-image-header-padding: 0 2px;
+  --sr-node-image-icon-size: 14px;
+  --sr-node-image-icon-radius: 3px;
+  --sr-node-image-icon-opacity: 0.82;
+  --sr-node-image-icon-glyph: linear-gradient(135deg, transparent 48%, var(--sr-ink-light) 50%, transparent 54%) 3px 7px / 8px 5px no-repeat;
+  --sr-node-error-bg: rgba(0, 0, 0, 0.40);
+  --sr-node-error-border-width: 2px;
+  --sr-node-error-padding: 6px 10px;
+  --sr-node-error-margin: 0 14px 8px;
+  --sr-node-error-radius: 4px;
+  --sr-node-progress-track: rgba(255, 255, 255, 0.08);
+  --sr-node-progress-fill: var(--sr-accent);
+  --sr-node-reroute-size: 20px;
+  --sr-node-reroute-dot-size: 9px;
+
+  --sr-handle-size: 20px;
+  --sr-handle-dot-size: 9px;
+  --sr-handle-rest-offset: 4px;
+  --sr-handle-outset: -14px;
+  --sr-handle-plus-length: 9px;
+  --sr-handle-plus-thickness: 1.5px;
+  --sr-handle-rest-dot: rgba(255, 255, 255, 0.85);
+  --sr-handle-ring: rgba(255, 255, 255, 0.85);
+  --sr-handle-glyph: rgba(255, 255, 255, 0.95);
+  --sr-handle-glass: rgba(20, 20, 22, 0.92);
+  --sr-handle-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+  --sr-handle-active-shadow: 0 0 0 4px var(--sr-accent-soft), var(--sr-handle-shadow);
+  --sr-handle-rest-scale: 0.45;
+  --sr-handle-catch-scale: 0.7;
+
+  --sr-edge-path-color: rgba(255, 255, 255, 0.55);
+  --sr-edge-path-width: 1.5;
+  --sr-edge-path-glow: drop-shadow(0 0 4px rgba(255, 255, 255, 0.18));
+  --sr-edge-selected-width: 2;
+  --sr-edge-selected-glow: drop-shadow(0 0 6px color-mix(in srgb, var(--sr-accent) 50%, transparent));
+  --sr-edge-draw-duration: 280ms;
+  --sr-edge-flow-duration: 900ms;
+  --sr-edge-flow-dasharray: 6 4 2 4;
+
+  --sr-motion-fast: 120ms ease;
+  --sr-motion-ui: 140ms ease;
+  --sr-motion-handle: 220ms cubic-bezier(0.32, 0.72, 0, 1);
+  --sr-motion-panel: 500ms cubic-bezier(0.32, 0.72, 0, 1);
+  --sr-motion-emphasized: 140ms cubic-bezier(0.05, 0.7, 0.1, 1);
+  --sr-focus-outline: 2px solid var(--sr-accent-soft);
+  --sr-focus-offset: 2px;
+
+  --sr-layer-panel: 10;
+  --sr-layer-agent-log: 11;
+  --sr-layer-settings: 30;
+  --sr-layer-popover: 40;
+  --sr-layer-modal: 60;
+  --sr-layer-modal-control: 61;
+  --sr-layer-node-preview: 1;
+  --sr-layer-node-header: 2;
+  --sr-layer-node-floating: 3;
+  --sr-layer-node-image-ports: 5;
+  --sr-layer-node-image-header: 6;
+  --sr-layer-drag: 10000;
+}
+
+body.app-slava-restraint .toolbar__icon,
+body.app-slava-restraint .panel__close-icon,
+body.app-slava-restraint .agent-log__icon,
+body.app-slava-restraint .connection-popup__close-icon,
+body.app-slava-restraint .model-node__download-icon,
+body.app-slava-restraint .model-node__enhance-icon,
+body.app-slava-restraint .model-node__loop-icon,
+body.app-slava-restraint .mesh-modal__close-icon,
+body.app-slava-restraint .mesh-modal__download-icon {
+  width: var(--sr-icon-size);
+  height: var(--sr-icon-size);
+  flex: 0 0 auto;
+  stroke-width: var(--sr-icon-stroke);
+}
+
+body.app-slava-restraint .chat__tool-icon,
+body.app-slava-restraint .chat-panel__model-caret,
+body.app-slava-restraint .chat-panel__chip-close-icon,
+body.app-slava-restraint .connection-popup__category-chevron,
+body.app-slava-restraint .panel__group-chevron,
+body.app-slava-restraint .settings__section-toggle-chevron,
+body.app-slava-restraint .agent-log__chevron {
+  width: var(--sr-icon-size-sm);
+  height: var(--sr-icon-size-sm);
+  flex: 0 0 auto;
+  stroke-width: var(--sr-icon-stroke);
+}
+
+body.app-slava-restraint .chat-panel__send-icon {
+  width: var(--sr-icon-size-lg);
+  height: var(--sr-icon-size-lg);
+  flex: 0 0 auto;
+  stroke-width: var(--sr-icon-stroke);
+  transform: none;
 }
 
 /* ─────────────────────────────────────────────────────────────────────
@@ -121,11 +367,28 @@ body.app-slava-restraint .react-flow__pane {
   background: transparent;
 }
 
+body.app-slava-restraint .canvas-wrapper {
+  position: relative;
+  overflow: hidden;
+  background: var(--sr-canvas);
+}
+
+body.app-slava-restraint .react-flow {
+  position: relative;
+  z-index: 1;
+}
+
 body.app-slava-restraint .react-flow__background {
   background: transparent;
 }
+
+body.app-slava-restraint .react-flow__background.slava-canvas-background {
+  opacity: 1;
+}
+
+body.app-slava-restraint .react-flow__background-pattern.slava-canvas-background__dot,
 body.app-slava-restraint .react-flow__background pattern circle {
-  fill: rgba(255, 255, 255, 0.04);
+  fill: var(--sr-canvas-dot-color);
 }
 
 /* ─────────────────────────────────────────────────────────────────────
@@ -171,27 +434,30 @@ body.app-slava-restraint .react-flow__background pattern circle {
  * curve / 500ms duration as the entrance for symmetric feel. */
 body.app-slava-restraint .panel.panel--exiting,
 body.app-slava-restraint .chat-panel.chat-panel--exiting {
-  animation: slava-panel-exit 500ms cubic-bezier(0.32, 0.72, 0, 1) forwards;
+  animation: slava-panel-exit var(--sr-motion-panel) forwards;
   pointer-events: none;
 }
 
 body.app-slava-restraint .panel {
+  z-index: var(--sr-layer-panel);
   background: var(--sr-glass);
-  backdrop-filter: blur(24px) saturate(140%);
-  -webkit-backdrop-filter: blur(24px) saturate(140%);
+  backdrop-filter: var(--sr-blur-panel);
+  -webkit-backdrop-filter: var(--sr-blur-panel);
   border: 1px solid var(--sr-edge);
   border-radius: var(--sr-radius-panel);
   color: var(--sr-ink);
-  box-shadow:
-    0 1px 0 0 rgba(255, 255, 255, 0.05) inset,
-    0 12px 36px rgba(0, 0, 0, 0.55);
+  box-shadow: var(--sr-shadow-panel);
   font-family: var(--sr-ui);
   /* Drawer preset — 500ms, Vaul's iOS-style ease-out heavy curve. */
-  animation: slava-panel-enter 500ms cubic-bezier(0.32, 0.72, 0, 1) backwards;
+  animation: slava-panel-enter var(--sr-motion-panel) backwards;
   /* `backwards` keeps the from-state applied during animation-delay (none here)
    * and ensures the start-frame is rendered before the animation begins —
    * avoids a one-frame flash of the to-state in some browsers. */
   transform-origin: center center;
+}
+
+body.app-slava-restraint .panel--settings {
+  z-index: var(--sr-layer-settings);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -201,7 +467,7 @@ body.app-slava-restraint .panel {
 }
 
 body.app-slava-restraint .panel__header {
-  padding: 14px 16px 10px;
+  padding: 14px var(--sr-space-4) 10px;
   border-bottom: 1px solid var(--sr-edge);
   background: transparent;
 }
@@ -211,36 +477,172 @@ body.app-slava-restraint .panel__header {
 body.app-slava-restraint .panel__title {
   font-family: var(--sr-ui);
   font-weight: 600;
-  font-size: 15px;
-  line-height: 1;
+  font-size: var(--sr-type-title);
+  line-height: var(--sr-line-tight);
   letter-spacing: -0.01em;
   color: var(--sr-ink);
   text-transform: none;
 }
 
-body.app-slava-restraint .panel__close {
-  color: var(--sr-ink-light);
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: var(--sr-radius-pill);
-  padding: 2px 8px;
-  font-size: 16px;
-  line-height: 1;
-  width: 24px;
-  height: 24px;
+body.app-slava-restraint :is(.panel__header-action, .model-node__header-action) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: color 120ms ease, background-color 120ms ease;
+  width: var(--sr-control-h-xs);
+  height: var(--sr-control-h-xs);
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--sr-radius-pill);
+  background: transparent;
+  color: var(--sr-ink-meta);
+  cursor: pointer;
+  opacity: 0.62;
+  transition:
+    opacity var(--sr-motion-fast),
+    background-color var(--sr-motion-fast),
+    border-color var(--sr-motion-fast),
+    color var(--sr-motion-fast);
 }
-body.app-slava-restraint .panel__close:hover {
+
+body.app-slava-restraint :is(.panel__header-action, .model-node__header-action):hover {
+  border-color: var(--sr-edge-strong);
+  background: var(--sr-surface-control-hover);
   color: var(--sr-ink-bold);
-  background: rgba(255, 255, 255, 0.06);
+  opacity: 1;
+}
+
+body.app-slava-restraint :is(.panel__header-action, .model-node__header-action):focus-visible {
+  outline: var(--sr-focus-outline);
+  outline-offset: var(--sr-focus-offset);
+  border-color: var(--sr-accent);
+  opacity: 1;
 }
 
 body.app-slava-restraint .panel__body {
-  padding: 12px 16px 16px;
+  padding: var(--sr-space-3) var(--sr-space-4) var(--sr-space-4);
   background: transparent;
+}
+
+body.app-slava-restraint :is(
+  .panel__search,
+  .inspector__field,
+  .inspector__action-button,
+  .inspector__file-button,
+  .inspector__favorite-button,
+  .inspector__info-button,
+  .settings__section-toggle,
+  .settings__save-button,
+  .toolbar__button
+):focus-visible {
+  outline: var(--sr-focus-outline);
+  outline-offset: var(--sr-focus-offset);
+  border-color: var(--sr-accent);
+}
+
+/* Popovers — keep connection creation/context menus off the old Default skin
+ * panel palette while preserving their existing geometry from panels.css. */
+body.app-slava-restraint .context-menu,
+body.app-slava-restraint .connection-popup {
+  z-index: var(--sr-layer-popover);
+  border: 1px solid var(--sr-edge);
+  border-radius: var(--sr-radius-control-lg);
+  background: var(--sr-glass-raised);
+  color: var(--sr-ink);
+  box-shadow: var(--sr-shadow-popover);
+  backdrop-filter: var(--sr-blur-panel);
+  -webkit-backdrop-filter: var(--sr-blur-panel);
+  font-family: var(--sr-ui);
+  font-size: var(--sr-type-body);
+}
+
+body.app-slava-restraint .context-menu {
+  padding: var(--sr-space-1);
+}
+
+body.app-slava-restraint .context-menu__item,
+body.app-slava-restraint .connection-popup__item,
+body.app-slava-restraint .connection-popup__category-label--button {
+  border-radius: var(--sr-radius-control);
+  color: var(--sr-ink-light);
+  font-family: var(--sr-ui);
+  font-size: var(--sr-type-body);
+  transition:
+    background-color var(--sr-motion-fast),
+    color var(--sr-motion-fast);
+}
+
+body.app-slava-restraint .context-menu__item:hover,
+body.app-slava-restraint .connection-popup__item:hover,
+body.app-slava-restraint .connection-popup__category-label--button:hover {
+  background: var(--sr-surface-control-hover);
+  color: var(--sr-ink-bold);
+}
+
+body.app-slava-restraint .context-menu__item:disabled {
+  opacity: var(--sr-disabled-opacity-strong);
+}
+
+body.app-slava-restraint .context-menu__item--danger:hover {
+  background: var(--sr-danger-soft);
+  color: var(--sr-danger);
+}
+
+body.app-slava-restraint .context-menu__shortcut,
+body.app-slava-restraint .connection-popup__item-port,
+body.app-slava-restraint .connection-popup__category-count,
+body.app-slava-restraint .connection-popup__category-chevron {
+  color: var(--sr-ink-meta);
+  font-family: var(--sr-mono);
+  font-size: var(--sr-type-meta);
+}
+
+body.app-slava-restraint .connection-popup__header {
+  border-bottom: 1px solid var(--sr-edge);
+}
+
+body.app-slava-restraint .connection-popup__search {
+  color: var(--sr-ink);
+  font-family: var(--sr-ui);
+  font-size: var(--sr-type-control);
+}
+
+body.app-slava-restraint .connection-popup__search::placeholder {
+  color: var(--sr-ink-faint);
+}
+
+body.app-slava-restraint .connection-popup__empty,
+body.app-slava-restraint .connection-popup__category-label {
+  color: var(--sr-ink-meta);
+  font-family: var(--sr-ui);
+}
+
+body.app-slava-restraint .connection-popup__category-label {
+  font-size: var(--sr-type-meta);
+  letter-spacing: 0.04em;
+}
+
+body.app-slava-restraint .connection-popup__close {
+  border: 1px solid transparent;
+  color: var(--sr-ink-meta);
+  transition:
+    background-color var(--sr-motion-fast),
+    border-color var(--sr-motion-fast),
+    color var(--sr-motion-fast);
+}
+
+body.app-slava-restraint .connection-popup__close:hover {
+  border-color: var(--sr-edge-strong);
+  background: var(--sr-surface-control-hover);
+  color: var(--sr-ink-bold);
+}
+
+body.app-slava-restraint .context-menu__item:focus-visible,
+body.app-slava-restraint .connection-popup__item:focus-visible,
+body.app-slava-restraint .connection-popup__category-label--button:focus-visible,
+body.app-slava-restraint .connection-popup__close:focus-visible,
+body.app-slava-restraint .connection-popup__search:focus-visible {
+  outline: var(--sr-focus-outline);
+  outline-offset: var(--sr-focus-offset);
 }
 
 /* ─────────────────────────────────────────────────────────────────────
@@ -249,20 +651,18 @@ body.app-slava-restraint .panel__body {
 body.app-slava-restraint .chat-panel {
   --chat-accent: var(--sr-accent);
   --chat-accent-bg: var(--sr-accent-soft);
-  --chat-accent-border: rgba(255, 90, 31, 0.34);
+  --chat-accent-border: var(--sr-accent-border);
 
   background: var(--sr-glass);
-  backdrop-filter: blur(24px) saturate(140%);
-  -webkit-backdrop-filter: blur(24px) saturate(140%);
+  backdrop-filter: var(--sr-blur-panel);
+  -webkit-backdrop-filter: var(--sr-blur-panel);
   border: 1px solid var(--sr-edge);
   border-radius: var(--sr-radius-panel);
   color: var(--sr-ink);
-  box-shadow:
-    0 1px 0 0 rgba(255, 255, 255, 0.05) inset,
-    0 12px 36px rgba(0, 0, 0, 0.55);
+  box-shadow: var(--sr-shadow-panel);
   font-family: var(--sr-ui);
-  font-size: 12px;
-  animation: slava-panel-enter 500ms cubic-bezier(0.32, 0.72, 0, 1) backwards;
+  font-size: var(--sr-type-body);
+  animation: slava-panel-enter var(--sr-motion-panel) backwards;
   transform-origin: center center;
 }
 
@@ -336,9 +736,9 @@ body.app-slava-restraint .chat-panel__title {
   margin-bottom: 8px;
   color: var(--sr-ink);
   font-family: var(--sr-ui);
-  font-size: 15px;
+  font-size: var(--sr-type-title);
   font-weight: 600;
-  line-height: 1;
+  line-height: var(--sr-line-tight);
   letter-spacing: 0;
   text-transform: none;
 }
@@ -351,8 +751,8 @@ body.app-slava-restraint .chat-panel__tone-toggle {
   margin: 0 6px 8px 0;
   padding: 3px;
   border: 1px solid var(--sr-edge);
-  border-radius: 10px;
-  background: rgba(0, 0, 0, 0.24);
+  border-radius: var(--sr-radius-control-lg);
+  background: var(--sr-surface-control);
 }
 
 body.app-slava-restraint .chat-panel__agent-btn,
@@ -361,36 +761,36 @@ body.app-slava-restraint .chat-panel__autonomy-btn,
 body.app-slava-restraint .chat-panel__autonomy-btn--active,
 body.app-slava-restraint .chat-panel__tone-btn,
 body.app-slava-restraint .chat-panel__tone-btn--active {
-  min-height: 28px;
-  padding: 5px 10px;
+  min-height: var(--sr-control-h-sm);
+  padding: 5px var(--sr-control-pad-x);
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: var(--sr-radius-control);
   background: transparent;
   color: var(--sr-ink-light);
   cursor: pointer;
   font-family: var(--sr-ui);
-  font-size: 12px;
+  font-size: var(--sr-type-body);
   font-weight: 500;
   letter-spacing: 0;
-  line-height: 1;
+  line-height: var(--sr-line-tight);
   transition:
-    background-color 140ms ease,
-    border-color 140ms ease,
-    color 140ms ease;
+    background-color var(--sr-motion-ui),
+    border-color var(--sr-motion-ui),
+    color var(--sr-motion-ui);
 }
 
 body.app-slava-restraint .chat-panel__agent-btn:hover,
 body.app-slava-restraint .chat-panel__autonomy-btn:hover,
 body.app-slava-restraint .chat-panel__tone-btn:hover {
   color: var(--sr-ink);
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--sr-surface-control-hover);
 }
 
 body.app-slava-restraint .chat-panel__agent-btn--active,
 body.app-slava-restraint .chat-panel__autonomy-btn--active,
 body.app-slava-restraint .chat-panel__tone-btn--active {
   border-color: var(--sr-edge-strong);
-  background: rgba(255, 255, 255, 0.10);
+  background: var(--sr-surface-control-active);
   color: var(--sr-ink-bold);
   box-shadow: 0 1px 0 rgba(255, 255, 255, 0.05) inset;
 }
@@ -409,8 +809,8 @@ body.app-slava-restraint .chat-panel__send:focus-visible,
 body.app-slava-restraint .chat-panel__approval-btn:focus-visible,
 body.app-slava-restraint .chat__codeblock-apply:focus-visible,
 body.app-slava-restraint .chat__tool-header:focus-visible {
-  outline: 2px solid var(--sr-accent-soft);
-  outline-offset: 2px;
+  outline: var(--sr-focus-outline);
+  outline-offset: var(--sr-focus-offset);
   border-color: var(--sr-accent);
 }
 
@@ -418,11 +818,14 @@ body.app-slava-restraint .chat-panel__meta,
 body.app-slava-restraint .chat-panel__session {
   color: var(--sr-ink-meta);
   font-family: var(--sr-mono);
-  font-size: 10px;
+  font-size: var(--sr-type-meta);
   letter-spacing: 0;
 }
 
 body.app-slava-restraint .chat-panel__model-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   margin-right: 4px;
   padding: 2px 6px;
   border: 1px solid transparent;
@@ -431,7 +834,7 @@ body.app-slava-restraint .chat-panel__model-trigger {
   color: var(--sr-ink-light);
   cursor: pointer;
   font-family: var(--sr-mono);
-  font-size: 10px;
+  font-size: var(--sr-type-meta);
   letter-spacing: 0;
 }
 
@@ -442,9 +845,7 @@ body.app-slava-restraint .chat-panel__model-trigger:hover {
 }
 
 body.app-slava-restraint .chat-panel__model-caret {
-  margin-left: 4px;
   color: var(--sr-ink-faint);
-  font-size: 9px;
 }
 
 body.app-slava-restraint .chat-panel__model-picker {
@@ -454,9 +855,9 @@ body.app-slava-restraint .chat-panel__model-picker {
   margin-top: 8px;
   overflow: hidden;
   border: 1px solid var(--sr-edge);
-  border-radius: 10px;
+  border-radius: var(--sr-radius-control-lg);
   background: rgba(0, 0, 0, 0.34);
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.36);
+  box-shadow: var(--sr-shadow-popover);
   font-family: var(--sr-ui);
 }
 
@@ -469,7 +870,7 @@ body.app-slava-restraint .chat-panel__model-search {
   background: transparent;
   color: var(--sr-ink);
   font-family: var(--sr-mono);
-  font-size: 11px;
+  font-size: var(--sr-type-label);
 }
 
 body.app-slava-restraint .chat-panel__model-search::placeholder {
@@ -482,8 +883,8 @@ body.app-slava-restraint .chat-panel__model-error {
   background: var(--sr-accent-soft);
   color: var(--sr-accent);
   font-family: var(--sr-mono);
-  font-size: 10px;
-  line-height: 1.4;
+  font-size: var(--sr-type-meta);
+  line-height: var(--sr-line-meta);
 }
 
 body.app-slava-restraint .chat-panel__model-list {
@@ -513,26 +914,26 @@ body.app-slava-restraint .chat-panel__model-row:last-child {
 }
 
 body.app-slava-restraint .chat-panel__model-row:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--sr-surface-control-hover);
   color: var(--sr-ink);
 }
 
 body.app-slava-restraint .chat-panel__model-row--active {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--sr-surface-control-active);
   box-shadow: 2px 0 0 var(--sr-accent) inset;
 }
 
 body.app-slava-restraint .chat-panel__model-row-name {
   color: var(--sr-ink);
-  font-size: 12px;
+  font-size: var(--sr-type-body);
   font-weight: 600;
-  line-height: 1.2;
+  line-height: var(--sr-line-compact);
 }
 
 body.app-slava-restraint .chat-panel__model-row-id {
   color: var(--sr-ink-meta);
   font-family: var(--sr-mono);
-  font-size: 9px;
+  font-size: var(--sr-type-micro);
   letter-spacing: 0;
   text-transform: lowercase;
 }
@@ -540,7 +941,7 @@ body.app-slava-restraint .chat-panel__model-row-id {
 body.app-slava-restraint .chat-panel__model-empty {
   padding: 12px 10px;
   color: var(--sr-ink-meta);
-  font-size: 12px;
+  font-size: var(--sr-type-body);
   text-align: center;
 }
 
@@ -581,8 +982,13 @@ body.app-slava-restraint .chat-panel__thinking-body::-webkit-scrollbar-thumb {
 }
 
 body.app-slava-restraint .chat__empty {
-  color: var(--sr-ink-light);
-  font-size: 12px;
+  align-self: flex-start;
+  padding: var(--sr-space-2) var(--sr-space-1) 0;
+  color: var(--sr-ink-faint);
+  font-family: var(--sr-ui);
+  font-size: var(--sr-type-body);
+  line-height: var(--sr-line-body);
+  text-align: left;
 }
 
 body.app-slava-restraint .chat__empty-hint {
@@ -591,15 +997,15 @@ body.app-slava-restraint .chat__empty-hint {
 
 body.app-slava-restraint .chat__empty code {
   border: 1px solid var(--sr-edge);
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.05);
+  border-radius: var(--sr-radius-control);
+  background: var(--sr-surface-control-hover);
   color: var(--sr-ink);
   font-family: var(--sr-mono);
 }
 
 body.app-slava-restraint .chat__bubble {
-  border-radius: 10px;
-  line-height: 1.48;
+  border-radius: var(--sr-radius-control-lg);
+  line-height: var(--sr-line-bubble);
 }
 
 body.app-slava-restraint .chat__bubble--user {
@@ -626,7 +1032,7 @@ body.app-slava-restraint .chat__bubble-thumb {
 body.app-slava-restraint .chat__codeblock,
 body.app-slava-restraint .chat__tool {
   border: 1px solid var(--sr-edge);
-  border-radius: 8px;
+  border-radius: var(--sr-radius-control);
   background: rgba(0, 0, 0, 0.32);
 }
 
@@ -648,7 +1054,7 @@ body.app-slava-restraint .chat__codeblock-apply {
 }
 
 body.app-slava-restraint .chat__codeblock-apply:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--sr-surface-control-active);
   color: var(--sr-ink-bold);
 }
 
@@ -665,7 +1071,7 @@ body.app-slava-restraint .chat__tool-header {
 }
 
 body.app-slava-restraint .chat__tool-header:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--sr-surface-control-hover);
   color: var(--sr-ink);
 }
 
@@ -680,18 +1086,18 @@ body.app-slava-restraint .chat__tool-body {
 
 body.app-slava-restraint .chat__tool--error,
 body.app-slava-restraint .chat__tool--error .chat__tool-output {
-  border-color: rgba(255, 90, 31, 0.34);
+  border-color: var(--sr-danger-border);
 }
 
 body.app-slava-restraint .chat__tool--error .chat__tool-output {
-  color: var(--sr-accent);
+  color: var(--sr-danger);
 }
 
 body.app-slava-restraint .chat-panel__input {
   --chat-composer-gap: 8px;
-  --chat-composer-control: 42px;
+  --chat-composer-control: var(--sr-control-h-lg);
   --chat-composer-action: 32px;
-  --chat-composer-pad-x: 12px;
+  --chat-composer-pad-x: var(--sr-space-3);
   --chat-composer-pad-y: 10px;
   gap: 0;
   padding: var(--chat-composer-pad-y) var(--chat-composer-pad-x) 12px;
@@ -701,11 +1107,11 @@ body.app-slava-restraint .chat-panel__input {
 
 body.app-slava-restraint .chat-panel__input-row {
   border: 1px solid var(--sr-edge-strong);
-  border-radius: 10px;
+  border-radius: var(--sr-radius-control-lg);
   background: rgba(0, 0, 0, 0.32);
   transition:
-    border-color 120ms ease,
-    background-color 120ms ease;
+    border-color var(--sr-motion-fast),
+    background-color var(--sr-motion-fast);
 }
 
 body.app-slava-restraint .chat-panel__input-row:focus-within {
@@ -722,8 +1128,8 @@ body.app-slava-restraint .chat-panel__textarea {
   background: transparent;
   color: var(--sr-ink);
   font-family: var(--sr-ui);
-  font-size: 13px;
-  line-height: 1.45;
+  font-size: var(--sr-type-control);
+  line-height: var(--sr-line-body);
 }
 
 body.app-slava-restraint .chat-panel__textarea::placeholder {
@@ -736,27 +1142,27 @@ body.app-slava-restraint .chat-panel__textarea:focus {
 }
 
 body.app-slava-restraint .chat-panel__textarea:disabled {
-  opacity: 0.48;
+  opacity: var(--sr-disabled-opacity);
 }
 
 body.app-slava-restraint .chat-panel__send {
   height: var(--chat-composer-action);
   padding: 0 16px;
   border: 1px solid transparent;
-  border-radius: 9px;
+  border-radius: var(--sr-radius-control);
   background: var(--sr-accent);
-  color: #080808;
+  color: var(--sr-on-accent);
   cursor: pointer;
   font-family: var(--sr-ui);
-  font-size: 13px;
+  font-size: var(--sr-type-control);
   font-weight: 700;
   letter-spacing: 0;
   transition:
-    opacity 120ms ease,
-    transform 120ms ease,
-    background-color 120ms ease,
-    border-color 120ms ease,
-    color 120ms ease;
+    opacity var(--sr-motion-fast),
+    transform var(--sr-motion-fast),
+    background-color var(--sr-motion-fast),
+    border-color var(--sr-motion-fast),
+    color var(--sr-motion-fast);
 }
 
 body.app-slava-restraint .chat-panel__send--submit {
@@ -766,29 +1172,29 @@ body.app-slava-restraint .chat-panel__send--submit {
 }
 
 body.app-slava-restraint .chat-panel__send-icon {
-  font-size: 18px;
-  line-height: 1;
+  display: block;
+  line-height: var(--sr-line-tight);
 }
 
 body.app-slava-restraint .chat-panel__send:hover:not(:disabled) {
-  background: #ff6b34;
+  background: var(--sr-accent-hover);
   transform: translateY(-1px);
 }
 
 body.app-slava-restraint .chat-panel__send:disabled {
-  opacity: 0.36;
+  opacity: var(--sr-disabled-opacity-strong);
   cursor: default;
 }
 
 body.app-slava-restraint .chat-panel__send--stop {
-  border-color: rgba(255, 90, 31, 0.36);
-  background: var(--sr-accent-soft);
-  color: var(--sr-accent);
+  border-color: var(--sr-accent-border-medium);
+  background: var(--sr-danger-soft);
+  color: var(--sr-danger);
 }
 
 body.app-slava-restraint .chat-panel__send--stop:hover {
   border-color: var(--sr-accent);
-  background: rgba(255, 90, 31, 0.16);
+  background: var(--sr-accent-hover-soft);
   color: var(--sr-ink-bold);
 }
 
@@ -799,58 +1205,61 @@ body.app-slava-restraint .chat-panel__chips {
 
 body.app-slava-restraint .chat-panel__chip {
   border: 1px solid var(--sr-edge);
-  border-radius: 8px;
+  border-radius: var(--sr-radius-control);
   background: rgba(255, 255, 255, 0.06);
 }
 
 body.app-slava-restraint .chat-panel__chip--error {
-  border-color: rgba(255, 90, 31, 0.45);
+  border-color: var(--sr-accent-border-strong);
 }
 
 body.app-slava-restraint .chat-panel__chip-label {
   background: rgba(0, 0, 0, 0.66);
   color: var(--sr-ink-bold);
   font-family: var(--sr-mono);
-  font-size: 9px;
+  font-size: var(--sr-type-micro);
 }
 
 body.app-slava-restraint .chat-panel__chip-error {
-  color: var(--sr-accent);
+  color: var(--sr-danger);
 }
 
 body.app-slava-restraint .chat-panel__chip-close {
   border: 1px solid var(--sr-edge-strong);
   background: rgba(0, 0, 0, 0.78);
   color: var(--sr-ink-bold);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 body.app-slava-restraint .chat-panel__notice {
   margin: 0 0 8px;
   padding: 7px 10px;
-  border: 1px solid rgba(255, 90, 31, 0.28);
-  border-radius: 8px;
-  background: var(--sr-accent-soft);
-  color: var(--sr-accent);
-  font-size: 11px;
+  border: 1px solid var(--sr-accent-border-muted);
+  border-radius: var(--sr-radius-control);
+  background: var(--sr-danger-soft);
+  color: var(--sr-danger);
+  font-size: var(--sr-type-label);
 }
 
 body.app-slava-restraint .chat-panel__approval {
-  border: 1px solid rgba(255, 90, 31, 0.32);
-  border-radius: 10px;
-  background: var(--sr-accent-soft);
+  border: 1px solid var(--sr-accent-border);
+  border-radius: var(--sr-radius-control-lg);
+  background: var(--sr-danger-soft);
   color: var(--sr-ink);
 }
 
 body.app-slava-restraint .chat-panel__approval-btn {
   min-height: 32px;
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: var(--sr-radius-control);
   font-family: var(--sr-ui);
 }
 
 body.app-slava-restraint .chat-panel__approval-btn--approve {
   background: var(--sr-accent);
-  color: #080808;
+  color: var(--sr-on-accent);
 }
 
 body.app-slava-restraint .chat-panel__approval-btn--reject {
@@ -860,9 +1269,9 @@ body.app-slava-restraint .chat-panel__approval-btn--reject {
 }
 
 body.app-slava-restraint .chat-panel__thinking {
-  border: 1px solid rgba(255, 90, 31, 0.34);
-  border-radius: 10px;
-  background: var(--sr-accent-soft);
+  border: 1px solid var(--sr-accent-border);
+  border-radius: var(--sr-radius-control-lg);
+  background: var(--sr-danger-soft);
   box-shadow: none;
 }
 
@@ -882,7 +1291,7 @@ body.app-slava-restraint .chat-panel__thinking-header:hover {
 
 body.app-slava-restraint .chat-panel__thinking-indicator,
 body.app-slava-restraint .chat-panel__thinking-label {
-  color: var(--sr-accent);
+  color: var(--sr-danger);
 }
 
 body.app-slava-restraint .chat-panel__thinking-caret,
@@ -891,7 +1300,7 @@ body.app-slava-restraint .chat-panel__thinking-line {
 }
 
 body.app-slava-restraint .chat-panel__thinking-body {
-  border-top: 1px solid rgba(255, 90, 31, 0.22);
+  border-top: 1px solid var(--sr-accent-border-soft);
   font-family: var(--sr-mono);
 }
 
@@ -925,7 +1334,7 @@ body.app-slava-restraint .panel__search {
   border: 1px solid var(--sr-edge);
   color: var(--sr-ink);
   font-family: var(--sr-ui);
-  font-size: 13px;
+  font-size: var(--sr-type-control);
   border-radius: var(--sr-radius-pill);
   padding: 8px 14px;
 }
@@ -941,7 +1350,7 @@ body.app-slava-restraint .panel__search::placeholder {
 body.app-slava-restraint .panel__group-label {
   font-family: var(--sr-ui);
   font-weight: 500;
-  font-size: 12px;
+  font-size: var(--sr-type-body);
   letter-spacing: 0;
   text-transform: none;
   color: var(--sr-ink-light);
@@ -959,7 +1368,6 @@ body.app-slava-restraint .panel__group-label--button:hover {
 
 body.app-slava-restraint .panel__group-chevron {
   color: var(--sr-ink-faint);
-  font-size: 9px;
 }
 
 body.app-slava-restraint .panel__group-text {
@@ -971,7 +1379,7 @@ body.app-slava-restraint .panel__group-text {
 body.app-slava-restraint .panel__group-count {
   font-family: var(--sr-mono);
   font-weight: 400;
-  font-size: 10px;
+  font-size: var(--sr-type-meta);
   color: var(--sr-ink-meta);
   background: transparent;
   border: none;
@@ -989,7 +1397,7 @@ body.app-slava-restraint .panel__group-dot {
 
 body.app-slava-restraint .panel__item {
   font-family: var(--sr-ui);
-  font-size: 13px;
+  font-size: var(--sr-type-control);
   font-weight: 400;
   color: var(--sr-ink);
   background: transparent;
@@ -997,10 +1405,10 @@ body.app-slava-restraint .panel__item {
   border-radius: 6px;
   padding: 6px 10px;
   margin: 1px 0;
-  transition: background-color 120ms ease, color 120ms ease;
+  transition: background-color var(--sr-motion-fast), color var(--sr-motion-fast);
 }
 body.app-slava-restraint .panel__item:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--sr-surface-control-hover);
   color: var(--sr-ink-bold);
 }
 
@@ -1156,7 +1564,12 @@ body.app-slava-restraint .panel__items--expanded .panel__item:nth-child(n+6) {
 }
 
 body.app-slava-restraint .model-node__loading {
-  border-top-color: var(--sr-edge);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sr-space-2);
+  padding: var(--sr-space-2) var(--sr-space-3) var(--sr-space-3);
+  border-top: 1px solid var(--sr-edge);
 }
 
 body.app-slava-restraint .model-node__loading-spinner {
@@ -1183,9 +1596,36 @@ body.app-slava-restraint .model-node__loading-spinner::before {
 }
 
 body.app-slava-restraint .model-node__loading-text {
+  flex: 1;
   color: var(--sr-ink-light);
   font-family: var(--sr-mono);
-  font-size: 10px;
+  font-size: var(--sr-type-meta);
+}
+
+body.app-slava-restraint .model-node__loading .model-node__progress {
+  width: 100%;
+}
+
+body.app-slava-restraint .model-node__progress {
+  height: 2px;
+  padding: 0;
+  border-top: 0;
+  border-radius: var(--sr-radius-pill);
+  background: var(--sr-node-progress-track);
+  overflow: hidden;
+}
+
+body.app-slava-restraint .model-node__progress-bar {
+  height: 100%;
+  border-radius: inherit;
+  background:
+    linear-gradient(
+      90deg,
+      var(--sr-node-progress-fill),
+      color-mix(in srgb, var(--sr-node-progress-fill) 62%, var(--sr-ink-bold))
+    );
+  box-shadow: 0 0 10px color-mix(in srgb, var(--sr-node-progress-fill) 42%, transparent);
+  transition: width var(--sr-motion-ui);
 }
 
 body.app-slava-restraint .chat-panel__chip-spinner {
@@ -1276,7 +1716,7 @@ body.app-slava-restraint .slava-library-drag-preview {
   position: fixed;
   left: 0;
   top: 0;
-  z-index: 10000;
+  z-index: var(--sr-layer-drag);
   pointer-events: none;
   display: inline-flex;
   align-items: center;
@@ -1294,9 +1734,9 @@ body.app-slava-restraint .slava-library-drag-preview {
   backdrop-filter: blur(18px) saturate(140%);
   -webkit-backdrop-filter: blur(18px) saturate(140%);
   font-family: var(--sr-ui);
-  font-size: 12px;
+  font-size: var(--sr-type-body);
   font-weight: 500;
-  line-height: 1;
+  line-height: var(--sr-line-tight);
   transform: translate3d(var(--drag-x), var(--drag-y), 0) scale(1);
   transition: transform 80ms cubic-bezier(0.32, 0.72, 0, 1);
   animation: slava-library-drag-preview-in 140ms cubic-bezier(0.05, 0.7, 0.1, 1) both;
@@ -1331,7 +1771,7 @@ body.app-slava-restraint .slava-library-drag-preview__label {
 body.app-slava-restraint .settings__section-label {
   font-family: var(--sr-ui);
   font-weight: 500;
-  font-size: 11px;
+  font-size: var(--sr-type-label);
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--sr-ink-light);
@@ -1339,29 +1779,40 @@ body.app-slava-restraint .settings__section-label {
   margin-bottom: 4px;
 }
 
+body.app-slava-restraint .settings__section-label--stacked {
+  margin-top: var(--sr-space-4);
+}
+
+body.app-slava-restraint .settings__loading {
+  padding: var(--sr-space-4);
+  color: var(--sr-ink-meta);
+  font-family: var(--sr-ui);
+  text-align: center;
+}
+
 body.app-slava-restraint .settings__section-toggle {
   border: 1px solid var(--sr-edge);
-  border-radius: 8px;
+  border-radius: var(--sr-radius-control);
   background: rgba(255, 255, 255, 0.03);
   color: var(--sr-ink);
   font-family: var(--sr-ui);
-  padding: 9px 10px;
-  transition: background-color 120ms ease, border-color 120ms ease;
+  padding: 9px var(--sr-control-pad-x);
+  transition: background-color var(--sr-motion-fast), border-color var(--sr-motion-fast);
 }
 
 body.app-slava-restraint .settings__section-toggle:hover {
   border-color: var(--sr-edge-strong);
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--sr-surface-control-hover);
 }
 
 body.app-slava-restraint .settings__section-toggle:focus-visible {
-  outline: 2px solid var(--sr-accent-soft);
-  outline-offset: 2px;
+  outline: var(--sr-focus-outline);
+  outline-offset: var(--sr-focus-offset);
 }
 
 body.app-slava-restraint .settings__section-toggle-title {
   color: var(--sr-ink-light);
-  font-size: 11px;
+  font-size: var(--sr-type-label);
   font-weight: 600;
   letter-spacing: 0.04em;
 }
@@ -1374,26 +1825,27 @@ body.app-slava-restraint .settings__section-toggle-chevron {
 body.app-slava-restraint .inspector__label {
   font-family: var(--sr-ui);
   font-weight: 500;
-  font-size: 11px;
+  font-size: var(--sr-type-label);
   letter-spacing: 0;
   text-transform: none;
   color: var(--sr-ink-light);
 }
 
 body.app-slava-restraint .inspector__field {
-  background: rgba(0, 0, 0, 0.30);
+  min-height: var(--sr-control-h-md);
+  background: var(--sr-surface-control);
   border: 1px solid var(--sr-edge);
   color: var(--sr-ink);
   font-family: var(--sr-mono);
-  font-size: 12px;
-  padding: 7px 10px;
-  border-radius: 8px;
-  transition: border-color 120ms ease, background-color 120ms ease;
+  font-size: var(--sr-type-body);
+  padding: var(--sr-control-pad-y) var(--sr-control-pad-x);
+  border-radius: var(--sr-radius-control);
+  transition: border-color var(--sr-motion-fast), background-color var(--sr-motion-fast);
 }
 body.app-slava-restraint .inspector__field:focus {
   outline: none;
   border-color: var(--sr-accent);
-  background: rgba(0, 0, 0, 0.45);
+  background: var(--sr-surface-control-focus);
 }
 body.app-slava-restraint .inspector__field::placeholder {
   color: var(--sr-ink-faint);
@@ -1403,35 +1855,160 @@ body.app-slava-restraint select.inspector__field {
   appearance: none;
 }
 
+body.app-slava-restraint .inspector__section--separated,
+body.app-slava-restraint .inspector__actions {
+  border-top-color: var(--sr-edge);
+}
+
+body.app-slava-restraint .inspector__model-error {
+  color: var(--sr-accent);
+  font-family: var(--sr-mono);
+}
+
+body.app-slava-restraint .inspector__model-selection,
+body.app-slava-restraint .inspector__state-value {
+  color: var(--sr-ink-meta);
+  font-family: var(--sr-mono);
+}
+
+body.app-slava-restraint .inspector__favorite-button {
+  color: var(--sr-ink-faint);
+  font-family: var(--sr-ui);
+  transition: color var(--sr-motion-fast), transform var(--sr-motion-fast);
+}
+
+body.app-slava-restraint .inspector__favorite-button:hover,
+body.app-slava-restraint .inspector__favorite-button--active {
+  color: var(--sr-accent);
+}
+
+body.app-slava-restraint .inspector__favorite-button:active {
+  transform: scale(0.94);
+}
+
+body.app-slava-restraint .inspector__checkbox-row {
+  color: var(--sr-ink-light);
+  font-family: var(--sr-ui);
+}
+
+body.app-slava-restraint .inspector__checkbox-row input,
+body.app-slava-restraint .settings__toggle-input {
+  accent-color: var(--sr-accent);
+}
+
+body.app-slava-restraint .inspector__info-button {
+  width: var(--sr-control-h-xs);
+  height: var(--sr-control-h-xs);
+  border: 1px solid var(--sr-edge);
+  background: transparent;
+  color: var(--sr-ink-light);
+  font-family: var(--sr-ui);
+  font-style: normal;
+  transition:
+    background-color var(--sr-motion-fast),
+    border-color var(--sr-motion-fast),
+    color var(--sr-motion-fast);
+}
+
+body.app-slava-restraint .inspector__info-button:hover {
+  border-color: var(--sr-edge-strong);
+  background: var(--sr-surface-control-hover);
+  color: var(--sr-ink-bold);
+}
+
+body.app-slava-restraint .inspector__info-panel {
+  border: 1px solid var(--sr-edge);
+  border-radius: var(--sr-radius-control);
+  background: rgba(0, 0, 0, 0.24);
+  color: var(--sr-ink-light);
+}
+
+body.app-slava-restraint .inspector__info-heading {
+  border-bottom-color: var(--sr-edge);
+  color: var(--sr-ink-meta);
+  font-family: var(--sr-mono);
+  letter-spacing: 0.04em;
+}
+
+body.app-slava-restraint .inspector__info-row {
+  color: var(--sr-ink-light);
+}
+
+body.app-slava-restraint .inspector__info-name {
+  color: var(--sr-ink);
+}
+
+body.app-slava-restraint .inspector__info-type,
+body.app-slava-restraint .inspector__info-meta {
+  color: var(--sr-ink-meta);
+}
+
+body.app-slava-restraint .inspector__info-meta {
+  border-top-color: var(--sr-edge);
+}
+
+body.app-slava-restraint .inspector__file-button,
+body.app-slava-restraint .inspector__action-button {
+  min-height: var(--sr-control-h-md);
+  border: 1px solid var(--sr-edge);
+  border-radius: var(--sr-radius-control);
+  background: var(--sr-surface-control);
+  color: var(--sr-ink-light);
+  font-family: var(--sr-ui);
+  font-size: var(--sr-type-body);
+  transition:
+    background-color var(--sr-motion-fast),
+    border-color var(--sr-motion-fast),
+    color var(--sr-motion-fast);
+}
+
+body.app-slava-restraint .inspector__file-button:hover,
+body.app-slava-restraint .inspector__action-button:hover {
+  border-color: var(--sr-edge-strong);
+  background: var(--sr-surface-control-hover);
+  color: var(--sr-ink-bold);
+}
+
+body.app-slava-restraint .inspector__action-button--danger:hover {
+  border-color: var(--sr-danger-border);
+  background: var(--sr-danger-soft);
+  color: var(--sr-danger);
+}
+
+body.app-slava-restraint .inspector__file-preview {
+  border: 1px solid var(--sr-edge);
+  border-radius: var(--sr-radius-control);
+}
+
 /* Settings save — primary CTA pill. Single place orange shows up in chrome. */
 body.app-slava-restraint .settings__save-button {
   background: var(--sr-accent);
-  color: #0A0A0B;
+  color: var(--sr-on-accent);
   border: none;
   padding: 10px 18px;
   font-family: var(--sr-ui);
   font-weight: 600;
-  font-size: 13px;
+  font-size: var(--sr-type-control);
   letter-spacing: 0;
   text-transform: none;
   border-radius: var(--sr-radius-pill);
   cursor: pointer;
   margin-top: 18px;
-  transition: filter 120ms ease;
+  transition: filter var(--sr-motion-fast);
 }
 body.app-slava-restraint .settings__save-button:hover {
   filter: brightness(1.08);
 }
 body.app-slava-restraint .settings__save-button:disabled {
-  opacity: 0.5;
+  opacity: var(--sr-disabled-opacity-muted);
   cursor: default;
 }
 
 body.app-slava-restraint .settings__toggle-row {
   border: 1px solid var(--sr-edge);
-  border-radius: 8px;
+  border-radius: var(--sr-radius-control);
   background: rgba(255, 255, 255, 0.03);
-  transition: background-color 120ms ease, border-color 120ms ease;
+  transition: background-color var(--sr-motion-fast), border-color var(--sr-motion-fast);
 }
 
 body.app-slava-restraint .settings__toggle-row:hover {
@@ -1442,33 +2019,29 @@ body.app-slava-restraint .settings__toggle-row:hover {
 body.app-slava-restraint .settings__toggle-title {
   color: var(--sr-ink);
   font-family: var(--sr-ui);
-  font-size: 12px;
+  font-size: var(--sr-type-body);
   font-weight: 600;
 }
 
 body.app-slava-restraint .settings__toggle-description {
   color: var(--sr-ink-meta);
   font-family: var(--sr-ui);
-  font-size: 11px;
-}
-
-body.app-slava-restraint .settings__toggle-input {
-  accent-color: var(--sr-accent);
+  font-size: var(--sr-type-label);
 }
 
 /* ─────────────────────────────────────────────────────────────────────
  * Toolbar — translucent rounded pill (keeps default position)
  * ───────────────────────────────────────────────────────────────────── */
 body.app-slava-restraint .toolbar {
+  z-index: var(--sr-layer-panel);
+  bottom: var(--sr-space-6);
   background: var(--sr-glass-raised);
-  backdrop-filter: blur(24px) saturate(140%);
-  -webkit-backdrop-filter: blur(24px) saturate(140%);
+  backdrop-filter: var(--sr-blur-panel);
+  -webkit-backdrop-filter: var(--sr-blur-panel);
   border: 1px solid var(--sr-edge);
   border-radius: var(--sr-radius-pill);
   font-family: var(--sr-ui);
-  box-shadow:
-    0 1px 0 0 rgba(255, 255, 255, 0.06) inset,
-    0 8px 24px rgba(0, 0, 0, 0.55);
+  box-shadow: var(--sr-shadow-panel-sm);
 }
 
 /* Wordmark — the ONE place dot-matrix-style display shows up. Sits
@@ -1481,7 +2054,7 @@ body.app-slava-restraint .toolbar::before {
   transform: translateX(-50%);
   font-family: var(--sr-mono);
   font-weight: 500;
-  font-size: 10px;
+  font-size: var(--sr-type-meta);
   letter-spacing: 0.30em;
   color: var(--sr-ink-faint);
   pointer-events: none;
@@ -1493,10 +2066,11 @@ body.app-slava-restraint .toolbar__button {
   color: var(--sr-ink-light);
   border: 1px solid transparent;
   font-family: var(--sr-ui);
-  font-size: 12px;
+  font-size: var(--sr-type-body);
   font-weight: 500;
-  padding: 6px 10px;
-  border-radius: 6px;
+  min-height: var(--sr-control-h-sm);
+  padding: 6px var(--sr-control-pad-x);
+  border-radius: var(--sr-radius-control);
   letter-spacing: 0;
   /* On RELEASE: scale back to 1 via back-ease that briefly overshoots —
    * gives a "pop" feel without explicitly keyframing past 1.0. The
@@ -1513,13 +2087,13 @@ body.app-slava-restraint .toolbar__button {
 }
 body.app-slava-restraint .toolbar__button:hover {
   color: var(--sr-ink-bold);
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--sr-surface-control-hover);
   border-color: transparent;
 }
 body.app-slava-restraint .toolbar__button--active,
 body.app-slava-restraint .toolbar__button--active:hover {
   color: var(--sr-ink-bold);
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--sr-surface-control-active);
 }
 body.app-slava-restraint .toolbar__button:active {
   transform: scale(0.96);
@@ -1566,14 +2140,15 @@ body.app-slava-restraint .toolbar__divider {
  * (small functional color use is allowed where it reads as data, not deco).
  * ───────────────────────────────────────────────────────────────────── */
 body.app-slava-restraint .agent-log {
+  z-index: var(--sr-layer-agent-log);
   background: var(--sr-glass);
-  backdrop-filter: blur(24px) saturate(140%);
-  -webkit-backdrop-filter: blur(24px) saturate(140%);
+  backdrop-filter: var(--sr-blur-panel);
+  -webkit-backdrop-filter: var(--sr-blur-panel);
   border: 1px solid var(--sr-edge);
   border-radius: var(--sr-radius-panel);
   color: var(--sr-ink);
   font-family: var(--sr-ui);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  box-shadow: var(--sr-shadow-panel-sm);
 }
 
 body.app-slava-restraint .agent-log__drag-row,
@@ -1590,7 +2165,7 @@ body.app-slava-restraint .agent-log--open .agent-log__header {
 body.app-slava-restraint .agent-log__title {
   font-family: var(--sr-ui);
   font-weight: 500;
-  font-size: 13px;
+  font-size: var(--sr-type-control);
   letter-spacing: 0;
   text-transform: none;
   color: var(--sr-ink);
@@ -1601,6 +2176,7 @@ body.app-slava-restraint .agent-log__title {
 
 body.app-slava-restraint .agent-log__icon {
   color: var(--sr-ink-light);
+  transform: none;
 }
 
 body.app-slava-restraint .agent-log__chevron {
@@ -1616,8 +2192,11 @@ body.app-slava-restraint .agent-log__body {
 body.app-slava-restraint .agent-log__empty {
   color: var(--sr-ink-faint);
   font-family: var(--sr-ui);
-  font-size: 12px;
-  padding: 8px 0;
+  font-size: var(--sr-type-label);
+  font-style: normal;
+  line-height: var(--sr-line-meta);
+  padding: 10px 0 0;
+  text-align: left;
 }
 
 body.app-slava-restraint .agent-log__entry {
@@ -1628,8 +2207,8 @@ body.app-slava-restraint .agent-log__entry {
   padding: 5px 0;
   border-bottom: 1px solid transparent;
   font-family: var(--sr-mono);
-  font-size: 11px;
-  line-height: 1.5;
+  font-size: var(--sr-type-label);
+  line-height: var(--sr-line-relaxed);
 }
 
 body.app-slava-restraint .agent-log__time {
@@ -1641,13 +2220,56 @@ body.app-slava-restraint .agent-log__source {
   color: var(--sr-ink-meta);
   text-transform: lowercase;
   letter-spacing: 0;
-  font-size: 10px;
+  font-size: var(--sr-type-meta);
 }
 
 body.app-slava-restraint .agent-log__msg {
   color: var(--sr-ink);
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+body.app-slava-restraint .mesh-preview__viewer,
+body.app-slava-restraint .mesh-modal__viewer {
+  background: var(--sr-canvas-elevated);
+}
+
+body.app-slava-restraint .mesh-modal-overlay {
+  background: rgba(0, 0, 0, 0.86);
+  z-index: var(--sr-layer-modal);
+}
+
+body.app-slava-restraint .mesh-modal {
+  border: 1px solid var(--sr-edge);
+  border-radius: var(--sr-radius-panel);
+  background: var(--sr-glass-strong);
+  box-shadow: var(--sr-shadow-panel);
+}
+
+body.app-slava-restraint .mesh-modal__close {
+  z-index: var(--sr-layer-modal-control);
+  border: 1px solid var(--sr-edge-strong);
+  background: rgba(0, 0, 0, 0.58);
+  color: var(--sr-ink-bold);
+}
+
+body.app-slava-restraint .mesh-modal__info {
+  background: rgba(0, 0, 0, 0.66);
+}
+
+body.app-slava-restraint .mesh-modal__format {
+  color: var(--sr-ink-meta);
+  font-family: var(--sr-mono);
+}
+
+body.app-slava-restraint .mesh-modal__download {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: var(--sr-radius-pill);
+  background: var(--sr-accent);
+  color: var(--sr-on-accent);
+  font-family: var(--sr-ui);
 }
 
 /* ─────────────────────────────────────────────────────────────────────
@@ -1682,7 +2304,7 @@ body.app-slava-restraint .model-node {
   overflow: visible;
   /* Top padding leaves room for the floating settings-bar + type-label
    * to sit above the card without being clipped or overlapping it. */
-  padding-top: 38px;
+  padding-top: var(--sr-node-pad-top);
 }
 
 /* Type label — small, quiet, sits in the upper-left ABOVE the card.
@@ -1690,11 +2312,11 @@ body.app-slava-restraint .model-node {
 body.app-slava-restraint .model-node__type-label {
   display: block;
   position: absolute;
-  top: 14px;
-  left: 4px;
+  top: var(--sr-node-type-label-top);
+  left: var(--sr-space-1);
   font-family: var(--sr-ui);
   font-weight: 400;
-  font-size: 10px;
+  font-size: var(--sr-type-meta);
   letter-spacing: 0.04em;
   text-transform: lowercase;
   color: var(--sr-ink-light);
@@ -1709,21 +2331,21 @@ body.app-slava-restraint .model-node__type-label {
 body.app-slava-restraint .model-node__settings-bar {
   display: inline-flex;
   position: absolute;
-  top: 4px;
+  top: var(--sr-node-pill-top);
   left: 50%;
   transform: translateX(-50%);
   align-items: center;
-  gap: 0;  /* expands to 8px on hover */
+  gap: 0;  /* expands to --sr-node-pill-expanded-gap on hover */
   padding: 0;
-  background: rgba(20, 20, 22, 0.78);
-  backdrop-filter: blur(20px) saturate(140%);
-  -webkit-backdrop-filter: blur(20px) saturate(140%);
+  background: var(--sr-node-pill-bg);
+  backdrop-filter: var(--sr-blur-node);
+  -webkit-backdrop-filter: var(--sr-blur-node);
   border: 1px solid var(--sr-edge);
   border-radius: var(--sr-radius-pill);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.55);
+  box-shadow: var(--sr-node-pill-shadow);
   white-space: nowrap;
-  z-index: 3;
-  transition: padding 180ms ease, gap 180ms ease;
+  z-index: var(--sr-layer-node-floating);
+  transition: padding var(--sr-node-pill-motion), gap var(--sr-node-pill-motion);
   cursor: default;
 }
 
@@ -1731,14 +2353,17 @@ body.app-slava-restraint .model-node__settings-bar {
 body.app-slava-restraint .model-node__settings-model {
   font-family: var(--sr-ui);
   font-weight: 500;
-  font-size: 11px;
+  font-size: var(--sr-type-label);
   color: var(--sr-ink-bold);
   letter-spacing: -0.005em;
   max-width: 0;
   opacity: 0;
   overflow: hidden;
   margin-left: 0;
-  transition: max-width 200ms ease, opacity 160ms ease 40ms, margin-left 200ms ease;
+  transition:
+    max-width var(--sr-node-pill-label-motion),
+    opacity var(--sr-node-pill-label-opacity-motion),
+    margin-left var(--sr-node-pill-label-motion);
   pointer-events: none;
 }
 
@@ -1747,22 +2372,22 @@ body.app-slava-restraint .model-node__settings-edit {
   background: transparent;
   border: none;
   border-radius: 50%;
-  width: 22px;
-  height: 22px;
+  width: var(--sr-node-pill-button-size);
+  height: var(--sr-node-pill-button-size);
   padding: 0;
   color: var(--sr-ink-light);
-  font-size: 14px;
-  line-height: 1;
+  font-size: var(--sr-type-action);
+  line-height: var(--sr-line-tight);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  transition: color 120ms ease, background-color 120ms ease;
+  transition: color var(--sr-motion-fast), background-color var(--sr-motion-fast);
 }
 body.app-slava-restraint .model-node__settings-edit:hover {
   color: var(--sr-ink-bold);
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--sr-surface-control-active);
 }
 
 /* Expanded state — triggered ONLY by hovering the bar itself or focusing
@@ -1770,12 +2395,12 @@ body.app-slava-restraint .model-node__settings-edit:hover {
  * the card is large and would keep the bar permanently expanded. */
 body.app-slava-restraint .model-node__settings-bar:hover,
 body.app-slava-restraint .model-node__settings-bar:focus-within {
-  padding: 3px 4px 3px 12px;
-  gap: 8px;
+  padding: var(--sr-node-pill-expanded-padding);
+  gap: var(--sr-node-pill-expanded-gap);
 }
 body.app-slava-restraint .model-node__settings-bar:hover .model-node__settings-model,
 body.app-slava-restraint .model-node__settings-bar:focus-within .model-node__settings-model {
-  max-width: 220px;
+  max-width: var(--sr-node-pill-label-max);
   opacity: 1;
   margin-left: 0;
 }
@@ -1787,22 +2412,20 @@ body.app-slava-restraint .model-node__card {
   display: block;
   position: relative;
   background: var(--sr-glass-strong);
-  backdrop-filter: blur(20px) saturate(140%);
-  -webkit-backdrop-filter: blur(20px) saturate(140%);
-  border: 1px solid color-mix(in srgb, var(--node-category-color, rgba(255,255,255,0.40)) 20%, transparent);
+  backdrop-filter: var(--sr-blur-node);
+  -webkit-backdrop-filter: var(--sr-blur-node);
+  border: 1px solid color-mix(in srgb, var(--node-category-color, var(--sr-node-category-fallback)) var(--sr-node-card-border-mix), transparent);
   border-radius: var(--sr-radius-node);
   /* Soft inner highlight (1px white at 6% inset) — Flora's quiet halo. */
-  box-shadow:
-    0 0 0 1px rgba(255, 255, 255, 0.06) inset,
-    0 8px 24px rgba(0, 0, 0, 0.65);
+  box-shadow: var(--sr-shadow-node);
   overflow: visible;  /* let handles escape; preview clips itself */
-  transition: border-color 140ms ease, box-shadow 140ms ease;
+  transition: border-color var(--sr-motion-ui), box-shadow var(--sr-motion-ui);
 }
 
 @keyframes slava-node-enter-opacity {
   from {
     opacity: 0;
-    filter: blur(3px);
+    filter: blur(var(--sr-node-enter-blur));
   }
   to {
     opacity: 1;
@@ -1814,8 +2437,8 @@ body.app-slava-restraint .model-node__card {
   from {
     opacity: 1;
     box-shadow:
-      0 0 0 10px color-mix(in srgb, var(--node-category-color, var(--sr-accent)) 20%, transparent),
-      0 0 34px color-mix(in srgb, var(--node-category-color, var(--sr-accent)) 32%, transparent);
+      0 0 0 var(--sr-node-enter-ring-size) color-mix(in srgb, var(--node-category-color, var(--sr-accent)) var(--sr-node-enter-ring-mix), transparent),
+      0 0 var(--sr-node-enter-glow-size) color-mix(in srgb, var(--node-category-color, var(--sr-accent)) var(--sr-node-enter-glow-mix), transparent);
   }
   to {
     opacity: 0;
@@ -1826,7 +2449,7 @@ body.app-slava-restraint .model-node__card {
 }
 
 body.app-slava-restraint .model-node--entering {
-  animation: slava-node-enter-opacity 220ms cubic-bezier(0.05, 0.7, 0.1, 1) both;
+  animation: slava-node-enter-opacity var(--sr-node-enter-duration) cubic-bezier(0.05, 0.7, 0.1, 1) both;
 }
 
 body.app-slava-restraint .model-node__card::after {
@@ -1839,7 +2462,7 @@ body.app-slava-restraint .model-node__card::after {
 }
 
 body.app-slava-restraint .model-node--entering .model-node__card::after {
-  animation: slava-node-enter-bloom 220ms cubic-bezier(0.05, 0.7, 0.1, 1) both;
+  animation: slava-node-enter-bloom var(--sr-node-enter-duration) cubic-bezier(0.05, 0.7, 0.1, 1) both;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1864,34 +2487,31 @@ body.app-slava-restraint .model-node--entering .model-node__card::after {
 @keyframes slava-select-breathe {
   0%, 100% {
     box-shadow:
-      0 0 0 1px var(--node-category-color, var(--sr-accent)),
-      0 0 18px color-mix(in srgb, var(--node-category-color, var(--sr-accent)) 28%, transparent),
-      0 0 0 1px rgba(255, 255, 255, 0.06) inset,
-      0 8px 24px rgba(0, 0, 0, 0.65);
+      0 0 0 var(--sr-node-ring-width) var(--node-category-color, var(--sr-accent)),
+      0 0 var(--sr-node-selected-glow-rest-size) color-mix(in srgb, var(--node-category-color, var(--sr-accent)) var(--sr-node-selected-glow-rest-mix), transparent),
+      var(--sr-shadow-node);
   }
   50% {
     box-shadow:
-      0 0 0 1px var(--node-category-color, var(--sr-accent)),
-      0 0 30px color-mix(in srgb, var(--node-category-color, var(--sr-accent)) 65%, transparent),
-      0 0 0 1px rgba(255, 255, 255, 0.06) inset,
-      0 8px 24px rgba(0, 0, 0, 0.65);
+      0 0 0 var(--sr-node-ring-width) var(--node-category-color, var(--sr-accent)),
+      0 0 var(--sr-node-selected-glow-peak-size) color-mix(in srgb, var(--node-category-color, var(--sr-accent)) var(--sr-node-selected-glow-peak-mix), transparent),
+      var(--sr-shadow-node);
   }
 }
 
 body.app-slava-restraint .model-node--selected .model-node__card {
   border-color: var(--node-category-color, var(--sr-accent));
-  border-width: 1.5px;
-  animation: slava-select-breathe 1600ms ease-in-out infinite;
+  border-width: var(--sr-node-card-selected-border-width);
+  animation: slava-select-breathe var(--sr-node-selected-duration) ease-in-out infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
   body.app-slava-restraint .model-node--selected .model-node__card {
     animation: none;
     box-shadow:
-      0 0 0 1px var(--node-category-color, var(--sr-accent)),
-      0 0 24px color-mix(in srgb, var(--node-category-color, var(--sr-accent)) 45%, transparent),
-      0 0 0 1px rgba(255, 255, 255, 0.06) inset,
-      0 8px 24px rgba(0, 0, 0, 0.65);
+      0 0 0 var(--sr-node-ring-width) var(--node-category-color, var(--sr-accent)),
+      0 0 var(--sr-node-selected-glow-reduced-size) color-mix(in srgb, var(--node-category-color, var(--sr-accent)) var(--sr-node-selected-glow-reduced-mix), transparent),
+      var(--sr-shadow-node);
   }
 }
 
@@ -1902,18 +2522,14 @@ body.app-slava-restraint .model-node--selected .model-node__card {
  * the React Flow handle anchoring intact). */
 body.app-slava-restraint .model-node__header {
   position: relative;
-  z-index: 2;
-  padding: 8px 12px 8px 12px;
+  z-index: var(--sr-layer-node-header);
+  padding: var(--sr-node-header-padding);
   border-bottom: none;
   background: transparent;
   align-items: center;
-  gap: 8px;
+  gap: var(--sr-node-header-gap);
   /* Tiny dark gradient overlay for label legibility on light previews. */
-  background-image: linear-gradient(
-    to bottom,
-    rgba(0, 0, 0, 0.45) 0%,
-    rgba(0, 0, 0, 0.0) 100%
-  );
+  background-image: var(--sr-node-header-gradient);
 }
 
 /* The 6px round dot is hidden — the border tint + model name carry the
@@ -1929,13 +2545,13 @@ body.app-slava-restraint .model-node__label {
   color: var(--sr-ink-bold);
   font-family: var(--sr-ui);
   font-weight: 500;
-  font-size: 12px;
-  line-height: 1.2;
+  font-size: var(--sr-type-body);
+  line-height: var(--sr-line-compact);
   letter-spacing: -0.005em;
 }
 
 body.app-slava-restraint .model-node__badge--warning {
-  color: #F5C518;
+  color: var(--sr-warning);
 }
 
 /* Id-chip — sits in the upper-right, mono, faint. Reads as model
@@ -1947,69 +2563,97 @@ body.app-slava-restraint .model-node__id-chip {
   border: none;
   border-radius: 0;
   font-family: var(--sr-mono);
-  font-size: 10px;
+  font-size: var(--sr-type-meta);
   font-weight: 400;
   letter-spacing: 0;
   padding: 0;
   text-transform: none;
 }
 
+body.app-slava-restraint .dynamic-node__model-badge {
+  margin: 0 var(--sr-space-3) var(--sr-space-2);
+  padding: 0;
+  overflow: hidden;
+  color: var(--sr-ink-meta);
+  background: transparent;
+  border-radius: 0;
+  font-family: var(--sr-mono);
+  font-size: var(--sr-type-meta);
+  line-height: var(--sr-line-compact);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 body.app-slava-restraint .model-node__ports {
-  padding: 6px 0 10px;
+  padding: var(--sr-node-port-padding);
 }
 
 body.app-slava-restraint .model-node__port-row {
-  padding: 3px 14px;
+  padding: var(--sr-node-port-row-padding);
 }
 
 body.app-slava-restraint .model-node__port-label {
   color: var(--sr-ink-light);
   font-family: var(--sr-ui);
   font-weight: 400;
-  font-size: 11px;
+  font-size: var(--sr-type-label);
   letter-spacing: 0;
   text-transform: none;
 }
 
-/* Handles — Flora-style circular `+` buttons floating OUTSIDE the card.
- *
- * v4 (2026-05-05): clip-path-driven dot-to-circle reveal.
- *
- * RESTING: a 9px white dot (visually a small filled circle). The
- * handle layout box stays 20×20 but the visible region is masked to a
- * `circle(4.5px at center)` clip-path. Since clip-path is paint-only
- * (NOT a transform), it doesn't interact with React Flow's inline
- * transform: matrix() on the handle — sidesteps the gotcha that bit
- * the v1/v2/v3 attempts.
- *
- * EXPANDED (on hover or active connection): clip-path opens to
- * `circle(10px at center)` revealing the full 20×20 handle: dark glass
- * fill, white 1px ring, drop-shadow, and the `+` glyph (twin pseudo
- * lines) fading in. Reads as "this is a connector — click and drag."
- *
- * Coordinated transitions: clip-path / bg-color / border-color /
- * box-shadow / `+` opacity all animate on the same 220ms Vaul curve so
- * the dot doesn't "lurch" — it transforms as a unified shape change.
- *
- * Hit area trade-off: clip-path DOES restrict pointer events, so at
- * rest the click target is the 9px dot. That's smaller than ideal
- * (Apple recommends 44px), but matches the "small mark, intentional
- * click" aesthetic the user is going for; full handle is reachable
- * by approaching from any direction since hover triggers as soon as
- * cursor enters the visible region.
- */
-/* Dot-to-circle connector reveal. The handle itself is only the 20x20
- * hit target; ::before paints the resting dot and ::after paints the
- * full glass circle + plus. Both pseudos are centered off the same
- * 50%/50% point, so the visual center cannot drift. */
+body.app-slava-restraint .reroute-node {
+  position: relative;
+  width: var(--sr-node-reroute-size);
+  height: var(--sr-node-reroute-size);
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  cursor: crosshair;
+}
+
+body.app-slava-restraint .reroute-node::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: var(--sr-node-reroute-dot-size);
+  height: var(--sr-node-reroute-dot-size);
+  border-radius: 50%;
+  background: var(--sr-handle-rest-dot);
+  transform: translate(-50%, -50%);
+  transition:
+    width var(--sr-motion-handle),
+    height var(--sr-motion-handle),
+    background-color var(--sr-motion-handle),
+    box-shadow var(--sr-motion-handle);
+}
+
+body.app-slava-restraint .reroute-node:hover::before {
+  width: var(--sr-handle-size);
+  height: var(--sr-handle-size);
+  background: var(--sr-handle-glass);
+  box-shadow: var(--sr-handle-shadow);
+}
+
+body.app-slava-restraint .reroute-node__handle {
+  width: var(--sr-handle-size) !important;
+  height: var(--sr-handle-size) !important;
+  background: transparent !important;
+  border: 0 !important;
+}
+
+/* Handles — Flora-style circular connector points floating outside the card.
+ * The handle keeps a stable 20px hit target; ::before paints the quiet rest
+ * dot and ::after paints the full glass circle + plus. Both pseudos share the
+ * same 50%/50% origin so hover, magnet, and connecting states cannot drift. */
 body.app-slava-restraint .model-node__handle,
 body.app-slava-restraint .react-flow__handle {
   --sr-handle-rest-x: 0px;
   --sr-handle-rest-y: 0px;
   --sr-handle-magnet-x: 0px;
   --sr-handle-magnet-y: 0px;
-  width: 20px !important;
-  height: 20px !important;
+  width: var(--sr-handle-size) !important;
+  height: var(--sr-handle-size) !important;
   border-radius: 50% !important;
   background: transparent !important;
   border: 0 !important;
@@ -2025,9 +2669,9 @@ body.app-slava-restraint .react-flow__handle::before {
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 9px;
-  height: 9px;
-  background: rgba(255, 255, 255, 0.85);
+  width: var(--sr-handle-dot-size);
+  height: var(--sr-handle-dot-size);
+  background: var(--sr-handle-rest-dot);
   border-radius: 50%;
   opacity: 1;
   transform:
@@ -2036,8 +2680,8 @@ body.app-slava-restraint .react-flow__handle::before {
     scale(1);
   transform-origin: center;
   transition:
-    opacity 220ms cubic-bezier(0.32, 0.72, 0, 1),
-    transform 220ms cubic-bezier(0.32, 0.72, 0, 1);
+    opacity var(--sr-motion-handle),
+    transform var(--sr-motion-handle);
   pointer-events: none;
 }
 
@@ -2049,26 +2693,26 @@ body.app-slava-restraint .react-flow__handle::after {
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 20px;
-  height: 20px;
+  width: var(--sr-handle-size);
+  height: var(--sr-handle-size);
   background:
-    linear-gradient(rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.95)) center / 9px 1.5px no-repeat,
-    linear-gradient(rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.95)) center / 1.5px 9px no-repeat,
-    rgba(20, 20, 22, 0.92);
-  border: 1px solid rgba(255, 255, 255, 0.85);
+    linear-gradient(var(--sr-handle-glyph), var(--sr-handle-glyph)) center / var(--sr-handle-plus-length) var(--sr-handle-plus-thickness) no-repeat,
+    linear-gradient(var(--sr-handle-glyph), var(--sr-handle-glyph)) center / var(--sr-handle-plus-thickness) var(--sr-handle-plus-length) no-repeat,
+    var(--sr-handle-glass);
+  border: 1px solid var(--sr-handle-ring);
   border-radius: 50%;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+  box-shadow: var(--sr-handle-shadow);
   opacity: 0;
   transform:
     translate(-50%, -50%)
     translate(var(--sr-handle-rest-x), var(--sr-handle-rest-y))
-    scale(0.45);
+    scale(var(--sr-handle-rest-scale));
   transform-origin: center;
   transition:
-    opacity 220ms cubic-bezier(0.32, 0.72, 0, 1),
-    transform 220ms cubic-bezier(0.32, 0.72, 0, 1),
-    border-color 220ms cubic-bezier(0.32, 0.72, 0, 1),
-    box-shadow 220ms cubic-bezier(0.32, 0.72, 0, 1);
+    opacity var(--sr-motion-handle),
+    transform var(--sr-motion-handle),
+    border-color var(--sr-motion-handle),
+    box-shadow var(--sr-motion-handle);
   pointer-events: none;
 }
 
@@ -2076,20 +2720,20 @@ body.app-slava-restraint .react-flow__handle::after {
  * connector points in the gap between nodes (Flora pattern), not as
  * decorations stuck to the card border. */
 body.app-slava-restraint .react-flow__handle-left {
-  margin-left: -14px;
-  --sr-handle-rest-x: 4px;
+  margin-left: var(--sr-handle-outset);
+  --sr-handle-rest-x: var(--sr-handle-rest-offset);
 }
 body.app-slava-restraint .react-flow__handle-right {
-  margin-right: -14px;
-  --sr-handle-rest-x: -4px;
+  margin-right: var(--sr-handle-outset);
+  --sr-handle-rest-x: calc(var(--sr-handle-rest-offset) * -1);
 }
 body.app-slava-restraint .react-flow__handle-top {
-  margin-top: -14px;
-  --sr-handle-rest-y: 4px;
+  margin-top: var(--sr-handle-outset);
+  --sr-handle-rest-y: var(--sr-handle-rest-offset);
 }
 body.app-slava-restraint .react-flow__handle-bottom {
-  margin-bottom: -14px;
-  --sr-handle-rest-y: -4px;
+  margin-bottom: var(--sr-handle-outset);
+  --sr-handle-rest-y: calc(var(--sr-handle-rest-offset) * -1);
 }
 
 /* React Flow centers handles with transform: translate(...). Preserve that
@@ -2133,7 +2777,7 @@ body.app-slava-restraint .react-flow__handle.connectingto::before {
     translate(-50%, -50%)
     translate(0, 0)
     translate(var(--sr-handle-magnet-x), var(--sr-handle-magnet-y))
-    scale(0.7);
+    scale(var(--sr-handle-catch-scale));
 }
 body.app-slava-restraint .react-flow__handle:hover::after,
 body.app-slava-restraint .react-flow__handle.connectingfrom::after,
@@ -2151,13 +2795,13 @@ body.app-slava-restraint .react-flow__handle.connectingto::after {
 body.app-slava-restraint .react-flow__handle.connectingfrom::after,
 body.app-slava-restraint .react-flow__handle.connecting::after,
 body.app-slava-restraint .react-flow__handle.connectingto::after {
-  box-shadow: 0 0 0 4px var(--sr-accent-soft), 0 1px 4px rgba(0, 0, 0, 0.6);
+  box-shadow: var(--sr-handle-active-shadow);
   border-color: var(--sr-accent);
   transition:
-    opacity 140ms cubic-bezier(0.05, 0.7, 0.1, 1),
-    transform 140ms cubic-bezier(0.05, 0.7, 0.1, 1),
-    border-color 140ms cubic-bezier(0.05, 0.7, 0.1, 1),
-    box-shadow 140ms cubic-bezier(0.05, 0.7, 0.1, 1);
+    opacity var(--sr-motion-emphasized),
+    transform var(--sr-motion-emphasized),
+    border-color var(--sr-motion-emphasized),
+    box-shadow var(--sr-motion-emphasized);
 }
 
 /* ─── DEBUG: handle alignment overlay ────────────────────────────────
@@ -2217,10 +2861,10 @@ body.app-slava-restraint.debug-handles .react-flow__handle {
 }
 
 body.app-slava-restraint .react-flow__edge-path {
-  stroke: rgba(255, 255, 255, 0.55);
-  stroke-width: 1.5;
-  filter: drop-shadow(0 0 4px rgba(255, 255, 255, 0.18));
-  animation: slava-edge-draw 280ms cubic-bezier(0.05, 0.7, 0.1, 1) forwards;
+  stroke: var(--sr-edge-path-color);
+  stroke-width: var(--sr-edge-path-width);
+  filter: var(--sr-edge-path-glow);
+  animation: slava-edge-draw var(--sr-edge-draw-duration) cubic-bezier(0.05, 0.7, 0.1, 1) forwards;
 }
 
 @keyframes slava-edge-dash-march {
@@ -2228,8 +2872,8 @@ body.app-slava-restraint .react-flow__edge-path {
 }
 
 body.app-slava-restraint .react-flow__edge.animated .react-flow__edge-path {
-  stroke-dasharray: 6 4 2 4;
-  animation: slava-edge-dash-march 900ms cubic-bezier(0.42, 0, 0.2, 1) infinite;
+  stroke-dasharray: var(--sr-edge-flow-dasharray);
+  animation: slava-edge-dash-march var(--sr-edge-flow-duration) cubic-bezier(0.42, 0, 0.2, 1) infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -2241,8 +2885,8 @@ body.app-slava-restraint .react-flow__edge.animated .react-flow__edge-path {
 }
 body.app-slava-restraint .react-flow__edge.selected .react-flow__edge-path {
   stroke: var(--sr-accent);
-  stroke-width: 2;
-  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--sr-accent) 50%, transparent));
+  stroke-width: var(--sr-edge-selected-width);
+  filter: var(--sr-edge-selected-glow);
 }
 
 /* Preview area — fills card edge-to-edge (Flora's image-fills-card move).
@@ -2252,12 +2896,12 @@ body.app-slava-restraint .react-flow__edge.selected .react-flow__edge-path {
  * (the card itself is overflow:visible to let handles escape). */
 body.app-slava-restraint .model-node__preview,
 body.app-slava-restraint .model-node__preview-placeholder {
-  background: rgba(0, 0, 0, 0.55);
+  background: var(--sr-node-preview-bg);
   border-radius: var(--sr-radius-node);
-  margin: -32px 0 0 0;  /* pull up under the absolute-positioned header */
+  margin: var(--sr-node-preview-overlap) 0 0 0;  /* pull up under the absolute-positioned header */
   overflow: hidden;
   position: relative;
-  z-index: 1;
+  z-index: var(--sr-layer-node-preview);
 }
 /* Image / video preview fills the area completely. */
 body.app-slava-restraint .model-node__preview img,
@@ -2268,11 +2912,131 @@ body.app-slava-restraint .model-node__preview video {
   border-radius: 0;
 }
 
+/* Text surfaces — the text itself is the object. Slava removes the chunky
+ * secondary Enhance button and lets the editor/preview occupy the card. */
+body.app-slava-restraint .model-node--text-surface {
+  min-width: var(--sr-node-text-min-width);
+  max-width: var(--sr-node-text-max-width);
+}
+
+body.app-slava-restraint .model-node--text-surface .model-node__card {
+  display: flex;
+  min-height: var(--sr-node-text-card-min-height);
+  flex-direction: column;
+  border-radius: var(--sr-radius-panel);
+}
+
+body.app-slava-restraint .model-node--text-surface .model-node__header {
+  flex: 0 0 auto;
+  min-height: var(--sr-node-text-header-min-height);
+  padding: var(--sr-node-text-header-padding);
+}
+
+body.app-slava-restraint .model-node--text-surface .model-node__label {
+  font-size: var(--sr-type-title);
+  font-weight: 600;
+}
+
+body.app-slava-restraint .model-node--text-surface .model-node__inline-textarea {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: var(--sr-node-text-content-min-height);
+  padding: var(--sr-node-text-content-padding);
+  border-top: 0;
+}
+
+body.app-slava-restraint .model-node--text-surface .model-node__textarea {
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0;
+  max-height: none;
+  padding: var(--sr-node-text-inner-padding);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--sr-ink);
+  font-family: var(--sr-ui);
+  font-size: var(--sr-type-control);
+  line-height: var(--sr-line-bubble);
+  resize: none;
+  scrollbar-color: var(--sr-node-scrollbar-color) transparent;
+}
+
+body.app-slava-restraint .model-node--text-surface .model-node__textarea:focus {
+  border-color: transparent;
+}
+
+body.app-slava-restraint .model-node--text-surface .model-node__textarea::placeholder {
+  color: var(--sr-ink-faint);
+}
+
+body.app-slava-restraint .model-node--text-surface .model-node__enhance {
+  display: none;
+}
+
+body.app-slava-restraint .model-node--text-surface .model-node__preview {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: var(--sr-node-text-content-min-height);
+  margin: 0;
+  padding: var(--sr-node-text-content-padding);
+  border-radius: 0;
+  background: transparent;
+  overflow: hidden;
+}
+
+body.app-slava-restraint .model-node--text-surface .model-node__preview-text {
+  flex: 1 1 auto;
+  max-height: none;
+  padding: var(--sr-node-text-inner-padding);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--sr-ink);
+  font-family: var(--sr-ui);
+  font-size: var(--sr-type-control);
+  line-height: var(--sr-line-bubble);
+  overflow-y: auto;
+}
+
+body.app-slava-restraint .model-node--text-input .model-node__ports {
+  position: absolute;
+  inset: 0;
+  padding: 0;
+  pointer-events: none;
+}
+
+body.app-slava-restraint .model-node--text-input .model-node__port-row {
+  position: absolute;
+  top: 50%;
+  width: 0;
+  height: 0;
+  padding: 0;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+body.app-slava-restraint .model-node--text-input .model-node__ports--input .model-node__port-row {
+  left: 0;
+}
+
+body.app-slava-restraint .model-node--text-input .model-node__ports--output .model-node__port-row {
+  right: 0;
+}
+
+body.app-slava-restraint .model-node--text-input .model-node__port-label {
+  display: none;
+}
+
+body.app-slava-restraint .model-node--text-input .react-flow__handle {
+  pointer-events: auto;
+}
+
 /* Image surface nodes — Flora reference: the image is the object, not a
  * preview nested inside a larger card. Chrome moves above the image and only
  * appears when the user approaches the node. */
 body.app-slava-restraint .model-node--image-surface {
-  padding-top: 70px;
+  padding-top: var(--sr-node-image-pad-top);
 }
 
 body.app-slava-restraint .model-node--image-surface .model-node__type-label,
@@ -2280,80 +3044,12 @@ body.app-slava-restraint .model-node--image-surface .model-node__settings-bar {
   display: none;
 }
 
-body.app-slava-restraint .model-node--image-surface .model-node__media-toolbar {
-  display: inline-flex;
-  position: absolute;
-  top: 6px;
-  left: 50%;
-  z-index: 7;
-  align-items: center;
-  justify-content: center;
-  min-height: 36px;
-  padding: 5px;
-  border: 1px solid var(--sr-edge);
-  border-radius: var(--sr-radius-pill);
-  background: rgba(20, 20, 22, 0.78);
-  backdrop-filter: blur(20px) saturate(140%);
-  -webkit-backdrop-filter: blur(20px) saturate(140%);
-  box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.05) inset,
-    0 10px 26px rgba(0, 0, 0, 0.55);
-  opacity: 0;
-  pointer-events: none;
-  transform: translate(-50%, 8px) scale(0.98);
-  transform-origin: center;
-  transition:
-    opacity 180ms cubic-bezier(0.32, 0.72, 0, 1),
-    transform 180ms cubic-bezier(0.32, 0.72, 0, 1);
-}
-
-body.app-slava-restraint .model-node--image-surface:hover .model-node__media-toolbar,
-body.app-slava-restraint .model-node--image-surface:focus-within .model-node__media-toolbar,
-body.app-slava-restraint .model-node--image-surface.model-node--selected .model-node__media-toolbar {
-  opacity: 1;
-  pointer-events: auto;
-  transform: translate(-50%, 0) scale(1);
-}
-
-body.app-slava-restraint .model-node__media-action {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 26px;
-  padding: 0;
-  border: 1px solid transparent;
-  border-radius: var(--sr-radius-pill);
-  background: transparent;
-  color: var(--sr-ink-light);
-  cursor: pointer;
-  font-family: var(--sr-mono);
-  font-size: 14px;
-  line-height: 1;
-  transition:
-    background-color 120ms ease,
-    border-color 120ms ease,
-    color 120ms ease;
-}
-
-body.app-slava-restraint .model-node__media-action:hover {
-  border-color: var(--sr-edge-strong);
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--sr-ink-bold);
-}
-
-body.app-slava-restraint .model-node__media-action:focus-visible {
-  outline: 2px solid var(--sr-accent-soft);
-  outline-offset: 2px;
-  border-color: var(--sr-accent);
-}
-
 body.app-slava-restraint .model-node--image-surface .model-node__card {
   background: transparent;
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
   border: none;
-  border-radius: 14px;
+  border-radius: var(--sr-node-media-radius);
   box-shadow: none;
   overflow: visible;
   animation: none;
@@ -2367,34 +3063,33 @@ body.app-slava-restraint .model-node--image-surface.model-node--selected .model-
 
 body.app-slava-restraint .model-node--image-surface .model-node__header {
   position: absolute;
-  top: -28px;
+  top: var(--sr-node-image-header-offset);
   left: 0;
   right: 0;
-  z-index: 6;
-  min-height: 22px;
-  padding: 0 2px;
+  z-index: var(--sr-layer-node-image-header);
+  min-height: var(--sr-node-image-header-min-height);
+  padding: var(--sr-node-image-header-padding);
   border: none;
   background: transparent;
   background-image: none;
-  gap: 8px;
+  gap: var(--sr-node-header-gap);
   pointer-events: auto;
 }
 
 body.app-slava-restraint .model-node--image-surface .model-node__header::before {
   content: '';
-  width: 14px;
-  height: 14px;
-  flex: 0 0 14px;
-  border: 1.5px solid var(--sr-ink-light);
-  border-radius: 3px;
-  background:
-    linear-gradient(135deg, transparent 48%, var(--sr-ink-light) 50%, transparent 54%) 3px 7px / 8px 5px no-repeat;
-  opacity: 0.82;
+  width: var(--sr-node-image-icon-size);
+  height: var(--sr-node-image-icon-size);
+  flex: 0 0 var(--sr-node-image-icon-size);
+  border: var(--sr-node-card-selected-border-width) solid var(--sr-ink-light);
+  border-radius: var(--sr-node-image-icon-radius);
+  background: var(--sr-node-image-icon-glyph);
+  opacity: var(--sr-node-image-icon-opacity);
 }
 
 body.app-slava-restraint .model-node--image-surface .model-node__label {
   color: var(--sr-ink-light);
-  font-size: 13px;
+  font-size: var(--sr-type-control);
   font-weight: 500;
   letter-spacing: 0;
 }
@@ -2402,12 +3097,19 @@ body.app-slava-restraint .model-node--image-surface .model-node__label {
 body.app-slava-restraint .model-node--image-surface .model-node__id-chip {
   color: var(--sr-ink-meta);
   opacity: 0;
-  transition: opacity 140ms ease, color 140ms ease;
+  transition: opacity var(--sr-motion-ui), color var(--sr-motion-ui);
+}
+
+body.app-slava-restraint .model-node--image-surface .model-node__header-action {
+  opacity: 0;
 }
 
 body.app-slava-restraint .model-node--image-surface:hover .model-node__id-chip,
 body.app-slava-restraint .model-node--image-surface:focus-within .model-node__id-chip,
-body.app-slava-restraint .model-node--image-surface.model-node--selected .model-node__id-chip {
+body.app-slava-restraint .model-node--image-surface.model-node--selected .model-node__id-chip,
+body.app-slava-restraint .model-node--image-surface:hover .model-node__header-action,
+body.app-slava-restraint .model-node--image-surface:focus-within .model-node__header-action,
+body.app-slava-restraint .model-node--image-surface.model-node--selected .model-node__header-action {
   opacity: 1;
 }
 
@@ -2419,11 +3121,9 @@ body.app-slava-restraint .model-node--image-surface .model-node__preview {
   margin: 0;
   padding: 0;
   border: none;
-  border-radius: 14px;
+  border-radius: var(--sr-node-media-radius);
   background: transparent;
-  box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.05) inset,
-    0 10px 30px rgba(0, 0, 0, 0.62);
+  box-shadow: var(--sr-shadow-node-media);
   line-height: 0;
   overflow: visible;
   cursor: grab;
@@ -2434,10 +3134,7 @@ body.app-slava-restraint .model-node--image-surface:active .model-node__preview 
 }
 
 body.app-slava-restraint .model-node--image-surface.model-node--selected .model-node__preview {
-  box-shadow:
-    0 0 0 1.5px var(--node-category-color, var(--sr-accent)),
-    0 0 22px color-mix(in srgb, var(--node-category-color, var(--sr-accent)) 36%, transparent),
-    0 10px 30px rgba(0, 0, 0, 0.62);
+  box-shadow: var(--sr-shadow-node-media-selected);
 }
 
 body.app-slava-restraint .model-node--image-surface .model-node__preview-image,
@@ -2446,26 +3143,74 @@ body.app-slava-restraint .model-node--image-surface .model-node__preview img {
   display: block;
   width: 100%;
   height: auto;
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.04);
+  border-radius: var(--sr-node-media-radius);
+  background: var(--sr-node-media-bg);
   box-shadow: none;
   -webkit-user-drag: none;
   user-select: none;
 }
 
 body.app-slava-restraint .model-node--image-surface .model-node__preview-image--streaming {
-  outline: 1px dashed rgba(255, 255, 255, 0.32);
-  outline-offset: -1px;
+  outline: var(--sr-node-streaming-outline);
+  outline-offset: var(--sr-node-streaming-outline-offset);
 }
 
+body.app-slava-restraint .model-node__preview > .model-node__download,
 body.app-slava-restraint .model-node--image-surface .model-node__preview > .model-node__download {
   display: none;
+}
+
+body.app-slava-restraint .model-node__loop-toggle {
+  position: absolute;
+  top: var(--sr-space-2);
+  right: var(--sr-space-2);
+  z-index: var(--sr-layer-node-header);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--sr-control-h-xs);
+  height: var(--sr-control-h-xs);
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--sr-radius-pill);
+  background: rgba(0, 0, 0, 0.46);
+  color: var(--sr-ink-meta);
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity var(--sr-motion-fast),
+    background-color var(--sr-motion-fast),
+    border-color var(--sr-motion-fast),
+    color var(--sr-motion-fast);
+}
+
+body.app-slava-restraint .model-node__preview:hover .model-node__loop-toggle,
+body.app-slava-restraint .model-node__loop-toggle:focus-visible,
+body.app-slava-restraint .model-node__loop-toggle--on {
+  opacity: 1;
+}
+
+body.app-slava-restraint .model-node__loop-toggle:hover {
+  border-color: var(--sr-edge-strong);
+  background: var(--sr-surface-control-hover);
+  color: var(--sr-ink-bold);
+}
+
+body.app-slava-restraint .model-node__loop-toggle--on {
+  border-color: color-mix(in srgb, var(--sr-success) 42%, transparent);
+  color: var(--sr-success);
+}
+
+body.app-slava-restraint .model-node__loop-toggle:focus-visible {
+  outline: var(--sr-focus-outline);
+  outline-offset: var(--sr-focus-offset);
+  border-color: var(--sr-accent);
 }
 
 body.app-slava-restraint .model-node--image-surface .model-node__ports {
   position: absolute;
   inset: 0;
-  z-index: 5;
+  z-index: var(--sr-layer-node-image-ports);
   padding: 0;
   pointer-events: none;
 }
@@ -2497,22 +3242,22 @@ body.app-slava-restraint .model-node--image-surface .react-flow__handle {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  body.app-slava-restraint .model-node--image-surface .model-node__media-toolbar,
+  body.app-slava-restraint .model-node__header-action,
   body.app-slava-restraint .model-node--image-surface .model-node__id-chip {
     transition: none;
   }
 }
 
 body.app-slava-restraint .model-node__error {
-  color: #F5C518;
-  background: rgba(0, 0, 0, 0.40);
+  color: var(--sr-warning);
+  background: var(--sr-node-error-bg);
   border: none;
-  border-left: 2px solid var(--sr-accent);
+  border-left: var(--sr-node-error-border-width) solid var(--sr-accent);
   font-family: var(--sr-mono);
-  font-size: 11px;
-  padding: 6px 10px;
-  margin: 0 14px 8px;
-  border-radius: 4px;
+  font-size: var(--sr-type-label);
+  padding: var(--sr-node-error-padding);
+  margin: var(--sr-node-error-margin);
+  border-radius: var(--sr-node-error-radius);
 }
 
 /* ─────────────────────────────────────────────────────────────────────
@@ -2538,15 +3283,15 @@ body.app-slava-restraint .skin-picker__label {
   color: var(--sr-ink-bold);
   font-family: var(--sr-ui);
   font-weight: 600;
-  font-size: 13px;
+  font-size: var(--sr-type-control);
   letter-spacing: 0;
 }
 body.app-slava-restraint .skin-picker__description {
   color: var(--sr-ink-light);
   font-family: var(--sr-ui);
-  font-size: 11px;
+  font-size: var(--sr-type-label);
   letter-spacing: 0;
-  line-height: 1.4;
+  line-height: var(--sr-line-meta);
 }
 
 /* ─────────────────────────────────────────────────────────────────────
@@ -2554,7 +3299,7 @@ body.app-slava-restraint .skin-picker__description {
  * ───────────────────────────────────────────────────────────────────── */
 body.app-slava-restraint ::selection {
   background: var(--sr-accent);
-  color: #0A0A0B;
+  color: var(--sr-on-accent);
 }
 
 body.app-slava-restraint ::-webkit-scrollbar {

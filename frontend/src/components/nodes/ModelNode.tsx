@@ -1,5 +1,6 @@
 import { memo, useCallback, useState } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
+import { Download, Repeat2, Sparkles } from 'lucide-react';
 import type { NodeData } from '../../types';
 import { NODE_DEFINITIONS } from '../../constants/nodeDefinitions';
 import { PORT_COLORS } from '../../lib/portCompatibility';
@@ -49,15 +50,25 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
   const updateNodeData = useGraphStore((s) => s.updateNodeData);
   const entranceClass = useSlavaNodeEntranceClass();
   const [videoLoop, setVideoLoop] = useState<boolean>(true);
+  const isTextInput = nodeData.definitionId === 'text-input';
+  const isStickyNote = nodeData.definitionId === 'sticky-note';
+  let inlineTextParamKey: 'value' | 'content' | null = null;
+  if (isTextInput) {
+    inlineTextParamKey = 'value';
+  } else if (isSlavaSkin && isStickyNote) {
+    inlineTextParamKey = 'content';
+  }
+  const isInlineTextNode = inlineTextParamKey !== null;
 
-  const handleTextChange = useCallback(
+  const handleInlineTextChange = useCallback(
     (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+      if (!inlineTextParamKey) return;
       e.stopPropagation();
       updateNodeData(id, {
-        params: { ...nodeData.params, value: e.target.value },
+        params: { ...nodeData.params, [inlineTextParamKey]: e.target.value },
       });
     },
-    [id, nodeData.params, updateNodeData]
+    [id, inlineTextParamKey, nodeData.params, updateNodeData]
   );
 
   const startImageDrag = useCallback(
@@ -125,7 +136,7 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
 
   const displayText = nodeData.streamingText ?? (textOutput && typeof textOutput.value === 'string' ? textOutput.value : null);
   const isStreaming = nodeData.state === 'executing' && nodeData.streamingText != null;
-  const isTextInput = nodeData.definitionId === 'text-input';
+  const isTextSurface = isInlineTextNode || Boolean(displayText && !isInlineTextNode);
   const isImageInput = nodeData.definitionId === 'image-input';
   const imageInputPreview = isImageInput && nodeData.params._previewUrl ? String(nodeData.params._previewUrl) : null;
   const finalImageOutput = nodeData.state === 'complete' && imageOutput && typeof imageOutput.value === 'string'
@@ -133,29 +144,28 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
     : null;
   const isImageSurface = Boolean(imageInputPreview || finalImageOutput);
   const imageClassName = isSlavaSkin ? 'model-node__preview-image' : 'model-node__preview-image nodrag';
+  const downloadableOutput =
+    finalImageOutput
+      ? { url: finalImageOutput, fallbackExt: 'png', title: 'Download image' }
+      : nodeData.state === 'complete' && videoOutput && typeof videoOutput.value === 'string'
+        ? { url: videoOutput.value, fallbackExt: 'mp4', title: 'Download video' }
+        : nodeData.state === 'complete' && meshOutput && typeof meshOutput.value === 'string'
+          ? { url: meshOutput.value, fallbackExt: 'glb', title: 'Download mesh' }
+          : nodeData.state === 'complete' && audioOutput && typeof audioOutput.value === 'string'
+            ? { url: audioOutput.value, fallbackExt: 'mp3', title: 'Download audio' }
+            : null;
+  const inlineTextParam = inlineTextParamKey
+    ? definition.params.find((param) => param.key === inlineTextParamKey)
+    : null;
+  const inlineTextValue = inlineTextParamKey ? String(nodeData.params[inlineTextParamKey] ?? '') : '';
+  const inlineTextPlaceholder = inlineTextParam?.placeholder ?? 'Enter text...';
 
   return (
     <div
-      className={`model-node ${stateClass}${isImageSurface ? ' model-node--image-surface' : ''} ${selected ? 'model-node--selected' : ''}${entranceClass}`}
+      className={`model-node ${stateClass}${isImageSurface ? ' model-node--image-surface' : ''}${isTextSurface ? ' model-node--text-surface' : ''}${isInlineTextNode ? ' model-node--inline-text' : ''}${isTextInput ? ' model-node--text-input' : ''}${isStickyNote ? ' model-node--sticky-note' : ''} ${selected ? 'model-node--selected' : ''}${entranceClass}`}
       onClick={() => selectNode(id)}
       style={{ ['--node-category-color' as string]: categoryColor }}
     >
-      {finalImageOutput && (
-        <div className="model-node__media-toolbar nodrag" onMouseDown={(e) => e.stopPropagation()}>
-          <button
-            type="button"
-            className="model-node__media-action"
-            title="Download image"
-            onClick={(e) => {
-              e.stopPropagation();
-              downloadOutput(finalImageOutput, filenameFor(nodeData.label, id, finalImageOutput, 'png'));
-            }}
-          >
-            &#x2913;
-          </button>
-        </div>
-      )}
-
       {/* Type label — floats above the card; small and quiet (Slava Restraint
        * style). Default + Hermes skins hide it via display:none in their CSS. */}
       <div className="model-node__type-label">{definition.category}</div>
@@ -206,6 +216,51 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
         >
           {/^n\d+$/.test(id) ? id : id.slice(0, 4)}
         </span>
+        {isSlavaSkin && downloadableOutput && (
+          <button
+            type="button"
+            className="model-node__header-action model-node__header-action--download nodrag"
+            title={downloadableOutput.title}
+            aria-label={downloadableOutput.title}
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              downloadOutput(
+                downloadableOutput.url,
+                filenameFor(nodeData.label, id, downloadableOutput.url, downloadableOutput.fallbackExt),
+              );
+            }}
+          >
+            <Download
+              className="model-node__download-icon"
+              size={14}
+              strokeWidth={1.75}
+              aria-hidden="true"
+              focusable="false"
+            />
+          </button>
+        )}
+        {isSlavaSkin && isTextInput && (
+          <button
+            type="button"
+            className="model-node__header-action model-node__header-action--enhance nodrag"
+            title="Enhance prompt"
+            aria-label="Enhance prompt"
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleEnhance();
+            }}
+          >
+            <Sparkles
+              className="model-node__enhance-icon"
+              size={14}
+              strokeWidth={1.75}
+              aria-hidden="true"
+              focusable="false"
+            />
+          </button>
+        )}
       </div>
 
       {definition.inputPorts.length > 0 && (
@@ -221,31 +276,33 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
         </div>
       )}
 
-      {/* Inline textarea for text-input nodes */}
-      {isTextInput && (
+      {/* Inline textarea for text-input and Slava sticky-note nodes */}
+      {isInlineTextNode && (
         <div className="model-node__inline-textarea">
           <textarea
             className="model-node__textarea nodrag nowheel"
-            value={String(nodeData.params.value ?? '')}
-            onChange={handleTextChange}
+            value={inlineTextValue}
+            onChange={handleInlineTextChange}
             onMouseDown={(e) => e.stopPropagation()}
             onKeyDown={(e) => e.stopPropagation()}
-            placeholder="Enter text or prompt..."
+            placeholder={inlineTextPlaceholder}
             rows={4}
             spellCheck
           />
-          <button
-            type="button"
-            className="model-node__enhance nodrag"
-            onClick={(e) => {
-              e.stopPropagation();
-              handleEnhance();
-            }}
-            onMouseDown={(e) => e.stopPropagation()}
-            title="Ask Claude to rewrite this prompt for the node it's connected to"
-          >
-            Enhance
-          </button>
+          {isTextInput && (
+            <button
+              type="button"
+              className="model-node__enhance nodrag"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleEnhance();
+              }}
+              onMouseDown={(e) => e.stopPropagation()}
+              title="Ask Claude to rewrite this prompt for the node it's connected to"
+            >
+              Enhance
+            </button>
+          )}
         </div>
       )}
 
@@ -296,12 +353,18 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
               downloadOutput(finalImageOutput, filenameFor(nodeData.label, id, finalImageOutput, 'png'));
             }}
           >
-            &#x2913;
+            <Download
+              className="model-node__download-icon"
+              size={14}
+              strokeWidth={1.75}
+              aria-hidden="true"
+              focusable="false"
+            />
           </button>
         </div>
       )}
 
-      {displayText && !isTextInput && (
+      {displayText && !isInlineTextNode && (
         <div className="model-node__preview">
           <div className={`model-node__preview-text ${isStreaming ? 'model-node__preview-text--streaming' : ''}`}>
             {displayText.length > 300 ? `${displayText.slice(0, 300)}...` : displayText}
@@ -316,7 +379,6 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
             controls
             loop={videoLoop}
             className="model-node__preview-video nodrag nowheel"
-            style={{ width: '100%', borderRadius: 4, display: 'block' }}
             onMouseDown={(e) => e.stopPropagation()}
           />
           <button
@@ -331,7 +393,13 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
             aria-pressed={videoLoop}
             aria-label="Toggle video loop"
           >
-            &#x21BB;
+            <Repeat2
+              className="model-node__loop-icon"
+              size={14}
+              strokeWidth={1.75}
+              aria-hidden="true"
+              focusable="false"
+            />
           </button>
           <button
             type="button"
@@ -343,7 +411,13 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
               downloadOutput(videoOutput.value as string, filenameFor(nodeData.label, id, videoOutput.value as string, 'mp4'));
             }}
           >
-            &#x2913;
+            <Download
+              className="model-node__download-icon"
+              size={14}
+              strokeWidth={1.75}
+              aria-hidden="true"
+              focusable="false"
+            />
           </button>
         </div>
       )}
@@ -361,7 +435,13 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
               downloadOutput(meshOutput.value as string, filenameFor(nodeData.label, id, meshOutput.value as string, 'glb'));
             }}
           >
-            &#x2913;
+            <Download
+              className="model-node__download-icon"
+              size={14}
+              strokeWidth={1.75}
+              aria-hidden="true"
+              focusable="false"
+            />
           </button>
         </div>
       )}
@@ -372,7 +452,6 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
             src={audioOutput.value}
             controls
             className="model-node__preview-audio nodrag nowheel"
-            style={{ width: '100%', borderRadius: 4 }}
             onMouseDown={(e) => e.stopPropagation()}
           />
           <button
@@ -385,7 +464,13 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
               downloadOutput(audioOutput.value as string, filenameFor(nodeData.label, id, audioOutput.value as string, 'mp3'));
             }}
           >
-            &#x2913;
+            <Download
+              className="model-node__download-icon"
+              size={14}
+              strokeWidth={1.75}
+              aria-hidden="true"
+              focusable="false"
+            />
           </button>
         </div>
       )}

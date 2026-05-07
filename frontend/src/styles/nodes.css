@@ -1,28 +1,31 @@
 .model-node {
+  min-width: 200px;
+  max-width: 240px;
+}
+
+body:not(.app-slava-restraint) .model-node {
   background: #1c1c1c;
   border: 1px solid #333;
   border-radius: 6px;
-  min-width: 200px;
-  max-width: 240px;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: 12px;
   color: #ccc;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
-.model-node--selected {
+body:not(.app-slava-restraint) .model-node--selected {
   border-color: #555;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.5);
 }
 
 .model-node--idle { }
-.model-node--queued { border-color: #555; }
-.model-node--executing {
+body:not(.app-slava-restraint) .model-node--queued { border-color: #555; }
+body:not(.app-slava-restraint) .model-node--executing {
   border-color: #2196F3;
   animation: pulse-border 2s ease-in-out infinite;
 }
 .model-node--complete { }
-.model-node--error { border-color: #F44336; }
+body:not(.app-slava-restraint) .model-node--error { border-color: #F44336; }
 
 @keyframes pulse-border {
   0%, 100% { border-color: #2196F3; }
@@ -34,6 +37,9 @@
   align-items: center;
   gap: 6px;
   padding: 6px 10px;
+}
+
+body:not(.app-slava-restraint) .model-node__header {
   border-bottom: 1px solid #2a2a2a;
 }
 
@@ -47,17 +53,25 @@
 .model-node__label {
   flex: 1;
   font-weight: 500;
-  color: #eee;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
+body:not(.app-slava-restraint) .model-node__label {
+  color: #eee;
+}
+
 .model-node__badge { font-size: 11px; flex-shrink: 0; }
-.model-node__badge--warning { color: #FFC107; }
+body:not(.app-slava-restraint) .model-node__badge--warning { color: #FFC107; }
 
 .model-node__id-chip {
   flex-shrink: 0;
+  cursor: grab;
+  user-select: none;
+}
+
+body:not(.app-slava-restraint) .model-node__id-chip {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 10px;
   font-weight: 500;
@@ -66,12 +80,10 @@
   border: 1px solid #333;
   border-radius: 3px;
   padding: 1px 5px;
-  cursor: grab;
-  user-select: none;
   transition: color 0.1s, background 0.1s, border-color 0.1s;
 }
 
-.model-node__id-chip:hover {
+body:not(.app-slava-restraint) .model-node__id-chip:hover {
   color: #d8e8f5;
   background: #2a3b4f;
   border-color: #3a5070;
@@ -91,9 +103,10 @@
 
 .model-node__port-row--output { justify-content: flex-end; }
 
-.model-node__port-label { font-size: 11px; color: #888; }
+.model-node__port-label { font-size: 11px; }
+body:not(.app-slava-restraint) .model-node__port-label { color: #888; }
 
-.model-node__handle {
+body:not(.app-slava-restraint) .model-node__handle {
   width: 10px !important;
   height: 10px !important;
   border: 2px solid rgba(255, 255, 255, 0.3) !important;
@@ -105,11 +118,14 @@ body:not(.app-slava-restraint) .model-node__handle:hover { transform: scale(1.4)
 
 .model-node__preview {
   position: relative;
+}
+
+body:not(.app-slava-restraint) .model-node__preview {
   padding: 6px 10px;
   border-top: 1px solid #2a2a2a;
 }
 
-.model-node__download {
+body:not(.app-slava-restraint) .model-node__download {
   position: absolute;
   top: 12px;
   right: 16px;
@@ -132,16 +148,16 @@ body:not(.app-slava-restraint) .model-node__handle:hover { transform: scale(1.4)
   z-index: 2;
 }
 
-.model-node__preview:hover .model-node__download {
+body:not(.app-slava-restraint) .model-node__preview:hover .model-node__download {
   opacity: 1;
 }
 
-.model-node__download:hover {
+body:not(.app-slava-restraint) .model-node__download:hover {
   background: rgba(40, 40, 40, 0.95);
   color: #fff;
 }
 
-.model-node__loop-toggle {
+body:not(.app-slava-restraint) .model-node__loop-toggle {
   position: absolute;
   top: 12px;
   right: 48px;
@@ -164,26 +180,26 @@ body:not(.app-slava-restraint) .model-node__handle:hover { transform: scale(1.4)
   z-index: 2;
 }
 
-.model-node__preview:hover .model-node__loop-toggle {
+body:not(.app-slava-restraint) .model-node__preview:hover .model-node__loop-toggle {
   opacity: 1;
 }
 
-.model-node__loop-toggle:hover {
+body:not(.app-slava-restraint) .model-node__loop-toggle:hover {
   background: rgba(40, 40, 40, 0.95);
   color: #fff;
 }
 
-.model-node__loop-toggle--on {
+body:not(.app-slava-restraint) .model-node__loop-toggle--on {
   color: #6ee7b7;
   border-color: rgba(110, 231, 183, 0.45);
 }
 
-.model-node__loop-toggle--on:hover {
+body:not(.app-slava-restraint) .model-node__loop-toggle--on:hover {
   color: #a7f3d0;
   border-color: rgba(110, 231, 183, 0.65);
 }
 
-.model-node__preview-placeholder {
+body:not(.app-slava-restraint) .model-node__preview-placeholder {
   background: #161616;
   border: 1px solid #2a2a2a;
   border-radius: 4px;
@@ -193,7 +209,7 @@ body:not(.app-slava-restraint) .model-node__handle:hover { transform: scale(1.4)
   font-size: 11px;
 }
 
-.model-node__error {
+body:not(.app-slava-restraint) .model-node__error {
   padding: 4px 10px;
   font-size: 10px;
   color: #F44336;
@@ -201,14 +217,14 @@ body:not(.app-slava-restraint) .model-node__handle:hover { transform: scale(1.4)
   border-top: 1px solid #2a2a2a;
 }
 
-.model-node__preview-image {
+body:not(.app-slava-restraint) .model-node__preview-image {
   max-width: 100%;
   height: auto;
   border-radius: 4px;
   display: block;
 }
 
-.model-node__preview-image--streaming {
+body:not(.app-slava-restraint) .model-node__preview-image--streaming {
   max-width: 100%;
   height: auto;
   border-radius: 4px;
@@ -225,8 +241,19 @@ body:not(.app-slava-restraint) .model-node__handle:hover { transform: scale(1.4)
   cursor: grabbing;
 }
 
+body:not(.app-slava-restraint) .model-node__preview-video {
+  display: block;
+  width: 100%;
+  border-radius: 4px;
+}
+
+body:not(.app-slava-restraint) .model-node__preview-audio {
+  width: 100%;
+  border-radius: 4px;
+}
+
 /* Loading indicator */
-.model-node__loading {
+body:not(.app-slava-restraint) .model-node__loading {
   padding: 8px 10px;
   border-top: 1px solid #2a2a2a;
   display: flex;
@@ -235,7 +262,7 @@ body:not(.app-slava-restraint) .model-node__handle:hover { transform: scale(1.4)
   gap: 8px;
 }
 
-.model-node__loading-spinner {
+body:not(.app-slava-restraint) .model-node__loading-spinner {
   width: 14px;
   height: 14px;
   border: 2px solid #333;
@@ -249,31 +276,31 @@ body:not(.app-slava-restraint) .model-node__handle:hover { transform: scale(1.4)
   to { transform: rotate(360deg); }
 }
 
-.model-node__loading-text {
+body:not(.app-slava-restraint) .model-node__loading-text {
   font-size: 11px;
   color: #888;
   flex: 1;
 }
 
-.model-node__loading .model-node__progress {
+body:not(.app-slava-restraint) .model-node__loading .model-node__progress {
   width: 100%;
   padding: 0;
   border-top: none;
 }
 
-.model-node__progress {
+body:not(.app-slava-restraint) .model-node__progress {
   padding: 4px 10px;
   border-top: 1px solid #2a2a2a;
 }
 
-.model-node__progress-bar {
+body:not(.app-slava-restraint) .model-node__progress-bar {
   height: 2px;
   background: #2196F3;
   border-radius: 1px;
   transition: width 0.3s ease;
 }
 
-.model-node__preview-text {
+body:not(.app-slava-restraint) .model-node__preview-text {
   background: #161616;
   border: 1px solid #2a2a2a;
   border-radius: 4px;
@@ -289,12 +316,12 @@ body:not(.app-slava-restraint) .model-node__handle:hover { transform: scale(1.4)
   scrollbar-color: #333 transparent;
 }
 
-.model-node__preview-text--streaming {
+body:not(.app-slava-restraint) .model-node__preview-text--streaming {
   border-color: #2196F3;
   color: #ccc;
 }
 
-.model-node__preview-text--streaming::after {
+body:not(.app-slava-restraint) .model-node__preview-text--streaming::after {
   content: '\25AE';
   animation: blink-cursor 0.8s step-end infinite;
   color: #2196F3;
@@ -308,12 +335,12 @@ body:not(.app-slava-restraint) .model-node__handle:hover { transform: scale(1.4)
 
 /* ---------- Inline textarea (text-input nodes) ---------- */
 
-.model-node__inline-textarea {
+body:not(.app-slava-restraint) .model-node__inline-textarea {
   padding: 6px 8px;
   border-top: 1px solid #2a2a2a;
 }
 
-.model-node__textarea {
+body:not(.app-slava-restraint) .model-node__textarea {
   width: 100%;
   min-height: 72px;
   max-height: 200px;
@@ -332,15 +359,15 @@ body:not(.app-slava-restraint) .model-node__handle:hover { transform: scale(1.4)
   scrollbar-color: #333 transparent;
 }
 
-.model-node__textarea:focus {
+body:not(.app-slava-restraint) .model-node__textarea:focus {
   border-color: #555;
 }
 
-.model-node__textarea::placeholder {
+body:not(.app-slava-restraint) .model-node__textarea::placeholder {
   color: #444;
 }
 
-.model-node__enhance {
+body:not(.app-slava-restraint) .model-node__enhance {
   margin-top: 6px;
   width: 100%;
   padding: 5px 0;
@@ -357,7 +384,7 @@ body:not(.app-slava-restraint) .model-node__handle:hover { transform: scale(1.4)
   transition: background 0.1s, color 0.1s, border-color 0.1s;
 }
 
-.model-node__enhance:hover {
+body:not(.app-slava-restraint) .model-node__enhance:hover {
   background: #242424;
   border-color: #3a3a3a;
   color: #ddd;
@@ -365,7 +392,7 @@ body:not(.app-slava-restraint) .model-node__handle:hover { transform: scale(1.4)
 
 /* ---------- Reroute node (minimal dot) ---------- */
 
-.reroute-node {
+body:not(.app-slava-restraint) .reroute-node {
   width: 12px;
   height: 12px;
   border-radius: 50%;
@@ -375,7 +402,7 @@ body:not(.app-slava-restraint) .model-node__handle:hover { transform: scale(1.4)
   cursor: crosshair;
 }
 
-.reroute-node:hover {
+body:not(.app-slava-restraint) .reroute-node:hover {
   background: #555;
   border-color: #888;
 }
@@ -389,7 +416,7 @@ body:not(.app-slava-restraint) .model-node__handle:hover { transform: scale(1.4)
   min-height: 8px !important;
 }
 
-.dynamic-node__model-badge {
+body:not(.app-slava-restraint) .dynamic-node__model-badge {
   padding: 2px 8px;
   margin: 0 8px 4px;
   font-size: 10px;
@@ -407,6 +434,12 @@ body:not(.app-slava-restraint) .model-node__handle:hover { transform: scale(1.4)
   cursor: pointer;
   border-radius: 4px;
   overflow: hidden;
+}
+
+.mesh-preview__viewer {
+  width: 100%;
+  height: 150px;
+  background: #161616;
 }
 
 /* Full-screen modal overlay */
@@ -431,6 +464,12 @@ body:not(.app-slava-restraint) .model-node__handle:hover { transform: scale(1.4)
   border-radius: 8px;
   overflow: hidden;
   border: 1px solid #333;
+}
+
+.mesh-modal__viewer {
+  width: 100%;
+  height: 100%;
+  background: #161616;
 }
 
 .mesh-modal__close {

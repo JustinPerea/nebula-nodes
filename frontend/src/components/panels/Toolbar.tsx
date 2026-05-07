@@ -1,11 +1,25 @@
 import { useEffect, useCallback } from 'react';
 import { useReactFlow } from '@xyflow/react';
+import {
+  Blocks,
+  FolderOpen,
+  Maximize2,
+  MessageSquare,
+  Play,
+  RotateCcw,
+  Save,
+  Settings,
+  Square,
+  Terminal,
+  Trash2,
+} from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
 import { saveToFile, loadFromFile } from '../../lib/graphFile';
 import { fetchCLIGraph } from '../../lib/api';
 import type { NodeData } from '../../types';
-import type { Node } from '@xyflow/react';
+import type { Edge, Node } from '@xyflow/react';
 import '../../styles/panels.css';
 
 export function Toolbar() {
@@ -125,7 +139,7 @@ export function Toolbar() {
       }
       useGraphStore.getState().loadGraph(
         data.nodes as Node<NodeData>[],
-        data.edges,
+        data.edges as Edge[],
       );
       setTimeout(() => fitView({ padding: 0.2, duration: 300 }), 50);
     } catch {
@@ -243,111 +257,29 @@ type IconName =
   | 'chat'
   | 'settings';
 
+const TOOLBAR_ICONS: Record<IconName, LucideIcon> = {
+  run: Play,
+  stop: Square,
+  save: Save,
+  load: FolderOpen,
+  cli: Terminal,
+  clear: Trash2,
+  fit: Maximize2,
+  reset: RotateCcw,
+  nodes: Blocks,
+  chat: MessageSquare,
+  settings: Settings,
+};
+
 function ToolbarIcon({ name }: { name: IconName }) {
-  const stroke = {
-    width: 14,
-    height: 14,
-    viewBox: '0 0 14 14',
-    fill: 'none',
-    stroke: 'currentColor',
-    strokeWidth: 1.4,
-    strokeLinecap: 'round' as const,
-    strokeLinejoin: 'round' as const,
-    'aria-hidden': true,
-    focusable: false,
-    className: 'toolbar__icon',
-  };
-  const filled = {
-    width: 14,
-    height: 14,
-    viewBox: '0 0 14 14',
-    fill: 'currentColor',
-    'aria-hidden': true,
-    focusable: false,
-    className: 'toolbar__icon',
-  };
-  switch (name) {
-    case 'run':
-      return (
-        <svg {...filled}>
-          <polygon points="3,2 12,7 3,12" />
-        </svg>
-      );
-    case 'stop':
-      return (
-        <svg {...filled}>
-          <rect x="3" y="3" width="8" height="8" rx="1" />
-        </svg>
-      );
-    case 'save':
-      return (
-        <svg {...stroke}>
-          <path d="M7 2 v6.5" />
-          <path d="M4 5.5 l3 3 3 -3" />
-          <path d="M2.5 11 v1 h9 v-1" />
-        </svg>
-      );
-    case 'load':
-      return (
-        <svg {...stroke}>
-          <path d="M7 11 v-6.5" />
-          <path d="M4 8 l3 -3 3 3" />
-          <path d="M2.5 11.5 v0.5 h9 v-0.5" />
-        </svg>
-      );
-    case 'cli':
-      return (
-        <svg {...stroke}>
-          <path d="M3 4 l3 3 -3 3" />
-          <path d="M7.5 11 h4" />
-        </svg>
-      );
-    case 'clear':
-      return (
-        <svg {...stroke}>
-          <path d="M2.5 4 h9" />
-          <path d="M5.5 4 v-1.2 h3 v1.2" />
-          <path d="M3.8 4 v8 h6.4 v-8" />
-          <path d="M6 6.2 v4 M8 6.2 v4" />
-        </svg>
-      );
-    case 'fit':
-      return (
-        <svg {...stroke}>
-          <path d="M2.5 5 v-2.5 h2.5" />
-          <path d="M9 2.5 h2.5 v2.5" />
-          <path d="M11.5 9 v2.5 h-2.5" />
-          <path d="M5 11.5 h-2.5 v-2.5" />
-        </svg>
-      );
-    case 'reset':
-      return (
-        <svg {...stroke}>
-          <path d="M11 7 a4 4 0 1 1 -1.2 -2.85" />
-          <path d="M11 2.5 v2.5 h-2.5" />
-        </svg>
-      );
-    case 'nodes':
-      return (
-        <svg {...filled}>
-          <rect x="2" y="2" width="3.5" height="3.5" rx="0.6" />
-          <rect x="8.5" y="2" width="3.5" height="3.5" rx="0.6" />
-          <rect x="2" y="8.5" width="3.5" height="3.5" rx="0.6" />
-          <rect x="8.5" y="8.5" width="3.5" height="3.5" rx="0.6" />
-        </svg>
-      );
-    case 'chat':
-      return (
-        <svg {...stroke}>
-          <path d="M2.5 5 q0 -2.5 2.5 -2.5 h4 q2.5 0 2.5 2.5 v2 q0 2.5 -2.5 2.5 h-1.5 l-2.5 2 v-2 q-2.5 0 -2.5 -2.5 z" />
-        </svg>
-      );
-    case 'settings':
-      return (
-        <svg {...stroke}>
-          <circle cx="7" cy="7" r="1.8" />
-          <path d="M7 1.5 v1.6 M7 10.9 v1.6 M1.5 7 h1.6 M10.9 7 h1.6 M3 3 l1.1 1.1 M9.9 9.9 l1.1 1.1 M11 3 l-1.1 1.1 M4.1 9.9 l-1.1 1.1" />
-        </svg>
-      );
-  }
+  const Icon = TOOLBAR_ICONS[name];
+  return (
+    <Icon
+      className="toolbar__icon"
+      size={14}
+      strokeWidth={1.4}
+      aria-hidden="true"
+      focusable="false"
+    />
+  );
 }

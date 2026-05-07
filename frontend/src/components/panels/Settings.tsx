@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { ChevronDown, ChevronRight, X } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import { getSettings, updateSettings } from '../../lib/api';
 import { SkinPicker } from '../SkinPicker';
@@ -66,11 +67,16 @@ export function Settings() {
   // Load settings when panel opens
   useEffect(() => {
     if (!visible) return;
-    setLoading(true);
-    setApiKeysOpen(false);
-    setRevealedKeys(new Set());
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setLoading(true);
+      setApiKeysOpen(false);
+      setRevealedKeys(new Set());
+    });
     getSettings()
       .then((data) => {
+        if (cancelled) return;
         const settings = data as {
           apiKeys?: Record<string, string>;
           routing?: Record<string, string>;
@@ -82,9 +88,15 @@ export function Settings() {
         setSaveStatus('idle');
       })
       .catch((err) => {
+        if (cancelled) return;
         console.error('Failed to load settings:', err);
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [visible]);
 
   // Dragging logic (same pattern as Inspector)
@@ -145,7 +157,7 @@ export function Settings() {
   );
 
   return (
-    <div className={`panel panel--settings${exiting ? ' panel--exiting' : ''}`} style={{ left: resolvedX, top: position.y, width: 320 }}>
+    <div className={`panel panel--settings${exiting ? ' panel--exiting' : ''}`} style={{ left: resolvedX, top: position.y }}>
       <div
         className="panel__header"
         onMouseDown={(e) => {
@@ -158,14 +170,26 @@ export function Settings() {
         }}
       >
         <span className="panel__title">Settings</span>
-        <button className="panel__close" onClick={() => togglePanel('settings')}>
-          &times;
+        <button
+          type="button"
+          className="panel__header-action panel__close"
+          onClick={() => togglePanel('settings')}
+          aria-label="Close settings panel"
+          title="Close"
+        >
+          <X
+            className="panel__close-icon"
+            size={16}
+            strokeWidth={1.75}
+            aria-hidden="true"
+            focusable="false"
+          />
         </button>
       </div>
 
       <div className="panel__body">
         {loading ? (
-          <div style={{ color: '#666', textAlign: 'center', padding: 16 }}>Loading...</div>
+          <div className="settings__loading">Loading...</div>
         ) : (
           <>
             {/* API Keys Section */}
@@ -179,9 +203,23 @@ export function Settings() {
               <span className="settings__section-toggle-count">
                 {configuredApiKeyCount}/{API_KEY_FIELDS.length}
               </span>
-              <span className="settings__section-toggle-chevron">
-                {apiKeysOpen ? '\u25BE' : '\u25B8'}
-              </span>
+              {apiKeysOpen ? (
+                <ChevronDown
+                  className="settings__section-toggle-chevron"
+                  size={12}
+                  strokeWidth={1.75}
+                  aria-hidden="true"
+                  focusable="false"
+                />
+              ) : (
+                <ChevronRight
+                  className="settings__section-toggle-chevron"
+                  size={12}
+                  strokeWidth={1.75}
+                  aria-hidden="true"
+                  focusable="false"
+                />
+              )}
             </button>
             {apiKeysOpen && (
               <div className="settings__collapsible-body">
@@ -223,7 +261,7 @@ export function Settings() {
             {/* Routing Section */}
             {ROUTING_OPTIONS.length > 0 && (
               <>
-                <div className="settings__section-label" style={{ marginTop: 16 }}>
+                <div className="settings__section-label settings__section-label--stacked">
                   Routing
                 </div>
                 {ROUTING_OPTIONS.map((opt) => (
@@ -248,13 +286,13 @@ export function Settings() {
             )}
 
             {/* Skin Section */}
-            <div className="settings__section-label" style={{ marginTop: 16 }}>
+            <div className="settings__section-label settings__section-label--stacked">
               Skin
             </div>
             <SkinPicker />
 
             {/* Interface Section */}
-            <div className="settings__section-label" style={{ marginTop: 16 }}>
+            <div className="settings__section-label settings__section-label--stacked">
               Interface
             </div>
             <label className="settings__toggle-row">
@@ -273,7 +311,7 @@ export function Settings() {
             </label>
 
             {/* Output Path Section */}
-            <div className="settings__section-label" style={{ marginTop: 16 }}>
+            <div className="settings__section-label settings__section-label--stacked">
               Output
             </div>
             <div className="inspector__section">

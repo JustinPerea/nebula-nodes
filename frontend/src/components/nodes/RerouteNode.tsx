@@ -1,8 +1,8 @@
 import { memo } from 'react';
-import { Handle, Position, type NodeProps } from '@xyflow/react';
+import { Handle, Position } from '@xyflow/react';
 import '../../styles/nodes.css';
 
-function RerouteNodeComponent(_props: NodeProps) {
+function RerouteNodeComponent() {
   return (
     <div className="reroute-node">
       <Handle

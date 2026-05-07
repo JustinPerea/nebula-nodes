@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { Activity, ChevronUp } from 'lucide-react';
 import { useGraphStore } from '../../store/graphStore';
 import { useUIStore } from '../../store/uiStore';
 
@@ -14,16 +15,10 @@ interface Position {
   top: number;
 }
 
-const OPEN_STORAGE_KEY = 'nebula:agentLog:open';
 const POS_STORAGE_KEY = 'nebula:agentLog:pos';
 // User has to drag this many px before we treat the gesture as a drag and
 // suppress the toggle click. Keeps single-click-to-collapse intact.
 const DRAG_THRESHOLD = 4;
-
-function readInitialOpen(): boolean {
-  if (typeof window === 'undefined') return false;
-  return window.localStorage.getItem(OPEN_STORAGE_KEY) === '1';
-}
 
 function readInitialPosition(): Position | null {
   if (typeof window === 'undefined') return null;
@@ -45,7 +40,7 @@ export function AgentLog() {
   const nodeCount = useGraphStore((s) => s.nodes.length);
   const enabled = useUIStore((s) => s.agentLogEnabled);
 
-  const [open, setOpen] = useState<boolean>(readInitialOpen);
+  const [open, setOpen] = useState(false);
   const [entries, setEntries] = useState<LogEntry[]>([]);
   const [position, setPosition] = useState<Position | null>(readInitialPosition);
 
@@ -77,23 +72,27 @@ export function AgentLog() {
   useEffect(() => {
     document.body.classList.toggle('agent-log-enabled', enabled);
     document.body.classList.toggle('agent-log-open', enabled && open);
+    document.body.classList.toggle('agent-log-empty', enabled && open && entries.length === 0);
     return () => {
-      document.body.classList.remove('agent-log-enabled', 'agent-log-open');
+      document.body.classList.remove('agent-log-enabled', 'agent-log-open', 'agent-log-empty');
     };
-  }, [enabled, open]);
+  }, [enabled, open, entries.length]);
 
   // Sample graph executions as a placeholder feed.
   useEffect(() => {
     if (!isExecuting) return;
-    setEntries((prev) => [
-      ...prev.slice(-49),
-      {
-        id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-        ts: Date.now(),
-        source: 'graph',
-        message: `Running graph (${nodeCount} node${nodeCount === 1 ? '' : 's'})…`,
-      },
-    ]);
+    const timeoutId = window.setTimeout(() => {
+      setEntries((prev) => [
+        ...prev.slice(-49),
+        {
+          id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          ts: Date.now(),
+          source: 'graph',
+          message: `Running graph (${nodeCount} node${nodeCount === 1 ? '' : 's'})…`,
+        },
+      ]);
+    }, 0);
+    return () => window.clearTimeout(timeoutId);
   }, [isExecuting, nodeCount]);
 
   // Subscribe to nebula:agent-log-entry events so any component can stream
@@ -120,14 +119,6 @@ export function AgentLog() {
     window.addEventListener('nebula:agent-log-entry', handleEntry);
     return () => window.removeEventListener('nebula:agent-log-entry', handleEntry);
   }, []);
-
-  function persistOpen(next: boolean) {
-    try {
-      window.localStorage.setItem(OPEN_STORAGE_KEY, next ? '1' : '0');
-    } catch {
-      // ignore
-    }
-  }
 
   function persistPosition(p: Position) {
     try {
@@ -185,9 +176,7 @@ export function AgentLog() {
       justDraggedRef.current = false;
       return;
     }
-    const next = !open;
-    setOpen(next);
-    persistOpen(next);
+    setOpen((current) => !current);
   }
 
   // Persist position on the latest setPosition that happened during the drag —
@@ -205,7 +194,7 @@ export function AgentLog() {
 
   return (
     <div
-      className={'agent-log' + (open ? ' agent-log--open' : '')}
+      className={'agent-log' + (open ? ' agent-log--open' : '') + (entries.length === 0 ? ' agent-log--empty' : '')}
       style={containerStyle}
     >
       <div
@@ -220,21 +209,29 @@ export function AgentLog() {
           title={open ? 'Collapse agent log' : 'Expand agent log'}
         >
           <span className="agent-log__title">
-            <span className="agent-log__icon" aria-hidden>
-              ⌁
-            </span>
+            <Activity
+              className="agent-log__icon"
+              size={14}
+              strokeWidth={1.75}
+              aria-hidden="true"
+              focusable="false"
+            />
             Agent log
           </span>
-          <span className={'agent-log__chevron' + (open ? ' agent-log__chevron--open' : '')}>
-            ⌃
-          </span>
+          <ChevronUp
+            className={'agent-log__chevron' + (open ? ' agent-log__chevron--open' : '')}
+            size={14}
+            strokeWidth={1.75}
+            aria-hidden="true"
+            focusable="false"
+          />
         </button>
       </div>
       {open && (
         <div className="agent-log__body">
           {entries.length === 0 ? (
             <div className="agent-log__empty">
-              No activity yet. Run the graph or talk to Daedalus to populate.
+              No events yet
             </div>
           ) : (
             <ul className="agent-log__list">

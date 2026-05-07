@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useReactFlow } from '@xyflow/react';
+import { ChevronDown, ChevronRight, X } from 'lucide-react';
 import { useUIStore } from '../store/uiStore';
 import { useGraphStore } from '../store/graphStore';
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
@@ -42,11 +43,13 @@ export function ConnectionPopup() {
   // Reset search and collapse everything each time the popup opens — otherwise
   // the user sees a wall of nodes from the last session and has to scroll.
   useEffect(() => {
-    if (visible) {
+    if (!visible) return undefined;
+    const timeoutId = window.setTimeout(() => {
       setSearch('');
       setExpanded({});
-      setTimeout(() => inputRef.current?.focus(), 0);
-    }
+      inputRef.current?.focus();
+    }, 0);
+    return () => window.clearTimeout(timeoutId);
   }, [visible]);
 
   // Dismiss on outside click or Escape
@@ -205,12 +208,18 @@ export function ConnectionPopup() {
         />
         <button
           type="button"
-          className="connection-popup__close"
+          className="panel__header-action connection-popup__close"
           onClick={hideConnectionPopup}
           title="Close (Esc)"
           aria-label="Close"
         >
-          ×
+          <X
+            className="connection-popup__close-icon"
+            size={14}
+            strokeWidth={1.75}
+            aria-hidden="true"
+            focusable="false"
+          />
         </button>
       </div>
       <div className="connection-popup__list">
@@ -231,7 +240,23 @@ export function ConnectionPopup() {
                   setExpanded((s) => ({ ...s, [category]: !(s[category] ?? false) }))
                 }
               >
-                <span className="connection-popup__category-chevron">{isOpen ? '\u25BE' : '\u25B8'}</span>
+                {isOpen ? (
+                  <ChevronDown
+                    className="connection-popup__category-chevron"
+                    size={12}
+                    strokeWidth={1.75}
+                    aria-hidden="true"
+                    focusable="false"
+                  />
+                ) : (
+                  <ChevronRight
+                    className="connection-popup__category-chevron"
+                    size={12}
+                    strokeWidth={1.75}
+                    aria-hidden="true"
+                    focusable="false"
+                  />
+                )}
                 <span className="connection-popup__category-text">
                   {CATEGORY_LABELS[category] ?? category}
                 </span>

@@ -3,6 +3,7 @@ import {
   ReactFlow,
   Background,
   BackgroundVariant,
+  SelectionMode,
   useReactFlow,
   type NodeTypes,
   type EdgeTypes,
@@ -31,8 +32,14 @@ const nodeTypes: NodeTypes = {
 // `${number}px` strings per side). Numeric padding takes a different formula
 // in React Flow that does NOT correspond to "fraction of viewport", so px is
 // the only way to guarantee content lands clear of the panels.
-function computeChatAwarePadding(): { top: string; right: string; bottom: string; left: string } {
-  const base = { top: '40px', right: '40px', bottom: '40px', left: '40px' };
+type PixelPadding = { top: `${number}px`; right: `${number}px`; bottom: `${number}px`; left: `${number}px` };
+
+function px(value: number): `${number}px` {
+  return `${value}px`;
+}
+
+function computeChatAwarePadding(): PixelPadding {
+  const base: PixelPadding = { top: '40px', right: '40px', bottom: '40px', left: '40px' };
   if (typeof window === 'undefined') return base;
   const vw = window.innerWidth;
   const vh = window.innerHeight;
@@ -60,10 +67,10 @@ function computeChatAwarePadding(): { top: string; right: string; bottom: string
   }
 
   return {
-    top: `${Math.max(40, intrusion.top + SAFETY)}px`,
-    right: `${Math.max(40, intrusion.right + SAFETY)}px`,
-    bottom: `${Math.max(40, intrusion.bottom + SAFETY)}px`,
-    left: `${Math.max(40, intrusion.left + SAFETY)}px`,
+    top: px(Math.max(40, intrusion.top + SAFETY)),
+    right: px(Math.max(40, intrusion.right + SAFETY)),
+    bottom: px(Math.max(40, intrusion.bottom + SAFETY)),
+    left: px(Math.max(40, intrusion.left + SAFETY)),
   };
 }
 
@@ -177,10 +184,11 @@ export function Canvas() {
   const executeGraph = useGraphStore((s) => s.executeGraph);
   const isExecuting = useGraphStore((s) => s.isExecuting);
   const isValidConnection = useIsValidConnection();
+  const skin = useUIStore((s) => s.skin);
   const showContextMenu = useUIStore((s) => s.showContextMenu);
   const hideContextMenu = useUIStore((s) => s.hideContextMenu);
   const showConnectionPopup = useUIStore((s) => s.showConnectionPopup);
-  const hideConnectionPopup = useUIStore((s) => s.hideConnectionPopup);
+  const isSlavaSkin = skin === 'slava-restraint';
 
   const reactFlow = useReactFlow();
   const { fitView, screenToFlowPosition } = reactFlow;
@@ -423,7 +431,7 @@ export function Canvas() {
 
   return (
     <div
-      className="canvas-wrapper"
+      className={`canvas-wrapper${isSlavaSkin ? ' canvas-wrapper--slava' : ''}${isSlavaSkin && nodes.length === 0 ? ' canvas-wrapper--slava-empty' : ''}`}
       onKeyDown={onKeyDown}
       tabIndex={0}
       onDrop={onDrop}
@@ -452,13 +460,15 @@ export function Canvas() {
         selectionKeyCode={null}
         selectionOnDrag
         panOnScroll={false}
-        selectionMode={1}
+        selectionMode={SelectionMode.Partial}
       >
         <Background
-          variant={BackgroundVariant.Lines}
-          gap={32}
-          size={1}
-          color="rgba(255, 255, 255, 0.04)"
+          variant={isSlavaSkin ? BackgroundVariant.Dots : BackgroundVariant.Lines}
+          gap={isSlavaSkin ? 16 : 32}
+          size={isSlavaSkin ? 1.2 : 1}
+          color={isSlavaSkin ? 'var(--sr-canvas-dot-color)' : 'rgba(255, 255, 255, 0.04)'}
+          className={isSlavaSkin ? 'slava-canvas-background' : undefined}
+          patternClassName={isSlavaSkin ? 'slava-canvas-background__dot' : undefined}
         />
       </ReactFlow>
       <ContextMenu />

@@ -1,6 +1,7 @@
 import { useMemo, useRef, useEffect, useState } from 'react';
 import type { CSSProperties, DragEvent as ReactDragEvent } from 'react';
 import { createPortal } from 'react-dom';
+import { ChevronDown, ChevronRight, X } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
 import { useDelayedUnmount } from '../../hooks/useDelayedUnmount';
@@ -89,8 +90,8 @@ export function NodeLibrary() {
 
   useEffect(() => {
     if (skin !== 'slava-restraint') {
-      setDragPreview(null);
-      return undefined;
+      const timeoutId = window.setTimeout(() => setDragPreview(null), 0);
+      return () => window.clearTimeout(timeoutId);
     }
 
     function clearDragPreview() {
@@ -179,8 +180,20 @@ export function NodeLibrary() {
         }}
       >
         <span className="panel__title">Nodes</span>
-        <button className="panel__close" onClick={() => togglePanel('library')}>
-          ×
+        <button
+          type="button"
+          className="panel__header-action panel__close"
+          onClick={() => togglePanel('library')}
+          aria-label="Close nodes panel"
+          title="Close"
+        >
+          <X
+            className="panel__close-icon"
+            size={16}
+            strokeWidth={1.75}
+            aria-hidden="true"
+            focusable="false"
+          />
         </button>
       </div>
 
@@ -222,7 +235,23 @@ export function NodeLibrary() {
                 type="button"
                 aria-expanded={!isCollapsed}
               >
-                <span className="panel__group-chevron">{isCollapsed ? '\u25B8' : '\u25BE'}</span>
+                {isCollapsed ? (
+                  <ChevronRight
+                    className="panel__group-chevron"
+                    size={12}
+                    strokeWidth={1.75}
+                    aria-hidden="true"
+                    focusable="false"
+                  />
+                ) : (
+                  <ChevronDown
+                    className="panel__group-chevron"
+                    size={12}
+                    strokeWidth={1.75}
+                    aria-hidden="true"
+                    focusable="false"
+                  />
+                )}
                 <span
                   className="panel__group-dot"
                   style={{ backgroundColor: CATEGORY_COLORS[category] }}

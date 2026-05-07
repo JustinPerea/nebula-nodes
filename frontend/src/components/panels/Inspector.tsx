@@ -1,4 +1,5 @@
 import { useRef, useEffect, useState, useMemo } from 'react';
+import { X } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
 import { NODE_DEFINITIONS } from '../../constants/nodeDefinitions';
@@ -41,7 +42,7 @@ export function Inspector() {
 
   // Load favorites from settings
   useEffect(() => {
-    getSettings().then((settings: any) => {
+    getSettings().then((settings: { favorites?: Record<string, string[]> }) => {
       setFavorites(settings.favorites ?? {});
     }).catch(() => {});
   }, []);
@@ -70,7 +71,7 @@ export function Inspector() {
       return [...definition.sharedParams, ...routeParams];
     }
     return definition.params;
-  }, [definition, settingsCache.loaded, settingsCache.apiKeys, definition?.directKeyName]);
+  }, [definition, settingsCache.loaded, settingsCache.apiKeys]);
 
   // Filter params by visibleWhen conditions
   const visibleParams = useMemo(() => {
@@ -84,7 +85,7 @@ export function Inspector() {
         return allowedValues.includes(currentValue as string | number | boolean);
       });
     });
-  }, [resolvedParams, nodeData?.params]);
+  }, [resolvedParams, nodeData]);
 
   // Universal-model nodes (OpenRouter, Nous Portal) share the modality-driven
   // model-picker UX. Map definitionId → favorites bucket + loader so we can
@@ -184,8 +185,20 @@ export function Inspector() {
         }}
       >
         <span className="panel__title">Inspector</span>
-        <button className="panel__close" onClick={() => togglePanel('inspector')}>
-          ×
+        <button
+          type="button"
+          className="panel__header-action panel__close"
+          onClick={() => togglePanel('inspector')}
+          aria-label="Close inspector panel"
+          title="Close"
+        >
+          <X
+            className="panel__close-icon"
+            size={16}
+            strokeWidth={1.75}
+            aria-hidden="true"
+            focusable="false"
+          />
         </button>
       </div>
 
@@ -282,8 +295,7 @@ export function Inspector() {
                   onChange={(e) => setModelSearch(e.target.value)}
                 />
                 <select
-                  className="inspector__field"
-                  style={{ marginTop: 4 }}
+                  className="inspector__field inspector__field--stacked"
                   value={String(nodeData.params.model ?? '')}
                   onChange={(e) => {
                     const selected = openRouterModels.find((m) => m.id === e.target.value);
@@ -300,22 +312,19 @@ export function Inspector() {
                   ))}
                 </select>
                 {modelLoadError && universalProvider === 'nous' && (
-                  <div style={{ fontSize: 10, color: '#c58b3a', marginTop: 4, lineHeight: 1.4 }}>
+                  <div className="inspector__model-error">
                     {modelLoadError}
                   </div>
                 )}
-                {nodeData.params.model && (
-                  <div style={{ fontSize: 10, color: '#666', marginTop: 2, display: 'flex', alignItems: 'center', gap: 4 }}>
+                {Boolean(nodeData.params.model) && (
+                  <div className="inspector__model-selection">
                     <span>Selected: {String(nodeData.params.model)}</span>
                     <button
-                      style={{
-                        background: 'none',
-                        border: 'none',
-                        cursor: 'pointer',
-                        fontSize: 14,
-                        padding: 0,
-                        color: (favorites[universalProvider] ?? []).includes(String(nodeData.params.model)) ? '#FFC107' : '#555',
-                      }}
+                      className={
+                        (favorites[universalProvider] ?? []).includes(String(nodeData.params.model))
+                          ? 'inspector__favorite-button inspector__favorite-button--active'
+                          : 'inspector__favorite-button'
+                      }
                       title="Toggle favorite"
                       onClick={() => {
                         const modelId = String(nodeData.params.model);
@@ -382,12 +391,12 @@ export function Inspector() {
               />
             ) : param.type === 'file' ? (
               <div>
-                <label style={{ display: 'inline-block', padding: '4px 10px', background: '#333', border: '1px solid #555', borderRadius: 4, cursor: 'pointer', color: '#ccc', fontSize: 12 }}>
+                <label className="inspector__file-button">
                   Choose File
                   <input
                     type="file"
                     accept="image/*"
-                    style={{ display: 'none' }}
+                    className="inspector__file-input"
                     onChange={(e) => {
                       const file = e.target.files?.[0];
                       if (!file) return;
@@ -404,16 +413,16 @@ export function Inspector() {
                     }}
                   />
                 </label>
-                {nodeData.params._previewUrl && (
+                {typeof nodeData.params._previewUrl === 'string' && (
                   <img
                     src={String(nodeData.params._previewUrl)}
                     alt="Preview"
-                    style={{ width: '100%', borderRadius: 4, marginTop: 6, display: 'block' }}
+                    className="inspector__file-preview"
                   />
                 )}
               </div>
             ) : param.type === 'boolean' ? (
-              <label style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#aaa' }}>
+              <label className="inspector__checkbox-row">
                 <input
                   type="checkbox"
                   checked={Boolean(nodeData.params[param.key] ?? param.default)}
@@ -433,8 +442,7 @@ export function Inspector() {
             {/* Replicate: show Fetch Schema button below the model_id field */}
             {nodeData.definitionId === 'replicate-universal' && param.key === 'model_id' && (
               <button
-                className="inspector__action-button"
-                style={{ marginTop: 4, width: '100%' }}
+                className="inspector__action-button inspector__action-button--full inspector__action-button--stacked"
                 disabled={schemaLoading || !nodeData.params.model_id}
                 onClick={async () => {
                   const modelId = String(nodeData.params.model_id ?? '');
@@ -491,7 +499,7 @@ export function Inspector() {
                   step={param.step ?? (param.type === 'float' ? 0.1 : 1)}
                 />
               ) : param.type === 'boolean' ? (
-                <label style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#aaa' }}>
+                <label className="inspector__checkbox-row">
                   <input
                     type="checkbox"
                     checked={Boolean(nodeData.params[param.key] ?? param.default)}
@@ -512,13 +520,13 @@ export function Inspector() {
           ));
         })()}
 
-        <div className="inspector__section" style={{ marginTop: 16, borderTop: '1px solid #2a2a2a', paddingTop: 8 }}>
+        <div className="inspector__section inspector__section--separated">
           <div className="inspector__label">State</div>
-          <div style={{ color: '#888', fontSize: 11 }}>{nodeData.state}</div>
+          <div className="inspector__state-value">{nodeData.state}</div>
         </div>
 
         {/* Actions */}
-        <div className="inspector__section" style={{ marginTop: 12, borderTop: '1px solid #2a2a2a', paddingTop: 8, display: 'flex', gap: 6 }}>
+        <div className="inspector__section inspector__actions">
           <button
             className="inspector__action-button"
             onClick={() => executeNode(renderNode.id)}

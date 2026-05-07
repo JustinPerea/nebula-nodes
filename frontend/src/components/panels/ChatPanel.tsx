@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { ArrowUp, ChevronDown, ChevronRight, X } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
 import { useDelayedUnmount } from '../../hooks/useDelayedUnmount';
@@ -30,6 +31,17 @@ const DEFAULT_DAEDALUS_MODEL = 'moonshotai/kimi-k2.6';
 // from the Nous catalog (which means they've authed via `hermes-daedalus
 // model`). This keeps fresh users from hitting a 401 on their first turn.
 type DaedalusProvider = 'openrouter' | 'nous';
+const CHAT_PANEL_RESIZE_CURSORS: Record<string, string> = {
+  l: 'ew-resize',
+  r: 'ew-resize',
+  t: 'ns-resize',
+  b: 'ns-resize',
+  tl: 'nwse-resize',
+  br: 'nwse-resize',
+  tr: 'nesw-resize',
+  bl: 'nesw-resize',
+};
+
 function loadDaedalusModel(): string {
   try {
     return window.localStorage.getItem(DAEDALUS_MODEL_KEY) || DEFAULT_DAEDALUS_MODEL;
@@ -261,6 +273,7 @@ function AssistantBubble({ message }: { message: Extract<ChatMessage, { role: 'a
           );
         }
         const isOpen = expandedTools[part.toolUseId] ?? false;
+        const ToolDisclosureIcon = isOpen ? ChevronDown : ChevronRight;
         return (
           <div
             key={part.toolUseId || idx}
@@ -272,7 +285,13 @@ function AssistantBubble({ message }: { message: Extract<ChatMessage, { role: 'a
                 setExpandedTools((s) => ({ ...s, [part.toolUseId]: !isOpen }))
               }
             >
-              <span className="chat__tool-icon">{isOpen ? '▾' : '▸'}</span>
+              <ToolDisclosureIcon
+                className="chat__tool-icon"
+                size={10}
+                strokeWidth={2}
+                aria-hidden="true"
+                focusable="false"
+              />
               <span className="chat__tool-name">{part.tool || 'tool'}</span>
               {part.result === undefined && (
                 <span className="chat__tool-status">running…</span>
@@ -400,7 +419,9 @@ export function ChatPanel() {
 
   const changeHermesTone = useCallback((next: HermesTone) => {
     setHermesTone(next);
-    try { window.localStorage.setItem(HERMES_TONE_KEY, next); } catch {}
+    try { window.localStorage.setItem(HERMES_TONE_KEY, next); } catch {
+      /* localStorage may be unavailable in private contexts. */
+    }
   }, []);
 
   // Daedalus model picker state
@@ -418,7 +439,9 @@ export function ChatPanel() {
     try {
       window.localStorage.setItem(DAEDALUS_MODEL_KEY, modelId);
       window.localStorage.setItem(DAEDALUS_PROVIDER_KEY, fromProvider);
-    } catch {}
+    } catch {
+      /* localStorage may be unavailable in private contexts. */
+    }
     setDaedalusModelPickerOpen(false);
   }, []);
 
@@ -435,18 +458,32 @@ export function ChatPanel() {
     const shouldFetch =
       daedalusModelPickerOpen || (agent === 'daedalus' && daedalusProvider === 'nous');
     if (!shouldFetch || nousModelsFetchedRef.current) return;
+    let cancelled = false;
     nousModelsFetchedRef.current = true;
-    setNousModelsLoading(true);
-    setNousModelsError(null);
-    fetchNousModels()
-      .then((data) => setNousModels(data.models))
-      .catch((err: unknown) => {
-        // Reset the ref so the user can retry by closing + reopening the
-        // picker after running `hermes auth`.
+    queueMicrotask(() => {
+      if (cancelled) {
         nousModelsFetchedRef.current = false;
-        setNousModelsError(err instanceof Error ? err.message : String(err));
-      })
-      .finally(() => setNousModelsLoading(false));
+        return;
+      }
+      setNousModelsLoading(true);
+      setNousModelsError(null);
+      fetchNousModels()
+        .then((data) => {
+          if (!cancelled) setNousModels(data.models);
+        })
+        .catch((err: unknown) => {
+          // Reset the ref so the user can retry by closing + reopening the
+          // picker after running `hermes auth`.
+          nousModelsFetchedRef.current = false;
+          if (!cancelled) setNousModelsError(err instanceof Error ? err.message : String(err));
+        })
+        .finally(() => {
+          if (!cancelled) setNousModelsLoading(false);
+        });
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [daedalusModelPickerOpen, agent, daedalusProvider]);
 
   // Daedalus is a text-out chat agent. Drop models whose only output is
@@ -481,8 +518,17 @@ export function ChatPanel() {
     const current = chatCapableNousModels.find((m) => m.id === daedalusModel);
     if (current) return;
     const fallback = chatCapableNousModels[0];
-    setDaedalusModel(fallback.id);
-    try { window.localStorage.setItem(DAEDALUS_MODEL_KEY, fallback.id); } catch {}
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setDaedalusModel(fallback.id);
+      try { window.localStorage.setItem(DAEDALUS_MODEL_KEY, fallback.id); } catch {
+        /* localStorage may be unavailable in private contexts. */
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [daedalusProvider, chatCapableNousModels, daedalusModel]);
 
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -523,22 +569,10 @@ export function ChatPanel() {
   const wsRef = useRef<WebSocket | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const busyRef = useRef(false);
-  busyRef.current = busy;
+  useEffect(() => {
+    busyRef.current = busy;
+  }, [busy]);
 
-  // Ref callback that scrolls the thinking-body to its bottom on every
-  // re-render. Combined with `key={lines.length}` on the body element, this
-  // fires each time a new line arrives so the newest entry stays visible.
-  const thinkingBodyRef = useCallback((el: HTMLDivElement | null) => {
-    if (el) el.scrollTop = el.scrollHeight;
-  }, []);
-
-  const toggleThinkingCollapsed = useCallback((id: string) => {
-    setMessages((prev) =>
-      prev.map((m) =>
-        m.role === 'thinking' && m.id === id ? { ...m, collapsed: !m.collapsed } : m,
-      ),
-    );
-  }, []);
   // Holds the text-input node id for the next outgoing message, set by the
   // Enhance button just before send. Cleared when the message leaves so it
   // only attaches to the one assistant response it triggered.
@@ -610,7 +644,7 @@ export function ChatPanel() {
         // thumbnail row, so nothing is truly lost.
         const textarea = document.querySelector<HTMLTextAreaElement>('.chat-panel__textarea');
         if (textarea) insertAtCaret(textarea, `@${body.nodeId}`);
-      } catch (err) {
+      } catch {
         setPendingImages((prev) => {
           const prior = prev.find((p) => p.id === chipId);
           // URL.revokeObjectURL is idempotent — safe inside a StrictMode-
@@ -1029,7 +1063,17 @@ export function ChatPanel() {
         provider: agent === 'daedalus' ? daedalusProvider : null,
       }),
     );
-  }, [input, model, daedalusModel, daedalusProvider, sessionId, pendingImages, agent, autonomy]);
+  }, [
+    input,
+    model,
+    daedalusModel,
+    daedalusProvider,
+    sessionId,
+    pendingImages,
+    agent,
+    autonomy,
+    changeDaedalusModel,
+  ]);
 
   // Keep sendRef pointing at the latest `send` so the chat-send event listener
   // always calls the current closure (input/model/sessionId are captured fresh).
@@ -1110,10 +1154,6 @@ export function ChatPanel() {
   const MAX_W = 720;
   const MIN_H = 240;
   const MAX_H = 2000;
-  const CURSOR_FOR: Record<string, string> = {
-    l: 'ew-resize', r: 'ew-resize', t: 'ns-resize', b: 'ns-resize',
-    tl: 'nwse-resize', br: 'nwse-resize', tr: 'nesw-resize', bl: 'nesw-resize',
-  };
   const startResize = useCallback(
     (e: React.MouseEvent<HTMLDivElement>, edgesStr: string) => {
       e.preventDefault();
@@ -1172,7 +1212,7 @@ export function ChatPanel() {
         document.body.style.cursor = '';
         document.body.style.userSelect = '';
       };
-      document.body.style.cursor = CURSOR_FOR[edgesStr] ?? 'move';
+      document.body.style.cursor = CHAT_PANEL_RESIZE_CURSORS[edgesStr] ?? 'move';
       document.body.style.userSelect = 'none';
       window.addEventListener('mousemove', onMove);
       window.addEventListener('mouseup', onUp);
@@ -1421,7 +1461,24 @@ export function ChatPanel() {
                 onClick={() => setDaedalusModelPickerOpen((v) => !v)}
                 title="Switch model — fetches the live list from Nous Portal"
               >
-                {daedalusModel} · Hermes <span className="chat-panel__model-caret">{daedalusModelPickerOpen ? '▾' : '▸'}</span>
+                {daedalusModel} · Hermes
+                {daedalusModelPickerOpen ? (
+                  <ChevronDown
+                    className="chat-panel__model-caret"
+                    size={10}
+                    strokeWidth={2}
+                    aria-hidden="true"
+                    focusable="false"
+                  />
+                ) : (
+                  <ChevronRight
+                    className="chat-panel__model-caret"
+                    size={10}
+                    strokeWidth={2}
+                    aria-hidden="true"
+                    focusable="false"
+                  />
+                )}
               </button>
             ) : (
               <span>{model}</span>
@@ -1478,28 +1535,27 @@ export function ChatPanel() {
             </div>
           )}
         </div>
-        <button className="panel__close" onClick={() => togglePanel('chat')}>
-          ×
+        <button
+          type="button"
+          className="panel__header-action panel__close"
+          onClick={() => togglePanel('chat')}
+          aria-label="Close chat panel"
+          title="Close"
+        >
+          <X
+            className="panel__close-icon"
+            size={16}
+            strokeWidth={1.75}
+            aria-hidden="true"
+            focusable="false"
+          />
         </button>
       </div>
 
       <div className="chat-panel__messages" ref={scrollRef}>
         {messages.length === 0 && (
           <div className="chat__empty">
-            {agent === 'daedalus' ? (
-              <p>Talk to Daedalus. Master craftsman, labyrinth-builder — it plans pipelines with precision, measures twice before each cut, and remembers every lesson a bad joint taught it.</p>
-            ) : (
-              <p>Talk to Claude Code. It has access to the nebula skill — ask it to build a graph.</p>
-            )}
-            <p className="chat__empty-hint">
-              {agent === 'daedalus' ? (
-                <code>/clear</code>
-              ) : (
-                <>
-                  <code>/model sonnet|opus|haiku</code> · <code>/clear</code>
-                </>
-              )}
-            </p>
+            No messages
           </div>
         )}
         {messages.map((m) => {
@@ -1606,7 +1662,13 @@ export function ChatPanel() {
                   onClick={() => removeChip(chip.id)}
                   aria-label="Remove image"
                 >
-                  ×
+                  <X
+                    className="chat-panel__chip-close-icon"
+                    size={10}
+                    strokeWidth={2}
+                    aria-hidden="true"
+                    focusable="false"
+                  />
                 </button>
               </div>
             ))}
@@ -1724,7 +1786,8 @@ export function ChatPanel() {
                   // don't leak object URLs.
                   if (available < newChips.length) {
                     for (let i = available; i < newChips.length; i++) {
-                      URL.revokeObjectURL(newChips[i].thumbUrl);
+                      const chip = newChips[i];
+                      if (chip?.thumbUrl) URL.revokeObjectURL(chip.thumbUrl);
                     }
                   }
                   return [...prev, ...newChips.slice(0, available)];
@@ -1767,9 +1830,13 @@ export function ChatPanel() {
                 pendingImages.some((p) => p.status === 'uploading')
               }
             >
-              <span className="chat-panel__send-icon" aria-hidden="true">
-                ↑
-              </span>
+              <ArrowUp
+                className="chat-panel__send-icon"
+                size={17}
+                strokeWidth={2}
+                aria-hidden="true"
+                focusable="false"
+              />
             </button>
           )}
         </div>

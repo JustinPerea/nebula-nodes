@@ -1,5 +1,6 @@
 import { memo, useState, useCallback, useEffect } from 'react';
 import { createPortal } from 'react-dom';
+import { Download, X } from 'lucide-react';
 import '@google/model-viewer';
 
 interface MeshPreviewProps {
@@ -34,15 +35,27 @@ function MeshPreviewComponent({ src }: MeshPreviewProps) {
           camera-controls
           auto-rotate
           shadow-intensity="0"
-          style={{ width: '100%', height: '150px', backgroundColor: '#161616' }}
+          className="mesh-preview__viewer"
         />
       </div>
 
       {showModal && createPortal(
         <div className="mesh-modal-overlay" onClick={handleClose}>
           <div className="mesh-modal" onClick={(e) => e.stopPropagation()}>
-            <button className="mesh-modal__close" onClick={handleClose} aria-label="Close">
-              &times;
+            <button
+              type="button"
+              className="mesh-modal__close"
+              onClick={handleClose}
+              aria-label="Close"
+              title="Close"
+            >
+              <X
+                className="mesh-modal__close-icon"
+                size={16}
+                strokeWidth={1.75}
+                aria-hidden="true"
+                focusable="false"
+              />
             </button>
             <model-viewer
               src={src}
@@ -50,13 +63,20 @@ function MeshPreviewComponent({ src }: MeshPreviewProps) {
               auto-rotate
               shadow-intensity="1"
               alt="3D model preview"
-              style={{ width: '100%', height: '100%', backgroundColor: '#161616' }}
+              className="mesh-modal__viewer"
             />
             <div className="mesh-modal__info">
               <span className="mesh-modal__format">
                 {src.split('.').pop()?.toUpperCase() || '3D'} model
               </span>
               <a href={src} download className="mesh-modal__download">
+                <Download
+                  className="mesh-modal__download-icon"
+                  size={14}
+                  strokeWidth={1.75}
+                  aria-hidden="true"
+                  focusable="false"
+                />
                 Download
               </a>
             </div>
