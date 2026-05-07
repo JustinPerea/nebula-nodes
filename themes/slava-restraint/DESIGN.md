@@ -446,7 +446,7 @@ These should not stay inline:
 - Mesh modal and Inspector no longer rely as heavily on inline visual styles.
 - Component inline styles have been audited; remaining cases are dynamic geometry, data colors, progress width, edge styling, or effect coordinates.
 - `npm run check:inline-styles` guards against new static inline visual styles in `frontend/src/components`.
-- `npm run check:slava-screenshots` captures desktop/settings/image-surface/mobile Slava screenshots into `output/slava-screenshot-check`.
+- `npm run check:slava-screenshots` captures desktop/settings/image-surface/popover-loading-reroute/mesh-modal/mobile/empty-canvas Slava screenshots into `output/slava-screenshot-check`.
 
 ### Weak
 
@@ -476,6 +476,10 @@ These should not stay inline:
    - chat rest/busy/error/image chips
    - connected nodes with handles at rest/hover/drag
    - image surface node hover/selected
+   - connection popup and context menu
+   - executing node loading/progress state
+   - text-surface and sticky-note inline editor
+   - reroute node
    - mesh modal
 4. Make Slava the default skin only after the above passes.
 

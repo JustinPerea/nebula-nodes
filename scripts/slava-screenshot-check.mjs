@@ -20,6 +20,7 @@ const userDataDir = join(OUT_DIR, `chrome-profile-${Date.now()}`);
 
 await mkdir(OUT_DIR, { recursive: true });
 await cleanupChromeProfiles();
+await cleanupScreenshots();
 
 const chrome = spawn(CHROME, [
   '--headless=new',
@@ -57,14 +58,14 @@ try {
 
   await waitForRuntime(cdp, 'window.__nebulaUIStore && window.__nebulaGraphStore');
   await setupSlavaScene(cdp);
-  await waitForRuntime(cdp, 'document.body.classList.contains("app-slava-restraint") && document.querySelectorAll(".react-flow__node").length >= 4');
+  await waitForRuntime(cdp, 'document.body.classList.contains("app-slava-restraint") && document.querySelectorAll(".react-flow__node").length >= 7');
 
   await screenshot(cdp, '01-slava-desktop.png');
 
   await runSlavaInteractionChecks(cdp);
   await runSlavaPersistenceChecks(cdp);
   await setupSlavaScene(cdp);
-  await waitForRuntime(cdp, 'document.body.classList.contains("app-slava-restraint") && document.querySelectorAll(".react-flow__node").length >= 4');
+  await waitForRuntime(cdp, 'document.body.classList.contains("app-slava-restraint") && document.querySelectorAll(".react-flow__node").length >= 7');
 
   await evaluate(cdp, () => {
     const firstToggle = document.querySelector('.settings__section-toggle');
@@ -88,14 +89,18 @@ try {
   await sleep(250);
   await screenshot(cdp, '03-image-surface-selected.png');
 
+  await runSlavaExpandedVisualCoverage(cdp);
+
   await cdp.send('Emulation.setDeviceMetricsOverride', {
     width: 390,
     height: 844,
     deviceScaleFactor: 2,
     mobile: true,
   });
+  await setupSlavaScene(cdp);
+  await waitForRuntime(cdp, 'document.body.classList.contains("app-slava-restraint") && document.querySelectorAll(".react-flow__node").length >= 7');
   await sleep(300);
-  await screenshot(cdp, '04-mobile-slava.png');
+  await screenshot(cdp, '06-mobile-slava.png');
   await runSlavaMobileLayoutChecks(cdp);
 
   const assertions = await evaluate(cdp, () => {
@@ -106,7 +111,10 @@ try {
       nodes: document.querySelectorAll('.react-flow__node').length,
       edges: document.querySelectorAll('.react-flow__edge').length,
       imageSurface: !!document.querySelector('.model-node--image-surface'),
+      executingNode: !!document.querySelector('.model-node--executing .model-node__loading'),
       stickyNoteEditor: !!document.querySelector('.model-node--sticky-note .model-node__textarea'),
+      rerouteNode: !!document.querySelector('.reroute-node'),
+      meshPreview: !!document.querySelector('.mesh-preview'),
       dotBackground: !!document.querySelector('.react-flow__background.slava-canvas-background .slava-canvas-background__dot'),
       lineBackground: !!document.querySelector('.react-flow__background.slava-canvas-background path.react-flow__background-pattern'),
       handles: document.querySelectorAll('.react-flow__handle').length,
@@ -121,7 +129,10 @@ try {
   if (assertions.nodes < 4) missing.push('four nodes');
   if (assertions.edges < 1) missing.push('edge');
   if (!assertions.imageSurface) missing.push('image surface node');
+  if (!assertions.executingNode) missing.push('executing/loading node');
   if (!assertions.stickyNoteEditor) missing.push('sticky note editor');
+  if (!assertions.rerouteNode) missing.push('reroute node');
+  if (!assertions.meshPreview) missing.push('mesh preview node');
   if (!assertions.dotBackground) missing.push('Slava dot matrix background');
   if (assertions.lineBackground) missing.push('Slava line background still present');
   if (assertions.handles < 2) missing.push('handles');
@@ -156,7 +167,7 @@ try {
     });
   });
   await sleep(650);
-  await screenshot(cdp, '05-empty-canvas.png');
+  await screenshot(cdp, '07-empty-canvas.png');
 
   const emptyAssertions = await evaluate(cdp, () => ({
     emptyGraph: document.querySelectorAll('.react-flow__node').length === 0,
@@ -251,6 +262,43 @@ async function setupSlavaScene(cdp) {
             outputs: {},
           },
         },
+        {
+          id: 'n5',
+          type: 'model-node',
+          position: { x: 980, y: 250 },
+          data: {
+            label: 'Running Model',
+            definitionId: 'openrouter-universal',
+            params: { model: 'openai/gpt-4.1-mini' },
+            state: 'executing',
+            progress: 0.46,
+            outputs: {},
+          },
+        },
+        {
+          id: 'n6',
+          type: 'reroute-node',
+          position: { x: 510, y: 430 },
+          data: {
+            label: 'Reroute',
+            definitionId: 'reroute',
+            params: {},
+            state: 'idle',
+            outputs: {},
+          },
+        },
+        {
+          id: 'n7',
+          type: 'model-node',
+          position: { x: 980, y: 535 },
+          data: {
+            label: 'Mesh Preview',
+            definitionId: 'meshy-text-to-3d',
+            params: { prompt: 'low poly robot mascot' },
+            state: 'complete',
+            outputs: { mesh: { type: 'Mesh', value: '/slava-check-mock.glb' } },
+          },
+        },
       ],
       edges: [
         {
@@ -263,11 +311,127 @@ async function setupSlavaScene(cdp) {
           selected: true,
           data: { dataType: 'Text' },
         },
+        {
+          id: 'e-n1-n6',
+          source: 'n1',
+          sourceHandle: 'text',
+          target: 'n6',
+          targetHandle: 'input',
+          type: 'typed-edge',
+          data: { dataType: 'Text' },
+        },
+        {
+          id: 'e-n6-n2',
+          source: 'n6',
+          sourceHandle: 'output',
+          target: 'n2',
+          targetHandle: 'prompt',
+          type: 'typed-edge',
+          data: { dataType: 'Text' },
+        },
       ],
       isExecuting: false,
     });
   });
   await sleep(500);
+}
+
+async function runSlavaExpandedVisualCoverage(cdp) {
+  debugStep('visual coverage: popovers and node states');
+  await cdp.send('Emulation.setDeviceMetricsOverride', {
+    width: 1440,
+    height: 980,
+    deviceScaleFactor: 1,
+    mobile: false,
+  });
+  await setupSlavaScene(cdp);
+  await waitForRuntime(cdp, 'document.querySelectorAll(".react-flow__node").length >= 7');
+
+  await evaluate(cdp, () => {
+    window.__nebulaUIStore.setState((state) => ({
+      selectedNodeId: 'n5',
+      contextMenu: {
+        visible: true,
+        position: { x: 930, y: 190 },
+        nodeId: 'n5',
+      },
+      connectionPopup: {
+        visible: true,
+        position: { x: 520, y: 150 },
+        nodeId: 'n1',
+        handleId: 'text',
+        handleType: 'source',
+      },
+      panels: {
+        ...state.panels,
+        library: { ...state.panels.library, visible: false },
+        inspector: { ...state.panels.inspector, visible: false },
+        settings: { ...state.panels.settings, visible: false },
+        chat: { ...state.panels.chat, visible: false },
+      },
+    }));
+  });
+  await waitForRuntime(cdp, 'document.querySelector(".context-menu") && document.querySelector(".connection-popup")');
+  await sleep(200);
+  await screenshot(cdp, '04-slava-popovers-and-states.png');
+
+  const stateAssertions = await evaluate(cdp, () => {
+    const progress = document.querySelector('.model-node--executing .model-node__progress-bar');
+    const progressRect = progress?.getBoundingClientRect();
+    const rerouteRect = document.querySelector('.reroute-node')?.getBoundingClientRect();
+    const contextMenu = document.querySelector('.context-menu');
+    const connectionPopup = document.querySelector('.connection-popup');
+    return {
+      contextMenuItems: document.querySelectorAll('.context-menu__item').length,
+      connectionPopupCategories: document.querySelectorAll('.connection-popup__category-label').length,
+      connectionPopupTopLayer: Boolean(connectionPopup && Number(getComputedStyle(connectionPopup).zIndex) >= 40),
+      contextMenuTopLayer: Boolean(contextMenu && Number(getComputedStyle(contextMenu).zIndex) >= 40),
+      executingNode: !!document.querySelector('.model-node--executing .model-node__loading-spinner'),
+      progressWidth: progressRect?.width ?? 0,
+      textSurfaceNodes: document.querySelectorAll('.model-node--text-surface').length,
+      stickyNoteEditor: !!document.querySelector('.model-node--sticky-note .model-node__textarea'),
+      rerouteSize: rerouteRect?.width ?? 0,
+      meshPreview: !!document.querySelector('[data-id="n7"] .mesh-preview'),
+    };
+  });
+
+  assertSlavaCheck(stateAssertions.contextMenuItems === 3, 'context menu renders all actions');
+  assertSlavaCheck(stateAssertions.connectionPopupCategories >= 1, 'connection popup renders compatible categories');
+  assertSlavaCheck(stateAssertions.connectionPopupTopLayer, 'connection popup uses Slava popover layer');
+  assertSlavaCheck(stateAssertions.contextMenuTopLayer, 'context menu uses Slava popover layer');
+  assertSlavaCheck(stateAssertions.executingNode, 'executing node shows Slava loading indicator');
+  assertSlavaCheck(stateAssertions.progressWidth > 0, 'executing node progress bar is visible');
+  assertSlavaCheck(stateAssertions.textSurfaceNodes >= 2, 'text input and sticky note render as text surfaces');
+  assertSlavaCheck(stateAssertions.stickyNoteEditor, 'sticky note renders inline text editor');
+  assertSlavaCheck(stateAssertions.rerouteSize >= 18, 'reroute node keeps Slava dot hit target');
+  assertSlavaCheck(stateAssertions.meshPreview, 'mesh node renders preview surface');
+
+  debugStep('visual coverage: mesh modal');
+  await evaluate(cdp, () => {
+    window.__nebulaUIStore.setState((state) => ({
+      contextMenu: { visible: false, position: { x: 0, y: 0 }, nodeId: null },
+      connectionPopup: { ...state.connectionPopup, visible: false },
+    }));
+  });
+  await waitForRuntime(cdp, '!document.querySelector(".context-menu") && !document.querySelector(".connection-popup")');
+  await clickSelector(cdp, '[data-id="n7"] .mesh-preview');
+  await waitForRuntime(cdp, 'document.querySelector(".mesh-modal-overlay") && document.querySelector(".mesh-modal__download")');
+  await sleep(200);
+  await screenshot(cdp, '05-slava-mesh-modal.png');
+
+  const meshAssertions = await evaluate(cdp, () => ({
+    modal: !!document.querySelector('.mesh-modal'),
+    closeIcon: !!document.querySelector('.mesh-modal__close-icon'),
+    downloadIcon: !!document.querySelector('.mesh-modal__download-icon'),
+    viewer: !!document.querySelector('.mesh-modal__viewer'),
+  }));
+  assertSlavaCheck(meshAssertions.modal, 'mesh modal renders');
+  assertSlavaCheck(meshAssertions.closeIcon, 'mesh modal close uses icon contract');
+  assertSlavaCheck(meshAssertions.downloadIcon, 'mesh modal download uses icon contract');
+  assertSlavaCheck(meshAssertions.viewer, 'mesh modal viewer renders');
+
+  await clickSelector(cdp, '.mesh-modal__close');
+  await waitForRuntime(cdp, '!document.querySelector(".mesh-modal-overlay")');
 }
 
 async function runSlavaInteractionChecks(cdp) {
@@ -900,8 +1064,32 @@ async function cleanupChromeProfiles() {
   await Promise.all(
     entries
       .filter((entry) => entry.isDirectory() && entry.name.startsWith('chrome-profile-'))
-      .map((entry) => rm(join(OUT_DIR, entry.name), { recursive: true, force: true })),
+      .map((entry) => rmWithRetry(join(OUT_DIR, entry.name))),
   );
+}
+
+async function cleanupScreenshots() {
+  if (!existsSync(OUT_DIR)) return;
+  const entries = await readdir(OUT_DIR, { withFileTypes: true });
+  await Promise.all(
+    entries
+      .filter((entry) => entry.isFile() && entry.name.endsWith('.png'))
+      .map((entry) => rm(join(OUT_DIR, entry.name), { force: true })),
+  );
+}
+
+async function rmWithRetry(path, attempts = 5) {
+  let lastError;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      await rm(path, { recursive: true, force: true, maxRetries: 2, retryDelay: 100 });
+      return;
+    } catch (error) {
+      lastError = error;
+      await sleep(100 * attempt);
+    }
+  }
+  throw lastError;
 }
 
 function waitForExit(child, timeout) {
