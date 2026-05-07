@@ -1,4 +1,6 @@
 import { vi, describe, it, expect, beforeEach } from 'vitest';
+import type { Node } from '@xyflow/react';
+import type { NodeData } from '../../src/types';
 
 // Mock WebSocket for jsdom
 vi.mock('../../src/lib/wsClient', () => ({
@@ -9,8 +11,12 @@ vi.mock('../../src/lib/wsClient', () => ({
   },
 }));
 
-// Mock fetch for api.ts
-globalThis.fetch = vi.fn();
+// Mock fetch for api.ts. Store tests exercise the frontend-only fallback path,
+// so backend writes should fail in a controlled way instead of returning
+// undefined and breaking async addNode.
+const fetchMock = vi.fn();
+globalThis.fetch = fetchMock as unknown as typeof fetch;
+vi.spyOn(console, 'warn').mockImplementation(() => {});
 
 import { useGraphStore } from '../../src/store/graphStore';
 
@@ -25,6 +31,21 @@ function resetStore() {
   });
 }
 
+async function addNode(definitionId: string, position: { x: number; y: number }) {
+  const nodeId = await useGraphStore.getState().addNode(definitionId, position);
+  expect(nodeId).toBeTruthy();
+  return nodeId as string;
+}
+
+beforeEach(() => {
+  fetchMock.mockReset();
+  fetchMock.mockResolvedValue({
+    ok: false,
+    status: 503,
+    json: async () => ({}),
+  });
+});
+
 describe('graphStore', () => {
   beforeEach(() => {
     useGraphStore.setState({ nodes: [], edges: [] });
@@ -36,9 +57,8 @@ describe('graphStore', () => {
     expect(state.edges).toEqual([]);
   });
 
-  it('adds a node', () => {
-    const { addNode } = useGraphStore.getState();
-    addNode('gpt-image-1-generate', { x: 100, y: 200 });
+  it('adds a node', async () => {
+    await addNode('gpt-image-1-generate', { x: 100, y: 200 });
 
     const { nodes } = useGraphStore.getState();
     expect(nodes).toHaveLength(1);
@@ -49,10 +69,9 @@ describe('graphStore', () => {
     expect(nodes[0].data.state).toBe('idle');
   });
 
-  it('removes a node and cleans up connected edges', () => {
-    const { addNode } = useGraphStore.getState();
-    addNode('text-input', { x: 0, y: 0 });
-    addNode('gpt-image-1-generate', { x: 300, y: 0 });
+  it('removes a node and cleans up connected edges', async () => {
+    await addNode('text-input', { x: 0, y: 0 });
+    await addNode('gpt-image-1-generate', { x: 300, y: 0 });
 
     const { nodes } = useGraphStore.getState();
     const sourceId = nodes[0].id;
@@ -83,16 +102,15 @@ describe('graphStore', () => {
     expect(state.edges).toHaveLength(0);
   });
 
-  it('removes a node without affecting unrelated edges', () => {
-    const { addNode } = useGraphStore.getState();
-    addNode('text-input', { x: 0, y: 0 });
-    addNode('gpt-image-1-generate', { x: 300, y: 0 });
-    addNode('preview', { x: 600, y: 0 });
+  it('removes a node without affecting unrelated edges', async () => {
+    await addNode('text-input', { x: 0, y: 0 });
+    await addNode('gpt-image-1-generate', { x: 300, y: 0 });
+    await addNode('preview', { x: 600, y: 0 });
 
     const { nodes } = useGraphStore.getState();
     const [textNode, gptNode, previewNode] = nodes;
 
-    useGraphStore.setState((state) => ({
+    useGraphStore.setState({
       edges: [
         {
           id: 'edge-1',
@@ -113,7 +131,7 @@ describe('graphStore', () => {
           data: { dataType: 'Image' },
         },
       ],
-    }));
+    });
 
     const { onNodesChange } = useGraphStore.getState();
     onNodesChange([{ type: 'remove', id: textNode.id }]);
@@ -132,16 +150,16 @@ describe('graphStore', () => {
 describe('undo/redo', () => {
   beforeEach(resetStore);
 
-  it('undo restores previous state after addNode', () => {
-    useGraphStore.getState().addNode('text-input', { x: 100, y: 100 });
+  it('undo restores previous state after addNode', async () => {
+    await addNode('text-input', { x: 100, y: 100 });
     expect(useGraphStore.getState().nodes).toHaveLength(1);
 
     useGraphStore.getState().undo();
     expect(useGraphStore.getState().nodes).toHaveLength(0);
   });
 
-  it('redo restores the undone state', () => {
-    useGraphStore.getState().addNode('text-input', { x: 100, y: 100 });
+  it('redo restores the undone state', async () => {
+    await addNode('text-input', { x: 100, y: 100 });
     useGraphStore.getState().undo();
     expect(useGraphStore.getState().nodes).toHaveLength(0);
 
@@ -149,8 +167,8 @@ describe('undo/redo', () => {
     expect(useGraphStore.getState().nodes).toHaveLength(1);
   });
 
-  it('undo preserves node outputs', () => {
-    useGraphStore.getState().addNode('text-input', { x: 100, y: 100 });
+  it('undo preserves node outputs', async () => {
+    await addNode('text-input', { x: 100, y: 100 });
     const nodeId = useGraphStore.getState().nodes[0].id;
 
     // Simulate execution producing an output (not a param change, won't push undo)
@@ -171,38 +189,38 @@ describe('undo/redo', () => {
     expect(node?.data.outputs).toMatchObject({ text: { type: 'Text', value: 'hello world' } });
   });
 
-  it('new mutation clears redo stack', () => {
-    useGraphStore.getState().addNode('text-input', { x: 100, y: 100 });
+  it('new mutation clears redo stack', async () => {
+    await addNode('text-input', { x: 100, y: 100 });
     useGraphStore.getState().undo();
     expect(useGraphStore.getState().redoStack).toHaveLength(1);
 
-    useGraphStore.getState().addNode('text-input', { x: 200, y: 200 });
+    await addNode('text-input', { x: 200, y: 200 });
     expect(useGraphStore.getState().redoStack).toHaveLength(0);
   });
 
-  it('caps undo stack at 50 entries', () => {
+  it('caps undo stack at 50 entries', async () => {
     for (let i = 0; i < 60; i++) {
-      useGraphStore.getState().addNode('text-input', { x: i * 10, y: 0 });
+      await addNode('text-input', { x: i * 10, y: 0 });
     }
     expect(useGraphStore.getState().undoStack.length).toBeLessThanOrEqual(50);
   });
 
-  it('undo does nothing when stack is empty', () => {
-    useGraphStore.getState().addNode('text-input', { x: 0, y: 0 });
+  it('undo does nothing when stack is empty', async () => {
+    await addNode('text-input', { x: 0, y: 0 });
     useGraphStore.setState({ undoStack: [] });
     useGraphStore.getState().undo();
     expect(useGraphStore.getState().nodes).toHaveLength(1);
   });
 
-  it('redo does nothing when stack is empty', () => {
-    useGraphStore.getState().addNode('text-input', { x: 0, y: 0 });
+  it('redo does nothing when stack is empty', async () => {
+    await addNode('text-input', { x: 0, y: 0 });
     expect(useGraphStore.getState().redoStack).toHaveLength(0);
     useGraphStore.getState().redo();
     expect(useGraphStore.getState().nodes).toHaveLength(1);
   });
 
-  it('loadGraph clears both stacks', () => {
-    useGraphStore.getState().addNode('text-input', { x: 0, y: 0 });
+  it('loadGraph clears both stacks', async () => {
+    await addNode('text-input', { x: 0, y: 0 });
     expect(useGraphStore.getState().undoStack.length).toBeGreaterThan(0);
 
     useGraphStore.getState().loadGraph([], []);
@@ -210,8 +228,8 @@ describe('undo/redo', () => {
     expect(useGraphStore.getState().redoStack).toHaveLength(0);
   });
 
-  it('clearGraph is undoable', () => {
-    useGraphStore.getState().addNode('text-input', { x: 0, y: 0 });
+  it('clearGraph is undoable', async () => {
+    await addNode('text-input', { x: 0, y: 0 });
     // Reset undo stack so only the clearGraph push is tracked
     useGraphStore.setState({ undoStack: [] });
 
@@ -230,8 +248,8 @@ describe('undo/redo', () => {
 describe('copy/paste', () => {
   beforeEach(resetStore);
 
-  it('paste creates nodes with new IDs', () => {
-    useGraphStore.getState().addNode('text-input', { x: 100, y: 100 });
+  it('paste creates nodes with new IDs', async () => {
+    await addNode('text-input', { x: 100, y: 100 });
     const originalId = useGraphStore.getState().nodes[0].id;
 
     // Select and copy
@@ -246,8 +264,8 @@ describe('copy/paste', () => {
     expect(nodes[1].id).not.toBe(originalId);
   });
 
-  it('paste offsets position by 20px', () => {
-    useGraphStore.getState().addNode('text-input', { x: 100, y: 200 });
+  it('paste offsets position by 20px', async () => {
+    await addNode('text-input', { x: 100, y: 200 });
     useGraphStore.setState({
       nodes: useGraphStore.getState().nodes.map((n) => ({ ...n, selected: true })),
     });
@@ -259,8 +277,8 @@ describe('copy/paste', () => {
     expect(pasted.position.y).toBe(220);
   });
 
-  it('paste clears outputs and resets state to idle', () => {
-    useGraphStore.getState().addNode('text-input', { x: 100, y: 100 });
+  it('paste clears outputs and resets state to idle', async () => {
+    await addNode('text-input', { x: 100, y: 100 });
     const nodeId = useGraphStore.getState().nodes[0].id;
 
     // Manually set outputs on the node
@@ -283,9 +301,9 @@ describe('copy/paste', () => {
     expect(Object.keys(pasted.data.outputs)).toHaveLength(0);
   });
 
-  it('paste remaps internal edges to new IDs', () => {
-    useGraphStore.getState().addNode('text-input', { x: 100, y: 100 });
-    useGraphStore.getState().addNode('claude-chat', { x: 300, y: 100 });
+  it('paste remaps internal edges to new IDs', async () => {
+    await addNode('text-input', { x: 100, y: 100 });
+    await addNode('claude-chat', { x: 300, y: 100 });
     const nodes = useGraphStore.getState().nodes;
 
     // Manually create an edge between them
@@ -316,8 +334,8 @@ describe('copy/paste', () => {
     expect(pastedEdge.target).not.toBe(nodes[1].id);
   });
 
-  it('copySelected with no selection does not set clipboard', () => {
-    useGraphStore.getState().addNode('text-input', { x: 100, y: 100 });
+  it('copySelected with no selection does not set clipboard', async () => {
+    await addNode('text-input', { x: 100, y: 100 });
     // Nodes are not selected
     useGraphStore.getState().copySelected();
     expect(useGraphStore.getState().clipboard).toBeNull();
@@ -337,9 +355,9 @@ describe('copy/paste', () => {
 describe('selectAll', () => {
   beforeEach(resetStore);
 
-  it('selects all nodes', () => {
-    useGraphStore.getState().addNode('text-input', { x: 0, y: 0 });
-    useGraphStore.getState().addNode('text-input', { x: 100, y: 0 });
+  it('selects all nodes', async () => {
+    await addNode('text-input', { x: 0, y: 0 });
+    await addNode('text-input', { x: 100, y: 0 });
 
     useGraphStore.getState().selectAll();
 
@@ -351,8 +369,8 @@ describe('selectAll', () => {
 describe('duplicateSelected', () => {
   beforeEach(resetStore);
 
-  it('duplicates selected nodes with new IDs and 20px offset', () => {
-    useGraphStore.getState().addNode('text-input', { x: 50, y: 50 });
+  it('duplicates selected nodes with new IDs and 20px offset', async () => {
+    await addNode('text-input', { x: 50, y: 50 });
     const originalId = useGraphStore.getState().nodes[0].id;
 
     useGraphStore.setState({
@@ -366,9 +384,9 @@ describe('duplicateSelected', () => {
     expect(nodes[1].position).toEqual({ x: 70, y: 70 });
   });
 
-  it('duplicates selected along with internal edges', () => {
-    useGraphStore.getState().addNode('text-input', { x: 0, y: 0 });
-    useGraphStore.getState().addNode('claude-chat', { x: 200, y: 0 });
+  it('duplicates selected along with internal edges', async () => {
+    await addNode('text-input', { x: 0, y: 0 });
+    await addNode('claude-chat', { x: 200, y: 0 });
     const [n1, n2] = useGraphStore.getState().nodes;
 
     useGraphStore.setState({
@@ -383,8 +401,8 @@ describe('duplicateSelected', () => {
     expect(edges[1].id).not.toBe('e1');
   });
 
-  it('does nothing when nothing is selected', () => {
-    useGraphStore.getState().addNode('text-input', { x: 0, y: 0 });
+  it('does nothing when nothing is selected', async () => {
+    await addNode('text-input', { x: 0, y: 0 });
     const beforeCount = useGraphStore.getState().nodes.length;
     useGraphStore.getState().duplicateSelected();
     expect(useGraphStore.getState().nodes).toHaveLength(beforeCount);
@@ -393,15 +411,21 @@ describe('duplicateSelected', () => {
 
 describe('graphStore streamPartialImage', () => {
   beforeEach(() => {
+    const executingNode: Node<NodeData> = {
+      id: 'n1',
+      type: 'default',
+      position: { x: 0, y: 0 },
+      data: {
+        label: 'GPT Image 2',
+        definitionId: 'gpt-image-2-generate',
+        params: {},
+        state: 'executing',
+        outputs: {},
+      },
+    };
+
     useGraphStore.setState({
-      nodes: [
-        {
-          id: 'n1',
-          type: 'default',
-          position: { x: 0, y: 0 },
-          data: { definitionId: 'gpt-image-2-generate', params: {}, state: 'executing' },
-        } as any,
-      ],
+      nodes: [executingNode],
       edges: [],
     });
   });

@@ -6,13 +6,18 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "lint": "eslint .",
+    "lint": "npm run check:inline-styles && eslint .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check:inline-styles": "node scripts/check-inline-styles.mjs",
+    "check:slava-screenshots": "node ../scripts/slava-screenshot-check.mjs",
     "preview": "vite preview"
   },
   "dependencies": {
     "@google/model-viewer": "^4.2.0",
     "@xyflow/react": "^12.10.2",
     "jszip": "^3.10.1",
+    "lucide-react": "^1.14.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "uuid": "^13.0.0",
