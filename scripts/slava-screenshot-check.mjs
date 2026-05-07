@@ -89,6 +89,7 @@ try {
   await sleep(250);
   await screenshot(cdp, '03-image-surface-selected.png');
 
+  await runSlavaInspectorCoverage(cdp);
   await runSlavaExpandedVisualCoverage(cdp);
 
   await cdp.send('Emulation.setDeviceMetricsOverride', {
@@ -100,7 +101,7 @@ try {
   await setupSlavaScene(cdp);
   await waitForRuntime(cdp, 'document.body.classList.contains("app-slava-restraint") && document.querySelectorAll(".react-flow__node").length >= 7');
   await sleep(300);
-  await screenshot(cdp, '06-mobile-slava.png');
+  await screenshot(cdp, '10-mobile-slava.png');
   await runSlavaMobileLayoutChecks(cdp);
 
   const assertions = await evaluate(cdp, () => {
@@ -167,7 +168,7 @@ try {
     });
   });
   await sleep(650);
-  await screenshot(cdp, '07-empty-canvas.png');
+  await screenshot(cdp, '11-empty-canvas.png');
 
   const emptyAssertions = await evaluate(cdp, () => ({
     emptyGraph: document.querySelectorAll('.react-flow__node').length === 0,
@@ -336,6 +337,157 @@ async function setupSlavaScene(cdp) {
   await sleep(500);
 }
 
+async function runSlavaInspectorCoverage(cdp) {
+  debugStep('visual coverage: inspector controls');
+  await cdp.send('Emulation.setDeviceMetricsOverride', {
+    width: 1440,
+    height: 980,
+    deviceScaleFactor: 1,
+    mobile: false,
+  });
+  await setupSlavaScene(cdp);
+  await waitForRuntime(cdp, 'document.querySelectorAll(".react-flow__node").length >= 7');
+
+  await evaluate(cdp, () => {
+    window.__nebulaUIStore.setState((state) => ({
+      selectedNodeId: 'n1',
+      panels: {
+        ...state.panels,
+        library: { ...state.panels.library, visible: false },
+        settings: { ...state.panels.settings, visible: false },
+        chat: { ...state.panels.chat, visible: false },
+        inspector: { ...state.panels.inspector, visible: true, position: { x: -320, y: 16 } },
+      },
+    }));
+  });
+  await waitForRuntime(cdp, 'document.querySelector(".panel--inspector [data-inspector-param=\\"value\\"][data-inspector-kind=\\"textarea\\"] textarea.inspector__field")');
+  await sleep(650);
+  await screenshot(cdp, '04-inspector-text-node.png');
+
+  const textAssertions = await evaluate(cdp, () => ({
+    textParam: !!document.querySelector('.panel--inspector [data-inspector-param="value"][data-inspector-kind="textarea"] textarea.inspector__field'),
+    actionIcons: document.querySelectorAll('.panel--inspector .inspector__action-icon').length,
+    infoIcon: !!document.querySelector('.panel--inspector .inspector__info-icon'),
+    paramSource: document.querySelector('.panel--inspector [data-inspector-param="value"]')?.getAttribute('data-inspector-source'),
+  }));
+  assertSlavaCheck(textAssertions.textParam, 'Inspector text param renders through shared textarea contract');
+  assertSlavaCheck(textAssertions.actionIcons >= 3, 'Inspector action buttons use icon contract');
+  assertSlavaCheck(textAssertions.infoIcon, 'Inspector info action uses icon contract');
+  assertSlavaCheck(textAssertions.paramSource === 'definition', 'Inspector static params expose a stable source marker');
+
+  await evaluate(cdp, () => {
+    const graph = window.__nebulaGraphStore;
+    const current = graph.getState();
+    const imageInputNode = {
+      id: 'n8',
+      type: 'model-node',
+      position: { x: 960, y: 670 },
+      data: {
+        label: 'Reference Image',
+        definitionId: 'image-input',
+        params: {
+          filePath: '/hermes/hermes-figure.jpeg',
+          _previewUrl: '/hermes/hermes-figure.jpeg',
+        },
+        state: 'complete',
+        outputs: { image: { type: 'Image', value: '/hermes/hermes-figure.jpeg' } },
+      },
+    };
+    graph.setState({
+      nodes: [...current.nodes.filter((node) => node.id !== 'n8'), imageInputNode],
+      edges: current.edges,
+    });
+    window.__nebulaUIStore.setState((state) => ({
+      selectedNodeId: 'n8',
+      panels: {
+        ...state.panels,
+        inspector: { ...state.panels.inspector, visible: true, position: { x: -320, y: 16 } },
+      },
+    }));
+  });
+  await waitForRuntime(cdp, 'document.querySelector(".panel--inspector [data-inspector-param=\\"filePath\\"][data-inspector-kind=\\"file\\"] .inspector__file-preview")');
+  await sleep(200);
+  await screenshot(cdp, '05-inspector-image-file.png');
+
+  const imageAssertions = await evaluate(cdp, () => ({
+    fileParam: !!document.querySelector('.panel--inspector [data-inspector-param="filePath"][data-inspector-kind="file"]'),
+    fileButtonIcon: !!document.querySelector('.panel--inspector .inspector__file-button .inspector__action-icon'),
+    filePreview: !!document.querySelector('.panel--inspector .inspector__file-preview'),
+  }));
+  assertSlavaCheck(imageAssertions.fileParam, 'Inspector file param exposes stable markers');
+  assertSlavaCheck(imageAssertions.fileButtonIcon, 'Inspector file button uses icon contract');
+  assertSlavaCheck(imageAssertions.filePreview, 'Inspector file preview renders');
+
+  await evaluate(cdp, () => {
+    const graph = window.__nebulaGraphStore;
+    const current = graph.getState();
+    graph.setState({
+      nodes: current.nodes.map((node) => node.id === 'n5'
+        ? {
+          ...node,
+          data: {
+            ...node.data,
+            keyStatus: 'missing',
+            params: {
+              ...node.data.params,
+              model: 'openai/gpt-4.1-mini',
+            },
+          },
+        }
+        : node),
+      edges: current.edges,
+    });
+    window.__nebulaUIStore.setState((state) => ({
+      selectedNodeId: 'n5',
+      panels: {
+        ...state.panels,
+        inspector: { ...state.panels.inspector, visible: true, position: { x: -320, y: 16 } },
+      },
+    }));
+  });
+  await waitForRuntime(cdp, 'document.querySelector(".panel--inspector [data-inspector-param=\\"model\\"] .inspector__model-selection") && document.querySelector(".panel--inspector .inspector__notice--warning")');
+  const favoritePressedBefore = await evaluate(cdp, () =>
+    document.querySelector('.panel--inspector .inspector__favorite-button')?.getAttribute('aria-pressed') === 'true',
+  );
+  if (!favoritePressedBefore) {
+    await clickSelector(cdp, '.panel--inspector .inspector__favorite-button');
+  }
+  await waitForRuntime(cdp, 'document.querySelector(".panel--inspector .inspector__favorite-button")?.getAttribute("aria-pressed") === "true"');
+  await sleep(200);
+  await screenshot(cdp, '06-inspector-model-warning.png');
+
+  const modelAssertions = await evaluate(cdp, () => ({
+    modelParam: !!document.querySelector('.panel--inspector [data-inspector-param="model"][data-inspector-kind="string"]'),
+    notice: document.querySelector('.panel--inspector .inspector__notice--warning')?.textContent?.trim() ?? '',
+    modelSelection: !!document.querySelector('.panel--inspector .inspector__model-selection-text'),
+    favoritePressed: document.querySelector('.panel--inspector .inspector__favorite-button')?.getAttribute('aria-pressed'),
+  }));
+  assertSlavaCheck(modelAssertions.modelParam, 'Inspector model param exposes stable markers');
+  assertSlavaCheck(modelAssertions.notice.includes('OPENROUTER_API_KEY'), 'Inspector missing API key notice names the required key');
+  assertSlavaCheck(modelAssertions.modelSelection, 'Inspector selected model summary renders');
+  assertSlavaCheck(modelAssertions.favoritePressed === 'true', 'Inspector favorite button exposes pressed state');
+
+  await evaluate(cdp, () => {
+    window.__nebulaUIStore.setState((state) => ({
+      selectedNodeId: 'n4',
+      panels: {
+        ...state.panels,
+        inspector: { ...state.panels.inspector, visible: true, position: { x: -320, y: 16 } },
+      },
+    }));
+  });
+  await waitForRuntime(cdp, 'document.querySelector(".panel--inspector [data-inspector-param=\\"content\\"][data-inspector-kind=\\"textarea\\"] textarea") && document.querySelector(".panel--inspector [data-inspector-param=\\"color\\"][data-inspector-kind=\\"enum\\"] select")');
+  await sleep(200);
+  await screenshot(cdp, '07-inspector-sticky-note.png');
+
+  const stickyAssertions = await evaluate(cdp, () => ({
+    contentTextarea: !!document.querySelector('.panel--inspector [data-inspector-param="content"][data-inspector-kind="textarea"] textarea.inspector__field'),
+    colorSelect: !!document.querySelector('.panel--inspector [data-inspector-param="color"][data-inspector-kind="enum"] select.inspector__field'),
+  }));
+  assertSlavaCheck(stickyAssertions.contentTextarea, 'Inspector sticky note textarea renders through shared contract');
+  assertSlavaCheck(stickyAssertions.colorSelect, 'Inspector sticky note enum renders through shared contract');
+}
+
 async function runSlavaExpandedVisualCoverage(cdp) {
   debugStep('visual coverage: popovers and node states');
   await cdp.send('Emulation.setDeviceMetricsOverride', {
@@ -373,7 +525,7 @@ async function runSlavaExpandedVisualCoverage(cdp) {
   });
   await waitForRuntime(cdp, 'document.querySelector(".context-menu") && document.querySelector(".connection-popup")');
   await sleep(200);
-  await screenshot(cdp, '04-slava-popovers-and-states.png');
+  await screenshot(cdp, '08-slava-popovers-and-states.png');
 
   const stateAssertions = await evaluate(cdp, () => {
     const progress = document.querySelector('.model-node--executing .model-node__progress-bar');
@@ -417,7 +569,7 @@ async function runSlavaExpandedVisualCoverage(cdp) {
   await clickSelector(cdp, '[data-id="n7"] .mesh-preview');
   await waitForRuntime(cdp, 'document.querySelector(".mesh-modal-overlay") && document.querySelector(".mesh-modal__download")');
   await sleep(200);
-  await screenshot(cdp, '05-slava-mesh-modal.png');
+  await screenshot(cdp, '09-slava-mesh-modal.png');
 
   const meshAssertions = await evaluate(cdp, () => ({
     modal: !!document.querySelector('.mesh-modal'),

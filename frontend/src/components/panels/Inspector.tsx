@@ -1,14 +1,16 @@
 import { useRef, useEffect, useState, useMemo } from 'react';
-import { X } from 'lucide-react';
+import { Copy, Info, Play, RefreshCw, Star, Trash2, Upload, X } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
 import { NODE_DEFINITIONS } from '../../constants/nodeDefinitions';
 import { CATEGORY_COLORS } from '../../constants/ports';
 import { PORT_COLORS } from '../../lib/portCompatibility';
-import type { NodeData, DynamicNodeData, ParamDefinition } from '../../types';
+import type { NodeData, DynamicNodeData, DynamicParamDefinition, ParamDefinition } from '../../types';
 import { fetchOpenRouterModels, fetchNousModels, getSettings, updateSettings, type OpenRouterModel } from '../../lib/api';
 import { useDelayedUnmount } from '../../hooks/useDelayedUnmount';
 import '../../styles/panels.css';
+
+type InspectorParamDefinition = ParamDefinition | DynamicParamDefinition;
 
 export function Inspector() {
   const visible = useUIStore((s) => s.panels.inspector.visible);
@@ -44,7 +46,7 @@ export function Inspector() {
   useEffect(() => {
     getSettings().then((settings: { favorites?: Record<string, string[]> }) => {
       setFavorites(settings.favorites ?? {});
-    }).catch(() => {});
+    }).catch(() => setFavorites({}));
   }, []);
 
   const selectedNode = nodes.find((n) => n.id === selectedNodeId);
@@ -58,7 +60,7 @@ export function Inspector() {
   const definition = nodeData ? NODE_DEFINITIONS[nodeData.definitionId] : undefined;
 
   // Resolve params: dual-param nodes use sharedParams + (falParams or directParams)
-  const { settingsCache } = useUIStore.getState();
+  const settingsCache = useUIStore((s) => s.settingsCache);
   const resolvedParams: ParamDefinition[] = useMemo(() => {
     if (!definition) return [];
     if (definition.sharedParams) {
@@ -104,17 +106,26 @@ export function Inspector() {
       setModelLoadError(null);
       return;
     }
+    let cancelled = false;
     setModelsLoading(true);
     setModelLoadError(null);
     const loader = universalProvider === 'openrouter' ? fetchOpenRouterModels : fetchNousModels;
     loader()
-      .then((data) => setOpenRouterModels(data.models))
+      .then((data) => {
+        if (!cancelled) setOpenRouterModels(data.models);
+      })
       .catch((err: unknown) => {
+        if (cancelled) return;
         const msg = err instanceof Error ? err.message : String(err);
         setModelLoadError(msg);
         setOpenRouterModels([]);
       })
-      .finally(() => setModelsLoading(false));
+      .finally(() => {
+        if (!cancelled) setModelsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [universalProvider]);
 
   // Filter models by search query — cap at 50 to avoid huge dropdowns, favorites sorted to top
@@ -168,6 +179,274 @@ export function Inspector() {
     });
   }
 
+  const requiredKeys = definition
+    ? Array.isArray(definition.envKeyName)
+      ? definition.envKeyName
+      : [definition.envKeyName]
+    : [];
+  const missingApiKeys = activeNodeData.keyStatus === 'missing'
+    ? requiredKeys.filter(Boolean)
+    : [];
+
+  function getVisibleOptions(param: InspectorParamDefinition) {
+    return (param.options ?? []).filter((opt) => {
+      if (!('visibleWhen' in opt) || !opt.visibleWhen) return true;
+      return Object.entries(opt.visibleWhen).every(([key, allowedValues]) => {
+        const currentValue = activeNodeData.params[key];
+        if (currentValue === undefined || currentValue === null) return true;
+        return allowedValues.includes(currentValue as string | number | boolean);
+      });
+    });
+  }
+
+  function renderUniversalModelControl() {
+    if (!universalProvider) return null;
+
+    const selectedModel = String(activeNodeData.params.model ?? '');
+    const favoriteIds = favorites[universalProvider] ?? [];
+    const isFavorite = selectedModel !== '' && favoriteIds.includes(selectedModel);
+
+    return (
+      <div className="inspector__control-stack">
+        <input
+          className="inspector__field"
+          type="text"
+          placeholder={
+            modelsLoading
+              ? 'Loading models...'
+              : modelLoadError
+                ? 'Could not load models'
+                : 'Search models...'
+          }
+          value={modelSearch}
+          onChange={(e) => setModelSearch(e.target.value)}
+        />
+        <select
+          className="inspector__field"
+          value={selectedModel}
+          onChange={(e) => {
+            const selected = openRouterModels.find((m) => m.id === e.target.value);
+            if (selected) {
+              configureOpenRouterModel(activeNode.id, selected.id, selected);
+            }
+          }}
+        >
+          <option value="">Select a model</option>
+          {filteredModels.map((model) => (
+            <option key={model.id} value={model.id}>
+              {favoriteIds.includes(model.id) ? '* ' : ''}{model.name} ({model.id})
+            </option>
+          ))}
+        </select>
+        {modelLoadError && universalProvider === 'nous' && (
+          <div className="inspector__model-error">
+            {modelLoadError}
+          </div>
+        )}
+        {selectedModel !== '' && (
+          <div className="inspector__model-selection">
+            <span className="inspector__model-selection-text">Selected: {selectedModel}</span>
+            <button
+              type="button"
+              className={
+                isFavorite
+                  ? 'inspector__favorite-button inspector__favorite-button--active'
+                  : 'inspector__favorite-button'
+              }
+              title={isFavorite ? 'Remove favorite' : 'Add favorite'}
+              aria-label={isFavorite ? 'Remove model from favorites' : 'Add model to favorites'}
+              aria-pressed={isFavorite}
+              onClick={() => {
+                const updated = isFavorite
+                  ? favoriteIds.filter((modelId: string) => modelId !== selectedModel)
+                  : [...favoriteIds, selectedModel];
+                const newFavorites = { ...favorites, [universalProvider]: updated };
+                setFavorites(newFavorites);
+                updateSettings({ favorites: newFavorites }).catch(() => undefined);
+              }}
+            >
+              <Star
+                className="inspector__favorite-icon"
+                size={14}
+                strokeWidth={1.75}
+                fill={isFavorite ? 'currentColor' : 'none'}
+                aria-hidden="true"
+                focusable="false"
+              />
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  function renderParamControl(param: InspectorParamDefinition) {
+    const value = activeNodeData.params[param.key] ?? param.default ?? '';
+
+    if (universalProvider && param.key === 'model') {
+      return renderUniversalModelControl();
+    }
+
+    if (param.type === 'enum' && param.options) {
+      return (
+        <select
+          className="inspector__field"
+          value={String(value)}
+          onChange={(e) => onParamChange(param.key, e.target.value)}
+        >
+          {getVisibleOptions(param).map((opt) => (
+            <option key={String(opt.value)} value={String(opt.value)}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
+      );
+    }
+
+    if (param.type === 'textarea') {
+      return (
+        <textarea
+          className="inspector__field"
+          rows={3}
+          value={String(value)}
+          onChange={(e) => onParamChange(param.key, e.target.value)}
+          placeholder={param.placeholder}
+        />
+      );
+    }
+
+    if (param.type === 'integer' || param.type === 'float') {
+      return (
+        <input
+          className="inspector__field"
+          type="number"
+          value={String(value)}
+          onChange={(e) => onParamChange(param.key, Number(e.target.value))}
+          onBlur={(e) => {
+            const raw = Number(e.target.value);
+            if (Number.isNaN(raw)) return;
+            let clamped = raw;
+            if (typeof param.min === 'number' && clamped < param.min) clamped = param.min;
+            if (typeof param.max === 'number' && clamped > param.max) clamped = param.max;
+            if (clamped !== raw) onParamChange(param.key, clamped);
+          }}
+          min={param.min}
+          max={param.max}
+          step={param.step ?? (param.type === 'float' ? 0.1 : 1)}
+        />
+      );
+    }
+
+    if (param.type === 'file') {
+      return (
+        <div className="inspector__control-stack">
+          <label className="inspector__file-button">
+            <Upload
+              className="inspector__action-icon"
+              size={14}
+              strokeWidth={1.75}
+              aria-hidden="true"
+              focusable="false"
+            />
+            <span>Choose File</span>
+            <input
+              type="file"
+              accept="image/*"
+              className="inspector__file-input"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                const formData = new FormData();
+                formData.append('file', file);
+                fetch('http://localhost:8000/api/uploads', { method: 'POST', body: formData })
+                  .then((r) => r.json())
+                  .then((data: { filePath: string; url: string }) => {
+                    updateNodeData(activeNode.id, {
+                      params: { ...activeNodeData.params, [param.key]: data.filePath, _previewUrl: data.url },
+                    });
+                  })
+                  .catch((err) => console.error('Upload failed:', err));
+              }}
+            />
+          </label>
+          {typeof activeNodeData.params._previewUrl === 'string' && (
+            <img
+              src={String(activeNodeData.params._previewUrl)}
+              alt="Preview"
+              className="inspector__file-preview"
+            />
+          )}
+        </div>
+      );
+    }
+
+    if (param.type === 'boolean') {
+      return (
+        <label className="inspector__checkbox-row">
+          <input
+            type="checkbox"
+            checked={Boolean(activeNodeData.params[param.key] ?? param.default)}
+            onChange={(e) => onParamChange(param.key, e.target.checked)}
+          />
+          <span className="inspector__checkbox-copy">{param.label}</span>
+        </label>
+      );
+    }
+
+    return (
+      <input
+        className="inspector__field"
+        type="text"
+        value={String(value)}
+        onChange={(e) => onParamChange(param.key, e.target.value)}
+        placeholder={param.placeholder}
+      />
+    );
+  }
+
+  function renderParamSection(param: InspectorParamDefinition, source: 'definition' | 'dynamic') {
+    const showLabel = param.type !== 'boolean';
+    return (
+      <div
+        key={`${source}-${param.key}`}
+        className="inspector__section inspector__section--param"
+        data-inspector-param={param.key}
+        data-inspector-kind={param.type}
+        data-inspector-source={source}
+      >
+        {showLabel && <div className="inspector__label">{param.label}</div>}
+        {renderParamControl(param)}
+        {activeNodeData.definitionId === 'replicate-universal' && param.key === 'model_id' && (
+          <button
+            type="button"
+            className="inspector__action-button inspector__action-button--full inspector__action-button--stacked"
+            disabled={schemaLoading || !activeNodeData.params.model_id}
+            onClick={async () => {
+              const modelId = String(activeNodeData.params.model_id ?? '');
+              if (!modelId.includes('/')) return;
+              const [owner, name] = modelId.split('/', 2);
+              setSchemaLoading(true);
+              try {
+                await fetchReplicateSchemaAndConfigure(activeNode.id, owner, name);
+              } finally {
+                setSchemaLoading(false);
+              }
+            }}
+          >
+            <RefreshCw
+              className="inspector__action-icon"
+              size={14}
+              strokeWidth={1.75}
+              aria-hidden="true"
+              focusable="false"
+            />
+            <span>{schemaLoading ? 'Fetching...' : (activeNodeData.params._schema_fetched ? 'Refresh Schema' : 'Fetch Schema')}</span>
+          </button>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div
       className={`panel panel--inspector${exiting ? ' panel--exiting' : ''}`}
@@ -213,14 +492,39 @@ export function Inspector() {
           <span className="inspector__node-name">{nodeData.label}</span>
           {definition && (
             <button
+              type="button"
               className="inspector__info-button"
               onClick={() => setShowInfo(!showInfo)}
               title="Node info — inputs, outputs, and settings"
+              aria-label={showInfo ? 'Hide node info' : 'Show node info'}
+              aria-expanded={showInfo}
             >
-              {showInfo ? '✕' : 'i'}
+              {showInfo ? (
+                <X
+                  className="inspector__info-icon"
+                  size={13}
+                  strokeWidth={1.75}
+                  aria-hidden="true"
+                  focusable="false"
+                />
+              ) : (
+                <Info
+                  className="inspector__info-icon"
+                  size={13}
+                  strokeWidth={1.75}
+                  aria-hidden="true"
+                  focusable="false"
+                />
+              )}
             </button>
           )}
         </div>
+
+        {missingApiKeys.length > 0 && (
+          <div className="inspector__notice inspector__notice--warning" role="status">
+            Missing API key: {missingApiKeys.join(', ')}
+          </div>
+        )}
 
         {showInfo && definition && (
           <div className="inspector__info-panel">
@@ -273,251 +577,14 @@ export function Inspector() {
           </div>
         )}
 
-        {visibleParams.map((param) => (
-          <div key={param.key} className="inspector__section">
-            <div className="inspector__label">{param.label}</div>
-            {/* Universal models (OpenRouter, Nous Portal): searchable dropdown
-                with favorites scoped per provider. configureOpenRouterModel
-                is provider-agnostic — it shapes ports from modalities. */}
-            {universalProvider && param.key === 'model' ? (
-              <div>
-                <input
-                  className="inspector__field"
-                  type="text"
-                  placeholder={
-                    modelsLoading
-                      ? 'Loading models…'
-                      : modelLoadError
-                        ? 'Could not load models'
-                        : 'Search models…'
-                  }
-                  value={modelSearch}
-                  onChange={(e) => setModelSearch(e.target.value)}
-                />
-                <select
-                  className="inspector__field inspector__field--stacked"
-                  value={String(nodeData.params.model ?? '')}
-                  onChange={(e) => {
-                    const selected = openRouterModels.find((m) => m.id === e.target.value);
-                    if (selected) {
-                      configureOpenRouterModel(renderNode.id, selected.id, selected);
-                    }
-                  }}
-                >
-                  <option value="">-- Select a model --</option>
-                  {filteredModels.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {(favorites[universalProvider] ?? []).includes(m.id) ? '★ ' : ''}{m.name} ({m.id})
-                    </option>
-                  ))}
-                </select>
-                {modelLoadError && universalProvider === 'nous' && (
-                  <div className="inspector__model-error">
-                    {modelLoadError}
-                  </div>
-                )}
-                {Boolean(nodeData.params.model) && (
-                  <div className="inspector__model-selection">
-                    <span>Selected: {String(nodeData.params.model)}</span>
-                    <button
-                      className={
-                        (favorites[universalProvider] ?? []).includes(String(nodeData.params.model))
-                          ? 'inspector__favorite-button inspector__favorite-button--active'
-                          : 'inspector__favorite-button'
-                      }
-                      title="Toggle favorite"
-                      onClick={() => {
-                        const modelId = String(nodeData.params.model);
-                        const current = favorites[universalProvider] ?? [];
-                        const updated = current.includes(modelId)
-                          ? current.filter((m: string) => m !== modelId)
-                          : [...current, modelId];
-                        const newFavorites = { ...favorites, [universalProvider]: updated };
-                        setFavorites(newFavorites);
-                        updateSettings({ favorites: newFavorites }).catch(() => {});
-                      }}
-                    >
-                      {(favorites[universalProvider] ?? []).includes(String(nodeData.params.model)) ? '★' : '☆'}
-                    </button>
-                  </div>
-                )}
-              </div>
-            ) : param.type === 'enum' && param.options ? (
-              <select
-                className="inspector__field"
-                value={String(nodeData.params[param.key] ?? param.default ?? '')}
-                onChange={(e) => onParamChange(param.key, e.target.value)}
-              >
-                {param.options
-                  .filter((opt) => {
-                    if (!opt.visibleWhen) return true;
-                    return Object.entries(opt.visibleWhen).every(([k, allowed]) => {
-                      const val = nodeData.params[k];
-                      if (val === undefined || val === null) return true;
-                      return allowed.includes(val as string | number | boolean);
-                    });
-                  })
-                  .map((opt) => (
-                  <option key={String(opt.value)} value={String(opt.value)}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-            ) : param.type === 'textarea' ? (
-              <textarea
-                className="inspector__field"
-                rows={3}
-                value={String(nodeData.params[param.key] ?? param.default ?? '')}
-                onChange={(e) => onParamChange(param.key, e.target.value)}
-                placeholder={param.placeholder}
-              />
-            ) : param.type === 'integer' || param.type === 'float' ? (
-              <input
-                className="inspector__field"
-                type="number"
-                value={String(nodeData.params[param.key] ?? param.default ?? '')}
-                onChange={(e) => onParamChange(param.key, Number(e.target.value))}
-                onBlur={(e) => {
-                  const raw = Number(e.target.value);
-                  if (Number.isNaN(raw)) return;
-                  let clamped = raw;
-                  if (typeof param.min === 'number' && clamped < param.min) clamped = param.min;
-                  if (typeof param.max === 'number' && clamped > param.max) clamped = param.max;
-                  if (clamped !== raw) onParamChange(param.key, clamped);
-                }}
-                min={param.min}
-                max={param.max}
-                step={param.step ?? (param.type === 'float' ? 0.1 : 1)}
-              />
-            ) : param.type === 'file' ? (
-              <div>
-                <label className="inspector__file-button">
-                  Choose File
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="inspector__file-input"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (!file) return;
-                      const formData = new FormData();
-                      formData.append('file', file);
-                      fetch('http://localhost:8000/api/uploads', { method: 'POST', body: formData })
-                        .then((r) => r.json())
-                        .then((data: { filePath: string; url: string }) => {
-                          updateNodeData(renderNode.id, {
-                            params: { ...nodeData.params, [param.key]: data.filePath, _previewUrl: data.url },
-                          });
-                        })
-                        .catch((err) => console.error('Upload failed:', err));
-                    }}
-                  />
-                </label>
-                {typeof nodeData.params._previewUrl === 'string' && (
-                  <img
-                    src={String(nodeData.params._previewUrl)}
-                    alt="Preview"
-                    className="inspector__file-preview"
-                  />
-                )}
-              </div>
-            ) : param.type === 'boolean' ? (
-              <label className="inspector__checkbox-row">
-                <input
-                  type="checkbox"
-                  checked={Boolean(nodeData.params[param.key] ?? param.default)}
-                  onChange={(e) => onParamChange(param.key, e.target.checked)}
-                />
-                {param.label}
-              </label>
-            ) : (
-              <input
-                className="inspector__field"
-                type="text"
-                value={String(nodeData.params[param.key] ?? param.default ?? '')}
-                onChange={(e) => onParamChange(param.key, e.target.value)}
-                placeholder={param.placeholder}
-              />
-            )}
-            {/* Replicate: show Fetch Schema button below the model_id field */}
-            {nodeData.definitionId === 'replicate-universal' && param.key === 'model_id' && (
-              <button
-                className="inspector__action-button inspector__action-button--full inspector__action-button--stacked"
-                disabled={schemaLoading || !nodeData.params.model_id}
-                onClick={async () => {
-                  const modelId = String(nodeData.params.model_id ?? '');
-                  if (!modelId.includes('/')) return;
-                  const [owner, name] = modelId.split('/', 2);
-                  setSchemaLoading(true);
-                  try {
-                    await fetchReplicateSchemaAndConfigure(renderNode.id, owner, name);
-                  } finally {
-                    setSchemaLoading(false);
-                  }
-                }}
-              >
-                {schemaLoading ? 'Fetching...' : (nodeData.params._schema_fetched ? 'Refresh Schema' : 'Fetch Schema')}
-              </button>
-            )}
-          </div>
-        ))}
+        {visibleParams.map((param) => renderParamSection(param, 'definition'))}
 
         {/* Dynamic params for dynamic nodes */}
         {(() => {
           const dynData = nodeData as unknown as DynamicNodeData;
           const hasDynamicParams = dynData?.isDynamic && dynData.dynamicParams?.length > 0;
           if (!hasDynamicParams) return null;
-          return dynData.dynamicParams.map((param) => (
-            <div key={param.key} className="inspector__section">
-              <div className="inspector__label">{param.label}</div>
-              {param.type === 'enum' && param.options ? (
-                <select
-                  className="inspector__field"
-                  value={String(nodeData.params[param.key] ?? param.default ?? '')}
-                  onChange={(e) => onParamChange(param.key, e.target.value)}
-                >
-                  {param.options.map((opt) => (
-                    <option key={String(opt.value)} value={String(opt.value)}>{opt.label}</option>
-                  ))}
-                </select>
-              ) : param.type === 'integer' || param.type === 'float' ? (
-                <input
-                  className="inspector__field"
-                  type="number"
-                  value={String(nodeData.params[param.key] ?? param.default ?? '')}
-                  onChange={(e) => onParamChange(param.key, Number(e.target.value))}
-                  onBlur={(e) => {
-                    const raw = Number(e.target.value);
-                    if (Number.isNaN(raw)) return;
-                    let clamped = raw;
-                    if (typeof param.min === 'number' && clamped < param.min) clamped = param.min;
-                    if (typeof param.max === 'number' && clamped > param.max) clamped = param.max;
-                    if (clamped !== raw) onParamChange(param.key, clamped);
-                  }}
-                  min={param.min}
-                  max={param.max}
-                  step={param.step ?? (param.type === 'float' ? 0.1 : 1)}
-                />
-              ) : param.type === 'boolean' ? (
-                <label className="inspector__checkbox-row">
-                  <input
-                    type="checkbox"
-                    checked={Boolean(nodeData.params[param.key] ?? param.default)}
-                    onChange={(e) => onParamChange(param.key, e.target.checked)}
-                  />
-                  {param.label}
-                </label>
-              ) : (
-                <input
-                  className="inspector__field"
-                  type="text"
-                  value={String(nodeData.params[param.key] ?? param.default ?? '')}
-                  onChange={(e) => onParamChange(param.key, e.target.value)}
-                  placeholder={param.placeholder}
-                />
-              )}
-            </div>
-          ));
+          return dynData.dynamicParams.map((param) => renderParamSection(param, 'dynamic'));
         })()}
 
         <div className="inspector__section inspector__section--separated">
@@ -528,25 +595,49 @@ export function Inspector() {
         {/* Actions */}
         <div className="inspector__section inspector__actions">
           <button
+            type="button"
             className="inspector__action-button"
             onClick={() => executeNode(renderNode.id)}
             title="Run this node and its dependencies"
           >
-            ▶ Run
+            <Play
+              className="inspector__action-icon"
+              size={14}
+              strokeWidth={1.75}
+              aria-hidden="true"
+              focusable="false"
+            />
+            <span>Run</span>
           </button>
           <button
+            type="button"
             className="inspector__action-button"
             onClick={() => duplicateNode(renderNode.id)}
             title="Duplicate this node"
           >
-            Duplicate
+            <Copy
+              className="inspector__action-icon"
+              size={14}
+              strokeWidth={1.75}
+              aria-hidden="true"
+              focusable="false"
+            />
+            <span>Duplicate</span>
           </button>
           <button
+            type="button"
             className="inspector__action-button inspector__action-button--danger"
             onClick={() => deleteNode(renderNode.id)}
             title="Delete this node"
           >
-            Delete
+            <Trash2
+              className="inspector__action-icon"
+              size={14}
+              strokeWidth={1.75}
+              aria-hidden="true"
+              focusable="false"
+            />
+            <span>Delete</span>
           </button>
         </div>
       </div>

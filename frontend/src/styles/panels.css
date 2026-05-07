@@ -178,6 +178,10 @@ body:not(.app-slava-restraint) .panel__close:hover { color: #ccc; }
 
 .inspector__section { margin-bottom: 12px; }
 
+.inspector__section--param {
+  min-width: 0;
+}
+
 .inspector__section--separated {
   margin-top: 16px;
   padding-top: 8px;
@@ -209,6 +213,24 @@ body:not(.app-slava-restraint) .panel__close:hover { color: #ccc; }
   margin-top: 4px;
 }
 
+.inspector__control-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.inspector__notice {
+  margin-bottom: 12px;
+  border: 1px solid #3a2f1d;
+  border-radius: 4px;
+  background: rgba(197, 139, 58, 0.10);
+  color: #c58b3a;
+  font-size: 11px;
+  line-height: 1.4;
+  padding: 7px 8px;
+}
+
 .inspector__model-error {
   margin-top: 4px;
   color: #c58b3a;
@@ -225,13 +247,31 @@ body:not(.app-slava-restraint) .panel__close:hover { color: #ccc; }
   font-size: 10px;
 }
 
+.inspector__model-selection-text {
+  min-width: 0;
+  flex: 1;
+  overflow-wrap: anywhere;
+}
+
 .inspector__favorite-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
   padding: 0;
   border: none;
   background: none;
   color: #555;
   cursor: pointer;
-  font-size: 14px;
+}
+
+.inspector__favorite-icon,
+.inspector__info-icon,
+.inspector__action-icon {
+  display: block;
+  flex: 0 0 auto;
 }
 
 .inspector__favorite-button--active {
@@ -239,7 +279,10 @@ body:not(.app-slava-restraint) .panel__close:hover { color: #ccc; }
 }
 
 .inspector__file-button {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   padding: 4px 10px;
   border: 1px solid #555;
   border-radius: 4px;
@@ -265,6 +308,11 @@ body:not(.app-slava-restraint) .panel__close:hover { color: #ccc; }
   align-items: center;
   gap: 6px;
   color: #aaa;
+}
+
+.inspector__checkbox-copy {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .inspector__state-value {
@@ -735,6 +783,10 @@ body:not(.app-slava-restraint) .toolbar {
 /* ---------- Inspector action buttons ---------- */
 
 .inspector__action-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
   flex: 1;
   background: #252525;
   border: 1px solid #333;
@@ -745,6 +797,11 @@ body:not(.app-slava-restraint) .toolbar {
   cursor: pointer;
   font-family: inherit;
   transition: background 0.1s, color 0.1s;
+}
+
+.inspector__action-button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .inspector__action-button:hover {

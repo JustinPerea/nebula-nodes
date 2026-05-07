@@ -1855,6 +1855,21 @@ body.app-slava-restraint select.inspector__field {
   appearance: none;
 }
 
+body.app-slava-restraint .inspector__control-stack {
+  gap: var(--sr-space-1);
+}
+
+body.app-slava-restraint .inspector__notice {
+  border: 1px solid var(--sr-accent-border);
+  border-radius: var(--sr-radius-control);
+  background: var(--sr-accent-soft);
+  color: var(--sr-ink-light);
+  font-family: var(--sr-ui);
+  font-size: var(--sr-type-label);
+  line-height: var(--sr-line-meta);
+  padding: var(--sr-space-2) var(--sr-space-3);
+}
+
 body.app-slava-restraint .inspector__section--separated,
 body.app-slava-restraint .inspector__actions {
   border-top-color: var(--sr-edge);
@@ -1869,6 +1884,14 @@ body.app-slava-restraint .inspector__model-selection,
 body.app-slava-restraint .inspector__state-value {
   color: var(--sr-ink-meta);
   font-family: var(--sr-mono);
+}
+
+body.app-slava-restraint .inspector__model-selection {
+  gap: var(--sr-space-2);
+}
+
+body.app-slava-restraint .inspector__model-selection-text {
+  line-height: var(--sr-line-meta);
 }
 
 body.app-slava-restraint .inspector__favorite-button {
@@ -1886,9 +1909,18 @@ body.app-slava-restraint .inspector__favorite-button:active {
   transform: scale(0.94);
 }
 
+body.app-slava-restraint .inspector__favorite-icon,
+body.app-slava-restraint .inspector__info-icon,
+body.app-slava-restraint .inspector__action-icon {
+  width: var(--sr-icon-size-sm);
+  height: var(--sr-icon-size-sm);
+  stroke-width: var(--sr-icon-stroke);
+}
+
 body.app-slava-restraint .inspector__checkbox-row {
   color: var(--sr-ink-light);
   font-family: var(--sr-ui);
+  font-size: var(--sr-type-body);
 }
 
 body.app-slava-restraint .inspector__checkbox-row input,
@@ -1960,6 +1992,11 @@ body.app-slava-restraint .inspector__action-button {
     background-color var(--sr-motion-fast),
     border-color var(--sr-motion-fast),
     color var(--sr-motion-fast);
+}
+
+body.app-slava-restraint .inspector__action-button:disabled {
+  opacity: var(--sr-disabled-opacity);
+  cursor: not-allowed;
 }
 
 body.app-slava-restraint .inspector__file-button:hover,

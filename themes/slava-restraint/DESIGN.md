@@ -441,12 +441,13 @@ These should not stay inline:
 - Slava panel/chrome/node/media z-index values are named layer tokens.
 - Default base visuals are now split away from Slava for the highest-impact shared shells: panels, toolbar, node cards, node state borders, node headers, ID chips, and preview wells.
 - The chat composer has a proper component contract.
+- Inspector controls now share one data-driven render contract for static and dynamic params, with stable `data-inspector-*` markers for visual checks.
 - Handles have clear rest/hover/connecting rules and target-size protection.
 - Settings now has clear disclosure and visibility behavior.
 - Mesh modal and Inspector no longer rely as heavily on inline visual styles.
 - Component inline styles have been audited; remaining cases are dynamic geometry, data colors, progress width, edge styling, or effect coordinates.
 - `npm run check:inline-styles` guards against new static inline visual styles in `frontend/src/components`.
-- `npm run check:slava-screenshots` captures desktop/settings/image-surface/popover-loading-reroute/mesh-modal/mobile/empty-canvas Slava screenshots into `output/slava-screenshot-check`.
+- `npm run check:slava-screenshots` captures desktop/settings/image-surface/Inspector text-file-model-sticky states/popover-loading-reroute/mesh-modal/mobile/empty-canvas Slava screenshots into `output/slava-screenshot-check`.
 
 ### Weak
 
@@ -459,7 +460,7 @@ These should not stay inline:
 1. `frontend/src/styles/slava-restraint.css` node/media section: now tokenized, but still high-risk because it owns React Flow geometry and hover/drag perception.
 2. `frontend/src/styles/nodes.css`: old mesh/modal defaults still carry shared structure plus hard-coded visual values that Slava overrides.
 3. `frontend/src/styles/panels.css`: base panel/chat styles still carry old values. Slava overrides most visible surfaces and popovers, but not all structural assumptions.
-4. Inspector dynamic controls: many data-driven branches make consistency easy to regress.
+4. Inspector dynamic controls: now centralized and screenshot-covered, but still high-risk because provider schemas are data-driven.
 5. React Flow handles: any transform change can reintroduce perceived drift.
 
 ---
