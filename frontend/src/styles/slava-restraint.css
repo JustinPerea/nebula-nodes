@@ -1864,6 +1864,78 @@ body.app-slava-restraint .inspector__label {
   color: var(--sr-ink-light);
 }
 
+body.app-slava-restraint .panel--inspector-empty .panel__body {
+  display: grid;
+  min-height: 180px;
+}
+
+body.app-slava-restraint .inspector__empty {
+  position: relative;
+  display: grid;
+  min-height: 148px;
+  grid-template-rows: 1fr auto auto 1fr;
+  align-items: center;
+  padding: var(--sr-space-4) var(--sr-space-4) var(--sr-space-4) 48px;
+  overflow: hidden;
+  color: var(--sr-ink-faint);
+  font-family: var(--sr-mono);
+  font-size: var(--sr-type-meta);
+  line-height: var(--sr-line-meta);
+}
+
+body.app-slava-restraint .inspector__empty::before {
+  content: '';
+  position: absolute;
+  top: 28px;
+  bottom: 24px;
+  left: 21px;
+  width: 1px;
+  background: linear-gradient(to bottom, transparent, var(--sr-edge-strong) 18%, var(--sr-edge-strong) 80%, transparent);
+}
+
+body.app-slava-restraint .inspector__empty::after {
+  content: '';
+  position: absolute;
+  top: 40px;
+  left: 17px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--sr-ink-faint);
+  box-shadow:
+    0 28px rgba(255, 255, 255, 0.14),
+    0 56px rgba(255, 255, 255, 0.08);
+}
+
+body.app-slava-restraint .inspector__empty-grid {
+  position: absolute;
+  inset: 14px 0 10px 36px;
+  pointer-events: none;
+  background-image: radial-gradient(circle, rgba(201, 202, 200, 0.20) 0 1px, transparent 1.25px);
+  background-size: 8px 8px;
+  opacity: 0.16;
+  -webkit-mask-image: linear-gradient(to right, #000, transparent 78%);
+  mask-image: linear-gradient(to right, #000, transparent 78%);
+}
+
+body.app-slava-restraint .inspector__empty-title {
+  position: relative;
+  grid-row: 2;
+  color: var(--sr-ink-light);
+  font-family: var(--sr-ui);
+  font-size: var(--sr-type-body);
+  font-weight: 500;
+}
+
+body.app-slava-restraint .inspector__empty-status {
+  position: relative;
+  grid-row: 3;
+  width: max-content;
+  margin-top: var(--sr-space-1);
+  color: var(--sr-ink-faint);
+  text-transform: lowercase;
+}
+
 body.app-slava-restraint .inspector__field {
   min-height: var(--sr-control-h-md);
   background: var(--sr-surface-control);

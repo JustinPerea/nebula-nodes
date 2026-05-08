@@ -16,6 +16,7 @@ export function Inspector() {
   const visible = useUIStore((s) => s.panels.inspector.visible);
   const position = useUIStore((s) => s.panels.inspector.position);
   const selectedNodeId = useUIStore((s) => s.selectedNodeId);
+  const skin = useUIStore((s) => s.skin);
   const togglePanel = useUIStore((s) => s.togglePanel);
   const setPanelPosition = useUIStore((s) => s.setPanelPosition);
   const nodes = useGraphStore((s) => s.nodes);
@@ -165,11 +166,59 @@ export function Inspector() {
     };
   }, [setPanelPosition]);
 
-  if (!shouldRender || !renderNode || !nodeData) return null;
+  const resolvedX = position.x < 0 ? window.innerWidth + position.x : position.x;
+  const isSlavaSkin = skin === 'slava-restraint';
+
+  function handleHeaderMouseDown(e: React.MouseEvent<HTMLDivElement>) {
+    dragRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      panelX: resolvedX,
+      panelY: position.y,
+    };
+  }
+
+  if (!shouldRender) return null;
+
+  if (!renderNode || !nodeData) {
+    if (!isSlavaSkin) return null;
+    return (
+      <div
+        className={`panel panel--inspector panel--inspector-empty${exiting ? ' panel--exiting' : ''}`}
+        style={{ left: resolvedX, top: position.y }}
+      >
+        <div className="panel__header" onMouseDown={handleHeaderMouseDown}>
+          <span className="panel__title">Inspector</span>
+          <button
+            type="button"
+            className="panel__header-action panel__close"
+            onClick={() => togglePanel('inspector')}
+            aria-label="Close inspector panel"
+            title="Close"
+          >
+            <X
+              className="panel__close-icon"
+              size={16}
+              strokeWidth={1.75}
+              aria-hidden="true"
+              focusable="false"
+            />
+          </button>
+        </div>
+
+        <div className="panel__body panel__body--empty" key="inspector-empty">
+          <div className="inspector__empty" data-inspector-empty="true">
+            <span className="inspector__empty-grid" aria-hidden="true" />
+            <span className="inspector__empty-title">No node selected</span>
+            <span className="inspector__empty-status">standby</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // For dynamic nodes, definition may be a shell — that's fine
   if (!definition && !(nodeData as unknown as DynamicNodeData)?.isDynamic) return null;
-
-  const resolvedX = position.x < 0 ? window.innerWidth + position.x : position.x;
   const activeNode = renderNode;
   const activeNodeData = nodeData;
 
@@ -454,14 +503,7 @@ export function Inspector() {
     >
       <div
         className="panel__header"
-        onMouseDown={(e) => {
-          dragRef.current = {
-            startX: e.clientX,
-            startY: e.clientY,
-            panelX: resolvedX,
-            panelY: position.y,
-          };
-        }}
+        onMouseDown={handleHeaderMouseDown}
       >
         <span className="panel__title">Inspector</span>
         <button

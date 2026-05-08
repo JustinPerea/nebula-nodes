@@ -490,6 +490,30 @@ async function runSlavaInspectorCoverage(cdp) {
 
   await evaluate(cdp, () => {
     window.__nebulaUIStore.setState((state) => ({
+      selectedNodeId: null,
+      panels: {
+        ...state.panels,
+        library: { ...state.panels.library, visible: false },
+        settings: { ...state.panels.settings, visible: false },
+        chat: { ...state.panels.chat, visible: false },
+        inspector: { ...state.panels.inspector, visible: true, position: { x: -320, y: 16 } },
+      },
+    }));
+  });
+  await waitForRuntime(cdp, 'document.querySelector(".panel--inspector [data-inspector-empty=\\"true\\"]")');
+  const emptyAssertions = await evaluate(cdp, () => ({
+    emptyState: !!document.querySelector('.panel--inspector [data-inspector-empty="true"]'),
+    emptyTitle: document.querySelector('.panel--inspector .inspector__empty-title')?.textContent?.trim() ?? '',
+    emptyStatus: document.querySelector('.panel--inspector .inspector__empty-status')?.textContent?.trim() ?? '',
+    emptyGrid: !!document.querySelector('.panel--inspector .inspector__empty-grid'),
+  }));
+  assertSlavaCheck(emptyAssertions.emptyState, 'Inspector renders Slava empty state when no node is selected');
+  assertSlavaCheck(emptyAssertions.emptyTitle === 'No node selected', 'Inspector empty state names no selection');
+  assertSlavaCheck(emptyAssertions.emptyStatus === 'standby', 'Inspector empty state exposes standby status');
+  assertSlavaCheck(emptyAssertions.emptyGrid, 'Inspector empty state renders dither grid');
+
+  await evaluate(cdp, () => {
+    window.__nebulaUIStore.setState((state) => ({
       selectedNodeId: 'n1',
       panels: {
         ...state.panels,
