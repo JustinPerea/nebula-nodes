@@ -151,13 +151,18 @@ export function Settings() {
   if (!shouldRender) return null;
 
   const resolvedX = position.x < 0 ? window.innerWidth + position.x : position.x;
+  const resolvedTop = position.y;
+  const settingsMaxHeight = `calc(100vh - ${Math.max(16, resolvedTop) + 16}px)`;
   const configuredApiKeyCount = API_KEY_FIELDS.reduce(
     (count, field) => count + (apiKeys[field.key]?.trim() ? 1 : 0),
     0,
   );
 
   return (
-    <div className={`panel panel--settings${exiting ? ' panel--exiting' : ''}`} style={{ left: resolvedX, top: position.y }}>
+    <div
+      className={`panel panel--settings${exiting ? ' panel--exiting' : ''}`}
+      style={{ left: resolvedX, top: resolvedTop, maxHeight: settingsMaxHeight }}
+    >
       <div
         className="panel__header"
         onMouseDown={(e) => {
@@ -325,23 +330,27 @@ export function Settings() {
               />
             </div>
 
-            {/* Save Button */}
-            <button
-              className="settings__save-button"
-              onClick={handleSave}
-              disabled={saveStatus === 'saving'}
-            >
-              {saveStatus === 'saving'
-                ? 'Saving...'
-                : saveStatus === 'saved'
-                  ? 'Saved'
-                  : saveStatus === 'error'
-                    ? 'Error — Retry'
-                    : 'Save Settings'}
-            </button>
           </>
         )}
       </div>
+
+      {!loading && (
+        <div className="settings__footer">
+          <button
+            className="settings__save-button"
+            onClick={handleSave}
+            disabled={saveStatus === 'saving'}
+          >
+            {saveStatus === 'saving'
+              ? 'Saving...'
+              : saveStatus === 'saved'
+                ? 'Saved'
+                : saveStatus === 'error'
+                  ? 'Error — Retry'
+                  : 'Save Settings'}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

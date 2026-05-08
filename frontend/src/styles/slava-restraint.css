@@ -226,6 +226,10 @@ body.app-slava-restraint {
   --sr-node-image-icon-radius: 3px;
   --sr-node-image-icon-opacity: 0.82;
   --sr-node-image-icon-glyph: linear-gradient(135deg, transparent 48%, var(--sr-ink-light) 50%, transparent 54%) 3px 7px / 8px 5px no-repeat;
+  --sr-node-mesh-height: 172px;
+  --sr-node-mesh-grid-color: rgba(201, 202, 200, 0.20);
+  --sr-node-mesh-grid-soft: rgba(201, 202, 200, 0.10);
+  --sr-node-mesh-line: rgba(255, 255, 255, 0.24);
   --sr-node-error-bg: rgba(0, 0, 0, 0.40);
   --sr-node-error-border-width: 2px;
   --sr-node-error-padding: 6px 10px;
@@ -1830,6 +1834,23 @@ body.app-slava-restraint .settings__section-toggle-chevron {
   color: var(--sr-ink-meta);
 }
 
+body.app-slava-restraint .settings__collapsible-body {
+  max-height: min(300px, 34vh);
+  margin-bottom: var(--sr-space-4);
+  padding: var(--sr-space-2);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--sr-edge);
+  border-radius: var(--sr-radius-control);
+  background:
+    linear-gradient(var(--sr-glass-raised), var(--sr-glass-raised)) padding-box,
+    linear-gradient(180deg, rgba(255, 255, 255, 0.07), transparent 34%) border-box;
+}
+
+body.app-slava-restraint .settings__collapsible-body .settings__key-row:last-child {
+  margin-bottom: 0;
+}
+
 body.app-slava-restraint .inspector__label {
   font-family: var(--sr-ui);
   font-weight: 500;
@@ -2026,6 +2047,12 @@ body.app-slava-restraint .inspector__file-preview {
 }
 
 /* Settings save — primary CTA pill. Single place orange shows up in chrome. */
+body.app-slava-restraint .settings__footer {
+  padding: var(--sr-space-3) var(--sr-space-4) var(--sr-space-4);
+  border-top: 1px solid var(--sr-edge);
+  background: linear-gradient(180deg, rgba(20, 20, 22, 0.52), rgba(20, 20, 22, 0.82));
+}
+
 body.app-slava-restraint .settings__save-button {
   background: var(--sr-accent);
   color: var(--sr-on-accent);
@@ -2038,7 +2065,7 @@ body.app-slava-restraint .settings__save-button {
   text-transform: none;
   border-radius: var(--sr-radius-pill);
   cursor: pointer;
-  margin-top: 18px;
+  margin-top: 0;
   transition: filter var(--sr-motion-fast);
 }
 body.app-slava-restraint .settings__save-button:hover {
@@ -2274,7 +2301,138 @@ body.app-slava-restraint .agent-log__msg {
   word-break: break-word;
 }
 
-body.app-slava-restraint .mesh-preview__viewer,
+body.app-slava-restraint .mesh-preview {
+  position: relative;
+  min-height: var(--sr-node-mesh-height);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: var(--sr-radius-node);
+  background:
+    radial-gradient(circle at 50% 42%, color-mix(in srgb, var(--node-category-color, var(--sr-accent)) 18%, transparent) 0, transparent 36%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.045), transparent 42%),
+    var(--sr-canvas-elevated);
+  isolation: isolate;
+  cursor: pointer;
+}
+
+body.app-slava-restraint .mesh-preview:focus-visible {
+  outline: var(--sr-focus-outline);
+  outline-offset: var(--sr-focus-offset);
+}
+
+body.app-slava-restraint .mesh-preview::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image: radial-gradient(circle, var(--sr-node-mesh-grid-color) 0 1px, transparent 1.25px);
+  background-position: center;
+  background-size: 8px 8px;
+  opacity: 0.36;
+  -webkit-mask-image: radial-gradient(ellipse at center, #000 0 52%, transparent 78%);
+  mask-image: radial-gradient(ellipse at center, #000 0 52%, transparent 78%);
+}
+
+body.app-slava-restraint .mesh-preview::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, transparent 0 49%, rgba(255, 255, 255, 0.10) 49% 50%, transparent 50%),
+    linear-gradient(0deg, transparent 0 49%, rgba(255, 255, 255, 0.08) 49% 50%, transparent 50%);
+  background-size: 44px 44px;
+  opacity: 0.12;
+}
+
+body.app-slava-restraint .mesh-preview__viewer {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: var(--sr-node-mesh-height);
+  background: transparent;
+  opacity: 0.74;
+  transition: opacity var(--sr-motion-ui);
+}
+
+body.app-slava-restraint .mesh-preview--loading .mesh-preview__viewer,
+body.app-slava-restraint .mesh-preview--error .mesh-preview__viewer {
+  opacity: 0.08;
+}
+
+body.app-slava-restraint .mesh-preview__placeholder {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--sr-motion-ui);
+}
+
+body.app-slava-restraint .mesh-preview--loading .mesh-preview__placeholder,
+body.app-slava-restraint .mesh-preview--error .mesh-preview__placeholder {
+  opacity: 1;
+}
+
+body.app-slava-restraint .mesh-preview__mesh {
+  position: relative;
+  width: 92px;
+  height: 62px;
+  border-radius: 3px;
+  background:
+    linear-gradient(var(--sr-node-mesh-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--sr-node-mesh-line) 1px, transparent 1px);
+  background-size: 12px 12px;
+  box-shadow:
+    0 0 0 1px var(--sr-node-mesh-grid-soft) inset,
+    0 0 30px color-mix(in srgb, var(--node-category-color, var(--sr-accent)) 22%, transparent);
+  opacity: 0.74;
+  transform: perspective(160px) rotateX(58deg) rotateZ(-12deg);
+}
+
+body.app-slava-restraint .mesh-preview__mesh::before {
+  content: '';
+  position: absolute;
+  inset: -14px 14px 18px;
+  border: 1px solid var(--sr-node-mesh-grid-color);
+  border-bottom: 0;
+  border-radius: 3px 3px 0 0;
+  transform: translateY(-10px) skewX(-12deg);
+}
+
+body.app-slava-restraint .mesh-preview__mesh::after {
+  content: '';
+  position: absolute;
+  left: 42px;
+  bottom: 15px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--node-category-color, var(--sr-accent));
+  box-shadow: 0 0 18px color-mix(in srgb, var(--node-category-color, var(--sr-accent)) 58%, transparent);
+}
+
+body.app-slava-restraint .mesh-preview__hud {
+  position: absolute;
+  left: var(--sr-space-3);
+  right: var(--sr-space-3);
+  bottom: var(--sr-space-2);
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sr-space-2);
+  color: var(--sr-ink-meta);
+  font-family: var(--sr-mono);
+  font-size: var(--sr-type-meta);
+  letter-spacing: 0;
+  line-height: var(--sr-line-compact);
+  text-transform: uppercase;
+}
+
 body.app-slava-restraint .mesh-modal__viewer {
   background: var(--sr-canvas-elevated);
 }

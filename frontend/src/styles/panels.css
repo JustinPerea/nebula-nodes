@@ -563,6 +563,20 @@ body:not(.app-slava-restraint) .toolbar {
   cursor: default;
 }
 
+.settings__footer {
+  flex-shrink: 0;
+  padding: 8px;
+}
+
+body:not(.app-slava-restraint) .settings__footer {
+  border-top: 1px solid #2a2a2a;
+  background: #1a1a1a;
+}
+
+.settings__footer .settings__save-button {
+  margin-top: 0;
+}
+
 /* ---------- Context menu ---------- */
 
 .context-menu {

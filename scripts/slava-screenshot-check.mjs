@@ -86,7 +86,7 @@ try {
       },
     }));
   });
-  await sleep(250);
+  await waitForRuntime(cdp, '!document.querySelector(".panel--settings") && !document.querySelector(".panel--library")');
   await screenshot(cdp, '03-image-surface-selected.png');
 
   await runSlavaChatCoverage(cdp);
@@ -663,6 +663,12 @@ async function runSlavaExpandedVisualCoverage(cdp) {
       },
     }));
   });
+  await waitForRuntime(cdp, `
+    !document.querySelector(".panel--library")
+    && !document.querySelector(".panel--inspector")
+    && !document.querySelector(".panel--settings")
+    && !document.querySelector(".chat-panel")
+  `);
   await waitForRuntime(cdp, 'document.querySelector(".context-menu") && document.querySelector(".connection-popup")');
   await sleep(200);
   await screenshot(cdp, '12-slava-popovers-and-states.png');
@@ -684,6 +690,8 @@ async function runSlavaExpandedVisualCoverage(cdp) {
       stickyNoteEditor: !!document.querySelector('.model-node--sticky-note .model-node__textarea'),
       rerouteSize: rerouteRect?.width ?? 0,
       meshPreview: !!document.querySelector('[data-id="n7"] .mesh-preview'),
+      meshPreviewPlaceholder: !!document.querySelector('[data-id="n7"] .mesh-preview__placeholder'),
+      meshPreviewStatus: document.querySelector('[data-id="n7"] .mesh-preview')?.getAttribute('data-status') ?? '',
     };
   });
 
@@ -697,6 +705,8 @@ async function runSlavaExpandedVisualCoverage(cdp) {
   assertSlavaCheck(stateAssertions.stickyNoteEditor, 'sticky note renders inline text editor');
   assertSlavaCheck(stateAssertions.rerouteSize >= 18, 'reroute node keeps Slava dot hit target');
   assertSlavaCheck(stateAssertions.meshPreview, 'mesh node renders preview surface');
+  assertSlavaCheck(stateAssertions.meshPreviewPlaceholder, 'mesh node renders Slava placeholder structure');
+  assertSlavaCheck(['loading', 'ready', 'error'].includes(stateAssertions.meshPreviewStatus), 'mesh node exposes viewer status');
 
   debugStep('visual coverage: mesh modal');
   await evaluate(cdp, () => {
@@ -768,8 +778,17 @@ async function runSlavaInteractionChecks(cdp) {
 
   const expandedAssertions = await evaluate(cdp, () => ({
     apiKeyInputs: document.querySelectorAll('.settings__collapsible-body .settings__key-input').length,
+    apiKeysBounded:
+      (document.querySelector('.settings__collapsible-body')?.scrollHeight ?? 0)
+      > (document.querySelector('.settings__collapsible-body')?.clientHeight ?? 0),
+    saveButtonVisible: (() => {
+      const rect = document.querySelector('.panel--settings .settings__save-button')?.getBoundingClientRect();
+      return Boolean(rect && rect.top >= 0 && rect.bottom <= window.innerHeight);
+    })(),
   }));
   assertSlavaCheck(expandedAssertions.apiKeyInputs >= 8, 'API Keys section expands to reveal provider inputs');
+  assertSlavaCheck(expandedAssertions.apiKeysBounded, 'API Keys section scrolls inside a bounded region');
+  assertSlavaCheck(expandedAssertions.saveButtonVisible, 'settings Save action remains visible with API Keys expanded');
 
   await clickSelector(cdp, '.settings__section-toggle');
   await waitForRuntime(cdp, 'document.querySelector(".settings__section-toggle")?.getAttribute("aria-expanded") === "false" && !document.querySelector(".settings__collapsible-body")');
