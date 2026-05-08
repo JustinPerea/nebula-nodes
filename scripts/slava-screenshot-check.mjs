@@ -796,8 +796,20 @@ async function runSlavaInteractionChecks(cdp) {
     const topElement = settingsRect
       ? document.elementFromPoint(settingsRect.left + 24, settingsRect.top + 24)
       : null;
-    const activeToolbarButtons = Array.from(document.querySelectorAll('.toolbar__button--active'))
+    const activeToolbarControls = Array.from(document.querySelectorAll('.toolbar__button--active'));
+    const activeToolbarButtons = activeToolbarControls
       .map((button) => button.getAttribute('title'));
+    const activeToolbarCell = document.querySelector('.toolbar__button--active[title="Toggle chat panel"]');
+    const inactiveToolbarCell = document.querySelector('.toolbar__button[title="Save graph (Ctrl+S)"]');
+    const activeToolbarCellStyle = activeToolbarCell
+      ? getComputedStyle(activeToolbarCell, '::after')
+      : null;
+    const inactiveToolbarCellStyle = inactiveToolbarCell
+      ? getComputedStyle(inactiveToolbarCell, '::after')
+      : null;
+    const activeToolbarButtonStyle = activeToolbarCell
+      ? getComputedStyle(activeToolbarCell)
+      : null;
     return {
       settingsAboveChat: Boolean(
         settings
@@ -811,6 +823,15 @@ async function runSlavaInteractionChecks(cdp) {
       toolbarChatActive: activeToolbarButtons.includes('Toggle chat panel'),
       toolbarSettingsActive: activeToolbarButtons.includes('Settings'),
       toolbarLibraryActive: activeToolbarButtons.includes('Toggle node library'),
+      toolbarActivePressedCount: activeToolbarControls
+        .filter((button) => button.getAttribute('aria-pressed') === 'true').length,
+      toolbarActiveCellHasDots: activeToolbarCellStyle?.backgroundImage.includes('radial-gradient') ?? false,
+      toolbarActiveCellOpacity: Number(activeToolbarCellStyle?.opacity ?? 0),
+      toolbarInactiveCellOpacity: Number(inactiveToolbarCellStyle?.opacity ?? 0),
+      toolbarActiveCellBordered: Boolean(
+        activeToolbarButtonStyle
+        && activeToolbarButtonStyle.borderTopColor !== 'rgba(0, 0, 0, 0)',
+      ),
       agentLogHiddenByDefault: !document.querySelector('.agent-log'),
     };
   });
@@ -820,6 +841,13 @@ async function runSlavaInteractionChecks(cdp) {
   assertSlavaCheck(chromeAssertions.toolbarChatActive, 'toolbar chat button shows active state');
   assertSlavaCheck(chromeAssertions.toolbarSettingsActive, 'toolbar settings button shows active state');
   assertSlavaCheck(chromeAssertions.toolbarLibraryActive, 'toolbar node-library button shows active state');
+  assertSlavaCheck(chromeAssertions.toolbarActivePressedCount >= 3, 'toolbar active buttons expose pressed state');
+  assertSlavaCheck(chromeAssertions.toolbarActiveCellHasDots, 'toolbar active cell uses dot-matrix surface');
+  assertSlavaCheck(
+    chromeAssertions.toolbarActiveCellOpacity > chromeAssertions.toolbarInactiveCellOpacity,
+    'toolbar active cell is visually stronger than inactive controls',
+  );
+  assertSlavaCheck(chromeAssertions.toolbarActiveCellBordered, 'toolbar active cell has selected border treatment');
   assertSlavaCheck(chromeAssertions.agentLogHiddenByDefault, 'agent log is hidden by default');
 
   await clickSelector(cdp, '.settings__section-toggle');

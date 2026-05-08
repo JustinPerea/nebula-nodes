@@ -1675,6 +1675,7 @@ body.app-slava-restraint .toolbar__button--executing .toolbar__icon {
 body.app-slava-restraint .toolbar__button--executing::before {
   content: '';
   position: absolute;
+  z-index: 1;
   left: 50%;
   top: 50%;
   width: 4px;
@@ -2210,7 +2211,10 @@ body.app-slava-restraint .toolbar::before {
 }
 
 body.app-slava-restraint .toolbar__button {
-  background: transparent;
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  background-color: transparent;
   color: var(--sr-ink-light);
   border: 1px solid transparent;
   font-family: var(--sr-ui);
@@ -2231,17 +2235,75 @@ body.app-slava-restraint .toolbar__button {
   transition:
     color 120ms ease,
     background-color 120ms ease,
+    border-color 120ms ease,
+    box-shadow 120ms ease,
     transform 220ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
+
+body.app-slava-restraint .toolbar__button::after {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  z-index: 0;
+  border-radius: calc(var(--sr-radius-control) - 2px);
+  background-image: radial-gradient(
+    circle,
+    rgba(255, 255, 255, 0.34) 0 1px,
+    transparent 1.35px
+  );
+  background-position: center;
+  background-size: 6px 6px;
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0.92);
+  transition:
+    opacity var(--sr-motion-fast),
+    transform var(--sr-motion-fast);
+}
+
+body.app-slava-restraint .toolbar__icon,
+body.app-slava-restraint .toolbar__label {
+  position: relative;
+  z-index: 1;
+}
+
+body.app-slava-restraint .toolbar__icon {
+  transition:
+    color 120ms ease,
+    filter 120ms ease,
+    opacity 120ms ease;
+}
+
 body.app-slava-restraint .toolbar__button:hover {
   color: var(--sr-ink-bold);
-  background: var(--sr-surface-control-hover);
+  background-color: var(--sr-surface-control-hover);
   border-color: transparent;
 }
+
+body.app-slava-restraint .toolbar__button:hover::after {
+  opacity: 0.22;
+  transform: scale(1);
+}
+
 body.app-slava-restraint .toolbar__button--active,
 body.app-slava-restraint .toolbar__button--active:hover {
   color: var(--sr-ink-bold);
-  background: var(--sr-surface-control-active);
+  background-color: var(--sr-surface-control-active);
+  border-color: rgba(255, 255, 255, 0.16);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.05),
+    0 0 14px rgba(255, 255, 255, 0.06);
+}
+
+body.app-slava-restraint .toolbar__button--active::after,
+body.app-slava-restraint .toolbar__button--active:hover::after {
+  opacity: 0.46;
+  transform: scale(1);
+}
+
+body.app-slava-restraint .toolbar__button--active .toolbar__icon {
+  color: rgba(255, 255, 255, 0.96);
+  filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.18));
 }
 body.app-slava-restraint .toolbar__button:active {
   transform: scale(0.96);
@@ -2251,6 +2313,8 @@ body.app-slava-restraint .toolbar__button:active {
   transition:
     color 120ms ease,
     background-color 120ms ease,
+    border-color 120ms ease,
+    box-shadow 120ms ease,
     transform 80ms ease-out;
 }
 
