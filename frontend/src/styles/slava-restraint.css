@@ -1066,6 +1066,14 @@ body.app-slava-restraint .chat__tool-status {
   color: var(--sr-ink-meta);
 }
 
+body.app-slava-restraint .chat__system--error {
+  color: var(--sr-danger);
+}
+
+body.app-slava-restraint .chat__system--success {
+  color: var(--sr-success);
+}
+
 body.app-slava-restraint .chat__tool-header {
   color: var(--sr-ink-light);
 }

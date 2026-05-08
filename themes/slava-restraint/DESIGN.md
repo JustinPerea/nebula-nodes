@@ -441,13 +441,14 @@ These should not stay inline:
 - Slava panel/chrome/node/media z-index values are named layer tokens.
 - Default base visuals are now split away from Slava for the highest-impact shared shells: panels, toolbar, node cards, node state borders, node headers, ID chips, and preview wells.
 - The chat composer has a proper component contract.
+- Chat rest, message, busy/stop, error, and image-chip states are now deterministic screenshot fixtures.
 - Inspector controls now share one data-driven render contract for static and dynamic params, with stable `data-inspector-*` markers for visual checks.
 - Handles have clear rest/hover/connecting rules and target-size protection.
 - Settings now has clear disclosure and visibility behavior.
 - Mesh modal and Inspector no longer rely as heavily on inline visual styles.
 - Component inline styles have been audited; remaining cases are dynamic geometry, data colors, progress width, edge styling, or effect coordinates.
 - `npm run check:inline-styles` guards against new static inline visual styles in `frontend/src/components`.
-- `npm run check:slava-screenshots` captures desktop/settings/image-surface/Inspector text-file-model-sticky states/popover-loading-reroute/mesh-modal/mobile/empty-canvas Slava screenshots into `output/slava-screenshot-check`.
+- `npm run check:slava-screenshots` captures desktop/settings/image-surface/chat rest-message-busy-error-chip states/Inspector text-file-model-sticky states/popover-loading-reroute/mesh-modal/mobile/empty-canvas Slava screenshots into `output/slava-screenshot-check`.
 
 ### Weak
 

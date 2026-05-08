@@ -89,6 +89,7 @@ try {
   await sleep(250);
   await screenshot(cdp, '03-image-surface-selected.png');
 
+  await runSlavaChatCoverage(cdp);
   await runSlavaInspectorCoverage(cdp);
   await runSlavaExpandedVisualCoverage(cdp);
 
@@ -101,7 +102,7 @@ try {
   await setupSlavaScene(cdp);
   await waitForRuntime(cdp, 'document.body.classList.contains("app-slava-restraint") && document.querySelectorAll(".react-flow__node").length >= 7');
   await sleep(300);
-  await screenshot(cdp, '10-mobile-slava.png');
+  await screenshot(cdp, '14-mobile-slava.png');
   await runSlavaMobileLayoutChecks(cdp);
 
   const assertions = await evaluate(cdp, () => {
@@ -168,7 +169,7 @@ try {
     });
   });
   await sleep(650);
-  await screenshot(cdp, '11-empty-canvas.png');
+  await screenshot(cdp, '15-empty-canvas.png');
 
   const emptyAssertions = await evaluate(cdp, () => ({
     emptyGraph: document.querySelectorAll('.react-flow__node').length === 0,
@@ -337,6 +338,145 @@ async function setupSlavaScene(cdp) {
   await sleep(500);
 }
 
+async function runSlavaChatCoverage(cdp) {
+  debugStep('visual coverage: chat states');
+  await cdp.send('Emulation.setDeviceMetricsOverride', {
+    width: 1440,
+    height: 980,
+    deviceScaleFactor: 1,
+    mobile: false,
+  });
+  await setupSlavaScene(cdp);
+  await waitForRuntime(cdp, 'window.__nebulaChat?.setPendingImages && document.querySelector(".chat-panel")');
+
+  await evaluate(cdp, () => {
+    window.__nebulaChat.clear();
+    window.__nebulaChat.setInput('');
+    window.__nebulaChat.setBusy(false);
+    window.__nebulaChat.setNotice(null);
+    window.__nebulaChat.setPendingImages([]);
+    window.__nebulaUIStore.setState((state) => ({
+      selectedNodeId: null,
+      chatResized: true,
+      agentLogEnabled: false,
+      panels: {
+        ...state.panels,
+        library: { ...state.panels.library, visible: false },
+        inspector: { ...state.panels.inspector, visible: false },
+        settings: { ...state.panels.settings, visible: false },
+        chat: {
+          ...state.panels.chat,
+          visible: true,
+          width: 440,
+          height: 720,
+          left: 940,
+          top: 32,
+        },
+      },
+    }));
+  });
+  await waitForRuntime(cdp, 'document.querySelector(".chat-panel[data-chat-message-count=\\"0\\"] [data-chat-empty=\\"true\\"]")');
+  await sleep(650);
+  await screenshot(cdp, '04-chat-empty-rest.png');
+
+  const restAssertions = await evaluate(cdp, () => ({
+    empty: !!document.querySelector('.chat-panel [data-chat-empty="true"]'),
+    sendDisabled: !!document.querySelector('.chat-panel__send--submit:disabled'),
+    connected: document.querySelector('.chat-panel')?.getAttribute('data-chat-connected'),
+  }));
+  assertSlavaCheck(restAssertions.empty, 'chat empty state renders');
+  assertSlavaCheck(restAssertions.sendDisabled, 'chat send button is disabled at rest');
+  assertSlavaCheck(restAssertions.connected === 'true', 'chat connects to the deterministic websocket');
+
+  await evaluate(cdp, () => {
+    window.__nebulaChat.clear();
+    window.__nebulaChat.setPendingImages([]);
+    window.__nebulaChat.setNotice(null);
+    window.__nebulaChat.setBusy(false);
+    window.__nebulaChat.pushUser('Use this image as reference and make the next variation calmer.', {
+      images: [{ nodeId: 'n3', thumbUrl: '/hermes/hermes-figure.jpeg' }],
+    });
+    window.__nebulaChat.pushAssistant('I will keep the image reference attached, reduce the contrast, and preserve the main silhouette.');
+  });
+  await waitForRuntime(cdp, 'document.querySelector(".chat-panel [data-chat-message-role=\\"user\\"] [data-chat-image-node-id=\\"n3\\"]") && document.querySelector(".chat-panel [data-chat-message-role=\\"assistant\\"]")');
+  await sleep(250);
+  await screenshot(cdp, '05-chat-message-image.png');
+
+  const messageAssertions = await evaluate(cdp, () => ({
+    userMessages: document.querySelectorAll('.chat-panel [data-chat-message-role="user"]').length,
+    assistantMessages: document.querySelectorAll('.chat-panel [data-chat-message-role="assistant"]').length,
+    imageThumb: !!document.querySelector('.chat-panel [data-chat-image-node-id="n3"]'),
+  }));
+  assertSlavaCheck(messageAssertions.userMessages >= 1, 'chat user message renders');
+  assertSlavaCheck(messageAssertions.assistantMessages >= 1, 'chat assistant message renders');
+  assertSlavaCheck(messageAssertions.imageThumb, 'chat user image reference thumbnail renders');
+
+  await evaluate(cdp, () => {
+    window.__nebulaChat.pushAssistant('Working through the graph and checking the active image reference.', { streaming: true });
+    window.__nebulaChat.setBusy(true);
+  });
+  await waitForRuntime(cdp, 'document.querySelector(".chat-panel[data-chat-busy=\\"true\\"] .chat-panel__send--stop") && document.querySelector(".chat-panel .chat__cursor")');
+  await sleep(250);
+  await screenshot(cdp, '06-chat-busy-stop.png');
+
+  const busyAssertions = await evaluate(cdp, () => ({
+    busy: document.querySelector('.chat-panel')?.getAttribute('data-chat-busy'),
+    stop: !!document.querySelector('.chat-panel__send--stop'),
+    cursor: !!document.querySelector('.chat-panel .chat__cursor'),
+  }));
+  assertSlavaCheck(busyAssertions.busy === 'true', 'chat busy state is marked on the panel');
+  assertSlavaCheck(busyAssertions.stop, 'chat busy state shows Stop control');
+  assertSlavaCheck(busyAssertions.cursor, 'chat streaming cursor renders');
+
+  await evaluate(cdp, () => {
+    window.__nebulaChat.clear();
+    window.__nebulaChat.setBusy(false);
+    window.__nebulaChat.pushUser('Try another take with @n3.', {
+      images: [{ nodeId: 'n3', thumbUrl: '/hermes/hermes-figure.jpeg' }],
+    });
+    window.__nebulaChat.pushAssistantSystem('Backend returned 502 while starting the stream.', { tone: 'error' });
+    window.__nebulaChat.setInput('Use @n3 and this second reference');
+    window.__nebulaChat.setNotice('Skipped: 1 not an image.');
+    window.__nebulaChat.setPendingImages([
+      {
+        id: 'chip-ready',
+        status: 'ready',
+        nodeId: 'n3',
+        thumbUrl: '/hermes/hermes-figure.jpeg',
+        label: 'Reference image',
+      },
+      {
+        id: 'chip-uploading',
+        status: 'uploading',
+        thumbUrl: '/hermes/hermes-figure.jpeg',
+        label: 'Uploading reference',
+      },
+      {
+        id: 'chip-error',
+        status: 'error',
+        error: 'Not an image',
+        label: 'notes.txt',
+      },
+    ]);
+  });
+  await waitForRuntime(cdp, 'document.querySelector(".chat-panel [data-chat-system-tone=\\"error\\"]") && document.querySelectorAll(".chat-panel [data-chat-chip-status]").length === 3 && document.querySelector(".chat-panel [data-chat-notice=\\"true\\"]")');
+  await sleep(250);
+  await screenshot(cdp, '07-chat-error-chips.png');
+
+  const errorAssertions = await evaluate(cdp, () => ({
+    errorSystem: !!document.querySelector('.chat-panel [data-chat-system-tone="error"]'),
+    readyChip: !!document.querySelector('.chat-panel [data-chat-chip-status="ready"]'),
+    uploadingChip: !!document.querySelector('.chat-panel [data-chat-chip-status="uploading"]'),
+    errorChip: !!document.querySelector('.chat-panel [data-chat-chip-status="error"]'),
+    notice: !!document.querySelector('.chat-panel [data-chat-notice="true"]'),
+  }));
+  assertSlavaCheck(errorAssertions.errorSystem, 'chat error system line renders');
+  assertSlavaCheck(errorAssertions.readyChip, 'chat ready image chip renders');
+  assertSlavaCheck(errorAssertions.uploadingChip, 'chat uploading image chip renders');
+  assertSlavaCheck(errorAssertions.errorChip, 'chat error image chip renders');
+  assertSlavaCheck(errorAssertions.notice, 'chat notice renders');
+}
+
 async function runSlavaInspectorCoverage(cdp) {
   debugStep('visual coverage: inspector controls');
   await cdp.send('Emulation.setDeviceMetricsOverride', {
@@ -362,7 +502,7 @@ async function runSlavaInspectorCoverage(cdp) {
   });
   await waitForRuntime(cdp, 'document.querySelector(".panel--inspector [data-inspector-param=\\"value\\"][data-inspector-kind=\\"textarea\\"] textarea.inspector__field")');
   await sleep(650);
-  await screenshot(cdp, '04-inspector-text-node.png');
+  await screenshot(cdp, '08-inspector-text-node.png');
 
   const textAssertions = await evaluate(cdp, () => ({
     textParam: !!document.querySelector('.panel--inspector [data-inspector-param="value"][data-inspector-kind="textarea"] textarea.inspector__field'),
@@ -407,7 +547,7 @@ async function runSlavaInspectorCoverage(cdp) {
   });
   await waitForRuntime(cdp, 'document.querySelector(".panel--inspector [data-inspector-param=\\"filePath\\"][data-inspector-kind=\\"file\\"] .inspector__file-preview")');
   await sleep(200);
-  await screenshot(cdp, '05-inspector-image-file.png');
+  await screenshot(cdp, '09-inspector-image-file.png');
 
   const imageAssertions = await evaluate(cdp, () => ({
     fileParam: !!document.querySelector('.panel--inspector [data-inspector-param="filePath"][data-inspector-kind="file"]'),
@@ -454,7 +594,7 @@ async function runSlavaInspectorCoverage(cdp) {
   }
   await waitForRuntime(cdp, 'document.querySelector(".panel--inspector .inspector__favorite-button")?.getAttribute("aria-pressed") === "true"');
   await sleep(200);
-  await screenshot(cdp, '06-inspector-model-warning.png');
+  await screenshot(cdp, '10-inspector-model-warning.png');
 
   const modelAssertions = await evaluate(cdp, () => ({
     modelParam: !!document.querySelector('.panel--inspector [data-inspector-param="model"][data-inspector-kind="string"]'),
@@ -478,7 +618,7 @@ async function runSlavaInspectorCoverage(cdp) {
   });
   await waitForRuntime(cdp, 'document.querySelector(".panel--inspector [data-inspector-param=\\"content\\"][data-inspector-kind=\\"textarea\\"] textarea") && document.querySelector(".panel--inspector [data-inspector-param=\\"color\\"][data-inspector-kind=\\"enum\\"] select")');
   await sleep(200);
-  await screenshot(cdp, '07-inspector-sticky-note.png');
+  await screenshot(cdp, '11-inspector-sticky-note.png');
 
   const stickyAssertions = await evaluate(cdp, () => ({
     contentTextarea: !!document.querySelector('.panel--inspector [data-inspector-param="content"][data-inspector-kind="textarea"] textarea.inspector__field'),
@@ -525,7 +665,7 @@ async function runSlavaExpandedVisualCoverage(cdp) {
   });
   await waitForRuntime(cdp, 'document.querySelector(".context-menu") && document.querySelector(".connection-popup")');
   await sleep(200);
-  await screenshot(cdp, '08-slava-popovers-and-states.png');
+  await screenshot(cdp, '12-slava-popovers-and-states.png');
 
   const stateAssertions = await evaluate(cdp, () => {
     const progress = document.querySelector('.model-node--executing .model-node__progress-bar');
@@ -569,7 +709,7 @@ async function runSlavaExpandedVisualCoverage(cdp) {
   await clickSelector(cdp, '[data-id="n7"] .mesh-preview');
   await waitForRuntime(cdp, 'document.querySelector(".mesh-modal-overlay") && document.querySelector(".mesh-modal__download")');
   await sleep(200);
-  await screenshot(cdp, '09-slava-mesh-modal.png');
+  await screenshot(cdp, '13-slava-mesh-modal.png');
 
   const meshAssertions = await evaluate(cdp, () => ({
     modal: !!document.querySelector('.mesh-modal'),

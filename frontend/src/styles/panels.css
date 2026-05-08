@@ -1271,6 +1271,14 @@ body:not(.app-slava-restraint) .toolbar {
   font-size: 11px;
 }
 
+.chat__system--error {
+  color: #d48b8b;
+}
+
+.chat__system--success {
+  color: #8fc89d;
+}
+
 .chat__cursor {
   color: #888;
   animation: chat-blink 1s step-end infinite;

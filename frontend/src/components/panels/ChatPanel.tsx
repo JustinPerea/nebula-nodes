@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowUp, ChevronDown, ChevronRight, X } from 'lucide-react';
+import { ArrowUp, ChevronDown, ChevronRight, Square, X } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
 import { useDelayedUnmount } from '../../hooks/useDelayedUnmount';
@@ -75,6 +75,7 @@ type TextChunk = {
 type SystemLine = {
   kind: 'system';
   text: string;
+  tone?: 'neutral' | 'error' | 'success';
 };
 
 type MessagePart = TextChunk | ToolCall | SystemLine;
@@ -237,7 +238,7 @@ function AssistantBubble({ message }: { message: Extract<ChatMessage, { role: 'a
     : 'Apply';
 
   return (
-    <div className="chat__bubble chat__bubble--assistant">
+    <div className="chat__bubble chat__bubble--assistant" data-chat-message-role="assistant">
       {message.parts.map((part, idx) => {
         if (part.kind === 'text') {
           const segments = parseTextWithCodeBlocks(part.text);
@@ -266,8 +267,13 @@ function AssistantBubble({ message }: { message: Extract<ChatMessage, { role: 'a
           );
         }
         if (part.kind === 'system') {
+          const tone = part.tone ?? 'neutral';
           return (
-            <div key={idx} className="chat__system">
+            <div
+              key={idx}
+              className={`chat__system chat__system--${tone}`}
+              data-chat-system-tone={tone}
+            >
               {part.text}
             </div>
           );
@@ -821,7 +827,7 @@ export function ChatPanel() {
                 ? { ...p, result: '(stream ended before this tool returned)', isError: true }
                 : p,
             ),
-            { kind: 'system', text: `\u26A0 ${errText}` },
+            { kind: 'system', text: `Warning: ${errText}`, tone: 'error' },
           ],
           streaming: false,
         }));
@@ -939,6 +945,22 @@ export function ChatPanel() {
           ),
         );
       },
+      pushAssistantSystem: (text: string, opts?: { tone?: 'neutral' | 'error' | 'success'; streaming?: boolean }) => {
+        const id = newId();
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: 'assistant',
+            id,
+            streaming: !!opts?.streaming,
+            parts: [{ kind: 'system', text, tone: opts?.tone ?? 'neutral' }],
+          },
+        ]);
+        return id;
+      },
+      setBusy: (next: boolean) => setBusy(next),
+      setNotice: (text: string | null) => setNotice(text),
+      setPendingImages: (chips: PendingImage[]) => setPendingImages(chips),
       pushThinking: (lines: string[]) => {
         const id = newId();
         setMessages((prev) => [
@@ -1330,6 +1352,11 @@ export function ChatPanel() {
       className={`chat-panel chat-panel--agent-${agent}${isFreePositioned ? ' chat-panel--free' : ''}${exiting ? ' chat-panel--exiting' : ''}`}
       style={panelStyle}
       onMouseDown={startPanelDrag}
+      data-chat-agent={agent}
+      data-chat-busy={busy ? 'true' : 'false'}
+      data-chat-connected={connected ? 'true' : 'false'}
+      data-chat-message-count={messages.length}
+      data-chat-pending-image-count={pendingImages.length}
     >
       {/* Daedalus sigil-bloom FX — Hermes-only, fires on agent transition.
        * Rendered via portal to document.body so the rings/glow can
@@ -1554,14 +1581,18 @@ export function ChatPanel() {
 
       <div className="chat-panel__messages" ref={scrollRef}>
         {messages.length === 0 && (
-          <div className="chat__empty">
+          <div className="chat__empty" data-chat-empty="true">
             No messages
           </div>
         )}
         {messages.map((m) => {
           if (m.role === 'user') {
             return (
-              <div key={m.id} className="chat__bubble chat__bubble--user">
+              <div
+                key={m.id}
+                className="chat__bubble chat__bubble--user"
+                data-chat-message-role="user"
+              >
                 {m.images && m.images.length > 0 && (
                   <div className="chat__bubble-thumbs">
                     {m.images.map((img) => (
@@ -1570,6 +1601,7 @@ export function ChatPanel() {
                         src={img.thumbUrl}
                         alt=""
                         className="chat__bubble-thumb"
+                        data-chat-image-node-id={img.nodeId}
                         loading="lazy"
                       />
                     ))}
@@ -1581,7 +1613,7 @@ export function ChatPanel() {
           }
           if (m.role === 'system') {
             return (
-              <div key={m.id} className="chat-panel__system-line">
+              <div key={m.id} className="chat-panel__system-line" data-chat-message-role="system">
                 {m.text}
               </div>
             );
@@ -1590,7 +1622,7 @@ export function ChatPanel() {
           if (m.role === 'thinking') return null;
           if (m.role === 'approval') {
             return (
-              <div key={m.id} className="chat-panel__approval">
+              <div key={m.id} className="chat-panel__approval" data-chat-message-role="approval">
                 <div className="chat-panel__approval-summary">
                   <strong>Approval required:</strong> {m.summary}
                 </div>
@@ -1630,7 +1662,7 @@ export function ChatPanel() {
       </div>
 
       <div className="chat-panel__input">
-        {notice && <div className="chat-panel__notice">{notice}</div>}
+        {notice && <div className="chat-panel__notice" data-chat-notice="true">{notice}</div>}
         {pendingImages.length > 0 && (
           <div className="chat-panel__chips">
             {pendingImages.map((chip) => (
@@ -1638,6 +1670,7 @@ export function ChatPanel() {
                 key={chip.id}
                 className={`chat-panel__chip chat-panel__chip--${chip.status}`}
                 title={chip.label}
+                data-chat-chip-status={chip.status}
               >
                 {chip.status === 'uploading' && (
                   <>
@@ -1814,8 +1847,21 @@ export function ChatPanel() {
             disabled={!connected}
           />
           {busy ? (
-            <button type="button" className="chat-panel__send chat-panel__send--stop" onClick={cancel}>
-              Stop
+            <button
+              type="button"
+              className="chat-panel__send chat-panel__send--stop"
+              onClick={cancel}
+              aria-label="Stop response"
+              title="Stop response"
+            >
+              <Square
+                className="chat-panel__send-icon"
+                size={13}
+                strokeWidth={2}
+                fill="currentColor"
+                aria-hidden="true"
+                focusable="false"
+              />
             </button>
           ) : (
             <button
