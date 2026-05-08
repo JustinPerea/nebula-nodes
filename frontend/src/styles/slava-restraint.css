@@ -2208,8 +2208,9 @@ body.app-slava-restraint .toolbar__divider {
 }
 
 /* ─────────────────────────────────────────────────────────────────────
- * Agent log — same translucent treatment. Source-tinted left borders kept
- * (small functional color use is allowed where it reads as data, not deco).
+ * Agent log — compact telemetry surface. The feed model is intentionally
+ * small today (time/source/message), so Slava expresses status through a
+ * subtle signal strip, source dots, and restrained mono metadata.
  * ───────────────────────────────────────────────────────────────────── */
 body.app-slava-restraint .agent-log {
   z-index: var(--sr-layer-agent-log);
@@ -2227,7 +2228,7 @@ body.app-slava-restraint .agent-log__drag-row,
 body.app-slava-restraint .agent-log__header {
   background: transparent;
   border-bottom: 1px solid transparent;
-  padding: 10px 14px;
+  padding: 10px 12px 10px 14px;
 }
 
 body.app-slava-restraint .agent-log--open .agent-log__header {
@@ -2251,6 +2252,65 @@ body.app-slava-restraint .agent-log__icon {
   transform: none;
 }
 
+body.app-slava-restraint .agent-log__telemetry {
+  display: inline-flex;
+  min-width: 0;
+  margin-left: auto;
+  margin-right: var(--sr-space-2);
+  align-items: center;
+  gap: var(--sr-space-2);
+  color: var(--sr-ink-faint);
+  font-family: var(--sr-mono);
+  font-size: var(--sr-type-meta);
+  line-height: var(--sr-line-tight);
+  text-transform: lowercase;
+}
+
+body.app-slava-restraint .agent-log__signal {
+  display: grid;
+  grid-template-columns: repeat(4, 3px);
+  gap: 3px;
+  align-items: center;
+  height: 10px;
+}
+
+body.app-slava-restraint .agent-log__signal-cell {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--sr-ink-faint);
+  opacity: 0.6;
+}
+
+body.app-slava-restraint .agent-log--executing .agent-log__signal-cell {
+  background: var(--sr-ink-bold);
+  animation: slava-agent-log-signal 960ms steps(4, end) infinite;
+}
+
+body.app-slava-restraint .agent-log--executing .agent-log__signal-cell:nth-child(2) {
+  animation-delay: 120ms;
+}
+
+body.app-slava-restraint .agent-log--executing .agent-log__signal-cell:nth-child(3) {
+  animation-delay: 240ms;
+}
+
+body.app-slava-restraint .agent-log--executing .agent-log__signal-cell:nth-child(4) {
+  animation-delay: 360ms;
+}
+
+body.app-slava-restraint .agent-log__count {
+  color: var(--sr-ink-meta);
+}
+
+body.app-slava-restraint .agent-log__status {
+  max-width: 72px;
+  overflow: hidden;
+  color: var(--sr-ink-faint);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 body.app-slava-restraint .agent-log__chevron {
   color: var(--sr-ink-light);
   transition: color 120ms ease;
@@ -2262,25 +2322,116 @@ body.app-slava-restraint .agent-log__body {
 }
 
 body.app-slava-restraint .agent-log__empty {
+  position: relative;
+  display: grid;
+  min-height: 96px;
+  grid-template-columns: 1fr auto;
+  grid-template-rows: 1fr auto auto 1fr;
+  column-gap: var(--sr-space-2);
+  align-items: center;
   color: var(--sr-ink-faint);
-  font-family: var(--sr-ui);
-  font-size: var(--sr-type-label);
+  font-family: var(--sr-mono);
+  font-size: var(--sr-type-meta);
   font-style: normal;
   line-height: var(--sr-line-meta);
-  padding: 10px 0 0;
+  padding: 4px 0 0 34px;
   text-align: left;
 }
 
+body.app-slava-restraint .agent-log__empty::before {
+  content: '';
+  position: absolute;
+  top: 18px;
+  bottom: 8px;
+  left: 9px;
+  width: 1px;
+  background: linear-gradient(to bottom, transparent, var(--sr-edge-strong) 18%, var(--sr-edge-strong) 78%, transparent);
+}
+
+body.app-slava-restraint .agent-log__empty::after {
+  content: '';
+  position: absolute;
+  top: 28px;
+  left: 6px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--sr-ink-faint);
+  box-shadow:
+    0 20px var(--sr-ink-faint),
+    0 40px rgba(255, 255, 255, 0.10);
+}
+
+body.app-slava-restraint .agent-log__empty-grid {
+  display: block;
+  position: absolute;
+  inset: 10px 0 0 28px;
+  pointer-events: none;
+  background-image: radial-gradient(circle, rgba(201, 202, 200, 0.20) 0 1px, transparent 1.25px);
+  background-size: 8px 8px;
+  opacity: 0.18;
+  -webkit-mask-image: linear-gradient(to right, #000, transparent 76%);
+  mask-image: linear-gradient(to right, #000, transparent 76%);
+}
+
+body.app-slava-restraint .agent-log__empty-title {
+  position: relative;
+  grid-column: 1;
+  grid-row: 2;
+  color: var(--sr-ink-light);
+  font-family: var(--sr-ui);
+  font-size: var(--sr-type-body);
+  font-weight: 500;
+}
+
+body.app-slava-restraint .agent-log__empty-status {
+  position: relative;
+  display: inline-flex;
+  grid-column: 1;
+  grid-row: 3;
+  width: max-content;
+  margin-top: 4px;
+  color: var(--sr-ink-faint);
+  text-transform: lowercase;
+}
+
 body.app-slava-restraint .agent-log__entry {
+  --agent-log-source-color: var(--sr-ink-meta);
   display: grid;
-  grid-template-columns: 64px 80px 1fr;
-  gap: 10px;
+  grid-template-columns: 8px 64px 70px 1fr;
+  gap: 8px;
   align-items: baseline;
-  padding: 5px 0;
-  border-bottom: 1px solid transparent;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--sr-edge);
   font-family: var(--sr-mono);
   font-size: var(--sr-type-label);
   line-height: var(--sr-line-relaxed);
+}
+
+body.app-slava-restraint .agent-log__entry:last-child {
+  border-bottom-color: transparent;
+}
+
+body.app-slava-restraint .agent-log__entry--graph {
+  --agent-log-source-color: var(--sr-success);
+}
+
+body.app-slava-restraint .agent-log__entry--hermes {
+  --agent-log-source-color: var(--sr-accent);
+}
+
+body.app-slava-restraint .agent-log__entry--system {
+  --agent-log-source-color: var(--sr-ink-light);
+}
+
+body.app-slava-restraint .agent-log__entry-marker {
+  display: inline-block;
+  align-self: center;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--agent-log-source-color);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--agent-log-source-color) 44%, transparent);
 }
 
 body.app-slava-restraint .agent-log__time {
@@ -2289,7 +2440,7 @@ body.app-slava-restraint .agent-log__time {
 }
 
 body.app-slava-restraint .agent-log__source {
-  color: var(--sr-ink-meta);
+  color: var(--agent-log-source-color);
   text-transform: lowercase;
   letter-spacing: 0;
   font-size: var(--sr-type-meta);
@@ -2299,6 +2450,23 @@ body.app-slava-restraint .agent-log__msg {
   color: var(--sr-ink);
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+@keyframes slava-agent-log-signal {
+  0%, 100% {
+    opacity: 0.24;
+    box-shadow: none;
+  }
+  50% {
+    opacity: 0.92;
+    box-shadow: 0 0 8px rgba(255, 255, 255, 0.30);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.app-slava-restraint .agent-log--executing .agent-log__signal-cell {
+    animation: none;
+  }
 }
 
 body.app-slava-restraint .mesh-preview {

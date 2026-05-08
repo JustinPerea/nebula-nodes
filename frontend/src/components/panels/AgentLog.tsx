@@ -13,12 +13,67 @@ interface LogEntry {
 interface Position {
   left: number;
   top: number;
+  anchorX?: 'left' | 'right';
+  anchorY?: 'top' | 'bottom';
+  offsetX?: number;
+  offsetY?: number;
 }
 
 const POS_STORAGE_KEY = 'nebula:agentLog:pos';
 // User has to drag this many px before we treat the gesture as a drag and
 // suppress the toggle click. Keeps single-click-to-collapse intact.
 const DRAG_THRESHOLD = 4;
+const MIN_VISIBLE_WIDTH = 80;
+const MIN_VISIBLE_HEIGHT = 40;
+
+function clamp(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function positionFromGeometry(
+  left: number,
+  top: number,
+  width: number,
+  height: number,
+  preferredAnchorX?: Position['anchorX'],
+  preferredAnchorY?: Position['anchorY'],
+): Position {
+  const right = window.innerWidth - left - width;
+  const bottom = window.innerHeight - top - height;
+  const anchorX = preferredAnchorX ?? (left <= right ? 'left' : 'right');
+  const anchorY = preferredAnchorY ?? (top <= bottom ? 'top' : 'bottom');
+
+  return {
+    left,
+    top,
+    anchorX,
+    anchorY,
+    offsetX: anchorX === 'left' ? left : right,
+    offsetY: anchorY === 'top' ? top : bottom,
+  };
+}
+
+function resolvePositionForViewport(position: Position, width: number, height: number): Position {
+  const anchorX = position.anchorX ?? (position.left <= window.innerWidth - position.left - width ? 'left' : 'right');
+  const anchorY = position.anchorY ?? (position.top <= window.innerHeight - position.top - height ? 'top' : 'bottom');
+  const offsetX = position.offsetX ?? (anchorX === 'left' ? position.left : window.innerWidth - position.left - width);
+  const offsetY = position.offsetY ?? (anchorY === 'top' ? position.top : window.innerHeight - position.top - height);
+  const rawLeft = anchorX === 'left' ? offsetX : window.innerWidth - width - offsetX;
+  const rawTop = anchorY === 'top' ? offsetY : window.innerHeight - height - offsetY;
+  const left = clamp(rawLeft, 0, Math.max(0, window.innerWidth - width));
+  const top = clamp(rawTop, 0, Math.max(0, window.innerHeight - height));
+
+  return positionFromGeometry(left, top, width, height, anchorX, anchorY);
+}
+
+function samePosition(a: Position, b: Position) {
+  return a.left === b.left
+    && a.top === b.top
+    && a.anchorX === b.anchorX
+    && a.anchorY === b.anchorY
+    && a.offsetX === b.offsetX
+    && a.offsetY === b.offsetY;
+}
 
 function readInitialPosition(): Position | null {
   if (typeof window === 'undefined') return null;
@@ -27,12 +82,37 @@ function readInitialPosition(): Position | null {
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Position;
     if (typeof parsed.left === 'number' && typeof parsed.top === 'number') {
-      return parsed;
+      return {
+        left: parsed.left,
+        top: parsed.top,
+        anchorX: parsed.anchorX === 'left' || parsed.anchorX === 'right' ? parsed.anchorX : undefined,
+        anchorY: parsed.anchorY === 'top' || parsed.anchorY === 'bottom' ? parsed.anchorY : undefined,
+        offsetX: typeof parsed.offsetX === 'number' ? parsed.offsetX : undefined,
+        offsetY: typeof parsed.offsetY === 'number' ? parsed.offsetY : undefined,
+      };
     }
   } catch {
     // bad JSON — fall through
   }
   return null;
+}
+
+function persistPosition(p: Position) {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(POS_STORAGE_KEY, JSON.stringify(p));
+  } catch {
+    // ignore
+  }
+}
+
+function clearPersistedPosition() {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.removeItem(POS_STORAGE_KEY);
+  } catch {
+    // ignore
+  }
 }
 
 export function AgentLog() {
@@ -43,6 +123,7 @@ export function AgentLog() {
   const [open, setOpen] = useState(false);
   const [entries, setEntries] = useState<LogEntry[]>([]);
   const [position, setPosition] = useState<Position | null>(readInitialPosition);
+  const logRef = useRef<HTMLDivElement | null>(null);
 
   // Drag bookkeeping refs (so we don't re-render mid-drag)
   const dragRef = useRef<{
@@ -50,6 +131,8 @@ export function AgentLog() {
     startY: number;
     originLeft: number;
     originTop: number;
+    width: number;
+    height: number;
     moved: boolean;
   } | null>(null);
   // Set true on mouseup if a drag actually happened, so the click event that
@@ -61,10 +144,46 @@ export function AgentLog() {
   // and the panel snaps back to the CSS-driven default anchor.
   useEffect(() => {
     function handleReset() {
+      clearPersistedPosition();
       setPosition(null);
     }
     window.addEventListener('nebula:layout-reset', handleReset);
     return () => window.removeEventListener('nebula:layout-reset', handleReset);
+  }, []);
+
+  // Older stored positions only have left/top. Once the element is mounted,
+  // infer the nearest viewport edges so future window resizes preserve the
+  // user's intended anchor instead of freezing absolute pixels.
+  useEffect(() => {
+    if (!enabled || !position || (position.anchorX && position.anchorY)) return;
+    const frameId = window.requestAnimationFrame(() => {
+      const rect = logRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const next = positionFromGeometry(rect.left, rect.top, rect.width, rect.height);
+      setPosition((current) => {
+        if (!current || (current.anchorX && current.anchorY)) return current;
+        persistPosition(next);
+        return next;
+      });
+    });
+    return () => window.cancelAnimationFrame(frameId);
+  }, [enabled, position]);
+
+  useEffect(() => {
+    function handleResize() {
+      setPosition((current) => {
+        if (!current) return current;
+        const rect = logRef.current?.getBoundingClientRect();
+        const width = rect?.width ?? MIN_VISIBLE_WIDTH;
+        const height = rect?.height ?? MIN_VISIBLE_HEIGHT;
+        const next = resolvePositionForViewport(current, width, height);
+        if (samePosition(current, next)) return current;
+        persistPosition(next);
+        return next;
+      });
+    }
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
   }, []);
 
   // Mirror visibility/open-state onto <body> so layouts.css only reserves
@@ -120,14 +239,6 @@ export function AgentLog() {
     return () => window.removeEventListener('nebula:agent-log-entry', handleEntry);
   }, []);
 
-  function persistPosition(p: Position) {
-    try {
-      window.localStorage.setItem(POS_STORAGE_KEY, JSON.stringify(p));
-    } catch {
-      // ignore
-    }
-  }
-
   function handleHeaderMouseDown(e: React.MouseEvent<HTMLDivElement>) {
     // Ignore right-click. Allow drag to start anywhere on the row — the
     // click handler later checks justDraggedRef to decide whether to fire.
@@ -139,6 +250,8 @@ export function AgentLog() {
       startY: e.clientY,
       originLeft: rect.left,
       originTop: rect.top,
+      width: rect.width,
+      height: rect.height,
       moved: false,
     };
 
@@ -149,11 +262,11 @@ export function AgentLog() {
       const dy = ev.clientY - d.startY;
       if (!d.moved && Math.abs(dx) + Math.abs(dy) < DRAG_THRESHOLD) return;
       d.moved = true;
-      const next: Position = {
-        left: Math.max(0, Math.min(window.innerWidth - 80, d.originLeft + dx)),
-        top: Math.max(0, Math.min(window.innerHeight - 40, d.originTop + dy)),
-      };
+      const left = clamp(d.originLeft + dx, 0, Math.max(0, window.innerWidth - d.width));
+      const top = clamp(d.originTop + dy, 0, Math.max(0, window.innerHeight - d.height));
+      const next = positionFromGeometry(left, top, d.width, d.height);
       setPosition(next);
+      persistPosition(next);
     }
 
     function onUp() {
@@ -189,13 +302,23 @@ export function AgentLog() {
   const containerStyle: React.CSSProperties = position
     ? { left: position.left, top: position.top, bottom: 'auto' }
     : {};
+  const latestEntry = entries.length > 0 ? entries[entries.length - 1] : null;
+  const statusLabel = isExecuting ? 'streaming' : latestEntry ? latestEntry.source : 'standby';
+  const countLabel = `${entries.length} event${entries.length === 1 ? '' : 's'}`;
 
   if (!enabled) return null;
 
   return (
     <div
-      className={'agent-log' + (open ? ' agent-log--open' : '') + (entries.length === 0 ? ' agent-log--empty' : '')}
+      ref={logRef}
+      className={
+        'agent-log'
+        + (open ? ' agent-log--open' : '')
+        + (entries.length === 0 ? ' agent-log--empty' : '')
+        + (isExecuting ? ' agent-log--executing' : '')
+      }
       style={containerStyle}
+      data-status={statusLabel}
     >
       <div
         className="agent-log__drag-row"
@@ -207,6 +330,7 @@ export function AgentLog() {
           className="agent-log__header"
           onClick={handleToggleClick}
           title={open ? 'Collapse agent log' : 'Expand agent log'}
+          aria-expanded={open}
         >
           <span className="agent-log__title">
             <Activity
@@ -217,6 +341,16 @@ export function AgentLog() {
               focusable="false"
             />
             Agent log
+          </span>
+          <span className="agent-log__telemetry" aria-hidden="true">
+            <span className="agent-log__signal">
+              <span className="agent-log__signal-cell" />
+              <span className="agent-log__signal-cell" />
+              <span className="agent-log__signal-cell" />
+              <span className="agent-log__signal-cell" />
+            </span>
+            <span className="agent-log__count">{countLabel}</span>
+            <span className="agent-log__status">{statusLabel}</span>
           </span>
           <ChevronUp
             className={'agent-log__chevron' + (open ? ' agent-log__chevron--open' : '')}
@@ -231,12 +365,15 @@ export function AgentLog() {
         <div className="agent-log__body">
           {entries.length === 0 ? (
             <div className="agent-log__empty">
-              No events yet
+              <span className="agent-log__empty-grid" aria-hidden="true" />
+              <span className="agent-log__empty-title">No events yet</span>
+              <span className="agent-log__empty-status">standby</span>
             </div>
           ) : (
-            <ul className="agent-log__list">
+            <ul className="agent-log__list" aria-live="polite">
               {entries.slice().reverse().map((e) => (
-                <li key={e.id} className={`agent-log__entry agent-log__entry--${e.source}`}>
+                <li key={e.id} className={`agent-log__entry agent-log__entry--${e.source}`} data-source={e.source}>
+                  <span className="agent-log__entry-marker" aria-hidden="true" />
                   <span className="agent-log__time">
                     {new Date(e.ts).toLocaleTimeString([], {
                       hour: '2-digit',

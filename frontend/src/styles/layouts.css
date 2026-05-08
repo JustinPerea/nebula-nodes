@@ -221,6 +221,13 @@ body.app-slava-restraint.agent-log-open.agent-log-empty .agent-log {
   color: #ddd;
 }
 
+.agent-log__telemetry,
+.agent-log__entry-marker,
+.agent-log__empty-grid,
+.agent-log__empty-status {
+  display: none;
+}
+
 .agent-log__icon {
   display: inline-block;
   color: #7aa9ff;

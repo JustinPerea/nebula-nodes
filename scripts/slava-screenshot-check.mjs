@@ -800,10 +800,16 @@ async function runSlavaInteractionChecks(cdp) {
 
   const agentLogAssertions = await evaluate(cdp, () => ({
     persisted: window.localStorage.getItem('nebula:agentLog:enabled') === '1',
-    openEmptyText: document.querySelector('.agent-log__empty')?.textContent?.trim() ?? '',
+    openEmptyTitle: document.querySelector('.agent-log__empty-title')?.textContent?.trim() ?? '',
+    openEmptyStatus: document.querySelector('.agent-log__empty-status')?.textContent?.trim() ?? '',
+    telemetry: !!document.querySelector('.agent-log__telemetry'),
+    signalCells: document.querySelectorAll('.agent-log__signal-cell').length,
   }));
   assertSlavaCheck(agentLogAssertions.persisted, 'agent log setting persists to localStorage');
-  assertSlavaCheck(agentLogAssertions.openEmptyText === 'No events yet', 'agent log opens with empty state');
+  assertSlavaCheck(agentLogAssertions.openEmptyTitle === 'No events yet', 'agent log opens with empty state');
+  assertSlavaCheck(agentLogAssertions.openEmptyStatus === 'standby', 'agent log empty state exposes standby telemetry');
+  assertSlavaCheck(agentLogAssertions.telemetry, 'agent log header renders telemetry strip');
+  assertSlavaCheck(agentLogAssertions.signalCells === 4, 'agent log header renders signal cells');
 
   debugStep('interaction: agent log drag/reset');
   const agentLogRectBeforeDrag = await getRect(cdp, '.agent-log');
@@ -816,6 +822,44 @@ async function runSlavaInteractionChecks(cdp) {
     'agent log moves after header drag',
   );
 
+  const agentLogResizeAnchor = await evaluate(cdp, () => {
+    const rect = document.querySelector('.agent-log')?.getBoundingClientRect();
+    return rect ? {
+      rightGap: window.innerWidth - rect.right,
+      bottomGap: window.innerHeight - rect.bottom,
+      left: rect.left,
+    } : null;
+  });
+  await cdp.send('Emulation.setDeviceMetricsOverride', {
+    width: 1200,
+    height: 860,
+    deviceScaleFactor: 1,
+    mobile: false,
+  });
+  await waitForRuntime(cdp, 'window.innerWidth === 1200 && window.innerHeight === 860');
+  await sleep(120);
+  const agentLogResizeAssertions = await evaluate(cdp, (anchor) => {
+    const rect = document.querySelector('.agent-log')?.getBoundingClientRect();
+    if (!rect || !anchor) return null;
+    return {
+      leftShifted: Math.abs(rect.left - anchor.left) > 40,
+      rightGapStable: Math.abs((window.innerWidth - rect.right) - anchor.rightGap) <= 4,
+      bottomGapStable: Math.abs((window.innerHeight - rect.bottom) - anchor.bottomGap) <= 4,
+    };
+  }, agentLogResizeAnchor);
+  assertSlavaCheck(agentLogResizeAssertions?.leftShifted, 'agent log responds to viewport resize after drag');
+  assertSlavaCheck(agentLogResizeAssertions?.rightGapStable, 'agent log preserves right-side drag anchor on resize');
+  assertSlavaCheck(agentLogResizeAssertions?.bottomGapStable, 'agent log preserves bottom-side drag anchor on resize');
+
+  await cdp.send('Emulation.setDeviceMetricsOverride', {
+    width: 1440,
+    height: 980,
+    deviceScaleFactor: 1,
+    mobile: false,
+  });
+  await waitForRuntime(cdp, 'window.innerWidth === 1440 && window.innerHeight === 980');
+  await sleep(120);
+
   await clickSelector(cdp, 'button[title="Reset panel positions and sizes"]');
   await waitForRuntime(cdp, '!window.localStorage.getItem("nebula:agentLog:pos") && !document.querySelector(".agent-log")?.style.left');
   const agentLogResetAssertions = await evaluate(cdp, () => ({
@@ -826,6 +870,28 @@ async function runSlavaInteractionChecks(cdp) {
   }));
   assertSlavaCheck(agentLogResetAssertions.persistedPositionCleared, 'layout reset clears persisted agent log position');
   assertSlavaCheck(agentLogResetAssertions.inlinePositionCleared, 'layout reset clears visible agent log position');
+
+  await evaluate(cdp, () => {
+    window.dispatchEvent(new CustomEvent('nebula:agent-log-entry', {
+      detail: { source: 'hermes', message: 'planning next graph action' },
+    }));
+    window.dispatchEvent(new CustomEvent('nebula:agent-log-entry', {
+      detail: { source: 'system', message: 'checkpoint recorded' },
+    }));
+  });
+  await waitForRuntime(cdp, 'document.querySelectorAll(".agent-log__entry").length >= 2 && document.querySelectorAll(".agent-log__entry-marker").length >= 2');
+  const agentLogEventAssertions = await evaluate(cdp, () => ({
+    entryCount: document.querySelectorAll('.agent-log__entry').length,
+    markerCount: document.querySelectorAll('.agent-log__entry-marker').length,
+    hermesEntry: !!document.querySelector('.agent-log__entry--hermes'),
+    systemEntry: !!document.querySelector('.agent-log__entry--system'),
+    statusText: document.querySelector('.agent-log__status')?.textContent?.trim() ?? '',
+  }));
+  assertSlavaCheck(agentLogEventAssertions.entryCount >= 2, 'agent log renders telemetry event rows');
+  assertSlavaCheck(agentLogEventAssertions.markerCount >= 2, 'agent log event rows render source markers');
+  assertSlavaCheck(agentLogEventAssertions.hermesEntry, 'agent log renders Hermes source event');
+  assertSlavaCheck(agentLogEventAssertions.systemEntry, 'agent log renders system source event');
+  assertSlavaCheck(agentLogEventAssertions.statusText === 'system', 'agent log header reflects latest source status');
 
   await clickSelector(cdp, '.settings__toggle-row');
   await waitForRuntime(cdp, '!document.querySelector(".agent-log") && !document.body.classList.contains("agent-log-enabled")');
