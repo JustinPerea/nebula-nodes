@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import {
   ReactFlow,
   Background,
@@ -189,6 +189,16 @@ export function Canvas() {
   const hideContextMenu = useUIStore((s) => s.hideContextMenu);
   const showConnectionPopup = useUIStore((s) => s.showConnectionPopup);
   const isSlavaSkin = skin === 'slava-restraint';
+  const renderedEdges = useMemo(() => {
+    if (!isSlavaSkin || !isExecuting) return edges;
+    return edges.map((edge) => ({
+      ...edge,
+      animated: true,
+      className: edge.className?.includes('typed-edge--running')
+        ? edge.className
+        : [edge.className, 'typed-edge--running'].filter(Boolean).join(' '),
+    }));
+  }, [edges, isExecuting, isSlavaSkin]);
 
   const reactFlow = useReactFlow();
   const { fitView, screenToFlowPosition } = reactFlow;
@@ -439,7 +449,7 @@ export function Canvas() {
     >
       <ReactFlow
         nodes={nodes}
-        edges={edges}
+        edges={renderedEdges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}

@@ -708,6 +708,31 @@ async function runSlavaExpandedVisualCoverage(cdp) {
   assertSlavaCheck(stateAssertions.meshPreviewPlaceholder, 'mesh node renders Slava placeholder structure');
   assertSlavaCheck(['loading', 'ready', 'error'].includes(stateAssertions.meshPreviewStatus), 'mesh node exposes viewer status');
 
+  await evaluate(cdp, () => {
+    window.__nebulaGraphStore.setState({ isExecuting: true });
+  });
+  await waitForRuntime(cdp, 'document.querySelector(".react-flow__edge.animated .typed-edge__pulse")');
+  const edgePulseAssertions = await evaluate(cdp, () => {
+    const pulse = document.querySelector('.react-flow__edge.animated .typed-edge__pulse');
+    const style = pulse ? getComputedStyle(pulse) : null;
+    return {
+      animatedEdges: document.querySelectorAll('.react-flow__edge.animated').length,
+      pulsePaths: document.querySelectorAll('.react-flow__edge.animated .typed-edge__pulse').length,
+      pulseDisplay: style?.display ?? '',
+      pulseAnimation: style?.animationName ?? '',
+      pulseDasharray: style?.strokeDasharray ?? '',
+    };
+  });
+  assertSlavaCheck(edgePulseAssertions.animatedEdges >= 1, 'Slava execution marks edges as animated');
+  assertSlavaCheck(edgePulseAssertions.pulsePaths >= 1, 'Slava running edges render dot pulse paths');
+  assertSlavaCheck(edgePulseAssertions.pulseDisplay !== 'none', 'Slava running edge pulse is visible');
+  assertSlavaCheck(edgePulseAssertions.pulseAnimation.includes('slava-edge-dot-pulse'), 'Slava running edge pulse uses dot pulse animation');
+  assertSlavaCheck(edgePulseAssertions.pulseDasharray !== 'none', 'Slava running edge pulse is dotted');
+  await evaluate(cdp, () => {
+    window.__nebulaGraphStore.setState({ isExecuting: false });
+  });
+  await waitForRuntime(cdp, '!document.querySelector(".react-flow__edge.animated .typed-edge__pulse")');
+
   debugStep('visual coverage: mesh modal');
   await evaluate(cdp, () => {
     window.__nebulaUIStore.setState((state) => ({

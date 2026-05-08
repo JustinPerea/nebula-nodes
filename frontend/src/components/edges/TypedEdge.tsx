@@ -37,6 +37,7 @@ function TypedEdgeComponent({
   sourcePosition,
   targetPosition,
   selected,
+  animated = false,
   data,
 }: EdgeProps) {
   const skin = useUIStore((s) => s.skin);
@@ -59,16 +60,28 @@ function TypedEdgeComponent({
   });
 
   return (
-    <BaseEdge
-      id={id}
-      path={edgePath}
-      pathLength={100}
-      style={{
-        stroke: color,
-        strokeWidth: selected ? 3 : 2,
-        filter: selected ? `drop-shadow(0 0 4px ${color}40)` : undefined,
-      }}
-    />
+    <>
+      <BaseEdge
+        id={id}
+        path={edgePath}
+        pathLength={100}
+        style={{
+          stroke: color,
+          strokeWidth: selected ? 3 : 2,
+          filter: selected ? `drop-shadow(0 0 4px ${color}40)` : undefined,
+        }}
+      />
+      {skin === 'slava-restraint' && animated && (
+        <path
+          className="typed-edge__pulse"
+          d={edgePath}
+          pathLength={100}
+          fill="none"
+          stroke={color}
+          aria-hidden="true"
+        />
+      )}
+    </>
   );
 }
 

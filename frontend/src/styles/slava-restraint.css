@@ -263,6 +263,10 @@ body.app-slava-restraint {
   --sr-edge-draw-duration: 280ms;
   --sr-edge-flow-duration: 900ms;
   --sr-edge-flow-dasharray: 6 4 2 4;
+  --sr-edge-pulse-duration: 1400ms;
+  --sr-edge-pulse-dasharray: 0.1 8;
+  --sr-edge-pulse-width: 3;
+  --sr-edge-pulse-opacity: 0.78;
 
   --sr-motion-fast: 120ms ease;
   --sr-motion-ui: 140ms ease;
@@ -3242,16 +3246,41 @@ body.app-slava-restraint .react-flow__edge-path {
   to { stroke-dashoffset: -16; }
 }
 
+@keyframes slava-edge-dot-pulse {
+  to { stroke-dashoffset: -100; }
+}
+
 body.app-slava-restraint .react-flow__edge.animated .react-flow__edge-path {
   stroke-dasharray: var(--sr-edge-flow-dasharray);
+  stroke-linecap: round;
   animation: slava-edge-dash-march var(--sr-edge-flow-duration) cubic-bezier(0.42, 0, 0.2, 1) infinite;
+}
+
+body.app-slava-restraint .react-flow__edge.animated .typed-edge__pulse {
+  display: block;
+  pointer-events: none;
+  stroke-width: var(--sr-edge-pulse-width);
+  stroke-linecap: round;
+  stroke-dasharray: var(--sr-edge-pulse-dasharray);
+  stroke-dashoffset: 0;
+  opacity: var(--sr-edge-pulse-opacity);
+  filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.26));
+  animation: slava-edge-dot-pulse var(--sr-edge-pulse-duration) steps(12, end) infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
   body.app-slava-restraint .react-flow__edge-path,
-  body.app-slava-restraint .react-flow__edge.animated .react-flow__edge-path {
+  body.app-slava-restraint .react-flow__edge.animated .react-flow__edge-path,
+  body.app-slava-restraint .react-flow__edge.animated .typed-edge__pulse {
     animation: none;
+  }
+
+  body.app-slava-restraint .react-flow__edge.animated .react-flow__edge-path {
     stroke-dasharray: none;
+  }
+
+  body.app-slava-restraint .react-flow__edge.animated .typed-edge__pulse {
+    display: none;
   }
 }
 body.app-slava-restraint .react-flow__edge.selected .react-flow__edge-path {
