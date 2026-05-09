@@ -581,13 +581,16 @@ body:not(.app-slava-restraint) .settings__footer {
 
 .context-menu {
   position: fixed;
+  min-width: 180px;
+  padding: 4px;
+}
+
+body:not(.app-slava-restraint) .context-menu {
   z-index: 20;
   background: #1a1a1a;
   border: 1px solid #333;
   border-radius: 6px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
-  min-width: 180px;
-  padding: 4px;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: 12px;
 }
@@ -600,16 +603,19 @@ body:not(.app-slava-restraint) .settings__footer {
   padding: 6px 10px;
   background: none;
   border: none;
-  border-radius: 4px;
-  color: #ccc;
   cursor: pointer;
-  font-size: 12px;
   font-family: inherit;
   text-align: left;
+}
+
+body:not(.app-slava-restraint) .context-menu__item {
+  border-radius: 4px;
+  color: #ccc;
+  font-size: 12px;
   transition: background 0.1s;
 }
 
-.context-menu__item:hover {
+body:not(.app-slava-restraint) .context-menu__item:hover {
   background: #252525;
 }
 
@@ -618,14 +624,17 @@ body:not(.app-slava-restraint) .settings__footer {
   cursor: default;
 }
 
-.context-menu__item--danger:hover {
+body:not(.app-slava-restraint) .context-menu__item--danger:hover {
   background: rgba(244, 67, 54, 0.15);
   color: #F44336;
 }
 
-.context-menu__shortcut {
+body:not(.app-slava-restraint) .context-menu__shortcut {
   color: #555;
   font-size: 11px;
+}
+
+.context-menu__shortcut {
   margin-left: 16px;
 }
 
@@ -633,15 +642,18 @@ body:not(.app-slava-restraint) .settings__footer {
 
 .connection-popup {
   position: fixed;
+  width: 260px;
+  max-height: 420px;
+  display: flex;
+  flex-direction: column;
+}
+
+body:not(.app-slava-restraint) .connection-popup {
   z-index: 25;
   background: #1a1a1a;
   border: 1px solid #333;
   border-radius: 8px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
-  width: 260px;
-  max-height: 420px;
-  display: flex;
-  flex-direction: column;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: 12px;
 }
@@ -651,6 +663,9 @@ body:not(.app-slava-restraint) .settings__footer {
   align-items: center;
   gap: 8px;
   padding: 8px 10px;
+}
+
+body:not(.app-slava-restraint) .connection-popup__header {
   border-bottom: 1px solid #2a2a2a;
 }
 
@@ -666,12 +681,15 @@ body:not(.app-slava-restraint) .settings__footer {
   background: transparent;
   border: none;
   outline: none;
+}
+
+body:not(.app-slava-restraint) .connection-popup__search {
   color: #ddd;
   font-size: 12px;
   font-family: inherit;
 }
 
-.connection-popup__search::placeholder {
+body:not(.app-slava-restraint) .connection-popup__search::placeholder {
   color: #555;
 }
 
@@ -682,12 +700,18 @@ body:not(.app-slava-restraint) .settings__footer {
 
 .connection-popup__empty {
   padding: 12px 10px;
-  color: #555;
   text-align: center;
+}
+
+body:not(.app-slava-restraint) .connection-popup__empty {
+  color: #555;
 }
 
 .connection-popup__category-label {
   padding: 6px 10px 3px;
+}
+
+body:not(.app-slava-restraint) .connection-popup__category-label {
   color: #666;
   font-size: 10px;
   text-transform: uppercase;
@@ -702,22 +726,28 @@ body:not(.app-slava-restraint) .settings__footer {
   padding: 6px 10px;
   background: transparent;
   border: none;
-  border-radius: 4px;
-  color: #888;
   font-family: inherit;
   cursor: pointer;
   text-align: left;
+}
+
+body:not(.app-slava-restraint) .connection-popup__category-label--button {
+  border-radius: 4px;
+  color: #888;
   transition: background 0.1s, color 0.1s;
 }
 
-.connection-popup__category-label--button:hover {
+body:not(.app-slava-restraint) .connection-popup__category-label--button:hover {
   background: #202020;
   color: #ccc;
 }
 
-.connection-popup__category-chevron {
+body:not(.app-slava-restraint) .connection-popup__category-chevron {
   color: #555;
   font-size: 9px;
+}
+
+.connection-popup__category-chevron {
   width: 10px;
   display: inline-block;
 }
@@ -726,9 +756,12 @@ body:not(.app-slava-restraint) .settings__footer {
   flex: 1;
 }
 
-.connection-popup__category-count {
+body:not(.app-slava-restraint) .connection-popup__category-count {
   color: #555;
   font-size: 9px;
+}
+
+.connection-popup__category-count {
   font-weight: 500;
   text-transform: none;
   letter-spacing: 0;
@@ -743,16 +776,19 @@ body:not(.app-slava-restraint) .settings__footer {
   justify-content: center;
   padding: 0;
   background: transparent;
+  line-height: 1;
+  cursor: pointer;
+}
+
+body:not(.app-slava-restraint) .connection-popup__close {
   border: none;
   border-radius: 4px;
   color: #666;
   font-size: 16px;
-  line-height: 1;
-  cursor: pointer;
   transition: background 0.1s, color 0.1s;
 }
 
-.connection-popup__close:hover {
+body:not(.app-slava-restraint) .connection-popup__close:hover {
   background: #252525;
   color: #ccc;
 }
@@ -765,16 +801,19 @@ body:not(.app-slava-restraint) .settings__footer {
   padding: 6px 10px;
   background: transparent;
   border: none;
-  border-radius: 4px;
-  color: #ccc;
   cursor: pointer;
-  font-size: 12px;
   font-family: inherit;
   text-align: left;
+}
+
+body:not(.app-slava-restraint) .connection-popup__item {
+  border-radius: 4px;
+  color: #ccc;
+  font-size: 12px;
   transition: background 0.1s;
 }
 
-.connection-popup__item:hover {
+body:not(.app-slava-restraint) .connection-popup__item:hover {
   background: #252525;
 }
 
@@ -789,7 +828,7 @@ body:not(.app-slava-restraint) .settings__footer {
   flex: 1;
 }
 
-.connection-popup__item-port {
+body:not(.app-slava-restraint) .connection-popup__item-port {
   color: #555;
   font-size: 10px;
 }
@@ -918,23 +957,26 @@ body:not(.app-slava-restraint) .settings__footer {
 
 .chat-panel {
   position: fixed;
-  z-index: 10;
   top: 16px;
   right: 16px;
   bottom: 72px;
   /* width set inline from uiStore.panels.chat.width; default 300 */
   min-width: 260px;
   max-width: 720px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+body:not(.app-slava-restraint) .chat-panel {
+  z-index: 10;
   background: #1a1a1a;
   border: 1px solid #333;
   border-radius: 8px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
-  display: flex;
-  flex-direction: column;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: 12px;
   color: #ccc;
-  overflow: hidden;
 }
 
 .chat-panel__resize-handle {

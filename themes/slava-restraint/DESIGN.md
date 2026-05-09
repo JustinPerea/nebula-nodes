@@ -291,6 +291,7 @@ Panel chrome must not use saturated color except focus/active/primary actions.
 - Text/icon color at rest: `--sr-ink-light`
 - Hover: `--sr-surface-control-hover`, `--sr-ink-bold`
 - Active: `--sr-surface-control-active`, `--sr-ink-bold`
+- Active Slava toolbar cells use a quiet dot-matrix backing and selected border; this visual must stay tied to `toolbar__button--active` and `aria-pressed`
 - Icon: Lucide, `--sr-icon-size`, `--sr-icon-stroke`
 - Press: small scale is allowed because toolbar is outside React Flow
 - Active state must map to actual panel visibility with `aria-pressed`
@@ -437,9 +438,11 @@ These should not stay inline:
 - Node, image-surface, handle, and edge geometry now use named Slava tokens instead of local one-off constants.
 - Default node visuals for handles, media actions, loading/progress, text previews, reroute dots, and dynamic model badges are now scoped away from Slava; Slava owns those states directly.
 - Connection popovers and context menus now have Slava-scoped glass styling instead of inheriting the old panel palette.
+- Context menu, connection popup, and chat panel shell visuals are now split so old Default backgrounds/borders/radii do not apply globally to Slava.
 - Agent log is hidden unless enabled in Settings and starts collapsed so it does not compete with chat by default.
 - Slava panel/chrome/node/media z-index values are named layer tokens.
-- Default base visuals are now split away from Slava for the highest-impact shared shells: panels, toolbar, node cards, node state borders, node headers, ID chips, and preview wells.
+- Slava toolbar active cells now have dot-matrix selected backing and automated `aria-pressed`/active visual coverage.
+- Default base visuals are now split away from Slava for the highest-impact shared shells: panels, toolbar, node cards, node state borders, node headers, ID chips, preview wells, and mesh modal chrome.
 - The chat composer has a proper component contract.
 - Chat rest, message, busy/stop, error, and image-chip states are now deterministic screenshot fixtures.
 - Inspector controls now share one data-driven render contract for static and dynamic params, with stable `data-inspector-*` markers for visual checks.
@@ -459,8 +462,8 @@ These should not stay inline:
 ### High-Risk Areas
 
 1. `frontend/src/styles/slava-restraint.css` node/media section: now tokenized, but still high-risk because it owns React Flow geometry and hover/drag perception.
-2. `frontend/src/styles/nodes.css`: old mesh/modal defaults still carry shared structure plus hard-coded visual values that Slava overrides.
-3. `frontend/src/styles/panels.css`: base panel/chat styles still carry old values. Slava overrides most visible surfaces and popovers, but not all structural assumptions.
+2. `frontend/src/styles/nodes.css`: most high-risk node/control leaks are isolated; continue splitting any remaining shared structural rules from Default-only visual values.
+3. `frontend/src/styles/panels.css`: top-level panel/chat/popover shells are mostly split; lower-level settings, inspector, and chat message controls still carry some old Default visual values that Slava overrides.
 4. Inspector dynamic controls: now centralized and screenshot-covered, but still high-risk because provider schemas are data-driven.
 5. React Flow handles: any transform change can reintroduce perceived drift.
 

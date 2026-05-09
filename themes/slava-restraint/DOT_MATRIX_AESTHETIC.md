@@ -127,7 +127,7 @@ Goal: controls should feel like lit cells, not flashy buttons.
 - Icon clarity still wins over texture.
 
 Implementation candidates:
-- Active state dot backing.
+- Active state dot backing. Implemented for Slava toolbar buttons in `frontend/src/styles/slava-restraint.css`, with screenshot assertions in `scripts/slava-screenshot-check.mjs`.
 - Tiny matrix tick marks for grouped toolbar separators.
 - Stepped hover transition only where it feels intentional.
 
@@ -139,7 +139,7 @@ Implementation candidates:
 4. Agent Log telemetry treatment.
 5. Active/running edge dot pulses.
 6. Panel empty-state dither.
-7. Toolbar active-cell refinements.
+7. Toolbar active-cell refinements. Implemented with active dot backing, selected-cell border treatment, and `aria-pressed` coverage.
 
 ## Design Rules
 

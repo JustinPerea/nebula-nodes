@@ -627,10 +627,12 @@ body.app-slava-restraint .connection-popup__category-label {
 body.app-slava-restraint .connection-popup__category-label {
   font-size: var(--sr-type-meta);
   letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 body.app-slava-restraint .connection-popup__close {
   border: 1px solid transparent;
+  border-radius: var(--sr-radius-control);
   color: var(--sr-ink-meta);
   transition:
     background-color var(--sr-motion-fast),
@@ -661,6 +663,7 @@ body.app-slava-restraint .chat-panel {
   --chat-accent-bg: var(--sr-accent-soft);
   --chat-accent-border: var(--sr-accent-border);
 
+  z-index: var(--sr-layer-panel);
   background: var(--sr-glass);
   backdrop-filter: var(--sr-blur-panel);
   -webkit-backdrop-filter: var(--sr-blur-panel);
@@ -2760,7 +2763,18 @@ body.app-slava-restraint .mesh-modal {
 body.app-slava-restraint .mesh-modal__close {
   z-index: var(--sr-layer-modal-control);
   border: 1px solid var(--sr-edge-strong);
+  border-radius: var(--sr-radius-pill);
   background: rgba(0, 0, 0, 0.58);
+  color: var(--sr-ink-bold);
+  transition:
+    background var(--sr-motion-fast),
+    border-color var(--sr-motion-fast),
+    color var(--sr-motion-fast);
+}
+
+body.app-slava-restraint .mesh-modal__close:hover {
+  border-color: var(--sr-edge-strong);
+  background: var(--sr-surface-control-hover);
   color: var(--sr-ink-bold);
 }
 
@@ -2771,6 +2785,7 @@ body.app-slava-restraint .mesh-modal__info {
 body.app-slava-restraint .mesh-modal__format {
   color: var(--sr-ink-meta);
   font-family: var(--sr-mono);
+  font-size: var(--sr-type-control);
 }
 
 body.app-slava-restraint .mesh-modal__download {
