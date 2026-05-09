@@ -1113,14 +1113,17 @@ body:not(.app-slava-restraint) .chat-panel {
   width: 2px;
   height: 40px;
   transform: translateY(-50%);
-  background: #3a3a3a;
   border-radius: 2px;
   transition: background 0.12s, height 0.12s;
   pointer-events: none;
 }
 
-.chat-panel__resize-handle--left:hover::before,
-.chat-panel__resize-handle--left:active::before {
+body:not(.app-slava-restraint) .chat-panel__resize-handle--left::before {
+  background: #3a3a3a;
+}
+
+body:not(.app-slava-restraint) .chat-panel__resize-handle--left:hover::before,
+body:not(.app-slava-restraint) .chat-panel__resize-handle--left:active::before {
   background: #6a8bb5;
   height: 60px;
 }
@@ -1141,14 +1144,17 @@ body:not(.app-slava-restraint) .chat-panel {
   height: 2px;
   width: 40px;
   transform: translateX(-50%);
-  background: #3a3a3a;
   border-radius: 2px;
   transition: background 0.12s, width 0.12s;
   pointer-events: none;
 }
 
-.chat-panel__resize-handle--bottom:hover::before,
-.chat-panel__resize-handle--bottom:active::before {
+body:not(.app-slava-restraint) .chat-panel__resize-handle--bottom::before {
+  background: #3a3a3a;
+}
+
+body:not(.app-slava-restraint) .chat-panel__resize-handle--bottom:hover::before,
+body:not(.app-slava-restraint) .chat-panel__resize-handle--bottom:active::before {
   background: #6a8bb5;
   width: 60px;
 }
@@ -1170,14 +1176,17 @@ body:not(.app-slava-restraint) .chat-panel {
   transform: translateY(-50%);
   width: 2px;
   height: 30px;
-  background: #2a2a2a;
   border-radius: 1px;
   transition: background 0.12s, height 0.12s;
   pointer-events: none;
 }
 
-.chat-panel__resize-handle--right:hover::before,
-.chat-panel__resize-handle--right:active::before {
+body:not(.app-slava-restraint) .chat-panel__resize-handle--right::before {
+  background: #2a2a2a;
+}
+
+body:not(.app-slava-restraint) .chat-panel__resize-handle--right:hover::before,
+body:not(.app-slava-restraint) .chat-panel__resize-handle--right:active::before {
   background: #6a8bb5;
   height: 60px;
 }
@@ -1198,14 +1207,17 @@ body:not(.app-slava-restraint) .chat-panel {
   transform: translateX(-50%);
   height: 2px;
   width: 30px;
-  background: #2a2a2a;
   border-radius: 1px;
   transition: background 0.12s, width 0.12s;
   pointer-events: none;
 }
 
-.chat-panel__resize-handle--top:hover::before,
-.chat-panel__resize-handle--top:active::before {
+body:not(.app-slava-restraint) .chat-panel__resize-handle--top::before {
+  background: #2a2a2a;
+}
+
+body:not(.app-slava-restraint) .chat-panel__resize-handle--top:hover::before,
+body:not(.app-slava-restraint) .chat-panel__resize-handle--top:active::before {
   background: #6a8bb5;
   width: 60px;
 }
@@ -1234,10 +1246,16 @@ body:not(.app-slava-restraint) .chat-panel {
   width: 10px;
   height: 10px;
   border-style: solid;
-  border-color: #2a2a2a;
   border-width: 0;
   transition: border-color 0.12s;
   pointer-events: none;
+}
+
+body:not(.app-slava-restraint) .chat-panel__resize-handle--tl::before,
+body:not(.app-slava-restraint) .chat-panel__resize-handle--tr::before,
+body:not(.app-slava-restraint) .chat-panel__resize-handle--bl::before,
+body:not(.app-slava-restraint) .chat-panel__resize-handle--br::before {
+  border-color: #2a2a2a;
 }
 
 .chat-panel__resize-handle--tl::before { top: 3px; left: 3px; border-top-width: 2px; border-left-width: 2px; }
@@ -1245,14 +1263,14 @@ body:not(.app-slava-restraint) .chat-panel {
 .chat-panel__resize-handle--bl::before { bottom: 3px; left: 3px; border-bottom-width: 2px; border-left-width: 2px; }
 .chat-panel__resize-handle--br::before { bottom: 3px; right: 3px; border-bottom-width: 2px; border-right-width: 2px; }
 
-.chat-panel__resize-handle--tl:hover::before,
-.chat-panel__resize-handle--tl:active::before,
-.chat-panel__resize-handle--tr:hover::before,
-.chat-panel__resize-handle--tr:active::before,
-.chat-panel__resize-handle--bl:hover::before,
-.chat-panel__resize-handle--bl:active::before,
-.chat-panel__resize-handle--br:hover::before,
-.chat-panel__resize-handle--br:active::before {
+body:not(.app-slava-restraint) .chat-panel__resize-handle--tl:hover::before,
+body:not(.app-slava-restraint) .chat-panel__resize-handle--tl:active::before,
+body:not(.app-slava-restraint) .chat-panel__resize-handle--tr:hover::before,
+body:not(.app-slava-restraint) .chat-panel__resize-handle--tr:active::before,
+body:not(.app-slava-restraint) .chat-panel__resize-handle--bl:hover::before,
+body:not(.app-slava-restraint) .chat-panel__resize-handle--bl:active::before,
+body:not(.app-slava-restraint) .chat-panel__resize-handle--br:hover::before,
+body:not(.app-slava-restraint) .chat-panel__resize-handle--br:active::before {
   border-color: #6a8bb5;
 }
 
@@ -1273,15 +1291,19 @@ body:not(.app-slava-restraint) .chat-panel {
   bottom: 3px;
   width: 8px;
   height: 8px;
-  border-left: 2px solid #555;
-  border-bottom: 2px solid #555;
+  border-left: 2px solid;
+  border-bottom: 2px solid;
   border-bottom-left-radius: 3px;
   transition: border-color 0.12s;
   pointer-events: none;
 }
 
-.chat-panel__resize-handle--corner:hover::before,
-.chat-panel__resize-handle--corner:active::before {
+body:not(.app-slava-restraint) .chat-panel__resize-handle--corner::before {
+  border-color: #555;
+}
+
+body:not(.app-slava-restraint) .chat-panel__resize-handle--corner:hover::before,
+body:not(.app-slava-restraint) .chat-panel__resize-handle--corner:active::before {
   border-color: #6a8bb5;
 }
 
@@ -1290,32 +1312,41 @@ body:not(.app-slava-restraint) .chat-panel {
   align-items: flex-start;
   justify-content: space-between;
   padding: 10px 12px;
-  border-bottom: 1px solid #2a2a2a;
   user-select: none;
   cursor: grab;
+}
+
+body:not(.app-slava-restraint) .chat-panel__header {
+  border-bottom: 1px solid #2a2a2a;
 }
 
 .chat-panel__header:active {
   cursor: grabbing;
 }
 
-.chat-panel__title {
+body:not(.app-slava-restraint) .chat-panel__title {
   font-size: 11px;
   text-transform: uppercase;
   color: #aaa;
   font-weight: 600;
   letter-spacing: 0.5px;
+}
+
+.chat-panel__title {
   margin-bottom: 2px;
 }
 
-.chat-panel__meta {
+body:not(.app-slava-restraint) .chat-panel__meta {
   font-size: 10px;
   color: #666;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
-.chat-panel__session {
+body:not(.app-slava-restraint) .chat-panel__session {
   color: #555;
+}
+
+.chat-panel__session {
   margin-left: 4px;
 }
 
