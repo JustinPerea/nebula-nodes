@@ -6,7 +6,7 @@
 **Status:** default skin
 **Last audited:** 2026-05-09
 
-**Companion notes:** [Dot Matrix Aesthetic](./DOT_MATRIX_AESTHETIC.md)
+**Companion notes:** [Dot Matrix Aesthetic](./DOT_MATRIX_AESTHETIC.md), [Case Study](./CASE_STUDY.md)
 
 ---
 
