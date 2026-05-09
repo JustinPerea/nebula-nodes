@@ -63,6 +63,7 @@ try {
   await screenshot(cdp, '01-slava-desktop.png');
 
   await runSlavaInteractionChecks(cdp);
+  await runSlavaHandleGeometryChecks(cdp);
   await runSlavaPersistenceChecks(cdp);
   await setupSlavaScene(cdp);
   await waitForRuntime(cdp, 'document.body.classList.contains("app-slava-restraint") && document.querySelectorAll(".react-flow__node").length >= 7');
@@ -650,6 +651,142 @@ async function runSlavaInspectorCoverage(cdp) {
   }));
   assertSlavaCheck(stickyAssertions.contentTextarea, 'Inspector sticky note textarea renders through shared contract');
   assertSlavaCheck(stickyAssertions.colorSelect, 'Inspector sticky note enum renders through shared contract');
+
+  await evaluate(cdp, () => {
+    const graph = window.__nebulaGraphStore;
+    const current = graph.getState();
+    const dynamicNode = {
+      id: 'n9',
+      type: 'dynamic-node',
+      position: { x: 960, y: 120 },
+      data: {
+        label: 'Dynamic Schema Probe',
+        definitionId: 'dynamic-schema-probe',
+        isDynamic: true,
+        providerType: 'replicate',
+        modelId: 'owner/model',
+        params: {
+          title: 'Alpha',
+          prompt: 'Describe the frame',
+          steps: 4,
+          strength: 0.5,
+          tile: false,
+          mode: 'fast',
+          emptyChoice: '',
+        },
+        dynamicInputPorts: [{ id: 'image', label: 'Image', dataType: 'Image', required: false }],
+        dynamicOutputPorts: [{ id: 'result', label: 'Result', dataType: 'Image', required: false }],
+        dynamicParams: [
+          { key: 'title', label: 'Title', type: 'string', required: true, default: 'Alpha', placeholder: 'Short label' },
+          { key: 'prompt', label: 'Prompt', type: 'textarea', required: false, default: 'Describe the frame' },
+          { key: 'steps', label: 'Steps', type: 'integer', required: false, default: 4, min: 1, max: 8 },
+          { key: 'strength', label: 'Strength', type: 'float', required: false, default: 0.5, min: 0, max: 1, step: 0.05 },
+          { key: 'tile', label: 'Tile', type: 'boolean', required: false, default: false },
+          {
+            key: 'mode',
+            label: 'Mode',
+            type: 'enum',
+            required: false,
+            default: 'fast',
+            options: [
+              { label: 'Fast', value: 'fast' },
+              { label: 'Quality', value: 'quality' },
+            ],
+          },
+          { key: 'emptyChoice', label: 'Empty Choice', type: 'enum', required: false, default: '', options: [] },
+        ],
+        state: 'idle',
+        outputs: {},
+        providerMeta: { description: 'Synthetic dynamic schema for Slava checks' },
+      },
+    };
+    graph.setState({
+      nodes: [...current.nodes.filter((node) => node.id !== 'n9'), dynamicNode],
+      edges: current.edges,
+    });
+    window.__nebulaUIStore.setState((state) => ({
+      selectedNodeId: 'n9',
+      panels: {
+        ...state.panels,
+        library: { ...state.panels.library, visible: false },
+        settings: { ...state.panels.settings, visible: false },
+        chat: { ...state.panels.chat, visible: false },
+        inspector: { ...state.panels.inspector, visible: true, position: { x: -320, y: 16 } },
+      },
+    }));
+  });
+  await waitForRuntime(cdp, `
+    document.querySelector(".panel--inspector [data-inspector-param=\\"title\\"][data-inspector-source=\\"dynamic\\"] input")
+    && document.querySelector(".panel--inspector [data-inspector-param=\\"prompt\\"][data-inspector-kind=\\"textarea\\"] textarea")
+    && document.querySelector(".panel--inspector [data-inspector-param=\\"steps\\"][data-inspector-kind=\\"integer\\"] input")
+    && document.querySelector(".panel--inspector [data-inspector-param=\\"strength\\"][data-inspector-kind=\\"float\\"] input")
+    && document.querySelector(".panel--inspector [data-inspector-param=\\"tile\\"][data-inspector-kind=\\"boolean\\"] input[type=\\"checkbox\\"]")
+    && document.querySelector(".panel--inspector [data-inspector-param=\\"mode\\"][data-inspector-kind=\\"enum\\"] select")
+    && document.querySelector(".panel--inspector [data-inspector-param=\\"emptyChoice\\"][data-inspector-kind=\\"enum\\"] select:disabled")
+  `);
+  await sleep(200);
+  await screenshot(cdp, '11b-inspector-dynamic-controls.png');
+
+  const dynamicAssertions = await evaluate(cdp, () => {
+    const get = (selector) => document.querySelector(selector);
+    const dynamicSections = Array.from(document.querySelectorAll('.panel--inspector [data-inspector-source="dynamic"]'));
+    const modeOptions = Array.from(document.querySelectorAll('.panel--inspector [data-inspector-param="mode"] option'))
+      .map((option) => option.textContent?.trim());
+    return {
+      dynamicSectionCount: dynamicSections.length,
+      allDynamicSources: dynamicSections.every((section) => section.getAttribute('data-inspector-source') === 'dynamic'),
+      titleValue: get('.panel--inspector [data-inspector-param="title"] input')?.value,
+      promptValue: get('.panel--inspector [data-inspector-param="prompt"] textarea')?.value,
+      stepsMin: get('.panel--inspector [data-inspector-param="steps"] input')?.getAttribute('min'),
+      stepsMax: get('.panel--inspector [data-inspector-param="steps"] input')?.getAttribute('max'),
+      strengthStep: get('.panel--inspector [data-inspector-param="strength"] input')?.getAttribute('step'),
+      tileChecked: get('.panel--inspector [data-inspector-param="tile"] input')?.checked,
+      modeOptions,
+      emptyEnumDisabled: get('.panel--inspector [data-inspector-param="emptyChoice"] select')?.disabled,
+      emptyEnumText: get('.panel--inspector [data-inspector-param="emptyChoice"] option')?.textContent?.trim(),
+      actionButtons: document.querySelectorAll('.panel--inspector .inspector__actions .inspector__action-button').length,
+    };
+  });
+  assertSlavaCheck(dynamicAssertions.dynamicSectionCount >= 7, 'Inspector renders all dynamic params');
+  assertSlavaCheck(dynamicAssertions.allDynamicSources, 'Inspector dynamic params expose stable source markers');
+  assertSlavaCheck(dynamicAssertions.titleValue === 'Alpha', 'Inspector dynamic string default renders');
+  assertSlavaCheck(dynamicAssertions.promptValue === 'Describe the frame', 'Inspector dynamic textarea default renders');
+  assertSlavaCheck(dynamicAssertions.stepsMin === '1' && dynamicAssertions.stepsMax === '8', 'Inspector dynamic integer constraints render');
+  assertSlavaCheck(dynamicAssertions.strengthStep === '0.05', 'Inspector dynamic float step renders');
+  assertSlavaCheck(dynamicAssertions.tileChecked === false, 'Inspector dynamic boolean default renders false');
+  assertSlavaCheck(dynamicAssertions.modeOptions.includes('Fast') && dynamicAssertions.modeOptions.includes('Quality'), 'Inspector dynamic enum options render');
+  assertSlavaCheck(dynamicAssertions.emptyEnumDisabled, 'Inspector dynamic empty enum renders disabled control');
+  assertSlavaCheck(dynamicAssertions.emptyEnumText === 'No options available', 'Inspector dynamic empty enum explains missing options');
+  assertSlavaCheck(dynamicAssertions.actionButtons === 3, 'Inspector dynamic node keeps action controls');
+
+  await fillSelector(cdp, '.panel--inspector [data-inspector-param="title"] input', 'Beta');
+  await fillSelector(cdp, '.panel--inspector [data-inspector-param="steps"] input', '99');
+  await clickSelector(cdp, '.panel--inspector [data-inspector-param="title"] input');
+  await fillSelector(cdp, '.panel--inspector [data-inspector-param="strength"] input', '-3');
+  await clickSelector(cdp, '.panel--inspector [data-inspector-param="title"] input');
+  await clickSelector(cdp, '.panel--inspector [data-inspector-param="tile"] input');
+  await selectOption(cdp, '.panel--inspector [data-inspector-param="mode"] select', 'quality');
+  await waitForRuntime(cdp, `
+    (() => {
+      const node = window.__nebulaGraphStore.getState().nodes.find((n) => n.id === "n9");
+      return node
+        && node.data.params.title === "Beta"
+        && node.data.params.steps === 8
+        && node.data.params.strength === 0
+        && node.data.params.tile === true
+        && node.data.params.mode === "quality";
+    })()
+  `);
+
+  const dynamicMutationAssertions = await evaluate(cdp, () => {
+    const node = window.__nebulaGraphStore.getState().nodes.find((n) => n.id === 'n9');
+    return node?.data.params ?? {};
+  });
+  assertSlavaCheck(dynamicMutationAssertions.title === 'Beta', 'Inspector dynamic string control updates params');
+  assertSlavaCheck(dynamicMutationAssertions.steps === 8, 'Inspector dynamic integer control clamps to max');
+  assertSlavaCheck(dynamicMutationAssertions.strength === 0, 'Inspector dynamic float control clamps to min');
+  assertSlavaCheck(dynamicMutationAssertions.tile === true, 'Inspector dynamic boolean control updates params');
+  assertSlavaCheck(dynamicMutationAssertions.mode === 'quality', 'Inspector dynamic enum control updates params');
 }
 
 async function runSlavaExpandedVisualCoverage(cdp) {
@@ -783,6 +920,157 @@ async function runSlavaExpandedVisualCoverage(cdp) {
 
   await clickSelector(cdp, '.mesh-modal__close');
   await waitForRuntime(cdp, '!document.querySelector(".mesh-modal-overlay")');
+}
+
+async function runSlavaHandleGeometryChecks(cdp) {
+  debugStep('interaction: handle geometry');
+  await cdp.send('Emulation.setDeviceMetricsOverride', {
+    width: 1440,
+    height: 980,
+    deviceScaleFactor: 1,
+    mobile: false,
+  });
+  await setupSlavaScene(cdp);
+  await waitForRuntime(cdp, 'document.body.classList.contains("app-slava-restraint") && document.querySelectorAll(".model-node .react-flow__handle").length >= 4');
+
+  await evaluate(cdp, () => {
+    window.__nebulaUIStore.setState((state) => ({
+      selectedNodeId: null,
+      panels: {
+        ...state.panels,
+        library: { ...state.panels.library, visible: false },
+        inspector: { ...state.panels.inspector, visible: false },
+        settings: { ...state.panels.settings, visible: false },
+        chat: { ...state.panels.chat, visible: false },
+      },
+    }));
+  });
+  await waitForRuntime(cdp, `
+    !document.querySelector(".panel--library")
+    && !document.querySelector(".panel--inspector")
+    && !document.querySelector(".panel--settings")
+    && !document.querySelector(".chat-panel")
+  `);
+  await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 8, y: 8, button: 'none' });
+  await sleep(280);
+
+  const sampleHandles = await evaluate(cdp, () => {
+    const seen = new Set();
+    return Array.from(document.querySelectorAll('.model-node .react-flow__handle'))
+      .map((handle, index) => {
+        const rect = handle.getBoundingClientRect();
+        const side = ['left', 'right', 'top', 'bottom'].find((name) => handle.classList.contains(`react-flow__handle-${name}`)) ?? 'unknown';
+        const nodeId = handle.closest('.react-flow__node')?.getAttribute('data-id') ?? '';
+        return {
+          index,
+          side,
+          nodeId,
+          width: rect.width,
+          height: rect.height,
+          centerX: rect.left + rect.width / 2,
+          centerY: rect.top + rect.height / 2,
+        };
+      })
+      .filter((handle) => {
+        if (handle.width <= 0 || handle.height <= 0 || handle.side === 'unknown') return false;
+        const key = `${handle.nodeId}:${handle.side}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .slice(0, 6);
+  });
+
+  assertSlavaCheck(sampleHandles.length >= 2, 'Slava handle geometry check has visible handles to sample');
+
+  const snapshotHandle = async (index) => evaluate(cdp, (handleIndex) => {
+    const handle = document.querySelectorAll('.model-node .react-flow__handle')[handleIndex];
+    if (!(handle instanceof HTMLElement)) return null;
+    const rect = handle.getBoundingClientRect();
+    const style = getComputedStyle(handle);
+    const before = getComputedStyle(handle, '::before');
+    const after = getComputedStyle(handle, '::after');
+    return {
+      centerX: rect.left + rect.width / 2,
+      centerY: rect.top + rect.height / 2,
+      width: rect.width,
+      height: rect.height,
+      transform: style.transform,
+      magnetX: parseFloat(style.getPropertyValue('--sr-handle-magnet-x')) || 0,
+      magnetY: parseFloat(style.getPropertyValue('--sr-handle-magnet-y')) || 0,
+      beforeOpacity: Number(before.opacity),
+      afterOpacity: Number(after.opacity),
+    };
+  }, index);
+
+  for (const handle of sampleHandles) {
+    const rest = await snapshotHandle(handle.index);
+    assertSlavaCheck(rest, `Slava handle ${handle.nodeId}:${handle.side} exists before hover`);
+
+    await cdp.send('Input.dispatchMouseEvent', {
+      type: 'mouseMoved',
+      x: handle.centerX,
+      y: handle.centerY,
+      button: 'none',
+    });
+    await evaluate(cdp, (handleIndex, x, y) => {
+      const handleEl = document.querySelectorAll('.model-node .react-flow__handle')[handleIndex];
+      handleEl?.dispatchEvent(new PointerEvent('pointermove', {
+        bubbles: true,
+        clientX: x,
+        clientY: y,
+        pointerId: 1,
+        pointerType: 'mouse',
+      }));
+    }, handle.index, handle.centerX, handle.centerY);
+    await sleep(300);
+
+    const hover = await snapshotHandle(handle.index);
+    assertSlavaCheck(hover, `Slava handle ${handle.nodeId}:${handle.side} exists during hover`);
+    const hoverDx = Math.abs(hover.centerX - rest.centerX);
+    const hoverDy = Math.abs(hover.centerY - rest.centerY);
+    assertSlavaCheck(hoverDx <= 0.05 && hoverDy <= 0.05, `Slava handle ${handle.nodeId}:${handle.side} hover center stays locked (${hoverDx.toFixed(3)}, ${hoverDy.toFixed(3)})`);
+    assertSlavaCheck(Math.abs(hover.width - rest.width) <= 0.05 && Math.abs(hover.height - rest.height) <= 0.05, `Slava handle ${handle.nodeId}:${handle.side} hover keeps hit box size`);
+    assertSlavaCheck(hover.transform === rest.transform, `Slava handle ${handle.nodeId}:${handle.side} preserves React Flow positioning transform`);
+    assertSlavaCheck(hover.afterOpacity >= 0.85 && hover.beforeOpacity <= 0.15, `Slava handle ${handle.nodeId}:${handle.side} reveals hover circle without moving layout`);
+
+    await cdp.send('Input.dispatchMouseEvent', {
+      type: 'mouseMoved',
+      x: handle.centerX + 7,
+      y: handle.centerY + 2,
+      button: 'none',
+    });
+    await evaluate(cdp, (handleIndex, x, y) => {
+      const handleEl = document.querySelectorAll('.model-node .react-flow__handle')[handleIndex];
+      handleEl?.dispatchEvent(new PointerEvent('pointermove', {
+        bubbles: true,
+        clientX: x,
+        clientY: y,
+        pointerId: 1,
+        pointerType: 'mouse',
+      }));
+    }, handle.index, handle.centerX + 7, handle.centerY + 2);
+    await sleep(80);
+
+    const magnet = await snapshotHandle(handle.index);
+    assertSlavaCheck(magnet, `Slava handle ${handle.nodeId}:${handle.side} exists during magnet check`);
+    const magnetDx = Math.abs(magnet.centerX - rest.centerX);
+    const magnetDy = Math.abs(magnet.centerY - rest.centerY);
+    assertSlavaCheck(magnetDx <= 0.05 && magnetDy <= 0.05, `Slava handle ${handle.nodeId}:${handle.side} magnetism does not move layout (${magnetDx.toFixed(3)}, ${magnetDy.toFixed(3)})`);
+    assertSlavaCheck(Math.abs(magnet.magnetX) >= 0.4 || Math.abs(magnet.magnetY) >= 0.4, `Slava handle ${handle.nodeId}:${handle.side} receives cursor magnet offset`);
+
+    await evaluate(cdp, (handleIndex) => {
+      const handleEl = document.querySelectorAll('.model-node .react-flow__handle')[handleIndex];
+      handleEl?.dispatchEvent(new PointerEvent('pointerout', {
+        bubbles: true,
+        relatedTarget: document.body,
+        pointerId: 1,
+        pointerType: 'mouse',
+      }));
+    }, handle.index);
+    await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 8, y: 8, button: 'none' });
+    await sleep(80);
+  }
 }
 
 async function runSlavaInteractionChecks(cdp) {
@@ -1341,6 +1629,34 @@ async function clickSelector(cdp, selector) {
   await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y, button: 'none' });
   await cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', buttons: 1, clickCount: 1 });
   await cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', buttons: 0, clickCount: 1 });
+}
+
+async function fillSelector(cdp, selector, text) {
+  await clickSelector(cdp, selector);
+  await evaluate(cdp, (targetSelector) => {
+    const target = document.querySelector(targetSelector);
+    if (!(target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement)) {
+      throw new Error(`Element is not a text field: ${targetSelector}`);
+    }
+    target.focus();
+    target.select();
+  }, selector);
+  await cdp.send('Input.insertText', { text });
+  await sleep(40);
+}
+
+async function selectOption(cdp, selector, value) {
+  await evaluate(cdp, (targetSelector, nextValue) => {
+    const target = document.querySelector(targetSelector);
+    if (!(target instanceof HTMLSelectElement)) {
+      throw new Error(`Element is not a select: ${targetSelector}`);
+    }
+    const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set;
+    setter?.call(target, nextValue);
+    target.dispatchEvent(new Event('input', { bubbles: true }));
+    target.dispatchEvent(new Event('change', { bubbles: true }));
+  }, selector, value);
+  await sleep(40);
 }
 
 async function dragSelector(cdp, selector, deltaX, deltaY) {

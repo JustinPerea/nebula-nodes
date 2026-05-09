@@ -450,12 +450,14 @@ These should not stay inline:
 - The chat composer has a proper component contract.
 - Chat rest, message, busy/stop, error, and image-chip states are now deterministic screenshot fixtures.
 - Inspector controls now share one data-driven render contract for static and dynamic params, with stable `data-inspector-*` markers for visual checks.
+- Inspector coverage now includes synthetic dynamic schemas across string, textarea, integer, float, boolean, enum, and empty-enum controls.
 - Handles have clear rest/hover/connecting rules and target-size protection.
+- Handle coverage now asserts hover and cursor magnetism preserve the React Flow handle layout center and positioning transform.
 - Settings now has clear disclosure and visibility behavior.
 - Mesh modal and Inspector no longer rely as heavily on inline visual styles.
 - Component inline styles have been audited; remaining cases are dynamic geometry, data colors, progress width, edge styling, or effect coordinates.
 - `npm run check:inline-styles` guards against new static inline visual styles in `frontend/src/components`.
-- `npm run check:slava-screenshots` captures desktop/settings/image-surface/chat rest-message-busy-error-chip states/Inspector text-file-model-sticky states/popover-loading-reroute/mesh-modal/mobile/empty-canvas Slava screenshots into `output/slava-screenshot-check`.
+- `npm run check:slava-screenshots` captures desktop/settings/image-surface/chat rest-message-busy-error-chip states/Inspector text-file-model-sticky-dynamic states/popover-loading-reroute/mesh-modal/mobile/empty-canvas Slava screenshots into `output/slava-screenshot-check`.
 
 ### Weak
 

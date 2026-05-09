@@ -336,18 +336,24 @@ export function Inspector() {
       return renderUniversalModelControl();
     }
 
-    if (param.type === 'enum' && param.options) {
+    if (param.type === 'enum') {
+      const options = getVisibleOptions(param);
       return (
         <select
           className="inspector__field"
           value={String(value)}
+          disabled={options.length === 0}
           onChange={(e) => onParamChange(param.key, e.target.value)}
         >
-          {getVisibleOptions(param).map((opt) => (
-            <option key={String(opt.value)} value={String(opt.value)}>
-              {opt.label}
-            </option>
-          ))}
+          {options.length === 0 ? (
+            <option value="">No options available</option>
+          ) : (
+            options.map((opt) => (
+              <option key={String(opt.value)} value={String(opt.value)}>
+                {opt.label}
+              </option>
+            ))
+          )}
         </select>
       );
     }
@@ -370,8 +376,12 @@ export function Inspector() {
           className="inspector__field"
           type="number"
           value={String(value)}
-          onChange={(e) => onParamChange(param.key, Number(e.target.value))}
+          onChange={(e) => {
+            const next = e.target.value;
+            onParamChange(param.key, next === '' ? '' : Number(next));
+          }}
           onBlur={(e) => {
+            if (e.target.value === '') return;
             const raw = Number(e.target.value);
             if (Number.isNaN(raw)) return;
             let clamped = raw;
