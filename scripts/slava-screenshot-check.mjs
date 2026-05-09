@@ -1412,7 +1412,6 @@ async function runSlavaInteractionChecks(cdp) {
   await clickSelector(cdp, '.settings__toggle-row');
   await waitForRuntime(cdp, '!document.querySelector(".agent-log") && !document.body.classList.contains("agent-log-enabled")');
 
-  debugStep('interaction: image drag');
   await evaluate(cdp, () => {
     window.__nebulaUIStore.setState((state) => ({
       panels: {
@@ -1423,6 +1422,51 @@ async function runSlavaInteractionChecks(cdp) {
   });
   await waitForRuntime(cdp, '!document.querySelector(".panel--settings")');
 
+  debugStep('interaction: daedalus mode switch');
+  await clickElementByText(cdp, '.chat-panel__agent-selector button', 'Daedalus');
+  await waitForRuntime(cdp, `
+    window.__nebulaUIStore.getState().skin === "hermes"
+    && document.body.classList.contains("app-hermes")
+    && !document.body.classList.contains("app-slava-restraint")
+    && document.body.classList.contains("chat-bloom-active")
+    && document.querySelector(".chat-panel--agent-daedalus")
+    && document.querySelector(".hermes-bloom-portal")
+  `);
+  const daedalusModeAssertions = await evaluate(cdp, () => ({
+    storedSkin: window.__nebulaUIStore.getState().skin,
+    hermesBody: document.body.classList.contains('app-hermes'),
+    slavaBody: document.body.classList.contains('app-slava-restraint'),
+    bloomActive: document.body.classList.contains('chat-bloom-active'),
+    bloomPortal: !!document.querySelector('.hermes-bloom-portal'),
+    agent: document.querySelector('.chat-panel')?.getAttribute('data-chat-agent') ?? '',
+  }));
+  assertSlavaCheck(daedalusModeAssertions.storedSkin === 'hermes', 'Daedalus agent switch activates Hermes skin');
+  assertSlavaCheck(daedalusModeAssertions.hermesBody, 'Daedalus agent switch applies Hermes body class');
+  assertSlavaCheck(!daedalusModeAssertions.slavaBody, 'Daedalus agent switch removes Slava body class');
+  assertSlavaCheck(daedalusModeAssertions.bloomActive, 'Daedalus agent switch starts bloom animation state');
+  assertSlavaCheck(daedalusModeAssertions.bloomPortal, 'Daedalus agent switch mounts the bloom portal');
+  assertSlavaCheck(daedalusModeAssertions.agent === 'daedalus', 'Daedalus agent switch updates chat agent state');
+
+  await clickElementByText(cdp, '.chat-panel__agent-selector button', 'Claude');
+  await waitForRuntime(cdp, `
+    window.__nebulaUIStore.getState().skin === "slava-restraint"
+    && document.body.classList.contains("app-slava-restraint")
+    && !document.body.classList.contains("app-hermes")
+    && document.querySelector(".chat-panel--agent-claude")
+  `);
+  await waitForRuntime(cdp, '!document.body.classList.contains("app-skin-switching-slava")', 1200);
+  const claudeModeAssertions = await evaluate(cdp, () => ({
+    storedSkin: window.__nebulaUIStore.getState().skin,
+    slavaBody: document.body.classList.contains('app-slava-restraint'),
+    hermesBody: document.body.classList.contains('app-hermes'),
+    agent: document.querySelector('.chat-panel')?.getAttribute('data-chat-agent') ?? '',
+  }));
+  assertSlavaCheck(claudeModeAssertions.storedSkin === 'slava-restraint', 'Claude agent switch restores previous Slava skin');
+  assertSlavaCheck(claudeModeAssertions.slavaBody, 'Claude agent switch restores Slava body class');
+  assertSlavaCheck(!claudeModeAssertions.hermesBody, 'Claude agent switch removes Hermes body class');
+  assertSlavaCheck(claudeModeAssertions.agent === 'claude', 'Claude agent switch updates chat agent state');
+
+  debugStep('interaction: image drag');
   const imageDragAssertions = await evaluate(cdp, () => ({
     imageDraggable: document.querySelector('.model-node--image-surface .model-node__preview-image')?.getAttribute('draggable'),
     imageHasNoNoDrag: !document.querySelector('.model-node--image-surface .model-node__preview-image')?.classList.contains('nodrag'),

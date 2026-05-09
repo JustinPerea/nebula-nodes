@@ -5,10 +5,9 @@
  * Each skin's CSS lives in its own file under styles/, scoped under the body
  * class so it can't leak into other skins or the unskinned default.
  *
- * Selection is independent of the chat agent. Hermes used to be a side-effect
- * of picking the Daedalus agent in the chat panel; this module decouples that
- * — the agent picker stays for picking which AI you talk to, and the skin
- * picker (in Settings) is its own thing.
+ * Manual selection lives in Settings. The chat panel may temporarily request
+ * Hermes when the user enters Daedalus mode, then restore the previous skin
+ * when they return to Claude.
  *
  * Default: Slava Restraint. Persistence: localStorage key `nebula:skin`.
  * Migration: existing users with `nebula:hermes-tone` set are auto-promoted

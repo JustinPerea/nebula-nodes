@@ -7,6 +7,7 @@ import { useDelayedUnmount } from '../../hooks/useDelayedUnmount';
 import '../../styles/panels.css';
 import '../../styles/hermes.css';
 import { fetchNousModels, type NousModel } from '../../lib/api';
+import type { SkinId } from '../../lib/skins';
 
 // Daedalus mode palette. Persisted so the user's choice survives reloads.
 type HermesTone = 'verdant' | 'obsidian';
@@ -376,6 +377,8 @@ export function ChatPanel() {
   const [bloomCenter, setBloomCenter] = useState<{ x: number; y: number } | null>(null);
   const chatPanelRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const skinBeforeDaedalusRef = useRef<SkinId | null>(null);
+  const daedalusChangedSkinRef = useRef(false);
 
   // Auto-grow the textarea as the user types so the full prompt is visible
   // (instead of scrolling inside a fixed 2-row box). Capped at 200px so a
@@ -403,13 +406,11 @@ export function ChatPanel() {
     };
   }, [bloomKey]);
 
-  // Hermes tone (Verdant/Obsidian) is a sub-option of the Hermes skin.
-  // The skin itself is now selected via the SkinPicker in Settings — body
-  // class application lives in the store (uiStore.setSkin / applySkinBodyClass),
-  // decoupled from the agent picker. We only manage the tone class here when
-  // the active skin is Hermes; otherwise we strip both tone classes so they
-  // can't leak into other skins.
+  // Hermes tone (Verdant/Obsidian) is a sub-option of the Hermes skin. Settings
+  // still owns manual skin selection, but the Daedalus agent button can enter
+  // Hermes mode temporarily so the character-specific animation actually plays.
   const activeSkin = useUIStore((s) => s.skin);
+  const setSkin = useUIStore((s) => s.setSkin);
   useEffect(() => {
     const body = document.body;
     if (activeSkin === 'hermes') {
@@ -553,6 +554,24 @@ export function ChatPanel() {
   const handleAgentChange = useCallback(
     (next: 'claude' | 'daedalus') => {
       if (next === agent) return;
+
+      if (next === 'daedalus') {
+        if (activeSkin !== 'hermes') {
+          skinBeforeDaedalusRef.current = activeSkin;
+          daedalusChangedSkinRef.current = true;
+          setSkin('hermes');
+        } else {
+          daedalusChangedSkinRef.current = false;
+          skinBeforeDaedalusRef.current = null;
+        }
+      } else if (daedalusChangedSkinRef.current) {
+        if (activeSkin === 'hermes') {
+          setSkin(skinBeforeDaedalusRef.current ?? 'slava-restraint');
+        }
+        daedalusChangedSkinRef.current = false;
+        skinBeforeDaedalusRef.current = null;
+      }
+
       setAgent(next);
       setSessionId(null);
       // Fire the sigil-bloom only on the awakening transition, not when
@@ -569,7 +588,7 @@ export function ChatPanel() {
         setBloomKey((k) => k + 1);
       }
     },
-    [agent],
+    [activeSkin, agent, setSkin],
   );
 
   const wsRef = useRef<WebSocket | null>(null);
