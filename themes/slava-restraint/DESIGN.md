@@ -439,6 +439,7 @@ These should not stay inline:
 - Default node visuals for handles, media actions, loading/progress, text previews, reroute dots, and dynamic model badges are now scoped away from Slava; Slava owns those states directly.
 - Connection popovers and context menus now have Slava-scoped glass styling instead of inheriting the old panel palette.
 - Context menu, connection popup, and chat panel shell visuals are now split so old Default backgrounds/borders/radii do not apply globally to Slava.
+- Lower-level settings, inspector, and chat message/control visuals are now split from shared panel structure so Slava owns token-backed controls directly.
 - Agent log is hidden unless enabled in Settings and starts collapsed so it does not compete with chat by default.
 - Slava panel/chrome/node/media z-index values are named layer tokens.
 - Slava toolbar active cells now have dot-matrix selected backing and automated `aria-pressed`/active visual coverage.
@@ -463,7 +464,7 @@ These should not stay inline:
 
 1. `frontend/src/styles/slava-restraint.css` node/media section: now tokenized, but still high-risk because it owns React Flow geometry and hover/drag perception.
 2. `frontend/src/styles/nodes.css`: most high-risk node/control leaks are isolated; continue splitting any remaining shared structural rules from Default-only visual values.
-3. `frontend/src/styles/panels.css`: top-level panel/chat/popover shells are mostly split; lower-level settings, inspector, and chat message controls still carry some old Default visual values that Slava overrides.
+3. `frontend/src/styles/panels.css`: major Slava-facing shell/control visuals are split; continue auditing any remaining Default-only resize, chat legacy, or niche control values.
 4. Inspector dynamic controls: now centralized and screenshot-covered, but still high-risk because provider schemas are data-driven.
 5. React Flow handles: any transform change can reintroduce perceived drift.
 

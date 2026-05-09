@@ -1321,6 +1321,8 @@ body.app-slava-restraint .chat-panel__thinking-line {
 body.app-slava-restraint .chat-panel__thinking-body {
   border-top: 1px solid var(--sr-accent-border-soft);
   font-family: var(--sr-mono);
+  font-size: var(--sr-type-meta);
+  line-height: var(--sr-line-relaxed);
 }
 
 /* Inspector content swap — when the user clicks a different node, the
@@ -1840,6 +1842,8 @@ body.app-slava-restraint .settings__section-toggle-title {
 body.app-slava-restraint .settings__section-toggle-count,
 body.app-slava-restraint .settings__section-toggle-chevron {
   color: var(--sr-ink-meta);
+  font-family: var(--sr-mono);
+  font-size: var(--sr-type-meta);
 }
 
 body.app-slava-restraint .settings__collapsible-body {
@@ -1857,6 +1861,51 @@ body.app-slava-restraint .settings__collapsible-body {
 
 body.app-slava-restraint .settings__collapsible-body .settings__key-row:last-child {
   margin-bottom: 0;
+}
+
+body.app-slava-restraint .settings__key-link {
+  color: var(--sr-ink-light);
+  font-family: var(--sr-ui);
+  font-size: var(--sr-type-label);
+  transition: color var(--sr-motion-fast);
+}
+
+body.app-slava-restraint .settings__key-link:hover {
+  color: var(--sr-ink-bold);
+  text-decoration: underline;
+}
+
+body.app-slava-restraint .settings__key-input {
+  font-family: var(--sr-mono);
+  font-size: var(--sr-type-label);
+  letter-spacing: 0;
+}
+
+body.app-slava-restraint .settings__reveal-button {
+  min-height: var(--sr-control-h-xs);
+  border: 1px solid var(--sr-edge);
+  border-radius: var(--sr-radius-control);
+  background: var(--sr-surface-control);
+  color: var(--sr-ink-light);
+  font-family: var(--sr-ui);
+  font-size: var(--sr-type-body);
+  transition:
+    background-color var(--sr-motion-fast),
+    border-color var(--sr-motion-fast),
+    color var(--sr-motion-fast);
+}
+
+body.app-slava-restraint .settings__reveal-button:hover {
+  border-color: var(--sr-edge-strong);
+  background: var(--sr-surface-control-hover);
+  color: var(--sr-ink-bold);
+}
+
+body.app-slava-restraint .inspector__node-name {
+  color: var(--sr-ink);
+  font-family: var(--sr-ui);
+  font-size: var(--sr-type-control);
+  font-weight: 600;
 }
 
 body.app-slava-restraint .inspector__label {
