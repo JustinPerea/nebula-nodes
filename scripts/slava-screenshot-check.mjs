@@ -39,9 +39,11 @@ chrome.stderr.on('data', (chunk) => {
   if (process.env.SLAVA_CHECK_DEBUG === '1') process.stderr.write(String(chunk));
 });
 
+let cdp;
+
 try {
   const pageWs = await waitForPageWebSocket(port);
-  const cdp = await connectCdp(pageWs);
+  cdp = await connectCdp(pageWs);
 
   await cdp.send('Page.enable');
   await cdp.send('Runtime.enable');
@@ -57,6 +59,7 @@ try {
   await loadEvent;
 
   await waitForRuntime(cdp, 'window.__nebulaUIStore && window.__nebulaGraphStore');
+  await runSkinSwitchSmokeChecks(cdp);
   await setupSlavaScene(cdp);
   await waitForRuntime(cdp, 'document.body.classList.contains("app-slava-restraint") && document.querySelectorAll(".react-flow__node").length >= 7');
 
@@ -185,12 +188,15 @@ try {
 
   console.log(`Slava screenshot check passed. Screenshots saved to ${OUT_DIR}`);
 } finally {
+  cdp?.close();
   if (chrome.exitCode === null) chrome.kill('SIGTERM');
   await waitForExit(chrome, 1500).catch(() => {
     if (chrome.exitCode === null) chrome.kill('SIGKILL');
   });
   await cleanupChromeProfiles();
 }
+
+process.exit(0);
 
 async function setupSlavaScene(cdp) {
   await evaluate(cdp, () => {
@@ -337,6 +343,97 @@ async function setupSlavaScene(cdp) {
     });
   });
   await sleep(500);
+}
+
+async function runSkinSwitchSmokeChecks(cdp) {
+  debugStep('smoke: skin defaults and settings picker');
+  await waitForRuntime(cdp, 'document.querySelector(".canvas-wrapper")');
+
+  const defaultAssertions = await evaluate(cdp, () => ({
+    storedSkin: window.localStorage.getItem('nebula:skin'),
+    storeSkin: window.__nebulaUIStore.getState().skin,
+    slavaBody: document.body.classList.contains('app-slava-restraint'),
+    hermesBody: document.body.classList.contains('app-hermes'),
+    slavaBackground: !!document.querySelector('.react-flow__background.slava-canvas-background'),
+    slavaDot: !!document.querySelector('.react-flow__background.slava-canvas-background .slava-canvas-background__dot'),
+  }));
+  assertSlavaCheck(defaultAssertions.storedSkin === null, 'fresh profile has no persisted skin before smoke check');
+  assertSlavaCheck(defaultAssertions.storeSkin === 'slava-restraint', 'fresh profile defaults to Slava skin');
+  assertSlavaCheck(defaultAssertions.slavaBody, 'fresh profile applies Slava body class');
+  assertSlavaCheck(!defaultAssertions.hermesBody, 'fresh Slava default does not also apply Hermes body class');
+  assertSlavaCheck(defaultAssertions.slavaBackground, 'fresh Slava default renders dot-matrix background layer');
+  assertSlavaCheck(defaultAssertions.slavaDot, 'fresh Slava default renders the dot-matrix marker element');
+
+  await evaluate(cdp, () => {
+    window.__nebulaUIStore.setState((state) => ({
+      panels: {
+        ...state.panels,
+        library: { ...state.panels.library, visible: false },
+        inspector: { ...state.panels.inspector, visible: false },
+        chat: { ...state.panels.chat, visible: false },
+        settings: { ...state.panels.settings, visible: true, position: { x: 24, y: 24 } },
+      },
+    }));
+  });
+  await waitForRuntime(cdp, 'document.querySelector(".panel--settings .skin-picker__option")');
+
+  const activeDefault = await getActiveSkinPickerLabel(cdp);
+  assertSlavaCheck(activeDefault.includes('Slava'), `settings picker marks Slava active by default, got "${activeDefault}"`);
+
+  await clickElementByText(cdp, '.skin-picker__option', 'Default');
+  await waitForRuntime(cdp, 'window.__nebulaUIStore.getState().skin === "default" && !document.body.classList.contains("app-slava-restraint") && !document.body.classList.contains("app-hermes")');
+  const baseAssertions = await evaluate(cdp, () => ({
+    storedSkin: window.localStorage.getItem('nebula:skin'),
+    activeSkin: document.querySelector('.skin-picker__option--active .skin-picker__label')?.textContent?.trim() ?? '',
+    slavaBackground: !!document.querySelector('.react-flow__background.slava-canvas-background'),
+  }));
+  assertSlavaCheck(baseAssertions.storedSkin === 'default', 'Default skin persists through settings picker');
+  assertSlavaCheck(baseAssertions.activeSkin === 'Default', `Default skin option is active, got "${baseAssertions.activeSkin}"`);
+  assertSlavaCheck(!baseAssertions.slavaBackground, 'Default skin removes the Slava background class');
+
+  await clickElementByText(cdp, '.skin-picker__option', 'Hermes');
+  await waitForRuntime(cdp, 'window.__nebulaUIStore.getState().skin === "hermes" && document.body.classList.contains("app-hermes") && !document.body.classList.contains("app-slava-restraint")');
+  const hermesAssertions = await evaluate(cdp, () => ({
+    storedSkin: window.localStorage.getItem('nebula:skin'),
+    activeSkin: document.querySelector('.skin-picker__option--active .skin-picker__label')?.textContent?.trim() ?? '',
+    slavaBackground: !!document.querySelector('.react-flow__background.slava-canvas-background'),
+  }));
+  assertSlavaCheck(hermesAssertions.storedSkin === 'hermes', 'Hermes skin persists through settings picker');
+  assertSlavaCheck(hermesAssertions.activeSkin === 'Hermes', `Hermes skin option is active, got "${hermesAssertions.activeSkin}"`);
+  assertSlavaCheck(!hermesAssertions.slavaBackground, 'Hermes skin keeps the Slava background class removed');
+
+  await evaluate(cdp, () => {
+    window.__slavaSkinSwitchSawClass = document.body.classList.contains('app-skin-switching-slava');
+    window.__slavaSkinSwitchObserver?.disconnect?.();
+    window.__slavaSkinSwitchObserver = new MutationObserver(() => {
+      if (document.body.classList.contains('app-skin-switching-slava')) {
+        window.__slavaSkinSwitchSawClass = true;
+      }
+    });
+    window.__slavaSkinSwitchObserver.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+  });
+  await clickElementByText(cdp, '.skin-picker__option', 'Slava');
+  await waitForRuntime(cdp, 'window.__slavaSkinSwitchSawClass === true', 1000);
+  await waitForRuntime(cdp, 'window.__nebulaUIStore.getState().skin === "slava-restraint" && document.body.classList.contains("app-slava-restraint") && !document.body.classList.contains("app-hermes")');
+  await waitForRuntime(cdp, '!document.body.classList.contains("app-skin-switching-slava")', 1200);
+  const slavaAssertions = await evaluate(cdp, () => {
+    window.__slavaSkinSwitchObserver?.disconnect?.();
+    window.__slavaSkinSwitchObserver = null;
+    return {
+      storedSkin: window.localStorage.getItem('nebula:skin'),
+      activeSkin: document.querySelector('.skin-picker__option--active .skin-picker__label')?.textContent?.trim() ?? '',
+      slavaBackground: !!document.querySelector('.react-flow__background.slava-canvas-background'),
+      slavaDot: !!document.querySelector('.react-flow__background.slava-canvas-background .slava-canvas-background__dot'),
+      switchClassLingering: document.body.classList.contains('app-skin-switching-slava'),
+    };
+  });
+  assertSlavaCheck(slavaAssertions.storedSkin === 'slava-restraint', 'Slava skin persists after switching back');
+  assertSlavaCheck(slavaAssertions.activeSkin.includes('Slava'), `Slava skin option is active after switching back, got "${slavaAssertions.activeSkin}"`);
+  assertSlavaCheck(slavaAssertions.slavaBackground, 'Slava background class returns after switching back');
+  assertSlavaCheck(slavaAssertions.slavaDot, 'Slava dot-matrix marker returns after switching back');
+  assertSlavaCheck(!slavaAssertions.switchClassLingering, 'Slava skin switch mask class cleans itself up');
+
+  debugStep('smoke: skin defaults and settings picker complete');
 }
 
 async function runSlavaChatCoverage(cdp) {
@@ -1631,6 +1728,30 @@ async function clickSelector(cdp, selector) {
   await cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', buttons: 0, clickCount: 1 });
 }
 
+async function clickElementByText(cdp, selector, text) {
+  const rect = await evaluate(cdp, (targetSelector, targetText) => {
+    const target = Array.from(document.querySelectorAll(targetSelector)).find((el) => (
+      el.textContent?.includes(targetText)
+    ));
+    if (!target) return null;
+    const { left, top, width, height } = target.getBoundingClientRect();
+    return { left, top, width, height };
+  }, selector, text);
+  if (!rect) throw new Error(`Element not found: ${selector} containing "${text}"`);
+
+  const x = rect.left + rect.width / 2;
+  const y = rect.top + rect.height / 2;
+  await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y, button: 'none' });
+  await cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', buttons: 1, clickCount: 1 });
+  await cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', buttons: 0, clickCount: 1 });
+}
+
+async function getActiveSkinPickerLabel(cdp) {
+  return evaluate(cdp, () => (
+    document.querySelector('.skin-picker__option--active .skin-picker__label')?.textContent?.trim() ?? ''
+  ));
+}
+
 async function fillSelector(cdp, selector, text) {
   await clickSelector(cdp, selector);
   await evaluate(cdp, (targetSelector) => {
@@ -1808,6 +1929,11 @@ function connectCdp(url) {
             };
             events.set(method, [...(events.get(method) ?? []), { resolve: wrapped, reject: eventReject, timer }]);
           });
+        },
+        close() {
+          if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+            ws.close();
+          }
         },
       });
     });

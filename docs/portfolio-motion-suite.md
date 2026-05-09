@@ -135,6 +135,7 @@ The work is paired with a reusable `motion-design` skill at `~/.claude/skills/mo
   - `frontend/src/styles/slava-restraint.css` — `@keyframes slava-skin-switch-mask`
 - **Pattern detail**: the mask only runs for transitions where Slava is entering or leaving. Initial page load stays static so persisted Slava does not flash.
 - **Scope note**: the transient selector is intentionally body-level rather than nested under `.app-slava-restraint`, because it must survive the exact frame where the Slava body class is being removed. The class is only added by Slava-aware switch logic.
+- **Verification guard**: `npm run check:slava-screenshots` now starts from a fresh Chrome profile, verifies unpersisted sessions default to Slava, switches Settings through Default → Hermes → Slava, confirms the Slava dot background appears/disappears with the skin, and checks the transient mask class cleans itself up.
 - **Reduced-motion**: `animation: none`
 
 ### 11. Library item drag preview
