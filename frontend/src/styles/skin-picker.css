@@ -19,22 +19,25 @@
   flex-direction: column;
   gap: 2px;
   padding: 8px 10px;
-  border: 1px solid #2a2a2a;
-  border-radius: 6px;
-  background: transparent;
-  color: inherit;
   text-align: left;
   cursor: pointer;
   font: inherit;
   transition: border-color 120ms ease, background-color 120ms ease;
 }
 
-.skin-picker__option:hover {
+body:not(.app-slava-restraint) .skin-picker__option {
+  border: 1px solid #2a2a2a;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+}
+
+body:not(.app-slava-restraint) .skin-picker__option:hover {
   border-color: #444;
   background: rgba(255, 255, 255, 0.02);
 }
 
-.skin-picker__option--active {
+body:not(.app-slava-restraint) .skin-picker__option--active {
   border-color: #888;
   background: rgba(255, 255, 255, 0.04);
 }
@@ -49,38 +52,50 @@
   width: 12px;
   height: 12px;
   border-radius: 50%;
-  border: 1px solid #555;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
 }
 
+body:not(.app-slava-restraint) .skin-picker__radio {
+  border: 1px solid #555;
+}
+
 .skin-picker__radio-dot {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: transparent;
   transition: background-color 120ms ease;
 }
 
-.skin-picker__option--active .skin-picker__radio {
+body:not(.app-slava-restraint) .skin-picker__radio-dot {
+  background: transparent;
+}
+
+body:not(.app-slava-restraint) .skin-picker__option--active .skin-picker__radio {
   border-color: #ccc;
 }
 
-.skin-picker__option--active .skin-picker__radio-dot {
+body:not(.app-slava-restraint) .skin-picker__option--active .skin-picker__radio-dot {
   background: #ccc;
 }
 
 .skin-picker__label {
   font-size: 13px;
   font-weight: 500;
+}
+
+body:not(.app-slava-restraint) .skin-picker__label {
   color: #ddd;
 }
 
 .skin-picker__description {
   font-size: 11px;
-  color: #888;
   line-height: 1.35;
   margin-left: 20px;
+}
+
+body:not(.app-slava-restraint) .skin-picker__description {
+  color: #888;
 }

@@ -445,6 +445,8 @@ These should not stay inline:
 - Slava panel/chrome/node/media z-index values are named layer tokens.
 - Slava toolbar active cells now have dot-matrix selected backing and automated `aria-pressed`/active visual coverage.
 - Default base visuals are now split away from Slava for the highest-impact shared shells: panels, toolbar, node cards, node state borders, node headers, ID chips, preview wells, and mesh modal chrome.
+- Default canvas visuals in `canvas.css` are scoped away from Slava; Slava owns React Flow canvas variables, selection, controls, and animated edge treatment.
+- Default agent log and skin picker visuals are scoped away from Slava; only their layout/structure contracts remain shared.
 - The chat composer has a proper component contract.
 - Chat rest, message, busy/stop, error, and image-chip states are now deterministic screenshot fixtures.
 - Inspector controls now share one data-driven render contract for static and dynamic params, with stable `data-inspector-*` markers for visual checks.
@@ -458,7 +460,7 @@ These should not stay inline:
 ### Weak
 
 - Success and pending tokens exist for consistency, but there are few visible states using them yet.
-- Default/Hermes base CSS still contains some hard-coded structural/modal values that Slava overrides. The highest-risk node/control leaks are isolated, but the system is not yet inversion-clean.
+- Default/Hermes base CSS still contains some hard-coded structural/modal values that Slava overrides. The highest-risk canvas/panel/node/control leaks are isolated, but the system is not yet inversion-clean.
 - The screenshot script verifies representative structure and image output dimensions, but final default promotion still needs human visual review of the captured PNGs.
 
 ### High-Risk Areas
@@ -466,8 +468,10 @@ These should not stay inline:
 1. `frontend/src/styles/slava-restraint.css` node/media section: now tokenized, but still high-risk because it owns React Flow geometry and hover/drag perception.
 2. `frontend/src/styles/nodes.css`: most high-risk node/control leaks are isolated; continue splitting any remaining shared structural rules from Default-only visual values.
 3. `frontend/src/styles/panels.css`: major Slava-facing shell/control visuals are split; continue auditing niche Default-only control values and any legacy classes not covered by Slava fixtures.
-4. Inspector dynamic controls: now centralized and screenshot-covered, but still high-risk because provider schemas are data-driven.
-5. React Flow handles: any transform change can reintroduce perceived drift.
+4. `frontend/src/styles/canvas.css`: visual React Flow defaults are now scoped away from Slava; keep future shared additions structural unless they are explicitly `body:not(.app-slava-restraint)`.
+5. `frontend/src/styles/layouts.css` and `skin-picker.css`: Slava-facing visuals are split; keep future shared additions structural unless they are explicitly `body:not(.app-slava-restraint)`.
+6. Inspector dynamic controls: now centralized and screenshot-covered, but still high-risk because provider schemas are data-driven.
+7. React Flow handles: any transform change can reintroduce perceived drift.
 
 ---
 

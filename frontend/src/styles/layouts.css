@@ -170,6 +170,10 @@ body.agent-log-enabled .chat-panel {
   bottom: var(--toolbar-pad);
   left: auto;
   width: var(--col-right-w);
+  overflow: hidden;
+}
+
+body:not(.app-slava-restraint) .agent-log {
   background: rgba(20, 20, 20, 0.92);
   border: 1px solid #2a2a2a;
   border-radius: 12px;
@@ -177,7 +181,6 @@ body.agent-log-enabled .chat-panel {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: 12px;
   color: #ccc;
-  overflow: hidden;
   backdrop-filter: blur(8px);
 }
 
@@ -210,6 +213,9 @@ body.app-slava-restraint.agent-log-open.agent-log-empty .agent-log {
   color: inherit;
   cursor: pointer;
   font-family: inherit;
+}
+
+body:not(.app-slava-restraint) .agent-log__header {
   font-size: 12px;
 }
 
@@ -217,6 +223,9 @@ body.app-slava-restraint.agent-log-open.agent-log-empty .agent-log {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+}
+
+body:not(.app-slava-restraint) .agent-log__title {
   letter-spacing: 0.4px;
   color: #ddd;
 }
@@ -230,16 +239,22 @@ body.app-slava-restraint.agent-log-open.agent-log-empty .agent-log {
 
 .agent-log__icon {
   display: inline-block;
+}
+
+body:not(.app-slava-restraint) .agent-log__icon {
   color: #7aa9ff;
   transform: rotate(-15deg);
 }
 
 .agent-log__chevron {
   display: inline-block;
-  color: #888;
   transition: transform 0.18s ease;
   font-size: 14px;
   line-height: 1;
+}
+
+body:not(.app-slava-restraint) .agent-log__chevron {
+  color: #888;
 }
 
 .agent-log__chevron--open {
@@ -253,15 +268,21 @@ body.app-slava-restraint.agent-log-open.agent-log-empty .agent-log {
 .agent-log__body {
   max-height: 240px;
   overflow-y: auto;
+}
+
+body:not(.app-slava-restraint) .agent-log__body {
   border-top: 1px solid #222;
   padding: 8px 12px 12px;
 }
 
 .agent-log__empty {
-  color: #666;
-  font-style: italic;
   padding: 14px 4px;
   text-align: center;
+}
+
+body:not(.app-slava-restraint) .agent-log__empty {
+  color: #666;
+  font-style: italic;
 }
 
 .agent-log__list {
@@ -280,22 +301,34 @@ body.app-slava-restraint.agent-log-open.agent-log-empty .agent-log {
   align-items: baseline;
   padding: 4px 0;
   font-size: 11px;
+}
+
+body:not(.app-slava-restraint) .agent-log__entry {
   color: #bbb;
 }
 
-.agent-log__time {
+body:not(.app-slava-restraint) .agent-log__time {
   color: #666;
+}
+
+.agent-log__time {
   font-variant-numeric: tabular-nums;
 }
 
-.agent-log__source {
+body:not(.app-slava-restraint) .agent-log__source {
   color: #888;
+}
+
+.agent-log__source {
   text-transform: uppercase;
   font-size: 10px;
   letter-spacing: 0.4px;
 }
 
-.agent-log__msg {
+body:not(.app-slava-restraint) .agent-log__msg {
   color: #ddd;
+}
+
+.agent-log__msg {
   word-break: break-word;
 }
