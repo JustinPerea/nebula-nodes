@@ -248,7 +248,7 @@ cat > ~/.local/bin/nebula <<'EOF'
 #!/bin/bash
 # nebula CLI wrapper — invokes `python3 -m nebula`. Adjust the cd path to
 # your nebula-nodes clone if it lives somewhere else.
-cd "$HOME/Documents/Projects/nebula_nodes" 2>/dev/null || true
+cd "$HOME/Documents/Workspace/Projects/nebula_nodes" 2>/dev/null || true
 exec python3 -m nebula "$@"
 EOF
 chmod +x ~/.local/bin/nebula
@@ -263,7 +263,7 @@ nebula nodes | head -5
 Expected: prints a list of available node types.
 
 **Note:** the wrapper hardcodes the nebula-nodes clone path to
-`~/Documents/Projects/nebula_nodes`. Edit the `cd` line in the wrapper if
+`~/Documents/Workspace/Projects/nebula_nodes`. Edit the `cd` line in the wrapper if
 you cloned elsewhere. A future version of this guide may use an env var.
 
 ## 7. One-turn smoke test
