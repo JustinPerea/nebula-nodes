@@ -10,9 +10,10 @@
  * — the agent picker stays for picking which AI you talk to, and the skin
  * picker (in Settings) is its own thing.
  *
- * Persistence: localStorage key `nebula:skin`. Migration: existing users with
- * `nebula:hermes-tone` set are auto-promoted to skin=hermes on first load so
- * their environment doesn't change underneath them.
+ * Default: Slava Restraint. Persistence: localStorage key `nebula:skin`.
+ * Migration: existing users with `nebula:hermes-tone` set are auto-promoted
+ * to skin=hermes on first load so their environment doesn't change underneath
+ * them.
  */
 
 export type SkinId =
@@ -61,6 +62,8 @@ export const SKINS: SkinDef[] = [
   },
 ];
 
+export const DEFAULT_SKIN: SkinId = 'slava-restraint';
+
 const SKIN_STORAGE_KEY = 'nebula:skin';
 const LEGACY_HERMES_TONE_KEY = 'nebula:hermes-tone';
 const SLAVA_SWITCH_CLASS = 'app-skin-switching-slava';
@@ -82,7 +85,7 @@ export function loadSkin(): SkinId {
   } catch {
     // localStorage may be unavailable in some environments; fall through.
   }
-  return 'default';
+  return DEFAULT_SKIN;
 }
 
 export function persistSkin(id: SkinId): void {

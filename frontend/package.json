@@ -6,10 +6,11 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "lint": "npm run check:inline-styles && eslint .",
+    "lint": "npm run check:inline-styles && npm run check:slava-css-scope && eslint .",
     "test": "vitest run",
     "test:watch": "vitest",
     "check:inline-styles": "node scripts/check-inline-styles.mjs",
+    "check:slava-css-scope": "node scripts/check-slava-css-scope.mjs",
     "check:slava-screenshots": "node ../scripts/slava-screenshot-check.mjs",
     "preview": "vite preview"
   },

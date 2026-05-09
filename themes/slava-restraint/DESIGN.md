@@ -3,7 +3,7 @@
 **Codename:** `slava-restraint`
 **App skin class:** `body.app-slava-restraint`
 **Implementation:** `frontend/src/styles/slava-restraint.css`
-**Status:** default-candidate, not yet default
+**Status:** default skin
 **Last audited:** 2026-05-07
 
 **Companion notes:** [Dot Matrix Aesthetic](./DOT_MATRIX_AESTHETIC.md)
@@ -12,11 +12,11 @@
 
 ## 0. Purpose
 
-Slava Restraint is the visual and interaction direction intended to become Nebula Nodes' default skin once the product behavior is stable.
+Slava Restraint is Nebula Nodes' default skin. Default and Hermes remain selectable legacy skins while Slava continues to be scoped under `body.app-slava-restraint`.
 
 The design goal is not a themed veneer. Slava should become the product's operating system: the canvas, nodes, panels, chat, toolbar, settings, inspector, handles, and image surfaces should feel like one quiet working environment.
 
-The current app still has older base CSS in `panels.css`, `nodes.css`, `canvas.css`, and Hermes-specific overrides. Slava must remain scoped under `body.app-slava-restraint` until it becomes default.
+The current app still has older base CSS in `panels.css`, `nodes.css`, `canvas.css`, and Hermes-specific overrides. Slava remains scoped under `body.app-slava-restraint` even as the default so legacy skins stay selectable and regressions stay easier to detect.
 
 ---
 
@@ -457,6 +457,7 @@ These should not stay inline:
 - Mesh modal and Inspector no longer rely as heavily on inline visual styles.
 - Component inline styles have been audited; remaining cases are dynamic geometry, data colors, progress width, edge styling, or effect coordinates.
 - `npm run check:inline-styles` guards against new static inline visual styles in `frontend/src/components`.
+- `npm run check:slava-css-scope` guards shared CSS against new unscoped visual rules on Slava-sensitive selectors.
 - `npm run check:slava-screenshots` captures desktop/settings/image-surface/chat rest-message-busy-error-chip states/Inspector text-file-model-sticky-dynamic states/popover-loading-reroute/mesh-modal/mobile/empty-canvas Slava screenshots into `output/slava-screenshot-check`.
 
 ### Weak
@@ -477,7 +478,7 @@ These should not stay inline:
 
 ---
 
-## 7. Migration Checklist Before Making Slava Default
+## 7. Default Skin Checklist
 
 1. Continue reducing dependency on Default base visuals by moving lower-level shared structure into neutral layout classes and Slava visuals into Slava tokens.
 2. Run `npm run check:inline-styles` before UI commits.
@@ -494,7 +495,7 @@ These should not stay inline:
    - text-surface and sticky-note inline editor
    - reroute node
    - mesh modal
-4. Make Slava the default skin only after the above passes.
+4. Keep Default and Hermes selectable while Slava remains scoped under `body.app-slava-restraint`.
 
 ---
 
