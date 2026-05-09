@@ -6,6 +6,7 @@ import { NodeLibrary } from './components/panels/NodeLibrary';
 import { Inspector } from './components/panels/Inspector';
 import { Settings } from './components/panels/Settings';
 import { Toolbar } from './components/panels/Toolbar';
+import { PanelLaunchers } from './components/panels/PanelLaunchers';
 import { ChatPanel } from './components/panels/ChatPanel';
 import { AgentLog } from './components/panels/AgentLog';
 import { getSettings, fetchCLIGraph } from './lib/api';
@@ -120,6 +121,7 @@ export default function App() {
       <Inspector />
       <Settings />
       <ChatPanel />
+      <PanelLaunchers />
       <Toolbar />
       <AgentLog />
     </ReactFlowProvider>

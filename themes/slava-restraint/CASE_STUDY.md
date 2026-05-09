@@ -132,7 +132,9 @@ Computer Use is currently blocked until macOS Automation/Accessibility permissio
 
 ### Live drag-to-create
 
-Native library drag-to-create is awkward to automate in the headless CDP harness because synthetic drag/drop events are not trusted like real browser drags. The code path remains simple (`application/nebula-node` drag payload -> Canvas drop -> `addNode`), but it should be manually verified in the visible browser once Computer Use is available.
+Native library drag-to-create is awkward to automate in the headless CDP harness because synthetic drag/drop events are not trusted like real browser drags. The code path remains simple (`application/nebula-node` drag payload -> Canvas drop -> `addNode`).
+
+Manual visible-browser QA on 2026-05-09 passed in Comet/Chrome-family browsers: `Text Input` drags from the Utility group, shows the Slava preview, and lands on the canvas under the cursor. Safari did not drag reliably in the same pass. Treat Chrome-family browsers as the current verified target for Slava drag-to-create.
 
 Manual check:
 1. Open `http://localhost:5173/`.
@@ -145,7 +147,7 @@ Manual check:
 The automated suite checks structure, state, and screenshots, but final promotion still benefits from a human pass over the generated PNGs:
 - Text density at mobile width.
 - Whether dot matrix density feels too faint/too busy on the user's display.
-- Whether chat and agent log should keep their current right-column proportions.
+- Whether the off-canvas Nodes/Chat launchers leave enough room for active graph work.
 
 ## Related Notes
 

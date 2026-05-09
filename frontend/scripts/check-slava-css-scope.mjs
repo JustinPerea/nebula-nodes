@@ -62,6 +62,7 @@ const SENSITIVE_SELECTOR_PATTERNS = [
   /\.inspector(?:__|--|\b)/,
   /\.mesh-(?:modal|preview)(?:__|--|\b)/,
   /\.model-node(?:__|--|\b)/,
+  /\.panel-launcher(?:__|--|\b)/,
   /\.panel(?:__|--|\b)/,
   /\.react-flow(?:__|--|-|\b)/,
   /\.reroute-node(?:__|--|\b)/,

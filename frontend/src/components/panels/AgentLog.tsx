@@ -119,6 +119,8 @@ export function AgentLog() {
   const isExecuting = useGraphStore((s) => s.isExecuting);
   const nodeCount = useGraphStore((s) => s.nodes.length);
   const enabled = useUIStore((s) => s.agentLogEnabled);
+  const chatVisible = useUIStore((s) => s.panels.chat.visible);
+  const visible = enabled && chatVisible;
 
   const [open, setOpen] = useState(false);
   const [entries, setEntries] = useState<LogEntry[]>([]);
@@ -187,15 +189,15 @@ export function AgentLog() {
   }, []);
 
   // Mirror visibility/open-state onto <body> so layouts.css only reserves
-  // space for the log when the user explicitly enables it in Settings.
+  // space while the chat dock is actually open.
   useEffect(() => {
-    document.body.classList.toggle('agent-log-enabled', enabled);
-    document.body.classList.toggle('agent-log-open', enabled && open);
-    document.body.classList.toggle('agent-log-empty', enabled && open && entries.length === 0);
+    document.body.classList.toggle('agent-log-enabled', visible);
+    document.body.classList.toggle('agent-log-open', visible && open);
+    document.body.classList.toggle('agent-log-empty', visible && open && entries.length === 0);
     return () => {
       document.body.classList.remove('agent-log-enabled', 'agent-log-open', 'agent-log-empty');
     };
-  }, [enabled, open, entries.length]);
+  }, [visible, open, entries.length]);
 
   // Sample graph executions as a placeholder feed.
   useEffect(() => {
@@ -306,7 +308,7 @@ export function AgentLog() {
   const statusLabel = isExecuting ? 'streaming' : latestEntry ? latestEntry.source : 'standby';
   const countLabel = `${entries.length} event${entries.length === 1 ? '' : 's'}`;
 
-  if (!enabled) return null;
+  if (!visible) return null;
 
   return (
     <div

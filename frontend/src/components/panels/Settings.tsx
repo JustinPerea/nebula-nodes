@@ -310,7 +310,7 @@ export function Settings() {
               <span className="settings__toggle-copy">
                 <span className="settings__toggle-title">Agent log</span>
                 <span className="settings__toggle-description">
-                  Show the execution log panel on the canvas.
+                  Show execution telemetry below the chat panel.
                 </span>
               </span>
             </label>

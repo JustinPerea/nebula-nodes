@@ -1,10 +1,8 @@
 import { useEffect, useCallback } from 'react';
 import { useReactFlow } from '@xyflow/react';
 import {
-  Blocks,
   FolderOpen,
   Maximize2,
-  MessageSquare,
   Play,
   RotateCcw,
   Save,
@@ -213,25 +211,6 @@ export function Toolbar() {
       </button>
       <div className="toolbar__divider" />
       <button
-        className={`toolbar__button${panels.library.visible ? ' toolbar__button--active' : ''}`}
-        onClick={() => togglePanel('library')}
-        title="Toggle node library"
-        aria-pressed={panels.library.visible}
-      >
-        <ToolbarIcon name="nodes" />
-        <span className="toolbar__label">Nodes</span>
-      </button>
-      <button
-        className={`toolbar__button${panels.chat.visible ? ' toolbar__button--active' : ''}`}
-        onClick={() => togglePanel('chat')}
-        title="Toggle chat panel"
-        aria-pressed={panels.chat.visible}
-      >
-        <ToolbarIcon name="chat" />
-        <span className="toolbar__label">Chat</span>
-      </button>
-      <div className="toolbar__divider" />
-      <button
         className={`toolbar__button${panels.settings.visible ? ' toolbar__button--active' : ''}`}
         onClick={() => togglePanel('settings')}
         title="Settings"
@@ -253,8 +232,6 @@ type IconName =
   | 'clear'
   | 'fit'
   | 'reset'
-  | 'nodes'
-  | 'chat'
   | 'settings';
 
 const TOOLBAR_ICONS: Record<IconName, LucideIcon> = {
@@ -266,8 +243,6 @@ const TOOLBAR_ICONS: Record<IconName, LucideIcon> = {
   clear: Trash2,
   fit: Maximize2,
   reset: RotateCcw,
-  nodes: Blocks,
-  chat: MessageSquare,
   settings: Settings,
 };
 

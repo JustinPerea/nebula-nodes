@@ -1,10 +1,9 @@
 /* Nebula default layout
  *
  * The whole app uses one layout shape:
- *   top-left      → Nodes panel
+ *   left rail     → Nodes launcher (panel is closed by default)
  *   bottom-left   → Inspector (only renders when a node is selected)
- *   right side    → Chat (top:gutter to above the agent log)
- *   bottom-right  → Agent log accordion (sits below the chat)
+ *   bottom-right  → Chat launcher
  *   bottom-center → Toolbar pill (text labels)
  *
  * Every panel uses clamp() with viewport units so it reflows on window
@@ -79,17 +78,70 @@ body.app-hermes .toolbar::before {
   display: none !important;
 }
 
+/* =============== Panel launchers: off-canvas entry points =============== */
+
+.panel-launcher {
+  position: fixed;
+  z-index: 12;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  cursor: pointer;
+}
+
+.panel-launcher--nodes {
+  left: var(--page-gutter);
+  top: var(--page-gutter);
+}
+
+.panel-launcher--nodes.panel-launcher--active {
+  left: var(--page-gutter);
+  top: var(--page-gutter);
+}
+
+.panel-launcher--chat {
+  right: var(--page-gutter);
+  bottom: var(--space-4);
+}
+
+.panel-launcher__icon {
+  display: block;
+  flex-shrink: 0;
+}
+
+body:not(.app-slava-restraint) .panel-launcher {
+  background: rgba(20, 20, 20, 0.92);
+  border: 1px solid #333;
+  border-radius: 12px;
+  color: #bbb;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+}
+
+body:not(.app-slava-restraint) .panel-launcher:hover,
+body:not(.app-slava-restraint) .panel-launcher--active {
+  border-color: #555;
+  background: #252525;
+  color: #eee;
+}
+
 /* =============== Chat panel: right column =============== */
 
 .chat-panel {
-  top: var(--page-gutter) !important;
+  top: auto !important;
   right: var(--page-gutter) !important;
   left: auto !important;
-  bottom: var(--toolbar-pad) !important;
+  bottom: calc(var(--space-4) + 42px + var(--space-2)) !important;
   width: var(--col-right-w);
   min-width: 280px;
   max-width: 720px;
-  height: auto;
+  height: clamp(
+    360px,
+    calc(100vh - var(--page-gutter) - var(--space-4) - 42px - var(--space-2)),
+    760px
+  );
 }
 
 /* When the user enables the agent log, reserve space for its collapsed row. */
@@ -127,13 +179,16 @@ body.agent-log-enabled .chat-panel {
  * Reset toolbar button clears the inline values to revert to defaults. */
 .panel--library {
   position: fixed !important;
-  top: var(--page-gutter) !important;
+  top: calc(var(--page-gutter) + 42px + var(--space-2)) !important;
   left: var(--page-gutter) !important;
   right: auto !important;
   bottom: auto !important;
   width: var(--col-left-w);
-  height: calc((100vh - var(--page-gutter) - var(--toolbar-pad) - var(--space-4)) / 2);
-  max-height: none;
+  height: min(
+    720px,
+    calc(100vh - var(--page-gutter) - 42px - var(--space-2) - var(--toolbar-pad) - var(--space-4))
+  );
+  max-height: calc(100vh - var(--page-gutter) - 42px - var(--space-2) - var(--toolbar-pad) - var(--space-4));
 }
 
 .panel--inspector {
@@ -143,7 +198,7 @@ body.agent-log-enabled .chat-panel {
   right: auto !important;
   top: auto !important;
   width: var(--col-left-w);
-  height: calc((100vh - var(--page-gutter) - var(--toolbar-pad) - var(--space-4)) / 2);
+  height: calc((100vh - var(--page-gutter) - 42px - var(--space-2) - var(--toolbar-pad) - var(--space-4)) / 2);
   max-height: none;
 }
 

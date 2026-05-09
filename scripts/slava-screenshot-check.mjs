@@ -356,6 +356,10 @@ async function runSkinSwitchSmokeChecks(cdp) {
     hermesBody: document.body.classList.contains('app-hermes'),
     slavaBackground: !!document.querySelector('.react-flow__background.slava-canvas-background'),
     slavaDot: !!document.querySelector('.react-flow__background.slava-canvas-background .slava-canvas-background__dot'),
+    libraryHidden: !document.querySelector('.panel--library'),
+    chatHidden: !document.querySelector('.chat-panel'),
+    nodeLauncher: !!document.querySelector('.panel-launcher--nodes'),
+    chatLauncher: !!document.querySelector('.panel-launcher--chat'),
   }));
   assertSlavaCheck(defaultAssertions.storedSkin === null, 'fresh profile has no persisted skin before smoke check');
   assertSlavaCheck(defaultAssertions.storeSkin === 'slava-restraint', 'fresh profile defaults to Slava skin');
@@ -363,6 +367,10 @@ async function runSkinSwitchSmokeChecks(cdp) {
   assertSlavaCheck(!defaultAssertions.hermesBody, 'fresh Slava default does not also apply Hermes body class');
   assertSlavaCheck(defaultAssertions.slavaBackground, 'fresh Slava default renders dot-matrix background layer');
   assertSlavaCheck(defaultAssertions.slavaDot, 'fresh Slava default renders the dot-matrix marker element');
+  assertSlavaCheck(defaultAssertions.libraryHidden, 'fresh Slava default starts with node library collapsed');
+  assertSlavaCheck(defaultAssertions.chatHidden, 'fresh Slava default starts with chat collapsed');
+  assertSlavaCheck(defaultAssertions.nodeLauncher, 'fresh Slava default renders node launcher');
+  assertSlavaCheck(defaultAssertions.chatLauncher, 'fresh Slava default renders chat launcher');
 
   await evaluate(cdp, () => {
     window.__nebulaUIStore.setState((state) => ({
@@ -1225,18 +1233,21 @@ async function runSlavaInteractionChecks(cdp) {
       ? document.elementFromPoint(settingsRect.left + 24, settingsRect.top + 24)
       : null;
     const activeToolbarControls = Array.from(document.querySelectorAll('.toolbar__button--active'));
+    const activeLauncherControls = Array.from(document.querySelectorAll('.panel-launcher--active'));
     const activeToolbarButtons = activeToolbarControls
       .map((button) => button.getAttribute('title'));
-    const activeToolbarCell = document.querySelector('.toolbar__button--active[title="Toggle chat panel"]');
+    const activeLauncherButtons = activeLauncherControls
+      .map((button) => button.getAttribute('title'));
+    const activeLauncherCell = document.querySelector('.panel-launcher--active[title="Toggle chat panel"]');
     const inactiveToolbarCell = document.querySelector('.toolbar__button[title="Save graph (Ctrl+S)"]');
-    const activeToolbarCellStyle = activeToolbarCell
-      ? getComputedStyle(activeToolbarCell, '::after')
+    const activeLauncherCellStyle = activeLauncherCell
+      ? getComputedStyle(activeLauncherCell, '::after')
       : null;
     const inactiveToolbarCellStyle = inactiveToolbarCell
       ? getComputedStyle(inactiveToolbarCell, '::after')
       : null;
-    const activeToolbarButtonStyle = activeToolbarCell
-      ? getComputedStyle(activeToolbarCell)
+    const activeLauncherButtonStyle = activeLauncherCell
+      ? getComputedStyle(activeLauncherCell)
       : null;
     return {
       settingsAboveChat: Boolean(
@@ -1248,17 +1259,17 @@ async function runSlavaInteractionChecks(cdp) {
       apiKeysInitiallyCollapsed:
         document.querySelector('.settings__section-toggle')?.getAttribute('aria-expanded') === 'false'
         && !document.querySelector('.settings__collapsible-body'),
-      toolbarChatActive: activeToolbarButtons.includes('Toggle chat panel'),
+      launcherChatActive: activeLauncherButtons.includes('Toggle chat panel'),
+      launcherLibraryActive: activeLauncherButtons.includes('Toggle node library'),
       toolbarSettingsActive: activeToolbarButtons.includes('Settings'),
-      toolbarLibraryActive: activeToolbarButtons.includes('Toggle node library'),
-      toolbarActivePressedCount: activeToolbarControls
+      activePressedCount: [...activeToolbarControls, ...activeLauncherControls]
         .filter((button) => button.getAttribute('aria-pressed') === 'true').length,
-      toolbarActiveCellHasDots: activeToolbarCellStyle?.backgroundImage.includes('radial-gradient') ?? false,
-      toolbarActiveCellOpacity: Number(activeToolbarCellStyle?.opacity ?? 0),
+      launcherActiveCellHasDots: activeLauncherCellStyle?.backgroundImage.includes('radial-gradient') ?? false,
+      launcherActiveCellOpacity: Number(activeLauncherCellStyle?.opacity ?? 0),
       toolbarInactiveCellOpacity: Number(inactiveToolbarCellStyle?.opacity ?? 0),
-      toolbarActiveCellBordered: Boolean(
-        activeToolbarButtonStyle
-        && activeToolbarButtonStyle.borderTopColor !== 'rgba(0, 0, 0, 0)',
+      launcherActiveCellBordered: Boolean(
+        activeLauncherButtonStyle
+        && activeLauncherButtonStyle.borderTopColor !== 'rgba(0, 0, 0, 0)',
       ),
       agentLogHiddenByDefault: !document.querySelector('.agent-log'),
     };
@@ -1266,16 +1277,16 @@ async function runSlavaInteractionChecks(cdp) {
   assertSlavaCheck(chromeAssertions.settingsAboveChat, 'settings panel z-index is above chat');
   assertSlavaCheck(chromeAssertions.settingsOwnsTopHit, 'settings receives pointer hits above chat');
   assertSlavaCheck(chromeAssertions.apiKeysInitiallyCollapsed, 'API Keys section is collapsed by default');
-  assertSlavaCheck(chromeAssertions.toolbarChatActive, 'toolbar chat button shows active state');
+  assertSlavaCheck(chromeAssertions.launcherChatActive, 'chat launcher shows active state');
+  assertSlavaCheck(chromeAssertions.launcherLibraryActive, 'node-library launcher shows active state');
   assertSlavaCheck(chromeAssertions.toolbarSettingsActive, 'toolbar settings button shows active state');
-  assertSlavaCheck(chromeAssertions.toolbarLibraryActive, 'toolbar node-library button shows active state');
-  assertSlavaCheck(chromeAssertions.toolbarActivePressedCount >= 3, 'toolbar active buttons expose pressed state');
-  assertSlavaCheck(chromeAssertions.toolbarActiveCellHasDots, 'toolbar active cell uses dot-matrix surface');
+  assertSlavaCheck(chromeAssertions.activePressedCount >= 3, 'active toolbar/launcher controls expose pressed state');
+  assertSlavaCheck(chromeAssertions.launcherActiveCellHasDots, 'launcher active cell uses dot-matrix surface');
   assertSlavaCheck(
-    chromeAssertions.toolbarActiveCellOpacity > chromeAssertions.toolbarInactiveCellOpacity,
-    'toolbar active cell is visually stronger than inactive controls',
+    chromeAssertions.launcherActiveCellOpacity > chromeAssertions.toolbarInactiveCellOpacity,
+    'launcher active cell is visually stronger than inactive controls',
   );
-  assertSlavaCheck(chromeAssertions.toolbarActiveCellBordered, 'toolbar active cell has selected border treatment');
+  assertSlavaCheck(chromeAssertions.launcherActiveCellBordered, 'launcher active cell has selected border treatment');
   assertSlavaCheck(chromeAssertions.agentLogHiddenByDefault, 'agent log is hidden by default');
 
   await clickSelector(cdp, '.settings__section-toggle');
@@ -1584,7 +1595,9 @@ async function runSlavaPersistenceChecks(cdp) {
   await cdp.send('Page.reload', { ignoreCache: true });
   await loadEvent;
   await waitForRuntime(cdp, 'window.__nebulaUIStore && window.__nebulaGraphStore && document.body.classList.contains("app-slava-restraint")');
-  await waitForRuntime(cdp, 'document.querySelector(".agent-log")');
+  await waitForRuntime(cdp, '!document.querySelector(".agent-log") && document.querySelector(".panel-launcher--chat")');
+  await clickSelector(cdp, '.panel-launcher--chat');
+  await waitForRuntime(cdp, 'document.querySelector(".chat-panel") && document.querySelector(".agent-log")');
 
   const persistenceAssertions = await evaluate(cdp, () => {
     const agentLog = document.querySelector('.agent-log');
@@ -1605,7 +1618,7 @@ async function runSlavaPersistenceChecks(cdp) {
   assertSlavaCheck(persistenceAssertions.bodySkin, 'Slava body class rehydrates after reload');
   assertSlavaCheck(persistenceAssertions.storedAgentLog === '1', 'agent log enabled preference persists to localStorage');
   assertSlavaCheck(persistenceAssertions.storeAgentLog, 'agent log enabled preference rehydrates into UI store');
-  assertSlavaCheck(persistenceAssertions.renderedAgentLog, 'agent log renders from persisted preference');
+  assertSlavaCheck(persistenceAssertions.renderedAgentLog, 'agent log renders when persisted preference is enabled and chat dock opens');
   assertSlavaCheck(persistenceAssertions.persistedAgentLogPosition, 'agent log drag position rehydrates after reload');
 
   await evaluate(cdp, () => {
@@ -1616,7 +1629,7 @@ async function runSlavaPersistenceChecks(cdp) {
 
 async function runSlavaMobileLayoutChecks(cdp) {
   const mobileAssertions = await evaluate(cdp, () => {
-    const selectors = ['.chat-panel', '.toolbar', '.panel--library', '.panel--inspector', '.panel--settings', '.agent-log'];
+    const selectors = ['.chat-panel', '.toolbar', '.panel-launcher', '.panel--library', '.panel--inspector', '.panel--settings', '.agent-log'];
     const overflow = [];
     for (const selector of selectors) {
       for (const el of document.querySelectorAll(selector)) {

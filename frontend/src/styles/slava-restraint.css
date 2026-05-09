@@ -468,6 +468,10 @@ body.app-slava-restraint .panel--settings {
   z-index: var(--sr-layer-settings);
 }
 
+body.app-slava-restraint .panel--library {
+  z-index: calc(var(--sr-layer-panel) + 1);
+}
+
 @media (prefers-reduced-motion: reduce) {
   body.app-slava-restraint .panel {
     animation: none;
@@ -540,6 +544,7 @@ body.app-slava-restraint :is(
   .inspector__info-button,
   .settings__section-toggle,
   .settings__save-button,
+  .panel-launcher,
   .toolbar__button
 ):focus-visible {
   outline: var(--sr-focus-outline);
@@ -2373,6 +2378,97 @@ body.app-slava-restraint .toolbar__button:active {
 body.app-slava-restraint .toolbar__divider {
   width: 1px;
   background: var(--sr-edge);
+}
+
+/* Launchers — the side entry points use the same glass-pill vocabulary as
+ * the toolbar, but stay off the main command rail to keep the canvas clear. */
+body.app-slava-restraint .panel-launcher {
+  isolation: isolate;
+  overflow: hidden;
+  background: var(--sr-glass-raised);
+  backdrop-filter: var(--sr-blur-pill);
+  -webkit-backdrop-filter: var(--sr-blur-pill);
+  border: 1px solid var(--sr-edge);
+  border-radius: var(--sr-radius-pill);
+  color: var(--sr-ink-light);
+  box-shadow: var(--sr-shadow-panel-sm);
+  transition:
+    color 120ms ease,
+    background-color 120ms ease,
+    border-color 120ms ease,
+    box-shadow 120ms ease,
+    transform 220ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+body.app-slava-restraint .panel-launcher::after {
+  content: '';
+  position: absolute;
+  inset: 4px;
+  z-index: 0;
+  border-radius: var(--sr-radius-pill);
+  background-image: radial-gradient(
+    circle,
+    rgba(255, 255, 255, 0.34) 0 1px,
+    transparent 1.35px
+  );
+  background-position: center;
+  background-size: 6px 6px;
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0.92);
+  transition:
+    opacity var(--sr-motion-fast),
+    transform var(--sr-motion-fast);
+}
+
+body.app-slava-restraint .panel-launcher__icon {
+  position: relative;
+  z-index: 1;
+  transition:
+    color 120ms ease,
+    filter 120ms ease;
+}
+
+body.app-slava-restraint .panel-launcher:hover {
+  color: var(--sr-ink-bold);
+  background-color: var(--sr-surface-control-hover);
+  border-color: var(--sr-edge-strong);
+}
+
+body.app-slava-restraint .panel-launcher:hover::after {
+  opacity: 0.22;
+  transform: scale(1);
+}
+
+body.app-slava-restraint .panel-launcher--active,
+body.app-slava-restraint .panel-launcher--active:hover {
+  color: var(--sr-ink-bold);
+  background-color: var(--sr-surface-control-active);
+  border-color: rgba(255, 255, 255, 0.16);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.05),
+    0 0 14px rgba(255, 255, 255, 0.06);
+}
+
+body.app-slava-restraint .panel-launcher--active::after,
+body.app-slava-restraint .panel-launcher--active:hover::after {
+  opacity: 0.46;
+  transform: scale(1);
+}
+
+body.app-slava-restraint .panel-launcher--active .panel-launcher__icon {
+  color: rgba(255, 255, 255, 0.96);
+  filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.18));
+}
+
+body.app-slava-restraint .panel-launcher:active {
+  transform: scale(0.96);
+  transition:
+    color 120ms ease,
+    background-color 120ms ease,
+    border-color 120ms ease,
+    box-shadow 120ms ease,
+    transform 80ms ease-out;
 }
 
 @media (max-width: 520px) {
