@@ -3379,6 +3379,22 @@ body.app-slava-restraint .react-flow__handle.connectingto::after {
     box-shadow var(--sr-motion-emphasized);
 }
 
+@media (prefers-reduced-motion: reduce) {
+  body.app-slava-restraint .reroute-node::before,
+  body.app-slava-restraint .model-node__handle::before,
+  body.app-slava-restraint .model-node__handle::after,
+  body.app-slava-restraint .react-flow__handle::before,
+  body.app-slava-restraint .react-flow__handle::after {
+    transition: none;
+  }
+
+  body.app-slava-restraint .model-node__handle,
+  body.app-slava-restraint .react-flow__handle {
+    --sr-handle-magnet-x: 0px !important;
+    --sr-handle-magnet-y: 0px !important;
+  }
+}
+
 /* ─── DEBUG: handle alignment overlay ────────────────────────────────
  * Toggle in DevTools console:
  *   document.body.classList.toggle('debug-handles')

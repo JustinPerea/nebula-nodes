@@ -4,7 +4,7 @@
 **App skin class:** `body.app-slava-restraint`
 **Implementation:** `frontend/src/styles/slava-restraint.css`
 **Status:** default skin
-**Last audited:** 2026-05-07
+**Last audited:** 2026-05-09
 
 **Companion notes:** [Dot Matrix Aesthetic](./DOT_MATRIX_AESTHETIC.md)
 
@@ -364,6 +364,7 @@ The composer is one visual input well, not a text area next to a separate button
 - Hover/connecting: full glass circle with plus.
 - Centers must stay locked between rest and hover.
 - Magnetism is visual-only through CSS variables; it must not change React Flow layout box.
+- Reduced motion disables cursor magnetism and handle/reroute transitions; state changes still snap to the same rest/hover/connecting visuals.
 - Do not use `clip-path` for rest state because it shrinks the pointer target.
 
 ### Edge
@@ -453,6 +454,7 @@ These should not stay inline:
 - Inspector coverage now includes synthetic dynamic schemas across string, textarea, integer, float, boolean, enum, and empty-enum controls.
 - Handles have clear rest/hover/connecting rules and target-size protection.
 - Handle coverage now asserts hover and cursor magnetism preserve the React Flow handle layout center and positioning transform.
+- Handle reduced-motion coverage is codified in CSS and the canvas magnetism hook.
 - Settings now has clear disclosure and visibility behavior.
 - Mesh modal and Inspector no longer rely as heavily on inline visual styles.
 - Component inline styles have been audited; remaining cases are dynamic geometry, data colors, progress width, edge styling, or effect coordinates.

@@ -88,6 +88,8 @@ function useSlavaHandleMagnetism() {
     let raf = 0;
     let magnetX = 0;
     let magnetY = 0;
+    const motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+    let reduceMotion = motionQuery.matches;
 
     const isSlavaSkin = () => document.body.classList.contains('app-slava-restraint');
 
@@ -113,7 +115,7 @@ function useSlavaHandleMagnetism() {
     };
 
     const onPointerMove = (event: PointerEvent) => {
-      if (!isSlavaSkin()) {
+      if (!isSlavaSkin() || reduceMotion) {
         resetHandle(activeHandle);
         activeHandle = null;
         return;
@@ -159,14 +161,23 @@ function useSlavaHandleMagnetism() {
       activeHandle = null;
     };
 
+    const onMotionPreferenceChange = (event: MediaQueryListEvent) => {
+      reduceMotion = event.matches;
+      if (!reduceMotion) return;
+      resetHandle(activeHandle);
+      activeHandle = null;
+    };
+
     document.addEventListener('pointermove', onPointerMove, { passive: true });
     document.addEventListener('pointerout', onPointerOut, { passive: true });
     window.addEventListener('blur', onBlur);
+    motionQuery.addEventListener('change', onMotionPreferenceChange);
 
     return () => {
       document.removeEventListener('pointermove', onPointerMove);
       document.removeEventListener('pointerout', onPointerOut);
       window.removeEventListener('blur', onBlur);
+      motionQuery.removeEventListener('change', onMotionPreferenceChange);
       if (raf) window.cancelAnimationFrame(raf);
       resetHandle(activeHandle);
     };

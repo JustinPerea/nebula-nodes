@@ -96,16 +96,19 @@ The work is paired with a reusable `motion-design` skill at `~/.claude/skills/mo
 
 ### 8. Connector handle dot → circle reveal (the closing-the-loop one)
 - **Pattern**: state-driven shape transformation (220ms one-shot on hover; 140ms on `.connecting` / `.connectingto`)
-- **Properties animated**: `clip-path` (size), `background-color` (fill), `border-color` (ring), `box-shadow` (drop-shadow), `+` glyph `opacity` (twin pseudo lines)
+- **Properties animated**: pseudo-element `opacity` / `transform`, `border-color`, `box-shadow`, and `+` glyph opacity via twin linear gradients. The actual `.react-flow__handle` positioning transform is never animated.
 - **Curve**: `cubic-bezier(0.32, 0.72, 0, 1)` (Vaul) for hover; `cubic-bezier(0.05, 0.7, 0.1, 1)` (M3 emphasized-decel) for `.connecting` catch
-- **File**: `frontend/src/styles/slava-restraint.css` — `.react-flow__handle` rule + hover/connecting overrides
-- **From** (rest): clip-path `circle(4.5px at center)`, bg white, transparent border, transparent box-shadow, `+` opacity 0
-- **To** (hover/connecting): clip-path `circle(10px at center)`, bg dark glass, white 1px ring, drop-shadow, `+` opacity 1
-- **Why `clip-path` is the breakthrough**: it's a **paint-only** CSS property. Unlike `transform`, it doesn't compose with React Flow's inline `transform: matrix()` on the handle. The layout box stays 20×20 throughout — the center literally cannot drift, since clip-path only changes which pixels are painted.
-- **The "three failures" payoff**: this is the same dot-to-circle reveal that crashed and burned three times earlier in the session. v1 (radial-gradient swap) had visual state mismatch. v2 (`scale` + `transform-origin: 50% 50%`) measured a 15.3px center drift no matter the origin. v3 (per-direction pseudo-element edge anchoring) tripped a browser cascade bug. v4 succeeds because clip-path bypasses the entire transform composition problem.
-- **Hit-area trade-off**: `clip-path` DOES restrict pointer events, so the click target at rest is the visible 9px dot. Smaller than the iOS 44pt minimum, but matches the "small mark, intentional click" aesthetic. The hover trigger (cursor entering the dot) is the proxy for connection-drag intent.
-- **The pattern that bound it together**: the box-shadow placeholder slot pioneered in #6 is reused here — both rest and hover state shadows are 2-layer lists so the drop-shadow can fade in without count mismatch.
-- **Reduced-motion**: not yet guarded — clip-path animation is mild enough not to require it, but worth adding alongside the next sweep.
+- **Files**:
+  - `frontend/src/styles/slava-restraint.css` - handle pseudo-elements, hover/connecting overrides, reduced-motion transition guard
+  - `frontend/src/components/Canvas.tsx` - cursor magnetism, disabled for reduced-motion users
+  - `frontend/src/components/edges/TypedEdge.tsx` - Slava edge endpoints shifted to the resting dot center
+- **From** (rest): stable 20x20 hit box, 9px white `::before` dot painted 4px closer to the node, no border ring, no plus glyph
+- **To** (hover/connecting): the same 20x20 box paints the `::after` glass circle at the locked center, white ring, centered plus glyph, drop-shadow; connecting adds the orange catch ring
+- **Why pseudo-elements are the breakthrough**: the handle parent keeps React Flow's exact inline positioning transform. The visible dot and circle are absolute children centered at `50% / 50%`, so the rest mark and hover circle share one screen-pixel anchor while the parent remains a full hit target.
+- **The "three failures" payoff**: v1 (radial-gradient swap) had visual state mismatch. v2 (`scale` + `transform-origin: 50% 50%`) measured a 15.3px center drift no matter the origin. v3 (per-direction pseudo-element edge anchoring) tripped a browser cascade bug. v4 (`clip-path`) removed drift but shrank pointer events to the visible dot. The final version keeps the v4 no-drift behavior while restoring the 20x20 hit box.
+- **Flora magnetism**: hover states use small CSS variables (`--sr-handle-magnet-x/y`) written by the canvas pointer hook, capped at 3px. This moves only the painted pseudo-elements, not the React Flow handle layout or edge anchor.
+- **Endpoint alignment**: typed edges compensate for React Flow's side-edge anchor and Slava's 4px inward rest dot, so idle connections terminate at the visible dot rather than leaving a gap.
+- **Reduced-motion**: CSS disables handle/reroute transitions and the Canvas pointer hook disables cursor magnetism via `matchMedia('(prefers-reduced-motion: reduce)')`. Hover/connecting states still appear, but they snap without animated pull or morph.
 
 ### 9. Symmetric panel exit
 - **Pattern**: delayed unmount choreography (500ms one-shot when panel visibility flips false)

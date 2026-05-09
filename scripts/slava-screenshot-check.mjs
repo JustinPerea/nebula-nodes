@@ -1097,6 +1097,8 @@ async function runSlavaHandleGeometryChecks(cdp) {
       magnetY: parseFloat(style.getPropertyValue('--sr-handle-magnet-y')) || 0,
       beforeOpacity: Number(before.opacity),
       afterOpacity: Number(after.opacity),
+      beforeTransitionNone: before.transitionDuration.split(',').every((duration) => Number.parseFloat(duration) === 0),
+      afterTransitionNone: after.transitionDuration.split(',').every((duration) => Number.parseFloat(duration) === 0),
     };
   }, index);
 
@@ -1166,6 +1168,47 @@ async function runSlavaHandleGeometryChecks(cdp) {
       }));
     }, handle.index);
     await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 8, y: 8, button: 'none' });
+    await sleep(80);
+  }
+
+  const reducedHandle = sampleHandles[0];
+  try {
+    await cdp.send('Emulation.setEmulatedMedia', {
+      features: [{ name: 'prefers-reduced-motion', value: 'reduce' }],
+    });
+    await sleep(120);
+    await cdp.send('Input.dispatchMouseEvent', {
+      type: 'mouseMoved',
+      x: reducedHandle.centerX + 7,
+      y: reducedHandle.centerY + 2,
+      button: 'none',
+    });
+    await evaluate(cdp, (handleIndex, x, y) => {
+      const handleEl = document.querySelectorAll('.model-node .react-flow__handle')[handleIndex];
+      handleEl?.dispatchEvent(new PointerEvent('pointermove', {
+        bubbles: true,
+        clientX: x,
+        clientY: y,
+        pointerId: 1,
+        pointerType: 'mouse',
+      }));
+    }, reducedHandle.index, reducedHandle.centerX + 7, reducedHandle.centerY + 2);
+    await sleep(120);
+
+    const reduced = await snapshotHandle(reducedHandle.index);
+    assertSlavaCheck(reduced, `Slava handle ${reducedHandle.nodeId}:${reducedHandle.side} exists during reduced-motion check`);
+    assertSlavaCheck(Math.abs(reduced.magnetX) <= 0.01 && Math.abs(reduced.magnetY) <= 0.01, `Slava handle ${reducedHandle.nodeId}:${reducedHandle.side} disables cursor magnetism for reduced motion`);
+    assertSlavaCheck(reduced.beforeTransitionNone && reduced.afterTransitionNone, `Slava handle ${reducedHandle.nodeId}:${reducedHandle.side} disables pseudo transitions for reduced motion`);
+
+    const rerouteReduced = await evaluate(cdp, () => {
+      const reroute = document.querySelector('.reroute-node');
+      if (!reroute) return null;
+      const before = getComputedStyle(reroute, '::before');
+      return before.transitionDuration.split(',').every((duration) => Number.parseFloat(duration) === 0);
+    });
+    assertSlavaCheck(rerouteReduced, 'Slava reroute dot disables transition for reduced motion');
+  } finally {
+    await cdp.send('Emulation.setEmulatedMedia', { features: [] });
     await sleep(80);
   }
 }
