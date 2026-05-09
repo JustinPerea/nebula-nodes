@@ -171,6 +171,58 @@ NODE_DEFS: dict[str, dict[str, Any]] = {
 }
 
 
+_REGISTRY_NODE_DEFS: dict[str, dict[str, Any]] | None = None
+
+
+def _registry_node_defs() -> dict[str, dict[str, Any]]:
+    """Load the full exported node registry lazily for metadata not in NODE_DEFS."""
+    global _REGISTRY_NODE_DEFS
+    if _REGISTRY_NODE_DEFS is None:
+        try:
+            from services.node_registry import NodeRegistry
+
+            _REGISTRY_NODE_DEFS = NodeRegistry().get_all()
+        except Exception:
+            _REGISTRY_NODE_DEFS = {}
+    return _REGISTRY_NODE_DEFS
+
+
+def _node_def_for(definition_id: str) -> dict[str, Any] | None:
+    return _registry_node_defs().get(definition_id) or NODE_DEFS.get(definition_id)
+
+
+def _multiple_input_ports(definition_id: str) -> set[str]:
+    node_def = _node_def_for(definition_id)
+    if not node_def:
+        return set()
+    return {
+        str(port["id"])
+        for port in node_def.get("inputPorts", [])
+        if isinstance(port, dict) and port.get("id") and port.get("multiple")
+    }
+
+
+def _as_multiple_values(value: Any) -> list[Any]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return list(value)
+    return [value]
+
+
+def _append_multiple_input(
+    existing: PortValueDict | None,
+    incoming: PortValueDict,
+) -> PortValueDict:
+    values = _as_multiple_values(existing.value if existing else None)
+    values.extend(_as_multiple_values(incoming.value))
+
+    port_type = incoming.type
+    if existing:
+        port_type = existing.type if existing.type == incoming.type else "Any"
+    return PortValueDict(type=port_type, value=values)
+
+
 def topological_sort(nodes: list[GraphNode], edges: list[GraphEdge]) -> list[str]:
     graph: dict[str, set[str]] = {node.id: set() for node in nodes}
     for edge in edges:
@@ -311,11 +363,19 @@ async def execute_graph(
         await emit(ExecutingEvent(node_id=nid))
 
         resolved_inputs: dict[str, PortValueDict] = {}
+        multiple_ports = _multiple_input_ports(node.definition_id)
         for edge in edges:
             if edge.target == nid and edge.source_handle and edge.target_handle:
                 upstream_outputs = outputs_cache.get(edge.source, {})
                 if edge.source_handle in upstream_outputs:
-                    resolved_inputs[edge.target_handle] = upstream_outputs[edge.source_handle]
+                    incoming = upstream_outputs[edge.source_handle]
+                    if edge.target_handle in multiple_ports:
+                        resolved_inputs[edge.target_handle] = _append_multiple_input(
+                            resolved_inputs.get(edge.target_handle),
+                            incoming,
+                        )
+                    else:
+                        resolved_inputs[edge.target_handle] = incoming
 
         try:
             cache_key: str | None = None

@@ -189,6 +189,46 @@ interface GraphState {
 // nodes use UUIDs. This regex lets graphSync distinguish them so we can preserve
 // frontend-only work when cli_graph changes.
 const CLI_ID_RE = /^n\d+$/;
+const DYNAMIC_NODE_IDS = [
+  'openrouter-universal',
+  'nous-portal-universal',
+  'replicate-universal',
+  'fal-universal',
+] as const;
+type DynamicProviderType = DynamicNodeData['providerType'];
+
+const DYNAMIC_PROVIDER_BY_DEFINITION: Record<string, DynamicProviderType> = {
+  'openrouter-universal': 'openrouter',
+  'nous-portal-universal': 'nous',
+  'replicate-universal': 'replicate',
+  'fal-universal': 'fal',
+};
+
+function isDynamicDefinition(definitionId: string): boolean {
+  return (DYNAMIC_NODE_IDS as readonly string[]).includes(definitionId);
+}
+
+function dynamicProviderFor(definitionId: string): DynamicProviderType {
+  return DYNAMIC_PROVIDER_BY_DEFINITION[definitionId] ?? 'openrouter';
+}
+
+function toDynamicPort(p: {
+  id: string;
+  label: string;
+  dataType: PortDataType;
+  required: boolean;
+  multiple?: boolean;
+  maxConnections?: number;
+}): DynamicPortDefinition {
+  return {
+    id: p.id,
+    label: p.label,
+    dataType: p.dataType,
+    required: p.required,
+    multiple: p.multiple,
+    maxConnections: p.maxConnections,
+  };
+}
 
 // Per-node timers for debounced param-sync to the backend. Keyed by node id
 // so one node's typing never stalls another node's flush.
@@ -487,8 +527,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   // ---------------------------------------------------------------------------
 
   addNode: async (definitionId, position) => {
-    const DYNAMIC_IDS = ['openrouter-universal', 'replicate-universal', 'fal-universal'];
-    if (DYNAMIC_IDS.includes(definitionId)) {
+    if (isDynamicDefinition(definitionId)) {
       return get().addDynamicNode(definitionId, position);
     }
     const definition = NODE_DEFINITIONS[definitionId];
@@ -582,12 +621,6 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       if (param.default !== undefined) defaults[param.key] = param.default;
     }
 
-    const providerMap: Record<string, 'openrouter' | 'replicate' | 'fal'> = {
-      'openrouter-universal': 'openrouter',
-      'replicate-universal': 'replicate',
-      'fal-universal': 'fal',
-    };
-
     // Check API key status from settings cache
     let keyStatus: 'missing' | undefined;
     const { settingsCache } = useUIStore.getState();
@@ -616,19 +649,9 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         outputs: {},
         keyStatus,
         isDynamic: true,
-        providerType: providerMap[definitionId] ?? 'openrouter',
-        dynamicInputPorts: definition.inputPorts.map((p) => ({
-          id: p.id,
-          label: p.label,
-          dataType: p.dataType,
-          required: p.required,
-        })),
-        dynamicOutputPorts: definition.outputPorts.map((p) => ({
-          id: p.id,
-          label: p.label,
-          dataType: p.dataType,
-          required: p.required,
-        })),
+        providerType: dynamicProviderFor(definitionId),
+        dynamicInputPorts: definition.inputPorts.map(toDynamicPort),
+        dynamicOutputPorts: definition.outputPorts.map(toDynamicPort),
         dynamicParams: [],
         providerMeta: {},
       },
@@ -923,7 +946,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       { id: 'messages', label: 'Messages', dataType: 'Text', required: true },
     ];
     if (inputModalities.includes('image')) {
-      inputPorts.push({ id: 'images', label: 'Images', dataType: 'Image', required: false });
+      inputPorts.push({ id: 'images', label: 'Images', dataType: 'Image', required: false, multiple: true });
     }
 
     const outputPorts: DynamicPortDefinition[] = [];
@@ -942,12 +965,17 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         const data = n.data as unknown as DynamicNodeData;
         return {
           ...n,
+          type: isDynamicDefinition(data.definitionId) ? 'dynamic-node' : n.type,
           data: {
             ...data,
+            isDynamic: true,
+            providerType: dynamicProviderFor(data.definitionId),
             modelId,
             params: { ...data.params, model: modelId, _output_image: wantsImage },
             dynamicInputPorts: inputPorts,
             dynamicOutputPorts: outputPorts,
+            dynamicParams: data.dynamicParams ?? [],
+            providerMeta: data.providerMeta ?? {},
           } as unknown as NodeData,
         };
       }),

@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from execution.engine import topological_sort, validate_graph, CycleError
-from models.graph import GraphNode, GraphEdge
+from execution.engine import topological_sort, validate_graph, execute_graph, CycleError
+from models.graph import GraphNode, GraphEdge, PortValueDict
 
 
 def _node(nid: str, def_id: str = "gpt-image-1-generate") -> GraphNode:
@@ -106,3 +106,77 @@ class TestDynamicNodeValidation:
         nodes = [_node("a", "some-future-node-type")]
         errors = validate_graph(nodes, [], {})
         assert len(errors) == 0
+
+
+class TestExecuteGraphInputResolution:
+    @pytest.mark.asyncio
+    async def test_multiple_input_port_accumulates_wires_in_edge_order(self) -> None:
+        captured: dict[str, PortValueDict] = {}
+
+        async def capture_handler(
+            _node: GraphNode,
+            inputs: dict[str, PortValueDict],
+            _api_keys: dict[str, str],
+        ) -> dict:
+            captured.update(inputs)
+            return {"text": {"type": "Text", "value": "ok"}}
+
+        async def emit(_event) -> None:
+            pass
+
+        nodes = [
+            GraphNode(id="a", definitionId="image-input", params={"filePath": "/tmp/one.png"}, outputs={}),
+            GraphNode(id="b", definitionId="image-input", params={"filePath": "/tmp/two.png"}, outputs={}),
+            GraphNode(id="c", definitionId="claude-chat", params={}, outputs={}),
+        ]
+        edges = [
+            _edge("a", "c", "image", "images"),
+            _edge("b", "c", "image", "images"),
+        ]
+
+        await execute_graph(
+            nodes,
+            edges,
+            {},
+            {"claude-chat": capture_handler},
+            emit,
+        )
+
+        assert captured["images"].type == "Image"
+        assert captured["images"].value == ["/tmp/one.png", "/tmp/two.png"]
+
+    @pytest.mark.asyncio
+    async def test_single_input_port_keeps_existing_last_writer_behavior(self) -> None:
+        captured: dict[str, PortValueDict] = {}
+
+        async def capture_handler(
+            _node: GraphNode,
+            inputs: dict[str, PortValueDict],
+            _api_keys: dict[str, str],
+        ) -> dict:
+            captured.update(inputs)
+            return {"input": {"type": "Text", "value": "ok"}}
+
+        async def emit(_event) -> None:
+            pass
+
+        nodes = [
+            GraphNode(id="a", definitionId="text-input", params={"value": "one"}, outputs={}),
+            GraphNode(id="b", definitionId="text-input", params={"value": "two"}, outputs={}),
+            GraphNode(id="c", definitionId="preview", params={}, outputs={}),
+        ]
+        edges = [
+            _edge("a", "c", "text", "input"),
+            _edge("b", "c", "text", "input"),
+        ]
+
+        await execute_graph(
+            nodes,
+            edges,
+            {},
+            {"preview": capture_handler},
+            emit,
+        )
+
+        assert captured["input"].type == "Text"
+        assert captured["input"].value == "two"

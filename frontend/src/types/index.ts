@@ -125,6 +125,8 @@ export interface DynamicPortDefinition {
   label: string;
   dataType: PortDataType;
   required: boolean;
+  multiple?: boolean;
+  maxConnections?: number;
 }
 
 export interface DynamicParamDefinition {
@@ -143,7 +145,7 @@ export interface DynamicParamDefinition {
 export interface DynamicNodeData extends NodeData {
   [key: string]: unknown;
   isDynamic: true;
-  providerType: 'openrouter' | 'replicate' | 'fal';
+  providerType: 'openrouter' | 'replicate' | 'fal' | 'nous';
   modelId?: string;
   dynamicInputPorts: DynamicPortDefinition[];
   dynamicOutputPorts: DynamicPortDefinition[];

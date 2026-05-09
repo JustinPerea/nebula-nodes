@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 class PortValueDict(BaseModel):
     type: str
-    value: str | list[str] | dict[str, str] | None = None
+    value: str | list[Any] | dict[str, Any] | None = None
 
 
 class GraphNode(BaseModel):

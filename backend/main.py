@@ -59,6 +59,13 @@ if _STATE_PATH is not None and _STATE_PATH.exists():
 
 app = FastAPI(title="Nebula Node Backend", version="0.1.0")
 
+DYNAMIC_NODE_PROVIDER_BY_DEFINITION = {
+    "openrouter-universal": "openrouter",
+    "nous-portal-universal": "nous",
+    "replicate-universal": "replicate",
+    "fal-universal": "fal",
+}
+
 app.add_middleware(
     CORSMiddleware,
     # Accept any localhost port for dev (Vite auto-bumps to 5174/5175 when 5173 is busy, etc.).
@@ -1279,7 +1286,15 @@ async def export_graph_for_frontend() -> dict:
 
     for i, n in enumerate(state["nodes"]):
         defn = all_defs.get(n["definitionId"], {})
-        node_type = "reroute-node" if n["definitionId"] == "reroute" else "model-node"
+        definition_id = n["definitionId"]
+        is_dynamic_node = definition_id in DYNAMIC_NODE_PROVIDER_BY_DEFINITION
+        node_type = (
+            "reroute-node"
+            if definition_id == "reroute"
+            else "dynamic-node"
+            if is_dynamic_node
+            else "model-node"
+        )
         outputs = _rewrite_output_paths(n.get("outputs", {}))
         node_state = "complete" if outputs else "idle"
 
@@ -1296,17 +1311,29 @@ async def export_graph_for_frontend() -> dict:
                 except ValueError:
                     pass
 
+        data = {
+            "label": defn.get("displayName", n["definitionId"]),
+            "definitionId": n["definitionId"],
+            "params": params,
+            "state": node_state,
+            "outputs": outputs,
+        }
+        if is_dynamic_node:
+            data.update({
+                "isDynamic": True,
+                "providerType": DYNAMIC_NODE_PROVIDER_BY_DEFINITION[definition_id],
+                "modelId": params.get("model") or params.get("model_id") or params.get("endpoint_id"),
+                "dynamicInputPorts": defn.get("inputPorts", []),
+                "dynamicOutputPorts": defn.get("outputPorts", []),
+                "dynamicParams": [],
+                "providerMeta": {},
+            })
+
         rf_nodes.append({
             "id": n["id"],
             "type": node_type,
             "position": computed_positions[n["id"]],
-            "data": {
-                "label": defn.get("displayName", n["definitionId"]),
-                "definitionId": n["definitionId"],
-                "params": params,
-                "state": node_state,
-                "outputs": outputs,
-            },
+            "data": data,
         })
 
     rf_edges = []

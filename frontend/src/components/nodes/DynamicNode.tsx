@@ -101,7 +101,9 @@ function DynamicNodeComponent({ id, data, selected }: NodeProps) {
                 className="model-node__handle"
                 style={{ backgroundColor: PORT_COLORS[port.dataType as PortDataType] ?? PORT_COLORS.Any }}
               />
-              <span className="model-node__port-label">{port.label}</span>
+              <span className="model-node__port-label">
+                {port.label}{port.multiple ? ' +' : ''}
+              </span>
             </div>
           ))}
         </div>

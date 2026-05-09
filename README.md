@@ -164,6 +164,9 @@ npm run dev
 # 4. Open http://localhost:5173
 ```
 
+> [!NOTE]
+> Chrome-family browsers are the current verified target for Slava drag-to-create. Manual QA on 2026-05-09 passed in Comet/Chrome-family browsers; Safari did not drag library nodes reliably in that pass.
+
 > [!TIP]
 > Drop a **Text Input** node on the canvas, wire it into a **GPT Image** node, wire that into a **Preview** node, and hit **Run**. That's the whole mental model. Or — open the chat panel, switch to **Daedalus**, and ask for what you want.
 

@@ -114,6 +114,21 @@ class TestGraphEndpoints:
         assert r1.json()["id"] == "n1"
         assert r2.json()["id"] == "n2"
 
+    def test_export_nous_portal_as_dynamic_node(self, client):
+        client.post("/api/graph/node", json={
+            "definitionId": "nous-portal-universal",
+            "params": {"model": "moonshotai/kimi-k2.6"},
+        })
+
+        resp = client.get("/api/graph/export")
+        assert resp.status_code == 200
+        node = resp.json()["nodes"][0]
+        assert node["type"] == "dynamic-node"
+        assert node["data"]["isDynamic"] is True
+        assert node["data"]["providerType"] == "nous"
+        assert node["data"]["modelId"] == "moonshotai/kimi-k2.6"
+        assert any(p["id"] == "images" and p["multiple"] is True for p in node["data"]["dynamicInputPorts"])
+
     def test_connect_nodes(self, client):
         client.post("/api/graph/node", json={"definitionId": "node-a", "params": {}})
         client.post("/api/graph/node", json={"definitionId": "node-b", "params": {}})

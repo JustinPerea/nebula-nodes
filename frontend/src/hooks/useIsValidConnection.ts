@@ -55,28 +55,28 @@ export function useIsValidConnection() {
       let sourcePortType: PortDataType | undefined;
       let targetPortType: PortDataType | undefined;
 
-      // Check static definitions first
       const sourceDef = NODE_DEFINITIONS[sourceData.definitionId];
       const targetDef = NODE_DEFINITIONS[targetData.definitionId];
 
-      if (sourceDef) {
-        const p = sourceDef.outputPorts.find((p) => p.id === connection.sourceHandle);
-        if (p) sourcePortType = p.dataType;
-      }
-      if (targetDef) {
-        const p = targetDef.inputPorts.find((p) => p.id === connection.targetHandle);
-        if (p) targetPortType = p.dataType;
-      }
-
-      // Fallback to dynamic ports
-      if (!sourcePortType && 'isDynamic' in sourceData) {
+      // Dynamic nodes own their active ports. Fall back to static definitions
+      // only when a node has no dynamic port metadata.
+      if ('isDynamic' in sourceData) {
         const dyn = sourceData as DynamicNodeData;
         const p = dyn.dynamicOutputPorts?.find((p) => p.id === connection.sourceHandle);
         if (p) sourcePortType = p.dataType;
       }
-      if (!targetPortType && 'isDynamic' in targetData) {
+      if ('isDynamic' in targetData) {
         const dyn = targetData as DynamicNodeData;
         const p = dyn.dynamicInputPorts?.find((p) => p.id === connection.targetHandle);
+        if (p) targetPortType = p.dataType;
+      }
+
+      if (!sourcePortType && sourceDef) {
+        const p = sourceDef.outputPorts.find((p) => p.id === connection.sourceHandle);
+        if (p) sourcePortType = p.dataType;
+      }
+      if (!targetPortType && targetDef) {
+        const p = targetDef.inputPorts.find((p) => p.id === connection.targetHandle);
         if (p) targetPortType = p.dataType;
       }
 
