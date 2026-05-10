@@ -113,7 +113,7 @@ try {
     const required = {
       slavaBody: document.body.classList.contains('app-slava-restraint'),
       chat: !!document.querySelector('.chat-panel'),
-      inspector: !!document.querySelector('.panel--inspector'),
+      inspector: !!document.querySelector('.inspector-shell'),
       nodes: document.querySelectorAll('.react-flow__node').length,
       edges: document.querySelectorAll('.react-flow__edge').length,
       imageSurface: !!document.querySelector('.model-node--image-surface'),
@@ -131,7 +131,7 @@ try {
   const missing = [];
   if (!assertions.slavaBody) missing.push('Slava body class');
   if (!assertions.chat) missing.push('chat panel');
-  if (!assertions.inspector) missing.push('inspector panel');
+  if (!assertions.inspector) missing.push('embedded inspector');
   if (assertions.nodes < 4) missing.push('four nodes');
   if (assertions.edges < 1) missing.push('edge');
   if (!assertions.imageSurface) missing.push('image surface node');
@@ -601,46 +601,42 @@ async function runSlavaInspectorCoverage(cdp) {
       selectedNodeId: null,
       panels: {
         ...state.panels,
-        library: { ...state.panels.library, visible: false },
+        library: { ...state.panels.library, visible: true },
         settings: { ...state.panels.settings, visible: false },
         chat: { ...state.panels.chat, visible: false },
-        inspector: { ...state.panels.inspector, visible: true, position: { x: -320, y: 16 } },
+        inspector: { ...state.panels.inspector, visible: false, position: { x: -320, y: 16 } },
       },
     }));
   });
-  await waitForRuntime(cdp, 'document.querySelector(".panel--inspector [data-inspector-empty=\\"true\\"]")');
-  const emptyAssertions = await evaluate(cdp, () => ({
-    emptyState: !!document.querySelector('.panel--inspector [data-inspector-empty="true"]'),
-    emptyTitle: document.querySelector('.panel--inspector .inspector__empty-title')?.textContent?.trim() ?? '',
-    emptyStatus: document.querySelector('.panel--inspector .inspector__empty-status')?.textContent?.trim() ?? '',
-    emptyGrid: !!document.querySelector('.panel--inspector .inspector__empty-grid'),
+  await waitForRuntime(cdp, 'document.querySelector(".panel--library") && !document.querySelector(".inspector-shell")');
+  const noSelectionAssertions = await evaluate(cdp, () => ({
+    libraryVisible: !!document.querySelector('.panel--library'),
+    inspectorHidden: !document.querySelector('.inspector-shell'),
   }));
-  assertSlavaCheck(emptyAssertions.emptyState, 'Inspector renders Slava empty state when no node is selected');
-  assertSlavaCheck(emptyAssertions.emptyTitle === 'No node selected', 'Inspector empty state names no selection');
-  assertSlavaCheck(emptyAssertions.emptyStatus === 'standby', 'Inspector empty state exposes standby status');
-  assertSlavaCheck(emptyAssertions.emptyGrid, 'Inspector empty state renders dither grid');
+  assertSlavaCheck(noSelectionAssertions.libraryVisible, 'Node library renders without a selected node');
+  assertSlavaCheck(noSelectionAssertions.inspectorHidden, 'Embedded inspector stays hidden when no node is selected');
 
   await evaluate(cdp, () => {
     window.__nebulaUIStore.setState((state) => ({
       selectedNodeId: 'n1',
       panels: {
         ...state.panels,
-        library: { ...state.panels.library, visible: false },
+        library: { ...state.panels.library, visible: true },
         settings: { ...state.panels.settings, visible: false },
         chat: { ...state.panels.chat, visible: false },
         inspector: { ...state.panels.inspector, visible: true, position: { x: -320, y: 16 } },
       },
     }));
   });
-  await waitForRuntime(cdp, 'document.querySelector(".panel--inspector [data-inspector-param=\\"value\\"][data-inspector-kind=\\"textarea\\"] textarea.inspector__field")');
+  await waitForRuntime(cdp, 'document.querySelector(".inspector-shell [data-inspector-param=\\"value\\"][data-inspector-kind=\\"textarea\\"] textarea.inspector__field")');
   await sleep(650);
   await screenshot(cdp, '08-inspector-text-node.png');
 
   const textAssertions = await evaluate(cdp, () => ({
-    textParam: !!document.querySelector('.panel--inspector [data-inspector-param="value"][data-inspector-kind="textarea"] textarea.inspector__field'),
-    actionIcons: document.querySelectorAll('.panel--inspector .inspector__action-icon').length,
-    infoIcon: !!document.querySelector('.panel--inspector .inspector__info-icon'),
-    paramSource: document.querySelector('.panel--inspector [data-inspector-param="value"]')?.getAttribute('data-inspector-source'),
+    textParam: !!document.querySelector('.inspector-shell [data-inspector-param="value"][data-inspector-kind="textarea"] textarea.inspector__field'),
+    actionIcons: document.querySelectorAll('.inspector-shell .inspector__action-icon').length,
+    infoIcon: !!document.querySelector('.inspector-shell .inspector__info-icon'),
+    paramSource: document.querySelector('.inspector-shell [data-inspector-param="value"]')?.getAttribute('data-inspector-source'),
   }));
   assertSlavaCheck(textAssertions.textParam, 'Inspector text param renders through shared textarea contract');
   assertSlavaCheck(textAssertions.actionIcons >= 3, 'Inspector action buttons use icon contract');
@@ -673,18 +669,19 @@ async function runSlavaInspectorCoverage(cdp) {
       selectedNodeId: 'n8',
       panels: {
         ...state.panels,
+        library: { ...state.panels.library, visible: true },
         inspector: { ...state.panels.inspector, visible: true, position: { x: -320, y: 16 } },
       },
     }));
   });
-  await waitForRuntime(cdp, 'document.querySelector(".panel--inspector [data-inspector-param=\\"filePath\\"][data-inspector-kind=\\"file\\"] .inspector__file-preview")');
+  await waitForRuntime(cdp, 'document.querySelector(".inspector-shell [data-inspector-param=\\"filePath\\"][data-inspector-kind=\\"file\\"] .inspector__file-preview")');
   await sleep(200);
   await screenshot(cdp, '09-inspector-image-file.png');
 
   const imageAssertions = await evaluate(cdp, () => ({
-    fileParam: !!document.querySelector('.panel--inspector [data-inspector-param="filePath"][data-inspector-kind="file"]'),
-    fileButtonIcon: !!document.querySelector('.panel--inspector .inspector__file-button .inspector__action-icon'),
-    filePreview: !!document.querySelector('.panel--inspector .inspector__file-preview'),
+    fileParam: !!document.querySelector('.inspector-shell [data-inspector-param="filePath"][data-inspector-kind="file"]'),
+    fileButtonIcon: !!document.querySelector('.inspector-shell .inspector__file-button .inspector__action-icon'),
+    filePreview: !!document.querySelector('.inspector-shell .inspector__file-preview'),
   }));
   assertSlavaCheck(imageAssertions.fileParam, 'Inspector file param exposes stable markers');
   assertSlavaCheck(imageAssertions.fileButtonIcon, 'Inspector file button uses icon contract');
@@ -713,26 +710,27 @@ async function runSlavaInspectorCoverage(cdp) {
       selectedNodeId: 'n5',
       panels: {
         ...state.panels,
+        library: { ...state.panels.library, visible: true },
         inspector: { ...state.panels.inspector, visible: true, position: { x: -320, y: 16 } },
       },
     }));
   });
-  await waitForRuntime(cdp, 'document.querySelector(".panel--inspector [data-inspector-param=\\"model\\"] .inspector__model-selection") && document.querySelector(".panel--inspector .inspector__notice--warning")');
+  await waitForRuntime(cdp, 'document.querySelector(".inspector-shell [data-inspector-param=\\"model\\"] .inspector__model-selection") && document.querySelector(".inspector-shell .inspector__notice--warning")');
   const favoritePressedBefore = await evaluate(cdp, () =>
-    document.querySelector('.panel--inspector .inspector__favorite-button')?.getAttribute('aria-pressed') === 'true',
+    document.querySelector('.inspector-shell .inspector__favorite-button')?.getAttribute('aria-pressed') === 'true',
   );
   if (!favoritePressedBefore) {
-    await clickSelector(cdp, '.panel--inspector .inspector__favorite-button');
+    await clickSelector(cdp, '.inspector-shell .inspector__favorite-button');
   }
-  await waitForRuntime(cdp, 'document.querySelector(".panel--inspector .inspector__favorite-button")?.getAttribute("aria-pressed") === "true"');
+  await waitForRuntime(cdp, 'document.querySelector(".inspector-shell .inspector__favorite-button")?.getAttribute("aria-pressed") === "true"');
   await sleep(200);
   await screenshot(cdp, '10-inspector-model-warning.png');
 
   const modelAssertions = await evaluate(cdp, () => ({
-    modelParam: !!document.querySelector('.panel--inspector [data-inspector-param="model"][data-inspector-kind="string"]'),
-    notice: document.querySelector('.panel--inspector .inspector__notice--warning')?.textContent?.trim() ?? '',
-    modelSelection: !!document.querySelector('.panel--inspector .inspector__model-selection-text'),
-    favoritePressed: document.querySelector('.panel--inspector .inspector__favorite-button')?.getAttribute('aria-pressed'),
+    modelParam: !!document.querySelector('.inspector-shell [data-inspector-param="model"][data-inspector-kind="string"]'),
+    notice: document.querySelector('.inspector-shell .inspector__notice--warning')?.textContent?.trim() ?? '',
+    modelSelection: !!document.querySelector('.inspector-shell .inspector__model-selection-text'),
+    favoritePressed: document.querySelector('.inspector-shell .inspector__favorite-button')?.getAttribute('aria-pressed'),
   }));
   assertSlavaCheck(modelAssertions.modelParam, 'Inspector model param exposes stable markers');
   assertSlavaCheck(modelAssertions.notice.includes('OPENROUTER_API_KEY'), 'Inspector missing API key notice names the required key');
@@ -744,17 +742,18 @@ async function runSlavaInspectorCoverage(cdp) {
       selectedNodeId: 'n4',
       panels: {
         ...state.panels,
+        library: { ...state.panels.library, visible: true },
         inspector: { ...state.panels.inspector, visible: true, position: { x: -320, y: 16 } },
       },
     }));
   });
-  await waitForRuntime(cdp, 'document.querySelector(".panel--inspector [data-inspector-param=\\"content\\"][data-inspector-kind=\\"textarea\\"] textarea") && document.querySelector(".panel--inspector [data-inspector-param=\\"color\\"][data-inspector-kind=\\"enum\\"] select")');
+  await waitForRuntime(cdp, 'document.querySelector(".inspector-shell [data-inspector-param=\\"content\\"][data-inspector-kind=\\"textarea\\"] textarea") && document.querySelector(".inspector-shell [data-inspector-param=\\"color\\"][data-inspector-kind=\\"enum\\"] select")');
   await sleep(200);
   await screenshot(cdp, '11-inspector-sticky-note.png');
 
   const stickyAssertions = await evaluate(cdp, () => ({
-    contentTextarea: !!document.querySelector('.panel--inspector [data-inspector-param="content"][data-inspector-kind="textarea"] textarea.inspector__field'),
-    colorSelect: !!document.querySelector('.panel--inspector [data-inspector-param="color"][data-inspector-kind="enum"] select.inspector__field'),
+    contentTextarea: !!document.querySelector('.inspector-shell [data-inspector-param="content"][data-inspector-kind="textarea"] textarea.inspector__field'),
+    colorSelect: !!document.querySelector('.inspector-shell [data-inspector-param="color"][data-inspector-kind="enum"] select.inspector__field'),
   }));
   assertSlavaCheck(stickyAssertions.contentTextarea, 'Inspector sticky note textarea renders through shared contract');
   assertSlavaCheck(stickyAssertions.colorSelect, 'Inspector sticky note enum renders through shared contract');
@@ -815,7 +814,7 @@ async function runSlavaInspectorCoverage(cdp) {
       selectedNodeId: 'n9',
       panels: {
         ...state.panels,
-        library: { ...state.panels.library, visible: false },
+        library: { ...state.panels.library, visible: true },
         settings: { ...state.panels.settings, visible: false },
         chat: { ...state.panels.chat, visible: false },
         inspector: { ...state.panels.inspector, visible: true, position: { x: -320, y: 16 } },
@@ -823,35 +822,35 @@ async function runSlavaInspectorCoverage(cdp) {
     }));
   });
   await waitForRuntime(cdp, `
-    document.querySelector(".panel--inspector [data-inspector-param=\\"title\\"][data-inspector-source=\\"dynamic\\"] input")
-    && document.querySelector(".panel--inspector [data-inspector-param=\\"prompt\\"][data-inspector-kind=\\"textarea\\"] textarea")
-    && document.querySelector(".panel--inspector [data-inspector-param=\\"steps\\"][data-inspector-kind=\\"integer\\"] input")
-    && document.querySelector(".panel--inspector [data-inspector-param=\\"strength\\"][data-inspector-kind=\\"float\\"] input")
-    && document.querySelector(".panel--inspector [data-inspector-param=\\"tile\\"][data-inspector-kind=\\"boolean\\"] input[type=\\"checkbox\\"]")
-    && document.querySelector(".panel--inspector [data-inspector-param=\\"mode\\"][data-inspector-kind=\\"enum\\"] select")
-    && document.querySelector(".panel--inspector [data-inspector-param=\\"emptyChoice\\"][data-inspector-kind=\\"enum\\"] select:disabled")
+    document.querySelector(".inspector-shell [data-inspector-param=\\"title\\"][data-inspector-source=\\"dynamic\\"] input")
+    && document.querySelector(".inspector-shell [data-inspector-param=\\"prompt\\"][data-inspector-kind=\\"textarea\\"] textarea")
+    && document.querySelector(".inspector-shell [data-inspector-param=\\"steps\\"][data-inspector-kind=\\"integer\\"] input")
+    && document.querySelector(".inspector-shell [data-inspector-param=\\"strength\\"][data-inspector-kind=\\"float\\"] input")
+    && document.querySelector(".inspector-shell [data-inspector-param=\\"tile\\"][data-inspector-kind=\\"boolean\\"] input[type=\\"checkbox\\"]")
+    && document.querySelector(".inspector-shell [data-inspector-param=\\"mode\\"][data-inspector-kind=\\"enum\\"] select")
+    && document.querySelector(".inspector-shell [data-inspector-param=\\"emptyChoice\\"][data-inspector-kind=\\"enum\\"] select:disabled")
   `);
   await sleep(200);
   await screenshot(cdp, '11b-inspector-dynamic-controls.png');
 
   const dynamicAssertions = await evaluate(cdp, () => {
     const get = (selector) => document.querySelector(selector);
-    const dynamicSections = Array.from(document.querySelectorAll('.panel--inspector [data-inspector-source="dynamic"]'));
-    const modeOptions = Array.from(document.querySelectorAll('.panel--inspector [data-inspector-param="mode"] option'))
+    const dynamicSections = Array.from(document.querySelectorAll('.inspector-shell [data-inspector-source="dynamic"]'));
+    const modeOptions = Array.from(document.querySelectorAll('.inspector-shell [data-inspector-param="mode"] option'))
       .map((option) => option.textContent?.trim());
     return {
       dynamicSectionCount: dynamicSections.length,
       allDynamicSources: dynamicSections.every((section) => section.getAttribute('data-inspector-source') === 'dynamic'),
-      titleValue: get('.panel--inspector [data-inspector-param="title"] input')?.value,
-      promptValue: get('.panel--inspector [data-inspector-param="prompt"] textarea')?.value,
-      stepsMin: get('.panel--inspector [data-inspector-param="steps"] input')?.getAttribute('min'),
-      stepsMax: get('.panel--inspector [data-inspector-param="steps"] input')?.getAttribute('max'),
-      strengthStep: get('.panel--inspector [data-inspector-param="strength"] input')?.getAttribute('step'),
-      tileChecked: get('.panel--inspector [data-inspector-param="tile"] input')?.checked,
+      titleValue: get('.inspector-shell [data-inspector-param="title"] input')?.value,
+      promptValue: get('.inspector-shell [data-inspector-param="prompt"] textarea')?.value,
+      stepsMin: get('.inspector-shell [data-inspector-param="steps"] input')?.getAttribute('min'),
+      stepsMax: get('.inspector-shell [data-inspector-param="steps"] input')?.getAttribute('max'),
+      strengthStep: get('.inspector-shell [data-inspector-param="strength"] input')?.getAttribute('step'),
+      tileChecked: get('.inspector-shell [data-inspector-param="tile"] input')?.checked,
       modeOptions,
-      emptyEnumDisabled: get('.panel--inspector [data-inspector-param="emptyChoice"] select')?.disabled,
-      emptyEnumText: get('.panel--inspector [data-inspector-param="emptyChoice"] option')?.textContent?.trim(),
-      actionButtons: document.querySelectorAll('.panel--inspector .inspector__actions .inspector__action-button').length,
+      emptyEnumDisabled: get('.inspector-shell [data-inspector-param="emptyChoice"] select')?.disabled,
+      emptyEnumText: get('.inspector-shell [data-inspector-param="emptyChoice"] option')?.textContent?.trim(),
+      actionButtons: document.querySelectorAll('.inspector-shell .inspector__actions .inspector__action-button').length,
     };
   });
   assertSlavaCheck(dynamicAssertions.dynamicSectionCount >= 7, 'Inspector renders all dynamic params');
@@ -866,13 +865,13 @@ async function runSlavaInspectorCoverage(cdp) {
   assertSlavaCheck(dynamicAssertions.emptyEnumText === 'No options available', 'Inspector dynamic empty enum explains missing options');
   assertSlavaCheck(dynamicAssertions.actionButtons === 3, 'Inspector dynamic node keeps action controls');
 
-  await fillSelector(cdp, '.panel--inspector [data-inspector-param="title"] input', 'Beta');
-  await fillSelector(cdp, '.panel--inspector [data-inspector-param="steps"] input', '99');
-  await clickSelector(cdp, '.panel--inspector [data-inspector-param="title"] input');
-  await fillSelector(cdp, '.panel--inspector [data-inspector-param="strength"] input', '-3');
-  await clickSelector(cdp, '.panel--inspector [data-inspector-param="title"] input');
-  await clickSelector(cdp, '.panel--inspector [data-inspector-param="tile"] input');
-  await selectOption(cdp, '.panel--inspector [data-inspector-param="mode"] select', 'quality');
+  await fillSelector(cdp, '.inspector-shell [data-inspector-param="title"] input', 'Beta');
+  await fillSelector(cdp, '.inspector-shell [data-inspector-param="steps"] input', '99');
+  await clickSelector(cdp, '.inspector-shell [data-inspector-param="title"] input');
+  await fillSelector(cdp, '.inspector-shell [data-inspector-param="strength"] input', '-3');
+  await clickSelector(cdp, '.inspector-shell [data-inspector-param="title"] input');
+  await clickSelector(cdp, '.inspector-shell [data-inspector-param="tile"] input');
+  await selectOption(cdp, '.inspector-shell [data-inspector-param="mode"] select', 'quality');
   await waitForRuntime(cdp, `
     (() => {
       const node = window.__nebulaGraphStore.getState().nodes.find((n) => n.id === "n9");
@@ -933,7 +932,7 @@ async function runSlavaExpandedVisualCoverage(cdp) {
   });
   await waitForRuntime(cdp, `
     !document.querySelector(".panel--library")
-    && !document.querySelector(".panel--inspector")
+    && !document.querySelector(".inspector-shell")
     && !document.querySelector(".panel--settings")
     && !document.querySelector(".chat-panel")
   `);
@@ -1058,7 +1057,7 @@ async function runSlavaHandleGeometryChecks(cdp) {
   });
   await waitForRuntime(cdp, `
     !document.querySelector(".panel--library")
-    && !document.querySelector(".panel--inspector")
+    && !document.querySelector(".inspector-shell")
     && !document.querySelector(".panel--settings")
     && !document.querySelector(".chat-panel")
   `);
@@ -1679,7 +1678,7 @@ async function runSlavaPersistenceChecks(cdp) {
 
 async function runSlavaMobileLayoutChecks(cdp) {
   const mobileAssertions = await evaluate(cdp, () => {
-    const selectors = ['.chat-panel', '.toolbar', '.panel-launcher', '.panel--library', '.panel--inspector', '.panel--settings', '.agent-log'];
+    const selectors = ['.chat-panel', '.toolbar', '.panel-launcher', '.panel--library', '.panel--settings', '.agent-log'];
     const overflow = [];
     for (const selector of selectors) {
       for (const el of document.querySelectorAll(selector)) {

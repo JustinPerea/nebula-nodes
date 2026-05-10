@@ -3,7 +3,6 @@ import { ReactFlowProvider, useReactFlow } from '@xyflow/react';
 import type { Node, Edge } from '@xyflow/react';
 import { Canvas } from './components/Canvas';
 import { NodeLibrary } from './components/panels/NodeLibrary';
-import { Inspector } from './components/panels/Inspector';
 import { Settings } from './components/panels/Settings';
 import { Toolbar } from './components/panels/Toolbar';
 import { PanelLaunchers } from './components/panels/PanelLaunchers';
@@ -124,7 +123,6 @@ export default function App() {
       <ZoomManifestRecorder />
       <Canvas />
       <NodeLibrary />
-      <Inspector />
       <Settings />
       <ChatPanel />
       <PanelLaunchers />

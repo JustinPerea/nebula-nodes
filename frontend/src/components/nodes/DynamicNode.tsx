@@ -66,9 +66,12 @@ function DynamicNodeComponent({ id, data, selected }: NodeProps) {
           <button
             type="button"
             className="model-node__settings-edit nodrag"
-            onClick={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              selectNode(id);
+            }}
             onMouseDown={(e) => e.stopPropagation()}
-            title="Open Inspector"
+            title="Show node settings"
           >
             …
           </button>

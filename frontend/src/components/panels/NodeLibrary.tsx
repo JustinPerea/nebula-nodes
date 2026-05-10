@@ -7,6 +7,7 @@ import { useGraphStore } from '../../store/graphStore';
 import { useDelayedUnmount } from '../../hooks/useDelayedUnmount';
 import { getNodesByCategory } from '../../constants/nodeDefinitions';
 import { CATEGORY_COLORS } from '../../constants/ports';
+import { Inspector } from './Inspector';
 import '../../styles/panels.css';
 
 // Initial collapsed state — all categories start collapsed on first render so
@@ -29,6 +30,7 @@ export function NodeLibrary() {
   const visible = useUIStore((s) => s.panels.library.visible);
   const position = useUIStore((s) => s.panels.library.position);
   const search = useUIStore((s) => s.librarySearch);
+  const selectedNodeId = useUIStore((s) => s.selectedNodeId);
   const setSearch = useUIStore((s) => s.setLibrarySearch);
   const togglePanel = useUIStore((s) => s.togglePanel);
   const skin = useUIStore((s) => s.skin);
@@ -197,83 +199,90 @@ export function NodeLibrary() {
         </button>
       </div>
 
-      <div className="panel__body">
-        <input
-          className="panel__search"
-          type="text"
-          placeholder="Search nodes..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
+      <div className={`panel__body panel__body--library${selectedNodeId ? ' panel__body--library-with-inspector' : ''}`}>
+        <div className="node-library__browser">
+          <input
+            className="panel__search"
+            type="text"
+            placeholder="Search nodes..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
 
-        {Object.entries(filtered).map(([category, defs]) => {
-          // When searching, always expand matching categories so results are visible.
-          const isSearching = search.trim().length > 0;
-          const isCollapsed = !isSearching && (collapsed[category] ?? true);
-          const items = defs.map((def) => (
-            <div
-              key={def.id}
-              className="panel__item"
-              draggable
-              onDragStart={(e) => onDragStart(e, def.id, def.displayName, category)}
-              onDrag={onDrag}
-              onDragEnd={onDragEnd}
-              onDoubleClick={() => onDoubleClick(def.id)}
-            >
-              {def.displayName}
-            </div>
-          ));
-          return (
-            <div
-              key={category}
-              className="panel__group"
-              style={{ ['--category-color' as string]: CATEGORY_COLORS[category] }}
-            >
-              <button
-                className="panel__group-label panel__group-label--button"
-                onClick={() => toggleCategory(category)}
-                type="button"
-                aria-expanded={!isCollapsed}
+          {Object.entries(filtered).map(([category, defs]) => {
+            // When searching, always expand matching categories so results are visible.
+            const isSearching = search.trim().length > 0;
+            const isCollapsed = !isSearching && (collapsed[category] ?? true);
+            const items = defs.map((def) => (
+              <div
+                key={def.id}
+                className="panel__item"
+                draggable
+                onDragStart={(e) => onDragStart(e, def.id, def.displayName, category)}
+                onDrag={onDrag}
+                onDragEnd={onDragEnd}
+                onDoubleClick={() => onDoubleClick(def.id)}
               >
-                {isCollapsed ? (
-                  <ChevronRight
-                    className="panel__group-chevron"
-                    size={12}
-                    strokeWidth={1.75}
-                    aria-hidden="true"
-                    focusable="false"
-                  />
-                ) : (
-                  <ChevronDown
-                    className="panel__group-chevron"
-                    size={12}
-                    strokeWidth={1.75}
-                    aria-hidden="true"
-                    focusable="false"
-                  />
-                )}
-                <span
-                  className="panel__group-dot"
-                  style={{ backgroundColor: CATEGORY_COLORS[category] }}
-                />
-                <span className="panel__group-text">{CATEGORY_LABELS[category] ?? category}</span>
-                <span className="panel__group-count">{defs.length}</span>
-              </button>
-              {skin === 'slava-restraint' ? (
-                <div
-                  className={`panel__items ${isCollapsed ? 'panel__items--collapsed' : 'panel__items--expanded'}`}
-                  aria-hidden={isCollapsed}
+                {def.displayName}
+              </div>
+            ));
+            return (
+              <div
+                key={category}
+                className="panel__group"
+                style={{ ['--category-color' as string]: CATEGORY_COLORS[category] }}
+              >
+                <button
+                  className="panel__group-label panel__group-label--button"
+                  onClick={() => toggleCategory(category)}
+                  type="button"
+                  aria-expanded={!isCollapsed}
                 >
-                  <div className="panel__items-inner">
-                    {items}
+                  {isCollapsed ? (
+                    <ChevronRight
+                      className="panel__group-chevron"
+                      size={12}
+                      strokeWidth={1.75}
+                      aria-hidden="true"
+                      focusable="false"
+                    />
+                  ) : (
+                    <ChevronDown
+                      className="panel__group-chevron"
+                      size={12}
+                      strokeWidth={1.75}
+                      aria-hidden="true"
+                      focusable="false"
+                    />
+                  )}
+                  <span
+                    className="panel__group-dot"
+                    style={{ backgroundColor: CATEGORY_COLORS[category] }}
+                  />
+                  <span className="panel__group-text">{CATEGORY_LABELS[category] ?? category}</span>
+                  <span className="panel__group-count">{defs.length}</span>
+                </button>
+                {skin === 'slava-restraint' ? (
+                  <div
+                    className={`panel__items ${isCollapsed ? 'panel__items--collapsed' : 'panel__items--expanded'}`}
+                    aria-hidden={isCollapsed}
+                  >
+                    <div className="panel__items-inner">
+                      {items}
+                    </div>
                   </div>
-                </div>
-              ) : (
-                !isCollapsed && items
-              )}
-            </div>
-          );
-        })}
+                ) : (
+                  !isCollapsed && items
+                )}
+              </div>
+            );
+          })}
+        </div>
+        {selectedNodeId && (
+          <div className="node-library__inspector">
+            <Inspector embedded />
+          </div>
+        )}
       </div>
       {skin === 'slava-restraint' && dragPreview && dragPreviewStyle && createPortal(
         <div className="slava-library-drag-preview" style={dragPreviewStyle}>

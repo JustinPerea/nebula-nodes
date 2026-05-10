@@ -127,6 +127,9 @@ export const useUIStore = create<UIState>((set) => ({
       selectedNodeId: nodeId,
       panels: {
         ...state.panels,
+        library: nodeId !== null
+          ? { ...state.panels.library, visible: true }
+          : state.panels.library,
         inspector: { ...state.panels.inspector, visible: nodeId !== null },
       },
     })),

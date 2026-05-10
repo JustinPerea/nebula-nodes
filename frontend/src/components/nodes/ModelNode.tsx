@@ -171,7 +171,7 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
       <div className="model-node__type-label">{definition.category}</div>
 
       {/* Settings bar — floats above the card when selected; renders model
-       * name + an "Edit" affordance that opens the existing Inspector panel. */}
+       * name + an "Edit" affordance that opens the node panel settings. */}
       {selected && (
         <div className="model-node__settings-bar">
           <span className="model-node__settings-model">{definition.displayName}</span>
@@ -180,12 +180,10 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
             className="model-node__settings-edit nodrag"
             onClick={(e) => {
               e.stopPropagation();
-              // Inspector panel is already visible whenever a node is selected
-              // (uiStore.selectNode toggles it on). This button is a hint
-              // that the full editor lives in the side panel.
+              selectNode(id);
             }}
             onMouseDown={(e) => e.stopPropagation()}
-            title="Open Inspector"
+            title="Show node settings"
           >
             …
           </button>

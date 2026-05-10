@@ -203,6 +203,104 @@ describe('graphStore', () => {
     expect(state.edges).toHaveLength(1);
     expect(state.edges[0].id).toBe('edge-2');
   });
+
+  it('replaces an existing wire on non-multiple input handles', () => {
+    useGraphStore.setState({
+      nodes: [
+        {
+          id: 'source-a',
+          type: 'model-node',
+          position: { x: 0, y: 0 },
+          data: { label: 'Text A', definitionId: 'text-input', params: {}, state: 'idle', outputs: {} },
+        },
+        {
+          id: 'source-b',
+          type: 'model-node',
+          position: { x: 0, y: 120 },
+          data: { label: 'Image B', definitionId: 'image-input', params: {}, state: 'idle', outputs: {} },
+        },
+        {
+          id: 'preview-1',
+          type: 'model-node',
+          position: { x: 320, y: 0 },
+          data: { label: 'Preview', definitionId: 'preview', params: {}, state: 'idle', outputs: {} },
+        },
+      ],
+      edges: [
+        {
+          id: 'old-edge',
+          source: 'source-a',
+          sourceHandle: 'text',
+          target: 'preview-1',
+          targetHandle: 'input',
+          type: 'typed-edge',
+        },
+      ],
+    });
+
+    useGraphStore.getState().onConnect({
+      source: 'source-b',
+      sourceHandle: 'image',
+      target: 'preview-1',
+      targetHandle: 'input',
+    });
+
+    const edges = useGraphStore.getState().edges;
+    expect(edges).toHaveLength(1);
+    expect(edges[0].id).not.toBe('old-edge');
+    expect(edges[0]).toMatchObject({
+      source: 'source-b',
+      sourceHandle: 'image',
+      target: 'preview-1',
+      targetHandle: 'input',
+    });
+  });
+
+  it('keeps multiple wires on multiple input handles', () => {
+    useGraphStore.setState({
+      nodes: [
+        {
+          id: 'image-a',
+          type: 'model-node',
+          position: { x: 0, y: 0 },
+          data: { label: 'Image A', definitionId: 'image-input', params: {}, state: 'idle', outputs: {} },
+        },
+        {
+          id: 'image-b',
+          type: 'model-node',
+          position: { x: 0, y: 120 },
+          data: { label: 'Image B', definitionId: 'image-input', params: {}, state: 'idle', outputs: {} },
+        },
+        {
+          id: 'gemini-1',
+          type: 'model-node',
+          position: { x: 320, y: 0 },
+          data: { label: 'Gemini', definitionId: 'gemini-chat', params: {}, state: 'idle', outputs: {} },
+        },
+      ],
+      edges: [
+        {
+          id: 'old-edge',
+          source: 'image-a',
+          sourceHandle: 'image',
+          target: 'gemini-1',
+          targetHandle: 'images',
+          type: 'typed-edge',
+        },
+      ],
+    });
+
+    useGraphStore.getState().onConnect({
+      source: 'image-b',
+      sourceHandle: 'image',
+      target: 'gemini-1',
+      targetHandle: 'images',
+    });
+
+    const edges = useGraphStore.getState().edges;
+    expect(edges).toHaveLength(2);
+    expect(edges.map((edge) => edge.source)).toEqual(['image-a', 'image-b']);
+  });
 });
 
 // ---------------------------------------------------------------------------

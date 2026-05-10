@@ -62,6 +62,49 @@ body:not(.app-slava-restraint) .panel__close:hover { color: #ccc; }
   flex: 1;
 }
 
+.panel__body--library {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.node-library__browser {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.panel__body--library:not(.panel__body--library-with-inspector) .node-library__browser {
+  flex: 1 1 auto;
+}
+
+.panel__body--library-with-inspector {
+  overflow: hidden;
+}
+
+.panel__body--library-with-inspector .node-library__browser {
+  flex: 0 1 45%;
+  min-height: 140px;
+}
+
+.node-library__inspector {
+  flex: 1 1 0;
+  min-height: 220px;
+  overflow-y: auto;
+  padding-top: 8px;
+}
+
+body:not(.app-slava-restraint) .node-library__inspector {
+  border-top: 1px solid #2a2a2a;
+}
+
+.inspector--embedded {
+  min-height: 0;
+}
+
+.inspector__body {
+  min-height: 0;
+}
+
 .panel__search {
   width: 100%;
   padding: 6px 8px;

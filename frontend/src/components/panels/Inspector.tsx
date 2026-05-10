@@ -12,8 +12,12 @@ import '../../styles/panels.css';
 
 type InspectorParamDefinition = ParamDefinition | DynamicParamDefinition;
 
-export function Inspector() {
-  const visible = useUIStore((s) => s.panels.inspector.visible);
+type InspectorProps = {
+  embedded?: boolean;
+};
+
+export function Inspector({ embedded = false }: InspectorProps) {
+  const panelVisible = useUIStore((s) => s.panels.inspector.visible);
   const position = useUIStore((s) => s.panels.inspector.position);
   const selectedNodeId = useUIStore((s) => s.selectedNodeId);
   const skin = useUIStore((s) => s.skin);
@@ -27,6 +31,7 @@ export function Inspector() {
   const configureOpenRouterModel = useGraphStore((s) => s.configureOpenRouterModel);
   const fetchReplicateSchemaAndConfigure = useGraphStore((s) => s.fetchReplicateSchemaAndConfigure);
   const dragRef = useRef<{ startX: number; startY: number; panelX: number; panelY: number } | null>(null);
+  const visible = embedded ? selectedNodeId !== null : panelVisible;
   const { shouldRender, exiting } = useDelayedUnmount(visible, 500);
 
   // OpenRouter model selector state
@@ -166,7 +171,8 @@ export function Inspector() {
     };
   }, [setPanelPosition]);
 
-  const resolvedX = position.x < 0 ? window.innerWidth + position.x : position.x;
+  const viewportWidth = typeof window === 'undefined' ? 0 : window.innerWidth;
+  const resolvedX = position.x < 0 ? viewportWidth + position.x : position.x;
   const isSlavaSkin = skin === 'slava-restraint';
 
   function handleHeaderMouseDown(e: React.MouseEvent<HTMLDivElement>) {
@@ -181,6 +187,7 @@ export function Inspector() {
   if (!shouldRender) return null;
 
   if (!renderNode || !nodeData) {
+    if (embedded) return null;
     if (!isSlavaSkin) return null;
     return (
       <div
@@ -506,77 +513,51 @@ export function Inspector() {
     );
   }
 
-  return (
-    <div
-      className={`panel panel--inspector${exiting ? ' panel--exiting' : ''}`}
-      style={{ left: resolvedX, top: position.y }}
-    >
-      <div
-        className="panel__header"
-        onMouseDown={handleHeaderMouseDown}
-      >
-        <span className="panel__title">Inspector</span>
-        <button
-          type="button"
-          className="panel__header-action panel__close"
-          onClick={() => togglePanel('inspector')}
-          aria-label="Close inspector panel"
-          title="Close"
-        >
-          <X
-            className="panel__close-icon"
-            size={16}
-            strokeWidth={1.75}
-            aria-hidden="true"
-            focusable="false"
-          />
-        </button>
+  const body = (
+    <div className={embedded ? 'inspector__body' : 'panel__body inspector__body'} key={renderNode.id}>
+      <div className="inspector__node-header">
+        <span
+          className="inspector__node-dot"
+          style={{
+            backgroundColor: CATEGORY_COLORS[definition?.category ?? 'universal'],
+          }}
+        />
+        <span className="inspector__node-name">{nodeData.label}</span>
+        {definition && (
+          <button
+            type="button"
+            className="inspector__info-button"
+            onClick={() => setShowInfo(!showInfo)}
+            title="Node info — inputs, outputs, and settings"
+            aria-label={showInfo ? 'Hide node info' : 'Show node info'}
+            aria-expanded={showInfo}
+          >
+            {showInfo ? (
+              <X
+                className="inspector__info-icon"
+                size={13}
+                strokeWidth={1.75}
+                aria-hidden="true"
+                focusable="false"
+              />
+            ) : (
+              <Info
+                className="inspector__info-icon"
+                size={13}
+                strokeWidth={1.75}
+                aria-hidden="true"
+                focusable="false"
+              />
+            )}
+          </button>
+        )}
       </div>
 
-      <div className="panel__body" key={renderNode.id}>
-        <div className="inspector__node-header">
-          <span
-            className="inspector__node-dot"
-            style={{
-              backgroundColor: CATEGORY_COLORS[definition?.category ?? 'universal'],
-            }}
-          />
-          <span className="inspector__node-name">{nodeData.label}</span>
-          {definition && (
-            <button
-              type="button"
-              className="inspector__info-button"
-              onClick={() => setShowInfo(!showInfo)}
-              title="Node info — inputs, outputs, and settings"
-              aria-label={showInfo ? 'Hide node info' : 'Show node info'}
-              aria-expanded={showInfo}
-            >
-              {showInfo ? (
-                <X
-                  className="inspector__info-icon"
-                  size={13}
-                  strokeWidth={1.75}
-                  aria-hidden="true"
-                  focusable="false"
-                />
-              ) : (
-                <Info
-                  className="inspector__info-icon"
-                  size={13}
-                  strokeWidth={1.75}
-                  aria-hidden="true"
-                  focusable="false"
-                />
-              )}
-            </button>
-          )}
+      {missingApiKeys.length > 0 && (
+        <div className="inspector__notice inspector__notice--warning" role="status">
+          Missing API key: {missingApiKeys.join(', ')}
         </div>
-
-        {missingApiKeys.length > 0 && (
-          <div className="inspector__notice inspector__notice--warning" role="status">
-            Missing API key: {missingApiKeys.join(', ')}
-          </div>
-        )}
+      )}
 
         {showInfo && definition && (
           <div className="inspector__info-panel">
@@ -693,6 +674,47 @@ export function Inspector() {
           </button>
         </div>
       </div>
+  );
+
+  if (embedded) {
+    return (
+      <div
+        className={`inspector inspector--embedded inspector-shell${exiting ? ' inspector--exiting' : ''}`}
+        data-inspector-embedded="true"
+      >
+        {body}
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={`panel panel--inspector inspector-shell${exiting ? ' panel--exiting' : ''}`}
+      style={{ left: resolvedX, top: position.y }}
+    >
+      <div
+        className="panel__header"
+        onMouseDown={handleHeaderMouseDown}
+      >
+        <span className="panel__title">Inspector</span>
+        <button
+          type="button"
+          className="panel__header-action panel__close"
+          onClick={() => togglePanel('inspector')}
+          aria-label="Close inspector panel"
+          title="Close"
+        >
+          <X
+            className="panel__close-icon"
+            size={16}
+            strokeWidth={1.75}
+            aria-hidden="true"
+            focusable="false"
+          />
+        </button>
+      </div>
+
+      {body}
     </div>
   );
 }

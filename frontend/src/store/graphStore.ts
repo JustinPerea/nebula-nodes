@@ -213,6 +213,16 @@ function dynamicProviderFor(definitionId: string): DynamicProviderType {
   return DYNAMIC_PROVIDER_BY_DEFINITION[definitionId] ?? 'openrouter';
 }
 
+function targetHandleAllowsMultiple(node: Node<NodeData>, handleId: string | null | undefined): boolean {
+  if (!handleId) return false;
+  const dynamicData = node.data as unknown as DynamicNodeData | undefined;
+  if (dynamicData?.isDynamic && dynamicData.dynamicInputPorts) {
+    return Boolean(dynamicData.dynamicInputPorts.find((p) => p.id === handleId)?.multiple);
+  }
+  const definition = NODE_DEFINITIONS[node.data.definitionId];
+  return Boolean(definition?.inputPorts.find((p) => p.id === handleId)?.multiple);
+}
+
 function toDynamicPort(p: {
   id: string;
   label: string;
@@ -808,6 +818,14 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       }
     }
 
+    const targetAllowsMultiple = targetHandleAllowsMultiple(targetNode, connection.targetHandle);
+    const edgesToReplace = targetAllowsMultiple
+      ? []
+      : get().edges.filter(
+        (edge) => edge.target === connection.target
+          && (edge.targetHandle ?? '') === (connection.targetHandle ?? ''),
+      );
+
     // Optimistic local edge so the user sees it immediately. If both endpoints
     // are cli-origin nodes, push the edge to cli_graph too — graphSync will
     // bring back the authoritative version (the id may differ) and the merge
@@ -821,19 +839,35 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       type: 'typed-edge',
       data: { dataType },
     };
-    set((state) => ({ edges: [...state.edges, newEdge] }));
+    const replacedIds = new Set(edgesToReplace.map((edge) => edge.id));
+    set((state) => ({ edges: [...state.edges.filter((edge) => !replacedIds.has(edge.id)), newEdge] }));
 
     if (CLI_ID_RE.test(connection.source) && CLI_ID_RE.test(connection.target)) {
-      fetch('http://localhost:8000/api/graph/connect', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          source: connection.source,
-          sourceHandle: connection.sourceHandle,
-          target: connection.target,
-          targetHandle: connection.targetHandle,
-        }),
-      }).catch((err) => console.warn('[nebula] onConnect backend push failed:', err));
+      (async () => {
+        for (const edge of edgesToReplace) {
+          if (!CLI_ID_RE.test(edge.source) || !CLI_ID_RE.test(edge.target)) continue;
+          await fetch('http://localhost:8000/api/graph/edge', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              source: edge.source,
+              sourceHandle: edge.sourceHandle ?? '',
+              target: edge.target,
+              targetHandle: edge.targetHandle ?? '',
+            }),
+          });
+        }
+        await fetch('http://localhost:8000/api/graph/connect', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            source: connection.source,
+            sourceHandle: connection.sourceHandle,
+            target: connection.target,
+            targetHandle: connection.targetHandle,
+          }),
+        });
+      })().catch((err) => console.warn('[nebula] onConnect backend push failed:', err));
     }
   },
 

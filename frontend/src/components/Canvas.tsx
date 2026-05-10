@@ -5,8 +5,10 @@ import {
   BackgroundVariant,
   SelectionMode,
   useReactFlow,
+  type Connection,
   type NodeTypes,
   type EdgeTypes,
+  type OnConnectEnd,
   type OnConnectStart,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
@@ -77,6 +79,14 @@ function computeChatAwarePadding(): PixelPadding {
 const edgeTypes: EdgeTypes = {
   'typed-edge': TypedEdge,
 };
+
+function getEventClientPoint(event: MouseEvent | TouchEvent): { x: number; y: number } | null {
+  if ('clientX' in event) {
+    return { x: event.clientX, y: event.clientY };
+  }
+  const touch = event.changedTouches[0] ?? event.touches[0];
+  return touch ? { x: touch.clientX, y: touch.clientY } : null;
+}
 
 function useSlavaHandleMagnetism() {
   useEffect(() => {
@@ -191,7 +201,7 @@ export function Canvas() {
   const edges = useGraphStore((s) => s.edges);
   const onNodesChange = useGraphStore((s) => s.onNodesChange);
   const onEdgesChange = useGraphStore((s) => s.onEdgesChange);
-  const onConnect = useGraphStore((s) => s.onConnect);
+  const storeOnConnect = useGraphStore((s) => s.onConnect);
   const executeGraph = useGraphStore((s) => s.executeGraph);
   const isExecuting = useGraphStore((s) => s.isExecuting);
   const isValidConnection = useIsValidConnection();
@@ -274,7 +284,7 @@ export function Canvas() {
       if (suppressed) return;
       setTimeout(() => {
         const padding = computeChatAwarePadding();
-        fitView({ padding, duration: 400 });
+        fitView({ padding, duration: 400, maxZoom: 0.85 });
       }, 80);
     }
     window.addEventListener('nebula:graph-nodes-added', onNodesAdded);
@@ -283,8 +293,10 @@ export function Canvas() {
 
   // Track the connection being dragged so onConnectEnd knows what port it came from
   const connectStartRef = useRef<{ nodeId: string; handleId: string; handleType: 'source' | 'target' } | null>(null);
+  const connectionSucceededRef = useRef(false);
 
   const onConnectStart: OnConnectStart = useCallback((_event, params) => {
+    connectionSucceededRef.current = false;
     connectStartRef.current = {
       nodeId: params.nodeId ?? '',
       handleId: params.handleId ?? '',
@@ -292,20 +304,31 @@ export function Canvas() {
     };
   }, []);
 
-  const onConnectEnd = useCallback((event: MouseEvent | TouchEvent) => {
+  const handleConnect = useCallback((connection: Connection) => {
+    connectionSucceededRef.current = true;
+    storeOnConnect(connection);
+  }, [storeOnConnect]);
+
+  const onConnectEnd: OnConnectEnd = useCallback((event, connectionState) => {
     const info = connectStartRef.current;
     connectStartRef.current = null;
+    const connectionSucceeded = connectionSucceededRef.current;
+    connectionSucceededRef.current = false;
     if (!info || !info.nodeId || !info.handleId) return;
+    if (connectionSucceeded) return;
+    if (connectionState.toHandle || connectionState.toNode || connectionState.isValid !== null) return;
+
+    const point = getEventClientPoint(event);
+    if (!point) return;
 
     // Only show popup if the drag ended on empty space (not on a handle/node)
     const target = event.target as HTMLElement;
     if (target.closest('.react-flow__handle') || target.closest('.react-flow__node')) return;
-
-    const clientX = 'clientX' in event ? event.clientX : event.touches[0].clientX;
-    const clientY = 'clientY' in event ? event.clientY : event.touches[0].clientY;
+    const elementsAtDrop = document.elementsFromPoint(point.x, point.y);
+    if (elementsAtDrop.some((el) => el.closest('.react-flow__handle') || el.closest('.react-flow__node'))) return;
 
     showConnectionPopup({
-      position: { x: clientX, y: clientY },
+      position: point,
       nodeId: info.nodeId,
       handleId: info.handleId,
       handleType: info.handleType,
@@ -463,7 +486,7 @@ export function Canvas() {
         edges={renderedEdges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
-        onConnect={onConnect}
+        onConnect={handleConnect}
         onConnectStart={onConnectStart}
         onConnectEnd={onConnectEnd}
         isValidConnection={isValidConnection}

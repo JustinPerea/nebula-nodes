@@ -225,7 +225,7 @@ body.app-slava-restraint {
   --sr-node-image-icon-size: 14px;
   --sr-node-image-icon-radius: 3px;
   --sr-node-image-icon-opacity: 0.82;
-  --sr-node-image-icon-glyph: linear-gradient(135deg, transparent 48%, var(--sr-ink-light) 50%, transparent 54%) 3px 7px / 8px 5px no-repeat;
+  --sr-node-image-icon-glyph: none;
   --sr-node-mesh-height: 172px;
   --sr-node-mesh-grid-color: rgba(201, 202, 200, 0.20);
   --sr-node-mesh-grid-soft: rgba(201, 202, 200, 0.10);
@@ -533,6 +533,26 @@ body.app-slava-restraint :is(.panel__header-action, .model-node__header-action):
 body.app-slava-restraint .panel__body {
   padding: var(--sr-space-3) var(--sr-space-4) var(--sr-space-4);
   background: transparent;
+}
+
+body.app-slava-restraint .panel__body--library {
+  min-height: 0;
+}
+
+body.app-slava-restraint .node-library__browser {
+  padding-right: 2px;
+  scrollbar-color: var(--sr-node-scrollbar-color) transparent;
+}
+
+body.app-slava-restraint .node-library__inspector {
+  margin-top: var(--sr-space-3);
+  padding-top: var(--sr-space-3);
+  border-top: 1px solid var(--sr-edge);
+  scrollbar-color: var(--sr-node-scrollbar-color) transparent;
+}
+
+body.app-slava-restraint .inspector--embedded .inspector__body {
+  animation: slava-inspector-swap 120ms cubic-bezier(0.05, 0.7, 0.1, 1) backwards;
 }
 
 body.app-slava-restraint :is(
@@ -1345,7 +1365,8 @@ body.app-slava-restraint .panel--inspector .panel__body {
   animation: slava-inspector-swap 120ms cubic-bezier(0.05, 0.7, 0.1, 1) backwards;
 }
 @media (prefers-reduced-motion: reduce) {
-  body.app-slava-restraint .panel--inspector .panel__body {
+  body.app-slava-restraint .panel--inspector .panel__body,
+  body.app-slava-restraint .inspector--embedded .inspector__body {
     animation: none;
   }
 }
@@ -3691,7 +3712,15 @@ body.app-slava-restraint .model-node--text-surface .model-node__textarea {
 }
 
 body.app-slava-restraint .model-node--text-surface .model-node__textarea:focus {
+  outline: none;
   border-color: transparent;
+  box-shadow: none;
+  caret-color: var(--sr-ink-bold);
+}
+
+body.app-slava-restraint .model-node--text-surface .model-node__textarea:focus-visible {
+  outline: none;
+  box-shadow: none;
 }
 
 body.app-slava-restraint .model-node--text-surface .model-node__textarea::placeholder {
@@ -3724,6 +3753,8 @@ body.app-slava-restraint .model-node--text-surface .model-node__preview-text {
   font-family: var(--sr-ui);
   font-size: var(--sr-type-control);
   line-height: var(--sr-line-bubble);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
   overflow-y: auto;
 }
 
