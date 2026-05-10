@@ -85,7 +85,7 @@ export const useUIStore = create<UIState>((set) => ({
   selectedNodeId: null,
   chatResized: false,
   panels: {
-    library: { visible: false, position: { x: 16, y: 16 } },
+    library: { visible: true, position: { x: 16, y: 16 } },
     inspector: { visible: false, position: { x: -280, y: 16 } },
     settings: { visible: false, position: { x: -340, y: 60 } },
     // Chat opens from the bottom-right launcher. Width seed (300) is ignored

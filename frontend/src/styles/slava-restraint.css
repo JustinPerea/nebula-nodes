@@ -3209,9 +3209,11 @@ body.app-slava-restraint .model-node__header {
   z-index: var(--sr-layer-node-header);
   padding: var(--sr-node-header-padding);
   border-bottom: none;
+  border-radius: var(--sr-radius-node) var(--sr-radius-node) 0 0;
   background: transparent;
   align-items: center;
   gap: var(--sr-node-header-gap);
+  overflow: hidden;
   /* Tiny dark gradient overlay for label legibility on light previews. */
   background-image: var(--sr-node-header-gradient);
 }
@@ -3655,6 +3657,7 @@ body.app-slava-restraint .model-node--text-surface .model-node__header {
   flex: 0 0 auto;
   min-height: var(--sr-node-text-header-min-height);
   padding: var(--sr-node-text-header-padding);
+  border-radius: var(--sr-radius-panel) var(--sr-radius-panel) 0 0;
 }
 
 body.app-slava-restraint .model-node--text-surface .model-node__label {
@@ -3795,9 +3798,11 @@ body.app-slava-restraint .model-node--image-surface .model-node__header {
   min-height: var(--sr-node-image-header-min-height);
   padding: var(--sr-node-image-header-padding);
   border: none;
+  border-radius: 0;
   background: transparent;
   background-image: none;
   gap: var(--sr-node-header-gap);
+  overflow: visible;
   pointer-events: auto;
 }
 

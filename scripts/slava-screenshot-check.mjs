@@ -356,9 +356,10 @@ async function runSkinSwitchSmokeChecks(cdp) {
     hermesBody: document.body.classList.contains('app-hermes'),
     slavaBackground: !!document.querySelector('.react-flow__background.slava-canvas-background'),
     slavaDot: !!document.querySelector('.react-flow__background.slava-canvas-background .slava-canvas-background__dot'),
-    libraryHidden: !document.querySelector('.panel--library'),
+    libraryVisible: !!document.querySelector('.panel--library'),
     chatHidden: !document.querySelector('.chat-panel'),
     nodeLauncher: !!document.querySelector('.panel-launcher--nodes'),
+    nodeLauncherActive: !!document.querySelector('.panel-launcher--nodes.panel-launcher--active'),
     chatLauncher: !!document.querySelector('.panel-launcher--chat'),
   }));
   assertSlavaCheck(defaultAssertions.storedSkin === null, 'fresh profile has no persisted skin before smoke check');
@@ -367,9 +368,10 @@ async function runSkinSwitchSmokeChecks(cdp) {
   assertSlavaCheck(!defaultAssertions.hermesBody, 'fresh Slava default does not also apply Hermes body class');
   assertSlavaCheck(defaultAssertions.slavaBackground, 'fresh Slava default renders dot-matrix background layer');
   assertSlavaCheck(defaultAssertions.slavaDot, 'fresh Slava default renders the dot-matrix marker element');
-  assertSlavaCheck(defaultAssertions.libraryHidden, 'fresh Slava default starts with node library collapsed');
+  assertSlavaCheck(defaultAssertions.libraryVisible, 'fresh Slava default starts with node library open');
   assertSlavaCheck(defaultAssertions.chatHidden, 'fresh Slava default starts with chat collapsed');
   assertSlavaCheck(defaultAssertions.nodeLauncher, 'fresh Slava default renders node launcher');
+  assertSlavaCheck(defaultAssertions.nodeLauncherActive, 'fresh Slava default marks node launcher active');
   assertSlavaCheck(defaultAssertions.chatLauncher, 'fresh Slava default renders chat launcher');
 
   await evaluate(cdp, () => {
