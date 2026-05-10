@@ -3,6 +3,24 @@ import { type SkinId, loadSkin, persistSkin, applySkinBodyClass } from '../lib/s
 
 const AGENT_LOG_ENABLED_KEY = 'nebula:agentLog:enabled';
 
+const DEFAULT_PANELS = {
+  library: { visible: true, position: { x: 16, y: 16 } },
+  inspector: { visible: false, position: { x: -280, y: 16 } },
+  settings: { visible: false, position: { x: -340, y: 60 } },
+  // Chat opens from the bottom-right launcher. Width seed (300) is ignored
+  // until chatResized flips, so the CSS clamp drives the rendered width.
+  chat: { visible: false, position: { x: 16, y: 16 }, width: 300 },
+};
+
+function createDefaultPanels(): UIState['panels'] {
+  return {
+    library: { ...DEFAULT_PANELS.library, position: { ...DEFAULT_PANELS.library.position } },
+    inspector: { ...DEFAULT_PANELS.inspector, position: { ...DEFAULT_PANELS.inspector.position } },
+    settings: { ...DEFAULT_PANELS.settings, position: { ...DEFAULT_PANELS.settings.position } },
+    chat: { ...DEFAULT_PANELS.chat, position: { ...DEFAULT_PANELS.chat.position } },
+  };
+}
+
 function loadAgentLogEnabled(): boolean {
   if (typeof window === 'undefined') return false;
   return window.localStorage.getItem(AGENT_LOG_ENABLED_KEY) === '1';
@@ -79,19 +97,13 @@ interface UIState {
   setSettingsCache: (apiKeys: Record<string, string>) => void;
   setSkin: (skin: SkinId) => void;
   setAgentLogEnabled: (enabled: boolean) => void;
+  resetPanelsForFreshCanvas: () => void;
 }
 
 export const useUIStore = create<UIState>((set) => ({
   selectedNodeId: null,
   chatResized: false,
-  panels: {
-    library: { visible: true, position: { x: 16, y: 16 } },
-    inspector: { visible: false, position: { x: -280, y: 16 } },
-    settings: { visible: false, position: { x: -340, y: 60 } },
-    // Chat opens from the bottom-right launcher. Width seed (300) is ignored
-    // until chatResized flips, so the CSS clamp drives the rendered width.
-    chat: { visible: false, position: { x: 16, y: 16 }, width: 300 },
-  },
+  panels: createDefaultPanels(),
   librarySearch: '',
   libraryCollapsed: {},
   contextMenu: {
@@ -214,6 +226,22 @@ export const useUIStore = create<UIState>((set) => ({
   setAgentLogEnabled: (enabled) => {
     persistAgentLogEnabled(enabled);
     set({ agentLogEnabled: enabled });
+  },
+
+  resetPanelsForFreshCanvas: () => {
+    set({
+      selectedNodeId: null,
+      chatResized: false,
+      panels: createDefaultPanels(),
+      contextMenu: { visible: false, position: { x: 0, y: 0 }, nodeId: null },
+      connectionPopup: {
+        visible: false,
+        position: { x: 0, y: 0 },
+        nodeId: '',
+        handleId: '',
+        handleType: 'source',
+      },
+    });
   },
 }));
 

@@ -41,7 +41,11 @@ function GraphHydrator() {
     (async () => {
       try {
         const data = await fetchCLIGraph();
-        if (cancelled || data.empty) return;
+        if (cancelled) return;
+        if (data.empty) {
+          useUIStore.getState().resetPanelsForFreshCanvas();
+          return;
+        }
         if (useGraphStore.getState().nodes.length > 0) return;
         useGraphStore.getState().loadGraph(
           data.nodes as Node<NodeData>[],
@@ -49,7 +53,9 @@ function GraphHydrator() {
         );
         setTimeout(() => fitView({ padding: 0.2, duration: 300 }), 50);
       } catch {
-        // Backend down on first load — silent; user can still click CLI later.
+        // Backend down on first load: keep the blank canvas clean. The graph
+        // store will clear stale cli_graph state before the first manual add.
+        useUIStore.getState().resetPanelsForFreshCanvas();
       }
     })();
 

@@ -136,6 +136,7 @@ interface GraphState {
   nodes: Node<NodeData>[];
   edges: Edge[];
   isExecuting: boolean;
+  backendFreshStartPending: boolean;
 
   // Undo/Redo
   undoStack: UndoSnapshot[];
@@ -235,6 +236,36 @@ function toDynamicPort(p: {
 const paramPushTimers: Record<string, number> = {};
 const PARAM_PUSH_DEBOUNCE_MS = 250;
 
+type GraphSet = (
+  partial: Partial<GraphState> | ((state: GraphState) => Partial<GraphState>),
+) => void;
+type GraphGet = () => GraphState;
+
+async function ensureBackendFreshForLocalCanvas(
+  localCanvasWasEmpty: boolean,
+  set: GraphSet,
+  get: GraphGet,
+): Promise<boolean> {
+  if (!localCanvasWasEmpty && !get().backendFreshStartPending) return true;
+
+  try {
+    const exportRes = await fetch('http://localhost:8000/api/graph/export');
+    if (!exportRes.ok) throw new Error(`Export failed: ${exportRes.status}`);
+    const exported = (await exportRes.json()) as { empty?: boolean };
+
+    if (exported.empty === false) {
+      const clearRes = await fetch('http://localhost:8000/api/graph', { method: 'DELETE' });
+      if (!clearRes.ok) throw new Error(`Clear failed: ${clearRes.status}`);
+    }
+
+    set({ backendFreshStartPending: false });
+    return true;
+  } catch {
+    set({ backendFreshStartPending: true });
+    return false;
+  }
+}
+
 wsClient.connect();
 wsClient.subscribe((event) => {
   if (event.type === 'graphSync') {
@@ -258,6 +289,7 @@ wsClient.subscribe((event) => {
         nodes: remainingNodes,
         edges: remainingEdges,
         isExecuting: false,
+        backendFreshStartPending: false,
       });
       return;
     }
@@ -336,6 +368,7 @@ wsClient.subscribe((event) => {
       nodes: merged,
       edges: mergedEdges,
       isExecuting: false,
+      backendFreshStartPending: false,
     });
 
     // Only fire the auto-fit event when cli_graph actually added nodes we didn't
@@ -358,6 +391,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   nodes: [],
   edges: [],
   isExecuting: false,
+  backendFreshStartPending: false,
 
   // ---------------------------------------------------------------------------
   // Undo/Redo initial state
@@ -542,9 +576,14 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       if (param.default !== undefined) defaults[param.key] = param.default;
     }
 
+    const localCanvasWasEmpty = get().nodes.length === 0 && get().edges.length === 0;
+
     // Push into cli_graph on the backend so `nebula graph` shows the node to
     // Claude. graphSync will bring it into the canvas with its cli short id.
     try {
+      const backendFresh = await ensureBackendFreshForLocalCanvas(localCanvasWasEmpty, set, get);
+      if (!backendFresh) throw new Error('Backend fresh-start guard failed');
+
       const res = await fetch('http://localhost:8000/api/graph/node', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -633,6 +672,8 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       }
     }
 
+    const localCanvasWasEmpty = get().nodes.length === 0 && get().edges.length === 0;
+
     // Optimistic local node with dynamic fields (ports/params/provider meta).
     // We assign a UUID up front; if the backend push succeeds, we'll renumber
     // the node to the short id so Claude can reference it.
@@ -660,11 +701,15 @@ export const useGraphStore = create<GraphState>((set, get) => ({
 
     // Fire-and-forget push to cli_graph. When it returns, swap the UUID for
     // the short id so subsequent edits flow through the usual cli path.
-    fetch('http://localhost:8000/api/graph/node', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ definitionId, params: defaults, position }),
-    })
+    ensureBackendFreshForLocalCanvas(localCanvasWasEmpty, set, get)
+      .then((backendFresh) => {
+        if (!backendFresh) throw new Error('Backend fresh-start guard failed');
+        return fetch('http://localhost:8000/api/graph/node', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ definitionId, params: defaults, position }),
+        });
+      })
       .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`HTTP ${res.status}`))))
       .then((body: { id?: string }) => {
         const shortId = body.id;
@@ -925,7 +970,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   },
 
   loadGraph: (nodes, edges) => {
-    set({ nodes, edges, isExecuting: false, undoStack: [], redoStack: [] });
+    set({ nodes, edges, isExecuting: false, undoStack: [], redoStack: [], backendFreshStartPending: false });
   },
 
   clearGraph: () => {
@@ -933,7 +978,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     const snapshot = createSnapshot(nodes, edges);
     const newStack = [...undoStack, snapshot];
     if (newStack.length > UNDO_CAP) newStack.shift();
-    set({ nodes: [], edges: [], isExecuting: false, undoStack: newStack, redoStack: [] });
+    set({ nodes: [], edges: [], isExecuting: false, undoStack: newStack, redoStack: [], backendFreshStartPending: false });
   },
 
   configureOpenRouterModel: (nodeId, modelId, model) => {

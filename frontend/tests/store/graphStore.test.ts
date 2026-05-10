@@ -20,6 +20,14 @@ vi.spyOn(console, 'warn').mockImplementation(() => {});
 
 import { useGraphStore } from '../../src/store/graphStore';
 
+function mockResponse(body: unknown, ok = true, status = 200) {
+  return {
+    ok,
+    status,
+    json: async () => body,
+  };
+}
+
 function resetStore() {
   useGraphStore.setState({
     nodes: [],
@@ -28,6 +36,7 @@ function resetStore() {
     redoStack: [],
     clipboard: null,
     isExecuting: false,
+    backendFreshStartPending: false,
   });
 }
 
@@ -48,7 +57,7 @@ beforeEach(() => {
 
 describe('graphStore', () => {
   beforeEach(() => {
-    useGraphStore.setState({ nodes: [], edges: [] });
+    useGraphStore.setState({ nodes: [], edges: [], backendFreshStartPending: false });
   });
 
   it('starts with empty nodes and edges', () => {
@@ -67,6 +76,59 @@ describe('graphStore', () => {
     expect(nodes[0].data.definitionId).toBe('gpt-image-1-generate');
     expect(nodes[0].data.label).toBe('GPT Image 1');
     expect(nodes[0].data.state).toBe('idle');
+  });
+
+  it('clears stale backend graph before the first manual node on an empty canvas', async () => {
+    fetchMock
+      .mockResolvedValueOnce(mockResponse({ empty: false, nodes: [{ id: 'n9' }], edges: [] }))
+      .mockResolvedValueOnce(mockResponse({ status: 'ok' }))
+      .mockResolvedValueOnce(mockResponse({ id: 'n1' }));
+
+    const nodeId = await useGraphStore.getState().addNode('text-input', { x: 10, y: 20 });
+
+    expect(nodeId).toBe('n1');
+    expect(fetchMock).toHaveBeenNthCalledWith(1, 'http://localhost:8000/api/graph/export');
+    expect(fetchMock).toHaveBeenNthCalledWith(2, 'http://localhost:8000/api/graph', { method: 'DELETE' });
+    expect(fetchMock.mock.calls[2][0]).toBe('http://localhost:8000/api/graph/node');
+    expect(fetchMock.mock.calls[2][1]).toMatchObject({ method: 'POST' });
+    expect(useGraphStore.getState().backendFreshStartPending).toBe(false);
+  });
+
+  it('does not clear backend graph when the local canvas already has nodes', async () => {
+    useGraphStore.setState({
+      nodes: [{
+        id: 'local-1',
+        type: 'model-node',
+        position: { x: 0, y: 0 },
+        data: {
+          label: 'Text Input',
+          definitionId: 'text-input',
+          params: {},
+          state: 'idle',
+          outputs: {},
+        },
+      }],
+      edges: [],
+      backendFreshStartPending: false,
+    });
+    fetchMock.mockResolvedValueOnce(mockResponse({ id: 'n2' }));
+
+    const nodeId = await useGraphStore.getState().addNode('text-input', { x: 10, y: 20 });
+
+    expect(nodeId).toBe('n2');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][0]).toBe('http://localhost:8000/api/graph/node');
+  });
+
+  it('keeps the first empty-canvas node local when backend freshness cannot be verified', async () => {
+    fetchMock.mockResolvedValueOnce(mockResponse({}, false, 503));
+
+    const nodeId = await useGraphStore.getState().addNode('text-input', { x: 10, y: 20 });
+
+    expect(nodeId).toBeTruthy();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(useGraphStore.getState().nodes).toHaveLength(1);
+    expect(useGraphStore.getState().backendFreshStartPending).toBe(true);
   });
 
   it('removes a node and cleans up connected edges', async () => {
@@ -222,10 +284,12 @@ describe('undo/redo', () => {
   it('loadGraph clears both stacks', async () => {
     await addNode('text-input', { x: 0, y: 0 });
     expect(useGraphStore.getState().undoStack.length).toBeGreaterThan(0);
+    useGraphStore.setState({ backendFreshStartPending: true });
 
     useGraphStore.getState().loadGraph([], []);
     expect(useGraphStore.getState().undoStack).toHaveLength(0);
     expect(useGraphStore.getState().redoStack).toHaveLength(0);
+    expect(useGraphStore.getState().backendFreshStartPending).toBe(false);
   });
 
   it('clearGraph is undoable', async () => {

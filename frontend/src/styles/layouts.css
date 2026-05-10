@@ -1,7 +1,7 @@
 /* Nebula default layout
  *
  * The whole app uses one layout shape:
- *   left rail     → Nodes launcher (panel is closed by default)
+ *   left rail     → Nodes launcher (panel is open by default)
  *   bottom-left   → Inspector (only renders when a node is selected)
  *   bottom-right  → Chat launcher
  *   bottom-center → Toolbar pill (text labels)

@@ -119,8 +119,6 @@ function MeshPreviewComponent({ src }: MeshPreviewProps) {
     const controller = new AbortController();
     let cancelled = false;
 
-    setViewerState({ src, status: 'loading', canMountViewer: false });
-
     const prepareViewer = async () => {
       if (!canUseWebGL()) {
         if (!cancelled) setViewerState({ src, status: 'error', canMountViewer: false });
