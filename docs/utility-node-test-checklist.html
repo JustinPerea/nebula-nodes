@@ -1,0 +1,1124 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Nebula Utility Node Test Checklist</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #08090b;
+      --panel: #111318;
+      --panel-2: #171a20;
+      --ink: #f3f4f6;
+      --muted: #a3a8b3;
+      --faint: #6f7582;
+      --line: #2a2f38;
+      --accent: #6ab0ff;
+      --good: #68d391;
+      --warn: #f6c560;
+      --bad: #ff7a7a;
+      --purple: #b18cff;
+      --radius: 8px;
+      --mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      --sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background:
+        linear-gradient(180deg, rgba(106, 176, 255, 0.06), transparent 360px),
+        radial-gradient(circle at top right, rgba(177, 140, 255, 0.10), transparent 320px),
+        var(--bg);
+      color: var(--ink);
+      font-family: var(--sans);
+      font-size: 14px;
+      line-height: 1.45;
+    }
+
+    button,
+    select,
+    textarea,
+    input {
+      font: inherit;
+    }
+
+    a {
+      color: var(--accent);
+    }
+
+    .page {
+      width: min(1320px, calc(100vw - 32px));
+      margin: 0 auto;
+      padding: 28px 0 56px;
+    }
+
+    .topbar {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 24px;
+      align-items: start;
+      padding: 24px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: rgba(17, 19, 24, 0.88);
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: clamp(28px, 4vw, 44px);
+      line-height: 1.05;
+      letter-spacing: 0;
+    }
+
+    .lede {
+      max-width: 760px;
+      margin: 0;
+      color: var(--muted);
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+
+    .button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 34px;
+      padding: 7px 12px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #1a1d24;
+      color: var(--ink);
+      cursor: pointer;
+    }
+
+    .button:hover {
+      border-color: #445063;
+      background: #20242d;
+    }
+
+    .button--danger {
+      color: var(--bad);
+    }
+
+    .meta-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 16px;
+    }
+
+    .metric {
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: rgba(23, 26, 32, 0.74);
+    }
+
+    .metric__value {
+      display: block;
+      font-size: 24px;
+      font-weight: 700;
+    }
+
+    .metric__label {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .workflow {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-top: 16px;
+    }
+
+    .section {
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: rgba(17, 19, 24, 0.78);
+    }
+
+    .section h2 {
+      margin: 0 0 10px;
+      font-size: 16px;
+      letter-spacing: 0;
+    }
+
+    ol,
+    ul {
+      margin: 0;
+      padding-left: 18px;
+    }
+
+    li + li {
+      margin-top: 6px;
+    }
+
+    code,
+    .mono {
+      font-family: var(--mono);
+      font-size: 0.93em;
+    }
+
+    .filters {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      margin: 18px 0 12px;
+    }
+
+    .filter-input {
+      flex: 1 1 260px;
+      min-height: 36px;
+      padding: 8px 11px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #0d0f13;
+      color: var(--ink);
+    }
+
+    .node-list {
+      display: grid;
+      gap: 12px;
+    }
+
+    details.node {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: rgba(17, 19, 24, 0.92);
+      overflow: hidden;
+    }
+
+    details.node[open] {
+      border-color: #3a4351;
+    }
+
+    summary {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto auto;
+      gap: 12px;
+      align-items: center;
+      min-height: 58px;
+      padding: 13px 16px;
+      cursor: pointer;
+      list-style: none;
+    }
+
+    summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .node-title {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: baseline;
+      min-width: 0;
+    }
+
+    .node-title strong {
+      font-size: 16px;
+    }
+
+    .node-id {
+      color: var(--faint);
+      font-family: var(--mono);
+      font-size: 12px;
+    }
+
+    .tag-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      min-height: 22px;
+      padding: 2px 8px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      color: var(--muted);
+      background: #0c0e12;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .tag--api {
+      color: var(--purple);
+      border-color: rgba(177, 140, 255, 0.35);
+    }
+
+    .tag--local {
+      color: var(--good);
+      border-color: rgba(104, 211, 145, 0.32);
+    }
+
+    .status {
+      min-width: 132px;
+      min-height: 34px;
+      padding: 6px 8px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #0d0f13;
+      color: var(--ink);
+    }
+
+    .node-body {
+      display: grid;
+      grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+      gap: 16px;
+      padding: 0 16px 16px;
+      border-top: 1px solid var(--line);
+    }
+
+    .node-panel {
+      min-width: 0;
+      padding-top: 14px;
+    }
+
+    .node-panel h3 {
+      margin: 0 0 8px;
+      color: var(--muted);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .ports {
+      display: grid;
+      gap: 8px;
+    }
+
+    .port-line {
+      display: grid;
+      grid-template-columns: 68px minmax(0, 1fr);
+      gap: 8px;
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #0c0e12;
+    }
+
+    .port-line span:first-child {
+      color: var(--faint);
+      font-family: var(--mono);
+      font-size: 12px;
+    }
+
+    .param-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .param {
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 4px 7px;
+      background: #0c0e12;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .checklist {
+      display: grid;
+      gap: 7px;
+      margin-top: 8px;
+    }
+
+    .checkline {
+      display: grid;
+      grid-template-columns: 18px minmax(0, 1fr);
+      gap: 8px;
+      align-items: start;
+      color: var(--muted);
+    }
+
+    .checkline input {
+      margin-top: 3px;
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 96px;
+      resize: vertical;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #0d0f13;
+      color: var(--ink);
+    }
+
+    .notes-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 10px;
+    }
+
+    .label {
+      display: grid;
+      gap: 5px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .report-box {
+      display: none;
+      margin-top: 16px;
+    }
+
+    .report-box textarea {
+      min-height: 260px;
+      font-family: var(--mono);
+      font-size: 12px;
+    }
+
+    .muted {
+      color: var(--muted);
+    }
+
+    .empty-state {
+      display: none;
+      padding: 24px;
+      text-align: center;
+      color: var(--muted);
+      border: 1px dashed var(--line);
+      border-radius: var(--radius);
+    }
+
+    @media (max-width: 900px) {
+      .topbar,
+      .workflow,
+      .node-body,
+      .notes-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .actions {
+        justify-content: flex-start;
+      }
+
+      .meta-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      summary {
+        grid-template-columns: 1fr;
+      }
+
+      .status {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="topbar">
+      <div>
+        <h1>Utility Node Test Checklist</h1>
+        <p class="lede">
+          Use this page while testing the Utility category in Chrome or Comet. Notes autosave in this browser.
+          The node list is based on <code>frontend/src/constants/nodeDefinitions.ts</code> on May 10, 2026.
+        </p>
+      </div>
+      <div class="actions">
+        <button class="button" type="button" id="expandAll">Expand all</button>
+        <button class="button" type="button" id="collapseAll">Collapse all</button>
+        <button class="button" type="button" id="exportReport">Build report</button>
+        <button class="button" type="button" id="downloadReport">Download report</button>
+        <button class="button button--danger" type="button" id="resetAll">Reset notes</button>
+      </div>
+    </header>
+
+    <section class="meta-grid" aria-label="Progress summary">
+      <div class="metric"><span class="metric__value" id="countTotal">15</span><span class="metric__label">Utility nodes</span></div>
+      <div class="metric"><span class="metric__value" id="countPass">0</span><span class="metric__label">Passed</span></div>
+      <div class="metric"><span class="metric__value" id="countNeedsFix">0</span><span class="metric__label">Needs fix</span></div>
+      <div class="metric"><span class="metric__value" id="countRemaining">15</span><span class="metric__label">Remaining</span></div>
+    </section>
+
+    <section class="workflow">
+      <div class="section">
+        <h2>Test Flow</h2>
+        <ol>
+          <li>Open the app in Chrome or Comet: <code>http://127.0.0.1:5173/</code>.</li>
+          <li>Refresh the app. Confirm the canvas starts empty and only the default Nodes panel is open.</li>
+          <li>For each node below, add the node from the Utility group and follow the test setup.</li>
+          <li>Run the node or graph when applicable, then record function notes and UI notes here.</li>
+          <li>Use <strong>Build report</strong> or <strong>Download report</strong> when you are done.</li>
+        </ol>
+      </div>
+      <div class="section">
+        <h2>Global UI Checks</h2>
+        <ul>
+          <li>Node panel remains usable and does not crowd the canvas unexpectedly.</li>
+          <li>Inspector opens only for the selected node and closes cleanly.</li>
+          <li>Ports, handles, labels, selected border, and header clipping look correct at normal zoom and zoomed in.</li>
+          <li>Run, Duplicate, Delete, drag, resize, and panel close behavior remains predictable.</li>
+          <li>Refresh plus first dropped node does not restore old panels or old backend graph state.</li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="filters" aria-label="Checklist filters">
+      <input class="filter-input" id="search" type="search" placeholder="Filter nodes by name, id, port, or expected behavior">
+      <select class="status" id="statusFilter" aria-label="Filter by status">
+        <option value="all">All statuses</option>
+        <option value="not-started">Not started</option>
+        <option value="pass">Pass</option>
+        <option value="needs-fix">Needs fix</option>
+        <option value="blocked">Blocked</option>
+        <option value="retest">Retest</option>
+      </select>
+    </section>
+
+    <section class="node-list" id="nodeList" aria-label="Utility node checklist"></section>
+    <div class="empty-state" id="emptyState">No nodes match the current filters.</div>
+
+    <section class="report-box" id="reportBox">
+      <label class="label">
+        Markdown report
+        <textarea id="reportOutput" spellcheck="false"></textarea>
+      </label>
+    </section>
+  </main>
+
+  <script>
+    const STORAGE_KEY = "nebula:utility-node-test-checklist:v1";
+
+    const nodes = [
+      {
+        id: "text-input",
+        name: "Text Input",
+        provider: "local",
+        inputs: [],
+        outputs: ["text: Text"],
+        params: ["value: textarea, required"],
+        purpose: "Seed a graph with literal text or a prompt.",
+        setup: [
+          "Add Text Input.",
+          "Enter a short value such as 'utility test alpha'.",
+          "Connect Text Input -> Preview and run the graph."
+        ],
+        expected: [
+          "Inspector textarea accepts typing, paste, multiline content, and node references like @n1 without layout breakage.",
+          "Run result exposes output port 'text' with the exact entered value.",
+          "Preview displays the text cleanly."
+        ],
+        ui: [
+          "Header, textarea, node body, selected border, and resize handle remain clipped and readable.",
+          "Textarea does not overlap output handle at zoomed-in scale."
+        ]
+      },
+      {
+        id: "image-input",
+        name: "Image Input",
+        provider: "local",
+        inputs: [],
+        outputs: ["image: Image"],
+        params: ["filePath: file, required"],
+        purpose: "Seed a graph with an image file.",
+        setup: [
+          "Add Image Input.",
+          "Choose or drag in a small PNG/JPEG.",
+          "Connect Image Input -> Preview and run the graph."
+        ],
+        expected: [
+          "File picker stores a path or upload reference without stale output-root paths.",
+          "Node preview shows the selected image.",
+          "Output port 'image' passes a renderable image to Preview."
+        ],
+        ui: [
+          "Thumbnail, file control, inspector label, and node media surface stay within the node.",
+          "Image remains visible after refresh/import if the path still exists."
+        ]
+      },
+      {
+        id: "preview",
+        name: "Preview",
+        provider: "local",
+        inputs: ["input: Any, required"],
+        outputs: [],
+        params: [],
+        purpose: "Render or inspect any incoming output.",
+        setup: [
+          "Connect Text Input -> Preview and run.",
+          "Repeat with Image Input, Audio Input, and Video Input if sample files are available."
+        ],
+        expected: [
+          "Text renders as readable text.",
+          "Image renders as an image preview.",
+          "Audio/video inputs render usable media controls or an understandable fallback.",
+          "Missing input reports a clear validation state instead of a blank failure."
+        ],
+        ui: [
+          "Preview node size, media controls, and scroll areas feel stable.",
+          "Large content does not cover ports or panel controls."
+        ]
+      },
+      {
+        id: "combine-text",
+        name: "Combine Text",
+        provider: "local",
+        inputs: ["text1: Text, required", "text2: Text", "text3: Text"],
+        outputs: ["text: Text"],
+        params: ["separator: string", "template: textarea"],
+        purpose: "Combine up to three text inputs with a separator or template.",
+        setup: [
+          "Create three Text Input nodes with values Alpha, Beta, Gamma.",
+          "Connect them to text1, text2, text3.",
+          "Run once with separator ' | '. Run again with template '{text1} / {text2} / {text3}'."
+        ],
+        expected: [
+          "Separator mode outputs 'Alpha | Beta | Gamma'.",
+          "Template mode substitutes all placeholders in order.",
+          "Unconnected optional inputs do not create literal 'undefined' text.",
+          "Multiline separator '\\n' works as expected."
+        ],
+        ui: [
+          "Three input handles are visually distinct and connectable.",
+          "Template textarea is large enough and does not crowd action buttons."
+        ]
+      },
+      {
+        id: "router",
+        name: "Router",
+        provider: "local",
+        inputs: ["input: Any, required"],
+        outputs: ["out1: Any", "out2: Any", "out3: Any"],
+        params: [],
+        purpose: "Fan one input out to three identical outputs.",
+        setup: [
+          "Connect Text Input -> Router.",
+          "Connect Router out1/out2/out3 to three Preview nodes.",
+          "Run the graph."
+        ],
+        expected: [
+          "All connected outputs receive the same payload.",
+          "Works with text and at least one media payload.",
+          "Partial fanout works when only one or two outputs are connected."
+        ],
+        ui: [
+          "Output handles are easy to target without accidental edge grabs.",
+          "Port labels remain readable at normal and zoomed-out scales."
+        ]
+      },
+      {
+        id: "reroute",
+        name: "Reroute",
+        provider: "local",
+        inputs: ["input: Any, required"],
+        outputs: ["output: Any"],
+        params: [],
+        purpose: "Bend or organize long wires without changing payload.",
+        setup: [
+          "Connect Text Input -> Reroute -> Preview.",
+          "Drag the reroute node between source and target.",
+          "Run the graph."
+        ],
+        expected: [
+          "Payload is unchanged after passing through the reroute.",
+          "Dragging reroute updates edge path smoothly.",
+          "Delete removes connected edge cleanly."
+        ],
+        ui: [
+          "Compact reroute node remains selectable without covering nearby ports.",
+          "Selected state is visible without making the reroute look broken."
+        ]
+      },
+      {
+        id: "gemini-embeddings",
+        name: "Gemini Embeddings",
+        provider: "api",
+        inputs: ["text: Text, required"],
+        outputs: ["embedding: Text", "dimensions: Text"],
+        params: ["model: enum", "taskType: enum", "outputDimensionality: enum"],
+        purpose: "Generate text embeddings through Gemini.",
+        setup: [
+          "Confirm GOOGLE_API_KEY is configured.",
+          "Connect Text Input -> Gemini Embeddings.",
+          "Connect dimensions -> Preview. Optionally connect embedding -> Preview.",
+          "Run with default settings, then try a different output dimensionality."
+        ],
+        expected: [
+          "Missing key badge appears if GOOGLE_API_KEY is absent.",
+          "Successful run returns a dimensions value matching the selected dimensionality.",
+          "Embedding output is present and serializes without crashing the preview."
+        ],
+        ui: [
+          "Enum controls are readable and not too tall.",
+          "Large embedding output does not freeze or flood the node UI."
+        ]
+      },
+      {
+        id: "video-input",
+        name: "Video Input",
+        provider: "local",
+        inputs: [],
+        outputs: ["video: Video"],
+        params: ["filePath: file, required"],
+        purpose: "Seed a graph with a local video file.",
+        setup: [
+          "Add Video Input.",
+          "Choose a small mp4 or mov.",
+          "Connect Video Input -> Preview and run."
+        ],
+        expected: [
+          "File control accepts a video source.",
+          "Preview receives the video output.",
+          "Media path survives normal run/export/import behavior."
+        ],
+        ui: [
+          "Video controls render without overflowing the node or Preview.",
+          "Large file names wrap cleanly in the inspector."
+        ]
+      },
+      {
+        id: "audio-input",
+        name: "Audio Input",
+        provider: "local",
+        inputs: [],
+        outputs: ["audio: Audio"],
+        params: ["filePath: file, required"],
+        purpose: "Seed a graph with a local audio file.",
+        setup: [
+          "Add Audio Input.",
+          "Choose a small mp3, wav, or m4a.",
+          "Connect Audio Input -> Preview and run."
+        ],
+        expected: [
+          "File control accepts an audio source.",
+          "Preview receives playable audio or a clear fallback.",
+          "Missing file produces a useful validation/error state."
+        ],
+        ui: [
+          "Audio controls do not cover the selected node outline or ports.",
+          "Inspector file row is readable with long file names."
+        ]
+      },
+      {
+        id: "sticky-note",
+        name: "Sticky Note",
+        provider: "local",
+        inputs: [],
+        outputs: [],
+        params: ["content: textarea", "color: enum"],
+        purpose: "Add non-executing notes to the canvas.",
+        setup: [
+          "Add Sticky Note.",
+          "Write a multiline note.",
+          "Change the color through every option: yellow, blue, green, pink, grey."
+        ],
+        expected: [
+          "Note content updates without requiring graph execution.",
+          "Color changes are visible and persist during the session.",
+          "Run graph ignores the note without errors."
+        ],
+        ui: [
+          "Text remains readable in all note colors.",
+          "Sticky note size and edit affordance feel natural on the canvas."
+        ]
+      },
+      {
+        id: "array-builder",
+        name: "Array Builder",
+        provider: "local",
+        inputs: ["item1..item8: Any"],
+        outputs: ["array: Array"],
+        params: [],
+        purpose: "Collect up to eight inputs into an ordered array.",
+        setup: [
+          "Create three Text Input nodes: First, Second, Third.",
+          "Connect them to item1, item2, item3.",
+          "Connect Array Builder -> Array Selector and/or Preview.",
+          "Run the graph."
+        ],
+        expected: [
+          "Array preserves input order.",
+          "Unconnected optional inputs are skipped or represented consistently.",
+          "Mixed item types do not crash the builder."
+        ],
+        ui: [
+          "Eight input handles remain usable and not too cramped.",
+          "Input handle labels are clear enough to wire in order."
+        ]
+      },
+      {
+        id: "array-selector",
+        name: "Array Selector",
+        provider: "local",
+        inputs: ["array: Array, required"],
+        outputs: ["item: Any"],
+        params: ["mode: enum", "index: integer"],
+        purpose: "Select one item from an array.",
+        setup: [
+          "Use Array Builder with at least three text items.",
+          "Run with mode First, Last, By Index index 1, and Random.",
+          "Connect output to Preview."
+        ],
+        expected: [
+          "First returns the first item.",
+          "Last returns the last item.",
+          "By Index uses zero-based index; index 1 returns the second item.",
+          "Out-of-range index produces a clear empty/error state.",
+          "Random returns one item from the array without crashing."
+        ],
+        ui: [
+          "Mode and index controls are easy to understand.",
+          "Index field validation is visible when invalid or out of range."
+        ]
+      },
+      {
+        id: "image-compare",
+        name: "Image Compare",
+        provider: "local",
+        inputs: ["imageA: Image, required", "imageB: Image, required"],
+        outputs: [],
+        params: [],
+        purpose: "Compare two images visually in one node.",
+        setup: [
+          "Add two Image Input nodes with different images.",
+          "Connect them to Image Compare imageA and imageB.",
+          "Run the graph if required for previews to resolve."
+        ],
+        expected: [
+          "Both images render in a comparison view.",
+          "Missing imageA or imageB shows a clear state.",
+          "Swapping inputs updates the comparison view."
+        ],
+        ui: [
+          "Side-by-side or comparison controls are understandable.",
+          "Large images do not push the node beyond usable canvas space."
+        ]
+      },
+      {
+        id: "iterator-image",
+        name: "Image Iterator",
+        provider: "local",
+        inputs: ["array: Array, required"],
+        outputs: ["image: Image"],
+        params: ["batch_size_cap: integer, default 10, min 1, max 25"],
+        purpose: "Iterate image arrays through downstream image workflows.",
+        setup: [
+          "Build an array from multiple Image Input nodes.",
+          "Connect Array Builder -> Image Iterator -> Preview.",
+          "Run with batch_size_cap 1 and default 10."
+        ],
+        expected: [
+          "Iterator emits image items from the array in expected order or batch behavior.",
+          "batch_size_cap limits processing and validates min/max.",
+          "Non-image items produce a clear validation state."
+        ],
+        ui: [
+          "Iterator state/progress is understandable during run.",
+          "Batch cap control is not ambiguous."
+        ]
+      },
+      {
+        id: "iterator-text",
+        name: "Text Iterator",
+        provider: "local",
+        inputs: ["array: Array, required"],
+        outputs: ["text: Text"],
+        params: ["batch_size_cap: integer, default 10, min 1, max 25"],
+        purpose: "Iterate text arrays through downstream text workflows.",
+        setup: [
+          "Build an array from multiple Text Input nodes.",
+          "Connect Array Builder -> Text Iterator -> Preview.",
+          "Run with batch_size_cap 1 and default 10."
+        ],
+        expected: [
+          "Iterator emits text items from the array in expected order or batch behavior.",
+          "batch_size_cap limits processing and validates min/max.",
+          "Non-text items produce a clear validation state."
+        ],
+        ui: [
+          "Iterator output is clear in Preview.",
+          "Run feedback makes it obvious which item or batch is active."
+        ]
+      }
+    ];
+
+    const state = loadState();
+    const nodeList = document.querySelector("#nodeList");
+    const searchInput = document.querySelector("#search");
+    const statusFilter = document.querySelector("#statusFilter");
+    const reportBox = document.querySelector("#reportBox");
+    const reportOutput = document.querySelector("#reportOutput");
+
+    function loadState() {
+      try {
+        return JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
+      } catch {
+        return {};
+      }
+    }
+
+    function saveState() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      updateCounts();
+    }
+
+    function nodeState(id) {
+      if (!state[id]) {
+        state[id] = {
+          status: "not-started",
+          checks: {},
+          functionNotes: "",
+          uiNotes: ""
+        };
+      }
+      return state[id];
+    }
+
+    function textForSearch(node) {
+      return [
+        node.id,
+        node.name,
+        node.provider,
+        node.purpose,
+        node.inputs.join(" "),
+        node.outputs.join(" "),
+        node.params.join(" "),
+        node.setup.join(" "),
+        node.expected.join(" "),
+        node.ui.join(" ")
+      ].join(" ").toLowerCase();
+    }
+
+    function renderNodes() {
+      nodeList.innerHTML = "";
+      const query = searchInput.value.trim().toLowerCase();
+      const status = statusFilter.value;
+      let visibleCount = 0;
+
+      nodes.forEach((node, index) => {
+        const itemState = nodeState(node.id);
+        if (status !== "all" && itemState.status !== status) return;
+        if (query && !textForSearch(node).includes(query)) return;
+        visibleCount += 1;
+
+        const details = document.createElement("details");
+        details.className = "node";
+        details.open = index === 0;
+        details.dataset.nodeId = node.id;
+
+        details.innerHTML = `
+          <summary>
+            <div class="node-title">
+              <strong>${escapeHtml(node.name)}</strong>
+              <span class="node-id">${escapeHtml(node.id)}</span>
+            </div>
+            <div class="tag-row">
+              <span class="tag ${node.provider === "api" ? "tag--api" : "tag--local"}">${node.provider === "api" ? "API-backed" : "Local"}</span>
+              <span class="tag">${node.inputs.length} in</span>
+              <span class="tag">${node.outputs.length} out</span>
+            </div>
+            <select class="status" data-field="status" aria-label="Status for ${escapeHtml(node.name)}">
+              <option value="not-started">Not started</option>
+              <option value="pass">Pass</option>
+              <option value="needs-fix">Needs fix</option>
+              <option value="blocked">Blocked</option>
+              <option value="retest">Retest</option>
+            </select>
+          </summary>
+          <div class="node-body">
+            <div class="node-panel">
+              <h3>Definition</h3>
+              <p>${escapeHtml(node.purpose)}</p>
+              <div class="ports">${renderPorts("Input", node.inputs)}${renderPorts("Output", node.outputs)}</div>
+              <h3 style="margin-top: 14px;">Params</h3>
+              <div class="param-list">${node.params.length ? node.params.map((p) => `<span class="param">${escapeHtml(p)}</span>`).join("") : "<span class=\"muted\">None</span>"}</div>
+            </div>
+            <div class="node-panel">
+              <h3>Test Setup</h3>
+              <ol>${node.setup.map((x) => `<li>${escapeHtml(x)}</li>`).join("")}</ol>
+              <h3 style="margin-top: 14px;">Expected Behavior</h3>
+              <div class="checklist">
+                ${node.expected.map((x, i) => renderCheck(node.id, `expected-${i}`, x)).join("")}
+              </div>
+              <h3 style="margin-top: 14px;">UI Checks</h3>
+              <div class="checklist">
+                ${node.ui.map((x, i) => renderCheck(node.id, `ui-${i}`, x)).join("")}
+              </div>
+              <div class="notes-grid">
+                <label class="label">Function notes<textarea data-field="functionNotes" placeholder="What worked, what failed, reproduction notes"></textarea></label>
+                <label class="label">UI comments<textarea data-field="uiNotes" placeholder="Crowding, labels, sizing, affordances, visual polish"></textarea></label>
+              </div>
+            </div>
+          </div>
+        `;
+
+        const statusSelect = details.querySelector("[data-field='status']");
+        statusSelect.value = itemState.status;
+        statusSelect.addEventListener("click", (event) => event.stopPropagation());
+        statusSelect.addEventListener("change", () => {
+          itemState.status = statusSelect.value;
+          saveState();
+          applyFilters();
+        });
+
+        details.querySelectorAll("input[type='checkbox']").forEach((checkbox) => {
+          checkbox.checked = Boolean(itemState.checks[checkbox.dataset.checkId]);
+          checkbox.addEventListener("change", () => {
+            itemState.checks[checkbox.dataset.checkId] = checkbox.checked;
+            saveState();
+          });
+        });
+
+        details.querySelectorAll("textarea").forEach((textarea) => {
+          textarea.value = itemState[textarea.dataset.field] || "";
+          textarea.addEventListener("input", () => {
+            itemState[textarea.dataset.field] = textarea.value;
+            saveState();
+          });
+        });
+
+        nodeList.appendChild(details);
+      });
+
+      document.querySelector("#emptyState").style.display = visibleCount ? "none" : "block";
+      updateCounts();
+    }
+
+    function renderPorts(label, ports) {
+      if (!ports.length) {
+        return `<div class="port-line"><span>${label}</span><span class="muted">None</span></div>`;
+      }
+      return ports.map((port) => `<div class="port-line"><span>${label}</span><span>${escapeHtml(port)}</span></div>`).join("");
+    }
+
+    function renderCheck(nodeId, checkId, label) {
+      return `
+        <label class="checkline">
+          <input type="checkbox" data-check-id="${nodeId}:${checkId}">
+          <span>${escapeHtml(label)}</span>
+        </label>
+      `;
+    }
+
+    function updateCounts() {
+      const statuses = nodes.map((node) => nodeState(node.id).status);
+      const pass = statuses.filter((x) => x === "pass").length;
+      const needsFix = statuses.filter((x) => x === "needs-fix").length;
+      const done = statuses.filter((x) => x !== "not-started").length;
+      document.querySelector("#countTotal").textContent = String(nodes.length);
+      document.querySelector("#countPass").textContent = String(pass);
+      document.querySelector("#countNeedsFix").textContent = String(needsFix);
+      document.querySelector("#countRemaining").textContent = String(nodes.length - done);
+    }
+
+    function applyFilters() {
+      renderNodes();
+    }
+
+    function buildReport() {
+      const lines = [
+        "# Utility Node Test Report",
+        "",
+        `Generated: ${new Date().toLocaleString()}`,
+        "",
+        "## Summary",
+        "",
+        `- Nodes: ${nodes.length}`,
+        `- Passed: ${nodes.filter((node) => nodeState(node.id).status === "pass").length}`,
+        `- Needs fix: ${nodes.filter((node) => nodeState(node.id).status === "needs-fix").length}`,
+        `- Blocked: ${nodes.filter((node) => nodeState(node.id).status === "blocked").length}`,
+        `- Retest: ${nodes.filter((node) => nodeState(node.id).status === "retest").length}`,
+        "",
+      ];
+
+      nodes.forEach((node) => {
+        const itemState = nodeState(node.id);
+        const checked = Object.entries(itemState.checks)
+          .filter((entry) => entry[1])
+          .map((entry) => entry[0].replace(`${node.id}:`, ""));
+        lines.push(`## ${node.name} (${node.id})`);
+        lines.push("");
+        lines.push(`Status: ${itemState.status}`);
+        lines.push(`Checked items: ${checked.length}`);
+        if (itemState.functionNotes.trim()) {
+          lines.push("");
+          lines.push("Function notes:");
+          lines.push(itemState.functionNotes.trim());
+        }
+        if (itemState.uiNotes.trim()) {
+          lines.push("");
+          lines.push("UI comments:");
+          lines.push(itemState.uiNotes.trim());
+        }
+        lines.push("");
+      });
+
+      reportOutput.value = lines.join("\n");
+      reportBox.style.display = "block";
+      reportOutput.focus();
+      reportOutput.select();
+      return reportOutput.value;
+    }
+
+    function downloadReport() {
+      const report = buildReport();
+      const blob = new Blob([report], { type: "text/markdown;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `utility-node-test-report-${new Date().toISOString().slice(0, 10)}.md`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;");
+    }
+
+    document.querySelector("#expandAll").addEventListener("click", () => {
+      document.querySelectorAll("details.node").forEach((details) => details.open = true);
+    });
+
+    document.querySelector("#collapseAll").addEventListener("click", () => {
+      document.querySelectorAll("details.node").forEach((details) => details.open = false);
+    });
+
+    document.querySelector("#exportReport").addEventListener("click", buildReport);
+    document.querySelector("#downloadReport").addEventListener("click", downloadReport);
+
+    document.querySelector("#resetAll").addEventListener("click", () => {
+      const confirmed = confirm("Clear all utility node test statuses, checks, and comments on this page?");
+      if (!confirmed) return;
+      localStorage.removeItem(STORAGE_KEY);
+      Object.keys(state).forEach((key) => delete state[key]);
+      renderNodes();
+      reportOutput.value = "";
+      reportBox.style.display = "none";
+    });
+
+    searchInput.addEventListener("input", applyFilters);
+    statusFilter.addEventListener("change", applyFilters);
+
+    renderNodes();
+  </script>
+</body>
+</html>
