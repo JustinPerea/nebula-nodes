@@ -80,6 +80,26 @@ def test_node_path_for_image_input_with_absolute_filepath(client):
     assert resp.json()["path"] == test_abs_path
 
 
+def test_node_path_for_moved_output_path(client):
+    """Persisted state can carry absolute paths from an old repo location.
+    If the same relative asset exists under the current OUTPUT_ROOT, resolve
+    to the current path instead of treating the node as broken."""
+    rel = Path("chat-uploads") / "moved-path.png"
+    current = OUTPUT_ROOT / rel
+    current.parent.mkdir(parents=True, exist_ok=True)
+    current.write_bytes(_make_png_bytes())
+    old_abs = f"/tmp/old-nebula/output/{rel.as_posix()}"
+
+    main_module.cli_graph.add_node(
+        "image-input",
+        {"filePath": old_abs},
+    )
+
+    resp = client.get("/api/graph/node/n1/path")
+    assert resp.status_code == 200
+    assert resp.json()["path"] == str(current.resolve())
+
+
 def test_node_path_for_model_output(client):
     """A model node with an image output should resolve via outputs['image'],
     which is the shape real handlers produce."""
@@ -96,6 +116,63 @@ def test_node_path_for_model_output(client):
     body = resp.json()
     assert body["path"].endswith("generated/xyz.png")
     assert Path(body["path"]).is_absolute()
+
+
+def test_export_rewrites_moved_output_path(client):
+    rel = Path("chat-uploads") / "moved-output.png"
+    current = OUTPUT_ROOT / rel
+    current.parent.mkdir(parents=True, exist_ok=True)
+    current.write_bytes(_make_png_bytes())
+    old_abs = f"/tmp/old-nebula/output/{rel.as_posix()}"
+
+    main_module.cli_graph.add_node(
+        "gpt-image-1-generate",
+        {},
+        outputs={"image": {"type": "Image", "value": old_abs}},
+    )
+
+    resp = client.get("/api/graph/export")
+    assert resp.status_code == 200
+    node = resp.json()["nodes"][0]
+    assert node["data"]["outputs"]["image"]["value"] == f"/api/outputs/{rel.as_posix()}"
+
+
+def test_export_normalizes_moved_image_input_params(client):
+    rel = Path("chat-uploads") / "moved-input.png"
+    current = OUTPUT_ROOT / rel
+    current.parent.mkdir(parents=True, exist_ok=True)
+    current.write_bytes(_make_png_bytes())
+    old_abs = f"/tmp/old-nebula/output/{rel.as_posix()}"
+
+    main_module.cli_graph.add_node(
+        "image-input",
+        {"filePath": old_abs},
+    )
+
+    resp = client.get("/api/graph/export")
+    assert resp.status_code == 200
+    params = resp.json()["nodes"][0]["data"]["params"]
+    assert params["filePath"] == str(current.resolve())
+    assert params["_previewUrl"] == f"/api/outputs/{rel.as_posix()}"
+
+
+def test_execute_request_nodes_normalize_moved_image_input_params(client):
+    rel = Path("chat-uploads") / "moved-execute.png"
+    current = OUTPUT_ROOT / rel
+    current.parent.mkdir(parents=True, exist_ok=True)
+    current.write_bytes(_make_png_bytes())
+    old_abs = f"/tmp/old-nebula/output/{rel.as_posix()}"
+
+    node = main_module.GraphNode(
+        id="n1",
+        definitionId="image-input",
+        params={"filePath": old_abs},
+        outputs={},
+    )
+
+    normalized = main_module._normalize_execute_nodes([node])[0]
+    assert normalized.params["filePath"] == str(current.resolve())
+    assert normalized.params["_previewUrl"] == f"/api/outputs/{rel.as_posix()}"
 
 
 def test_node_path_for_unknown_node(client):
@@ -316,6 +393,24 @@ def test_sync_outputs_to_cli_graph_wraps_bare_values(client):
     main_module._sync_outputs_to_cli_graph("n1", {"image": "/api/outputs/bare.png"})
     node = main_module.cli_graph.nodes["n1"]
     assert node["outputs"] == {"image": {"type": "Any", "value": "/api/outputs/bare.png"}}
+
+
+def test_sync_outputs_to_cli_graph_stores_current_output_urls(client):
+    rel = Path("generated") / "synced-output.png"
+    current = OUTPUT_ROOT / rel
+    current.parent.mkdir(parents=True, exist_ok=True)
+    current.write_bytes(_make_png_bytes())
+
+    main_module.cli_graph.add_node("some-model", {})
+    main_module._sync_outputs_to_cli_graph(
+        "n1",
+        {"image": {"type": "Image", "value": str(current.resolve())}},
+    )
+
+    node = main_module.cli_graph.nodes["n1"]
+    assert node["outputs"] == {
+        "image": {"type": "Image", "value": f"/api/outputs/{rel.as_posix()}"}
+    }
 
 
 def test_sync_outputs_to_cli_graph_missing_node_noops(client):

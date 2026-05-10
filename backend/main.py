@@ -134,6 +134,173 @@ def _restore_zip_bundle(zip_bytes: bytes) -> dict[str, str]:
 
 
 _OUTPUT_DIR_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}$")
+_OUTPUTS_URL_PREFIX = "/api/outputs/"
+
+
+def _safe_output_relative_path(value: str) -> Path | None:
+    """Return a safe relative path under OUTPUT_ROOT, or None."""
+    rel = Path(value)
+    if rel.is_absolute():
+        return None
+    candidate = (OUTPUT_ROOT / rel).resolve()
+    try:
+        candidate.relative_to(OUTPUT_ROOT.resolve())
+    except ValueError:
+        return None
+    return rel
+
+
+def _moved_output_relative_path(value: str) -> Path | None:
+    """Map stale absolute .../output/<rel> paths to the current OUTPUT_ROOT.
+
+    This keeps persisted graph state portable across repo moves. We only accept
+    the mapping when the equivalent file exists under the current OUTPUT_ROOT,
+    so arbitrary external paths are not accidentally treated as local assets.
+    """
+    parts = Path(value).parts
+    output_dir_names = {OUTPUT_ROOT.name, "output"}
+    for idx in range(len(parts) - 1, -1, -1):
+        if parts[idx] not in output_dir_names:
+            continue
+        suffix = parts[idx + 1:]
+        if not suffix:
+            continue
+        rel = _safe_output_relative_path(str(Path(*suffix)))
+        if rel is None:
+            continue
+        candidate = (OUTPUT_ROOT / rel).resolve()
+        if candidate.exists():
+            return rel
+    return None
+
+
+def _output_relative_from_ref(value: str) -> Path | None:
+    """Resolve a served URL or filesystem-ish value to OUTPUT_ROOT-relative."""
+    if not value or value.startswith(("http://", "https://")):
+        return None
+
+    if value.startswith(_OUTPUTS_URL_PREFIX):
+        return _safe_output_relative_path(value[len(_OUTPUTS_URL_PREFIX):])
+
+    rel = _safe_output_relative_path(value)
+    if rel is not None and (OUTPUT_ROOT / rel).exists():
+        return rel
+
+    try:
+        candidate = Path(value).expanduser().resolve()
+        return candidate.relative_to(OUTPUT_ROOT.resolve())
+    except (OSError, ValueError):
+        return _moved_output_relative_path(value)
+
+
+def _output_path_from_ref(value: str) -> Path | None:
+    rel = _output_relative_from_ref(value)
+    if rel is None:
+        return None
+    return (OUTPUT_ROOT / rel).resolve()
+
+
+def _output_url_from_ref(value: str) -> str | None:
+    rel = _output_relative_from_ref(value)
+    if rel is None:
+        return None
+    return f"{_OUTPUTS_URL_PREFIX}{rel.as_posix()}"
+
+
+def _normalize_output_value_for_storage(port_val: Any) -> Any:
+    """Store portable /api/outputs URLs instead of absolute output paths."""
+    if not isinstance(port_val, dict) or not isinstance(port_val.get("value"), str):
+        return port_val
+    url = _output_url_from_ref(port_val["value"])
+    if url is None:
+        return port_val
+    return {**port_val, "value": url}
+
+
+def _normalize_outputs_for_storage(outputs: dict[str, Any]) -> dict[str, Any]:
+    rewritten: dict[str, Any] = {}
+    for key, value in outputs.items():
+        if isinstance(value, dict):
+            rewritten[key] = _normalize_output_value_for_storage(value)
+            continue
+        if isinstance(value, str):
+            url = _output_url_from_ref(value)
+            if url is not None:
+                rewritten[key] = {"type": "Any", "value": url}
+                continue
+        rewritten[key] = value
+    return rewritten
+
+
+def _normalize_image_input_params(params: dict[str, Any]) -> dict[str, Any]:
+    """Normalize image-input file paths after repo/output-root moves."""
+    rewritten = dict(params)
+
+    for key in ("filePath", "file"):
+        value = rewritten.get(key)
+        if not isinstance(value, str) or not value:
+            continue
+        local_path = _output_path_from_ref(value)
+        url = _output_url_from_ref(value)
+        if key == "filePath" and local_path is not None:
+            rewritten[key] = str(local_path)
+        elif key == "file" and url is not None:
+            rewritten[key] = url
+
+    preview = rewritten.get("_previewUrl")
+    if isinstance(preview, str) and preview:
+        preview_url = _output_url_from_ref(preview)
+        if preview_url is not None:
+            rewritten["_previewUrl"] = preview_url
+
+    if not rewritten.get("_previewUrl"):
+        for key in ("filePath", "file"):
+            value = rewritten.get(key)
+            if not isinstance(value, str) or not value:
+                continue
+            preview_url = _output_url_from_ref(value)
+            if preview_url is not None:
+                rewritten["_previewUrl"] = preview_url
+                break
+
+    return rewritten
+
+
+def _normalize_cli_graph_output_refs() -> None:
+    """Migrate in-memory CLI graph refs to the current output root."""
+    changed = False
+    for node in cli_graph.nodes.values():
+        if node.get("definitionId") == "image-input":
+            params = _normalize_image_input_params(node.get("params", {}) or {})
+            if params != node.get("params"):
+                node["params"] = params
+                changed = True
+
+        outputs = node.get("outputs")
+        if isinstance(outputs, dict):
+            normalized_outputs = _normalize_outputs_for_storage(outputs)
+            if normalized_outputs != outputs:
+                node["outputs"] = normalized_outputs
+                changed = True
+
+    if changed:
+        cli_graph._maybe_persist()
+
+
+def _normalize_execute_nodes(nodes: list[GraphNode]) -> list[GraphNode]:
+    """Normalize request-scoped nodes before validation/execution."""
+    normalized: list[GraphNode] = []
+    for node in nodes:
+        if node.definition_id == "image-input":
+            normalized.append(
+                node.model_copy(update={"params": _normalize_image_input_params(node.params)})
+            )
+        else:
+            normalized.append(node)
+    return normalized
+
+
+_normalize_cli_graph_output_refs()
 
 
 @app.post("/api/outputs/archive")
@@ -572,14 +739,15 @@ async def update_settings(body: dict[str, Any]) -> dict:
 async def execute(request: ExecuteRequest) -> dict:
     settings = load_settings()
     api_keys = settings.get("apiKeys", {})
+    nodes = _normalize_execute_nodes(request.nodes)
 
-    errors = validate_graph(request.nodes, request.edges, api_keys)
+    errors = validate_graph(nodes, request.edges, api_keys)
     if errors:
         await manager.broadcast(ValidationErrorEvent(errors=errors))
         return {"status": "validation_error", "errorCount": len(errors)}
 
     try:
-        topological_sort(request.nodes, request.edges)
+        topological_sort(nodes, request.edges)
     except CycleError as exc:
         await manager.broadcast(
             ValidationErrorEvent(
@@ -601,7 +769,7 @@ async def execute(request: ExecuteRequest) -> dict:
         print("[exec] _run started", file=sys.stderr, flush=True)
         try:
             await execute_graph(
-                nodes=request.nodes,
+                nodes=nodes,
                 edges=request.edges,
                 api_keys=api_keys,
                 handler_registry=handler_registry,
@@ -623,10 +791,11 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
     """Execute only the subgraph feeding into a specific target node."""
     settings = load_settings()
     api_keys = settings.get("apiKeys", {})
+    nodes = _normalize_execute_nodes(request.nodes)
 
     # Compute the subgraph: target node + all its ancestors
     sub_nodes, sub_edges = get_subgraph(
-        request.nodes, request.edges, request.target_node_id
+        nodes, request.edges, request.target_node_id
     )
 
     if not sub_nodes:
@@ -736,10 +905,12 @@ def _sync_outputs_to_cli_graph(node_id: str, outputs: dict[str, Any]) -> None:
     if not isinstance(outputs, dict):
         cli_graph.nodes[node_id]["outputs"] = {}
         return
-    cli_graph.nodes[node_id]["outputs"] = {
+    shaped_outputs = {
         k: v if isinstance(v, dict) else {"type": "Any", "value": v}
         for k, v in outputs.items()
     }
+    cli_graph.nodes[node_id]["outputs"] = _normalize_outputs_for_storage(shaped_outputs)
+    cli_graph._maybe_persist()
 
 
 async def _emit_and_sync(event: ExecutionEvent) -> None:
@@ -1154,23 +1325,7 @@ def _url_to_output_path(value: str) -> Path | None:
     absolute local filesystem path. External URLs (http://, https://) and
     paths outside OUTPUT_ROOT return None so callers reject with a clear
     error."""
-    if not value:
-        return None
-    if value.startswith(("http://", "https://")):
-        return None
-
-    prefix = "/api/outputs/"
-    if value.startswith(prefix):
-        candidate = (OUTPUT_ROOT / value[len(prefix):]).resolve()
-    else:
-        # Treat as a filesystem path (absolute or relative).
-        candidate = Path(value).resolve()
-
-    try:
-        candidate.relative_to(OUTPUT_ROOT.resolve())
-    except ValueError:
-        return None
-    return candidate
+    return _output_path_from_ref(value)
 
 
 @app.delete("/api/graph/edge")
@@ -1205,11 +1360,14 @@ async def import_graph(body: dict[str, Any]) -> dict:
     for n in body.get("nodes", []):
         if "definitionId" not in n:
             continue
+        params = n.get("params", {}) or {}
+        if n["definitionId"] == "image-input":
+            params = _normalize_image_input_params(params)
         new_id = cli_graph.add_node(
             n["definitionId"],
-            n.get("params", {}) or {},
+            params,
             position=n.get("position"),
-            outputs=n.get("outputs"),
+            outputs=_normalize_outputs_for_storage(n.get("outputs", {}) or {}),
         )
         old_id = n.get("id")
         if old_id:
@@ -1241,13 +1399,8 @@ def _rewrite_output_paths(outputs: dict[str, Any]) -> dict[str, Any]:
     rewritten: dict[str, Any] = {}
     for port_id, port_val in outputs.items():
         if isinstance(port_val, dict) and isinstance(port_val.get("value"), str):
-            val = port_val["value"]
-            # Convert absolute paths under OUTPUT_ROOT to relative URLs
-            try:
-                rel = Path(val).relative_to(OUTPUT_ROOT)
-                rewritten[port_id] = {**port_val, "value": f"/api/outputs/{rel}"}
-            except (ValueError, TypeError):
-                rewritten[port_id] = port_val
+            url = _output_url_from_ref(port_val["value"])
+            rewritten[port_id] = {**port_val, "value": url} if url else port_val
         else:
             rewritten[port_id] = port_val
     return rewritten
@@ -1298,18 +1451,11 @@ async def export_graph_for_frontend() -> dict:
         outputs = _rewrite_output_paths(n.get("outputs", {}))
         node_state = "complete" if outputs else "idle"
 
-        # For image-input nodes: derive _previewUrl from filePath if the file is
-        # under OUTPUT_ROOT and no preview URL was stored. This makes CLI-created
-        # image-input nodes render a real preview instead of the broken fallback.
+        # For image-input nodes: keep file paths current after repo moves and
+        # derive _previewUrl from local output refs when it was not stored.
         params = dict(n.get("params", {}))
-        if n["definitionId"] == "image-input" and not params.get("_previewUrl"):
-            fp = params.get("filePath")
-            if isinstance(fp, str) and fp:
-                try:
-                    rel = Path(fp).resolve().relative_to(OUTPUT_ROOT.resolve())
-                    params["_previewUrl"] = f"/api/outputs/{rel}"
-                except ValueError:
-                    pass
+        if n["definitionId"] == "image-input":
+            params = _normalize_image_input_params(params)
 
         data = {
             "label": defn.get("displayName", n["definitionId"]),
@@ -1377,6 +1523,7 @@ async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dic
 
     settings = load_settings()
     api_keys = settings.get("apiKeys", {})
+    _normalize_cli_graph_output_refs()
     nodes_list, edges_list = cli_graph.to_execute_format()
 
     target = body.get("targetNodeId") if body else None
@@ -1439,10 +1586,7 @@ async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dic
     # Update CLI graph node outputs
     for node_id, outputs in results.items():
         if node_id in cli_graph.nodes:
-            cli_graph.nodes[node_id]["outputs"] = (
-                {k: v if isinstance(v, dict) else {"type": "Any", "value": v} for k, v in outputs.items()}
-                if isinstance(outputs, dict) else {}
-            )
+            _sync_outputs_to_cli_graph(node_id, outputs)
 
     # Sync outputs to frontend canvas
     await _broadcast_graph_sync()
