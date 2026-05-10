@@ -957,6 +957,7 @@ async function runSlavaExpandedVisualCoverage(cdp) {
       rerouteSize: rerouteRect?.width ?? 0,
       meshPreview: !!document.querySelector('[data-id="n7"] .mesh-preview'),
       meshPreviewPlaceholder: !!document.querySelector('[data-id="n7"] .mesh-preview__placeholder'),
+      meshPreviewViewer: !!document.querySelector('[data-id="n7"] .mesh-preview model-viewer'),
       meshPreviewStatus: document.querySelector('[data-id="n7"] .mesh-preview')?.getAttribute('data-status') ?? '',
     };
   });
@@ -973,6 +974,7 @@ async function runSlavaExpandedVisualCoverage(cdp) {
   assertSlavaCheck(stateAssertions.meshPreview, 'mesh node renders preview surface');
   assertSlavaCheck(stateAssertions.meshPreviewPlaceholder, 'mesh node renders Slava placeholder structure');
   assertSlavaCheck(['loading', 'ready', 'error'].includes(stateAssertions.meshPreviewStatus), 'mesh node exposes viewer status');
+  assertSlavaCheck(!stateAssertions.meshPreviewViewer, 'unavailable mesh source falls back before mounting model-viewer');
 
   await evaluate(cdp, () => {
     window.__nebulaGraphStore.setState({ isExecuting: true });
@@ -1017,11 +1019,13 @@ async function runSlavaExpandedVisualCoverage(cdp) {
     closeIcon: !!document.querySelector('.mesh-modal__close-icon'),
     downloadIcon: !!document.querySelector('.mesh-modal__download-icon'),
     viewer: !!document.querySelector('.mesh-modal__viewer'),
+    fallback: !!document.querySelector('.mesh-modal__fallback'),
   }));
   assertSlavaCheck(meshAssertions.modal, 'mesh modal renders');
   assertSlavaCheck(meshAssertions.closeIcon, 'mesh modal close uses icon contract');
   assertSlavaCheck(meshAssertions.downloadIcon, 'mesh modal download uses icon contract');
-  assertSlavaCheck(meshAssertions.viewer, 'mesh modal viewer renders');
+  assertSlavaCheck(meshAssertions.viewer || meshAssertions.fallback, 'mesh modal renders viewer or fallback');
+  assertSlavaCheck(meshAssertions.fallback, 'unavailable mesh source renders modal fallback');
 
   await clickSelector(cdp, '.mesh-modal__close');
   await waitForRuntime(cdp, '!document.querySelector(".mesh-modal-overlay")');

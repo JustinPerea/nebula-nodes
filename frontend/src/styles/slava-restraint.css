@@ -2893,6 +2893,19 @@ body.app-slava-restraint .mesh-modal__viewer {
   background: var(--sr-canvas-elevated);
 }
 
+body.app-slava-restraint .mesh-modal__fallback {
+  background:
+    radial-gradient(circle at 50% 42%, color-mix(in srgb, var(--node-category-color, var(--sr-accent)) 18%, transparent) 0, transparent 36%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.045), transparent 42%),
+    var(--sr-canvas-elevated);
+}
+
+body.app-slava-restraint .mesh-modal__fallback .mesh-preview__mesh {
+  width: min(34vw, 260px);
+  height: min(22vw, 174px);
+  background-size: 22px 22px;
+}
+
 body.app-slava-restraint .mesh-modal-overlay {
   background: rgba(0, 0, 0, 0.86);
   z-index: var(--sr-layer-modal);
