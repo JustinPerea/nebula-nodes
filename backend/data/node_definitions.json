@@ -1928,12 +1928,8 @@
     "category": "image-gen",
     "apiProvider": "fal",
     "apiEndpoint": "fal-ai/flux-pro/v1.1-ultra",
-    "envKeyName": [
-      "FAL_KEY",
-      "BFL_API_KEY"
-    ],
-    "executionPattern": "sync",
-    "directKeyName": "BFL_API_KEY",
+    "envKeyName": "FAL_KEY",
+    "executionPattern": "async-poll",
     "inputPorts": [
       {
         "id": "prompt",
@@ -2011,15 +2007,6 @@
         "default": 1,
         "min": 1,
         "max": 4
-      }
-    ],
-    "directParams": [
-      {
-        "key": "raw",
-        "label": "Raw (Natural Look)",
-        "type": "boolean",
-        "required": false,
-        "default": false
       }
     ],
     "falParams": [

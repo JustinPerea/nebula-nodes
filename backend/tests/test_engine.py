@@ -89,12 +89,11 @@ class TestValidateGraph:
 
 
 class TestDynamicNodeValidation:
-    def test_dynamic_node_skips_port_validation(self) -> None:
-        """Dynamic nodes not in NODE_DEFS should not fail port validation."""
+    def test_universal_registry_node_validates_base_required_ports(self) -> None:
         nodes = [_node("a", "openrouter-universal")]
         errors = validate_graph(nodes, [], {"OPENROUTER_API_KEY": "or-test"})
-        port_errors = [e for e in errors if e.port_id]
-        assert len(port_errors) == 0
+        port_errors = [e for e in errors if e.port_id == "messages"]
+        assert len(port_errors) == 1
 
     def test_dynamic_node_missing_key(self) -> None:
         """Dynamic nodes should still validate API keys."""
@@ -108,6 +107,18 @@ class TestDynamicNodeValidation:
         nodes = [_node("a", "some-future-node-type")]
         errors = validate_graph(nodes, [], {})
         assert len(errors) == 0
+
+    def test_registry_node_missing_required_ports(self) -> None:
+        nodes = [_node("a", "seedance-2-i2v")]
+        errors = validate_graph(nodes, [], {"FAL_KEY": "fal-test"})
+        assert {e.port_id for e in errors} == {"image", "prompt"}
+
+    def test_registry_node_missing_api_key(self) -> None:
+        nodes = [_node("a", "text-input"), _node("b", "gpt-image-2-generate")]
+        edges = [_edge("a", "b", "text", "prompt")]
+        errors = validate_graph(nodes, edges, {})
+        key_errors = [e for e in errors if "OPENAI_API_KEY" in e.message]
+        assert len(key_errors) == 1
 
 
 class TestExecuteGraphInputResolution:

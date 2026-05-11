@@ -139,6 +139,14 @@ def get_handler_registry(
         ) -> dict[str, Any]:
             return await handle_fal_universal(node, inputs, api_keys, emit=emit)
 
+        async def _flux_ultra_handler(
+            node: GraphNode,
+            inputs: dict[str, PortValueDict],
+            api_keys: dict[str, str],
+        ) -> dict[str, Any]:
+            node.params.setdefault("endpoint_id", "fal-ai/flux-pro/v1.1-ultra")
+            return await handle_fal_universal(node, inputs, api_keys, emit=emit)
+
         async def _kling_handler(
             node: GraphNode,
             inputs: dict[str, PortValueDict],
@@ -429,6 +437,7 @@ def get_handler_registry(
         registry["replicate-universal"] = _replicate_handler
         registry["fal-universal"] = _fal_handler
         registry["nous-portal-universal"] = _nous_portal_handler
+        registry["flux-1-1-ultra"] = _flux_ultra_handler
         registry["kling-v2-1"] = _kling_handler
         registry["sora-2"] = _sora2_handler
         registry["veo-3"] = _veo3_handler

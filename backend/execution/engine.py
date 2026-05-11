@@ -285,9 +285,10 @@ def validate_graph(
             connected_ports.add((edge.target, edge.target_handle))
 
     for node in nodes:
-        node_def = NODE_DEFS.get(node.definition_id)
+        node_def = _node_def_for(node.definition_id)
         if not node_def:
-            # Dynamic node — still validate API key if definition_id is recognized
+            # Unknown or future dynamic node — still validate API key for
+            # known dynamic shells when the exported registry is unavailable.
             DYNAMIC_ENV_KEYS: dict[str, str] = {
                 "openrouter-universal": "OPENROUTER_API_KEY",
                 "replicate-universal": "REPLICATE_API_TOKEN",
