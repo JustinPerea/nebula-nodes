@@ -135,6 +135,7 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
   const audioOutput = Object.values(nodeData.outputs).find((o) => o.type === 'Audio' && o.value);
 
   const displayText = nodeData.streamingText ?? (textOutput && typeof textOutput.value === 'string' ? textOutput.value : null);
+  const previewText = displayText ? displayText.replace(/\\n/g, '\n') : null;
   const isStreaming = nodeData.state === 'executing' && nodeData.streamingText != null;
   const isTextSurface = isInlineTextNode || Boolean(displayText && !isInlineTextNode);
   const isImageInput = nodeData.definitionId === 'image-input';
@@ -162,7 +163,7 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
 
   return (
     <div
-      className={`model-node ${stateClass}${isImageSurface ? ' model-node--image-surface' : ''}${isTextSurface ? ' model-node--text-surface' : ''}${isInlineTextNode ? ' model-node--inline-text' : ''}${isTextInput ? ' model-node--text-input' : ''}${isStickyNote ? ' model-node--sticky-note' : ''} ${selected ? 'model-node--selected' : ''}${entranceClass}`}
+      className={`model-node ${stateClass}${isImageSurface ? ' model-node--image-surface' : ''}${isTextSurface ? ' model-node--text-surface' : ''}${isInlineTextNode ? ' model-node--inline-text' : ''}${isTextInput ? ' model-node--text-input' : ''}${isImageInput ? ' model-node--image-input' : ''}${isStickyNote ? ' model-node--sticky-note' : ''} ${selected ? 'model-node--selected' : ''}${entranceClass}`}
       onClick={() => selectNode(id)}
       style={{ ['--node-category-color' as string]: categoryColor }}
     >
@@ -362,10 +363,10 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
         </div>
       )}
 
-      {displayText && !isInlineTextNode && (
+      {previewText && !isInlineTextNode && (
         <div className="model-node__preview">
           <div className={`model-node__preview-text ${isStreaming ? 'model-node__preview-text--streaming' : ''}`}>
-            {displayText.length > 300 ? `${displayText.slice(0, 300)}...` : displayText}
+            {previewText.length > 300 ? `${previewText.slice(0, 300)}...` : previewText}
           </div>
         </div>
       )}

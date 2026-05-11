@@ -80,6 +80,9 @@ const edgeTypes: EdgeTypes = {
   'typed-edge': TypedEdge,
 };
 
+const DEFAULT_FIT_MAX_ZOOM = 0.85;
+const FIRST_NODE_FIT_MAX_ZOOM = 0.62;
+
 function getEventClientPoint(event: MouseEvent | TouchEvent): { x: number; y: number } | null {
   if ('clientX' in event) {
     return { x: event.clientX, y: event.clientY };
@@ -274,7 +277,7 @@ export function Canvas() {
   // resized it still get a clean fit. Falls back to symmetric padding when
   // the panel is hidden.
   useEffect(() => {
-    function onNodesAdded() {
+    function onNodesAdded(event: Event) {
       // Driver-side flag (DEV demo runs only) to suppress the auto-fit
       // when subsequent nodes arrive. Lets the driver own the post-first-
       // node layout instead of getting clobbered by every fitView call.
@@ -284,12 +287,20 @@ export function Canvas() {
       if (suppressed) return;
       setTimeout(() => {
         const padding = computeChatAwarePadding();
-        fitView({ padding, duration: 400, maxZoom: 0.85 });
+        const totalCount =
+          event instanceof CustomEvent && typeof event.detail?.totalCount === 'number'
+            ? event.detail.totalCount
+            : nodes.length;
+        fitView({
+          padding,
+          duration: 400,
+          maxZoom: totalCount <= 1 ? FIRST_NODE_FIT_MAX_ZOOM : DEFAULT_FIT_MAX_ZOOM,
+        });
       }, 80);
     }
     window.addEventListener('nebula:graph-nodes-added', onNodesAdded);
     return () => window.removeEventListener('nebula:graph-nodes-added', onNodesAdded);
-  }, [fitView]);
+  }, [fitView, nodes.length]);
 
   // Track the connection being dragged so onConnectEnd knows what port it came from
   const connectStartRef = useRef<{ nodeId: string; handleId: string; handleType: 'source' | 'target' } | null>(null);
