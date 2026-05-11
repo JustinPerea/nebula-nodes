@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 
 from execution.engine import topological_sort, validate_graph, execute_graph, CycleError
@@ -180,3 +182,63 @@ class TestExecuteGraphInputResolution:
 
         assert captured["input"].type == "Text"
         assert captured["input"].value == "two"
+
+    @pytest.mark.asyncio
+    async def test_router_fanout_runs_ready_branches_in_parallel(self) -> None:
+        active = 0
+        max_active = 0
+        emitted: list[tuple[str, str]] = []
+
+        async def slow_image_handler(
+            node: GraphNode,
+            _inputs: dict[str, PortValueDict],
+            _api_keys: dict[str, str],
+        ) -> dict:
+            nonlocal active, max_active
+            active += 1
+            max_active = max(max_active, active)
+            await asyncio.sleep(0.02)
+            active -= 1
+            return {"image": {"type": "Image", "value": f"/tmp/{node.id}.png"}}
+
+        async def emit(event) -> None:
+            node_id = getattr(event, "node_id", "")
+            emitted.append((event.type, node_id))
+
+        nodes = [
+            GraphNode(id="source", definitionId="text-input", params={"value": "A cat playing drums"}, outputs={}),
+            GraphNode(id="router", definitionId="router", params={}, outputs={}),
+            GraphNode(id="image-a", definitionId="gpt-image-1-generate", params={}, outputs={}),
+            GraphNode(id="image-b", definitionId="gpt-image-1-generate", params={}, outputs={}),
+            GraphNode(id="image-c", definitionId="gpt-image-1-generate", params={}, outputs={}),
+        ]
+        edges = [
+            _edge("source", "router", "text", "input"),
+            _edge("router", "image-a", "out1", "prompt"),
+            _edge("router", "image-b", "out2", "prompt"),
+            _edge("router", "image-c", "out3", "prompt"),
+        ]
+
+        await execute_graph(
+            nodes,
+            edges,
+            {},
+            {"gpt-image-1-generate": slow_image_handler},
+            emit,
+            max_parallel_nodes=4,
+        )
+
+        branch_ids = {"image-a", "image-b", "image-c"}
+        branch_executing = [
+            index for index, event in enumerate(emitted)
+            if event[0] == "executing" and event[1] in branch_ids
+        ]
+        branch_executed = [
+            index for index, event in enumerate(emitted)
+            if event[0] == "executed" and event[1] in branch_ids
+        ]
+
+        assert max_active == 3
+        assert len(branch_executing) == 3
+        assert len(branch_executed) == 3
+        assert max(branch_executing) < min(branch_executed)

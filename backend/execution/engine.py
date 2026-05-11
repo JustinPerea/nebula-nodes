@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+from collections import deque
 from graphlib import TopologicalSorter, CycleError as _GraphlibCycleError
 from typing import Any, Callable, Awaitable
 
@@ -348,24 +349,48 @@ async def execute_graph(
     handler_registry: dict[str, NodeHandler],
     emit: Callable[[ExecutionEvent], Awaitable[None]],
     cache: ExecutionCache | None = None,
+    max_parallel_nodes: int = 4,
 ) -> None:
     start_time = time.monotonic()
     nodes_executed = 0
     node_map: dict[str, GraphNode] = {n.id: n for n in nodes}
     outputs_cache: dict[str, dict[str, PortValueDict]] = {}
     order = topological_sort(nodes, edges)
+    order_index = {nid: index for index, nid in enumerate(order)}
+    concurrency = max(1, max_parallel_nodes)
 
-    for nid in order:
+    incoming_edges: dict[str, list[GraphEdge]] = {nid: [] for nid in node_map}
+    outgoing_edges: dict[str, list[GraphEdge]] = {nid: [] for nid in node_map}
+    remaining_dependencies: dict[str, int] = {nid: 0 for nid in node_map}
+    for edge in edges:
+        if edge.source not in node_map or edge.target not in node_map:
+            continue
+        incoming_edges[edge.target].append(edge)
+        outgoing_edges[edge.source].append(edge)
+        remaining_dependencies[edge.target] += 1
+
+    ready: deque[str] = deque(
+        nid for nid in order if nid in node_map and remaining_dependencies[nid] == 0
+    )
+    queued_nodes: set[str] = set()
+    failed_nodes: set[str] = set()
+
+    async def queue_ready_node(nid: str) -> None:
+        if nid in queued_nodes:
+            return
+        queued_nodes.add(nid)
         await emit(QueuedEvent(node_id=nid))
 
-    for nid in order:
-        node = node_map[nid]
-        await emit(ExecutingEvent(node_id=nid))
+    async def queue_initial_ready_nodes() -> None:
+        for nid in list(ready):
+            await queue_ready_node(nid)
 
+    def resolve_inputs(nid: str) -> dict[str, PortValueDict]:
+        node = node_map[nid]
         resolved_inputs: dict[str, PortValueDict] = {}
         multiple_ports = _multiple_input_ports(node.definition_id)
-        for edge in edges:
-            if edge.target == nid and edge.source_handle and edge.target_handle:
+        for edge in incoming_edges[nid]:
+            if edge.source_handle and edge.target_handle:
                 upstream_outputs = outputs_cache.get(edge.source, {})
                 if edge.source_handle in upstream_outputs:
                     incoming = upstream_outputs[edge.source_handle]
@@ -376,6 +401,12 @@ async def execute_graph(
                         )
                     else:
                         resolved_inputs[edge.target_handle] = incoming
+        return resolved_inputs
+
+    async def run_node(nid: str) -> tuple[str, bool, int]:
+        node = node_map[nid]
+        await emit(ExecutingEvent(node_id=nid))
+        resolved_inputs = resolve_inputs(nid)
 
         try:
             cache_key: str | None = None
@@ -394,8 +425,7 @@ async def execute_graph(
                         for k, v in cached_outputs.items()
                     }
                     await emit(ExecutedEvent(node_id=nid, outputs=cached_outputs))
-                    nodes_executed += 1
-                    continue
+                    return nid, True, 1
 
             handler = handler_registry.get(node.definition_id)
             if handler is None:
@@ -537,8 +567,7 @@ async def execute_graph(
                         for i, item in enumerate(items):
                             iter_outputs = {out_key: {"type": out_type, "value": item}}
                             await emit(ExecutedEvent(node_id=nid, outputs=iter_outputs))
-                        nodes_executed += 1
-                        continue  # Skip the default ExecutedEvent below
+                        return nid, True, 1
                     else:
                         node_outputs = {}
                 elif node.definition_id == "preview":
@@ -600,11 +629,51 @@ async def execute_graph(
                 cache.set(cache_key, node_outputs)
 
             await emit(ExecutedEvent(node_id=nid, outputs=node_outputs))
-            nodes_executed += 1
+            return nid, True, 1
 
         except Exception as exc:
             await emit(ErrorEvent(node_id=nid, error=str(exc), retryable=False))
+            return nid, False, 0
+
+    await queue_initial_ready_nodes()
+    running: dict[asyncio.Task[tuple[str, bool, int]], str] = {}
+
+    while ready or running:
+        while ready and len(running) < concurrency:
+            nid = ready.popleft()
+            if nid in failed_nodes:
+                continue
+            task = asyncio.create_task(run_node(nid))
+            running[task] = nid
+
+        if not running:
             break
+
+        done, _pending = await asyncio.wait(
+            running.keys(),
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+
+        for task in done:
+            running.pop(task, None)
+            nid, succeeded, executed_count = task.result()
+            nodes_executed += executed_count
+
+            if not succeeded:
+                failed_nodes.add(nid)
+                continue
+
+            newly_ready: list[str] = []
+            for edge in outgoing_edges[nid]:
+                if edge.target in failed_nodes:
+                    continue
+                remaining_dependencies[edge.target] -= 1
+                if remaining_dependencies[edge.target] == 0:
+                    newly_ready.append(edge.target)
+
+            for target in sorted(newly_ready, key=lambda node_id: order_index[node_id]):
+                await queue_ready_node(target)
+                ready.append(target)
 
     duration = time.monotonic() - start_time
     await emit(GraphCompleteEvent(duration=round(duration, 3), nodes_executed=nodes_executed))

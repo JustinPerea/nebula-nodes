@@ -1,0 +1,20 @@
+{
+  "category": "utility",
+  "nodes": [
+    { "id": "text-input", "backend": "native", "browser": "execute" },
+    { "id": "image-input", "backend": "native", "browser": "execute" },
+    { "id": "preview", "backend": "native", "browser": "execute" },
+    { "id": "combine-text", "backend": "native", "browser": "execute" },
+    { "id": "router", "backend": "native", "browser": "execute" },
+    { "id": "reroute", "backend": "native", "browser": "execute" },
+    { "id": "gemini-embeddings", "backend": "mocked-handler", "browser": "mocked-event" },
+    { "id": "video-input", "backend": "native", "browser": "execute" },
+    { "id": "audio-input", "backend": "native", "browser": "execute" },
+    { "id": "sticky-note", "backend": "native", "browser": "execute" },
+    { "id": "array-builder", "backend": "native", "browser": "execute" },
+    { "id": "array-selector", "backend": "native", "browser": "execute" },
+    { "id": "image-compare", "backend": "native", "browser": "execute" },
+    { "id": "iterator-image", "backend": "native", "browser": "execute" },
+    { "id": "iterator-text", "backend": "native", "browser": "execute" }
+  ]
+}
