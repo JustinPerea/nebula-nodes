@@ -4171,7 +4171,7 @@
         "label": "Image Size",
         "type": "enum",
         "required": false,
-        "default": "landscape_16_9",
+        "default": "landscape_4_3",
         "options": [
           {
             "label": "Square HD (1024×1024)",
@@ -4231,19 +4231,19 @@
         "label": "Format",
         "type": "enum",
         "required": false,
-        "default": "webp",
+        "default": "jpeg",
         "options": [
           {
-            "label": "WebP",
-            "value": "webp"
+            "label": "JPEG",
+            "value": "jpeg"
           },
           {
             "label": "PNG",
             "value": "png"
           },
           {
-            "label": "JPEG",
-            "value": "jpeg"
+            "label": "WebP",
+            "value": "webp"
           }
         ]
       },
@@ -4425,6 +4425,23 @@
         "type": "boolean",
         "required": false,
         "default": true
+      },
+      {
+        "key": "safety_checker_version",
+        "label": "Safety Checker Version",
+        "type": "enum",
+        "required": false,
+        "default": "v1",
+        "options": [
+          {
+            "label": "v1 (Default)",
+            "value": "v1"
+          },
+          {
+            "label": "v2 (ViT)",
+            "value": "v2"
+          }
+        ]
       },
       {
         "key": "seed",
@@ -9513,15 +9530,6 @@
             "value": "png"
           }
         ]
-      },
-      {
-        "key": "num_images",
-        "label": "Count",
-        "type": "integer",
-        "required": false,
-        "default": 1,
-        "min": 1,
-        "max": 4
       },
       {
         "key": "safety_tolerance",

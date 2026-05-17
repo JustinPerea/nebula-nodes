@@ -57,6 +57,7 @@ Generated: 2026-05-17 | Nodes: 100 | Source: [`backend/data/node_definitions.jso
 | Embeddings (JSON) | textarea | — | — |
 | Format | enum | jpeg | JPEG, PNG |
 | Safety Checker | bool | true | — |
+| Safety Checker Version | enum | v1 | v1 (Default), v2 (ViT) |
 | Seed | int | — | 0–4294967295 |
 
 ---
@@ -72,7 +73,7 @@ Generated: 2026-05-17 | Nodes: 100 | Source: [`backend/data/node_definitions.jso
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text)*, Image Guide (Image) |
 | **Outputs** | Image (Image) |
-| **Audited** | — |
+| **Audited** | 2026-05-17 |
 
 **Shared Parameters**
 
@@ -104,13 +105,12 @@ Generated: 2026-05-17 | Nodes: 100 | Source: [`backend/data/node_definitions.jso
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text)* |
 | **Outputs** | Image (Image) |
-| **Audited** | — |
+| **Audited** | 2026-05-17 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
 | Size | enum | landscape_4_3 | Square HD, Square, Portrait 4:3, Portrait 16:9, Landscape 4:3, Landscape 16:9 |
 | Format | enum | jpeg | JPEG, PNG |
-| Count | int | 1 | 1–4 |
 | Safety | enum | 2 | 1 (Strict), 2, 3, 4, 5 (Permissive) |
 | Safety Checker | bool | true | — |
 | Seed | int | — | — |
@@ -128,7 +128,7 @@ Generated: 2026-05-17 | Nodes: 100 | Source: [`backend/data/node_definitions.jso
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text)*, Image (Image)* |
 | **Outputs** | Image (Image) |
-| **Audited** | — |
+| **Audited** | 2026-05-17 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -153,15 +153,15 @@ Generated: 2026-05-17 | Nodes: 100 | Source: [`backend/data/node_definitions.jso
 | **Execution** | sync |
 | **Inputs** | Prompt (Text)* |
 | **Outputs** | Image (Image) |
-| **Audited** | — |
+| **Audited** | 2026-05-17 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Image Size | enum | landscape_16_9 | Square HD (1024×1024), Square (512×512), Landscape 4:3, Landscape 16:9, Portrait 4:3, Portrait 16:9 |
+| Image Size | enum | landscape_4_3 | Square HD (1024×1024), Square (512×512), Landscape 4:3, Landscape 16:9, Portrait 4:3, Portrait 16:9 |
 | Steps | int | 4 | 1–4 |
 | Guidance Scale | float | 3.5 | 1–5 |
 | Count | int | 1 | 1–4 |
-| Format | enum | webp | WebP, PNG, JPEG |
+| Format | enum | jpeg | JPEG, PNG, WebP |
 | Acceleration | enum | none | None, Regular, High |
 | Safety Checker | bool | true | — |
 | Seed | int | — | 0–2147483647 |

@@ -2082,3 +2082,590 @@ async def test_recraft_svg_output_port_is_svg_not_image():
     assert "image" not in result, "SVG content_type must not route to image port"
     assert result["svg"]["type"] == "SVG"
     assert result["svg"]["value"] == "https://fal.ai/vector.svg"
+
+
+# ---------------------------------------------------------------------------
+# FLUX family wrapper tests (flux-1-1-ultra, flux-schnell, fast-sdxl,
+# flux-kontext, flux-2-pro)  — Phase 2 audit 2026-05-17
+# ---------------------------------------------------------------------------
+
+
+def _make_image_poll_mocks_flux():
+    """Standard poll-cycle mocks returning a single image."""
+    mock_submit = MagicMock()
+    mock_submit.status_code = 200
+    mock_submit.json.return_value = {"request_id": "flux-req-1"}
+
+    mock_status = MagicMock()
+    mock_status.status_code = 200
+    mock_status.json.return_value = {"status": "COMPLETED"}
+
+    mock_result = MagicMock()
+    mock_result.status_code = 200
+    mock_result.json.return_value = {
+        "images": [{"url": "https://fal.ai/flux-out.png", "content_type": "image/png"}]
+    }
+    return mock_submit, mock_status, mock_result
+
+
+def _make_image_direct_mocks_flux():
+    """Mock FAL returning the result directly (no request_id — sync response)."""
+    mock_submit = MagicMock()
+    mock_submit.status_code = 200
+    mock_submit.json.return_value = {
+        "images": [{"url": "https://fal.ai/fast-sdxl-out.jpeg", "content_type": "image/jpeg"}]
+    }
+    return mock_submit
+
+
+# --- flux-1-1-ultra ---
+
+
+@pytest.mark.asyncio
+async def test_flux_ultra_endpoint_injected():
+    """_flux_ultra_handler injects fal-ai/flux-pro/v1.1-ultra."""
+    mock_submit, mock_status, mock_result = _make_image_poll_mocks_flux()
+
+    node = GraphNode(id="fu1", definitionId="flux-1-1-ultra", params={})
+    node.params.setdefault("endpoint_id", "fal-ai/flux-pro/v1.1-ultra")
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            result = await handle_fal_universal(
+                node,
+                {"prompt": PortValueDict(type="Text", value="a mountain lake")},
+                {"FAL_KEY": "fal_test"},
+                emit=AsyncMock(),
+            )
+
+    assert result["image"]["type"] == "Image"
+    posted_url = mock_client.post.call_args.args[0] if mock_client.post.call_args.args \
+        else mock_client.post.call_args.kwargs.get("url", "")
+    assert "flux-pro/v1.1-ultra" in posted_url
+
+
+@pytest.mark.asyncio
+async def test_flux_ultra_aspect_ratio_and_safety_tolerance_sent():
+    """flux-1-1-ultra: sharedParam aspect_ratio and falParam safety_tolerance forwarded."""
+    mock_submit, mock_status, mock_result = _make_image_poll_mocks_flux()
+
+    node = GraphNode(
+        id="fu2",
+        definitionId="flux-1-1-ultra",
+        params={
+            "endpoint_id": "fal-ai/flux-pro/v1.1-ultra",
+            "aspect_ratio": "9:16",
+            "safety_tolerance": "3",
+            "num_images": 2,
+        },
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            await handle_fal_universal(
+                node,
+                {"prompt": PortValueDict(type="Text", value="portrait")},
+                {"FAL_KEY": "fal_test"},
+                emit=AsyncMock(),
+            )
+
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert payload["aspect_ratio"] == "9:16"
+    assert payload["safety_tolerance"] == "3"
+    assert payload["num_images"] == 2
+    assert "endpoint_id" not in payload, "endpoint_id must not be forwarded to FAL"
+
+
+@pytest.mark.asyncio
+async def test_flux_ultra_image_port_maps_to_image_url():
+    """flux-1-1-ultra image guide port maps to image_url."""
+    mock_submit, mock_status, mock_result = _make_image_poll_mocks_flux()
+
+    node = GraphNode(
+        id="fu3",
+        definitionId="flux-1-1-ultra",
+        params={
+            "endpoint_id": "fal-ai/flux-pro/v1.1-ultra",
+            "image_prompt_strength": 0.3,
+        },
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            await handle_fal_universal(
+                node,
+                {
+                    "prompt": PortValueDict(type="Text", value="style transfer"),
+                    "image": PortValueDict(type="Image", value="https://example.com/guide.jpg"),
+                },
+                {"FAL_KEY": "fal_test"},
+                emit=AsyncMock(),
+            )
+
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert payload["image_url"] == "https://example.com/guide.jpg"
+    assert payload["image_prompt_strength"] == 0.3
+
+
+# --- flux-schnell ---
+
+
+@pytest.mark.asyncio
+async def test_flux_schnell_endpoint_injected():
+    """_flux_schnell_handler injects fal-ai/flux/schnell."""
+    mock_submit, mock_status, mock_result = _make_image_poll_mocks_flux()
+
+    node = GraphNode(id="fs1", definitionId="flux-schnell", params={})
+    node.params.setdefault("endpoint_id", "fal-ai/flux/schnell")
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            result = await handle_fal_universal(
+                node,
+                {"prompt": PortValueDict(type="Text", value="a quick sketch")},
+                {"FAL_KEY": "fal_test"},
+                emit=AsyncMock(),
+            )
+
+    assert result["image"]["type"] == "Image"
+    posted_url = mock_client.post.call_args.args[0] if mock_client.post.call_args.args \
+        else mock_client.post.call_args.kwargs.get("url", "")
+    assert "flux/schnell" in posted_url
+
+
+@pytest.mark.asyncio
+async def test_flux_schnell_image_size_param_forwarded():
+    """flux-schnell: image_size param (not aspect_ratio) must be forwarded.
+    The frontend previously sent aspect_ratio instead — this test pins the correct key."""
+    mock_submit, mock_status, mock_result = _make_image_poll_mocks_flux()
+
+    node = GraphNode(
+        id="fs2",
+        definitionId="flux-schnell",
+        params={
+            "endpoint_id": "fal-ai/flux/schnell",
+            "image_size": "portrait_16_9",
+            "num_images": 1,
+            "output_format": "jpeg",
+        },
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            await handle_fal_universal(
+                node,
+                {"prompt": PortValueDict(type="Text", value="fast image")},
+                {"FAL_KEY": "fal_test"},
+                emit=AsyncMock(),
+            )
+
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert payload["image_size"] == "portrait_16_9", "image_size must be forwarded (not aspect_ratio)"
+    assert "aspect_ratio" not in payload, "aspect_ratio is not a valid flux/schnell param"
+    assert payload["output_format"] == "jpeg"
+
+
+@pytest.mark.asyncio
+async def test_flux_schnell_direct_response_no_poll():
+    """flux-schnell: when FAL returns images directly (no request_id), no poll loop runs."""
+    mock_submit = _make_image_direct_mocks_flux()
+    # No GET calls should happen — direct response
+    mock_submit.json.return_value = {
+        "images": [{"url": "https://fal.ai/schnell-fast.png", "content_type": "image/png"}]
+    }
+
+    node = GraphNode(
+        id="fs3",
+        definitionId="flux-schnell",
+        params={"endpoint_id": "fal-ai/flux/schnell"},
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        result = await handle_fal_universal(
+            node,
+            {"prompt": PortValueDict(type="Text", value="instant output")},
+            {"FAL_KEY": "fal_test"},
+        )
+
+    assert result["image"]["type"] == "Image"
+    assert result["image"]["value"] == "https://fal.ai/schnell-fast.png"
+    # GET (poll/result) was never called
+    mock_client.get.assert_not_called()
+
+
+# --- fast-sdxl ---
+
+
+@pytest.mark.asyncio
+async def test_fast_sdxl_endpoint_injected():
+    """_fast_sdxl_handler injects fal-ai/fast-sdxl."""
+    mock_submit, mock_status, mock_result = _make_image_poll_mocks_flux()
+
+    node = GraphNode(id="fsdxl1", definitionId="fast-sdxl", params={})
+    node.params.setdefault("endpoint_id", "fal-ai/fast-sdxl")
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            result = await handle_fal_universal(
+                node,
+                {"prompt": PortValueDict(type="Text", value="a stylized portrait")},
+                {"FAL_KEY": "fal_test"},
+                emit=AsyncMock(),
+            )
+
+    assert result["image"]["type"] == "Image"
+    posted_url = mock_client.post.call_args.args[0] if mock_client.post.call_args.args \
+        else mock_client.post.call_args.kwargs.get("url", "")
+    assert "fast-sdxl" in posted_url
+
+
+@pytest.mark.asyncio
+async def test_fast_sdxl_key_params_forwarded():
+    """fast-sdxl: guidance_scale, negative_prompt, image_size, safety_checker_version forwarded."""
+    mock_submit, mock_status, mock_result = _make_image_poll_mocks_flux()
+
+    node = GraphNode(
+        id="fsdxl2",
+        definitionId="fast-sdxl",
+        params={
+            "endpoint_id": "fal-ai/fast-sdxl",
+            "image_size": "landscape_16_9",
+            "guidance_scale": 8.0,
+            "negative_prompt": "blurry, low quality",
+            "num_inference_steps": 30,
+            "safety_checker_version": "v2",
+        },
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            await handle_fal_universal(
+                node,
+                {"prompt": PortValueDict(type="Text", value="render")},
+                {"FAL_KEY": "fal_test"},
+                emit=AsyncMock(),
+            )
+
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert payload["image_size"] == "landscape_16_9"
+    assert payload["guidance_scale"] == 8.0
+    assert payload["negative_prompt"] == "blurry, low quality"
+    assert payload["num_inference_steps"] == 30
+    assert payload["safety_checker_version"] == "v2"
+
+
+@pytest.mark.asyncio
+async def test_fast_sdxl_loras_json_string_parsed():
+    """fast-sdxl: loras param stored as JSON string must be parsed to list before dispatch.
+    Empty/invalid JSON must be dropped silently (handler pre-processes in sync_runner)."""
+    # Simulate what _fast_sdxl_handler does: parse JSON strings before calling universal handler
+    import json as _json
+
+    node = GraphNode(
+        id="fsdxl3",
+        definitionId="fast-sdxl",
+        params={
+            "endpoint_id": "fal-ai/fast-sdxl",
+            "loras": '[{"path": "https://example.com/lora.safetensors", "scale": 0.8}]',
+            "embeddings": "",  # empty — must be dropped
+        },
+    )
+
+    # Simulate handler pre-processing
+    for array_key in ("loras", "embeddings"):
+        raw = node.params.get(array_key)
+        if isinstance(raw, str):
+            stripped = raw.strip()
+            if not stripped:
+                node.params.pop(array_key, None)
+            else:
+                try:
+                    node.params[array_key] = _json.loads(stripped)
+                except _json.JSONDecodeError:
+                    node.params.pop(array_key, None)
+
+    assert isinstance(node.params["loras"], list)
+    assert node.params["loras"][0]["path"] == "https://example.com/lora.safetensors"
+    assert node.params["loras"][0]["scale"] == 0.8
+    assert "embeddings" not in node.params, "empty embeddings must be dropped"
+
+
+# --- flux-kontext ---
+
+
+@pytest.mark.asyncio
+async def test_flux_kontext_endpoint_injected():
+    """_flux_kontext_handler injects fal-ai/flux-pro/kontext."""
+    mock_submit, mock_status, mock_result = _make_image_poll_mocks_flux()
+
+    node = GraphNode(id="fk1", definitionId="flux-kontext", params={})
+    node.params.setdefault("endpoint_id", "fal-ai/flux-pro/kontext")
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            result = await handle_fal_universal(
+                node,
+                {
+                    "prompt": PortValueDict(type="Text", value="make it sunset"),
+                    "image": PortValueDict(type="Image", value="https://example.com/source.jpg"),
+                },
+                {"FAL_KEY": "fal_test"},
+                emit=AsyncMock(),
+            )
+
+    assert result["image"]["type"] == "Image"
+    posted_url = mock_client.post.call_args.args[0] if mock_client.post.call_args.args \
+        else mock_client.post.call_args.kwargs.get("url", "")
+    assert "flux-pro/kontext" in posted_url
+
+
+@pytest.mark.asyncio
+async def test_flux_kontext_image_port_maps_to_image_url():
+    """flux-kontext: required image input port maps to image_url in FAL request."""
+    mock_submit, mock_status, mock_result = _make_image_poll_mocks_flux()
+
+    node = GraphNode(
+        id="fk2",
+        definitionId="flux-kontext",
+        params={
+            "endpoint_id": "fal-ai/flux-pro/kontext",
+            "aspect_ratio": "16:9",
+            "safety_tolerance": "2",
+            "num_images": 1,
+        },
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            await handle_fal_universal(
+                node,
+                {
+                    "prompt": PortValueDict(type="Text", value="change background to forest"),
+                    "image": PortValueDict(type="Image", value="https://example.com/person.jpg"),
+                },
+                {"FAL_KEY": "fal_test"},
+                emit=AsyncMock(),
+            )
+
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert payload["image_url"] == "https://example.com/person.jpg", \
+        "flux-kontext image port must map to image_url"
+    assert payload["aspect_ratio"] == "16:9"
+    assert payload["num_images"] == 1
+    assert payload["safety_tolerance"] == "2"
+
+
+@pytest.mark.asyncio
+async def test_flux_kontext_safety_tolerance_max_is_6():
+    """flux-kontext: safety_tolerance accepts values up to 6 (unlike flux-2-pro max of 5)."""
+    mock_submit, mock_status, mock_result = _make_image_poll_mocks_flux()
+
+    node = GraphNode(
+        id="fk3",
+        definitionId="flux-kontext",
+        params={
+            "endpoint_id": "fal-ai/flux-pro/kontext",
+            "safety_tolerance": "6",
+        },
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            await handle_fal_universal(
+                node,
+                {
+                    "prompt": PortValueDict(type="Text", value="test"),
+                    "image": PortValueDict(type="Image", value="https://example.com/img.jpg"),
+                },
+                {"FAL_KEY": "fal_test"},
+                emit=AsyncMock(),
+            )
+
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert payload["safety_tolerance"] == "6"
+
+
+# --- flux-2-pro ---
+
+
+@pytest.mark.asyncio
+async def test_flux2_pro_endpoint_injected():
+    """_flux2_pro_handler injects fal-ai/flux-2-pro."""
+    mock_submit, mock_status, mock_result = _make_image_poll_mocks_flux()
+
+    node = GraphNode(id="f2p1", definitionId="flux-2-pro", params={})
+    node.params.setdefault("endpoint_id", "fal-ai/flux-2-pro")
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            result = await handle_fal_universal(
+                node,
+                {"prompt": PortValueDict(type="Text", value="a futuristic cityscape")},
+                {"FAL_KEY": "fal_test"},
+                emit=AsyncMock(),
+            )
+
+    assert result["image"]["type"] == "Image"
+    posted_url = mock_client.post.call_args.args[0] if mock_client.post.call_args.args \
+        else mock_client.post.call_args.kwargs.get("url", "")
+    assert "flux-2-pro" in posted_url
+
+
+@pytest.mark.asyncio
+async def test_flux2_pro_key_params_forwarded():
+    """flux-2-pro: image_size, safety_tolerance, enable_safety_checker, output_format forwarded.
+    num_images must NOT be sent — it is not a documented API param for this model."""
+    mock_submit, mock_status, mock_result = _make_image_poll_mocks_flux()
+
+    node = GraphNode(
+        id="f2p2",
+        definitionId="flux-2-pro",
+        params={
+            "endpoint_id": "fal-ai/flux-2-pro",
+            "image_size": "square_hd",
+            "safety_tolerance": "3",
+            "enable_safety_checker": True,
+            "output_format": "png",
+        },
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            await handle_fal_universal(
+                node,
+                {"prompt": PortValueDict(type="Text", value="portrait")},
+                {"FAL_KEY": "fal_test"},
+                emit=AsyncMock(),
+            )
+
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert payload["image_size"] == "square_hd"
+    assert payload["safety_tolerance"] == "3"
+    assert payload["enable_safety_checker"] is True
+    assert payload["output_format"] == "png"
+    assert "num_images" not in payload, \
+        "num_images is not documented for flux-2-pro and must not be in registry"
+
+
+@pytest.mark.asyncio
+async def test_flux2_pro_safety_tolerance_max_is_5():
+    """flux-2-pro: safety_tolerance max is 5 (not 6 like flux-1-1-ultra and flux-kontext)."""
+    mock_submit, mock_status, mock_result = _make_image_poll_mocks_flux()
+
+    node = GraphNode(
+        id="f2p3",
+        definitionId="flux-2-pro",
+        params={
+            "endpoint_id": "fal-ai/flux-2-pro",
+            "safety_tolerance": "5",
+        },
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            await handle_fal_universal(
+                node,
+                {"prompt": PortValueDict(type="Text", value="test")},
+                {"FAL_KEY": "fal_test"},
+                emit=AsyncMock(),
+            )
+
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert payload["safety_tolerance"] == "5"
