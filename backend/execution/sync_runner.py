@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from typing import Any, Awaitable, Callable
 
 from models.graph import GraphNode, PortValueDict
@@ -338,10 +339,9 @@ def get_handler_registry(
             node.params.setdefault("endpoint_id", "fal-ai/kling-video/v3/standard/text-to-video")
             mp = node.params.get("multi_prompt")
             if isinstance(mp, str) and mp.strip():
-                import json as _json
                 try:
-                    node.params["multi_prompt"] = _json.loads(mp)
-                except _json.JSONDecodeError:
+                    node.params["multi_prompt"] = json.loads(mp)
+                except json.JSONDecodeError:
                     node.params.pop("multi_prompt", None)
             elif mp == "":
                 node.params.pop("multi_prompt", None)
@@ -391,18 +391,12 @@ def get_handler_registry(
             node.params.setdefault("endpoint_id", "fal-ai/moonvalley/image-to-video")
             return await handle_fal_universal(node, inputs, api_keys, emit=emit)
 
-        async def _kling_o3_handler(node, inputs, api_keys):
+        async def _kling_o3_handler(
+            node: GraphNode,
+            inputs: dict[str, PortValueDict],
+            api_keys: dict[str, str],
+        ) -> dict[str, Any]:
             node.params.setdefault("endpoint_id", "fal-ai/kling-video/o3/standard/image-to-video")
-            # Parse multi_prompt JSON string if provided (same pattern as kling-v3)
-            mp = node.params.get("multi_prompt")
-            if isinstance(mp, str) and mp.strip():
-                import json as _json
-                try:
-                    node.params["multi_prompt"] = _json.loads(mp)
-                except _json.JSONDecodeError:
-                    node.params.pop("multi_prompt", None)
-            elif mp == "":
-                node.params.pop("multi_prompt", None)
             return await handle_fal_universal(node, inputs, api_keys, emit=emit)
 
         async def _ltx_23_handler(node, inputs, api_keys):

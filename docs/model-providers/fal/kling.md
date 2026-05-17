@@ -161,10 +161,19 @@ File: `backend/tests/test_fal_handler.py`
    explicitly reject it and the Pro skill notes confirm the pattern works there.
 
 3. **kling-o3 `multi_prompt` exposure** — the API accepts `multi_prompt` on
-   o3/standard but no textarea param was added to the node definition (only the
-   handler pre-parse was added). If multi-shot storyboarding is a desired user
-   feature for o3, add the same `multi_prompt` textarea param as kling-v3.
+   o3/standard but no textarea param was added to the node definition. The
+   handler pre-parse logic for `multi_prompt` was removed during the 2026-05-17
+   polish pass (decision: drop dead code rather than add the param). If multi-shot
+   storyboarding becomes a desired user feature for o3, add the same
+   `multi_prompt` textarea param as kling-v3.
 
 4. **Duration enum completeness** — all three nodes expose only 3–4 duration
    options out of the full 3–15 range. This is intentional (avoid a 13-item
    dropdown) but could be changed to a numeric slider if user feedback warrants it.
+
+5. **Saved-graph compatibility** — removed params (`resolution`, `ref_video1/2/3`,
+   `aspect_ratio` for v2.1) may still be present in old saved graphs'
+   `node.params`. The universal handler forwards all params to FAL, which may
+   reject them as unknown keys (400 error) or silently ignore them. Investigate
+   FAL's behavior on unknown body keys before users report errors. If FAL rejects,
+   consider param-stripping logic in the wrapper handlers.
