@@ -251,7 +251,7 @@ async def test_extended_thinking_sends_thinking_block():
 
 @pytest.mark.asyncio
 async def test_extended_thinking_budget_clamps_to_minimum():
-    """budget_tokens must be >= 1024 per API docs."""
+    """budget_tokens must be clamped to exactly 1024 when user sets a value below the floor."""
     fake_response = FakeStreamResponse(_make_sse_lines(["ok"]))
     with patch("execution.stream_runner.httpx.AsyncClient") as MockClient:
         mock_client = AsyncMock()
@@ -267,7 +267,73 @@ async def test_extended_thinking_budget_clamps_to_minimum():
         )
 
     body = mock_client.stream.call_args.kwargs.get("json") or mock_client.stream.call_args[1].get("json")
-    assert body["thinking"]["budget_tokens"] >= 1024
+    assert body["thinking"]["budget_tokens"] == 1024
+
+
+@pytest.mark.asyncio
+async def test_extended_thinking_overrides_user_temperature():
+    """When extended_thinking is enabled, temperature=1 must be forced regardless of user-set value."""
+    fake_response = FakeStreamResponse(_make_sse_lines(["ok"]))
+    with patch("execution.stream_runner.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.stream = MagicMock(return_value=fake_response)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        await handle_claude_chat(
+            _make_node({"model": "claude-sonnet-4-6", "max_tokens": 16000, "temperature": 0.5, "extended_thinking": True, "thinkingBudget": 5000}),
+            {"messages": PortValueDict(type="Text", value="think hard")},
+            {"ANTHROPIC_API_KEY": "sk-ant-test"},
+        )
+
+    body = mock_client.stream.call_args.kwargs.get("json") or mock_client.stream.call_args[1].get("json")
+    assert body["temperature"] == 1, "temperature must be forced to 1 when extended_thinking is on, overriding user value"
+    assert body["thinking"] == {"type": "enabled", "budget_tokens": 5000}
+
+
+@pytest.mark.asyncio
+async def test_extended_thinking_not_sent_when_disabled():
+    """No thinking block when extended_thinking is False; user temperature is preserved."""
+    fake_response = FakeStreamResponse(_make_sse_lines(["ok"]))
+    with patch("execution.stream_runner.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.stream = MagicMock(return_value=fake_response)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        await handle_claude_chat(
+            _make_node({"model": "claude-sonnet-4-6", "max_tokens": 4096, "extended_thinking": False, "temperature": 0.3}),
+            {"messages": PortValueDict(type="Text", value="test")},
+            {"ANTHROPIC_API_KEY": "sk-ant-test"},
+        )
+
+    body = mock_client.stream.call_args.kwargs.get("json") or mock_client.stream.call_args[1].get("json")
+    assert "thinking" not in body, "thinking block must not be sent when extended_thinking is False"
+    assert body.get("temperature") == 0.3, "user-set temperature must be preserved when thinking is disabled"
+
+
+@pytest.mark.asyncio
+async def test_top_p_omitted_when_temperature_set():
+    """Anthropic API requires temperature OR top_p, not both — top_p drops when both are set."""
+    fake_response = FakeStreamResponse(_make_sse_lines(["ok"]))
+    with patch("execution.stream_runner.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.stream = MagicMock(return_value=fake_response)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        await handle_claude_chat(
+            _make_node({"model": "claude-sonnet-4-6", "max_tokens": 1024, "temperature": 0.5, "top_p": 0.9}),
+            {"messages": PortValueDict(type="Text", value="test")},
+            {"ANTHROPIC_API_KEY": "sk-ant-test"},
+        )
+
+    body = mock_client.stream.call_args.kwargs.get("json") or mock_client.stream.call_args[1].get("json")
+    assert body.get("temperature") == 0.5
+    assert "top_p" not in body, "top_p must be omitted when temperature is also set (Anthropic API constraint)"
 
 
 def test_model_lineup_current():

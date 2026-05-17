@@ -135,12 +135,16 @@ entirely absent. `claude-opus-4-7` is the current flagship.
    Thinking content is not surfaced to the output. This is acceptable for now but means
    users cannot see the model's reasoning chain in the UI.
 
-2. **`thinkingBudget` default** — The handler defaults to 10,000 tokens when
-   `thinkingBudget` is unset. The registry param has no `default` field, so the UI
-   shows a placeholder. Aligning the registry default with the handler default (10,000)
-   would make behavior predictable.
+2. **`thinkingBudget` default** — Resolved: both registries now carry `"default": 10000`,
+   matching the handler fallback. UI will show 10,000 as the pre-filled value.
 
 3. **`max_tokens` upper bound per model** — The registry caps `max_tokens` at 200,000.
    Actual output limits vary: Opus 4.7 → 128k, Sonnet 4.6 → 64k, Haiku 4.5 → 64k.
    A user setting `max_tokens=200000` on Haiku will get an API error. Per-model caps
    would be more accurate; currently using a conservative shared ceiling.
+
+4. **Saved-graph compatibility for deprecated models** — Graphs saved before the model
+   lineup audit that selected `claude-opus-4-20250514` (deprecated, retiring 2026-06-15)
+   will continue to execute without error until that date. After 2026-06-15 the Anthropic
+   API will reject the model ID and the node will error on run. Users with saved graphs
+   should re-open the node and switch to `claude-opus-4-7` before that date.

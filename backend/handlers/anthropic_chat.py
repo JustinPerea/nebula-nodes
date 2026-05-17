@@ -62,7 +62,7 @@ async def handle_claude_chat(
         request_body["temperature"] = float(temperature)
 
     top_p = node.params.get("top_p")
-    if top_p is not None:
+    if top_p is not None and "temperature" not in request_body:
         request_body["top_p"] = float(top_p)
 
     stop_sequences_raw = node.params.get("stop_sequences")

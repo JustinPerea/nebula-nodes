@@ -166,6 +166,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         label: 'Thinking Budget',
         type: 'integer',
         required: false,
+        default: 10000,
         placeholder: 'Default (min 1024)',
         min: 1024,
         max: 200000,
