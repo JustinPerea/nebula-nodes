@@ -17,7 +17,7 @@ async def _resolve_version(owner: str, name: str, api_key: str) -> str:
     async with httpx.AsyncClient(timeout=30.0) as client:
         resp = await client.get(
             f"{REPLICATE_API_BASE}/models/{owner}/{name}",
-            headers={"Authorization": f"Token {api_key}"},
+            headers={"Authorization": f"Bearer {api_key}"},
         )
         if resp.status_code != 200:
             raise RuntimeError(f"Failed to fetch Replicate model {owner}/{name}: {resp.status_code} {resp.text}")
@@ -104,7 +104,7 @@ async def handle_replicate_universal(
         submit_url=f"{REPLICATE_API_BASE}/predictions",
         poll_url_template=f"{REPLICATE_API_BASE}/predictions/{{task_id}}",
         headers={
-            "Authorization": f"Token {api_key}",
+            "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
         },
         terminal_success={"succeeded"},

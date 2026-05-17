@@ -114,3 +114,54 @@ async def test_resolves_version_when_not_cached():
             )
 
     mock_resolve.assert_called_once_with("owner", "model", "r8_test")
+
+
+@pytest.mark.asyncio
+async def test_auth_header_uses_bearer():
+    """Authorization header must use 'Bearer' prefix, not legacy 'Token'.
+
+    Verified 2026-05-17 against https://replicate.com/docs/reference/http:
+    'The token must be prefixed by "Bearer", followed by a space and the token value.'
+    Token prefix is a legacy alias still accepted by the API but no longer documented.
+    """
+    with patch("handlers.replicate_universal.async_poll_execute", new_callable=AsyncMock) as mock_poll:
+        mock_poll.return_value = {"status": "succeeded", "output": "done"}
+
+        await handle_replicate_universal(
+            _make_node(),
+            {"prompt": PortValueDict(type="Text", value="test")},
+            {"REPLICATE_API_TOKEN": "r8_abc123"},
+            emit=AsyncMock(),
+        )
+
+    call_kwargs = mock_poll.call_args.kwargs
+    config = call_kwargs.get("config") or mock_poll.call_args[1].get("config")
+    auth = config.headers["Authorization"]
+    assert auth == "Bearer r8_abc123", (
+        f"Expected 'Bearer r8_abc123', got {auth!r}. "
+        "Replicate docs now specify Bearer prefix; Token prefix is legacy."
+    )
+
+
+@pytest.mark.asyncio
+async def test_submit_body_uses_version_field():
+    """Prediction submit body must use 'version' key with a version ID.
+
+    Verified 2026-05-17: POST /v1/predictions expects {'version': '<64-char-id>', 'input': {...}}.
+    Source: https://replicate.com/docs/reference/http
+    """
+    with patch("handlers.replicate_universal.async_poll_execute", new_callable=AsyncMock) as mock_poll:
+        mock_poll.return_value = {"status": "succeeded", "output": "result"}
+
+        await handle_replicate_universal(
+            _make_node({"model_id": "stability-ai/sdxl", "_version_id": "abc-v1"}),
+            {"prompt": PortValueDict(type="Text", value="a dog")},
+            {"REPLICATE_API_TOKEN": "r8_test"},
+            emit=AsyncMock(),
+        )
+
+    call_kwargs = mock_poll.call_args.kwargs
+    body = call_kwargs.get("submit_body") or mock_poll.call_args[1].get("submit_body")
+    assert "version" in body, "Submit body must contain 'version' key"
+    assert body["version"] == "abc-v1"
+    assert "input" in body, "Submit body must contain 'input' key"

@@ -96,7 +96,7 @@ async def _handle_text_streaming(
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
             "HTTP-Referer": "http://localhost:5173",
-            "X-Title": "Nebula Nodes",
+            "X-OpenRouter-Title": "Nebula Nodes",
         },
         event_type_filter=None,  # OpenRouter sends standard SSE without event types
         delta_path="choices.0.delta.content",
@@ -134,7 +134,7 @@ async def _handle_image_generation(
                 "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json",
                 "HTTP-Referer": "http://localhost:5173",
-                "X-Title": "Nebula Nodes",
+                "X-OpenRouter-Title": "Nebula Nodes",
             },
             json=request_body,
         )
@@ -143,13 +143,25 @@ async def _handle_image_generation(
 
     data = resp.json()
 
-    # Check for images in the non-standard location
+    # Image output lives in choices[0].message.images[] as objects:
+    # {"type": "image_url", "image_url": {"url": "data:image/png;base64,<b64>"}}
+    # Verified 2026-05-17 against https://openrouter.ai/docs/guides/overview/multimodal/image-generation
     message = data.get("choices", [{}])[0].get("message", {})
     images = message.get("images", [])
 
     if images:
-        # Save first image
-        b64_data = images[0]
+        # Extract base64 from the data URI in image_url.url
+        first = images[0]
+        if isinstance(first, dict):
+            data_uri = first.get("image_url", {}).get("url", "")
+        else:
+            # Fallback: treat as raw base64 string (older/undocumented shape)
+            data_uri = str(first)
+        if data_uri.startswith("data:"):
+            # Strip "data:<mime>;base64," prefix
+            b64_data = data_uri.split(",", 1)[-1]
+        else:
+            b64_data = data_uri
         run_dir = get_run_dir()
         file_path = save_base64_image(b64_data, run_dir, extension="png")
         return {"image": {"type": "Image", "value": str(file_path)}}

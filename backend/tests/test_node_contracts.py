@@ -603,3 +603,40 @@ def test_researched_provider_corrections_are_pinned(definitions: dict[str, dict[
     assert "Image" not in recraft_svg_out_types, (
         "recraft-v4-svg must not have Image output port (SVG nodes output SVG only)"
     )
+
+    # --- Universal nodes (verified 2026-05-17 against provider docs) ---
+
+    # replicate-universal: envKeyName must be REPLICATE_API_TOKEN; executionPattern async-poll;
+    # apiEndpoint must be the v1/predictions URL.
+    # Auth: Bearer prefix (docs: https://replicate.com/docs/reference/http).
+    rep = definitions["replicate-universal"]
+    assert rep["envKeyName"] == "REPLICATE_API_TOKEN", (
+        "replicate-universal must declare REPLICATE_API_TOKEN as the required env key"
+    )
+    assert rep["executionPattern"] == "async-poll"
+    assert rep["apiEndpoint"] == "https://api.replicate.com/v1/predictions"
+
+    # openrouter-universal: envKeyName must be OPENROUTER_API_KEY; executionPattern stream;
+    # endpoint is the OpenAI-compatible chat completions URL.
+    # Auth: Bearer prefix; attribution header is X-OpenRouter-Title (not legacy X-Title).
+    # Source: https://openrouter.ai/docs/api/reference/authentication
+    orr = definitions["openrouter-universal"]
+    assert orr["envKeyName"] == "OPENROUTER_API_KEY", (
+        "openrouter-universal must declare OPENROUTER_API_KEY as the required env key"
+    )
+    assert orr["executionPattern"] == "stream"
+    assert orr["apiEndpoint"] == "https://openrouter.ai/api/v1/chat/completions"
+
+    # nous-portal-universal: envKeyName must be [] (empty list) — auth is Hermes OAuth,
+    # not an env-sourced API key.
+    # Verified 2026-05-17: unauthenticated POST returns HTTP 402 (x402 payment challenge).
+    # Hermes manages agent_key lifecycle; handler calls load_nous_credential().
+    # envKeyName=[] is INTENTIONAL — this is the only node that uses OAuth-based auth.
+    nous = definitions["nous-portal-universal"]
+    env_key = nous["envKeyName"]
+    assert isinstance(env_key, list) and len(env_key) == 0, (
+        "nous-portal-universal envKeyName must be [] — auth is Hermes OAuth, not env-sourced. "
+        "This is intentional: the handler calls load_nous_credential() to read ~/.hermes/…/auth.json."
+    )
+    assert nous["executionPattern"] == "stream"
+    assert nous["apiProvider"] == "nous"
