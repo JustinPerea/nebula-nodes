@@ -1582,7 +1582,7 @@ Generated: 2026-05-17 | Nodes: 100 | Source: [`backend/data/node_definitions.jso
 | **Execution** | async-poll |
 | **Inputs** | Front Image (Image)*, Back Image (Image), Left Image (Image), Right Image (Image) |
 | **Outputs** | Mesh (Mesh) |
-| **Audited** | 2026-05-10 |
+| **Audited** | 2026-05-17 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -1604,7 +1604,7 @@ Generated: 2026-05-17 | Nodes: 100 | Source: [`backend/data/node_definitions.jso
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text)* |
 | **Outputs** | Mesh (Mesh) |
-| **Audited** | 2026-05-10 |
+| **Audited** | 2026-05-17 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|

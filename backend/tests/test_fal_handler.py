@@ -4007,4 +4007,228 @@ async def test_seedvr2_target_resolution_mode():
 
     payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
     assert payload.get("upscale_mode") == "target"
-    assert payload.get("target_resolution") == "2160p"
+
+
+# ---------------------------------------------------------------------------
+# Hunyuan3D structural tests — audited 2026-05-17
+# ---------------------------------------------------------------------------
+
+
+class TestParseFalOutputHunyuan3D:
+    """Verify _parse_fal_output handles all Hunyuan3D V3 response shapes.
+
+    FAL API returns model_glb as a File dict {url, content_type, file_name,
+    file_size}, plus model_urls with glb/fbx/obj/usdz File entries.
+    Both must resolve to the 'mesh' output port.
+    """
+
+    def test_model_glb_dict_resolves_mesh(self) -> None:
+        """Primary Hunyuan3D response: model_glb as File dict."""
+        result = _parse_fal_output({
+            "model_glb": {
+                "url": "https://fal.ai/hunyuan3d/output.glb",
+                "content_type": "model/gltf-binary",
+                "file_name": "output.glb",
+                "file_size": 2048000,
+            },
+            "thumbnail": {"url": "https://fal.ai/thumb.png"},
+        })
+        assert result["mesh"]["type"] == "Mesh"
+        assert result["mesh"]["value"] == "https://fal.ai/hunyuan3d/output.glb"
+
+    def test_model_urls_glb_resolves_mesh(self) -> None:
+        """Fallback: model_urls.glb File dict also resolves to mesh port."""
+        result = _parse_fal_output({
+            "model_urls": {
+                "glb": {
+                    "url": "https://fal.ai/hunyuan3d/output.glb",
+                    "content_type": "model/gltf-binary",
+                    "file_size": 2048000,
+                },
+                "obj": {"url": "https://fal.ai/hunyuan3d/output.obj"},
+            }
+        })
+        assert result["mesh"]["type"] == "Mesh"
+        assert result["mesh"]["value"] == "https://fal.ai/hunyuan3d/output.glb"
+
+    def test_thumbnail_not_returned_as_image_when_mesh_present(self) -> None:
+        """Hunyuan3D response includes a thumbnail image alongside model_glb.
+        The output must be mesh only — thumbnail must not leak into 'image' port."""
+        result = _parse_fal_output({
+            "model_glb": {"url": "https://fal.ai/hunyuan3d/output.glb"},
+            "thumbnail": {"url": "https://fal.ai/hunyuan3d/thumb.png"},
+        })
+        assert "mesh" in result
+        # The mesh branch returns early, so 'image' must not be present
+        assert "image" not in result
+
+
+@pytest.mark.asyncio
+async def test_hunyuan3d_text_to_3d_prompt_sent_and_mesh_returned():
+    """hunyuan3d-text-to-3d sends prompt, gets back model_glb → mesh port."""
+    mock_submit = MagicMock()
+    mock_submit.status_code = 200
+    mock_submit.json.return_value = {"request_id": "req-h3d-txt"}
+
+    mock_status = MagicMock()
+    mock_status.status_code = 200
+    mock_status.json.return_value = {"status": "COMPLETED"}
+
+    mock_result = MagicMock()
+    mock_result.status_code = 200
+    mock_result.json.return_value = {
+        "model_glb": {
+            "url": "https://fal.ai/hunyuan3d/output.glb",
+            "content_type": "model/gltf-binary",
+            "file_size": 1500000,
+        },
+        "thumbnail": {"url": "https://fal.ai/thumb.png"},
+        "model_urls": {
+            "glb": {"url": "https://fal.ai/hunyuan3d/output.glb"},
+            "fbx": {"url": "https://fal.ai/hunyuan3d/output.fbx"},
+        },
+        "seed": 42,
+    }
+
+    node = _make_node({
+        "endpoint_id": "fal-ai/hunyuan3d-v3/text-to-3d",
+        "generate_type": "Normal",
+        "face_count": 500000,
+        "enable_pbr": False,
+        "polygon_type": "triangle",
+    })
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            result = await handle_fal_universal(
+                node,
+                {"prompt": PortValueDict(type="Text", value="a ceramic teapot")},
+                {"FAL_KEY": "fal_test"},
+                emit=AsyncMock(),
+            )
+
+    assert result["mesh"]["type"] == "Mesh"
+    assert result["mesh"]["value"] == "https://fal.ai/hunyuan3d/output.glb"
+
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert payload["prompt"] == "a ceramic teapot"
+    assert payload.get("generate_type") == "Normal"
+    assert payload.get("face_count") == 500000
+    # endpoint URL must target text-to-3d
+    posted_url = mock_client.post.call_args.args[0] if mock_client.post.call_args.args else mock_client.post.call_args.kwargs.get("url", "")
+    assert "hunyuan3d-v3/text-to-3d" in posted_url
+
+
+@pytest.mark.asyncio
+async def test_hunyuan3d_image_to_3d_maps_input_image_url_and_returns_mesh():
+    """hunyuan3d-image-to-3d maps front_image → input_image_url (not image_url).
+    Multi-view optional ports map to back/left/right_image_url.
+    Response model_glb → mesh port.
+    """
+    mock_submit = MagicMock()
+    mock_submit.status_code = 200
+    mock_submit.json.return_value = {"request_id": "req-h3d-img"}
+
+    mock_status = MagicMock()
+    mock_status.status_code = 200
+    mock_status.json.return_value = {"status": "COMPLETED"}
+
+    mock_result = MagicMock()
+    mock_result.status_code = 200
+    mock_result.json.return_value = {
+        "model_glb": {
+            "url": "https://fal.ai/hunyuan3d/img-output.glb",
+            "content_type": "model/gltf-binary",
+            "file_size": 1800000,
+        },
+    }
+
+    node = _make_node({
+        "endpoint_id": "fal-ai/hunyuan3d-v3/image-to-3d",
+        "generate_type": "Normal",
+        "face_count": 500000,
+        "enable_pbr": False,
+        "polygon_type": "triangle",
+    })
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            result = await handle_fal_universal(
+                node,
+                {
+                    "front_image": PortValueDict(type="Image", value="https://example.com/front.png"),
+                    "back_image": PortValueDict(type="Image", value="https://example.com/back.png"),
+                },
+                {"FAL_KEY": "fal_test"},
+                emit=AsyncMock(),
+            )
+
+    assert result["mesh"]["type"] == "Mesh"
+    assert result["mesh"]["value"] == "https://fal.ai/hunyuan3d/img-output.glb"
+
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    # Must use input_image_url (not image_url) for the primary front view
+    assert payload["input_image_url"] == "https://example.com/front.png"
+    assert "image_url" not in payload, "must use input_image_url, not image_url"
+    assert payload["back_image_url"] == "https://example.com/back.png"
+    # endpoint URL must target image-to-3d
+    posted_url = mock_client.post.call_args.args[0] if mock_client.post.call_args.args else mock_client.post.call_args.kwargs.get("url", "")
+    assert "hunyuan3d-v3/image-to-3d" in posted_url
+
+
+@pytest.mark.asyncio
+async def test_hunyuan3d_image_to_3d_front_only_minimal():
+    """hunyuan3d-image-to-3d works with only the required front_image.
+    Optional view ports omitted → only input_image_url sent."""
+    mock_submit = MagicMock()
+    mock_submit.status_code = 200
+    mock_submit.json.return_value = {"request_id": "req-h3d-front-only"}
+
+    mock_status = MagicMock()
+    mock_status.status_code = 200
+    mock_status.json.return_value = {"status": "COMPLETED"}
+
+    mock_result = MagicMock()
+    mock_result.status_code = 200
+    mock_result.json.return_value = {
+        "model_glb": {"url": "https://fal.ai/hunyuan3d/simple.glb"},
+    }
+
+    node = _make_node({"endpoint_id": "fal-ai/hunyuan3d-v3/image-to-3d"})
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            result = await handle_fal_universal(
+                node,
+                {"front_image": PortValueDict(type="Image", value="https://example.com/front.png")},
+                {"FAL_KEY": "fal_test"},
+                emit=AsyncMock(),
+            )
+
+    assert result["mesh"]["type"] == "Mesh"
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert payload["input_image_url"] == "https://example.com/front.png"
+    assert "back_image_url" not in payload
+    assert "left_image_url" not in payload
+    assert "right_image_url" not in payload

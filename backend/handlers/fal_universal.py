@@ -264,9 +264,12 @@ def _parse_fal_output(data: dict[str, Any]) -> dict[str, Any]:
     """Parse FAL output into our standard port format."""
     # 3D mesh output — check before images since some 3D endpoints also return preview images
     # Meshy pattern: {"model_urls": {"glb": "url", "fbx": "url"}}
+    # Hunyuan3D also populates model_urls but glb is a File dict {"url": "...", ...}
     model_urls = data.get("model_urls", {})
     if isinstance(model_urls, dict) and model_urls.get("glb"):
-        return {"mesh": {"type": "Mesh", "value": model_urls["glb"]}}
+        glb_entry = model_urls["glb"]
+        glb_url = glb_entry["url"] if isinstance(glb_entry, dict) else glb_entry
+        return {"mesh": {"type": "Mesh", "value": glb_url}}
 
     # Hunyuan/generic pattern: {"glb": {"url": "..."}} or {"glb": "url"}
     glb = data.get("glb")
