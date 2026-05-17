@@ -433,3 +433,72 @@ def test_researched_provider_corrections_are_pinned(definitions: dict[str, dict[
     assert "video2" in wan_r2v_input_ids, "wan-2-6-r2v must have video2 input port"
     assert "video3" in wan_r2v_input_ids, "wan-2-6-r2v must have video3 input port"
     assert "image" not in gpt2_edit_input_ids, "gpt-image-2-edit must not use singular 'image' input port"
+
+    # --- Luma Ray 2 nodes (verified 2026-05-17 against fal.ai/models/fal-ai/luma-dream-machine/ray-2/api) ---
+
+    # luma-ray2-t2v: aspect_ratio must expose all 6 API options (16:9, 9:16, 4:3, 3:4, 21:9, 9:21);
+    # must NOT expose 1:1 (not in API); resolution default must be 540p (API default, not 720p).
+    luma_t2v = definitions["luma-ray2-t2v"]
+    luma_t2v_ar_values = {o["value"] for o in _param_by_key(luma_t2v, "aspect_ratio")["options"]}
+    assert luma_t2v_ar_values == {"16:9", "9:16", "4:3", "3:4", "21:9", "9:21"}, (
+        "luma-ray2-t2v aspect_ratio must expose all 6 API options (16:9, 9:16, 4:3, 3:4, 21:9, 9:21)"
+    )
+    assert "1:1" not in luma_t2v_ar_values, (
+        "luma-ray2-t2v must not expose 1:1 aspect_ratio (not in API)"
+    )
+    assert _param_by_key(luma_t2v, "resolution")["default"] == "540p", (
+        "luma-ray2-t2v resolution default must be '540p' (API default)"
+    )
+    luma_t2v_duration_values = {o["value"] for o in _param_by_key(luma_t2v, "duration")["options"]}
+    assert luma_t2v_duration_values == {"5s", "9s"}, (
+        "luma-ray2-t2v duration must be {'5s', '9s'}"
+    )
+    assert luma_t2v["apiEndpoint"] == "fal-ai/luma-dream-machine/ray-2"
+
+    # luma-ray2-i2v: aspect_ratio must expose all 6 API options including 9:21.
+    luma_i2v = definitions["luma-ray2-i2v"]
+    luma_i2v_ar_values = {o["value"] for o in _param_by_key(luma_i2v, "aspect_ratio")["options"]}
+    assert luma_i2v_ar_values == {"16:9", "9:16", "4:3", "3:4", "21:9", "9:21"}, (
+        "luma-ray2-i2v aspect_ratio must expose all 6 API options including 9:21"
+    )
+    assert luma_i2v["apiEndpoint"] == "fal-ai/luma-dream-machine/ray-2/image-to-video"
+    luma_i2v_input_ids = {p["id"] for p in luma_i2v["inputPorts"]}
+    assert "image" in luma_i2v_input_ids, "luma-ray2-i2v must have image input port"
+    assert "end_image" in luma_i2v_input_ids, "luma-ray2-i2v must have end_image input port"
+
+    # luma-ray2-flash-modify: must have mode param (not aspect_ratio/resolution/duration);
+    # prompt must NOT be required; must have image input port for reference image.
+    luma_fm = definitions["luma-ray2-flash-modify"]
+    luma_fm_mode = _param_by_key(luma_fm, "mode")
+    luma_fm_mode_values = {o["value"] for o in luma_fm_mode["options"]}
+    assert luma_fm_mode_values == {
+        "adhere_1", "adhere_2", "adhere_3",
+        "flex_1", "flex_2", "flex_3",
+        "reimagine_1", "reimagine_2", "reimagine_3",
+    }, "luma-ray2-flash-modify mode must have all 9 ModeEnum values"
+    assert luma_fm_mode["default"] == "flex_1", (
+        "luma-ray2-flash-modify mode default must be 'flex_1'"
+    )
+    # Must NOT have aspect_ratio, resolution, or duration — they are not in the flash-modify API
+    luma_fm_param_keys = {
+        p["key"]
+        for group in ("params", "sharedParams", "falParams", "directParams")
+        for p in luma_fm.get(group, []) or []
+    }
+    assert "aspect_ratio" not in luma_fm_param_keys, (
+        "luma-ray2-flash-modify must not have aspect_ratio param (not in API)"
+    )
+    assert "resolution" not in luma_fm_param_keys, (
+        "luma-ray2-flash-modify must not have resolution param (not in API)"
+    )
+    assert "duration" not in luma_fm_param_keys, (
+        "luma-ray2-flash-modify must not have duration param (not in API)"
+    )
+    luma_fm_input_ids = {p["id"] for p in luma_fm["inputPorts"]}
+    assert "video" in luma_fm_input_ids, "luma-ray2-flash-modify must have video input port"
+    assert "image" in luma_fm_input_ids, "luma-ray2-flash-modify must have image input port (reference)"
+    luma_fm_prompt_port = next(p for p in luma_fm["inputPorts"] if p["id"] == "prompt")
+    assert luma_fm_prompt_port["required"] is False, (
+        "luma-ray2-flash-modify prompt port must not be required (API: optional)"
+    )
+    assert luma_fm["apiEndpoint"] == "fal-ai/luma-dream-machine/ray-2-flash/modify"

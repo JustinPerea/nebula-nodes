@@ -1411,3 +1411,346 @@ async def test_wan26_r2v_duration_is_integer():
     assert payload["duration"] == 10, f"duration must be integer 10, got {payload.get('duration')!r}"
     assert payload["duration"] != "10s", "duration must not use '10s' string format"
     assert "audio" not in payload  # raw port name must not leak into request
+
+
+# ---------------------------------------------------------------------------
+# Luma Ray 2 wrapper structural tests (audit 2026-05-17)
+# ---------------------------------------------------------------------------
+
+
+# --- luma-ray2-t2v ---
+
+@pytest.mark.asyncio
+async def test_luma_ray2_t2v_endpoint_injected():
+    """_luma_ray2_handler injects fal-ai/luma-dream-machine/ray-2."""
+    mock_submit, mock_status, mock_result = _make_video_poll_mocks()
+
+    node = GraphNode(id="luma-t2v", definitionId="luma-ray2-t2v", params={})
+    node.params.setdefault("endpoint_id", "fal-ai/luma-dream-machine/ray-2")
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            result = await handle_fal_universal(
+                node,
+                {"prompt": PortValueDict(type="Text", value="a cinematic sunrise")},
+                {"FAL_KEY": "fal_test"},
+                emit=AsyncMock(),
+            )
+
+    assert result["video"]["type"] == "Video"
+    posted_url = mock_client.post.call_args.args[0] if mock_client.post.call_args.args else mock_client.post.call_args.kwargs.get("url", "")
+    assert "luma-dream-machine/ray-2" in posted_url
+
+
+@pytest.mark.asyncio
+async def test_luma_ray2_t2v_key_params_forwarded():
+    """luma-ray2-t2v: aspect_ratio, duration, resolution, loop all forwarded correctly."""
+    mock_submit, mock_status, mock_result = _make_video_poll_mocks()
+
+    node = GraphNode(
+        id="luma-t2v-params",
+        definitionId="luma-ray2-t2v",
+        params={
+            "endpoint_id": "fal-ai/luma-dream-machine/ray-2",
+            "aspect_ratio": "9:16",
+            "duration": "9s",
+            "resolution": "540p",
+            "loop": True,
+        },
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            await handle_fal_universal(
+                node,
+                {"prompt": PortValueDict(type="Text", value="sunset over the ocean")},
+                {"FAL_KEY": "fal_test"},
+                emit=AsyncMock(),
+            )
+
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert payload["aspect_ratio"] == "9:16"
+    assert payload["duration"] == "9s"
+    assert payload["resolution"] == "540p"
+    assert payload["loop"] is True
+    assert "endpoint_id" not in payload, "endpoint_id must not be forwarded to FAL"
+
+
+@pytest.mark.asyncio
+async def test_luma_ray2_t2v_ultrawide_aspect_ratios_forwarded():
+    """luma-ray2-t2v accepts 21:9 and 9:21 ultrawide aspect ratios."""
+    mock_submit, mock_status, mock_result = _make_video_poll_mocks()
+
+    node = GraphNode(
+        id="luma-t2v-ultrawide",
+        definitionId="luma-ray2-t2v",
+        params={
+            "endpoint_id": "fal-ai/luma-dream-machine/ray-2",
+            "aspect_ratio": "21:9",
+        },
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            await handle_fal_universal(
+                node,
+                {"prompt": PortValueDict(type="Text", value="cinematic widescreen")},
+                {"FAL_KEY": "fal_test"},
+                emit=AsyncMock(),
+            )
+
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert payload["aspect_ratio"] == "21:9"
+
+
+# --- luma-ray2-i2v ---
+
+@pytest.mark.asyncio
+async def test_luma_ray2_i2v_endpoint_injected():
+    """_luma_ray2_i2v_handler injects fal-ai/luma-dream-machine/ray-2/image-to-video."""
+    mock_submit, mock_status, mock_result = _make_video_poll_mocks()
+
+    node = GraphNode(id="luma-i2v", definitionId="luma-ray2-i2v", params={})
+    node.params.setdefault("endpoint_id", "fal-ai/luma-dream-machine/ray-2/image-to-video")
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            result = await handle_fal_universal(
+                node,
+                {
+                    "image": PortValueDict(type="Image", value="https://example.com/frame.png"),
+                    "prompt": PortValueDict(type="Text", value="pan left slowly"),
+                },
+                {"FAL_KEY": "fal_test"},
+                emit=AsyncMock(),
+            )
+
+    assert result["video"]["type"] == "Video"
+    posted_url = mock_client.post.call_args.args[0] if mock_client.post.call_args.args else mock_client.post.call_args.kwargs.get("url", "")
+    assert "luma-dream-machine/ray-2/image-to-video" in posted_url
+
+
+@pytest.mark.asyncio
+async def test_luma_ray2_i2v_image_maps_to_image_url():
+    """luma-ray2-i2v image port maps to image_url; end_image maps to end_image_url."""
+    mock_submit, mock_status, mock_result = _make_video_poll_mocks()
+
+    node = GraphNode(
+        id="luma-i2v-img",
+        definitionId="luma-ray2-i2v",
+        params={
+            "endpoint_id": "fal-ai/luma-dream-machine/ray-2/image-to-video",
+            "aspect_ratio": "9:21",
+            "duration": "5s",
+            "resolution": "720p",
+        },
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            await handle_fal_universal(
+                node,
+                {
+                    "image": PortValueDict(type="Image", value="https://example.com/start.jpg"),
+                    "end_image": PortValueDict(type="Image", value="https://example.com/end.jpg"),
+                    "prompt": PortValueDict(type="Text", value="smooth transition"),
+                },
+                {"FAL_KEY": "fal_test"},
+                emit=AsyncMock(),
+            )
+
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert payload["image_url"] == "https://example.com/start.jpg"
+    assert payload["end_image_url"] == "https://example.com/end.jpg"
+    assert payload["aspect_ratio"] == "9:21"
+    assert payload["duration"] == "5s"
+    assert payload["resolution"] == "720p"
+
+
+# --- luma-ray2-flash-modify ---
+
+@pytest.mark.asyncio
+async def test_luma_ray2_flash_modify_endpoint_injected():
+    """_luma_ray2_flash_modify_handler injects fal-ai/luma-dream-machine/ray-2-flash/modify."""
+    mock_submit, mock_status, mock_result = _make_video_poll_mocks()
+
+    node = GraphNode(id="luma-fm", definitionId="luma-ray2-flash-modify", params={})
+    node.params.setdefault("endpoint_id", "fal-ai/luma-dream-machine/ray-2-flash/modify")
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            result = await handle_fal_universal(
+                node,
+                {
+                    "video": PortValueDict(type="Video", value="https://example.com/clip.mp4"),
+                    "prompt": PortValueDict(type="Text", value="make it cinematic"),
+                },
+                {"FAL_KEY": "fal_test"},
+                emit=AsyncMock(),
+            )
+
+    assert result["video"]["type"] == "Video"
+    posted_url = mock_client.post.call_args.args[0] if mock_client.post.call_args.args else mock_client.post.call_args.kwargs.get("url", "")
+    assert "luma-dream-machine/ray-2-flash/modify" in posted_url
+
+
+@pytest.mark.asyncio
+async def test_luma_ray2_flash_modify_video_maps_to_video_url():
+    """luma-ray2-flash-modify video port maps to video_url; mode param forwarded."""
+    mock_submit, mock_status, mock_result = _make_video_poll_mocks()
+
+    node = GraphNode(
+        id="luma-fm-mode",
+        definitionId="luma-ray2-flash-modify",
+        params={
+            "endpoint_id": "fal-ai/luma-dream-machine/ray-2-flash/modify",
+            "mode": "reimagine_2",
+        },
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            await handle_fal_universal(
+                node,
+                {
+                    "video": PortValueDict(type="Video", value="https://example.com/source.mp4"),
+                    "prompt": PortValueDict(type="Text", value="restyle as anime"),
+                },
+                {"FAL_KEY": "fal_test"},
+                emit=AsyncMock(),
+            )
+
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert payload["video_url"] == "https://example.com/source.mp4"
+    assert payload["mode"] == "reimagine_2"
+    # aspect_ratio, resolution, duration must NOT appear — they are not API params
+    assert "aspect_ratio" not in payload, "aspect_ratio must not be sent to flash-modify API"
+    assert "resolution" not in payload, "resolution must not be sent to flash-modify API"
+    assert "duration" not in payload, "duration must not be sent to flash-modify API"
+
+
+@pytest.mark.asyncio
+async def test_luma_ray2_flash_modify_reference_image_maps_to_image_url():
+    """luma-ray2-flash-modify optional reference image port maps to image_url."""
+    mock_submit, mock_status, mock_result = _make_video_poll_mocks()
+
+    node = GraphNode(
+        id="luma-fm-ref",
+        definitionId="luma-ray2-flash-modify",
+        params={
+            "endpoint_id": "fal-ai/luma-dream-machine/ray-2-flash/modify",
+            "mode": "flex_1",
+        },
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            await handle_fal_universal(
+                node,
+                {
+                    "video": PortValueDict(type="Video", value="https://example.com/clip.mp4"),
+                    "image": PortValueDict(type="Image", value="https://example.com/style.jpg"),
+                },
+                {"FAL_KEY": "fal_test"},
+                emit=AsyncMock(),
+            )
+
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert payload["video_url"] == "https://example.com/clip.mp4"
+    assert payload["image_url"] == "https://example.com/style.jpg"
+    assert payload["mode"] == "flex_1"
+
+
+@pytest.mark.asyncio
+async def test_luma_ray2_flash_modify_without_prompt_still_works():
+    """luma-ray2-flash-modify prompt is optional — omitting it must not raise."""
+    mock_submit, mock_status, mock_result = _make_video_poll_mocks()
+
+    node = GraphNode(
+        id="luma-fm-no-prompt",
+        definitionId="luma-ray2-flash-modify",
+        params={
+            "endpoint_id": "fal-ai/luma-dream-machine/ray-2-flash/modify",
+            "mode": "adhere_1",
+        },
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            result = await handle_fal_universal(
+                node,
+                {
+                    "video": PortValueDict(type="Video", value="https://example.com/clip.mp4"),
+                    # no prompt connected
+                },
+                {"FAL_KEY": "fal_test"},
+                emit=AsyncMock(),
+            )
+
+    assert result["video"]["type"] == "Video"
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert payload["video_url"] == "https://example.com/clip.mp4"
+    assert "prompt" not in payload, "prompt must not appear in payload when not connected"

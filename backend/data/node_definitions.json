@@ -4605,10 +4605,6 @@
         "default": "16:9",
         "options": [
           {
-            "label": "1:1",
-            "value": "1:1"
-          },
-          {
             "label": "16:9",
             "value": "16:9"
           },
@@ -4623,6 +4619,14 @@
           {
             "label": "3:4",
             "value": "3:4"
+          },
+          {
+            "label": "21:9",
+            "value": "21:9"
+          },
+          {
+            "label": "9:21",
+            "value": "9:21"
           }
         ]
       },
@@ -4655,7 +4659,7 @@
         "label": "Resolution",
         "type": "enum",
         "required": false,
-        "default": "720p",
+        "default": "540p",
         "options": [
           {
             "label": "540p",
@@ -7126,6 +7130,10 @@
           {
             "label": "21:9",
             "value": "21:9"
+          },
+          {
+            "label": "9:21",
+            "value": "9:21"
           }
         ]
       },
@@ -7441,7 +7449,13 @@
         "id": "prompt",
         "label": "Prompt",
         "dataType": "Text",
-        "required": true
+        "required": false
+      },
+      {
+        "id": "image",
+        "label": "Reference Image",
+        "dataType": "Image",
+        "required": false
       }
     ],
     "outputPorts": [
@@ -7454,69 +7468,47 @@
     ],
     "params": [
       {
-        "key": "aspect_ratio",
-        "label": "Aspect Ratio",
+        "key": "mode",
+        "label": "Modification Mode",
         "type": "enum",
         "required": false,
-        "default": "16:9",
+        "default": "flex_1",
         "options": [
           {
-            "label": "16:9",
-            "value": "16:9"
+            "label": "Adhere 1 (least)",
+            "value": "adhere_1"
           },
           {
-            "label": "9:16",
-            "value": "9:16"
+            "label": "Adhere 2",
+            "value": "adhere_2"
           },
           {
-            "label": "4:3",
-            "value": "4:3"
+            "label": "Adhere 3",
+            "value": "adhere_3"
           },
           {
-            "label": "3:4",
-            "value": "3:4"
+            "label": "Flex 1",
+            "value": "flex_1"
           },
           {
-            "label": "21:9",
-            "value": "21:9"
-          }
-        ]
-      },
-      {
-        "key": "resolution",
-        "label": "Resolution",
-        "type": "enum",
-        "required": false,
-        "default": "540p",
-        "options": [
-          {
-            "label": "540p",
-            "value": "540p"
+            "label": "Flex 2",
+            "value": "flex_2"
           },
           {
-            "label": "720p",
-            "value": "720p"
+            "label": "Flex 3",
+            "value": "flex_3"
           },
           {
-            "label": "1080p",
-            "value": "1080p"
-          }
-        ]
-      },
-      {
-        "key": "duration",
-        "label": "Duration",
-        "type": "enum",
-        "required": false,
-        "default": "5s",
-        "options": [
-          {
-            "label": "5 seconds",
-            "value": "5s"
+            "label": "Reimagine 1",
+            "value": "reimagine_1"
           },
           {
-            "label": "9 seconds",
-            "value": "9s"
+            "label": "Reimagine 2",
+            "value": "reimagine_2"
+          },
+          {
+            "label": "Reimagine 3 (most)",
+            "value": "reimagine_3"
           }
         ]
       }
