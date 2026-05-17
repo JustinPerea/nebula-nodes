@@ -40,6 +40,7 @@ const VALID_PROVIDERS = new Set([
   'higgsfield',
   'meshy',
   'nous',
+  'utility',
 ]);
 const VALID_EXECUTION_PATTERNS = new Set(['sync', 'async-poll', 'stream']);
 const VALID_PORT_TYPES = new Set(['Text', 'Image', 'Video', 'Audio', 'Mask', 'Array', 'SVG', 'Mesh', 'Any']);
@@ -76,6 +77,7 @@ validateEnvExampleCoverage();
 validateReferenceCountWording();
 validatePinnedCorrections();
 validateLocalExecutionCoverage();
+validateLocalExecutionProvider();
 
 if (errors.length) {
   console.error(`Node contract check failed with ${errors.length} issue(s):`);
@@ -232,6 +234,21 @@ function validatePinnedCorrections() {
 function validateLocalExecutionCoverage() {
   for (const nodeId of LOCAL_EXECUTION_NODE_IDS) {
     if (!definitions[nodeId]) errors.push(`LOCAL_EXECUTION_NODE_IDS contains unknown node: ${nodeId}`);
+  }
+}
+
+function validateLocalExecutionProvider() {
+  for (const nodeId of LOCAL_EXECUTION_NODE_IDS) {
+    const definition = definitions[nodeId];
+    if (!definition) continue;
+    if (definition.apiProvider !== 'utility') {
+      errors.push(`${nodeId} is a local utility node and must have apiProvider: 'utility' (got '${definition.apiProvider}')`);
+    }
+    const env = definition.envKeyName;
+    const envIsEmpty = (Array.isArray(env) && env.length === 0) || env === '' || env == null;
+    if (!envIsEmpty) {
+      errors.push(`${nodeId} is a local utility node and must have empty envKeyName (got ${JSON.stringify(env)})`);
+    }
   }
 }
 

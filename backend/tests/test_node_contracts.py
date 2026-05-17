@@ -44,6 +44,7 @@ VALID_PROVIDERS = {
     "higgsfield",
     "meshy",
     "nous",
+    "utility",
 }
 VALID_EXECUTION_PATTERNS = {"sync", "async-poll", "stream"}
 VALID_PORT_TYPES = {"Text", "Image", "Video", "Audio", "Mask", "Array", "SVG", "Mesh", "Any"}
@@ -213,6 +214,28 @@ def _param_by_key(definition: dict[str, Any], key: str) -> dict[str, Any]:
             if param.get("key") == key:
                 return param
     raise AssertionError(f"Param {key!r} not found on {definition.get('id')}")
+
+
+def test_local_execution_nodes_have_utility_provider(definitions: dict[str, dict[str, Any]]) -> None:
+    errors: list[str] = []
+    for node_id in LOCAL_EXECUTION_NODE_IDS:
+        definition = definitions.get(node_id)
+        if definition is None:
+            errors.append(f"LOCAL_EXECUTION_NODE_IDS contains unknown node: {node_id}")
+            continue
+        if definition.get("apiProvider") != "utility":
+            errors.append(
+                f"{node_id} is a local utility node and must have apiProvider 'utility'"
+                f" (got {definition.get('apiProvider')!r})"
+            )
+        env_key = definition.get("envKeyName")
+        env_is_empty = (isinstance(env_key, list) and not env_key) or env_key in ("", None)
+        if not env_is_empty:
+            errors.append(
+                f"{node_id} is a local utility node and must have empty envKeyName"
+                f" (got {env_key!r})"
+            )
+    assert errors == []
 
 
 def test_researched_provider_corrections_are_pinned(definitions: dict[str, dict[str, Any]]) -> None:

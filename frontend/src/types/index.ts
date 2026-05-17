@@ -43,7 +43,8 @@ export type APIProvider =
   | 'bfl'
   | 'higgsfield'
   | 'meshy'
-  | 'nous';
+  | 'nous'
+  | 'utility';
 
 export interface PortDefinition {
   id: string;
