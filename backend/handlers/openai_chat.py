@@ -54,13 +54,29 @@ async def handle_openai_chat(
         "stream": True,
     }
 
-    max_tokens = node.params.get("max_tokens")
-    if max_tokens:
-        request_body["max_tokens"] = int(max_tokens)
+    max_completion_tokens = node.params.get("max_completion_tokens")
+    if max_completion_tokens:
+        request_body["max_completion_tokens"] = int(max_completion_tokens)
 
     temperature = node.params.get("temperature")
     if temperature is not None:
         request_body["temperature"] = float(temperature)
+
+    top_p = node.params.get("top_p")
+    if top_p is not None:
+        request_body["top_p"] = float(top_p)
+
+    frequency_penalty = node.params.get("frequency_penalty")
+    if frequency_penalty is not None:
+        request_body["frequency_penalty"] = float(frequency_penalty)
+
+    presence_penalty = node.params.get("presence_penalty")
+    if presence_penalty is not None:
+        request_body["presence_penalty"] = float(presence_penalty)
+
+    response_format = node.params.get("response_format")
+    if response_format and response_format != "text":
+        request_body["response_format"] = {"type": response_format}
 
     config = StreamConfig(
         url=OPENAI_CHAT_URL,

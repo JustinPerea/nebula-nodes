@@ -1581,10 +1581,12 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
           { label: 'GPT-4o', value: 'gpt-4o' },
           { label: 'GPT-4o Mini', value: 'gpt-4o-mini' },
           { label: 'GPT-4.1', value: 'gpt-4.1' },
+          { label: 'GPT-4.1 Mini', value: 'gpt-4.1-mini' },
+          { label: 'GPT-4.1 Nano', value: 'gpt-4.1-nano' },
         ],
       },
       {
-        key: 'max_tokens',
+        key: 'max_completion_tokens',
         label: 'Max Tokens',
         type: 'integer',
         required: false,
