@@ -8313,7 +8313,7 @@
     "displayName": "Grok Imagine Video",
     "category": "video-gen",
     "apiProvider": "xai",
-    "apiEndpoint": "https://api.x.ai/v1/images/generations",
+    "apiEndpoint": "https://api.x.ai/v1/videos/generations",
     "envKeyName": "XAI_API_KEY",
     "executionPattern": "async-poll",
     "inputPorts": [
@@ -8374,6 +8374,31 @@
           {
             "label": "3:4",
             "value": "3:4"
+          },
+          {
+            "label": "3:2",
+            "value": "3:2"
+          },
+          {
+            "label": "2:3",
+            "value": "2:3"
+          }
+        ]
+      },
+      {
+        "key": "resolution",
+        "label": "Resolution",
+        "type": "enum",
+        "required": false,
+        "default": "480p",
+        "options": [
+          {
+            "label": "480p",
+            "value": "480p"
+          },
+          {
+            "label": "720p",
+            "value": "720p"
           }
         ]
       }
@@ -8384,7 +8409,7 @@
     "displayName": "Higgsfield",
     "category": "video-gen",
     "apiProvider": "higgsfield",
-    "apiEndpoint": "https://api.higgsfield.ai/v1/video/generate",
+    "apiEndpoint": "https://platform.higgsfield.ai/higgsfield-ai/dop/standard",
     "envKeyName": "HIGGSFIELD_API_KEY",
     "executionPattern": "async-poll",
     "inputPorts": [
@@ -8393,6 +8418,12 @@
         "label": "Prompt",
         "dataType": "Text",
         "required": true
+      },
+      {
+        "id": "image",
+        "label": "Image",
+        "dataType": "Image",
+        "required": false
       }
     ],
     "outputPorts": [
@@ -8409,23 +8440,23 @@
         "label": "Model",
         "type": "enum",
         "required": false,
-        "default": "higgsfield-native",
+        "default": "higgsfield-ai/dop/standard",
         "options": [
           {
-            "label": "Higgsfield Native",
-            "value": "higgsfield-native"
+            "label": "DoP Standard (T2V + I2V)",
+            "value": "higgsfield-ai/dop/standard"
           },
           {
-            "label": "Kling 2.6",
-            "value": "kling-2.6"
+            "label": "DoP Preview",
+            "value": "higgsfield-ai/dop/preview"
           },
           {
-            "label": "Sora 2",
-            "value": "sora-2"
+            "label": "Kling v2.1 Pro (I2V)",
+            "value": "kling-video/v2.1/pro/image-to-video"
           },
           {
-            "label": "Veo 3.1",
-            "value": "veo-3.1"
+            "label": "Seedance v1 Pro (I2V)",
+            "value": "bytedance/seedance/v1/pro/image-to-video"
           }
         ]
       },
@@ -8437,6 +8468,27 @@
         "default": 5,
         "min": 1,
         "max": 15
+      },
+      {
+        "key": "aspect_ratio",
+        "label": "Aspect Ratio",
+        "type": "enum",
+        "required": false,
+        "default": "16:9",
+        "options": [
+          {
+            "label": "16:9",
+            "value": "16:9"
+          },
+          {
+            "label": "9:16",
+            "value": "9:16"
+          },
+          {
+            "label": "1:1",
+            "value": "1:1"
+          }
+        ]
       }
     ]
   },

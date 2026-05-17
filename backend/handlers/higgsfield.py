@@ -16,6 +16,20 @@ def _log(msg: str) -> None:
     print(f"[higgsfield] {msg}", file=sys.stderr, flush=True)
 
 
+HIGGSFIELD_BASE = "https://platform.higgsfield.ai"
+
+# Model ID → platform path mapping.
+# Paths sourced from https://docs.higgsfield.ai/docs/guides/video.md (2026-05-16).
+# Higgsfield native (DoP) model also supports text-to-video; others are I2V.
+_MODEL_PATHS: dict[str, str] = {
+    "higgsfield-ai/dop/standard": "higgsfield-ai/dop/standard",
+    "higgsfield-ai/dop/preview": "higgsfield-ai/dop/preview",
+    "kling-video/v2.1/pro/image-to-video": "kling-video/v2.1/pro/image-to-video",
+    "bytedance/seedance/v1/pro/image-to-video": "bytedance/seedance/v1/pro/image-to-video",
+}
+_DEFAULT_MODEL = "higgsfield-ai/dop/standard"
+
+
 async def handle_higgsfield(
     node: GraphNode,
     inputs: dict[str, PortValueDict],
@@ -30,13 +44,17 @@ async def handle_higgsfield(
     if not prompt_input or not prompt_input.value:
         raise ValueError("Prompt is required")
 
+    # Higgsfield auth: "Key {api_key}" (single-key form — key:secret pairs also accepted
+    # but HIGGSFIELD_API_KEY stores the combined credential or the key alone).
     headers = {
-        "Authorization": f"Bearer {api_key}",
+        "Authorization": f"Key {api_key}",
         "Content-Type": "application/json",
+        "Accept": "application/json",
     }
 
+    model_id = node.params.get("model", _DEFAULT_MODEL)
+
     body: dict[str, Any] = {
-        "model": node.params.get("model", "higgsfield-native"),
         "prompt": str(prompt_input.value),
     }
 
@@ -44,14 +62,27 @@ async def handle_higgsfield(
     if duration is not None:
         body["duration"] = int(duration)
 
+    aspect = node.params.get("aspect_ratio")
+    if aspect:
+        body["aspect_ratio"] = str(aspect)
+
+    # Optional image input for image-to-video models
+    image_input = inputs.get("image")
+    if image_input and image_input.value:
+        img_str = str(image_input.value)
+        if img_str.startswith(("http://", "https://")):
+            body["image_url"] = img_str
+
     async def noop_emit(event: ExecutionEvent) -> None:
         pass
     _emit = emit or noop_emit
 
-    _log(f"submitting video generation")
+    # Endpoint is model-specific: POST {base}/{model_id}
+    submit_url = f"{HIGGSFIELD_BASE}/{model_id}"
+    _log(f"submitting to {submit_url}")
     async with httpx.AsyncClient(timeout=120.0) as client:
         resp = await client.post(
-            "https://api.higgsfield.ai/v1/video/generate",
+            submit_url,
             headers=headers,
             json=body,
         )
@@ -60,16 +91,17 @@ async def handle_higgsfield(
             raise RuntimeError(f"Higgsfield submit failed ({resp.status_code}): {resp.text}")
 
         result = resp.json()
-        gen_id = result.get("id") or result.get("job_id") or result.get("generation_id")
+        # Submission returns {"request_id": "...", "status": "queued", ...}
+        gen_id = result.get("request_id")
         if not gen_id:
             raise RuntimeError(f"Higgsfield returned unexpected response: {result}")
 
-        _log(f"polling generation {gen_id}")
+        _log(f"polling request {gen_id}")
         max_polls = 300
         for poll_num in range(1, max_polls + 1):
             await asyncio.sleep(3.0)
             poll_resp = await client.get(
-                f"https://api.higgsfield.ai/v1/video/{gen_id}",
+                f"{HIGGSFIELD_BASE}/requests/{gen_id}/status",
                 headers=headers,
             )
             if poll_resp.status_code != 200:
@@ -80,8 +112,9 @@ async def handle_higgsfield(
 
             await _emit(ProgressEvent(node_id=node.id, value=min(poll_num / max_polls, 0.99)))
 
-            if status in ("completed", "succeeded", "complete", "done"):
-                video_url = poll_data.get("url") or poll_data.get("video_url") or poll_data.get("output", {}).get("url", "")
+            if status == "completed":
+                # Completed response: {"status": "completed", "video": {"url": "..."}}
+                video_url = poll_data.get("video", {}).get("url", "")
                 if video_url:
                     run_dir = get_run_dir()
                     filename = f"{uuid4().hex[:12]}.mp4"
@@ -94,5 +127,8 @@ async def handle_higgsfield(
                 raise RuntimeError(f"Higgsfield completed but no video URL: {poll_data}")
             elif status in ("failed", "error"):
                 raise RuntimeError(f"Higgsfield failed: {poll_data.get('error', status)}")
+            elif status == "nsfw":
+                raise RuntimeError("Higgsfield rejected generation: content policy violation")
+            # "queued" and "in_progress" → continue polling
 
         raise RuntimeError("Higgsfield timed out")

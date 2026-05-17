@@ -35,8 +35,9 @@ async def handle_grok_video(
         "Content-Type": "application/json",
     }
 
+    # Model is always grok-imagine-video (canonical xAI model ID as of 2026-05-16)
     body: dict[str, Any] = {
-        "model": "grok-2-video",
+        "model": "grok-imagine-video",
         "prompt": str(prompt_input.value),
     }
 
@@ -46,22 +47,25 @@ async def handle_grok_video(
     aspect = node.params.get("aspect_ratio")
     if aspect:
         body["aspect_ratio"] = str(aspect)
+    resolution = node.params.get("resolution")
+    if resolution:
+        body["resolution"] = str(resolution)
 
-    # Image input for I2V
+    # Image input for I2V — pass as base64 data URI or URL in "image" field
     image_input = inputs.get("image")
     if image_input and image_input.value:
         import base64
         from pathlib import Path
         img_str = str(image_input.value)
         if img_str.startswith(("http://", "https://")):
-            body["image_url"] = img_str
+            body["image"] = img_str
         else:
             img_path = Path(img_str)
             if img_path.exists():
                 b64 = base64.b64encode(img_path.read_bytes()).decode("ascii")
                 suffix = img_path.suffix.lstrip(".").lower()
                 mime = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg"}.get(suffix, "image/png")
-                body["image_url"] = f"data:{mime};base64,{b64}"
+                body["image"] = f"data:{mime};base64,{b64}"
 
     async def noop_emit(event: ExecutionEvent) -> None:
         pass
@@ -70,7 +74,7 @@ async def handle_grok_video(
     _log(f"submitting video generation")
     async with httpx.AsyncClient(timeout=120.0) as client:
         resp = await client.post(
-            "https://api.x.ai/v1/video/generations",
+            "https://api.x.ai/v1/videos/generations",
             headers=headers,
             json=body,
         )
@@ -79,27 +83,18 @@ async def handle_grok_video(
             raise RuntimeError(f"Grok submit failed ({resp.status_code}): {resp.text}")
 
         result = resp.json()
-        gen_id = result.get("id") or result.get("generation_id")
+        # xAI video API returns {"request_id": "..."} on submission
+        gen_id = result.get("request_id")
         if not gen_id:
-            # Some APIs return result directly
-            video_url = result.get("url") or result.get("video_url")
-            if video_url:
-                run_dir = get_run_dir()
-                filename = f"{uuid4().hex[:12]}.mp4"
-                file_path = run_dir / filename
-                dl = await client.get(video_url, timeout=120.0)
-                dl.raise_for_status()
-                file_path.write_bytes(dl.content)
-                return {"video": {"type": "Video", "value": str(file_path)}}
             raise RuntimeError(f"Grok returned unexpected response: {result}")
 
         _log(f"polling generation {gen_id}")
-        # Poll
+        # Poll GET /v1/videos/{request_id}
         max_polls = 300
         for poll_num in range(1, max_polls + 1):
             await asyncio.sleep(3.0)
             poll_resp = await client.get(
-                f"https://api.x.ai/v1/video/generations/{gen_id}",
+                f"https://api.x.ai/v1/videos/{gen_id}",
                 headers=headers,
             )
             if poll_resp.status_code != 200:
@@ -110,8 +105,9 @@ async def handle_grok_video(
 
             await _emit(ProgressEvent(node_id=node.id, value=min(poll_num / max_polls, 0.99)))
 
-            if status in ("completed", "succeeded", "complete"):
-                video_url = poll_data.get("url") or poll_data.get("video_url") or poll_data.get("output", {}).get("url", "")
+            if status == "done":
+                # Completed response: {"status": "done", "video": {"url": "..."}}
+                video_url = poll_data.get("video", {}).get("url", "")
                 if video_url:
                     run_dir = get_run_dir()
                     filename = f"{uuid4().hex[:12]}.mp4"
@@ -122,7 +118,8 @@ async def handle_grok_video(
                     _log(f"saved to {file_path}")
                     return {"video": {"type": "Video", "value": str(file_path)}}
                 raise RuntimeError(f"Grok completed but no video URL: {poll_data}")
-            elif status in ("failed", "error"):
-                raise RuntimeError(f"Grok failed: {poll_data.get('error', status)}")
+            elif status in ("failed", "expired"):
+                err = poll_data.get("error", {})
+                raise RuntimeError(f"Grok failed: {err.get('message', status)}")
 
         raise RuntimeError("Grok timed out")
