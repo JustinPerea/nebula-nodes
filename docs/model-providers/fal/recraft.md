@@ -222,3 +222,8 @@ File: `backend/tests/test_node_contracts.py` — `test_researched_provider_corre
 3. **`colors` list length limit** — The FAL API documentation does not specify
    a maximum number of colors. Behavior with large palettes (>10 colors) is
    untested.
+
+4. **Saved-graph compat note** — Saved graphs with `style` param set will
+   silently forward that value to FAL V4; FAL typically ignores unknown fields
+   but a `node.params.pop('style', None)` in the handler would be safer if
+   errors surface.

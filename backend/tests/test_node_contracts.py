@@ -530,6 +530,19 @@ def test_researched_provider_corrections_are_pinned(definitions: dict[str, dict[
     assert "enable_safety_checker" in recraft_raster_param_keys, (
         "recraft-v4-raster must have 'enable_safety_checker' param"
     )
+    # Frontend must also have enable_safety_checker for recraft-v4-raster (symmetry with backend)
+    frontend_source = (REPO_ROOT / "frontend" / "src" / "constants" / "nodeDefinitions.ts").read_text()
+    # Find the block from 'recraft-v4-raster': { to the next top-level node definition
+    recraft_raster_block_match = re.search(
+        r"'recraft-v4-raster':\s*\{.*?(?=\n\n\s+'[^']+':|\n\};)",
+        frontend_source,
+        flags=re.DOTALL,
+    )
+    assert recraft_raster_block_match, "Could not find recraft-v4-raster block in frontend nodeDefinitions.ts"
+    recraft_raster_frontend_block = recraft_raster_block_match.group(0)
+    assert "enable_safety_checker" in recraft_raster_frontend_block, (
+        "recraft-v4-raster frontend definition must have 'enable_safety_checker' param (symmetry gap)"
+    )
     assert recraft_raster["apiEndpoint"] == "fal-ai/recraft/v4/text-to-image", (
         "recraft-v4-raster apiEndpoint must be 'fal-ai/recraft/v4/text-to-image'"
     )

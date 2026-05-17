@@ -3717,6 +3717,13 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: false,
         placeholder: '{"r":255,"g":255,"b":255}',
       },
+      {
+        key: 'enable_safety_checker',
+        label: 'Safety Checker',
+        type: 'boolean',
+        required: false,
+        default: true,
+      },
     ],
   },
 
