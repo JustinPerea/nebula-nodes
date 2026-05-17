@@ -14,6 +14,14 @@ stale_after_days: 30
 Covers five miscellaneous FAL wrapper nodes. All route through `handle_fal_universal`
 (see `fal-universal.md`).
 
+> **Live-smoke correction (2026-05-17):** The initial audit set sora-2 and pixverse-v4-5
+> duration options as STRINGS. Direct API verification shows FAL expects INTEGERS for
+> these two: sora-2 takes `4`/`8`/`12`/`16`/`20`, pixverse takes `5`/`8`. Both registries
+> reverted to integer option values. The Inspector dropdown will send the integer type
+> correctly. The Nebula CLI's `--param key=value` flag passes strings unconditionally,
+> so live CLI smoke for integer enum params is a known limitation — verify via the UI
+> or direct curl instead.
+
 ## Sources
 
 - `https://fal.ai/models/fal-ai/sora-2/text-to-video/api` — fetched 2026-05-17

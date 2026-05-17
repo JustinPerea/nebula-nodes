@@ -3279,27 +3279,27 @@
         "label": "Duration (s)",
         "type": "enum",
         "required": false,
-        "default": "4",
+        "default": 4,
         "options": [
           {
             "label": "4s",
-            "value": "4"
+            "value": 4
           },
           {
             "label": "8s",
-            "value": "8"
+            "value": 8
           },
           {
             "label": "12s",
-            "value": "12"
+            "value": 12
           },
           {
             "label": "16s",
-            "value": "16"
+            "value": 16
           },
           {
             "label": "20s",
-            "value": "20"
+            "value": 20
           }
         ]
       }
@@ -8069,15 +8069,15 @@
         "label": "Duration",
         "type": "enum",
         "required": false,
-        "default": "5",
+        "default": 5,
         "options": [
           {
             "label": "5 seconds",
-            "value": "5"
+            "value": 5
           },
           {
             "label": "8 seconds",
-            "value": "8"
+            "value": 8
           }
         ]
       },
