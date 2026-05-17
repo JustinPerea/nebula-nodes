@@ -118,7 +118,7 @@ Frontend TS was also stripped down (missing `expand_prompt`, `loras`,
 |-----------|------|---------|-----------------|--------|
 | `prompt` | string | required | — | via `prompt` port |
 | `image_url` | string | required | any URL | via `image` port (required) |
-| `aspect_ratio` | enum | no default | `21:9`–`9:21` (9 values) | param |
+| `aspect_ratio` | enum | `"1:1"` | `21:9`–`9:21` (9 values) | param |
 | `num_images` | integer | `1` | 1–4 | param — **was missing from frontend TS** |
 | `guidance_scale` | float | `3.5` | 1–20 | param |
 | `enhance_prompt` | boolean | optional | — | param |
@@ -181,3 +181,10 @@ Total: 8 bugs across 4 nodes. `flux-1-1-ultra` was clean.
 
 3. **`fast-sdxl` sync executionPattern** — Resolved. See "Sync pattern
    resolved" note in the `fast-sdxl` section above. No fix needed.
+
+4. **Saved-graph backward compatibility** — Saved graphs with `num_images`
+   set on flux-2-pro nodes will be forwarded to FAL by the universal handler
+   (no allowlist) and likely produce 422 validation errors until manually
+   reset. Same risk applies to flux-schnell graphs with the old
+   `aspect_ratio` key still in node.params (replaced with `image_size`).
+   Graphs saved before this audit may require manual parameter cleanup.

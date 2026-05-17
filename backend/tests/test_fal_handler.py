@@ -2413,36 +2413,47 @@ async def test_fast_sdxl_key_params_forwarded():
 async def test_fast_sdxl_loras_json_string_parsed():
     """fast-sdxl: loras param stored as JSON string must be parsed to list before dispatch.
     Empty/invalid JSON must be dropped silently (handler pre-processes in sync_runner)."""
-    # Simulate what _fast_sdxl_handler does: parse JSON strings before calling universal handler
-    import json as _json
+    from execution.sync_runner import get_handler_registry
 
-    node = GraphNode(
-        id="fsdxl3",
-        definitionId="fast-sdxl",
-        params={
-            "endpoint_id": "fal-ai/fast-sdxl",
-            "loras": '[{"path": "https://example.com/lora.safetensors", "scale": 0.8}]',
-            "embeddings": "",  # empty — must be dropped
-        },
-    )
+    mock_submit, mock_status, mock_result = _make_image_poll_mocks_flux()
 
-    # Simulate handler pre-processing
-    for array_key in ("loras", "embeddings"):
-        raw = node.params.get(array_key)
-        if isinstance(raw, str):
-            stripped = raw.strip()
-            if not stripped:
-                node.params.pop(array_key, None)
-            else:
-                try:
-                    node.params[array_key] = _json.loads(stripped)
-                except _json.JSONDecodeError:
-                    node.params.pop(array_key, None)
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
 
-    assert isinstance(node.params["loras"], list)
-    assert node.params["loras"][0]["path"] == "https://example.com/lora.safetensors"
-    assert node.params["loras"][0]["scale"] == 0.8
-    assert "embeddings" not in node.params, "empty embeddings must be dropped"
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            async def fake_emit(_e):
+                pass
+
+            handlers = get_handler_registry(emit=fake_emit)
+            handler = handlers["fast-sdxl"]
+
+            node = GraphNode(
+                id="fsdxl3",
+                definitionId="fast-sdxl",
+                params={
+                    "loras": '[{"path": "https://example.com/lora.safetensors", "scale": 0.8}]',
+                    "embeddings": "",  # empty — must be dropped
+                },
+            )
+
+            result = await handler(
+                node,
+                {"prompt": PortValueDict(type="Text", value="cyberpunk portrait")},
+                {"FAL_KEY": "fal_test"},
+            )
+
+    assert result["image"]["type"] == "Image"
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert "loras" in payload, "loras must be present in FAL request"
+    assert isinstance(payload["loras"], list), "loras must be parsed to list, not forwarded as JSON string"
+    assert payload["loras"][0]["path"] == "https://example.com/lora.safetensors"
+    assert payload["loras"][0]["scale"] == 0.8
+    assert "embeddings" not in payload, "empty embeddings string must be dropped, not forwarded"
 
 
 # --- flux-kontext ---
