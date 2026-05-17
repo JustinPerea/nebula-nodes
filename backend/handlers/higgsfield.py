@@ -53,6 +53,10 @@ async def handle_higgsfield(
     }
 
     model_id = node.params.get("model", _DEFAULT_MODEL)
+    if model_id not in _MODEL_PATHS:
+        raise ValueError(
+            f"Unknown Higgsfield model: {model_id!r}. Known models: {sorted(_MODEL_PATHS)}"
+        )
 
     body: dict[str, Any] = {
         "prompt": str(prompt_input.value),
@@ -129,6 +133,8 @@ async def handle_higgsfield(
                 raise RuntimeError(f"Higgsfield failed: {poll_data.get('error', status)}")
             elif status == "nsfw":
                 raise RuntimeError("Higgsfield rejected generation: content policy violation")
+            elif status == "cancelled":
+                raise RuntimeError("Higgsfield generation was cancelled")
             # "queued" and "in_progress" → continue polling
 
         raise RuntimeError("Higgsfield timed out")

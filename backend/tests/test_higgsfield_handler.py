@@ -296,6 +296,73 @@ async def test_missing_request_id_in_response_raises() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Model validation
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_unknown_model_raises_value_error() -> None:
+    """Unknown model IDs (e.g., from saved graphs with old IDs) raise ValueError."""
+    with pytest.raises(ValueError, match="Unknown Higgsfield model"):
+        await handle_higgsfield(
+            _make_node({"model": "higgsfield-native"}),
+            {"prompt": PortValueDict(type="Text", value="test")},
+            _API_KEYS,
+        )
+
+
+# ---------------------------------------------------------------------------
+# Cancelled status
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_poll_cancelled_status_raises() -> None:
+    """Cancelled status terminates polling immediately."""
+    poll_data = {"status": "cancelled"}
+    mock_client = _mock_client(_SUBMIT_OK, poll_data)
+
+    with patch("handlers.higgsfield.httpx.AsyncClient", return_value=mock_client), \
+         patch("handlers.higgsfield.asyncio.sleep", new_callable=AsyncMock):
+
+        with pytest.raises(RuntimeError, match="cancelled"):
+            await handle_higgsfield(
+                _make_node(),
+                {"prompt": PortValueDict(type="Text", value="test")},
+                _API_KEYS,
+            )
+
+
+# ---------------------------------------------------------------------------
+# Image field name (I2V)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_i2v_request_body_uses_image_url_field() -> None:
+    """I2V mode maps the image port to `image_url` in the request body (not `image`)."""
+    mock_client = _mock_client(_SUBMIT_OK, _POLL_COMPLETED)
+
+    with patch("handlers.higgsfield.httpx.AsyncClient", return_value=mock_client), \
+         patch("handlers.higgsfield.asyncio.sleep", new_callable=AsyncMock), \
+         patch("handlers.higgsfield.get_run_dir", return_value=__import__("pathlib").Path("/tmp")):
+
+        await handle_higgsfield(
+            _make_node({"model": "kling-video/v2.1/pro/image-to-video"}),
+            {
+                "prompt": PortValueDict(type="Text", value="a zooming shot"),
+                "image": PortValueDict(type="Image", value="https://example.com/frame.jpg"),
+            },
+            _API_KEYS,
+        )
+
+    body = mock_client.post.call_args.kwargs["json"]
+    assert "image_url" in body, "Expected 'image_url' key in body for Higgsfield I2V"
+    assert body["image_url"] == "https://example.com/frame.jpg"
+    assert "image" not in body, "Body must not contain 'image' — Higgsfield uses 'image_url'"
+
+
+# ---------------------------------------------------------------------------
 # Output contract
 # ---------------------------------------------------------------------------
 

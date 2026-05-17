@@ -310,6 +310,35 @@ async def test_missing_request_id_in_response_raises() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Image field name (I2V)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_i2v_request_body_uses_image_field() -> None:
+    """I2V mode maps the image port to `image` in the request body (not `image_url`)."""
+    mock_client = _mock_client(_SUBMIT_OK, _POLL_DONE)
+
+    with patch("handlers.grok_video.httpx.AsyncClient", return_value=mock_client), \
+         patch("handlers.grok_video.asyncio.sleep", new_callable=AsyncMock), \
+         patch("handlers.grok_video.get_run_dir", return_value=__import__("pathlib").Path("/tmp")):
+
+        await handle_grok_video(
+            _make_node(),
+            {
+                "prompt": PortValueDict(type="Text", value="a slow pan"),
+                "image": PortValueDict(type="Image", value="https://example.com/frame.jpg"),
+            },
+            _API_KEYS,
+        )
+
+    body = mock_client.post.call_args.kwargs["json"]
+    assert "image" in body, "Expected 'image' key in body for Grok I2V"
+    assert body["image"] == "https://example.com/frame.jpg"
+    assert "image_url" not in body, "Body must not contain 'image_url' — Grok uses 'image'"
+
+
+# ---------------------------------------------------------------------------
 # Output contract
 # ---------------------------------------------------------------------------
 
