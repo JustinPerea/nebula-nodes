@@ -236,23 +236,14 @@ class TestParseFalOutputSVG:
         assert result["image"]["type"] == "Image"
         assert "svg" not in result
 
-
-@pytest.mark.asyncio
-async def _make_poll_mock(submit_payload: dict, result_payload: dict):
-    """Helper: returns (MockClient context, mock_client) for a standard poll cycle."""
-    mock_submit = MagicMock()
-    mock_submit.status_code = 200
-    mock_submit.json.return_value = submit_payload
-
-    mock_status = MagicMock()
-    mock_status.status_code = 200
-    mock_status.json.return_value = {"status": "COMPLETED"}
-
-    mock_result = MagicMock()
-    mock_result.status_code = 200
-    mock_result.json.return_value = result_payload
-
-    return mock_submit, mock_status, mock_result
+    def test_uppercase_svg_content_type_returns_svg_port(self) -> None:
+        """Uppercase MIME types like IMAGE/SVG+XML must still route to SVG port."""
+        result = _parse_fal_output({
+            "images": [{"url": "https://fal.ai/output.svg", "content_type": "IMAGE/SVG+XML"}]
+        })
+        assert result["svg"]["type"] == "SVG"
+        assert result["svg"]["value"] == "https://fal.ai/output.svg"
+        assert "image" not in result
 
 
 @pytest.mark.asyncio
@@ -402,6 +393,20 @@ async def test_images_multi_port_sends_image_urls():
         "https://example.com/b.png",
     ]
     assert "image_url" not in payload  # singular form must not appear
+
+
+@pytest.mark.asyncio
+async def test_gpt_image_1_5_edit_missing_image_raises_value_error():
+    """gpt-image-1.5/edit requires at least one reference image."""
+    node = _make_node({"endpoint_id": "fal-ai/gpt-image-1.5/edit"})
+
+    with pytest.raises(ValueError, match="image"):
+        await handle_fal_universal(
+            node,
+            {"prompt": PortValueDict(type="Text", value="make it blue")},
+            {"FAL_KEY": "fal_test"},
+            emit=AsyncMock(),
+        )
 
 
 @pytest.mark.asyncio

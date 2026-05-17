@@ -139,6 +139,11 @@ async def handle_fal_universal(
         if urls:
             fal_input["image_urls"] = urls
 
+    # Validate: gpt-image-1-5-edit requires at least one reference image
+    endpoint_id = node.params.get("endpoint_id", "")
+    if endpoint_id.startswith("fal-ai/gpt-image-1.5/edit") and not fal_input.get("image_urls"):
+        raise ValueError("gpt-image-1.5 edit requires at least one reference image")
+
     # Video input (luma-ray2-flash-modify) → video_url
     video_input = inputs.get("video")
     if video_input and video_input.value:
@@ -296,7 +301,7 @@ def _parse_fal_output(data: dict[str, Any]) -> dict[str, Any]:
             url = str(first_image)
             content_type = ""
         if url:
-            if "svg" in content_type:
+            if "svg" in content_type.lower():
                 return {"svg": {"type": "SVG", "value": url}}
             return {"image": {"type": "Image", "value": url}}
 
