@@ -125,6 +125,9 @@ async def test_request_body_includes_model_and_stream():
     assert body["max_completion_tokens"] == 512
     assert "max_tokens" not in body, "max_tokens is deprecated; handler must use max_completion_tokens"
     assert body["messages"][0]["role"] == "user"
+    assert "top_p" not in body
+    assert "frequency_penalty" not in body
+    assert "presence_penalty" not in body
 
 
 @pytest.mark.asyncio

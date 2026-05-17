@@ -76,10 +76,6 @@ and `nodeDefinitions.ts`. Handler now reads `max_completion_tokens` and sends
 `max_completion_tokens` in the request body. The display label ("Max Tokens") is unchanged
 for UX continuity.
 
-**Note:** Existing saved graphs that stored `max_tokens` in their param payload will
-silently drop token limiting (the key will be unrecognised by the handler). This is the
-correct behaviour — sending `max_tokens` to newer model versions risks API rejection.
-
 ### `top_p`, `frequency_penalty`, `presence_penalty` in registry but never forwarded (FIXED)
 
 **Severity:** High. All three params appeared in both registries (UI exposed them) but
@@ -122,7 +118,7 @@ as current production models. The registry only had three options (`gpt-4o`, `gp
 | Output port type correct (Text) | PASS |
 | Missing API key error names `OPENAI_API_KEY` | PASS |
 | Contract check (100 definitions) | PASS |
-| Test suite (28 tests) | PASS |
+| Test suite (9 tests) | PASS |
 
 ## Open Questions
 
@@ -136,6 +132,10 @@ as current production models. The registry only had three options (`gpt-4o`, `gp
    `top_p`, and `stop` for those model IDs. Deferred until demand is confirmed.
 
 3. **`max_completion_tokens` upper bound** — The registry caps at 128,000. The actual
-   model context window varies (`gpt-4.1` supports up to 1M input tokens but output
-   limit differs). A per-model cap would be more accurate; currently the registry uses a
-   conservative shared ceiling.
+   model context window varies (`gpt-4.1` has a 1M context window for input + output
+   combined; max output tokens is 32,768 per SDK stubs). A per-model cap would be more
+   accurate; currently the registry uses a conservative shared ceiling.
+
+4. **Saved graph migration** — Users with `max_tokens` stored in saved graphs will
+   silently lose token limiting on next load — no in-app migration or warning currently
+   exists.
