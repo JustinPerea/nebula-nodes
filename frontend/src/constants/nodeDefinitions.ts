@@ -1903,6 +1903,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     inputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: true },
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: false },
+      { id: 'tail_image', label: 'End Frame', dataType: 'Image', required: false },
     ],
     outputPorts: [
       { id: 'video', label: 'Video', dataType: 'Video', required: false },
@@ -1917,18 +1918,6 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         options: [
           { label: '5 seconds', value: '5' },
           { label: '10 seconds', value: '10' },
-        ],
-      },
-      {
-        key: 'aspect_ratio',
-        label: 'Aspect Ratio',
-        type: 'enum',
-        required: false,
-        default: '16:9',
-        options: [
-          { label: '16:9', value: '16:9' },
-          { label: '9:16', value: '9:16' },
-          { label: '1:1', value: '1:1' },
         ],
       },
       {
@@ -3917,17 +3906,6 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         ],
       },
       {
-        key: 'resolution',
-        label: 'Resolution',
-        type: 'enum',
-        required: false,
-        default: '1080p',
-        options: [
-          { label: '720p', value: '720p' },
-          { label: '1080p', value: '1080p' },
-        ],
-      },
-      {
         key: 'aspect_ratio',
         label: 'Aspect Ratio',
         type: 'enum',
@@ -3944,7 +3922,26 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         label: 'Negative Prompt',
         type: 'string',
         required: false,
-        placeholder: 'What to avoid',
+        default: 'blur, distort, and low quality',
+      },
+      {
+        key: 'shot_type',
+        label: 'Shot Type',
+        type: 'enum',
+        required: false,
+        default: 'customize',
+        options: [
+          { label: 'Customize', value: 'customize' },
+          { label: 'Intelligent (auto)', value: 'intelligent' },
+        ],
+      },
+      {
+        key: 'multi_prompt',
+        label: 'Multi-Shot (JSON)',
+        type: 'textarea',
+        required: false,
+        default: '',
+        placeholder: '[{"prompt":"shot 1","duration":3},{"prompt":"shot 2","duration":4}]',
       },
       {
         key: 'generate_audio',
@@ -4488,10 +4485,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     executionPattern: 'async-poll',
     inputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: true },
-      { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
-      { id: 'ref_video1', label: 'Ref Video 1', dataType: 'Video', required: false },
-      { id: 'ref_video2', label: 'Ref Video 2', dataType: 'Video', required: false },
-      { id: 'ref_video3', label: 'Ref Video 3', dataType: 'Video', required: false },
+      { id: 'prompt', label: 'Prompt', dataType: 'Text', required: false },
+      { id: 'end_image', label: 'End Frame', dataType: 'Image', required: false },
     ],
     outputPorts: [
       { id: 'video', label: 'Video', dataType: 'Video', required: false },
@@ -4504,19 +4499,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: false,
         default: '5',
         options: [
+          { label: '3 seconds', value: '3' },
           { label: '5 seconds', value: '5' },
           { label: '10 seconds', value: '10' },
-        ],
-      },
-      {
-        key: 'resolution',
-        label: 'Resolution',
-        type: 'enum',
-        required: false,
-        default: '1080p',
-        options: [
-          { label: '720p', value: '720p' },
-          { label: '1080p', value: '1080p' },
+          { label: '15 seconds', value: '15' },
         ],
       },
       {
@@ -4536,7 +4522,35 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         label: 'Generate Audio',
         type: 'boolean',
         required: false,
-        default: true,
+        default: false,
+      },
+      {
+        key: 'negative_prompt',
+        label: 'Negative Prompt',
+        type: 'string',
+        required: false,
+        default: 'blur, distort, and low quality',
+      },
+      {
+        key: 'cfg_scale',
+        label: 'CFG Scale',
+        type: 'float',
+        required: false,
+        default: 0.5,
+        min: 0,
+        max: 1,
+        step: 0.1,
+      },
+      {
+        key: 'shot_type',
+        label: 'Shot Type',
+        type: 'enum',
+        required: false,
+        default: 'customize',
+        options: [
+          { label: 'Customize', value: 'customize' },
+          { label: 'Intelligent (auto)', value: 'intelligent' },
+        ],
       },
     ],
   },

@@ -393,6 +393,16 @@ def get_handler_registry(
 
         async def _kling_o3_handler(node, inputs, api_keys):
             node.params.setdefault("endpoint_id", "fal-ai/kling-video/o3/standard/image-to-video")
+            # Parse multi_prompt JSON string if provided (same pattern as kling-v3)
+            mp = node.params.get("multi_prompt")
+            if isinstance(mp, str) and mp.strip():
+                import json as _json
+                try:
+                    node.params["multi_prompt"] = _json.loads(mp)
+                except _json.JSONDecodeError:
+                    node.params.pop("multi_prompt", None)
+            elif mp == "":
+                node.params.pop("multi_prompt", None)
             return await handle_fal_universal(node, inputs, api_keys, emit=emit)
 
         async def _ltx_23_handler(node, inputs, api_keys):

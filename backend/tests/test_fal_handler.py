@@ -495,3 +495,341 @@ async def test_audio_input_port_sends_audio_url():
     call_args = mock_client.post.call_args
     payload = call_args.kwargs.get("json") or call_args[1].get("json")
     assert payload["audio_url"] == "https://example.com/track.mp3"
+
+
+# ---------------------------------------------------------------------------
+# Kling wrapper structural tests (audit 2026-05-17)
+# ---------------------------------------------------------------------------
+
+
+def _make_video_poll_mocks():
+    """Return (mock_submit, mock_status, mock_result) for a standard video job."""
+    mock_submit = MagicMock()
+    mock_submit.status_code = 200
+    mock_submit.json.return_value = {"request_id": "req-kling"}
+
+    mock_status = MagicMock()
+    mock_status.status_code = 200
+    mock_status.json.return_value = {"status": "COMPLETED"}
+
+    mock_result = MagicMock()
+    mock_result.status_code = 200
+    mock_result.json.return_value = {"video": {"url": "https://fal.ai/kling-out.mp4"}}
+
+    return mock_submit, mock_status, mock_result
+
+
+# --- kling-v2-1 ---
+
+@pytest.mark.asyncio
+async def test_kling_v2_1_endpoint_injected():
+    """_kling_handler injects fal-ai/kling-video/v2.1/pro/image-to-video."""
+    mock_submit, mock_status, mock_result = _make_video_poll_mocks()
+
+    node = GraphNode(id="kv2", definitionId="kling-v2-1", params={})
+    node.params.setdefault("endpoint_id", "fal-ai/kling-video/v2.1/pro/image-to-video")
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            result = await handle_fal_universal(
+                node,
+                {"image": PortValueDict(type="Image", value="https://example.com/frame.png")},
+                {"FAL_KEY": "fal_test"},
+                emit=AsyncMock(),
+            )
+
+    assert result["video"]["type"] == "Video"
+    call_args = mock_client.post.call_args
+    posted_url = call_args.args[0] if call_args.args else call_args.kwargs.get("url", "")
+    assert "kling-video/v2.1/pro/image-to-video" in posted_url
+
+
+@pytest.mark.asyncio
+async def test_kling_v2_1_image_maps_to_image_url():
+    """kling-v2-1 image port must map to image_url in FAL request body."""
+    mock_submit, mock_status, mock_result = _make_video_poll_mocks()
+
+    node = GraphNode(
+        id="kv2-img",
+        definitionId="kling-v2-1",
+        params={"endpoint_id": "fal-ai/kling-video/v2.1/pro/image-to-video", "duration": "5"},
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            await handle_fal_universal(
+                node,
+                {
+                    "image": PortValueDict(type="Image", value="https://example.com/start.png"),
+                    "prompt": PortValueDict(type="Text", value="cinematic motion"),
+                },
+                {"FAL_KEY": "fal_test"},
+                emit=AsyncMock(),
+            )
+
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert payload["image_url"] == "https://example.com/start.png"
+    assert payload["duration"] == "5"
+    assert "aspect_ratio" not in payload  # not a v2.1 param
+
+
+@pytest.mark.asyncio
+async def test_kling_v2_1_tail_image_maps_to_tail_image_url():
+    """kling-v2-1 tail_image port (end frame) must map to tail_image_url."""
+    mock_submit, mock_status, mock_result = _make_video_poll_mocks()
+
+    node = GraphNode(
+        id="kv2-tail",
+        definitionId="kling-v2-1",
+        params={"endpoint_id": "fal-ai/kling-video/v2.1/pro/image-to-video"},
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            await handle_fal_universal(
+                node,
+                {
+                    "image": PortValueDict(type="Image", value="https://example.com/start.png"),
+                    "tail_image": PortValueDict(type="Image", value="https://example.com/end.png"),
+                },
+                {"FAL_KEY": "fal_test"},
+                emit=AsyncMock(),
+            )
+
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert payload["tail_image_url"] == "https://example.com/end.png"
+    assert payload["image_url"] == "https://example.com/start.png"
+
+
+# --- kling-v3 ---
+
+@pytest.mark.asyncio
+async def test_kling_v3_endpoint_injected():
+    """_kling_v3_handler injects fal-ai/kling-video/v3/standard/text-to-video."""
+    mock_submit, mock_status, mock_result = _make_video_poll_mocks()
+
+    node = GraphNode(id="kv3", definitionId="kling-v3", params={})
+    node.params.setdefault("endpoint_id", "fal-ai/kling-video/v3/standard/text-to-video")
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            result = await handle_fal_universal(
+                node,
+                {"prompt": PortValueDict(type="Text", value="a cinematic shot")},
+                {"FAL_KEY": "fal_test"},
+                emit=AsyncMock(),
+            )
+
+    assert result["video"]["type"] == "Video"
+    posted_url = mock_client.post.call_args.args[0] if mock_client.post.call_args.args else mock_client.post.call_args.kwargs.get("url", "")
+    assert "kling-video/v3/standard/text-to-video" in posted_url
+
+
+@pytest.mark.asyncio
+async def test_kling_v3_aspect_ratio_and_duration_forwarded():
+    """kling-v3 aspect_ratio and duration params are forwarded correctly."""
+    mock_submit, mock_status, mock_result = _make_video_poll_mocks()
+
+    node = GraphNode(
+        id="kv3-params",
+        definitionId="kling-v3",
+        params={
+            "endpoint_id": "fal-ai/kling-video/v3/standard/text-to-video",
+            "aspect_ratio": "9:16",
+            "duration": "10",
+            "generate_audio": True,
+        },
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            await handle_fal_universal(
+                node,
+                {"prompt": PortValueDict(type="Text", value="sunset")},
+                {"FAL_KEY": "fal_test"},
+                emit=AsyncMock(),
+            )
+
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert payload["aspect_ratio"] == "9:16"
+    assert payload["duration"] == "10"
+    assert payload["generate_audio"] is True
+    assert "resolution" not in payload  # resolution is not a v3 param
+
+
+@pytest.mark.asyncio
+async def test_kling_v3_start_image_maps_to_image_url():
+    """kling-v3 start image port maps to image_url."""
+    mock_submit, mock_status, mock_result = _make_video_poll_mocks()
+
+    node = GraphNode(
+        id="kv3-img",
+        definitionId="kling-v3",
+        params={"endpoint_id": "fal-ai/kling-video/v3/standard/text-to-video"},
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            await handle_fal_universal(
+                node,
+                {
+                    "prompt": PortValueDict(type="Text", value="animate this"),
+                    "image": PortValueDict(type="Image", value="https://example.com/start.jpg"),
+                    "end_image": PortValueDict(type="Image", value="https://example.com/end.jpg"),
+                },
+                {"FAL_KEY": "fal_test"},
+                emit=AsyncMock(),
+            )
+
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert payload["image_url"] == "https://example.com/start.jpg"
+    assert payload["end_image_url"] == "https://example.com/end.jpg"
+
+
+# --- kling-o3 ---
+
+@pytest.mark.asyncio
+async def test_kling_o3_endpoint_injected():
+    """_kling_o3_handler injects fal-ai/kling-video/o3/standard/image-to-video."""
+    mock_submit, mock_status, mock_result = _make_video_poll_mocks()
+
+    node = GraphNode(id="ko3", definitionId="kling-o3", params={})
+    node.params.setdefault("endpoint_id", "fal-ai/kling-video/o3/standard/image-to-video")
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            result = await handle_fal_universal(
+                node,
+                {"image": PortValueDict(type="Image", value="https://example.com/frame.png")},
+                {"FAL_KEY": "fal_test"},
+                emit=AsyncMock(),
+            )
+
+    assert result["video"]["type"] == "Video"
+    posted_url = mock_client.post.call_args.args[0] if mock_client.post.call_args.args else mock_client.post.call_args.kwargs.get("url", "")
+    assert "kling-video/o3/standard/image-to-video" in posted_url
+
+
+@pytest.mark.asyncio
+async def test_kling_o3_image_maps_to_image_url():
+    """kling-o3 image port maps to image_url."""
+    mock_submit, mock_status, mock_result = _make_video_poll_mocks()
+
+    node = GraphNode(
+        id="ko3-img",
+        definitionId="kling-o3",
+        params={
+            "endpoint_id": "fal-ai/kling-video/o3/standard/image-to-video",
+            "duration": "5",
+            "generate_audio": False,
+        },
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            await handle_fal_universal(
+                node,
+                {
+                    "image": PortValueDict(type="Image", value="https://example.com/subject.png"),
+                    "prompt": PortValueDict(type="Text", value="walk forward"),
+                },
+                {"FAL_KEY": "fal_test"},
+                emit=AsyncMock(),
+            )
+
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert payload["image_url"] == "https://example.com/subject.png"
+    assert payload["duration"] == "5"
+    assert "resolution" not in payload  # resolution is not an o3 param
+    assert "ref_video1" not in payload  # removed port must not appear
+
+
+@pytest.mark.asyncio
+async def test_kling_o3_end_image_maps_to_end_image_url():
+    """kling-o3 end_image port maps to end_image_url."""
+    mock_submit, mock_status, mock_result = _make_video_poll_mocks()
+
+    node = GraphNode(
+        id="ko3-end",
+        definitionId="kling-o3",
+        params={"endpoint_id": "fal-ai/kling-video/o3/standard/image-to-video"},
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            await handle_fal_universal(
+                node,
+                {
+                    "image": PortValueDict(type="Image", value="https://example.com/start.png"),
+                    "end_image": PortValueDict(type="Image", value="https://example.com/end.png"),
+                },
+                {"FAL_KEY": "fal_test"},
+                emit=AsyncMock(),
+            )
+
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert payload["image_url"] == "https://example.com/start.png"
+    assert payload["end_image_url"] == "https://example.com/end.png"
