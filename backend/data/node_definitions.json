@@ -6583,43 +6583,25 @@
         ]
       },
       {
-        "key": "style",
-        "label": "Style",
-        "type": "enum",
-        "required": false,
-        "default": "realistic_image",
-        "options": [
-          {
-            "label": "Realistic",
-            "value": "realistic_image"
-          },
-          {
-            "label": "Digital Illustration",
-            "value": "digital_illustration"
-          },
-          {
-            "label": "Vector Illustration",
-            "value": "vector_illustration"
-          },
-          {
-            "label": "Icon",
-            "value": "icon"
-          }
-        ]
-      },
-      {
         "key": "style_id",
         "label": "Style ID",
         "type": "string",
         "required": false,
-        "placeholder": "Custom style UUID"
+        "placeholder": "Custom style UUID (Recraft style reference)"
       },
       {
         "key": "colors",
         "label": "Color Palette",
         "type": "string",
         "required": false,
-        "placeholder": "#FF0000,#00FF00,#0000FF"
+        "placeholder": "[{\"r\":255,\"g\":0,\"b\":0},{\"r\":0,\"g\":255,\"b\":0}]"
+      },
+      {
+        "key": "background_color",
+        "label": "Background Color",
+        "type": "string",
+        "required": false,
+        "placeholder": "{\"r\":255,\"g\":255,\"b\":255}"
       },
       {
         "key": "enable_safety_checker",
@@ -6689,39 +6671,32 @@
         ]
       },
       {
-        "key": "style",
-        "label": "Style",
-        "type": "enum",
-        "required": false,
-        "default": "vector_illustration",
-        "options": [
-          {
-            "label": "Vector Illustration",
-            "value": "vector_illustration"
-          },
-          {
-            "label": "Digital Illustration",
-            "value": "digital_illustration"
-          },
-          {
-            "label": "Icon",
-            "value": "icon"
-          }
-        ]
-      },
-      {
         "key": "style_id",
         "label": "Style ID",
         "type": "string",
         "required": false,
-        "placeholder": "Custom style UUID"
+        "placeholder": "Custom style UUID (Recraft style reference)"
       },
       {
         "key": "colors",
         "label": "Color Palette",
         "type": "string",
         "required": false,
-        "placeholder": "#FF0000,#00FF00,#0000FF"
+        "placeholder": "[{\"r\":255,\"g\":0,\"b\":0},{\"r\":0,\"g\":255,\"b\":0}]"
+      },
+      {
+        "key": "background_color",
+        "label": "Background Color",
+        "type": "string",
+        "required": false,
+        "placeholder": "{\"r\":255,\"g\":255,\"b\":255}"
+      },
+      {
+        "key": "enable_safety_checker",
+        "label": "Safety Checker",
+        "type": "boolean",
+        "required": false,
+        "default": true
       }
     ]
   },

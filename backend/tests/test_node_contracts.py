@@ -502,3 +502,77 @@ def test_researched_provider_corrections_are_pinned(definitions: dict[str, dict[
         "luma-ray2-flash-modify prompt port must not be required (API: optional)"
     )
     assert luma_fm["apiEndpoint"] == "fal-ai/luma-dream-machine/ray-2-flash/modify"
+
+    # --- Recraft V4 nodes (verified 2026-05-17 against fal.ai/models/fal-ai/recraft/v4/*/api) ---
+
+    # recraft-v4-raster: apiEndpoint must be fal-ai/recraft/v4/text-to-image;
+    # must NOT have 'style' enum (V3-only param, not in V4 API);
+    # must have 'style_id', 'colors', 'background_color', 'enable_safety_checker';
+    # output port must be Image type.
+    recraft_raster = definitions["recraft-v4-raster"]
+    recraft_raster_param_keys = {
+        p["key"]
+        for group in ("params", "sharedParams", "falParams", "directParams")
+        for p in recraft_raster.get(group, []) or []
+    }
+    assert "style" not in recraft_raster_param_keys, (
+        "recraft-v4-raster must not have 'style' param (V3-only; not in V4 API)"
+    )
+    assert "style_id" in recraft_raster_param_keys, (
+        "recraft-v4-raster must have 'style_id' param (custom style UUID)"
+    )
+    assert "colors" in recraft_raster_param_keys, (
+        "recraft-v4-raster must have 'colors' param"
+    )
+    assert "background_color" in recraft_raster_param_keys, (
+        "recraft-v4-raster must have 'background_color' param (added in V4 API)"
+    )
+    assert "enable_safety_checker" in recraft_raster_param_keys, (
+        "recraft-v4-raster must have 'enable_safety_checker' param"
+    )
+    assert recraft_raster["apiEndpoint"] == "fal-ai/recraft/v4/text-to-image", (
+        "recraft-v4-raster apiEndpoint must be 'fal-ai/recraft/v4/text-to-image'"
+    )
+    recraft_raster_out_types = {p["dataType"] for p in recraft_raster["outputPorts"]}
+    assert "Image" in recraft_raster_out_types, (
+        "recraft-v4-raster must have Image output port"
+    )
+    assert "SVG" not in recraft_raster_out_types, (
+        "recraft-v4-raster must not have SVG output port"
+    )
+
+    # recraft-v4-svg: apiEndpoint must be fal-ai/recraft/v4/text-to-vector;
+    # must NOT have 'style' enum (V3-only);
+    # must have 'style_id', 'colors', 'background_color', 'enable_safety_checker';
+    # output port must be SVG type (not Image).
+    recraft_svg = definitions["recraft-v4-svg"]
+    recraft_svg_param_keys = {
+        p["key"]
+        for group in ("params", "sharedParams", "falParams", "directParams")
+        for p in recraft_svg.get(group, []) or []
+    }
+    assert "style" not in recraft_svg_param_keys, (
+        "recraft-v4-svg must not have 'style' param (V3-only; not in V4 API)"
+    )
+    assert "style_id" in recraft_svg_param_keys, (
+        "recraft-v4-svg must have 'style_id' param"
+    )
+    assert "colors" in recraft_svg_param_keys, (
+        "recraft-v4-svg must have 'colors' param"
+    )
+    assert "background_color" in recraft_svg_param_keys, (
+        "recraft-v4-svg must have 'background_color' param (added in V4 API)"
+    )
+    assert "enable_safety_checker" in recraft_svg_param_keys, (
+        "recraft-v4-svg must have 'enable_safety_checker' param"
+    )
+    assert recraft_svg["apiEndpoint"] == "fal-ai/recraft/v4/text-to-vector", (
+        "recraft-v4-svg apiEndpoint must be 'fal-ai/recraft/v4/text-to-vector'"
+    )
+    recraft_svg_out_types = {p["dataType"] for p in recraft_svg["outputPorts"]}
+    assert "SVG" in recraft_svg_out_types, (
+        "recraft-v4-svg must have SVG output port (content_type image/svg+xml routes here)"
+    )
+    assert "Image" not in recraft_svg_out_types, (
+        "recraft-v4-svg must not have Image output port (SVG nodes output SVG only)"
+    )

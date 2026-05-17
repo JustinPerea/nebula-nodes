@@ -38,6 +38,111 @@ SYNC_HANDLERS: dict[
 }
 
 
+def _parse_recraft_color(value: str) -> dict[str, int] | None:
+    """Parse a single color value into an RGBColor dict {r, g, b}.
+
+    Accepts:
+    - Hex string: "#FF0000" or "FF0000"  → {"r": 255, "g": 0, "b": 0}
+    - RGB dict JSON: {"r": 255, "g": 0, "b": 0} (already correct, returned as-is)
+    Returns None if the value cannot be parsed.
+    """
+    if isinstance(value, dict):
+        if "r" in value and "g" in value and "b" in value:
+            return {"r": int(value["r"]), "g": int(value["g"]), "b": int(value["b"])}
+        return None
+    s = str(value).strip().lstrip("#")
+    if len(s) == 6:
+        try:
+            return {
+                "r": int(s[0:2], 16),
+                "g": int(s[2:4], 16),
+                "b": int(s[4:6], 16),
+            }
+        except ValueError:
+            return None
+    return None
+
+
+def _apply_recraft_color_params(node: GraphNode) -> None:
+    """Convert Recraft color params from string representation to FAL's expected format.
+
+    FAL's Recraft V4 API expects:
+    - colors: list[{r, g, b}]   (NOT comma-separated hex strings)
+    - background_color: {r, g, b}  (NOT a hex string)
+
+    The UI stores these as:
+    - colors: JSON array string like '[{"r":255,"g":0,"b":0}]'
+              OR comma-separated hex string like '#FF0000,#00FF00'
+    - background_color: JSON object string like '{"r":255,"g":255,"b":255}'
+                        OR a hex string like '#FFFFFF'
+
+    Drops the param if the value is empty, unparseable, or produces no valid colors.
+    """
+    # --- colors ---
+    raw_colors = node.params.get("colors")
+    if raw_colors is not None:
+        if isinstance(raw_colors, list):
+            # Already a list — ensure each item is an {r,g,b} dict
+            parsed = [c for c in (_parse_recraft_color(c) for c in raw_colors) if c]
+            if parsed:
+                node.params["colors"] = parsed
+            else:
+                node.params.pop("colors", None)
+        else:
+            s = str(raw_colors).strip()
+            if not s:
+                node.params.pop("colors", None)
+            elif s.startswith("["):
+                # JSON array
+                try:
+                    items = json.loads(s)
+                    parsed = [c for c in (_parse_recraft_color(i) for i in items) if c]
+                    if parsed:
+                        node.params["colors"] = parsed
+                    else:
+                        node.params.pop("colors", None)
+                except (json.JSONDecodeError, TypeError):
+                    node.params.pop("colors", None)
+            else:
+                # Comma-separated hex strings: "#FF0000,#00FF00,#0000FF"
+                parts = [p.strip() for p in s.split(",") if p.strip()]
+                parsed = [c for c in (_parse_recraft_color(p) for p in parts) if c]
+                if parsed:
+                    node.params["colors"] = parsed
+                else:
+                    node.params.pop("colors", None)
+
+    # --- background_color ---
+    raw_bg = node.params.get("background_color")
+    if raw_bg is not None:
+        if isinstance(raw_bg, dict):
+            result = _parse_recraft_color(raw_bg)
+            if result:
+                node.params["background_color"] = result
+            else:
+                node.params.pop("background_color", None)
+        else:
+            s = str(raw_bg).strip()
+            if not s:
+                node.params.pop("background_color", None)
+            elif s.startswith("{"):
+                try:
+                    obj = json.loads(s)
+                    result = _parse_recraft_color(obj)
+                    if result:
+                        node.params["background_color"] = result
+                    else:
+                        node.params.pop("background_color", None)
+                except (json.JSONDecodeError, TypeError):
+                    node.params.pop("background_color", None)
+            else:
+                result = _parse_recraft_color(s)
+                if result:
+                    node.params["background_color"] = result
+                else:
+                    node.params.pop("background_color", None)
+
+
 def get_handler_registry(
     emit: Callable[[ExecutionEvent], Awaitable[None]] | None = None,
 ) -> dict[
@@ -321,6 +426,7 @@ def get_handler_registry(
             api_keys: dict[str, str],
         ) -> dict[str, Any]:
             node.params.setdefault("endpoint_id", "fal-ai/recraft/v4/text-to-image")
+            _apply_recraft_color_params(node)
             return await handle_fal_universal(node, inputs, api_keys, emit=emit)
 
         async def _recraft_svg_handler(
@@ -329,6 +435,7 @@ def get_handler_registry(
             api_keys: dict[str, str],
         ) -> dict[str, Any]:
             node.params.setdefault("endpoint_id", "fal-ai/recraft/v4/text-to-vector")
+            _apply_recraft_color_params(node)
             return await handle_fal_universal(node, inputs, api_keys, emit=emit)
 
         async def _kling_v3_handler(

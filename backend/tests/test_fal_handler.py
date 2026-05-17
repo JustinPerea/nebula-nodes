@@ -1754,3 +1754,331 @@ async def test_luma_ray2_flash_modify_without_prompt_still_works():
     payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
     assert payload["video_url"] == "https://example.com/clip.mp4"
     assert "prompt" not in payload, "prompt must not appear in payload when not connected"
+
+
+# ---------------------------------------------------------------------------
+# Recraft V4 wrapper tests (audit 2026-05-17)
+# Source: fal.ai/models/fal-ai/recraft/v4/text-to-image/api  (fetched 2026-05-17)
+#         fal.ai/models/fal-ai/recraft/v4/text-to-vector/api  (fetched 2026-05-17)
+# ---------------------------------------------------------------------------
+
+from execution.sync_runner import _apply_recraft_color_params, _parse_recraft_color
+
+
+def _make_image_poll_mocks_recraft():
+    """Return (mock_submit, mock_status, mock_result) for a standard raster image job."""
+    mock_submit = MagicMock()
+    mock_submit.status_code = 200
+    mock_submit.json.return_value = {"request_id": "req-recraft"}
+
+    mock_status = MagicMock()
+    mock_status.status_code = 200
+    mock_status.json.return_value = {"status": "COMPLETED"}
+
+    mock_result = MagicMock()
+    mock_result.status_code = 200
+    mock_result.json.return_value = {
+        "images": [{"url": "https://fal.ai/recraft-out.png", "content_type": "image/png"}]
+    }
+    return mock_submit, mock_status, mock_result
+
+
+def _make_svg_poll_mocks():
+    """Return (mock_submit, mock_status, mock_result) for a Recraft SVG job."""
+    mock_submit = MagicMock()
+    mock_submit.status_code = 200
+    mock_submit.json.return_value = {"request_id": "req-recraft-svg"}
+
+    mock_status = MagicMock()
+    mock_status.status_code = 200
+    mock_status.json.return_value = {"status": "COMPLETED"}
+
+    mock_result = MagicMock()
+    mock_result.status_code = 200
+    mock_result.json.return_value = {
+        "images": [{"url": "https://fal.ai/recraft-out.svg", "content_type": "image/svg+xml"}]
+    }
+    return mock_submit, mock_status, mock_result
+
+
+# --- _parse_recraft_color unit tests ---
+
+
+class TestParseRecraftColor:
+    def test_hex_with_hash(self):
+        assert _parse_recraft_color("#FF0000") == {"r": 255, "g": 0, "b": 0}
+
+    def test_hex_without_hash(self):
+        assert _parse_recraft_color("00FF00") == {"r": 0, "g": 255, "b": 0}
+
+    def test_hex_lowercase(self):
+        assert _parse_recraft_color("#0000ff") == {"r": 0, "g": 0, "b": 255}
+
+    def test_rgb_dict_passthrough(self):
+        assert _parse_recraft_color({"r": 128, "g": 64, "b": 32}) == {"r": 128, "g": 64, "b": 32}
+
+    def test_invalid_hex_returns_none(self):
+        assert _parse_recraft_color("ZZZZZZ") is None
+
+    def test_short_hex_returns_none(self):
+        assert _parse_recraft_color("#FFF") is None
+
+    def test_empty_string_returns_none(self):
+        assert _parse_recraft_color("") is None
+
+    def test_dict_missing_keys_returns_none(self):
+        assert _parse_recraft_color({"r": 255}) is None
+
+
+# --- _apply_recraft_color_params unit tests ---
+
+
+class TestApplyRecraftColorParams:
+    def test_hex_csv_colors_converted_to_rgb_list(self):
+        node = GraphNode(id="r", definitionId="recraft-v4-raster",
+                         params={"endpoint_id": "fal-ai/recraft/v4/text-to-image",
+                                 "colors": "#FF0000,#00FF00,#0000FF"})
+        _apply_recraft_color_params(node)
+        assert node.params["colors"] == [
+            {"r": 255, "g": 0, "b": 0},
+            {"r": 0, "g": 255, "b": 0},
+            {"r": 0, "g": 0, "b": 255},
+        ]
+
+    def test_json_array_colors_converted(self):
+        node = GraphNode(id="r", definitionId="recraft-v4-raster",
+                         params={"endpoint_id": "fal-ai/recraft/v4/text-to-image",
+                                 "colors": '[{"r":255,"g":0,"b":0}]'})
+        _apply_recraft_color_params(node)
+        assert node.params["colors"] == [{"r": 255, "g": 0, "b": 0}]
+
+    def test_empty_colors_dropped(self):
+        node = GraphNode(id="r", definitionId="recraft-v4-raster",
+                         params={"endpoint_id": "fal-ai/recraft/v4/text-to-image",
+                                 "colors": ""})
+        _apply_recraft_color_params(node)
+        assert "colors" not in node.params
+
+    def test_invalid_colors_dropped(self):
+        node = GraphNode(id="r", definitionId="recraft-v4-raster",
+                         params={"endpoint_id": "fal-ai/recraft/v4/text-to-image",
+                                 "colors": "not-a-color"})
+        _apply_recraft_color_params(node)
+        assert "colors" not in node.params
+
+    def test_hex_background_color_converted(self):
+        node = GraphNode(id="r", definitionId="recraft-v4-raster",
+                         params={"endpoint_id": "fal-ai/recraft/v4/text-to-image",
+                                 "background_color": "#FFFFFF"})
+        _apply_recraft_color_params(node)
+        assert node.params["background_color"] == {"r": 255, "g": 255, "b": 255}
+
+    def test_json_object_background_color_converted(self):
+        node = GraphNode(id="r", definitionId="recraft-v4-raster",
+                         params={"endpoint_id": "fal-ai/recraft/v4/text-to-image",
+                                 "background_color": '{"r":0,"g":0,"b":0}'})
+        _apply_recraft_color_params(node)
+        assert node.params["background_color"] == {"r": 0, "g": 0, "b": 0}
+
+    def test_empty_background_color_dropped(self):
+        node = GraphNode(id="r", definitionId="recraft-v4-raster",
+                         params={"endpoint_id": "fal-ai/recraft/v4/text-to-image",
+                                 "background_color": ""})
+        _apply_recraft_color_params(node)
+        assert "background_color" not in node.params
+
+    def test_no_color_params_unchanged(self):
+        node = GraphNode(id="r", definitionId="recraft-v4-raster",
+                         params={"endpoint_id": "fal-ai/recraft/v4/text-to-image",
+                                 "enable_safety_checker": True})
+        _apply_recraft_color_params(node)
+        assert node.params == {"endpoint_id": "fal-ai/recraft/v4/text-to-image",
+                               "enable_safety_checker": True}
+
+
+# --- recraft-v4-raster endpoint injection and port mapping ---
+
+
+@pytest.mark.asyncio
+async def test_recraft_raster_endpoint_injected():
+    """_recraft_raster_handler injects fal-ai/recraft/v4/text-to-image."""
+    mock_submit, mock_status, mock_result = _make_image_poll_mocks_recraft()
+
+    node = GraphNode(id="rr", definitionId="recraft-v4-raster", params={})
+    node.params.setdefault("endpoint_id", "fal-ai/recraft/v4/text-to-image")
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            result = await handle_fal_universal(
+                node,
+                {"prompt": PortValueDict(type="Text", value="a dragon")},
+                {"FAL_KEY": "fal_test"},
+                emit=AsyncMock(),
+            )
+
+    assert result["image"]["type"] == "Image"
+    posted_url = mock_client.post.call_args.args[0] if mock_client.post.call_args.args \
+        else mock_client.post.call_args.kwargs.get("url", "")
+    assert "recraft/v4/text-to-image" in posted_url
+
+
+@pytest.mark.asyncio
+async def test_recraft_raster_colors_hex_csv_sent_as_rgb_list():
+    """recraft-v4-raster: comma-sep hex colors must arrive at FAL as [{r,g,b}] list."""
+    mock_submit, mock_status, mock_result = _make_image_poll_mocks_recraft()
+
+    node = GraphNode(
+        id="rr-colors",
+        definitionId="recraft-v4-raster",
+        params={
+            "endpoint_id": "fal-ai/recraft/v4/text-to-image",
+            "colors": "#FF0000,#0000FF",
+        },
+    )
+    _apply_recraft_color_params(node)
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            await handle_fal_universal(
+                node,
+                {"prompt": PortValueDict(type="Text", value="colorful art")},
+                {"FAL_KEY": "fal_test"},
+                emit=AsyncMock(),
+            )
+
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert payload["colors"] == [{"r": 255, "g": 0, "b": 0}, {"r": 0, "g": 0, "b": 255}]
+    assert "style" not in payload, "style param must not be sent to FAL V4 (removed from definition)"
+
+
+@pytest.mark.asyncio
+async def test_recraft_raster_background_color_sent_as_rgb_object():
+    """recraft-v4-raster: hex background_color must arrive at FAL as {r,g,b} object."""
+    mock_submit, mock_status, mock_result = _make_image_poll_mocks_recraft()
+
+    node = GraphNode(
+        id="rr-bg",
+        definitionId="recraft-v4-raster",
+        params={
+            "endpoint_id": "fal-ai/recraft/v4/text-to-image",
+            "background_color": "#FFFFFF",
+        },
+    )
+    _apply_recraft_color_params(node)
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            await handle_fal_universal(
+                node,
+                {"prompt": PortValueDict(type="Text", value="white background")},
+                {"FAL_KEY": "fal_test"},
+                emit=AsyncMock(),
+            )
+
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert payload["background_color"] == {"r": 255, "g": 255, "b": 255}
+
+
+# --- recraft-v4-svg endpoint injection and SVG output port ---
+
+
+@pytest.mark.asyncio
+async def test_recraft_svg_endpoint_injected():
+    """_recraft_svg_handler injects fal-ai/recraft/v4/text-to-vector."""
+    mock_submit, mock_status, mock_result = _make_svg_poll_mocks()
+
+    node = GraphNode(id="rs", definitionId="recraft-v4-svg", params={})
+    node.params.setdefault("endpoint_id", "fal-ai/recraft/v4/text-to-vector")
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            result = await handle_fal_universal(
+                node,
+                {"prompt": PortValueDict(type="Text", value="a logo")},
+                {"FAL_KEY": "fal_test"},
+                emit=AsyncMock(),
+            )
+
+    assert result["svg"]["type"] == "SVG", "recraft-v4-svg must return SVG port, not Image"
+    assert result["svg"]["value"] == "https://fal.ai/recraft-out.svg"
+    posted_url = mock_client.post.call_args.args[0] if mock_client.post.call_args.args \
+        else mock_client.post.call_args.kwargs.get("url", "")
+    assert "recraft/v4/text-to-vector" in posted_url
+
+
+@pytest.mark.asyncio
+async def test_recraft_svg_colors_hex_csv_sent_as_rgb_list():
+    """recraft-v4-svg: comma-sep hex colors must arrive at FAL as [{r,g,b}] list."""
+    mock_submit, mock_status, mock_result = _make_svg_poll_mocks()
+
+    node = GraphNode(
+        id="rs-colors",
+        definitionId="recraft-v4-svg",
+        params={
+            "endpoint_id": "fal-ai/recraft/v4/text-to-vector",
+            "colors": "#123456,#ABCDEF",
+        },
+    )
+    _apply_recraft_color_params(node)
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            result = await handle_fal_universal(
+                node,
+                {"prompt": PortValueDict(type="Text", value="icon")},
+                {"FAL_KEY": "fal_test"},
+                emit=AsyncMock(),
+            )
+
+    assert result["svg"]["type"] == "SVG"
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert payload["colors"] == [{"r": 0x12, "g": 0x34, "b": 0x56}, {"r": 0xAB, "g": 0xCD, "b": 0xEF}]
+    assert "style" not in payload, "style param must not be sent to FAL V4 (removed from definition)"
+
+
+@pytest.mark.asyncio
+async def test_recraft_svg_output_port_is_svg_not_image():
+    """_parse_fal_output must return svg port (not image) for image/svg+xml content_type.
+    This is the core routing test for the recraft-v4-svg node."""
+    result = _parse_fal_output({
+        "images": [{"url": "https://fal.ai/vector.svg", "content_type": "image/svg+xml"}]
+    })
+    assert "svg" in result, "SVG content_type must route to svg port"
+    assert "image" not in result, "SVG content_type must not route to image port"
+    assert result["svg"]["type"] == "SVG"
+    assert result["svg"]["value"] == "https://fal.ai/vector.svg"
