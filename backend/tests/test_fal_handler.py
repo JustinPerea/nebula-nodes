@@ -2680,3 +2680,403 @@ async def test_flux2_pro_safety_tolerance_max_is_5():
 
     payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
     assert payload["safety_tolerance"] == "5"
+
+
+# ---------------------------------------------------------------------------
+# seedance-v1-5
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_seedance_v1_5_endpoint_injected():
+    """seedance-v1-5 must use fal-ai/bytedance/seedance/v1.5/pro/image-to-video (not the old
+    fal-ai/seedance/v1.5/text-to-video endpoint that the frontend used to have)."""
+    mock_submit, mock_status, mock_result = _make_video_poll_mocks()
+
+    node = GraphNode(id="sd15-ep", definitionId="seedance-v1-5", params={})
+    node.params.setdefault("endpoint_id", "fal-ai/bytedance/seedance/v1.5/pro/image-to-video")
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            result = await handle_fal_universal(
+                node,
+                {
+                    "prompt": PortValueDict(type="Text", value="cinematic"),
+                    "image": PortValueDict(type="Image", value="https://example.com/start.png"),
+                },
+                {"FAL_KEY": "fal_test"},
+                emit=AsyncMock(),
+            )
+
+    assert result["video"]["type"] == "Video"
+    posted_url = mock_client.post.call_args.args[0] if mock_client.post.call_args.args \
+        else mock_client.post.call_args.kwargs.get("url", "")
+    assert "bytedance/seedance/v1.5/pro/image-to-video" in posted_url
+
+
+@pytest.mark.asyncio
+async def test_seedance_v1_5_image_maps_to_image_url():
+    """seedance-v1-5 image port must map to image_url; end_image port to end_image_url."""
+    mock_submit, mock_status, mock_result = _make_video_poll_mocks()
+
+    node = GraphNode(
+        id="sd15-img",
+        definitionId="seedance-v1-5",
+        params={
+            "endpoint_id": "fal-ai/bytedance/seedance/v1.5/pro/image-to-video",
+            "duration": "5",
+            "aspect_ratio": "16:9",
+            "resolution": "720p",
+            "generate_audio": True,
+        },
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            await handle_fal_universal(
+                node,
+                {
+                    "prompt": PortValueDict(type="Text", value="slow pan"),
+                    "image": PortValueDict(type="Image", value="https://example.com/start.png"),
+                    "end_image": PortValueDict(type="Image", value="https://example.com/end.png"),
+                },
+                {"FAL_KEY": "fal_test"},
+                emit=AsyncMock(),
+            )
+
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert payload["image_url"] == "https://example.com/start.png"
+    assert payload["end_image_url"] == "https://example.com/end.png"
+    assert payload["duration"] == "5", "duration must be integer string, not '5s'"
+    assert payload["generate_audio"] is True
+
+
+# ---------------------------------------------------------------------------
+# seedance-2-t2v
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_seedance2_t2v_endpoint_injected():
+    """seedance-2-t2v must route to bytedance/seedance-2.0/text-to-video (no fal-ai/ prefix)."""
+    mock_submit, mock_status, mock_result = _make_video_poll_mocks()
+
+    node = GraphNode(id="sd2t-ep", definitionId="seedance-2-t2v", params={})
+    node.params.setdefault("endpoint_id", "bytedance/seedance-2.0/text-to-video")
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            result = await handle_fal_universal(
+                node,
+                {"prompt": PortValueDict(type="Text", value="sunrise timelapse")},
+                {"FAL_KEY": "fal_test"},
+                emit=AsyncMock(),
+            )
+
+    assert result["video"]["type"] == "Video"
+    posted_url = mock_client.post.call_args.args[0] if mock_client.post.call_args.args \
+        else mock_client.post.call_args.kwargs.get("url", "")
+    assert "bytedance/seedance-2.0/text-to-video" in posted_url
+    assert posted_url.startswith("https://queue.fal.run/bytedance"), \
+        "No fal-ai/ prefix — endpoint goes directly under queue.fal.run/bytedance"
+
+
+@pytest.mark.asyncio
+async def test_seedance2_t2v_key_params_forwarded():
+    """seedance-2-t2v: aspect_ratio, duration (integer string), resolution, generate_audio forwarded."""
+    mock_submit, mock_status, mock_result = _make_video_poll_mocks()
+
+    node = GraphNode(
+        id="sd2t-params",
+        definitionId="seedance-2-t2v",
+        params={
+            "endpoint_id": "bytedance/seedance-2.0/text-to-video",
+            "aspect_ratio": "16:9",
+            "duration": "8",
+            "resolution": "1080p",
+            "generate_audio": True,
+        },
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            await handle_fal_universal(
+                node,
+                {"prompt": PortValueDict(type="Text", value="ocean waves")},
+                {"FAL_KEY": "fal_test"},
+                emit=AsyncMock(),
+            )
+
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert payload["aspect_ratio"] == "16:9"
+    assert payload["duration"] == "8", "duration must be integer string, not '8s'"
+    assert payload["resolution"] == "1080p"
+    assert payload["generate_audio"] is True
+
+
+# ---------------------------------------------------------------------------
+# seedance-2-i2v
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_seedance2_i2v_endpoint_and_ports():
+    """seedance-2-i2v: correct endpoint, image_url + end_image_url mapping."""
+    mock_submit, mock_status, mock_result = _make_video_poll_mocks()
+
+    node = GraphNode(
+        id="sd2i-ep",
+        definitionId="seedance-2-i2v",
+        params={
+            "endpoint_id": "bytedance/seedance-2.0/image-to-video",
+            "duration": "auto",
+        },
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            result = await handle_fal_universal(
+                node,
+                {
+                    "prompt": PortValueDict(type="Text", value="zoom in"),
+                    "image": PortValueDict(type="Image", value="https://example.com/frame.png"),
+                    "end_image": PortValueDict(type="Image", value="https://example.com/last.png"),
+                },
+                {"FAL_KEY": "fal_test"},
+                emit=AsyncMock(),
+            )
+
+    assert result["video"]["type"] == "Video"
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert payload["image_url"] == "https://example.com/frame.png"
+    assert payload["end_image_url"] == "https://example.com/last.png"
+    posted_url = mock_client.post.call_args.args[0] if mock_client.post.call_args.args \
+        else mock_client.post.call_args.kwargs.get("url", "")
+    assert "bytedance/seedance-2.0/image-to-video" in posted_url
+
+
+# ---------------------------------------------------------------------------
+# seedance-2-r2v
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_seedance2_r2v_images_port_maps_to_image_urls():
+    """seedance-2-r2v: multi-image 'images' port must map to image_urls list (not image_url)."""
+    mock_submit, mock_status, mock_result = _make_video_poll_mocks()
+
+    node = GraphNode(
+        id="sd2r-imgs",
+        definitionId="seedance-2-r2v",
+        params={"endpoint_id": "bytedance/seedance-2.0/reference-to-video"},
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            result = await handle_fal_universal(
+                node,
+                {
+                    "prompt": PortValueDict(type="Text", value="@Image1 in motion"),
+                    "images": PortValueDict(type="Image", value=[
+                        "https://example.com/ref1.png",
+                        "https://example.com/ref2.png",
+                    ]),
+                },
+                {"FAL_KEY": "fal_test"},
+                emit=AsyncMock(),
+            )
+
+    assert result["video"]["type"] == "Video"
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert payload["image_urls"] == [
+        "https://example.com/ref1.png",
+        "https://example.com/ref2.png",
+    ], "multi-port images must arrive as image_urls list"
+    assert "image_url" not in payload, "singular image_url must not appear for r2v"
+
+
+@pytest.mark.asyncio
+async def test_seedance2_r2v_endpoint_injected():
+    """seedance-2-r2v routes to bytedance/seedance-2.0/reference-to-video."""
+    mock_submit, mock_status, mock_result = _make_video_poll_mocks()
+
+    node = GraphNode(id="sd2r-ep", definitionId="seedance-2-r2v", params={})
+    node.params.setdefault("endpoint_id", "bytedance/seedance-2.0/reference-to-video")
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            result = await handle_fal_universal(
+                node,
+                {"prompt": PortValueDict(type="Text", value="character walks")},
+                {"FAL_KEY": "fal_test"},
+                emit=AsyncMock(),
+            )
+
+    assert result["video"]["type"] == "Video"
+    posted_url = mock_client.post.call_args.args[0] if mock_client.post.call_args.args \
+        else mock_client.post.call_args.kwargs.get("url", "")
+    assert "seedance-2.0/reference-to-video" in posted_url
+
+
+# ---------------------------------------------------------------------------
+# seedance-2-fast-t2v
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_seedance2_fast_t2v_endpoint_injected():
+    """seedance-2-fast-t2v routes to bytedance/seedance-2.0/fast/text-to-video."""
+    mock_submit, mock_status, mock_result = _make_video_poll_mocks()
+
+    node = GraphNode(id="sd2ft-ep", definitionId="seedance-2-fast-t2v", params={})
+    node.params.setdefault("endpoint_id", "bytedance/seedance-2.0/fast/text-to-video")
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            result = await handle_fal_universal(
+                node,
+                {"prompt": PortValueDict(type="Text", value="quick pan")},
+                {"FAL_KEY": "fal_test"},
+                emit=AsyncMock(),
+            )
+
+    assert result["video"]["type"] == "Video"
+    posted_url = mock_client.post.call_args.args[0] if mock_client.post.call_args.args \
+        else mock_client.post.call_args.kwargs.get("url", "")
+    assert "seedance-2.0/fast/text-to-video" in posted_url
+
+
+@pytest.mark.asyncio
+async def test_seedance2_fast_t2v_duration_is_string_not_int():
+    """seedance-2-fast-t2v: duration param is string enum ('auto', '4'..'15'), not integer."""
+    mock_submit, mock_status, mock_result = _make_video_poll_mocks()
+
+    node = GraphNode(
+        id="sd2ft-dur",
+        definitionId="seedance-2-fast-t2v",
+        params={
+            "endpoint_id": "bytedance/seedance-2.0/fast/text-to-video",
+            "duration": "auto",
+            "aspect_ratio": "auto",
+        },
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            await handle_fal_universal(
+                node,
+                {"prompt": PortValueDict(type="Text", value="test")},
+                {"FAL_KEY": "fal_test"},
+                emit=AsyncMock(),
+            )
+
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert payload["duration"] == "auto"
+    assert isinstance(payload["duration"], str), "duration must be a string, not int"
+    assert payload["aspect_ratio"] == "auto"
+
+
+# ---------------------------------------------------------------------------
+# seedance-2-fast-i2v
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_seedance2_fast_i2v_endpoint_and_ports():
+    """seedance-2-fast-i2v: correct endpoint, image_url + end_image_url mapping."""
+    mock_submit, mock_status, mock_result = _make_video_poll_mocks()
+
+    node = GraphNode(
+        id="sd2fi-ep",
+        definitionId="seedance-2-fast-i2v",
+        params={
+            "endpoint_id": "bytedance/seedance-2.0/fast/image-to-video",
+            "duration": "auto",
+            "aspect_ratio": "auto",
+        },
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            result = await handle_fal_universal(
+                node,
+                {
+                    "prompt": PortValueDict(type="Text", value="fast dolly"),
+                    "image": PortValueDict(type="Image", value="https://example.com/start.png"),
+                    "end_image": PortValueDict(type="Image", value="https://example.com/end.png"),
+                },
+                {"FAL_KEY": "fal_test"},
+                emit=AsyncMock(),
+            )
+
+    assert result["video"]["type"] == "Video"
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert payload["image_url"] == "https://example.com/start.png"
+    assert payload["end_image_url"] == "https://example.com/end.png"
+    posted_url = mock_client.post.call_args.args[0] if mock_client.post.call_args.args \
+        else mock_client.post.call_args.kwargs.get("url", "")
+    assert "seedance-2.0/fast/image-to-video" in posted_url

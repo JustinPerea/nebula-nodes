@@ -933,12 +933,12 @@ Generated: 2026-05-17 | Nodes: 100 | Source: [`backend/data/node_definitions.jso
 | **Execution** | async-poll |
 | **Inputs** | Image (Image)*, Prompt (Text)*, End Frame (Image) |
 | **Outputs** | Video (Video) |
-| **Audited** | — |
+| **Audited** | 2026-05-17 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
 | Aspect Ratio | enum | auto | Auto, 21:9, 16:9, 4:3, 1:1, 3:4, 9:16 |
-| Duration | enum | 10 | Auto, 4s, 5s, 6s, 8s, 10s, 12s, 15s |
+| Duration | enum | auto | Auto, 4s, 5s, 6s, 8s, 10s, 12s, 15s |
 | Resolution | enum | 720p | 480p, 720p |
 | Generate Audio | bool | true | — |
 | Seed | int | — | — |
@@ -956,12 +956,12 @@ Generated: 2026-05-17 | Nodes: 100 | Source: [`backend/data/node_definitions.jso
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text)* |
 | **Outputs** | Video (Video) |
-| **Audited** | — |
+| **Audited** | 2026-05-17 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Aspect Ratio | enum | 16:9 | Auto, 21:9, 16:9, 4:3, 1:1, 3:4, 9:16 |
-| Duration | enum | 10 | Auto, 4s, 5s, 6s, 8s, 10s, 12s, 15s |
+| Aspect Ratio | enum | auto | Auto, 21:9, 16:9, 4:3, 1:1, 3:4, 9:16 |
+| Duration | enum | auto | Auto, 4s, 5s, 6s, 8s, 10s, 12s, 15s |
 | Resolution | enum | 720p | 480p, 720p |
 | Generate Audio | bool | true | — |
 | Seed | int | — | — |
@@ -979,13 +979,13 @@ Generated: 2026-05-17 | Nodes: 100 | Source: [`backend/data/node_definitions.jso
 | **Execution** | async-poll |
 | **Inputs** | Image (Image)*, Prompt (Text)*, End Frame (Image) |
 | **Outputs** | Video (Video) |
-| **Audited** | — |
+| **Audited** | 2026-05-17 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
 | Aspect Ratio | enum | auto | Auto, 21:9, 16:9, 4:3, 1:1, 3:4, 9:16 |
 | Duration | enum | auto | Auto, 4s, 5s, 6s, 8s, 10s, 12s, 15s |
-| Resolution | enum | 720p | 480p, 720p |
+| Resolution | enum | 720p | 480p, 720p, 1080p |
 | Generate Audio | bool | true | — |
 | Seed | int | — | — |
 
@@ -1006,14 +1006,15 @@ Generated: 2026-05-17 | Nodes: 100 | Source: [`backend/data/node_definitions.jso
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Aspect Ratio | enum | auto | Auto, 16:9, 9:16, 4:3, 1:1, 3:4 |
+| Aspect Ratio | enum | auto | Auto, 21:9, 16:9, 9:16, 4:3, 1:1, 3:4 |
 | Duration | enum | auto | Auto, 4s, 6s, 8s, 10s, 15s |
+| Resolution | enum | 720p | 480p, 720p, 1080p |
 | Generate Audio | bool | true | — |
 | Seed | int | — | — |
 
 ---
 
-### Seedance 2.0 T2V
+### Seedance 2.0 Text-to-Video
 
 | | |
 |---|---|
@@ -1024,13 +1025,13 @@ Generated: 2026-05-17 | Nodes: 100 | Source: [`backend/data/node_definitions.jso
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text)* |
 | **Outputs** | Video (Video) |
-| **Audited** | — |
+| **Audited** | 2026-05-17 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Aspect Ratio | enum | 16:9 | Auto, 21:9, 16:9, 4:3, 1:1, 3:4, 9:16 |
+| Aspect Ratio | enum | auto | Auto, 21:9, 16:9, 4:3, 1:1, 3:4, 9:16 |
 | Duration | enum | auto | Auto, 4s, 5s, 6s, 8s, 10s, 12s, 15s |
-| Resolution | enum | 720p | 480p, 720p |
+| Resolution | enum | 720p | 480p, 720p, 1080p |
 | Generate Audio | bool | true | — |
 | Seed | int | — | — |
 
@@ -1047,13 +1048,16 @@ Generated: 2026-05-17 | Nodes: 100 | Source: [`backend/data/node_definitions.jso
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text)*, Image (Image)*, End Image (Image) |
 | **Outputs** | Video (Video) |
-| **Audited** | — |
+| **Audited** | 2026-05-17 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Duration | enum | 8s | 4 seconds, 6 seconds, 8 seconds, 10 seconds, 12 seconds |
-| Aspect Ratio | enum | 16:9 | 16:9, 9:16, 1:1, 21:9, 4:3, 3:4 |
-| Resolution | enum | 720p | 480p, 720p |
+| Duration | enum | 5 | 4 seconds, 5 seconds, 6 seconds, 7 seconds, 8 seconds, 9 seconds, 10 seconds, 11 seconds, … |
+| Aspect Ratio | enum | 16:9 | 16:9, 9:16, 1:1, 21:9, 4:3, 3:4, Auto |
+| Resolution | enum | 720p | 480p, 720p, 1080p |
+| Generate Audio | bool | true | — |
+| Camera Fixed | bool | false | — |
+| Seed | int | — | — |
 
 ---
 

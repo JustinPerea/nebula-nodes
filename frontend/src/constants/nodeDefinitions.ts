@@ -4565,15 +4565,16 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
   },
   'seedance-v1-5': {
     id: 'seedance-v1-5',
-    displayName: 'Seedance V1.5',
+    displayName: 'Seedance V1.5 Pro (I2V)',
     category: 'video-gen',
     apiProvider: 'fal',
-    apiEndpoint: 'fal-ai/seedance/v1.5/text-to-video',
+    apiEndpoint: 'fal-ai/bytedance/seedance/v1.5/pro/image-to-video',
     envKeyName: 'FAL_KEY',
     executionPattern: 'async-poll',
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
-      { id: 'image', label: 'Image', dataType: 'Image', required: false },
+      { id: 'image', label: 'Image', dataType: 'Image', required: true },
+      { id: 'end_image', label: 'End Image', dataType: 'Image', required: false },
     ],
     outputPorts: [
       { id: 'video', label: 'Video', dataType: 'Video', required: false },
@@ -4584,13 +4585,17 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         label: 'Duration',
         type: 'enum',
         required: false,
-        default: '8s',
+        default: '5',
         options: [
-          { label: '4 seconds', value: '4s' },
-          { label: '6 seconds', value: '6s' },
-          { label: '8 seconds', value: '8s' },
-          { label: '10 seconds', value: '10s' },
-          { label: '12 seconds', value: '12s' },
+          { label: '4 seconds', value: '4' },
+          { label: '5 seconds', value: '5' },
+          { label: '6 seconds', value: '6' },
+          { label: '7 seconds', value: '7' },
+          { label: '8 seconds', value: '8' },
+          { label: '9 seconds', value: '9' },
+          { label: '10 seconds', value: '10' },
+          { label: '11 seconds', value: '11' },
+          { label: '12 seconds', value: '12' },
         ],
       },
       {
@@ -4606,6 +4611,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
           { label: '21:9', value: '21:9' },
           { label: '4:3', value: '4:3' },
           { label: '3:4', value: '3:4' },
+          { label: 'Auto', value: 'auto' },
         ],
       },
       {
@@ -4617,7 +4623,29 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         options: [
           { label: '480p', value: '480p' },
           { label: '720p', value: '720p' },
+          { label: '1080p', value: '1080p' },
         ],
+      },
+      {
+        key: 'generate_audio',
+        label: 'Generate Audio',
+        type: 'boolean',
+        required: false,
+        default: true,
+      },
+      {
+        key: 'camera_fixed',
+        label: 'Camera Fixed',
+        type: 'boolean',
+        required: false,
+        default: false,
+      },
+      {
+        key: 'seed',
+        label: 'Seed',
+        type: 'integer',
+        required: false,
+        placeholder: 'Random',
       },
     ],
   },
@@ -5048,7 +5076,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
 
   'seedance-2-t2v': {
     id: 'seedance-2-t2v',
-    displayName: 'Seedance 2.0 T2V',
+    displayName: 'Seedance 2.0 Text-to-Video',
     category: 'video-gen',
     apiProvider: 'fal',
     apiEndpoint: 'bytedance/seedance-2.0/text-to-video',
@@ -5066,7 +5094,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         label: 'Aspect Ratio',
         type: 'enum',
         required: false,
-        default: '16:9',
+        default: 'auto',
         options: [
           { label: 'Auto', value: 'auto' },
           { label: '21:9', value: '21:9' },
@@ -5103,6 +5131,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         options: [
           { label: '480p', value: '480p' },
           { label: '720p', value: '720p' },
+          { label: '1080p', value: '1080p' },
         ],
       },
       {
@@ -5181,6 +5210,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         options: [
           { label: '480p', value: '480p' },
           { label: '720p', value: '720p' },
+          { label: '1080p', value: '1080p' },
         ],
       },
       {
@@ -5224,6 +5254,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         default: 'auto',
         options: [
           { label: 'Auto', value: 'auto' },
+          { label: '21:9', value: '21:9' },
           { label: '16:9', value: '16:9' },
           { label: '9:16', value: '9:16' },
           { label: '4:3', value: '4:3' },
@@ -5244,6 +5275,18 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
           { label: '8s', value: '8' },
           { label: '10s', value: '10' },
           { label: '15s', value: '15' },
+        ],
+      },
+      {
+        key: 'resolution',
+        label: 'Resolution',
+        type: 'enum',
+        required: false,
+        default: '720p',
+        options: [
+          { label: '480p', value: '480p' },
+          { label: '720p', value: '720p' },
+          { label: '1080p', value: '1080p' },
         ],
       },
       {
@@ -5283,7 +5326,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         label: 'Aspect Ratio',
         type: 'enum',
         required: false,
-        default: '16:9',
+        default: 'auto',
         options: [
           { label: 'Auto', value: 'auto' },
           { label: '21:9', value: '21:9' },
@@ -5299,7 +5342,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         label: 'Duration',
         type: 'enum',
         required: false,
-        default: '10',
+        default: 'auto',
         options: [
           { label: 'Auto', value: 'auto' },
           { label: '4s', value: '4' },
@@ -5377,7 +5420,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         label: 'Duration',
         type: 'enum',
         required: false,
-        default: '10',
+        default: 'auto',
         options: [
           { label: 'Auto', value: 'auto' },
           { label: '4s', value: '4' },

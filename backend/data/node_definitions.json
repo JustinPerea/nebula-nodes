@@ -57,15 +57,15 @@
             "value": "auto"
           },
           {
-            "label": "1024×1024",
+            "label": "1024\u00d71024",
             "value": "1024x1024"
           },
           {
-            "label": "1536×1024",
+            "label": "1536\u00d71024",
             "value": "1536x1024"
           },
           {
-            "label": "1024×1536",
+            "label": "1024\u00d71536",
             "value": "1024x1536"
           }
         ]
@@ -2616,15 +2616,15 @@
         "default": "1024x1024",
         "options": [
           {
-            "label": "1024×1024",
+            "label": "1024\u00d71024",
             "value": "1024x1024"
           },
           {
-            "label": "1024×1792",
+            "label": "1024\u00d71792",
             "value": "1024x1792"
           },
           {
-            "label": "1792×1024",
+            "label": "1792\u00d71024",
             "value": "1792x1024"
           }
         ]
@@ -3616,123 +3616,123 @@
         "default": "Kore",
         "options": [
           {
-            "label": "Zephyr — Bright",
+            "label": "Zephyr \u2014 Bright",
             "value": "Zephyr"
           },
           {
-            "label": "Puck — Upbeat",
+            "label": "Puck \u2014 Upbeat",
             "value": "Puck"
           },
           {
-            "label": "Charon — Informative",
+            "label": "Charon \u2014 Informative",
             "value": "Charon"
           },
           {
-            "label": "Kore — Firm",
+            "label": "Kore \u2014 Firm",
             "value": "Kore"
           },
           {
-            "label": "Fenrir — Excitable",
+            "label": "Fenrir \u2014 Excitable",
             "value": "Fenrir"
           },
           {
-            "label": "Leda — Youthful",
+            "label": "Leda \u2014 Youthful",
             "value": "Leda"
           },
           {
-            "label": "Orus — Firm",
+            "label": "Orus \u2014 Firm",
             "value": "Orus"
           },
           {
-            "label": "Aoede — Breezy",
+            "label": "Aoede \u2014 Breezy",
             "value": "Aoede"
           },
           {
-            "label": "Callirrhoe — Easy-going",
+            "label": "Callirrhoe \u2014 Easy-going",
             "value": "Callirrhoe"
           },
           {
-            "label": "Autonoe — Bright",
+            "label": "Autonoe \u2014 Bright",
             "value": "Autonoe"
           },
           {
-            "label": "Enceladus — Breathy",
+            "label": "Enceladus \u2014 Breathy",
             "value": "Enceladus"
           },
           {
-            "label": "Iapetus — Clear",
+            "label": "Iapetus \u2014 Clear",
             "value": "Iapetus"
           },
           {
-            "label": "Umbriel — Easy-going",
+            "label": "Umbriel \u2014 Easy-going",
             "value": "Umbriel"
           },
           {
-            "label": "Algieba — Smooth",
+            "label": "Algieba \u2014 Smooth",
             "value": "Algieba"
           },
           {
-            "label": "Despina — Smooth",
+            "label": "Despina \u2014 Smooth",
             "value": "Despina"
           },
           {
-            "label": "Erinome — Clear",
+            "label": "Erinome \u2014 Clear",
             "value": "Erinome"
           },
           {
-            "label": "Algenib — Gravelly",
+            "label": "Algenib \u2014 Gravelly",
             "value": "Algenib"
           },
           {
-            "label": "Rasalgethi — Informative",
+            "label": "Rasalgethi \u2014 Informative",
             "value": "Rasalgethi"
           },
           {
-            "label": "Laomedeia — Upbeat",
+            "label": "Laomedeia \u2014 Upbeat",
             "value": "Laomedeia"
           },
           {
-            "label": "Achernar — Soft",
+            "label": "Achernar \u2014 Soft",
             "value": "Achernar"
           },
           {
-            "label": "Alnilam — Firm",
+            "label": "Alnilam \u2014 Firm",
             "value": "Alnilam"
           },
           {
-            "label": "Schedar — Even",
+            "label": "Schedar \u2014 Even",
             "value": "Schedar"
           },
           {
-            "label": "Gacrux — Mature",
+            "label": "Gacrux \u2014 Mature",
             "value": "Gacrux"
           },
           {
-            "label": "Pulcherrima — Forward",
+            "label": "Pulcherrima \u2014 Forward",
             "value": "Pulcherrima"
           },
           {
-            "label": "Achird — Friendly",
+            "label": "Achird \u2014 Friendly",
             "value": "Achird"
           },
           {
-            "label": "Zubenelgenubi — Casual",
+            "label": "Zubenelgenubi \u2014 Casual",
             "value": "Zubenelgenubi"
           },
           {
-            "label": "Vindemiatrix — Gentle",
+            "label": "Vindemiatrix \u2014 Gentle",
             "value": "Vindemiatrix"
           },
           {
-            "label": "Sadachbia — Lively",
+            "label": "Sadachbia \u2014 Lively",
             "value": "Sadachbia"
           },
           {
-            "label": "Sadaltager — Knowledgeable",
+            "label": "Sadaltager \u2014 Knowledgeable",
             "value": "Sadaltager"
           },
           {
-            "label": "Sulafat — Warm",
+            "label": "Sulafat \u2014 Warm",
             "value": "Sulafat"
           }
         ]
@@ -4174,11 +4174,11 @@
         "default": "landscape_4_3",
         "options": [
           {
-            "label": "Square HD (1024×1024)",
+            "label": "Square HD (1024\u00d71024)",
             "value": "square_hd"
           },
           {
-            "label": "Square (512×512)",
+            "label": "Square (512\u00d7512)",
             "value": "square"
           },
           {
@@ -5016,7 +5016,9 @@
         "required": false,
         "default": 1.7,
         "visibleWhen": {
-          "enable_rigging": [true]
+          "enable_rigging": [
+            true
+          ]
         }
       },
       {
@@ -5026,7 +5028,9 @@
         "required": false,
         "default": false,
         "visibleWhen": {
-          "enable_rigging": [true]
+          "enable_rigging": [
+            true
+          ]
         }
       },
       {
@@ -5036,7 +5040,9 @@
         "required": false,
         "default": 1001,
         "visibleWhen": {
-          "enable_animation": [true]
+          "enable_animation": [
+            true
+          ]
         }
       },
       {
@@ -5272,7 +5278,9 @@
         "required": false,
         "default": 1.7,
         "visibleWhen": {
-          "enable_rigging": [true]
+          "enable_rigging": [
+            true
+          ]
         }
       },
       {
@@ -5282,7 +5290,9 @@
         "required": false,
         "default": false,
         "visibleWhen": {
-          "enable_rigging": [true]
+          "enable_rigging": [
+            true
+          ]
         }
       },
       {
@@ -5292,7 +5302,9 @@
         "required": false,
         "default": 1001,
         "visibleWhen": {
-          "enable_animation": [true]
+          "enable_animation": [
+            true
+          ]
         }
       },
       {
@@ -6241,15 +6253,15 @@
             "value": "auto"
           },
           {
-            "label": "1024×1024",
+            "label": "1024\u00d71024",
             "value": "1024x1024"
           },
           {
-            "label": "1536×1024",
+            "label": "1536\u00d71024",
             "value": "1536x1024"
           },
           {
-            "label": "1024×1536",
+            "label": "1024\u00d71536",
             "value": "1024x1536"
           }
         ]
@@ -6332,44 +6344,133 @@
     "envKeyName": "OPENAI_API_KEY",
     "executionPattern": "stream",
     "inputPorts": [
-      { "id": "prompt", "label": "Prompt", "dataType": "Text", "required": true }
+      {
+        "id": "prompt",
+        "label": "Prompt",
+        "dataType": "Text",
+        "required": true
+      }
     ],
     "outputPorts": [
-      { "id": "image", "label": "Image", "dataType": "Image", "required": false }
+      {
+        "id": "image",
+        "label": "Image",
+        "dataType": "Image",
+        "required": false
+      }
     ],
     "params": [
-      { "key": "size", "label": "Size", "type": "enum", "required": false, "default": "auto",
+      {
+        "key": "size",
+        "label": "Size",
+        "type": "enum",
+        "required": false,
+        "default": "auto",
         "options": [
-          { "label": "Auto", "value": "auto" },
-          { "label": "1024x1024", "value": "1024x1024" },
-          { "label": "1536x1024", "value": "1536x1024" },
-          { "label": "1024x1536", "value": "1024x1536" },
-          { "label": "2048x2048", "value": "2048x2048" },
-          { "label": "2048x1152", "value": "2048x1152" },
-          { "label": "3840x2160 (4K landscape)", "value": "3840x2160" },
-          { "label": "2160x3840 (4K portrait)", "value": "2160x3840" }
+          {
+            "label": "Auto",
+            "value": "auto"
+          },
+          {
+            "label": "1024x1024",
+            "value": "1024x1024"
+          },
+          {
+            "label": "1536x1024",
+            "value": "1536x1024"
+          },
+          {
+            "label": "1024x1536",
+            "value": "1024x1536"
+          },
+          {
+            "label": "2048x2048",
+            "value": "2048x2048"
+          },
+          {
+            "label": "2048x1152",
+            "value": "2048x1152"
+          },
+          {
+            "label": "3840x2160 (4K landscape)",
+            "value": "3840x2160"
+          },
+          {
+            "label": "2160x3840 (4K portrait)",
+            "value": "2160x3840"
+          }
         ]
       },
-      { "key": "quality", "label": "Quality", "type": "enum", "required": false, "default": "auto",
+      {
+        "key": "quality",
+        "label": "Quality",
+        "type": "enum",
+        "required": false,
+        "default": "auto",
         "options": [
-          { "label": "Auto", "value": "auto" },
-          { "label": "Low", "value": "low" },
-          { "label": "Medium", "value": "medium" },
-          { "label": "High", "value": "high" }
+          {
+            "label": "Auto",
+            "value": "auto"
+          },
+          {
+            "label": "Low",
+            "value": "low"
+          },
+          {
+            "label": "Medium",
+            "value": "medium"
+          },
+          {
+            "label": "High",
+            "value": "high"
+          }
         ]
       },
-      { "key": "output_format", "label": "Format", "type": "enum", "required": false, "default": "png",
+      {
+        "key": "output_format",
+        "label": "Format",
+        "type": "enum",
+        "required": false,
+        "default": "png",
         "options": [
-          { "label": "PNG", "value": "png" },
-          { "label": "JPEG", "value": "jpeg" },
-          { "label": "WebP", "value": "webp" }
+          {
+            "label": "PNG",
+            "value": "png"
+          },
+          {
+            "label": "JPEG",
+            "value": "jpeg"
+          },
+          {
+            "label": "WebP",
+            "value": "webp"
+          }
         ]
       },
-      { "key": "output_compression", "label": "Compression", "type": "integer", "required": false, "default": 90, "min": 0, "max": 100 },
-      { "key": "moderation", "label": "Moderation", "type": "enum", "required": false, "default": "auto",
+      {
+        "key": "output_compression",
+        "label": "Compression",
+        "type": "integer",
+        "required": false,
+        "default": 90,
+        "min": 0,
+        "max": 100
+      },
+      {
+        "key": "moderation",
+        "label": "Moderation",
+        "type": "enum",
+        "required": false,
+        "default": "auto",
         "options": [
-          { "label": "Auto", "value": "auto" },
-          { "label": "Low", "value": "low" }
+          {
+            "label": "Auto",
+            "value": "auto"
+          },
+          {
+            "label": "Low",
+            "value": "low"
+          }
         ]
       }
     ]
@@ -6383,46 +6484,146 @@
     "envKeyName": "OPENAI_API_KEY",
     "executionPattern": "stream",
     "inputPorts": [
-      { "id": "images", "label": "Images", "dataType": "Image", "required": true, "multiple": true },
-      { "id": "prompt", "label": "Prompt", "dataType": "Text", "required": true },
-      { "id": "mask", "label": "Mask", "dataType": "Mask", "required": false }
+      {
+        "id": "images",
+        "label": "Images",
+        "dataType": "Image",
+        "required": true,
+        "multiple": true
+      },
+      {
+        "id": "prompt",
+        "label": "Prompt",
+        "dataType": "Text",
+        "required": true
+      },
+      {
+        "id": "mask",
+        "label": "Mask",
+        "dataType": "Mask",
+        "required": false
+      }
     ],
     "outputPorts": [
-      { "id": "image", "label": "Image", "dataType": "Image", "required": false }
+      {
+        "id": "image",
+        "label": "Image",
+        "dataType": "Image",
+        "required": false
+      }
     ],
     "params": [
-      { "key": "size", "label": "Size", "type": "enum", "required": false, "default": "auto",
+      {
+        "key": "size",
+        "label": "Size",
+        "type": "enum",
+        "required": false,
+        "default": "auto",
         "options": [
-          { "label": "Auto", "value": "auto" },
-          { "label": "1024x1024", "value": "1024x1024" },
-          { "label": "1536x1024", "value": "1536x1024" },
-          { "label": "1024x1536", "value": "1024x1536" },
-          { "label": "2048x2048", "value": "2048x2048" },
-          { "label": "2048x1152", "value": "2048x1152" },
-          { "label": "3840x2160 (4K landscape)", "value": "3840x2160" },
-          { "label": "2160x3840 (4K portrait)", "value": "2160x3840" }
+          {
+            "label": "Auto",
+            "value": "auto"
+          },
+          {
+            "label": "1024x1024",
+            "value": "1024x1024"
+          },
+          {
+            "label": "1536x1024",
+            "value": "1536x1024"
+          },
+          {
+            "label": "1024x1536",
+            "value": "1024x1536"
+          },
+          {
+            "label": "2048x2048",
+            "value": "2048x2048"
+          },
+          {
+            "label": "2048x1152",
+            "value": "2048x1152"
+          },
+          {
+            "label": "3840x2160 (4K landscape)",
+            "value": "3840x2160"
+          },
+          {
+            "label": "2160x3840 (4K portrait)",
+            "value": "2160x3840"
+          }
         ]
       },
-      { "key": "quality", "label": "Quality", "type": "enum", "required": false, "default": "auto",
+      {
+        "key": "quality",
+        "label": "Quality",
+        "type": "enum",
+        "required": false,
+        "default": "auto",
         "options": [
-          { "label": "Auto", "value": "auto" },
-          { "label": "Low", "value": "low" },
-          { "label": "Medium", "value": "medium" },
-          { "label": "High", "value": "high" }
+          {
+            "label": "Auto",
+            "value": "auto"
+          },
+          {
+            "label": "Low",
+            "value": "low"
+          },
+          {
+            "label": "Medium",
+            "value": "medium"
+          },
+          {
+            "label": "High",
+            "value": "high"
+          }
         ]
       },
-      { "key": "output_format", "label": "Format", "type": "enum", "required": false, "default": "png",
+      {
+        "key": "output_format",
+        "label": "Format",
+        "type": "enum",
+        "required": false,
+        "default": "png",
         "options": [
-          { "label": "PNG", "value": "png" },
-          { "label": "JPEG", "value": "jpeg" },
-          { "label": "WebP", "value": "webp" }
+          {
+            "label": "PNG",
+            "value": "png"
+          },
+          {
+            "label": "JPEG",
+            "value": "jpeg"
+          },
+          {
+            "label": "WebP",
+            "value": "webp"
+          }
         ]
       },
-      { "key": "output_compression", "label": "Compression", "type": "integer", "required": false, "default": 90, "min": 0, "max": 100 },
-      { "key": "moderation", "label": "Moderation", "type": "enum", "required": false, "default": "auto",
+      {
+        "key": "output_compression",
+        "label": "Compression",
+        "type": "integer",
+        "required": false,
+        "default": 90,
+        "min": 0,
+        "max": 100
+      },
+      {
+        "key": "moderation",
+        "label": "Moderation",
+        "type": "enum",
+        "required": false,
+        "default": "auto",
         "options": [
-          { "label": "Auto", "value": "auto" },
-          { "label": "Low", "value": "low" }
+          {
+            "label": "Auto",
+            "value": "auto"
+          },
+          {
+            "label": "Low",
+            "value": "low"
+          }
         ]
       }
     ]
@@ -6436,38 +6637,115 @@
     "envKeyName": "FAL_KEY",
     "executionPattern": "stream",
     "inputPorts": [
-      { "id": "prompt", "label": "Prompt", "dataType": "Text", "required": true }
+      {
+        "id": "prompt",
+        "label": "Prompt",
+        "dataType": "Text",
+        "required": true
+      }
     ],
     "outputPorts": [
-      { "id": "image", "label": "Image", "dataType": "Image", "required": false }
+      {
+        "id": "image",
+        "label": "Image",
+        "dataType": "Image",
+        "required": false
+      }
     ],
     "params": [
-      { "key": "image_size", "label": "Size", "type": "enum", "required": false, "default": "1024x1024",
+      {
+        "key": "image_size",
+        "label": "Size",
+        "type": "enum",
+        "required": false,
+        "default": "1024x1024",
         "options": [
-          { "label": "1024x1024", "value": "1024x1024" },
-          { "label": "1536x1024", "value": "1536x1024" },
-          { "label": "1024x1536", "value": "1024x1536" },
-          { "label": "2048x2048", "value": "2048x2048" },
-          { "label": "3840x2160", "value": "3840x2160" },
-          { "label": "2160x3840", "value": "2160x3840" }
+          {
+            "label": "1024x1024",
+            "value": "1024x1024"
+          },
+          {
+            "label": "1536x1024",
+            "value": "1536x1024"
+          },
+          {
+            "label": "1024x1536",
+            "value": "1024x1536"
+          },
+          {
+            "label": "2048x2048",
+            "value": "2048x2048"
+          },
+          {
+            "label": "3840x2160",
+            "value": "3840x2160"
+          },
+          {
+            "label": "2160x3840",
+            "value": "2160x3840"
+          }
         ]
       },
-      { "key": "quality", "label": "Quality", "type": "enum", "required": false, "default": "high",
+      {
+        "key": "quality",
+        "label": "Quality",
+        "type": "enum",
+        "required": false,
+        "default": "high",
         "options": [
-          { "label": "Low", "value": "low" },
-          { "label": "Medium", "value": "medium" },
-          { "label": "High", "value": "high" }
+          {
+            "label": "Low",
+            "value": "low"
+          },
+          {
+            "label": "Medium",
+            "value": "medium"
+          },
+          {
+            "label": "High",
+            "value": "high"
+          }
         ]
       },
-      { "key": "num_images", "label": "Count", "type": "integer", "required": false, "default": 1, "min": 1, "max": 4 },
-      { "key": "output_format", "label": "Format", "type": "enum", "required": false, "default": "png",
+      {
+        "key": "num_images",
+        "label": "Count",
+        "type": "integer",
+        "required": false,
+        "default": 1,
+        "min": 1,
+        "max": 4
+      },
+      {
+        "key": "output_format",
+        "label": "Format",
+        "type": "enum",
+        "required": false,
+        "default": "png",
         "options": [
-          { "label": "PNG", "value": "png" },
-          { "label": "JPEG", "value": "jpeg" },
-          { "label": "WebP", "value": "webp" }
+          {
+            "label": "PNG",
+            "value": "png"
+          },
+          {
+            "label": "JPEG",
+            "value": "jpeg"
+          },
+          {
+            "label": "WebP",
+            "value": "webp"
+          }
         ]
       },
-      { "key": "partial_images", "label": "Preview Frames", "type": "integer", "required": false, "default": 2, "min": 0, "max": 3 }
+      {
+        "key": "partial_images",
+        "label": "Preview Frames",
+        "type": "integer",
+        "required": false,
+        "default": 2,
+        "min": 0,
+        "max": 3
+      }
     ]
   },
   "gpt-image-2-fal-edit": {
@@ -6479,40 +6757,126 @@
     "envKeyName": "FAL_KEY",
     "executionPattern": "stream",
     "inputPorts": [
-      { "id": "images", "label": "Reference Images", "dataType": "Image", "required": true, "multiple": true },
-      { "id": "prompt", "label": "Prompt", "dataType": "Text", "required": true }
+      {
+        "id": "images",
+        "label": "Reference Images",
+        "dataType": "Image",
+        "required": true,
+        "multiple": true
+      },
+      {
+        "id": "prompt",
+        "label": "Prompt",
+        "dataType": "Text",
+        "required": true
+      }
     ],
     "outputPorts": [
-      { "id": "image", "label": "Image", "dataType": "Image", "required": false }
+      {
+        "id": "image",
+        "label": "Image",
+        "dataType": "Image",
+        "required": false
+      }
     ],
     "params": [
-      { "key": "image_size", "label": "Size", "type": "enum", "required": false, "default": "auto",
+      {
+        "key": "image_size",
+        "label": "Size",
+        "type": "enum",
+        "required": false,
+        "default": "auto",
         "options": [
-          { "label": "Auto", "value": "auto" },
-          { "label": "1024x1024", "value": "1024x1024" },
-          { "label": "1536x1024", "value": "1536x1024" },
-          { "label": "1024x1536", "value": "1024x1536" },
-          { "label": "2048x2048", "value": "2048x2048" },
-          { "label": "3840x2160", "value": "3840x2160" },
-          { "label": "2160x3840", "value": "2160x3840" }
+          {
+            "label": "Auto",
+            "value": "auto"
+          },
+          {
+            "label": "1024x1024",
+            "value": "1024x1024"
+          },
+          {
+            "label": "1536x1024",
+            "value": "1536x1024"
+          },
+          {
+            "label": "1024x1536",
+            "value": "1024x1536"
+          },
+          {
+            "label": "2048x2048",
+            "value": "2048x2048"
+          },
+          {
+            "label": "3840x2160",
+            "value": "3840x2160"
+          },
+          {
+            "label": "2160x3840",
+            "value": "2160x3840"
+          }
         ]
       },
-      { "key": "quality", "label": "Quality", "type": "enum", "required": false, "default": "high",
+      {
+        "key": "quality",
+        "label": "Quality",
+        "type": "enum",
+        "required": false,
+        "default": "high",
         "options": [
-          { "label": "Low", "value": "low" },
-          { "label": "Medium", "value": "medium" },
-          { "label": "High", "value": "high" }
+          {
+            "label": "Low",
+            "value": "low"
+          },
+          {
+            "label": "Medium",
+            "value": "medium"
+          },
+          {
+            "label": "High",
+            "value": "high"
+          }
         ]
       },
-      { "key": "num_images", "label": "Count", "type": "integer", "required": false, "default": 1, "min": 1, "max": 4 },
-      { "key": "output_format", "label": "Format", "type": "enum", "required": false, "default": "png",
+      {
+        "key": "num_images",
+        "label": "Count",
+        "type": "integer",
+        "required": false,
+        "default": 1,
+        "min": 1,
+        "max": 4
+      },
+      {
+        "key": "output_format",
+        "label": "Format",
+        "type": "enum",
+        "required": false,
+        "default": "png",
         "options": [
-          { "label": "PNG", "value": "png" },
-          { "label": "JPEG", "value": "jpeg" },
-          { "label": "WebP", "value": "webp" }
+          {
+            "label": "PNG",
+            "value": "png"
+          },
+          {
+            "label": "JPEG",
+            "value": "jpeg"
+          },
+          {
+            "label": "WebP",
+            "value": "webp"
+          }
         ]
       },
-      { "key": "partial_images", "label": "Preview Frames", "type": "integer", "required": false, "default": 2, "min": 0, "max": 3 }
+      {
+        "key": "partial_images",
+        "label": "Preview Frames",
+        "type": "integer",
+        "required": false,
+        "default": 2,
+        "min": 0,
+        "max": 3
+      }
     ]
   },
   "remove-background": {
@@ -7801,27 +8165,43 @@
         "label": "Duration",
         "type": "enum",
         "required": false,
-        "default": "8s",
+        "default": "5",
         "options": [
           {
             "label": "4 seconds",
-            "value": "4s"
+            "value": "4"
+          },
+          {
+            "label": "5 seconds",
+            "value": "5"
           },
           {
             "label": "6 seconds",
-            "value": "6s"
+            "value": "6"
+          },
+          {
+            "label": "7 seconds",
+            "value": "7"
           },
           {
             "label": "8 seconds",
-            "value": "8s"
+            "value": "8"
+          },
+          {
+            "label": "9 seconds",
+            "value": "9"
           },
           {
             "label": "10 seconds",
-            "value": "10s"
+            "value": "10"
+          },
+          {
+            "label": "11 seconds",
+            "value": "11"
           },
           {
             "label": "12 seconds",
-            "value": "12s"
+            "value": "12"
           }
         ]
       },
@@ -7855,6 +8235,10 @@
           {
             "label": "3:4",
             "value": "3:4"
+          },
+          {
+            "label": "Auto",
+            "value": "auto"
           }
         ]
       },
@@ -7872,8 +8256,33 @@
           {
             "label": "720p",
             "value": "720p"
+          },
+          {
+            "label": "1080p",
+            "value": "1080p"
           }
         ]
+      },
+      {
+        "key": "generate_audio",
+        "label": "Generate Audio",
+        "type": "boolean",
+        "required": false,
+        "default": true
+      },
+      {
+        "key": "camera_fixed",
+        "label": "Camera Fixed",
+        "type": "boolean",
+        "required": false,
+        "default": false
+      },
+      {
+        "key": "seed",
+        "label": "Seed",
+        "type": "integer",
+        "required": false,
+        "placeholder": "Random"
       }
     ]
   },
@@ -8615,7 +9024,7 @@
   },
   "seedance-2-t2v": {
     "id": "seedance-2-t2v",
-    "displayName": "Seedance 2.0 T2V",
+    "displayName": "Seedance 2.0 Text-to-Video",
     "category": "video-gen",
     "apiProvider": "fal",
     "apiEndpoint": "bytedance/seedance-2.0/text-to-video",
@@ -8643,7 +9052,7 @@
         "label": "Aspect Ratio",
         "type": "enum",
         "required": false,
-        "default": "16:9",
+        "default": "auto",
         "options": [
           {
             "label": "Auto",
@@ -8730,6 +9139,10 @@
           {
             "label": "720p",
             "value": "720p"
+          },
+          {
+            "label": "1080p",
+            "value": "1080p"
           }
         ]
       },
@@ -8878,6 +9291,10 @@
           {
             "label": "720p",
             "value": "720p"
+          },
+          {
+            "label": "1080p",
+            "value": "1080p"
           }
         ]
       },
@@ -8941,6 +9358,10 @@
             "value": "auto"
           },
           {
+            "label": "21:9",
+            "value": "21:9"
+          },
+          {
             "label": "16:9",
             "value": "16:9"
           },
@@ -8996,6 +9417,27 @@
         ]
       },
       {
+        "key": "resolution",
+        "label": "Resolution",
+        "type": "enum",
+        "required": false,
+        "default": "720p",
+        "options": [
+          {
+            "label": "480p",
+            "value": "480p"
+          },
+          {
+            "label": "720p",
+            "value": "720p"
+          },
+          {
+            "label": "1080p",
+            "value": "1080p"
+          }
+        ]
+      },
+      {
         "key": "generate_audio",
         "label": "Generate Audio",
         "type": "boolean",
@@ -9041,7 +9483,7 @@
         "label": "Aspect Ratio",
         "type": "enum",
         "required": false,
-        "default": "16:9",
+        "default": "auto",
         "options": [
           {
             "label": "Auto",
@@ -9078,7 +9520,7 @@
         "label": "Duration",
         "type": "enum",
         "required": false,
-        "default": "10",
+        "default": "auto",
         "options": [
           {
             "label": "Auto",
@@ -9226,7 +9668,7 @@
         "label": "Duration",
         "type": "enum",
         "required": false,
-        "default": "10",
+        "default": "auto",
         "options": [
           {
             "label": "Auto",
