@@ -7,10 +7,6 @@ model: gpt-image-2
 status: active
 verified: 2026-05-16
 stale_after_days: 30
-shared_reference: ~/Documents/Workspace/Reference/model-providers/openai/gpt-image-2.md
-runtime_skill_sources:
-  - ~/.hermes/profiles/daedalus/skills/creative/gpt-image-2/SKILL.md
-  - ~/.hermes/profiles/daedalus/skills/creative/gpt-image-2-prompting/SKILL.md
 ---
 
 # GPT Image 2 in Nebula Nodes

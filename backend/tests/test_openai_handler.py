@@ -171,7 +171,6 @@ async def test_gpt_image_1_does_not_send_response_format() -> None:
 
     body = mock_client.post.call_args.kwargs["json"]
     assert "response_format" not in body
-    assert "style" not in body
 
 
 # ---------------------------------------------------------------------------
@@ -331,4 +330,86 @@ async def test_output_returns_image_type() -> None:
     assert set(result.keys()) == {"image"}
     assert result["image"]["type"] == "Image"
     assert isinstance(result["image"]["value"], str)
+    # Default model (gpt-image-1) with no output_format → PNG
     assert result["image"]["value"].endswith(".png")
+
+
+# ---------------------------------------------------------------------------
+# File extension follows output_format
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_gpt_image_1_saves_jpeg_extension() -> None:
+    """When output_format=jpeg the saved file must have a .jpeg extension."""
+    mock_resp = _mock_response(RED_PIXEL_B64)
+    patcher, mock_client = _patch_client(mock_resp)
+
+    with patcher:
+        node = _make_node(params={"model": "gpt-image-1", "output_format": "jpeg"})
+        inputs = {"prompt": PortValueDict(type="Text", value="test")}
+        result = await handle_openai_image_generate(node, inputs, _API_KEYS)
+
+    assert result["image"]["value"].endswith(".jpeg")
+
+
+@pytest.mark.asyncio
+async def test_gpt_image_1_saves_webp_extension() -> None:
+    """When output_format=webp the saved file must have a .webp extension."""
+    mock_resp = _mock_response(RED_PIXEL_B64)
+    patcher, mock_client = _patch_client(mock_resp)
+
+    with patcher:
+        node = _make_node(params={"model": "gpt-image-1", "output_format": "webp"})
+        inputs = {"prompt": PortValueDict(type="Text", value="test")}
+        result = await handle_openai_image_generate(node, inputs, _API_KEYS)
+
+    assert result["image"]["value"].endswith(".webp")
+
+
+@pytest.mark.asyncio
+async def test_dalle3_saves_png_extension_regardless_of_output_format() -> None:
+    """DALL-E models ignore output_format — the saved file must always be .png."""
+    mock_resp = _mock_response(RED_PIXEL_B64)
+    patcher, mock_client = _patch_client(mock_resp)
+
+    with patcher:
+        node = _make_node(
+            definition_id="dalle-3-generate",
+            # output_format should be a no-op for dall-e models
+            params={"model": "dall-e-3", "output_format": "jpeg"},
+        )
+        inputs = {"prompt": PortValueDict(type="Text", value="test")}
+        result = await handle_openai_image_generate(node, inputs, _API_KEYS)
+
+    assert result["image"]["value"].endswith(".png")
+    # Confirm output_format was NOT forwarded to the API for dall-e
+    body = mock_client.post.call_args.kwargs["json"]
+    assert "output_format" not in body
+
+
+# ---------------------------------------------------------------------------
+# dall-e-2 negative test
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_dalle2_omits_style_and_sends_response_format() -> None:
+    """dall-e-2 must include response_format=b64_json and must never send style."""
+    mock_resp = _mock_response(RED_PIXEL_B64)
+    patcher, mock_client = _patch_client(mock_resp)
+
+    with patcher:
+        node = _make_node(
+            definition_id="dalle-3-generate",
+            params={"model": "dall-e-2", "style": "vivid"},
+        )
+        inputs = {"prompt": PortValueDict(type="Text", value="a landscape")}
+        await handle_openai_image_generate(node, inputs, _API_KEYS)
+
+    body = mock_client.post.call_args.kwargs["json"]
+    assert body["response_format"] == "b64_json"
+    assert "style" not in body
+    # dall-e-2 does not support GPT-image-only params either
+    assert "output_format" not in body
+    assert "background" not in body

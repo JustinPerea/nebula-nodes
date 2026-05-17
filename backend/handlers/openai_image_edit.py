@@ -94,8 +94,13 @@ async def handle_openai_image_edit(
     data = response.json()
     b64_data = data["data"][0]["b64_json"]
 
+    # Match the saved file extension to the format the API returns.
+    # output_format controls the actual bytes returned, so jpeg/webp requests
+    # must be saved with the matching extension for correct MIME inference downstream.
+    extension = output_format if output_format in ("png", "jpeg", "webp") else "png"
+
     run_dir = get_run_dir()
-    file_path = save_base64_image(b64_data, run_dir, extension="png")
+    file_path = save_base64_image(b64_data, run_dir, extension=extension)
 
     return {
         "image": {

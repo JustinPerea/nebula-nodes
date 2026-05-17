@@ -50,6 +50,8 @@ async def handle_openai_image_generate(
         body["n"] = int(n)
 
     # GPT image models support output_format (png/jpeg/webp); dall-e models do not.
+    # Capture output_format here so we can use it for the saved file extension below.
+    output_format: str | None = None
     if not model.startswith("dall-e"):
         output_format = node.params.get("output_format")
         if output_format and output_format != "png":
@@ -82,8 +84,14 @@ async def handle_openai_image_generate(
     data = response.json()
     b64_data = data["data"][0]["b64_json"]
 
+    # Match the saved file extension to the format actually returned by the API.
+    # DALL-E models always return PNG (response_format controls url vs b64, not format).
+    # GPT image models honour output_format, so jpeg/webp need the matching extension
+    # so that downstream MIME inference (e.g. image_to_data_uri) is correct.
+    extension = output_format if output_format in ("png", "jpeg", "webp") else "png"
+
     run_dir = get_run_dir()
-    file_path = save_base64_image(b64_data, run_dir, extension="png")
+    file_path = save_base64_image(b64_data, run_dir, extension=extension)
 
     return {
         "image": {
