@@ -827,13 +827,13 @@ Partial hand-maintained reference for documented nodes. The live registry curren
 
 | Parameter | Type | Default | Options |
 |-----------|------|---------|---------|
-| Model | enum | eleven_multilingual_v2 | v3 (Highest), Multilingual v2, Flash v2.5 |
+| Model | enum | eleven_multilingual_v2 | v3 (Highest Quality), Multilingual v2, Turbo v2.5 (Low Latency), Flash v2.5 (Fastest), Turbo v2, Flash v2 |
 | Stability | float (0-1) | 0.5 | — |
 | Voice ID | string | 21m00Tcm4TlvDq8ikWAM | Rachel (default) |
 | Similarity Boost | float (0-1) | 0.75 | — |
 | Style | float (0-1) | 0 | — |
 | Speaker Boost | bool | true | — |
-| Speed | float (0.1-4.0) | 1.0 | — |
+| Speed | float (0.7-1.2) | 1.0 | — |
 | Output Format | enum | mp3_44100_128 | MP3 44.1kHz, MP3 22kHz, PCM 16kHz, PCM 24kHz, PCM 44.1kHz |
 | Seed | int | random | — |
 

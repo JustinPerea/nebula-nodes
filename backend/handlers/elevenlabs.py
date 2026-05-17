@@ -328,6 +328,7 @@ async def handle_elevenlabs_dubbing(
                         f"{status_resp.status_code} {status_resp.text}"
                     )
                 continue
+            # Reset on successful response; threshold of 5 requires CONSECUTIVE failures.
             poll_errors = 0
             status_data = status_resp.json()
             if status_data.get("status") == "dubbed":

@@ -323,7 +323,7 @@ async def test_sfx_pcm_format_saves_as_wav() -> None:
 @pytest.mark.asyncio
 async def test_sts_sends_multipart_with_voice_settings(tmp_path: Path) -> None:
     """voice_settings must be forwarded as a JSON-encoded string in multipart."""
-    audio_file, audio_port = _make_audio_input(tmp_path)
+    audio_file, audio_port = _mock_audio_input(tmp_path)
     response = _make_http_response(content=b"fake sts audio")
 
     with patch("handlers.elevenlabs.httpx.AsyncClient") as MockClient:
@@ -366,7 +366,7 @@ async def test_sts_sends_multipart_with_voice_settings(tmp_path: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_sts_remove_background_noise_forwarded(tmp_path: Path) -> None:
-    audio_file, audio_port = _make_audio_input(tmp_path)
+    audio_file, audio_port = _mock_audio_input(tmp_path)
     response = _make_http_response(content=b"fake sts audio")
 
     with patch("handlers.elevenlabs.httpx.AsyncClient") as MockClient:
@@ -394,7 +394,7 @@ async def test_sts_remove_background_noise_forwarded(tmp_path: Path) -> None:
 @pytest.mark.asyncio
 async def test_sts_no_voice_settings_when_not_provided(tmp_path: Path) -> None:
     """If stability/similarity_boost not in params, voice_settings should not be sent."""
-    audio_file, audio_port = _make_audio_input(tmp_path)
+    audio_file, audio_port = _mock_audio_input(tmp_path)
     response = _make_http_response(content=b"fake sts audio")
 
     with patch("handlers.elevenlabs.httpx.AsyncClient") as MockClient:
@@ -417,7 +417,7 @@ async def test_sts_no_voice_settings_when_not_provided(tmp_path: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_sts_pcm_format_saves_as_wav(tmp_path: Path) -> None:
-    audio_file, audio_port = _make_audio_input(tmp_path)
+    audio_file, audio_port = _mock_audio_input(tmp_path)
     response = _make_http_response(content=b"fake pcm")
 
     with patch("handlers.elevenlabs.httpx.AsyncClient") as MockClient:
@@ -442,7 +442,7 @@ async def test_sts_pcm_format_saves_as_wav(tmp_path: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_isolation_sends_audio_multipart(tmp_path: Path) -> None:
-    audio_file, audio_port = _make_audio_input(tmp_path)
+    audio_file, audio_port = _mock_audio_input(tmp_path)
     response = _make_http_response(content=b"isolated audio")
 
     with patch("handlers.elevenlabs.httpx.AsyncClient") as MockClient:
@@ -473,7 +473,7 @@ async def test_isolation_sends_audio_multipart(tmp_path: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_isolation_raises_on_api_error(tmp_path: Path) -> None:
-    audio_file, audio_port = _make_audio_input(tmp_path)
+    audio_file, audio_port = _mock_audio_input(tmp_path)
     response = _make_http_response(status=422, content=b"validation error")
 
     with patch("handlers.elevenlabs.httpx.AsyncClient") as MockClient:
@@ -498,7 +498,7 @@ async def test_isolation_raises_on_api_error(tmp_path: Path) -> None:
 @pytest.mark.asyncio
 async def test_dubbing_full_flow(tmp_path: Path) -> None:
     """Submit → poll → download happy path."""
-    audio_file, audio_port = _make_audio_input(tmp_path)
+    audio_file, audio_port = _mock_audio_input(tmp_path)
 
     submit_resp = MagicMock()
     submit_resp.status_code = 200
@@ -549,7 +549,7 @@ async def test_dubbing_full_flow(tmp_path: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_dubbing_raises_on_failed_status(tmp_path: Path) -> None:
-    audio_file, audio_port = _make_audio_input(tmp_path)
+    audio_file, audio_port = _mock_audio_input(tmp_path)
 
     submit_resp = MagicMock()
     submit_resp.status_code = 200
@@ -580,7 +580,7 @@ async def test_dubbing_raises_on_failed_status(tmp_path: Path) -> None:
 @pytest.mark.asyncio
 async def test_dubbing_raises_after_repeated_poll_errors(tmp_path: Path) -> None:
     """5 consecutive non-200 poll responses should raise, not loop forever."""
-    audio_file, audio_port = _make_audio_input(tmp_path)
+    audio_file, audio_port = _mock_audio_input(tmp_path)
 
     submit_resp = MagicMock()
     submit_resp.status_code = 200
@@ -610,7 +610,7 @@ async def test_dubbing_raises_after_repeated_poll_errors(tmp_path: Path) -> None
 @pytest.mark.asyncio
 async def test_dubbing_source_lang_auto_omitted(tmp_path: Path) -> None:
     """source_lang='auto' must be omitted from the submit payload."""
-    audio_file, audio_port = _make_audio_input(tmp_path)
+    audio_file, audio_port = _mock_audio_input(tmp_path)
 
     submit_resp = MagicMock()
     submit_resp.status_code = 200
@@ -649,7 +649,7 @@ async def test_dubbing_source_lang_auto_omitted(tmp_path: Path) -> None:
 @pytest.mark.asyncio
 async def test_dubbing_optional_flags_forwarded(tmp_path: Path) -> None:
     """drop_background_audio and disable_voice_cloning must reach the submit payload."""
-    audio_file, audio_port = _make_audio_input(tmp_path)
+    audio_file, audio_port = _mock_audio_input(tmp_path)
 
     submit_resp = MagicMock()
     submit_resp.status_code = 200
@@ -686,10 +686,3 @@ async def test_dubbing_optional_flags_forwarded(tmp_path: Path) -> None:
     assert data["drop_background_audio"] == "true"
     assert data["disable_voice_cloning"] == "true"
 
-
-# ---------------------------------------------------------------------------
-# Shared helper (placed after test functions that reference it)
-# ---------------------------------------------------------------------------
-
-def _make_audio_input(tmp_path: Path) -> tuple[Path, PortValueDict]:
-    return _mock_audio_input(tmp_path)
