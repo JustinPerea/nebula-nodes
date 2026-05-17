@@ -1,6 +1,6 @@
 # Node Input + API Contract Hardening - Goal Plan
 
-> **Goal status:** started 2026-05-16. This is the catalog-hardening pass prompted by the research + Obsidian synthesis: make the 100-node registry trustworthy before expanding the model catalog again.
+> **Goal status:** Started 2026-05-16. Active. As of 2026-05-17: 60 of 100 nodes audited, 156 bugs fixed, 497 backend tests passing (up from 246 baseline), Phase 1 and Phase 3 complete. Phase 2 ~60% complete. Phase 4 unstarted.
 
 ## Goal
 
@@ -26,19 +26,25 @@ The immediate outcome is that bad node IDs, missing handlers, stale API keys, in
 
 ### Phase 2 - Full input/API audit
 
-- [ ] Review all 100 nodes by provider family against canonical docs.
-- [ ] Normalize required vs optional ports, file vs URL params, array inputs, masks, reference media, and conditional fields.
-- [ ] Confirm each static FAL wrapper injects the correct endpoint and strips/normalizes params the endpoint does not accept.
-- [ ] Confirm direct-provider handlers map UI params to request bodies exactly.
-- [ ] Add targeted handler tests for high-risk families: OpenAI image edit, FAL wrappers, MiniMax, Kling, LTX, Wan, Recraft, ElevenLabs, Higgsfield.
+Status: 60/100 nodes audited as of 2026-05-17. Each audited family has a note under `docs/model-providers/<provider>/` with severity-tagged findings, canonical doc citations, and fixes.
+
+- [~] Review all 100 nodes by provider family against canonical docs. **Done so far:** OpenAI direct (image 5, audio 3, chat 1), Anthropic (1), MiniMax (3), Higgsfield (1), xAI Grok (1), ElevenLabs (5), FAL universal + Kling (3) + LTX (2) + Wan (3) + Luma (3) + Recraft (2) + FLUX (5) + Seedance (6) + OpenAI passthroughs (5), Universal nodes (Replicate, OpenRouter, Nous — 3), Google (7). **Remaining (~40):** FAL misc (Sora, Moonvalley, Pixverse, RemoveBG, Seedvr2 — 5), Hunyuan3D (2), Meshy direct + via FAL (10), Runway (7), and node families needing real API keys (currently placeholders): MiniMax I2V smoke, Higgsfield + xAI Grok + ElevenLabs STS for live verification.
+- [x] Normalize required vs optional ports, file vs URL params, array inputs, masks, reference media, and conditional fields — covered for every audited family.
+- [x] Confirm each static FAL wrapper injects the correct endpoint and strips/normalizes params the endpoint does not accept — `fal-universal.md` audit established the contract; Kling/LTX/Wan/Luma/Recraft/FLUX/Seedance/OpenAI passthroughs all use it correctly post-audit.
+- [x] Confirm direct-provider handlers map UI params to request bodies exactly — for all 14 audited families.
+- [x] Add targeted handler tests for high-risk families: 251 net new structural body-shape tests across the audited handlers. Tests grew 246 → 497.
 
 ### Phase 3 - Generated docs
 
-- [ ] Replace hand-maintained `MODEL_REFERENCE.md` with a generated source-of-truth artifact or add a generation script with a checked-in output.
-- [ ] Include per-node inputs, outputs, params, API key, execution pattern, handler route, and provider-doc verification status.
-- [ ] Add stale-after metadata for provider docs so old claims are easy to find.
+Status: complete 2026-05-17.
+
+- [x] Replace hand-maintained `MODEL_REFERENCE.md` with a generated source-of-truth artifact. `scripts/generate-model-reference.mjs` reads `backend/data/node_definitions.json` + per-provider audit-note `verified:` frontmatter. `--check` mode wired into `scripts/check-node-contracts.mjs` and `tests/test_node_contracts.py` so future drift fails CI.
+- [x] Include per-node inputs, outputs, params, API key, execution pattern, handler route, and provider-doc verification status — all present in the generated output (100 nodes, 8 categories, dual/triple-param table handling for flux-1-1-ultra, veo-3, meshy-text-to-3d, meshy-image-to-3d).
+- [x] Add stale-after metadata for provider docs so old claims are easy to find — every audit note has `stale_after_days` frontmatter (14 for fast-moving providers, 30 for stable).
 
 ### Phase 4 - UI quality pass
+
+Status: not started. In-flight inspector-popover work in the worktree (uncommitted) is adjacent but unrelated to this phase.
 
 - [ ] Group advanced params consistently in the Inspector.
 - [ ] Show missing-key and required-input states before run.
@@ -47,11 +53,16 @@ The immediate outcome is that bad node IDs, missing handlers, stale API keys, in
 
 ## Current findings
 
-- Live registry has 100 nodes in `backend/data/node_definitions.json`.
-- Frontend `NODE_DEFINITIONS` also has 100 IDs.
-- Runtime handler coverage is currently complete: 84 API-backed handlers plus 16 local utility nodes.
-- `MODEL_REFERENCE.md` is partial and stale relative to the live registry.
-- `.env.example` was missing `MESHY_API_KEY` even though Meshy nodes require it.
+- Live registry has 100 nodes in `backend/data/node_definitions.json`. Frontend `NODE_DEFINITIONS` has matching 100 IDs.
+- Runtime handler coverage is complete: 84 API-backed handlers plus 16 local utility nodes.
+- `MODEL_REFERENCE.md` is now generated from the registry; future drift fails CI via `--check`.
+- `.env.example` has all required keys including `MESHY_API_KEY`.
+
+## Methodology lessons captured 2026-05-17
+
+- **Live API smoke testing catches what mocked tests can't.** Two regressions slipped through structural-tested audits (ElevenLabs PCM saved as `.wav` without header; Google nano-banana `responseFormat.image` rejecting natural value strings). Both caught only when we hit the live API. Tests can pin incorrect behavior if the audit subagent doesn't catch the wrongness.
+- **Public docs can be stale.** Google's image-generation docs page describes `responseFormat.image.aspectRatio = "1:1"` as the canonical path; the live v1beta API rejects that value. Direct curl is the only reliable check when an audit changes a request body shape.
+- **Proto enum values differ from natural strings.** Lyria-3 `responseFormat.audio.mimeType` accepts `AUDIO_WAV` (proto enum form), not `"audio/wav"` (MIME string). Public docs ambiguity caught only by trying values against the API.
 
 ## Verification command
 
