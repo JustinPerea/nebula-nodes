@@ -202,3 +202,291 @@ async def test_multi_image_inputs_mapped():
         assert payload["back_image_url"] == "https://example.com/back.png"
         assert payload["left_image_url"] == "https://example.com/left.png"
         assert payload["right_image_url"] == "https://example.com/right.png"
+
+
+# ---------------------------------------------------------------------------
+# New tests: coverage gaps identified in the infrastructure audit 2026-05-17
+# ---------------------------------------------------------------------------
+
+
+class TestParseFalOutputSVG:
+    def test_svg_content_type_returns_svg_port(self) -> None:
+        """Recraft V4 text-to-vector returns images[0] with content_type image/svg+xml.
+        Must return SVG port, not Image port."""
+        result = _parse_fal_output({
+            "images": [{"url": "https://fal.ai/output.svg", "content_type": "image/svg+xml"}]
+        })
+        assert result["svg"]["type"] == "SVG"
+        assert result["svg"]["value"] == "https://fal.ai/output.svg"
+        assert "image" not in result
+
+    def test_png_content_type_returns_image_port(self) -> None:
+        """Images with image/png content_type must still return Image port."""
+        result = _parse_fal_output({
+            "images": [{"url": "https://fal.ai/output.png", "content_type": "image/png"}]
+        })
+        assert result["image"]["type"] == "Image"
+        assert "svg" not in result
+
+    def test_no_content_type_returns_image_port(self) -> None:
+        """Images without content_type (most endpoints) must return Image port."""
+        result = _parse_fal_output({
+            "images": [{"url": "https://fal.ai/output.jpg"}]
+        })
+        assert result["image"]["type"] == "Image"
+        assert "svg" not in result
+
+
+@pytest.mark.asyncio
+async def _make_poll_mock(submit_payload: dict, result_payload: dict):
+    """Helper: returns (MockClient context, mock_client) for a standard poll cycle."""
+    mock_submit = MagicMock()
+    mock_submit.status_code = 200
+    mock_submit.json.return_value = submit_payload
+
+    mock_status = MagicMock()
+    mock_status.status_code = 200
+    mock_status.json.return_value = {"status": "COMPLETED"}
+
+    mock_result = MagicMock()
+    mock_result.status_code = 200
+    mock_result.json.return_value = result_payload
+
+    return mock_submit, mock_status, mock_result
+
+
+@pytest.mark.asyncio
+async def test_endpoint_id_injection_wrapper_node():
+    """Wrapper nodes inject endpoint_id via setdefault before calling handle_fal_universal.
+    Verify the handler reads it correctly and submits to the right URL."""
+    mock_submit = MagicMock()
+    mock_submit.status_code = 200
+    mock_submit.json.return_value = {"request_id": "req-wrap"}
+
+    mock_status = MagicMock()
+    mock_status.status_code = 200
+    mock_status.json.return_value = {"status": "COMPLETED"}
+
+    mock_result = MagicMock()
+    mock_result.status_code = 200
+    mock_result.json.return_value = {
+        "images": [{"url": "https://fal.ai/flux-result.png", "content_type": "image/png"}]
+    }
+
+    # Simulate _flux_ultra_handler: setdefault injects endpoint_id then calls handler
+    node = GraphNode(
+        id="test-flux-wrapper",
+        definitionId="flux-1-1-ultra",
+        params={},  # no endpoint_id yet, like freshly-deserialized wrapper node
+    )
+    node.params.setdefault("endpoint_id", "fal-ai/flux-pro/v1.1-ultra")
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            result = await handle_fal_universal(
+                node,
+                {"prompt": PortValueDict(type="Text", value="test prompt")},
+                {"FAL_KEY": "fal_test"},
+                emit=AsyncMock(),
+            )
+
+    assert result["image"]["type"] == "Image"
+    # Confirm the POST URL used the injected endpoint_id
+    call_args = mock_client.post.call_args
+    posted_url = call_args.args[0] if call_args.args else call_args.kwargs.get("url", "")
+    assert "fal-ai/flux-pro/v1.1-ultra" in posted_url
+
+
+@pytest.mark.asyncio
+async def test_empty_optional_params_omitted_from_request():
+    """Params with empty-string values must NOT be sent to FAL.
+    Sending empty strings for optional params causes API validation errors."""
+    mock_submit = MagicMock()
+    mock_submit.status_code = 200
+    mock_submit.json.return_value = {"request_id": "req-empty"}
+
+    mock_status = MagicMock()
+    mock_status.status_code = 200
+    mock_status.json.return_value = {"status": "COMPLETED"}
+
+    mock_result = MagicMock()
+    mock_result.status_code = 200
+    mock_result.json.return_value = {
+        "images": [{"url": "https://fal.ai/result.png"}]
+    }
+
+    node = _make_node({
+        "endpoint_id": "fal-ai/flux-pro/v1.1-ultra",
+        "negative_prompt": "",       # empty — must be omitted
+        "seed": None,                # None — must be omitted
+        "num_images": 1,             # has value — must be sent
+    })
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            await handle_fal_universal(
+                node,
+                {"prompt": PortValueDict(type="Text", value="test")},
+                {"FAL_KEY": "fal_test"},
+                emit=AsyncMock(),
+            )
+
+    call_args = mock_client.post.call_args
+    payload = call_args.kwargs.get("json") or call_args[1].get("json")
+    assert "negative_prompt" not in payload, "empty string param must be omitted"
+    assert "seed" not in payload, "None param must be omitted"
+    assert payload.get("num_images") == 1, "non-empty param must be sent"
+
+
+@pytest.mark.asyncio
+async def test_images_multi_port_sends_image_urls():
+    """Nodes with a multi-image 'images' port (gpt-image-1-5-edit, seedance-2-r2v)
+    must map to image_urls list in the FAL request body."""
+    mock_submit = MagicMock()
+    mock_submit.status_code = 200
+    mock_submit.json.return_value = {"request_id": "req-multi"}
+
+    mock_status = MagicMock()
+    mock_status.status_code = 200
+    mock_status.json.return_value = {"status": "COMPLETED"}
+
+    mock_result = MagicMock()
+    mock_result.status_code = 200
+    mock_result.json.return_value = {
+        "images": [{"url": "https://fal.ai/edited.png", "content_type": "image/png"}]
+    }
+
+    node = _make_node({"endpoint_id": "fal-ai/gpt-image-1.5/edit"})
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            result = await handle_fal_universal(
+                node,
+                {
+                    "prompt": PortValueDict(type="Text", value="make it blue"),
+                    "images": PortValueDict(type="Image", value=[
+                        "https://example.com/a.png",
+                        "https://example.com/b.png",
+                    ]),
+                },
+                {"FAL_KEY": "fal_test"},
+                emit=AsyncMock(),
+            )
+
+    assert result["image"]["type"] == "Image"
+    call_args = mock_client.post.call_args
+    payload = call_args.kwargs.get("json") or call_args[1].get("json")
+    assert payload["image_urls"] == [
+        "https://example.com/a.png",
+        "https://example.com/b.png",
+    ]
+    assert "image_url" not in payload  # singular form must not appear
+
+
+@pytest.mark.asyncio
+async def test_video_input_port_sends_video_url():
+    """luma-ray2-flash-modify has a video input port that must map to video_url."""
+    mock_submit = MagicMock()
+    mock_submit.status_code = 200
+    mock_submit.json.return_value = {"request_id": "req-video-in"}
+
+    mock_status = MagicMock()
+    mock_status.status_code = 200
+    mock_status.json.return_value = {"status": "COMPLETED"}
+
+    mock_result = MagicMock()
+    mock_result.status_code = 200
+    mock_result.json.return_value = {
+        "video": {"url": "https://fal.ai/modified.mp4"}
+    }
+
+    node = _make_node({"endpoint_id": "fal-ai/luma-dream-machine/ray-2-flash/modify"})
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            result = await handle_fal_universal(
+                node,
+                {
+                    "prompt": PortValueDict(type="Text", value="make it cinematic"),
+                    "video": PortValueDict(type="Video", value="https://example.com/clip.mp4"),
+                },
+                {"FAL_KEY": "fal_test"},
+                emit=AsyncMock(),
+            )
+
+    assert result["video"]["type"] == "Video"
+    call_args = mock_client.post.call_args
+    payload = call_args.kwargs.get("json") or call_args[1].get("json")
+    assert payload["video_url"] == "https://example.com/clip.mp4"
+
+
+@pytest.mark.asyncio
+async def test_audio_input_port_sends_audio_url():
+    """ltx-2-3 has an audio input port that must map to audio_url."""
+    mock_submit = MagicMock()
+    mock_submit.status_code = 200
+    mock_submit.json.return_value = {"request_id": "req-audio-in"}
+
+    mock_status = MagicMock()
+    mock_status.status_code = 200
+    mock_status.json.return_value = {"status": "COMPLETED"}
+
+    mock_result = MagicMock()
+    mock_result.status_code = 200
+    mock_result.json.return_value = {
+        "video": {"url": "https://fal.ai/ltx-output.mp4"}
+    }
+
+    node = _make_node({"endpoint_id": "fal-ai/ltx-2.3/image-to-video"})
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            result = await handle_fal_universal(
+                node,
+                {
+                    "prompt": PortValueDict(type="Text", value="animate"),
+                    "audio": PortValueDict(type="Audio", value="https://example.com/track.mp3"),
+                },
+                {"FAL_KEY": "fal_test"},
+                emit=AsyncMock(),
+            )
+
+    assert result["video"]["type"] == "Video"
+    call_args = mock_client.post.call_args
+    payload = call_args.kwargs.get("json") or call_args[1].get("json")
+    assert payload["audio_url"] == "https://example.com/track.mp3"

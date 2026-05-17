@@ -128,6 +128,27 @@ async def handle_fal_universal(
     if image_input and image_input.value:
         fal_input["image_url"] = _to_fal_url(str(image_input.value))
 
+    # Multi-image port (gpt-image-1-5-edit, seedance-2-r2v) → image_urls list
+    images_input = inputs.get("images")
+    if images_input and images_input.value:
+        raw = images_input.value
+        if isinstance(raw, list):
+            urls = [_to_fal_url(str(v)) for v in raw if v]
+        else:
+            urls = [_to_fal_url(str(raw))]
+        if urls:
+            fal_input["image_urls"] = urls
+
+    # Video input (luma-ray2-flash-modify) → video_url
+    video_input = inputs.get("video")
+    if video_input and video_input.value:
+        fal_input["video_url"] = _to_fal_url(str(video_input.value))
+
+    # Audio input (ltx-2-3) → audio_url
+    audio_input = inputs.get("audio")
+    if audio_input and audio_input.value:
+        fal_input["audio_url"] = _to_fal_url(str(audio_input.value))
+
     texture_image_input = inputs.get("texture_image")
     if texture_image_input and texture_image_input.value:
         fal_input["texture_image_url"] = _to_fal_url(str(texture_image_input.value))
@@ -263,15 +284,20 @@ def _parse_fal_output(data: dict[str, Any]) -> dict[str, Any]:
     if isinstance(model_mesh, str) and model_mesh:
         return {"mesh": {"type": "Mesh", "value": model_mesh}}
 
-    # Image output (most common)
+    # Image / SVG output (most common)
+    # SVG check: Recraft V4 text-to-vector returns images[0] with content_type "image/svg+xml"
     images = data.get("images", [])
     if images and isinstance(images, list) and len(images) > 0:
         first_image = images[0]
         if isinstance(first_image, dict):
             url = first_image.get("url", "")
+            content_type = first_image.get("content_type", "")
         else:
             url = str(first_image)
+            content_type = ""
         if url:
+            if "svg" in content_type:
+                return {"svg": {"type": "SVG", "value": url}}
             return {"image": {"type": "Image", "value": url}}
 
     # Single image URL
