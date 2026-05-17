@@ -833,3 +833,265 @@ async def test_kling_o3_end_image_maps_to_end_image_url():
     payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
     assert payload["image_url"] == "https://example.com/start.png"
     assert payload["end_image_url"] == "https://example.com/end.png"
+
+
+# ---------------------------------------------------------------------------
+# LTX wrapper structural tests (audit 2026-05-17)
+# ---------------------------------------------------------------------------
+
+
+# --- ltx-video-2 ---
+
+@pytest.mark.asyncio
+async def test_ltx_video2_endpoint_injected():
+    """_ltx_video2_handler injects fal-ai/ltx-2/image-to-video."""
+    mock_submit, mock_status, mock_result = _make_video_poll_mocks()
+
+    node = GraphNode(id="ltx2", definitionId="ltx-video-2", params={})
+    node.params.setdefault("endpoint_id", "fal-ai/ltx-2/image-to-video")
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            result = await handle_fal_universal(
+                node,
+                {
+                    "image": PortValueDict(type="Image", value="https://example.com/frame.png"),
+                    "prompt": PortValueDict(type="Text", value="animate"),
+                },
+                {"FAL_KEY": "fal_test"},
+                emit=AsyncMock(),
+            )
+
+    assert result["video"]["type"] == "Video"
+    posted_url = mock_client.post.call_args.args[0] if mock_client.post.call_args.args else mock_client.post.call_args.kwargs.get("url", "")
+    assert "ltx-2/image-to-video" in posted_url
+
+
+@pytest.mark.asyncio
+async def test_ltx_video2_image_maps_to_image_url():
+    """ltx-video-2 image port maps to image_url; fps and generate_audio forwarded."""
+    mock_submit, mock_status, mock_result = _make_video_poll_mocks()
+
+    node = GraphNode(
+        id="ltx2-params",
+        definitionId="ltx-video-2",
+        params={
+            "endpoint_id": "fal-ai/ltx-2/image-to-video",
+            "duration": "8",
+            "resolution": "1440p",
+            "fps": "50",
+            "generate_audio": True,
+        },
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            await handle_fal_universal(
+                node,
+                {
+                    "image": PortValueDict(type="Image", value="https://example.com/src.png"),
+                    "prompt": PortValueDict(type="Text", value="gentle waves"),
+                },
+                {"FAL_KEY": "fal_test"},
+                emit=AsyncMock(),
+            )
+
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert payload["image_url"] == "https://example.com/src.png"
+    assert payload["duration"] == "8"
+    assert payload["resolution"] == "1440p"
+    assert payload["fps"] == "50"
+    assert payload["generate_audio"] is True
+
+
+@pytest.mark.asyncio
+async def test_ltx_video2_generate_audio_false_omitted_when_empty():
+    """ltx-video-2: when generate_audio is not set, it must not appear in payload."""
+    mock_submit, mock_status, mock_result = _make_video_poll_mocks()
+
+    node = GraphNode(
+        id="ltx2-no-audio",
+        definitionId="ltx-video-2",
+        params={"endpoint_id": "fal-ai/ltx-2/image-to-video"},
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            await handle_fal_universal(
+                node,
+                {
+                    "image": PortValueDict(type="Image", value="https://example.com/src.png"),
+                    "prompt": PortValueDict(type="Text", value="slow pan"),
+                },
+                {"FAL_KEY": "fal_test"},
+                emit=AsyncMock(),
+            )
+
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    # generate_audio not in params dict → must not appear in request
+    assert "generate_audio" not in payload
+
+
+# --- ltx-2-3 ---
+
+@pytest.mark.asyncio
+async def test_ltx_23_endpoint_injected():
+    """_ltx_23_handler injects fal-ai/ltx-2.3/image-to-video."""
+    mock_submit, mock_status, mock_result = _make_video_poll_mocks()
+
+    node = GraphNode(id="ltx23", definitionId="ltx-2-3", params={})
+    node.params.setdefault("endpoint_id", "fal-ai/ltx-2.3/image-to-video")
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            result = await handle_fal_universal(
+                node,
+                {"prompt": PortValueDict(type="Text", value="ocean at dawn")},
+                {"FAL_KEY": "fal_test"},
+                emit=AsyncMock(),
+            )
+
+    assert result["video"]["type"] == "Video"
+    posted_url = mock_client.post.call_args.args[0] if mock_client.post.call_args.args else mock_client.post.call_args.kwargs.get("url", "")
+    assert "ltx-2.3/image-to-video" in posted_url
+
+
+@pytest.mark.asyncio
+async def test_ltx_23_key_params_forwarded():
+    """ltx-2-3: duration, aspect_ratio, fps, generate_audio all forwarded correctly."""
+    mock_submit, mock_status, mock_result = _make_video_poll_mocks()
+
+    node = GraphNode(
+        id="ltx23-params",
+        definitionId="ltx-2-3",
+        params={
+            "endpoint_id": "fal-ai/ltx-2.3/image-to-video",
+            "duration": "8",
+            "resolution": "1080p",
+            "aspect_ratio": "9:16",
+            "fps": "24",
+            "generate_audio": True,
+        },
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            await handle_fal_universal(
+                node,
+                {"prompt": PortValueDict(type="Text", value="portrait walk")},
+                {"FAL_KEY": "fal_test"},
+                emit=AsyncMock(),
+            )
+
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert payload["duration"] == "8"
+    assert payload["resolution"] == "1080p"
+    assert payload["aspect_ratio"] == "9:16"
+    assert payload["fps"] == "24"
+    assert payload["generate_audio"] is True
+
+
+@pytest.mark.asyncio
+async def test_ltx_23_end_image_maps_to_end_image_url():
+    """ltx-2-3 end_image port maps to end_image_url (transition generation)."""
+    mock_submit, mock_status, mock_result = _make_video_poll_mocks()
+
+    node = GraphNode(
+        id="ltx23-end",
+        definitionId="ltx-2-3",
+        params={"endpoint_id": "fal-ai/ltx-2.3/image-to-video"},
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            await handle_fal_universal(
+                node,
+                {
+                    "prompt": PortValueDict(type="Text", value="transition"),
+                    "image": PortValueDict(type="Image", value="https://example.com/start.png"),
+                    "end_image": PortValueDict(type="Image", value="https://example.com/end.png"),
+                },
+                {"FAL_KEY": "fal_test"},
+                emit=AsyncMock(),
+            )
+
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert payload["image_url"] == "https://example.com/start.png"
+    assert payload["end_image_url"] == "https://example.com/end.png"
+
+
+@pytest.mark.asyncio
+async def test_ltx_23_audio_port_maps_to_audio_url():
+    """ltx-2-3 audio port maps to audio_url (audio-driven generation)."""
+    mock_submit, mock_status, mock_result = _make_video_poll_mocks()
+
+    node = GraphNode(
+        id="ltx23-audio",
+        definitionId="ltx-2-3",
+        params={"endpoint_id": "fal-ai/ltx-2.3/image-to-video"},
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            await handle_fal_universal(
+                node,
+                {
+                    "prompt": PortValueDict(type="Text", value="music video"),
+                    "audio": PortValueDict(type="Audio", value="https://example.com/track.mp3"),
+                },
+                {"FAL_KEY": "fal_test"},
+                emit=AsyncMock(),
+            )
+
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert payload["audio_url"] == "https://example.com/track.mp3"
+    assert "audio" not in payload  # raw port name must not leak into request

@@ -399,7 +399,11 @@ def get_handler_registry(
             node.params.setdefault("endpoint_id", "fal-ai/kling-video/o3/standard/image-to-video")
             return await handle_fal_universal(node, inputs, api_keys, emit=emit)
 
-        async def _ltx_23_handler(node, inputs, api_keys):
+        async def _ltx_23_handler(
+            node: GraphNode,
+            inputs: dict[str, PortValueDict],
+            api_keys: dict[str, str],
+        ) -> dict[str, Any]:
             node.params.setdefault("endpoint_id", "fal-ai/ltx-2.3/image-to-video")
             return await handle_fal_universal(node, inputs, api_keys, emit=emit)
 

@@ -239,11 +239,46 @@ def test_local_execution_nodes_have_utility_provider(definitions: dict[str, dict
 
 
 def test_researched_provider_corrections_are_pinned(definitions: dict[str, dict[str, Any]]) -> None:
+    # --- ltx-video-2 (verified 2026-05-17 against fal.ai/models/fal-ai/ltx-2/image-to-video/api) ---
     ltx = definitions["ltx-video-2"]
     ltx_resolution_values = {option["value"] for option in _param_by_key(ltx, "resolution")["options"]}
     ltx_duration_values = {str(option["value"]) for option in _param_by_key(ltx, "duration")["options"]}
     assert ltx_resolution_values == {"1080p", "1440p", "2160p"}
     assert ltx_duration_values == {"6", "8", "10"}
+    # fps and generate_audio are API params and must be exposed
+    ltx_fps_values = {str(o["value"]) for o in _param_by_key(ltx, "fps")["options"]}
+    assert ltx_fps_values == {"25", "50"}, "ltx-video-2 fps must be 25 or 50"
+    assert _param_by_key(ltx, "fps")["default"] == "25"
+    assert _param_by_key(ltx, "generate_audio")["default"] is True, (
+        "ltx-video-2 generate_audio default must be True (API default)"
+    )
+
+    # --- ltx-2-3 (verified 2026-05-17 against fal.ai/models/fal-ai/ltx-2.3/image-to-video/api) ---
+    ltx23 = definitions["ltx-2-3"]
+    # duration must be an enum (string values), not integer type
+    ltx23_duration_param = _param_by_key(ltx23, "duration")
+    assert ltx23_duration_param["type"] == "enum", "ltx-2-3 duration must be enum, not integer"
+    ltx23_duration_values = {str(o["value"]) for o in ltx23_duration_param["options"]}
+    assert ltx23_duration_values == {"6", "8", "10"}, "ltx-2-3 duration options must be 6, 8, 10"
+    assert str(ltx23_duration_param["default"]) == "6"
+    # aspect_ratio must include 'auto' as default (API: auto, 16:9, 9:16)
+    ltx23_ar_param = _param_by_key(ltx23, "aspect_ratio")
+    ltx23_ar_values = {o["value"] for o in ltx23_ar_param["options"]}
+    assert "auto" in ltx23_ar_values, "ltx-2-3 aspect_ratio must include 'auto'"
+    assert "1:1" not in ltx23_ar_values, "ltx-2-3 aspect_ratio must not include '1:1' (not in API)"
+    assert ltx23_ar_param["default"] == "auto", "ltx-2-3 aspect_ratio default must be 'auto'"
+    # fps must expose all four API options as string values
+    ltx23_fps_values = {str(o["value"]) for o in _param_by_key(ltx23, "fps")["options"]}
+    assert ltx23_fps_values == {"24", "25", "48", "50"}, "ltx-2-3 fps must be 24, 25, 48, 50"
+    assert str(_param_by_key(ltx23, "fps")["default"]) == "25"
+    # generate_audio default must be True (API default)
+    assert _param_by_key(ltx23, "generate_audio")["default"] is True, (
+        "ltx-2-3 generate_audio default must be True (API default)"
+    )
+    # end_image input port must be present (maps to end_image_url via universal handler)
+    ltx23_input_ids = {p["id"] for p in ltx23["inputPorts"]}
+    assert "end_image" in ltx23_input_ids, "ltx-2-3 must have end_image input port"
+    assert "audio" in ltx23_input_ids, "ltx-2-3 must retain audio input port"
 
     for node_id in ("minimax-t2v", "minimax-i2v"):
         mm = definitions[node_id]

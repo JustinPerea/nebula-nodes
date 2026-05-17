@@ -2646,6 +2646,24 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
           { label: '2160p', value: '2160p' },
         ],
       },
+      {
+        key: 'fps',
+        label: 'FPS',
+        type: 'enum',
+        required: false,
+        default: '25',
+        options: [
+          { label: '25', value: '25' },
+          { label: '50', value: '50' },
+        ],
+      },
+      {
+        key: 'generate_audio',
+        label: 'Generate Audio',
+        type: 'boolean',
+        required: false,
+        default: true,
+      },
     ],
   },
 
@@ -4565,6 +4583,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     inputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: false },
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
+      { id: 'end_image', label: 'End Image', dataType: 'Image', required: false },
       { id: 'audio', label: 'Audio', dataType: 'Audio', required: false },
     ],
     outputPorts: [
@@ -4574,11 +4593,14 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       {
         key: 'duration',
         label: 'Duration',
-        type: 'integer',
+        type: 'enum',
         required: false,
-        default: 6,
-        min: 2,
-        max: 20,
+        default: '6',
+        options: [
+          { label: '6 seconds', value: '6' },
+          { label: '8 seconds', value: '8' },
+          { label: '10 seconds', value: '10' },
+        ],
       },
       {
         key: 'resolution',
@@ -4597,11 +4619,11 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         label: 'Aspect Ratio',
         type: 'enum',
         required: false,
-        default: '16:9',
+        default: 'auto',
         options: [
+          { label: 'Auto', value: 'auto' },
           { label: '16:9', value: '16:9' },
           { label: '9:16', value: '9:16' },
-          { label: '1:1', value: '1:1' },
         ],
       },
       {
@@ -4609,10 +4631,12 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         label: 'FPS',
         type: 'enum',
         required: false,
-        default: 25,
+        default: '25',
         options: [
-          { label: '25', value: 25 },
-          { label: '50', value: 50 },
+          { label: '24', value: '24' },
+          { label: '25', value: '25' },
+          { label: '48', value: '48' },
+          { label: '50', value: '50' },
         ],
       },
       {
@@ -4620,7 +4644,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         label: 'Generate Audio',
         type: 'boolean',
         required: false,
-        default: false,
+        default: true,
       },
     ],
   },
