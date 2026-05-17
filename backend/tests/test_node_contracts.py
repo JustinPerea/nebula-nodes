@@ -270,3 +270,52 @@ def test_researched_provider_corrections_are_pinned(definitions: dict[str, dict[
     elevenlabs_tts = definitions["elevenlabs-tts"]
     for key in ("similarity_boost", "style", "use_speaker_boost", "speed", "output_format", "seed"):
         _param_by_key(elevenlabs_tts, key)
+
+    # --- OpenAI image nodes (verified 2026-05-16 against openai-python SDK types) ---
+
+    # gpt-image-1-generate: quality must include "auto" (API default); output_format and
+    # background must be present (handler now forwards them).
+    gpt1_gen = definitions["gpt-image-1-generate"]
+    gpt1_gen_quality_values = {o["value"] for o in _param_by_key(gpt1_gen, "quality")["options"]}
+    assert "auto" in gpt1_gen_quality_values, "gpt-image-1-generate quality must include 'auto'"
+    assert "low" in gpt1_gen_quality_values
+    assert "medium" in gpt1_gen_quality_values
+    assert "high" in gpt1_gen_quality_values
+    _param_by_key(gpt1_gen, "output_format")   # must exist
+    _param_by_key(gpt1_gen, "background")       # must exist
+
+    # gpt-image-1-edit: quality must include "auto" (matches generate node and API spec);
+    # size must include "auto" option.
+    gpt1_edit = definitions["gpt-image-1-edit"]
+    gpt1_edit_quality_values = {o["value"] for o in _param_by_key(gpt1_edit, "quality")["options"]}
+    assert "auto" in gpt1_edit_quality_values, "gpt-image-1-edit quality must include 'auto'"
+    assert _param_by_key(gpt1_edit, "quality")["default"] == "auto"
+    gpt1_edit_size_values = {o["value"] for o in _param_by_key(gpt1_edit, "size")["options"]}
+    assert "auto" in gpt1_edit_size_values, "gpt-image-1-edit size must include 'auto'"
+    assert _param_by_key(gpt1_edit, "size")["default"] == "auto"
+
+    # dalle-3-generate: must have style param with vivid/natural options; must NOT have
+    # output_format or background (DALL-E 3 does not support GPT-image-only params).
+    dalle3 = definitions["dalle-3-generate"]
+    dalle3_style_values = {o["value"] for o in _param_by_key(dalle3, "style")["options"]}
+    assert dalle3_style_values == {"vivid", "natural"}, "dalle-3 style must be vivid or natural"
+    assert _param_by_key(dalle3, "style")["default"] == "vivid"
+    dalle3_quality_values = {o["value"] for o in _param_by_key(dalle3, "quality")["options"]}
+    assert dalle3_quality_values == {"standard", "hd"}, "dalle-3 quality must be standard or hd"
+
+    # gpt-image-2-generate: must have moderation param with auto/low; no background or style.
+    gpt2_gen = definitions["gpt-image-2-generate"]
+    gpt2_mod_values = {o["value"] for o in _param_by_key(gpt2_gen, "moderation")["options"]}
+    assert gpt2_mod_values == {"auto", "low"}, "gpt-image-2-generate moderation must be auto or low"
+    gpt2_gen_quality_values = {o["value"] for o in _param_by_key(gpt2_gen, "quality")["options"]}
+    assert "auto" in gpt2_gen_quality_values
+    assert "high" in gpt2_gen_quality_values
+
+    # gpt-image-2-edit: same param surface as generate.
+    gpt2_edit = definitions["gpt-image-2-edit"]
+    gpt2_edit_mod_values = {o["value"] for o in _param_by_key(gpt2_edit, "moderation")["options"]}
+    assert gpt2_edit_mod_values == {"auto", "low"}, "gpt-image-2-edit moderation must be auto or low"
+    # edit uses 'images' port (plural), not 'image'
+    gpt2_edit_input_ids = {p["id"] for p in gpt2_edit["inputPorts"]}
+    assert "images" in gpt2_edit_input_ids, "gpt-image-2-edit must use port id 'images' (plural)"
+    assert "image" not in gpt2_edit_input_ids, "gpt-image-2-edit must not use singular 'image' input port"

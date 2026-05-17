@@ -6082,8 +6082,12 @@
         "label": "Size",
         "type": "enum",
         "required": false,
-        "default": "1024x1024",
+        "default": "auto",
         "options": [
+          {
+            "label": "Auto",
+            "value": "auto"
+          },
           {
             "label": "1024×1024",
             "value": "1024x1024"
@@ -6103,8 +6107,12 @@
         "label": "Quality",
         "type": "enum",
         "required": false,
-        "default": "medium",
+        "default": "auto",
         "options": [
+          {
+            "label": "Auto",
+            "value": "auto"
+          },
           {
             "label": "Low",
             "value": "low"

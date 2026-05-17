@@ -3513,8 +3513,9 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         label: 'Size',
         type: 'enum',
         required: false,
-        default: '1024x1024',
+        default: 'auto',
         options: [
+          { label: 'Auto', value: 'auto' },
           { label: '1024×1024', value: '1024x1024' },
           { label: '1536×1024', value: '1536x1024' },
           { label: '1024×1536', value: '1024x1536' },
@@ -3525,8 +3526,9 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         label: 'Quality',
         type: 'enum',
         required: false,
-        default: 'medium',
+        default: 'auto',
         options: [
+          { label: 'Auto', value: 'auto' },
           { label: 'Low', value: 'low' },
           { label: 'Medium', value: 'medium' },
           { label: 'High', value: 'high' },

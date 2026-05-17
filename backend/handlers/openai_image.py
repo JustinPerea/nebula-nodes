@@ -49,6 +49,22 @@ async def handle_openai_image_generate(
     if n and int(n) > 1:
         body["n"] = int(n)
 
+    # GPT image models support output_format (png/jpeg/webp); dall-e models do not.
+    if not model.startswith("dall-e"):
+        output_format = node.params.get("output_format")
+        if output_format and output_format != "png":
+            body["output_format"] = output_format
+
+        background = node.params.get("background")
+        if background and background != "auto":
+            body["background"] = background
+
+    # dall-e-3 supports a style param (vivid/natural); other models do not.
+    if model == "dall-e-3":
+        style = node.params.get("style")
+        if style:
+            body["style"] = style
+
     async with httpx.AsyncClient(timeout=120.0) as client:
         response = await client.post(
             OPENAI_API_URL,

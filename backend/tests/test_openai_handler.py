@@ -17,11 +17,13 @@ RED_PIXEL_B64 = (
     "2mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg=="
 )
 
+_API_KEYS = {"OPENAI_API_KEY": "sk-test-key"}
 
-def _make_node(params: dict | None = None) -> GraphNode:
+
+def _make_node(definition_id: str = "gpt-image-1-generate", params: dict | None = None) -> GraphNode:
     return GraphNode(
         id="test-node-1",
-        definitionId="gpt-image-1-generate",
+        definitionId=definition_id,
         params=params or {"model": "gpt-image-1", "size": "1024x1024", "quality": "auto", "n": 1},
     )
 
@@ -37,6 +39,15 @@ def _mock_response(b64_data: str) -> MagicMock:
     return resp
 
 
+def _patch_client(mock_resp: MagicMock):
+    """Context manager that patches httpx.AsyncClient inside the handler."""
+    mock_client = AsyncMock()
+    mock_client.post.return_value = mock_resp
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
+    return patch("handlers.openai_image.httpx.AsyncClient", return_value=mock_client), mock_client
+
+
 @pytest.fixture(autouse=True)
 def cleanup_output():
     """OUTPUT_ROOT is sandboxed to a tmp dir by tests/conftest.py
@@ -45,6 +56,11 @@ def cleanup_output():
     sandbox, because it would wipe the user's real output/. Left as a
     no-op hook in case per-test isolation is needed later."""
     yield
+
+
+# ---------------------------------------------------------------------------
+# Basic happy-path
+# ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
@@ -60,9 +76,8 @@ async def test_generates_image_and_saves_file() -> None:
 
         node = _make_node()
         inputs = {"prompt": PortValueDict(type="Text", value="a red pixel")}
-        api_keys = {"OPENAI_API_KEY": "sk-test-key"}
 
-        result = await handle_openai_image_generate(node, inputs, api_keys)
+        result = await handle_openai_image_generate(node, inputs, _API_KEYS)
 
     assert "image" in result
     assert result["image"]["type"] == "Image"
@@ -77,14 +92,188 @@ async def test_generates_image_and_saves_file() -> None:
     assert "response_format" not in body
 
 
+# ---------------------------------------------------------------------------
+# Request body shape — gpt-image-1
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_gpt_image_1_forwards_output_format_jpeg() -> None:
+    """output_format=jpeg must appear in the request body for gpt-image-1."""
+    mock_resp = _mock_response(RED_PIXEL_B64)
+    patcher, mock_client = _patch_client(mock_resp)
+
+    with patcher:
+        node = _make_node(params={"model": "gpt-image-1", "output_format": "jpeg"})
+        inputs = {"prompt": PortValueDict(type="Text", value="test")}
+        await handle_openai_image_generate(node, inputs, _API_KEYS)
+
+    body = mock_client.post.call_args.kwargs["json"]
+    assert body["output_format"] == "jpeg"
+    assert "response_format" not in body
+
+
+@pytest.mark.asyncio
+async def test_gpt_image_1_omits_output_format_png_default() -> None:
+    """output_format=png is the API default; we skip it to keep requests minimal."""
+    mock_resp = _mock_response(RED_PIXEL_B64)
+    patcher, mock_client = _patch_client(mock_resp)
+
+    with patcher:
+        node = _make_node(params={"model": "gpt-image-1", "output_format": "png"})
+        inputs = {"prompt": PortValueDict(type="Text", value="test")}
+        await handle_openai_image_generate(node, inputs, _API_KEYS)
+
+    body = mock_client.post.call_args.kwargs["json"]
+    assert "output_format" not in body
+
+
+@pytest.mark.asyncio
+async def test_gpt_image_1_forwards_background_transparent() -> None:
+    """background=transparent must appear in the request body for gpt-image-1."""
+    mock_resp = _mock_response(RED_PIXEL_B64)
+    patcher, mock_client = _patch_client(mock_resp)
+
+    with patcher:
+        node = _make_node(params={"model": "gpt-image-1", "background": "transparent"})
+        inputs = {"prompt": PortValueDict(type="Text", value="test")}
+        await handle_openai_image_generate(node, inputs, _API_KEYS)
+
+    body = mock_client.post.call_args.kwargs["json"]
+    assert body["background"] == "transparent"
+
+
+@pytest.mark.asyncio
+async def test_gpt_image_1_omits_background_auto() -> None:
+    """background=auto is the API default; omit it."""
+    mock_resp = _mock_response(RED_PIXEL_B64)
+    patcher, mock_client = _patch_client(mock_resp)
+
+    with patcher:
+        node = _make_node(params={"model": "gpt-image-1", "background": "auto"})
+        inputs = {"prompt": PortValueDict(type="Text", value="test")}
+        await handle_openai_image_generate(node, inputs, _API_KEYS)
+
+    body = mock_client.post.call_args.kwargs["json"]
+    assert "background" not in body
+
+
+@pytest.mark.asyncio
+async def test_gpt_image_1_does_not_send_response_format() -> None:
+    """GPT image models always return b64_json — response_format must not be sent."""
+    mock_resp = _mock_response(RED_PIXEL_B64)
+    patcher, mock_client = _patch_client(mock_resp)
+
+    with patcher:
+        node = _make_node(params={"model": "gpt-image-1"})
+        inputs = {"prompt": PortValueDict(type="Text", value="test")}
+        await handle_openai_image_generate(node, inputs, _API_KEYS)
+
+    body = mock_client.post.call_args.kwargs["json"]
+    assert "response_format" not in body
+    assert "style" not in body
+
+
+# ---------------------------------------------------------------------------
+# Request body shape — dall-e-3
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_dalle3_sends_response_format_b64_json() -> None:
+    """DALL-E 3 must include response_format=b64_json (otherwise API returns URL)."""
+    mock_resp = _mock_response(RED_PIXEL_B64)
+    patcher, mock_client = _patch_client(mock_resp)
+
+    with patcher:
+        node = _make_node(
+            definition_id="dalle-3-generate",
+            params={"model": "dall-e-3", "size": "1024x1024", "quality": "standard"},
+        )
+        inputs = {"prompt": PortValueDict(type="Text", value="a landscape")}
+        await handle_openai_image_generate(node, inputs, _API_KEYS)
+
+    body = mock_client.post.call_args.kwargs["json"]
+    assert body["model"] == "dall-e-3"
+    assert body["response_format"] == "b64_json"
+    # DALL-E 3 does not support GPT-image-only params
+    assert "output_format" not in body
+    assert "background" not in body
+
+
+@pytest.mark.asyncio
+async def test_dalle3_forwards_style_vivid() -> None:
+    """style=vivid must appear in the request body for dall-e-3."""
+    mock_resp = _mock_response(RED_PIXEL_B64)
+    patcher, mock_client = _patch_client(mock_resp)
+
+    with patcher:
+        node = _make_node(
+            definition_id="dalle-3-generate",
+            params={"model": "dall-e-3", "style": "vivid"},
+        )
+        inputs = {"prompt": PortValueDict(type="Text", value="dramatic scene")}
+        await handle_openai_image_generate(node, inputs, _API_KEYS)
+
+    body = mock_client.post.call_args.kwargs["json"]
+    assert body["style"] == "vivid"
+
+
+@pytest.mark.asyncio
+async def test_dalle3_forwards_style_natural() -> None:
+    """style=natural must appear in the request body for dall-e-3."""
+    mock_resp = _mock_response(RED_PIXEL_B64)
+    patcher, mock_client = _patch_client(mock_resp)
+
+    with patcher:
+        node = _make_node(
+            definition_id="dalle-3-generate",
+            params={"model": "dall-e-3", "style": "natural"},
+        )
+        inputs = {"prompt": PortValueDict(type="Text", value="a calm scene")}
+        await handle_openai_image_generate(node, inputs, _API_KEYS)
+
+    body = mock_client.post.call_args.kwargs["json"]
+    assert body["style"] == "natural"
+
+
+@pytest.mark.asyncio
+async def test_gpt_image_1_does_not_send_style() -> None:
+    """style is dall-e-3 only; must never appear for gpt-image-1."""
+    mock_resp = _mock_response(RED_PIXEL_B64)
+    patcher, mock_client = _patch_client(mock_resp)
+
+    with patcher:
+        node = _make_node(params={"model": "gpt-image-1", "style": "vivid"})
+        inputs = {"prompt": PortValueDict(type="Text", value="test")}
+        await handle_openai_image_generate(node, inputs, _API_KEYS)
+
+    body = mock_client.post.call_args.kwargs["json"]
+    assert "style" not in body
+
+
+# ---------------------------------------------------------------------------
+# Error handling
+# ---------------------------------------------------------------------------
+
+
 @pytest.mark.asyncio
 async def test_missing_prompt_raises() -> None:
     node = _make_node()
     inputs: dict[str, PortValueDict] = {}
-    api_keys = {"OPENAI_API_KEY": "sk-test-key"}
 
     with pytest.raises(ValueError, match="[Pp]rompt"):
-        await handle_openai_image_generate(node, inputs, api_keys)
+        await handle_openai_image_generate(node, inputs, _API_KEYS)
+
+
+@pytest.mark.asyncio
+async def test_missing_api_key_raises_openai_api_key() -> None:
+    """Error message must name OPENAI_API_KEY so the user knows which env var to set."""
+    node = _make_node()
+    inputs = {"prompt": PortValueDict(type="Text", value="test")}
+
+    with pytest.raises(ValueError, match="OPENAI_API_KEY"):
+        await handle_openai_image_generate(node, inputs, {})
 
 
 @pytest.mark.asyncio
@@ -98,7 +287,48 @@ async def test_api_error_propagates() -> None:
 
         node = _make_node()
         inputs = {"prompt": PortValueDict(type="Text", value="test")}
-        api_keys = {"OPENAI_API_KEY": "sk-test-key"}
 
         with pytest.raises(RuntimeError, match="API connection failed"):
-            await handle_openai_image_generate(node, inputs, api_keys)
+            await handle_openai_image_generate(node, inputs, _API_KEYS)
+
+
+@pytest.mark.asyncio
+async def test_non_200_response_raises_runtime_error() -> None:
+    """A non-200 HTTP status must raise RuntimeError with the status code."""
+    with patch("handlers.openai_image.httpx.AsyncClient") as MockClient:
+        mock_client_instance = AsyncMock()
+        bad_resp = MagicMock()
+        bad_resp.status_code = 429
+        bad_resp.text = '{"error": {"message": "rate limited"}}'
+        mock_client_instance.post.return_value = bad_resp
+        mock_client_instance.__aenter__ = AsyncMock(return_value=mock_client_instance)
+        mock_client_instance.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client_instance
+
+        node = _make_node()
+        inputs = {"prompt": PortValueDict(type="Text", value="test")}
+
+        with pytest.raises(RuntimeError, match="429"):
+            await handle_openai_image_generate(node, inputs, _API_KEYS)
+
+
+# ---------------------------------------------------------------------------
+# Output contract
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_output_returns_image_type() -> None:
+    """Handler must return {'image': {'type': 'Image', 'value': <path>}}."""
+    mock_resp = _mock_response(RED_PIXEL_B64)
+    patcher, mock_client = _patch_client(mock_resp)
+
+    with patcher:
+        node = _make_node()
+        inputs = {"prompt": PortValueDict(type="Text", value="test")}
+        result = await handle_openai_image_generate(node, inputs, _API_KEYS)
+
+    assert set(result.keys()) == {"image"}
+    assert result["image"]["type"] == "Image"
+    assert isinstance(result["image"]["value"], str)
+    assert result["image"]["value"].endswith(".png")
