@@ -179,7 +179,7 @@ Generated: 2026-05-17 | Nodes: 100 | Source: [`backend/data/node_definitions.jso
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text)* |
 | **Outputs** | Image (Image) |
-| **Audited** | — |
+| **Audited** | 2026-05-17 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -297,7 +297,7 @@ Generated: 2026-05-17 | Nodes: 100 | Source: [`backend/data/node_definitions.jso
 | **Execution** | stream |
 | **Inputs** | Reference Images (Image ×n)*, Prompt (Text)* |
 | **Outputs** | Image (Image) |
-| **Audited** | 2026-05-16 |
+| **Audited** | 2026-05-17 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -320,7 +320,7 @@ Generated: 2026-05-17 | Nodes: 100 | Source: [`backend/data/node_definitions.jso
 | **Execution** | stream |
 | **Inputs** | Prompt (Text)* |
 | **Outputs** | Image (Image) |
-| **Audited** | 2026-05-16 |
+| **Audited** | 2026-05-17 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -521,7 +521,7 @@ Generated: 2026-05-17 | Nodes: 100 | Source: [`backend/data/node_definitions.jso
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text)* |
 | **Outputs** | Image (Image) |
-| **Audited** | — |
+| **Audited** | 2026-05-17 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
