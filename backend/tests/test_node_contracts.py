@@ -353,4 +353,83 @@ def test_researched_provider_corrections_are_pinned(definitions: dict[str, dict[
     # edit uses 'images' port (plural), not 'image'
     gpt2_edit_input_ids = {p["id"] for p in gpt2_edit["inputPorts"]}
     assert "images" in gpt2_edit_input_ids, "gpt-image-2-edit must use port id 'images' (plural)"
+
+    # --- Wan 2.6 nodes (verified 2026-05-17 against fal.ai/models/wan/v2.6/*) ---
+
+    # wan-2-6-t2v: duration must be integer enum (5/10/15, no 's' suffix);
+    # aspect_ratio must expose all 5 API options; generate_audio default must be True.
+    wan_t2v = definitions["wan-2-6-t2v"]
+    wan_t2v_duration_values = {o["value"] for o in _param_by_key(wan_t2v, "duration")["options"]}
+    assert wan_t2v_duration_values == {5, 10, 15}, (
+        "wan-2-6-t2v duration must be integer enum {5, 10, 15}, not string '5s'"
+    )
+    assert _param_by_key(wan_t2v, "duration")["default"] == 5
+    wan_t2v_ar_values = {o["value"] for o in _param_by_key(wan_t2v, "aspect_ratio")["options"]}
+    assert wan_t2v_ar_values == {"16:9", "9:16", "1:1", "4:3", "3:4"}, (
+        "wan-2-6-t2v aspect_ratio must expose all 5 API options"
+    )
+    assert _param_by_key(wan_t2v, "generate_audio")["default"] is True, (
+        "wan-2-6-t2v generate_audio default must be True (API default)"
+    )
+    _param_by_key(wan_t2v, "enable_prompt_expansion")   # must exist
+    _param_by_key(wan_t2v, "multi_shots")                # must exist
+    _param_by_key(wan_t2v, "enable_safety_checker")      # must exist
+    # resolution must NOT expose 480p (not in API)
+    wan_t2v_res_values = {o["value"] for o in _param_by_key(wan_t2v, "resolution")["options"]}
+    assert "480p" not in wan_t2v_res_values, "wan-2-6-t2v must not expose 480p (not in API)"
+    assert wan_t2v_res_values == {"720p", "1080p"}
+    # apiEndpoint must not have fal-ai/ prefix
+    assert wan_t2v["apiEndpoint"] == "wan/v2.6/text-to-video", (
+        "wan-2-6-t2v apiEndpoint must be 'wan/v2.6/text-to-video' (no fal-ai/ prefix)"
+    )
+
+    # wan-2-6-i2v: same duration/resolution fixes; generate_audio default True;
+    # apiEndpoint must not have fal-ai/ prefix.
+    wan_i2v = definitions["wan-2-6-i2v"]
+    wan_i2v_duration_values = {o["value"] for o in _param_by_key(wan_i2v, "duration")["options"]}
+    assert wan_i2v_duration_values == {5, 10, 15}, (
+        "wan-2-6-i2v duration must be integer enum {5, 10, 15}"
+    )
+    assert _param_by_key(wan_i2v, "duration")["default"] == 5
+    wan_i2v_res_values = {o["value"] for o in _param_by_key(wan_i2v, "resolution")["options"]}
+    assert "480p" not in wan_i2v_res_values, "wan-2-6-i2v must not expose 480p (not in API)"
+    assert wan_i2v_res_values == {"720p", "1080p"}
+    assert _param_by_key(wan_i2v, "generate_audio")["default"] is True, (
+        "wan-2-6-i2v generate_audio default must be True"
+    )
+    _param_by_key(wan_i2v, "enable_prompt_expansion")
+    _param_by_key(wan_i2v, "multi_shots")
+    _param_by_key(wan_i2v, "enable_safety_checker")
+    assert wan_i2v["apiEndpoint"] == "wan/v2.6/image-to-video", (
+        "wan-2-6-i2v apiEndpoint must be 'wan/v2.6/image-to-video' (no fal-ai/ prefix)"
+    )
+
+    # wan-2-6-r2v: duration only 5/10 (API limit); no 480p; default resolution 1080p;
+    # apiEndpoint must not have fal-ai/ prefix; video1/video2/video3 ports present.
+    wan_r2v = definitions["wan-2-6-r2v"]
+    wan_r2v_duration_values = {o["value"] for o in _param_by_key(wan_r2v, "duration")["options"]}
+    assert wan_r2v_duration_values == {5, 10}, (
+        "wan-2-6-r2v duration must be {5, 10} only (API does not support 15s)"
+    )
+    assert _param_by_key(wan_r2v, "duration")["default"] == 5
+    wan_r2v_res_values = {o["value"] for o in _param_by_key(wan_r2v, "resolution")["options"]}
+    assert "480p" not in wan_r2v_res_values, "wan-2-6-r2v must not expose 480p"
+    assert wan_r2v_res_values == {"720p", "1080p"}
+    assert _param_by_key(wan_r2v, "resolution")["default"] == "1080p", (
+        "wan-2-6-r2v resolution default must be 1080p (API default)"
+    )
+    wan_r2v_ar_values = {o["value"] for o in _param_by_key(wan_r2v, "aspect_ratio")["options"]}
+    assert wan_r2v_ar_values == {"16:9", "9:16", "1:1", "4:3", "3:4"}, (
+        "wan-2-6-r2v aspect_ratio must expose all 5 API options"
+    )
+    _param_by_key(wan_r2v, "enable_prompt_expansion")
+    _param_by_key(wan_r2v, "multi_shots")
+    _param_by_key(wan_r2v, "enable_safety_checker")
+    assert wan_r2v["apiEndpoint"] == "wan/v2.6/reference-to-video", (
+        "wan-2-6-r2v apiEndpoint must be 'wan/v2.6/reference-to-video' (no fal-ai/ prefix)"
+    )
+    wan_r2v_input_ids = {p["id"] for p in wan_r2v["inputPorts"]}
+    assert "video1" in wan_r2v_input_ids, "wan-2-6-r2v must have video1 input port"
+    assert "video2" in wan_r2v_input_ids, "wan-2-6-r2v must have video2 input port"
+    assert "video3" in wan_r2v_input_ids, "wan-2-6-r2v must have video3 input port"
     assert "image" not in gpt2_edit_input_ids, "gpt-image-2-edit must not use singular 'image' input port"

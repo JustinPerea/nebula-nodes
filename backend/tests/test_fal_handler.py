@@ -1094,4 +1094,320 @@ async def test_ltx_23_audio_port_maps_to_audio_url():
 
     payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
     assert payload["audio_url"] == "https://example.com/track.mp3"
+
+
+# ---------------------------------------------------------------------------
+# Wan 2.6 wrapper structural tests (audit 2026-05-17)
+# ---------------------------------------------------------------------------
+
+
+# --- wan-2-6-t2v ---
+
+@pytest.mark.asyncio
+async def test_wan26_t2v_endpoint_injected():
+    """_wan26_t2v_handler injects wan/v2.6/text-to-video (no fal-ai/ prefix)."""
+    mock_submit, mock_status, mock_result = _make_video_poll_mocks()
+
+    node = GraphNode(id="wan-t2v", definitionId="wan-2-6-t2v", params={})
+    node.params.setdefault("endpoint_id", "wan/v2.6/text-to-video")
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            result = await handle_fal_universal(
+                node,
+                {"prompt": PortValueDict(type="Text", value="a futuristic city")},
+                {"FAL_KEY": "fal_test"},
+                emit=AsyncMock(),
+            )
+
+    assert result["video"]["type"] == "Video"
+    posted_url = mock_client.post.call_args.args[0] if mock_client.post.call_args.args else mock_client.post.call_args.kwargs.get("url", "")
+    assert "wan/v2.6/text-to-video" in posted_url
+    assert "fal-ai" not in posted_url
+
+
+@pytest.mark.asyncio
+async def test_wan26_t2v_key_params_forwarded():
+    """wan-2-6-t2v: duration (integer), resolution, generate_audio, enable_prompt_expansion forwarded."""
+    mock_submit, mock_status, mock_result = _make_video_poll_mocks()
+
+    node = GraphNode(
+        id="wan-t2v-params",
+        definitionId="wan-2-6-t2v",
+        params={
+            "endpoint_id": "wan/v2.6/text-to-video",
+            "duration": 10,
+            "resolution": "1080p",
+            "generate_audio": True,
+            "enable_prompt_expansion": False,
+            "multi_shots": False,
+            "enable_safety_checker": True,
+        },
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            await handle_fal_universal(
+                node,
+                {"prompt": PortValueDict(type="Text", value="test")},
+                {"FAL_KEY": "fal_test"},
+                emit=AsyncMock(),
+            )
+
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert payload["duration"] == 10, "duration must be integer, not '10s'"
+    assert payload["resolution"] == "1080p"
+    assert payload["generate_audio"] is True
+    assert payload["enable_prompt_expansion"] is False
+    assert payload["multi_shots"] is False
+    assert payload["enable_safety_checker"] is True
+    assert "endpoint_id" not in payload, "endpoint_id must not be forwarded to FAL"
+
+
+# --- wan-2-6-i2v ---
+
+@pytest.mark.asyncio
+async def test_wan26_i2v_endpoint_injected():
+    """_wan26_i2v_handler injects wan/v2.6/image-to-video (no fal-ai/ prefix)."""
+    mock_submit, mock_status, mock_result = _make_video_poll_mocks()
+
+    node = GraphNode(id="wan-i2v", definitionId="wan-2-6-i2v", params={})
+    node.params.setdefault("endpoint_id", "wan/v2.6/image-to-video")
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            result = await handle_fal_universal(
+                node,
+                {
+                    "image": PortValueDict(type="Image", value="https://example.com/frame.png"),
+                    "prompt": PortValueDict(type="Text", value="animate the character"),
+                },
+                {"FAL_KEY": "fal_test"},
+                emit=AsyncMock(),
+            )
+
+    assert result["video"]["type"] == "Video"
+    posted_url = mock_client.post.call_args.args[0] if mock_client.post.call_args.args else mock_client.post.call_args.kwargs.get("url", "")
+    assert "wan/v2.6/image-to-video" in posted_url
+    assert "fal-ai" not in posted_url
+
+
+@pytest.mark.asyncio
+async def test_wan26_i2v_image_maps_to_image_url():
+    """wan-2-6-i2v: image port maps to image_url; duration sent as integer."""
+    mock_submit, mock_status, mock_result = _make_video_poll_mocks()
+
+    node = GraphNode(
+        id="wan-i2v-img",
+        definitionId="wan-2-6-i2v",
+        params={
+            "endpoint_id": "wan/v2.6/image-to-video",
+            "duration": 5,
+            "generate_audio": True,
+        },
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            await handle_fal_universal(
+                node,
+                {
+                    "image": PortValueDict(type="Image", value="https://example.com/char.png"),
+                    "prompt": PortValueDict(type="Text", value="wave at camera"),
+                },
+                {"FAL_KEY": "fal_test"},
+                emit=AsyncMock(),
+            )
+
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert payload["image_url"] == "https://example.com/char.png"
+    assert "image" not in payload, "raw 'image' key must not appear — only image_url"
+    assert payload["duration"] == 5, "duration must be integer 5, not '5s'"
+    assert payload["generate_audio"] is True
+
+
+# --- wan-2-6-r2v ---
+
+@pytest.mark.asyncio
+async def test_wan26_r2v_endpoint_injected():
+    """_wan26_r2v_handler injects wan/v2.6/reference-to-video (no fal-ai/ prefix)."""
+    mock_submit, mock_status, mock_result = _make_video_poll_mocks()
+
+    node = GraphNode(id="wan-r2v", definitionId="wan-2-6-r2v", params={})
+    node.params.setdefault("endpoint_id", "wan/v2.6/reference-to-video")
+    # Simulate the handler collating video ports into video_urls
+    node.params["video_urls"] = ["https://example.com/ref1.mp4"]
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            result = await handle_fal_universal(
+                node,
+                {"prompt": PortValueDict(type="Text", value="@Video1 dancing")},
+                {"FAL_KEY": "fal_test"},
+                emit=AsyncMock(),
+            )
+
+    assert result["video"]["type"] == "Video"
+    posted_url = mock_client.post.call_args.args[0] if mock_client.post.call_args.args else mock_client.post.call_args.kwargs.get("url", "")
+    assert "wan/v2.6/reference-to-video" in posted_url
+    assert "fal-ai" not in posted_url
+
+
+@pytest.mark.asyncio
+async def test_wan26_r2v_video_ports_collated_into_video_urls():
+    """_wan26_r2v_handler must collate video1/video2/video3 input ports into
+    a video_urls array on node.params before calling handle_fal_universal.
+    Without this, all reference videos are silently dropped."""
+    from execution.sync_runner import get_handler_registry
+
+    mock_submit, mock_status, mock_result = _make_video_poll_mocks()
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            async def fake_emit(_e):
+                pass
+
+            handlers = get_handler_registry(emit=fake_emit)
+            handler = handlers["wan-2-6-r2v"]
+
+            node = GraphNode(id="wan-r2v-collate", definitionId="wan-2-6-r2v", params={})
+            result = await handler(
+                node,
+                {
+                    "prompt": PortValueDict(type="Text", value="@Video1 running @Video2 jumping"),
+                    "video1": PortValueDict(type="Video", value="https://example.com/ref1.mp4"),
+                    "video2": PortValueDict(type="Video", value="https://example.com/ref2.mp4"),
+                    # video3 not connected
+                },
+                {"FAL_KEY": "fal_test"},
+            )
+
+    assert result["video"]["type"] == "Video"
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert "video_urls" in payload, "video_urls must be present — reference videos were silently dropped"
+    assert payload["video_urls"] == [
+        "https://example.com/ref1.mp4",
+        "https://example.com/ref2.mp4",
+    ]
+    assert "video1" not in payload, "raw video1 key must not appear in FAL payload"
+    assert "video2" not in payload
+
+
+@pytest.mark.asyncio
+async def test_wan26_r2v_single_video_collated():
+    """R2V with only video1 connected still produces video_urls with one entry."""
+    from execution.sync_runner import get_handler_registry
+
+    mock_submit, mock_status, mock_result = _make_video_poll_mocks()
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            async def fake_emit(_e):
+                pass
+
+            handlers = get_handler_registry(emit=fake_emit)
+            handler = handlers["wan-2-6-r2v"]
+
+            node = GraphNode(id="wan-r2v-one", definitionId="wan-2-6-r2v", params={})
+            await handler(
+                node,
+                {
+                    "prompt": PortValueDict(type="Text", value="@Video1 walks forward"),
+                    "video1": PortValueDict(type="Video", value="https://example.com/only.mp4"),
+                },
+                {"FAL_KEY": "fal_test"},
+            )
+
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert payload["video_urls"] == ["https://example.com/only.mp4"]
+
+
+@pytest.mark.asyncio
+async def test_wan26_r2v_duration_is_integer():
+    """R2V duration must be sent as integer (5 or 10), not string '5s'."""
+    from execution.sync_runner import get_handler_registry
+
+    mock_submit, mock_status, mock_result = _make_video_poll_mocks()
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            async def fake_emit(_e):
+                pass
+
+            handlers = get_handler_registry(emit=fake_emit)
+            handler = handlers["wan-2-6-r2v"]
+
+            node = GraphNode(
+                id="wan-r2v-dur",
+                definitionId="wan-2-6-r2v",
+                params={"duration": 10},
+            )
+            await handler(
+                node,
+                {
+                    "prompt": PortValueDict(type="Text", value="@Video1 jumps"),
+                    "video1": PortValueDict(type="Video", value="https://example.com/ref.mp4"),
+                },
+                {"FAL_KEY": "fal_test"},
+            )
+
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert payload["duration"] == 10, f"duration must be integer 10, got {payload.get('duration')!r}"
+    assert payload["duration"] != "10s", "duration must not use '10s' string format"
     assert "audio" not in payload  # raw port name must not leak into request

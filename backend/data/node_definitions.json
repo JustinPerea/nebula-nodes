@@ -4466,19 +4466,19 @@
         "label": "Duration",
         "type": "enum",
         "required": false,
-        "default": "5s",
+        "default": 5,
         "options": [
           {
             "label": "5 seconds",
-            "value": "5s"
+            "value": 5
           },
           {
             "label": "10 seconds",
-            "value": "10s"
+            "value": 10
           },
           {
             "label": "15 seconds",
-            "value": "15s"
+            "value": 15
           }
         ]
       },
@@ -4517,6 +4517,14 @@
           {
             "label": "1:1",
             "value": "1:1"
+          },
+          {
+            "label": "4:3",
+            "value": "4:3"
+          },
+          {
+            "label": "3:4",
+            "value": "3:4"
           }
         ]
       },
@@ -4539,7 +4547,28 @@
         "label": "Generate Audio",
         "type": "boolean",
         "required": false,
-        "default": false
+        "default": true
+      },
+      {
+        "key": "enable_prompt_expansion",
+        "label": "Prompt Expansion",
+        "type": "boolean",
+        "required": false,
+        "default": true
+      },
+      {
+        "key": "multi_shots",
+        "label": "Multi-Shot",
+        "type": "boolean",
+        "required": false,
+        "default": true
+      },
+      {
+        "key": "enable_safety_checker",
+        "label": "Safety Checker",
+        "type": "boolean",
+        "required": false,
+        "default": true
       }
     ]
   },
@@ -7152,7 +7181,7 @@
     "displayName": "Wan 2.6 I2V",
     "category": "video-gen",
     "apiProvider": "fal",
-    "apiEndpoint": "fal-ai/wan/v2.6/image-to-video",
+    "apiEndpoint": "wan/v2.6/image-to-video",
     "envKeyName": "FAL_KEY",
     "executionPattern": "async-poll",
     "inputPorts": [
@@ -7183,19 +7212,19 @@
         "label": "Duration",
         "type": "enum",
         "required": false,
-        "default": "5s",
+        "default": 5,
         "options": [
           {
             "label": "5 seconds",
-            "value": "5s"
+            "value": 5
           },
           {
             "label": "10 seconds",
-            "value": "10s"
+            "value": 10
           },
           {
             "label": "15 seconds",
-            "value": "15s"
+            "value": 15
           }
         ]
       },
@@ -7206,10 +7235,6 @@
         "required": false,
         "default": "720p",
         "options": [
-          {
-            "label": "480p",
-            "value": "480p"
-          },
           {
             "label": "720p",
             "value": "720p"
@@ -7268,7 +7293,28 @@
         "label": "Generate Audio",
         "type": "boolean",
         "required": false,
+        "default": true
+      },
+      {
+        "key": "enable_prompt_expansion",
+        "label": "Prompt Expansion",
+        "type": "boolean",
+        "required": false,
+        "default": true
+      },
+      {
+        "key": "multi_shots",
+        "label": "Multi-Shot",
+        "type": "boolean",
+        "required": false,
         "default": false
+      },
+      {
+        "key": "enable_safety_checker",
+        "label": "Safety Checker",
+        "type": "boolean",
+        "required": false,
+        "default": true
       }
     ]
   },
@@ -7481,7 +7527,7 @@
     "displayName": "Wan 2.6 R2V",
     "category": "video-gen",
     "apiProvider": "fal",
-    "apiEndpoint": "fal-ai/wan/v2.6/reference-to-video",
+    "apiEndpoint": "wan/v2.6/reference-to-video",
     "envKeyName": "FAL_KEY",
     "executionPattern": "async-poll",
     "inputPorts": [
@@ -7524,19 +7570,15 @@
         "label": "Duration",
         "type": "enum",
         "required": false,
-        "default": "5s",
+        "default": 5,
         "options": [
           {
             "label": "5 seconds",
-            "value": "5s"
+            "value": 5
           },
           {
             "label": "10 seconds",
-            "value": "10s"
-          },
-          {
-            "label": "15 seconds",
-            "value": "15s"
+            "value": 10
           }
         ]
       },
@@ -7545,12 +7587,8 @@
         "label": "Resolution",
         "type": "enum",
         "required": false,
-        "default": "720p",
+        "default": "1080p",
         "options": [
-          {
-            "label": "480p",
-            "value": "480p"
-          },
           {
             "label": "720p",
             "value": "720p"
@@ -7579,6 +7617,14 @@
           {
             "label": "1:1",
             "value": "1:1"
+          },
+          {
+            "label": "4:3",
+            "value": "4:3"
+          },
+          {
+            "label": "3:4",
+            "value": "3:4"
           }
         ]
       },
@@ -7595,6 +7641,27 @@
         "type": "integer",
         "required": false,
         "placeholder": "Random"
+      },
+      {
+        "key": "enable_prompt_expansion",
+        "label": "Prompt Expansion",
+        "type": "boolean",
+        "required": false,
+        "default": true
+      },
+      {
+        "key": "multi_shots",
+        "label": "Multi-Shot",
+        "type": "boolean",
+        "required": false,
+        "default": true
+      },
+      {
+        "key": "enable_safety_checker",
+        "label": "Safety Checker",
+        "type": "boolean",
+        "required": false,
+        "default": true
       }
     ]
   },

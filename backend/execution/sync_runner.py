@@ -375,8 +375,24 @@ def get_handler_registry(
             node.params.setdefault("endpoint_id", "fal-ai/luma-dream-machine/ray-2-flash/modify")
             return await handle_fal_universal(node, inputs, api_keys, emit=emit)
 
-        async def _wan26_r2v_handler(node, inputs, api_keys):
+        async def _wan26_r2v_handler(
+            node: GraphNode,
+            inputs: dict[str, PortValueDict],
+            api_keys: dict[str, str],
+        ) -> dict[str, Any]:
             node.params.setdefault("endpoint_id", "wan/v2.6/reference-to-video")
+            # Collate video1/video2/video3 ports into the video_urls array the API expects.
+            # handle_fal_universal has no mapping for numbered video ports, so we inject
+            # video_urls into params before calling it; the universal handler will forward
+            # any param key whose value is not None/"" straight to the FAL payload.
+            video_urls: list[str] = []
+            from handlers.fal_universal import _to_fal_url
+            for port_id in ("video1", "video2", "video3"):
+                port_val = inputs.get(port_id)
+                if port_val and port_val.value:
+                    video_urls.append(_to_fal_url(str(port_val.value)))
+            if video_urls:
+                node.params["video_urls"] = video_urls
             return await handle_fal_universal(node, inputs, api_keys, emit=emit)
 
         async def _pixverse_handler(node, inputs, api_keys):
