@@ -391,11 +391,11 @@ Generated: 2026-05-17 | Nodes: 100 | Source: [`backend/data/node_definitions.jso
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text)*, Reference Images (Image ×n)* |
 | **Outputs** | Image (Image) |
-| **Audited** | 2026-05-10 |
+| **Audited** | 2026-05-17 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Model | enum | nano-banana | Nano Banana, Nano Banana Pro |
+| Model | enum | nano-banana | Nano Banana, Nano Banana 2, Nano Banana Pro |
 | Multi-View | bool | false | — |
 
 ---
@@ -411,11 +411,11 @@ Generated: 2026-05-17 | Nodes: 100 | Source: [`backend/data/node_definitions.jso
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text)* |
 | **Outputs** | Image (Image) |
-| **Audited** | 2026-05-10 |
+| **Audited** | 2026-05-17 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Model | enum | nano-banana | Nano Banana, Nano Banana Pro |
+| Model | enum | nano-banana | Nano Banana, Nano Banana 2, Nano Banana Pro |
 | Multi-View | bool | false | — |
 | Aspect Ratio | enum | 1:1 | 1:1, 16:9, 9:16, 4:3, 3:4 |
 | Pose Mode | enum | — | None, A-Pose, T-Pose |
@@ -1626,7 +1626,7 @@ Generated: 2026-05-17 | Nodes: 100 | Source: [`backend/data/node_definitions.jso
 | **Execution** | async-poll |
 | **Inputs** | Task ID (Text)* |
 | **Outputs** | Print File (Mesh) |
-| **Audited** | 2026-05-10 |
+| **Audited** | 2026-05-17 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -1646,7 +1646,7 @@ Generated: 2026-05-17 | Nodes: 100 | Source: [`backend/data/node_definitions.jso
 | **Execution** | async-poll |
 | **Inputs** | Rig Task ID (Text)* |
 | **Outputs** | Animated Mesh (Mesh) |
-| **Audited** | 2026-05-10 |
+| **Audited** | 2026-05-17 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -1666,7 +1666,7 @@ Generated: 2026-05-17 | Nodes: 100 | Source: [`backend/data/node_definitions.jso
 | **Execution** | async-poll |
 | **Inputs** | Image (Image)*, Texture Reference (Image) |
 | **Outputs** | Mesh (Mesh) |
-| **Audited** | 2026-05-10 |
+| **Audited** | 2026-05-17 |
 
 **Shared Parameters**
 
@@ -1715,7 +1715,7 @@ Generated: 2026-05-17 | Nodes: 100 | Source: [`backend/data/node_definitions.jso
 | **Execution** | async-poll |
 | **Inputs** | Images (1-4) (Image ×n)* |
 | **Outputs** | Mesh (Mesh) |
-| **Audited** | 2026-05-10 |
+| **Audited** | 2026-05-17 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -1743,7 +1743,7 @@ Generated: 2026-05-17 | Nodes: 100 | Source: [`backend/data/node_definitions.jso
 | **Execution** | async-poll |
 | **Inputs** | Model URL (Text)* |
 | **Outputs** | Mesh (Mesh) |
-| **Audited** | 2026-05-10 |
+| **Audited** | 2026-05-17 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -1766,7 +1766,7 @@ Generated: 2026-05-17 | Nodes: 100 | Source: [`backend/data/node_definitions.jso
 | **Execution** | async-poll |
 | **Inputs** | Model URL (Text)*, Style Prompt (Text) |
 | **Outputs** | Mesh (Mesh) |
-| **Audited** | 2026-05-10 |
+| **Audited** | 2026-05-17 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -1788,7 +1788,7 @@ Generated: 2026-05-17 | Nodes: 100 | Source: [`backend/data/node_definitions.jso
 | **Execution** | async-poll |
 | **Inputs** | Model URL (Text)* |
 | **Outputs** | Rigged Mesh (Mesh), Rig Task ID (Text) |
-| **Audited** | 2026-05-10 |
+| **Audited** | 2026-05-17 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -1807,7 +1807,7 @@ Generated: 2026-05-17 | Nodes: 100 | Source: [`backend/data/node_definitions.jso
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text)*, Texture Reference (Image) |
 | **Outputs** | Mesh (Mesh) |
-| **Audited** | 2026-05-10 |
+| **Audited** | 2026-05-17 |
 
 **Shared Parameters**
 

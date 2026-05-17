@@ -5822,6 +5822,10 @@
             "value": "nano-banana"
           },
           {
+            "label": "Nano Banana 2",
+            "value": "nano-banana-2"
+          },
+          {
             "label": "Nano Banana Pro",
             "value": "nano-banana-pro"
           }
@@ -5933,6 +5937,10 @@
           {
             "label": "Nano Banana",
             "value": "nano-banana"
+          },
+          {
+            "label": "Nano Banana 2",
+            "value": "nano-banana-2"
           },
           {
             "label": "Nano Banana Pro",
