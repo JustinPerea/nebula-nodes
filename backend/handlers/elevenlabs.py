@@ -78,7 +78,7 @@ async def handle_elevenlabs_tts(
             raise RuntimeError(f"ElevenLabs API error {response.status_code}: {error_detail}")
 
     run_dir = get_run_dir()
-    ext = "mp3" if "mp3" in output_format else "wav" if "pcm" in output_format else "mp3"
+    ext = _audio_extension(output_format)
     filename = f"{uuid4().hex[:12]}.{ext}"
     file_path = run_dir / filename
     file_path.write_bytes(response.content)
@@ -91,10 +91,27 @@ async def handle_elevenlabs_tts(
     }
 
 
+def _audio_extension(output_format: str) -> str:
+    """Map an ElevenLabs output_format value to the file extension that matches the bytes.
+
+    ElevenLabs returns RAW PCM bytes for pcm_* formats (no WAV header). Saving them as
+    .wav produces a broken file. The extension must match the actual content so
+    downstream consumers (which often infer MIME from extension) handle the bytes
+    correctly.
+    """
+    if "mp3" in output_format:
+        return "mp3"
+    if "pcm" in output_format:
+        return "pcm"
+    if "wav" in output_format:
+        return "wav"
+    return "mp3"
+
+
 def _save_audio(content: bytes, output_format: str = "mp3_44100_128") -> str:
     """Save audio bytes to a file and return the path."""
     run_dir = get_run_dir()
-    ext = "mp3" if "mp3" in output_format else "wav" if "pcm" in output_format or "wav" in output_format else "mp3"
+    ext = _audio_extension(output_format)
     filename = f"{uuid4().hex[:12]}.{ext}"
     file_path = run_dir / filename
     file_path.write_bytes(content)

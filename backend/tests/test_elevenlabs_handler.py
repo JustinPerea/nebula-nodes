@@ -197,8 +197,10 @@ async def test_tts_defaults_speaker_boost_to_true() -> None:
 
 
 @pytest.mark.asyncio
-async def test_tts_pcm_format_saves_as_wav() -> None:
-    """pcm_* output_format should produce a .wav file extension."""
+async def test_tts_pcm_format_saves_as_pcm() -> None:
+    """pcm_* output_format returns raw PCM bytes (no WAV header), so the file
+    extension must be .pcm. Saving as .wav produced a broken file that any
+    media player rejected — caught by live smoke testing on 2026-05-17."""
     response = _make_http_response(content=b"fake pcm")
 
     with patch("handlers.elevenlabs.httpx.AsyncClient") as MockClient:
@@ -214,7 +216,7 @@ async def test_tts_pcm_format_saves_as_wav() -> None:
             {"ELEVENLABS_API_KEY": "el-test"},
         )
 
-    assert Path(result["audio"]["value"]).suffix == ".wav"
+    assert Path(result["audio"]["value"]).suffix == ".pcm"
 
 
 # ---------------------------------------------------------------------------
@@ -297,7 +299,8 @@ async def test_sfx_loop_flag_forwarded() -> None:
 
 
 @pytest.mark.asyncio
-async def test_sfx_pcm_format_saves_as_wav() -> None:
+async def test_sfx_pcm_format_saves_as_pcm() -> None:
+    """pcm_* output returns raw PCM bytes — must save as .pcm not .wav."""
     response = _make_http_response(content=b"fake pcm")
 
     with patch("handlers.elevenlabs.httpx.AsyncClient") as MockClient:
@@ -313,7 +316,7 @@ async def test_sfx_pcm_format_saves_as_wav() -> None:
             {"ELEVENLABS_API_KEY": "el-test"},
         )
 
-    assert Path(result["audio"]["value"]).suffix == ".wav"
+    assert Path(result["audio"]["value"]).suffix == ".pcm"
 
 
 # ---------------------------------------------------------------------------
@@ -416,7 +419,8 @@ async def test_sts_no_voice_settings_when_not_provided(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_sts_pcm_format_saves_as_wav(tmp_path: Path) -> None:
+async def test_sts_pcm_format_saves_as_pcm(tmp_path: Path) -> None:
+    """pcm_* output returns raw PCM bytes — must save as .pcm not .wav."""
     audio_file, audio_port = _mock_audio_input(tmp_path)
     response = _make_http_response(content=b"fake pcm")
 
@@ -433,7 +437,7 @@ async def test_sts_pcm_format_saves_as_wav(tmp_path: Path) -> None:
             {"ELEVENLABS_API_KEY": "el-test"},
         )
 
-    assert Path(result["audio"]["value"]).suffix == ".wav"
+    assert Path(result["audio"]["value"]).suffix == ".pcm"
 
 
 # ---------------------------------------------------------------------------

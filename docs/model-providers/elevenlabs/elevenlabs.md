@@ -5,7 +5,7 @@ project: nebula_nodes
 provider: elevenlabs
 model: elevenlabs-tts, elevenlabs-sfx, elevenlabs-sts, elevenlabs-isolation, elevenlabs-dubbing
 status: active
-verified: 2026-05-16
+verified: 2026-05-17
 stale_after_days: 30
 ---
 
@@ -63,6 +63,32 @@ the SDK stubs and `openapi.json` were used as the authoritative fallback per aud
 | `elevenlabs-dubbing` | `audio` (Audio) | `audio` (Audio) | sync (internal async poll) |
 
 ## Findings and Fixes
+
+### PCM output saved as `.wav` without WAV header — broken file (FIXED 2026-05-17, found via live smoke test)
+
+**Severity:** High. The original audit missed this because the failing path was pinned
+by structural tests that asserted the wrong behavior — tests checked that PCM output
+produced a `.wav` file, but never verified the file's actual content.
+
+ElevenLabs `pcm_*` `output_format` values return RAW PCM bytes (no RIFF/WAVE header).
+The handler was saving those bytes with a `.wav` extension. Media players that infer
+format from extension would reject the file (`file` reports `data`, not `WAVE audio`).
+Caught by smoke-testing `elevenlabs-tts` with `output_format=pcm_24000` on 2026-05-17:
+file started with `00 00 00 00` instead of `RIFF`.
+
+**Fix:** Extracted `_audio_extension(output_format)` helper that maps:
+- `mp3` → `.mp3`
+- `pcm` → `.pcm` (was `.wav`)
+- `wav` → `.wav`
+
+Applied to both `handle_elevenlabs_tts` and the shared `_save_audio` helper used by
+SFX, STS, and isolation. Three existing tests (`test_*_pcm_format_saves_as_wav`)
+renamed to `_saves_as_pcm` and updated to assert the correct extension.
+
+**Lesson for future audits:** when an extension fix activates a previously-dropped
+param (OpenAI Image precedent), verify the saved file format matches the extension.
+When an extension is hard-coded to a value that differs from the API's actual byte
+shape (this case), audit the byte shape, not just the extension string.
 
 ### TTS: `speed` was a top-level body field — should be inside `voice_settings` (FIXED)
 

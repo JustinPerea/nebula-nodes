@@ -1295,7 +1295,7 @@ Generated: 2026-05-17 | Nodes: 100 | Source: [`backend/data/node_definitions.jso
 | **Execution** | sync |
 | **Inputs** | Audio (Audio)* |
 | **Outputs** | Dubbed Audio (Audio) |
-| **Audited** | 2026-05-16 |
+| **Audited** | 2026-05-17 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -1318,7 +1318,7 @@ Generated: 2026-05-17 | Nodes: 100 | Source: [`backend/data/node_definitions.jso
 | **Execution** | sync |
 | **Inputs** | Audio (Audio)* |
 | **Outputs** | Isolated Audio (Audio) |
-| **Audited** | 2026-05-16 |
+| **Audited** | 2026-05-17 |
 
 ---
 
@@ -1333,7 +1333,7 @@ Generated: 2026-05-17 | Nodes: 100 | Source: [`backend/data/node_definitions.jso
 | **Execution** | sync |
 | **Inputs** | Text (Text)* |
 | **Outputs** | Audio (Audio) |
-| **Audited** | 2026-05-16 |
+| **Audited** | 2026-05-17 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -1355,7 +1355,7 @@ Generated: 2026-05-17 | Nodes: 100 | Source: [`backend/data/node_definitions.jso
 | **Execution** | sync |
 | **Inputs** | Audio (Audio)* |
 | **Outputs** | Audio (Audio) |
-| **Audited** | 2026-05-16 |
+| **Audited** | 2026-05-17 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -1380,7 +1380,7 @@ Generated: 2026-05-17 | Nodes: 100 | Source: [`backend/data/node_definitions.jso
 | **Execution** | sync |
 | **Inputs** | Text (Text)* |
 | **Outputs** | Audio (Audio) |
-| **Audited** | 2026-05-16 |
+| **Audited** | 2026-05-17 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
