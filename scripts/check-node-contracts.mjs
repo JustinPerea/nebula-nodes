@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises';
+import { spawnSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -7,7 +8,6 @@ const REPO_ROOT = join(__dirname, '..');
 const NODE_DEFS_PATH = join(REPO_ROOT, 'backend', 'data', 'node_definitions.json');
 const FRONTEND_DEFS_PATH = join(REPO_ROOT, 'frontend', 'src', 'constants', 'nodeDefinitions.ts');
 const ENV_EXAMPLE_PATH = join(REPO_ROOT, '.env.example');
-const MODEL_REFERENCE_PATH = join(REPO_ROOT, 'docs', 'MODEL_REFERENCE.md');
 
 const VALID_CATEGORIES = new Set([
   'image-gen',
@@ -68,13 +68,12 @@ const LOCAL_EXECUTION_NODE_IDS = new Set([
 const definitions = JSON.parse(await readFile(NODE_DEFS_PATH, 'utf8'));
 const frontendSource = await readFile(FRONTEND_DEFS_PATH, 'utf8');
 const envExample = await readFile(ENV_EXAMPLE_PATH, 'utf8');
-const modelReference = await readFile(MODEL_REFERENCE_PATH, 'utf8');
 const errors = [];
 
 validateRegistryShape();
 validateFrontendBackendIdParity();
 validateEnvExampleCoverage();
-validateReferenceCountWording();
+validateGeneratedReference();
 validatePinnedCorrections();
 validateLocalExecutionCoverage();
 validateLocalExecutionProvider();
@@ -204,12 +203,15 @@ function validateEnvExampleCoverage() {
   }
 }
 
-function validateReferenceCountWording() {
-  if (modelReference.includes('Complete reference for all 77 nodes')) {
-    errors.push('MODEL_REFERENCE.md still claims "Complete reference for all 77 nodes"');
-  }
-  if (!modelReference.includes(`live registry currently contains ${Object.keys(definitions).length} nodes`)) {
-    errors.push(`MODEL_REFERENCE.md should mention live registry currently contains ${Object.keys(definitions).length} nodes`);
+function validateGeneratedReference() {
+  const generatorPath = join(__dirname, 'generate-model-reference.mjs');
+  const result = spawnSync(process.execPath, [generatorPath, '--check'], {
+    encoding: 'utf8',
+    env: process.env,
+  });
+  if (result.status !== 0) {
+    const msg = (result.stderr || result.stdout || '').trim().split('\n')[0];
+    errors.push(`MODEL_REFERENCE.md is out of sync with registry: ${msg}`);
   }
 }
 

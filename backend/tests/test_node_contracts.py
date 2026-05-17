@@ -201,11 +201,25 @@ def test_env_example_covers_all_registry_api_keys(definitions: dict[str, dict[st
     assert missing == []
 
 
-def test_model_reference_no_longer_claims_stale_full_count(definitions: dict[str, dict[str, Any]]) -> None:
-    model_reference = (REPO_ROOT / "docs" / "MODEL_REFERENCE.md").read_text()
+def test_generated_model_reference_matches_committed_file() -> None:
+    """Ensure the committed MODEL_REFERENCE.md matches what the generator produces.
 
-    assert "Complete reference for all 77 nodes" not in model_reference
-    assert f"live registry currently contains {len(definitions)} nodes" in model_reference
+    Runs `node scripts/generate-model-reference.mjs --check` and asserts exit 0.
+    If this fails, run `node scripts/generate-model-reference.mjs` to regenerate.
+    """
+    import subprocess
+
+    generator = REPO_ROOT / "scripts" / "generate-model-reference.mjs"
+    result = subprocess.run(
+        ["node", str(generator), "--check"],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, (
+        f"MODEL_REFERENCE.md is out of sync with registry.\n"
+        f"Run `node scripts/generate-model-reference.mjs` to regenerate.\n"
+        f"Generator output:\n{result.stderr or result.stdout}"
+    )
 
 
 def _param_by_key(definition: dict[str, Any], key: str) -> dict[str, Any]:
