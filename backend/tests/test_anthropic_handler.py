@@ -118,3 +118,191 @@ async def test_includes_temperature_in_request():
     body = mock_client.stream.call_args.kwargs.get("json") or mock_client.stream.call_args[1].get("json")
     assert body["temperature"] == 0.3
     assert body["stream"] is True
+
+
+@pytest.mark.asyncio
+async def test_max_tokens_always_sent():
+    """max_tokens is REQUIRED by Anthropic API — must always be present in request body."""
+    fake_response = FakeStreamResponse(_make_sse_lines(["ok"]))
+    with patch("execution.stream_runner.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.stream = MagicMock(return_value=fake_response)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        # No max_tokens param — should fall back to default 4096
+        await handle_claude_chat(
+            _make_node({"model": "claude-sonnet-4-6"}),
+            {"messages": PortValueDict(type="Text", value="test")},
+            {"ANTHROPIC_API_KEY": "sk-ant-test"},
+        )
+
+    body = mock_client.stream.call_args.kwargs.get("json") or mock_client.stream.call_args[1].get("json")
+    assert "max_tokens" in body, "max_tokens must always be sent (Anthropic API requires it)"
+    assert body["max_tokens"] == 4096
+
+
+@pytest.mark.asyncio
+async def test_system_prompt_sent_as_top_level_field():
+    """Anthropic uses a top-level 'system' field, not a role in the messages array."""
+    fake_response = FakeStreamResponse(_make_sse_lines(["ok"]))
+    with patch("execution.stream_runner.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.stream = MagicMock(return_value=fake_response)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        await handle_claude_chat(
+            _make_node({"model": "claude-sonnet-4-6", "max_tokens": 1024, "system": "You are a pirate."}),
+            {"messages": PortValueDict(type="Text", value="hello")},
+            {"ANTHROPIC_API_KEY": "sk-ant-test"},
+        )
+
+    body = mock_client.stream.call_args.kwargs.get("json") or mock_client.stream.call_args[1].get("json")
+    assert body.get("system") == "You are a pirate."
+    # system must NOT appear as a role in the messages array
+    for msg in body["messages"]:
+        assert msg.get("role") != "system", "system prompt must not be injected as a messages role"
+
+
+@pytest.mark.asyncio
+async def test_top_p_forwarded():
+    fake_response = FakeStreamResponse(_make_sse_lines(["ok"]))
+    with patch("execution.stream_runner.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.stream = MagicMock(return_value=fake_response)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        await handle_claude_chat(
+            _make_node({"model": "claude-sonnet-4-6", "max_tokens": 1024, "top_p": 0.9}),
+            {"messages": PortValueDict(type="Text", value="test")},
+            {"ANTHROPIC_API_KEY": "sk-ant-test"},
+        )
+
+    body = mock_client.stream.call_args.kwargs.get("json") or mock_client.stream.call_args[1].get("json")
+    assert body.get("top_p") == 0.9
+
+
+@pytest.mark.asyncio
+async def test_top_p_absent_when_not_set():
+    fake_response = FakeStreamResponse(_make_sse_lines(["ok"]))
+    with patch("execution.stream_runner.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.stream = MagicMock(return_value=fake_response)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        await handle_claude_chat(
+            _make_node({"model": "claude-sonnet-4-6", "max_tokens": 1024}),
+            {"messages": PortValueDict(type="Text", value="test")},
+            {"ANTHROPIC_API_KEY": "sk-ant-test"},
+        )
+
+    body = mock_client.stream.call_args.kwargs.get("json") or mock_client.stream.call_args[1].get("json")
+    assert "top_p" not in body
+
+
+@pytest.mark.asyncio
+async def test_stop_sequences_forwarded_as_list():
+    fake_response = FakeStreamResponse(_make_sse_lines(["ok"]))
+    with patch("execution.stream_runner.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.stream = MagicMock(return_value=fake_response)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        await handle_claude_chat(
+            _make_node({"model": "claude-sonnet-4-6", "max_tokens": 1024, "stop_sequences": "END, STOP"}),
+            {"messages": PortValueDict(type="Text", value="test")},
+            {"ANTHROPIC_API_KEY": "sk-ant-test"},
+        )
+
+    body = mock_client.stream.call_args.kwargs.get("json") or mock_client.stream.call_args[1].get("json")
+    assert body.get("stop_sequences") == ["END", "STOP"]
+
+
+@pytest.mark.asyncio
+async def test_extended_thinking_sends_thinking_block():
+    fake_response = FakeStreamResponse(_make_sse_lines(["ok"]))
+    with patch("execution.stream_runner.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.stream = MagicMock(return_value=fake_response)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        await handle_claude_chat(
+            _make_node({"model": "claude-sonnet-4-6", "max_tokens": 16000, "extended_thinking": True, "thinkingBudget": 5000}),
+            {"messages": PortValueDict(type="Text", value="think hard")},
+            {"ANTHROPIC_API_KEY": "sk-ant-test"},
+        )
+
+    body = mock_client.stream.call_args.kwargs.get("json") or mock_client.stream.call_args[1].get("json")
+    assert body.get("thinking") == {"type": "enabled", "budget_tokens": 5000}
+    # Anthropic requires temperature=1 when thinking is enabled
+    assert body.get("temperature") == 1
+
+
+@pytest.mark.asyncio
+async def test_extended_thinking_budget_clamps_to_minimum():
+    """budget_tokens must be >= 1024 per API docs."""
+    fake_response = FakeStreamResponse(_make_sse_lines(["ok"]))
+    with patch("execution.stream_runner.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.stream = MagicMock(return_value=fake_response)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        await handle_claude_chat(
+            _make_node({"model": "claude-sonnet-4-6", "max_tokens": 8000, "extended_thinking": True, "thinkingBudget": 100}),
+            {"messages": PortValueDict(type="Text", value="test")},
+            {"ANTHROPIC_API_KEY": "sk-ant-test"},
+        )
+
+    body = mock_client.stream.call_args.kwargs.get("json") or mock_client.stream.call_args[1].get("json")
+    assert body["thinking"]["budget_tokens"] >= 1024
+
+
+def test_model_lineup_current():
+    """Pin: registry model values must match the current Anthropic model lineup.
+
+    Canonical source: https://platform.claude.com/docs/en/docs/about-claude/models/all-models
+    Verified: 2026-05-16
+
+    Current models (flagship tier):
+      claude-opus-4-7         — most capable, 1M context, 128k output
+      claude-sonnet-4-6       — speed+intelligence, 1M context, 64k output
+      claude-haiku-4-5-20251001 — fastest, 200k context, 64k output
+
+    Legacy (still available, not deprecated):
+      claude-opus-4-6
+
+    Deprecated (retiring 2026-06-15, must NOT appear):
+      claude-opus-4-20250514  (Claude Opus 4 — original)
+      claude-sonnet-4-20250514 (Claude Sonnet 4 — original)
+
+    Removed (never existed in current lineup):
+      claude-haiku-3-5-20241022 — was Claude 3.5 Haiku, superseded by claude-haiku-4-5
+    """
+    import json, pathlib
+    registry_path = pathlib.Path(__file__).parent.parent / "data" / "node_definitions.json"
+    data = json.loads(registry_path.read_text())
+    node = data["claude-chat"]
+    model_param = next(p for p in node["params"] if p["key"] == "model")
+    values = {opt["value"] for opt in model_param["options"]}
+
+    # Current models must be present
+    assert "claude-opus-4-7" in values, "claude-opus-4-7 missing from model list"
+    assert "claude-sonnet-4-6" in values, "claude-sonnet-4-6 missing"
+    assert "claude-haiku-4-5-20251001" in values, "claude-haiku-4-5-20251001 missing"
+
+    # Deprecated/wrong models must not appear
+    assert "claude-opus-4-20250514" not in values, "claude-opus-4-20250514 is deprecated (retires 2026-06-15)"
+    assert "claude-haiku-3-5-20241022" not in values, "claude-haiku-3-5-20241022 does not exist (superseded by haiku-4-5)"

@@ -61,9 +61,26 @@ async def handle_claude_chat(
     if temperature is not None:
         request_body["temperature"] = float(temperature)
 
+    top_p = node.params.get("top_p")
+    if top_p is not None:
+        request_body["top_p"] = float(top_p)
+
+    stop_sequences_raw = node.params.get("stop_sequences")
+    if stop_sequences_raw:
+        sequences = [s.strip() for s in str(stop_sequences_raw).split(",") if s.strip()]
+        if sequences:
+            request_body["stop_sequences"] = sequences
+
     system_prompt = node.params.get("system")
     if system_prompt:
         request_body["system"] = str(system_prompt)
+
+    if node.params.get("extended_thinking"):
+        budget = int(node.params.get("thinkingBudget", 10000))
+        budget = max(1024, budget)
+        request_body["thinking"] = {"type": "enabled", "budget_tokens": budget}
+        # thinking mode requires temperature=1 (API constraint)
+        request_body["temperature"] = 1
 
     config = StreamConfig(
         url=ANTHROPIC_API_URL,

@@ -104,9 +104,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: true,
         default: 'claude-sonnet-4-6',
         options: [
-          { label: 'Claude Opus 4', value: 'claude-opus-4-20250514' },
+          { label: 'Claude Opus 4.7', value: 'claude-opus-4-7' },
           { label: 'Claude Sonnet 4.6', value: 'claude-sonnet-4-6' },
-          { label: 'Claude Haiku 3.5', value: 'claude-haiku-3-5-20241022' },
+          { label: 'Claude Haiku 4.5', value: 'claude-haiku-4-5-20251001' },
+          { label: 'Claude Opus 4.6 (legacy)', value: 'claude-opus-4-6' },
         ],
       },
       {
