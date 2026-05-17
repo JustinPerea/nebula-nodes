@@ -6679,7 +6679,7 @@
         "id": "prompt",
         "label": "Prompt",
         "dataType": "Text",
-        "required": false
+        "required": true
       }
     ],
     "outputPorts": [

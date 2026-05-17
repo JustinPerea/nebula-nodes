@@ -3756,7 +3756,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     executionPattern: 'async-poll',
     inputPorts: [
       { id: 'first_frame_image', label: 'First Frame', dataType: 'Image', required: true },
-      { id: 'prompt', label: 'Prompt', dataType: 'Text', required: false },
+      { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
     ],
     outputPorts: [
       { id: 'video', label: 'Video', dataType: 'Video', required: false },

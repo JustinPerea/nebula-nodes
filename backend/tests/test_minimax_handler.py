@@ -16,8 +16,8 @@ def _make_node(definition_id: str, params: dict | None = None) -> GraphNode:
     )
 
 
-def _mock_client(submit_json: dict, poll_json: dict, retrieve_json: dict) -> tuple:
-    """Return (MockClient class, mock_client instance) pre-wired with three responses."""
+def _mock_client(submit_json: dict, poll_json: dict, retrieve_json: dict) -> AsyncMock:
+    """Return a mock AsyncClient pre-wired with three responses."""
     submit_resp = MagicMock()
     submit_resp.status_code = 200
     submit_resp.json.return_value = submit_json
@@ -286,5 +286,50 @@ async def test_poll_fail_status_raises() -> None:
             await handle_minimax_video(
                 _make_node("minimax-t2v", {"model": "MiniMax-Hailuo-2.3", "duration": 6, "resolution": "768P"}),
                 {"prompt": PortValueDict(type="Text", value="test")},
+                _API_KEYS,
+            )
+
+
+@pytest.mark.asyncio
+async def test_i2v_missing_prompt_raises() -> None:
+    """I2V handler must raise ValueError when prompt input is absent."""
+    mock_client = _mock_client(_SUBMIT_OK, _POLL_SUCCESS, _RETRIEVE_OK)
+
+    with patch("handlers.minimax.httpx.AsyncClient", return_value=mock_client), \
+         patch("handlers.minimax._resolve_image_url", return_value="https://cdn.test/frame.jpg"):
+
+        with pytest.raises(ValueError, match="(?i)MINIMAX|Prompt"):
+            await handle_minimax_video(
+                _make_node("minimax-i2v", {"model": "MiniMax-Hailuo-2.3", "duration": 6, "resolution": "768P"}),
+                {"first_frame_image": PortValueDict(type="Image", value="https://cdn.test/frame.jpg")},
+                _API_KEYS,
+            )
+
+
+@pytest.mark.asyncio
+async def test_t2v_poll_times_out_after_max_polls() -> None:
+    """Polling loop must raise RuntimeError with 'timed out' after max_polls exhausted."""
+    max_polls = 300
+    queueing_resp = MagicMock()
+    queueing_resp.status_code = 200
+    queueing_resp.json.return_value = {"status": "Queueing"}
+
+    submit_resp = MagicMock()
+    submit_resp.status_code = 200
+    submit_resp.json.return_value = _SUBMIT_OK
+
+    mock_client = AsyncMock()
+    mock_client.post.return_value = submit_resp
+    mock_client.get.side_effect = [queueing_resp] * (max_polls + 1)
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
+
+    with patch("handlers.minimax.httpx.AsyncClient", return_value=mock_client), \
+         patch("handlers.minimax.asyncio.sleep", new_callable=AsyncMock):
+
+        with pytest.raises(RuntimeError, match="timed out"):
+            await handle_minimax_video(
+                _make_node("minimax-t2v", {"model": "MiniMax-Hailuo-2.3", "duration": 6, "resolution": "768P"}),
+                {"prompt": PortValueDict(type="Text", value="a stormy sea")},
                 _API_KEYS,
             )
