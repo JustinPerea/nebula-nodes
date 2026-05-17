@@ -301,8 +301,8 @@ Generated: 2026-05-17 | Nodes: 100 | Source: [`backend/data/node_definitions.jso
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Size | enum | auto | Auto, 1024x1024, 1536x1024, 1024x1536, 2048x2048, 3840x2160, 2160x3840 |
-| Quality | enum | high | Low, Medium, High |
+| Size | enum | auto | Auto, Square HD (1024x1024), Square (512x512), Portrait 4:3 (768x1024), Portrait 16:9 (576x1024), Landscape 4:3 (1024x768), Landscape 16:9 (1024x576) |
+| Quality | enum | high | Auto, Low, Medium, High |
 | Count | int | 1 | 1–4 |
 | Format | enum | png | PNG, JPEG, WebP |
 | Preview Frames | int | 2 | 0–3 |
@@ -324,8 +324,8 @@ Generated: 2026-05-17 | Nodes: 100 | Source: [`backend/data/node_definitions.jso
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Size | enum | 1024x1024 | 1024x1024, 1536x1024, 1024x1536, 2048x2048, 3840x2160, 2160x3840 |
-| Quality | enum | high | Low, Medium, High |
+| Size | enum | landscape_4_3 | Square HD (1024x1024), Square (512x512), Portrait 4:3 (768x1024), Portrait 16:9 (576x1024), Landscape 4:3 (1024x768), Landscape 16:9 (1024x576) |
+| Quality | enum | high | Auto, Low, Medium, High |
 | Count | int | 1 | 1–4 |
 | Format | enum | png | PNG, JPEG, WebP |
 | Preview Frames | int | 2 | 0–3 |
@@ -525,9 +525,9 @@ Generated: 2026-05-17 | Nodes: 100 | Source: [`backend/data/node_definitions.jso
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Size | enum | landscape_4_3 | Square HD, Square, Portrait 4:3, Portrait 16:9, Landscape 4:3, Landscape 16:9 |
-| Generations | int | 1 | 1–15 |
-| Images per Generation | int | 1 | 1–15 |
+| Size | enum | square_hd | Square HD (2048x2048), Square (512x512), Portrait 4:3, Portrait 16:9, Landscape 4:3, Landscape 16:9, Auto 2K, Auto 4K |
+| Generations | int | 1 | 1–6 |
+| Images per Generation | int | 1 | 1–6 |
 | Safety Checker | bool | true | — |
 | Seed | int | — | — |
 

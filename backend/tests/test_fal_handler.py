@@ -3080,3 +3080,537 @@ async def test_seedance2_fast_i2v_endpoint_and_ports():
     posted_url = mock_client.post.call_args.args[0] if mock_client.post.call_args.args \
         else mock_client.post.call_args.kwargs.get("url", "")
     assert "seedance-2.0/fast/image-to-video" in posted_url
+
+
+# ---------------------------------------------------------------------------
+# FAL OpenAI passthrough node tests — audit 2026-05-17
+# Covers: gpt-image-2-fal-generate, gpt-image-2-fal-edit,
+#         gpt-image-1-5, gpt-image-1-5-edit, seedream-4-5
+# ---------------------------------------------------------------------------
+
+
+def _make_poll_mocks(result_payload: dict):
+    """Return (mock_submit, mock_status, mock_result) for a standard poll flow."""
+    mock_submit = MagicMock()
+    mock_submit.status_code = 200
+    mock_submit.json.return_value = {"request_id": "req-test"}
+
+    mock_status = MagicMock()
+    mock_status.status_code = 200
+    mock_status.json.return_value = {"status": "COMPLETED"}
+
+    mock_result = MagicMock()
+    mock_result.status_code = 200
+    mock_result.json.return_value = result_payload
+
+    return mock_submit, mock_status, mock_result
+
+
+def _image_result(url: str = "https://fal.ai/out.png") -> dict:
+    return {"images": [{"url": url, "content_type": "image/png"}]}
+
+
+# ── gpt-image-2-fal-generate ────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_gpt_image_2_fal_generate_endpoint_injection():
+    """Wrapper must inject openai/gpt-image-2 as endpoint_id and route through
+    the FAL streaming path (not the async-poll queue)."""
+    from execution.stream_runner import StreamConfig
+
+    node = GraphNode(
+        id="test-gpt2-fal-gen",
+        definitionId="gpt-image-2-fal-generate",
+        params={},
+    )
+    node.params.setdefault("endpoint_id", "openai/gpt-image-2")
+
+    # stream_execute_image is imported lazily inside handle_fal_universal;
+    # patch it at the source module so the local import picks up the mock.
+    with patch("execution.stream_runner.stream_execute_image", new_callable=AsyncMock) as mock_stream:
+        mock_stream.return_value = "https://fal.ai/streamed.png"
+        result = await handle_fal_universal(
+            node,
+            {"prompt": PortValueDict(type="Text", value="a red cube")},
+            {"FAL_KEY": "fal_test"},
+            emit=AsyncMock(),
+        )
+
+    assert result["image"]["type"] == "Image"
+    assert result["image"]["value"] == "https://fal.ai/streamed.png"
+    mock_stream.assert_called_once()
+    call_kwargs = mock_stream.call_args.kwargs
+    config: StreamConfig = call_kwargs["config"]
+    assert "openai/gpt-image-2/stream" in config.url
+
+
+@pytest.mark.asyncio
+async def test_gpt_image_2_fal_generate_key_params_forwarded():
+    """image_size preset name and quality must reach the FAL request body."""
+    node = GraphNode(
+        id="test-gpt2-fal-gen-params",
+        definitionId="gpt-image-2-fal-generate",
+        params={
+            "endpoint_id": "openai/gpt-image-2",
+            "image_size": "square_hd",
+            "quality": "high",
+            "num_images": 2,
+            "output_format": "jpeg",
+        },
+    )
+
+    with patch("execution.stream_runner.stream_execute_image", new_callable=AsyncMock) as mock_stream:
+        mock_stream.return_value = "https://fal.ai/out.png"
+        await handle_fal_universal(
+            node,
+            {"prompt": PortValueDict(type="Text", value="test")},
+            {"FAL_KEY": "fal_test"},
+            emit=AsyncMock(),
+        )
+
+    body = mock_stream.call_args.kwargs["request_body"]
+    assert body["image_size"] == "square_hd"
+    assert body["quality"] == "high"
+    assert body["num_images"] == 2
+    assert body["output_format"] == "jpeg"
+    # FAL-specific param names — must not use OpenAI-direct names
+    assert "size" not in body
+    assert "n" not in body
+
+
+# ── gpt-image-2-fal-edit ────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_gpt_image_2_fal_edit_endpoint_injection():
+    """Wrapper must inject openai/gpt-image-2/edit and stream via SSE."""
+    node = GraphNode(
+        id="test-gpt2-fal-edit",
+        definitionId="gpt-image-2-fal-edit",
+        params={},
+    )
+    node.params.setdefault("endpoint_id", "openai/gpt-image-2/edit")
+
+    with patch("execution.stream_runner.stream_execute_image", new_callable=AsyncMock) as mock_stream:
+        mock_stream.return_value = "https://fal.ai/edited.png"
+        result = await handle_fal_universal(
+            node,
+            {
+                "prompt": PortValueDict(type="Text", value="add snow"),
+                "images": PortValueDict(type="Image", value=["https://example.com/ref.png"]),
+            },
+            {"FAL_KEY": "fal_test"},
+            emit=AsyncMock(),
+        )
+
+    assert result["image"]["type"] == "Image"
+    mock_stream.assert_called_once()
+    config = mock_stream.call_args.kwargs["config"]
+    assert "openai/gpt-image-2/edit/stream" in config.url
+
+
+@pytest.mark.asyncio
+async def test_gpt_image_2_fal_edit_images_map_to_image_urls():
+    """The 'images' multi-port must map to image_urls list in the stream body."""
+    node = GraphNode(
+        id="test-gpt2-fal-edit-imgs",
+        definitionId="gpt-image-2-fal-edit",
+        params={"endpoint_id": "openai/gpt-image-2/edit", "image_size": "auto"},
+    )
+
+    with patch("execution.stream_runner.stream_execute_image", new_callable=AsyncMock) as mock_stream:
+        mock_stream.return_value = "https://fal.ai/out.png"
+        await handle_fal_universal(
+            node,
+            {
+                "prompt": PortValueDict(type="Text", value="make it night"),
+                "images": PortValueDict(type="Image", value=[
+                    "https://example.com/img1.png",
+                    "https://example.com/img2.png",
+                ]),
+            },
+            {"FAL_KEY": "fal_test"},
+            emit=AsyncMock(),
+        )
+
+    body = mock_stream.call_args.kwargs["request_body"]
+    assert body["image_urls"] == [
+        "https://example.com/img1.png",
+        "https://example.com/img2.png",
+    ]
+    assert "image_url" not in body  # singular must not appear
+
+
+@pytest.mark.asyncio
+async def test_gpt_image_2_fal_edit_missing_images_raises():
+    """Edit endpoint must raise ValueError when no reference images are provided."""
+    node = GraphNode(
+        id="test-gpt2-fal-edit-no-imgs",
+        definitionId="gpt-image-2-fal-edit",
+        params={"endpoint_id": "openai/gpt-image-2/edit"},
+    )
+
+    with pytest.raises(ValueError, match="image"):
+        await handle_fal_universal(
+            node,
+            {"prompt": PortValueDict(type="Text", value="add snow")},
+            {"FAL_KEY": "fal_test"},
+            emit=AsyncMock(),
+        )
+
+
+@pytest.mark.asyncio
+async def test_gpt_image_2_fal_edit_image_size_preset_forwarded():
+    """image_size must be sent as a preset string (e.g. 'square_hd'), not a WxH string."""
+    node = GraphNode(
+        id="test-gpt2-fal-edit-size",
+        definitionId="gpt-image-2-fal-edit",
+        params={"endpoint_id": "openai/gpt-image-2/edit", "image_size": "portrait_4_3"},
+    )
+
+    with patch("execution.stream_runner.stream_execute_image", new_callable=AsyncMock) as mock_stream:
+        mock_stream.return_value = "https://fal.ai/out.png"
+        await handle_fal_universal(
+            node,
+            {
+                "prompt": PortValueDict(type="Text", value="test"),
+                "images": PortValueDict(type="Image", value=["https://example.com/img.png"]),
+            },
+            {"FAL_KEY": "fal_test"},
+            emit=AsyncMock(),
+        )
+
+    body = mock_stream.call_args.kwargs["request_body"]
+    assert body["image_size"] == "portrait_4_3"
+    # WxH string format must not appear — FAL schema uses preset names
+    assert body["image_size"] != "768x1024"
+
+
+# ── gpt-image-1-5 ───────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_gpt_image_1_5_endpoint_injection():
+    """Wrapper must inject fal-ai/gpt-image-1.5 and POST to the queue."""
+    mock_submit, mock_status, mock_result = _make_poll_mocks(_image_result())
+
+    node = GraphNode(
+        id="test-gpt15",
+        definitionId="gpt-image-1-5",
+        params={},
+    )
+    node.params.setdefault("endpoint_id", "fal-ai/gpt-image-1.5")
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            result = await handle_fal_universal(
+                node,
+                {"prompt": PortValueDict(type="Text", value="a blue sphere")},
+                {"FAL_KEY": "fal_test"},
+                emit=AsyncMock(),
+            )
+
+    assert result["image"]["type"] == "Image"
+    posted_url = mock_client.post.call_args.args[0] if mock_client.post.call_args.args \
+        else mock_client.post.call_args.kwargs.get("url", "")
+    assert "fal-ai/gpt-image-1.5" in posted_url
+
+
+@pytest.mark.asyncio
+async def test_gpt_image_1_5_key_params_forwarded():
+    """image_size, quality, background, num_images, output_format all forwarded."""
+    mock_submit, mock_status, mock_result = _make_poll_mocks(_image_result())
+
+    node = GraphNode(
+        id="test-gpt15-params",
+        definitionId="gpt-image-1-5",
+        params={
+            "endpoint_id": "fal-ai/gpt-image-1.5",
+            "image_size": "1024x1024",
+            "quality": "medium",
+            "background": "transparent",
+            "num_images": 3,
+            "output_format": "webp",
+        },
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            await handle_fal_universal(
+                node,
+                {"prompt": PortValueDict(type="Text", value="test")},
+                {"FAL_KEY": "fal_test"},
+                emit=AsyncMock(),
+            )
+
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert payload["image_size"] == "1024x1024"
+    assert payload["quality"] == "medium"
+    assert payload["background"] == "transparent"
+    assert payload["num_images"] == 3
+    assert payload["output_format"] == "webp"
+    # Must not send OpenAI-direct param names
+    assert "size" not in payload
+    assert "n" not in payload
+
+
+# ── gpt-image-1-5-edit ──────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_gpt_image_1_5_edit_endpoint_injection():
+    """Wrapper must inject fal-ai/gpt-image-1.5/edit and POST to queue."""
+    mock_submit, mock_status, mock_result = _make_poll_mocks(_image_result())
+
+    node = GraphNode(
+        id="test-gpt15-edit",
+        definitionId="gpt-image-1-5-edit",
+        params={},
+    )
+    node.params.setdefault("endpoint_id", "fal-ai/gpt-image-1.5/edit")
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            result = await handle_fal_universal(
+                node,
+                {
+                    "prompt": PortValueDict(type="Text", value="add a hat"),
+                    "images": PortValueDict(type="Image", value=["https://example.com/cat.png"]),
+                },
+                {"FAL_KEY": "fal_test"},
+                emit=AsyncMock(),
+            )
+
+    assert result["image"]["type"] == "Image"
+    posted_url = mock_client.post.call_args.args[0] if mock_client.post.call_args.args \
+        else mock_client.post.call_args.kwargs.get("url", "")
+    assert "fal-ai/gpt-image-1.5/edit" in posted_url
+
+
+@pytest.mark.asyncio
+async def test_gpt_image_1_5_edit_images_map_to_image_urls():
+    """Multi-image 'images' port must map to image_urls list in the request body."""
+    mock_submit, mock_status, mock_result = _make_poll_mocks(_image_result())
+
+    node = GraphNode(
+        id="test-gpt15-edit-imgs",
+        definitionId="gpt-image-1-5-edit",
+        params={
+            "endpoint_id": "fal-ai/gpt-image-1.5/edit",
+            "input_fidelity": "high",
+        },
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            await handle_fal_universal(
+                node,
+                {
+                    "prompt": PortValueDict(type="Text", value="make it winter"),
+                    "images": PortValueDict(type="Image", value=[
+                        "https://example.com/a.png",
+                        "https://example.com/b.png",
+                    ]),
+                },
+                {"FAL_KEY": "fal_test"},
+                emit=AsyncMock(),
+            )
+
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert payload["image_urls"] == [
+        "https://example.com/a.png",
+        "https://example.com/b.png",
+    ]
+    assert "image_url" not in payload
+    assert payload["input_fidelity"] == "high"
+
+
+@pytest.mark.asyncio
+async def test_gpt_image_1_5_edit_missing_images_raises():
+    """fal-ai/gpt-image-1.5/edit must raise ValueError when no images provided."""
+    node = GraphNode(
+        id="test-gpt15-edit-no-imgs",
+        definitionId="gpt-image-1-5-edit",
+        params={"endpoint_id": "fal-ai/gpt-image-1.5/edit"},
+    )
+
+    with pytest.raises(ValueError, match="image"):
+        await handle_fal_universal(
+            node,
+            {"prompt": PortValueDict(type="Text", value="add a hat")},
+            {"FAL_KEY": "fal_test"},
+            emit=AsyncMock(),
+        )
+
+
+# ── seedream-4-5 ────────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_seedream_4_5_endpoint_injection():
+    """Wrapper must inject fal-ai/bytedance/seedream/v4.5/text-to-image."""
+    mock_submit, mock_status, mock_result = _make_poll_mocks(_image_result())
+
+    node = GraphNode(
+        id="test-seedream45",
+        definitionId="seedream-4-5",
+        params={},
+    )
+    node.params.setdefault("endpoint_id", "fal-ai/bytedance/seedream/v4.5/text-to-image")
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            result = await handle_fal_universal(
+                node,
+                {"prompt": PortValueDict(type="Text", value="a futuristic city")},
+                {"FAL_KEY": "fal_test"},
+                emit=AsyncMock(),
+            )
+
+    assert result["image"]["type"] == "Image"
+    posted_url = mock_client.post.call_args.args[0] if mock_client.post.call_args.args \
+        else mock_client.post.call_args.kwargs.get("url", "")
+    assert "fal-ai/bytedance/seedream/v4.5/text-to-image" in posted_url
+
+
+@pytest.mark.asyncio
+async def test_seedream_4_5_key_params_forwarded():
+    """image_size preset, num_images, max_images, enable_safety_checker, seed all forwarded."""
+    mock_submit, mock_status, mock_result = _make_poll_mocks(_image_result())
+
+    node = GraphNode(
+        id="test-seedream45-params",
+        definitionId="seedream-4-5",
+        params={
+            "endpoint_id": "fal-ai/bytedance/seedream/v4.5/text-to-image",
+            "image_size": "square_hd",
+            "num_images": 2,
+            "max_images": 3,
+            "enable_safety_checker": True,
+            "seed": 42,
+        },
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            await handle_fal_universal(
+                node,
+                {"prompt": PortValueDict(type="Text", value="test")},
+                {"FAL_KEY": "fal_test"},
+                emit=AsyncMock(),
+            )
+
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert payload["image_size"] == "square_hd"
+    assert payload["num_images"] == 2
+    assert payload["max_images"] == 3
+    assert payload["enable_safety_checker"] is True
+    assert payload["seed"] == 42
+
+
+@pytest.mark.asyncio
+async def test_seedream_4_5_auto_2k_size_preset():
+    """auto_2K is a valid image_size preset for Seedream 4.5 — must be forwarded as-is."""
+    mock_submit, mock_status, mock_result = _make_poll_mocks(_image_result())
+
+    node = GraphNode(
+        id="test-seedream45-auto2k",
+        definitionId="seedream-4-5",
+        params={
+            "endpoint_id": "fal-ai/bytedance/seedream/v4.5/text-to-image",
+            "image_size": "auto_2K",
+        },
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            await handle_fal_universal(
+                node,
+                {"prompt": PortValueDict(type="Text", value="test")},
+                {"FAL_KEY": "fal_test"},
+                emit=AsyncMock(),
+            )
+
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert payload["image_size"] == "auto_2K"
+
+
+@pytest.mark.asyncio
+async def test_seedream_4_5_null_seed_omitted():
+    """A null/None seed must not be sent to FAL (would cause API validation error)."""
+    mock_submit, mock_status, mock_result = _make_poll_mocks(_image_result())
+
+    node = GraphNode(
+        id="test-seedream45-noseed",
+        definitionId="seedream-4-5",
+        params={
+            "endpoint_id": "fal-ai/bytedance/seedream/v4.5/text-to-image",
+            "seed": None,
+            "num_images": 1,
+        },
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            await handle_fal_universal(
+                node,
+                {"prompt": PortValueDict(type="Text", value="test")},
+                {"FAL_KEY": "fal_test"},
+                emit=AsyncMock(),
+            )
+
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert "seed" not in payload, "null seed must be omitted from request"
+    assert payload.get("num_images") == 1

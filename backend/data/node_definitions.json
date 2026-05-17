@@ -6658,31 +6658,31 @@
         "label": "Size",
         "type": "enum",
         "required": false,
-        "default": "1024x1024",
+        "default": "landscape_4_3",
         "options": [
           {
-            "label": "1024x1024",
-            "value": "1024x1024"
+            "label": "Square HD (1024x1024)",
+            "value": "square_hd"
           },
           {
-            "label": "1536x1024",
-            "value": "1536x1024"
+            "label": "Square (512x512)",
+            "value": "square"
           },
           {
-            "label": "1024x1536",
-            "value": "1024x1536"
+            "label": "Portrait 4:3 (768x1024)",
+            "value": "portrait_4_3"
           },
           {
-            "label": "2048x2048",
-            "value": "2048x2048"
+            "label": "Portrait 16:9 (576x1024)",
+            "value": "portrait_16_9"
           },
           {
-            "label": "3840x2160",
-            "value": "3840x2160"
+            "label": "Landscape 4:3 (1024x768)",
+            "value": "landscape_4_3"
           },
           {
-            "label": "2160x3840",
-            "value": "2160x3840"
+            "label": "Landscape 16:9 (1024x576)",
+            "value": "landscape_16_9"
           }
         ]
       },
@@ -6693,6 +6693,10 @@
         "required": false,
         "default": "high",
         "options": [
+          {
+            "label": "Auto",
+            "value": "auto"
+          },
           {
             "label": "Low",
             "value": "low"
@@ -6792,28 +6796,28 @@
             "value": "auto"
           },
           {
-            "label": "1024x1024",
-            "value": "1024x1024"
+            "label": "Square HD (1024x1024)",
+            "value": "square_hd"
           },
           {
-            "label": "1536x1024",
-            "value": "1536x1024"
+            "label": "Square (512x512)",
+            "value": "square"
           },
           {
-            "label": "1024x1536",
-            "value": "1024x1536"
+            "label": "Portrait 4:3 (768x1024)",
+            "value": "portrait_4_3"
           },
           {
-            "label": "2048x2048",
-            "value": "2048x2048"
+            "label": "Portrait 16:9 (576x1024)",
+            "value": "portrait_16_9"
           },
           {
-            "label": "3840x2160",
-            "value": "3840x2160"
+            "label": "Landscape 4:3 (1024x768)",
+            "value": "landscape_4_3"
           },
           {
-            "label": "2160x3840",
-            "value": "2160x3840"
+            "label": "Landscape 16:9 (1024x576)",
+            "value": "landscape_16_9"
           }
         ]
       },
@@ -6824,6 +6828,10 @@
         "required": false,
         "default": "high",
         "options": [
+          {
+            "label": "Auto",
+            "value": "auto"
+          },
           {
             "label": "Low",
             "value": "low"
@@ -10443,14 +10451,14 @@
         "label": "Size",
         "type": "enum",
         "required": false,
-        "default": "landscape_4_3",
+        "default": "square_hd",
         "options": [
           {
-            "label": "Square HD",
+            "label": "Square HD (2048x2048)",
             "value": "square_hd"
           },
           {
-            "label": "Square",
+            "label": "Square (512x512)",
             "value": "square"
           },
           {
@@ -10468,6 +10476,14 @@
           {
             "label": "Landscape 16:9",
             "value": "landscape_16_9"
+          },
+          {
+            "label": "Auto 2K",
+            "value": "auto_2K"
+          },
+          {
+            "label": "Auto 4K",
+            "value": "auto_4K"
           }
         ]
       },
@@ -10478,7 +10494,7 @@
         "required": false,
         "default": 1,
         "min": 1,
-        "max": 15
+        "max": 6
       },
       {
         "key": "max_images",
@@ -10487,7 +10503,7 @@
         "required": false,
         "default": 1,
         "min": 1,
-        "max": 15
+        "max": 6
       },
       {
         "key": "enable_safety_checker",
