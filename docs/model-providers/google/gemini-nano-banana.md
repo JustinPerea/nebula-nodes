@@ -6,12 +6,6 @@ provider: google
 status: active
 verified: 2026-05-17
 stale_after_days: 14
-shared_reference: ~/Documents/Workspace/Reference/model-providers/google/gemini-nano-banana.md
-runtime_skill_sources:
-  - ~/.hermes/profiles/daedalus/skills/creative/gemini/SKILL.md
-  - ~/.hermes/profiles/daedalus/skills/creative/gemini/gemini-text.md
-  - ~/.hermes/profiles/daedalus/skills/creative/gemini/nano-banana.md
-  - ~/.hermes/profiles/daedalus/skills/creative/nano-banana-2/SKILL.md
 ---
 
 # Gemini and Nano Banana in Nebula Nodes
@@ -27,17 +21,26 @@ Read the shared provider reference first:
 | Date | Auditor | Scope | Sources |
 |---|---|---|---|
 | 2026-05-10 | Claude | Initial coverage: gemini-chat, nano-banana, gemini-tts, gemini-embeddings | ai.google.dev |
-| 2026-05-17 | Claude | Phase 2 full audit: all 7 Google nodes (+ imagen-4, lyria-3, veo-3). Fixed 4 handler bugs + 1 model ID + 1 new TTS model. | ai.google.dev/gemini-api/docs (text-generation, image-generation, imagen, video, speech-generation, music-generation, embeddings) accessed 2026-05-17 |
+| 2026-05-17 | Claude | Phase 2 full audit: all 7 Google nodes (+ imagen-4, lyria-3, veo-3). Initial commit fixed handler bugs but introduced 2 regressions on nano-banana and lyria-3 (path/value mismatches); caught by live smoke tests on the same day and corrected. See "Live smoke regressions" below. Net result: gemini-embeddings camelCase fix verified, nano-banana `imageConfig` path restored, lyria-3 `AUDIO_WAV` proto enum value applied. | ai.google.dev/gemini-api/docs (text-generation, image-generation, imagen, video, speech-generation, music-generation, embeddings) accessed 2026-05-17; direct curl verification 2026-05-17 |
 
-### 2026-05-17 Fixes Applied
+### 2026-05-17 Fixes Applied (final state after live smoke regression fix)
 
 | Node | Component | Old (broken) | New (canonical) | Source |
 |---|---|---|---|---|
-| `nano-banana` | `google_gemini.py` handler | `generationConfig.imageConfig` | `generationConfig.responseFormat.image` | [image-generation docs](https://ai.google.dev/gemini-api/docs/image-generation) |
-| `lyria-3` | `google_gemini.py` handler | `generationConfig.responseMimeType = "audio/wav"` | `generationConfig.responseFormat.audio.mimeType = "audio/wav"` | [music-generation docs](https://ai.google.dev/gemini-api/docs/music-generation) |
-| `gemini-embeddings` | `google_gemini.py` handler | `body["output_dimensionality"]` (snake_case) | `body["outputDimensionality"]` (camelCase) | [embeddings API](https://ai.google.dev/api/embeddings) |
+| `nano-banana` | `google_gemini.py` handler | `responseFormat.image.aspectRatio` (interim audit value) | `generationConfig.imageConfig.aspectRatio` (live-verified, accepts natural `"1:1"`/`"16:9"` strings) | direct curl `gemini-3.1-flash-image-preview` 2026-05-17 |
+| `lyria-3` | `google_gemini.py` handler | `responseFormat.audio.mimeType = "audio/wav"` (interim audit value rejected by proto) | `responseFormat.audio.mimeType = "AUDIO_WAV"` (proto enum form) | direct curl `lyria-3-pro-preview` 2026-05-17 |
+| `gemini-embeddings` | `google_gemini.py` handler | `body["output_dimensionality"]` (snake_case) | `body["outputDimensionality"]` (camelCase) | [embeddings API](https://ai.google.dev/api/embeddings) — live-verified returns 256-dim vector when set |
 | `gemini-embeddings` | `node_definitions.json` | `"gemini-embedding-2-preview"` | `"gemini-embedding-2"` (stable model ID) | [embeddings docs](https://ai.google.dev/gemini-api/docs/embeddings) |
 | `gemini-tts` | `node_definitions.json` | missing `gemini-3.1-flash-tts-preview` | added as first option | [speech-generation docs](https://ai.google.dev/gemini-api/docs/speech-generation) |
+
+### Live smoke regressions caught and fixed
+
+The first pass of this audit (commit `6a30941`) changed two paths based on the public docs page and shipped tests pinning the new shapes. Live smoke testing the same day exposed two regressions:
+
+1. **nano-banana `responseFormat.image` rejects the natural value strings.** The docs page lists `"1:1"`, `"16:9"`, etc. as valid `aspectRatio` values under `generationConfig.responseFormat.image`, but the live v1beta API returns `Invalid value at 'generation_config.response_format.image.aspect_ratio'` for those strings. The pre-audit path (`generationConfig.imageConfig`) accepts the natural strings and is confirmed working. The audit fix was reverted; the test was flipped to assert the working path.
+2. **lyria-3 `responseFormat.audio.mimeType` rejects `"audio/wav"`.** The proto enum `AudioResponseFormat.MimeType` accepts `AUDIO_WAV` (Google's enum constant form), not the literal MIME string the docs imply. The path itself is correct. Note: even with `AUDIO_WAV` set, both `lyria-3-pro-preview` and `lyria-3-clip-preview` currently return `audio/mpeg` — the format preference is parsed and accepted but does not change the response. Tracked as an open question.
+
+**Methodology lesson:** "Canonical docs" is a layered claim. Public doc pages can be stale or describe a separate ingestion path. When an audit changes a request field name or shape, the only reliable check is to hit the live API.
 
 ## Node Matrix
 

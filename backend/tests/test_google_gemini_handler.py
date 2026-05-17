@@ -247,7 +247,7 @@ async def test_imagen4_api_error_propagates():
             )
 
 
-# --- Nano Banana tests (imageConfig → responseFormat.image fix) ---
+# --- Nano Banana tests (generationConfig.imageConfig) ---
 
 def _make_nano_node(params=None):
     return GraphNode(
@@ -258,9 +258,14 @@ def _make_nano_node(params=None):
 
 
 @pytest.mark.asyncio
-async def test_nano_banana_aspect_ratio_uses_response_format():
-    """Verifies aspect_ratio is sent as generationConfig.responseFormat.image.aspectRatio,
-    NOT the old generationConfig.imageConfig path (2026-05-17 fix)."""
+async def test_nano_banana_aspect_ratio_uses_image_config():
+    """Verifies aspect_ratio is sent as generationConfig.imageConfig.aspectRatio.
+
+    An earlier audit changed this to responseFormat.image based on the public
+    docs, but the live v1beta API rejects "1:1" through that path (the proto
+    enum doesn't accept the natural string form). The pre-audit imageConfig
+    path accepts the natural values — confirmed via direct curl 2026-05-17.
+    """
     nano_resp = {
         "candidates": [{
             "content": {
@@ -288,10 +293,10 @@ async def test_nano_banana_aspect_ratio_uses_response_format():
     assert "image" in result
     body = mock_client_instance.post.call_args.kwargs.get("json") or mock_client_instance.post.call_args[1].get("json")
     gen_cfg = body.get("generationConfig", {})
-    # Must use responseFormat.image, NOT imageConfig
-    assert "imageConfig" not in gen_cfg, "imageConfig is the old broken path; use responseFormat.image"
-    assert gen_cfg.get("responseFormat", {}).get("image", {}).get("aspectRatio") == "16:9"
-    assert gen_cfg.get("responseFormat", {}).get("image", {}).get("imageSize") == "2K"
+    # Must use imageConfig (responseFormat.image accepts the field but rejects natural value strings)
+    assert "responseFormat" not in gen_cfg, "responseFormat.image rejects '1:1'/'16:9'; use imageConfig"
+    assert gen_cfg.get("imageConfig", {}).get("aspectRatio") == "16:9"
+    assert gen_cfg.get("imageConfig", {}).get("imageSize") == "2K"
 
 
 # --- Lyria 3 tests (responseMimeType → responseFormat.audio fix) ---
@@ -306,8 +311,10 @@ def _make_lyria_node(params=None):
 
 @pytest.mark.asyncio
 async def test_lyria3_wav_uses_response_format():
-    """Verifies WAV output uses generationConfig.responseFormat.audio.mimeType,
-    NOT the old responseMimeType path (2026-05-17 fix)."""
+    """Verifies WAV output uses generationConfig.responseFormat.audio.mimeType with
+    the proto enum value "AUDIO_WAV" — verified via direct curl 2026-05-17. The pre-audit
+    code used `responseMimeType` (only accepts text mimes); an interim audit used
+    `responseFormat.audio.mimeType = "audio/wav"` (path right, value rejected by proto)."""
     SILENCE_MP3_B64 = base64.b64encode(b"\xff\xfb" + b"\x00" * 26).decode()
     lyria_resp = {
         "candidates": [{
@@ -336,9 +343,9 @@ async def test_lyria3_wav_uses_response_format():
     assert "audio" in result
     body = mock_client_instance.post.call_args.kwargs.get("json") or mock_client_instance.post.call_args[1].get("json")
     gen_cfg = body.get("generationConfig", {})
-    # Must use responseFormat.audio, NOT responseMimeType
-    assert "responseMimeType" not in gen_cfg, "responseMimeType is the old broken path; use responseFormat.audio"
-    assert gen_cfg.get("responseFormat", {}).get("audio", {}).get("mimeType") == "audio/wav"
+    # Must use responseFormat.audio with proto enum value AUDIO_WAV
+    assert "responseMimeType" not in gen_cfg, "responseMimeType only accepts text mimes; use responseFormat.audio"
+    assert gen_cfg.get("responseFormat", {}).get("audio", {}).get("mimeType") == "AUDIO_WAV"
 
 
 # --- Gemini TTS tests ---

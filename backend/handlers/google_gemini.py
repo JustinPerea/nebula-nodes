@@ -175,7 +175,7 @@ async def handle_nano_banana(
             image_config["aspectRatio"] = aspect
         if image_size:
             image_config["imageSize"] = image_size
-        body["generationConfig"]["responseFormat"] = {"image": image_config}
+        body["generationConfig"]["imageConfig"] = image_config
 
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 
@@ -327,10 +327,12 @@ async def handle_lyria3(
         "responseModalities": ["AUDIO", "TEXT"],
     }
 
-    # WAV output for Pro model (canonical field: generationConfig.responseFormat.audio.mimeType)
+    # WAV output for Pro model. The mimeType field uses Google's proto enum form
+    # (AUDIO_WAV), not the literal mime string "audio/wav" — verified via live API
+    # call 2026-05-17 (the proto enum rejected "audio/wav").
     output_format = node.params.get("outputFormat")
     if output_format == "wav" and "pro" in model:
-        generation_config["responseFormat"] = {"audio": {"mimeType": "audio/wav"}}
+        generation_config["responseFormat"] = {"audio": {"mimeType": "AUDIO_WAV"}}
 
     body: dict[str, Any] = {
         "contents": [{"parts": parts}],
