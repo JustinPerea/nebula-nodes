@@ -9,7 +9,7 @@
  */
 
 import { readFile, writeFile } from 'node:fs/promises';
-import { existsSync, readdirSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -87,72 +87,6 @@ function escapeCell(value) {
     .replace(/\|/g, '&#124;');
 }
 
-/**
- * Build the audit map: nodeId -> verified date.
- * Scans all docs/model-providers/<provider>/*.md frontmatter and body.
- */
-function buildAuditMap() {
-  const auditMap = new Map(); // nodeId -> verified date string
-
-  if (!existsSync(MODEL_PROVIDERS_PATH)) return auditMap;
-
-  for (const provider of readdirSync(MODEL_PROVIDERS_PATH)) {
-    const providerPath = join(MODEL_PROVIDERS_PATH, provider);
-    let files;
-    try {
-      files = readdirSync(providerPath).filter((f) => f.endsWith('.md'));
-    } catch {
-      continue;
-    }
-
-    for (const fname of files) {
-      const fpath = join(providerPath, fname);
-      let content;
-      try {
-        content = require('node:fs').readFileSync(fpath, 'utf8');
-      } catch {
-        continue;
-      }
-
-      const fmMatch = content.match(/^---\n([\s\S]*?)\n---/);
-      if (!fmMatch) continue;
-
-      const fm = {};
-      for (const line of fmMatch[1].split('\n')) {
-        const colonIdx = line.indexOf(': ');
-        if (colonIdx !== -1) {
-          const key = line.slice(0, colonIdx).trim();
-          const val = line.slice(colonIdx + 2).trim();
-          fm[key] = val;
-        }
-      }
-
-      const verified = fm.verified;
-      if (!verified) continue;
-
-      const body = content.slice(fmMatch[0].length);
-
-      // Find all backtick-quoted tokens that look like node slugs (lowercase + hyphens + digits)
-      const slugMatches = [...body.matchAll(/`([a-z][a-z0-9-]+)`/g)].map((m) => m[1]);
-      for (const slug of slugMatches) {
-        if (!auditMap.has(slug)) {
-          auditMap.set(slug, verified);
-        }
-      }
-
-      // Also check model field in frontmatter for node ID hints
-      const modelField = fm.model ?? '';
-      for (const part of modelField.split(',')) {
-        const trimmed = part.trim();
-        if (/^[a-z][a-z0-9-]+$/.test(trimmed) && !auditMap.has(trimmed)) {
-          auditMap.set(trimmed, verified);
-        }
-      }
-    }
-  }
-
-  return auditMap;
-}
 
 /**
  * Format a single parameter row for the params table.
@@ -167,8 +101,6 @@ function formatParamRow(param) {
 
   let defaultVal = '—';
   if (param.default !== undefined && param.default !== null && param.default !== '') {
-    defaultVal = escapeCell(String(param.default));
-  } else if (param.default === false || param.default === 0) {
     defaultVal = escapeCell(String(param.default));
   }
 
@@ -249,10 +181,8 @@ function getPopulatedParamGroups(node) {
 async function generate() {
   const rawDefs = await readFile(NODE_DEFS_PATH, 'utf8');
   const definitions = JSON.parse(rawDefs);
-  const { createRequire } = await import('node:module');
-  const require = createRequire(import.meta.url);
 
-  const auditMap = buildAuditMapSync(require);
+  const auditMap = buildAuditMapSync();
 
   const nodeCount = Object.keys(definitions).length;
   const date = new Date().toISOString().slice(0, 10);
@@ -352,7 +282,7 @@ async function generate() {
 /**
  * Sync version of buildAuditMap for use in generate() after module resolution.
  */
-function buildAuditMapSync(require) {
+function buildAuditMapSync() {
   const auditMap = new Map();
 
   if (!existsSync(MODEL_PROVIDERS_PATH)) return auditMap;
@@ -370,7 +300,7 @@ function buildAuditMapSync(require) {
       const fpath = join(providerPath, fname);
       let content;
       try {
-        content = require('node:fs').readFileSync(fpath, 'utf8');
+        content = readFileSync(fpath, 'utf8');
       } catch {
         continue;
       }
