@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import asyncio
+import json as _json
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-import base64
 import httpx
 
 from models.graph import GraphNode, PortValueDict
@@ -42,6 +43,7 @@ async def handle_elevenlabs_tts(
         "stability": stability,
         "similarity_boost": similarity_boost,
         "use_speaker_boost": use_speaker_boost,
+        "speed": speed,
     }
     if style > 0:
         voice_settings["style"] = style
@@ -51,9 +53,6 @@ async def handle_elevenlabs_tts(
         "model_id": model_id,
         "voice_settings": voice_settings,
     }
-
-    if speed != 1.0:
-        body["speed"] = speed
 
     seed = node.params.get("seed")
     if seed is not None and seed != "":
@@ -187,6 +186,27 @@ async def handle_elevenlabs_sts(
     if remove_noise:
         data["remove_background_noise"] = "true"
 
+    # voice_settings must be sent as a JSON-encoded string in the multipart form
+    stability = node.params.get("stability")
+    similarity_boost = node.params.get("similarity_boost")
+    if stability is not None or similarity_boost is not None:
+        vs: dict[str, Any] = {}
+        if stability is not None:
+            vs["stability"] = float(stability)
+        if similarity_boost is not None:
+            vs["similarity_boost"] = float(similarity_boost)
+        style = node.params.get("style")
+        if style is not None and float(style) > 0:
+            vs["style"] = float(style)
+        use_speaker_boost = node.params.get("use_speaker_boost")
+        if use_speaker_boost is not None:
+            vs["use_speaker_boost"] = bool(use_speaker_boost)
+        data["voice_settings"] = _json.dumps(vs)
+
+    seed = node.params.get("seed")
+    if seed is not None and seed != "":
+        data["seed"] = str(int(seed))
+
     async with httpx.AsyncClient(timeout=120.0) as client:
         response = await client.post(
             url,
@@ -293,7 +313,7 @@ async def handle_elevenlabs_dubbing(
             raise RuntimeError(f"ElevenLabs Dubbing returned no ID: {dub_data}")
 
         # Step 2: Poll for completion
-        import asyncio
+        poll_errors = 0
         for _ in range(120):
             await asyncio.sleep(5)
             status_resp = await client.get(
@@ -301,7 +321,14 @@ async def handle_elevenlabs_dubbing(
                 headers={"xi-api-key": api_key},
             )
             if status_resp.status_code != 200:
+                poll_errors += 1
+                if poll_errors >= 5:
+                    raise RuntimeError(
+                        f"ElevenLabs Dubbing poll failed {poll_errors} times: "
+                        f"{status_resp.status_code} {status_resp.text}"
+                    )
                 continue
+            poll_errors = 0
             status_data = status_resp.json()
             if status_data.get("status") == "dubbed":
                 # Step 3: Download dubbed audio
