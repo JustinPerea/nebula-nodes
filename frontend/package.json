@@ -11,6 +11,7 @@
     "test:watch": "vitest",
     "check:inline-styles": "node scripts/check-inline-styles.mjs",
     "check:slava-css-scope": "node scripts/check-slava-css-scope.mjs",
+    "check:node-contracts": "node ../scripts/check-node-contracts.mjs",
     "check:utility-nodes": "node ../scripts/check-utility-nodes.mjs",
     "check:slava-screenshots": "node ../scripts/slava-screenshot-check.mjs",
     "preview": "vite preview"

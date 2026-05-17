@@ -34,12 +34,14 @@ async def handle_elevenlabs_tts(
     stability = float(node.params.get("stability", 0.5))
     similarity_boost = float(node.params.get("similarity_boost", 0.75))
     style = float(node.params.get("style", 0))
+    use_speaker_boost = bool(node.params.get("use_speaker_boost", True))
     speed = float(node.params.get("speed", 1.0))
     output_format = node.params.get("output_format", "mp3_44100_128")
 
     voice_settings: dict[str, Any] = {
         "stability": stability,
         "similarity_boost": similarity_boost,
+        "use_speaker_boost": use_speaker_boost,
     }
     if style > 0:
         voice_settings["style"] = style

@@ -1180,6 +1180,13 @@
         "step": 0.05
       },
       {
+        "key": "use_speaker_boost",
+        "label": "Speaker Boost",
+        "type": "boolean",
+        "required": false,
+        "default": true
+      },
+      {
         "key": "speed",
         "label": "Speed",
         "type": "float",
@@ -2264,7 +2271,7 @@
     "inputPorts": [
       {
         "id": "input",
-        "label": "",
+        "label": "Input",
         "dataType": "Any",
         "required": true
       }
@@ -2272,7 +2279,7 @@
     "outputPorts": [
       {
         "id": "output",
-        "label": "",
+        "label": "Output",
         "dataType": "Any",
         "required": false
       }

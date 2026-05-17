@@ -1,6 +1,6 @@
 # Nebula Node — Model Reference
 
-Complete reference for all 77 nodes. Nodes with dual-provider support show separate parameter tables for each API route.
+Partial hand-maintained reference for documented nodes. The live registry currently contains 100 nodes in `backend/data/node_definitions.json`; regenerate this file before treating it as complete. Nodes with dual-provider support show separate parameter tables for each API route.
 
 **Dual-param nodes** (marked with `[dual]`) show different parameters depending on which API key is configured. The Inspector automatically selects the right set.
 
@@ -832,6 +832,7 @@ Complete reference for all 77 nodes. Nodes with dual-provider support show separ
 | Voice ID | string | 21m00Tcm4TlvDq8ikWAM | Rachel (default) |
 | Similarity Boost | float (0-1) | 0.75 | — |
 | Style | float (0-1) | 0 | — |
+| Speaker Boost | bool | true | — |
 | Speed | float (0.1-4.0) | 1.0 | — |
 | Output Format | enum | mp3_44100_128 | MP3 44.1kHz, MP3 22kHz, PCM 16kHz, PCM 24kHz, PCM 44.1kHz |
 | Seed | int | random | — |

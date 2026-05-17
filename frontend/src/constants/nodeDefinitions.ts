@@ -644,6 +644,13 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         step: 0.05,
       },
       {
+        key: 'use_speaker_boost',
+        label: 'Speaker Boost',
+        type: 'boolean',
+        required: false,
+        default: true,
+      },
+      {
         key: 'speed',
         label: 'Speed',
         type: 'float',
@@ -1309,10 +1316,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     envKeyName: [],
     executionPattern: 'sync',
     inputPorts: [
-      { id: 'input', label: '', dataType: 'Any', required: true },
+      { id: 'input', label: 'Input', dataType: 'Any', required: true },
     ],
     outputPorts: [
-      { id: 'output', label: '', dataType: 'Any', required: false },
+      { id: 'output', label: 'Output', dataType: 'Any', required: false },
     ],
     params: [],
   },

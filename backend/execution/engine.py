@@ -171,6 +171,27 @@ NODE_DEFS: dict[str, dict[str, Any]] = {
     },
 }
 
+LOCAL_EXECUTION_NODE_IDS = frozenset(
+    {
+        "text-input",
+        "image-input",
+        "video-input",
+        "audio-input",
+        "sticky-note",
+        "frame-extractor",
+        "array-builder",
+        "array-selector",
+        "image-compare",
+        "svg-rasterize",
+        "iterator-image",
+        "iterator-text",
+        "preview",
+        "combine-text",
+        "router",
+        "reroute",
+    }
+)
+
 
 _REGISTRY_NODE_DEFS: dict[str, dict[str, Any]] | None = None
 
