@@ -1960,7 +1960,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         label: 'Resolution',
         type: 'enum',
         required: false,
-        default: '1080p',
+        default: '720p',
         options: [
           { label: '720p', value: '720p' },
           { label: '1080p', value: '1080p' },
@@ -1982,13 +1982,13 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         label: 'Duration (s)',
         type: 'enum',
         required: false,
-        default: 4,
+        default: '4',
         options: [
-          { label: '4s', value: 4 },
-          { label: '8s', value: 8 },
-          { label: '12s', value: 12 },
-          { label: '16s', value: 16 },
-          { label: '20s', value: 20 },
+          { label: '4s', value: '4' },
+          { label: '8s', value: '8' },
+          { label: '12s', value: '12' },
+          { label: '16s', value: '16' },
+          { label: '20s', value: '20' },
         ],
       },
     ],
@@ -3781,7 +3781,15 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     outputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: false },
     ],
-    params: [],
+    params: [
+      {
+        key: 'crop_to_bbox',
+        label: 'Crop to Subject',
+        type: 'boolean',
+        required: false,
+        default: false,
+      },
+    ],
   },
 
   'recraft-v4-raster': {
@@ -4516,10 +4524,24 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         label: 'Duration',
         type: 'enum',
         required: false,
-        default: 5,
+        default: '5',
         options: [
-          { label: '5 seconds', value: 5 },
-          { label: '8 seconds', value: 8 },
+          { label: '5 seconds', value: '5' },
+          { label: '8 seconds', value: '8' },
+        ],
+      },
+      {
+        key: 'aspect_ratio',
+        label: 'Aspect Ratio',
+        type: 'enum',
+        required: false,
+        default: '16:9',
+        options: [
+          { label: '16:9', value: '16:9' },
+          { label: '4:3', value: '4:3' },
+          { label: '1:1', value: '1:1' },
+          { label: '3:4', value: '3:4' },
+          { label: '9:16', value: '9:16' },
         ],
       },
       {
@@ -4536,15 +4558,17 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         ],
       },
       {
-        key: 'quality',
-        label: 'Quality',
+        key: 'style',
+        label: 'Style',
         type: 'enum',
         required: false,
-        default: 'Normal',
         options: [
-          { label: 'Turbo', value: 'Turbo' },
-          { label: 'Normal', value: 'Normal' },
-          { label: 'Fast', value: 'Fast' },
+          { label: 'None', value: '' },
+          { label: 'Anime', value: 'anime' },
+          { label: '3D Animation', value: '3d_animation' },
+          { label: 'Clay', value: 'clay' },
+          { label: 'Comic', value: 'comic' },
+          { label: 'Cyberpunk', value: 'cyberpunk' },
         ],
       },
       {

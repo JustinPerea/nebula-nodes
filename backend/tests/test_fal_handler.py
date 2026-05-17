@@ -3614,3 +3614,397 @@ async def test_seedream_4_5_null_seed_omitted():
     payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
     assert "seed" not in payload, "null seed must be omitted from request"
     assert payload.get("num_images") == 1
+
+
+# ── sora-2 ────────────────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_sora2_standard_endpoint_injection():
+    """sora-2 with model=standard must inject fal-ai/sora-2/text-to-video."""
+    from execution.sync_runner import get_handler_registry
+    from unittest.mock import MagicMock as MM
+
+    emit = AsyncMock()
+    registry = get_handler_registry(emit=emit)
+    handler = registry["sora-2"]
+
+    mock_submit, mock_status, mock_result = _make_poll_mocks(
+        {"video": {"url": "https://fal.ai/sora2.mp4"}}
+    )
+
+    node = GraphNode(
+        id="test-sora2-std",
+        definitionId="sora-2",
+        params={"model": "standard", "resolution": "720p", "duration": "4", "aspect_ratio": "16:9"},
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            result = await handler(
+                node,
+                {"prompt": PortValueDict(type="Text", value="A calm ocean")},
+                {"FAL_KEY": "fal_test"},
+            )
+
+    assert result["video"]["type"] == "Video"
+    url = mock_client.post.call_args.args[0] if mock_client.post.call_args.args else mock_client.post.call_args[0][0]
+    assert "sora-2/text-to-video" in url
+    assert "pro" not in url
+
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    # model param must be popped — not sent to FAL
+    assert "model" not in payload
+    # duration must be string "4"
+    assert payload["duration"] == "4"
+
+
+@pytest.mark.asyncio
+async def test_sora2_pro_endpoint_injection():
+    """sora-2 with model=pro must inject fal-ai/sora-2/text-to-video/pro."""
+    from execution.sync_runner import get_handler_registry
+
+    emit = AsyncMock()
+    registry = get_handler_registry(emit=emit)
+    handler = registry["sora-2"]
+
+    mock_submit, mock_status, mock_result = _make_poll_mocks(
+        {"video": {"url": "https://fal.ai/sora2pro.mp4"}}
+    )
+
+    node = GraphNode(
+        id="test-sora2-pro",
+        definitionId="sora-2",
+        params={"model": "pro", "duration": "8"},
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            await handler(
+                node,
+                {"prompt": PortValueDict(type="Text", value="A rocket launch")},
+                {"FAL_KEY": "fal_test"},
+            )
+
+    url = mock_client.post.call_args.args[0] if mock_client.post.call_args.args else mock_client.post.call_args[0][0]
+    assert "sora-2/text-to-video/pro" in url
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert "model" not in payload
+
+
+# ── moonvalley ────────────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_moonvalley_endpoint_injection():
+    """moonvalley must inject fal-ai/moonvalley/image-to-video and map image → image_url."""
+    from execution.sync_runner import get_handler_registry
+
+    emit = AsyncMock()
+    registry = get_handler_registry(emit=emit)
+    handler = registry["moonvalley"]
+
+    mock_submit, mock_status, mock_result = _make_poll_mocks(
+        {"video": {"url": "https://fal.ai/moonvalley.mp4"}}
+    )
+
+    node = GraphNode(
+        id="test-moonvalley",
+        definitionId="moonvalley",
+        params={"duration": "5s", "resolution": "1920x1080"},
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            result = await handler(
+                node,
+                {
+                    "image": PortValueDict(type="Image", value="https://example.com/img.jpg"),
+                    "prompt": PortValueDict(type="Text", value="Slow zoom out"),
+                },
+                {"FAL_KEY": "fal_test"},
+            )
+
+    assert result["video"]["type"] == "Video"
+    url = mock_client.post.call_args.args[0] if mock_client.post.call_args.args else mock_client.post.call_args[0][0]
+    assert "moonvalley/image-to-video" in url
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    # image input must be mapped to image_url
+    assert payload.get("image_url") == "https://example.com/img.jpg"
+    assert payload.get("duration") == "5s"
+
+
+# ── pixverse-v4-5 ─────────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_pixverse_v4_5_endpoint_injection():
+    """pixverse-v4-5 must inject correct endpoint; duration must be string; style forwarded."""
+    from execution.sync_runner import get_handler_registry
+
+    emit = AsyncMock()
+    registry = get_handler_registry(emit=emit)
+    handler = registry["pixverse-v4-5"]
+
+    mock_submit, mock_status, mock_result = _make_poll_mocks(
+        {"video": {"url": "https://fal.ai/pixverse.mp4"}}
+    )
+
+    node = GraphNode(
+        id="test-pixverse",
+        definitionId="pixverse-v4-5",
+        params={
+            "duration": "5",
+            "aspect_ratio": "16:9",
+            "resolution": "720p",
+            "style": "anime",
+        },
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            result = await handler(
+                node,
+                {"prompt": PortValueDict(type="Text", value="Cherry blossoms")},
+                {"FAL_KEY": "fal_test"},
+            )
+
+    assert result["video"]["type"] == "Video"
+    url = mock_client.post.call_args.args[0] if mock_client.post.call_args.args else mock_client.post.call_args[0][0]
+    assert "pixverse/v4.5/text-to-video" in url
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    # duration must be string "5" — not integer 5
+    assert payload["duration"] == "5", f"expected str '5', got {payload['duration']!r}"
+    assert payload.get("style") == "anime"
+    # 'quality' param must not be present (removed from definition)
+    assert "quality" not in payload
+
+
+@pytest.mark.asyncio
+async def test_pixverse_null_seed_omitted():
+    """Null seed must not be forwarded to FAL."""
+    from execution.sync_runner import get_handler_registry
+
+    emit = AsyncMock()
+    registry = get_handler_registry(emit=emit)
+    handler = registry["pixverse-v4-5"]
+
+    mock_submit, mock_status, mock_result = _make_poll_mocks(
+        {"video": {"url": "https://fal.ai/pixverse.mp4"}}
+    )
+
+    node = GraphNode(
+        id="test-pixverse-noseed",
+        definitionId="pixverse-v4-5",
+        params={"duration": "5", "seed": None},
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            await handler(
+                node,
+                {"prompt": PortValueDict(type="Text", value="test")},
+                {"FAL_KEY": "fal_test"},
+            )
+
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert "seed" not in payload
+
+
+# ── remove-background ─────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_remove_background_endpoint_and_image_mapping():
+    """remove-background must inject fal-ai/imageutils/rembg and map image → image_url."""
+    from execution.sync_runner import get_handler_registry
+
+    emit = AsyncMock()
+    registry = get_handler_registry(emit=emit)
+    handler = registry["remove-background"]
+
+    mock_submit, mock_status, mock_result = _make_poll_mocks(
+        {"image": {"url": "https://fal.ai/rembg_out.png", "content_type": "image/png"}}
+    )
+
+    node = GraphNode(
+        id="test-rembg",
+        definitionId="remove-background",
+        params={},
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            result = await handler(
+                node,
+                {"image": PortValueDict(type="Image", value="https://example.com/photo.jpg")},
+                {"FAL_KEY": "fal_test"},
+            )
+
+    assert result["image"]["type"] == "Image"
+    url = mock_client.post.call_args.args[0] if mock_client.post.call_args.args else mock_client.post.call_args[0][0]
+    assert "imageutils/rembg" in url
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert payload.get("image_url") == "https://example.com/photo.jpg"
+    # prompt must not be sent (no prompt port on this node)
+    assert "prompt" not in payload
+
+
+@pytest.mark.asyncio
+async def test_remove_background_crop_to_bbox_forwarded():
+    """crop_to_bbox param must be forwarded to FAL when set."""
+    from execution.sync_runner import get_handler_registry
+
+    emit = AsyncMock()
+    registry = get_handler_registry(emit=emit)
+    handler = registry["remove-background"]
+
+    mock_submit, mock_status, mock_result = _make_poll_mocks(
+        {"image": {"url": "https://fal.ai/rembg_crop.png", "content_type": "image/png"}}
+    )
+
+    node = GraphNode(
+        id="test-rembg-crop",
+        definitionId="remove-background",
+        params={"crop_to_bbox": True},
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            await handler(
+                node,
+                {"image": PortValueDict(type="Image", value="https://example.com/photo.jpg")},
+                {"FAL_KEY": "fal_test"},
+            )
+
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert payload.get("crop_to_bbox") is True
+
+
+# ── seedvr2-upscale ───────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_seedvr2_upscale_endpoint_and_image_mapping():
+    """seedvr2-upscale must inject fal-ai/seedvr/upscale/image and map image → image_url."""
+    from execution.sync_runner import get_handler_registry
+
+    emit = AsyncMock()
+    registry = get_handler_registry(emit=emit)
+    handler = registry["seedvr2-upscale"]
+
+    mock_submit, mock_status, mock_result = _make_poll_mocks(
+        {"image": {"url": "https://fal.ai/seedvr_up.jpg", "content_type": "image/jpeg"}}
+    )
+
+    node = GraphNode(
+        id="test-seedvr2",
+        definitionId="seedvr2-upscale",
+        params={"upscale_mode": "factor", "upscale_factor": 2, "output_format": "jpg"},
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            result = await handler(
+                node,
+                {"image": PortValueDict(type="Image", value="https://example.com/low_res.jpg")},
+                {"FAL_KEY": "fal_test"},
+            )
+
+    assert result["image"]["type"] == "Image"
+    url = mock_client.post.call_args.args[0] if mock_client.post.call_args.args else mock_client.post.call_args[0][0]
+    assert "seedvr/upscale/image" in url
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert payload.get("image_url") == "https://example.com/low_res.jpg"
+    assert payload.get("upscale_factor") == 2
+    assert payload.get("output_format") == "jpg"
+
+
+@pytest.mark.asyncio
+async def test_seedvr2_target_resolution_mode():
+    """target_resolution mode must forward target_resolution and omit upscale_factor."""
+    from execution.sync_runner import get_handler_registry
+
+    emit = AsyncMock()
+    registry = get_handler_registry(emit=emit)
+    handler = registry["seedvr2-upscale"]
+
+    mock_submit, mock_status, mock_result = _make_poll_mocks(
+        {"image": {"url": "https://fal.ai/seedvr_4k.png", "content_type": "image/png"}}
+    )
+
+    node = GraphNode(
+        id="test-seedvr2-target",
+        definitionId="seedvr2-upscale",
+        params={"upscale_mode": "target", "target_resolution": "2160p", "output_format": "png"},
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            await handler(
+                node,
+                {"image": PortValueDict(type="Image", value="https://example.com/img.png")},
+                {"FAL_KEY": "fal_test"},
+            )
+
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert payload.get("upscale_mode") == "target"
+    assert payload.get("target_resolution") == "2160p"

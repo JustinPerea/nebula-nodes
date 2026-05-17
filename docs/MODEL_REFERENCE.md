@@ -827,7 +827,7 @@ Generated: 2026-05-17 | Nodes: 100 | Source: [`backend/data/node_definitions.jso
 | **Execution** | async-poll |
 | **Inputs** | Image (Image)*, Prompt (Text) |
 | **Outputs** | Video (Video) |
-| **Audited** | — |
+| **Audited** | 2026-05-17 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -847,15 +847,16 @@ Generated: 2026-05-17 | Nodes: 100 | Source: [`backend/data/node_definitions.jso
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text)*, Image (Image) |
 | **Outputs** | Video (Video) |
-| **Audited** | — |
+| **Audited** | 2026-05-17 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
 | Duration | enum | 5 | 5 seconds, 8 seconds |
+| Aspect Ratio | enum | 16:9 | 16:9, 4:3, 1:1, 3:4, 9:16 |
 | Resolution | enum | 720p | 360p, 540p, 720p, 1080p |
-| Quality | enum | Normal | Turbo, Normal, Fast |
 | Negative Prompt | string | — | — |
 | Seed | int | — | — |
+| Style | enum | — | None, Anime, 3D Animation, Clay, Comic, Cyberpunk |
 
 ---
 
@@ -1077,7 +1078,7 @@ Generated: 2026-05-17 | Nodes: 100 | Source: [`backend/data/node_definitions.jso
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
 | Model | enum | standard | Sora 2 Standard, Sora 2 Pro |
-| Resolution | enum | 1080p | 720p, 1080p |
+| Resolution | enum | 720p | 720p, 1080p |
 | Aspect Ratio | enum | 16:9 | 16:9, 9:16 |
 | Duration (s) | enum | 4 | 4s, 8s, 12s, 16s, 20s |
 
@@ -1878,6 +1879,10 @@ Generated: 2026-05-17 | Nodes: 100 | Source: [`backend/data/node_definitions.jso
 | **Outputs** | Image (Image) |
 | **Audited** | 2026-05-17 |
 
+| Parameter | Type | Default | Options/Range |
+|-----------|------|---------|---------------|
+| Crop to Subject | bool | false | — |
+
 ---
 
 ### SeedVR2 Upscale
@@ -1891,7 +1896,7 @@ Generated: 2026-05-17 | Nodes: 100 | Source: [`backend/data/node_definitions.jso
 | **Execution** | async-poll |
 | **Inputs** | Image (Image)* |
 | **Outputs** | Upscaled Image (Image) |
-| **Audited** | — |
+| **Audited** | 2026-05-17 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
