@@ -210,6 +210,44 @@ async def test_stt_http_error_raises_runtime_error(tmp_path: Path) -> None:
             )
 
 
+@pytest.mark.asyncio
+async def test_stt_temperature_zero_is_omitted(tmp_path: Path) -> None:
+    """temperature=0 (registry default) must NOT be forwarded in form data."""
+    audio_file = tmp_path / "clip.mp3"
+    audio_file.write_bytes(b"fake-audio")
+
+    mock_client = _mock_client(_mock_http_response(json_body={"text": ""}))
+
+    with patch("handlers.openai_audio.httpx.AsyncClient", return_value=mock_client):
+        await handle_openai_stt(
+            _node("openai-stt", {"temperature": 0, "response_format": "json"}),
+            {"audio": PortValueDict(type="Audio", value=str(audio_file))},
+            _API_KEYS,
+        )
+
+    data = mock_client.post.call_args.kwargs["data"]
+    assert "temperature" not in data
+
+
+@pytest.mark.asyncio
+async def test_stt_temperature_nonzero_is_forwarded(tmp_path: Path) -> None:
+    """An explicit non-zero temperature must be forwarded as a string."""
+    audio_file = tmp_path / "clip.mp3"
+    audio_file.write_bytes(b"fake-audio")
+
+    mock_client = _mock_client(_mock_http_response(json_body={"text": ""}))
+
+    with patch("handlers.openai_audio.httpx.AsyncClient", return_value=mock_client):
+        await handle_openai_stt(
+            _node("openai-stt", {"temperature": 0.4, "response_format": "json"}),
+            {"audio": PortValueDict(type="Audio", value=str(audio_file))},
+            _API_KEYS,
+        )
+
+    data = mock_client.post.call_args.kwargs["data"]
+    assert data["temperature"] == "0.4"
+
+
 # ---------------------------------------------------------------------------
 # Translate — form data shape
 # ---------------------------------------------------------------------------
@@ -308,6 +346,58 @@ async def test_translate_missing_api_key_raises(tmp_path: Path) -> None:
             {"audio": PortValueDict(type="Audio", value=str(audio_file))},
             {},
         )
+
+
+@pytest.mark.asyncio
+async def test_translate_temperature_zero_is_omitted(tmp_path: Path) -> None:
+    """temperature=0 (registry default) must NOT be forwarded in form data."""
+    audio_file = tmp_path / "clip.mp3"
+    audio_file.write_bytes(b"fake-audio")
+
+    mock_client = _mock_client(_mock_http_response(json_body={"text": ""}))
+
+    with patch("handlers.openai_audio.httpx.AsyncClient", return_value=mock_client):
+        await handle_openai_translate(
+            _node("openai-translate", {"temperature": 0, "response_format": "json"}),
+            {"audio": PortValueDict(type="Audio", value=str(audio_file))},
+            _API_KEYS,
+        )
+
+    data = mock_client.post.call_args.kwargs["data"]
+    assert "temperature" not in data
+
+
+@pytest.mark.asyncio
+async def test_translate_temperature_nonzero_is_forwarded(tmp_path: Path) -> None:
+    """An explicit non-zero temperature must be forwarded as a string."""
+    audio_file = tmp_path / "clip.mp3"
+    audio_file.write_bytes(b"fake-audio")
+
+    mock_client = _mock_client(_mock_http_response(json_body={"text": ""}))
+
+    with patch("handlers.openai_audio.httpx.AsyncClient", return_value=mock_client):
+        await handle_openai_translate(
+            _node("openai-translate", {"temperature": 0.6, "response_format": "json"}),
+            {"audio": PortValueDict(type="Audio", value=str(audio_file))},
+            _API_KEYS,
+        )
+
+    data = mock_client.post.call_args.kwargs["data"]
+    assert data["temperature"] == "0.6"
+
+
+@pytest.mark.asyncio
+async def test_translate_http_error_raises_runtime_error(tmp_path: Path) -> None:
+    audio_file = tmp_path / "clip.mp3"
+    audio_file.write_bytes(b"x")
+    mock_client = _mock_client(_mock_http_response(status=500))
+    with patch("handlers.openai_audio.httpx.AsyncClient", return_value=mock_client):
+        with pytest.raises(RuntimeError, match="OpenAI Translate error 500"):
+            await handle_openai_translate(
+                _node("openai-translate"),
+                {"audio": PortValueDict(type="Audio", value=str(audio_file))},
+                _API_KEYS,
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -454,6 +544,24 @@ async def test_tts_http_error_raises_runtime_error() -> None:
                 {"text": PortValueDict(type="Text", value="hi")},
                 _API_KEYS,
             )
+
+
+@pytest.mark.asyncio
+async def test_tts_unknown_format_falls_back_to_mp3(tmp_path: Path) -> None:
+    """An unrecognised response_format (e.g. 'ogg') must fall back to .mp3 extension."""
+    mock_client = _mock_client(_mock_http_response(content=b"audio-bytes"))
+
+    with patch("handlers.openai_audio.httpx.AsyncClient", return_value=mock_client), \
+         patch("handlers.openai_audio.get_run_dir", return_value=tmp_path):
+        result = await handle_openai_tts(
+            _node("openai-tts", {"model": "tts-1", "voice": "alloy", "response_format": "ogg"}),
+            {"text": PortValueDict(type="Text", value="test")},
+            _API_KEYS,
+        )
+
+    assert result["audio"]["value"].endswith(".mp3"), (
+        f"Expected .mp3 fallback for unknown format 'ogg', got: {result['audio']['value']}"
+    )
 
 
 @pytest.mark.asyncio

@@ -50,9 +50,10 @@ async def handle_openai_stt(
     if prompt:
         data["prompt"] = str(prompt)
 
-    # temperature is respected by whisper-1; gpt-4o-* models silently ignore it
+    # temperature is respected by whisper-1; gpt-4o-* models silently ignore it.
+    # Skip forwarding the registry default (0) — only forward explicit non-zero values.
     temperature = node.params.get("temperature")
-    if temperature is not None and temperature != "":
+    if temperature is not None and temperature != "" and float(temperature) != 0:
         data["temperature"] = str(float(temperature))
 
     async with httpx.AsyncClient(timeout=120.0) as client:
@@ -104,8 +105,9 @@ async def handle_openai_translate(
     if prompt:
         data["prompt"] = str(prompt)
 
+    # Skip forwarding the registry default (0) — only forward explicit non-zero values.
     temperature = node.params.get("temperature")
-    if temperature is not None and temperature != "":
+    if temperature is not None and temperature != "" and float(temperature) != 0:
         data["temperature"] = str(float(temperature))
 
     async with httpx.AsyncClient(timeout=120.0) as client:
