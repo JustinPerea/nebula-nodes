@@ -8,7 +8,14 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from handlers.google_gemini import handle_gemini_chat, handle_imagen4
+from handlers.google_gemini import (
+    handle_gemini_chat,
+    handle_imagen4,
+    handle_nano_banana,
+    handle_lyria3,
+    handle_gemini_tts,
+    handle_gemini_embeddings,
+)
 from models.graph import GraphNode, PortValueDict
 from models.events import StreamDeltaEvent
 from services.output import OUTPUT_ROOT
@@ -238,3 +245,211 @@ async def test_imagen4_api_error_propagates():
                 {"prompt": PortValueDict(type="Text", value="test")},
                 {"GOOGLE_API_KEY": "bad-key"},
             )
+
+
+# --- Nano Banana tests (imageConfig → responseFormat.image fix) ---
+
+def _make_nano_node(params=None):
+    return GraphNode(
+        id="test-nano-1",
+        definitionId="nano-banana",
+        params=params or {"model": "gemini-3.1-flash-image-preview"},
+    )
+
+
+@pytest.mark.asyncio
+async def test_nano_banana_aspect_ratio_uses_response_format():
+    """Verifies aspect_ratio is sent as generationConfig.responseFormat.image.aspectRatio,
+    NOT the old generationConfig.imageConfig path (2026-05-17 fix)."""
+    nano_resp = {
+        "candidates": [{
+            "content": {
+                "parts": [{"inlineData": {"mimeType": "image/png", "data": RED_PIXEL_B64}}]
+            }
+        }]
+    }
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = nano_resp
+
+    with patch("handlers.google_gemini.httpx.AsyncClient") as MockClient:
+        mock_client_instance = AsyncMock()
+        mock_client_instance.post.return_value = mock_resp
+        mock_client_instance.__aenter__ = AsyncMock(return_value=mock_client_instance)
+        mock_client_instance.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client_instance
+
+        result = await handle_nano_banana(
+            _make_nano_node({"model": "gemini-3.1-flash-image-preview", "aspect_ratio": "16:9", "imageSize": "2K"}),
+            {"prompt": PortValueDict(type="Text", value="a sunset")},
+            {"GOOGLE_API_KEY": "test-key"},
+        )
+
+    assert "image" in result
+    body = mock_client_instance.post.call_args.kwargs.get("json") or mock_client_instance.post.call_args[1].get("json")
+    gen_cfg = body.get("generationConfig", {})
+    # Must use responseFormat.image, NOT imageConfig
+    assert "imageConfig" not in gen_cfg, "imageConfig is the old broken path; use responseFormat.image"
+    assert gen_cfg.get("responseFormat", {}).get("image", {}).get("aspectRatio") == "16:9"
+    assert gen_cfg.get("responseFormat", {}).get("image", {}).get("imageSize") == "2K"
+
+
+# --- Lyria 3 tests (responseMimeType → responseFormat.audio fix) ---
+
+def _make_lyria_node(params=None):
+    return GraphNode(
+        id="test-lyria-1",
+        definitionId="lyria-3",
+        params=params or {"model": "lyria-3-clip-preview"},
+    )
+
+
+@pytest.mark.asyncio
+async def test_lyria3_wav_uses_response_format():
+    """Verifies WAV output uses generationConfig.responseFormat.audio.mimeType,
+    NOT the old responseMimeType path (2026-05-17 fix)."""
+    SILENCE_MP3_B64 = base64.b64encode(b"\xff\xfb" + b"\x00" * 26).decode()
+    lyria_resp = {
+        "candidates": [{
+            "content": {
+                "parts": [{"inlineData": {"mimeType": "audio/wav", "data": SILENCE_MP3_B64}}]
+            }
+        }]
+    }
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = lyria_resp
+
+    with patch("handlers.google_gemini.httpx.AsyncClient") as MockClient:
+        mock_client_instance = AsyncMock()
+        mock_client_instance.post.return_value = mock_resp
+        mock_client_instance.__aenter__ = AsyncMock(return_value=mock_client_instance)
+        mock_client_instance.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client_instance
+
+        result = await handle_lyria3(
+            _make_lyria_node({"model": "lyria-3-pro-preview", "outputFormat": "wav"}),
+            {"prompt": PortValueDict(type="Text", value="upbeat jazz")},
+            {"GOOGLE_API_KEY": "test-key"},
+        )
+
+    assert "audio" in result
+    body = mock_client_instance.post.call_args.kwargs.get("json") or mock_client_instance.post.call_args[1].get("json")
+    gen_cfg = body.get("generationConfig", {})
+    # Must use responseFormat.audio, NOT responseMimeType
+    assert "responseMimeType" not in gen_cfg, "responseMimeType is the old broken path; use responseFormat.audio"
+    assert gen_cfg.get("responseFormat", {}).get("audio", {}).get("mimeType") == "audio/wav"
+
+
+# --- Gemini TTS tests ---
+
+def _make_tts_node(params=None):
+    return GraphNode(
+        id="test-tts-1",
+        definitionId="gemini-tts",
+        params=params or {"model": "gemini-2.5-flash-preview-tts", "voiceName": "Kore"},
+    )
+
+
+@pytest.mark.asyncio
+async def test_gemini_tts_returns_audio_file():
+    """Verifies TTS returns a .wav file path at audio port."""
+    import wave, io, struct
+    # Build a minimal valid PCM payload (1 sample = 2 bytes)
+    pcm_bytes = struct.pack("<h", 0)
+    pcm_b64 = base64.b64encode(pcm_bytes).decode()
+
+    tts_resp = {
+        "candidates": [{
+            "content": {
+                "parts": [{"inlineData": {"mimeType": "audio/pcm", "data": pcm_b64}}]
+            }
+        }]
+    }
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = tts_resp
+
+    with patch("handlers.google_gemini.httpx.AsyncClient") as MockClient:
+        mock_client_instance = AsyncMock()
+        mock_client_instance.post.return_value = mock_resp
+        mock_client_instance.__aenter__ = AsyncMock(return_value=mock_client_instance)
+        mock_client_instance.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client_instance
+
+        result = await handle_gemini_tts(
+            _make_tts_node(),
+            {"text": PortValueDict(type="Text", value="Hello world")},
+            {"GOOGLE_API_KEY": "test-key"},
+        )
+
+    assert "audio" in result
+    assert result["audio"]["type"] == "Audio"
+    assert Path(result["audio"]["value"]).suffix == ".wav"
+
+    body = mock_client_instance.post.call_args.kwargs.get("json") or mock_client_instance.post.call_args[1].get("json")
+    gen_cfg = body.get("generationConfig", {})
+    assert gen_cfg.get("responseModalities") == ["AUDIO"]
+    assert gen_cfg["speechConfig"]["voiceConfig"]["prebuiltVoiceConfig"]["voiceName"] == "Kore"
+
+
+# --- Gemini Embeddings tests (outputDimensionality camelCase fix) ---
+
+def _make_embeddings_node(params=None):
+    return GraphNode(
+        id="test-emb-1",
+        definitionId="gemini-embeddings",
+        params=params or {"model": "gemini-embedding-001", "taskType": "SEMANTIC_SIMILARITY"},
+    )
+
+
+@pytest.mark.asyncio
+async def test_gemini_embeddings_returns_vector():
+    """Verifies embeddings returns JSON-serialised vector at embedding port."""
+    emb_resp = {"embedding": {"values": [0.1, 0.2, 0.3]}}
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = emb_resp
+
+    with patch("handlers.google_gemini.httpx.AsyncClient") as MockClient:
+        mock_client_instance = AsyncMock()
+        mock_client_instance.post.return_value = mock_resp
+        mock_client_instance.__aenter__ = AsyncMock(return_value=mock_client_instance)
+        mock_client_instance.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client_instance
+
+        result = await handle_gemini_embeddings(
+            _make_embeddings_node(),
+            {"text": PortValueDict(type="Text", value="hello")},
+            {"GOOGLE_API_KEY": "test-key"},
+        )
+
+    assert result["embedding"]["type"] == "Text"
+    assert json.loads(result["embedding"]["value"]) == [0.1, 0.2, 0.3]
+    assert result["dimensions"]["value"] == "3"
+
+
+@pytest.mark.asyncio
+async def test_gemini_embeddings_output_dimensionality_camelcase():
+    """Verifies outputDimensionality is sent as camelCase, not output_dimensionality (2026-05-17 fix)."""
+    emb_resp = {"embedding": {"values": [0.1, 0.2]}}
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = emb_resp
+
+    with patch("handlers.google_gemini.httpx.AsyncClient") as MockClient:
+        mock_client_instance = AsyncMock()
+        mock_client_instance.post.return_value = mock_resp
+        mock_client_instance.__aenter__ = AsyncMock(return_value=mock_client_instance)
+        mock_client_instance.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client_instance
+
+        await handle_gemini_embeddings(
+            _make_embeddings_node({"model": "gemini-embedding-001", "outputDimensionality": "768"}),
+            {"text": PortValueDict(type="Text", value="hello")},
+            {"GOOGLE_API_KEY": "test-key"},
+        )
+
+    body = mock_client_instance.post.call_args.kwargs.get("json") or mock_client_instance.post.call_args[1].get("json")
+    assert "output_dimensionality" not in body, "snake_case key is wrong; API requires camelCase outputDimensionality"
+    assert body.get("outputDimensionality") == 768

@@ -366,7 +366,7 @@ Generated: 2026-05-17 | Nodes: 100 | Source: [`backend/data/node_definitions.jso
 | **Execution** | sync |
 | **Inputs** | Prompt (Text)* |
 | **Outputs** | Image (Image) |
-| **Audited** | — |
+| **Audited** | 2026-05-17 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -433,7 +433,7 @@ Generated: 2026-05-17 | Nodes: 100 | Source: [`backend/data/node_definitions.jso
 | **Execution** | sync |
 | **Inputs** | Prompt (Text)*, Images (Image ×n) |
 | **Outputs** | Image (Image), Text (Text) |
-| **Audited** | 2026-05-10 |
+| **Audited** | 2026-05-17 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -1244,7 +1244,7 @@ Generated: 2026-05-17 | Nodes: 100 | Source: [`backend/data/node_definitions.jso
 | **Execution** | stream |
 | **Inputs** | Messages (Text)*, Images (Image ×n) |
 | **Outputs** | Text (Text) |
-| **Audited** | 2026-05-10 |
+| **Audited** | 2026-05-17 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -1411,11 +1411,11 @@ Generated: 2026-05-17 | Nodes: 100 | Source: [`backend/data/node_definitions.jso
 | **Execution** | sync |
 | **Inputs** | Text (Text)* |
 | **Outputs** | Audio (Audio) |
-| **Audited** | 2026-05-10 |
+| **Audited** | 2026-05-17 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Model | enum | gemini-2.5-flash-preview-tts | 2.5 Flash TTS, 2.5 Pro TTS |
+| Model | enum | gemini-2.5-flash-preview-tts | 3.1 Flash TTS, 2.5 Flash TTS, 2.5 Pro TTS |
 | Voice | enum | Kore | Zephyr — Bright, Puck — Upbeat, Charon — Informative, Kore — Firm, Fenrir — Excitable, Leda — Youthful, Orus — Firm, Aoede — Breezy, … |
 
 ---
@@ -1431,7 +1431,7 @@ Generated: 2026-05-17 | Nodes: 100 | Source: [`backend/data/node_definitions.jso
 | **Execution** | sync |
 | **Inputs** | Prompt (Text)*, Images (Image ×n) |
 | **Outputs** | Audio (Audio), Lyrics (Text) |
-| **Audited** | — |
+| **Audited** | 2026-05-17 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -2089,7 +2089,7 @@ Generated: 2026-05-17 | Nodes: 100 | Source: [`backend/data/node_definitions.jso
 | **Execution** | sync |
 | **Inputs** | Text (Text)* |
 | **Outputs** | Embedding (Text), Dimensions (Text) |
-| **Audited** | 2026-05-10 |
+| **Audited** | 2026-05-17 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|

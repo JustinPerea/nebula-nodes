@@ -175,7 +175,7 @@ async def handle_nano_banana(
             image_config["aspectRatio"] = aspect
         if image_size:
             image_config["imageSize"] = image_size
-        body["generationConfig"]["imageConfig"] = image_config
+        body["generationConfig"]["responseFormat"] = {"image": image_config}
 
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 
@@ -327,10 +327,10 @@ async def handle_lyria3(
         "responseModalities": ["AUDIO", "TEXT"],
     }
 
-    # WAV output for Pro model
+    # WAV output for Pro model (canonical field: generationConfig.responseFormat.audio.mimeType)
     output_format = node.params.get("outputFormat")
     if output_format == "wav" and "pro" in model:
-        generation_config["responseMimeType"] = "audio/wav"
+        generation_config["responseFormat"] = {"audio": {"mimeType": "audio/wav"}}
 
     body: dict[str, Any] = {
         "contents": [{"parts": parts}],
@@ -477,7 +477,7 @@ async def handle_gemini_embeddings(
 
     output_dim = node.params.get("outputDimensionality")
     if output_dim:
-        body["output_dimensionality"] = int(output_dim)
+        body["outputDimensionality"] = int(output_dim)
 
     url = f"{GEMINI_BASE_URL}/{model}:embedContent"
 

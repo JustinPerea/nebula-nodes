@@ -3599,6 +3599,10 @@
         "default": "gemini-2.5-flash-preview-tts",
         "options": [
           {
+            "label": "3.1 Flash TTS",
+            "value": "gemini-3.1-flash-tts-preview"
+          },
+          {
             "label": "2.5 Flash TTS",
             "value": "gemini-2.5-flash-preview-tts"
           },
@@ -3783,7 +3787,7 @@
           },
           {
             "label": "Embedding 2 (multimodal)",
-            "value": "gemini-embedding-2-preview"
+            "value": "gemini-embedding-2"
           }
         ]
       },
