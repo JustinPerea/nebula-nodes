@@ -3700,7 +3700,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     displayName: 'MiniMax T2V',
     category: 'video-gen',
     apiProvider: 'minimax',
-    apiEndpoint: 'https://api.minimaxi.chat/v1/video_generation',
+    apiEndpoint: 'https://api.minimaxi.com/v1/video_generation',
     envKeyName: 'MINIMAX_API_KEY',
     executionPattern: 'async-poll',
     inputPorts: [
@@ -3729,7 +3729,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         default: 6,
         options: [
           { label: '6 seconds', value: 6 },
-          { label: '9 seconds', value: 9 },
+          { label: '10 seconds', value: 10 },
         ],
       },
       {
@@ -3737,9 +3737,9 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         label: 'Resolution',
         type: 'enum',
         required: false,
-        default: '1080P',
+        default: '768P',
         options: [
-          { label: '720P', value: '720P' },
+          { label: '768P', value: '768P' },
           { label: '1080P', value: '1080P' },
         ],
       },
@@ -3751,12 +3751,11 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     displayName: 'MiniMax I2V',
     category: 'video-gen',
     apiProvider: 'minimax',
-    apiEndpoint: 'https://api.minimaxi.chat/v1/video_generation',
+    apiEndpoint: 'https://api.minimaxi.com/v1/video_generation',
     envKeyName: 'MINIMAX_API_KEY',
     executionPattern: 'async-poll',
     inputPorts: [
-      { id: 'image', label: 'First Frame', dataType: 'Image', required: true },
-      { id: 'last_frame', label: 'Last Frame', dataType: 'Image', required: false },
+      { id: 'first_frame_image', label: 'First Frame', dataType: 'Image', required: true },
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: false },
     ],
     outputPorts: [
@@ -3782,7 +3781,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         default: 6,
         options: [
           { label: '6 seconds', value: 6 },
-          { label: '9 seconds', value: 9 },
+          { label: '10 seconds', value: 10 },
         ],
       },
       {
@@ -3790,9 +3789,9 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         label: 'Resolution',
         type: 'enum',
         required: false,
-        default: '1080P',
+        default: '768P',
         options: [
-          { label: '720P', value: '720P' },
+          { label: '768P', value: '768P' },
           { label: '1080P', value: '1080P' },
         ],
       },
@@ -3804,11 +3803,11 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     displayName: 'MiniMax S2V',
     category: 'video-gen',
     apiProvider: 'minimax',
-    apiEndpoint: 'https://api.minimaxi.chat/v1/video_generation',
+    apiEndpoint: 'https://api.minimaxi.com/v1/video_generation',
     envKeyName: 'MINIMAX_API_KEY',
     executionPattern: 'async-poll',
     inputPorts: [
-      { id: 'image', label: 'Character Image', dataType: 'Image', required: true },
+      { id: 'subject_reference', label: 'Character Image', dataType: 'Image', required: true },
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
     ],
     outputPorts: [
@@ -3816,25 +3815,13 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     ],
     params: [
       {
-        key: 'duration',
-        label: 'Duration',
+        key: 'model',
+        label: 'Model',
         type: 'enum',
         required: false,
-        default: 6,
+        default: 'S2V-01',
         options: [
-          { label: '6 seconds', value: 6 },
-          { label: '9 seconds', value: 9 },
-        ],
-      },
-      {
-        key: 'resolution',
-        label: 'Resolution',
-        type: 'enum',
-        required: false,
-        default: '1080P',
-        options: [
-          { label: '720P', value: '720P' },
-          { label: '1080P', value: '1080P' },
+          { label: 'S2V-01', value: 'S2V-01' },
         ],
       },
     ],

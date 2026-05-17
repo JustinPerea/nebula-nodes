@@ -246,7 +246,26 @@ def test_researched_provider_corrections_are_pinned(definitions: dict[str, dict[
     assert ltx_duration_values == {"6", "8", "10"}
 
     for node_id in ("minimax-t2v", "minimax-i2v"):
-        assert _param_by_key(definitions[node_id], "model")["default"] == "MiniMax-Hailuo-2.3"
+        mm = definitions[node_id]
+        assert _param_by_key(mm, "model")["default"] == "MiniMax-Hailuo-2.3"
+        mm_duration_values = {str(o["value"]) for o in _param_by_key(mm, "duration")["options"]}
+        assert mm_duration_values == {"6", "10"}, f"{node_id} duration options should be 6 and 10 (not 9)"
+        mm_resolution_values = {o["value"] for o in _param_by_key(mm, "resolution")["options"]}
+        assert "768P" in mm_resolution_values, f"{node_id} resolution options must include 768P"
+        assert "720P" not in mm_resolution_values, f"{node_id} should not expose legacy 720P option"
+        assert _param_by_key(mm, "resolution")["default"] == "768P"
+
+    mm_s2v = definitions["minimax-s2v"]
+    assert _param_by_key(mm_s2v, "model")["default"] == "S2V-01"
+    s2v_input_ids = {p["id"] for p in mm_s2v["inputPorts"]}
+    assert "subject_reference" in s2v_input_ids, "minimax-s2v must use port id 'subject_reference'"
+    assert "image" not in s2v_input_ids, "minimax-s2v must not use generic 'image' port id"
+
+    mm_i2v = definitions["minimax-i2v"]
+    i2v_input_ids = {p["id"] for p in mm_i2v["inputPorts"]}
+    assert "first_frame_image" in i2v_input_ids, "minimax-i2v must use port id 'first_frame_image'"
+    assert "image" not in i2v_input_ids, "minimax-i2v must not use generic 'image' port id"
+    assert "last_frame" not in i2v_input_ids, "minimax-i2v must not expose last_frame (not in API)"
 
     elevenlabs_tts = definitions["elevenlabs-tts"]
     for key in ("similarity_boost", "style", "use_speaker_boost", "speed", "output_format", "seed"):

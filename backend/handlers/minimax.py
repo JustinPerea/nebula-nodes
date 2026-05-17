@@ -4,7 +4,6 @@ import asyncio
 import sys
 from pathlib import Path
 from typing import Any, Awaitable, Callable
-from uuid import uuid4
 
 import httpx
 
@@ -12,7 +11,7 @@ from models.graph import GraphNode, PortValueDict
 from models.events import ExecutionEvent, ProgressEvent
 from services.output import get_run_dir, image_to_data_uri, save_video_from_url
 
-MINIMAX_API_BASE = "https://api.minimaxi.chat"
+MINIMAX_API_BASE = "https://api.minimaxi.com"
 
 
 def _log(msg: str) -> None:
@@ -47,40 +46,44 @@ async def handle_minimax_video(
     if not api_key:
         raise ValueError("MINIMAX_API_KEY is required")
 
-    # Determine variant from connected inputs
+    # Determine variant from connected inputs.
+    # Port ids in the registry: T2V="prompt", I2V="first_frame_image", S2V="subject_reference".
     prompt_input = inputs.get("prompt")
-    first_frame_input = inputs.get("first_frame_image") or inputs.get("first_frame")
-    last_frame_input = inputs.get("last_frame_image") or inputs.get("last_frame")
-    subject_input = inputs.get("subject_reference") or inputs.get("subject")
+    first_frame_input = inputs.get("first_frame_image")
+    subject_input = inputs.get("subject_reference")
 
     prompt = str(prompt_input.value) if prompt_input and prompt_input.value else ""
 
-    # Build request body based on variant
-    body: dict[str, Any] = {
-        "prompt": prompt,
-        "duration": node.params.get("duration", 6),
-        "resolution": node.params.get("resolution", "1080P"),
-    }
-
-    # S2V — subject reference video
+    # S2V — subject reference video (no duration/resolution params accepted by API)
     if subject_input and subject_input.value:
         _log("variant=S2V")
-        body["model"] = node.params.get("model", "S2V-01")
+        body: dict[str, Any] = {
+            "prompt": prompt,
+            "model": node.params.get("model", "S2V-01"),
+        }
         subject_url = _resolve_image_url(str(subject_input.value))
         body["subject_reference"] = [{"type": "character", "image": [subject_url]}]
 
-    # I2V — image to video (first frame required, last frame optional)
+    # I2V — image to video (first frame required)
     elif first_frame_input and first_frame_input.value:
         _log("variant=I2V")
-        body["model"] = node.params.get("model", "MiniMax-Hailuo-2.3")
-        body["first_frame_image"] = _resolve_image_url(str(first_frame_input.value))
-        if last_frame_input and last_frame_input.value:
-            body["last_frame_image"] = _resolve_image_url(str(last_frame_input.value))
+        body = {
+            "prompt": prompt,
+            "model": node.params.get("model", "MiniMax-Hailuo-2.3"),
+            "first_frame_image": _resolve_image_url(str(first_frame_input.value)),
+            "duration": node.params.get("duration", 6),
+            "resolution": node.params.get("resolution", "768P"),
+        }
 
     # T2V — text to video (default)
     else:
         _log("variant=T2V")
-        body["model"] = node.params.get("model", "MiniMax-Hailuo-2.3")
+        body = {
+            "prompt": prompt,
+            "model": node.params.get("model", "MiniMax-Hailuo-2.3"),
+            "duration": node.params.get("duration", 6),
+            "resolution": node.params.get("resolution", "768P"),
+        }
 
     if not prompt:
         raise ValueError("Prompt input is required")
