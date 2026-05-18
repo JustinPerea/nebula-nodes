@@ -1,3 +1,35 @@
+---
+name: Nebula Nodes
+slug: nebula-nodes
+status: active
+tagline: A local node-based canvas where Daedalus wires creative AI pipelines from plain language
+description: A BYOK visual programming environment for stitching image, video, 3D, audio, and text models together, with a Hermes Agent persona named Daedalus that can operate the canvas through natural language.
+stack:
+  - Python
+  - FastAPI
+  - React
+  - TypeScript
+  - React Flow
+  - Hermes Agent
+  - Kimi K2.6
+  - Nous Portal
+  - OpenRouter
+  - Replicate
+  - fal.ai
+features:
+  - Plain-language pipeline construction through Daedalus
+  - Node-based visual AI canvas
+  - Universal model nodes for multiple providers
+  - BYOK local backend
+  - Canvas context awareness for agent actions
+  - Demo recording and Hermes theme pipeline
+hero: docs/assets/banner.svg
+links:
+  github: https://github.com/JustinPerea/nebula-nodes
+visibility: public
+lastUpdated: 2026-05-12
+---
+
 <div align="center">
   <img src="docs/assets/banner.svg" alt="Nebula Nodes / Daedalus — a node-based canvas for artistic AI, spoken to in plain language" width="900">
 </div>
