@@ -62,15 +62,13 @@ Note: base URL uses `api.dev.runwayml.com` — this is the current production do
 
 ## Findings and Fixes
 
-### runway-image: ratio value `"720:1280"` for label `"768x1360 (9:16)"` — label/value mismatch (FIXED)
+### runway-image: ratio 9:16 portrait — `"720:1280"` is the correct final value (REVERTED)
 
-**Severity:** Medium. The node definition listed:
-```json
-{ "label": "768x1360 (9:16)", "value": "720:1280" }
-```
-The label describes a 768×1360 frame (portrait 9:16 at ~768p) but the API value `"720:1280"` is a different resolution (standard 720p portrait). The SDK's `gen4_image` param schema lists `"768:1360"` (not `"720:1280"`) as a valid ratio option.
+**Severity:** Medium. The initial audit identified a label/value mismatch: the label said `"768x1360 (9:16)"` while the value was `"720:1280"`, and the audit subagent changed the value to `"768:1360"` to match the SDK schema.
 
-**Fix:** Corrected value to `"768:1360"` in `backend/data/node_definitions.json`. The label now matches the actual resolution sent to the API.
+**That change was reverted in commit `c963dd0`.** Live-smoke testing showed the Runway API rejected `"768:1360"` at runtime. The valid option for the 9:16 portrait ratio is `"720:1280"` per the Runway API's actual accepted values.
+
+**Final state:** Registry has `{ "label": "720x1280 (9:16)", "value": "720:1280" }`. The label and value are internally consistent and the value is API-validated. No further change needed.
 
 ### runway-video: dual-endpoint routing not reflected in node's apiEndpoint field (INFO, no fix needed)
 
