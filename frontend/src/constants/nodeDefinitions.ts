@@ -307,7 +307,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         default: '1360:768',
         options: [
           { label: '1360x768 (16:9)', value: '1360:768' },
-          { label: '768x1360 (9:16)', value: '720:1280' },
+          { label: '720x1280 (9:16)', value: '720:1280' },
           { label: '1024x1024 (1:1)', value: '1024:1024' },
           { label: '1080x1080', value: '1080:1080' },
           { label: '1168x880', value: '1168:880' },

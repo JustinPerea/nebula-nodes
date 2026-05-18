@@ -505,7 +505,7 @@ Generated: 2026-05-18 | Nodes: 100 | Source: [`backend/data/node_definitions.jso
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
 | Model | enum | gen4_image | Gen-4 Image, Gen-4 Image Turbo, Gemini 2.5 Flash |
-| Ratio | enum | 1360:768 | 1360x768 (16:9), 768x1360 (9:16), 1024x1024 (1:1), 1080x1080, 1168x880, 1440x1080, 1080x1440, 1920x1080, … |
+| Ratio | enum | 1360:768 | 1360x768 (16:9), 720x1280 (9:16), 1024x1024 (1:1), 1080x1080, 1168x880, 1440x1080, 1080x1440, 1920x1080, … |
 | Seed | int | — | 0–4294967295 |
 
 ---
