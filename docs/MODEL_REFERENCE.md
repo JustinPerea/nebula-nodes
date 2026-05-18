@@ -1001,7 +1001,7 @@ Generated: 2026-05-18 | Nodes: 100 | Source: [`backend/data/node_definitions.jso
 | **API Key** | FAL_KEY |
 | **Endpoint** | `bytedance/seedance-2.0/reference-to-video` |
 | **Execution** | async-poll |
-| **Inputs** | Prompt (Text)*, Reference Images (Image ×n) |
+| **Inputs** | Prompt (Text)*, Reference Images (Image ×n)* |
 | **Outputs** | Video (Video) |
 | **Audited** | 2026-05-17 |
 

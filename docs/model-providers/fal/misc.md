@@ -50,16 +50,23 @@ Covers five miscellaneous FAL wrapper nodes. All route through `handle_fal_unive
 (`fal-ai/sora-2/text-to-video/pro`) when `model == "pro"`, otherwise standard. The `model`
 value is never forwarded to FAL (intentional — FAL's inner model enum differs).
 
-**FAL API `duration` type:** string. Node definition must use string values (`"4"`, `"8"`, etc.)
+**FAL API `duration` type:** integer (`4`, `8`, `12`, `16`, `20`). See the live-smoke
+correction note at the top — the initial audit pass switched these to strings; direct API
+verification reverted them to integers.
 **FAL API `resolution` default:** `"720p"` (not `"1080p"`).
 
 ### Bugs Fixed
 
 | # | Severity | Field | Before | After |
 |---|----------|-------|--------|-------|
-| 1 | Medium | `duration` default | `4` (int) | `"4"` (string) |
-| 2 | Medium | `duration` options | `[4, 8, 12, 16, 20]` (ints) | `["4","8","12","16","20"]` (strings) |
-| 3 | Low | `resolution` default | `"1080p"` | `"720p"` (matches FAL API default) |
+| 1 | Low | `resolution` default | `"1080p"` | `"720p"` (matches FAL API default) |
+
+### Reverted Changes
+
+| Severity | Field | Audit proposed | Final state | Reason |
+|----------|-------|----------------|-------------|--------|
+| Medium | `duration` default | `4` (int) → `"4"` (string) | `4` (int) | FAL accepts integer; live-smoke caught string regression |
+| Medium | `duration` options | `[4, 8, 12, 16, 20]` (ints) → `["4","8","12","16","20"]` (strings) | `[4, 8, 12, 16, 20]` (ints) | Same — reverted per live-smoke verification |
 
 ---
 
@@ -79,20 +86,30 @@ No bugs fixed in this node; no changes made.
 
 ## pixverse-v4-5
 
-**FAL API `duration` type:** string (`"5"`, `"8"`).
+**FAL API `duration` type:** integer (`5`, `8`). See the live-smoke correction note at
+the top — the initial audit pass switched these to strings; direct API verification
+reverted them to integers.
 **`quality` param:** Not present in FAL API spec. FAL exposes `style` instead
 (`anime`, `3d_animation`, `clay`, `comic`, `cyberpunk`).
 **`aspect_ratio`:** Present in FAL API but missing from node definition.
+**`resolution`:** Pre-existing param (`360p`/`540p`/`720p`/`1080p`, default `720p`)
+that matches the FAL API and was correct in the original node definition. Not part of
+the audit drift findings — documented here for completeness.
 
 ### Bugs Fixed
 
 | # | Severity | Field | Before | After |
 |---|----------|-------|--------|-------|
-| 4 | High | `quality` param | Present (`Turbo/Normal/Fast`) — not a FAL field | Removed |
-| 5 | Medium | `duration` default | `5` (int) | `"5"` (string) |
-| 6 | Medium | `duration` options | `[5, 8]` (ints) | `["5","8"]` (strings) |
-| 7 | Low | `aspect_ratio` param | Missing | Added (`16:9`, `4:3`, `1:1`, `3:4`, `9:16`) |
-| 8 | Low | `style` param | Missing | Added (`anime`, `3d_animation`, `clay`, `comic`, `cyberpunk`) |
+| 2 | High | `quality` param | Present (`Turbo/Normal/Fast`) — not a FAL field | Removed |
+| 3 | Low | `aspect_ratio` param | Missing | Added (`16:9`, `4:3`, `1:1`, `3:4`, `9:16`) |
+| 4 | Low | `style` param | Missing | Added (`anime`, `3d_animation`, `clay`, `comic`, `cyberpunk`) |
+
+### Reverted Changes
+
+| Severity | Field | Audit proposed | Final state | Reason |
+|----------|-------|----------------|-------------|--------|
+| Medium | `duration` default | `5` (int) → `"5"` (string) | `5` (int) | FAL accepts integer; live-smoke caught string regression |
+| Medium | `duration` options | `[5, 8]` (ints) → `["5","8"]` (strings) | `[5, 8]` (ints) | Same — reverted per live-smoke verification |
 
 ---
 
@@ -108,7 +125,7 @@ the single-image-dict branch of `_parse_fal_output`.
 
 | # | Severity | Field | Before | After |
 |---|----------|-------|--------|-------|
-| 9 | Low | `crop_to_bbox` param | Missing | Added (boolean, default `false`) |
+| 5 | Low | `crop_to_bbox` param | Missing | Added (boolean, default `false`) |
 
 ---
 
