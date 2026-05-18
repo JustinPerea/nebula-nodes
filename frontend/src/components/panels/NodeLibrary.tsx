@@ -7,7 +7,6 @@ import { useGraphStore } from '../../store/graphStore';
 import { useDelayedUnmount } from '../../hooks/useDelayedUnmount';
 import { getNodesByCategory } from '../../constants/nodeDefinitions';
 import { CATEGORY_COLORS } from '../../constants/ports';
-import { Inspector } from './Inspector';
 import '../../styles/panels.css';
 
 // Initial collapsed state — all categories start collapsed on first render so
@@ -30,7 +29,6 @@ export function NodeLibrary() {
   const visible = useUIStore((s) => s.panels.library.visible);
   const position = useUIStore((s) => s.panels.library.position);
   const search = useUIStore((s) => s.librarySearch);
-  const selectedNodeId = useUIStore((s) => s.selectedNodeId);
   const setSearch = useUIStore((s) => s.setLibrarySearch);
   const togglePanel = useUIStore((s) => s.togglePanel);
   const skin = useUIStore((s) => s.skin);
@@ -199,7 +197,7 @@ export function NodeLibrary() {
         </button>
       </div>
 
-      <div className={`panel__body panel__body--library${selectedNodeId ? ' panel__body--library-with-inspector' : ''}`}>
+      <div className="panel__body panel__body--library">
         <div className="node-library__browser">
           <input
             className="panel__search"
@@ -278,11 +276,6 @@ export function NodeLibrary() {
             );
           })}
         </div>
-        {selectedNodeId && (
-          <div className="node-library__inspector">
-            <Inspector embedded />
-          </div>
-        )}
       </div>
       {skin === 'slava-restraint' && dragPreview && dragPreviewStyle && createPortal(
         <div className="slava-library-drag-preview" style={dragPreviewStyle}>

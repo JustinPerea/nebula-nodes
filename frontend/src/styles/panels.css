@@ -69,32 +69,9 @@ body:not(.app-slava-restraint) .panel__close:hover { color: #ccc; }
 }
 
 .node-library__browser {
+  flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
-}
-
-.panel__body--library:not(.panel__body--library-with-inspector) .node-library__browser {
-  flex: 1 1 auto;
-}
-
-.panel__body--library-with-inspector {
-  overflow: hidden;
-}
-
-.panel__body--library-with-inspector .node-library__browser {
-  flex: 0 1 45%;
-  min-height: 140px;
-}
-
-.node-library__inspector {
-  flex: 1 1 0;
-  min-height: 220px;
-  overflow-y: auto;
-  padding-top: 8px;
-}
-
-body:not(.app-slava-restraint) .node-library__inspector {
-  border-top: 1px solid #2a2a2a;
 }
 
 .inspector--embedded {
@@ -103,6 +80,87 @@ body:not(.app-slava-restraint) .node-library__inspector {
 
 .inspector__body {
   min-height: 0;
+}
+
+.node-inspector-popover {
+  position: fixed;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  max-width: calc(100vw - 32px);
+}
+
+.node-inspector-popover--pinned {
+  resize: both;
+  overflow: hidden;
+  min-width: 240px;
+  min-height: 260px;
+  max-width: min(520px, calc(100vw - 32px));
+  max-height: calc(100vh - 96px);
+}
+
+.node-inspector-popover--pinned .node-inspector-popover__header {
+  cursor: grab;
+}
+
+.node-inspector-popover--pinned .node-inspector-popover__header:active {
+  cursor: grabbing;
+}
+
+body:not(.app-slava-restraint) .node-inspector-popover {
+  z-index: 11;
+  background: #1a1a1a;
+  border: 1px solid #333;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 12px;
+  color: #ccc;
+}
+
+.node-inspector-popover__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex: 0 0 auto;
+  gap: 8px;
+  padding: 7px 10px;
+  user-select: none;
+}
+
+.node-inspector-popover__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+body:not(.app-slava-restraint) .node-inspector-popover__header {
+  border-bottom: 1px solid #2a2a2a;
+}
+
+.node-inspector-popover__pin--active {
+  opacity: 1;
+}
+
+body:not(.app-slava-restraint) .node-inspector-popover__pin--active {
+  color: #ccc;
+  background: #252525;
+}
+
+.node-inspector-popover__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 10px;
+  overscroll-behavior: contain;
+}
+
+.node-inspector-popover .inspector__actions {
+  flex-wrap: wrap;
+}
+
+.node-inspector-popover:not(.node-inspector-popover--pinned) .inspector__section {
+  margin-bottom: 10px;
 }
 
 .panel__search {

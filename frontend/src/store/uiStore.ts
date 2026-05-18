@@ -80,8 +80,11 @@ interface UIState {
   };
   skin: SkinId;
   agentLogEnabled: boolean;
+  inspectorPinned: boolean;
 
   selectNode: (nodeId: string | null) => void;
+  setInspectorVisible: (visible: boolean) => void;
+  setInspectorPinned: (pinned: boolean) => void;
   togglePanel: (panel: 'library' | 'inspector' | 'settings' | 'chat') => void;
   setPanelPosition: (panel: 'library' | 'inspector' | 'settings' | 'chat', position: { x: number; y: number }) => void;
   setLibrarySearch: (search: string) => void;
@@ -121,16 +124,37 @@ export const useUIStore = create<UIState>((set) => ({
   settingsCache: { apiKeys: {}, loaded: false },
   skin: loadSkin(),
   agentLogEnabled: loadAgentLogEnabled(),
+  inspectorPinned: false,
 
   selectNode: (nodeId) =>
     set((state) => ({
       selectedNodeId: nodeId,
+      inspectorPinned: nodeId === null ? false : state.inspectorPinned,
       panels: {
         ...state.panels,
-        library: nodeId !== null
-          ? { ...state.panels.library, visible: true }
-          : state.panels.library,
-        inspector: { ...state.panels.inspector, visible: nodeId !== null },
+        library: state.panels.library,
+        inspector: {
+          ...state.panels.inspector,
+          visible: nodeId !== null && state.inspectorPinned ? state.panels.inspector.visible : false,
+        },
+      },
+    })),
+
+  setInspectorVisible: (visible) =>
+    set((state) => ({
+      inspectorPinned: visible ? state.inspectorPinned : false,
+      panels: {
+        ...state.panels,
+        inspector: { ...state.panels.inspector, visible },
+      },
+    })),
+
+  setInspectorPinned: (pinned) =>
+    set((state) => ({
+      inspectorPinned: pinned,
+      panels: {
+        ...state.panels,
+        inspector: { ...state.panels.inspector, visible: pinned ? true : state.panels.inspector.visible },
       },
     })),
 
@@ -235,6 +259,7 @@ export const useUIStore = create<UIState>((set) => ({
     set({
       selectedNodeId: null,
       chatResized: false,
+      inspectorPinned: false,
       panels: createDefaultPanels(),
       contextMenu: { visible: false, position: { x: 0, y: 0 }, nodeId: null },
       connectionPopup: {

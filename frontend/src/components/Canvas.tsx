@@ -50,7 +50,13 @@ function computeChatAwarePadding(): PixelPadding {
   const intrusion = { top: 0, right: 0, bottom: 0, left: 0 };
   const SAFETY = 24; // breathing room beyond the panel edge
 
-  const PANEL_SELECTORS = ['.chat-panel', '.panel--library', '.panel--inspector', '.panel--settings'];
+  const PANEL_SELECTORS = [
+    '.chat-panel',
+    '.panel--library',
+    '.node-inspector-popover',
+    '.panel--inspector',
+    '.panel--settings',
+  ];
   for (const sel of PANEL_SELECTORS) {
     const el = document.querySelector(sel);
     if (!el) continue;

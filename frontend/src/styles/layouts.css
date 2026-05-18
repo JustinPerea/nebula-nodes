@@ -2,7 +2,7 @@
  *
  * The whole app uses one layout shape:
  *   left rail     → Nodes launcher (panel is open by default)
- *   bottom-left   → Inspector (only renders when a node is selected)
+ *   node flyout   → Inspector (attached to the selected canvas node)
  *   bottom-right  → Chat launcher
  *   bottom-center → Toolbar pill (text labels)
  *
@@ -169,10 +169,10 @@ body.agent-log-enabled .chat-panel {
   display: none;
 }
 
-/* =============== Left column: Nodes top, Inspector bottom ===============
- * Equal heights from a 50/50 split of the available vertical space:
- *   available = 100vh - top - toolbar-pad - inter-panel-gap
- *   per panel = available / 2 */
+/* =============== Left column: Nodes + attached Inspector flyout ===============
+ * Nodes own the left rail. The inspector is rendered as a fixed popover
+ * anchored to the selected canvas node's ellipsis control, not as a second
+ * left-column panel. */
 
 /* Width / height drop !important here so the browser's CSS-resize gesture
  * (it writes inline width/height on drag) actually takes effect. The
@@ -191,22 +191,10 @@ body.agent-log-enabled .chat-panel {
   max-height: calc(100vh - var(--page-gutter) - 42px - var(--space-2) - var(--toolbar-pad) - var(--space-4));
 }
 
-.panel--inspector {
-  position: fixed !important;
-  bottom: var(--toolbar-pad) !important;
-  left: var(--page-gutter) !important;
-  right: auto !important;
-  top: auto !important;
-  width: var(--col-left-w);
-  height: calc((100vh - var(--page-gutter) - 42px - var(--space-2) - var(--toolbar-pad) - var(--space-4)) / 2);
-  max-height: none;
-}
-
 /* Native CSS resize on the side panels and agent log so each can be
  * dragged at the bottom-right corner. The chat panel has its own custom
  * resize handles already, so we don't double up there. */
 .panel--library,
-.panel--inspector,
 .agent-log {
   resize: both;
   overflow: auto;

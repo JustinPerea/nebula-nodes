@@ -46,6 +46,9 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
   const nodeData = data as unknown as NodeData;
   const definition = NODE_DEFINITIONS[nodeData.definitionId];
   const selectNode = useUIStore((s) => s.selectNode);
+  const selectedNodeId = useUIStore((s) => s.selectedNodeId);
+  const inspectorVisible = useUIStore((s) => s.panels.inspector.visible);
+  const setInspectorVisible = useUIStore((s) => s.setInspectorVisible);
   const isSlavaSkin = useUIStore((s) => s.skin === 'slava-restraint');
   const updateNodeData = useGraphStore((s) => s.updateNodeData);
   const entranceClass = useSlavaNodeEntranceClass();
@@ -124,6 +127,16 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
     window.dispatchEvent(new CustomEvent('nebula:chat-send', { detail: { message, sourceNodeId: id } }));
   }, [id, nodeData.params]);
 
+  const handleInspectorButtonClick = useCallback(
+    (e: React.MouseEvent<HTMLButtonElement>) => {
+      e.stopPropagation();
+      const shouldOpen = selectedNodeId !== id || !inspectorVisible;
+      selectNode(id);
+      setInspectorVisible(shouldOpen);
+    },
+    [id, inspectorVisible, selectNode, selectedNodeId, setInspectorVisible],
+  );
+
   if (!definition) return <div className="model-node model-node--error">Unknown node type</div>;
 
   const categoryColor = CATEGORY_COLORS[definition.category] ?? '#424242';
@@ -160,10 +173,11 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
     : null;
   const inlineTextValue = inlineTextParamKey ? String(nodeData.params[inlineTextParamKey] ?? '') : '';
   const inlineTextPlaceholder = inlineTextParam?.placeholder ?? 'Enter text...';
+  const isNodeSelected = selected || selectedNodeId === id;
 
   return (
     <div
-      className={`model-node ${stateClass}${isImageSurface ? ' model-node--image-surface' : ''}${isTextSurface ? ' model-node--text-surface' : ''}${isInlineTextNode ? ' model-node--inline-text' : ''}${isTextInput ? ' model-node--text-input' : ''}${isImageInput ? ' model-node--image-input' : ''}${isStickyNote ? ' model-node--sticky-note' : ''} ${selected ? 'model-node--selected' : ''}${entranceClass}`}
+      className={`model-node ${stateClass}${isImageSurface ? ' model-node--image-surface' : ''}${isTextSurface ? ' model-node--text-surface' : ''}${isInlineTextNode ? ' model-node--inline-text' : ''}${isTextInput ? ' model-node--text-input' : ''}${isImageInput ? ' model-node--image-input' : ''}${isStickyNote ? ' model-node--sticky-note' : ''} ${isNodeSelected ? 'model-node--selected' : ''}${entranceClass}`}
       onClick={() => selectNode(id)}
       style={{ ['--node-category-color' as string]: categoryColor }}
     >
@@ -173,16 +187,16 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
 
       {/* Settings bar — floats above the card when selected; renders model
        * name + an "Edit" affordance that opens the node panel settings. */}
-      {selected && (
+      {isNodeSelected && (
         <div className="model-node__settings-bar">
           <span className="model-node__settings-model">{definition.displayName}</span>
           <button
             type="button"
             className="model-node__settings-edit nodrag"
-            onClick={(e) => {
-              e.stopPropagation();
-              selectNode(id);
-            }}
+            data-node-inspector-anchor={id}
+            aria-haspopup="dialog"
+            aria-expanded={inspectorVisible && selectedNodeId === id}
+            onClick={handleInspectorButtonClick}
             onMouseDown={(e) => e.stopPropagation()}
             title="Show node settings"
           >

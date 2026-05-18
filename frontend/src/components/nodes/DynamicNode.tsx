@@ -1,4 +1,4 @@
-import { memo, useState } from 'react';
+import { memo, useCallback, useState } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { Repeat2 } from 'lucide-react';
 import type { NodeData, DynamicNodeData, PortDataType } from '../../types';
@@ -17,6 +17,9 @@ function isDynamicData(data: NodeData): data is DynamicNodeData {
 function DynamicNodeComponent({ id, data, selected }: NodeProps) {
   const nodeData = data as unknown as NodeData;
   const selectNode = useUIStore((s) => s.selectNode);
+  const selectedNodeId = useUIStore((s) => s.selectedNodeId);
+  const inspectorVisible = useUIStore((s) => s.panels.inspector.visible);
+  const setInspectorVisible = useUIStore((s) => s.setInspectorVisible);
   const entranceClass = useSlavaNodeEntranceClass();
   const [videoLoop, setVideoLoop] = useState<boolean>(true);
 
@@ -47,10 +50,21 @@ function DynamicNodeComponent({ id, data, selected }: NodeProps) {
 
   // Model badge: show selected model compactly
   const modelBadge = dynData?.modelId || (nodeData.params.model as string) || (nodeData.params.model_id as string) || (nodeData.params.endpoint_id as string) || null;
+  const isNodeSelected = selected || selectedNodeId === id;
+
+  const handleInspectorButtonClick = useCallback(
+    (e: React.MouseEvent<HTMLButtonElement>) => {
+      e.stopPropagation();
+      const shouldOpen = selectedNodeId !== id || !inspectorVisible;
+      selectNode(id);
+      setInspectorVisible(shouldOpen);
+    },
+    [id, inspectorVisible, selectNode, selectedNodeId, setInspectorVisible],
+  );
 
   return (
     <div
-      className={`model-node ${stateClass}${isImageSurface ? ' model-node--image-surface' : ''}${isTextSurface ? ' model-node--text-surface' : ''} ${selected ? 'model-node--selected' : ''}${entranceClass}`}
+      className={`model-node ${stateClass}${isImageSurface ? ' model-node--image-surface' : ''}${isTextSurface ? ' model-node--text-surface' : ''} ${isNodeSelected ? 'model-node--selected' : ''}${entranceClass}`}
       onClick={() => selectNode(id)}
       style={{ ['--node-category-color' as string]: categoryColor }}
     >
@@ -58,7 +72,7 @@ function DynamicNodeComponent({ id, data, selected }: NodeProps) {
       <div className="model-node__type-label">{definition?.category ?? 'universal'}</div>
 
       {/* Settings bar — floats above the card when selected. */}
-      {selected && (
+      {isNodeSelected && (
         <div className="model-node__settings-bar">
           <span className="model-node__settings-model">
             {definition?.displayName ?? nodeData.label}
@@ -66,10 +80,10 @@ function DynamicNodeComponent({ id, data, selected }: NodeProps) {
           <button
             type="button"
             className="model-node__settings-edit nodrag"
-            onClick={(e) => {
-              e.stopPropagation();
-              selectNode(id);
-            }}
+            data-node-inspector-anchor={id}
+            aria-haspopup="dialog"
+            aria-expanded={inspectorVisible && selectedNodeId === id}
+            onClick={handleInspectorButtonClick}
             onMouseDown={(e) => e.stopPropagation()}
             title="Show node settings"
           >

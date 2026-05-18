@@ -292,6 +292,7 @@ body.app-slava-restraint {
 
 body.app-slava-restraint .toolbar__icon,
 body.app-slava-restraint .panel__close-icon,
+body.app-slava-restraint .node-inspector-popover__pin-icon,
 body.app-slava-restraint .agent-log__icon,
 body.app-slava-restraint .connection-popup__close-icon,
 body.app-slava-restraint .model-node__download-icon,
@@ -544,11 +545,40 @@ body.app-slava-restraint .node-library__browser {
   scrollbar-color: var(--sr-node-scrollbar-color) transparent;
 }
 
-body.app-slava-restraint .node-library__inspector {
-  margin-top: var(--sr-space-3);
-  padding-top: var(--sr-space-3);
-  border-top: 1px solid var(--sr-edge);
+body.app-slava-restraint .node-inspector-popover {
+  z-index: calc(var(--sr-layer-panel) + 2);
+  background: var(--sr-glass);
+  backdrop-filter: var(--sr-blur-panel);
+  -webkit-backdrop-filter: var(--sr-blur-panel);
+  border: 1px solid var(--sr-edge);
+  border-radius: var(--sr-radius-panel);
+  color: var(--sr-ink);
+  box-shadow: var(--sr-shadow-panel);
+  font-family: var(--sr-ui);
+  animation: slava-panel-enter var(--sr-motion-panel) backwards;
+  transform-origin: left top;
+}
+
+body.app-slava-restraint .node-inspector-popover--pinned {
+  border-color: var(--sr-accent-border-muted);
+  transform-origin: left bottom;
+}
+
+body.app-slava-restraint .node-inspector-popover__header {
+  padding: var(--sr-space-3);
+  border-bottom: 1px solid var(--sr-edge);
+}
+
+body.app-slava-restraint .node-inspector-popover__body {
+  padding: var(--sr-space-3);
   scrollbar-color: var(--sr-node-scrollbar-color) transparent;
+}
+
+body.app-slava-restraint .node-inspector-popover__pin--active {
+  border-color: var(--sr-accent-border);
+  background: var(--sr-accent-soft);
+  color: var(--sr-ink-bold);
+  opacity: 1;
 }
 
 body.app-slava-restraint .inspector--embedded .inspector__body {
