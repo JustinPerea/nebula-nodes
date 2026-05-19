@@ -43,6 +43,7 @@ export type APIProvider =
   | 'bfl'
   | 'higgsfield'
   | 'meshy'
+  | 'quiver'
   | 'nous'
   | 'utility';
 
