@@ -8,6 +8,7 @@ export type ExecutionEvent =
   | { type: 'graphComplete'; duration: number; nodesExecuted: number }
   | { type: 'streamDelta'; nodeId: string; delta: string; accumulated: string }
   | { type: 'streamPartialImage'; nodeId: string; partialIndex: number; src: string; isFinal: boolean }
+  | { type: 'streamPartialSvg'; nodeId: string; partialIndex: number; svg: string; isFinal: boolean }
   | { type: 'graphSync'; nodes: unknown[]; edges: unknown[]; empty: boolean };
 
 type EventHandler = (event: ExecutionEvent) => void;

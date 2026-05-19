@@ -120,6 +120,11 @@ export interface NodeData {
   keyStatus?: 'ok' | 'missing';
   streamingText?: string;
   streamingPartials?: { index: number; src: string }[];
+  /** Latest partial SVG markup during a Quiver Arrow stream. Replaced
+   *  by the final SVG once the `content` event lands. Stored as raw
+   *  markup; ModelNode renders inline via a data URI so no disk write
+   *  is needed for the progressive preview. */
+  streamingSvg?: { index: number; svg: string; isFinal: boolean };
 }
 
 export interface DynamicPortDefinition {

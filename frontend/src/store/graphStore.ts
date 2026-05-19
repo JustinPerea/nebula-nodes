@@ -1168,7 +1168,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         });
         break;
       case 'executing':
-        get().updateNodeData(event.nodeId, { state: 'executing', progress: 0, streamingText: undefined, streamingPartials: undefined });
+        get().updateNodeData(event.nodeId, { state: 'executing', progress: 0, streamingText: undefined, streamingPartials: undefined, streamingSvg: undefined });
         break;
       case 'progress':
         get().updateNodeData(event.nodeId, { progress: event.value });
@@ -1194,7 +1194,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
             outputs[key] = outputVal;
           }
         }
-        get().updateNodeData(event.nodeId, { state: 'complete', outputs: outputs as NodeData['outputs'], progress: undefined, streamingText: undefined, streamingPartials: undefined });
+        get().updateNodeData(event.nodeId, { state: 'complete', outputs: outputs as NodeData['outputs'], progress: undefined, streamingText: undefined, streamingPartials: undefined, streamingSvg: undefined });
         break;
       }
       case 'streamDelta':
@@ -1205,6 +1205,15 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         const filtered = existing.filter((p) => p.index !== event.partialIndex);
         const next = [...filtered, { index: event.partialIndex, src: event.src }].sort((a, b) => a.index - b.index);
         get().updateNodeData(event.nodeId, { streamingPartials: next });
+        break;
+      }
+      case 'streamPartialSvg': {
+        // Quiver Arrow streams: keep only the latest draft so ModelNode renders
+        // a single progressive preview rather than accumulating every draft.
+        // The `executed` event later overwrites with the final outputs.svg.value.
+        get().updateNodeData(event.nodeId, {
+          streamingSvg: { index: event.partialIndex, svg: event.svg, isFinal: event.isFinal },
+        });
         break;
       }
       case 'error':

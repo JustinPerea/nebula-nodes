@@ -146,6 +146,7 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
   const videoOutput = Object.values(nodeData.outputs).find((o) => o.type === 'Video' && o.value);
   const meshOutput = Object.values(nodeData.outputs).find((o) => o.type === 'Mesh' && o.value);
   const audioOutput = Object.values(nodeData.outputs).find((o) => o.type === 'Audio' && o.value);
+  const svgOutput = Object.values(nodeData.outputs).find((o) => o.type === 'SVG' && o.value);
 
   const displayText = nodeData.streamingText ?? (textOutput && typeof textOutput.value === 'string' ? textOutput.value : null);
   const previewText = displayText ? displayText.replace(/\\n/g, '\n') : null;
@@ -156,18 +157,29 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
   const finalImageOutput = nodeData.state === 'complete' && imageOutput && typeof imageOutput.value === 'string'
     ? imageOutput.value
     : null;
-  const isImageSurface = Boolean(imageInputPreview || finalImageOutput);
+  // Quiver Arrow progressive preview: stream.draft fires StreamPartialSvgEvent
+  // with raw SVG markup; we render it as an inline-SVG data URI while executing,
+  // then the final outputs.svg.value (served via /api/outputs/...) takes over.
+  const streamingSvgPreview = nodeData.streamingSvg && nodeData.state === 'executing'
+    ? `data:image/svg+xml;utf8,${encodeURIComponent(nodeData.streamingSvg.svg)}`
+    : null;
+  const finalSvgOutput = nodeData.state === 'complete' && svgOutput && typeof svgOutput.value === 'string'
+    ? svgOutput.value
+    : null;
+  const isImageSurface = Boolean(imageInputPreview || finalImageOutput || streamingSvgPreview || finalSvgOutput);
   const imageClassName = isSlavaSkin ? 'model-node__preview-image' : 'model-node__preview-image nodrag';
   const downloadableOutput =
     finalImageOutput
       ? { url: finalImageOutput, fallbackExt: 'png', title: 'Download image' }
-      : nodeData.state === 'complete' && videoOutput && typeof videoOutput.value === 'string'
-        ? { url: videoOutput.value, fallbackExt: 'mp4', title: 'Download video' }
-        : nodeData.state === 'complete' && meshOutput && typeof meshOutput.value === 'string'
-          ? { url: meshOutput.value, fallbackExt: 'glb', title: 'Download mesh' }
-          : nodeData.state === 'complete' && audioOutput && typeof audioOutput.value === 'string'
-            ? { url: audioOutput.value, fallbackExt: 'mp3', title: 'Download audio' }
-            : null;
+      : finalSvgOutput
+        ? { url: finalSvgOutput, fallbackExt: 'svg', title: 'Download SVG' }
+        : nodeData.state === 'complete' && videoOutput && typeof videoOutput.value === 'string'
+          ? { url: videoOutput.value, fallbackExt: 'mp4', title: 'Download video' }
+          : nodeData.state === 'complete' && meshOutput && typeof meshOutput.value === 'string'
+            ? { url: meshOutput.value, fallbackExt: 'glb', title: 'Download mesh' }
+            : nodeData.state === 'complete' && audioOutput && typeof audioOutput.value === 'string'
+              ? { url: audioOutput.value, fallbackExt: 'mp3', title: 'Download audio' }
+              : null;
   const inlineTextParam = inlineTextParamKey
     ? definition.params.find((param) => param.key === inlineTextParamKey)
     : null;
@@ -377,6 +389,49 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
         </div>
       )}
 
+      {streamingSvgPreview && (
+        <div className="model-node__preview">
+          <img
+            src={streamingSvgPreview}
+            alt="Streaming SVG preview"
+            className={`${imageClassName} model-node__preview-image--streaming`}
+            loading="lazy"
+            draggable={false}
+          />
+        </div>
+      )}
+
+      {finalSvgOutput && !streamingSvgPreview && (
+        <div className="model-node__preview">
+          <img
+            src={finalSvgOutput}
+            alt="Generated SVG"
+            className={imageClassName}
+            loading="lazy"
+            draggable={!isSlavaSkin}
+            onDragStart={isSlavaSkin ? undefined : startImageDrag(finalSvgOutput)}
+          />
+          <button
+            type="button"
+            className="model-node__download nodrag"
+            title="Download SVG"
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              downloadOutput(finalSvgOutput, filenameFor(nodeData.label, id, finalSvgOutput, 'svg'));
+            }}
+          >
+            <Download
+              className="model-node__download-icon"
+              size={14}
+              strokeWidth={1.75}
+              aria-hidden="true"
+              focusable="false"
+            />
+          </button>
+        </div>
+      )}
+
       {previewText && !isInlineTextNode && (
         <div className="model-node__preview">
           <div className={`model-node__preview-text ${isStreaming ? 'model-node__preview-text--streaming' : ''}`}>
@@ -488,7 +543,7 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
         </div>
       )}
 
-      {nodeData.state === 'complete' && !imageOutput && !textOutput && !videoOutput && !meshOutput && !audioOutput && Object.keys(nodeData.outputs).length > 0 && (
+      {nodeData.state === 'complete' && !imageOutput && !textOutput && !videoOutput && !meshOutput && !audioOutput && !svgOutput && Object.keys(nodeData.outputs).length > 0 && (
         <div className="model-node__preview">
           <div className="model-node__preview-placeholder">Output ready</div>
         </div>

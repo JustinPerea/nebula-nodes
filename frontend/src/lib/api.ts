@@ -76,6 +76,30 @@ export async function fetchNousModels(): Promise<{ models: NousModel[]; count: n
   return response.json();
 }
 
+export interface QuiverModel {
+  id: string;
+  name: string;
+  description?: string | null;
+  input_modalities: string[];
+  output_modalities: string[];
+  supported_operations: string[];
+  pricing_credits: Record<string, number>;
+}
+
+export async function fetchQuiverModels(): Promise<{ models: QuiverModel[]; count: number }> {
+  const response = await fetch(`${API_BASE}/quiver/models`);
+  if (!response.ok) {
+    // 400 is the offline-fallback signal — frontend uses hardcoded
+    // arrow-1 / arrow-1.1 / arrow-1.1-max if QUIVER_API_KEY is unset.
+    let detail = '';
+    try { detail = (await response.json()).detail ?? ''; } catch {
+      /* Non-JSON error responses still fall back to the status message. */
+    }
+    throw new Error(detail || `Fetch Quiver models failed: ${response.status}`);
+  }
+  return response.json();
+}
+
 export interface ReplicateSchema {
   version_id: string;
   model_id: string;

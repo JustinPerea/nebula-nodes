@@ -6,7 +6,7 @@ import { NODE_DEFINITIONS } from '../../constants/nodeDefinitions';
 import { CATEGORY_COLORS } from '../../constants/ports';
 import { PORT_COLORS } from '../../lib/portCompatibility';
 import type { NodeData, DynamicNodeData, DynamicParamDefinition, ParamDefinition } from '../../types';
-import { fetchOpenRouterModels, fetchNousModels, getSettings, updateSettings, type OpenRouterModel } from '../../lib/api';
+import { fetchOpenRouterModels, fetchNousModels, fetchQuiverModels, getSettings, updateSettings, type OpenRouterModel, type QuiverModel } from '../../lib/api';
 import { useDelayedUnmount } from '../../hooks/useDelayedUnmount';
 import '../../styles/panels.css';
 
@@ -41,6 +41,13 @@ export function Inspector({ embedded = false }: InspectorProps) {
 
   // Replicate schema fetch state
   const [schemaLoading, setSchemaLoading] = useState(false);
+
+  // Quiver Arrow dynamic model list (cached for the session). Loaded on
+  // first selection of any Quiver node so the `model` enum reflects
+  // models added after this build (arrow-1.2, arrow-2, etc.) without
+  // a frontend rebuild. Failure leaves it null and we fall through to
+  // the hardcoded options baked into the node definition.
+  const [quiverModels, setQuiverModels] = useState<QuiverModel[] | null>(null);
 
   // Info panel toggle
   const [showInfo, setShowInfo] = useState(false);
@@ -133,6 +140,26 @@ export function Inspector({ embedded = false }: InspectorProps) {
       cancelled = true;
     };
   }, [universalProvider]);
+
+  const isQuiverNode = nodeData?.definitionId === 'quiver-arrow-generate' || nodeData?.definitionId === 'quiver-arrow-vectorize';
+
+  // Fetch Quiver model catalog the first time a Quiver node is selected.
+  // Failure is silent — the hardcoded enum options in the node definition
+  // remain usable as a fallback.
+  useEffect(() => {
+    if (!isQuiverNode || quiverModels !== null) return;
+    let cancelled = false;
+    fetchQuiverModels()
+      .then((data) => {
+        if (!cancelled) setQuiverModels(data.models);
+      })
+      .catch(() => {
+        // Leave quiverModels null — getVisibleOptions falls through to static options.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isQuiverNode, quiverModels]);
 
   // Filter models by search query — cap at 50 to avoid huge dropdowns, favorites sorted to top
   const filteredModels = useMemo(() => {
@@ -245,7 +272,27 @@ export function Inspector({ embedded = false }: InspectorProps) {
     : [];
 
   function getVisibleOptions(param: InspectorParamDefinition) {
-    return (param.options ?? []).filter((opt) => {
+    let baseOptions = param.options ?? [];
+
+    // Quiver Arrow: union the static enum with any dynamically discovered
+    // models from /api/quiver/models. Static options stay first (so the
+    // current default lands where users expect); newly discovered models
+    // append below with credit cost shown in the label when known.
+    if (isQuiverNode && param.key === 'model' && quiverModels) {
+      const isGenerate = activeNodeData.definitionId === 'quiver-arrow-generate';
+      const opKey = isGenerate ? 'svg_generate' : 'svg_vectorize';
+      const staticIds = new Set(baseOptions.map((o) => String(o.value)));
+      const extra = quiverModels
+        .filter((m) => m.supported_operations.includes(opKey) && !staticIds.has(m.id))
+        .map((m) => {
+          const credits = m.pricing_credits?.[opKey];
+          const label = credits != null ? `${m.name} (${credits} credits)` : m.name;
+          return { label, value: m.id };
+        });
+      baseOptions = [...baseOptions, ...extra];
+    }
+
+    return baseOptions.filter((opt) => {
       if (!('visibleWhen' in opt) || !opt.visibleWhen) return true;
       return Object.entries(opt.visibleWhen).every(([key, allowedValues]) => {
         const currentValue = activeNodeData.params[key];
