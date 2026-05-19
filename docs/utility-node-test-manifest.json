@@ -15,6 +15,7 @@
     { "id": "array-selector", "backend": "native", "browser": "execute" },
     { "id": "image-compare", "backend": "native", "browser": "execute" },
     { "id": "iterator-image", "backend": "native", "browser": "execute" },
-    { "id": "iterator-text", "backend": "native", "browser": "execute" }
+    { "id": "iterator-text", "backend": "native", "browser": "execute" },
+    { "id": "style-reference", "backend": "mocked-handler", "browser": "mocked-event" }
   ]
 }

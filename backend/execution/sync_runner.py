@@ -608,8 +608,13 @@ def get_handler_registry(
             from handlers.quiver import handle_quiver_arrow_vectorize
             return await handle_quiver_arrow_vectorize(node, inputs, api_keys, emit=emit)
 
+        async def _style_reference_handler(node, inputs, api_keys):
+            from handlers.style_reference import handle_style_reference
+            return await handle_style_reference(node, inputs, api_keys, emit=emit)
+
         registry["quiver-arrow-generate"] = _quiver_generate_handler
         registry["quiver-arrow-vectorize"] = _quiver_vectorize_handler
+        registry["style-reference"] = _style_reference_handler
 
         registry["meshy-remesh"] = _meshy_remesh_handler
         registry["meshy-text-to-image"] = _meshy_text_to_image_handler

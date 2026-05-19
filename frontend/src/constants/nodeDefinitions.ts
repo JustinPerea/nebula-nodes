@@ -1292,6 +1292,60 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     ],
   },
 
+  'style-reference': {
+    id: 'style-reference',
+    displayName: 'Style Reference',
+    category: 'utility',
+    apiProvider: 'google',
+    apiEndpoint: '/v1beta/models/gemini-2.5-flash:generateContent',
+    envKeyName: 'GOOGLE_API_KEY',
+    executionPattern: 'sync',
+    inputPorts: [],
+    outputPorts: [
+      { id: 'image', label: 'Reference', dataType: 'Image', required: false },
+      { id: 'style_description', label: 'Style', dataType: 'Text', required: false },
+    ],
+    params: [
+      { key: 'filePath', label: 'Reference Image', type: 'file', required: true, default: '' },
+      {
+        key: 'mode',
+        label: 'Description Mode',
+        type: 'enum',
+        required: false,
+        default: 'auto',
+        options: [
+          { label: 'Auto (Gemini)', value: 'auto' },
+          { label: 'Manual', value: 'manual' },
+          { label: 'Image only', value: 'passthrough' },
+        ],
+      },
+      {
+        key: 'manual_description',
+        label: 'Description',
+        type: 'textarea',
+        required: false,
+        default: '',
+        placeholder: 'e.g. wabi-sabi minimalism, warm tungsten lighting, grainy 35mm film',
+        visibleWhen: { mode: ['manual'] },
+      },
+      {
+        key: 'focus',
+        label: 'Focus',
+        type: 'enum',
+        required: false,
+        default: 'all',
+        visibleWhen: { mode: ['auto'] },
+        options: [
+          { label: 'All (palette + lighting + medium + mood)', value: 'all' },
+          { label: 'Palette only', value: 'palette' },
+          { label: 'Lighting only', value: 'lighting' },
+          { label: 'Medium / texture only', value: 'medium' },
+        ],
+      },
+      { key: 'strength', label: 'Strength', type: 'float', required: false, default: 0.7, min: 0, max: 1, step: 0.05 },
+    ],
+  },
+
   'preview': {
     id: 'preview',
     displayName: 'Preview',
