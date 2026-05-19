@@ -3832,10 +3832,12 @@ body.app-slava-restraint .model-node--image-surface {
   padding-top: var(--sr-node-image-pad-top);
 }
 
-body.app-slava-restraint .model-node--image-surface .model-node__type-label,
-body.app-slava-restraint .model-node--image-surface .model-node__settings-bar {
+body.app-slava-restraint .model-node--image-surface .model-node__type-label {
   display: none;
 }
+/* settings-bar stays visible on image-surface nodes — it's the only UI
+ * entry point for the Inspector popover, and hiding it leaves the node
+ * uneditable. Lives in the 70px image-padding zone above the image. */
 
 body.app-slava-restraint .model-node--image-surface .model-node__card {
   background: transparent;
