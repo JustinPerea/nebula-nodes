@@ -454,7 +454,7 @@ Generated: 2026-05-19 | Nodes: 102 | Source: [`backend/data/node_definitions.jso
 | **Execution** | stream |
 | **Inputs** | Prompt (Text)*, References (Image ×n) |
 | **Outputs** | SVG (SVG) |
-| **Audited** | — |
+| **Audited** | 2026-05-19 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -479,7 +479,7 @@ Generated: 2026-05-19 | Nodes: 102 | Source: [`backend/data/node_definitions.jso
 | **Execution** | stream |
 | **Inputs** | Image (Image)* |
 | **Outputs** | SVG (SVG) |
-| **Audited** | — |
+| **Audited** | 2026-05-19 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
