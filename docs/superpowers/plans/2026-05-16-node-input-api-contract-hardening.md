@@ -42,14 +42,19 @@ Status: complete 2026-05-17.
 - [x] Include per-node inputs, outputs, params, API key, execution pattern, handler route, and provider-doc verification status — all present in the generated output (100 nodes, 8 categories, dual/triple-param table handling for flux-1-1-ultra, veo-3, meshy-text-to-3d, meshy-image-to-3d).
 - [x] Add stale-after metadata for provider docs so old claims are easy to find — every audit note has `stale_after_days` frontmatter (14 for fast-moving providers, 30 for stable).
 
-### Phase 4 - UI quality pass
+### Phase 4 - QuiverAI Arrow integration
 
-Status: not started. In-flight inspector-popover work in the worktree (uncommitted) is adjacent but unrelated to this phase.
+Status: planned 2026-05-19. **Full plan: [.planning/backlog/quiverai-arrow-node-PLAN.md](../../../.planning/backlog/quiverai-arrow-node-PLAN.md).**
 
-- [ ] Group advanced params consistently in the Inspector.
-- [ ] Show missing-key and required-input states before run.
-- [ ] Clarify array, mask, reference image/video, audio, and SVG bridge affordances.
-- [ ] Add cost/risk hints where provider costs or long async times materially affect user decisions.
+Replaces the original "UI quality pass" scope. Three of the four UX bullets from that scope (missing-key states, SVG affordances, cost hints) are exercised by the Quiver integration in passing; the orphaned bullet (param grouping) is dropped to a future polish phase.
+
+- [ ] Ship `quiver-arrow-generate` (text + image refs → SVG, with SSE streaming).
+- [ ] Ship `quiver-arrow-vectorize` (raster → SVG, with SSE streaming).
+- [ ] Dynamic model discovery via `GET /api/providers/quiver/models` proxy (matches OpenRouter pattern), hardcoded fallback for offline / unkeyed use.
+- [ ] Forward-compat hooks for `svg_edit` and `svg_animate` operations (advertised in `/v1/models` `supported_operations` but no endpoints yet).
+- [ ] Audit notes under `docs/model-providers/quiver/` with `verified: 2026-05-19`, `stale_after_days: 14`.
+
+Inspector-popover work shipped in `f6ceb15` (image-surface visibility patched 2026-05-19).
 
 ## Current findings
 
