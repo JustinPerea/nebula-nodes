@@ -175,6 +175,68 @@ def test_execute_request_nodes_normalize_moved_image_input_params(client):
     assert normalized.params["_previewUrl"] == f"/api/outputs/{rel.as_posix()}"
 
 
+def test_image_input_outside_output_root_auto_imports(client, tmp_path, monkeypatch):
+    """image-input filePath pointing to a valid image OUTSIDE OUTPUT_ROOT
+    (cross-project ref, CLI-set absolute path) gets copied into chat-uploads
+    so the browser can preview it via /api/outputs. Stale outputs across the
+    graph that referenced the old absolute path get rewritten in lock-step."""
+    # Override OUTPUT_ROOT so the mocked chat-uploads lives under it — that
+    # mirrors prod where CHAT_UPLOADS_DIR is OUTPUT_ROOT / "chat-uploads" and
+    # lets _output_url_from_ref convert the migrated path to /api/outputs/...
+    fake_root = tmp_path / "output"
+    fake_root.mkdir()
+    chat_uploads = fake_root / "chat-uploads"
+    chat_uploads.mkdir()
+    monkeypatch.setattr("main.OUTPUT_ROOT", fake_root)
+    monkeypatch.setattr("main.CHAT_UPLOADS_DIR", chat_uploads)
+
+    external_dir = tmp_path / "external"
+    external_dir.mkdir()
+    external = external_dir / "external-image.png"
+    external.write_bytes(_make_png_bytes())
+    external_abs = str(external.resolve())
+
+    main_module.cli_graph.add_node("image-input", {"filePath": external_abs})
+    main_module.cli_graph.add_node(
+        "router",
+        {},
+        outputs={"out1": {"type": "Image", "value": external_abs}},
+    )
+    # Mirror prod state: prior execution left the image-input's own output
+    # pointing at the external path; migration must rewrite that too.
+    main_module.cli_graph.nodes["n1"]["outputs"] = {
+        "image": {"type": "Image", "value": external_abs}
+    }
+
+    resp = client.get("/api/graph/export")
+    assert resp.status_code == 200
+    nodes = {n["id"]: n["data"] for n in resp.json()["nodes"]}
+
+    img_input = nodes["n1"]
+    new_preview_url = img_input["params"]["_previewUrl"]
+    assert new_preview_url.startswith("/api/outputs/chat-uploads/")
+    assert img_input["params"]["filePath"].endswith(new_preview_url.split("/")[-1])
+    # Image-input's own output got rewritten to the URL form.
+    assert img_input["outputs"]["image"]["value"] == new_preview_url
+    # Router's stale cached output also got rewritten — preview chain stays intact.
+    assert nodes["n2"]["outputs"]["out1"]["value"] == new_preview_url
+
+
+def test_image_input_non_image_path_leaves_params_untouched(client, tmp_path):
+    """Files that aren't recognized images don't get auto-imported — we
+    don't want to silently copy arbitrary bytes into chat-uploads."""
+    text_file = tmp_path / "not-an-image.txt"
+    text_file.write_text("hello world")
+    main_module.cli_graph.add_node("image-input", {"filePath": str(text_file.resolve())})
+
+    resp = client.get("/api/graph/export")
+    assert resp.status_code == 200
+    params = resp.json()["nodes"][0]["data"]["params"]
+    # filePath unchanged; no _previewUrl synthesized for a non-image.
+    assert params["filePath"] == str(text_file.resolve())
+    assert "_previewUrl" not in params or not params.get("_previewUrl")
+
+
 def test_node_path_for_unknown_node(client):
     resp = client.get("/api/graph/node/n99/path")
     assert resp.status_code == 404

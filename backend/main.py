@@ -232,6 +232,48 @@ def _normalize_outputs_for_storage(outputs: dict[str, Any]) -> dict[str, Any]:
     return rewritten
 
 
+def _import_external_image_to_output_root(file_path_value: str) -> tuple[Path, str] | None:
+    """Copy an image referenced by an external local path into chat-uploads.
+
+    Used when an image-input node's `filePath` points outside OUTPUT_ROOT
+    (cross-project graph imports, CLI-set paths, etc.) — without this,
+    the file is unreachable from the browser and the preview breaks.
+    Content-hash dedup matches the `/api/uploads` flow so identical
+    bytes collapse to one file on disk.
+
+    Returns (new_local_path, served_url) when migration happens, None when
+    the file is already under OUTPUT_ROOT, missing, too large, or not a
+    recognized image format. None means "leave params untouched".
+    """
+    if not file_path_value:
+        return None
+    src = Path(file_path_value).expanduser()
+    try:
+        src_resolved = src.resolve(strict=True)
+    except (OSError, RuntimeError):
+        return None
+    try:
+        src_resolved.relative_to(OUTPUT_ROOT.resolve())
+        return None  # Already inside OUTPUT_ROOT — caller's existing logic handles it.
+    except ValueError:
+        pass
+    try:
+        if src_resolved.stat().st_size > MAX_CHAT_UPLOAD_BYTES:
+            return None
+        data = src_resolved.read_bytes()
+    except OSError:
+        return None
+    sniffed = _sniff_image_type(data[:16])
+    if sniffed is None:
+        return None
+    _, ext = sniffed
+    digest = hashlib.sha256(data).hexdigest()
+    saved_path = CHAT_UPLOADS_DIR / f"{digest}{ext}"
+    if not saved_path.exists():
+        saved_path.write_bytes(data)
+    return saved_path.resolve(), f"/api/outputs/chat-uploads/{saved_path.name}"
+
+
 def _normalize_image_input_params(params: dict[str, Any]) -> dict[str, Any]:
     """Normalize image-input file paths after repo/output-root moves."""
     rewritten = dict(params)
@@ -246,6 +288,17 @@ def _normalize_image_input_params(params: dict[str, Any]) -> dict[str, Any]:
             rewritten[key] = str(local_path)
         elif key == "file" and url is not None:
             rewritten[key] = url
+
+    # If filePath still points outside OUTPUT_ROOT (cross-project ref or
+    # CLI-set path), auto-import the file so the browser can preview it
+    # via /api/outputs and downstream nodes see a URL-resolvable value.
+    file_path = rewritten.get("filePath")
+    if isinstance(file_path, str) and file_path:
+        imported = _import_external_image_to_output_root(file_path)
+        if imported is not None:
+            new_path, new_url = imported
+            rewritten["filePath"] = str(new_path)
+            rewritten["_previewUrl"] = new_url
 
     preview = rewritten.get("_previewUrl")
     if isinstance(preview, str) and preview:
@@ -266,16 +319,54 @@ def _normalize_image_input_params(params: dict[str, Any]) -> dict[str, Any]:
     return rewritten
 
 
+def _substitute_output_paths(outputs: dict[str, Any], mapping: dict[str, str]) -> tuple[dict[str, Any], bool]:
+    """Rewrite stale absolute paths in port outputs to their migrated targets.
+
+    Returns (new_outputs, changed). Used after image-input migration so
+    downstream nodes (Router, etc.) whose cached outputs still reference
+    the pre-migration path get updated in lock-step.
+    """
+    rewritten: dict[str, Any] = {}
+    changed = False
+    for key, port_val in outputs.items():
+        if isinstance(port_val, dict):
+            value = port_val.get("value")
+            if isinstance(value, str) and value in mapping:
+                rewritten[key] = {**port_val, "value": mapping[value]}
+                changed = True
+                continue
+        rewritten[key] = port_val
+    return rewritten, changed
+
+
 def _normalize_cli_graph_output_refs() -> None:
     """Migrate in-memory CLI graph refs to the current output root."""
     changed = False
+    path_substitutions: dict[str, str] = {}
+
     for node in cli_graph.nodes.values():
         if node.get("definitionId") == "image-input":
-            params = _normalize_image_input_params(node.get("params", {}) or {})
-            if params != node.get("params"):
+            old_params = node.get("params", {}) or {}
+            old_file_path = old_params.get("filePath") if isinstance(old_params.get("filePath"), str) else None
+            params = _normalize_image_input_params(old_params)
+            if params != old_params:
                 node["params"] = params
                 changed = True
+                new_file_path = params.get("filePath") if isinstance(params.get("filePath"), str) else None
+                if old_file_path and new_file_path and old_file_path != new_file_path:
+                    path_substitutions[old_file_path] = new_file_path
 
+    if path_substitutions:
+        for node in cli_graph.nodes.values():
+            outputs = node.get("outputs")
+            if not isinstance(outputs, dict):
+                continue
+            new_outputs, sub_changed = _substitute_output_paths(outputs, path_substitutions)
+            if sub_changed:
+                node["outputs"] = new_outputs
+                changed = True
+
+    for node in cli_graph.nodes.values():
         outputs = node.get("outputs")
         if isinstance(outputs, dict):
             normalized_outputs = _normalize_outputs_for_storage(outputs)
@@ -298,9 +389,6 @@ def _normalize_execute_nodes(nodes: list[GraphNode]) -> list[GraphNode]:
         else:
             normalized.append(node)
     return normalized
-
-
-_normalize_cli_graph_output_refs()
 
 
 @app.post("/api/outputs/archive")
@@ -380,6 +468,11 @@ def _sniff_image_type(data: bytes) -> tuple[str, str] | None:
     if len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"WEBP":
         return ("image/webp", ".webp")
     return None
+
+
+# Run after _sniff_image_type / MAX_CHAT_UPLOAD_BYTES are defined — the
+# image-input normalizer now auto-imports external files and needs both.
+_normalize_cli_graph_output_refs()
 
 
 app.include_router(openrouter_router)
@@ -1409,6 +1502,11 @@ def _rewrite_output_paths(outputs: dict[str, Any]) -> dict[str, Any]:
 @app.get("/api/graph/export")
 async def export_graph_for_frontend() -> dict:
     """Export CLI graph in React Flow format for the frontend canvas."""
+    # Run normalization on every export so image-input nodes added or
+    # re-pointed AFTER server start (CLI sets, post-boot imports) still get
+    # their external filePath auto-imported and cross-node output refs
+    # rewritten. Idempotent — does no work when no migration is needed.
+    _normalize_cli_graph_output_refs()
     state = cli_graph.get_state()
     if not state["nodes"]:
         return {"nodes": [], "edges": [], "empty": True}
