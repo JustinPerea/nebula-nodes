@@ -32,6 +32,7 @@ from routes.openrouter_proxy import router as openrouter_router
 from routes.replicate_proxy import router as replicate_router
 from routes.fal_proxy import router as fal_router
 from routes.nous_proxy import router as nous_router
+from routes.quiver_proxy import router as quiver_router
 
 execution_cache = ExecutionCache(ttl=3600)
 node_registry = NodeRegistry()
@@ -479,6 +480,7 @@ app.include_router(openrouter_router)
 app.include_router(replicate_router)
 app.include_router(fal_router)
 app.include_router(nous_router)
+app.include_router(quiver_router)
 
 
 @app.post("/api/uploads")
