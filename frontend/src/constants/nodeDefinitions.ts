@@ -3914,6 +3914,85 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     ],
   },
 
+  'quiver-arrow-generate': {
+    id: 'quiver-arrow-generate',
+    displayName: 'Quiver Arrow Generate',
+    category: 'image-gen',
+    apiProvider: 'quiver',
+    apiEndpoint: '/v1/svgs/generations',
+    envKeyName: 'QUIVER_API_KEY',
+    executionPattern: 'stream',
+    inputPorts: [
+      { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
+      { id: 'references', label: 'References', dataType: 'Image', required: false, multiple: true, maxConnections: 16 },
+    ],
+    outputPorts: [
+      { id: 'svg', label: 'SVG', dataType: 'SVG', required: false },
+    ],
+    params: [
+      {
+        key: 'model',
+        label: 'Model',
+        type: 'enum',
+        required: false,
+        default: 'arrow-1.1',
+        options: [
+          { label: 'Arrow 1.1 (20 credits)', value: 'arrow-1.1' },
+          { label: 'Arrow 1.1 max (25 credits)', value: 'arrow-1.1-max' },
+          { label: 'Arrow 1 (30 credits, legacy)', value: 'arrow-1' },
+        ],
+      },
+      { key: 'n', label: 'Outputs', type: 'integer', required: false, default: 1, min: 1, max: 16 },
+      {
+        key: 'instructions',
+        label: 'Instructions',
+        type: 'textarea',
+        required: false,
+        placeholder: 'Optional style/formatting guidance (e.g. "thin uniform stroke, no fill")',
+      },
+      { key: 'temperature', label: 'Temperature', type: 'float', required: false, default: 1.0, min: 0, max: 2, step: 0.1 },
+      { key: 'top_p', label: 'Top P', type: 'float', required: false, default: 1.0, min: 0, max: 1, step: 0.05 },
+      { key: 'presence_penalty', label: 'Presence Penalty', type: 'float', required: false, default: 0.0, min: -2, max: 2, step: 0.1 },
+      { key: 'max_output_tokens', label: 'Max Output Tokens', type: 'integer', required: false, default: 16384, min: 1, max: 131072 },
+    ],
+  },
+
+  'quiver-arrow-vectorize': {
+    id: 'quiver-arrow-vectorize',
+    displayName: 'Quiver Arrow Vectorize',
+    category: 'image-gen',
+    apiProvider: 'quiver',
+    apiEndpoint: '/v1/svgs/vectorizations',
+    envKeyName: 'QUIVER_API_KEY',
+    executionPattern: 'stream',
+    inputPorts: [
+      { id: 'image', label: 'Image', dataType: 'Image', required: true },
+    ],
+    outputPorts: [
+      { id: 'svg', label: 'SVG', dataType: 'SVG', required: false },
+    ],
+    params: [
+      {
+        key: 'model',
+        label: 'Model',
+        type: 'enum',
+        required: false,
+        default: 'arrow-1.1',
+        options: [
+          { label: 'Arrow 1.1 (15 credits)', value: 'arrow-1.1' },
+          { label: 'Arrow 1.1 max (20 credits)', value: 'arrow-1.1-max' },
+          { label: 'Arrow 1 (30 credits, legacy)', value: 'arrow-1' },
+        ],
+      },
+      { key: 'auto_crop', label: 'Auto-crop to subject', type: 'boolean', required: false, default: false },
+      { key: 'target_size', label: 'Target Size (px)', type: 'integer', required: false, default: 1024, min: 128, max: 4096 },
+      { key: 'temperature', label: 'Temperature', type: 'float', required: false, default: 1.0, min: 0, max: 2, step: 0.1 },
+      { key: 'top_p', label: 'Top P', type: 'float', required: false, default: 1.0, min: 0, max: 1, step: 0.05 },
+      { key: 'presence_penalty', label: 'Presence Penalty', type: 'float', required: false, default: 0.0, min: -2, max: 2, step: 0.1 },
+      { key: 'max_output_tokens', label: 'Max Output Tokens', type: 'integer', required: false, default: 16384, min: 1, max: 131072 },
+    ],
+  },
+
   'minimax-t2v': {
     id: 'minimax-t2v',
     displayName: 'MiniMax T2V',

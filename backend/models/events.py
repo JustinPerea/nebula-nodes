@@ -66,6 +66,14 @@ class StreamPartialImageEvent(BaseModel):
     is_final: bool = False
 
 
+class StreamPartialSvgEvent(BaseModel):
+    type: Literal["stream_partial_svg"] = "stream_partial_svg"
+    node_id: str
+    partial_index: int
+    svg: str  # raw SVG markup; frontend renders inline as a data URI for progressive preview
+    is_final: bool = False
+
+
 ExecutionEvent = Union[
     QueuedEvent,
     ExecutingEvent,
@@ -76,4 +84,5 @@ ExecutionEvent = Union[
     GraphCompleteEvent,
     StreamDeltaEvent,
     StreamPartialImageEvent,
+    StreamPartialSvgEvent,
 ]

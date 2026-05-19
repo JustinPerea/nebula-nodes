@@ -39,6 +39,7 @@ const VALID_PROVIDERS = new Set([
   'bfl',
   'higgsfield',
   'meshy',
+  'quiver',
   'nous',
   'utility',
 ]);

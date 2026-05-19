@@ -600,6 +600,17 @@ def get_handler_registry(
             from handlers.meshy import handle_meshy_3d_print
             return await handle_meshy_3d_print(node, inputs, api_keys, emit=emit)
 
+        async def _quiver_generate_handler(node, inputs, api_keys):
+            from handlers.quiver import handle_quiver_arrow_generate
+            return await handle_quiver_arrow_generate(node, inputs, api_keys, emit=emit)
+
+        async def _quiver_vectorize_handler(node, inputs, api_keys):
+            from handlers.quiver import handle_quiver_arrow_vectorize
+            return await handle_quiver_arrow_vectorize(node, inputs, api_keys, emit=emit)
+
+        registry["quiver-arrow-generate"] = _quiver_generate_handler
+        registry["quiver-arrow-vectorize"] = _quiver_vectorize_handler
+
         registry["meshy-remesh"] = _meshy_remesh_handler
         registry["meshy-text-to-image"] = _meshy_text_to_image_handler
         registry["meshy-image-to-image"] = _meshy_image_to_image_handler

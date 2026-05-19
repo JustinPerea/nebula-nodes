@@ -43,6 +43,7 @@ VALID_PROVIDERS = {
     "bfl",
     "higgsfield",
     "meshy",
+    "quiver",
     "nous",
     "utility",
 }
