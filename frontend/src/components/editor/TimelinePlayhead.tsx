@@ -3,22 +3,28 @@ import { useUIStore } from '../../store/uiStore';
 import {
   type EditClip,
   outputTimeToSourceTime,
-  totalOutputDuration,
+  totalOutputDuration as computeTotalOutputDuration,
 } from '../../lib/editor/virtualPlayback';
 
 interface Props {
-  sourceDuration: number;
+  /** Total output duration in seconds — the playhead's full traverse range. */
+  totalOutputDuration: number;
   clips: EditClip[];
 }
 
-export function TimelinePlayhead({ sourceDuration, clips }: Props) {
+export function TimelinePlayhead({ totalOutputDuration, clips }: Props) {
   const outputTime = useUIStore((s) => s.playheadOutputTime);
   const setOutputTime = useUIStore((s) => s.setPlayheadOutputTime);
 
-  const { sourceTime } = outputTimeToSourceTime(outputTime, clips);
-  const leftPct = sourceDuration > 0 ? (sourceTime / sourceDuration) * 100 : 0;
+  // Position the playhead in OUTPUT-time space. Wrapper provides correct
+  // coordinate frame (track-body extent, not container).
+  const leftPct = totalOutputDuration > 0 ? (outputTime / totalOutputDuration) * 100 : 0;
 
+  // Debug hook: expose the SOURCE-time the playhead currently points at.
+  // Useful for CLI/test inspection. Lives in useEffect to avoid the
+  // react-hooks/immutability lint error from side-effects-during-render.
   useEffect(() => {
+    const { sourceTime } = outputTimeToSourceTime(outputTime, clips);
     (window as Window & { __editorPlayheadSourceTime?: number }).__editorPlayheadSourceTime = sourceTime;
   });
 
@@ -27,7 +33,7 @@ export function TimelinePlayhead({ sourceDuration, clips }: Props) {
     const scrubArea = (e.currentTarget as HTMLElement).parentElement as HTMLElement | null;
     if (!scrubArea) return;
     const rect = scrubArea.getBoundingClientRect();
-    const total = totalOutputDuration(clips);
+    const total = computeTotalOutputDuration(clips);
     function onMove(ev: PointerEvent) {
       const x = (ev.clientX - rect.left) / rect.width;
       setOutputTime(Math.max(0, Math.min(total, x * total)));
