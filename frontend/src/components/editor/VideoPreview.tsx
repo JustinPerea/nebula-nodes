@@ -6,6 +6,7 @@ import {
   type EditClip,
   outputTimeToSourceTime,
   totalOutputDuration,
+  clipSpeed,
 } from '../../lib/editor/virtualPlayback';
 import { formatSmpte } from '../../lib/editor/timecode';
 
@@ -37,7 +38,7 @@ export function VideoPreview({ sourceUrl, editNode }: Props) {
     if (Math.abs(video.currentTime - snapped) > 0.05) {
       video.currentTime = snapped;
     }
-    video.playbackRate = clip.speed;
+    video.playbackRate = clipSpeed(clip);
     video.muted = clip.mute;
     video.volume = clip.volume;
   }, [outputTime, clips, fps]);
