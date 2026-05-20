@@ -125,6 +125,10 @@ export interface NodeData {
    *  markup; ModelNode renders inline via a data URI so no disk write
    *  is needed for the progressive preview. */
   streamingSvg?: { index: number; svg: string; isFinal: boolean };
+  /** Marks Edit nodes that were auto-spawned this session. Used by
+   *  graphStore.removeEmptyEditNode (Task 10) to auto-remove no-op
+   *  Edit nodes when the editor is exited without making real edits. */
+  spawnedThisSession?: boolean;
 }
 
 export interface DynamicPortDefinition {
