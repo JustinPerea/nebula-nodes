@@ -1,0 +1,41 @@
+.editor-view {
+  position: fixed;
+  inset: 0;
+  background: var(--sr-canvas, #000);
+  background-image: radial-gradient(
+    circle at 1px 1px,
+    var(--sr-canvas-dot-color, rgba(201, 202, 200, 0.15)) 1px,
+    transparent 0
+  );
+  background-size: var(--sr-canvas-dot-step, 16px) var(--sr-canvas-dot-step, 16px);
+  display: flex;
+  flex-direction: column;
+  padding: 80px 24px 24px;
+  gap: 10px;
+  color: var(--sr-ink, rgba(255, 255, 255, 0.92));
+  font-family: var(--sr-ui, inherit);
+}
+.editor-view--empty {
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  font-size: 14px;
+  color: var(--sr-ink-light);
+}
+.editor-view--empty button {
+  padding: 8px 16px;
+  background: transparent;
+  color: var(--sr-ink);
+  border: 1px solid var(--sr-edge);
+  border-radius: 4px;
+  cursor: pointer;
+}
+.editor-view__too-small {
+  background: rgba(255, 90, 31, 0.10);
+  border: 1px solid var(--sr-accent-border);
+  border-radius: 4px;
+  padding: 6px 12px;
+  font-size: 11px;
+  color: var(--sr-ink);
+  text-align: center;
+}
