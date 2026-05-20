@@ -27,9 +27,6 @@ async def test_no_op_fast_path_returns_upstream_unchanged(tmp_path: Path) -> Non
     probe_result = type("PR", (), {"duration": 8.0, "fps": 30.0, "is_vfr": False})()
 
     node = _node({
-        "sourceDuration": 8.0,
-        "sourceFps": 30.0,
-        "sourceIsVfr": False,
         "clips": [
             {"id": "c1", "sourceIn": 0.0, "sourceOut": 8.0, "speed": 1.0, "volume": 1.0, "mute": False}
         ],
@@ -44,3 +41,8 @@ async def test_no_op_fast_path_returns_upstream_unchanged(tmp_path: Path) -> Non
 
     assert result == {"video": {"type": "Video", "value": str(src)}}
     mock_ffmpeg.assert_not_called()
+
+    # Handler writes probe metadata into node.params even on no-op
+    assert node.params["sourceDuration"] == 8.0
+    assert node.params["sourceFps"] == 30.0
+    assert node.params["sourceIsVfr"] is False

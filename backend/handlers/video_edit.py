@@ -11,7 +11,6 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any, Awaitable, Callable
-from uuid import uuid4
 
 from models.events import ExecutionEvent, ProgressEvent
 from models.graph import GraphNode, PortValueDict
@@ -19,16 +18,34 @@ from services.ffmpeg import ProbeResult, ffprobe_video, run_ffmpeg
 from services.output import OUTPUT_ROOT, get_run_dir
 
 
-def _resolve_local_path(value: str) -> Path:
-    """Accept either a filesystem path or /api/outputs/<rel> URL.
+_OUTPUTS_URL_PREFIX = "/api/outputs/"
 
-    Mirrors the pattern from handlers/style_reference.py — saved graphs
-    re-execute with /api/outputs URLs while fresh runs have raw paths.
+
+def _resolve_local_path(value: str) -> Path | None:
+    """Resolve a `video_in` value to a real filesystem path, or None.
+
+    Accepts:
+    - `/api/outputs/<rel>` — sandboxed under OUTPUT_ROOT via `relative_to` check
+    - absolute filesystem path — used as-is if it exists
+
+    Mirrors `handlers/style_reference.py` defensively: returns None for
+    anything unresolvable so the caller can raise a clear error instead of
+    silently following a path-traversal escape.
     """
-    if value.startswith("/api/outputs/"):
-        rel = value[len("/api/outputs/"):]
-        return OUTPUT_ROOT / rel
-    return Path(value)
+    if not value:
+        return None
+    if value.startswith(_OUTPUTS_URL_PREFIX):
+        rel = value[len(_OUTPUTS_URL_PREFIX):]
+        candidate = (OUTPUT_ROOT / rel).resolve()
+        try:
+            candidate.relative_to(OUTPUT_ROOT.resolve())
+        except ValueError:
+            return None
+        return candidate if candidate.exists() else None
+    candidate = Path(value).expanduser()
+    if candidate.is_absolute() and candidate.exists():
+        return candidate
+    return None
 
 
 def _is_no_op(clips: list[dict[str, Any]], source_duration: float) -> bool:
@@ -55,8 +72,8 @@ async def handle_video_edit(
     if src_input is None or not src_input.value:
         raise ValueError("video_in port is required for video-edit")
     src_path = _resolve_local_path(str(src_input.value))
-    if not src_path.exists():
-        raise FileNotFoundError(f"Source video not found: {src_path}")
+    if src_path is None:
+        raise FileNotFoundError(f"Source video not found: {src_input.value}")
 
     probe = await ffprobe_video(src_path)
     node.params["sourceDuration"] = probe.duration
