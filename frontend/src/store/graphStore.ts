@@ -408,6 +408,32 @@ wsClient.subscribe((event) => {
   useGraphStore.getState().handleExecutionEvent(event);
 });
 
+// ---------- Edit-clip invariant helpers ----------
+
+interface EditClipLike {
+  id: string;
+  start: number;
+  duration: number;
+  sourceIn: number;
+  sourceOut: number;
+  volume: number;
+  mute: boolean;
+}
+
+/**
+ * Re-establish the end-to-end invariant: clip[i].start = sum of prior
+ * durations. Call after any mutation that changes clip durations or
+ * order. Pure function; does not mutate input.
+ */
+function reflowClips(clips: EditClipLike[]): EditClipLike[] {
+  let runningStart = 0;
+  return clips.map((c) => {
+    const out = { ...c, start: runningStart };
+    runningStart += c.duration;
+    return out;
+  });
+}
+
 export const useGraphStore = create<GraphState>((set, get) => ({
   nodes: [],
   edges: [],
@@ -1049,8 +1075,8 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       ? sourceParams.sourceFps : 30;
     const sourceIsVfr = Boolean(sourceParams.sourceIsVfr);
 
-    const initialClips = sourceDuration > 0
-      ? [{ id: 'c1', sourceIn: 0, sourceOut: sourceDuration, speed: 1, volume: 1, mute: false }]
+    const initialClips: EditClipLike[] = sourceDuration > 0
+      ? [{ id: 'c1', start: 0, duration: sourceDuration, sourceIn: 0, sourceOut: sourceDuration, volume: 1, mute: false }]
       : [];
 
     const editId = `video-edit-${Math.random().toString(36).slice(2, 8)}`;
@@ -1098,7 +1124,9 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       clips.length === 0 ||
       (clips.length === 1 &&
         (clips[0].sourceIn === 0 || clips[0].sourceIn === 0.0) &&
-        (clips[0].speed === 1 || clips[0].speed === 1.0) &&
+        // Speed is derived: speed = 1 means duration equals source range.
+        // For a freshly seeded clip, duration === sourceOut - sourceIn.
+        Math.abs((clips[0].duration as number) - ((clips[0].sourceOut as number) - (clips[0].sourceIn as number))) < 0.0001 &&
         (clips[0].volume === 1 || clips[0].volume === 1.0) &&
         clips[0].mute === false);
     if (!isVirgin) return;
@@ -1114,10 +1142,12 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       nodes: state.nodes.map((n) => {
         if (n.id !== nodeId) return n;
         const params = { ...(n.data.params ?? {}) };
-        const clips = ((params.clips as any[]) ?? []).map((c) =>
+        const oldClips = ((params.clips as EditClipLike[]) ?? []);
+        const patched = oldClips.map((c) =>
           c.id === clipId ? { ...c, ...patch } : c,
         );
-        return { ...n, data: { ...n.data, params: { ...params, clips } } };
+        const reflowed = reflowClips(patched);
+        return { ...n, data: { ...n.data, params: { ...params, clips: reflowed } } };
       }),
     }));
   },
@@ -1127,17 +1157,26 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       nodes: state.nodes.map((n) => {
         if (n.id !== nodeId) return n;
         const params = { ...(n.data.params ?? {}) };
-        const clips = ((params.clips as any[]) ?? []);
+        const clips = ((params.clips as EditClipLike[]) ?? []);
         const idx = clips.findIndex((c) => sourceTime > c.sourceIn && sourceTime < c.sourceOut);
         if (idx < 0) return n;
         const orig = clips[idx];
-        const left = { ...orig, sourceOut: sourceTime };
-        const right = {
+        // Keep speed constant across both halves: same (sourceOut - sourceIn) / duration ratio.
+        const origSpeed = orig.duration > 0 ? (orig.sourceOut - orig.sourceIn) / orig.duration : 1;
+        const leftSourceRange = sourceTime - orig.sourceIn;
+        const rightSourceRange = orig.sourceOut - sourceTime;
+        const left: EditClipLike = {
+          ...orig,
+          sourceOut: sourceTime,
+          duration: leftSourceRange / origSpeed,
+        };
+        const right: EditClipLike = {
           ...orig,
           id: `${orig.id}-${Math.random().toString(36).slice(2, 6)}`,
           sourceIn: sourceTime,
+          duration: rightSourceRange / origSpeed,
         };
-        const next = [...clips.slice(0, idx), left, right, ...clips.slice(idx + 1)];
+        const next = reflowClips([...clips.slice(0, idx), left, right, ...clips.slice(idx + 1)]);
         return { ...n, data: { ...n.data, params: { ...params, clips: next } } };
       }),
     }));
@@ -1148,9 +1187,10 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       nodes: state.nodes.map((n) => {
         if (n.id !== nodeId) return n;
         const params = { ...(n.data.params ?? {}) };
-        const clips = ((params.clips as any[]) ?? []).filter((c) => c.id !== clipId);
-        if (clips.length === 0) return n; // Never delete the only clip
-        return { ...n, data: { ...n.data, params: { ...params, clips } } };
+        const filtered = ((params.clips as EditClipLike[]) ?? []).filter((c) => c.id !== clipId);
+        if (filtered.length === 0) return n; // Never delete the only clip
+        const reflowed = reflowClips(filtered);
+        return { ...n, data: { ...n.data, params: { ...params, clips: reflowed } } };
       }),
     }));
   },
