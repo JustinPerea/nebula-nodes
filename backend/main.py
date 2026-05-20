@@ -455,6 +455,7 @@ _SUPPORTED_IMAGE_TYPES = {
 }
 
 MAX_CHAT_UPLOAD_BYTES = 20 * 1024 * 1024  # 20 MB
+MAX_VIDEO_UPLOAD_BYTES = 500 * 1024 * 1024  # 500 MB
 
 
 def _sniff_image_type(data: bytes) -> tuple[str, str] | None:
@@ -469,6 +470,22 @@ def _sniff_image_type(data: bytes) -> tuple[str, str] | None:
     # WebP has a variable prefix: "RIFF" then 4 size bytes then "WEBP".
     if len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"WEBP":
         return ("image/webp", ".webp")
+    return None
+
+
+def _sniff_video_type(data: bytes) -> tuple[str, str] | None:
+    """Return (mime, ext) if *data* matches a supported video container.
+
+    Detects:
+    - MP4 / MOV / M4V: ISO base media file format — bytes 4-8 == b"ftyp"
+    - WebM: EBML/Matroska header — bytes 0-4 == b"\\x1a\\x45\\xdf\\xa3"
+
+    Returns None for anything else.
+    """
+    if len(data) >= 8 and data[4:8] == b"ftyp":
+        return ("video/mp4", ".mp4")
+    if len(data) >= 4 and data[:4] == b"\x1a\x45\xdf\xa3":
+        return ("video/webm", ".webm")
     return None
 
 
@@ -501,15 +518,33 @@ async def upload_file_consolidated(
     both shapes of caller can migrate to this one.
     """
     content = await file.read()
-    if len(content) > MAX_CHAT_UPLOAD_BYTES:
-        raise HTTPException(status_code=413, detail="Image exceeds 20 MB limit")
+    # Reject anything that cannot possibly be an accepted file before sniffing.
+    # Images are capped at MAX_CHAT_UPLOAD_BYTES; videos at MAX_VIDEO_UPLOAD_BYTES.
+    # Check the tighter image cap first so oversized non-video uploads get 413
+    # without needing valid magic bytes (preserves legacy test expectations).
+    if len(content) > MAX_VIDEO_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="File exceeds 500 MB limit")
     if len(content) < 12:
-        raise HTTPException(status_code=415, detail="File is too small to be a valid image")
+        raise HTTPException(status_code=415, detail="File is too small to be a valid media file")
 
-    sniffed = _sniff_image_type(content[:16])
-    if sniffed is None:
-        raise HTTPException(status_code=415, detail="Only image files are accepted")
-    _, ext = sniffed
+    image_sniffed = _sniff_image_type(content[:16])
+    video_sniffed = _sniff_video_type(content[:16]) if image_sniffed is None else None
+
+    if image_sniffed is not None:
+        if len(content) > MAX_CHAT_UPLOAD_BYTES:
+            raise HTTPException(status_code=413, detail="Image exceeds 20 MB limit")
+        _, ext = image_sniffed
+        node_type = "image-input"
+    elif video_sniffed is not None:
+        # Size already validated against MAX_VIDEO_UPLOAD_BYTES above.
+        _, ext = video_sniffed
+        node_type = "video-input"
+    else:
+        # Neither image nor video magic bytes — but file was within video size
+        # budget. Check if it's oversized for images to give a better error.
+        if len(content) > MAX_CHAT_UPLOAD_BYTES:
+            raise HTTPException(status_code=413, detail="Image exceeds 20 MB limit")
+        raise HTTPException(status_code=415, detail="Only image or video files are accepted")
 
     digest = hashlib.sha256(content).hexdigest()
     saved_path = CHAT_UPLOADS_DIR / f"{digest}{ext}"
@@ -535,17 +570,20 @@ async def upload_file_consolidated(
         max_x = max((p.get("x", 0) for p in positions), default=-300)
         new_position = {"x": float(max_x) + 300.0, "y": 100.0}
 
-        # filePath is the absolute local path (handlers open() this), _previewUrl
-        # is the served URL (frontend <img> displays this). Same shape Inspector
-        # and legacy Canvas file-drop always used.
-        node_id = cli_graph.add_node(
-            "image-input",
-            {"filePath": str(saved_path.resolve()), "_previewUrl": url},
-            position=new_position,
-        )
+        if node_type == "image-input":
+            # filePath is the absolute local path (handlers open() this), _previewUrl
+            # is the served URL (frontend <img> displays this). Same shape Inspector
+            # and legacy Canvas file-drop always used.
+            node_params = {"filePath": str(saved_path.resolve()), "_previewUrl": url}
+        else:
+            # video-input only needs filePath; no _previewUrl.
+            node_params = {"filePath": str(saved_path.resolve())}
+
+        node_id = cli_graph.add_node(node_type, node_params, position=new_position)
         await _broadcast_graph_sync()
         response["nodeId"] = node_id
-        response["thumbUrl"] = url
+        if node_type == "image-input":
+            response["thumbUrl"] = url
 
     return response
 
