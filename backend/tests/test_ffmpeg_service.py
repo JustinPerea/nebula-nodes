@@ -32,7 +32,7 @@ async def test_ffprobe_video_returns_duration_fps_vfr_flag(tmp_path: Path) -> No
 
 @pytest.mark.asyncio
 async def test_ffprobe_video_detects_vfr(tmp_path: Path) -> None:
-    fake_json = b'{"format":{"duration":"8.0"},"streams":[{"codec_type":"video","r_frame_rate":"30000/1001","avg_frame_rate":"29897/1000"}]}'
+    fake_json = b'{"format":{"duration":"8.0"},"streams":[{"codec_type":"video","r_frame_rate":"30/1","avg_frame_rate":"24/1"}]}'
     src = tmp_path / "src.mp4"
     src.write_bytes(b"fake")
 

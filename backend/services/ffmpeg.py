@@ -71,8 +71,8 @@ async def ffprobe_video(source: Path | str) -> ProbeResult:
 
     r_fps = _parse_frame_rate(video_stream.get("r_frame_rate", "0/1"))
     avg_fps = _parse_frame_rate(video_stream.get("avg_frame_rate", "0/1"))
-    # >0.1% deviation between r_frame_rate and avg_frame_rate ⇒ VFR.
-    is_vfr = r_fps > 0 and abs(r_fps - avg_fps) / r_fps > 0.001
+    # >0.5% deviation between r_frame_rate and avg_frame_rate ⇒ VFR.
+    is_vfr = r_fps > 0 and abs(r_fps - avg_fps) / r_fps > 0.005
 
     return ProbeResult(duration=duration, fps=avg_fps or r_fps, is_vfr=is_vfr)
 
