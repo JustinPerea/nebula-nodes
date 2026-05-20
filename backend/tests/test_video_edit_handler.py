@@ -120,3 +120,73 @@ async def test_mixed_mute_generates_silent_audio_for_muted_clips(tmp_path: Path,
     assert "anullsrc=cl=stereo:r=44100:d=3.0[a1]" in filter_complex
     # Both [a0] and [a1] interleaved into the concat
     assert "[v0][a0][v1][a1]concat=n=2:v=1:a=1" in filter_complex
+
+
+async def _run_with_clips(tmp_path, monkeypatch, clips):
+    """Helper: run handler with given clips, return the captured ffmpeg args."""
+    src = tmp_path / "src.mp4"
+    src.write_bytes(b"fake")
+    out_dir = tmp_path / "output" / "run-1"
+    out_dir.mkdir(parents=True)
+    monkeypatch.setattr("handlers.video_edit.get_run_dir", lambda: out_dir)
+    monkeypatch.setattr("handlers.video_edit.OUTPUT_ROOT", tmp_path)
+    probe_result = type("PR", (), {"duration": 8.0, "fps": 30.0, "is_vfr": False})()
+
+    captured: list[list[str]] = []
+    async def fake_ffmpeg(args, on_progress=None):
+        captured.append(args)
+        Path(args[-1]).touch()
+    with (
+        patch("handlers.video_edit.ffprobe_video", AsyncMock(return_value=probe_result)),
+        patch("handlers.video_edit.run_ffmpeg", side_effect=fake_ffmpeg),
+    ):
+        await handle_video_edit(
+            _node({"clips": clips}),
+            {"video_in": PortValueDict(type="Video", value=str(src))},
+            {},
+        )
+    return captured[0] if captured else []
+
+
+def _filter_str(args: list[str]) -> str:
+    return next(args[i + 1] for i, a in enumerate(args) if a == "-filter_complex")
+
+
+@pytest.mark.asyncio
+async def test_speed_change_injects_setpts_and_atempo(tmp_path, monkeypatch) -> None:
+    args = await _run_with_clips(tmp_path, monkeypatch, [
+        {"id": "c1", "sourceIn": 0.0, "sourceOut": 4.0, "speed": 0.5, "volume": 1.0, "mute": False}
+    ])
+    f = _filter_str(args)
+    assert "setpts=PTS/0.5" in f
+    assert "atempo=0.5" in f
+
+
+@pytest.mark.asyncio
+async def test_multi_clip_concat_emits_correct_stream_count(tmp_path, monkeypatch) -> None:
+    args = await _run_with_clips(tmp_path, monkeypatch, [
+        {"id": "c1", "sourceIn": 0.0, "sourceOut": 2.0, "speed": 1.0, "volume": 1.0, "mute": False},
+        {"id": "c2", "sourceIn": 2.0, "sourceOut": 5.0, "speed": 1.0, "volume": 1.0, "mute": False},
+    ])
+    f = _filter_str(args)
+    assert "[v0]" in f and "[v1]" in f
+    assert "concat=n=2:v=1:a=1" in f
+
+
+@pytest.mark.asyncio
+async def test_all_muted_omits_audio_chain(tmp_path, monkeypatch) -> None:
+    args = await _run_with_clips(tmp_path, monkeypatch, [
+        {"id": "c1", "sourceIn": 0.0, "sourceOut": 2.0, "speed": 1.0, "volume": 0.5, "mute": True}
+    ])
+    f = _filter_str(args)
+    assert "atrim" not in f
+    assert "anullsrc" not in f
+    assert "concat=n=1:v=1:a=0" in f
+
+
+@pytest.mark.asyncio
+async def test_volume_injects_volume_filter(tmp_path, monkeypatch) -> None:
+    args = await _run_with_clips(tmp_path, monkeypatch, [
+        {"id": "c1", "sourceIn": 0.0, "sourceOut": 2.0, "speed": 1.0, "volume": 0.4, "mute": False}
+    ])
+    assert "volume=0.4" in _filter_str(args)
