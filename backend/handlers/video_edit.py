@@ -174,10 +174,37 @@ async def handle_video_edit(
             if probe.fps > 0:
                 s_in = int(s_in * probe.fps) / probe.fps
                 s_out = int(s_out * probe.fps) / probe.fps
-            snapped.append({**c, "sourceIn": s_in, "sourceOut": s_out})
+            # If the source clamped the range, recompute duration from the new
+            # range and the original speed so the frontend's start/duration
+            # invariants stay consistent post-roundtrip.
+            orig_speed = c.get("speed", 1.0) or 1.0
+            new_duration = (s_out - s_in) / orig_speed if orig_speed > 0 else (s_out - s_in)
+            # Reflow start happens on the frontend after graphSync; here we just
+            # preserve whatever start was stored, or 0 for legacy clips that
+            # lacked it (they're about to be reflowed anyway).
+            existing_start = c.get("start", 0.0)
+            snapped.append({
+                **c,
+                "sourceIn": s_in,
+                "sourceOut": s_out,
+                "duration": new_duration,
+                "start": existing_start,
+            })
         if not snapped:
+            # Frontend stores start/duration as primary; backend stores speed
+            # for ffmpeg. Emit all four time fields so the roundtrip preserves
+            # the frontend's data model when graphSync replays back to the UI.
             snapped = [
-                {"id": "c1", "sourceIn": 0.0, "sourceOut": probe.duration, "speed": 1.0, "volume": 1.0, "mute": False}
+                {
+                    "id": "c1",
+                    "start": 0.0,
+                    "duration": probe.duration,
+                    "sourceIn": 0.0,
+                    "sourceOut": probe.duration,
+                    "speed": 1.0,
+                    "volume": 1.0,
+                    "mute": False,
+                }
             ]
         node.params["clips"] = snapped
 
