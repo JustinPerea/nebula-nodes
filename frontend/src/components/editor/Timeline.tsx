@@ -35,7 +35,9 @@ export function Timeline({ editNode, sourceUrl }: Props) {
           sourceUrl={sourceUrl}
         />
       </div>
-      <TimelinePlayhead sourceDuration={sourceDuration} clips={clips} />
+      <div className="editor-tl__playhead-area">
+        <TimelinePlayhead sourceDuration={sourceDuration} clips={clips} />
+      </div>
     </div>
   );
 }

@@ -259,11 +259,24 @@
   color: var(--sr-ink-light);
   font-size: 7px;
 }
-.editor-tl__playhead {
+.editor-tl__playhead-area {
   position: absolute;
+  /* Track-body coordinate space: matches the area where clip bars actually
+     render so the playhead's 0% lines up with the track-body left edge.
+     left: container padding (10px) + label width (26px) + flex gap (8px) = 44px
+     right: container padding (10px) */
   top: 60px;
   bottom: 10px;
+  left: 44px;
+  right: 10px;
+  pointer-events: none;
+}
+.editor-tl__playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
   width: 2px;
   background: var(--sr-accent);
   box-shadow: 0 0 6px rgba(255, 90, 31, 0.6);
+  pointer-events: auto;
 }

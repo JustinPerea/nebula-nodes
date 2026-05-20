@@ -24,11 +24,9 @@ export function TimelinePlayhead({ sourceDuration, clips }: Props) {
 
   function onPointerDown(e: React.PointerEvent) {
     e.preventDefault();
-    const tracksEl = (e.currentTarget as HTMLElement).parentElement?.querySelector(
-      '.editor-tl__tracks',
-    ) as HTMLElement | null;
-    if (!tracksEl) return;
-    const rect = tracksEl.getBoundingClientRect();
+    const scrubArea = (e.currentTarget as HTMLElement).parentElement as HTMLElement | null;
+    if (!scrubArea) return;
+    const rect = scrubArea.getBoundingClientRect();
     const total = totalOutputDuration(clips);
     function onMove(ev: PointerEvent) {
       const x = (ev.clientX - rect.left) / rect.width;
