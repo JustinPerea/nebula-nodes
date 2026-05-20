@@ -184,6 +184,17 @@ interface GraphState {
   clearGraph: () => void;
   configureOpenRouterModel: (nodeId: string, modelId: string, model: OpenRouterModel) => void;
   fetchReplicateSchemaAndConfigure: (nodeId: string, owner: string, name: string) => Promise<void>;
+
+  // Video-edit node helpers
+  getOrCreateEditNodeDownstream: (sourceNodeId: string) => string;
+  removeEmptyEditNode: (nodeId: string) => void;
+  updateEditNodeClip: (
+    nodeId: string,
+    clipId: string,
+    patch: Partial<{ sourceIn: number; sourceOut: number; speed: number; volume: number; mute: boolean }>,
+  ) => void;
+  cutEditNodeAtSource: (nodeId: string, sourceTime: number) => void;
+  removeEditNodeClip: (nodeId: string, clipId: string) => void;
 }
 
 // CLI nodes use short sequential IDs like n1, n2. Frontend-only (library-dragged)
@@ -1001,6 +1012,129 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         console.warn(`[nebula] DELETE node ${nodeId} failed:`, err),
       );
     }
+  },
+
+  // ---------------------------------------------------------------------------
+  // Video-edit node helpers
+  // ---------------------------------------------------------------------------
+
+  getOrCreateEditNodeDownstream: (sourceNodeId) => {
+    const state = get();
+    const sourceNode = state.nodes.find((n) => n.id === sourceNodeId);
+    if (!sourceNode) {
+      throw new Error(`Source node not found: ${sourceNodeId}`);
+    }
+
+    const existingMatches = state.nodes.filter((n) => {
+      if (n.data.definitionId !== 'video-edit') return false;
+      return state.edges.some(
+        (e) =>
+          e.source === sourceNodeId &&
+          e.sourceHandle === 'video' &&
+          e.target === n.id &&
+          e.targetHandle === 'video_in',
+      );
+    });
+    if (existingMatches.length > 0) {
+      // Most recently created wins (id tiebreak)
+      return existingMatches[existingMatches.length - 1].id;
+    }
+
+    const editId = `video-edit-${Math.random().toString(36).slice(2, 8)}`;
+    const editNode = {
+      id: editId,
+      type: 'editNode',
+      position: { x: sourceNode.position.x + 280, y: sourceNode.position.y },
+      data: {
+        definitionId: 'video-edit',
+        label: 'Video Edit',
+        state: 'idle' as const,
+        inputs: {},
+        outputs: {},
+        params: { clips: [] },
+        spawnedThisSession: true,
+      },
+    };
+    const edge = {
+      id: `e-${sourceNodeId}-${editId}`,
+      source: sourceNodeId,
+      sourceHandle: 'video',
+      target: editId,
+      targetHandle: 'video_in',
+    };
+    set({
+      nodes: [...state.nodes, editNode as any],
+      edges: [...state.edges, edge as any],
+    });
+    return editId;
+  },
+
+  removeEmptyEditNode: (nodeId) => {
+    const state = get();
+    const node = state.nodes.find((n) => n.id === nodeId);
+    if (!node || node.data.definitionId !== 'video-edit') return;
+    if (!node.data.spawnedThisSession) return;
+
+    const clips = (node.data.params?.clips ?? []) as Array<Record<string, unknown>>;
+    const isVirgin =
+      clips.length === 0 ||
+      (clips.length === 1 &&
+        (clips[0].sourceIn === 0 || clips[0].sourceIn === 0.0) &&
+        (clips[0].speed === 1 || clips[0].speed === 1.0) &&
+        (clips[0].volume === 1 || clips[0].volume === 1.0) &&
+        clips[0].mute === false);
+    if (!isVirgin) return;
+
+    set({
+      nodes: state.nodes.filter((n) => n.id !== nodeId),
+      edges: state.edges.filter((e) => e.target !== nodeId && e.source !== nodeId),
+    });
+  },
+
+  updateEditNodeClip: (nodeId, clipId, patch) => {
+    set((state) => ({
+      nodes: state.nodes.map((n) => {
+        if (n.id !== nodeId) return n;
+        const params = { ...(n.data.params ?? {}) };
+        const clips = ((params.clips as any[]) ?? []).map((c) =>
+          c.id === clipId ? { ...c, ...patch } : c,
+        );
+        return { ...n, data: { ...n.data, params: { ...params, clips } } };
+      }),
+    }));
+  },
+
+  cutEditNodeAtSource: (nodeId, sourceTime) => {
+    set((state) => ({
+      nodes: state.nodes.map((n) => {
+        if (n.id !== nodeId) return n;
+        const params = { ...(n.data.params ?? {}) };
+        const clips = ((params.clips as any[]) ?? []);
+        const idx = clips.findIndex((c) => sourceTime > c.sourceIn && sourceTime < c.sourceOut);
+        if (idx < 0) return n;
+        const orig = clips[idx];
+        const left = { ...orig, sourceOut: sourceTime };
+        const right = {
+          ...orig,
+          id: `${orig.id}-${Math.random().toString(36).slice(2, 6)}`,
+          sourceIn: sourceTime,
+        };
+        const next = [...clips.slice(0, idx), left, right, ...clips.slice(idx + 1)];
+        return { ...n, data: { ...n.data, params: { ...params, clips: next } } };
+      }),
+    }));
+  },
+
+  removeEditNodeClip: (nodeId, clipId) => {
+    set((state) => ({
+      nodes: state.nodes.map((n) => {
+        if (n.id !== nodeId) return n;
+        const params = { ...(n.data.params ?? {}) };
+        const clips = ((params.clips as any[]) ?? []).filter((c) => c.id !== clipId);
+        if (clips.length === 0) return n; // Never delete the only clip
+        return { ...n, data: { ...n.data, params: { ...params, clips } } };
+      }),
+    }));
   },
 
   loadGraph: (nodes, edges) => {
