@@ -1,6 +1,6 @@
 # Node Input + API Contract Hardening - Goal Plan
 
-> **Goal status:** Started 2026-05-16. Active. As of 2026-05-17: 60 of 100 nodes audited, 156 bugs fixed, 497 backend tests passing (up from 246 baseline), Phase 1 and Phase 3 complete. Phase 2 ~60% complete. Phase 4 unstarted.
+> **Goal status:** Started 2026-05-16. Active. As of 2026-05-19: 88 of 88 API-backed nodes have a structural audit note under `docs/model-providers/`. 633 backend tests passing (246 baseline + 387 net new across the audit + Phase 4). Phases 1, 3, and 4 complete. Phase 2 **structural audit complete**; remaining gate is **live-smoke verification** for ~21 nodes across 6 families (see Phase 2 below).
 
 ## Goal
 
@@ -26,13 +26,46 @@ The immediate outcome is that bad node IDs, missing handlers, stale API keys, in
 
 ### Phase 2 - Full input/API audit
 
-Status: 60/100 nodes audited as of 2026-05-17. Each audited family has a note under `docs/model-providers/<provider>/` with severity-tagged findings, canonical doc citations, and fixes.
+Status: **structural audit complete** for all 88 API-backed nodes as of 2026-05-19. Each audited family has a note under `docs/model-providers/<provider>/` with severity-tagged findings, canonical doc citations, and fixes. The remaining work is the **live-smoke gate** — verifying request/response shapes against the actual API rather than just the docs. See `## Phase 2 live-smoke status` below for what's verified vs pending.
 
-- [~] Review all 100 nodes by provider family against canonical docs. **Done so far:** OpenAI direct (image 5, audio 3, chat 1), Anthropic (1), MiniMax (3), Higgsfield (1), xAI Grok (1), ElevenLabs (5), FAL universal + Kling (3) + LTX (2) + Wan (3) + Luma (3) + Recraft (2) + FLUX (5) + Seedance (6) + OpenAI passthroughs (5), Universal nodes (Replicate, OpenRouter, Nous — 3), Google (7). **Remaining (~40):** FAL misc (Sora, Moonvalley, Pixverse, RemoveBG, Seedvr2 — 5), Hunyuan3D (2), Meshy direct + via FAL (10), Runway (7), and node families needing real API keys (currently placeholders): MiniMax I2V smoke, Higgsfield + xAI Grok + ElevenLabs STS for live verification.
+- [x] Review all 88 API-backed nodes by provider family against canonical docs. Coverage: OpenAI direct (image 5, audio 3, chat 1), Anthropic (1), MiniMax (3), Higgsfield (1), xAI Grok (1), ElevenLabs (5), FAL universal + Kling (3) + LTX (2) + Wan (3) + Luma (3) + Recraft (2) + FLUX (5) + Seedance (6) + OpenAI passthroughs (5) + misc (Sora, Pixverse, RemoveBG, Seedvr2 — Moonvalley deprecated 2026-05-19), Hunyuan3D (2), Meshy direct + via FAL (10), Runway (7), Quiver (2), Universal nodes (Replicate, OpenRouter, Nous — 3), Google (7).
 - [x] Normalize required vs optional ports, file vs URL params, array inputs, masks, reference media, and conditional fields — covered for every audited family.
-- [x] Confirm each static FAL wrapper injects the correct endpoint and strips/normalizes params the endpoint does not accept — `fal-universal.md` audit established the contract; Kling/LTX/Wan/Luma/Recraft/FLUX/Seedance/OpenAI passthroughs all use it correctly post-audit.
-- [x] Confirm direct-provider handlers map UI params to request bodies exactly — for all 14 audited families.
-- [x] Add targeted handler tests for high-risk families: 251 net new structural body-shape tests across the audited handlers. Tests grew 246 → 497.
+- [x] Confirm each static FAL wrapper injects the correct endpoint and strips/normalizes params the endpoint does not accept — `fal-universal.md` audit established the contract; Kling/LTX/Wan/Luma/Recraft/FLUX/Seedance/OpenAI passthroughs/misc all use it correctly post-audit.
+- [x] Confirm direct-provider handlers map UI params to request bodies exactly — for all audited families.
+- [x] Add targeted handler tests for high-risk families: 387 net new structural body-shape tests across the audited handlers (246 baseline → 633 with Phase 4).
+- [ ] **Live-smoke gate:** verify request/response shapes against the actual API for the families that have not yet had a live-smoke pass. See live-smoke status below.
+
+## Phase 2 live-smoke status
+
+Live-smoke testing has caught at least four post-structural-audit bugs that structural tests pinned wrong (PCM-as-WAV header, Google responseFormat enum, FAL duration integer-vs-string, Runway ratio enum). Treating it as a separate completion gate.
+
+| Family | Structural | Live-smoke | Notes |
+|---|---|---|---|
+| OpenAI image/audio/chat | done | done (TTS PCM, image edit) | |
+| Google (Gemini, Lyria, etc.) | done | done | responseFormat + Lyria MIME caught on smoke |
+| FAL (Sora, Pixverse) | done | done | duration int-vs-string caught on smoke |
+| Runway (image, video) | done | done | ratio 720:1280 caught on smoke |
+| ElevenLabs TTS | done | done | PCM/WAV header caught on smoke |
+| ElevenLabs SFX | done | done | |
+| ElevenLabs Isolation | done | done | |
+| ElevenLabs Dubbing | done | done | |
+| Quiver (arrow-generate, arrow-vectorize) | done | done | Phase 4 |
+| Anthropic Claude Chat | done | done | |
+| MiniMax T2V | done | done | |
+| FAL families (Kling/LTX/Wan/Luma/Recraft/FLUX/Seedance/openai-passthroughs) | done | partial | one node per family smoked; remaining inherit `fal-universal` contract |
+| ElevenLabs STS | done | done (2026-05-19) | voice_settings JSON multipart + seed verified via `backend/scripts/smoke_elevenlabs_sts.py` |
+| **MiniMax I2V / S2V** | done | **pending** | port-id mismatch fixed in audit (was silently falling through to T2V) — never smoked |
+| **Higgsfield** | done | **pending** | base URL, auth scheme, all endpoints rewritten in audit |
+| **xAI Grok video** | done | **pending** | endpoint URL + model ID + response shape all rewritten in audit |
+| **Hunyuan3D (text-to-3d, image-to-3d)** | done | **pending** | FAL v3 endpoint; structural only |
+| **Meshy direct (8 nodes)** | done | **pending** | `MESHY_API_KEY` is set in `settings.json` (not `.env`); tractable |
+| **Meshy FAL-backed (2 nodes)** | done | **pending** | `meshy-text-to-3d`, `meshy-image-to-3d` |
+
+Live-smoke remaining (tractable): ~27 nodes — Meshy direct (8), Meshy FAL (2), Hunyuan3D (2), plus per-family rotations on FAL families with non-default endpoints. ElevenLabs STS verified 2026-05-19.
+
+Live-smoke blocked on missing API keys: MiniMax I2V/S2V (2), Higgsfield (1), xAI Grok (1) — keys absent from both `.env` and `settings.json` as of 2026-05-19. These need real keys before they can be verified.
+
+**Key source note (added 2026-05-19):** API keys are stored in two places. `.env` carries some, but the canonical source is `settings.json` (`apiKeys` block) which the in-app Settings UI writes. The running uvicorn pulls from `settings.json`. Always check both before assuming a key is missing.
 
 ### Phase 3 - Generated docs
 
@@ -58,8 +91,8 @@ Inspector-popover work shipped in `f6ceb15` (image-surface visibility patched 20
 
 ## Current findings
 
-- Live registry has 100 nodes in `backend/data/node_definitions.json`. Frontend `NODE_DEFINITIONS` has matching 100 IDs.
-- Runtime handler coverage is complete: 84 API-backed handlers plus 16 local utility nodes.
+- Live registry has 103 nodes in `backend/data/node_definitions.json` (104 prior to 2026-05-19 — `moonvalley` deprecated, FAL endpoint returned 404 and Moonvalley no longer published a FAL surface). Frontend `NODE_DEFINITIONS` matches.
+- Runtime handler coverage is complete: 86 API-backed handlers plus 17 local utility nodes (Style Reference added 2026-05-19).
 - `MODEL_REFERENCE.md` is now generated from the registry; future drift fails CI via `--check`.
 - `.env.example` has all required keys including `MESHY_API_KEY`.
 

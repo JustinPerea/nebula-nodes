@@ -3,16 +3,25 @@ id: nebula-fal-misc
 kind: project-model-integration
 project: nebula_nodes
 provider: fal
-model: sora-2, moonvalley, pixverse-v4-5, remove-background, seedvr2-upscale
+model: sora-2, pixverse-v4-5, remove-background, seedvr2-upscale
 status: active
-verified: 2026-05-17
+verified: 2026-05-19
 stale_after_days: 30
 ---
 
 # FAL Misc Wrappers — Audit Note
 
-Covers five miscellaneous FAL wrapper nodes. All route through `handle_fal_universal`
+Covers four miscellaneous FAL wrapper nodes. All route through `handle_fal_universal`
 (see `fal-universal.md`).
+
+> **2026-05-19 — `moonvalley` deprecated.** The `fal-ai/moonvalley/image-to-video`
+> endpoint returns HTTP 404 and Moonvalley no longer publishes a FAL surface (their
+> `Marey` model is currently waitlist-only with ComfyUI/Runway/Replicate integrations,
+> per the Moonvalley/CineD/TechCrunch coverage from mid-2025). Node was removed from
+> `backend/data/node_definitions.json`, `frontend/src/constants/nodeDefinitions.ts`,
+> the `_moonvalley_handler` in `backend/execution/sync_runner.py`, and the
+> `test_moonvalley_endpoint_injection` test. No saved graphs in `saved/` referenced it.
+> Reinstate when Moonvalley publishes a stable API (either via FAL again or direct).
 
 > **Live-smoke correction (2026-05-17):** The initial audit set sora-2 and pixverse-v4-5
 > duration options as STRINGS. Direct API verification shows FAL expects INTEGERS for
@@ -28,7 +37,7 @@ Covers five miscellaneous FAL wrapper nodes. All route through `handle_fal_unive
 - `https://fal.ai/models/fal-ai/pixverse/v4.5/text-to-video/api` — fetched 2026-05-17
 - `https://fal.ai/models/fal-ai/imageutils/rembg/api` — fetched 2026-05-17
 - `https://fal.ai/models/fal-ai/seedvr/upscale/image/api` — fetched 2026-05-17
-- `https://fal.ai/models/fal-ai/moonvalley/image-to-video` — returned 404 on 2026-05-17; endpoint ID and params retained from prior implementation; mark for re-verification
+- `https://fal.ai/video` — fetched 2026-05-19, confirms Moonvalley is not on FAL's current video model index
 
 ---
 
@@ -37,7 +46,6 @@ Covers five miscellaneous FAL wrapper nodes. All route through `handle_fal_unive
 | ID | Endpoint | Input Ports | Output Port | Handler |
 |----|----------|-------------|-------------|---------|
 | `sora-2` | `fal-ai/sora-2/text-to-video` (std) or `/pro` | `prompt` | `video` | `_sora2_handler` |
-| `moonvalley` | `fal-ai/moonvalley/image-to-video` | `image`, `prompt` | `video` | `_moonvalley_handler` |
 | `pixverse-v4-5` | `fal-ai/pixverse/v4.5/text-to-video` | `prompt`, `image` | `video` | `_pixverse_handler` |
 | `remove-background` | `fal-ai/imageutils/rembg` | `image` | `image` | `_remove_bg_handler` |
 | `seedvr2-upscale` | `fal-ai/seedvr/upscale/image` | `image` | `image` | `_seedvr2_upscale_handler` |
@@ -67,20 +75,6 @@ verification reverted them to integers.
 |----------|-------|----------------|-------------|--------|
 | Medium | `duration` default | `4` (int) → `"4"` (string) | `4` (int) | FAL accepts integer; live-smoke caught string regression |
 | Medium | `duration` options | `[4, 8, 12, 16, 20]` (ints) → `["4","8","12","16","20"]` (strings) | `[4, 8, 12, 16, 20]` (ints) | Same — reverted per live-smoke verification |
-
----
-
-## moonvalley
-
-FAL model page returned HTTP 404 on 2026-05-17. Endpoint
-`fal-ai/moonvalley/image-to-video` is retained from the existing implementation.
-Port shape (`image` + `prompt` → `video`) and params (`duration`, `resolution`) appear
-consistent with the image-to-video pattern used across other FAL I2V nodes.
-
-**Action required:** Re-verify endpoint ID and param schema when FAL page becomes
-accessible. Mark endpoint as unverified.
-
-No bugs fixed in this node; no changes made.
 
 ---
 
@@ -143,10 +137,6 @@ No bugs fixed. Node definition was accurate.
 
 ## Open Questions
 
-1. **moonvalley 404** — FAL model page is inaccessible. Endpoint ID may have changed
-   (e.g. to `fal-ai/moonvalley-marey/image-to-video` or similar). Re-verify before
-   relying on this node in production.
-
-2. **pixverse image port** — The node has an `image` input port, implying image-to-video
+1. **pixverse image port** — The node has an `image` input port, implying image-to-video
    support. The FAL text-to-video endpoint may not accept `image_url`. Confirm whether
    PixVerse v4.5 has a separate I2V endpoint that should be used when an image is wired.

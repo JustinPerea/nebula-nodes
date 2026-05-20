@@ -221,8 +221,9 @@ infrastructure audit:
 1. **Wrapper endpoint IDs** — each wrapper should have its injected endpoint
    verified against `fal.ai/models`. The audit found no obviously wrong
    endpoint IDs in the infrastructure itself, but per-family verification is
-   needed (Kling, Luma, Seedance, WAN, Pixverse, Moonvalley, Flux variants,
-   etc.).
+   needed (Kling, Luma, Seedance, WAN, Pixverse, Flux variants, etc.). The
+   `moonvalley` wrapper was deprecated 2026-05-19 after its endpoint started
+   returning 404 — see `misc.md`.
 
 2. **Recraft SVG param `colors`** — the `colors` param takes a comma-separated
    hex string in the node definition placeholder, but FAL's API likely expects

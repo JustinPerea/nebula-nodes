@@ -129,7 +129,7 @@ values — only `pcm_*`, `mp3_*`, `opus_*`, `ulaw_8000`, and `alaw_8000`.
 unchanged (`pcm_44100`, `pcm_24000` are valid API enum values). The `_save_audio` helper
 correctly maps `pcm_*` → `.wav` extension (standard practice for raw PCM files).
 
-### STS: `voice_settings` never forwarded (FIXED)
+### STS: `voice_settings` never forwarded (FIXED + LIVE-VERIFIED 2026-05-19)
 
 **Severity:** High. The STS API accepts `voice_settings` as a JSON-encoded string in the
 multipart form body. The handler sent `model_id` and `remove_background_noise` but never
@@ -140,6 +140,12 @@ params from Phase 1 (they were listed as params but never read or sent).
 either is present, it constructs a `voice_settings` dict and serialises it with
 `json.dumps()`, then sends it as the `voice_settings` multipart field — matching the API's
 expected format.
+
+**Live-smoke (2026-05-19):** Verified end-to-end via
+`backend/scripts/smoke_elevenlabs_sts.py` with `stability=0.7`, `similarity_boost=0.6`,
+`seed=42`, and a 3s MP3 input. API returned 200; output MP3 is valid (ID3 header present),
+duration 3.02s, 49KB at `mp3_44100_128`. Multipart `voice_settings` and `seed` fields both
+accepted without rejection. No further bugs found.
 
 ### STS: `seed` param not forwarded (FIXED)
 

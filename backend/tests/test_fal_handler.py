@@ -3705,54 +3705,6 @@ async def test_sora2_pro_endpoint_injection():
     assert "model" not in payload
 
 
-# ── moonvalley ────────────────────────────────────────────────────────────────
-
-@pytest.mark.asyncio
-async def test_moonvalley_endpoint_injection():
-    """moonvalley must inject fal-ai/moonvalley/image-to-video and map image → image_url."""
-    from execution.sync_runner import get_handler_registry
-
-    emit = AsyncMock()
-    registry = get_handler_registry(emit=emit)
-    handler = registry["moonvalley"]
-
-    mock_submit, mock_status, mock_result = _make_poll_mocks(
-        {"video": {"url": "https://fal.ai/moonvalley.mp4"}}
-    )
-
-    node = GraphNode(
-        id="test-moonvalley",
-        definitionId="moonvalley",
-        params={"duration": "5s", "resolution": "1920x1080"},
-    )
-
-    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
-        mock_client = AsyncMock()
-        mock_client.post.return_value = mock_submit
-        mock_client.get.side_effect = [mock_status, mock_result]
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=False)
-        MockClient.return_value = mock_client
-
-        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
-            result = await handler(
-                node,
-                {
-                    "image": PortValueDict(type="Image", value="https://example.com/img.jpg"),
-                    "prompt": PortValueDict(type="Text", value="Slow zoom out"),
-                },
-                {"FAL_KEY": "fal_test"},
-            )
-
-    assert result["video"]["type"] == "Video"
-    url = mock_client.post.call_args.args[0] if mock_client.post.call_args.args else mock_client.post.call_args[0][0]
-    assert "moonvalley/image-to-video" in url
-    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
-    # image input must be mapped to image_url
-    assert payload.get("image_url") == "https://example.com/img.jpg"
-    assert payload.get("duration") == "5s"
-
-
 # ── pixverse-v4-5 ─────────────────────────────────────────────────────────────
 
 @pytest.mark.asyncio

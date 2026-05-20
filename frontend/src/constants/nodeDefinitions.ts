@@ -4806,47 +4806,6 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
     ],
   },
-  'moonvalley': {
-    id: 'moonvalley',
-    displayName: 'Moonvalley',
-    category: 'video-gen',
-    apiProvider: 'fal',
-    apiEndpoint: 'fal-ai/moonvalley/image-to-video',
-    envKeyName: 'FAL_KEY',
-    executionPattern: 'async-poll',
-    inputPorts: [
-      { id: 'image', label: 'Image', dataType: 'Image', required: true },
-      { id: 'prompt', label: 'Prompt', dataType: 'Text', required: false },
-    ],
-    outputPorts: [
-      { id: 'video', label: 'Video', dataType: 'Video', required: false },
-    ],
-    params: [
-      {
-        key: 'duration',
-        label: 'Duration',
-        type: 'enum',
-        required: false,
-        default: '5s',
-        options: [
-          { label: '5 seconds', value: '5s' },
-          { label: '10 seconds', value: '10s' },
-        ],
-      },
-      {
-        key: 'resolution',
-        label: 'Resolution',
-        type: 'enum',
-        required: false,
-        default: '1920x1080',
-        options: [
-          { label: '1920x1080', value: '1920x1080' },
-          { label: '1080x1920', value: '1080x1920' },
-          { label: '1152x1152', value: '1152x1152' },
-        ],
-      },
-    ],
-  },
   'kling-o3': {
     id: 'kling-o3',
     displayName: 'Kling Omni 3',

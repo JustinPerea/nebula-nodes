@@ -2271,9 +2271,18 @@
         "required": false,
         "default": "auto",
         "options": [
-          { "label": "Auto (Gemini)", "value": "auto" },
-          { "label": "Manual", "value": "manual" },
-          { "label": "Image only", "value": "passthrough" }
+          {
+            "label": "Auto (Gemini)",
+            "value": "auto"
+          },
+          {
+            "label": "Manual",
+            "value": "manual"
+          },
+          {
+            "label": "Image only",
+            "value": "passthrough"
+          }
         ]
       },
       {
@@ -2283,7 +2292,11 @@
         "required": false,
         "default": "",
         "placeholder": "e.g. wabi-sabi minimalism, warm tungsten lighting, grainy 35mm film",
-        "visibleWhen": { "mode": ["manual"] }
+        "visibleWhen": {
+          "mode": [
+            "manual"
+          ]
+        }
       },
       {
         "key": "focus",
@@ -2291,12 +2304,28 @@
         "type": "enum",
         "required": false,
         "default": "all",
-        "visibleWhen": { "mode": ["auto"] },
+        "visibleWhen": {
+          "mode": [
+            "auto"
+          ]
+        },
         "options": [
-          { "label": "All (palette + lighting + medium + mood)", "value": "all" },
-          { "label": "Palette only", "value": "palette" },
-          { "label": "Lighting only", "value": "lighting" },
-          { "label": "Medium / texture only", "value": "medium" }
+          {
+            "label": "All (palette + lighting + medium + mood)",
+            "value": "all"
+          },
+          {
+            "label": "Palette only",
+            "value": "palette"
+          },
+          {
+            "label": "Lighting only",
+            "value": "lighting"
+          },
+          {
+            "label": "Medium / texture only",
+            "value": "medium"
+          }
         ]
       },
       {
@@ -7227,9 +7256,18 @@
         "required": false,
         "default": "arrow-1.1",
         "options": [
-          { "label": "Arrow 1.1 (20 credits)", "value": "arrow-1.1" },
-          { "label": "Arrow 1.1 max (25 credits)", "value": "arrow-1.1-max" },
-          { "label": "Arrow 1 (30 credits, legacy)", "value": "arrow-1" }
+          {
+            "label": "Arrow 1.1 (20 credits)",
+            "value": "arrow-1.1"
+          },
+          {
+            "label": "Arrow 1.1 max (25 credits)",
+            "value": "arrow-1.1-max"
+          },
+          {
+            "label": "Arrow 1 (30 credits, legacy)",
+            "value": "arrow-1"
+          }
         ]
       },
       {
@@ -7321,9 +7359,18 @@
         "required": false,
         "default": "arrow-1.1",
         "options": [
-          { "label": "Arrow 1.1 (15 credits)", "value": "arrow-1.1" },
-          { "label": "Arrow 1.1 max (20 credits)", "value": "arrow-1.1-max" },
-          { "label": "Arrow 1 (30 credits, legacy)", "value": "arrow-1" }
+          {
+            "label": "Arrow 1.1 (15 credits)",
+            "value": "arrow-1.1"
+          },
+          {
+            "label": "Arrow 1.1 max (20 credits)",
+            "value": "arrow-1.1-max"
+          },
+          {
+            "label": "Arrow 1 (30 credits, legacy)",
+            "value": "arrow-1"
+          }
         ]
       },
       {
@@ -8625,77 +8672,6 @@
         "type": "integer",
         "required": false,
         "placeholder": "Random"
-      }
-    ]
-  },
-  "moonvalley": {
-    "id": "moonvalley",
-    "displayName": "Moonvalley",
-    "category": "video-gen",
-    "apiProvider": "fal",
-    "apiEndpoint": "fal-ai/moonvalley/image-to-video",
-    "envKeyName": "FAL_KEY",
-    "executionPattern": "async-poll",
-    "inputPorts": [
-      {
-        "id": "image",
-        "label": "Image",
-        "dataType": "Image",
-        "required": true
-      },
-      {
-        "id": "prompt",
-        "label": "Prompt",
-        "dataType": "Text",
-        "required": false
-      }
-    ],
-    "outputPorts": [
-      {
-        "id": "video",
-        "label": "Video",
-        "dataType": "Video",
-        "required": false
-      }
-    ],
-    "params": [
-      {
-        "key": "duration",
-        "label": "Duration",
-        "type": "enum",
-        "required": false,
-        "default": "5s",
-        "options": [
-          {
-            "label": "5 seconds",
-            "value": "5s"
-          },
-          {
-            "label": "10 seconds",
-            "value": "10s"
-          }
-        ]
-      },
-      {
-        "key": "resolution",
-        "label": "Resolution",
-        "type": "enum",
-        "required": false,
-        "default": "1920x1080",
-        "options": [
-          {
-            "label": "1920x1080",
-            "value": "1920x1080"
-          },
-          {
-            "label": "1080x1920",
-            "value": "1080x1920"
-          },
-          {
-            "label": "1152x1152",
-            "value": "1152x1152"
-          }
-        ]
       }
     ]
   },

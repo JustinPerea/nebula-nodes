@@ -510,10 +510,6 @@ def get_handler_registry(
             node.params.setdefault("endpoint_id", "fal-ai/bytedance/seedance/v1.5/pro/image-to-video")
             return await handle_fal_universal(node, inputs, api_keys, emit=emit)
 
-        async def _moonvalley_handler(node, inputs, api_keys):
-            node.params.setdefault("endpoint_id", "fal-ai/moonvalley/image-to-video")
-            return await handle_fal_universal(node, inputs, api_keys, emit=emit)
-
         async def _kling_o3_handler(
             node: GraphNode,
             inputs: dict[str, PortValueDict],
@@ -635,7 +631,6 @@ def get_handler_registry(
         registry["wan-2-6-r2v"] = _wan26_r2v_handler
         registry["pixverse-v4-5"] = _pixverse_handler
         registry["seedance-v1-5"] = _seedance_handler
-        registry["moonvalley"] = _moonvalley_handler
         registry["kling-o3"] = _kling_o3_handler
         registry["ltx-2-3"] = _ltx_23_handler
         registry["grok-imagine-video"] = _grok_video_handler
