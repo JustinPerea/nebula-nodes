@@ -2,6 +2,8 @@ import { useEffect, useRef } from 'react';
 import { ReactFlowProvider, useReactFlow } from '@xyflow/react';
 import type { Node, Edge } from '@xyflow/react';
 import { Canvas } from './components/Canvas';
+import { CanvasTabs } from './components/CanvasTabs';
+import { EditorView } from './components/editor/EditorView';
 import { NodeLibrary } from './components/panels/NodeLibrary';
 import { Settings } from './components/panels/Settings';
 import { Toolbar } from './components/panels/Toolbar';
@@ -118,11 +120,14 @@ export default function App() {
     return () => window.removeEventListener('nebula:settings-saved', handleSettingsSaved);
   }, []);
 
+  const viewMode = useUIStore((s) => s.viewMode);
+
   return (
     <ReactFlowProvider>
       <GraphHydrator />
       <ZoomManifestRecorder />
-      <Canvas />
+      <CanvasTabs />
+      {viewMode === 'editor' ? <EditorView /> : <Canvas />}
       <NodeLibrary />
       <NodeInspectorPopover />
       <Settings />
