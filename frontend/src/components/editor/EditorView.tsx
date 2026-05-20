@@ -36,27 +36,116 @@ export function EditorView() {
 
   useEffect(() => {
     function handleKey(e: KeyboardEvent) {
+      // Bail out of all bindings if the user is typing in a form field.
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+        return;
+      }
+
+      // Always-available bindings (work whether or not an edit node is loaded).
       if (e.key === 'Escape') {
         e.preventDefault();
         const ui = useUIStore.getState();
         if (ui.selectedClipId) setSelectedClip(null);
         else exitEditor();
-      } else if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+        return;
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === 's') {
         e.preventDefault();
-      } else if ((e.metaKey || e.ctrlKey) && (e.key === '=' || e.key === '+')) {
+        return;
+      }
+      if ((e.metaKey || e.ctrlKey) && (e.key === '=' || e.key === '+')) {
         e.preventDefault();
         useUIStore.getState().zoomTimelineIn();
-      } else if ((e.metaKey || e.ctrlKey) && e.key === '-') {
+        return;
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === '-') {
         e.preventDefault();
         useUIStore.getState().zoomTimelineOut();
-      } else if ((e.metaKey || e.ctrlKey) && e.key === '0') {
+        return;
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === '0') {
         e.preventDefault();
         useUIStore.getState().resetTimelineZoom();
+        return;
+      }
+
+      // Editor-context bindings (only when we have an edit node loaded).
+      if (!editNode) return;
+      const ui = useUIStore.getState();
+      const graph = useGraphStore.getState();
+
+      // Cut at playhead — bare S (no modifiers) or ⌘K/Ctrl+K
+      if (
+        (e.key === 's' || e.key === 'S') && !e.metaKey && !e.ctrlKey && !e.altKey
+      ) {
+        e.preventDefault();
+        const srcT = (window as Window & { __editorPlayheadSourceTime?: number }).__editorPlayheadSourceTime ?? 0;
+        graph.cutEditNodeAtSource(editNode.id, srcT);
+        return;
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        const srcT = (window as Window & { __editorPlayheadSourceTime?: number }).__editorPlayheadSourceTime ?? 0;
+        graph.cutEditNodeAtSource(editNode.id, srcT);
+        return;
+      }
+
+      // Delete selected clip — Backspace or Delete
+      if ((e.key === 'Backspace' || e.key === 'Delete') && ui.selectedClipId) {
+        e.preventDefault();
+        graph.removeEditNodeClip(editNode.id, ui.selectedClipId);
+        setSelectedClip(null);
+        return;
+      }
+
+      // Mute toggle — bare M
+      if ((e.key === 'm' || e.key === 'M') && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        if (!ui.selectedClipId) return;
+        e.preventDefault();
+        const params = (editNode.data as { params?: Record<string, unknown> }).params ?? {};
+        const clips = (params.clips as Array<{ id: string; mute: boolean }>) ?? [];
+        const clip = clips.find((c) => c.id === ui.selectedClipId);
+        if (clip) graph.updateEditNodeClip(editNode.id, clip.id, { mute: !clip.mute });
+        return;
+      }
+
+      // Set in/out at playhead — bare I or O
+      // Keep speed constant; recompute duration from new source range.
+      if (
+        (e.key === 'i' || e.key === 'I' || e.key === 'o' || e.key === 'O') &&
+        !e.metaKey && !e.ctrlKey && !e.altKey
+      ) {
+        if (!ui.selectedClipId) return;
+        e.preventDefault();
+        const srcT = (window as Window & { __editorPlayheadSourceTime?: number }).__editorPlayheadSourceTime ?? 0;
+        const params = (editNode.data as { params?: Record<string, unknown> }).params ?? {};
+        const clips = (params.clips as Array<{
+          id: string;
+          duration: number;
+          sourceIn: number;
+          sourceOut: number;
+        }>) ?? [];
+        const clip = clips.find((c) => c.id === ui.selectedClipId);
+        if (!clip) return;
+        const speed = clip.duration > 0 ? (clip.sourceOut - clip.sourceIn) / clip.duration : 1;
+        if (e.key === 'i' || e.key === 'I') {
+          // Set sourceIn to playhead's source-time; clamp [0, sourceOut - epsilon]
+          const newSourceIn = Math.max(0, Math.min(srcT, clip.sourceOut - 0.001));
+          const newDuration = (clip.sourceOut - newSourceIn) / speed;
+          graph.updateEditNodeClip(editNode.id, clip.id, { sourceIn: newSourceIn, duration: newDuration });
+        } else {
+          // Set sourceOut to playhead's source-time; clamp [sourceIn + epsilon, ∞)
+          const newSourceOut = Math.max(clip.sourceIn + 0.001, srcT);
+          const newDuration = (newSourceOut - clip.sourceIn) / speed;
+          graph.updateEditNodeClip(editNode.id, clip.id, { sourceOut: newSourceOut, duration: newDuration });
+        }
+        return;
       }
     }
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
-  }, [exitEditor, setSelectedClip]);
+  }, [exitEditor, setSelectedClip, editNode]);
 
   if (!editNode || !sourceNode || !sourceUrl) {
     return (
