@@ -451,6 +451,12 @@ export function Inspector({ embedded = false }: InspectorProps) {
     }
 
     if (param.type === 'file') {
+      const fileValue = String(value);
+      const loadedFilename = fileValue
+        ? fileValue.split('/').pop() ?? fileValue
+        : null;
+      const isVideoNode = activeNodeData.definitionId === 'video-input' || activeNodeData.definitionId === 'audio-input';
+      const acceptAttr = isVideoNode ? 'video/*,audio/*' : 'image/*,video/*,audio/*';
       return (
         <div className="inspector__control-stack">
           <label className="inspector__file-button">
@@ -461,10 +467,10 @@ export function Inspector({ embedded = false }: InspectorProps) {
               aria-hidden="true"
               focusable="false"
             />
-            <span>Choose File</span>
+            <span>{loadedFilename ?? 'Choose File'}</span>
             <input
               type="file"
-              accept="image/*"
+              accept={acceptAttr}
               className="inspector__file-input"
               onChange={(e) => {
                 const file = e.target.files?.[0];
