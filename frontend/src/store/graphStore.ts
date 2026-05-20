@@ -1045,7 +1045,8 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     // the existing "run the edit node to populate" fallback still works.
     const sourceParams = ((sourceNode.data as { params?: Record<string, unknown> }).params ?? {});
     const sourceDuration = typeof sourceParams.sourceDuration === 'number' ? sourceParams.sourceDuration : 0;
-    const sourceFps = typeof sourceParams.sourceFps === 'number' ? sourceParams.sourceFps : 30;
+    const sourceFps = typeof sourceParams.sourceFps === 'number' && sourceParams.sourceFps > 0
+      ? sourceParams.sourceFps : 30;
     const sourceIsVfr = Boolean(sourceParams.sourceIsVfr);
 
     const initialClips = sourceDuration > 0

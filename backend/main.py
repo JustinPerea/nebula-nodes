@@ -508,12 +508,19 @@ async def upload_file_consolidated(
     file: UploadFile,
     create_node: str = Form("false"),
 ) -> dict:
-    """Accept an image upload with strict validation and content-hash dedup.
+    """Accept an image or video upload with strict validation and content-hash dedup.
 
-    When `create_node` is truthy, atomically creates an image-input node in
+    Routes by magic bytes: PNG/JPEG/GIF/WebP → image-input node; MP4/MOV/WebM
+    → video-input node (with ffprobe-derived sourceDuration/sourceFps/sourceIsVfr
+    stored on the node's params so the editor surface can read source metadata
+    without waiting for the edit handler to run).
+
+    When `create_node` is truthy, atomically creates the routed node in
     cli_graph and broadcasts graphSync. When absent or falsy, returns only
     the upload metadata so callers can handle node creation themselves (or
     use the URL for an existing node).
+
+    Probe failure on a video that passed the magic-byte sniff returns 415.
 
     Supersedes the deprecated /api/upload and /api/chat/uploads endpoints;
     both shapes of caller can migrate to this one.
