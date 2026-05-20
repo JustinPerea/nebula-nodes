@@ -18,6 +18,7 @@ import { useIsValidConnection } from '../hooks/useIsValidConnection';
 import { ModelNode } from './nodes/ModelNode';
 import { DynamicNode } from './nodes/DynamicNode';
 import { RerouteNode } from './nodes/RerouteNode';
+import { EditNode } from './nodes/EditNode';
 import { TypedEdge } from './edges/TypedEdge';
 import { ContextMenu } from './ContextMenu';
 import { ConnectionPopup } from './ConnectionPopup';
@@ -27,6 +28,7 @@ const nodeTypes: NodeTypes = {
   'model-node': ModelNode,
   'dynamic-node': DynamicNode,
   'reroute-node': RerouteNode,
+  editNode: EditNode,
 };
 
 // fitView padding that reserves space for every floating panel that overlaps
