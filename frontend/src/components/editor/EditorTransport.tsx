@@ -3,7 +3,7 @@ import type { Node } from '@xyflow/react';
 import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
 import { renderPreview } from '../../lib/editor/api';
-import { type EditClip, totalOutputDuration } from '../../lib/editor/virtualPlayback';
+import { type EditClip, totalOutputDuration, clipSpeed } from '../../lib/editor/virtualPlayback';
 import { formatSmpte } from '../../lib/editor/timecode';
 
 interface Props {
@@ -54,12 +54,17 @@ export function EditorTransport({ editNode, sourceUrl }: Props) {
         <div className="editor-transport__inspector">
           <label className="editor-transport__label">Speed</label>
           <input type="range" min={0.25} max={4} step={0.05}
-            value={selectedClip.speed}
-            onChange={(e) => updateClip(editNode.id, selectedClip.id, { speed: parseFloat(e.target.value) })} />
-          <span className="editor-transport__value">{selectedClip.speed.toFixed(2)}×</span>
-          <button onClick={() => updateClip(editNode.id, selectedClip.id, { speed: 0.5 })}>0.5×</button>
-          <button onClick={() => updateClip(editNode.id, selectedClip.id, { speed: 1.0 })}>1×</button>
-          <button onClick={() => updateClip(editNode.id, selectedClip.id, { speed: 2.0 })}>2×</button>
+            value={clipSpeed(selectedClip)}
+            onChange={(e) => {
+              const newSpeed = parseFloat(e.target.value);
+              if (newSpeed <= 0) return;
+              const newDuration = (selectedClip.sourceOut - selectedClip.sourceIn) / newSpeed;
+              updateClip(editNode.id, selectedClip.id, { duration: newDuration });
+            }} />
+          <span className="editor-transport__value">{clipSpeed(selectedClip).toFixed(2)}×</span>
+          <button onClick={() => updateClip(editNode.id, selectedClip.id, { duration: (selectedClip.sourceOut - selectedClip.sourceIn) / 0.5 })}>0.5×</button>
+          <button onClick={() => updateClip(editNode.id, selectedClip.id, { duration: (selectedClip.sourceOut - selectedClip.sourceIn) })}>1×</button>
+          <button onClick={() => updateClip(editNode.id, selectedClip.id, { duration: (selectedClip.sourceOut - selectedClip.sourceIn) / 2 })}>2×</button>
 
           <label className="editor-transport__label">Vol</label>
           <input type="range" min={0} max={1} step={0.05}
