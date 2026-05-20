@@ -641,3 +641,20 @@ def test_researched_provider_corrections_are_pinned(definitions: dict[str, dict[
     )
     assert nous["executionPattern"] == "stream"
     assert nous["apiProvider"] == "nous"
+
+
+def test_video_edit_node_present_with_required_shape() -> None:
+    """video-edit must be registered with the documented port shape."""
+    import json
+    with open("data/node_definitions.json") as f:
+        defs = json.load(f)
+    node = defs["video-edit"]
+    assert node["category"] == "utility"
+    assert node["apiProvider"] == "utility"
+    assert node["executionPattern"] == "async-poll"
+    assert node["envKeyName"] == []
+    assert {p["id"] for p in node["inputPorts"]} == {"video_in"}
+    assert {p["id"] for p in node["outputPorts"]} == {"video"}
+    assert node["inputPorts"][0]["dataType"] == "Video"
+    assert node["outputPorts"][0]["dataType"] == "Video"
+    assert node["inputPorts"][0]["required"] is True
