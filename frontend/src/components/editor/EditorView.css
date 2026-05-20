@@ -487,3 +487,10 @@ body:not(.app-slava-restraint) .editor-tl__playhead {
   gap: 4px;
   align-items: center;
 }
+
+.editor-tl__waveform {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.6;
+}

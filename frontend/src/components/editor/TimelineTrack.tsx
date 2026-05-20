@@ -1,5 +1,6 @@
 import { type EditClip } from '../../lib/editor/virtualPlayback';
 import { TimelineClip } from './TimelineClip';
+import { WaveformAudio } from './WaveformAudio';
 
 interface Props {
   type: 'video' | 'audio';
@@ -11,11 +12,12 @@ interface Props {
   sourceUrl?: string;
 }
 
-export function TimelineTrack({ type, clips, sourceDuration, sourceFps, editNodeId }: Props) {
+export function TimelineTrack({ type, clips, sourceDuration, sourceFps, editNodeId, sourceUrl }: Props) {
   return (
     <div className={`editor-tl__track editor-tl__track--${type}`}>
       <div className="editor-tl__track-label">{type === 'video' ? 'VID' : 'AUD'}</div>
       <div className="editor-tl__track-body">
+        {type === 'audio' && sourceUrl && <WaveformAudio sourceUrl={sourceUrl} />}
         {clips.map((clip, i) => (
           <TimelineClip
             key={clip.id}
