@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { ArrowLeft } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
 import { EditorBreadcrumb } from './EditorBreadcrumb';
@@ -42,6 +43,15 @@ export function EditorView() {
         else exitEditor();
       } else if ((e.metaKey || e.ctrlKey) && e.key === 's') {
         e.preventDefault();
+      } else if ((e.metaKey || e.ctrlKey) && (e.key === '=' || e.key === '+')) {
+        e.preventDefault();
+        useUIStore.getState().zoomTimelineIn();
+      } else if ((e.metaKey || e.ctrlKey) && e.key === '-') {
+        e.preventDefault();
+        useUIStore.getState().zoomTimelineOut();
+      } else if ((e.metaKey || e.ctrlKey) && e.key === '0') {
+        e.preventDefault();
+        useUIStore.getState().resetTimelineZoom();
       }
     }
     window.addEventListener('keydown', handleKey);
@@ -52,7 +62,10 @@ export function EditorView() {
     return (
       <div className="editor-view editor-view--empty">
         <p>Connect a video upstream to edit.</p>
-        <button type="button" onClick={exitEditor}>Back to Canvas</button>
+        <button type="button" onClick={exitEditor}>
+          <ArrowLeft className="editor-view__button-icon" aria-hidden="true" focusable="false" />
+          <span>Back to Canvas</span>
+        </button>
       </div>
     );
   }

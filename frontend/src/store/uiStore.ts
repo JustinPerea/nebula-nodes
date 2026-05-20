@@ -62,6 +62,7 @@ interface UIState {
   editorTargetNodeId: string | null;
   selectedClipId: string | null;
   playheadOutputTime: number;
+  timelineZoom: number;
   // True after the user manually resizes/drags the chat panel. While false,
   // ChatPanel skips its inline width/height so CSS-driven sizing
   // (clamp + viewport units) drives the chat width and lines it up with the
@@ -93,6 +94,10 @@ interface UIState {
   exitEditor: () => void;
   setSelectedClip: (id: string | null) => void;
   setPlayheadOutputTime: (t: number) => void;
+  setTimelineZoom: (zoom: number) => void;
+  zoomTimelineIn: () => void;
+  zoomTimelineOut: () => void;
+  resetTimelineZoom: () => void;
 
   selectNode: (nodeId: string | null) => void;
   setInspectorVisible: (visible: boolean) => void;
@@ -121,6 +126,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   editorTargetNodeId: null,
   selectedClipId: null,
   playheadOutputTime: 0,
+  timelineZoom: 1,
   chatResized: false,
   panels: createDefaultPanels(),
   librarySearch: '',
@@ -163,6 +169,11 @@ export const useUIStore = create<UIState>((set, get) => ({
   setSelectedClip: (id) => set({ selectedClipId: id }),
 
   setPlayheadOutputTime: (t) => set({ playheadOutputTime: t }),
+
+  setTimelineZoom: (zoom) => set({ timelineZoom: Math.max(1, Math.min(10, zoom)) }),
+  zoomTimelineIn: () => set((s) => ({ timelineZoom: Math.min(10, s.timelineZoom * 2) })),
+  zoomTimelineOut: () => set((s) => ({ timelineZoom: Math.max(1, s.timelineZoom / 2) })),
+  resetTimelineZoom: () => set({ timelineZoom: 1 }),
 
   selectNode: (nodeId) =>
     set((state) => ({
