@@ -39,3 +39,31 @@
   color: var(--sr-ink);
   text-align: center;
 }
+.editor-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--sr-mono, monospace);
+  font-size: 10px;
+  color: var(--sr-ink-light);
+  letter-spacing: 0.1em;
+}
+.editor-breadcrumb__label { opacity: 0.7; }
+.editor-breadcrumb__source { color: var(--sr-ink); }
+.editor-breadcrumb__arrow { opacity: 0.4; }
+.editor-breadcrumb__edit {
+  background: var(--sr-accent-soft);
+  border: 1px solid var(--sr-accent-border);
+  padding: 2px 8px;
+  border-radius: 4px;
+  color: var(--sr-accent);
+}
+.editor-breadcrumb__shortcuts { margin-left: auto; color: var(--sr-ink-meta); }
+.editor-breadcrumb__vfr {
+  background: rgba(255, 90, 31, 0.10);
+  border: 1px solid var(--sr-accent-border);
+  border-radius: 4px;
+  padding: 6px 12px;
+  font-size: 11px;
+  color: var(--sr-ink);
+}
