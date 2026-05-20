@@ -652,7 +652,7 @@ def test_video_edit_node_present_with_required_shape() -> None:
     assert node["category"] == "utility"
     assert node["apiProvider"] == "utility"
     assert node["executionPattern"] == "async-poll"
-    assert node["envKeyName"] is None
+    assert node["envKeyName"] == []
     assert {p["id"] for p in node["inputPorts"]} == {"video_in"}
     assert {p["id"] for p in node["outputPorts"]} == {"video"}
     assert node["inputPorts"][0]["dataType"] == "Video"

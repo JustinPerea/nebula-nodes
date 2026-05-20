@@ -1351,8 +1351,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     displayName: 'Video Edit',
     category: 'utility',
     apiProvider: 'utility',
-    apiEndpoint: null,
-    envKeyName: null,
+    apiEndpoint: '',
+    envKeyName: [],
     executionPattern: 'async-poll',
     inputPorts: [
       { id: 'video_in', label: 'Source Video', dataType: 'Video', required: true },

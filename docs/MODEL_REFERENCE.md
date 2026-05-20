@@ -257,7 +257,6 @@ Generated: 2026-05-20 | Nodes: 103 | Source: [`backend/data/node_definitions.jso
 | Model | enum | gpt-image-1 | GPT Image 1, GPT Image 1.5, GPT Image 1 Mini |
 | Size | enum | auto | Auto, 1024×1024, 1536×1024, 1024×1536 |
 | Quality | enum | auto | Auto, Low, Medium, High |
-| Count | int | 1 | 1–10 |
 | Format | enum | png | PNG, JPEG, WebP |
 | Background | enum | auto | Auto, Transparent, Opaque |
 
@@ -395,7 +394,7 @@ Generated: 2026-05-20 | Nodes: 103 | Source: [`backend/data/node_definitions.jso
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Model | enum | nano-banana | Nano Banana, Nano Banana 2, Nano Banana Pro |
+| Model | enum | nano-banana | Nano Banana, Nano Banana Pro |
 | Multi-View | bool | false | — |
 
 ---
@@ -415,7 +414,7 @@ Generated: 2026-05-20 | Nodes: 103 | Source: [`backend/data/node_definitions.jso
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Model | enum | nano-banana | Nano Banana, Nano Banana 2, Nano Banana Pro |
+| Model | enum | nano-banana | Nano Banana, Nano Banana Pro |
 | Multi-View | bool | false | — |
 | Aspect Ratio | enum | 1:1 | 1:1, 16:9, 9:16, 4:3, 3:4 |
 | Pose Mode | enum | — | None, A-Pose, T-Pose |
@@ -884,9 +883,9 @@ Generated: 2026-05-20 | Nodes: 103 | Source: [`backend/data/node_definitions.jso
 | Duration | enum | 5 | 5 seconds, 8 seconds |
 | Aspect Ratio | enum | 16:9 | 16:9, 4:3, 1:1, 3:4, 9:16 |
 | Resolution | enum | 720p | 360p, 540p, 720p, 1080p |
+| Style | enum | — | None, Anime, 3D Animation, Clay, Comic, Cyberpunk |
 | Negative Prompt | string | — | — |
 | Seed | int | — | — |
-| Style | enum | — | None, Anime, 3D Animation, Clay, Comic, Cyberpunk |
 
 ---
 
@@ -1107,7 +1106,6 @@ Generated: 2026-05-20 | Nodes: 103 | Source: [`backend/data/node_definitions.jso
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Model | enum | standard | Sora 2 Standard, Sora 2 Pro |
 | Resolution | enum | 720p | 720p, 1080p |
 | Aspect Ratio | enum | 16:9 | 16:9, 9:16 |
 | Duration (s) | enum | 4 | 4s, 8s, 12s, 16s, 20s |
@@ -1131,6 +1129,7 @@ Generated: 2026-05-20 | Nodes: 103 | Source: [`backend/data/node_definitions.jso
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
+| Aspect Ratio | enum | 16:9 | 16:9, 9:16 |
 | Duration | enum | 8 | 4 seconds, 5 seconds, 6 seconds, 8 seconds |
 | Resolution | enum | 720p | 720p, 1080p, 4K |
 | Person Generation | enum | allow_adult | Allow All, Allow Adult, Don't Allow |
@@ -1139,9 +1138,6 @@ Generated: 2026-05-20 | Nodes: 103 | Source: [`backend/data/node_definitions.jso
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Aspect Ratio | enum | 16:9 | 16:9, 9:16 |
-| Generate Audio | bool | true | — |
-| Auto-Fix Prompt | bool | true | — |
 | Negative Prompt | string | — | — |
 | Seed | int | — | — |
 | Safety Tolerance | enum | 4 | 1 (Strict), 2, 3, 4, 5, 6 (Permissive) |
@@ -1151,7 +1147,6 @@ Generated: 2026-05-20 | Nodes: 103 | Source: [`backend/data/node_definitions.jso
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
 | Model | enum | veo-3.1-generate-preview | Veo 3.1, Veo 3.1 Fast, Veo 3.1 Lite, Veo 3, Veo 3 Fast, Veo 2 |
-| Aspect Ratio | enum | 16:9 | 16:9, 9:16 |
 | Seed | int | — | — |
 
 ---
@@ -1446,7 +1441,7 @@ Generated: 2026-05-20 | Nodes: 103 | Source: [`backend/data/node_definitions.jso
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Model | enum | gemini-2.5-flash-preview-tts | 3.1 Flash TTS, 2.5 Flash TTS, 2.5 Pro TTS |
+| Model | enum | gemini-2.5-flash-preview-tts | 2.5 Flash TTS, 2.5 Pro TTS |
 | Voice | enum | Kore | Zephyr — Bright, Puck — Upbeat, Charon — Informative, Kore — Firm, Fenrir — Excitable, Leda — Youthful, Orus — Firm, Aoede — Breezy, … |
 
 ---
@@ -1694,7 +1689,7 @@ Generated: 2026-05-20 | Nodes: 103 | Source: [`backend/data/node_definitions.jso
 | **API Key** | MESHY_API_KEY, FAL_KEY |
 | **Endpoint** | `fal-ai/meshy/v6/image-to-3d` |
 | **Execution** | async-poll |
-| **Inputs** | Image (Image)*, Texture Reference (Image) |
+| **Inputs** | Image (Image)* |
 | **Outputs** | Mesh (Mesh) |
 | **Audited** | 2026-05-17 |
 
@@ -1715,10 +1710,6 @@ Generated: 2026-05-20 | Nodes: 103 | Source: [`backend/data/node_definitions.jso
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
 | Texture Prompt | string | — | — |
-| Auto-Rig (Humanoid) | bool | false | — |
-| Rig Height (m) | float | 1.7 | — |
-| Apply Animation | bool | false | — |
-| Animation ID | int | 1001 | — |
 | Safety Checker | bool | true | — |
 | Seed | int | — | — |
 
@@ -1835,7 +1826,7 @@ Generated: 2026-05-20 | Nodes: 103 | Source: [`backend/data/node_definitions.jso
 | **API Key** | MESHY_API_KEY, FAL_KEY |
 | **Endpoint** | `fal-ai/meshy/v6/text-to-3d` |
 | **Execution** | async-poll |
-| **Inputs** | Prompt (Text)*, Texture Reference (Image) |
+| **Inputs** | Prompt (Text)* |
 | **Outputs** | Mesh (Mesh) |
 | **Audited** | 2026-05-17 |
 
@@ -1856,12 +1847,7 @@ Generated: 2026-05-20 | Nodes: 103 | Source: [`backend/data/node_definitions.jso
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Art Style | enum | realistic | Realistic, Sculpture |
 | Texture Prompt | string | — | — |
-| Auto-Rig (Humanoid) | bool | false | — |
-| Rig Height (m) | float | 1.7 | — |
-| Apply Animation | bool | false | — |
-| Animation ID | int | 1001 | — |
 | Enhance Prompt | bool | false | — |
 | Safety Checker | bool | true | — |
 | Seed | int | — | — |
