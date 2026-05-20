@@ -4,27 +4,24 @@ import { getThumbnail } from '../../lib/editor/thumbnailStrip';
 
 interface Props {
   sourceUrl: string;
-  /** Total output duration in seconds — the timeline's full visible range. */
+  /** Source media duration in seconds — the timeline's visual reference width. */
+  sourceDuration: number;
+  /** Output playback duration in seconds — used for tick labels (where the edit ends). */
   totalOutputDuration: number;
   /** Used for SMPTE display only. */
   sourceFps: number;
-  /** Used to compute thumbnail source times (proportionally mapped from output). */
-  sourceDuration: number;
 }
 
-export function TimelineRuler({ sourceUrl, totalOutputDuration, sourceFps, sourceDuration }: Props) {
-  // Tick every ~2 seconds of OUTPUT time, capped to keep the strip from
-  // overflowing on long durations. Phase D code review flagged uncapped
-  // step counts; this preserves that limit while moving to output time.
+export function TimelineRuler({ sourceUrl, sourceDuration, totalOutputDuration, sourceFps }: Props) {
+  // Tick every ~2 seconds of OUTPUT time, capped at 12 to keep the strip
+  // from overflowing. Even spacing across the OUTPUT range.
   const stepCount = Math.max(1, Math.min(12, Math.floor(totalOutputDuration / 2)));
   const outputStepTimes = Array.from(
     { length: stepCount + 1 },
     (_, i) => (totalOutputDuration * i) / stepCount,
   );
-  // Thumbnails are sampled from source time. We pick proportional source
-  // times so the strip shows a roughly representative sweep of the media —
-  // accurate-to-output-time-position would require integrating across
-  // speed-changed clips, which is Phase 2 work.
+  // Thumbnails sampled across source. Same step count for visual symmetry
+  // with the ticks.
   const sourceStepTimes = Array.from(
     { length: stepCount + 1 },
     (_, i) => (sourceDuration * i) / stepCount,
@@ -46,11 +43,29 @@ export function TimelineRuler({ sourceUrl, totalOutputDuration, sourceFps, sourc
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sourceUrl, sourceDuration]);
 
+  // Positions each ruler tick at its proportional position on the timeline.
+  // Timeline width represents sourceDuration; ticks are output-time values,
+  // so the last tick sits at totalOutputDuration / sourceDuration of the way
+  // across (= 1 at speed=1, < 1 when sped up, > 1 when slowed — clipped by
+  // overflow if so).
+  function tickLeftPct(outputTime: number): number {
+    if (sourceDuration <= 0) return 0;
+    return Math.min(100, (outputTime / sourceDuration) * 100);
+  }
+  function thumbLeftPct(sourceTime: number): number {
+    if (sourceDuration <= 0) return 0;
+    return (sourceTime / sourceDuration) * 100;
+  }
+
   return (
     <div className="editor-tl__ruler-wrap">
       <div className="editor-tl__ruler-thumbs">
         {sourceStepTimes.map((t, i) => (
-          <div key={i} className="editor-tl__ruler-thumb">
+          <div
+            key={i}
+            className="editor-tl__ruler-thumb"
+            style={{ left: `${thumbLeftPct(t)}%` }}
+          >
             {thumbs[Number(t.toFixed(2))] ? (
               <img src={thumbs[Number(t.toFixed(2))]} alt="" />
             ) : (
@@ -61,7 +76,13 @@ export function TimelineRuler({ sourceUrl, totalOutputDuration, sourceFps, sourc
       </div>
       <div className="editor-tl__ruler">
         {outputStepTimes.map((t, i) => (
-          <span key={i} className="editor-tl__ruler-tick">{formatSmpte(t, sourceFps)}</span>
+          <span
+            key={i}
+            className="editor-tl__ruler-tick"
+            style={{ left: `${tickLeftPct(t)}%` }}
+          >
+            {formatSmpte(t, sourceFps)}
+          </span>
         ))}
       </div>
     </div>

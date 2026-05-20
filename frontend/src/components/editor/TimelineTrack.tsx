@@ -4,14 +4,14 @@ import { TimelineClip } from './TimelineClip';
 interface Props {
   type: 'video' | 'audio';
   clips: EditClip[];
-  totalOutputDuration: number;
+  sourceDuration: number;
   sourceFps: number;
   editNodeId: string;
   /** Reserved for Task 21 (wavesurfer waveform on the audio track). */
   sourceUrl?: string;
 }
 
-export function TimelineTrack({ type, clips, totalOutputDuration, sourceFps, editNodeId }: Props) {
+export function TimelineTrack({ type, clips, sourceDuration, sourceFps, editNodeId }: Props) {
   return (
     <div className={`editor-tl__track editor-tl__track--${type}`}>
       <div className="editor-tl__track-label">{type === 'video' ? 'VID' : 'AUD'}</div>
@@ -22,7 +22,7 @@ export function TimelineTrack({ type, clips, totalOutputDuration, sourceFps, edi
             clip={clip}
             index={i}
             track={type}
-            totalOutputDuration={totalOutputDuration}
+            sourceDuration={sourceDuration}
             sourceFps={sourceFps}
             editNodeId={editNodeId}
           />

@@ -3,26 +3,26 @@ import { useUIStore } from '../../store/uiStore';
 import {
   type EditClip,
   outputTimeToSourceTime,
-  totalOutputDuration as computeTotalOutputDuration,
 } from '../../lib/editor/virtualPlayback';
 
 interface Props {
-  /** Total output duration in seconds — the playhead's full traverse range. */
+  /** Source media duration in seconds — the timeline's visual reference width. */
+  sourceDuration: number;
+  /** Output playback duration — scrub clamp upper bound (can't scrub past edit end). */
   totalOutputDuration: number;
   clips: EditClip[];
 }
 
-export function TimelinePlayhead({ totalOutputDuration, clips }: Props) {
+export function TimelinePlayhead({ sourceDuration, totalOutputDuration, clips }: Props) {
   const outputTime = useUIStore((s) => s.playheadOutputTime);
   const setOutputTime = useUIStore((s) => s.setPlayheadOutputTime);
 
-  // Position the playhead in OUTPUT-time space. Wrapper provides correct
-  // coordinate frame (track-body extent, not container).
-  const leftPct = totalOutputDuration > 0 ? (outputTime / totalOutputDuration) * 100 : 0;
+  // Position the playhead in TIMELINE-reference space. Timeline width
+  // represents sourceDuration; playhead reaches the clip's right edge when
+  // outputTime hits totalOutputDuration.
+  const leftPct = sourceDuration > 0 ? (outputTime / sourceDuration) * 100 : 0;
 
-  // Debug hook: expose the SOURCE-time the playhead currently points at.
-  // Useful for CLI/test inspection. Lives in useEffect to avoid the
-  // react-hooks/immutability lint error from side-effects-during-render.
+  // Debug hook: expose source-time at the playhead position.
   useEffect(() => {
     const { sourceTime } = outputTimeToSourceTime(outputTime, clips);
     (window as Window & { __editorPlayheadSourceTime?: number }).__editorPlayheadSourceTime = sourceTime;
@@ -33,10 +33,12 @@ export function TimelinePlayhead({ totalOutputDuration, clips }: Props) {
     const scrubArea = (e.currentTarget as HTMLElement).parentElement as HTMLElement | null;
     if (!scrubArea) return;
     const rect = scrubArea.getBoundingClientRect();
-    const total = computeTotalOutputDuration(clips);
     function onMove(ev: PointerEvent) {
       const x = (ev.clientX - rect.left) / rect.width;
-      setOutputTime(Math.max(0, Math.min(total, x * total)));
+      // Cursor position in TIMELINE-reference space maps to a source-time
+      // equivalent; clamp into the valid output-time range [0, totalOutputDuration].
+      const cursorTimelineTime = x * sourceDuration;
+      setOutputTime(Math.max(0, Math.min(totalOutputDuration, cursorTimelineTime)));
     }
     function onUp() {
       window.removeEventListener('pointermove', onMove);

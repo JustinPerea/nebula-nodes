@@ -1,282 +1,469 @@
+/* Layout only. Slava Restraint owns the visual treatment in slava-restraint.css. */
+
 .editor-view {
   position: fixed;
   inset: 0;
-  background: var(--sr-canvas, #000);
-  background-image: radial-gradient(
-    circle at 1px 1px,
-    var(--sr-canvas-dot-color, rgba(201, 202, 200, 0.15)) 1px,
-    transparent 0
-  );
-  background-size: var(--sr-canvas-dot-step, 16px) var(--sr-canvas-dot-step, 16px);
   display: flex;
   flex-direction: column;
-  padding: 80px 24px 24px;
   gap: 10px;
-  color: var(--sr-ink, rgba(255, 255, 255, 0.92));
-  font-family: var(--sr-ui, inherit);
+  min-width: 0;
+  min-height: 0;
+  padding: 80px 24px 24px;
 }
+
 .editor-view--empty {
   align-items: center;
   justify-content: center;
   gap: 16px;
-  font-size: 14px;
-  color: var(--sr-ink-light);
 }
-.editor-view--empty button {
-  padding: 8px 16px;
-  background: transparent;
-  color: var(--sr-ink);
-  border: 1px solid var(--sr-edge);
-  border-radius: 4px;
-  cursor: pointer;
+
+.editor-view--empty button,
+.editor-preview--error button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
 }
+
+.editor-view__button-icon,
+.editor-preview__button-icon {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+}
+
 .editor-view__too-small {
-  background: rgba(255, 90, 31, 0.10);
-  border: 1px solid var(--sr-accent-border);
-  border-radius: 4px;
   padding: 6px 12px;
-  font-size: 11px;
-  color: var(--sr-ink);
   text-align: center;
 }
+
 .editor-breadcrumb {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-family: var(--sr-mono, monospace);
-  font-size: 10px;
-  color: var(--sr-ink-light);
-  letter-spacing: 0.1em;
+  min-width: 0;
 }
-.editor-breadcrumb__label { opacity: 0.7; }
-.editor-breadcrumb__source { color: var(--sr-ink); }
-.editor-breadcrumb__arrow { opacity: 0.4; }
-.editor-breadcrumb__edit {
-  background: var(--sr-accent-soft);
-  border: 1px solid var(--sr-accent-border);
-  padding: 2px 8px;
-  border-radius: 4px;
-  color: var(--sr-accent);
+
+.editor-breadcrumb__source {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.editor-breadcrumb__shortcuts { margin-left: auto; color: var(--sr-ink-meta); }
+
+.editor-breadcrumb__arrow,
+.editor-breadcrumb__vfr-icon {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+}
+
 .editor-breadcrumb__vfr {
-  background: rgba(255, 90, 31, 0.10);
-  border: 1px solid var(--sr-accent-border);
-  border-radius: 4px;
-  padding: 6px 12px;
-  font-size: 11px;
-  color: var(--sr-ink);
-}
-.editor-preview {
-  flex: 1.8;
-  background: var(--sr-node-preview-bg, rgba(0, 0, 0, 0.55));
-  border: 1px solid var(--sr-edge);
-  border-radius: 6px;
   display: flex;
   align-items: center;
-  justify-content: center;
+  gap: 8px;
+  padding: 6px 12px;
+}
+
+.editor-preview {
   position: relative;
+  display: flex;
+  flex: 1.8 1 0;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
   overflow: hidden;
 }
+
 .editor-preview__video {
+  display: block;
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
 }
+
 .editor-preview__hud {
   position: absolute;
   bottom: 8px;
   left: 50%;
   transform: translateX(-50%);
-  background: var(--sr-node-pill-bg);
-  border: 1px solid var(--sr-edge);
-  padding: 3px 10px;
-  border-radius: 4px;
-  font-family: var(--sr-mono, monospace);
-  font-size: 10px;
-  color: var(--sr-ink);
 }
+
 .editor-preview--error {
   flex-direction: column;
   gap: 10px;
-  color: var(--sr-ink-light);
-  font-size: 12px;
 }
-.editor-preview--error button {
-  padding: 6px 12px;
-  background: transparent;
-  color: var(--sr-ink);
-  border: 1px solid var(--sr-edge);
-  border-radius: 4px;
-  cursor: pointer;
-}
+
 .editor-transport {
-  min-height: 32px;
-  background: var(--sr-glass-raised);
-  border: 1px solid var(--sr-edge);
-  border-radius: 6px;
   display: flex;
-  align-items: center;
-  padding: 4px 12px;
-  gap: 14px;
-  font-size: 10px;
-  color: var(--sr-ink-light);
   flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  min-height: 32px;
+  padding: 4px 12px;
 }
-.editor-transport__group { display: flex; gap: 4px; align-items: center; }
-.editor-transport__btn {
-  background: transparent;
-  color: var(--sr-ink-light);
-  border: 1px solid transparent;
-  border-radius: 3px;
-  padding: 4px 8px;
-  cursor: pointer;
-}
-.editor-transport__btn:hover { background: var(--sr-surface-control-hover); color: var(--sr-ink); }
-.editor-transport__btn--primary {
-  background: var(--sr-surface-control);
-  border: 1px solid var(--sr-edge);
-  color: var(--sr-ink);
-}
-.editor-transport__btn--render {
-  margin-left: auto;
-  background: var(--sr-accent-soft);
-  border: 1px solid var(--sr-accent-border);
-  color: var(--sr-ink);
-}
-.editor-transport__btn--render:disabled { opacity: 0.5; cursor: not-allowed; }
-.editor-transport__divider { width: 1px; height: 18px; background: var(--sr-edge); }
-.editor-transport__tool {
-  background: transparent;
-  color: var(--sr-ink-light);
-  border: none;
-  cursor: pointer;
-  padding: 4px 6px;
-}
-.editor-transport__tool:hover { color: var(--sr-ink); }
-.editor-transport__summary {
-  font-family: var(--sr-mono, monospace);
-  color: var(--sr-ink);
-}
-.editor-transport__inspector { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.editor-transport__label { color: var(--sr-ink-light); font-size: 10px; }
-.editor-transport__value { color: var(--sr-ink); font-family: var(--sr-mono, monospace); font-size: 10px; min-width: 40px; }
-.editor-tl {
-  flex: 1;
-  background: var(--sr-glass-raised);
-  border: 1px solid var(--sr-edge);
-  border-radius: 6px;
-  padding: 10px;
+
+.editor-transport__group,
+.editor-transport__inspector {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.editor-transport__btn,
+.editor-transport__tool,
+.editor-transport__preset {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.editor-transport__btn--icon {
+  width: 28px;
+  padding-inline: 0;
+}
+
+.editor-transport__icon {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+}
+
+.editor-transport__btn:disabled,
+.editor-transport__preset:disabled,
+.editor-transport__range:disabled {
+  cursor: not-allowed;
+}
+
+.editor-transport__divider {
+  width: 1px;
+  height: 18px;
+}
+
+.editor-transport__summary {
+  margin-left: auto;
+}
+
+.editor-transport__range {
+  width: 112px;
+}
+
+.editor-tl {
+  position: relative;
+  display: flex;
+  flex: 1 1 0;
   flex-direction: column;
   gap: 8px;
-  position: relative;
+  min-height: 160px;
+  padding: 10px;
 }
-.editor-tl__ruler-wrap { display: flex; flex-direction: column; gap: 4px; }
-.editor-tl__ruler-thumbs { display: flex; justify-content: space-between; padding-left: 34px; padding-right: 8px; }
-.editor-tl__ruler-thumb {
-  width: 60px; height: 34px;
-  background: var(--sr-canvas-elevated, #060607);
-  border: 1px solid var(--sr-edge);
-  border-radius: 2px;
-  overflow: hidden;
-}
-.editor-tl__ruler-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.editor-tl__ruler-thumb-placeholder {
-  width: 100%; height: 100%;
-  background: repeating-linear-gradient(135deg, rgba(255,255,255,0.04), rgba(255,255,255,0.04) 4px, transparent 4px, transparent 8px);
-}
-.editor-tl__ruler {
-  height: 14px;
+
+.editor-tl__ruler-wrap {
   display: flex;
-  justify-content: space-between;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.editor-tl__ruler-thumbs {
+  position: relative;
+  height: 34px;
   padding-left: 34px;
   padding-right: 8px;
-  font-family: var(--sr-mono, monospace);
-  font-size: 8px;
-  color: var(--sr-ink-meta);
-  border-bottom: 1px dashed var(--sr-edge);
 }
-.editor-tl__tracks { display: flex; flex-direction: column; gap: 6px; }
-.editor-tl__track { display: flex; align-items: center; gap: 8px; }
+
+.editor-tl__ruler-thumb {
+  position: absolute;
+  width: 60px;
+  height: 34px;
+  margin-left: -30px;
+  overflow: hidden;
+}
+
+.editor-tl__ruler-thumb img,
+.editor-tl__ruler-thumb-placeholder {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.editor-tl__ruler-thumb img {
+  object-fit: cover;
+}
+
+.editor-tl__ruler {
+  position: relative;
+  height: 14px;
+  padding-left: 34px;
+  padding-right: 8px;
+}
+
+.editor-tl__ruler-tick {
+  position: absolute;
+  transform: translateX(-50%);
+}
+
+.editor-tl__tracks {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.editor-tl__track {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .editor-tl__track-label {
   width: 26px;
-  color: var(--sr-ink-light);
-  font-family: var(--sr-mono, monospace);
-  font-size: 9px;
+  flex: 0 0 26px;
 }
+
 .editor-tl__track-body {
-  flex: 1;
-  height: 32px;
-  background: rgba(0, 0, 0, 0.40);
-  border: 1px solid var(--sr-edge);
-  border-radius: 3px;
   position: relative;
+  flex: 1 1 auto;
+  height: 32px;
+  overflow: hidden;
 }
-.editor-tl__track--audio .editor-tl__track-body { height: 22px; }
+
+.editor-tl__track--audio .editor-tl__track-body {
+  height: 22px;
+}
+
 .editor-tl__clip {
   position: absolute;
   top: 2px;
   bottom: 2px;
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.10));
-  border: 1px solid var(--sr-edge-strong);
-  border-radius: 2px;
   display: flex;
   align-items: center;
-  padding-left: 6px;
-  font-size: 8px;
-  color: var(--sr-ink);
+  min-width: 10px;
   overflow: hidden;
+  padding-left: 6px;
   cursor: pointer;
 }
-.editor-tl__clip--edited {
-  background: linear-gradient(135deg, rgba(255, 90, 31, 0.30), rgba(255, 90, 31, 0.18));
-  border-color: var(--sr-accent-border);
+
+.editor-tl__clip-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.editor-tl__clip--selected {
-  outline: 1px solid var(--sr-accent);
-  outline-offset: 1px;
-}
+
 .editor-tl__clip-handle {
   position: absolute;
-  top: 0; bottom: 0;
+  top: 0;
+  bottom: 0;
   width: 6px;
   cursor: ew-resize;
-  background: rgba(255, 255, 255, 0.10);
 }
-.editor-tl__clip--edited .editor-tl__clip-handle { background: var(--sr-accent); }
-.editor-tl__clip-handle--in { left: 0; }
-.editor-tl__clip-handle--out { right: 0; }
+
+.editor-tl__clip-handle--in {
+  left: 0;
+}
+
+.editor-tl__clip-handle--out {
+  right: 0;
+}
+
 .editor-tl__clip-speed {
   margin-left: 6px;
-  color: var(--sr-accent);
-  font-family: var(--sr-mono, monospace);
-  font-size: 7px;
 }
+
 .editor-tl__clip-vol {
-  margin-left: auto;
   margin-right: 6px;
-  color: var(--sr-ink-light);
-  font-size: 7px;
+  margin-left: auto;
 }
+
 .editor-tl__playhead-area {
   position: absolute;
-  /* Track-body coordinate space: matches the area where clip bars actually
-     render so the playhead's 0% lines up with the track-body left edge.
-     left: container padding (10px) + label width (26px) + flex gap (8px) = 44px
-     right: container padding (10px) */
   top: 60px;
+  right: 10px;
   bottom: 10px;
   left: 44px;
-  right: 10px;
   pointer-events: none;
 }
+
 .editor-tl__playhead {
   position: absolute;
   top: 0;
   bottom: 0;
   width: 2px;
-  background: var(--sr-accent);
-  box-shadow: 0 0 6px rgba(255, 90, 31, 0.6);
   pointer-events: auto;
+}
+
+body:not(.app-slava-restraint) .editor-view {
+  background: #000;
+  background-image: radial-gradient(circle at 1px 1px, rgba(201, 202, 200, 0.15) 1px, transparent 0);
+  background-size: 16px 16px;
+  color: rgba(255, 255, 255, 0.92);
+  font-family: system-ui, sans-serif;
+}
+
+body:not(.app-slava-restraint) .editor-view--empty {
+  color: rgba(255, 255, 255, 0.58);
+  font-size: 14px;
+}
+
+body:not(.app-slava-restraint) .editor-view--empty button,
+body:not(.app-slava-restraint) .editor-preview--error button {
+  padding: 7px 12px;
+  color: rgba(255, 255, 255, 0.92);
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 6px;
+}
+
+body:not(.app-slava-restraint) .editor-view__too-small,
+body:not(.app-slava-restraint) .editor-breadcrumb__vfr {
+  color: rgba(255, 255, 255, 0.88);
+  background: rgba(255, 90, 31, 0.10);
+  border: 1px solid rgba(255, 90, 31, 0.28);
+  border-radius: 6px;
+  font-size: 11px;
+}
+
+body:not(.app-slava-restraint) .editor-breadcrumb {
+  color: rgba(255, 255, 255, 0.56);
+  font: 10px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.1em;
+}
+
+body:not(.app-slava-restraint) .editor-breadcrumb__source {
+  color: rgba(255, 255, 255, 0.88);
+}
+
+body:not(.app-slava-restraint) .editor-breadcrumb__edit {
+  padding: 2px 8px;
+  color: #ff5a1f;
+  background: rgba(255, 90, 31, 0.10);
+  border: 1px solid rgba(255, 90, 31, 0.28);
+  border-radius: 4px;
+}
+
+body:not(.app-slava-restraint) .editor-preview,
+body:not(.app-slava-restraint) .editor-transport,
+body:not(.app-slava-restraint) .editor-tl {
+  background: rgba(28, 28, 31, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+}
+
+body:not(.app-slava-restraint) .editor-preview__hud {
+  padding: 3px 10px;
+  color: rgba(255, 255, 255, 0.92);
+  background: rgba(20, 20, 22, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  font: 10px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+body:not(.app-slava-restraint) .editor-transport {
+  color: rgba(255, 255, 255, 0.58);
+  font-size: 10px;
+}
+
+body:not(.app-slava-restraint) .editor-transport__btn,
+body:not(.app-slava-restraint) .editor-transport__tool,
+body:not(.app-slava-restraint) .editor-transport__preset {
+  min-height: 28px;
+  padding: 5px 9px;
+  color: rgba(255, 255, 255, 0.62);
+  border-radius: 6px;
+}
+
+body:not(.app-slava-restraint) .editor-transport__btn:hover:not(:disabled),
+body:not(.app-slava-restraint) .editor-transport__tool:hover,
+body:not(.app-slava-restraint) .editor-transport__preset:hover {
+  color: rgba(255, 255, 255, 0.92);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+body:not(.app-slava-restraint) .editor-transport__btn--primary,
+body:not(.app-slava-restraint) .editor-transport__btn--render {
+  color: rgba(255, 255, 255, 0.92);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+body:not(.app-slava-restraint) .editor-transport__btn--render {
+  background: rgba(255, 90, 31, 0.10);
+  border-color: rgba(255, 90, 31, 0.28);
+}
+
+body:not(.app-slava-restraint) .editor-transport__divider {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+body:not(.app-slava-restraint) .editor-transport__value,
+body:not(.app-slava-restraint) .editor-transport__summary {
+  color: rgba(255, 255, 255, 0.90);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+body:not(.app-slava-restraint) .editor-tl__ruler-thumb,
+body:not(.app-slava-restraint) .editor-tl__track-body {
+  background: rgba(0, 0, 0, 0.40);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+}
+
+body:not(.app-slava-restraint) .editor-tl__ruler-thumb-placeholder {
+  background: repeating-linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.04),
+    rgba(255, 255, 255, 0.04) 4px,
+    transparent 4px,
+    transparent 8px
+  );
+}
+
+body:not(.app-slava-restraint) .editor-tl__ruler,
+body:not(.app-slava-restraint) .editor-tl__track-label,
+body:not(.app-slava-restraint) .editor-tl__clip-vol {
+  color: rgba(255, 255, 255, 0.45);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 9px;
+}
+
+body:not(.app-slava-restraint) .editor-tl__clip {
+  color: rgba(255, 255, 255, 0.92);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.10));
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 3px;
+  font-size: 8px;
+}
+
+body:not(.app-slava-restraint) .editor-tl__clip--edited {
+  background: linear-gradient(135deg, rgba(255, 90, 31, 0.30), rgba(255, 90, 31, 0.18));
+  border-color: rgba(255, 90, 31, 0.28);
+}
+
+body:not(.app-slava-restraint) .editor-tl__clip--selected {
+  outline: 1px solid #ff5a1f;
+  outline-offset: 1px;
+}
+
+body:not(.app-slava-restraint) .editor-tl__clip-handle {
+  background: rgba(255, 255, 255, 0.10);
+}
+
+body:not(.app-slava-restraint) .editor-tl__clip--edited .editor-tl__clip-handle,
+body:not(.app-slava-restraint) .editor-tl__playhead {
+  background: #ff5a1f;
+}
+
+body:not(.app-slava-restraint) .editor-tl__clip-speed {
+  color: #ff5a1f;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 7px;
+}
+
+body:not(.app-slava-restraint) .editor-tl__playhead {
+  box-shadow: 0 0 6px rgba(255, 90, 31, 0.6);
 }
