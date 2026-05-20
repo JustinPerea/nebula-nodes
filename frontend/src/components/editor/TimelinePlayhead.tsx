@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { useUIStore } from '../../store/uiStore';
 import {
   type EditClip,
@@ -17,9 +18,9 @@ export function TimelinePlayhead({ sourceDuration, clips }: Props) {
   const { sourceTime } = outputTimeToSourceTime(outputTime, clips);
   const leftPct = sourceDuration > 0 ? (sourceTime / sourceDuration) * 100 : 0;
 
-  if (typeof window !== 'undefined') {
-    (window as any).__editorPlayheadSourceTime = sourceTime;
-  }
+  useEffect(() => {
+    (window as Window & { __editorPlayheadSourceTime?: number }).__editorPlayheadSourceTime = sourceTime;
+  });
 
   function onPointerDown(e: React.PointerEvent) {
     e.preventDefault();
