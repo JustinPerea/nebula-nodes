@@ -159,9 +159,29 @@ async def handle_video_edit(
     node.params["sourceFps"] = probe.fps
     node.params["sourceIsVfr"] = probe.is_vfr
 
-    clips = node.params.get("clips") or [
-        {"id": "c1", "sourceIn": 0.0, "sourceOut": probe.duration, "speed": 1.0, "volume": 1.0, "mute": False}
-    ]
+    # Clamp + frame-snap existing clips against the (potentially-new) source.
+    # If the source shrank, drop sub-clips that fall entirely outside and clamp
+    # any that hang off the end. Snap times to the source frame grid so the
+    # virtual editor preview and the final ffmpeg render agree at boundaries.
+    existing_clips = node.params.get("clips")
+    if existing_clips:
+        snapped: list[dict[str, Any]] = []
+        for c in existing_clips:
+            if c["sourceIn"] >= probe.duration:
+                continue
+            s_in = min(c["sourceIn"], probe.duration)
+            s_out = min(c["sourceOut"], probe.duration)
+            if probe.fps > 0:
+                s_in = int(s_in * probe.fps) / probe.fps
+                s_out = int(s_out * probe.fps) / probe.fps
+            snapped.append({**c, "sourceIn": s_in, "sourceOut": s_out})
+        if not snapped:
+            snapped = [
+                {"id": "c1", "sourceIn": 0.0, "sourceOut": probe.duration, "speed": 1.0, "volume": 1.0, "mute": False}
+            ]
+        node.params["clips"] = snapped
+
+    clips = node.params["clips"]
 
     if _is_no_op(clips, probe.duration):
         return {"video": {"type": "Video", "value": str(src_input.value)}}

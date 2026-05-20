@@ -190,3 +190,78 @@ async def test_volume_injects_volume_filter(tmp_path, monkeypatch) -> None:
         {"id": "c1", "sourceIn": 0.0, "sourceOut": 2.0, "speed": 1.0, "volume": 0.4, "mute": False}
     ])
     assert "volume=0.4" in _filter_str(args)
+
+
+@pytest.mark.asyncio
+async def test_clip_dropped_when_sourceIn_exceeds_new_duration(tmp_path, monkeypatch) -> None:
+    src = tmp_path / "src.mp4"
+    src.write_bytes(b"fake")
+    monkeypatch.setattr("handlers.video_edit.get_run_dir", lambda: tmp_path / "out")
+    monkeypatch.setattr("handlers.video_edit.OUTPUT_ROOT", tmp_path)
+    (tmp_path / "out").mkdir()
+    probe_result = type("PR", (), {"duration": 3.0, "fps": 30.0, "is_vfr": False})()
+
+    node = _node({
+        "clips": [
+            {"id": "c1", "sourceIn": 0.0, "sourceOut": 1.5, "speed": 1.0, "volume": 1.0, "mute": False},
+            {"id": "c2", "sourceIn": 5.0, "sourceOut": 7.0, "speed": 1.0, "volume": 1.0, "mute": False},
+        ],
+    })
+    async def fake(args, on_progress=None):
+        Path(args[-1]).touch()
+    with (
+        patch("handlers.video_edit.ffprobe_video", AsyncMock(return_value=probe_result)),
+        patch("handlers.video_edit.run_ffmpeg", side_effect=fake),
+    ):
+        await handle_video_edit(node, {"video_in": PortValueDict(type="Video", value=str(src))}, {})
+    assert len(node.params["clips"]) == 1
+    assert node.params["clips"][0]["id"] == "c1"
+
+
+@pytest.mark.asyncio
+async def test_sourceOut_clamped_to_new_duration(tmp_path, monkeypatch) -> None:
+    src = tmp_path / "src.mp4"
+    src.write_bytes(b"fake")
+    monkeypatch.setattr("handlers.video_edit.get_run_dir", lambda: tmp_path / "out")
+    monkeypatch.setattr("handlers.video_edit.OUTPUT_ROOT", tmp_path)
+    (tmp_path / "out").mkdir()
+    probe_result = type("PR", (), {"duration": 3.0, "fps": 30.0, "is_vfr": False})()
+
+    node = _node({
+        "clips": [
+            {"id": "c1", "sourceIn": 0.5, "sourceOut": 7.0, "speed": 1.0, "volume": 1.0, "mute": False},
+        ],
+    })
+    async def fake(args, on_progress=None):
+        Path(args[-1]).touch()
+    with (
+        patch("handlers.video_edit.ffprobe_video", AsyncMock(return_value=probe_result)),
+        patch("handlers.video_edit.run_ffmpeg", side_effect=fake),
+    ):
+        await handle_video_edit(node, {"video_in": PortValueDict(type="Video", value=str(src))}, {})
+    assert node.params["clips"][0]["sourceOut"] == 3.0
+
+
+@pytest.mark.asyncio
+async def test_times_snapped_to_frame_grid(tmp_path, monkeypatch) -> None:
+    src = tmp_path / "src.mp4"
+    src.write_bytes(b"fake")
+    monkeypatch.setattr("handlers.video_edit.get_run_dir", lambda: tmp_path / "out")
+    monkeypatch.setattr("handlers.video_edit.OUTPUT_ROOT", tmp_path)
+    (tmp_path / "out").mkdir()
+    probe_result = type("PR", (), {"duration": 8.0, "fps": 30.0, "is_vfr": False})()
+
+    node = _node({
+        "clips": [
+            {"id": "c1", "sourceIn": 1.05, "sourceOut": 3.07, "speed": 1.0, "volume": 1.0, "mute": False},
+        ],
+    })
+    async def fake(args, on_progress=None):
+        Path(args[-1]).touch()
+    with (
+        patch("handlers.video_edit.ffprobe_video", AsyncMock(return_value=probe_result)),
+        patch("handlers.video_edit.run_ffmpeg", side_effect=fake),
+    ):
+        await handle_video_edit(node, {"video_in": PortValueDict(type="Video", value=str(src))}, {})
+    assert abs(node.params["clips"][0]["sourceIn"] - (31 / 30)) < 0.001
+    assert abs(node.params["clips"][0]["sourceOut"] - (92 / 30)) < 0.001
