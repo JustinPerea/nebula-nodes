@@ -2346,7 +2346,7 @@
     "category": "utility",
     "apiProvider": "utility",
     "apiEndpoint": null,
-    "envKeyName": [],
+    "envKeyName": null,
     "executionPattern": "async-poll",
     "inputPorts": [
       {

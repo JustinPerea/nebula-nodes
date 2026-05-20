@@ -1352,7 +1352,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     category: 'utility',
     apiProvider: 'utility',
     apiEndpoint: null,
-    envKeyName: [],
+    envKeyName: null,
     executionPattern: 'async-poll',
     inputPorts: [
       { id: 'video_in', label: 'Source Video', dataType: 'Video', required: true },
