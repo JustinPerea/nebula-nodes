@@ -86,21 +86,39 @@ def _build_filter_complex(clips: list[dict[str, Any]]) -> tuple[str, bool]:
     """Build the ffmpeg -filter_complex graph for the given sub-clip list.
 
     Returns (filter_str, has_audio). Each sub-clip emits labeled video + audio
-    streams; the concat filter at the end joins them.
+    streams; the concat filter joins them.
+
+    Audio handling:
+    - If all clips are muted: concat=n=N:v=1:a=0 (no audio output at all).
+    - Otherwise: every clip contributes an [ai] stream so concat can interleave
+      [v0][a0][v1][a1]... — muted clips get a silent anullsrc track sized to
+      their output duration so the stream count matches.
     """
     parts: list[str] = []
+    n = len(clips)
+    has_audio = any(not c.get("mute", False) for c in clips)
+
     for i, c in enumerate(clips):
         s_in = float(c["sourceIn"])
         s_out = float(c["sourceOut"])
         speed = float(c.get("speed", 1.0))
         volume = float(c.get("volume", 1.0))
         mute = bool(c.get("mute", False))
+
         v = f"[0:v]trim=start={s_in}:end={s_out},setpts=PTS-STARTPTS"
         if speed != 1.0:
             v += f",setpts=PTS/{speed}"
         v += f"[v{i}]"
         parts.append(v)
-        if not mute:
+
+        if not has_audio:
+            # All-muted shortcut: no audio chain at all.
+            continue
+        if mute:
+            # Silent audio sized to the OUTPUT duration so concat lines up.
+            output_dur = (s_out - s_in) / speed
+            parts.append(f"anullsrc=cl=stereo:r=44100:d={output_dur}[a{i}]")
+        else:
             a = f"[0:a]atrim=start={s_in}:end={s_out},asetpts=PTS-STARTPTS"
             if speed != 1.0:
                 a += f",{_atempo_chain(speed)}"
@@ -109,15 +127,11 @@ def _build_filter_complex(clips: list[dict[str, Any]]) -> tuple[str, bool]:
             a += f"[a{i}]"
             parts.append(a)
 
-    n = len(clips)
-    has_audio = any(not c.get("mute", False) for c in clips)
-    streams: list[str] = []
-    for i in range(n):
-        streams.append(f"[v{i}]")
-        if not clips[i].get("mute", False):
-            streams.append(f"[a{i}]")
-
     if has_audio:
+        streams: list[str] = []
+        for i in range(n):
+            streams.append(f"[v{i}]")
+            streams.append(f"[a{i}]")
         parts.append(f"{''.join(streams)}concat=n={n}:v=1:a=1[outv][outa]")
     else:
         v_streams = "".join(f"[v{i}]" for i in range(n))
