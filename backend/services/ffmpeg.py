@@ -10,13 +10,20 @@ import asyncio
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable
+from typing import Callable
 
 
 # Local alias for the asyncio subprocess factory. Using a variable keeps the
 # literal "exec(" substring out of the call sites — purely a CI-hook hygiene
 # choice; the semantic is identical.
 _spawn_subprocess = getattr(asyncio, "create_subprocess_exec")
+
+# Threshold for VFR detection: if r_frame_rate vs avg_frame_rate differ by
+# more than this fraction, treat the source as variable frame rate. 0.5% is
+# picked to catch real VFR while ignoring tiny rounding (e.g., 29.97 vs 29.96
+# reported avg). Editors using this flag warn users their virtual preview may
+# differ from the final ffmpeg render.
+_VFR_THRESHOLD = 0.005
 
 
 @dataclass(frozen=True)
@@ -71,8 +78,7 @@ async def ffprobe_video(source: Path | str) -> ProbeResult:
 
     r_fps = _parse_frame_rate(video_stream.get("r_frame_rate", "0/1"))
     avg_fps = _parse_frame_rate(video_stream.get("avg_frame_rate", "0/1"))
-    # >0.5% deviation between r_frame_rate and avg_frame_rate ⇒ VFR.
-    is_vfr = r_fps > 0 and abs(r_fps - avg_fps) / r_fps > 0.005
+    is_vfr = r_fps > 0 and abs(r_fps - avg_fps) / r_fps > _VFR_THRESHOLD
 
     return ProbeResult(duration=duration, fps=avg_fps or r_fps, is_vfr=is_vfr)
 
