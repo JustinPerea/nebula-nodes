@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { type SkinId, loadSkin, persistSkin, applySkinBodyClass } from '../lib/skins';
+import { useGraphStore } from './graphStore';
 
 const AGENT_LOG_ENABLED_KEY = 'nebula:agentLog:enabled';
 
@@ -142,7 +143,6 @@ export const useUIStore = create<UIState>((set, get) => ({
   inspectorPinned: false,
 
   enterEditor: (sourceNodeId) => {
-    const { useGraphStore } = require('./graphStore');
     const editNodeId = useGraphStore.getState().getOrCreateEditNodeDownstream(sourceNodeId);
     set({
       viewMode: 'editor',
@@ -153,7 +153,6 @@ export const useUIStore = create<UIState>((set, get) => ({
   },
 
   exitEditor: () => {
-    const { useGraphStore } = require('./graphStore');
     const state = get();
     if (state.editorTargetNodeId) {
       useGraphStore.getState().removeEmptyEditNode(state.editorTargetNodeId);
