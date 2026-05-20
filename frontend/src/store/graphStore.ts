@@ -1040,6 +1040,18 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       return existingMatches[existingMatches.length - 1].id;
     }
 
+    // Read source-file metadata that the upload endpoint probed via ffprobe.
+    // If absent (legacy node from before upload-time probing), seed empty so
+    // the existing "run the edit node to populate" fallback still works.
+    const sourceParams = ((sourceNode.data as { params?: Record<string, unknown> }).params ?? {});
+    const sourceDuration = typeof sourceParams.sourceDuration === 'number' ? sourceParams.sourceDuration : 0;
+    const sourceFps = typeof sourceParams.sourceFps === 'number' ? sourceParams.sourceFps : 30;
+    const sourceIsVfr = Boolean(sourceParams.sourceIsVfr);
+
+    const initialClips = sourceDuration > 0
+      ? [{ id: 'c1', sourceIn: 0, sourceOut: sourceDuration, speed: 1, volume: 1, mute: false }]
+      : [];
+
     const editId = `video-edit-${Math.random().toString(36).slice(2, 8)}`;
     const editNode = {
       id: editId,
@@ -1051,7 +1063,12 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         state: 'idle' as const,
         inputs: {},
         outputs: {},
-        params: { clips: [] },
+        params: {
+          clips: initialClips,
+          sourceDuration,
+          sourceFps,
+          sourceIsVfr,
+        },
         spawnedThisSession: true,
       },
     };

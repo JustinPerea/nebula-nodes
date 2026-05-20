@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -8,6 +9,7 @@ from fastapi.testclient import TestClient
 import main as main_module
 from main import app
 from services.cli_graph import CLIGraph
+from services.ffmpeg import ProbeResult
 from services.output import OUTPUT_ROOT
 
 
@@ -35,6 +37,13 @@ def _make_png_bytes() -> bytes:
         "890000000d49444154789c6300010000000500010d0a2db40000000049454e44"
         "ae426082"
     )
+
+
+def _make_mp4_bytes() -> bytes:
+    """Minimal MP4 header bytes that pass _sniff_video_type. Not a real
+    playable video — tests that need ffprobe results must mock the probe."""
+    # ftyp box with 'isom' brand.
+    return b"\x00\x00\x00\x20ftypisom\x00\x00\x02\x00" + b"\x00" * 100
 
 
 def test_node_path_for_image_input(client):
@@ -501,3 +510,42 @@ def test_upload_create_node_filepath_is_openable(client):
     assert Path(node_file_path).is_file()
     # And the bytes must round-trip.
     assert Path(node_file_path).read_bytes() == png_bytes
+
+
+def test_video_upload_probes_and_stores_source_metadata(client):
+    """Uploading a video should run ffprobe and store duration/fps/isVfr
+    on the created node's params AND return them in the response."""
+    fake_probe = ProbeResult(duration=12.5, fps=29.97, is_vfr=False)
+    with patch("main.ffprobe_video", return_value=fake_probe):
+        resp = client.post(
+            "/api/uploads",
+            files={"file": ("test.mp4", _make_mp4_bytes(), "video/mp4")},
+            data={"create_node": "true"},
+        )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["sourceDuration"] == 12.5
+    assert body["sourceFps"] == 29.97
+    assert body["sourceIsVfr"] is False
+    assert "nodeId" in body
+
+    # Node params should have the same metadata so the frontend can read it
+    # from sourceNode.data.params when spawning the edit node downstream.
+    node = main_module.cli_graph.nodes[body["nodeId"]]
+    assert node["params"]["sourceDuration"] == 12.5
+    assert node["params"]["sourceFps"] == 29.97
+    assert node["params"]["sourceIsVfr"] is False
+    assert node["params"]["filePath"].endswith(".mp4")
+
+
+def test_video_upload_ffprobe_failure_returns_415(client):
+    """If ffprobe can't read the uploaded video (corrupt/unsupported),
+    the upload should reject with 415 instead of creating a broken node."""
+    with patch("main.ffprobe_video", side_effect=RuntimeError("bad codec")):
+        resp = client.post(
+            "/api/uploads",
+            files={"file": ("test.mp4", _make_mp4_bytes(), "video/mp4")},
+            data={"create_node": "true"},
+        )
+    assert resp.status_code == 415
+    assert "Could not probe video metadata" in resp.json()["detail"]

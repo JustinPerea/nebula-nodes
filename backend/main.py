@@ -34,6 +34,7 @@ from routes.fal_proxy import router as fal_router
 from routes.nous_proxy import router as nous_router
 from routes.quiver_proxy import router as quiver_router
 from routes.video_edit_preview import router as video_edit_preview_router
+from services.ffmpeg import ffprobe_video
 
 execution_cache = ExecutionCache(ttl=3600)
 node_registry = NodeRegistry()
@@ -576,8 +577,27 @@ async def upload_file_consolidated(
             # and legacy Canvas file-drop always used.
             node_params = {"filePath": str(saved_path.resolve()), "_previewUrl": url}
         else:
-            # video-input only needs filePath; no _previewUrl.
-            node_params = {"filePath": str(saved_path.resolve())}
+            # video-input: probe at upload so the source owns its own
+            # metadata. Downstream consumers (editor surface, edit handler,
+            # inspector) can read sourceDuration/sourceFps/sourceIsVfr from
+            # params without re-probing. Editor initial-clip seeding depends
+            # on this — without it the editor opens degraded with 0 clips.
+            try:
+                probe = await ffprobe_video(saved_path)
+            except Exception as exc:
+                raise HTTPException(
+                    status_code=415,
+                    detail=f"Could not probe video metadata: {exc}",
+                ) from exc
+            node_params = {
+                "filePath": str(saved_path.resolve()),
+                "sourceDuration": probe.duration,
+                "sourceFps": probe.fps,
+                "sourceIsVfr": probe.is_vfr,
+            }
+            response["sourceDuration"] = probe.duration
+            response["sourceFps"] = probe.fps
+            response["sourceIsVfr"] = probe.is_vfr
 
         node_id = cli_graph.add_node(node_type, node_params, position=new_position)
         await _broadcast_graph_sync()
