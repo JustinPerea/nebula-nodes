@@ -122,19 +122,22 @@ export default function App() {
 
   const viewMode = useUIStore((s) => s.viewMode);
 
+  const isCanvas = viewMode === 'canvas';
   return (
     <ReactFlowProvider>
       <GraphHydrator />
       <ZoomManifestRecorder />
       <CanvasTabs />
-      {viewMode === 'editor' ? <EditorView /> : <Canvas />}
-      <NodeLibrary />
-      <NodeInspectorPopover />
-      <Settings />
+      {isCanvas ? <Canvas /> : <EditorView />}
+      {/* Canvas-only chrome: library, inspector, settings, launchers, toolbar, agent log.
+          The editor view is a focused workspace — only the pill control and chat remain. */}
+      {isCanvas && <NodeLibrary />}
+      {isCanvas && <NodeInspectorPopover />}
+      {isCanvas && <Settings />}
       <ChatPanel />
-      <PanelLaunchers />
-      <Toolbar />
-      <AgentLog />
+      {isCanvas && <PanelLaunchers />}
+      {isCanvas && <Toolbar />}
+      {isCanvas && <AgentLog />}
     </ReactFlowProvider>
   );
 }
