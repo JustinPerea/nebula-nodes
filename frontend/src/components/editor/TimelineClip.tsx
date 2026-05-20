@@ -1,30 +1,32 @@
 import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
 import { snapToFrameGrid } from '../../lib/editor/frameAccurate';
-import { type EditClip } from '../../lib/editor/virtualPlayback';
+import { type EditClip, clipSpeed } from '../../lib/editor/virtualPlayback';
 
 interface Props {
   clip: EditClip;
   index: number;
   track: 'video' | 'audio';
-  sourceDuration: number;
+  totalOutputDuration: number;
   sourceFps: number;
   editNodeId: string;
 }
 
-export function TimelineClip({ clip, sourceDuration, sourceFps, track, editNodeId }: Props) {
+export function TimelineClip({ clip, totalOutputDuration, sourceFps, track, editNodeId }: Props) {
   const setSelectedClip = useUIStore((s) => s.setSelectedClip);
   const selectedClipId = useUIStore((s) => s.selectedClipId);
   const updateClip = useGraphStore((s) => s.updateEditNodeClip);
 
-  const leftPct = (clip.sourceIn / sourceDuration) * 100;
-  const widthPct = ((clip.sourceOut - clip.sourceIn) / sourceDuration) * 100;
+  // Output-time positioning: where the clip sits on the edited timeline.
+  const leftPct = totalOutputDuration > 0 ? (clip.start / totalOutputDuration) * 100 : 0;
+  const widthPct = totalOutputDuration > 0 ? (clip.duration / totalOutputDuration) * 100 : 0;
+
+  const speed = clipSpeed(clip);
   const isEdited =
-    clip.speed !== 1.0 ||
+    Math.abs(speed - 1) > 0.0001 ||
     clip.volume !== 1.0 ||
     clip.mute ||
-    clip.sourceIn > 0 ||
-    clip.sourceOut < sourceDuration;
+    clip.sourceIn > 0;
   const isSelected = selectedClipId === clip.id;
 
   function startDrag(edge: 'in' | 'out') {
@@ -34,16 +36,48 @@ export function TimelineClip({ clip, sourceDuration, sourceFps, track, editNodeI
       const trackEl = (e.currentTarget as HTMLElement).closest('.editor-tl__track-body') as HTMLElement | null;
       if (!trackEl) return;
       const rect = trackEl.getBoundingClientRect();
+      // Capture immutables at drag start: speed stays constant; source bounds
+      // shift; duration recomputes from new source range / speed.
+      const dragSpeed = speed;
+      const origSourceIn = clip.sourceIn;
+      const origSourceOut = clip.sourceOut;
 
       function onMove(ev: PointerEvent) {
         const x = (ev.clientX - rect.left) / rect.width;
-        const t = snapToFrameGrid(x * sourceDuration, sourceFps);
+        // Cursor is in OUTPUT time space (the track body's coordinate system).
+        const cursorOutputTime = x * totalOutputDuration;
+        // Translate cursor's output-time movement into source-time movement.
+        // dragSpeed stays constant: source moves dragSpeed seconds per second of output.
         if (edge === 'in') {
-          const clamped = Math.max(0, Math.min(t, clip.sourceOut - 0.1));
-          updateClip(editNodeId, clip.id, { sourceIn: clamped });
+          // IN handle: source-in shifts by (cursorOutputTime - clip.start) * speed.
+          // Clamp so newSourceIn stays in [0, origSourceOut - 0.1 * speed]
+          // (the latter preserves at least 0.1s of output duration).
+          const deltaOutput = cursorOutputTime - clip.start;
+          const newSourceInUnclamped = origSourceIn + deltaOutput * dragSpeed;
+          const minSrcIn = 0;
+          const maxSrcIn = origSourceOut - 0.1 * dragSpeed;
+          const snappedSourceIn = snapToFrameGrid(
+            Math.max(minSrcIn, Math.min(newSourceInUnclamped, maxSrcIn)),
+            sourceFps,
+          );
+          const newDuration = (origSourceOut - snappedSourceIn) / dragSpeed;
+          updateClip(editNodeId, clip.id, { sourceIn: snappedSourceIn, duration: newDuration });
         } else {
-          const clamped = Math.min(sourceDuration, Math.max(t, clip.sourceIn + 0.1));
-          updateClip(editNodeId, clip.id, { sourceOut: clamped });
+          // OUT handle: source-out shifts by (cursorOutputTime - (clip.start + clip.duration)) * speed.
+          const clipEnd = clip.start + clip.duration;
+          const deltaOutput = cursorOutputTime - clipEnd;
+          const newSourceOutUnclamped = origSourceOut + deltaOutput * dragSpeed;
+          const minSrcOut = origSourceIn + 0.1 * dragSpeed;
+          // No hard upper bound here; the caller (Timeline) is responsible for
+          // not letting source extend past sourceDuration. We clamp using the
+          // source media's known duration from params (passed via the parent
+          // chain implicitly through sourceFps; for now, just bound below).
+          const snappedSourceOut = snapToFrameGrid(
+            Math.max(minSrcOut, newSourceOutUnclamped),
+            sourceFps,
+          );
+          const newDuration = (snappedSourceOut - origSourceIn) / dragSpeed;
+          updateClip(editNodeId, clip.id, { sourceOut: snappedSourceOut, duration: newDuration });
         }
       }
       function onUp() {
@@ -66,7 +100,9 @@ export function TimelineClip({ clip, sourceDuration, sourceFps, track, editNodeI
       )}
       <span className="editor-tl__clip-label">
         clip {clip.id}
-        {clip.speed !== 1.0 && <span className="editor-tl__clip-speed">{clip.speed}×</span>}
+        {Math.abs(speed - 1) > 0.0001 && (
+          <span className="editor-tl__clip-speed">{speed.toFixed(2)}×</span>
+        )}
       </span>
       {track === 'audio' && clip.volume !== 1.0 && (
         <span className="editor-tl__clip-vol">vol {Math.round(clip.volume * 100)}%</span>

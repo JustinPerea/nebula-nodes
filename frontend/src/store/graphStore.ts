@@ -191,7 +191,7 @@ interface GraphState {
   updateEditNodeClip: (
     nodeId: string,
     clipId: string,
-    patch: Partial<{ sourceIn: number; sourceOut: number; speed: number; volume: number; mute: boolean }>,
+    patch: Partial<{ start: number; duration: number; sourceIn: number; sourceOut: number; volume: number; mute: boolean }>,
   ) => void;
   cutEditNodeAtSource: (nodeId: string, sourceTime: number) => void;
   removeEditNodeClip: (nodeId: string, clipId: string) => void;
