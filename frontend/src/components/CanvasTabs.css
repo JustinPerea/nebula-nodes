@@ -1,0 +1,82 @@
+/* Layout only. Skin visuals live in the active skin stylesheet. */
+
+.canvas-tabs-wrap {
+  position: fixed;
+  top: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  pointer-events: none;
+}
+
+.canvas-tabs__wordmark {
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.canvas-tabs {
+  display: flex;
+  pointer-events: auto;
+}
+
+.canvas-tabs__btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.canvas-tabs__icon {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+}
+
+.canvas-tabs__btn:disabled {
+  cursor: not-allowed;
+}
+
+body:not(.app-slava-restraint) .canvas-tabs__wordmark {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  letter-spacing: 0.24em;
+  color: rgba(255, 255, 255, 0.28);
+}
+
+body:not(.app-slava-restraint) .canvas-tabs {
+  background: rgba(28, 28, 31, 0.86);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  padding: 4px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+body:not(.app-slava-restraint) .canvas-tabs__btn {
+  min-height: 30px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  color: rgba(255, 255, 255, 0.58);
+  font: 500 12px/1.2 system-ui, sans-serif;
+}
+
+body:not(.app-slava-restraint) .canvas-tabs__btn:hover:not(:disabled) {
+  color: rgba(255, 255, 255, 0.92);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+body:not(.app-slava-restraint) .canvas-tabs__btn--active {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.10);
+}
+
+body:not(.app-slava-restraint) .canvas-tabs__btn:disabled {
+  opacity: 0.42;
+}

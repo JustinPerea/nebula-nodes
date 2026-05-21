@@ -1,0 +1,496 @@
+/* Layout only. Slava Restraint owns the visual treatment in slava-restraint.css. */
+
+.editor-view {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  min-height: 0;
+  padding: 80px 24px 24px;
+}
+
+.editor-view--empty {
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+}
+
+.editor-view--empty button,
+.editor-preview--error button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+
+.editor-view__button-icon,
+.editor-preview__button-icon {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+}
+
+.editor-view__too-small {
+  padding: 6px 12px;
+  text-align: center;
+}
+
+.editor-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.editor-breadcrumb__source {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.editor-breadcrumb__arrow,
+.editor-breadcrumb__vfr-icon {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+}
+
+.editor-breadcrumb__vfr {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+}
+
+.editor-preview {
+  position: relative;
+  display: flex;
+  flex: 1.8 1 0;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.editor-preview__video {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.editor-preview__hud {
+  position: absolute;
+  bottom: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.editor-preview--error {
+  flex-direction: column;
+  gap: 10px;
+}
+
+.editor-transport {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  min-height: 32px;
+  padding: 4px 12px;
+}
+
+.editor-transport__group,
+.editor-transport__inspector {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.editor-transport__btn,
+.editor-transport__tool,
+.editor-transport__preset {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.editor-transport__btn--icon {
+  width: 28px;
+  padding-inline: 0;
+}
+
+.editor-transport__icon {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+}
+
+.editor-transport__btn:disabled,
+.editor-transport__preset:disabled,
+.editor-transport__range:disabled {
+  cursor: not-allowed;
+}
+
+.editor-transport__divider {
+  width: 1px;
+  height: 18px;
+}
+
+.editor-transport__summary {
+  margin-left: auto;
+}
+
+.editor-transport__range {
+  width: 112px;
+}
+
+.editor-tl {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  min-height: 160px;
+}
+
+.editor-tl__viewport {
+  flex: 1;
+  overflow-x: auto;
+  overflow-y: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.editor-tl__scroll-content {
+  min-width: 100%;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+}
+
+.editor-tl__ruler-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.editor-tl__ruler-thumbs {
+  position: relative;
+  height: 34px;
+  padding-left: 34px;
+  padding-right: 8px;
+}
+
+.editor-tl__ruler-thumb {
+  position: absolute;
+  width: 60px;
+  height: 34px;
+  margin-left: -30px;
+  overflow: hidden;
+}
+
+.editor-tl__ruler-thumb img,
+.editor-tl__ruler-thumb-placeholder {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.editor-tl__ruler-thumb img {
+  object-fit: cover;
+}
+
+.editor-tl__ruler {
+  position: relative;
+  height: 14px;
+  padding-left: 34px;
+  padding-right: 8px;
+}
+
+.editor-tl__ruler-tick {
+  position: absolute;
+  transform: translateX(-50%);
+}
+
+.editor-tl__tracks {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.editor-tl__track {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.editor-tl__track-label {
+  width: 26px;
+  flex: 0 0 26px;
+}
+
+.editor-tl__track-body {
+  position: relative;
+  flex: 1 1 auto;
+  height: 32px;
+  overflow: hidden;
+}
+
+.editor-tl__track--audio .editor-tl__track-body {
+  height: 22px;
+}
+
+.editor-tl__clip {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  display: flex;
+  align-items: center;
+  min-width: 10px;
+  overflow: hidden;
+  padding-left: 6px;
+  cursor: pointer;
+}
+
+.editor-tl__clip-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.editor-tl__clip-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: ew-resize;
+}
+
+.editor-tl__clip-handle--in {
+  left: 0;
+}
+
+.editor-tl__clip-handle--out {
+  right: 0;
+}
+
+.editor-tl__clip-speed {
+  margin-left: 6px;
+}
+
+.editor-tl__clip-vol {
+  margin-right: 6px;
+  margin-left: auto;
+}
+
+.editor-tl__playhead-area {
+  position: absolute;
+  top: 60px;
+  right: 10px;
+  bottom: 10px;
+  left: 44px;
+  pointer-events: none;
+}
+
+.editor-tl__playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  pointer-events: auto;
+}
+
+body:not(.app-slava-restraint) .editor-view {
+  background: #000;
+  background-image: radial-gradient(circle at 1px 1px, rgba(201, 202, 200, 0.15) 1px, transparent 0);
+  background-size: 16px 16px;
+  color: rgba(255, 255, 255, 0.92);
+  font-family: system-ui, sans-serif;
+}
+
+body:not(.app-slava-restraint) .editor-view--empty {
+  color: rgba(255, 255, 255, 0.58);
+  font-size: 14px;
+}
+
+body:not(.app-slava-restraint) .editor-view--empty button,
+body:not(.app-slava-restraint) .editor-preview--error button {
+  padding: 7px 12px;
+  color: rgba(255, 255, 255, 0.92);
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 6px;
+}
+
+body:not(.app-slava-restraint) .editor-view__too-small,
+body:not(.app-slava-restraint) .editor-breadcrumb__vfr {
+  color: rgba(255, 255, 255, 0.88);
+  background: rgba(255, 90, 31, 0.10);
+  border: 1px solid rgba(255, 90, 31, 0.28);
+  border-radius: 6px;
+  font-size: 11px;
+}
+
+body:not(.app-slava-restraint) .editor-breadcrumb {
+  color: rgba(255, 255, 255, 0.56);
+  font: 10px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.1em;
+}
+
+body:not(.app-slava-restraint) .editor-breadcrumb__source {
+  color: rgba(255, 255, 255, 0.88);
+}
+
+body:not(.app-slava-restraint) .editor-breadcrumb__edit {
+  padding: 2px 8px;
+  color: #ff5a1f;
+  background: rgba(255, 90, 31, 0.10);
+  border: 1px solid rgba(255, 90, 31, 0.28);
+  border-radius: 4px;
+}
+
+body:not(.app-slava-restraint) .editor-preview,
+body:not(.app-slava-restraint) .editor-transport,
+body:not(.app-slava-restraint) .editor-tl {
+  background: rgba(28, 28, 31, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+}
+
+body:not(.app-slava-restraint) .editor-preview__hud {
+  padding: 3px 10px;
+  color: rgba(255, 255, 255, 0.92);
+  background: rgba(20, 20, 22, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  font: 10px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+body:not(.app-slava-restraint) .editor-transport {
+  color: rgba(255, 255, 255, 0.58);
+  font-size: 10px;
+}
+
+body:not(.app-slava-restraint) .editor-transport__btn,
+body:not(.app-slava-restraint) .editor-transport__tool,
+body:not(.app-slava-restraint) .editor-transport__preset {
+  min-height: 28px;
+  padding: 5px 9px;
+  color: rgba(255, 255, 255, 0.62);
+  border-radius: 6px;
+}
+
+body:not(.app-slava-restraint) .editor-transport__btn:hover:not(:disabled),
+body:not(.app-slava-restraint) .editor-transport__tool:hover,
+body:not(.app-slava-restraint) .editor-transport__preset:hover {
+  color: rgba(255, 255, 255, 0.92);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+body:not(.app-slava-restraint) .editor-transport__btn--primary,
+body:not(.app-slava-restraint) .editor-transport__btn--render {
+  color: rgba(255, 255, 255, 0.92);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+body:not(.app-slava-restraint) .editor-transport__btn--render {
+  background: rgba(255, 90, 31, 0.10);
+  border-color: rgba(255, 90, 31, 0.28);
+}
+
+body:not(.app-slava-restraint) .editor-transport__divider {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+body:not(.app-slava-restraint) .editor-transport__value,
+body:not(.app-slava-restraint) .editor-transport__summary {
+  color: rgba(255, 255, 255, 0.90);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+body:not(.app-slava-restraint) .editor-tl__ruler-thumb,
+body:not(.app-slava-restraint) .editor-tl__track-body {
+  background: rgba(0, 0, 0, 0.40);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+}
+
+body:not(.app-slava-restraint) .editor-tl__ruler-thumb-placeholder {
+  background: repeating-linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.04),
+    rgba(255, 255, 255, 0.04) 4px,
+    transparent 4px,
+    transparent 8px
+  );
+}
+
+body:not(.app-slava-restraint) .editor-tl__ruler,
+body:not(.app-slava-restraint) .editor-tl__track-label,
+body:not(.app-slava-restraint) .editor-tl__clip-vol {
+  color: rgba(255, 255, 255, 0.45);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 9px;
+}
+
+body:not(.app-slava-restraint) .editor-tl__clip {
+  color: rgba(255, 255, 255, 0.92);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.10));
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 3px;
+  font-size: 8px;
+}
+
+body:not(.app-slava-restraint) .editor-tl__clip--edited {
+  background: linear-gradient(135deg, rgba(255, 90, 31, 0.30), rgba(255, 90, 31, 0.18));
+  border-color: rgba(255, 90, 31, 0.28);
+}
+
+body:not(.app-slava-restraint) .editor-tl__clip--selected {
+  outline: 1px solid #ff5a1f;
+  outline-offset: 1px;
+}
+
+body:not(.app-slava-restraint) .editor-tl__clip-handle {
+  background: rgba(255, 255, 255, 0.10);
+}
+
+body:not(.app-slava-restraint) .editor-tl__clip--edited .editor-tl__clip-handle,
+body:not(.app-slava-restraint) .editor-tl__playhead {
+  background: #ff5a1f;
+}
+
+body:not(.app-slava-restraint) .editor-tl__clip-speed {
+  color: #ff5a1f;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 7px;
+}
+
+body:not(.app-slava-restraint) .editor-tl__playhead {
+  box-shadow: 0 0 6px rgba(255, 90, 31, 0.6);
+}
+
+.editor-transport__zoom {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.editor-tl__waveform {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.6;
+}

@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { type SkinId, loadSkin, persistSkin, applySkinBodyClass } from '../lib/skins';
+import { useGraphStore } from './graphStore';
 
 const AGENT_LOG_ENABLED_KEY = 'nebula:agentLog:enabled';
 
@@ -55,6 +56,13 @@ interface ConnectionPopupState {
 
 interface UIState {
   selectedNodeId: string | null;
+
+  // Editor view state — Phase 1 video-editor pivot
+  viewMode: 'canvas' | 'editor';
+  editorTargetNodeId: string | null;
+  selectedClipId: string | null;
+  playheadOutputTime: number;
+  timelineZoom: number;
   // True after the user manually resizes/drags the chat panel. While false,
   // ChatPanel skips its inline width/height so CSS-driven sizing
   // (clamp + viewport units) drives the chat width and lines it up with the
@@ -82,6 +90,15 @@ interface UIState {
   agentLogEnabled: boolean;
   inspectorPinned: boolean;
 
+  enterEditor: (sourceNodeId: string) => void;
+  exitEditor: () => void;
+  setSelectedClip: (id: string | null) => void;
+  setPlayheadOutputTime: (t: number) => void;
+  setTimelineZoom: (zoom: number) => void;
+  zoomTimelineIn: () => void;
+  zoomTimelineOut: () => void;
+  resetTimelineZoom: () => void;
+
   selectNode: (nodeId: string | null) => void;
   setInspectorVisible: (visible: boolean) => void;
   setInspectorPinned: (pinned: boolean) => void;
@@ -103,8 +120,13 @@ interface UIState {
   resetPanelsForFreshCanvas: () => void;
 }
 
-export const useUIStore = create<UIState>((set) => ({
+export const useUIStore = create<UIState>((set, get) => ({
   selectedNodeId: null,
+  viewMode: 'canvas',
+  editorTargetNodeId: null,
+  selectedClipId: null,
+  playheadOutputTime: 0,
+  timelineZoom: 1,
   chatResized: false,
   panels: createDefaultPanels(),
   librarySearch: '',
@@ -125,6 +147,33 @@ export const useUIStore = create<UIState>((set) => ({
   skin: loadSkin(),
   agentLogEnabled: loadAgentLogEnabled(),
   inspectorPinned: false,
+
+  enterEditor: (sourceNodeId) => {
+    const editNodeId = useGraphStore.getState().getOrCreateEditNodeDownstream(sourceNodeId);
+    set({
+      viewMode: 'editor',
+      editorTargetNodeId: editNodeId,
+      selectedClipId: null,
+      playheadOutputTime: 0,
+    });
+  },
+
+  exitEditor: () => {
+    const state = get();
+    if (state.editorTargetNodeId) {
+      useGraphStore.getState().removeEmptyEditNode(state.editorTargetNodeId);
+    }
+    set({ viewMode: 'canvas', editorTargetNodeId: null, selectedClipId: null });
+  },
+
+  setSelectedClip: (id) => set({ selectedClipId: id }),
+
+  setPlayheadOutputTime: (t) => set({ playheadOutputTime: t }),
+
+  setTimelineZoom: (zoom) => set({ timelineZoom: Math.max(1, Math.min(10, zoom)) }),
+  zoomTimelineIn: () => set((s) => ({ timelineZoom: Math.min(10, s.timelineZoom * 2) })),
+  zoomTimelineOut: () => set((s) => ({ timelineZoom: Math.max(1, s.timelineZoom / 2) })),
+  resetTimelineZoom: () => set({ timelineZoom: 1 }),
 
   selectNode: (nodeId) =>
     set((state) => ({

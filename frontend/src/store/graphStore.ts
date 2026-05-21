@@ -184,6 +184,17 @@ interface GraphState {
   clearGraph: () => void;
   configureOpenRouterModel: (nodeId: string, modelId: string, model: OpenRouterModel) => void;
   fetchReplicateSchemaAndConfigure: (nodeId: string, owner: string, name: string) => Promise<void>;
+
+  // Video-edit node helpers
+  getOrCreateEditNodeDownstream: (sourceNodeId: string) => string;
+  removeEmptyEditNode: (nodeId: string) => void;
+  updateEditNodeClip: (
+    nodeId: string,
+    clipId: string,
+    patch: Partial<{ start: number; duration: number; sourceIn: number; sourceOut: number; volume: number; mute: boolean }>,
+  ) => void;
+  cutEditNodeAtSource: (nodeId: string, sourceTime: number) => void;
+  removeEditNodeClip: (nodeId: string, clipId: string) => void;
 }
 
 // CLI nodes use short sequential IDs like n1, n2. Frontend-only (library-dragged)
@@ -396,6 +407,32 @@ wsClient.subscribe((event) => {
   }
   useGraphStore.getState().handleExecutionEvent(event);
 });
+
+// ---------- Edit-clip invariant helpers ----------
+
+interface EditClipLike {
+  id: string;
+  start: number;
+  duration: number;
+  sourceIn: number;
+  sourceOut: number;
+  volume: number;
+  mute: boolean;
+}
+
+/**
+ * Re-establish the end-to-end invariant: clip[i].start = sum of prior
+ * durations. Call after any mutation that changes clip durations or
+ * order. Pure function; does not mutate input.
+ */
+function reflowClips(clips: EditClipLike[]): EditClipLike[] {
+  let runningStart = 0;
+  return clips.map((c) => {
+    const out = { ...c, start: runningStart };
+    runningStart += c.duration;
+    return out;
+  });
+}
 
 export const useGraphStore = create<GraphState>((set, get) => ({
   nodes: [],
@@ -1001,6 +1038,161 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         console.warn(`[nebula] DELETE node ${nodeId} failed:`, err),
       );
     }
+  },
+
+  // ---------------------------------------------------------------------------
+  // Video-edit node helpers
+  // ---------------------------------------------------------------------------
+
+  getOrCreateEditNodeDownstream: (sourceNodeId) => {
+    const state = get();
+    const sourceNode = state.nodes.find((n) => n.id === sourceNodeId);
+    if (!sourceNode) {
+      throw new Error(`Source node not found: ${sourceNodeId}`);
+    }
+
+    const existingMatches = state.nodes.filter((n) => {
+      if (n.data.definitionId !== 'video-edit') return false;
+      return state.edges.some(
+        (e) =>
+          e.source === sourceNodeId &&
+          e.sourceHandle === 'video' &&
+          e.target === n.id &&
+          e.targetHandle === 'video_in',
+      );
+    });
+    if (existingMatches.length > 0) {
+      // Most recently created wins (id tiebreak)
+      return existingMatches[existingMatches.length - 1].id;
+    }
+
+    // Read source-file metadata that the upload endpoint probed via ffprobe.
+    // If absent (legacy node from before upload-time probing), seed empty so
+    // the existing "run the edit node to populate" fallback still works.
+    const sourceParams = ((sourceNode.data as { params?: Record<string, unknown> }).params ?? {});
+    const sourceDuration = typeof sourceParams.sourceDuration === 'number' ? sourceParams.sourceDuration : 0;
+    const sourceFps = typeof sourceParams.sourceFps === 'number' && sourceParams.sourceFps > 0
+      ? sourceParams.sourceFps : 30;
+    const sourceIsVfr = Boolean(sourceParams.sourceIsVfr);
+
+    const initialClips: EditClipLike[] = sourceDuration > 0
+      ? [{ id: 'c1', start: 0, duration: sourceDuration, sourceIn: 0, sourceOut: sourceDuration, volume: 1, mute: false }]
+      : [];
+
+    const editId = `video-edit-${Math.random().toString(36).slice(2, 8)}`;
+    const editNode: Node<NodeData> = {
+      id: editId,
+      type: 'editNode',
+      position: { x: sourceNode.position.x + 280, y: sourceNode.position.y },
+      data: {
+        definitionId: 'video-edit',
+        label: 'Video Edit',
+        state: 'idle' as const,
+        inputs: {},
+        outputs: {},
+        params: {
+          clips: initialClips,
+          sourceDuration,
+          sourceFps,
+          sourceIsVfr,
+        },
+        spawnedThisSession: true,
+      },
+    };
+    const edge: Edge = {
+      id: `e-${sourceNodeId}-${editId}`,
+      source: sourceNodeId,
+      sourceHandle: 'video',
+      target: editId,
+      targetHandle: 'video_in',
+    };
+    set({
+      nodes: [...state.nodes, editNode],
+      edges: [...state.edges, edge],
+    });
+    return editId;
+  },
+
+  removeEmptyEditNode: (nodeId) => {
+    const state = get();
+    const node = state.nodes.find((n) => n.id === nodeId);
+    if (!node || node.data.definitionId !== 'video-edit') return;
+    if (!node.data.spawnedThisSession) return;
+
+    const clips = (node.data.params?.clips ?? []) as Array<Record<string, unknown>>;
+    const isVirgin =
+      clips.length === 0 ||
+      (clips.length === 1 &&
+        (clips[0].sourceIn === 0 || clips[0].sourceIn === 0.0) &&
+        // Speed is derived: speed = 1 means duration equals source range.
+        // For a freshly seeded clip, duration === sourceOut - sourceIn.
+        Math.abs((clips[0].duration as number) - ((clips[0].sourceOut as number) - (clips[0].sourceIn as number))) < 0.0001 &&
+        (clips[0].volume === 1 || clips[0].volume === 1.0) &&
+        clips[0].mute === false);
+    if (!isVirgin) return;
+
+    set({
+      nodes: state.nodes.filter((n) => n.id !== nodeId),
+      edges: state.edges.filter((e) => e.target !== nodeId && e.source !== nodeId),
+    });
+  },
+
+  updateEditNodeClip: (nodeId, clipId, patch) => {
+    set((state) => ({
+      nodes: state.nodes.map((n) => {
+        if (n.id !== nodeId) return n;
+        const params = { ...(n.data.params ?? {}) };
+        const oldClips = ((params.clips as EditClipLike[]) ?? []);
+        const patched = oldClips.map((c) =>
+          c.id === clipId ? { ...c, ...patch } : c,
+        );
+        const reflowed = reflowClips(patched);
+        return { ...n, data: { ...n.data, params: { ...params, clips: reflowed } } };
+      }),
+    }));
+  },
+
+  cutEditNodeAtSource: (nodeId, sourceTime) => {
+    set((state) => ({
+      nodes: state.nodes.map((n) => {
+        if (n.id !== nodeId) return n;
+        const params = { ...(n.data.params ?? {}) };
+        const clips = ((params.clips as EditClipLike[]) ?? []);
+        const idx = clips.findIndex((c) => sourceTime > c.sourceIn && sourceTime < c.sourceOut);
+        if (idx < 0) return n;
+        const orig = clips[idx];
+        // Keep speed constant across both halves: same (sourceOut - sourceIn) / duration ratio.
+        const origSpeed = orig.duration > 0 ? (orig.sourceOut - orig.sourceIn) / orig.duration : 1;
+        const leftSourceRange = sourceTime - orig.sourceIn;
+        const rightSourceRange = orig.sourceOut - sourceTime;
+        const left: EditClipLike = {
+          ...orig,
+          sourceOut: sourceTime,
+          duration: leftSourceRange / origSpeed,
+        };
+        const right: EditClipLike = {
+          ...orig,
+          id: `${orig.id}-${Math.random().toString(36).slice(2, 6)}`,
+          sourceIn: sourceTime,
+          duration: rightSourceRange / origSpeed,
+        };
+        const next = reflowClips([...clips.slice(0, idx), left, right, ...clips.slice(idx + 1)]);
+        return { ...n, data: { ...n.data, params: { ...params, clips: next } } };
+      }),
+    }));
+  },
+
+  removeEditNodeClip: (nodeId, clipId) => {
+    set((state) => ({
+      nodes: state.nodes.map((n) => {
+        if (n.id !== nodeId) return n;
+        const params = { ...(n.data.params ?? {}) };
+        const filtered = ((params.clips as EditClipLike[]) ?? []).filter((c) => c.id !== clipId);
+        if (filtered.length === 0) return n; // Never delete the only clip
+        const reflowed = reflowClips(filtered);
+        return { ...n, data: { ...n.data, params: { ...params, clips: reflowed } } };
+      }),
+    }));
   },
 
   loadGraph: (nodes, edges) => {

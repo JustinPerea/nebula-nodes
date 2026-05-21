@@ -2,6 +2,8 @@ import { useEffect, useRef } from 'react';
 import { ReactFlowProvider, useReactFlow } from '@xyflow/react';
 import type { Node, Edge } from '@xyflow/react';
 import { Canvas } from './components/Canvas';
+import { CanvasTabs } from './components/CanvasTabs';
+import { EditorView } from './components/editor/EditorView';
 import { NodeLibrary } from './components/panels/NodeLibrary';
 import { Settings } from './components/panels/Settings';
 import { Toolbar } from './components/panels/Toolbar';
@@ -118,18 +120,24 @@ export default function App() {
     return () => window.removeEventListener('nebula:settings-saved', handleSettingsSaved);
   }, []);
 
+  const viewMode = useUIStore((s) => s.viewMode);
+
+  const isCanvas = viewMode === 'canvas';
   return (
     <ReactFlowProvider>
       <GraphHydrator />
       <ZoomManifestRecorder />
-      <Canvas />
-      <NodeLibrary />
-      <NodeInspectorPopover />
-      <Settings />
+      <CanvasTabs />
+      {isCanvas ? <Canvas /> : <EditorView />}
+      {/* Canvas-only chrome: library, inspector, settings, launchers, toolbar, agent log.
+          The editor view is a focused workspace — only the pill control and chat remain. */}
+      {isCanvas && <NodeLibrary />}
+      {isCanvas && <NodeInspectorPopover />}
+      {isCanvas && <Settings />}
       <ChatPanel />
-      <PanelLaunchers />
-      <Toolbar />
-      <AgentLog />
+      {isCanvas && <PanelLaunchers />}
+      {isCanvas && <Toolbar />}
+      {isCanvas && <AgentLog />}
     </ReactFlowProvider>
   );
 }

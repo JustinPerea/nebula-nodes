@@ -18,6 +18,7 @@ import { useIsValidConnection } from '../hooks/useIsValidConnection';
 import { ModelNode } from './nodes/ModelNode';
 import { DynamicNode } from './nodes/DynamicNode';
 import { RerouteNode } from './nodes/RerouteNode';
+import { EditNode } from './nodes/EditNode';
 import { TypedEdge } from './edges/TypedEdge';
 import { ContextMenu } from './ContextMenu';
 import { ConnectionPopup } from './ConnectionPopup';
@@ -27,6 +28,7 @@ const nodeTypes: NodeTypes = {
   'model-node': ModelNode,
   'dynamic-node': DynamicNode,
   'reroute-node': RerouteNode,
+  editNode: EditNode,
 };
 
 // fitView padding that reserves space for every floating panel that overlaps
@@ -356,20 +358,23 @@ export function Canvas() {
     (event: React.DragEvent) => {
       event.preventDefault();
 
-      // Check for image file drops first
+      // Check for image or video file drops first
       const files = event.dataTransfer.files;
       if (files.length > 0) {
-        const imageFiles = Array.from(files).filter((f) => f.type.startsWith('image/'));
-        if (imageFiles.length > 0) {
+        const mediaFiles = Array.from(files).filter(
+          (f) => f.type.startsWith('image/') || f.type.startsWith('video/'),
+        );
+        if (mediaFiles.length > 0) {
           const reactFlowBounds = (event.target as HTMLElement)
             .closest('.react-flow')
             ?.getBoundingClientRect();
           if (!reactFlowBounds) return;
 
-          imageFiles.forEach((file) => {
+          mediaFiles.forEach((file) => {
             // Upload then register the node in cli_graph so Claude's `nebula graph`
             // sees it with a short ID. graphSync will push it back to the canvas.
             // Position from the drop event is discarded — cli_graph export auto-lays-out.
+            // Backend routes image → image-input node, video → video-input node.
             const formData = new FormData();
             formData.append('file', file);
             formData.append('create_node', 'true');

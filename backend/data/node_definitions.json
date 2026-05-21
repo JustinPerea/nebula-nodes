@@ -57,15 +57,15 @@
             "value": "auto"
           },
           {
-            "label": "1024\u00d71024",
+            "label": "1024×1024",
             "value": "1024x1024"
           },
           {
-            "label": "1536\u00d71024",
+            "label": "1536×1024",
             "value": "1536x1024"
           },
           {
-            "label": "1024\u00d71536",
+            "label": "1024×1536",
             "value": "1024x1536"
           }
         ]
@@ -94,15 +94,6 @@
             "value": "high"
           }
         ]
-      },
-      {
-        "key": "n",
-        "label": "Count",
-        "type": "integer",
-        "required": false,
-        "default": 1,
-        "min": 1,
-        "max": 10
       },
       {
         "key": "output_format",
@@ -2340,6 +2331,32 @@
       }
     ]
   },
+  "video-edit": {
+    "id": "video-edit",
+    "displayName": "Video Edit",
+    "category": "utility",
+    "apiProvider": "utility",
+    "apiEndpoint": "",
+    "envKeyName": [],
+    "executionPattern": "async-poll",
+    "inputPorts": [
+      {
+        "id": "video_in",
+        "label": "Source Video",
+        "dataType": "Video",
+        "required": true
+      }
+    ],
+    "outputPorts": [
+      {
+        "id": "video",
+        "label": "Edited Video",
+        "dataType": "Video",
+        "required": false
+      }
+    ],
+    "params": []
+  },
   "preview": {
     "id": "preview",
     "displayName": "Preview",
@@ -2570,14 +2587,14 @@
         "type": "string",
         "required": true,
         "default": "",
-        "placeholder": "Loading models..."
+        "placeholder": "Loading models…"
       },
       {
         "key": "temperature",
         "label": "Temperature",
         "type": "float",
         "required": false,
-        "default": 1.0,
+        "default": 1,
         "min": 0,
         "max": 2,
         "step": 0.1
@@ -2723,15 +2740,15 @@
         "default": "1024x1024",
         "options": [
           {
-            "label": "1024\u00d71024",
+            "label": "1024×1024",
             "value": "1024x1024"
           },
           {
-            "label": "1024\u00d71792",
+            "label": "1024×1792",
             "value": "1024x1792"
           },
           {
-            "label": "1792\u00d71024",
+            "label": "1792×1024",
             "value": "1792x1024"
           }
         ]
@@ -3331,23 +3348,6 @@
     ],
     "params": [
       {
-        "key": "model",
-        "label": "Model",
-        "type": "enum",
-        "required": false,
-        "default": "standard",
-        "options": [
-          {
-            "label": "Sora 2 Standard",
-            "value": "standard"
-          },
-          {
-            "label": "Sora 2 Pro",
-            "value": "pro"
-          }
-        ]
-      },
-      {
         "key": "resolution",
         "label": "Resolution",
         "type": "enum",
@@ -3706,10 +3706,6 @@
         "default": "gemini-2.5-flash-preview-tts",
         "options": [
           {
-            "label": "3.1 Flash TTS",
-            "value": "gemini-3.1-flash-tts-preview"
-          },
-          {
             "label": "2.5 Flash TTS",
             "value": "gemini-2.5-flash-preview-tts"
           },
@@ -3727,123 +3723,123 @@
         "default": "Kore",
         "options": [
           {
-            "label": "Zephyr \u2014 Bright",
+            "label": "Zephyr — Bright",
             "value": "Zephyr"
           },
           {
-            "label": "Puck \u2014 Upbeat",
+            "label": "Puck — Upbeat",
             "value": "Puck"
           },
           {
-            "label": "Charon \u2014 Informative",
+            "label": "Charon — Informative",
             "value": "Charon"
           },
           {
-            "label": "Kore \u2014 Firm",
+            "label": "Kore — Firm",
             "value": "Kore"
           },
           {
-            "label": "Fenrir \u2014 Excitable",
+            "label": "Fenrir — Excitable",
             "value": "Fenrir"
           },
           {
-            "label": "Leda \u2014 Youthful",
+            "label": "Leda — Youthful",
             "value": "Leda"
           },
           {
-            "label": "Orus \u2014 Firm",
+            "label": "Orus — Firm",
             "value": "Orus"
           },
           {
-            "label": "Aoede \u2014 Breezy",
+            "label": "Aoede — Breezy",
             "value": "Aoede"
           },
           {
-            "label": "Callirrhoe \u2014 Easy-going",
+            "label": "Callirrhoe — Easy-going",
             "value": "Callirrhoe"
           },
           {
-            "label": "Autonoe \u2014 Bright",
+            "label": "Autonoe — Bright",
             "value": "Autonoe"
           },
           {
-            "label": "Enceladus \u2014 Breathy",
+            "label": "Enceladus — Breathy",
             "value": "Enceladus"
           },
           {
-            "label": "Iapetus \u2014 Clear",
+            "label": "Iapetus — Clear",
             "value": "Iapetus"
           },
           {
-            "label": "Umbriel \u2014 Easy-going",
+            "label": "Umbriel — Easy-going",
             "value": "Umbriel"
           },
           {
-            "label": "Algieba \u2014 Smooth",
+            "label": "Algieba — Smooth",
             "value": "Algieba"
           },
           {
-            "label": "Despina \u2014 Smooth",
+            "label": "Despina — Smooth",
             "value": "Despina"
           },
           {
-            "label": "Erinome \u2014 Clear",
+            "label": "Erinome — Clear",
             "value": "Erinome"
           },
           {
-            "label": "Algenib \u2014 Gravelly",
+            "label": "Algenib — Gravelly",
             "value": "Algenib"
           },
           {
-            "label": "Rasalgethi \u2014 Informative",
+            "label": "Rasalgethi — Informative",
             "value": "Rasalgethi"
           },
           {
-            "label": "Laomedeia \u2014 Upbeat",
+            "label": "Laomedeia — Upbeat",
             "value": "Laomedeia"
           },
           {
-            "label": "Achernar \u2014 Soft",
+            "label": "Achernar — Soft",
             "value": "Achernar"
           },
           {
-            "label": "Alnilam \u2014 Firm",
+            "label": "Alnilam — Firm",
             "value": "Alnilam"
           },
           {
-            "label": "Schedar \u2014 Even",
+            "label": "Schedar — Even",
             "value": "Schedar"
           },
           {
-            "label": "Gacrux \u2014 Mature",
+            "label": "Gacrux — Mature",
             "value": "Gacrux"
           },
           {
-            "label": "Pulcherrima \u2014 Forward",
+            "label": "Pulcherrima — Forward",
             "value": "Pulcherrima"
           },
           {
-            "label": "Achird \u2014 Friendly",
+            "label": "Achird — Friendly",
             "value": "Achird"
           },
           {
-            "label": "Zubenelgenubi \u2014 Casual",
+            "label": "Zubenelgenubi — Casual",
             "value": "Zubenelgenubi"
           },
           {
-            "label": "Vindemiatrix \u2014 Gentle",
+            "label": "Vindemiatrix — Gentle",
             "value": "Vindemiatrix"
           },
           {
-            "label": "Sadachbia \u2014 Lively",
+            "label": "Sadachbia — Lively",
             "value": "Sadachbia"
           },
           {
-            "label": "Sadaltager \u2014 Knowledgeable",
+            "label": "Sadaltager — Knowledgeable",
             "value": "Sadaltager"
           },
           {
-            "label": "Sulafat \u2014 Warm",
+            "label": "Sulafat — Warm",
             "value": "Sulafat"
           }
         ]
@@ -3894,7 +3890,7 @@
           },
           {
             "label": "Embedding 2 (multimodal)",
-            "value": "gemini-embedding-2"
+            "value": "gemini-embedding-2-preview"
           }
         ]
       },
@@ -4004,6 +4000,23 @@
     ],
     "params": [],
     "sharedParams": [
+      {
+        "key": "aspectRatio",
+        "label": "Aspect Ratio",
+        "type": "enum",
+        "required": false,
+        "default": "16:9",
+        "options": [
+          {
+            "label": "16:9",
+            "value": "16:9"
+          },
+          {
+            "label": "9:16",
+            "value": "9:16"
+          }
+        ]
+      },
       {
         "key": "duration",
         "label": "Duration",
@@ -4138,23 +4151,6 @@
         ]
       },
       {
-        "key": "aspectRatio",
-        "label": "Aspect Ratio",
-        "type": "enum",
-        "required": false,
-        "default": "16:9",
-        "options": [
-          {
-            "label": "16:9",
-            "value": "16:9"
-          },
-          {
-            "label": "9:16",
-            "value": "9:16"
-          }
-        ]
-      },
-      {
         "key": "seed",
         "label": "Seed",
         "type": "integer",
@@ -4172,37 +4168,6 @@
       }
     ],
     "falParams": [
-      {
-        "key": "aspect_ratio",
-        "label": "Aspect Ratio",
-        "type": "enum",
-        "required": false,
-        "default": "16:9",
-        "options": [
-          {
-            "label": "16:9",
-            "value": "16:9"
-          },
-          {
-            "label": "9:16",
-            "value": "9:16"
-          }
-        ]
-      },
-      {
-        "key": "generate_audio",
-        "label": "Generate Audio",
-        "type": "boolean",
-        "required": false,
-        "default": true
-      },
-      {
-        "key": "auto_fix",
-        "label": "Auto-Fix Prompt",
-        "type": "boolean",
-        "required": false,
-        "default": true
-      },
       {
         "key": "negative_prompt",
         "label": "Negative Prompt",
@@ -4285,11 +4250,11 @@
         "default": "landscape_4_3",
         "options": [
           {
-            "label": "Square HD (1024\u00d71024)",
+            "label": "Square HD (1024×1024)",
             "value": "square_hd"
           },
           {
-            "label": "Square (512\u00d7512)",
+            "label": "Square (512×512)",
             "value": "square"
           },
           {
@@ -4325,8 +4290,8 @@
         "type": "float",
         "required": false,
         "default": 3.5,
-        "min": 1.0,
-        "max": 5.0
+        "min": 1,
+        "max": 5
       },
       {
         "key": "num_images",
@@ -4922,12 +4887,6 @@
         "label": "Prompt",
         "dataType": "Text",
         "required": true
-      },
-      {
-        "id": "texture_image",
-        "label": "Texture Reference",
-        "dataType": "Image",
-        "required": false
       }
     ],
     "outputPorts": [
@@ -5090,71 +5049,11 @@
     ],
     "falParams": [
       {
-        "key": "art_style",
-        "label": "Art Style",
-        "type": "enum",
-        "required": false,
-        "default": "realistic",
-        "options": [
-          {
-            "label": "Realistic",
-            "value": "realistic"
-          },
-          {
-            "label": "Sculpture",
-            "value": "sculpture"
-          }
-        ]
-      },
-      {
         "key": "texture_prompt",
         "label": "Texture Prompt",
         "type": "string",
         "required": false,
         "placeholder": "Guide the texturing process"
-      },
-      {
-        "key": "enable_rigging",
-        "label": "Auto-Rig (Humanoid)",
-        "type": "boolean",
-        "required": false,
-        "default": false
-      },
-      {
-        "key": "rigging_height_meters",
-        "label": "Rig Height (m)",
-        "type": "float",
-        "required": false,
-        "default": 1.7,
-        "visibleWhen": {
-          "enable_rigging": [
-            true
-          ]
-        }
-      },
-      {
-        "key": "enable_animation",
-        "label": "Apply Animation",
-        "type": "boolean",
-        "required": false,
-        "default": false,
-        "visibleWhen": {
-          "enable_rigging": [
-            true
-          ]
-        }
-      },
-      {
-        "key": "animation_action_id",
-        "label": "Animation ID",
-        "type": "integer",
-        "required": false,
-        "default": 1001,
-        "visibleWhen": {
-          "enable_animation": [
-            true
-          ]
-        }
       },
       {
         "key": "enable_prompt_expansion",
@@ -5197,12 +5096,6 @@
         "label": "Image",
         "dataType": "Image",
         "required": true
-      },
-      {
-        "id": "texture_image",
-        "label": "Texture Reference",
-        "dataType": "Image",
-        "required": false
       }
     ],
     "outputPorts": [
@@ -5374,49 +5267,6 @@
         "type": "string",
         "required": false,
         "placeholder": "Guide the texturing process"
-      },
-      {
-        "key": "enable_rigging",
-        "label": "Auto-Rig (Humanoid)",
-        "type": "boolean",
-        "required": false,
-        "default": false
-      },
-      {
-        "key": "rigging_height_meters",
-        "label": "Rig Height (m)",
-        "type": "float",
-        "required": false,
-        "default": 1.7,
-        "visibleWhen": {
-          "enable_rigging": [
-            true
-          ]
-        }
-      },
-      {
-        "key": "enable_animation",
-        "label": "Apply Animation",
-        "type": "boolean",
-        "required": false,
-        "default": false,
-        "visibleWhen": {
-          "enable_rigging": [
-            true
-          ]
-        }
-      },
-      {
-        "key": "animation_action_id",
-        "label": "Animation ID",
-        "type": "integer",
-        "required": false,
-        "default": 1001,
-        "visibleWhen": {
-          "enable_animation": [
-            true
-          ]
-        }
       },
       {
         "key": "enable_safety_checker",
@@ -5929,10 +5779,6 @@
             "value": "nano-banana"
           },
           {
-            "label": "Nano Banana 2",
-            "value": "nano-banana-2"
-          },
-          {
             "label": "Nano Banana Pro",
             "value": "nano-banana-pro"
           }
@@ -6044,10 +5890,6 @@
           {
             "label": "Nano Banana",
             "value": "nano-banana"
-          },
-          {
-            "label": "Nano Banana 2",
-            "value": "nano-banana-2"
           },
           {
             "label": "Nano Banana Pro",
@@ -6372,15 +6214,15 @@
             "value": "auto"
           },
           {
-            "label": "1024\u00d71024",
+            "label": "1024×1024",
             "value": "1024x1024"
           },
           {
-            "label": "1536\u00d71024",
+            "label": "1536×1024",
             "value": "1536x1024"
           },
           {
-            "label": "1024\u00d71536",
+            "label": "1024×1536",
             "value": "1024x1536"
           }
         ]
@@ -6451,558 +6293,6 @@
             "value": "opaque"
           }
         ]
-      }
-    ]
-  },
-  "gpt-image-2-generate": {
-    "id": "gpt-image-2-generate",
-    "displayName": "GPT Image 2",
-    "category": "image-gen",
-    "apiProvider": "openai",
-    "apiEndpoint": "/v1/images/generations",
-    "envKeyName": "OPENAI_API_KEY",
-    "executionPattern": "stream",
-    "inputPorts": [
-      {
-        "id": "prompt",
-        "label": "Prompt",
-        "dataType": "Text",
-        "required": true
-      }
-    ],
-    "outputPorts": [
-      {
-        "id": "image",
-        "label": "Image",
-        "dataType": "Image",
-        "required": false
-      }
-    ],
-    "params": [
-      {
-        "key": "size",
-        "label": "Size",
-        "type": "enum",
-        "required": false,
-        "default": "auto",
-        "options": [
-          {
-            "label": "Auto",
-            "value": "auto"
-          },
-          {
-            "label": "1024x1024",
-            "value": "1024x1024"
-          },
-          {
-            "label": "1536x1024",
-            "value": "1536x1024"
-          },
-          {
-            "label": "1024x1536",
-            "value": "1024x1536"
-          },
-          {
-            "label": "2048x2048",
-            "value": "2048x2048"
-          },
-          {
-            "label": "2048x1152",
-            "value": "2048x1152"
-          },
-          {
-            "label": "3840x2160 (4K landscape)",
-            "value": "3840x2160"
-          },
-          {
-            "label": "2160x3840 (4K portrait)",
-            "value": "2160x3840"
-          }
-        ]
-      },
-      {
-        "key": "quality",
-        "label": "Quality",
-        "type": "enum",
-        "required": false,
-        "default": "auto",
-        "options": [
-          {
-            "label": "Auto",
-            "value": "auto"
-          },
-          {
-            "label": "Low",
-            "value": "low"
-          },
-          {
-            "label": "Medium",
-            "value": "medium"
-          },
-          {
-            "label": "High",
-            "value": "high"
-          }
-        ]
-      },
-      {
-        "key": "output_format",
-        "label": "Format",
-        "type": "enum",
-        "required": false,
-        "default": "png",
-        "options": [
-          {
-            "label": "PNG",
-            "value": "png"
-          },
-          {
-            "label": "JPEG",
-            "value": "jpeg"
-          },
-          {
-            "label": "WebP",
-            "value": "webp"
-          }
-        ]
-      },
-      {
-        "key": "output_compression",
-        "label": "Compression",
-        "type": "integer",
-        "required": false,
-        "default": 90,
-        "min": 0,
-        "max": 100
-      },
-      {
-        "key": "moderation",
-        "label": "Moderation",
-        "type": "enum",
-        "required": false,
-        "default": "auto",
-        "options": [
-          {
-            "label": "Auto",
-            "value": "auto"
-          },
-          {
-            "label": "Low",
-            "value": "low"
-          }
-        ]
-      }
-    ]
-  },
-  "gpt-image-2-edit": {
-    "id": "gpt-image-2-edit",
-    "displayName": "GPT Image 2 Edit",
-    "category": "image-gen",
-    "apiProvider": "openai",
-    "apiEndpoint": "/v1/images/edits",
-    "envKeyName": "OPENAI_API_KEY",
-    "executionPattern": "stream",
-    "inputPorts": [
-      {
-        "id": "images",
-        "label": "Images",
-        "dataType": "Image",
-        "required": true,
-        "multiple": true
-      },
-      {
-        "id": "prompt",
-        "label": "Prompt",
-        "dataType": "Text",
-        "required": true
-      },
-      {
-        "id": "mask",
-        "label": "Mask",
-        "dataType": "Mask",
-        "required": false
-      }
-    ],
-    "outputPorts": [
-      {
-        "id": "image",
-        "label": "Image",
-        "dataType": "Image",
-        "required": false
-      }
-    ],
-    "params": [
-      {
-        "key": "size",
-        "label": "Size",
-        "type": "enum",
-        "required": false,
-        "default": "auto",
-        "options": [
-          {
-            "label": "Auto",
-            "value": "auto"
-          },
-          {
-            "label": "1024x1024",
-            "value": "1024x1024"
-          },
-          {
-            "label": "1536x1024",
-            "value": "1536x1024"
-          },
-          {
-            "label": "1024x1536",
-            "value": "1024x1536"
-          },
-          {
-            "label": "2048x2048",
-            "value": "2048x2048"
-          },
-          {
-            "label": "2048x1152",
-            "value": "2048x1152"
-          },
-          {
-            "label": "3840x2160 (4K landscape)",
-            "value": "3840x2160"
-          },
-          {
-            "label": "2160x3840 (4K portrait)",
-            "value": "2160x3840"
-          }
-        ]
-      },
-      {
-        "key": "quality",
-        "label": "Quality",
-        "type": "enum",
-        "required": false,
-        "default": "auto",
-        "options": [
-          {
-            "label": "Auto",
-            "value": "auto"
-          },
-          {
-            "label": "Low",
-            "value": "low"
-          },
-          {
-            "label": "Medium",
-            "value": "medium"
-          },
-          {
-            "label": "High",
-            "value": "high"
-          }
-        ]
-      },
-      {
-        "key": "output_format",
-        "label": "Format",
-        "type": "enum",
-        "required": false,
-        "default": "png",
-        "options": [
-          {
-            "label": "PNG",
-            "value": "png"
-          },
-          {
-            "label": "JPEG",
-            "value": "jpeg"
-          },
-          {
-            "label": "WebP",
-            "value": "webp"
-          }
-        ]
-      },
-      {
-        "key": "output_compression",
-        "label": "Compression",
-        "type": "integer",
-        "required": false,
-        "default": 90,
-        "min": 0,
-        "max": 100
-      },
-      {
-        "key": "moderation",
-        "label": "Moderation",
-        "type": "enum",
-        "required": false,
-        "default": "auto",
-        "options": [
-          {
-            "label": "Auto",
-            "value": "auto"
-          },
-          {
-            "label": "Low",
-            "value": "low"
-          }
-        ]
-      }
-    ]
-  },
-  "gpt-image-2-fal-generate": {
-    "id": "gpt-image-2-fal-generate",
-    "displayName": "GPT Image 2 (FAL)",
-    "category": "image-gen",
-    "apiProvider": "fal",
-    "apiEndpoint": "openai/gpt-image-2",
-    "envKeyName": "FAL_KEY",
-    "executionPattern": "stream",
-    "inputPorts": [
-      {
-        "id": "prompt",
-        "label": "Prompt",
-        "dataType": "Text",
-        "required": true
-      }
-    ],
-    "outputPorts": [
-      {
-        "id": "image",
-        "label": "Image",
-        "dataType": "Image",
-        "required": false
-      }
-    ],
-    "params": [
-      {
-        "key": "image_size",
-        "label": "Size",
-        "type": "enum",
-        "required": false,
-        "default": "landscape_4_3",
-        "options": [
-          {
-            "label": "Square HD (1024x1024)",
-            "value": "square_hd"
-          },
-          {
-            "label": "Square (512x512)",
-            "value": "square"
-          },
-          {
-            "label": "Portrait 4:3 (768x1024)",
-            "value": "portrait_4_3"
-          },
-          {
-            "label": "Portrait 16:9 (576x1024)",
-            "value": "portrait_16_9"
-          },
-          {
-            "label": "Landscape 4:3 (1024x768)",
-            "value": "landscape_4_3"
-          },
-          {
-            "label": "Landscape 16:9 (1024x576)",
-            "value": "landscape_16_9"
-          }
-        ]
-      },
-      {
-        "key": "quality",
-        "label": "Quality",
-        "type": "enum",
-        "required": false,
-        "default": "high",
-        "options": [
-          {
-            "label": "Auto",
-            "value": "auto"
-          },
-          {
-            "label": "Low",
-            "value": "low"
-          },
-          {
-            "label": "Medium",
-            "value": "medium"
-          },
-          {
-            "label": "High",
-            "value": "high"
-          }
-        ]
-      },
-      {
-        "key": "num_images",
-        "label": "Count",
-        "type": "integer",
-        "required": false,
-        "default": 1,
-        "min": 1,
-        "max": 4
-      },
-      {
-        "key": "output_format",
-        "label": "Format",
-        "type": "enum",
-        "required": false,
-        "default": "png",
-        "options": [
-          {
-            "label": "PNG",
-            "value": "png"
-          },
-          {
-            "label": "JPEG",
-            "value": "jpeg"
-          },
-          {
-            "label": "WebP",
-            "value": "webp"
-          }
-        ]
-      },
-      {
-        "key": "partial_images",
-        "label": "Preview Frames",
-        "type": "integer",
-        "required": false,
-        "default": 2,
-        "min": 0,
-        "max": 3
-      }
-    ]
-  },
-  "gpt-image-2-fal-edit": {
-    "id": "gpt-image-2-fal-edit",
-    "displayName": "GPT Image 2 Edit (FAL)",
-    "category": "image-gen",
-    "apiProvider": "fal",
-    "apiEndpoint": "openai/gpt-image-2/edit",
-    "envKeyName": "FAL_KEY",
-    "executionPattern": "stream",
-    "inputPorts": [
-      {
-        "id": "images",
-        "label": "Reference Images",
-        "dataType": "Image",
-        "required": true,
-        "multiple": true
-      },
-      {
-        "id": "prompt",
-        "label": "Prompt",
-        "dataType": "Text",
-        "required": true
-      }
-    ],
-    "outputPorts": [
-      {
-        "id": "image",
-        "label": "Image",
-        "dataType": "Image",
-        "required": false
-      }
-    ],
-    "params": [
-      {
-        "key": "image_size",
-        "label": "Size",
-        "type": "enum",
-        "required": false,
-        "default": "auto",
-        "options": [
-          {
-            "label": "Auto",
-            "value": "auto"
-          },
-          {
-            "label": "Square HD (1024x1024)",
-            "value": "square_hd"
-          },
-          {
-            "label": "Square (512x512)",
-            "value": "square"
-          },
-          {
-            "label": "Portrait 4:3 (768x1024)",
-            "value": "portrait_4_3"
-          },
-          {
-            "label": "Portrait 16:9 (576x1024)",
-            "value": "portrait_16_9"
-          },
-          {
-            "label": "Landscape 4:3 (1024x768)",
-            "value": "landscape_4_3"
-          },
-          {
-            "label": "Landscape 16:9 (1024x576)",
-            "value": "landscape_16_9"
-          }
-        ]
-      },
-      {
-        "key": "quality",
-        "label": "Quality",
-        "type": "enum",
-        "required": false,
-        "default": "high",
-        "options": [
-          {
-            "label": "Auto",
-            "value": "auto"
-          },
-          {
-            "label": "Low",
-            "value": "low"
-          },
-          {
-            "label": "Medium",
-            "value": "medium"
-          },
-          {
-            "label": "High",
-            "value": "high"
-          }
-        ]
-      },
-      {
-        "key": "num_images",
-        "label": "Count",
-        "type": "integer",
-        "required": false,
-        "default": 1,
-        "min": 1,
-        "max": 4
-      },
-      {
-        "key": "output_format",
-        "label": "Format",
-        "type": "enum",
-        "required": false,
-        "default": "png",
-        "options": [
-          {
-            "label": "PNG",
-            "value": "png"
-          },
-          {
-            "label": "JPEG",
-            "value": "jpeg"
-          },
-          {
-            "label": "WebP",
-            "value": "webp"
-          }
-        ]
-      },
-      {
-        "key": "partial_images",
-        "label": "Preview Frames",
-        "type": "integer",
-        "required": false,
-        "default": 2,
-        "min": 0,
-        "max": 3
       }
     ]
   },
@@ -7291,7 +6581,7 @@
         "label": "Temperature",
         "type": "float",
         "required": false,
-        "default": 1.0,
+        "default": 1,
         "min": 0,
         "max": 2,
         "step": 0.1
@@ -7301,7 +6591,7 @@
         "label": "Top P",
         "type": "float",
         "required": false,
-        "default": 1.0,
+        "default": 1,
         "min": 0,
         "max": 1,
         "step": 0.05
@@ -7311,7 +6601,7 @@
         "label": "Presence Penalty",
         "type": "float",
         "required": false,
-        "default": 0.0,
+        "default": 0,
         "min": -2,
         "max": 2,
         "step": 0.1
@@ -7394,7 +6684,7 @@
         "label": "Temperature",
         "type": "float",
         "required": false,
-        "default": 1.0,
+        "default": 1,
         "min": 0,
         "max": 2,
         "step": 0.1
@@ -7404,7 +6694,7 @@
         "label": "Top P",
         "type": "float",
         "required": false,
-        "default": 1.0,
+        "default": 1,
         "min": 0,
         "max": 1,
         "step": 0.05
@@ -7414,7 +6704,7 @@
         "label": "Presence Penalty",
         "type": "float",
         "required": false,
-        "default": 0.0,
+        "default": 0,
         "min": -2,
         "max": 2,
         "step": 0.1
@@ -8465,20 +7755,6 @@
         ]
       },
       {
-        "key": "negative_prompt",
-        "label": "Negative Prompt",
-        "type": "string",
-        "required": false,
-        "placeholder": "What to avoid"
-      },
-      {
-        "key": "seed",
-        "label": "Seed",
-        "type": "integer",
-        "required": false,
-        "placeholder": "Random"
-      },
-      {
         "key": "style",
         "label": "Style",
         "type": "enum",
@@ -8509,6 +7785,20 @@
             "value": "cyberpunk"
           }
         ]
+      },
+      {
+        "key": "negative_prompt",
+        "label": "Negative Prompt",
+        "type": "string",
+        "required": false,
+        "placeholder": "What to avoid"
+      },
+      {
+        "key": "seed",
+        "label": "Seed",
+        "type": "integer",
+        "required": false,
+        "placeholder": "Random"
       }
     ]
   },
@@ -10601,6 +9891,558 @@
             "value": "webp"
           }
         ]
+      }
+    ]
+  },
+  "gpt-image-2-generate": {
+    "id": "gpt-image-2-generate",
+    "displayName": "GPT Image 2",
+    "category": "image-gen",
+    "apiProvider": "openai",
+    "apiEndpoint": "/v1/images/generations",
+    "envKeyName": "OPENAI_API_KEY",
+    "executionPattern": "stream",
+    "inputPorts": [
+      {
+        "id": "prompt",
+        "label": "Prompt",
+        "dataType": "Text",
+        "required": true
+      }
+    ],
+    "outputPorts": [
+      {
+        "id": "image",
+        "label": "Image",
+        "dataType": "Image",
+        "required": false
+      }
+    ],
+    "params": [
+      {
+        "key": "size",
+        "label": "Size",
+        "type": "enum",
+        "required": false,
+        "default": "auto",
+        "options": [
+          {
+            "label": "Auto",
+            "value": "auto"
+          },
+          {
+            "label": "1024x1024",
+            "value": "1024x1024"
+          },
+          {
+            "label": "1536x1024",
+            "value": "1536x1024"
+          },
+          {
+            "label": "1024x1536",
+            "value": "1024x1536"
+          },
+          {
+            "label": "2048x2048",
+            "value": "2048x2048"
+          },
+          {
+            "label": "2048x1152",
+            "value": "2048x1152"
+          },
+          {
+            "label": "3840x2160 (4K landscape)",
+            "value": "3840x2160"
+          },
+          {
+            "label": "2160x3840 (4K portrait)",
+            "value": "2160x3840"
+          }
+        ]
+      },
+      {
+        "key": "quality",
+        "label": "Quality",
+        "type": "enum",
+        "required": false,
+        "default": "auto",
+        "options": [
+          {
+            "label": "Auto",
+            "value": "auto"
+          },
+          {
+            "label": "Low",
+            "value": "low"
+          },
+          {
+            "label": "Medium",
+            "value": "medium"
+          },
+          {
+            "label": "High",
+            "value": "high"
+          }
+        ]
+      },
+      {
+        "key": "output_format",
+        "label": "Format",
+        "type": "enum",
+        "required": false,
+        "default": "png",
+        "options": [
+          {
+            "label": "PNG",
+            "value": "png"
+          },
+          {
+            "label": "JPEG",
+            "value": "jpeg"
+          },
+          {
+            "label": "WebP",
+            "value": "webp"
+          }
+        ]
+      },
+      {
+        "key": "output_compression",
+        "label": "Compression",
+        "type": "integer",
+        "required": false,
+        "default": 90,
+        "min": 0,
+        "max": 100
+      },
+      {
+        "key": "moderation",
+        "label": "Moderation",
+        "type": "enum",
+        "required": false,
+        "default": "auto",
+        "options": [
+          {
+            "label": "Auto",
+            "value": "auto"
+          },
+          {
+            "label": "Low",
+            "value": "low"
+          }
+        ]
+      }
+    ]
+  },
+  "gpt-image-2-edit": {
+    "id": "gpt-image-2-edit",
+    "displayName": "GPT Image 2 Edit",
+    "category": "image-gen",
+    "apiProvider": "openai",
+    "apiEndpoint": "/v1/images/edits",
+    "envKeyName": "OPENAI_API_KEY",
+    "executionPattern": "stream",
+    "inputPorts": [
+      {
+        "id": "images",
+        "label": "Images",
+        "dataType": "Image",
+        "required": true,
+        "multiple": true
+      },
+      {
+        "id": "prompt",
+        "label": "Prompt",
+        "dataType": "Text",
+        "required": true
+      },
+      {
+        "id": "mask",
+        "label": "Mask",
+        "dataType": "Mask",
+        "required": false
+      }
+    ],
+    "outputPorts": [
+      {
+        "id": "image",
+        "label": "Image",
+        "dataType": "Image",
+        "required": false
+      }
+    ],
+    "params": [
+      {
+        "key": "size",
+        "label": "Size",
+        "type": "enum",
+        "required": false,
+        "default": "auto",
+        "options": [
+          {
+            "label": "Auto",
+            "value": "auto"
+          },
+          {
+            "label": "1024x1024",
+            "value": "1024x1024"
+          },
+          {
+            "label": "1536x1024",
+            "value": "1536x1024"
+          },
+          {
+            "label": "1024x1536",
+            "value": "1024x1536"
+          },
+          {
+            "label": "2048x2048",
+            "value": "2048x2048"
+          },
+          {
+            "label": "2048x1152",
+            "value": "2048x1152"
+          },
+          {
+            "label": "3840x2160 (4K landscape)",
+            "value": "3840x2160"
+          },
+          {
+            "label": "2160x3840 (4K portrait)",
+            "value": "2160x3840"
+          }
+        ]
+      },
+      {
+        "key": "quality",
+        "label": "Quality",
+        "type": "enum",
+        "required": false,
+        "default": "auto",
+        "options": [
+          {
+            "label": "Auto",
+            "value": "auto"
+          },
+          {
+            "label": "Low",
+            "value": "low"
+          },
+          {
+            "label": "Medium",
+            "value": "medium"
+          },
+          {
+            "label": "High",
+            "value": "high"
+          }
+        ]
+      },
+      {
+        "key": "output_format",
+        "label": "Format",
+        "type": "enum",
+        "required": false,
+        "default": "png",
+        "options": [
+          {
+            "label": "PNG",
+            "value": "png"
+          },
+          {
+            "label": "JPEG",
+            "value": "jpeg"
+          },
+          {
+            "label": "WebP",
+            "value": "webp"
+          }
+        ]
+      },
+      {
+        "key": "output_compression",
+        "label": "Compression",
+        "type": "integer",
+        "required": false,
+        "default": 90,
+        "min": 0,
+        "max": 100
+      },
+      {
+        "key": "moderation",
+        "label": "Moderation",
+        "type": "enum",
+        "required": false,
+        "default": "auto",
+        "options": [
+          {
+            "label": "Auto",
+            "value": "auto"
+          },
+          {
+            "label": "Low",
+            "value": "low"
+          }
+        ]
+      }
+    ]
+  },
+  "gpt-image-2-fal-generate": {
+    "id": "gpt-image-2-fal-generate",
+    "displayName": "GPT Image 2 (FAL)",
+    "category": "image-gen",
+    "apiProvider": "fal",
+    "apiEndpoint": "openai/gpt-image-2",
+    "envKeyName": "FAL_KEY",
+    "executionPattern": "stream",
+    "inputPorts": [
+      {
+        "id": "prompt",
+        "label": "Prompt",
+        "dataType": "Text",
+        "required": true
+      }
+    ],
+    "outputPorts": [
+      {
+        "id": "image",
+        "label": "Image",
+        "dataType": "Image",
+        "required": false
+      }
+    ],
+    "params": [
+      {
+        "key": "image_size",
+        "label": "Size",
+        "type": "enum",
+        "required": false,
+        "default": "landscape_4_3",
+        "options": [
+          {
+            "label": "Square HD (1024x1024)",
+            "value": "square_hd"
+          },
+          {
+            "label": "Square (512x512)",
+            "value": "square"
+          },
+          {
+            "label": "Portrait 4:3 (768x1024)",
+            "value": "portrait_4_3"
+          },
+          {
+            "label": "Portrait 16:9 (576x1024)",
+            "value": "portrait_16_9"
+          },
+          {
+            "label": "Landscape 4:3 (1024x768)",
+            "value": "landscape_4_3"
+          },
+          {
+            "label": "Landscape 16:9 (1024x576)",
+            "value": "landscape_16_9"
+          }
+        ]
+      },
+      {
+        "key": "quality",
+        "label": "Quality",
+        "type": "enum",
+        "required": false,
+        "default": "high",
+        "options": [
+          {
+            "label": "Auto",
+            "value": "auto"
+          },
+          {
+            "label": "Low",
+            "value": "low"
+          },
+          {
+            "label": "Medium",
+            "value": "medium"
+          },
+          {
+            "label": "High",
+            "value": "high"
+          }
+        ]
+      },
+      {
+        "key": "num_images",
+        "label": "Count",
+        "type": "integer",
+        "required": false,
+        "default": 1,
+        "min": 1,
+        "max": 4
+      },
+      {
+        "key": "output_format",
+        "label": "Format",
+        "type": "enum",
+        "required": false,
+        "default": "png",
+        "options": [
+          {
+            "label": "PNG",
+            "value": "png"
+          },
+          {
+            "label": "JPEG",
+            "value": "jpeg"
+          },
+          {
+            "label": "WebP",
+            "value": "webp"
+          }
+        ]
+      },
+      {
+        "key": "partial_images",
+        "label": "Preview Frames",
+        "type": "integer",
+        "required": false,
+        "default": 2,
+        "min": 0,
+        "max": 3
+      }
+    ]
+  },
+  "gpt-image-2-fal-edit": {
+    "id": "gpt-image-2-fal-edit",
+    "displayName": "GPT Image 2 Edit (FAL)",
+    "category": "image-gen",
+    "apiProvider": "fal",
+    "apiEndpoint": "openai/gpt-image-2/edit",
+    "envKeyName": "FAL_KEY",
+    "executionPattern": "stream",
+    "inputPorts": [
+      {
+        "id": "images",
+        "label": "Reference Images",
+        "dataType": "Image",
+        "required": true,
+        "multiple": true
+      },
+      {
+        "id": "prompt",
+        "label": "Prompt",
+        "dataType": "Text",
+        "required": true
+      }
+    ],
+    "outputPorts": [
+      {
+        "id": "image",
+        "label": "Image",
+        "dataType": "Image",
+        "required": false
+      }
+    ],
+    "params": [
+      {
+        "key": "image_size",
+        "label": "Size",
+        "type": "enum",
+        "required": false,
+        "default": "auto",
+        "options": [
+          {
+            "label": "Auto",
+            "value": "auto"
+          },
+          {
+            "label": "Square HD (1024x1024)",
+            "value": "square_hd"
+          },
+          {
+            "label": "Square (512x512)",
+            "value": "square"
+          },
+          {
+            "label": "Portrait 4:3 (768x1024)",
+            "value": "portrait_4_3"
+          },
+          {
+            "label": "Portrait 16:9 (576x1024)",
+            "value": "portrait_16_9"
+          },
+          {
+            "label": "Landscape 4:3 (1024x768)",
+            "value": "landscape_4_3"
+          },
+          {
+            "label": "Landscape 16:9 (1024x576)",
+            "value": "landscape_16_9"
+          }
+        ]
+      },
+      {
+        "key": "quality",
+        "label": "Quality",
+        "type": "enum",
+        "required": false,
+        "default": "high",
+        "options": [
+          {
+            "label": "Auto",
+            "value": "auto"
+          },
+          {
+            "label": "Low",
+            "value": "low"
+          },
+          {
+            "label": "Medium",
+            "value": "medium"
+          },
+          {
+            "label": "High",
+            "value": "high"
+          }
+        ]
+      },
+      {
+        "key": "num_images",
+        "label": "Count",
+        "type": "integer",
+        "required": false,
+        "default": 1,
+        "min": 1,
+        "max": 4
+      },
+      {
+        "key": "output_format",
+        "label": "Format",
+        "type": "enum",
+        "required": false,
+        "default": "png",
+        "options": [
+          {
+            "label": "PNG",
+            "value": "png"
+          },
+          {
+            "label": "JPEG",
+            "value": "jpeg"
+          },
+          {
+            "label": "WebP",
+            "value": "webp"
+          }
+        ]
+      },
+      {
+        "key": "partial_images",
+        "label": "Preview Frames",
+        "type": "integer",
+        "required": false,
+        "default": 2,
+        "min": 0,
+        "max": 3
       }
     ]
   },

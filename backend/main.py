@@ -33,6 +33,8 @@ from routes.replicate_proxy import router as replicate_router
 from routes.fal_proxy import router as fal_router
 from routes.nous_proxy import router as nous_router
 from routes.quiver_proxy import router as quiver_router
+from routes.video_edit_preview import router as video_edit_preview_router
+from services.ffmpeg import ffprobe_video
 
 execution_cache = ExecutionCache(ttl=3600)
 node_registry = NodeRegistry()
@@ -454,6 +456,7 @@ _SUPPORTED_IMAGE_TYPES = {
 }
 
 MAX_CHAT_UPLOAD_BYTES = 20 * 1024 * 1024  # 20 MB
+MAX_VIDEO_UPLOAD_BYTES = 500 * 1024 * 1024  # 500 MB
 
 
 def _sniff_image_type(data: bytes) -> tuple[str, str] | None:
@@ -471,6 +474,22 @@ def _sniff_image_type(data: bytes) -> tuple[str, str] | None:
     return None
 
 
+def _sniff_video_type(data: bytes) -> tuple[str, str] | None:
+    """Return (mime, ext) if *data* matches a supported video container.
+
+    Detects:
+    - MP4 / MOV / M4V: ISO base media file format — bytes 4-8 == b"ftyp"
+    - WebM: EBML/Matroska header — bytes 0-4 == b"\\x1a\\x45\\xdf\\xa3"
+
+    Returns None for anything else.
+    """
+    if len(data) >= 8 and data[4:8] == b"ftyp":
+        return ("video/mp4", ".mp4")
+    if len(data) >= 4 and data[:4] == b"\x1a\x45\xdf\xa3":
+        return ("video/webm", ".webm")
+    return None
+
+
 # Run after _sniff_image_type / MAX_CHAT_UPLOAD_BYTES are defined — the
 # image-input normalizer now auto-imports external files and needs both.
 _normalize_cli_graph_output_refs()
@@ -481,6 +500,7 @@ app.include_router(replicate_router)
 app.include_router(fal_router)
 app.include_router(nous_router)
 app.include_router(quiver_router)
+app.include_router(video_edit_preview_router)
 
 
 @app.post("/api/uploads")
@@ -488,26 +508,51 @@ async def upload_file_consolidated(
     file: UploadFile,
     create_node: str = Form("false"),
 ) -> dict:
-    """Accept an image upload with strict validation and content-hash dedup.
+    """Accept an image or video upload with strict validation and content-hash dedup.
 
-    When `create_node` is truthy, atomically creates an image-input node in
+    Routes by magic bytes: PNG/JPEG/GIF/WebP → image-input node; MP4/MOV/WebM
+    → video-input node (with ffprobe-derived sourceDuration/sourceFps/sourceIsVfr
+    stored on the node's params so the editor surface can read source metadata
+    without waiting for the edit handler to run).
+
+    When `create_node` is truthy, atomically creates the routed node in
     cli_graph and broadcasts graphSync. When absent or falsy, returns only
     the upload metadata so callers can handle node creation themselves (or
     use the URL for an existing node).
+
+    Probe failure on a video that passed the magic-byte sniff returns 415.
 
     Supersedes the deprecated /api/upload and /api/chat/uploads endpoints;
     both shapes of caller can migrate to this one.
     """
     content = await file.read()
-    if len(content) > MAX_CHAT_UPLOAD_BYTES:
-        raise HTTPException(status_code=413, detail="Image exceeds 20 MB limit")
+    # Reject anything that cannot possibly be an accepted file before sniffing.
+    # Images are capped at MAX_CHAT_UPLOAD_BYTES; videos at MAX_VIDEO_UPLOAD_BYTES.
+    # Check the tighter image cap first so oversized non-video uploads get 413
+    # without needing valid magic bytes (preserves legacy test expectations).
+    if len(content) > MAX_VIDEO_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="File exceeds 500 MB limit")
     if len(content) < 12:
-        raise HTTPException(status_code=415, detail="File is too small to be a valid image")
+        raise HTTPException(status_code=415, detail="File is too small to be a valid media file")
 
-    sniffed = _sniff_image_type(content[:16])
-    if sniffed is None:
-        raise HTTPException(status_code=415, detail="Only image files are accepted")
-    _, ext = sniffed
+    image_sniffed = _sniff_image_type(content[:16])
+    video_sniffed = _sniff_video_type(content[:16]) if image_sniffed is None else None
+
+    if image_sniffed is not None:
+        if len(content) > MAX_CHAT_UPLOAD_BYTES:
+            raise HTTPException(status_code=413, detail="Image exceeds 20 MB limit")
+        _, ext = image_sniffed
+        node_type = "image-input"
+    elif video_sniffed is not None:
+        # Size already validated against MAX_VIDEO_UPLOAD_BYTES above.
+        _, ext = video_sniffed
+        node_type = "video-input"
+    else:
+        # Neither image nor video magic bytes — but file was within video size
+        # budget. Check if it's oversized for images to give a better error.
+        if len(content) > MAX_CHAT_UPLOAD_BYTES:
+            raise HTTPException(status_code=413, detail="Image exceeds 20 MB limit")
+        raise HTTPException(status_code=415, detail="Only image or video files are accepted")
 
     digest = hashlib.sha256(content).hexdigest()
     saved_path = CHAT_UPLOADS_DIR / f"{digest}{ext}"
@@ -533,17 +578,39 @@ async def upload_file_consolidated(
         max_x = max((p.get("x", 0) for p in positions), default=-300)
         new_position = {"x": float(max_x) + 300.0, "y": 100.0}
 
-        # filePath is the absolute local path (handlers open() this), _previewUrl
-        # is the served URL (frontend <img> displays this). Same shape Inspector
-        # and legacy Canvas file-drop always used.
-        node_id = cli_graph.add_node(
-            "image-input",
-            {"filePath": str(saved_path.resolve()), "_previewUrl": url},
-            position=new_position,
-        )
+        if node_type == "image-input":
+            # filePath is the absolute local path (handlers open() this), _previewUrl
+            # is the served URL (frontend <img> displays this). Same shape Inspector
+            # and legacy Canvas file-drop always used.
+            node_params = {"filePath": str(saved_path.resolve()), "_previewUrl": url}
+        else:
+            # video-input: probe at upload so the source owns its own
+            # metadata. Downstream consumers (editor surface, edit handler,
+            # inspector) can read sourceDuration/sourceFps/sourceIsVfr from
+            # params without re-probing. Editor initial-clip seeding depends
+            # on this — without it the editor opens degraded with 0 clips.
+            try:
+                probe = await ffprobe_video(saved_path)
+            except Exception as exc:
+                raise HTTPException(
+                    status_code=415,
+                    detail=f"Could not probe video metadata: {exc}",
+                ) from exc
+            node_params = {
+                "filePath": str(saved_path.resolve()),
+                "sourceDuration": probe.duration,
+                "sourceFps": probe.fps,
+                "sourceIsVfr": probe.is_vfr,
+            }
+            response["sourceDuration"] = probe.duration
+            response["sourceFps"] = probe.fps
+            response["sourceIsVfr"] = probe.is_vfr
+
+        node_id = cli_graph.add_node(node_type, node_params, position=new_position)
         await _broadcast_graph_sync()
         response["nodeId"] = node_id
-        response["thumbUrl"] = url
+        if node_type == "image-input":
+            response["thumbUrl"] = url
 
     return response
 

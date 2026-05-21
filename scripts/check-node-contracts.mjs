@@ -96,8 +96,8 @@ function validateRegistryShape() {
     if (!VALID_EXECUTION_PATTERNS.has(definition.executionPattern)) {
       errors.push(`${nodeId}.executionPattern invalid: ${definition.executionPattern}`);
     }
-    if (!(typeof definition.envKeyName === 'string' || Array.isArray(definition.envKeyName))) {
-      errors.push(`${nodeId}.envKeyName must be string or array`);
+    if (!(typeof definition.envKeyName === 'string' || Array.isArray(definition.envKeyName) || definition.envKeyName === null)) {
+      errors.push(`${nodeId}.envKeyName must be string, array, or null`);
     }
     validatePorts(nodeId, 'inputPorts', definition.inputPorts);
     validatePorts(nodeId, 'outputPorts', definition.outputPorts);
