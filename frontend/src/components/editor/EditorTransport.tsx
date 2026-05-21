@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { Node } from '@xyflow/react';
 import {
   Gauge,
+  Pause,
   Play,
   RotateCw,
   Scissors,
@@ -30,14 +31,69 @@ export function EditorTransport({ editNode, sourceUrl }: Props) {
   const [hasRendered, setHasRendered] = useState(false);
   const selectedClipId = useUIStore((s) => s.selectedClipId);
   const timelineZoom = useUIStore((s) => s.timelineZoom);
+  const isPlaying = useUIStore((s) => s.isPlaying);
+  const togglePlaying = useUIStore((s) => s.togglePlaying);
+  const setSelectedClip = useUIStore((s) => s.setSelectedClip);
+  const playheadOutputTime = useUIStore((s) => s.playheadOutputTime);
+  const setPlayheadOutputTime = useUIStore((s) => s.setPlayheadOutputTime);
   const setRenderedPreviewUrl = useUIStore((s) => s.setRenderedPreviewUrl);
   const updateClip = useGraphStore((s) => s.updateEditNodeClip);
+  const cutAtSource = useGraphStore((s) => s.cutEditNodeAtSource);
+  const speedSliderRef = useRef<HTMLInputElement>(null);
+  const volSliderRef = useRef<HTMLInputElement>(null);
 
   const params = editNode.data.params;
   const clips = Array.isArray(params.clips) ? (params.clips as EditClip[]) : EMPTY_CLIPS;
   const fps = typeof params.sourceFps === 'number' ? params.sourceFps : 30;
   const totalDur = totalOutputDuration(clips);
   const selectedClip = clips.find((c) => c.id === selectedClipId);
+
+  // Edit points = clip start times. Used by SkipBack / SkipForward to
+  // jump the playhead to the previous / next cut boundary.
+  function jumpToPrevEditPoint() {
+    if (clips.length === 0) return;
+    const points = clips.map((c) => c.start);
+    const epsilon = 1 / fps;
+    const before = points.filter((p) => p < playheadOutputTime - epsilon);
+    setPlayheadOutputTime(before.length > 0 ? before[before.length - 1] : 0);
+  }
+  function jumpToNextEditPoint() {
+    if (clips.length === 0) return;
+    const points = clips.map((c) => c.start);
+    const epsilon = 1 / fps;
+    const after = points.find((p) => p > playheadOutputTime + epsilon);
+    setPlayheadOutputTime(after ?? totalDur);
+  }
+
+  // Ensure a clip is selected before opening the inspector. Used by the
+  // Trim / Speed / Cut / Vol toolbar buttons so a fresh user who hasn't
+  // clicked a clip yet still gets the inspector to appear.
+  function ensureClipSelected(): string | null {
+    if (selectedClipId) return selectedClipId;
+    if (clips.length === 0) return null;
+    const first = clips[0].id;
+    setSelectedClip(first);
+    return first;
+  }
+
+  function handleTrim() {
+    ensureClipSelected();
+  }
+  function handleSpeed() {
+    ensureClipSelected();
+    // Defer focus until after the inspector mounts (selectedClip render).
+    requestAnimationFrame(() => speedSliderRef.current?.focus());
+  }
+  function handleCut() {
+    if (clips.length === 0) return;
+    // Read the live source-time the playhead exposes — matches the B key path.
+    const srcT = (window as Window & { __editorPlayheadSourceTime?: number }).__editorPlayheadSourceTime ?? 0;
+    cutAtSource(editNode.id, srcT);
+  }
+  function handleVol() {
+    ensureClipSelected();
+    requestAnimationFrame(() => volSliderRef.current?.focus());
+  }
 
   async function handleRender() {
     setIsRendering(true);
@@ -55,32 +111,54 @@ export function EditorTransport({ editNode, sourceUrl }: Props) {
   return (
     <div className="editor-transport">
       <div className="editor-transport__group">
-        <button className="editor-transport__btn editor-transport__btn--primary" type="button">
-          <Play className="editor-transport__icon" aria-hidden="true" focusable="false" />
-          <span>Play</span>
+        <button
+          className="editor-transport__btn editor-transport__btn--primary"
+          type="button"
+          onClick={togglePlaying}
+          aria-label={isPlaying ? 'Pause' : 'Play'}
+          title="Space"
+        >
+          {isPlaying ? (
+            <Pause className="editor-transport__icon" aria-hidden="true" focusable="false" />
+          ) : (
+            <Play className="editor-transport__icon" aria-hidden="true" focusable="false" />
+          )}
+          <span>{isPlaying ? 'Pause' : 'Play'}</span>
         </button>
-        <button className="editor-transport__btn editor-transport__btn--icon" type="button" aria-label="Previous edit point">
+        <button
+          className="editor-transport__btn editor-transport__btn--icon"
+          type="button"
+          aria-label="Previous edit point"
+          onClick={jumpToPrevEditPoint}
+          disabled={clips.length === 0}
+        >
           <SkipBack className="editor-transport__icon" aria-hidden="true" focusable="false" />
         </button>
-        <button className="editor-transport__btn editor-transport__btn--icon" type="button" aria-label="Next edit point">
+        <button
+          className="editor-transport__btn editor-transport__btn--icon"
+          type="button"
+          aria-label="Next edit point"
+          onClick={jumpToNextEditPoint}
+          disabled={clips.length === 0}
+        >
           <SkipForward className="editor-transport__icon" aria-hidden="true" focusable="false" />
         </button>
       </div>
       <span className="editor-transport__divider" />
       <div className="editor-transport__group">
-        <button className="editor-transport__tool" type="button">
+        <button className="editor-transport__tool" type="button" onClick={handleTrim} disabled={clips.length === 0} title="Drag the clip edges to trim">
           <Scissors className="editor-transport__icon" aria-hidden="true" focusable="false" />
           <span>Trim</span>
         </button>
-        <button className="editor-transport__tool" type="button">
+        <button className="editor-transport__tool" type="button" onClick={handleSpeed} disabled={clips.length === 0} title="Adjust playback speed">
           <Gauge className="editor-transport__icon" aria-hidden="true" focusable="false" />
           <span>Speed</span>
         </button>
-        <button className="editor-transport__tool" type="button">
+        <button className="editor-transport__tool" type="button" onClick={handleCut} disabled={clips.length === 0} title="Cut at playhead (B)">
           <Split className="editor-transport__icon" aria-hidden="true" focusable="false" />
           <span>Cut</span>
         </button>
-        <button className="editor-transport__tool" type="button">
+        <button className="editor-transport__tool" type="button" onClick={handleVol} disabled={clips.length === 0} title="Adjust volume / mute">
           <Volume2 className="editor-transport__icon" aria-hidden="true" focusable="false" />
           <span>Vol</span>
         </button>
@@ -89,7 +167,7 @@ export function EditorTransport({ editNode, sourceUrl }: Props) {
       {selectedClip && (
         <div className="editor-transport__inspector">
           <label className="editor-transport__label">Speed</label>
-          <input className="editor-transport__range" type="range" min={0.25} max={4} step={0.05}
+          <input ref={speedSliderRef} className="editor-transport__range" type="range" min={0.25} max={4} step={0.05}
             value={clipSpeed(selectedClip)}
             onChange={(e) => {
               const newSpeed = parseFloat(e.target.value);
@@ -120,7 +198,7 @@ export function EditorTransport({ editNode, sourceUrl }: Props) {
           }}>2×</button>
 
           <label className="editor-transport__label">Vol</label>
-          <input className="editor-transport__range" type="range" min={0} max={1} step={0.05}
+          <input ref={volSliderRef} className="editor-transport__range" type="range" min={0} max={1} step={0.05}
             value={selectedClip.mute ? 0 : selectedClip.volume}
             disabled={selectedClip.mute}
             onChange={(e) => updateClip(editNode.id, selectedClip.id, { volume: parseFloat(e.target.value) })} />

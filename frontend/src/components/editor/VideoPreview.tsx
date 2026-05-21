@@ -24,7 +24,8 @@ export function VideoPreview({ sourceUrl, editNode }: Props) {
   const outputTime = useUIStore((s) => s.playheadOutputTime);
   const setOutputTime = useUIStore((s) => s.setPlayheadOutputTime);
   const renderedPreviewUrl = useUIStore((s) => s.renderedPreviewUrl);
-  const [isPlaying, setIsPlaying] = useState(false);
+  const isPlaying = useUIStore((s) => s.isPlaying);
+  const togglePlaying = useUIStore((s) => s.togglePlaying);
   const [sourceError, setSourceError] = useState(false);
 
   const params = editNode.data.params;
@@ -73,17 +74,18 @@ export function VideoPreview({ sourceUrl, editNode }: Props) {
     return () => { cancelled = true; cancelAnimationFrame(rafId); };
   }, [isPlaying, totalDur, outputTime, setOutputTime]);
 
-  // Space to play/pause
+  // Space to play/pause — kept on VideoPreview rather than EditorView so the
+  // shortcut only fires when the editor surface is mounted.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === ' ' && !e.repeat && (e.target as HTMLElement).tagName !== 'INPUT') {
         e.preventDefault();
-        setIsPlaying((p) => !p);
+        togglePlaying();
       }
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, []);
+  }, [togglePlaying]);
 
   if (sourceError) {
     return (

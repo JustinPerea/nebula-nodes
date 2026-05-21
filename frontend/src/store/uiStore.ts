@@ -63,6 +63,10 @@ interface UIState {
   selectedClipId: string | null;
   playheadOutputTime: number;
   timelineZoom: number;
+  // Lifted from VideoPreview so EditorTransport's Play button can drive the
+  // same state and flip its icon between Play and Pause. The actual playback
+  // loop still lives in VideoPreview — this is just the toggle.
+  isPlaying: boolean;
   // Set by Render Preview / Re-render in EditorTransport so VideoPreview
   // can swap its <video src> from the source pass-through to the actual
   // ffmpeg-rendered output. Cleared on editor enter/exit so a fresh session
@@ -99,6 +103,8 @@ interface UIState {
   exitEditor: () => void;
   setSelectedClip: (id: string | null) => void;
   setPlayheadOutputTime: (t: number) => void;
+  setIsPlaying: (playing: boolean) => void;
+  togglePlaying: () => void;
   setRenderedPreviewUrl: (url: string | null) => void;
   setTimelineZoom: (zoom: number) => void;
   zoomTimelineIn: () => void;
@@ -133,6 +139,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   selectedClipId: null,
   playheadOutputTime: 0,
   timelineZoom: 1,
+  isPlaying: false,
   renderedPreviewUrl: null,
   chatResized: false,
   panels: createDefaultPanels(),
@@ -162,6 +169,7 @@ export const useUIStore = create<UIState>((set, get) => ({
       editorTargetNodeId: editNodeId,
       selectedClipId: null,
       playheadOutputTime: 0,
+      isPlaying: false,
       renderedPreviewUrl: null,
     });
   },
@@ -171,12 +179,16 @@ export const useUIStore = create<UIState>((set, get) => ({
     if (state.editorTargetNodeId) {
       useGraphStore.getState().removeEmptyEditNode(state.editorTargetNodeId);
     }
-    set({ viewMode: 'canvas', editorTargetNodeId: null, selectedClipId: null, renderedPreviewUrl: null });
+    set({ viewMode: 'canvas', editorTargetNodeId: null, selectedClipId: null, isPlaying: false, renderedPreviewUrl: null });
   },
 
   setSelectedClip: (id) => set({ selectedClipId: id }),
 
   setPlayheadOutputTime: (t) => set({ playheadOutputTime: t }),
+
+  setIsPlaying: (playing) => set({ isPlaying: playing }),
+
+  togglePlaying: () => set((s) => ({ isPlaying: !s.isPlaying })),
 
   setRenderedPreviewUrl: (url) => set({ renderedPreviewUrl: url }),
 
