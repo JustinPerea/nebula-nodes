@@ -113,19 +113,13 @@ const currentFrame = useCurrentFrame();
 const opacity = interpolate(currentFrame, [0, 15], [0, 1], { extrapolateRight: 'clamp' });
 ```
 
-## Open questions / decisions needed before build
+## Decisions (resolved 2026-05-21)
 
-These weren't in the original spec but need answers before any implementation pass:
-
-1. **Replace or run alongside the current Phase 1 editor?** Phase 1 already ships an output-time NLE timeline + ffmpeg-rendered preview surface where edits are first-class nodes. The Remotion approach is a different paradigm (frame-bound deterministic composition, multi-track keyframe animation). If this replaces Phase 1, the lab page case study and the `<EditNode>` card need updating. If it runs alongside, we need a clear UX answer for which node type uses which editor (`video-edit` vs new `remotion-compiler`).
-
-2. **ffmpeg vs Remotion as the renderer.** Phase 1's ffmpeg-rendered preview is fast (~5s for an 11s clip at 640p). Remotion render is browser-based (Puppeteer headless) and slower for video-only edits but vastly more capable for keyframed compositions. Decide which renderer backs the `Render Preview` button per-node.
-
-3. **Schema integration with the existing graph.** Phase 1's `EditClip` shape (`start/duration/sourceIn/sourceOut/volume/mute`) is incompatible with the proposed `TrackItem` shape. A migration story is needed: either the new node uses its own schema and Phase 1 nodes stay as-is, or we unify.
-
-4. **Isometric / 3D scope.** The R3F isometric block is a significant new surface. Worth scoping whether it's a Phase 2.1 (timeline only) vs Phase 2.2 (timeline + 3D) split so the first ship has a clearer boundary.
-
-5. **`@xzdarcy/react-timeline-editor` maintenance.** Last npm release should be checked for activity (the org and package have been quiet for a while). If unmaintained, consider forking or picking a different OSS timeline component.
+1. **Run alongside Phase 1.** New node type `RemotionNode` with its own editor surface. Phase 1 NLE + `<EditNode>` stay untouched.
+2. **Separate renderers.** Phase 1 keeps ffmpeg. RemotionNode uses `@remotion/player` for live preview. No shared render code path.
+3. **Isolated schema.** `VideoGraphManifest` / `TrackItem` is exclusive to `RemotionNode`. Do not merge with the Phase 1 `EditClip` types.
+4. **Phased scope.** Phase 2.1 = core timeline + HTML/SVG/Text layers + playhead-relative duplication + bidirectional graph mirroring. Phase 2.2 = R3F isometric 3D cameras + blocks. Build 2.1 first.
+5. **Timeline library.** Originally planned: `@cyca/react-timeline-editor` as a "modern fork." Vetting reversed this — the @cyca GitHub repo returns 404, the package ships alpha versions only (0.2.1-alpha.0 latest, 6+ months stale), single non-org maintainer, AND it pulls in `motion: ^12.23.24` as a runtime dep (Framer Motion's continuation — directly violates rule #4 of the deterministic stack). **Use the original `@xzdarcy/react-timeline-editor@1.0.0` instead.** That package: 736 GitHub stars, real maintained repo (last push 2026-01-25), stable 1.0.0, MIT, clean deps (interactjs + react-virtualized, no motion lib pollution). Vite/React 19 compatibility verified via peer deps (`>=18.0.0`).
 
 ## Instructions for Claude Code execution (when ready)
 
