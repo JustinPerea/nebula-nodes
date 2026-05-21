@@ -22,7 +22,7 @@ features:
   - Save / load graphs as JSON
   - Daedalus chat agent (Hermes Agent persona, optional)
   - Live-smoke-verified handler contracts (632 backend tests)
-hero: docs/assets/banner.svg
+hero: docs/assets/banner-slava.svg
 links:
   github: https://github.com/JustinPerea/nebula-nodes
   lab: https://justinperea.com/lab/nebula-quiver
@@ -31,7 +31,7 @@ lastUpdated: 2026-05-20
 ---
 
 <div align="center">
-  <img src="docs/assets/banner.svg" alt="Nebula Nodes — a BYOK node-graph for AI" width="900">
+  <img src="docs/assets/banner-slava.svg" alt="Nebula Nodes — a BYOK node-graph for AI" width="900">
 </div>
 
 ```
