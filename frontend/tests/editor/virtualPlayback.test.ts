@@ -6,6 +6,7 @@ import {
   totalOutputDuration,
   outputTimeToSourceTime,
   sourceTimeToActiveClipIndex,
+  isClipEdited,
 } from '../../src/lib/editor/virtualPlayback';
 
 // Two end-to-end clips. clip[1] is at 0.5x speed so it stretches: 2s of source
@@ -14,6 +15,44 @@ const clips: EditClip[] = [
   { id: 'c1', start: 0, duration: 2, sourceIn: 0, sourceOut: 2, volume: 1, mute: false },
   { id: 'c2', start: 2, duration: 4, sourceIn: 2, sourceOut: 4, volume: 1, mute: false },
 ];
+
+describe('isClipEdited', () => {
+  // sourceDuration of 8s for all cases — matches what the editor reads off
+  // the source node after ffprobe.
+  const SOURCE_DUR = 8;
+  const baseClip = (overrides: Partial<EditClip> = {}): EditClip => ({
+    id: 'c1', start: 0, duration: 8, sourceIn: 0, sourceOut: 8, volume: 1, mute: false, ...overrides,
+  });
+
+  it('returns false for the seeded full-span no-op clip', () => {
+    expect(isClipEdited(baseClip(), SOURCE_DUR)).toBe(false);
+  });
+
+  it('fires when speed deviates from 1.0', () => {
+    // duration=16 over a 0-to-8 source range = 0.5x derived speed
+    expect(isClipEdited(baseClip({ duration: 16 }), SOURCE_DUR)).toBe(true);
+  });
+
+  it('fires when volume drops below 1.0', () => {
+    expect(isClipEdited(baseClip({ volume: 0.4 }), SOURCE_DUR)).toBe(true);
+  });
+
+  it('fires when the clip is muted', () => {
+    expect(isClipEdited(baseClip({ mute: true }), SOURCE_DUR)).toBe(true);
+  });
+
+  it('fires when the head is trimmed (sourceIn > 0)', () => {
+    expect(isClipEdited(baseClip({ sourceIn: 1, duration: 7 }), SOURCE_DUR)).toBe(true);
+  });
+
+  // Regression: this is the case that silently broke during the output-time
+  // refactor's prop-renaming. sourceIn=0, speed=1, vol=1, mute=false — the
+  // only divergence is sourceOut decreased. Without the sourceOut check,
+  // the badge never fired for tail-only trims.
+  it('fires when only the tail is trimmed (sourceOut < sourceDuration)', () => {
+    expect(isClipEdited(baseClip({ sourceOut: 4, duration: 4 }), SOURCE_DUR)).toBe(true);
+  });
+});
 
 describe('clipSpeed', () => {
   it('derives 1.0 when duration matches source range', () => {

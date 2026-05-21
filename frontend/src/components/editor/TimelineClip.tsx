@@ -1,7 +1,7 @@
 import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
 import { snapToFrameGrid } from '../../lib/editor/frameAccurate';
-import { type EditClip, clipSpeed } from '../../lib/editor/virtualPlayback';
+import { type EditClip, clipSpeed, isClipEdited } from '../../lib/editor/virtualPlayback';
 
 interface Props {
   clip: EditClip;
@@ -24,12 +24,7 @@ export function TimelineClip({ clip, sourceDuration, sourceFps, track, editNodeI
   const widthPct = sourceDuration > 0 ? (clip.duration / sourceDuration) * 100 : 0;
 
   const speed = clipSpeed(clip);
-  const isEdited =
-    Math.abs(speed - 1) > 0.0001 ||
-    clip.volume !== 1.0 ||
-    clip.mute ||
-    clip.sourceIn > 0 ||
-    clip.sourceOut < sourceDuration;
+  const isEdited = isClipEdited(clip, sourceDuration);
   const isSelected = selectedClipId === clip.id;
 
   function startDrag(edge: 'in' | 'out') {

@@ -163,10 +163,37 @@
 
 .editor-tl__viewport {
   flex: 1;
-  overflow-x: auto;
+  /* `scroll` (not `auto`) forces the scrollbar lane to always be present so
+   * the user can see "this is scrollable" without first scrolling. At
+   * zoom=1 the lane is just empty space; once zoomed-in the thumb appears. */
+  overflow-x: scroll;
   overflow-y: hidden;
   display: flex;
   flex-direction: column;
+  /* Firefox: theme the standard scrollbar in Slava orange. */
+  scrollbar-color: var(--sr-accent-border, rgba(255, 90, 31, 0.34)) rgba(255, 255, 255, 0.03);
+}
+
+.editor-tl__viewport::-webkit-scrollbar {
+  height: 10px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.editor-tl__viewport::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 5px;
+  margin: 0 4px;
+}
+
+.editor-tl__viewport::-webkit-scrollbar-thumb {
+  background: var(--sr-accent-border, rgba(255, 90, 31, 0.34));
+  border-radius: 5px;
+  transition: background-color 120ms ease;
+  min-width: 32px;
+}
+
+.editor-tl__viewport::-webkit-scrollbar-thumb:hover {
+  background: var(--sr-accent-border-strong, rgba(255, 90, 31, 0.45));
 }
 
 .editor-tl__scroll-content {

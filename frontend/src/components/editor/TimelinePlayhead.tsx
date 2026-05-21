@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useUIStore } from '../../store/uiStore';
 import {
   type EditClip,
@@ -16,6 +16,7 @@ interface Props {
 export function TimelinePlayhead({ sourceDuration, totalOutputDuration, clips }: Props) {
   const outputTime = useUIStore((s) => s.playheadOutputTime);
   const setOutputTime = useUIStore((s) => s.setPlayheadOutputTime);
+  const playheadRef = useRef<HTMLDivElement>(null);
 
   // Position the playhead in TIMELINE-reference space. Timeline width
   // represents sourceDuration; playhead reaches the clip's right edge when
@@ -27,6 +28,30 @@ export function TimelinePlayhead({ sourceDuration, totalOutputDuration, clips }:
     const { sourceTime } = outputTimeToSourceTime(outputTime, clips);
     (window as Window & { __editorPlayheadSourceTime?: number }).__editorPlayheadSourceTime = sourceTime;
   });
+
+  // Auto-follow: keep the playhead inside the viewport at zoom > 1, where
+  // the timeline content overflows horizontally. Without this the playhead
+  // walks off-screen mid-playback and the user loses their place. Fires
+  // only when the playhead crosses a 15% buffer zone at either edge, so
+  // there's no per-frame scroll thrash — the viewport "catches up" in
+  // discrete smooth jumps that land the playhead at 20%/80% of viewport
+  // depending on direction.
+  useEffect(() => {
+    const playhead = playheadRef.current;
+    if (!playhead) return;
+    const viewport = playhead.closest('.editor-tl__viewport') as HTMLElement | null;
+    if (!viewport) return;
+    if (viewport.scrollWidth <= viewport.clientWidth) return;  // not zoomed
+    const phRect = playhead.getBoundingClientRect();
+    const vpRect = viewport.getBoundingClientRect();
+    const buffer = vpRect.width * 0.15;
+    const phRelLeft = phRect.left - vpRect.left + viewport.scrollLeft;
+    if (phRect.right > vpRect.right - buffer) {
+      viewport.scrollTo({ left: phRelLeft - vpRect.width * 0.2, behavior: 'smooth' });
+    } else if (phRect.left < vpRect.left + buffer) {
+      viewport.scrollTo({ left: phRelLeft - vpRect.width * 0.8, behavior: 'smooth' });
+    }
+  }, [outputTime]);
 
   function onPointerDown(e: React.PointerEvent) {
     e.preventDefault();
@@ -50,6 +75,7 @@ export function TimelinePlayhead({ sourceDuration, totalOutputDuration, clips }:
 
   return (
     <div
+      ref={playheadRef}
       className="editor-tl__playhead"
       style={{ left: `${leftPct}%`, cursor: 'ew-resize', pointerEvents: 'auto' }}
       onPointerDown={onPointerDown}

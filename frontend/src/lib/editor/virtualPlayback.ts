@@ -34,6 +34,24 @@ export function clipSpeed(clip: EditClip): number {
   return (clip.sourceOut - clip.sourceIn) / clip.duration;
 }
 
+/**
+ * Whether a clip diverges from the source — used by TimelineClip to flip on
+ * the `--edited` style. Fires on speed change, volume change, mute, head
+ * trim (sourceIn > 0), or tail trim (sourceOut < sourceDuration). The tail
+ * case must check against `sourceDuration` because a clip can be untouched
+ * at speed=1 with sourceIn=0 but still trimmed from the end — without that
+ * branch the badge silently stops firing for OUT-only trims.
+ */
+export function isClipEdited(clip: EditClip, sourceDuration: number): boolean {
+  return (
+    Math.abs(clipSpeed(clip) - 1) > 0.0001 ||
+    clip.volume !== 1.0 ||
+    clip.mute ||
+    clip.sourceIn > 0 ||
+    clip.sourceOut < sourceDuration
+  );
+}
+
 export function clipOutputDuration(clip: EditClip): number {
   return clip.duration;
 }
