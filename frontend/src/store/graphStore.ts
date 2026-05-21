@@ -19,6 +19,19 @@ import {
 } from '../lib/api';
 import { wsClient, type ExecutionEvent } from '../lib/wsClient';
 import { useUIStore } from './uiStore';
+import { clipSpeed, type EditClip } from '../lib/editor/virtualPlayback';
+
+/** Backend contract: video-edit's ffmpeg pipeline still operates on
+ * sourceIn/sourceOut/speed even though the frontend stores `duration` as
+ * primary. Derive `speed` at the network boundary so the handler's snap-
+ * clamp doesn't reset duration from a stale `speed=1`. Same transform that
+ * `frontend/src/lib/editor/api.ts` applies for the preview-render path. */
+function paramsForBackend(definitionId: string, params: Record<string, unknown>): Record<string, unknown> {
+  if (definitionId !== 'video-edit') return params;
+  const clips = Array.isArray(params.clips) ? (params.clips as EditClip[]) : null;
+  if (!clips) return params;
+  return { ...params, clips: clips.map((c) => ({ ...c, speed: clipSpeed(c) })) };
+}
 
 // ---------------------------------------------------------------------------
 // Undo/Redo types and helpers
@@ -966,7 +979,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     if (isExecuting) return;
     resetExecution();
     set({ isExecuting: true });
-    const graphNodes = nodes.map((n) => ({ id: n.id, definitionId: n.data.definitionId, params: n.data.params, outputs: {} }));
+    const graphNodes = nodes.map((n) => ({ id: n.id, definitionId: n.data.definitionId, params: paramsForBackend(n.data.definitionId, n.data.params as Record<string, unknown>), outputs: {} }));
     const graphEdges = edges.map((e) => ({ id: e.id, source: e.source, sourceHandle: e.sourceHandle, target: e.target, targetHandle: e.targetHandle }));
     try {
       const result = await apiExecuteGraph(graphNodes, graphEdges);
@@ -985,7 +998,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     const graphNodes = nodes.map((n) => ({
       id: n.id,
       definitionId: n.data.definitionId,
-      params: n.data.params,
+      params: paramsForBackend(n.data.definitionId, n.data.params as Record<string, unknown>),
       outputs: {},
     }));
     const graphEdges = edges.map((e) => ({

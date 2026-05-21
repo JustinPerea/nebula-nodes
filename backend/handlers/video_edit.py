@@ -164,7 +164,25 @@ async def handle_video_edit(
     # any that hang off the end. Snap times to the source frame grid so the
     # virtual editor preview and the final ffmpeg render agree at boundaries.
     existing_clips = node.params.get("clips")
-    if existing_clips:
+    if not existing_clips:
+        # Source didn't probe at upload time (generator nodes — Veo, Kling,
+        # Sora, etc. — don't yet write sourceDuration back to their params).
+        # Seed a full-span no-op clip so "Run" on the edit node becomes a
+        # populate-from-source action. The _is_no_op shortcut below skips
+        # the ffmpeg re-encode, returning the source video pass-through.
+        node.params["clips"] = [
+            {
+                "id": "c1",
+                "start": 0.0,
+                "duration": probe.duration,
+                "sourceIn": 0.0,
+                "sourceOut": probe.duration,
+                "speed": 1.0,
+                "volume": 1.0,
+                "mute": False,
+            }
+        ]
+    elif existing_clips:
         snapped: list[dict[str, Any]] = []
         for c in existing_clips:
             if c["sourceIn"] >= probe.duration:
@@ -215,6 +233,13 @@ async def handle_video_edit(
 
     # Render path
     filter_complex, has_audio = _build_filter_complex(clips)
+    # ffmpeg rejects mixing simple filters (-af) with -filter_complex on the
+    # same output stream. Chain the audio resync into the complex graph so
+    # the concat's [outa] is already drift-corrected before encoding.
+    audio_label = "[outa]"
+    if has_audio:
+        filter_complex = f"{filter_complex};[outa]aresample=async=1[outas]"
+        audio_label = "[outas]"
     run_dir = get_run_dir()
     output_path = run_dir / f"{uuid4().hex[:12]}.mp4"
 
@@ -224,7 +249,7 @@ async def handle_video_edit(
         "-map", "[outv]",
     ]
     if has_audio:
-        args += ["-map", "[outa]"]
+        args += ["-map", audio_label]
     args += [
         "-c:v", "libx264",
         "-preset", "fast",
@@ -235,7 +260,7 @@ async def handle_video_edit(
         "-color_range", "tv",
     ]
     if has_audio:
-        args += ["-c:a", "aac", "-b:a", "192k", "-af", "aresample=async=1"]
+        args += ["-c:a", "aac", "-b:a", "192k"]
     args += ["-progress", "pipe:1", "-stats_period", "0.25", str(output_path)]
 
     def _on_progress(block: dict[str, str]) -> None:

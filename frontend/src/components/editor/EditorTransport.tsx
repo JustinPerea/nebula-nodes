@@ -30,6 +30,7 @@ export function EditorTransport({ editNode, sourceUrl }: Props) {
   const [hasRendered, setHasRendered] = useState(false);
   const selectedClipId = useUIStore((s) => s.selectedClipId);
   const timelineZoom = useUIStore((s) => s.timelineZoom);
+  const setRenderedPreviewUrl = useUIStore((s) => s.setRenderedPreviewUrl);
   const updateClip = useGraphStore((s) => s.updateEditNodeClip);
 
   const params = editNode.data.params;
@@ -41,7 +42,8 @@ export function EditorTransport({ editNode, sourceUrl }: Props) {
   async function handleRender() {
     setIsRendering(true);
     try {
-      await renderPreview({ sourceUrl, clips });
+      const previewUrl = await renderPreview({ sourceUrl, clips });
+      setRenderedPreviewUrl(previewUrl);
       setHasRendered(true);
     } catch (err) {
       console.error(err);

@@ -63,6 +63,11 @@ interface UIState {
   selectedClipId: string | null;
   playheadOutputTime: number;
   timelineZoom: number;
+  // Set by Render Preview / Re-render in EditorTransport so VideoPreview
+  // can swap its <video src> from the source pass-through to the actual
+  // ffmpeg-rendered output. Cleared on editor enter/exit so a fresh session
+  // never shows a stale render from a prior edit node.
+  renderedPreviewUrl: string | null;
   // True after the user manually resizes/drags the chat panel. While false,
   // ChatPanel skips its inline width/height so CSS-driven sizing
   // (clamp + viewport units) drives the chat width and lines it up with the
@@ -94,6 +99,7 @@ interface UIState {
   exitEditor: () => void;
   setSelectedClip: (id: string | null) => void;
   setPlayheadOutputTime: (t: number) => void;
+  setRenderedPreviewUrl: (url: string | null) => void;
   setTimelineZoom: (zoom: number) => void;
   zoomTimelineIn: () => void;
   zoomTimelineOut: () => void;
@@ -127,6 +133,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   selectedClipId: null,
   playheadOutputTime: 0,
   timelineZoom: 1,
+  renderedPreviewUrl: null,
   chatResized: false,
   panels: createDefaultPanels(),
   librarySearch: '',
@@ -155,6 +162,7 @@ export const useUIStore = create<UIState>((set, get) => ({
       editorTargetNodeId: editNodeId,
       selectedClipId: null,
       playheadOutputTime: 0,
+      renderedPreviewUrl: null,
     });
   },
 
@@ -163,12 +171,14 @@ export const useUIStore = create<UIState>((set, get) => ({
     if (state.editorTargetNodeId) {
       useGraphStore.getState().removeEmptyEditNode(state.editorTargetNodeId);
     }
-    set({ viewMode: 'canvas', editorTargetNodeId: null, selectedClipId: null });
+    set({ viewMode: 'canvas', editorTargetNodeId: null, selectedClipId: null, renderedPreviewUrl: null });
   },
 
   setSelectedClip: (id) => set({ selectedClipId: id }),
 
   setPlayheadOutputTime: (t) => set({ playheadOutputTime: t }),
+
+  setRenderedPreviewUrl: (url) => set({ renderedPreviewUrl: url }),
 
   setTimelineZoom: (zoom) => set({ timelineZoom: Math.max(1, Math.min(10, zoom)) }),
   zoomTimelineIn: () => set((s) => ({ timelineZoom: Math.min(10, s.timelineZoom * 2) })),

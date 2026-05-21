@@ -40,6 +40,10 @@ async def preview_render(req: PreviewRenderRequest) -> PreviewRenderResponse:
 
     await ffprobe_video(src_path)  # validates source decodes
     filter_complex, has_audio = _build_filter_complex(req.clips)
+    # Chain the preview downscale into the filter_complex graph itself —
+    # ffmpeg rejects mixing -vf (simple filter) with -filter_complex on the
+    # same stream. Concat outputs [outv]; we re-label after scaling.
+    filter_complex = f"{filter_complex};[outv]scale=640:-2[outvs]"
 
     preview_dir = get_run_dir() / "_preview"
     preview_dir.mkdir(parents=True, exist_ok=True)
@@ -53,12 +57,11 @@ async def preview_render(req: PreviewRenderRequest) -> PreviewRenderResponse:
     args = [
         "-i", str(src_path),
         "-filter_complex", filter_complex,
-        "-map", "[outv]",
+        "-map", "[outvs]",
     ]
     if has_audio:
         args += ["-map", "[outa]"]
     args += [
-        "-vf", "scale=640:-2",
         "-c:v", "libx264",
         "-preset", "ultrafast",
         "-crf", "32",

@@ -55,3 +55,10 @@ scripts/remotion-demo/
 # Demo-only static assets (heavy, not required for app to run)
 frontend/public/demo/
 *.bak
+
+# Playwright MCP session artifacts (snapshots, console logs)
+.playwright-mcp/
+
+# Ad-hoc smoke-test screenshots in repo root
+smoke-*.png
+page-*.png

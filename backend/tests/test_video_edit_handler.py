@@ -243,6 +243,63 @@ async def test_sourceOut_clamped_to_new_duration(tmp_path, monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
+async def test_aresample_chained_into_filter_complex_not_passed_as_simple_af(tmp_path, monkeypatch) -> None:
+    """ffmpeg rejects -af (simple audio filter) on the same stream as a
+    -filter_complex output. The audio resync must be chained into the
+    complex graph and the -map must point at the relabeled scaled stream.
+    Regression for the Phase F smoke failure where the chain to a downstream
+    Veo I2V node errored at the render step with "aresample=async=1 was
+    specified for a stream fed from a complex filtergraph"."""
+    args = await _run_with_clips(tmp_path, monkeypatch, [
+        {"id": "c1", "sourceIn": 0.0, "sourceOut": 2.0, "speed": 1.0, "volume": 1.0, "mute": False}
+    ])
+    assert "-af" not in args  # no simple audio filter alongside complex graph
+    filter_complex = next(args[i + 1] for i, a in enumerate(args) if a == "-filter_complex")
+    assert "aresample=async=1" in filter_complex
+    assert "[outas]" in filter_complex
+    # Mapping uses the resync-corrected label, not the raw concat output
+    map_indices = [i for i, a in enumerate(args) if a == "-map"]
+    map_targets = [args[i + 1] for i in map_indices]
+    assert "[outas]" in map_targets
+    assert "[outa]" not in map_targets
+
+
+@pytest.mark.asyncio
+async def test_empty_clips_seeds_full_span_from_probe(tmp_path: Path, monkeypatch) -> None:
+    """Run on an edit node with no clips (e.g., spawned downstream of a
+    generator that doesn't probe at upload time) must seed a full-span
+    no-op clip and return the source video unchanged. Regression for the
+    KeyError('clips') that crashed the Veo→Editor path during Phase F smoke.
+    """
+    src = tmp_path / "src.mp4"
+    src.write_bytes(b"fake")
+    monkeypatch.setattr("handlers.video_edit.get_run_dir", lambda: tmp_path / "out")
+    monkeypatch.setattr("handlers.video_edit.OUTPUT_ROOT", tmp_path)
+    (tmp_path / "out").mkdir()
+    probe_result = type("PR", (), {"duration": 6.5, "fps": 24.0, "is_vfr": False})()
+
+    node = _node()  # params={} — no 'clips' key
+    inputs = {"video_in": PortValueDict(type="Video", value=str(src))}
+
+    with (
+        patch("handlers.video_edit.ffprobe_video", AsyncMock(return_value=probe_result)),
+        patch("handlers.video_edit.run_ffmpeg", AsyncMock()) as mock_ffmpeg,
+    ):
+        result = await handle_video_edit(node, inputs, {}, emit=None)
+
+    assert result == {"video": {"type": "Video", "value": str(src)}}
+    mock_ffmpeg.assert_not_called()  # _is_no_op shortcut took the pass-through
+    seeded = node.params["clips"]
+    assert len(seeded) == 1
+    assert seeded[0]["sourceIn"] == 0.0
+    assert seeded[0]["sourceOut"] == 6.5
+    assert seeded[0]["duration"] == 6.5
+    assert seeded[0]["speed"] == 1.0
+    assert seeded[0]["volume"] == 1.0
+    assert seeded[0]["mute"] is False
+
+
+@pytest.mark.asyncio
 async def test_times_snapped_to_frame_grid(tmp_path, monkeypatch) -> None:
     src = tmp_path / "src.mp4"
     src.write_bytes(b"fake")

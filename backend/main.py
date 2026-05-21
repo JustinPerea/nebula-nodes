@@ -938,6 +938,7 @@ async def execute(request: ExecuteRequest) -> dict:
                 emit=_emit_and_sync,
                 cache=execution_cache,
             )
+            _sync_params_to_cli_graph(nodes)
             print("[exec] _run completed successfully", file=sys.stderr, flush=True)
         except Exception as e:
             print(f"[exec] _run FAILED: {e}", file=sys.stderr, flush=True)
@@ -997,6 +998,7 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
                 emit=_emit_and_sync,
                 cache=execution_cache,
             )
+            _sync_params_to_cli_graph(sub_nodes)
         except Exception:
             traceback.print_exc()
 
@@ -1083,6 +1085,22 @@ async def _emit_and_sync(event: ExecutionEvent) -> None:
     if isinstance(event, ExecutedEvent):
         _sync_outputs_to_cli_graph(event.node_id, event.outputs)
     await manager.broadcast(event)
+
+
+def _sync_params_to_cli_graph(nodes: list[GraphNode]) -> None:
+    """Mirror handler-mutated params from in-memory GraphNode instances back
+    to cli_graph. Pydantic deep-copies params at model_validate time, so any
+    handler that enriches node.params (e.g. video-edit seeding clips +
+    sourceDuration after probing) needs an explicit sync — otherwise the
+    next /api/graph/export sees the pre-execution state and the canvas
+    reverts to whatever the user last set manually."""
+    persisted = False
+    for node in nodes:
+        if node.id in cli_graph.nodes:
+            cli_graph.nodes[node.id]["params"] = node.params
+            persisted = True
+    if persisted:
+        cli_graph._maybe_persist()
 
 
 def _validate_connect_handles(
@@ -1611,6 +1629,8 @@ async def export_graph_for_frontend() -> dict:
         node_type = (
             "reroute-node"
             if definition_id == "reroute"
+            else "editNode"
+            if definition_id == "video-edit"
             else "dynamic-node"
             if is_dynamic_node
             else "model-node"
@@ -1754,6 +1774,8 @@ async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dic
     for node_id, outputs in results.items():
         if node_id in cli_graph.nodes:
             _sync_outputs_to_cli_graph(node_id, outputs)
+
+    _sync_params_to_cli_graph(sub_nodes)
 
     # Sync outputs to frontend canvas
     await _broadcast_graph_sync()

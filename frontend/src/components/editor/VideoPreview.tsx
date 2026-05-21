@@ -23,6 +23,7 @@ export function VideoPreview({ sourceUrl, editNode }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const outputTime = useUIStore((s) => s.playheadOutputTime);
   const setOutputTime = useUIStore((s) => s.setPlayheadOutputTime);
+  const renderedPreviewUrl = useUIStore((s) => s.renderedPreviewUrl);
   const [isPlaying, setIsPlaying] = useState(false);
   const [sourceError, setSourceError] = useState(false);
 
@@ -30,9 +31,14 @@ export function VideoPreview({ sourceUrl, editNode }: Props) {
   const clips = Array.isArray(params.clips) ? (params.clips as EditClip[]) : EMPTY_CLIPS;
   const fps = typeof params.sourceFps === 'number' ? params.sourceFps : 30;
   const totalDur = totalOutputDuration(clips);
+  const showingRendered = renderedPreviewUrl != null;
+  const videoSrc = renderedPreviewUrl ?? sourceUrl;
 
-  // Sync video element to outputTime + active clip's speed/volume/mute
+  // Sync video element to outputTime + active clip's speed/volume/mute.
+  // Skipped when showing the rendered preview — that file is the final
+  // edit already, no virtual-playback math needed.
   useEffect(() => {
+    if (showingRendered) return;
     const video = videoRef.current;
     if (!video || clips.length === 0) return;
     const { clipIndex, sourceTime } = outputTimeToSourceTime(outputTime, clips);
@@ -45,7 +51,7 @@ export function VideoPreview({ sourceUrl, editNode }: Props) {
     video.playbackRate = clipSpeed(clip);
     video.muted = clip.mute;
     video.volume = clip.volume;
-  }, [outputTime, clips, fps]);
+  }, [outputTime, clips, fps, showingRendered]);
 
   // Virtual playback loop
   useEffect(() => {
@@ -95,13 +101,15 @@ export function VideoPreview({ sourceUrl, editNode }: Props) {
     <div className="editor-preview">
       <video
         ref={videoRef}
-        src={sourceUrl}
+        src={videoSrc}
         playsInline
+        controls={showingRendered}
         className="editor-preview__video"
         onError={() => setSourceError(true)}
       />
       <div className="editor-preview__hud">
         <span>{formatSmpte(outputTime, fps)} / {formatSmpte(totalDur, fps)}</span>
+        {showingRendered ? <span className="editor-preview__hud-tag">Rendered</span> : null}
       </div>
     </div>
   );

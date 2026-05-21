@@ -129,6 +129,70 @@ class TestGraphEndpoints:
         assert node["data"]["modelId"] == "moonshotai/kimi-k2.6"
         assert any(p["id"] == "images" and p["multiple"] is True for p in node["data"]["dynamicInputPorts"])
 
+    def test_run_syncs_handler_mutated_params_to_cli_graph(self, client, tmp_path, monkeypatch):
+        """After /api/graph/run, handler-mutated node.params should be mirrored
+        back to cli_graph and visible via /api/graph/export. Regression for the
+        Phase F bug where Pydantic deep-copied params into GraphNode and lost
+        the video-edit handler's seeded clips + probed sourceDuration after
+        execution, leaving the editor stuck in the 0-clips state forever.
+        """
+        from unittest.mock import AsyncMock, patch
+
+        src = tmp_path / "src.mp4"
+        src.write_bytes(b"fake")
+        monkeypatch.setattr("handlers.video_edit.OUTPUT_ROOT", tmp_path)
+
+        client.post("/api/graph/node", json={
+            "definitionId": "video-input",
+            "params": {"filePath": str(src)},
+        })
+        client.post("/api/graph/node", json={
+            "definitionId": "video-edit",
+            "params": {},
+        })
+        client.post("/api/graph/connect", json={
+            "source": "n1", "sourceHandle": "video",
+            "target": "n2", "targetHandle": "video_in",
+        })
+
+        probe_result = type("PR", (), {"duration": 7.0, "fps": 24.0, "is_vfr": False})()
+
+        with (
+            patch("handlers.video_edit.ffprobe_video", AsyncMock(return_value=probe_result)),
+            patch("handlers.video_edit.run_ffmpeg", AsyncMock()),
+        ):
+            run_resp = client.post("/api/graph/run", json={"targetNodeId": "n2"})
+        assert run_resp.status_code == 200
+
+        export = client.get("/api/graph/export").json()
+        n2 = next(n for n in export["nodes"] if n["id"] == "n2")
+        # Handler seeded a full-span clip and probed metadata — both must
+        # now be visible to the frontend via export, not stuck on the
+        # in-memory GraphNode that was discarded post-run.
+        assert n2["data"]["params"]["sourceDuration"] == 7.0
+        assert n2["data"]["params"]["sourceFps"] == 24.0
+        clips = n2["data"]["params"]["clips"]
+        assert len(clips) == 1
+        assert clips[0]["sourceIn"] == 0.0
+        assert clips[0]["sourceOut"] == 7.0
+
+    def test_export_video_edit_as_editNode_type(self, client):
+        """Frontend renders the custom EditNode card only when type=='editNode'.
+        Regression for Phase F smoke: CLI-imported video-edit nodes used to
+        fall through to the generic model-node renderer, hiding the trim/cut/
+        speed/volume summary that's the headline portfolio moment.
+        """
+        client.post("/api/graph/node", json={
+            "definitionId": "video-edit",
+            "params": {},
+        })
+
+        resp = client.get("/api/graph/export")
+        assert resp.status_code == 200
+        node = resp.json()["nodes"][0]
+        assert node["type"] == "editNode"
+        assert node["data"]["definitionId"] == "video-edit"
+
     def test_connect_nodes(self, client):
         client.post("/api/graph/node", json={"definitionId": "node-a", "params": {}})
         client.post("/api/graph/node", json={"definitionId": "node-b", "params": {}})
