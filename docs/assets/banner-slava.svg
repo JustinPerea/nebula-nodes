@@ -3,20 +3,19 @@
   <desc>A BYOK node-graph canvas for AI — image, video, 3D, audio, text.</desc>
 
   <defs>
-    <!-- Subtle dot grid matching the editor's canvas backdrop. -->
     <pattern id="slava-dot-grid" width="16" height="16" patternUnits="userSpaceOnUse">
       <circle cx="1" cy="1" r="1" fill="rgba(201,202,200,0.10)"/>
     </pattern>
   </defs>
 
-  <!-- True black canvas. -->
+  <!-- True black canvas + dot grid. -->
   <rect width="1200" height="320" fill="#000000"/>
   <rect width="1200" height="320" fill="url(#slava-dot-grid)"/>
 
-  <!-- Frame edge: single 1px white-at-low-opacity hairline. -->
+  <!-- Frame edge: single 1px hairline. -->
   <rect x="0.5" y="0.5" width="1199" height="319" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
 
-  <!-- Corner instrumentation marks (monospace, low-opacity). -->
+  <!-- Corner instrumentation marks. -->
   <g font-family="ui-monospace, 'SF Mono', Menlo, monospace" font-size="10" letter-spacing="0.15em" fill="rgba(255,255,255,0.35)">
     <text x="32" y="40">.NEBULA(0.1).</text>
     <text x="1168" y="40" text-anchor="end">BYOK · LOCAL · BRING-YOUR-OWN-KEYS</text>
@@ -24,71 +23,47 @@
     <text x="1168" y="296" text-anchor="end">— system::ready</text>
   </g>
 
-  <!-- Crosshair corner ticks (Slava instrumentation feel). -->
+  <!-- Crosshair corner ticks. -->
   <g stroke="rgba(255,255,255,0.25)" stroke-width="1" fill="none">
-    <!-- top-left -->
     <line x1="20" y1="20" x2="20" y2="28"/>
     <line x1="20" y1="20" x2="28" y2="20"/>
-    <!-- top-right -->
     <line x1="1180" y1="20" x2="1180" y2="28"/>
     <line x1="1180" y1="20" x2="1172" y2="20"/>
-    <!-- bottom-left -->
     <line x1="20" y1="300" x2="20" y2="292"/>
     <line x1="20" y1="300" x2="28" y2="300"/>
-    <!-- bottom-right -->
     <line x1="1180" y1="300" x2="1180" y2="292"/>
     <line x1="1180" y1="300" x2="1172" y2="300"/>
   </g>
 
-  <!-- Main wordmark — primary white-92%, generous tracking. -->
-  <text x="56" y="180"
+  <!-- Brand mark (crab-mark.svg) on the left. -->
+  <image href="crab-mark.svg" xlink:href="crab-mark.svg"
+         xmlns:xlink="http://www.w3.org/1999/xlink"
+         x="60" y="80" width="160" height="160"/>
+
+  <!-- Hairline divider between mark and wordmark. -->
+  <line x1="248" y1="100" x2="248" y2="220" stroke="rgba(255,255,255,0.12)" stroke-width="1"/>
+
+  <!-- Wordmark — primary white-92%. -->
+  <text x="276" y="180"
         font-family="ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif"
         font-size="84" font-weight="500"
         fill="rgba(255,255,255,0.92)"
         letter-spacing="-0.02em">Nebula Nodes</text>
 
   <!-- Tagline — white-60%, monospace. -->
-  <text x="58" y="222"
+  <text x="278" y="222"
         font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace"
         font-size="13" font-weight="400"
         fill="rgba(255,255,255,0.60)"
         letter-spacing="0.06em">a BYOK node-graph for AI · image · video · 3D · audio · text</text>
 
-  <!-- Node-graph cluster on the right: three connected nodes, the touched one orange. -->
-  <g transform="translate(940 160)">
-    <!-- Edges — fine 1px lines at 25% opacity. -->
-    <line x1="-110" y1="0" x2="0" y2="-44" stroke="rgba(255,255,255,0.25)" stroke-width="1"/>
-    <line x1="0" y1="-44" x2="110" y2="0" stroke="rgba(255,255,255,0.25)" stroke-width="1"/>
-    <line x1="-110" y1="0" x2="110" y2="0" stroke="rgba(255,255,255,0.18)" stroke-width="1" stroke-dasharray="3 3"/>
-
-    <!-- Node A: source, white-edged. -->
-    <g transform="translate(-110 0)">
-      <circle r="22" fill="#000000" stroke="rgba(255,255,255,0.35)" stroke-width="1"/>
-      <circle r="3" fill="rgba(255,255,255,0.55)"/>
-      <text y="42" text-anchor="middle"
-            font-family="ui-monospace, 'SF Mono', Menlo, monospace"
-            font-size="9" fill="rgba(255,255,255,0.45)"
-            letter-spacing="0.12em">IN</text>
-    </g>
-
-    <!-- Node B: touched / active — single orange element. -->
-    <g transform="translate(0 -44)">
-      <circle r="24" fill="rgba(255,90,31,0.10)" stroke="#FF5A1F" stroke-width="1.5"/>
-      <circle r="4" fill="#FF5A1F"/>
-      <text y="44" text-anchor="middle"
-            font-family="ui-monospace, 'SF Mono', Menlo, monospace"
-            font-size="9" fill="#FF5A1F"
-            letter-spacing="0.12em">EDIT</text>
-    </g>
-
-    <!-- Node C: sink, white-edged. -->
-    <g transform="translate(110 0)">
-      <circle r="22" fill="#000000" stroke="rgba(255,255,255,0.35)" stroke-width="1"/>
-      <circle r="3" fill="rgba(255,255,255,0.55)"/>
-      <text y="42" text-anchor="middle"
-            font-family="ui-monospace, 'SF Mono', Menlo, monospace"
-            font-size="9" fill="rgba(255,255,255,0.45)"
-            letter-spacing="0.12em">OUT</text>
-    </g>
+  <!-- Single orange "user touched this" signifier on the right edge: a single accent dot + label. -->
+  <g transform="translate(1080 168)">
+    <circle r="6" fill="rgba(255,90,31,0.12)" stroke="#FF5A1F" stroke-width="1.5"/>
+    <circle r="2" fill="#FF5A1F"/>
+    <text x="-14" y="4" text-anchor="end"
+          font-family="ui-monospace, 'SF Mono', Menlo, monospace"
+          font-size="10" fill="#FF5A1F"
+          letter-spacing="0.18em">EDITS · LIVE</text>
   </g>
 </svg>
