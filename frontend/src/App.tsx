@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import { ReactFlowProvider, useReactFlow } from '@xyflow/react';
 import type { Node, Edge } from '@xyflow/react';
 import { Canvas } from './components/Canvas';
@@ -32,29 +32,31 @@ import './styles/slava-restraint.css';
  * hasRunRef guard makes the second pass a no-op. */
 function GraphHydrator() {
   const { fitView } = useReactFlow();
-  const hasRunRef = useRef(false);
 
   useEffect(() => {
-    if (hasRunRef.current) return;
-    hasRunRef.current = true;
     if (useGraphStore.getState().nodes.length > 0) return;
 
     let cancelled = false;
     (async () => {
       try {
         const data = await fetchCLIGraph();
-        if (cancelled) return;
+        // Re-check after the await: in React StrictMode dev the effect runs
+        // twice with a cleanup between, so the first run's cancelled flag is
+        // always set before its fetch resolves. The store-state check lets a
+        // mount-2 fetch successfully load, while mount-1's stale fetch sees
+        // the populated store and bails.
+        if (cancelled || useGraphStore.getState().nodes.length > 0) return;
         if (data.empty) {
           useUIStore.getState().resetPanelsForFreshCanvas();
           return;
         }
-        if (useGraphStore.getState().nodes.length > 0) return;
         useGraphStore.getState().loadGraph(
           data.nodes as Node<NodeData>[],
           data.edges as Edge[],
         );
         setTimeout(() => fitView({ padding: 0.2, duration: 300 }), 50);
       } catch {
+        if (cancelled) return;
         // Backend down on first load: keep the blank canvas clean. The graph
         // store will clear stale cli_graph state before the first manual add.
         useUIStore.getState().resetPanelsForFreshCanvas();

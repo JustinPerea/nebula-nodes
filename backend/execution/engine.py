@@ -20,6 +20,41 @@ from models.events import (
 
 CycleError = _GraphlibCycleError
 
+
+async def _maybe_probe_video_output(node: GraphNode, node_outputs: dict[str, Any]) -> None:
+    """If a node produced a Video output and we haven't yet probed it,
+    run ffprobe and stash sourceDuration / sourceFps / sourceIsVfr on
+    node.params. Mirrors the upload-time probe so every video source —
+    Veo, Kling, Sora, Seedance, Wan, etc. — opens its downstream editor
+    with a pre-populated clip instead of forcing the user to Run the
+    edit node first. Best-effort: failures are silent (the editor's
+    Run-to-populate fallback still works as graceful degradation)."""
+    if node.params.get("sourceDuration") is not None:
+        return
+    from pathlib import Path
+    for v in node_outputs.values():
+        if not isinstance(v, dict) or v.get("type") != "Video":
+            continue
+        value = v.get("value")
+        if not isinstance(value, str) or not value:
+            continue
+        # Outputs are absolute local paths after handlers write to OUTPUT_ROOT.
+        # Skip remote URLs and missing files — nothing we can probe.
+        if value.startswith(("http://", "https://")):
+            continue
+        path = Path(value)
+        if not path.exists():
+            continue
+        try:
+            from services.ffmpeg import ffprobe_video
+            probe = await ffprobe_video(path)
+            node.params["sourceDuration"] = probe.duration
+            node.params["sourceFps"] = probe.fps
+            node.params["sourceIsVfr"] = probe.is_vfr
+        except Exception:
+            pass
+        return
+
 NODE_DEFS: dict[str, dict[str, Any]] = {
     "gpt-image-1-generate": {
         "inputPorts": [{"id": "prompt", "required": True}],
@@ -649,6 +684,8 @@ async def execute_graph(
 
             if cache is not None and cache_key is not None and handler is not None:
                 cache.set(cache_key, node_outputs)
+
+            await _maybe_probe_video_output(node, node_outputs)
 
             await emit(ExecutedEvent(node_id=nid, outputs=node_outputs))
             return nid, True, 1

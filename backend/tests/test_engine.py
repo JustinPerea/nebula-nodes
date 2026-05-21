@@ -253,3 +253,77 @@ class TestExecuteGraphInputResolution:
         assert len(branch_executing) == 3
         assert len(branch_executed) == 3
         assert max(branch_executing) < min(branch_executed)
+
+
+class TestVideoOutputProbe:
+    """Engine post-processes Video outputs with ffprobe so any node that
+    produces a video (Veo, Kling, Sora, Seedance, Wan, etc.) writes
+    sourceDuration/sourceFps/sourceIsVfr to its own params. This lets the
+    frontend's getOrCreateEditNodeDownstream open the editor with a
+    pre-populated clip instead of forcing the user to Run the edit node
+    first. Symmetric to the upload-time probe."""
+
+    @pytest.mark.asyncio
+    async def test_probes_local_video_output_and_writes_params(self, tmp_path, monkeypatch):
+        from unittest.mock import AsyncMock, patch
+        from execution.engine import _maybe_probe_video_output
+
+        vid = tmp_path / "x.mp4"
+        vid.write_bytes(b"fake")
+        node = GraphNode(id="n1", definitionId="veo-3", params={})
+        outputs = {"video": {"type": "Video", "value": str(vid)}}
+        probe = type("PR", (), {"duration": 8.0, "fps": 24.0, "is_vfr": False})()
+
+        with patch("services.ffmpeg.ffprobe_video", AsyncMock(return_value=probe)):
+            await _maybe_probe_video_output(node, outputs)
+
+        assert node.params["sourceDuration"] == 8.0
+        assert node.params["sourceFps"] == 24.0
+        assert node.params["sourceIsVfr"] is False
+
+    @pytest.mark.asyncio
+    async def test_skips_when_sourceDuration_already_set(self, tmp_path, monkeypatch):
+        from unittest.mock import AsyncMock, patch
+        from execution.engine import _maybe_probe_video_output
+
+        vid = tmp_path / "x.mp4"
+        vid.write_bytes(b"fake")
+        node = GraphNode(id="n1", definitionId="veo-3", params={"sourceDuration": 5.0})
+        outputs = {"video": {"type": "Video", "value": str(vid)}}
+
+        ffprobe_mock = AsyncMock()
+        with patch("services.ffmpeg.ffprobe_video", ffprobe_mock):
+            await _maybe_probe_video_output(node, outputs)
+
+        ffprobe_mock.assert_not_called()
+        assert node.params["sourceDuration"] == 5.0  # untouched
+
+    @pytest.mark.asyncio
+    async def test_skips_remote_urls(self, tmp_path, monkeypatch):
+        from unittest.mock import AsyncMock, patch
+        from execution.engine import _maybe_probe_video_output
+
+        node = GraphNode(id="n1", definitionId="veo-3", params={})
+        outputs = {"video": {"type": "Video", "value": "https://cdn.example.com/x.mp4"}}
+
+        ffprobe_mock = AsyncMock()
+        with patch("services.ffmpeg.ffprobe_video", ffprobe_mock):
+            await _maybe_probe_video_output(node, outputs)
+
+        ffprobe_mock.assert_not_called()
+        assert "sourceDuration" not in node.params
+
+    @pytest.mark.asyncio
+    async def test_silent_on_ffprobe_failure(self, tmp_path, monkeypatch):
+        from unittest.mock import AsyncMock, patch
+        from execution.engine import _maybe_probe_video_output
+
+        vid = tmp_path / "x.mp4"
+        vid.write_bytes(b"fake")
+        node = GraphNode(id="n1", definitionId="veo-3", params={})
+        outputs = {"video": {"type": "Video", "value": str(vid)}}
+
+        with patch("services.ffmpeg.ffprobe_video", AsyncMock(side_effect=RuntimeError("ffprobe boom"))):
+            await _maybe_probe_video_output(node, outputs)  # must not raise
+
+        assert "sourceDuration" not in node.params
