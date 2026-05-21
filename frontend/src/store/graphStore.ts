@@ -1080,7 +1080,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       : [];
 
     const editId = `video-edit-${Math.random().toString(36).slice(2, 8)}`;
-    const editNode = {
+    const editNode: Node<NodeData> = {
       id: editId,
       type: 'editNode',
       position: { x: sourceNode.position.x + 280, y: sourceNode.position.y },
@@ -1099,7 +1099,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         spawnedThisSession: true,
       },
     };
-    const edge = {
+    const edge: Edge = {
       id: `e-${sourceNodeId}-${editId}`,
       source: sourceNodeId,
       sourceHandle: 'video',
@@ -1107,8 +1107,8 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       targetHandle: 'video_in',
     };
     set({
-      nodes: [...state.nodes, editNode as any],
-      edges: [...state.edges, edge as any],
+      nodes: [...state.nodes, editNode],
+      edges: [...state.edges, edge],
     });
     return editId;
   },

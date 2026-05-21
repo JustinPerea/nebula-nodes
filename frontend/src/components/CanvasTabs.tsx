@@ -1,6 +1,7 @@
 import { useUIStore } from '../store/uiStore';
 import { useGraphStore } from '../store/graphStore';
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
+import { Clapperboard, LayoutGrid } from 'lucide-react';
 import './CanvasTabs.css';
 
 /**
@@ -36,7 +37,8 @@ export function CanvasTabs() {
           onClick={() => { if (viewMode === 'editor') exitEditor(); }}
           aria-label="Canvas view"
         >
-          <span aria-hidden="true">▣</span> Canvas
+          <LayoutGrid className="canvas-tabs__icon" aria-hidden="true" focusable="false" />
+          <span>Canvas</span>
         </button>
         <button
           type="button"
@@ -50,7 +52,8 @@ export function CanvasTabs() {
           title={tooltip || undefined}
           aria-label="Editor view"
         >
-          <span aria-hidden="true">▤</span> Editor
+          <Clapperboard className="canvas-tabs__icon" aria-hidden="true" focusable="false" />
+          <span>Editor</span>
         </button>
       </div>
     </div>

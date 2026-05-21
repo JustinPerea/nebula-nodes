@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Node } from '@xyflow/react';
+import { ArrowLeft } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import { snapToFrameGrid } from '../../lib/editor/frameAccurate';
 import {
@@ -9,10 +10,13 @@ import {
   clipSpeed,
 } from '../../lib/editor/virtualPlayback';
 import { formatSmpte } from '../../lib/editor/timecode';
+import type { NodeData } from '../../types';
+
+const EMPTY_CLIPS: EditClip[] = [];
 
 interface Props {
   sourceUrl: string;
-  editNode: Node;
+  editNode: Node<NodeData>;
 }
 
 export function VideoPreview({ sourceUrl, editNode }: Props) {
@@ -22,9 +26,9 @@ export function VideoPreview({ sourceUrl, editNode }: Props) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [sourceError, setSourceError] = useState(false);
 
-  const params = (editNode.data as any).params ?? {};
-  const clips: EditClip[] = params.clips ?? [];
-  const fps: number = params.sourceFps ?? 30;
+  const params = editNode.data.params;
+  const clips = Array.isArray(params.clips) ? (params.clips as EditClip[]) : EMPTY_CLIPS;
+  const fps = typeof params.sourceFps === 'number' ? params.sourceFps : 30;
   const totalDur = totalOutputDuration(clips);
 
   // Sync video element to outputTime + active clip's speed/volume/mute
@@ -78,8 +82,11 @@ export function VideoPreview({ sourceUrl, editNode }: Props) {
   if (sourceError) {
     return (
       <div className="editor-preview editor-preview--error">
-        Source unavailable — try re-running upstream.
-        <button onClick={() => useUIStore.getState().exitEditor()}>Back to Canvas</button>
+        <span>Source unavailable. Try re-running upstream.</span>
+        <button type="button" onClick={() => useUIStore.getState().exitEditor()}>
+          <ArrowLeft className="editor-preview__button-icon" aria-hidden="true" focusable="false" />
+          <span>Back to Canvas</span>
+        </button>
       </div>
     );
   }
