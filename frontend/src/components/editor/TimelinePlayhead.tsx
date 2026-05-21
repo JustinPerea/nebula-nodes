@@ -68,9 +68,14 @@ export function TimelinePlayhead({ sourceDuration, totalOutputDuration, clips }:
     function onUp() {
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
     }
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
+    // pointercancel fires on touch interrupts (incoming call, gesture). Without
+    // this cleanup the scrub move handler leaks and every subsequent pointer
+    // motion drags the playhead — editor effectively frozen until reload.
+    window.addEventListener('pointercancel', onUp);
   }
 
   return (

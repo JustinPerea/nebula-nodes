@@ -7,6 +7,8 @@ import {
   outputTimeToSourceTime,
   sourceTimeToActiveClipIndex,
   isClipEdited,
+  clampSpeedToFloor,
+  MIN_OUTPUT_DURATION,
 } from '../../src/lib/editor/virtualPlayback';
 
 // Two end-to-end clips. clip[1] is at 0.5x speed so it stretches: 2s of source
@@ -15,6 +17,43 @@ const clips: EditClip[] = [
   { id: 'c1', start: 0, duration: 2, sourceIn: 0, sourceOut: 2, volume: 1, mute: false },
   { id: 'c2', start: 2, duration: 4, sourceIn: 2, sourceOut: 4, volume: 1, mute: false },
 ];
+
+describe('clampSpeedToFloor', () => {
+  // Phase F handoff flagged the math edge case: at 4× speed on a 0.3s source
+  // range, the prior unclamped math produced 0.075s output — below the
+  // intended 0.1s floor. clampSpeedToFloor caps the effective speed so the
+  // output never dips beneath MIN_OUTPUT_DURATION.
+
+  it('leaves the requested speed untouched when source range is comfortable', () => {
+    const { speed, duration } = clampSpeedToFloor(2, 4);  // 4s source, 2× → 2s output
+    expect(speed).toBe(2);
+    expect(duration).toBe(2);
+  });
+
+  it('caps the requested speed when output would fall below the floor', () => {
+    // 0.3s source, requested 4× → would be 0.075s output. Max safe speed is
+    // sourceRange / floor = 0.3 / 0.1 = 3×.
+    const { speed, duration } = clampSpeedToFloor(4, 0.3);
+    expect(speed).toBeCloseTo(3, 5);
+    expect(duration).toBeCloseTo(0.1, 5);
+  });
+
+  it('holds speed at 1× when the source itself is shorter than the floor', () => {
+    // 0.05s source: no speed can produce ≥ 0.1s output. Fall back to native.
+    const { speed, duration } = clampSpeedToFloor(2, 0.05);
+    expect(speed).toBe(1);
+    expect(duration).toBe(0.05);
+  });
+
+  it('honors a custom floor when supplied', () => {
+    const { duration } = clampSpeedToFloor(4, 0.3, 0.2);  // custom 0.2s floor
+    expect(duration).toBeCloseTo(0.2, 5);
+  });
+
+  it('exports MIN_OUTPUT_DURATION as the shared floor constant', () => {
+    expect(MIN_OUTPUT_DURATION).toBe(0.1);
+  });
+});
 
 describe('isClipEdited', () => {
   // sourceDuration of 8s for all cases — matches what the editor reads off

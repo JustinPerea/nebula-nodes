@@ -75,9 +75,12 @@ export function EditorView() {
       const ui = useUIStore.getState();
       const graph = useGraphStore.getState();
 
-      // Cut at playhead — bare S (no modifiers) or ⌘K/Ctrl+K
+      // Cut at playhead — bare B (Blade, matching FCPX + DaVinci Resolve)
+      // or ⌘K / Ctrl+K (Premiere's "Add Edit"). Bare S was the original
+      // binding but collides with too many established single-key shortcuts
+      // (select tool, snap toggle, etc.). B is the safest NLE convention.
       if (
-        (e.key === 's' || e.key === 'S') && !e.metaKey && !e.ctrlKey && !e.altKey
+        (e.key === 'b' || e.key === 'B') && !e.metaKey && !e.ctrlKey && !e.altKey
       ) {
         e.preventDefault();
         const srcT = (window as Window & { __editorPlayheadSourceTime?: number }).__editorPlayheadSourceTime ?? 0;

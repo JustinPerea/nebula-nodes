@@ -35,6 +35,35 @@ export function clipSpeed(clip: EditClip): number {
 }
 
 /**
+ * Hard floor on output duration. Below 0.1s and the rendered preview shows
+ * a black flash instead of a clip. The trim handles and the speed slider
+ * both enforce this floor so the user can't paint themselves into a corner
+ * where the output is empty.
+ */
+export const MIN_OUTPUT_DURATION = 0.1;
+
+/**
+ * Cap a requested speed so the resulting output duration stays ≥ floor.
+ * Returns the safe speed and the resulting duration so callers don't have
+ * to recompute. When the source range is shorter than the floor (extreme
+ * case: a generator emitted a sub-0.1s clip), the speed is held at 1× and
+ * the clip stays at its native length — the floor can't be achieved at
+ * any other speed anyway.
+ */
+export function clampSpeedToFloor(
+  requestedSpeed: number,
+  sourceRange: number,
+  floor: number = MIN_OUTPUT_DURATION,
+): { speed: number; duration: number } {
+  if (sourceRange <= floor) {
+    return { speed: 1, duration: sourceRange };
+  }
+  const maxSpeed = sourceRange / floor;
+  const safeSpeed = Math.min(requestedSpeed, maxSpeed);
+  return { speed: safeSpeed, duration: sourceRange / safeSpeed };
+}
+
+/**
  * Whether a clip diverges from the source — used by TimelineClip to flip on
  * the `--edited` style. Fires on speed change, volume change, mute, head
  * trim (sourceIn > 0), or tail trim (sourceOut < sourceDuration). The tail

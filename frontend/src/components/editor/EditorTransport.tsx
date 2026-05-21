@@ -14,7 +14,7 @@ import {
 import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
 import { renderPreview } from '../../lib/editor/api';
-import { type EditClip, totalOutputDuration, clipSpeed } from '../../lib/editor/virtualPlayback';
+import { type EditClip, totalOutputDuration, clipSpeed, clampSpeedToFloor, MIN_OUTPUT_DURATION } from '../../lib/editor/virtualPlayback';
 import { formatSmpte } from '../../lib/editor/timecode';
 import type { NodeData } from '../../types';
 
@@ -94,13 +94,30 @@ export function EditorTransport({ editNode, sourceUrl }: Props) {
             onChange={(e) => {
               const newSpeed = parseFloat(e.target.value);
               if (newSpeed <= 0) return;
-              const newDuration = (selectedClip.sourceOut - selectedClip.sourceIn) / newSpeed;
-              updateClip(editNode.id, selectedClip.id, { duration: newDuration });
+              // Clamp to MIN_OUTPUT_DURATION floor so a fast speed on a short
+              // source clip can't produce sub-floor output. clampSpeedToFloor
+              // gracefully holds speed at 1× when the source range itself is
+              // shorter than the floor (extreme-short generator output).
+              const sourceRange = selectedClip.sourceOut - selectedClip.sourceIn;
+              const { duration } = clampSpeedToFloor(newSpeed, sourceRange);
+              updateClip(editNode.id, selectedClip.id, { duration });
             }} />
           <span className="editor-transport__value">{clipSpeed(selectedClip).toFixed(2)}×</span>
-          <button className="editor-transport__preset" type="button" onClick={() => updateClip(editNode.id, selectedClip.id, { duration: (selectedClip.sourceOut - selectedClip.sourceIn) / 0.5 })}>0.5×</button>
-          <button className="editor-transport__preset" type="button" onClick={() => updateClip(editNode.id, selectedClip.id, { duration: (selectedClip.sourceOut - selectedClip.sourceIn) })}>1×</button>
-          <button className="editor-transport__preset" type="button" onClick={() => updateClip(editNode.id, selectedClip.id, { duration: (selectedClip.sourceOut - selectedClip.sourceIn) / 2 })}>2×</button>
+          <button className="editor-transport__preset" type="button" onClick={() => {
+            const sourceRange = selectedClip.sourceOut - selectedClip.sourceIn;
+            const { duration } = clampSpeedToFloor(0.5, sourceRange);
+            updateClip(editNode.id, selectedClip.id, { duration });
+          }}>0.5×</button>
+          <button className="editor-transport__preset" type="button" onClick={() => {
+            const sourceRange = selectedClip.sourceOut - selectedClip.sourceIn;
+            const { duration } = clampSpeedToFloor(1, sourceRange);
+            updateClip(editNode.id, selectedClip.id, { duration });
+          }}>1×</button>
+          <button className="editor-transport__preset" type="button" onClick={() => {
+            const sourceRange = selectedClip.sourceOut - selectedClip.sourceIn;
+            const { duration } = clampSpeedToFloor(2, sourceRange);
+            updateClip(editNode.id, selectedClip.id, { duration });
+          }}>2×</button>
 
           <label className="editor-transport__label">Vol</label>
           <input className="editor-transport__range" type="range" min={0} max={1} step={0.05}
