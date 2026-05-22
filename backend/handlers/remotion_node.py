@@ -13,7 +13,10 @@ from models.graph import GraphNode, PortValueDict
 
 REQUIRED_TOP_LEVEL_KEYS = {"graph", "timeline"}
 REQUIRED_GRAPH_KEYS = {"nodes", "edges"}
-EMPTY_MANIFEST = {"graph": {"nodes": [], "edges": []}, "timeline": []}
+
+
+def _empty_manifest() -> dict[str, Any]:
+    return {"graph": {"nodes": [], "edges": []}, "timeline": []}
 
 
 def _validate_manifest(manifest: Any) -> None:
@@ -41,6 +44,9 @@ async def handle_remotion_node(
     params = node.params
     manifest = params.get("manifest")
     if manifest is None:
-        manifest = EMPTY_MANIFEST
+        manifest = _empty_manifest()
     _validate_manifest(manifest)
-    return {"video": None, "manifest": manifest}
+    return {
+        "video": {"type": "Video", "value": None},
+        "manifest": {"type": "Any", "value": manifest},
+    }
