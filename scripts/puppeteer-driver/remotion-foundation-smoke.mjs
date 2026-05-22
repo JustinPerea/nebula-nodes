@@ -106,7 +106,65 @@ async function main() {
     await page.waitForSelector('.remotion-editor-view', { timeout: 3000 });
     await page.screenshot({ path: join(OUT_DIR, 'step5-reopened.png') });
 
-    log('done', 'all 5 steps passed');
+    // Step 6 — Rule A: add a TrackItem via the store, verify canvas node spawns
+    log('test-6', 'addTrackItemWithCanvasMirror with TextNode');
+    await page.evaluate(async () => {
+      const state = window.__nebulaGraphStore.getState();
+      const remotion = state.nodes.find((n) => n.data.definitionId === 'remotion-node');
+      if (!remotion) throw new Error('[smoke] no remotion-node found');
+      state.addTrackItemWithCanvasMirror(remotion.id, {
+        componentType: 'TextNode',
+        props: { text: 'smoke test', fontSize: 80, color: '#ffcc00' },
+        time: { startFrame: 0, durationInFrames: 90 },
+      });
+    });
+    await sleep(800);
+    const ruleAState = await page.evaluate(() => {
+      const s = window.__nebulaGraphStore.getState();
+      const nodeDefs = s.nodes.map((n) => n.data.definitionId);
+      const remotion = s.nodes.find((n) => n.data.definitionId === 'remotion-node');
+      const tl = remotion?.data.params?.manifest?.timeline ?? [];
+      return { nodeDefs, timelineLength: tl.length, trackSourceId: tl[0]?.sourceNodeId };
+    });
+    log('test-6', `state: ${JSON.stringify(ruleAState)}`);
+    if (!ruleAState.nodeDefs.includes('text-input')) {
+      throw new Error('[smoke] Rule A failed: text-input node not spawned');
+    }
+    if (ruleAState.timelineLength !== 1) {
+      throw new Error('[smoke] Rule A failed: TrackItem not added to manifest');
+    }
+    await page.screenshot({ path: join(OUT_DIR, 'step6-rule-a-spawned.png') });
+
+    // Step 7 — back to canvas + reopen editor — TrackItem renders in Player
+    await page.click('.remotion-editor-view__back');
+    await sleep(300);
+    await page.click('.remotion-node');
+    await page.click('.remotion-node__open');
+    await sleep(800);
+    await page.screenshot({ path: join(OUT_DIR, 'step7-text-rendering.png') });
+
+    // Step 8 — Rule B: remove the spawned text-input node, verify TrackItem pruned
+    const spawnedTextInputId = ruleAState.trackSourceId;
+    log('test-8', `removing spawned node ${spawnedTextInputId}`);
+    await page.evaluate((id) => {
+      window.__nebulaGraphStore.getState().onNodesChange([{ id, type: 'remove' }]);
+    }, spawnedTextInputId);
+    await sleep(500);
+    const ruleBState = await page.evaluate(() => {
+      const s = window.__nebulaGraphStore.getState();
+      const remotion = s.nodes.find((n) => n.data.definitionId === 'remotion-node');
+      return {
+        nodeCount: s.nodes.length,
+        timelineLength: remotion?.data.params?.manifest?.timeline?.length ?? 0,
+      };
+    });
+    log('test-8', `state: ${JSON.stringify(ruleBState)}`);
+    if (ruleBState.timelineLength !== 0) {
+      throw new Error('[smoke] Rule B failed: TrackItem not pruned after canvas-node removal');
+    }
+    await page.screenshot({ path: join(OUT_DIR, 'step8-rule-b-pruned.png') });
+
+    log('done', 'all 8 steps passed');
   } finally {
     await browser.close();
   }
