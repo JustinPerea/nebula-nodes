@@ -23,7 +23,7 @@ import { clipSpeed, type EditClip } from '../lib/editor/virtualPlayback';
 import type { VideoGraphManifest, TrackItem } from '../types/video';
 import { createEmptyManifest, DEFAULT_FPS } from '../types/video';
 import { validateManifest } from '../lib/video/manifestValidator';
-import { componentTypeToCanvasDefId } from '../lib/video/mirroring';
+import { componentTypeToCanvasDefId, pruneTrackItemsForDeletedNode } from '../lib/video/mirroring';
 
 /** Backend contract: video-edit's ffmpeg pipeline still operates on
  * sourceIn/sourceOut/speed even though the frontend stores `duration` as
@@ -815,10 +815,35 @@ export const useGraphStore = create<GraphState>((set, get) => ({
           );
         }
       }
-      set((state) => ({
-        nodes: applyNodeChanges(changes, state.nodes) as Node<NodeData>[],
-        edges: state.edges.filter((e) => !removedIds.includes(e.source) && !removedIds.includes(e.target)),
-      }));
+      set((state) => {
+        const nextNodes = applyNodeChanges(changes, state.nodes) as Node<NodeData>[];
+        const nextEdges = state.edges.filter((e) => !removedIds.includes(e.source) && !removedIds.includes(e.target));
+
+        // Rule B-1: prune TrackItems whose sourceNodeId matches a removed node.
+        const updatedNodes = nextNodes.map((n) => {
+          if (n.data?.definitionId !== 'remotion-node') return n;
+          const currentParams = (n.data.params ?? {}) as Record<string, unknown>;
+          const manifest = currentParams.manifest as VideoGraphManifest | undefined;
+          if (!manifest) return n;
+
+          let nextManifest = manifest;
+          let anyChange = false;
+          for (const removedId of removedIds) {
+            const result = pruneTrackItemsForDeletedNode(nextManifest, removedId);
+            if (result.changed) {
+              nextManifest = result.manifest;
+              anyChange = true;
+            }
+          }
+          if (!anyChange) return n;
+          return {
+            ...n,
+            data: { ...n.data, params: { ...currentParams, manifest: nextManifest } },
+          };
+        });
+
+        return { nodes: updatedNodes, edges: nextEdges };
+      });
     } else {
       set((state) => ({ nodes: applyNodeChanges(changes, state.nodes) as Node<NodeData>[] }));
     }

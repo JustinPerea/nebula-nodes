@@ -72,3 +72,53 @@ describe('graphStore — addTrackItemWithCanvasMirror (Rule A)', () => {
     expect(manifest.timeline).toHaveLength(0);
   });
 });
+
+describe('graphStore — Rule B-1: node deletion prunes TrackItems', () => {
+  beforeEach(() => {
+    useGraphStore.setState(INITIAL_GRAPH_STATE, true);
+  });
+
+  it('prunes a TrackItem when its source canvas node is removed', () => {
+    const remotionNode = {
+      id: 'r1',
+      type: 'remotionNode',
+      position: { x: 0, y: 0 },
+      data: {
+        definitionId: 'remotion-node',
+        label: 'R',
+        params: {
+          manifest: {
+            graph: { nodes: [], edges: [] },
+            timeline: [
+              {
+                id: 't1',
+                sourceNodeId: 'src-1',
+                componentType: 'TextNode' as const,
+                time: { startFrame: 0, durationInFrames: 60 },
+                spatial: { x: 0, y: 0, z: 0, scale: [1, 1, 1] as [number, number, number], rotation: [0, 0, 0] as [number, number, number] },
+                keyframes: {},
+                props: {},
+              },
+            ],
+          },
+        },
+        state: 'idle' as const,
+        outputs: {},
+      },
+    };
+    const sourceNode = {
+      id: 'src-1',
+      type: 'model-node',
+      position: { x: -300, y: 0 },
+      data: { definitionId: 'text-input', label: 'text-input', params: {}, state: 'idle' as const, outputs: {} },
+    };
+    useGraphStore.setState({ nodes: [remotionNode as never, sourceNode as never] });
+
+    useGraphStore.getState().onNodesChange([{ id: 'src-1', type: 'remove' }]);
+
+    const state = useGraphStore.getState();
+    const remotion = state.nodes.find((n) => n.id === 'r1');
+    const manifest = (remotion?.data.params as { manifest: { timeline: unknown[] } }).manifest;
+    expect(manifest.timeline).toHaveLength(0);
+  });
+});
