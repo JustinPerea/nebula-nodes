@@ -187,6 +187,8 @@ export const useUIStore = create<UIState>((set, get) => ({
     set({ viewMode: 'canvas', editorTargetNodeId: null, selectedClipId: null, isPlaying: false, renderedPreviewUrl: null });
   },
 
+  // Phase 2's RemotionEditor playback state is owned by @remotion/player's
+  // PlayerRef, not Zustand. We only track which RemotionNode is being edited.
   enterRemotionEditor: (remotionNodeId) => {
     set({
       viewMode: 'remotion-editor',
@@ -198,6 +200,7 @@ export const useUIStore = create<UIState>((set, get) => ({
     set({
       viewMode: 'canvas',
       remotionEditorTargetNodeId: null,
+      isPlaying: false,
     });
   },
 

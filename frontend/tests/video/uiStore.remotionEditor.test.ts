@@ -1,12 +1,15 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { useUIStore } from '../../src/store/uiStore';
 
+// Capture the full initial store state so beforeEach can do a hard replace
+// (Zustand replace flag = true) rather than a partial merge. This prevents any
+// field set in one test (editorTargetNodeId, isPlaying, selectedClipId, etc.)
+// from bleeding into the next.
+const INITIAL_STATE = { ...useUIStore.getState() };
+
 describe('uiStore — RemotionEditor lifecycle', () => {
   beforeEach(() => {
-    useUIStore.setState({
-      viewMode: 'canvas',
-      remotionEditorTargetNodeId: null,
-    });
+    useUIStore.setState(INITIAL_STATE, true);
   });
 
   it('enterRemotionEditor sets viewMode and target node id', () => {
