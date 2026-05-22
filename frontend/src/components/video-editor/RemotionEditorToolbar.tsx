@@ -17,6 +17,7 @@ export function RemotionEditorToolbar({ remotionNodeId }: RemotionEditorToolbarP
   const addTrackItemWithCanvasMirror = useGraphStore((s) => s.addTrackItemWithCanvasMirror);
   const deleteTrackItem = useGraphStore((s) => s.deleteTrackItem);
   const selectedTrackItemId = useUIStore((s) => s.selectedTrackItemId);
+  const setSelectedTrackItem = useUIStore((s) => s.setSelectedTrackItem);
 
   const handleAdd = (componentType: TrackComponentType) => {
     addTrackItemWithCanvasMirror(remotionNodeId, { componentType });
@@ -25,6 +26,7 @@ export function RemotionEditorToolbar({ remotionNodeId }: RemotionEditorToolbarP
   const handleDelete = () => {
     if (!selectedTrackItemId) return;
     deleteTrackItem(remotionNodeId, selectedTrackItemId);
+    setSelectedTrackItem(null);
   };
 
   return (

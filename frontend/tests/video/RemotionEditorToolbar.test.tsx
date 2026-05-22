@@ -17,15 +17,20 @@ vi.mock('../../src/store/graphStore', () => ({
 }));
 
 let mockSelectedId: string | null = null;
+const setSelectedMock = vi.fn();
 vi.mock('../../src/store/uiStore', () => ({
-  useUIStore: (selector: (s: { selectedTrackItemId: string | null }) => unknown) =>
-    selector({ selectedTrackItemId: mockSelectedId }),
+  useUIStore: (selector: (s: {
+    selectedTrackItemId: string | null;
+    setSelectedTrackItem: typeof setSelectedMock;
+  }) => unknown) =>
+    selector({ selectedTrackItemId: mockSelectedId, setSelectedTrackItem: setSelectedMock }),
 }));
 
 describe('RemotionEditorToolbar', () => {
   beforeEach(() => {
     addMock.mockReset();
     deleteMock.mockReset();
+    setSelectedMock.mockReset();
     mockSelectedId = null;
   });
 
@@ -55,12 +60,13 @@ describe('RemotionEditorToolbar', () => {
     expect(del).toBeDisabled();
   });
 
-  it('Delete button dispatches deleteTrackItem when a TrackItem is selected', () => {
+  it('Delete button dispatches deleteTrackItem AND clears selection when a TrackItem is selected', () => {
     mockSelectedId = 'track-1';
     render(<RemotionEditorToolbar remotionNodeId="r1" />);
     const del = screen.getByRole('button', { name: /delete/i });
     expect(del).not.toBeDisabled();
     fireEvent.click(del);
     expect(deleteMock).toHaveBeenCalledWith('r1', 'track-1');
+    expect(setSelectedMock).toHaveBeenCalledWith(null);
   });
 });
