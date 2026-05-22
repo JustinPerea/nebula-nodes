@@ -1,6 +1,9 @@
 import { Sequence, AbsoluteFill } from 'remotion';
 import type { TrackItem, VideoGraphManifest } from '../../types/video';
 import { TextRenderer } from './components/TextRenderer';
+import { SVGRenderer } from './components/SVGRenderer';
+import { ImageRenderer } from './components/ImageRenderer';
+import { VideoRenderer } from './components/VideoRenderer';
 
 interface RemotionCompositionProps {
   manifest: VideoGraphManifest;
@@ -10,9 +13,13 @@ function renderItem(item: TrackItem) {
   switch (item.componentType) {
     case 'TextNode':
       return <TextRenderer item={item} />;
-    // SVGInput, ImageAssetNode, VideoAssetNode, IsometricBlock, LottieNode
-    // are added in Plan 2.1.b. Render a labeled placeholder so the timeline
-    // still shows the item and the smoke test can verify it.
+    case 'SVGInput':
+      return <SVGRenderer item={item} />;
+    case 'ImageAssetNode':
+      return <ImageRenderer item={item} />;
+    case 'VideoAssetNode':
+      return <VideoRenderer item={item} />;
+    // IsometricBlock + LottieNode remain unimplemented until Phase 2.2.
     default:
       return (
         <AbsoluteFill
