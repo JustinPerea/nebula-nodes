@@ -94,6 +94,7 @@ export function RemotionEditorView() {
       </div>
       <div className="remotion-editor-view__timeline" data-testid="remotion-timeline-slot">
         <RemotionTimeline
+          remotionNodeId={targetNodeId}
           manifest={manifest}
           currentFrame={currentFrame}
           onScrub={(frame) => playerRef.current?.seekTo(frame)}
