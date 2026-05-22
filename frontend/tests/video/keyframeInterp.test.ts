@@ -64,3 +64,46 @@ describe('interpolateVec3', () => {
     expect(() => interpolateVec3(10, kfs, [0, 0, 0])).toThrow(/vec3/);
   });
 });
+
+describe('interpolateScalar — per-segment easing', () => {
+  it('uses the segment-start keyframes easing, not the first overall', () => {
+    // Three keyframes with different easings. Frame 45 is in segment 1 (kf1→kf2).
+    // Linear interp between (30, 0) and (60, 100) at frame 45 → 50.
+    // If the bug were still present, the bezier from kf0 would distort this.
+    const kfs: KeyframeData[] = [
+      { frame: 0, value: 0, easing: 'spring' },
+      { frame: 30, value: 0, easing: 'linear' },
+      { frame: 60, value: 100, easing: 'linear' },
+    ];
+    expect(interpolateScalar(45, kfs, 0)).toBe(50);
+  });
+
+  it('clamp easing kind interpolates without throwing', () => {
+    const kfs: KeyframeData[] = [
+      { frame: 0, value: 0, easing: 'clamp' },
+      { frame: 60, value: 100, easing: 'clamp' },
+    ];
+    expect(interpolateScalar(30, kfs, 0)).toBe(50);
+  });
+
+  it('spring easing kind produces a non-linear curve', () => {
+    const kfs: KeyframeData[] = [
+      { frame: 0, value: 0, easing: 'spring' },
+      { frame: 60, value: 100, easing: 'spring' },
+    ];
+    // The bezier(0.16, 1, 0.3, 1) curve eases out fast then settles.
+    // At t=0.5 (frame 30), the value should be > 50 (not the linear midpoint).
+    const v = interpolateScalar(30, kfs, 0);
+    expect(v).toBeGreaterThan(50);
+    expect(v).toBeLessThanOrEqual(100);
+  });
+});
+
+describe('assertVec3', () => {
+  it('rejects vec3 containing non-numeric elements', () => {
+    const kfs: KeyframeData[] = [
+      { frame: 0, value: ['a', 'b', 'c'] as unknown as [number, number, number], easing: 'linear' },
+    ];
+    expect(() => interpolateVec3(10, kfs, [0, 0, 0])).toThrow(/number/);
+  });
+});
