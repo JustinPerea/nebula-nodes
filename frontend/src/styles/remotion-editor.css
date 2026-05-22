@@ -16,20 +16,21 @@ body.app-slava-restraint .remotion-editor-view {
   position: fixed;
   inset: 0;
   display: grid;
+  grid-template-columns: 1fr 320px;
   grid-template-rows: 48px 1fr 320px;
+  grid-template-areas:
+    "header header"
+    "player panel"
+    "timeline panel";
   background: var(--sr-canvas);
   color: var(--sr-ink);
   z-index: 50;
 }
 
-body.app-slava-restraint .remotion-editor-view__header {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 0 16px;
-  border-bottom: 1px solid var(--sr-edge-strong);
-  background: var(--sr-glass);
-}
+body.app-slava-restraint .remotion-editor-view__header { grid-area: header; display: flex; align-items: center; gap: 16px; padding: 0 16px; border-bottom: 1px solid var(--sr-edge-strong); background: var(--sr-glass); }
+body.app-slava-restraint .remotion-editor-view__player { grid-area: player; }
+body.app-slava-restraint .remotion-editor-view__timeline { grid-area: timeline; }
+body.app-slava-restraint .remotion-editor-view__panel { grid-area: panel; border-left: 1px solid var(--sr-edge-strong); background: var(--sr-glass-strong); overflow: auto; }
 
 body.app-slava-restraint .remotion-editor-view__back {
   background: none;
@@ -131,4 +132,109 @@ body.app-slava-restraint .remotion-node__open {
 body.app-slava-restraint .remotion-node__open:hover {
   border-color: var(--sr-accent);
   color: var(--sr-accent);
+}
+
+/* ── RemotionEditorToolbar ──────────────────────────────────────────────────── */
+
+body.app-slava-restraint .remotion-editor-toolbar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+body.app-slava-restraint .remotion-editor-toolbar__add,
+body.app-slava-restraint .remotion-editor-toolbar__delete {
+  background: none;
+  border: 1px solid var(--sr-edge);
+  color: var(--sr-ink);
+  padding: 4px 10px;
+  border-radius: 2px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+}
+
+body.app-slava-restraint .remotion-editor-toolbar__add:hover {
+  border-color: var(--sr-accent);
+}
+
+body.app-slava-restraint .remotion-editor-toolbar__delete:not(:disabled):hover {
+  border-color: var(--sr-accent);
+}
+
+body.app-slava-restraint .remotion-editor-toolbar__delete:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ── RemotionPropertiesPanel ────────────────────────────────────────────────── */
+
+body.app-slava-restraint .remotion-properties-panel {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  font-size: 12px;
+}
+
+body.app-slava-restraint .remotion-properties-panel--empty {
+  color: var(--sr-ink-meta);
+  display: grid;
+  place-items: center;
+  height: 100%;
+  text-align: center;
+}
+
+body.app-slava-restraint .remotion-properties-panel__hint {
+  font-size: 11px;
+  margin-top: 4px;
+}
+
+body.app-slava-restraint .remotion-properties-panel__header {
+  display: flex;
+  justify-content: space-between;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--sr-edge);
+}
+
+body.app-slava-restraint .remotion-properties-panel__type {
+  font-weight: 600;
+  color: var(--sr-ink);
+}
+
+body.app-slava-restraint .remotion-properties-panel__id {
+  color: var(--sr-ink-meta);
+  font-family: monospace;
+}
+
+body.app-slava-restraint .remotion-properties-panel__section h4 {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--sr-ink-meta);
+  margin: 0 0 6px 0;
+}
+
+body.app-slava-restraint .remotion-properties-panel__section label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+
+body.app-slava-restraint .remotion-properties-panel__section input,
+body.app-slava-restraint .remotion-properties-panel__section textarea {
+  background: var(--sr-canvas);
+  border: 1px solid var(--sr-edge);
+  color: var(--sr-ink);
+  padding: 4px 8px;
+  border-radius: 2px;
+  font: inherit;
+  font-size: 12px;
+}
+
+body.app-slava-restraint .remotion-properties-panel__section input:focus,
+body.app-slava-restraint .remotion-properties-panel__section textarea:focus {
+  outline: none;
+  border-color: var(--sr-accent);
 }

@@ -196,6 +196,22 @@ interface GraphState {
     remotionNodeId: string,
     partial: Partial<TrackItem> & Pick<TrackItem, 'componentType'>,
   ) => void;
+  deleteTrackItem: (remotionNodeId: string, trackItemId: string) => void;
+  duplicateTrackItemAtPlayhead: (
+    remotionNodeId: string,
+    trackItemId: string,
+    currentFrame: number,
+  ) => void;
+  updateTrackItemProps: (
+    remotionNodeId: string,
+    trackItemId: string,
+    propsPatch: Record<string, unknown>,
+  ) => void;
+  updateTrackItemTime: (
+    remotionNodeId: string,
+    trackItemId: string,
+    timePatch: Partial<{ startFrame: number; durationInFrames: number }>,
+  ) => void;
   executeGraph: () => Promise<void>;
   resetExecution: () => void;
   handleExecutionEvent: (event: ExecutionEvent) => void;
@@ -1124,6 +1140,184 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         };
       });
       return { nodes: [...updatedNodes, newCanvasNode as never] };
+    });
+  },
+
+  deleteTrackItem: (remotionNodeId, trackItemId) => {
+    const state = get();
+    const remotion = state.nodes.find((n) => n.id === remotionNodeId);
+    if (!remotion) return;
+
+    const currentParams = (remotion.data.params ?? {}) as Record<string, unknown>;
+    const manifest = currentParams.manifest as VideoGraphManifest | undefined;
+    if (!manifest) return;
+
+    const item = manifest.timeline.find((t) => t.id === trackItemId);
+    if (!item) return;
+
+    pushUndo(set, get);
+
+    set((s) => {
+      const updatedNodes = s.nodes
+        .filter((n) => n.id !== item.sourceNodeId)
+        .map((n) => {
+          if (n.id !== remotionNodeId) return n;
+          const params = (n.data.params ?? {}) as Record<string, unknown>;
+          const currentManifest = params.manifest as VideoGraphManifest;
+          const nextManifest: VideoGraphManifest = {
+            ...currentManifest,
+            timeline: currentManifest.timeline.filter((t) => t.id !== trackItemId),
+          };
+          return {
+            ...n,
+            data: { ...n.data, params: { ...params, manifest: nextManifest } },
+          };
+        });
+      return { nodes: updatedNodes };
+    });
+  },
+
+  duplicateTrackItemAtPlayhead: (remotionNodeId, trackItemId, currentFrame) => {
+    const state = get();
+    const remotion = state.nodes.find((n) => n.id === remotionNodeId);
+    if (!remotion) return;
+
+    const currentParams = (remotion.data.params ?? {}) as Record<string, unknown>;
+    const manifest = currentParams.manifest as VideoGraphManifest | undefined;
+    if (!manifest) return;
+
+    const original = manifest.timeline.find((t) => t.id === trackItemId);
+    if (!original) return;
+
+    const sourceNode = state.nodes.find((n) => n.id === original.sourceNodeId);
+    const sourceDefId =
+      (sourceNode?.data.definitionId as string | undefined) ?? 'text-input';
+
+    pushUndo(set, get);
+
+    const newSourceId = uuidv4();
+    const newSourceNode = {
+      id: newSourceId,
+      type: 'model-node' as const,
+      position: {
+        x: remotion.position.x - 280,
+        y: remotion.position.y + 80,
+      },
+      data: {
+        definitionId: sourceDefId,
+        label: sourceDefId,
+        params: {},
+        state: 'idle' as const,
+        outputs: {},
+      },
+    };
+
+    const clone: TrackItem = {
+      ...original,
+      id: uuidv4(),
+      sourceNodeId: newSourceId,
+      time: {
+        startFrame: currentFrame,
+        durationInFrames: original.time.durationInFrames,
+      },
+      // Deep-clone spatial/keyframes/props so mutations to the clone don't affect the original
+      spatial: JSON.parse(JSON.stringify(original.spatial)),
+      keyframes: JSON.parse(JSON.stringify(original.keyframes)),
+      props: JSON.parse(JSON.stringify(original.props)),
+    };
+
+    set((s) => {
+      const updatedNodes = s.nodes.map((n) => {
+        if (n.id !== remotionNodeId) return n;
+        const params = (n.data.params ?? {}) as Record<string, unknown>;
+        const m = params.manifest as VideoGraphManifest;
+        const nextManifest: VideoGraphManifest = {
+          ...m,
+          timeline: [...m.timeline, clone],
+        };
+        return {
+          ...n,
+          data: { ...n.data, params: { ...params, manifest: nextManifest } },
+        };
+      });
+      return { nodes: [...updatedNodes, newSourceNode as never] };
+    });
+  },
+
+  updateTrackItemProps: (remotionNodeId, trackItemId, propsPatch) => {
+    const state = get();
+    const remotion = state.nodes.find((n) => n.id === remotionNodeId);
+    if (!remotion) return;
+    const currentParams = (remotion.data.params ?? {}) as Record<string, unknown>;
+    const manifest = currentParams.manifest as VideoGraphManifest | undefined;
+    if (!manifest) return;
+    if (!manifest.timeline.some((t) => t.id === trackItemId)) return;
+
+    maybePushUndo(set, get, remotionNodeId);
+
+    set((s) => {
+      const updatedNodes = s.nodes.map((n) => {
+        if (n.id !== remotionNodeId) return n;
+        const params = (n.data.params ?? {}) as Record<string, unknown>;
+        const m = params.manifest as VideoGraphManifest;
+        const nextManifest: VideoGraphManifest = {
+          ...m,
+          timeline: m.timeline.map((t) =>
+            t.id === trackItemId
+              ? { ...t, props: { ...t.props, ...propsPatch } }
+              : t,
+          ),
+        };
+        return {
+          ...n,
+          data: { ...n.data, params: { ...params, manifest: nextManifest } },
+        };
+      });
+      return { nodes: updatedNodes };
+    });
+  },
+
+  updateTrackItemTime: (remotionNodeId, trackItemId, timePatch) => {
+    const state = get();
+    const remotion = state.nodes.find((n) => n.id === remotionNodeId);
+    if (!remotion) return;
+    const currentParams = (remotion.data.params ?? {}) as Record<string, unknown>;
+    const manifest = currentParams.manifest as VideoGraphManifest | undefined;
+    if (!manifest) return;
+    if (!manifest.timeline.some((t) => t.id === trackItemId)) return;
+
+    maybePushUndo(set, get, remotionNodeId);
+
+    set((s) => {
+      const updatedNodes = s.nodes.map((n) => {
+        if (n.id !== remotionNodeId) return n;
+        const params = (n.data.params ?? {}) as Record<string, unknown>;
+        const m = params.manifest as VideoGraphManifest;
+        const nextManifest: VideoGraphManifest = {
+          ...m,
+          timeline: m.timeline.map((t) => {
+            if (t.id !== trackItemId) return t;
+            return {
+              ...t,
+              time: {
+                startFrame:
+                  timePatch.startFrame !== undefined
+                    ? Math.round(timePatch.startFrame)
+                    : t.time.startFrame,
+                durationInFrames:
+                  timePatch.durationInFrames !== undefined
+                    ? Math.max(1, Math.round(timePatch.durationInFrames))
+                    : t.time.durationInFrames,
+              },
+            };
+          }),
+        };
+        return {
+          ...n,
+          data: { ...n.data, params: { ...params, manifest: nextManifest } },
+        };
+      });
+      return { nodes: updatedNodes };
     });
   },
 

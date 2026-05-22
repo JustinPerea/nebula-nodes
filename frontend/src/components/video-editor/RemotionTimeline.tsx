@@ -8,6 +8,8 @@ import type {
 } from '@xzdarcy/timeline-engine';
 import type { VideoGraphManifest, TrackItem } from '../../types/video';
 import { DEFAULT_FPS } from '../../types/video';
+import { useGraphStore } from '../../store/graphStore';
+import { useUIStore } from '../../store/uiStore';
 
 /** Local structural typing for the @xzdarcy timeline imperative ref.
  *  We don't import from the package's deep dist/ path because it's an internal
@@ -31,6 +33,7 @@ export interface TimelineState {
 }
 
 interface RemotionTimelineProps {
+  remotionNodeId: string;
   manifest: VideoGraphManifest;
   currentFrame: number;
   onScrub: (frame: number) => void;
@@ -64,24 +67,43 @@ const EFFECTS: Record<string, TimelineEffect> = {
 };
 
 export function RemotionTimeline({
+  remotionNodeId,
   manifest,
   onScrub,
   timelineState,
 }: RemotionTimelineProps) {
   const editorData = useMemo(() => manifestToEditorData(manifest), [manifest]);
 
+  const updateTrackItemTime = useGraphStore((s) => s.updateTrackItemTime);
+  const setSelectedTrackItem = useUIStore((s) => s.setSelectedTrackItem);
+  const selectedTrackItemId = useUIStore((s) => s.selectedTrackItemId);
+
+  // data-selected-id is a hook for T10 CSS styling — gives the selected track
+  // item's id to the DOM so the row highlight rule can target it.
   return (
-    <XzdarcyTimeline
-      ref={timelineState}
-      editorData={editorData}
-      effects={EFFECTS}
-      autoScroll
-      onChange={() => {
-        // Mutation routing (drag-to-trim, drag-to-move) lands in Plan 2.1.b.
-        // For Phase 2.1.a the timeline is read-only — Player drives playback.
-      }}
-      onCursorDragEnd={(time: number) => onScrub(Math.round(time * DEFAULT_FPS))}
-      style={{ height: '100%' }}
-    />
+    <div style={{ height: '100%' }} data-selected-id={selectedTrackItemId ?? ''}>
+      <XzdarcyTimeline
+        ref={timelineState}
+        editorData={editorData}
+        effects={EFFECTS}
+        autoScroll
+        onClickAction={(_e, { action }) => {
+          setSelectedTrackItem(action.id);
+        }}
+        onActionMoveEnd={({ action, start }) => {
+          updateTrackItemTime(remotionNodeId, action.id, {
+            startFrame: Math.round(start * DEFAULT_FPS),
+          });
+        }}
+        onActionResizeEnd={({ action, start, end }) => {
+          updateTrackItemTime(remotionNodeId, action.id, {
+            startFrame: Math.round(start * DEFAULT_FPS),
+            durationInFrames: Math.round((end - start) * DEFAULT_FPS),
+          });
+        }}
+        onCursorDragEnd={(time: number) => onScrub(Math.round(time * DEFAULT_FPS))}
+        style={{ height: '100%' }}
+      />
+    </div>
   );
 }

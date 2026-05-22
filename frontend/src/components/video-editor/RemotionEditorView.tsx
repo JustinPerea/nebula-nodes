@@ -7,6 +7,9 @@ import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
 import { createEmptyManifest, DEFAULT_FPS, type VideoGraphManifest } from '../../types/video';
 import { RemotionComposition } from './RemotionComposition';
+import { RemotionEditorToolbar } from './RemotionEditorToolbar';
+import { RemotionPropertiesPanel } from './RemotionPropertiesPanel';
+import { useRemotionKeyboard } from './useRemotionKeyboard';
 import '../../styles/remotion-editor.css';
 
 export function RemotionEditorView() {
@@ -18,6 +21,12 @@ export function RemotionEditorView() {
   const node = useGraphStore((s) =>
     targetNodeId ? s.nodes.find((n) => n.id === targetNodeId) : null,
   );
+
+  // Keyboard shortcuts (Delete, Cmd+D). Hook is no-op when targetNodeId is null.
+  useRemotionKeyboard({
+    remotionNodeId: targetNodeId ?? '',
+    currentFrame,
+  });
 
   // Sync Player playback position → currentFrame state.
   // frameupdate fires every rendered frame with { detail: { frame } }.
@@ -67,6 +76,7 @@ export function RemotionEditorView() {
         <span className="remotion-editor-view__title">
           Remotion Composition · {targetNodeId}
         </span>
+        <RemotionEditorToolbar remotionNodeId={targetNodeId} />
         <span className="remotion-editor-view__meta">
           {manifest.timeline.length} layer{manifest.timeline.length === 1 ? '' : 's'}
         </span>
@@ -92,8 +102,12 @@ export function RemotionEditorView() {
           acknowledgeRemotionLicense
         />
       </div>
+      <aside className="remotion-editor-view__panel" data-testid="remotion-panel-slot">
+        <RemotionPropertiesPanel remotionNodeId={targetNodeId} />
+      </aside>
       <div className="remotion-editor-view__timeline" data-testid="remotion-timeline-slot">
         <RemotionTimeline
+          remotionNodeId={targetNodeId}
           manifest={manifest}
           currentFrame={currentFrame}
           onScrub={(frame) => playerRef.current?.seekTo(frame)}
