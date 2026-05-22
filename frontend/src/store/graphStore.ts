@@ -877,7 +877,53 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         }
       }
     }
-    set((state) => ({ edges: applyEdgeChanges(changes, state.edges) }));
+    set((state) => {
+      const nextEdges = applyEdgeChanges(changes, state.edges);
+
+      // Rule B-2: For each removed edge whose targetHandle === 'sources' and
+      // whose target is a RemotionNode, prune any TrackItem whose sourceNodeId
+      // matches the edge's source node.
+      const removedEdges = changes
+        .filter((c): c is { id: string; type: 'remove' } => c.type === 'remove')
+        .map((c) => state.edges.find((e) => e.id === c.id))
+        .filter((e): e is NonNullable<typeof e> => !!e);
+
+      const sourceIdsLosingConnection: string[] = [];
+      for (const edge of removedEdges) {
+        if (edge.targetHandle !== 'sources') continue;
+        const targetNode = state.nodes.find((n) => n.id === edge.target);
+        if (targetNode?.data?.definitionId !== 'remotion-node') continue;
+        sourceIdsLosingConnection.push(edge.source);
+      }
+
+      if (sourceIdsLosingConnection.length === 0) {
+        return { edges: nextEdges };
+      }
+
+      const updatedNodes = state.nodes.map((n) => {
+        if (n.data?.definitionId !== 'remotion-node') return n;
+        const currentParams = (n.data.params ?? {}) as Record<string, unknown>;
+        const manifest = currentParams.manifest as VideoGraphManifest | undefined;
+        if (!manifest) return n;
+
+        let nextManifest = manifest;
+        let anyChange = false;
+        for (const sourceId of sourceIdsLosingConnection) {
+          const result = pruneTrackItemsForDeletedNode(nextManifest, sourceId);
+          if (result.changed) {
+            nextManifest = result.manifest;
+            anyChange = true;
+          }
+        }
+        if (!anyChange) return n;
+        return {
+          ...n,
+          data: { ...n.data, params: { ...currentParams, manifest: nextManifest } },
+        };
+      });
+
+      return { edges: nextEdges, nodes: updatedNodes };
+    });
   },
 
   onConnect: (connection) => {
