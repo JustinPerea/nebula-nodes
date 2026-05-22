@@ -56,7 +56,7 @@ body.app-slava-restraint .remotion-editor-view__meta {
 }
 
 body.app-slava-restraint .remotion-editor-view__player {
-  background: #000;
+  background: var(--sr-canvas);
   display: grid;
   place-items: center;
 }
@@ -67,7 +67,9 @@ body.app-slava-restraint .remotion-editor-view__timeline {
   overflow: auto;
 }
 
-body.app-slava-restraint .remotion-editor-view__error {
+body.app-slava-restraint .remotion-editor-view__empty-state {
+  grid-column: 1 / -1;
+  grid-row: 1 / -1;
   display: grid;
   place-items: center;
   padding: 40px;

@@ -13,7 +13,7 @@ export function RemotionEditorView() {
   if (!targetNodeId || !node) {
     return (
       <div className="remotion-editor-view">
-        <div className="remotion-editor-view__error">
+        <div className="remotion-editor-view__empty-state">
           No RemotionNode selected.{' '}
           <button type="button" onClick={exitRemotionEditor}>
             Back to canvas
