@@ -1248,7 +1248,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     if (!manifest) return;
     if (!manifest.timeline.some((t) => t.id === trackItemId)) return;
 
-    pushUndo(set, get);
+    maybePushUndo(set, get, remotionNodeId);
 
     set((s) => {
       const updatedNodes = s.nodes.map((n) => {
