@@ -1,8 +1,8 @@
 import { useRef, useEffect, useState } from 'react';
 import { Player } from '@remotion/player';
 import type { PlayerRef } from '@remotion/player';
-import type { TimelineState } from '@xzdarcy/react-timeline-editor/dist/interface/timeline';
 import { RemotionTimeline } from './RemotionTimeline';
+import type { TimelineState } from './RemotionTimeline';
 import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
 import { createEmptyManifest, DEFAULT_FPS, type VideoGraphManifest } from '../../types/video';
@@ -27,7 +27,12 @@ export function RemotionEditorView() {
   useEffect(() => {
     const player = playerRef.current;
     if (!player) return;
-    const handler = () => setCurrentFrame(player.getCurrentFrame());
+    const handler = () => {
+      const frame = player.getCurrentFrame();
+      setCurrentFrame(frame);
+      // Drive the xzdarcy timeline cursor to match the Player's current frame.
+      timelineStateRef.current?.setTime(frame / DEFAULT_FPS);
+    };
     player.addEventListener('frameupdate', handler);
     return () => player.removeEventListener('frameupdate', handler);
   }, []); // empty — runs once after mount; playerRef.current is stable post-mount

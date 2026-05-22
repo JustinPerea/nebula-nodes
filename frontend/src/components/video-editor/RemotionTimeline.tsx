@@ -1,13 +1,34 @@
 import { useMemo } from 'react';
 import { Timeline as XzdarcyTimeline } from '@xzdarcy/react-timeline-editor';
-import type { TimelineState } from '@xzdarcy/react-timeline-editor/dist/interface/timeline';
 import type {
   TimelineRow,
-  TimelineAction,
   TimelineEffect,
+  Emitter,
+  EventTypes,
 } from '@xzdarcy/timeline-engine';
 import type { VideoGraphManifest, TrackItem } from '../../types/video';
 import { DEFAULT_FPS } from '../../types/video';
+
+/** Local structural typing for the @xzdarcy timeline imperative ref.
+ *  We don't import from the package's deep dist/ path because it's an internal
+ *  build artifact — restructuring on a patch release would silently break us.
+ *  All fields are derived from the package's public surface types only
+ *  (Emitter/EventTypes come from @xzdarcy/timeline-engine public index). */
+export interface TimelineState {
+  target: HTMLElement | null;
+  listener: Emitter<EventTypes>;
+  isPlaying: boolean;
+  isPaused: boolean;
+  setTime: (time: number) => void;
+  getTime: () => number;
+  setPlayRate: (rate: number) => void;
+  getPlayRate: () => number;
+  reRender: () => void;
+  play: (param: { toTime?: number; autoEnd?: boolean; runActionIds?: string[] }) => boolean;
+  pause: () => void;
+  setScrollLeft: (val: number) => void;
+  setScrollTop: (val: number) => void;
+}
 
 interface RemotionTimelineProps {
   manifest: VideoGraphManifest;
@@ -27,7 +48,7 @@ function manifestToEditorData(manifest: VideoGraphManifest): TimelineRow[] {
         effectId: item.componentType,
         flexible: true,
         movable: true,
-      } as TimelineAction,
+      },
     ],
   }));
 }
