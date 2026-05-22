@@ -158,3 +158,46 @@ describe('graphStore — updateTrackItemProps', () => {
     expect(manifest.timeline[0].props.text).toBe('hello');
   });
 });
+
+describe('graphStore — updateTrackItemTime', () => {
+  beforeEach(() => {
+    useGraphStore.setState(INITIAL_GRAPH_STATE, true);
+  });
+
+  it('updates startFrame only when timePatch has only startFrame', () => {
+    seedRemotionWithItem(makeTrackItem({ time: { startFrame: 0, durationInFrames: 60 } }));
+    useGraphStore.getState().updateTrackItemTime('r1', 't1', { startFrame: 90 });
+
+    const state = useGraphStore.getState();
+    const remotion = state.nodes.find((n) => n.id === 'r1');
+    const manifest = (remotion?.data.params as { manifest: { timeline: TrackItem[] } }).manifest;
+    expect(manifest.timeline[0].time.startFrame).toBe(90);
+    expect(manifest.timeline[0].time.durationInFrames).toBe(60);
+  });
+
+  it('updates both startFrame and durationInFrames in one patch', () => {
+    seedRemotionWithItem(makeTrackItem({ time: { startFrame: 0, durationInFrames: 60 } }));
+    useGraphStore
+      .getState()
+      .updateTrackItemTime('r1', 't1', { startFrame: 30, durationInFrames: 120 });
+
+    const state = useGraphStore.getState();
+    const remotion = state.nodes.find((n) => n.id === 'r1');
+    const manifest = (remotion?.data.params as { manifest: { timeline: TrackItem[] } }).manifest;
+    expect(manifest.timeline[0].time.startFrame).toBe(30);
+    expect(manifest.timeline[0].time.durationInFrames).toBe(120);
+  });
+
+  it('rounds non-integer frames to integers (timeline edits arrive in seconds * fps)', () => {
+    seedRemotionWithItem(makeTrackItem());
+    useGraphStore
+      .getState()
+      .updateTrackItemTime('r1', 't1', { startFrame: 30.7, durationInFrames: 60.4 });
+
+    const state = useGraphStore.getState();
+    const remotion = state.nodes.find((n) => n.id === 'r1');
+    const manifest = (remotion?.data.params as { manifest: { timeline: TrackItem[] } }).manifest;
+    expect(manifest.timeline[0].time.startFrame).toBe(31);
+    expect(manifest.timeline[0].time.durationInFrames).toBe(60);
+  });
+});

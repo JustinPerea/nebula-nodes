@@ -207,6 +207,11 @@ interface GraphState {
     trackItemId: string,
     propsPatch: Record<string, unknown>,
   ) => void;
+  updateTrackItemTime: (
+    remotionNodeId: string,
+    trackItemId: string,
+    timePatch: Partial<{ startFrame: number; durationInFrames: number }>,
+  ) => void;
   executeGraph: () => Promise<void>;
   resetExecution: () => void;
   handleExecutionEvent: (event: ExecutionEvent) => void;
@@ -1262,6 +1267,50 @@ export const useGraphStore = create<GraphState>((set, get) => ({
               ? { ...t, props: { ...t.props, ...propsPatch } }
               : t,
           ),
+        };
+        return {
+          ...n,
+          data: { ...n.data, params: { ...params, manifest: nextManifest } },
+        };
+      });
+      return { nodes: updatedNodes };
+    });
+  },
+
+  updateTrackItemTime: (remotionNodeId, trackItemId, timePatch) => {
+    const state = get();
+    const remotion = state.nodes.find((n) => n.id === remotionNodeId);
+    if (!remotion) return;
+    const currentParams = (remotion.data.params ?? {}) as Record<string, unknown>;
+    const manifest = currentParams.manifest as VideoGraphManifest | undefined;
+    if (!manifest) return;
+    if (!manifest.timeline.some((t) => t.id === trackItemId)) return;
+
+    maybePushUndo(set, get, remotionNodeId);
+
+    set((s) => {
+      const updatedNodes = s.nodes.map((n) => {
+        if (n.id !== remotionNodeId) return n;
+        const params = (n.data.params ?? {}) as Record<string, unknown>;
+        const m = params.manifest as VideoGraphManifest;
+        const nextManifest: VideoGraphManifest = {
+          ...m,
+          timeline: m.timeline.map((t) => {
+            if (t.id !== trackItemId) return t;
+            return {
+              ...t,
+              time: {
+                startFrame:
+                  timePatch.startFrame !== undefined
+                    ? Math.round(timePatch.startFrame)
+                    : t.time.startFrame,
+                durationInFrames:
+                  timePatch.durationInFrames !== undefined
+                    ? Math.max(1, Math.round(timePatch.durationInFrames))
+                    : t.time.durationInFrames,
+              },
+            };
+          }),
         };
         return {
           ...n,
