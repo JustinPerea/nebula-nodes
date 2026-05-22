@@ -9,7 +9,7 @@ vi.mock('../../src/store/uiStore', () => ({
     selector({ enterRemotionEditor: vi.fn() }),
 }));
 
-function mkProps(overrides: Partial<NodeProps> = {}): NodeProps {
+function mkEmptyProps(overrides: Partial<NodeProps> = {}): NodeProps {
   return {
     id: 'remotion-1',
     type: 'remotionNode',
@@ -19,11 +19,21 @@ function mkProps(overrides: Partial<NodeProps> = {}): NodeProps {
   } as unknown as NodeProps;
 }
 
+function mkPropsWithLayer(timeline: object[], overrides: Partial<NodeProps> = {}): NodeProps {
+  return {
+    id: 'remotion-1',
+    type: 'remotionNode',
+    selected: false,
+    data: { params: { manifest: { graph: { nodes: [], edges: [] }, timeline } } },
+    ...overrides,
+  } as unknown as NodeProps;
+}
+
 describe('RemotionNode card', () => {
   it('renders title and empty-state summary', () => {
     render(
       <ReactFlowProvider>
-        <RemotionNode {...mkProps()} />
+        <RemotionNode {...mkEmptyProps()} />
       </ReactFlowProvider>,
     );
     expect(screen.getByText(/Remotion Composition/i)).toBeInTheDocument();
@@ -31,30 +41,21 @@ describe('RemotionNode card', () => {
   });
 
   it('renders layer count when manifest has TrackItems', () => {
-    const props = mkProps({
-      data: {
-        params: {
-          manifest: {
-            graph: { nodes: [], edges: [] },
-            timeline: [
-              { id: 't1', sourceNodeId: 's1', componentType: 'TextNode', time: { startFrame: 0, durationInFrames: 60 }, spatial: { x: 0, y: 0, z: 0, scale: [1, 1, 1], rotation: [0, 0, 0] }, keyframes: {}, props: {} },
-            ],
-          },
-        },
-      },
-    });
+    const timeline = [
+      { id: 't1', sourceNodeId: 's1', componentType: 'TextNode', time: { startFrame: 0, durationInFrames: 60 }, spatial: { x: 0, y: 0, z: 0, scale: [1, 1, 1], rotation: [0, 0, 0] }, keyframes: {}, props: {} },
+    ];
     render(
       <ReactFlowProvider>
-        <RemotionNode {...props} />
+        <RemotionNode {...mkPropsWithLayer(timeline)} />
       </ReactFlowProvider>,
     );
-    expect(screen.getByText(/1 layer/i)).toBeInTheDocument();
+    expect(screen.getByText(/1 layer · 60f/i)).toBeInTheDocument();
   });
 
   it('shows Open Editor button when selected', () => {
     render(
       <ReactFlowProvider>
-        <RemotionNode {...mkProps({ selected: true })} />
+        <RemotionNode {...mkEmptyProps({ selected: true })} />
       </ReactFlowProvider>,
     );
     expect(screen.getByRole('button', { name: /open editor/i })).toBeInTheDocument();

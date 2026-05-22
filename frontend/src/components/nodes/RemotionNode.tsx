@@ -10,7 +10,7 @@ interface RemotionNodeData {
 
 export function RemotionNode({ id, data, selected }: NodeProps) {
   const enterRemotionEditor = useUIStore((s) => s.enterRemotionEditor);
-  const params = ((data as RemotionNodeData).params ?? {}) as RemotionNodeData['params'];
+  const params = (data as RemotionNodeData).params;
   const manifest = params?.manifest;
   const layers = manifest?.timeline ?? [];
   const layerCount = layers.length;
