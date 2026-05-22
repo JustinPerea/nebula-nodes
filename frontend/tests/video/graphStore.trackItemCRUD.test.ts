@@ -73,3 +73,42 @@ describe('graphStore — deleteTrackItem', () => {
     expect(useGraphStore.getState().nodes).toHaveLength(0);
   });
 });
+
+describe('graphStore — duplicateTrackItemAtPlayhead', () => {
+  beforeEach(() => {
+    useGraphStore.setState(INITIAL_GRAPH_STATE, true);
+  });
+
+  it('clones the TrackItem at the given frame and spawns a new source node', () => {
+    seedRemotionWithItem(makeTrackItem({ time: { startFrame: 0, durationInFrames: 60 } }));
+    useGraphStore.getState().duplicateTrackItemAtPlayhead('r1', 't1', 45);
+
+    const state = useGraphStore.getState();
+    const remotion = state.nodes.find((n) => n.id === 'r1');
+    const manifest = (remotion?.data.params as { manifest: { timeline: TrackItem[] } }).manifest;
+    expect(manifest.timeline).toHaveLength(2);
+
+    const clone = manifest.timeline.find((t) => t.id !== 't1')!;
+    expect(clone.time.startFrame).toBe(45);
+    expect(clone.time.durationInFrames).toBe(60);
+    expect(clone.componentType).toBe('TextNode');
+    expect(clone.props.text).toBe('hello');
+    expect(clone.sourceNodeId).not.toBe('src-1');
+
+    // The spawned source canvas node exists and matches the original's definitionId
+    const spawnedSource = state.nodes.find((n) => n.id === clone.sourceNodeId);
+    expect(spawnedSource).toBeDefined();
+    expect(spawnedSource?.data.definitionId).toBe('text-input');
+  });
+
+  it('no-ops if the TrackItem does not exist', () => {
+    seedRemotionWithItem(makeTrackItem());
+    useGraphStore.getState().duplicateTrackItemAtPlayhead('r1', 'does-not-exist', 30);
+
+    const state = useGraphStore.getState();
+    expect(state.nodes).toHaveLength(2);
+    const remotion = state.nodes.find((n) => n.id === 'r1');
+    const manifest = (remotion?.data.params as { manifest: { timeline: TrackItem[] } }).manifest;
+    expect(manifest.timeline).toHaveLength(1);
+  });
+});
