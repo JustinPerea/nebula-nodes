@@ -62,6 +62,7 @@ interface UIState {
   editorTargetNodeId: string | null;
   // Phase 2 Remotion editor
   remotionEditorTargetNodeId: string | null;
+  selectedTrackItemId: string | null;
   selectedClipId: string | null;
   playheadOutputTime: number;
   timelineZoom: number;
@@ -105,6 +106,7 @@ interface UIState {
   exitEditor: () => void;
   enterRemotionEditor: (remotionNodeId: string) => void;
   exitRemotionEditor: () => void;
+  setSelectedTrackItem: (id: string | null) => void;
   setSelectedClip: (id: string | null) => void;
   setPlayheadOutputTime: (t: number) => void;
   setIsPlaying: (playing: boolean) => void;
@@ -141,6 +143,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   viewMode: 'canvas',
   editorTargetNodeId: null,
   remotionEditorTargetNodeId: null,
+  selectedTrackItemId: null,
   selectedClipId: null,
   playheadOutputTime: 0,
   timelineZoom: 1,
@@ -200,8 +203,13 @@ export const useUIStore = create<UIState>((set, get) => ({
     set({
       viewMode: 'canvas',
       remotionEditorTargetNodeId: null,
+      selectedTrackItemId: null,
       isPlaying: false,
     });
+  },
+
+  setSelectedTrackItem: (id) => {
+    set({ selectedTrackItemId: id });
   },
 
   setSelectedClip: (id) => set({ selectedClipId: id }),
