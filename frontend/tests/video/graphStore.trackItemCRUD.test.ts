@@ -131,3 +131,30 @@ describe('graphStore — duplicateTrackItemAtPlayhead', () => {
     expect(original.spatial.scale[0]).toBe(1);
   });
 });
+
+describe('graphStore — updateTrackItemProps', () => {
+  beforeEach(() => {
+    useGraphStore.setState(INITIAL_GRAPH_STATE, true);
+  });
+
+  it('shallow-merges propsPatch into the existing props', () => {
+    seedRemotionWithItem(makeTrackItem({ props: { text: 'hello', fontSize: 64 } }));
+    useGraphStore.getState().updateTrackItemProps('r1', 't1', { text: 'world' });
+
+    const state = useGraphStore.getState();
+    const remotion = state.nodes.find((n) => n.id === 'r1');
+    const manifest = (remotion?.data.params as { manifest: { timeline: TrackItem[] } }).manifest;
+    expect(manifest.timeline[0].props.text).toBe('world');
+    expect(manifest.timeline[0].props.fontSize).toBe(64); // preserved
+  });
+
+  it('no-ops if the TrackItem does not exist', () => {
+    seedRemotionWithItem(makeTrackItem());
+    useGraphStore.getState().updateTrackItemProps('r1', 'does-not-exist', { text: 'world' });
+
+    const state = useGraphStore.getState();
+    const remotion = state.nodes.find((n) => n.id === 'r1');
+    const manifest = (remotion?.data.params as { manifest: { timeline: TrackItem[] } }).manifest;
+    expect(manifest.timeline[0].props.text).toBe('hello');
+  });
+});
