@@ -1363,6 +1363,23 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     params: [],
   },
 
+  'remotion-node': {
+    id: 'remotion-node',
+    displayName: 'Remotion Composition',
+    category: 'utility',
+    apiProvider: 'utility',
+    apiEndpoint: '',
+    envKeyName: [],
+    executionPattern: 'async-poll',
+    inputPorts: [
+      { id: 'sources', label: 'Track Sources', dataType: 'Any', required: false },
+    ],
+    outputPorts: [
+      { id: 'video', label: 'Rendered Video', dataType: 'Video', required: false },
+    ],
+    params: [],
+  },
+
   'preview': {
     id: 'preview',
     displayName: 'Preview',

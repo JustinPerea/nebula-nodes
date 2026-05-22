@@ -28,13 +28,3 @@ def test_remotion_node_ports():
     assert entry["outputPorts"][0]["id"] == "video"
     assert entry["outputPorts"][0]["dataType"] == "Video"
 
-def test_remotion_node_manifest_param():
-    with open(NODE_DEFS_PATH) as f:
-        defs = json.load(f)
-    entry = defs["remotion-node"]
-    # Manifest param is the serialized VideoGraphManifest, default is empty
-    params = entry["params"]
-    manifest_param = next((p for p in params if p["id"] == "manifest"), None)
-    assert manifest_param is not None, "manifest param missing"
-    assert manifest_param["type"] == "json"
-    assert manifest_param["default"] == {"graph": {"nodes": [], "edges": []}, "timeline": []}

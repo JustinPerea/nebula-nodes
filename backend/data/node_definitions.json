@@ -2381,14 +2381,7 @@
         "required": false
       }
     ],
-    "params": [
-      {
-        "id": "manifest",
-        "label": "Manifest",
-        "type": "json",
-        "default": {"graph": {"nodes": [], "edges": []}, "timeline": []}
-      }
-    ]
+    "params": []
   },
   "preview": {
     "id": "preview",
