@@ -20,7 +20,11 @@ const VIEWPORT = { width: 1920, height: 1080 };
 const OUT_DIR = join(REPO_ROOT, 'output', 'puppeteer-driver', 'remotion-foundation-smoke');
 
 const args = parseArgs(process.argv.slice(2));
-const HEADLESS = args.headless === 'true' || args.headless === true;
+// Use 'shell' (chrome-headless-shell) instead of the default 'new' headless
+// mode. The 'new' mode (--headless=new) stalls Page.captureScreenshot on
+// macOS when Remotion's @remotion/player compositor is active; 'shell' mode
+// uses the older --headless flag which has reliable screenshot support.
+const HEADLESS = (args.headless === 'true' || args.headless === true) ? 'shell' : false;
 
 async function main() {
   await mkdir(OUT_DIR, { recursive: true });
@@ -29,12 +33,24 @@ async function main() {
   const browser = await puppeteer.launch({
     headless: HEADLESS,
     defaultViewport: VIEWPORT,
-    args: [`--window-size=${VIEWPORT.width},${VIEWPORT.height}`],
+    protocolTimeout: 120000,
+    args: [
+      `--window-size=${VIEWPORT.width},${VIEWPORT.height}`,
+      // Software rendering — prevents CDP screenshot timeouts when Remotion's
+      // @remotion/player compositor blocks the GPU pipeline in headless mode.
+      '--use-gl=swiftshader',
+      '--disable-gpu-sandbox',
+      '--disable-software-rasterizer',
+      '--no-sandbox',
+    ],
   });
 
   try {
     const page = await browser.newPage();
     await page.setViewport(VIEWPORT);
+    // Raise the per-page default so screenshot / waitForSelector calls don't
+    // time out when Remotion's player renders frames in software mode.
+    page.setDefaultTimeout(60000);
     page.on('console', (msg) => {
       const txt = msg.text();
       if (txt.includes('[smoke]') || msg.type() === 'error' || msg.type() === 'warn') {
@@ -47,14 +63,40 @@ async function main() {
     // Vite 8 re-optimizes deps lazily on the first headless browser visit, issuing
     // 504s for in-flight chunks while rolldown bundles them. Strategy: retry
     // goto+reload up to 4 times (each attempt either completes the optimization or
-    // gets closer) until .chat-panel is present, then proceed.
+    // gets closer) until .canvas-tabs-wrap + __nebulaGraphStore are stable.
     log('nav', URL);
-    await page.goto(URL, { waitUntil: 'domcontentloaded', timeout: 30000 });
-    // Wait for the React tree to mount. Use .canvas-tabs-wrap which is always
-    // present regardless of panel visibility state. Then confirm the graph store
-    // is attached (set by App.tsx on mount).
-    await page.waitForSelector('.canvas-tabs-wrap', { timeout: 60000 });
-    await page.waitForFunction(() => !!window.__nebulaGraphStore, { timeout: 5000 });
+    let step0Ready = false;
+    for (let attempt = 0; attempt < 4 && !step0Ready; attempt++) {
+      if (attempt > 0) {
+        log('nav', `retry attempt ${attempt}`);
+        await page.goto(URL, { waitUntil: 'domcontentloaded', timeout: 30000 });
+      } else {
+        await page.goto(URL, { waitUntil: 'domcontentloaded', timeout: 30000 });
+      }
+      try {
+        // Wait for the React tree to mount. Use .canvas-tabs-wrap which is always
+        // present regardless of panel visibility state.
+        await page.waitForSelector('.canvas-tabs-wrap', { timeout: 30000 });
+        // Confirm the graph store is attached (set by App.tsx on mount) and that
+        // the page hasn't been reloaded by Vite dep-optimization mid-wait.
+        await page.waitForFunction(() => !!window.__nebulaGraphStore, { timeout: 8000 });
+        // Small buffer to let any pending Vite HMR settle before evaluating.
+        await sleep(1500);
+        // Re-check the store is still present (guards against a reload between
+        // waitForFunction and the evaluate below).
+        const storePresent = await page.evaluate(() => !!window.__nebulaGraphStore).catch(() => false);
+        if (!storePresent) {
+          log('nav', `attempt ${attempt}: store disappeared after settle — retrying`);
+          continue;
+        }
+        step0Ready = true;
+      } catch (e) {
+        log('nav', `attempt ${attempt}: ${e.message} — retrying`);
+      }
+    }
+    if (!step0Ready) {
+      throw new Error('[smoke] Step 0: could not stabilize page after 4 attempts');
+    }
     await page.evaluate(async () => {
       try { await fetch('http://localhost:8000/api/graph', { method: 'DELETE' }); }
       catch (e) { console.warn('[smoke] backend clear failed', String(e)); }
@@ -164,7 +206,95 @@ async function main() {
     }
     await page.screenshot({ path: join(OUT_DIR, 'step8-rule-b-pruned.png') });
 
-    log('done', 'all 8 steps passed');
+    // Step 9 — Re-open editor on the existing RemotionNode
+    // After step 8 the remotion-editor-view is still open; go back to canvas first.
+    await page.click('.remotion-editor-view__back');
+    await page.waitForSelector('.react-flow', { timeout: 3000 });
+    await page.waitForFunction(() => !!document.querySelector('.remotion-node'), { timeout: 5000 });
+    await page.click('.remotion-node');
+    await page.click('.remotion-node__open');
+    await sleep(400);
+
+    // Step 10 — Toolbar UI: click + Text to add a TrackItem
+    log('test-10', 'toolbar + Text click');
+    await page.waitForSelector('.remotion-editor-toolbar', { timeout: 2000 });
+    const addButtons = await page.$$('.remotion-editor-toolbar__add');
+    if (addButtons.length !== 4) {
+      throw new Error(`[smoke] Toolbar add buttons expected 4, got ${addButtons.length}`);
+    }
+    // Click the first add button (+ Text)
+    await addButtons[0].click();
+    await sleep(500);
+    const afterAdd = await page.evaluate(() => {
+      const s = window.__nebulaGraphStore.getState();
+      const remotion = s.nodes.find((n) => n.data.definitionId === 'remotion-node');
+      return remotion?.data.params?.manifest?.timeline?.length ?? 0;
+    });
+    if (afterAdd !== 1) {
+      throw new Error(`[smoke] After toolbar + Text, timeline length expected 1, got ${afterAdd}`);
+    }
+    await page.screenshot({ path: join(OUT_DIR, 'step10-toolbar-add-text.png') });
+
+    // Step 11 — Select the TrackItem by setting selection from store (the
+    // xzdarcy onClickAction wiring is exercised by users; programmatic
+    // selection is the assert path)
+    log('test-11', 'set selection + properties panel populates');
+    const trackId = await page.evaluate(() => {
+      const s = window.__nebulaGraphStore.getState();
+      const remotion = s.nodes.find((n) => n.data.definitionId === 'remotion-node');
+      const tl = remotion?.data.params?.manifest?.timeline ?? [];
+      return tl[0]?.id;
+    });
+    await page.evaluate((id) => {
+      window.__nebulaUIStore?.getState?.().setSelectedTrackItem?.(id);
+    }, trackId);
+    await sleep(300);
+    await page.screenshot({ path: join(OUT_DIR, 'step11-selection.png') });
+
+    // Step 12 — Delete via Delete key (keyboard hook)
+    log('test-12', 'press Delete to remove selected');
+    await page.keyboard.press('Delete');
+    await sleep(500);
+    const afterDel = await page.evaluate(() => {
+      const s = window.__nebulaGraphStore.getState();
+      const remotion = s.nodes.find((n) => n.data.definitionId === 'remotion-node');
+      return remotion?.data.params?.manifest?.timeline?.length ?? -1;
+    });
+    if (afterDel !== 0) {
+      throw new Error(`[smoke] After Delete, timeline length expected 0, got ${afterDel}`);
+    }
+    await page.screenshot({ path: join(OUT_DIR, 'step12-deleted.png') });
+
+    // Step 13 — Toolbar add, then Cmd+D to duplicate at current frame
+    log('test-13', 'add via toolbar, then Cmd+D');
+    await (await page.$$('.remotion-editor-toolbar__add'))[0].click(); // + Text
+    await sleep(400);
+    // Select it (same store-poke as step 11)
+    const newTrackId = await page.evaluate(() => {
+      const s = window.__nebulaGraphStore.getState();
+      const remotion = s.nodes.find((n) => n.data.definitionId === 'remotion-node');
+      return remotion?.data.params?.manifest?.timeline[0]?.id;
+    });
+    await page.evaluate((id) => {
+      window.__nebulaUIStore?.getState?.().setSelectedTrackItem?.(id);
+    }, newTrackId);
+    await sleep(200);
+    // Fire Cmd+D (on macOS this is Meta+D; the hook accepts both Meta and Ctrl)
+    await page.keyboard.down('Meta');
+    await page.keyboard.press('d');
+    await page.keyboard.up('Meta');
+    await sleep(500);
+    const afterDup = await page.evaluate(() => {
+      const s = window.__nebulaGraphStore.getState();
+      const remotion = s.nodes.find((n) => n.data.definitionId === 'remotion-node');
+      return remotion?.data.params?.manifest?.timeline?.length ?? -1;
+    });
+    if (afterDup !== 2) {
+      throw new Error(`[smoke] After Cmd+D, timeline length expected 2, got ${afterDup}`);
+    }
+    await page.screenshot({ path: join(OUT_DIR, 'step13-duplicated.png') });
+
+    log('done', 'all 13 steps passed');
   } finally {
     await browser.close();
   }
