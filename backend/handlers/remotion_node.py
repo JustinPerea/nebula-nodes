@@ -4,7 +4,12 @@ No-op for Phase 2.1 — Remotion preview happens client-side via @remotion/playe
 The handler validates the manifest shape and echoes it through as the node's
 output so downstream consumers receive a typed value.
 """
-from typing import Any
+from __future__ import annotations
+
+from typing import Any, Awaitable, Callable
+
+from models.events import ExecutionEvent
+from models.graph import GraphNode, PortValueDict
 
 REQUIRED_TOP_LEVEL_KEYS = {"graph", "timeline"}
 REQUIRED_GRAPH_KEYS = {"nodes", "edges"}
@@ -27,8 +32,15 @@ def _validate_manifest(manifest: Any) -> None:
         raise ValueError("manifest.timeline must be a list")
 
 
-async def handle_remotion_node(node: dict, inputs: dict, api_keys: dict, emit=None) -> dict:
-    params = node.get("params") or {}
-    manifest = params.get("manifest") or EMPTY_MANIFEST
+async def handle_remotion_node(
+    node: GraphNode,
+    inputs: dict[str, PortValueDict],
+    api_keys: dict[str, str],
+    emit: Callable[[ExecutionEvent], Awaitable[None]] | None = None,
+) -> dict[str, Any]:
+    params = node.params
+    manifest = params.get("manifest")
+    if manifest is None:
+        manifest = EMPTY_MANIFEST
     _validate_manifest(manifest)
     return {"video": None, "manifest": manifest}
