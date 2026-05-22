@@ -35,6 +35,16 @@ function validateTrackItem(item: unknown, index: number): string | null {
     return `timeline[${index}].time.durationInFrames must be number`;
   }
   if (!isObject(item.spatial)) return `timeline[${index}].spatial missing`;
+  const spatial = item.spatial as Record<string, unknown>;
+  if (typeof spatial.x !== 'number') return `timeline[${index}].spatial.x must be number`;
+  if (typeof spatial.y !== 'number') return `timeline[${index}].spatial.y must be number`;
+  if (typeof spatial.z !== 'number') return `timeline[${index}].spatial.z must be number`;
+  if (!Array.isArray(spatial.scale) || spatial.scale.length !== 3 || !spatial.scale.every((n) => typeof n === 'number')) {
+    return `timeline[${index}].spatial.scale must be [number, number, number]`;
+  }
+  if (!Array.isArray(spatial.rotation) || spatial.rotation.length !== 3 || !spatial.rotation.every((n) => typeof n === 'number')) {
+    return `timeline[${index}].spatial.rotation must be [number, number, number]`;
+  }
   if (!isObject(item.keyframes)) return `timeline[${index}].keyframes must be an object`;
   if (!isObject(item.props)) return `timeline[${index}].props must be an object`;
   return null;

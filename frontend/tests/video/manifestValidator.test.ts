@@ -65,4 +65,40 @@ describe('validateManifest', () => {
     });
     expect(r.ok).toBe(false);
   });
+
+  it('rejects TrackItem with malformed spatial', () => {
+    const r = validateManifest({
+      graph: { nodes: [], edges: [] },
+      timeline: [
+        {
+          id: 't1',
+          sourceNodeId: 's1',
+          componentType: 'TextNode',
+          time: { startFrame: 0, durationInFrames: 60 },
+          spatial: {}, // missing x, y, z, scale, rotation
+          keyframes: {},
+          props: {},
+        },
+      ],
+    });
+    expect(r.ok).toBe(false);
+  });
+
+  it('rejects TrackItem with non-numeric spatial.scale', () => {
+    const r = validateManifest({
+      graph: { nodes: [], edges: [] },
+      timeline: [
+        {
+          id: 't1',
+          sourceNodeId: 's1',
+          componentType: 'TextNode',
+          time: { startFrame: 0, durationInFrames: 60 },
+          spatial: { x: 0, y: 0, z: 0, scale: ['a', 'b', 'c'], rotation: [0, 0, 0] },
+          keyframes: {},
+          props: {},
+        },
+      ],
+    });
+    expect(r.ok).toBe(false);
+  });
 });
