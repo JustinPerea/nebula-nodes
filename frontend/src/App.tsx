@@ -4,6 +4,7 @@ import type { Node, Edge } from '@xyflow/react';
 import { Canvas } from './components/Canvas';
 import { CanvasTabs } from './components/CanvasTabs';
 import { EditorView } from './components/editor/EditorView';
+import { RemotionEditorView } from './components/video-editor/RemotionEditorView';
 import { NodeLibrary } from './components/panels/NodeLibrary';
 import { Settings } from './components/panels/Settings';
 import { Toolbar } from './components/panels/Toolbar';
@@ -125,12 +126,23 @@ export default function App() {
   const viewMode = useUIStore((s) => s.viewMode);
 
   const isCanvas = viewMode === 'canvas';
+  const isRemotion = viewMode === 'remotion-editor';
+
+  let mainView;
+  if (isCanvas) {
+    mainView = <Canvas />;
+  } else if (isRemotion) {
+    mainView = <RemotionEditorView />;
+  } else {
+    mainView = <EditorView />;
+  }
+
   return (
     <ReactFlowProvider>
       <GraphHydrator />
       <ZoomManifestRecorder />
       <CanvasTabs />
-      {isCanvas ? <Canvas /> : <EditorView />}
+      {mainView}
       {/* Canvas-only chrome: library, inspector, settings, launchers, toolbar, agent log.
           The editor view is a focused workspace — only the pill control and chat remain. */}
       {isCanvas && <NodeLibrary />}
