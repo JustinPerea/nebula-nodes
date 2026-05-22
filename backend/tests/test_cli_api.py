@@ -193,6 +193,24 @@ class TestGraphEndpoints:
         assert node["type"] == "editNode"
         assert node["data"]["definitionId"] == "video-edit"
 
+    def test_export_remotion_node_as_remotionNode_type(self, client):
+        """graph/export must resolve remotion-node definitionId to type=='remotionNode'.
+
+        Regression guard: before the resolver branch was added, remotion-node
+        fell through to 'model-node', which rendered the wrong React card and
+        hid the manifest editor UI.
+        """
+        client.post("/api/graph/node", json={
+            "definitionId": "remotion-node",
+            "params": {},
+        })
+
+        resp = client.get("/api/graph/export")
+        assert resp.status_code == 200
+        node = resp.json()["nodes"][0]
+        assert node["type"] == "remotionNode"
+        assert node["data"]["definitionId"] == "remotion-node"
+
     def test_connect_nodes(self, client):
         client.post("/api/graph/node", json={"definitionId": "node-a", "params": {}})
         client.post("/api/graph/node", json={"definitionId": "node-b", "params": {}})
