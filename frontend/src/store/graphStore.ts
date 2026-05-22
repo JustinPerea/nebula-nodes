@@ -20,9 +20,10 @@ import {
 import { wsClient, type ExecutionEvent } from '../lib/wsClient';
 import { useUIStore } from './uiStore';
 import { clipSpeed, type EditClip } from '../lib/editor/virtualPlayback';
-import type { VideoGraphManifest } from '../types/video';
-import { createEmptyManifest } from '../types/video';
+import type { VideoGraphManifest, TrackItem } from '../types/video';
+import { createEmptyManifest, DEFAULT_FPS } from '../types/video';
 import { validateManifest } from '../lib/video/manifestValidator';
+import { componentTypeToCanvasDefId, pruneTrackItemsForDeletedNode } from '../lib/video/mirroring';
 
 /** Backend contract: video-edit's ffmpeg pipeline still operates on
  * sourceIn/sourceOut/speed even though the frontend stores `duration` as
@@ -191,6 +192,10 @@ interface GraphState {
   onConnect: (connection: Connection) => void;
   updateNodeData: (nodeId: string, data: Partial<NodeData>) => void;
   updateRemotionManifest: (nodeId: string, patch: Partial<VideoGraphManifest>) => void;
+  addTrackItemWithCanvasMirror: (
+    remotionNodeId: string,
+    partial: Partial<TrackItem> & Pick<TrackItem, 'componentType'>,
+  ) => void;
   executeGraph: () => Promise<void>;
   resetExecution: () => void;
   handleExecutionEvent: (event: ExecutionEvent) => void;
@@ -810,10 +815,35 @@ export const useGraphStore = create<GraphState>((set, get) => ({
           );
         }
       }
-      set((state) => ({
-        nodes: applyNodeChanges(changes, state.nodes) as Node<NodeData>[],
-        edges: state.edges.filter((e) => !removedIds.includes(e.source) && !removedIds.includes(e.target)),
-      }));
+      set((state) => {
+        const nextNodes = applyNodeChanges(changes, state.nodes) as Node<NodeData>[];
+        const nextEdges = state.edges.filter((e) => !removedIds.includes(e.source) && !removedIds.includes(e.target));
+
+        // Rule B-1: prune TrackItems whose sourceNodeId matches a removed node.
+        const updatedNodes = nextNodes.map((n) => {
+          if (n.data?.definitionId !== 'remotion-node') return n;
+          const currentParams = (n.data.params ?? {}) as Record<string, unknown>;
+          const manifest = currentParams.manifest as VideoGraphManifest | undefined;
+          if (!manifest) return n;
+
+          let nextManifest = manifest;
+          let anyChange = false;
+          for (const removedId of removedIds) {
+            const result = pruneTrackItemsForDeletedNode(nextManifest, removedId);
+            if (result.changed) {
+              nextManifest = result.manifest;
+              anyChange = true;
+            }
+          }
+          if (!anyChange) return n;
+          return {
+            ...n,
+            data: { ...n.data, params: { ...currentParams, manifest: nextManifest } },
+          };
+        });
+
+        return { nodes: updatedNodes, edges: nextEdges };
+      });
     } else {
       set((state) => ({ nodes: applyNodeChanges(changes, state.nodes) as Node<NodeData>[] }));
     }
@@ -847,7 +877,53 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         }
       }
     }
-    set((state) => ({ edges: applyEdgeChanges(changes, state.edges) }));
+    set((state) => {
+      const nextEdges = applyEdgeChanges(changes, state.edges);
+
+      // Rule B-2: For each removed edge whose targetHandle === 'sources' and
+      // whose target is a RemotionNode, prune any TrackItem whose sourceNodeId
+      // matches the edge's source node.
+      const removedEdges = changes
+        .filter((c): c is { id: string; type: 'remove' } => c.type === 'remove')
+        .map((c) => state.edges.find((e) => e.id === c.id))
+        .filter((e): e is NonNullable<typeof e> => !!e);
+
+      const sourceIdsLosingConnection: string[] = [];
+      for (const edge of removedEdges) {
+        if (edge.targetHandle !== 'sources') continue;
+        const targetNode = state.nodes.find((n) => n.id === edge.target);
+        if (targetNode?.data?.definitionId !== 'remotion-node') continue;
+        sourceIdsLosingConnection.push(edge.source);
+      }
+
+      if (sourceIdsLosingConnection.length === 0) {
+        return { edges: nextEdges };
+      }
+
+      const updatedNodes = state.nodes.map((n) => {
+        if (n.data?.definitionId !== 'remotion-node') return n;
+        const currentParams = (n.data.params ?? {}) as Record<string, unknown>;
+        const manifest = currentParams.manifest as VideoGraphManifest | undefined;
+        if (!manifest) return n;
+
+        let nextManifest = manifest;
+        let anyChange = false;
+        for (const sourceId of sourceIdsLosingConnection) {
+          const result = pruneTrackItemsForDeletedNode(nextManifest, sourceId);
+          if (result.changed) {
+            nextManifest = result.manifest;
+            anyChange = true;
+          }
+        }
+        if (!anyChange) return n;
+        return {
+          ...n,
+          data: { ...n.data, params: { ...currentParams, manifest: nextManifest } },
+        };
+      });
+
+      return { edges: nextEdges, nodes: updatedNodes };
+    });
   },
 
   onConnect: (connection) => {
@@ -978,6 +1054,76 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     }
     state.updateNodeData(nodeId, {
       params: { ...currentParams, manifest: validation.manifest },
+    });
+  },
+
+  addTrackItemWithCanvasMirror: (remotionNodeId, partial) => {
+    const state = get();
+    const remotion = state.nodes.find((n) => n.id === remotionNodeId);
+    if (!remotion) return;
+
+    const defId = componentTypeToCanvasDefId(partial.componentType);
+    if (!defId) {
+      console.warn(
+        `addTrackItemWithCanvasMirror: componentType ${partial.componentType} has no canvas mapping yet`,
+      );
+      return;
+    }
+
+    const newNodeId = uuidv4();
+    const offsetPosition = {
+      x: remotion.position.x - 280,
+      y: remotion.position.y,
+    };
+    const newCanvasNode: Node<NodeData> = {
+      id: newNodeId,
+      type: 'model-node',
+      position: offsetPosition,
+      data: {
+        definitionId: defId,
+        label: defId,
+        params: {},
+        state: 'idle' as const,
+        outputs: {},
+      },
+    };
+
+    const newItem: TrackItem = {
+      id: partial.id ?? uuidv4(),
+      sourceNodeId: newNodeId,
+      componentType: partial.componentType,
+      time: partial.time ?? { startFrame: 0, durationInFrames: DEFAULT_FPS * 2 },
+      spatial: partial.spatial ?? {
+        x: 0, y: 0, z: 0, scale: [1, 1, 1], rotation: [0, 0, 0],
+      },
+      keyframes: partial.keyframes ?? {},
+      props: partial.props ?? {},
+    };
+
+    // Push to undo history before mutating so Ctrl-Z reverses this action.
+    // Match the pattern used by addNode / updateNodeData.
+    pushUndo(set, get);
+
+    set((s) => {
+      const updatedNodes = s.nodes.map((n) => {
+        if (n.id !== remotionNodeId) return n;
+        const currentParams = (n.data.params ?? {}) as Record<string, unknown>;
+        const currentManifest =
+          (currentParams.manifest as VideoGraphManifest | undefined) ??
+          { graph: { nodes: [], edges: [] }, timeline: [] };
+        const nextManifest: VideoGraphManifest = {
+          ...currentManifest,
+          timeline: [...currentManifest.timeline, newItem],
+        };
+        return {
+          ...n,
+          data: {
+            ...n.data,
+            params: { ...currentParams, manifest: nextManifest },
+          },
+        };
+      });
+      return { nodes: [...updatedNodes, newCanvasNode as never] };
     });
   },
 

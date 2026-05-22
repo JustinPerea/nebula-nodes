@@ -18,6 +18,7 @@
   },
   "dependencies": {
     "@google/model-viewer": "^4.2.0",
+    "@remotion/media": "^4.0.464",
     "@remotion/player": "^4.0.464",
     "@xyflow/react": "^12.10.2",
     "@xzdarcy/react-timeline-editor": "^1.0.0",
