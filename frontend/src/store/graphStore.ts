@@ -1210,7 +1210,8 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         startFrame: currentFrame,
         durationInFrames: original.time.durationInFrames,
       },
-      // Deep-clone keyframes/props so mutations to the clone don't affect the original
+      // Deep-clone spatial/keyframes/props so mutations to the clone don't affect the original
+      spatial: JSON.parse(JSON.stringify(original.spatial)),
       keyframes: JSON.parse(JSON.stringify(original.keyframes)),
       props: JSON.parse(JSON.stringify(original.props)),
     };

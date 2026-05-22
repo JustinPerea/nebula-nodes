@@ -111,4 +111,23 @@ describe('graphStore — duplicateTrackItemAtPlayhead', () => {
     const manifest = (remotion?.data.params as { manifest: { timeline: TrackItem[] } }).manifest;
     expect(manifest.timeline).toHaveLength(1);
   });
+
+  it('deep-clones spatial so mutating the clone does not affect the original', () => {
+    seedRemotionWithItem(makeTrackItem());
+    useGraphStore.getState().duplicateTrackItemAtPlayhead('r1', 't1', 30);
+
+    const state = useGraphStore.getState();
+    const remotion = state.nodes.find((n) => n.id === 'r1');
+    const manifest = (remotion?.data.params as { manifest: { timeline: TrackItem[] } }).manifest;
+    const original = manifest.timeline.find((t) => t.id === 't1')!;
+    const clone = manifest.timeline.find((t) => t.id !== 't1')!;
+
+    expect(clone.spatial).not.toBe(original.spatial);
+    expect(clone.spatial.scale).not.toBe(original.spatial.scale);
+    expect(clone.spatial.rotation).not.toBe(original.spatial.rotation);
+
+    // Mutate the clone — original must be untouched
+    clone.spatial.scale[0] = 99;
+    expect(original.spatial.scale[0]).toBe(1);
+  });
 });
