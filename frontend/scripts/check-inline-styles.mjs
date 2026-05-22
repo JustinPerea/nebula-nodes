@@ -5,6 +5,13 @@ import ts from 'typescript';
 const ROOT = process.cwd();
 const COMPONENTS_DIR = join(ROOT, 'src', 'components');
 
+// Remotion composition renderers must use inline styles — the Remotion renderer
+// serializes inline styles directly to the video frame; CSS class-based styling
+// cannot be applied in the same way during server-side rendering. The entire
+// video-editor/ subtree is exempt: RemotionComposition.tsx (at this level) and
+// all render components under components/ both require inline styles.
+const REMOTION_EXEMPT_PREFIX = join(COMPONENTS_DIR, 'video-editor');
+
 const VISUAL_PROPS = new Set([
   'alignItems',
   'background',
@@ -93,6 +100,8 @@ function collectFiles(dir) {
   const out = [];
   for (const entry of readdirSync(dir)) {
     const path = join(dir, entry);
+    // Skip Remotion composition renderers — they require inline styles.
+    if (path.startsWith(REMOTION_EXEMPT_PREFIX)) continue;
     const stat = statSync(path);
     if (stat.isDirectory()) {
       out.push(...collectFiles(path));

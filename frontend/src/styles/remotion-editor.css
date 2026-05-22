@@ -1,0 +1,134 @@
+/*
+ * RemotionEditorView styles — Slava-restraint skin
+ *
+ * All rules scoped under body.app-slava-restraint.
+ * Token substitutions (spec → actual):
+ *   --sr-bg-base    → --sr-canvas        (true black)
+ *   --sr-bg-chrome  → --sr-glass         (translucent dark glass for header)
+ *   --sr-bg-deep    → --sr-glass-strong  (darkest glass for timeline tray)
+ *   --sr-text-primary → --sr-ink         (primary type)
+ *   --sr-text-muted   → --sr-ink-meta    (metadata / secondary)
+ *   --sr-edge-soft    → --sr-edge        (low-alpha hairline)
+ * --sr-edge-strong and --sr-accent exist verbatim.
+ */
+
+body.app-slava-restraint .remotion-editor-view {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  grid-template-rows: 48px 1fr 320px;
+  background: var(--sr-canvas);
+  color: var(--sr-ink);
+  z-index: 50;
+}
+
+body.app-slava-restraint .remotion-editor-view__header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--sr-edge-strong);
+  background: var(--sr-glass);
+}
+
+body.app-slava-restraint .remotion-editor-view__back {
+  background: none;
+  border: 1px solid var(--sr-edge);
+  color: var(--sr-ink);
+  padding: 4px 10px;
+  border-radius: 2px;
+  cursor: pointer;
+  font: inherit;
+}
+
+body.app-slava-restraint .remotion-editor-view__back:hover {
+  border-color: var(--sr-accent);
+}
+
+body.app-slava-restraint .remotion-editor-view__title {
+  flex: 1;
+  font-weight: 500;
+}
+
+body.app-slava-restraint .remotion-editor-view__meta {
+  color: var(--sr-ink-meta);
+  font-size: 12px;
+}
+
+body.app-slava-restraint .remotion-editor-view__player {
+  background: var(--sr-canvas);
+  display: grid;
+  place-items: center;
+  /* Clip so the Remotion Player (width:100%, maxWidth:1280) can't overflow the
+     player row and push the timeline off-screen. */
+  overflow: hidden;
+  min-height: 0;
+}
+
+body.app-slava-restraint .remotion-editor-view__timeline {
+  border-top: 1px solid var(--sr-edge-strong);
+  background: var(--sr-glass-strong);
+  /* Let the xzdarcy timeline (height:100%) fill the tray exactly.
+     overflow:auto caused a nested scroll that competed with the editor grid. */
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+body.app-slava-restraint .remotion-editor-view__empty-state {
+  grid-column: 1 / -1;
+  grid-row: 1 / -1;
+  display: grid;
+  place-items: center;
+  padding: 40px;
+  color: var(--sr-ink-meta);
+}
+
+/* ── RemotionNode card ──────────────────────────────────────────────────────── */
+
+body.app-slava-restraint .remotion-node {
+  width: 220px;
+  padding: 10px 14px 12px;
+  background: var(--sr-glass);
+  border: 1px solid var(--sr-edge);
+  border-radius: var(--sr-radius-node, 6px);
+  color: var(--sr-ink);
+  font-size: 13px;
+  cursor: default;
+}
+
+body.app-slava-restraint .remotion-node--selected {
+  border-color: var(--sr-accent);
+}
+
+body.app-slava-restraint .remotion-node__title {
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  margin-bottom: 4px;
+}
+
+body.app-slava-restraint .remotion-node__summary {
+  color: var(--sr-ink-meta);
+  font-size: 11px;
+  margin-bottom: 8px;
+}
+
+body.app-slava-restraint .remotion-node__open {
+  display: block;
+  width: 100%;
+  padding: 5px 0;
+  background: none;
+  border: 1px solid var(--sr-edge);
+  border-radius: 2px;
+  color: var(--sr-ink);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  text-align: center;
+}
+
+body.app-slava-restraint .remotion-node__open:hover {
+  border-color: var(--sr-accent);
+  color: var(--sr-accent);
+}

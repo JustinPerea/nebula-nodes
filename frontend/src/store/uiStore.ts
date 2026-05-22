@@ -58,8 +58,10 @@ interface UIState {
   selectedNodeId: string | null;
 
   // Editor view state — Phase 1 video-editor pivot
-  viewMode: 'canvas' | 'editor';
+  viewMode: 'canvas' | 'editor' | 'remotion-editor';
   editorTargetNodeId: string | null;
+  // Phase 2 Remotion editor
+  remotionEditorTargetNodeId: string | null;
   selectedClipId: string | null;
   playheadOutputTime: number;
   timelineZoom: number;
@@ -101,6 +103,8 @@ interface UIState {
 
   enterEditor: (sourceNodeId: string) => void;
   exitEditor: () => void;
+  enterRemotionEditor: (remotionNodeId: string) => void;
+  exitRemotionEditor: () => void;
   setSelectedClip: (id: string | null) => void;
   setPlayheadOutputTime: (t: number) => void;
   setIsPlaying: (playing: boolean) => void;
@@ -136,6 +140,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   selectedNodeId: null,
   viewMode: 'canvas',
   editorTargetNodeId: null,
+  remotionEditorTargetNodeId: null,
   selectedClipId: null,
   playheadOutputTime: 0,
   timelineZoom: 1,
@@ -180,6 +185,23 @@ export const useUIStore = create<UIState>((set, get) => ({
       useGraphStore.getState().removeEmptyEditNode(state.editorTargetNodeId);
     }
     set({ viewMode: 'canvas', editorTargetNodeId: null, selectedClipId: null, isPlaying: false, renderedPreviewUrl: null });
+  },
+
+  // Phase 2's RemotionEditor playback state is owned by @remotion/player's
+  // PlayerRef, not Zustand. We only track which RemotionNode is being edited.
+  enterRemotionEditor: (remotionNodeId) => {
+    set({
+      viewMode: 'remotion-editor',
+      remotionEditorTargetNodeId: remotionNodeId,
+    });
+  },
+
+  exitRemotionEditor: () => {
+    set({
+      viewMode: 'canvas',
+      remotionEditorTargetNodeId: null,
+      isPlaying: false,
+    });
   },
 
   setSelectedClip: (id) => set({ selectedClipId: id }),

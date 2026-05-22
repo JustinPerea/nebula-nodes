@@ -15,7 +15,7 @@ import {
 import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
 import { renderPreview } from '../../lib/editor/api';
-import { type EditClip, totalOutputDuration, clipSpeed, clampSpeedToFloor, MIN_OUTPUT_DURATION } from '../../lib/editor/virtualPlayback';
+import { type EditClip, totalOutputDuration, clipSpeed, clampSpeedToFloor } from '../../lib/editor/virtualPlayback';
 import { formatSmpte } from '../../lib/editor/timecode';
 import type { NodeData } from '../../types';
 

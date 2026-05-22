@@ -20,6 +20,9 @@ import {
 import { wsClient, type ExecutionEvent } from '../lib/wsClient';
 import { useUIStore } from './uiStore';
 import { clipSpeed, type EditClip } from '../lib/editor/virtualPlayback';
+import type { VideoGraphManifest } from '../types/video';
+import { createEmptyManifest } from '../types/video';
+import { validateManifest } from '../lib/video/manifestValidator';
 
 /** Backend contract: video-edit's ffmpeg pipeline still operates on
  * sourceIn/sourceOut/speed even though the frontend stores `duration` as
@@ -187,6 +190,7 @@ interface GraphState {
   onEdgesChange: (changes: EdgeChange[]) => void;
   onConnect: (connection: Connection) => void;
   updateNodeData: (nodeId: string, data: Partial<NodeData>) => void;
+  updateRemotionManifest: (nodeId: string, patch: Partial<VideoGraphManifest>) => void;
   executeGraph: () => Promise<void>;
   resetExecution: () => void;
   handleExecutionEvent: (event: ExecutionEvent) => void;
@@ -955,6 +959,26 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         });
       }, PARAM_PUSH_DEBOUNCE_MS);
     }
+  },
+
+  updateRemotionManifest: (nodeId, patch) => {
+    const state = get();
+    const node = state.nodes.find((n) => n.id === nodeId);
+    if (!node) return;
+    const currentParams = (node.data.params ?? {}) as Record<string, unknown>;
+    const currentManifest = (currentParams.manifest ?? createEmptyManifest()) as VideoGraphManifest;
+    const nextManifest: VideoGraphManifest = {
+      graph: patch.graph ?? currentManifest.graph,
+      timeline: patch.timeline ?? currentManifest.timeline,
+    };
+    const validation = validateManifest(nextManifest);
+    if (!validation.ok) {
+      console.warn('updateRemotionManifest rejected invalid patch:', validation.error);
+      return;
+    }
+    state.updateNodeData(nodeId, {
+      params: { ...currentParams, manifest: validation.manifest },
+    });
   },
 
   resetExecution: () => {

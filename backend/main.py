@@ -1631,6 +1631,8 @@ async def export_graph_for_frontend() -> dict:
             if definition_id == "reroute"
             else "editNode"
             if definition_id == "video-edit"
+            else "remotionNode"
+            if definition_id == "remotion-node"
             else "dynamic-node"
             if is_dynamic_node
             else "model-node"

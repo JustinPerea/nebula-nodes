@@ -19,6 +19,7 @@ import { ModelNode } from './nodes/ModelNode';
 import { DynamicNode } from './nodes/DynamicNode';
 import { RerouteNode } from './nodes/RerouteNode';
 import { EditNode } from './nodes/EditNode';
+import { RemotionNode } from './nodes/RemotionNode';
 import { TypedEdge } from './edges/TypedEdge';
 import { ContextMenu } from './ContextMenu';
 import { ConnectionPopup } from './ConnectionPopup';
@@ -29,6 +30,7 @@ const nodeTypes: NodeTypes = {
   'dynamic-node': DynamicNode,
   'reroute-node': RerouteNode,
   editNode: EditNode,
+  remotionNode: RemotionNode,
 };
 
 // fitView padding that reserves space for every floating panel that overlaps
