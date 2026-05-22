@@ -999,7 +999,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       return;
     }
 
-    const newNodeId = `node-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    const newNodeId = uuidv4();
     const offsetPosition = {
       x: remotion.position.x - 280,
       y: remotion.position.y,
@@ -1018,7 +1018,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     };
 
     const newItem: TrackItem = {
-      id: partial.id ?? `track-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      id: partial.id ?? uuidv4(),
       sourceNodeId: newNodeId,
       componentType: partial.componentType,
       time: partial.time ?? { startFrame: 0, durationInFrames: DEFAULT_FPS * 2 },
@@ -1028,6 +1028,10 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       keyframes: partial.keyframes ?? {},
       props: partial.props ?? {},
     };
+
+    // Push to undo history before mutating so Ctrl-Z reverses this action.
+    // Match the pattern used by addNode / updateNodeData.
+    pushUndo(set, get);
 
     set((s) => {
       const updatedNodes = s.nodes.map((n) => {
