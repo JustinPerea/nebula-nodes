@@ -20,9 +20,10 @@ import {
 import { wsClient, type ExecutionEvent } from '../lib/wsClient';
 import { useUIStore } from './uiStore';
 import { clipSpeed, type EditClip } from '../lib/editor/virtualPlayback';
-import type { VideoGraphManifest } from '../types/video';
-import { createEmptyManifest } from '../types/video';
+import type { VideoGraphManifest, TrackItem } from '../types/video';
+import { createEmptyManifest, DEFAULT_FPS } from '../types/video';
 import { validateManifest } from '../lib/video/manifestValidator';
+import { componentTypeToCanvasDefId } from '../lib/video/mirroring';
 
 /** Backend contract: video-edit's ffmpeg pipeline still operates on
  * sourceIn/sourceOut/speed even though the frontend stores `duration` as
@@ -191,6 +192,10 @@ interface GraphState {
   onConnect: (connection: Connection) => void;
   updateNodeData: (nodeId: string, data: Partial<NodeData>) => void;
   updateRemotionManifest: (nodeId: string, patch: Partial<VideoGraphManifest>) => void;
+  addTrackItemWithCanvasMirror: (
+    remotionNodeId: string,
+    partial: Partial<TrackItem> & Pick<TrackItem, 'componentType'>,
+  ) => void;
   executeGraph: () => Promise<void>;
   resetExecution: () => void;
   handleExecutionEvent: (event: ExecutionEvent) => void;
@@ -978,6 +983,72 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     }
     state.updateNodeData(nodeId, {
       params: { ...currentParams, manifest: validation.manifest },
+    });
+  },
+
+  addTrackItemWithCanvasMirror: (remotionNodeId, partial) => {
+    const state = get();
+    const remotion = state.nodes.find((n) => n.id === remotionNodeId);
+    if (!remotion) return;
+
+    const defId = componentTypeToCanvasDefId(partial.componentType);
+    if (!defId) {
+      console.warn(
+        `addTrackItemWithCanvasMirror: componentType ${partial.componentType} has no canvas mapping yet`,
+      );
+      return;
+    }
+
+    const newNodeId = `node-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    const offsetPosition = {
+      x: remotion.position.x - 280,
+      y: remotion.position.y,
+    };
+    const newCanvasNode: Node<NodeData> = {
+      id: newNodeId,
+      type: 'model-node',
+      position: offsetPosition,
+      data: {
+        definitionId: defId,
+        label: defId,
+        params: {},
+        state: 'idle' as const,
+        outputs: {},
+      },
+    };
+
+    const newItem: TrackItem = {
+      id: partial.id ?? `track-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      sourceNodeId: newNodeId,
+      componentType: partial.componentType,
+      time: partial.time ?? { startFrame: 0, durationInFrames: DEFAULT_FPS * 2 },
+      spatial: partial.spatial ?? {
+        x: 0, y: 0, z: 0, scale: [1, 1, 1], rotation: [0, 0, 0],
+      },
+      keyframes: partial.keyframes ?? {},
+      props: partial.props ?? {},
+    };
+
+    set((s) => {
+      const updatedNodes = s.nodes.map((n) => {
+        if (n.id !== remotionNodeId) return n;
+        const currentParams = (n.data.params ?? {}) as Record<string, unknown>;
+        const currentManifest =
+          (currentParams.manifest as VideoGraphManifest | undefined) ??
+          { graph: { nodes: [], edges: [] }, timeline: [] };
+        const nextManifest: VideoGraphManifest = {
+          ...currentManifest,
+          timeline: [...currentManifest.timeline, newItem],
+        };
+        return {
+          ...n,
+          data: {
+            ...n.data,
+            params: { ...currentParams, manifest: nextManifest },
+          },
+        };
+      });
+      return { nodes: [...updatedNodes, newCanvasNode as never] };
     });
   },
 
