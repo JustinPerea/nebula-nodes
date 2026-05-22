@@ -196,6 +196,7 @@ interface GraphState {
     remotionNodeId: string,
     partial: Partial<TrackItem> & Pick<TrackItem, 'componentType'>,
   ) => void;
+  deleteTrackItem: (remotionNodeId: string, trackItemId: string) => void;
   executeGraph: () => Promise<void>;
   resetExecution: () => void;
   handleExecutionEvent: (event: ExecutionEvent) => void;
@@ -1124,6 +1125,40 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         };
       });
       return { nodes: [...updatedNodes, newCanvasNode as never] };
+    });
+  },
+
+  deleteTrackItem: (remotionNodeId, trackItemId) => {
+    const state = get();
+    const remotion = state.nodes.find((n) => n.id === remotionNodeId);
+    if (!remotion) return;
+
+    const currentParams = (remotion.data.params ?? {}) as Record<string, unknown>;
+    const manifest = currentParams.manifest as VideoGraphManifest | undefined;
+    if (!manifest) return;
+
+    const item = manifest.timeline.find((t) => t.id === trackItemId);
+    if (!item) return;
+
+    pushUndo(set, get);
+
+    set((s) => {
+      const updatedNodes = s.nodes
+        .filter((n) => n.id !== item.sourceNodeId)
+        .map((n) => {
+          if (n.id !== remotionNodeId) return n;
+          const params = (n.data.params ?? {}) as Record<string, unknown>;
+          const currentManifest = params.manifest as VideoGraphManifest;
+          const nextManifest: VideoGraphManifest = {
+            ...currentManifest,
+            timeline: currentManifest.timeline.filter((t) => t.id !== trackItemId),
+          };
+          return {
+            ...n,
+            data: { ...n.data, params: { ...params, manifest: nextManifest } },
+          };
+        });
+      return { nodes: updatedNodes };
     });
   },
 
