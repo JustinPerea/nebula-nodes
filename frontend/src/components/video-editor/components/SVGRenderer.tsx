@@ -30,6 +30,9 @@ export function SVGRenderer({ item }: SVGRendererProps) {
   const explicitSrc = typeof item.props.src === 'string' ? item.props.src : null;
   const src = svgMarkup ? svgMarkupToDataUrl(svgMarkup) : explicitSrc;
 
+  const width = typeof item.props.width === 'number' ? item.props.width : undefined;
+  const height = typeof item.props.height === 'number' ? item.props.height : undefined;
+
   if (!src) {
     return (
       <AbsoluteFill style={{ display: 'grid', placeItems: 'center', color: '#888' }}>
@@ -42,8 +45,13 @@ export function SVGRenderer({ item }: SVGRendererProps) {
     <AbsoluteFill style={{ display: 'grid', placeItems: 'center' }}>
       <Img
         src={src}
+        alt=""
         style={{
           opacity,
+          width,
+          height,
+          maxWidth: '100%',
+          maxHeight: '100%',
           transform: `translate3d(${position[0]}px, ${position[1]}px, ${position[2]}px) rotateX(${rotation[0]}deg) rotateY(${rotation[1]}deg) rotateZ(${rotation[2]}deg) scale3d(${scale[0]}, ${scale[1]}, ${scale[2]})`,
         }}
       />
