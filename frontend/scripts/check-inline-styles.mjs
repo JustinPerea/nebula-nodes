@@ -7,9 +7,10 @@ const COMPONENTS_DIR = join(ROOT, 'src', 'components');
 
 // Remotion composition renderers must use inline styles — the Remotion renderer
 // serializes inline styles directly to the video frame; CSS class-based styling
-// cannot be applied in the same way during server-side rendering. Any component
-// subtree under this path is exempt from the static-inline-style guard.
-const REMOTION_EXEMPT_PREFIX = join(COMPONENTS_DIR, 'video-editor', 'components');
+// cannot be applied in the same way during server-side rendering. The entire
+// video-editor/ subtree is exempt: RemotionComposition.tsx (at this level) and
+// all render components under components/ both require inline styles.
+const REMOTION_EXEMPT_PREFIX = join(COMPONENTS_DIR, 'video-editor');
 
 const VISUAL_PROPS = new Set([
   'alignItems',

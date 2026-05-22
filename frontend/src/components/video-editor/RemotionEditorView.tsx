@@ -1,9 +1,14 @@
+import { useRef } from 'react';
+import { Player } from '@remotion/player';
+import type { PlayerRef } from '@remotion/player';
 import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
-import { createEmptyManifest, type VideoGraphManifest } from '../../types/video';
+import { createEmptyManifest, DEFAULT_FPS, type VideoGraphManifest } from '../../types/video';
+import { RemotionComposition } from './RemotionComposition';
 import '../../styles/remotion-editor.css';
 
 export function RemotionEditorView() {
+  const playerRef = useRef<PlayerRef>(null);
   const targetNodeId = useUIStore((s) => s.remotionEditorTargetNodeId);
   const exitRemotionEditor = useUIStore((s) => s.exitRemotionEditor);
   const node = useGraphStore((s) =>
@@ -45,7 +50,25 @@ export function RemotionEditorView() {
         </span>
       </header>
       <div className="remotion-editor-view__player" data-testid="remotion-player-slot">
-        {/* Player mounts here in T12 */}
+        <Player
+          ref={playerRef}
+          component={RemotionComposition}
+          inputProps={{ manifest }}
+          durationInFrames={Math.max(
+            DEFAULT_FPS * 5,
+            ...manifest.timeline.map(
+              (i) => i.time.startFrame + i.time.durationInFrames,
+            ),
+            DEFAULT_FPS,
+          )}
+          compositionWidth={1280}
+          compositionHeight={720}
+          fps={DEFAULT_FPS}
+          controls
+          loop
+          style={{ width: '100%', maxWidth: 1280, aspectRatio: '16 / 9' }}
+          acknowledgeRemotionLicense
+        />
       </div>
       <div className="remotion-editor-view__timeline" data-testid="remotion-timeline-slot">
         {/* Timeline mounts here in T13 */}
