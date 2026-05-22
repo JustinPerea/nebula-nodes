@@ -59,12 +59,20 @@ body.app-slava-restraint .remotion-editor-view__player {
   background: var(--sr-canvas);
   display: grid;
   place-items: center;
+  /* Clip so the Remotion Player (width:100%, maxWidth:1280) can't overflow the
+     player row and push the timeline off-screen. */
+  overflow: hidden;
+  min-height: 0;
 }
 
 body.app-slava-restraint .remotion-editor-view__timeline {
   border-top: 1px solid var(--sr-edge-strong);
   background: var(--sr-glass-strong);
-  overflow: auto;
+  /* Let the xzdarcy timeline (height:100%) fill the tray exactly.
+     overflow:auto caused a nested scroll that competed with the editor grid. */
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 body.app-slava-restraint .remotion-editor-view__empty-state {
@@ -74,4 +82,53 @@ body.app-slava-restraint .remotion-editor-view__empty-state {
   place-items: center;
   padding: 40px;
   color: var(--sr-ink-meta);
+}
+
+/* ── RemotionNode card ──────────────────────────────────────────────────────── */
+
+body.app-slava-restraint .remotion-node {
+  width: 220px;
+  padding: 10px 14px 12px;
+  background: var(--sr-glass);
+  border: 1px solid var(--sr-edge);
+  border-radius: var(--sr-radius-node, 6px);
+  color: var(--sr-ink);
+  font-size: 13px;
+  cursor: default;
+}
+
+body.app-slava-restraint .remotion-node--selected {
+  border-color: var(--sr-accent);
+}
+
+body.app-slava-restraint .remotion-node__title {
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  margin-bottom: 4px;
+}
+
+body.app-slava-restraint .remotion-node__summary {
+  color: var(--sr-ink-meta);
+  font-size: 11px;
+  margin-bottom: 8px;
+}
+
+body.app-slava-restraint .remotion-node__open {
+  display: block;
+  width: 100%;
+  padding: 5px 0;
+  background: none;
+  border: 1px solid var(--sr-edge);
+  border-radius: 2px;
+  color: var(--sr-ink);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  text-align: center;
+}
+
+body.app-slava-restraint .remotion-node__open:hover {
+  border-color: var(--sr-accent);
+  color: var(--sr-accent);
 }
