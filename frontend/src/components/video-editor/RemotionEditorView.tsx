@@ -1,6 +1,8 @@
-import { useRef } from 'react';
+import { useRef, useEffect, useState } from 'react';
 import { Player } from '@remotion/player';
 import type { PlayerRef } from '@remotion/player';
+import type { TimelineState } from '@xzdarcy/react-timeline-editor/dist/interface/timeline';
+import { RemotionTimeline } from './RemotionTimeline';
 import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
 import { createEmptyManifest, DEFAULT_FPS, type VideoGraphManifest } from '../../types/video';
@@ -9,11 +11,26 @@ import '../../styles/remotion-editor.css';
 
 export function RemotionEditorView() {
   const playerRef = useRef<PlayerRef>(null);
+  const [currentFrame, setCurrentFrame] = useState(0);
+  const timelineStateRef = useRef<TimelineState | null>(null);
   const targetNodeId = useUIStore((s) => s.remotionEditorTargetNodeId);
   const exitRemotionEditor = useUIStore((s) => s.exitRemotionEditor);
   const node = useGraphStore((s) =>
     targetNodeId ? s.nodes.find((n) => n.id === targetNodeId) : null,
   );
+
+  // Sync Player playback position → currentFrame state.
+  // frameupdate fires every rendered frame with { detail: { frame } }.
+  // We call getCurrentFrame() instead of reading the event payload to stay
+  // type-safe without casting the generic CallbackListener signature.
+  // Must be declared before any conditional return to satisfy Rules of Hooks.
+  useEffect(() => {
+    const player = playerRef.current;
+    if (!player) return;
+    const handler = () => setCurrentFrame(player.getCurrentFrame());
+    player.addEventListener('frameupdate', handler);
+    return () => player.removeEventListener('frameupdate', handler);
+  }, []); // empty — runs once after mount; playerRef.current is stable post-mount
 
   if (!targetNodeId || !node) {
     return (
@@ -71,7 +88,12 @@ export function RemotionEditorView() {
         />
       </div>
       <div className="remotion-editor-view__timeline" data-testid="remotion-timeline-slot">
-        {/* Timeline mounts here in T13 */}
+        <RemotionTimeline
+          manifest={manifest}
+          currentFrame={currentFrame}
+          onScrub={(frame) => playerRef.current?.seekTo(frame)}
+          timelineState={timelineStateRef}
+        />
       </div>
     </div>
   );
