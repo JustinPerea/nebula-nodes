@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { AbsoluteFill } from 'remotion';
-import { Lottie } from '@remotion/lottie';
+import { Lottie, type LottieAnimationData } from '@remotion/lottie';
 import type { TrackItem } from '../../../types/video';
 
 interface LottieRendererProps {
@@ -9,7 +9,7 @@ interface LottieRendererProps {
 
 export function LottieRenderer({ item }: LottieRendererProps) {
   const src = typeof item.props.src === 'string' ? item.props.src : null;
-  const [animationData, setAnimationData] = useState<unknown | null>(null);
+  const [animationData, setAnimationData] = useState<LottieAnimationData | null>(null);
 
   useEffect(() => {
     if (!src) {
@@ -20,7 +20,7 @@ export function LottieRenderer({ item }: LottieRendererProps) {
     fetch(src)
       .then((r) => r.json())
       .then((data) => {
-        if (!cancelled) setAnimationData(data);
+        if (!cancelled) setAnimationData(data as LottieAnimationData);
       })
       .catch(() => {
         if (!cancelled) setAnimationData(null);
