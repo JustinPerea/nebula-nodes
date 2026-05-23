@@ -5,15 +5,21 @@ import { useUIStore } from '../../src/store/uiStore';
 
 const INITIAL_UI_STATE = { ...useUIStore.getState() };
 
+function makePlayerFrameRef(): { current: HTMLElement } {
+  const el = document.createElement('div');
+  el.getBoundingClientRect = () => ({
+    left: 0, top: 0, width: 1280, height: 720, right: 1280, bottom: 720, x: 0, y: 0, toJSON: () => ({}),
+  });
+  return { current: el };
+}
+
 function renderOverlay() {
-  return render(<PlayerOverlay remotionNodeId="r1" />);
+  return render(<PlayerOverlay remotionNodeId="r1" playerFrameRef={makePlayerFrameRef()} />);
 }
 
 describe('PlayerOverlay', () => {
   beforeEach(() => {
     useUIStore.setState(INITIAL_UI_STATE, true);
-    // Mirror SelectionBox.test.tsx — defensively clear any leaked data-track-item-id
-    // elements so a previously-failing test doesn't pollute subsequent ones.
     document.querySelectorAll('[data-track-item-id]').forEach((el) => el.remove());
   });
 
@@ -24,12 +30,10 @@ describe('PlayerOverlay', () => {
   });
 
   it('pointerdown on overlay with a hit dispatches setSelectedTrackItem(id)', () => {
-    // Seed a layer DOM element with data-track-item-id below the overlay's z-stack
     const layerEl = document.createElement('div');
     layerEl.setAttribute('data-track-item-id', 'track-xyz');
     document.body.appendChild(layerEl);
 
-    // Mock elementsFromPoint to return our seeded element
     const elementsFromPointSpy = vi
       .spyOn(document, 'elementsFromPoint')
       .mockReturnValue([layerEl] as unknown as Element[]);
@@ -61,9 +65,6 @@ describe('PlayerOverlay', () => {
   });
 
   it('renders SelectionBox when selectedTrackItemId is non-null and target element is in DOM', () => {
-    // Set up the layer DOM BEFORE rendering so SelectionBox's first effect
-    // finds it and computes a rect (otherwise the first render returns null
-    // and there's no trigger to re-query after appendChild).
     const layerEl = document.createElement('div');
     layerEl.setAttribute('data-track-item-id', 'track-xyz');
     document.body.appendChild(layerEl);
