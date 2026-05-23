@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { Timeline as XzdarcyTimeline } from '@xzdarcy/react-timeline-editor';
+import '@xzdarcy/react-timeline-editor/dist/react-timeline-editor.css';
 import type {
   TimelineRow,
   TimelineEffect,
