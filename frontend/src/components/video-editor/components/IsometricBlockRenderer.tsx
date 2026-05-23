@@ -40,6 +40,42 @@ function PrimitiveCube({ color, size }: { color: string; size: number }) {
   );
 }
 
+function PrimitiveSphere({ color, size }: { color: string; size: number }) {
+  return (
+    <mesh>
+      <sphereGeometry args={[size / 2, 32, 16]} />
+      <meshStandardMaterial color={color} />
+    </mesh>
+  );
+}
+
+function PrimitiveCylinder({ color, size }: { color: string; size: number }) {
+  return (
+    <mesh>
+      <cylinderGeometry args={[size / 2, size / 2, size, 24]} />
+      <meshStandardMaterial color={color} />
+    </mesh>
+  );
+}
+
+function PrimitiveCone({ color, size }: { color: string; size: number }) {
+  return (
+    <mesh>
+      <coneGeometry args={[size / 2, size, 24]} />
+      <meshStandardMaterial color={color} />
+    </mesh>
+  );
+}
+
+function PrimitivePlane({ color, size }: { color: string; size: number }) {
+  return (
+    <mesh>
+      <planeGeometry args={[size, size]} />
+      <meshStandardMaterial color={color} side={2 /* THREE.DoubleSide */} />
+    </mesh>
+  );
+}
+
 export function IsometricBlockRenderer({ item }: IsometricBlockRendererProps) {
   const { width, height } = useVideoConfig();
   const geometry = (item.props.geometry as string) ?? 'cube';
@@ -50,11 +86,17 @@ export function IsometricBlockRenderer({ item }: IsometricBlockRendererProps) {
   const zoom = camera.zoom ?? DEFAULT_ZOOM;
 
   return (
-    <ThreeCanvas width={width} height={height}>
-      <OrthographicCamera makeDefault position={position} zoom={zoom} />
-      <ambientLight intensity={0.5} />
-      <directionalLight position={[10, 10, 10]} intensity={1.0} />
-      {geometry === 'cube' && <PrimitiveCube color={color} size={size} />}
-    </ThreeCanvas>
+    <div data-iso-geometry={geometry} style={{ width: '100%', height: '100%' }}>
+      <ThreeCanvas width={width} height={height}>
+        <OrthographicCamera makeDefault position={position} zoom={zoom} />
+        <ambientLight intensity={0.5} />
+        <directionalLight position={[10, 10, 10]} intensity={1.0} />
+        {geometry === 'cube'     && <PrimitiveCube     color={color} size={size} />}
+        {geometry === 'sphere'   && <PrimitiveSphere   color={color} size={size} />}
+        {geometry === 'cylinder' && <PrimitiveCylinder color={color} size={size} />}
+        {geometry === 'cone'     && <PrimitiveCone     color={color} size={size} />}
+        {geometry === 'plane'    && <PrimitivePlane    color={color} size={size} />}
+      </ThreeCanvas>
+    </div>
   );
 }

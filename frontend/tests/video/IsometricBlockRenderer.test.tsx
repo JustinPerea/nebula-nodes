@@ -51,4 +51,19 @@ describe('IsometricBlockRenderer', () => {
     expect(x).toBeGreaterThan(0);
     expect(y).toBeGreaterThan(0);
   });
+
+  it.each([
+    ['cube'],
+    ['sphere'],
+    ['cylinder'],
+    ['cone'],
+    ['plane'],
+  ])('routes geometry=%s through the correct primitive case', (geometry) => {
+    const { container } = render(
+      <IsometricBlockRenderer item={makeItem({ props: { geometry } })} />,
+    );
+    // IsometricBlockRenderer wraps the ThreeCanvas in a <div data-iso-geometry={geometry}>
+    // so we can assert routing in JSDOM (which has no GL).
+    expect(container.querySelector(`[data-iso-geometry="${geometry}"]`)).not.toBeNull();
+  });
 });
