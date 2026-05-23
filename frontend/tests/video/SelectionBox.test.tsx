@@ -49,7 +49,7 @@ describe('SelectionBox — scaffolding', () => {
   beforeEach(() => {
     useUIStore.setState(INITIAL_UI_STATE, true);
     useGraphStore.setState(INITIAL_GRAPH_STATE, true);
-    document.querySelectorAll('[data-track-item-id]').forEach((el) => el.remove());
+    document.querySelectorAll('[data-track-item-id], [data-track-item-content-id]').forEach((el) => el.remove());
   });
 
   it('renders nothing when target element does not exist in DOM', () => {
@@ -63,6 +63,7 @@ describe('SelectionBox — scaffolding', () => {
   it('renders an outline div positioned via getBoundingClientRect', () => {
     const layerEl = document.createElement('div');
     layerEl.setAttribute('data-track-item-id', 'track-xyz');
+    layerEl.setAttribute('data-track-item-content-id', 'track-xyz');
     vi.spyOn(layerEl, 'getBoundingClientRect').mockReturnValue({
       left: 100, top: 200, width: 300, height: 150, right: 400, bottom: 350, x: 100, y: 200, toJSON: () => ({}),
     });
@@ -88,12 +89,13 @@ describe('SelectionBox — body drag', () => {
   beforeEach(() => {
     useUIStore.setState(INITIAL_UI_STATE, true);
     useGraphStore.setState(INITIAL_GRAPH_STATE, true);
-    document.querySelectorAll('[data-track-item-id]').forEach((el) => el.remove());
+    document.querySelectorAll('[data-track-item-id], [data-track-item-content-id]').forEach((el) => el.remove());
   });
 
   it('pointerdown → pointermove dispatches updateTrackItemSpatial with scaled deltas', () => {
     const layerEl = document.createElement('div');
     layerEl.setAttribute('data-track-item-id', 'track-xyz');
+    layerEl.setAttribute('data-track-item-content-id', 'track-xyz');
     vi.spyOn(layerEl, 'getBoundingClientRect').mockReturnValue({
       left: 100, top: 100, width: 200, height: 100, right: 300, bottom: 200, x: 100, y: 100, toJSON: () => ({}),
     });
@@ -127,6 +129,7 @@ describe('SelectionBox — body drag', () => {
   it('pointerdown without move does NOT mutate spatial', () => {
     const layerEl = document.createElement('div');
     layerEl.setAttribute('data-track-item-id', 'track-xyz');
+    layerEl.setAttribute('data-track-item-content-id', 'track-xyz');
     vi.spyOn(layerEl, 'getBoundingClientRect').mockReturnValue({
       left: 0, top: 0, width: 100, height: 100, right: 100, bottom: 100, x: 0, y: 0, toJSON: () => ({}),
     });
@@ -148,6 +151,35 @@ describe('SelectionBox — body drag', () => {
     const manifest = (remotion?.data.params as { manifest: { timeline: TrackItem[] } }).manifest;
     expect(manifest.timeline[0].spatial.x).toBe(10);
     expect(manifest.timeline[0].spatial.y).toBe(20);
+
+    document.body.removeChild(layerEl);
+  });
+});
+
+describe('SelectionBox — content-id fallback', () => {
+  beforeEach(() => {
+    useUIStore.setState(INITIAL_UI_STATE, true);
+    useGraphStore.setState(INITIAL_GRAPH_STATE, true);
+    document.querySelectorAll('[data-track-item-id], [data-track-item-content-id]').forEach((el) => el.remove());
+  });
+
+  it('falls back to data-track-item-id when no content-id element exists', () => {
+    const layerEl = document.createElement('div');
+    layerEl.setAttribute('data-track-item-id', 'track-xyz');
+    // Note: NO data-track-item-content-id set
+    vi.spyOn(layerEl, 'getBoundingClientRect').mockReturnValue({
+      left: 50, top: 60, width: 100, height: 50, right: 150, bottom: 110, x: 50, y: 60, toJSON: () => ({}),
+    });
+    document.body.appendChild(layerEl);
+
+    const playerFrameRef = makePlayerFrameRef();
+    seedRemotionWithItem(makeTrackItem());
+    const { container } = render(
+      <SelectionBox remotionNodeId="r1" trackItemId="track-xyz" playerFrameRef={playerFrameRef} />,
+    );
+    const box = container.querySelector('.remotion-selection-box') as HTMLElement;
+    expect(box).not.toBeNull();
+    expect(box.style.left).toBe('50px');
 
     document.body.removeChild(layerEl);
   });

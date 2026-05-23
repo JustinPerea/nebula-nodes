@@ -48,7 +48,9 @@ export function LottieRenderer({ item }: LottieRendererProps) {
 
   return (
     <AbsoluteFill data-track-item-id={item.id} style={{ display: 'grid', placeItems: 'center' }}>
-      <Lottie animationData={animationData} style={{ width: '100%', height: '100%' }} />
+      <div data-track-item-content-id={item.id} style={{ width: '100%', height: '100%' }}>
+        <Lottie animationData={animationData} style={{ width: '100%', height: '100%' }} />
+      </div>
     </AbsoluteFill>
   );
 }

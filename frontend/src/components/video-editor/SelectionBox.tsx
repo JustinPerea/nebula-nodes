@@ -36,15 +36,10 @@ export function SelectionBox({ remotionNodeId, trackItemId, playerFrameRef }: Se
   // store spread creates { ...t.spatial, ...patch }), so Object.is fails and
   // the subscription fires.
   //
-  // NOTE FOR 2.3.b: data-track-item-id currently lives on the AbsoluteFill
-  // root, which is always full-composition-size. getBoundingClientRect returns
-  // the full Player bounding rect regardless of spatial.x/y (the translate3d
-  // is on the *inner* content div, not the AbsoluteFill). For 2.3.a this is
-  // acceptable — drag still works mechanically because the body fills the
-  // canvas. For 2.3.b resize handles to land on layer corners (not canvas
-  // corners), you will need to either move data-track-item-id to a content
-  // wrapper that receives the transform, or add a separate data attribute on
-  // the inner element.
+  // SelectionBox queries data-track-item-content-id (the transformed inner
+  // element) so the outline traces the layer's screen bounds, not the full
+  // canvas. Falls back to data-track-item-id for empty/loading-state layers
+  // that don't yet render a content element.
   const spatial = useGraphStore((s) => {
     const node = s.nodes.find((n) => n.id === remotionNodeId);
     const manifest = (node?.data.params as { manifest?: VideoGraphManifest } | undefined)?.manifest;
@@ -53,7 +48,9 @@ export function SelectionBox({ remotionNodeId, trackItemId, playerFrameRef }: Se
   const dragRef = useRef<DragSession | null>(null);
 
   useEffect(() => {
-    const el = document.querySelector(`[data-track-item-id="${trackItemId}"]`);
+    const el =
+      document.querySelector(`[data-track-item-content-id="${trackItemId}"]`) ??
+      document.querySelector(`[data-track-item-id="${trackItemId}"]`);
     if (!el) {
       setRect(null);
       return;

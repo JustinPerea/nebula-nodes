@@ -46,6 +46,7 @@ export function SVGRenderer({ item }: SVGRendererProps) {
       <Img
         src={src}
         alt=""
+        data-track-item-content-id={item.id}
         style={{
           opacity,
           width,

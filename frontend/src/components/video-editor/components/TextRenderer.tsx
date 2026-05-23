@@ -25,6 +25,7 @@ export function TextRenderer({ item }: TextRendererProps) {
   return (
     <AbsoluteFill data-track-item-id={item.id} style={{ display: 'grid', placeItems: 'center' }}>
       <div
+        data-track-item-content-id={item.id}
         style={{
           opacity,
           color,

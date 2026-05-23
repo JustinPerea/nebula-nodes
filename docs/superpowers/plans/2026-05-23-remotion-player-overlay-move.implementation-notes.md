@@ -321,3 +321,53 @@ mentions:
   reviewer notes the "1 error" count; pre-existing test-harness noise)
 - WebGL context errors during Steps 10-15 of the smoke (expected in headless
   swiftshader mode)
+
+---
+
+## Pre-merge fix — Content bounding box (commit TBD)
+
+### Bug
+
+The SelectionBox outline covered the entire Player canvas instead of tracing the
+layer's actual screen bounds. Root cause: `data-track-item-id` lives on the
+`<AbsoluteFill>` root, which is always full-composition-size.
+`getBoundingClientRect` on that element returns the full Player rect regardless
+of the layer's `spatial.x/y` — the `translate3d` transform is applied to the
+inner content element, not the `AbsoluteFill`.
+
+### Fix — dual-attribute approach
+
+Added a second attribute `data-track-item-content-id` on the inner content
+element (the one that receives the `translate3d` transform) in each renderer's
+happy path:
+
+- **TextRenderer** — added directly to the inner `<div>` (already accepts HTML attrs)
+- **SVGRenderer** — added directly to `<Img>` (Remotion's `Img` passes through HTML attrs)
+- **ImageRenderer** — added directly to `<Img>`
+- **VideoRenderer** — wrapped `<Video>` in `<div data-track-item-content-id>` because `@remotion/media`'s `Video` component destructures only its own props and does not forward arbitrary HTML attributes
+- **LottieRenderer** — wrapped `<Lottie>` in `<div data-track-item-content-id>` for the same reason (`@remotion/lottie`'s `Lottie` destructures only `LottieProps`)
+
+`SelectionBox.useEffect` now queries `data-track-item-content-id` first, falling
+back to `data-track-item-id` when no content element is found. The fallback
+exists for empty/loading states (e.g. `[no svg source]`, `[loading lottie…]`)
+where only the `AbsoluteFill` root is rendered — those states have no content
+element yet, so the full-canvas rect is the best available bound and is still
+correct for triggering selection.
+
+### Scope
+
+`data-track-item-id` on `<AbsoluteFill>` is unchanged — `PlayerOverlay` still
+uses it for `document.elementsFromPoint` hit-testing, which correctly targets the
+full canvas overlay.
+
+### Tests added
+
+- `renderers.dataTrackItemId.test.tsx` — new `describe` block asserting
+  `data-track-item-content-id` is present on TextRenderer, SVGRenderer (happy),
+  and ImageRenderer (happy). Video/Lottie happy paths skipped (require media
+  context; empty-state coverage is sufficient).
+- `SelectionBox.test.tsx` — existing three `layerEl` setups now also set
+  `data-track-item-content-id` so tests exercise the new code path. New
+  `describe('SelectionBox — content-id fallback')` block verifies the `??`
+  fallback: when only `data-track-item-id` is present (no content-id), the box
+  still renders at the correct position.

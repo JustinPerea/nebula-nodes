@@ -13,8 +13,8 @@ vi.mock('remotion', async () => {
   return {
     ...actual,
     useCurrentFrame: () => 0,
-    Img: ({ src, alt, style }: { src: string; alt?: string; style?: React.CSSProperties }) => (
-      <img src={src} alt={alt} style={style} />
+    Img: ({ src, alt, style, ...rest }: { src: string; alt?: string; style?: React.CSSProperties; [key: string]: unknown }) => (
+      <img src={src} alt={alt} style={style} {...rest} />
     ),
   };
 });
@@ -81,5 +81,22 @@ describe('CSS-driven renderers — data-track-item-id', () => {
   it('LottieRenderer empty-state ([no lottie src]) puts data-track-item-id', () => {
     const { container } = render(<LottieRenderer item={makeItem({ componentType: 'LottieNode', props: {} })} />);
     expect(container.querySelector('[data-track-item-id="track-abc"]')).not.toBeNull();
+  });
+});
+
+describe('CSS-driven renderers — data-track-item-content-id', () => {
+  it('TextRenderer puts data-track-item-content-id on the inner content div', () => {
+    const { container } = render(<TextRenderer item={makeItem({ props: { text: 'hi' } })} />);
+    expect(container.querySelector('[data-track-item-content-id="track-abc"]')).not.toBeNull();
+  });
+
+  it('SVGRenderer happy path puts data-track-item-content-id on the Img element', () => {
+    const { container } = render(<SVGRenderer item={makeItem({ componentType: 'SVGInput', props: { svg: '<svg/>' } })} />);
+    expect(container.querySelector('[data-track-item-content-id="track-abc"]')).not.toBeNull();
+  });
+
+  it('ImageRenderer happy path puts data-track-item-content-id on the Img element', () => {
+    const { container } = render(<ImageRenderer item={makeItem({ componentType: 'ImageAssetNode', props: { src: 'data:image/png;base64,AAAA' } })} />);
+    expect(container.querySelector('[data-track-item-content-id="track-abc"]')).not.toBeNull();
   });
 });

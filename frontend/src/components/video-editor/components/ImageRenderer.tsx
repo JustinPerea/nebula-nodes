@@ -36,6 +36,7 @@ export function ImageRenderer({ item }: ImageRendererProps) {
       <Img
         src={src}
         alt={alt}
+        data-track-item-content-id={item.id}
         style={{
           opacity,
           width,
