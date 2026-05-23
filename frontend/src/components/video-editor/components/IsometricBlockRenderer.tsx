@@ -104,7 +104,9 @@ export function IsometricBlockRenderer({ item }: IsometricBlockRendererProps) {
           {geometry === 'cylinder' && <PrimitiveCylinder color={color} size={size} />}
           {geometry === 'cone'     && <PrimitiveCone     color={color} size={size} />}
           {geometry === 'plane'    && <PrimitivePlane    color={color} size={size} />}
-          {geometry === 'gltf'     && <GLTFPrimitive     url={(item.props.gltfUrl as string) ?? ''} />}
+          {geometry === 'gltf' && (item.props.gltfUrl as string) && (
+            <GLTFPrimitive url={item.props.gltfUrl as string} />
+          )}
         </Suspense>
       </ThreeCanvas>
     </div>
