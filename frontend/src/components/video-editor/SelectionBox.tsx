@@ -7,6 +7,7 @@ import { screenToComposition } from '../../lib/video/coordinates';
 import { computeResizeScale } from '../../lib/video/resizeMath';
 import type { ResizeHandle } from '../../lib/video/resizeMath';
 import { computeRotationZ } from '../../lib/video/rotationMath';
+import { interpolateVec3 } from '../../lib/video/keyframeInterp';
 
 interface SelectionBoxProps {
   remotionNodeId: string;
@@ -20,6 +21,7 @@ interface ScreenRect {
   top: number;
   width: number;
   height: number;
+  rotationZ: number;
 }
 
 interface MoveDragSession {
@@ -62,6 +64,38 @@ function hasMovedPastDeadZone(dxScreen: number, dyScreen: number): boolean {
   return Math.hypot(dxScreen, dyScreen) > POINTER_DEAD_ZONE_PX;
 }
 
+function computeOrientedScreenSize(
+  boundingRect: DOMRect,
+  baseWidth: number,
+  baseHeight: number,
+  scale: [number, number, number],
+  rotationZ: number,
+): { width: number; height: number } {
+  if (baseWidth <= 0 || baseHeight <= 0) {
+    return { width: boundingRect.width, height: boundingRect.height };
+  }
+
+  const unrotatedWidth = Math.abs(baseWidth * scale[0]);
+  const unrotatedHeight = Math.abs(baseHeight * scale[1]);
+  if (unrotatedWidth <= 0 || unrotatedHeight <= 0) {
+    return { width: boundingRect.width, height: boundingRect.height };
+  }
+
+  const aspectRatio = unrotatedWidth / unrotatedHeight;
+  const radians = (rotationZ * Math.PI) / 180;
+  const cos = Math.abs(Math.cos(radians));
+  const sin = Math.abs(Math.sin(radians));
+  const heightFromWidth = boundingRect.width / (aspectRatio * cos + sin);
+  const heightFromHeight = boundingRect.height / (aspectRatio * sin + cos);
+  const heights = [heightFromWidth, heightFromHeight].filter((n) => Number.isFinite(n) && n > 0);
+  if (heights.length === 0) {
+    return { width: boundingRect.width, height: boundingRect.height };
+  }
+
+  const height = heights.reduce((sum, n) => sum + n, 0) / heights.length;
+  return { width: height * aspectRatio, height };
+}
+
 const RESIZE_HANDLES: ResizeHandle[] = [
   'corner-tl',
   'corner-tr',
@@ -83,26 +117,19 @@ export function SelectionBox({
   const updateTrackItemSpatial = useGraphStore((s) => s.updateTrackItemSpatial);
   const addOrUpdateKeyframe = useGraphStore((s) => s.addOrUpdateKeyframe);
   const isKeyframeRecording = useUIStore((s) => s.isKeyframeRecording);
-  // Subscribe to the selected item's spatial so SelectionBox re-renders after
+  // Subscribe to the selected item so SelectionBox re-renders after
   // every updateTrackItemSpatial dispatch (drag tick OR Properties Panel edit).
-  // The selector result is used only as a useEffect dep — its value isn't read
-  // directly here. Each spatial change produces a new object reference (the
-  // store spread creates { ...t.spatial, ...patch }), so Object.is fails and
-  // the subscription fires.
+  // Each spatial/keyframe change produces a new item object reference, so
+  // Object.is fails and the subscription fires.
   //
   // SelectionBox queries data-track-item-content-id (the transformed inner
   // element) so the outline traces the layer's screen bounds, not the full
   // canvas. Falls back to data-track-item-id for empty/loading-state layers
   // that don't yet render a content element.
-  const spatial = useGraphStore((s) => {
+  const selectedItem = useGraphStore((s) => {
     const node = s.nodes.find((n) => n.id === remotionNodeId);
     const manifest = (node?.data.params as { manifest?: VideoGraphManifest } | undefined)?.manifest;
-    return manifest?.timeline.find((t) => t.id === trackItemId)?.spatial ?? null;
-  });
-  const keyframes = useGraphStore((s) => {
-    const node = s.nodes.find((n) => n.id === remotionNodeId);
-    const manifest = (node?.data.params as { manifest?: VideoGraphManifest } | undefined)?.manifest;
-    return manifest?.timeline.find((t) => t.id === trackItemId)?.keyframes ?? null;
+    return manifest?.timeline.find((t) => t.id === trackItemId) ?? null;
   });
   const dragRef = useRef<DragSession | null>(null);
 
@@ -115,8 +142,26 @@ export function SelectionBox({
       return;
     }
     const r = el.getBoundingClientRect();
-    setRect({ left: r.left, top: r.top, width: r.width, height: r.height });
-  }, [trackItemId, spatial, keyframes, currentFrame]);
+    const hasBaseSize = el instanceof HTMLElement && el.offsetWidth > 0 && el.offsetHeight > 0;
+    const baseWidth = hasBaseSize ? el.offsetWidth : 0;
+    const baseHeight = hasBaseSize ? el.offsetHeight : 0;
+    const scale = selectedItem
+      ? interpolateVec3(currentFrame, selectedItem.keyframes.scale ?? [], selectedItem.spatial.scale)
+      : ([1, 1, 1] as [number, number, number]);
+    const rotation = selectedItem
+      ? interpolateVec3(currentFrame, selectedItem.keyframes.rotation ?? [], selectedItem.spatial.rotation)
+      : ([0, 0, 0] as [number, number, number]);
+    const { width, height } = computeOrientedScreenSize(r, baseWidth, baseHeight, scale, rotation[2]);
+    const centerX = r.left + r.width / 2;
+    const centerY = r.top + r.height / 2;
+    setRect({
+      left: centerX - width / 2,
+      top: centerY - height / 2,
+      width,
+      height,
+      rotationZ: rotation[2],
+    });
+  }, [trackItemId, selectedItem, currentFrame]);
 
   if (!rect) return null;
 
@@ -272,6 +317,7 @@ export function SelectionBox({
         top: `${rect.top}px`,
         width: `${rect.width}px`,
         height: `${rect.height}px`,
+        transform: `rotateZ(${rect.rotationZ}deg)`,
       }}
     >
       <div

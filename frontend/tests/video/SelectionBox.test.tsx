@@ -58,6 +58,11 @@ function setupSelectedLayer(spatial: TrackItem['spatial'] = { x: 0, y: 0, z: 0, 
   return layerEl;
 }
 
+function setOffsetSize(el: HTMLElement, width: number, height: number) {
+  Object.defineProperty(el, 'offsetWidth', { configurable: true, value: width });
+  Object.defineProperty(el, 'offsetHeight', { configurable: true, value: height });
+}
+
 function readSelectedScale(): TrackItem['spatial']['scale'] {
   const remotion = useGraphStore.getState().nodes.find((n) => n.id === 'r1');
   const manifest = (remotion?.data.params as { manifest: { timeline: TrackItem[] } }).manifest;
@@ -138,6 +143,70 @@ describe('SelectionBox — scaffolding', () => {
     expect(box.style.top).toBe('200px');
     expect(box.style.width).toBe('300px');
     expect(box.style.height).toBe('150px');
+
+    document.body.removeChild(layerEl);
+  });
+
+  it('rotates the outline around the selected layer center instead of drawing the transformed AABB', () => {
+    const layerEl = document.createElement('div');
+    layerEl.setAttribute('data-track-item-id', 'track-xyz');
+    layerEl.setAttribute('data-track-item-content-id', 'track-xyz');
+    setOffsetSize(layerEl, 200, 100);
+    vi.spyOn(layerEl, 'getBoundingClientRect').mockReturnValue({
+      left: 93.93398282201788,
+      top: 43.93398282201788,
+      width: 212.13203435596427,
+      height: 212.13203435596424,
+      right: 306.06601717798213,
+      bottom: 256.06601717798213,
+      x: 93.93398282201788,
+      y: 43.93398282201788,
+      toJSON: () => ({}),
+    });
+    document.body.appendChild(layerEl);
+
+    const playerFrameRef = makePlayerFrameRef();
+    seedRemotionWithItem(makeTrackItem({ spatial: { x: 0, y: 0, z: 0, scale: [1, 1, 1], rotation: [0, 0, 45] } }));
+    const { container } = render(
+      <SelectionBox remotionNodeId="r1" trackItemId="track-xyz" playerFrameRef={playerFrameRef} />,
+    );
+    const box = container.querySelector('.remotion-selection-box') as HTMLElement;
+    expect(Number.parseFloat(box.style.left)).toBeCloseTo(100);
+    expect(Number.parseFloat(box.style.top)).toBeCloseTo(100);
+    expect(Number.parseFloat(box.style.width)).toBeCloseTo(200);
+    expect(Number.parseFloat(box.style.height)).toBeCloseTo(100);
+    expect(box.style.transform).toBe('rotateZ(45deg)');
+
+    document.body.removeChild(layerEl);
+  });
+
+  it('uses interpolated scale and rotation for the outline at the current frame', () => {
+    const layerEl = document.createElement('div');
+    layerEl.setAttribute('data-track-item-id', 'track-xyz');
+    layerEl.setAttribute('data-track-item-content-id', 'track-xyz');
+    setOffsetSize(layerEl, 100, 40);
+    vi.spyOn(layerEl, 'getBoundingClientRect').mockReturnValue({
+      left: 90, top: 0, width: 120, height: 200, right: 210, bottom: 200, x: 90, y: 0, toJSON: () => ({}),
+    });
+    document.body.appendChild(layerEl);
+
+    const playerFrameRef = makePlayerFrameRef();
+    seedRemotionWithItem(makeTrackItem({
+      spatial: { x: 0, y: 0, z: 0, scale: [1, 1, 1], rotation: [0, 0, 0] },
+      keyframes: {
+        scale: [{ frame: 30, value: [2, 3, 1], easing: 'linear' }],
+        rotation: [{ frame: 30, value: [0, 0, 90], easing: 'linear' }],
+      },
+    }));
+    const { container } = render(
+      <SelectionBox remotionNodeId="r1" trackItemId="track-xyz" playerFrameRef={playerFrameRef} currentFrame={30} />,
+    );
+    const box = container.querySelector('.remotion-selection-box') as HTMLElement;
+    expect(Number.parseFloat(box.style.left)).toBeCloseTo(50);
+    expect(Number.parseFloat(box.style.top)).toBeCloseTo(40);
+    expect(Number.parseFloat(box.style.width)).toBeCloseTo(200);
+    expect(Number.parseFloat(box.style.height)).toBeCloseTo(120);
+    expect(box.style.transform).toBe('rotateZ(90deg)');
 
     document.body.removeChild(layerEl);
   });

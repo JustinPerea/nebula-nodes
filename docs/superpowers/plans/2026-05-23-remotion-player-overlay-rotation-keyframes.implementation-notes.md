@@ -157,3 +157,25 @@ Running log of decisions, deviations, and tradeoffs for
   `[done] all 17 steps passed`.
 - Headless run still emits the known IsoBlock WebGL context errors after Step
   14; they did not block Steps 15-17.
+
+## Post-test fix — rotated SelectionBox geometry
+
+### Decisions outside the spec
+
+- User manual testing caught two visual issues that automated coverage missed:
+  rotated text looked clipped, and the SelectionBox stayed axis-aligned instead
+  of rotating with the selected layer.
+- SelectionBox now centers itself on the transformed content's screen-space
+  center, but derives the oriented screen-size from the transformed AABB,
+  untransformed `offsetWidth` / `offsetHeight` aspect ratio, current
+  interpolated scale, and current Z rotation. Raw `offsetWidth` is composition
+  pixels, while the overlay is fixed-position screen pixels, so using it
+  directly makes the overlay too large inside Remotion's scaled player.
+- TextRenderer now makes text an explicit inline-block with no wrapping and a
+  center transform origin. That keeps rotated text measurement stable and avoids
+  normal block text layout influencing the transformed visual.
+
+### Changes
+
+- Added SelectionBox tests for rotated outline geometry and current-frame
+  keyframed scale/rotation.

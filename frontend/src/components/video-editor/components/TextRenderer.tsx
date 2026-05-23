@@ -32,6 +32,10 @@ export function TextRenderer({ item }: TextRendererProps) {
           fontSize,
           fontFamily: 'system-ui, sans-serif',
           fontWeight: 600,
+          display: 'inline-block',
+          lineHeight: 1,
+          whiteSpace: 'pre',
+          transformOrigin: 'center center',
           transform: `translate3d(${position[0]}px, ${position[1]}px, ${position[2]}px) rotateX(${rotation[0]}deg) rotateY(${rotation[1]}deg) rotateZ(${rotation[2]}deg) scale3d(${scale[0]}, ${scale[1]}, ${scale[2]})`,
         }}
       >
