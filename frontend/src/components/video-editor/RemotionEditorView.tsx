@@ -48,6 +48,25 @@ export function RemotionEditorView() {
     return () => player.removeEventListener('frameupdate', handler);
   }, []); // empty — runs once after mount; playerRef.current is stable post-mount
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const automation = {
+      seekToFrame: (frame: number) => {
+        playerRef.current?.seekTo(frame);
+        setCurrentFrame(frame);
+        timelineStateRef.current?.setTime(frame / DEFAULT_FPS);
+      },
+      getCurrentFrame: () => currentFrame,
+    };
+    (window as unknown as { __nebulaRemotionEditor?: typeof automation }).__nebulaRemotionEditor = automation;
+    return () => {
+      const w = window as unknown as { __nebulaRemotionEditor?: typeof automation };
+      if (w.__nebulaRemotionEditor === automation) {
+        delete w.__nebulaRemotionEditor;
+      }
+    };
+  }, [currentFrame]);
+
   if (!targetNodeId || !node) {
     return (
       <div className="remotion-editor-view">
@@ -66,7 +85,7 @@ export function RemotionEditorView() {
     createEmptyManifest();
 
   return (
-    <div className="remotion-editor-view">
+    <div className="remotion-editor-view" data-current-frame={currentFrame}>
       <header className="remotion-editor-view__header">
         <button
           type="button"

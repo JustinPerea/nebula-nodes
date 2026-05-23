@@ -128,3 +128,32 @@ Running log of decisions, deviations, and tradeoffs for
 - First focused/full/build attempt failed because `currentFrame` was added to
   the prop type and call sites but not destructured in `SelectionBox`. Fixed the
   destructuring and removed the now-unneeded nullish fallback at call sites.
+
+## Task 7 — Smoke Step 17
+
+### Decisions outside the spec
+
+- Added a small `window.__nebulaRemotionEditor` automation hook for smoke tests,
+  analogous to the existing `__nebulaGraphStore` / `__nebulaUIStore` hooks.
+  Pixel-clicking the third-party timeline to land exactly on frame 30 is brittle;
+  the hook calls `Player.seekTo(frame)`, updates the local `currentFrame` state,
+  and moves the timeline cursor together.
+- Added `data-current-frame` to `.remotion-editor-view` as a visible DOM signal
+  for current frame debugging.
+
+### Changes
+
+- Extended the Puppeteer smoke with Step 17: select Text, seek to frame 30,
+  enable REC through the toolbar button, drag the SelectionBox body, assert a
+  `position` keyframe at frame 30, assert static `spatial.x/y` stayed unchanged,
+  then disable REC and clear selection.
+
+### Verification notes
+
+- First headless smoke attempt failed before app assertions with Puppeteer's
+  intermittent `Protocol error (Runtime.callFunctionOn): Promise was collected`,
+  same class of flake observed in 2.3.b.
+- Retried against the warmed Vite page; smoke final line:
+  `[done] all 17 steps passed`.
+- Headless run still emits the known IsoBlock WebGL context errors after Step
+  14; they did not block Steps 15-17.
