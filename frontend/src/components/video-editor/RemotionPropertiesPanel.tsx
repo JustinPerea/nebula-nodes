@@ -77,7 +77,7 @@ export function RemotionPropertiesPanel({ remotionNodeId }: RemotionPropertiesPa
         </label>
       </section>
 
-      <section className="remotion-properties-panel__section remotion-properties-panel__transform-section">
+      <section className="remotion-properties-panel__section">
         <h4>Transform</h4>
         <label>
           Position X
