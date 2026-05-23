@@ -66,6 +66,37 @@ body.app-slava-restraint .remotion-editor-view__player {
   min-height: 0;
 }
 
+/* ── PlayerOverlay + SelectionBox ──────────────────────────────────────────── */
+
+body.app-slava-restraint .remotion-editor-view__player-frame {
+  position: relative;
+  width: 100%;
+  max-width: 1280px;
+  aspect-ratio: 16 / 9;
+}
+
+body.app-slava-restraint .remotion-player-overlay {
+  position: absolute;
+  inset: 0;
+  /* Visually transparent; receives pointer events so click-to-select works
+     even when the click would otherwise hit a layer's DOM directly. */
+  background: transparent;
+}
+
+body.app-slava-restraint .remotion-selection-box {
+  position: fixed;
+  border: 1px solid var(--sr-accent);
+  /* The box itself shouldn't block clicks; only its handles should (added in 2.3.b/c). */
+  pointer-events: none;
+}
+
+body.app-slava-restraint .remotion-selection-box__body {
+  position: absolute;
+  inset: 0;
+  /* Body becomes pointer-events: auto in Task 5 when drag is wired. */
+  pointer-events: none;
+}
+
 body.app-slava-restraint .remotion-editor-view__timeline {
   border-top: 1px solid var(--sr-edge-strong);
   background: var(--sr-glass-strong);
