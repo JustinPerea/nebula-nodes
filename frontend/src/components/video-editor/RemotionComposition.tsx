@@ -4,6 +4,8 @@ import { TextRenderer } from './components/TextRenderer';
 import { SVGRenderer } from './components/SVGRenderer';
 import { ImageRenderer } from './components/ImageRenderer';
 import { VideoRenderer } from './components/VideoRenderer';
+import { IsometricBlockRenderer } from './components/IsometricBlockRenderer';
+import { LottieRenderer } from './components/LottieRenderer';
 
 interface RemotionCompositionProps {
   manifest: VideoGraphManifest;
@@ -19,7 +21,10 @@ function renderItem(item: TrackItem) {
       return <ImageRenderer item={item} />;
     case 'VideoAssetNode':
       return <VideoRenderer item={item} />;
-    // IsometricBlock + LottieNode remain unimplemented until Phase 2.2.
+    case 'IsometricBlock':
+      return <IsometricBlockRenderer item={item} />;
+    case 'LottieNode':
+      return <LottieRenderer item={item} />;
     default:
       return (
         <AbsoluteFill
