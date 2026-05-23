@@ -2,8 +2,10 @@ import type { TrackComponentType, VideoGraphManifest } from '../../types/video';
 
 /** Maps a TrackItem.componentType to the canvas node definitionId that
  *  feeds it. Phase 2.1.b covers TextNode, SVGInput (via text-input),
- *  ImageAssetNode, and VideoAssetNode. IsometricBlock + LottieNode are
- *  deferred to Phase 2.2 and return null. */
+ *  ImageAssetNode, and VideoAssetNode. Phase 2.2 adds stubs for
+ *  IsometricBlock (text-input) and LottieNode (image-input) — the
+ *  block config and the Lottie URL live in TrackItem.props, so the
+ *  spawned source node carries no meaningful state. */
 export function componentTypeToCanvasDefId(
   componentType: TrackComponentType,
 ): string | null {
@@ -16,8 +18,9 @@ export function componentTypeToCanvasDefId(
     case 'VideoAssetNode':
       return 'video-input';
     case 'IsometricBlock':
+      return 'text-input';
     case 'LottieNode':
-      return null;
+      return 'image-input';
   }
 }
 

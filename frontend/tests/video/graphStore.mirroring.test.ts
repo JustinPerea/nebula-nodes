@@ -48,7 +48,7 @@ describe('graphStore — addTrackItemWithCanvasMirror (Rule A)', () => {
     expect(useGraphStore.getState().nodes).toHaveLength(0);
   });
 
-  it('no-ops for componentTypes mapped to null (Phase 2.2 deferred)', () => {
+  it('spawns a text-input canvas node when adding an IsometricBlock TrackItem (Phase 2.2 stub)', () => {
     const remotionNode = {
       id: 'r1',
       type: 'remotionNode',
@@ -67,9 +67,15 @@ describe('graphStore — addTrackItemWithCanvasMirror (Rule A)', () => {
       componentType: 'IsometricBlock',
     });
 
-    expect(useGraphStore.getState().nodes).toHaveLength(1);
-    const manifest = (useGraphStore.getState().nodes[0].data.params as { manifest: ReturnType<typeof createEmptyManifest> }).manifest;
-    expect(manifest.timeline).toHaveLength(0);
+    const nodes = useGraphStore.getState().nodes;
+    expect(nodes).toHaveLength(2);
+    const textInput = nodes.find((n) => n.data.definitionId === 'text-input');
+    expect(textInput).toBeDefined();
+
+    const remotion = nodes.find((n) => n.id === 'r1');
+    const manifest = (remotion?.data.params as { manifest: ReturnType<typeof createEmptyManifest> }).manifest;
+    expect(manifest.timeline).toHaveLength(1);
+    expect(manifest.timeline[0].componentType).toBe('IsometricBlock');
   });
 });
 
