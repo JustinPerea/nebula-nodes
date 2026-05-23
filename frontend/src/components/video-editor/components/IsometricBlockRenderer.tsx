@@ -1,0 +1,60 @@
+import { ThreeCanvas } from '@remotion/three';
+import { OrthographicCamera } from '@react-three/drei';
+import { useVideoConfig } from 'remotion';
+import type { TrackItem } from '../../../types/video';
+
+interface IsometricBlockRendererProps {
+  item: TrackItem;
+}
+
+interface CameraConfig {
+  azimuth?: number;   // degrees, default 45
+  elevation?: number; // degrees, default arctan(1/sqrt(2)) ≈ 35.264
+  zoom?: number;      // default 10
+}
+
+const DEFAULT_AZIMUTH = 45;
+const DEFAULT_ELEVATION = (Math.atan(1 / Math.SQRT2) * 180) / Math.PI; // ≈ 35.264
+const DEFAULT_ZOOM = 10;
+const CAMERA_RADIUS = 20;
+
+/** Spherical → Cartesian for an orbiting camera looking at origin.
+ *  Azimuth = horizontal angle (around Y axis), elevation = vertical angle. */
+function cameraPositionFromAngles(camera: CameraConfig): [number, number, number] {
+  const azimuth = camera.azimuth ?? DEFAULT_AZIMUTH;
+  const elevation = camera.elevation ?? DEFAULT_ELEVATION;
+  const azRad = (azimuth * Math.PI) / 180;
+  const elRad = (elevation * Math.PI) / 180;
+  const x = CAMERA_RADIUS * Math.cos(elRad) * Math.sin(azRad);
+  const y = CAMERA_RADIUS * Math.sin(elRad);
+  const z = CAMERA_RADIUS * Math.cos(elRad) * Math.cos(azRad);
+  return [x, y, z];
+}
+
+function PrimitiveCube({ color, size }: { color: string; size: number }) {
+  return (
+    <mesh>
+      <boxGeometry args={[size, size, size]} />
+      <meshStandardMaterial color={color} />
+    </mesh>
+  );
+}
+
+export function IsometricBlockRenderer({ item }: IsometricBlockRendererProps) {
+  const { width, height } = useVideoConfig();
+  const geometry = (item.props.geometry as string) ?? 'cube';
+  const color = (item.props.color as string) ?? '#888888';
+  const size = (item.props.size as number) ?? 1;
+  const camera = (item.props.camera as CameraConfig | undefined) ?? {};
+  const position = cameraPositionFromAngles(camera);
+  const zoom = camera.zoom ?? DEFAULT_ZOOM;
+
+  return (
+    <ThreeCanvas width={width} height={height}>
+      <OrthographicCamera makeDefault position={position} zoom={zoom} />
+      <ambientLight intensity={0.5} />
+      <directionalLight position={[10, 10, 10]} intensity={1.0} />
+      {geometry === 'cube' && <PrimitiveCube color={color} size={size} />}
+    </ThreeCanvas>
+  );
+}
