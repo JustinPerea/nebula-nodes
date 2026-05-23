@@ -60,3 +60,18 @@ Running log of decisions, deviations, and tradeoffs for
 - Added tests proving 3px pointer jitter does not mutate spatial values.
 - Added tests proving `pointercancel` releases pointer capture and prevents later
   pointermove from mutating the layer.
+
+## Task 2 — Resize scale math helper
+
+### Decisions outside the spec
+
+- Used `toBeCloseTo` for the tests that multiply by `1.1` / `1.2` on a
+  non-integer starting scale. Direct tuple equality would make the test depend
+  on floating-point representation details rather than the resize rule.
+
+### Changes
+
+- Added `resizeMath.ts` with the eight handle identifiers and
+  `computeResizeScale`.
+- Covered proportional corners, Shift independent corners, edge-only stretch,
+  inverted left/top deltas, and zero-size rect fallback.
