@@ -124,4 +124,27 @@ describe('RemotionPropertiesPanel — Transform section', () => {
     expect(manifest.timeline[0].spatial.y).toBe(50);
     expect(manifest.timeline[0].spatial.scale).toEqual([5, 3, 4]);
   });
+
+  it('renders Rotation X/Y/Z inputs below Scale fields', () => {
+    seedAndSelect(makeTrackItem({ spatial: { x: 100, y: 50, z: 0, scale: [2, 3, 4], rotation: [10, 20, 30] } }));
+    const { getByLabelText } = render(<RemotionPropertiesPanel remotionNodeId="r1" />);
+
+    expect((getByLabelText('Rotation X') as HTMLInputElement).value).toBe('10');
+    expect((getByLabelText('Rotation Y') as HTMLInputElement).value).toBe('20');
+    expect((getByLabelText('Rotation Z') as HTMLInputElement).value).toBe('30');
+  });
+
+  it('typing in Rotation Z updates spatial.rotation while preserving position, scale, and other rotation axes', () => {
+    seedAndSelect(makeTrackItem({ spatial: { x: 100, y: 50, z: 0, scale: [2, 3, 4], rotation: [10, 20, 30] } }));
+    const { getByLabelText } = render(<RemotionPropertiesPanel remotionNodeId="r1" />);
+
+    fireEvent.change(getByLabelText('Rotation Z'), { target: { value: '90' } });
+
+    const remotion = useGraphStore.getState().nodes.find((n) => n.id === 'r1');
+    const manifest = (remotion?.data.params as { manifest: { timeline: TrackItem[] } }).manifest;
+    expect(manifest.timeline[0].spatial.x).toBe(100);
+    expect(manifest.timeline[0].spatial.y).toBe(50);
+    expect(manifest.timeline[0].spatial.scale).toEqual([2, 3, 4]);
+    expect(manifest.timeline[0].spatial.rotation).toEqual([10, 20, 90]);
+  });
 });

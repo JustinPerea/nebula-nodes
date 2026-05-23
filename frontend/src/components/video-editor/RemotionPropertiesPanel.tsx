@@ -58,6 +58,15 @@ export function RemotionPropertiesPanel({ remotionNodeId }: RemotionPropertiesPa
     nextScale[index] = value;
     onSpatialPatch({ scale: nextScale });
   };
+  const onRotationValue = (index: 0 | 1 | 2, value: number) => {
+    const nextRotation: TrackItem['spatial']['rotation'] = [
+      item.spatial.rotation[0],
+      item.spatial.rotation[1],
+      item.spatial.rotation[2],
+    ];
+    nextRotation[index] = value;
+    onSpatialPatch({ rotation: nextRotation });
+  };
 
   return (
     <aside className="remotion-properties-panel">
@@ -124,6 +133,24 @@ export function RemotionPropertiesPanel({ remotionNodeId }: RemotionPropertiesPa
           label="Scale Z"
           value={item.spatial.scale[2]}
           onValueChange={(value) => onScaleValue(2, value)}
+        />
+        <SpatialAxisInput
+          axis="x"
+          label="Rotation X"
+          value={item.spatial.rotation[0]}
+          onValueChange={(value) => onRotationValue(0, value)}
+        />
+        <SpatialAxisInput
+          axis="y"
+          label="Rotation Y"
+          value={item.spatial.rotation[1]}
+          onValueChange={(value) => onRotationValue(1, value)}
+        />
+        <SpatialAxisInput
+          axis="z"
+          label="Rotation Z"
+          value={item.spatial.rotation[2]}
+          onValueChange={(value) => onRotationValue(2, value)}
         />
       </section>
 

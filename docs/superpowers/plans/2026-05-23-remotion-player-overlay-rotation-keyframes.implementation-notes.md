@@ -72,3 +72,16 @@ Running log of decisions, deviations, and tradeoffs for
 - Added one `data-rotation-handle="z"` handle.
 - Added tests for handle presence, rotation.z updates, and preserving
   rotation.x/y.
+
+## Task 4 — Properties Panel Rotation fields
+
+### Decisions outside the spec
+
+- None so far. Rotation inputs reuse `SpatialAxisInput`, and edits rebuild the
+  rotation tuple before dispatching `updateTrackItemSpatial`.
+
+### Changes
+
+- Added Rotation X/Y/Z below Scale X/Y/Z.
+- Added tests for rendering current rotation values and preserving unrelated
+  transform fields when editing Rotation Z.
