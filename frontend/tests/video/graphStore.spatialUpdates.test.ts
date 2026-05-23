@@ -116,3 +116,112 @@ describe('graphStore — updateTrackItemSpatial', () => {
     expect(manifestAfterUndo.timeline[0].spatial.x).toBe(0);
   });
 });
+
+describe('graphStore — addOrUpdateKeyframe', () => {
+  beforeEach(() => {
+    useGraphStore.setState(INITIAL_GRAPH_STATE, true);
+  });
+
+  it('inserts a new keyframe array for a missing prop', () => {
+    seedRemotionWithItem(makeTrackItem());
+    useGraphStore.getState().addOrUpdateKeyframe('r1', 't1', 'position', 30, [100, 50, 0]);
+
+    const state = useGraphStore.getState();
+    const remotion = state.nodes.find((n) => n.id === 'r1');
+    const manifest = (remotion?.data.params as { manifest: { timeline: TrackItem[] } }).manifest;
+    expect(manifest.timeline[0].keyframes.position).toEqual([
+      { frame: 30, value: [100, 50, 0], easing: 'linear' },
+    ]);
+  });
+
+  it('replaces an existing keyframe at the same rounded frame', () => {
+    seedRemotionWithItem(makeTrackItem({
+      keyframes: {
+        position: [
+          { frame: 30, value: [1, 2, 3], easing: 'spring' },
+        ],
+      },
+    }));
+    useGraphStore.getState().addOrUpdateKeyframe('r1', 't1', 'position', 30.4, [4, 5, 6]);
+
+    const state = useGraphStore.getState();
+    const remotion = state.nodes.find((n) => n.id === 'r1');
+    const manifest = (remotion?.data.params as { manifest: { timeline: TrackItem[] } }).manifest;
+    expect(manifest.timeline[0].keyframes.position).toEqual([
+      { frame: 30, value: [4, 5, 6], easing: 'linear' },
+    ]);
+  });
+
+  it('keeps keyframes sorted by frame', () => {
+    seedRemotionWithItem(makeTrackItem({
+      keyframes: {
+        position: [
+          { frame: 40, value: [40, 0, 0], easing: 'linear' },
+          { frame: 10, value: [10, 0, 0], easing: 'linear' },
+        ],
+      },
+    }));
+    useGraphStore.getState().addOrUpdateKeyframe('r1', 't1', 'position', 25, [25, 0, 0]);
+
+    const state = useGraphStore.getState();
+    const remotion = state.nodes.find((n) => n.id === 'r1');
+    const manifest = (remotion?.data.params as { manifest: { timeline: TrackItem[] } }).manifest;
+    expect(manifest.timeline[0].keyframes.position.map((k) => k.frame)).toEqual([10, 25, 40]);
+  });
+
+  it('no-ops if the TrackItem does not exist', () => {
+    seedRemotionWithItem(makeTrackItem());
+    useGraphStore.getState().addOrUpdateKeyframe('r1', 'does-not-exist', 'position', 30, [1, 2, 3]);
+
+    const state = useGraphStore.getState();
+    const remotion = state.nodes.find((n) => n.id === 'r1');
+    const manifest = (remotion?.data.params as { manifest: { timeline: TrackItem[] } }).manifest;
+    expect(manifest.timeline[0].keyframes).toEqual({});
+  });
+
+  it('no-ops if the RemotionNode does not exist', () => {
+    useGraphStore.getState().addOrUpdateKeyframe('does-not-exist', 't1', 'position', 30, [1, 2, 3]);
+    expect(useGraphStore.getState().nodes).toHaveLength(0);
+  });
+
+  it('does not mutate static spatial values', () => {
+    seedRemotionWithItem(makeTrackItem({
+      spatial: { x: 10, y: 20, z: 30, scale: [2, 3, 4], rotation: [5, 6, 7] },
+    }));
+    useGraphStore.getState().addOrUpdateKeyframe('r1', 't1', 'position', 30, [100, 200, 300]);
+
+    const state = useGraphStore.getState();
+    const remotion = state.nodes.find((n) => n.id === 'r1');
+    const manifest = (remotion?.data.params as { manifest: { timeline: TrackItem[] } }).manifest;
+    expect(manifest.timeline[0].spatial).toEqual({
+      x: 10,
+      y: 20,
+      z: 30,
+      scale: [2, 3, 4],
+      rotation: [5, 6, 7],
+    });
+  });
+
+  it('debounces rapid same-node keyframe updates into one undo entry', () => {
+    seedRemotionWithItem(makeTrackItem(), 'r-keyframe-undo');
+    const undoBefore = useGraphStore.getState().undoStack.length;
+
+    useGraphStore.getState().addOrUpdateKeyframe('r-keyframe-undo', 't1', 'position', 10, [10, 0, 0]);
+    useGraphStore.getState().addOrUpdateKeyframe('r-keyframe-undo', 't1', 'position', 20, [20, 0, 0]);
+    useGraphStore.getState().addOrUpdateKeyframe('r-keyframe-undo', 't1', 'position', 30, [30, 0, 0]);
+
+    const undoAfter = useGraphStore.getState().undoStack.length;
+    expect(undoAfter).toBe(undoBefore + 1);
+
+    const state = useGraphStore.getState();
+    const remotion = state.nodes.find((n) => n.id === 'r-keyframe-undo');
+    const manifest = (remotion?.data.params as { manifest: { timeline: TrackItem[] } }).manifest;
+    expect(manifest.timeline[0].keyframes.position).toHaveLength(3);
+
+    state.undo();
+    const stateAfterUndo = useGraphStore.getState();
+    const remotionAfterUndo = stateAfterUndo.nodes.find((n) => n.id === 'r-keyframe-undo');
+    const manifestAfterUndo = (remotionAfterUndo?.data.params as { manifest: { timeline: TrackItem[] } }).manifest;
+    expect(manifestAfterUndo.timeline[0].keyframes).toEqual({});
+  });
+});

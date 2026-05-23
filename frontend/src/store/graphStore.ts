@@ -217,6 +217,13 @@ interface GraphState {
     trackItemId: string,
     spatialPatch: Partial<TrackItem['spatial']>,
   ) => void;
+  addOrUpdateKeyframe: (
+    remotionNodeId: string,
+    trackItemId: string,
+    propName: string,
+    frame: number,
+    value: number | [number, number, number],
+  ) => void;
   executeGraph: () => Promise<void>;
   resetExecution: () => void;
   handleExecutionEvent: (event: ExecutionEvent) => void;
@@ -1349,6 +1356,51 @@ export const useGraphStore = create<GraphState>((set, get) => ({
               ? { ...t, spatial: { ...t.spatial, ...spatialPatch } }
               : t,
           ),
+        };
+        return {
+          ...n,
+          data: { ...n.data, params: { ...params, manifest: nextManifest } },
+        };
+      });
+      return { nodes: updatedNodes };
+    });
+  },
+
+  addOrUpdateKeyframe: (remotionNodeId, trackItemId, propName, frame, value) => {
+    const state = get();
+    const remotion = state.nodes.find((n) => n.id === remotionNodeId);
+    if (!remotion) return;
+    const currentParams = (remotion.data.params ?? {}) as Record<string, unknown>;
+    const manifest = currentParams.manifest as VideoGraphManifest | undefined;
+    if (!manifest) return;
+    if (!manifest.timeline.some((t) => t.id === trackItemId)) return;
+
+    const roundedFrame = Math.round(frame);
+    const storedValue = Array.isArray(value) ? ([...value] as [number, number, number]) : value;
+    maybePushUndo(set, get, remotionNodeId);
+
+    set((s) => {
+      const updatedNodes = s.nodes.map((n) => {
+        if (n.id !== remotionNodeId) return n;
+        const params = (n.data.params ?? {}) as Record<string, unknown>;
+        const m = params.manifest as VideoGraphManifest;
+        const nextManifest: VideoGraphManifest = {
+          ...m,
+          timeline: m.timeline.map((t) => {
+            if (t.id !== trackItemId) return t;
+            const existingKeyframes = t.keyframes[propName] ?? [];
+            const nextKeyframes = [
+              ...existingKeyframes.filter((k) => k.frame !== roundedFrame),
+              { frame: roundedFrame, value: storedValue, easing: 'linear' as const },
+            ].sort((a, b) => a.frame - b.frame);
+            return {
+              ...t,
+              keyframes: {
+                ...t.keyframes,
+                [propName]: nextKeyframes,
+              },
+            };
+          }),
         };
         return {
           ...n,

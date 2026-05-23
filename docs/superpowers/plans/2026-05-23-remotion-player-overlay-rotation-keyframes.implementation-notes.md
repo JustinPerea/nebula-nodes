@@ -85,3 +85,17 @@ Running log of decisions, deviations, and tradeoffs for
 - Added Rotation X/Y/Z below Scale X/Y/Z.
 - Added tests for rendering current rotation values and preserving unrelated
   transform fields when editing Rotation Z.
+
+## Task 5 — graphStore.addOrUpdateKeyframe
+
+### Decisions outside the spec
+
+- Cloned tuple values before storing them in keyframes. Drag handlers build fresh
+  tuples today, but cloning prevents future callers from mutating a tuple after
+  the store accepts it.
+
+### Changes
+
+- Added `addOrUpdateKeyframe` to the graph store interface and implementation.
+- Added tests for insert, same-frame replace, frame sorting, missing target
+  no-ops, static spatial preservation, and undo debounce behavior.
