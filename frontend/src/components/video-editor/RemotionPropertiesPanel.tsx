@@ -1,6 +1,7 @@
 import { useGraphStore } from '../../store/graphStore';
 import { useUIStore } from '../../store/uiStore';
 import type { TrackItem, VideoGraphManifest } from '../../types/video';
+import { SpatialAxisInput } from './SpatialAxisInput';
 
 function isVoxelCellArray(
   v: unknown,
@@ -48,6 +49,15 @@ export function RemotionPropertiesPanel({ remotionNodeId }: RemotionPropertiesPa
   const onSpatialPatch = (patch: Partial<TrackItem['spatial']>) => {
     updateTrackItemSpatial(remotionNodeId, item.id, patch);
   };
+  const onScaleValue = (index: 0 | 1 | 2, value: number) => {
+    const nextScale: TrackItem['spatial']['scale'] = [
+      item.spatial.scale[0],
+      item.spatial.scale[1],
+      item.spatial.scale[2],
+    ];
+    nextScale[index] = value;
+    onSpatialPatch({ scale: nextScale });
+  };
 
   return (
     <aside className="remotion-properties-panel">
@@ -79,33 +89,42 @@ export function RemotionPropertiesPanel({ remotionNodeId }: RemotionPropertiesPa
 
       <section className="remotion-properties-panel__section">
         <h4>Transform</h4>
-        <label>
-          Position X
-          <input
-            type="number"
-            data-spatial-axis="x"
-            value={item.spatial.x}
-            onChange={(e) => onSpatialPatch({ x: Number(e.target.value) })}
-          />
-        </label>
-        <label>
-          Position Y
-          <input
-            type="number"
-            data-spatial-axis="y"
-            value={item.spatial.y}
-            onChange={(e) => onSpatialPatch({ y: Number(e.target.value) })}
-          />
-        </label>
-        <label>
-          Position Z
-          <input
-            type="number"
-            data-spatial-axis="z"
-            value={item.spatial.z}
-            onChange={(e) => onSpatialPatch({ z: Number(e.target.value) })}
-          />
-        </label>
+        <SpatialAxisInput
+          axis="x"
+          label="Position X"
+          value={item.spatial.x}
+          onValueChange={(value) => onSpatialPatch({ x: value })}
+        />
+        <SpatialAxisInput
+          axis="y"
+          label="Position Y"
+          value={item.spatial.y}
+          onValueChange={(value) => onSpatialPatch({ y: value })}
+        />
+        <SpatialAxisInput
+          axis="z"
+          label="Position Z"
+          value={item.spatial.z}
+          onValueChange={(value) => onSpatialPatch({ z: value })}
+        />
+        <SpatialAxisInput
+          axis="x"
+          label="Scale X"
+          value={item.spatial.scale[0]}
+          onValueChange={(value) => onScaleValue(0, value)}
+        />
+        <SpatialAxisInput
+          axis="y"
+          label="Scale Y"
+          value={item.spatial.scale[1]}
+          onValueChange={(value) => onScaleValue(1, value)}
+        />
+        <SpatialAxisInput
+          axis="z"
+          label="Scale Z"
+          value={item.spatial.scale[2]}
+          onValueChange={(value) => onScaleValue(2, value)}
+        />
       </section>
 
       {item.componentType === 'TextNode' && (

@@ -101,6 +101,73 @@ body.app-slava-restraint .remotion-selection-box__body:active {
   cursor: grabbing;
 }
 
+body.app-slava-restraint .remotion-selection-box__handle {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border: 1px solid var(--sr-accent);
+  background: var(--sr-canvas);
+  box-shadow: 0 0 0 1px var(--sr-canvas);
+  pointer-events: auto;
+  z-index: 2;
+}
+
+body.app-slava-restraint .remotion-selection-box__handle--corner-tl {
+  top: 0;
+  left: 0;
+  transform: translate(-50%, -50%);
+  cursor: nwse-resize;
+}
+
+body.app-slava-restraint .remotion-selection-box__handle--corner-tr {
+  top: 0;
+  right: 0;
+  transform: translate(50%, -50%);
+  cursor: nesw-resize;
+}
+
+body.app-slava-restraint .remotion-selection-box__handle--corner-bl {
+  bottom: 0;
+  left: 0;
+  transform: translate(-50%, 50%);
+  cursor: nesw-resize;
+}
+
+body.app-slava-restraint .remotion-selection-box__handle--corner-br {
+  right: 0;
+  bottom: 0;
+  transform: translate(50%, 50%);
+  cursor: nwse-resize;
+}
+
+body.app-slava-restraint .remotion-selection-box__handle--edge-top {
+  top: 0;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  cursor: ns-resize;
+}
+
+body.app-slava-restraint .remotion-selection-box__handle--edge-right {
+  top: 50%;
+  right: 0;
+  transform: translate(50%, -50%);
+  cursor: ew-resize;
+}
+
+body.app-slava-restraint .remotion-selection-box__handle--edge-bottom {
+  bottom: 0;
+  left: 50%;
+  transform: translate(-50%, 50%);
+  cursor: ns-resize;
+}
+
+body.app-slava-restraint .remotion-selection-box__handle--edge-left {
+  top: 50%;
+  left: 0;
+  transform: translate(-50%, -50%);
+  cursor: ew-resize;
+}
+
 body.app-slava-restraint .remotion-editor-view__timeline {
   border-top: 1px solid var(--sr-edge-strong);
   background: var(--sr-glass-strong);

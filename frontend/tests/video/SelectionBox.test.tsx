@@ -4,6 +4,7 @@ import { SelectionBox } from '../../src/components/video-editor/SelectionBox';
 import { useUIStore } from '../../src/store/uiStore';
 import { useGraphStore } from '../../src/store/graphStore';
 import type { TrackItem } from '../../src/types/video';
+import type { ResizeHandle } from '../../src/lib/video/resizeMath';
 
 const INITIAL_UI_STATE = { ...useUIStore.getState() };
 const INITIAL_GRAPH_STATE = { ...useGraphStore.getState() };
@@ -43,6 +44,42 @@ function makePlayerFrameRef(width = 1280, height = 720): { current: HTMLElement 
     left: 0, top: 0, width, height, right: width, bottom: height, x: 0, y: 0, toJSON: () => ({}),
   });
   return { current: el };
+}
+
+function setupSelectedLayer(spatial: TrackItem['spatial'] = { x: 0, y: 0, z: 0, scale: [1, 1, 1], rotation: [0, 0, 0] }) {
+  const layerEl = document.createElement('div');
+  layerEl.setAttribute('data-track-item-id', 'track-xyz');
+  layerEl.setAttribute('data-track-item-content-id', 'track-xyz');
+  vi.spyOn(layerEl, 'getBoundingClientRect').mockReturnValue({
+    left: 100, top: 100, width: 200, height: 100, right: 300, bottom: 200, x: 100, y: 100, toJSON: () => ({}),
+  });
+  document.body.appendChild(layerEl);
+  seedRemotionWithItem(makeTrackItem({ spatial }));
+  return layerEl;
+}
+
+function readSelectedScale(): TrackItem['spatial']['scale'] {
+  const remotion = useGraphStore.getState().nodes.find((n) => n.id === 'r1');
+  const manifest = (remotion?.data.params as { manifest: { timeline: TrackItem[] } }).manifest;
+  return manifest.timeline[0].spatial.scale;
+}
+
+function dragHandle(container: HTMLElement, handle: ResizeHandle, options: { dx: number; dy: number; shiftKey?: boolean }) {
+  const el = container.querySelector(`[data-resize-handle="${handle}"]`) as HTMLElement;
+  el.setPointerCapture = vi.fn();
+  el.releasePointerCapture = vi.fn();
+  fireEvent.pointerDown(el, { pointerId: 2, clientX: 300, clientY: 200 });
+  fireEvent.pointerMove(el, {
+    pointerId: 2,
+    clientX: 300 + options.dx,
+    clientY: 200 + options.dy,
+    shiftKey: options.shiftKey ?? false,
+  });
+  fireEvent.pointerUp(el, {
+    pointerId: 2,
+    clientX: 300 + options.dx,
+    clientY: 200 + options.dy,
+  });
 }
 
 describe('SelectionBox — scaffolding', () => {
@@ -154,6 +191,67 @@ describe('SelectionBox — body drag', () => {
 
     document.body.removeChild(layerEl);
   });
+
+  it('ignores pointer jitter inside the 4px dead-zone', () => {
+    const layerEl = document.createElement('div');
+    layerEl.setAttribute('data-track-item-id', 'track-xyz');
+    layerEl.setAttribute('data-track-item-content-id', 'track-xyz');
+    vi.spyOn(layerEl, 'getBoundingClientRect').mockReturnValue({
+      left: 0, top: 0, width: 100, height: 100, right: 100, bottom: 100, x: 0, y: 0, toJSON: () => ({}),
+    });
+    document.body.appendChild(layerEl);
+    seedRemotionWithItem(makeTrackItem({ spatial: { x: 10, y: 20, z: 0, scale: [1, 1, 1], rotation: [0, 0, 0] } }));
+
+    const playerFrameRef = makePlayerFrameRef();
+    const { container } = render(
+      <SelectionBox remotionNodeId="r1" trackItemId="track-xyz" playerFrameRef={playerFrameRef} />,
+    );
+    const body = container.querySelector('.remotion-selection-box__body') as HTMLElement;
+    body.setPointerCapture = vi.fn();
+    body.releasePointerCapture = vi.fn();
+
+    fireEvent.pointerDown(body, { pointerId: 1, clientX: 50, clientY: 50 });
+    fireEvent.pointerMove(body, { pointerId: 1, clientX: 53, clientY: 50 });
+    fireEvent.pointerUp(body, { pointerId: 1, clientX: 53, clientY: 50 });
+
+    const remotion = useGraphStore.getState().nodes.find((n) => n.id === 'r1');
+    const manifest = (remotion?.data.params as { manifest: { timeline: TrackItem[] } }).manifest;
+    expect(manifest.timeline[0].spatial.x).toBe(10);
+    expect(manifest.timeline[0].spatial.y).toBe(20);
+
+    document.body.removeChild(layerEl);
+  });
+
+  it('pointercancel clears the active body drag session', () => {
+    const layerEl = document.createElement('div');
+    layerEl.setAttribute('data-track-item-id', 'track-xyz');
+    layerEl.setAttribute('data-track-item-content-id', 'track-xyz');
+    vi.spyOn(layerEl, 'getBoundingClientRect').mockReturnValue({
+      left: 0, top: 0, width: 100, height: 100, right: 100, bottom: 100, x: 0, y: 0, toJSON: () => ({}),
+    });
+    document.body.appendChild(layerEl);
+    seedRemotionWithItem(makeTrackItem({ spatial: { x: 10, y: 20, z: 0, scale: [1, 1, 1], rotation: [0, 0, 0] } }));
+
+    const playerFrameRef = makePlayerFrameRef();
+    const { container } = render(
+      <SelectionBox remotionNodeId="r1" trackItemId="track-xyz" playerFrameRef={playerFrameRef} />,
+    );
+    const body = container.querySelector('.remotion-selection-box__body') as HTMLElement;
+    body.setPointerCapture = vi.fn();
+    body.releasePointerCapture = vi.fn();
+
+    fireEvent.pointerDown(body, { pointerId: 1, clientX: 50, clientY: 50 });
+    fireEvent.pointerCancel(body, { pointerId: 1, clientX: 50, clientY: 50 });
+    fireEvent.pointerMove(body, { pointerId: 1, clientX: 80, clientY: 50 });
+
+    const remotion = useGraphStore.getState().nodes.find((n) => n.id === 'r1');
+    const manifest = (remotion?.data.params as { manifest: { timeline: TrackItem[] } }).manifest;
+    expect(manifest.timeline[0].spatial.x).toBe(10);
+    expect(manifest.timeline[0].spatial.y).toBe(20);
+    expect(body.releasePointerCapture).toHaveBeenCalledWith(1);
+
+    document.body.removeChild(layerEl);
+  });
 });
 
 describe('SelectionBox — content-id fallback', () => {
@@ -181,6 +279,93 @@ describe('SelectionBox — content-id fallback', () => {
     expect(box).not.toBeNull();
     expect(box.style.left).toBe('50px');
 
+    document.body.removeChild(layerEl);
+  });
+});
+
+describe('SelectionBox — resize handles', () => {
+  beforeEach(() => {
+    useUIStore.setState(INITIAL_UI_STATE, true);
+    useGraphStore.setState(INITIAL_GRAPH_STATE, true);
+    document.querySelectorAll('[data-track-item-id], [data-track-item-content-id]').forEach((el) => el.remove());
+  });
+
+  it('renders eight resize handles with stable data attributes', () => {
+    const layerEl = setupSelectedLayer();
+    const playerFrameRef = makePlayerFrameRef();
+    const { container } = render(
+      <SelectionBox remotionNodeId="r1" trackItemId="track-xyz" playerFrameRef={playerFrameRef} />,
+    );
+
+    const handles = Array.from(container.querySelectorAll('[data-resize-handle]')).map(
+      (el) => (el as HTMLElement).dataset.resizeHandle,
+    );
+    expect(handles).toEqual([
+      'corner-tl',
+      'corner-tr',
+      'corner-bl',
+      'corner-br',
+      'edge-top',
+      'edge-right',
+      'edge-bottom',
+      'edge-left',
+    ]);
+
+    document.body.removeChild(layerEl);
+  });
+
+  it('corner drag scales proportionally by default', () => {
+    const layerEl = setupSelectedLayer({ x: 0, y: 0, z: 0, scale: [1, 1, 1], rotation: [0, 0, 0] });
+    const playerFrameRef = makePlayerFrameRef();
+    const { container } = render(
+      <SelectionBox remotionNodeId="r1" trackItemId="track-xyz" playerFrameRef={playerFrameRef} />,
+    );
+
+    dragHandle(container, 'corner-br', { dx: 40, dy: 10 });
+
+    expect(readSelectedScale()).toEqual([1.2, 1.2, 1]);
+    document.body.removeChild(layerEl);
+  });
+
+  it('Shift corner drag scales X and Y independently', () => {
+    const layerEl = setupSelectedLayer({ x: 0, y: 0, z: 0, scale: [1, 1, 1], rotation: [0, 0, 0] });
+    const playerFrameRef = makePlayerFrameRef();
+    const { container } = render(
+      <SelectionBox remotionNodeId="r1" trackItemId="track-xyz" playerFrameRef={playerFrameRef} />,
+    );
+
+    dragHandle(container, 'corner-br', { dx: 40, dy: 10, shiftKey: true });
+
+    expect(readSelectedScale()).toEqual([1.2, 1.1, 1]);
+    document.body.removeChild(layerEl);
+  });
+
+  it('right edge drag updates only scale.x', () => {
+    const layerEl = setupSelectedLayer({ x: 0, y: 0, z: 0, scale: [2, 3, 4], rotation: [0, 0, 0] });
+    const playerFrameRef = makePlayerFrameRef();
+    const { container } = render(
+      <SelectionBox remotionNodeId="r1" trackItemId="track-xyz" playerFrameRef={playerFrameRef} />,
+    );
+
+    dragHandle(container, 'edge-right', { dx: 40, dy: 80 });
+
+    expect(readSelectedScale()).toEqual([2.4, 3, 4]);
+    document.body.removeChild(layerEl);
+  });
+
+  it('bottom edge drag updates only scale.y', () => {
+    const layerEl = setupSelectedLayer({ x: 0, y: 0, z: 0, scale: [2, 3, 4], rotation: [0, 0, 0] });
+    const playerFrameRef = makePlayerFrameRef();
+    const { container } = render(
+      <SelectionBox remotionNodeId="r1" trackItemId="track-xyz" playerFrameRef={playerFrameRef} />,
+    );
+
+    dragHandle(container, 'edge-bottom', { dx: 80, dy: 20 });
+
+    const scale = readSelectedScale();
+    expect(scale[0]).toBe(2);
+    expect(scale[1]).toBeCloseTo(3.6);
+    expect(scale[2]).toBe(4);
     document.body.removeChild(layerEl);
   });
 });
