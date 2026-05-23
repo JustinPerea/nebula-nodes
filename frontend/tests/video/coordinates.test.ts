@@ -2,11 +2,14 @@ import { describe, it, expect } from 'vitest';
 import { screenToComposition } from '../../src/lib/video/coordinates';
 
 function mockPlayerEl(width: number, height: number): HTMLElement {
-  const el = document.createElement('div');
-  el.getBoundingClientRect = () => ({
-    left: 0, top: 0, width, height, right: width, bottom: height, x: 0, y: 0, toJSON: () => ({}),
-  });
-  return el;
+  // Plain object with the getBoundingClientRect method that screenToComposition
+  // actually calls — no DOM needed. Keeps this test environment-agnostic so it
+  // passes whether vitest runs from `frontend/` (jsdom) or the repo root (node).
+  return {
+    getBoundingClientRect: () => ({
+      left: 0, top: 0, width, height, right: width, bottom: height, x: 0, y: 0, toJSON: () => ({}),
+    }),
+  } as unknown as HTMLElement;
 }
 
 describe('screenToComposition', () => {
