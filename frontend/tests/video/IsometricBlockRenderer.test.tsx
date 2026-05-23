@@ -15,6 +15,7 @@ vi.mock('@react-three/drei', () => ({
   OrthographicCamera: ({ position }: { position: [number, number, number] }) => (
     <div data-testid="ortho-camera" data-pos={position.join(',')} />
   ),
+  useGLTF: (url: string) => ({ scene: { name: `mock-scene-${url}` } }),
 }));
 
 // Stub remotion's useVideoConfig so the component can run outside a composition.
@@ -65,5 +66,12 @@ describe('IsometricBlockRenderer', () => {
     // IsometricBlockRenderer wraps the ThreeCanvas in a <div data-iso-geometry={geometry}>
     // so we can assert routing in JSDOM (which has no GL).
     expect(container.querySelector(`[data-iso-geometry="${geometry}"]`)).not.toBeNull();
+  });
+
+  it('routes geometry=gltf through the GLTF primitive case', () => {
+    const { container } = render(
+      <IsometricBlockRenderer item={makeItem({ props: { geometry: 'gltf', gltfUrl: 'https://example.com/cube.glb' } })} />,
+    );
+    expect(container.querySelector('[data-iso-geometry="gltf"]')).not.toBeNull();
   });
 });

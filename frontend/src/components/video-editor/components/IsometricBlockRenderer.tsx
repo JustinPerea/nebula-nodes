@@ -1,5 +1,6 @@
+import { Suspense } from 'react';
 import { ThreeCanvas } from '@remotion/three';
-import { OrthographicCamera } from '@react-three/drei';
+import { OrthographicCamera, useGLTF } from '@react-three/drei';
 import { useVideoConfig } from 'remotion';
 import type { TrackItem } from '../../../types/video';
 
@@ -76,6 +77,12 @@ function PrimitivePlane({ color, size }: { color: string; size: number }) {
   );
 }
 
+function GLTFPrimitive({ url }: { url: string }) {
+  const gltf = useGLTF(url);
+  // gltf.scene is the loaded Three.js Object3D.
+  return <primitive object={gltf.scene} />;
+}
+
 export function IsometricBlockRenderer({ item }: IsometricBlockRendererProps) {
   const { width, height } = useVideoConfig();
   const geometry = (item.props.geometry as string) ?? 'cube';
@@ -91,11 +98,14 @@ export function IsometricBlockRenderer({ item }: IsometricBlockRendererProps) {
         <OrthographicCamera makeDefault position={position} zoom={zoom} />
         <ambientLight intensity={0.5} />
         <directionalLight position={[10, 10, 10]} intensity={1.0} />
-        {geometry === 'cube'     && <PrimitiveCube     color={color} size={size} />}
-        {geometry === 'sphere'   && <PrimitiveSphere   color={color} size={size} />}
-        {geometry === 'cylinder' && <PrimitiveCylinder color={color} size={size} />}
-        {geometry === 'cone'     && <PrimitiveCone     color={color} size={size} />}
-        {geometry === 'plane'    && <PrimitivePlane    color={color} size={size} />}
+        <Suspense fallback={null}>
+          {geometry === 'cube'     && <PrimitiveCube     color={color} size={size} />}
+          {geometry === 'sphere'   && <PrimitiveSphere   color={color} size={size} />}
+          {geometry === 'cylinder' && <PrimitiveCylinder color={color} size={size} />}
+          {geometry === 'cone'     && <PrimitiveCone     color={color} size={size} />}
+          {geometry === 'plane'    && <PrimitivePlane    color={color} size={size} />}
+          {geometry === 'gltf'     && <GLTFPrimitive     url={(item.props.gltfUrl as string) ?? ''} />}
+        </Suspense>
       </ThreeCanvas>
     </div>
   );
