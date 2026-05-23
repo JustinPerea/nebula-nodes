@@ -12,6 +12,9 @@ function renderOverlay() {
 describe('PlayerOverlay', () => {
   beforeEach(() => {
     useUIStore.setState(INITIAL_UI_STATE, true);
+    // Mirror SelectionBox.test.tsx — defensively clear any leaked data-track-item-id
+    // elements so a previously-failing test doesn't pollute subsequent ones.
+    document.querySelectorAll('[data-track-item-id]').forEach((el) => el.remove());
   });
 
   it('renders a transparent overlay div', () => {
