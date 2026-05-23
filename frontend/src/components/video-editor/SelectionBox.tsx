@@ -26,6 +26,12 @@ interface DragSession {
   moved: boolean;
 }
 
+const POINTER_DEAD_ZONE_PX = 4;
+
+function hasMovedPastDeadZone(dxScreen: number, dyScreen: number): boolean {
+  return Math.hypot(dxScreen, dyScreen) > POINTER_DEAD_ZONE_PX;
+}
+
 export function SelectionBox({ remotionNodeId, trackItemId, playerFrameRef }: SelectionBoxProps) {
   const [rect, setRect] = useState<ScreenRect | null>(null);
   const updateTrackItemSpatial = useGraphStore((s) => s.updateTrackItemSpatial);
@@ -97,7 +103,7 @@ export function SelectionBox({ remotionNodeId, trackItemId, playerFrameRef }: Se
 
     // Mark the drag as moved on the first non-zero pointermove so a true click
     // (down → up with no move) doesn't flush an undo entry.
-    if (!drag.moved && (dxScreen !== 0 || dyScreen !== 0)) {
+    if (!drag.moved && hasMovedPastDeadZone(dxScreen, dyScreen)) {
       drag.moved = true;
     }
     if (!drag.moved) return;
@@ -108,10 +114,14 @@ export function SelectionBox({ remotionNodeId, trackItemId, playerFrameRef }: Se
     });
   };
 
-  const handlePointerUp = (e: PointerEvent<HTMLDivElement>) => {
+  const endDrag = (e: PointerEvent<HTMLDivElement>) => {
     const drag = dragRef.current;
     if (!drag || drag.pointerId !== e.pointerId) return;
-    e.currentTarget.releasePointerCapture(e.pointerId);
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {
+      // Pointer capture may already be released by the browser during cancel.
+    }
     dragRef.current = null;
   };
 
@@ -129,7 +139,8 @@ export function SelectionBox({ remotionNodeId, trackItemId, playerFrameRef }: Se
         className="remotion-selection-box__body"
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
+        onPointerUp={endDrag}
+        onPointerCancel={endDrag}
       />
     </div>
   );

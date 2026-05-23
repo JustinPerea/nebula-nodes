@@ -154,6 +154,67 @@ describe('SelectionBox — body drag', () => {
 
     document.body.removeChild(layerEl);
   });
+
+  it('ignores pointer jitter inside the 4px dead-zone', () => {
+    const layerEl = document.createElement('div');
+    layerEl.setAttribute('data-track-item-id', 'track-xyz');
+    layerEl.setAttribute('data-track-item-content-id', 'track-xyz');
+    vi.spyOn(layerEl, 'getBoundingClientRect').mockReturnValue({
+      left: 0, top: 0, width: 100, height: 100, right: 100, bottom: 100, x: 0, y: 0, toJSON: () => ({}),
+    });
+    document.body.appendChild(layerEl);
+    seedRemotionWithItem(makeTrackItem({ spatial: { x: 10, y: 20, z: 0, scale: [1, 1, 1], rotation: [0, 0, 0] } }));
+
+    const playerFrameRef = makePlayerFrameRef();
+    const { container } = render(
+      <SelectionBox remotionNodeId="r1" trackItemId="track-xyz" playerFrameRef={playerFrameRef} />,
+    );
+    const body = container.querySelector('.remotion-selection-box__body') as HTMLElement;
+    body.setPointerCapture = vi.fn();
+    body.releasePointerCapture = vi.fn();
+
+    fireEvent.pointerDown(body, { pointerId: 1, clientX: 50, clientY: 50 });
+    fireEvent.pointerMove(body, { pointerId: 1, clientX: 53, clientY: 50 });
+    fireEvent.pointerUp(body, { pointerId: 1, clientX: 53, clientY: 50 });
+
+    const remotion = useGraphStore.getState().nodes.find((n) => n.id === 'r1');
+    const manifest = (remotion?.data.params as { manifest: { timeline: TrackItem[] } }).manifest;
+    expect(manifest.timeline[0].spatial.x).toBe(10);
+    expect(manifest.timeline[0].spatial.y).toBe(20);
+
+    document.body.removeChild(layerEl);
+  });
+
+  it('pointercancel clears the active body drag session', () => {
+    const layerEl = document.createElement('div');
+    layerEl.setAttribute('data-track-item-id', 'track-xyz');
+    layerEl.setAttribute('data-track-item-content-id', 'track-xyz');
+    vi.spyOn(layerEl, 'getBoundingClientRect').mockReturnValue({
+      left: 0, top: 0, width: 100, height: 100, right: 100, bottom: 100, x: 0, y: 0, toJSON: () => ({}),
+    });
+    document.body.appendChild(layerEl);
+    seedRemotionWithItem(makeTrackItem({ spatial: { x: 10, y: 20, z: 0, scale: [1, 1, 1], rotation: [0, 0, 0] } }));
+
+    const playerFrameRef = makePlayerFrameRef();
+    const { container } = render(
+      <SelectionBox remotionNodeId="r1" trackItemId="track-xyz" playerFrameRef={playerFrameRef} />,
+    );
+    const body = container.querySelector('.remotion-selection-box__body') as HTMLElement;
+    body.setPointerCapture = vi.fn();
+    body.releasePointerCapture = vi.fn();
+
+    fireEvent.pointerDown(body, { pointerId: 1, clientX: 50, clientY: 50 });
+    fireEvent.pointerCancel(body, { pointerId: 1, clientX: 50, clientY: 50 });
+    fireEvent.pointerMove(body, { pointerId: 1, clientX: 80, clientY: 50 });
+
+    const remotion = useGraphStore.getState().nodes.find((n) => n.id === 'r1');
+    const manifest = (remotion?.data.params as { manifest: { timeline: TrackItem[] } }).manifest;
+    expect(manifest.timeline[0].spatial.x).toBe(10);
+    expect(manifest.timeline[0].spatial.y).toBe(20);
+    expect(body.releasePointerCapture).toHaveBeenCalledWith(1);
+
+    document.body.removeChild(layerEl);
+  });
 });
 
 describe('SelectionBox — content-id fallback', () => {

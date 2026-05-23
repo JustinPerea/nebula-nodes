@@ -47,3 +47,16 @@ Running log of decisions, deviations, and tradeoffs for
 ### Self-review
 
 - Ran the plan placeholder scan and got no hits.
+
+## Task 1 — SelectionBox body drag hardening
+
+### Decisions outside the spec
+
+- None so far. Followed the plan template: 4px Euclidean dead-zone and shared
+  `endDrag` handler for `pointerup` / `pointercancel`.
+
+### Changes
+
+- Added tests proving 3px pointer jitter does not mutate spatial values.
+- Added tests proving `pointercancel` releases pointer capture and prevents later
+  pointermove from mutating the layer.
