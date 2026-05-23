@@ -54,3 +54,21 @@ Running log of decisions, deviations, and tradeoffs for
 
 - Added `rotationMath.ts` with `computeRotationZ`.
 - Added tests for above/right/below/left cardinal pointer positions.
+
+## Task 3 — SelectionBox rotation handle
+
+### Decisions outside the spec
+
+- The rotation handle reuses the same `handlePointerMove` / `endDrag` path as
+  move and resize gestures. That keeps dead-zone and pointercancel behavior
+  consistent across all SelectionBox interactions.
+- Styled the rotation affordance as a small circular handle with a connector
+  line above the SelectionBox. It is separate from `[data-resize-handle]` so
+  existing resize tests and selectors remain stable.
+
+### Changes
+
+- Added a `RotationDragSession` branch to SelectionBox drag state.
+- Added one `data-rotation-handle="z"` handle.
+- Added tests for handle presence, rotation.z updates, and preserving
+  rotation.x/y.

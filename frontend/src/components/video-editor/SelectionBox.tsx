@@ -5,6 +5,7 @@ import type { VideoGraphManifest } from '../../types/video';
 import { screenToComposition } from '../../lib/video/coordinates';
 import { computeResizeScale } from '../../lib/video/resizeMath';
 import type { ResizeHandle } from '../../lib/video/resizeMath';
+import { computeRotationZ } from '../../lib/video/rotationMath';
 
 interface SelectionBoxProps {
   remotionNodeId: string;
@@ -40,7 +41,17 @@ interface ResizeDragSession {
   moved: boolean;
 }
 
-type DragSession = MoveDragSession | ResizeDragSession;
+interface RotationDragSession {
+  type: 'rotate';
+  pointerId: number;
+  startClientX: number;
+  startClientY: number;
+  startRotation: [number, number, number];
+  startRect: ScreenRect;
+  moved: boolean;
+}
+
+type DragSession = MoveDragSession | ResizeDragSession | RotationDragSession;
 
 const POINTER_DEAD_ZONE_PX = 4;
 
@@ -141,6 +152,27 @@ export function SelectionBox({ remotionNodeId, trackItemId, playerFrameRef }: Se
     e.currentTarget.setPointerCapture(e.pointerId);
   };
 
+  const handleRotatePointerDown = (e: PointerEvent<HTMLDivElement>) => {
+    e.stopPropagation();
+
+    const remotion = useGraphStore.getState().nodes.find((n) => n.id === remotionNodeId);
+    const manifest = (remotion?.data.params as { manifest?: VideoGraphManifest } | undefined)?.manifest;
+    const item = manifest?.timeline.find((t) => t.id === trackItemId);
+    if (!item) return;
+
+    dragRef.current = {
+      type: 'rotate',
+      pointerId: e.pointerId,
+      startClientX: e.clientX,
+      startClientY: e.clientY,
+      startRotation: item.spatial.rotation,
+      startRect: rect,
+      moved: false,
+    };
+
+    e.currentTarget.setPointerCapture(e.pointerId);
+  };
+
   const handlePointerMove = (e: PointerEvent<HTMLDivElement>) => {
     const drag = dragRef.current;
     if (!drag || drag.pointerId !== e.pointerId) return;
@@ -163,6 +195,16 @@ export function SelectionBox({ remotionNodeId, trackItemId, playerFrameRef }: Se
         x: drag.startSpatialX + dxComp,
         y: drag.startSpatialY + dyComp,
       });
+      return;
+    }
+
+    if (drag.type === 'rotate') {
+      const nextRotation: [number, number, number] = [
+        drag.startRotation[0],
+        drag.startRotation[1],
+        computeRotationZ(drag.startRect, e.clientX, e.clientY),
+      ];
+      updateTrackItemSpatial(remotionNodeId, trackItemId, { rotation: nextRotation });
       return;
     }
 
@@ -216,6 +258,14 @@ export function SelectionBox({ remotionNodeId, trackItemId, playerFrameRef }: Se
           onPointerCancel={endDrag}
         />
       ))}
+      <div
+        className="remotion-selection-box__rotation-handle"
+        data-rotation-handle="z"
+        onPointerDown={handleRotatePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={endDrag}
+        onPointerCancel={endDrag}
+      />
     </div>
   );
 }

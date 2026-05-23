@@ -64,6 +64,12 @@ function readSelectedScale(): TrackItem['spatial']['scale'] {
   return manifest.timeline[0].spatial.scale;
 }
 
+function readSelectedRotation(): TrackItem['spatial']['rotation'] {
+  const remotion = useGraphStore.getState().nodes.find((n) => n.id === 'r1');
+  const manifest = (remotion?.data.params as { manifest: { timeline: TrackItem[] } }).manifest;
+  return manifest.timeline[0].spatial.rotation;
+}
+
 function dragHandle(container: HTMLElement, handle: ResizeHandle, options: { dx: number; dy: number; shiftKey?: boolean }) {
   const el = container.querySelector(`[data-resize-handle="${handle}"]`) as HTMLElement;
   el.setPointerCapture = vi.fn();
@@ -80,6 +86,15 @@ function dragHandle(container: HTMLElement, handle: ResizeHandle, options: { dx:
     clientX: 300 + options.dx,
     clientY: 200 + options.dy,
   });
+}
+
+function dragRotationHandle(container: HTMLElement, options: { toX: number; toY: number }) {
+  const el = container.querySelector('[data-rotation-handle="z"]') as HTMLElement;
+  el.setPointerCapture = vi.fn();
+  el.releasePointerCapture = vi.fn();
+  fireEvent.pointerDown(el, { pointerId: 3, clientX: 200, clientY: 70 });
+  fireEvent.pointerMove(el, { pointerId: 3, clientX: options.toX, clientY: options.toY });
+  fireEvent.pointerUp(el, { pointerId: 3, clientX: options.toX, clientY: options.toY });
 }
 
 describe('SelectionBox — scaffolding', () => {
@@ -366,6 +381,53 @@ describe('SelectionBox — resize handles', () => {
     expect(scale[0]).toBe(2);
     expect(scale[1]).toBeCloseTo(3.6);
     expect(scale[2]).toBe(4);
+    document.body.removeChild(layerEl);
+  });
+});
+
+describe('SelectionBox — rotation handle', () => {
+  beforeEach(() => {
+    useUIStore.setState(INITIAL_UI_STATE, true);
+    useGraphStore.setState(INITIAL_GRAPH_STATE, true);
+    document.querySelectorAll('[data-track-item-id], [data-track-item-content-id]').forEach((el) => el.remove());
+  });
+
+  it('renders one rotation handle with a stable data attribute', () => {
+    const layerEl = setupSelectedLayer();
+    const playerFrameRef = makePlayerFrameRef();
+    const { container } = render(
+      <SelectionBox remotionNodeId="r1" trackItemId="track-xyz" playerFrameRef={playerFrameRef} />,
+    );
+
+    const handle = container.querySelector('[data-rotation-handle="z"]');
+    expect(handle).not.toBeNull();
+    expect(container.querySelectorAll('[data-rotation-handle]')).toHaveLength(1);
+    document.body.removeChild(layerEl);
+  });
+
+  it('rotation handle drag updates rotation.z', () => {
+    const layerEl = setupSelectedLayer({ x: 0, y: 0, z: 0, scale: [1, 1, 1], rotation: [0, 0, 0] });
+    const playerFrameRef = makePlayerFrameRef();
+    const { container } = render(
+      <SelectionBox remotionNodeId="r1" trackItemId="track-xyz" playerFrameRef={playerFrameRef} />,
+    );
+
+    dragRotationHandle(container, { toX: 300, toY: 150 });
+
+    expect(readSelectedRotation()).toEqual([0, 0, 90]);
+    document.body.removeChild(layerEl);
+  });
+
+  it('rotation handle drag preserves rotation.x and rotation.y', () => {
+    const layerEl = setupSelectedLayer({ x: 0, y: 0, z: 0, scale: [1, 1, 1], rotation: [15, 30, 45] });
+    const playerFrameRef = makePlayerFrameRef();
+    const { container } = render(
+      <SelectionBox remotionNodeId="r1" trackItemId="track-xyz" playerFrameRef={playerFrameRef} />,
+    );
+
+    dragRotationHandle(container, { toX: 200, toY: 200 });
+
+    expect(readSelectedRotation()).toEqual([15, 30, 180]);
     document.body.removeChild(layerEl);
   });
 });

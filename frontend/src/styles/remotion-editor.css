@@ -168,6 +168,37 @@ body.app-slava-restraint .remotion-selection-box__handle--edge-left {
   cursor: ew-resize;
 }
 
+body.app-slava-restraint .remotion-selection-box__rotation-handle {
+  position: absolute;
+  top: -32px;
+  left: 50%;
+  width: 12px;
+  height: 12px;
+  border: 1px solid var(--sr-accent);
+  border-radius: 999px;
+  background: var(--sr-canvas);
+  box-shadow: 0 0 0 1px var(--sr-canvas);
+  cursor: grab;
+  pointer-events: auto;
+  transform: translate(-50%, -50%);
+  z-index: 3;
+}
+
+body.app-slava-restraint .remotion-selection-box__rotation-handle:active {
+  cursor: grabbing;
+}
+
+body.app-slava-restraint .remotion-selection-box__rotation-handle::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -21px;
+  width: 1px;
+  height: 20px;
+  background: var(--sr-accent);
+  transform: translateX(-50%);
+}
+
 body.app-slava-restraint .remotion-editor-view__timeline {
   border-top: 1px solid var(--sr-edge-strong);
   background: var(--sr-glass-strong);
