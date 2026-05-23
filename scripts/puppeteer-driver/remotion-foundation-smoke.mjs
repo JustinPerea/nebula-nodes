@@ -449,7 +449,102 @@ async function main() {
       window.__nebulaUIStore.getState().setSelectedTrackItem(null);
     });
 
-    log('done', 'all 16 steps passed');
+    // Step 17 - Record-mode body drag inserts a position keyframe at frame 30
+    log('test-17', 'enable REC at frame 30, drag Text layer, assert position keyframe');
+    const recordTarget = await page.evaluate(() => {
+      const s = window.__nebulaGraphStore.getState();
+      const remotion = s.nodes.find((n) => n.data.definitionId === 'remotion-node');
+      const tl = remotion?.data.params?.manifest?.timeline ?? [];
+      const text = tl.find((t) => t.componentType === 'TextNode');
+      return text
+        ? {
+            id: text.id,
+            beforeX: text.spatial.x,
+            beforeY: text.spatial.y,
+            beforeZ: text.spatial.z,
+            beforeKeyframes: text.keyframes.position ?? [],
+          }
+        : null;
+    });
+    if (!recordTarget) {
+      throw new Error('[smoke] Step 17: no Text TrackItem on timeline');
+    }
+
+    await page.evaluate((id) => {
+      window.__nebulaUIStore.getState().setSelectedTrackItem(id);
+      if (window.__nebulaUIStore.getState().isKeyframeRecording) {
+        window.__nebulaUIStore.getState().toggleKeyframeRecording();
+      }
+      window.__nebulaRemotionEditor?.seekToFrame?.(30);
+    }, recordTarget.id);
+    await page.waitForFunction(() => window.__nebulaRemotionEditor?.getCurrentFrame?.() === 30, { timeout: 3000 });
+    await page.waitForSelector('.remotion-editor-toolbar__record', { timeout: 3000 });
+    await page.click('.remotion-editor-toolbar__record');
+    await sleep(300);
+
+    const recActive = await page.evaluate(() => ({
+      store: window.__nebulaUIStore.getState().isKeyframeRecording,
+      classActive: document.querySelector('.remotion-editor-toolbar__record')?.classList.contains('remotion-editor-toolbar__record--active') ?? false,
+      currentFrame: window.__nebulaRemotionEditor?.getCurrentFrame?.(),
+    }));
+    if (!recActive.store || !recActive.classActive || recActive.currentFrame !== 30) {
+      throw new Error(`[smoke] Step 17: REC/frame not active as expected: ${JSON.stringify(recActive)}`);
+    }
+
+    const recordDragRect = await page.evaluate(() => {
+      const body = document.querySelector('.remotion-selection-box__body');
+      if (!body) return null;
+      const r = body.getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    });
+    if (!recordDragRect) {
+      throw new Error('[smoke] Step 17: .remotion-selection-box__body not in DOM after selecting Text layer');
+    }
+
+    await page.mouse.move(recordDragRect.x, recordDragRect.y);
+    await page.mouse.down();
+    await page.mouse.move(recordDragRect.x + 120, recordDragRect.y, { steps: 8 });
+    await page.mouse.up();
+    await sleep(300);
+
+    const afterRecordDrag = await page.evaluate((id) => {
+      const s = window.__nebulaGraphStore.getState();
+      const remotion = s.nodes.find((n) => n.data.definitionId === 'remotion-node');
+      const tl = remotion?.data.params?.manifest?.timeline ?? [];
+      const item = tl.find((t) => t.id === id);
+      return item
+        ? {
+            x: item.spatial.x,
+            y: item.spatial.y,
+            z: item.spatial.z,
+            positionKeyframes: item.keyframes.position ?? [],
+          }
+        : null;
+    }, recordTarget.id);
+    if (!afterRecordDrag) {
+      throw new Error(`[smoke] Step 17: Text TrackItem ${recordTarget.id} disappeared after record drag`);
+    }
+    if (afterRecordDrag.x !== recordTarget.beforeX || afterRecordDrag.y !== recordTarget.beforeY) {
+      throw new Error(
+        `[smoke] Step 17: static spatial changed during REC drag. before=(${recordTarget.beforeX},${recordTarget.beforeY}) after=(${afterRecordDrag.x},${afterRecordDrag.y})`,
+      );
+    }
+    const frame30 = afterRecordDrag.positionKeyframes.find((kf) => kf.frame === 30);
+    if (!frame30) {
+      throw new Error(`[smoke] Step 17: no position keyframe at frame 30: ${JSON.stringify(afterRecordDrag.positionKeyframes)}`);
+    }
+    if (!Array.isArray(frame30.value) || frame30.value[0] <= recordTarget.beforeX || frame30.value[1] !== recordTarget.beforeY || frame30.value[2] !== recordTarget.beforeZ) {
+      throw new Error(`[smoke] Step 17: unexpected frame 30 keyframe value: ${JSON.stringify(frame30.value)}`);
+    }
+    await page.screenshot({ path: join(OUT_DIR, 'step17-rec-position-keyframe.png') });
+    await page.evaluate(() => {
+      if (window.__nebulaUIStore.getState().isKeyframeRecording) {
+        window.__nebulaUIStore.getState().toggleKeyframeRecording();
+      }
+      window.__nebulaUIStore.getState().setSelectedTrackItem(null);
+    });
+
+    log('done', 'all 17 steps passed');
   } finally {
     await browser.close();
   }

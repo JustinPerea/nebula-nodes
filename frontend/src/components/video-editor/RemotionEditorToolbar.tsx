@@ -20,6 +20,8 @@ export function RemotionEditorToolbar({ remotionNodeId }: RemotionEditorToolbarP
   const deleteTrackItem = useGraphStore((s) => s.deleteTrackItem);
   const selectedTrackItemId = useUIStore((s) => s.selectedTrackItemId);
   const setSelectedTrackItem = useUIStore((s) => s.setSelectedTrackItem);
+  const isKeyframeRecording = useUIStore((s) => s.isKeyframeRecording);
+  const toggleKeyframeRecording = useUIStore((s) => s.toggleKeyframeRecording);
 
   const handleAdd = (componentType: TrackComponentType) => {
     addTrackItemWithCanvasMirror(remotionNodeId, { componentType });
@@ -50,6 +52,14 @@ export function RemotionEditorToolbar({ remotionNodeId }: RemotionEditorToolbarP
         disabled={!selectedTrackItemId}
       >
         Delete
+      </button>
+      <button
+        type="button"
+        className={`remotion-editor-toolbar__record ${isKeyframeRecording ? 'remotion-editor-toolbar__record--active' : ''}`}
+        onClick={toggleKeyframeRecording}
+        title={isKeyframeRecording ? 'Recording keyframes - click to stop' : 'Click to record keyframes on drag'}
+      >
+        ● REC
       </button>
     </div>
   );
