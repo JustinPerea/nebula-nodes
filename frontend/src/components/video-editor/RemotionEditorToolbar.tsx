@@ -11,6 +11,8 @@ const ADD_BUTTONS: Array<{ label: string; componentType: TrackComponentType }> =
   { label: '+ SVG', componentType: 'SVGInput' },
   { label: '+ Image', componentType: 'ImageAssetNode' },
   { label: '+ Video', componentType: 'VideoAssetNode' },
+  { label: '+ Iso Block', componentType: 'IsometricBlock' },
+  { label: '+ Lottie', componentType: 'LottieNode' },
 ];
 
 export function RemotionEditorToolbar({ remotionNodeId }: RemotionEditorToolbarProps) {
