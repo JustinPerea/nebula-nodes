@@ -371,12 +371,18 @@ async function main() {
     if (!afterDrag) {
       throw new Error(`[smoke] Step 15: Text TrackItem ${textItem.id} disappeared after drag`);
     }
+    // beforeX is 0 (IDENTITY_TRANSFORM default) unless a prior step moved the item.
+    // If this assertion false-fails, check that no step between 13 and 15 mutates spatial.x.
     if (afterDrag.x <= textItem.beforeX) {
       throw new Error(
         `[smoke] Step 15: spatial.x did not increase. before=${textItem.beforeX} after=${afterDrag.x}`,
       );
     }
     await page.screenshot({ path: join(OUT_DIR, 'step15-text-dragged.png') });
+    // Clear selection so any future Step 16+ starts with no SelectionBox mounted.
+    await page.evaluate(() => {
+      window.__nebulaUIStore.getState().setSelectedTrackItem(null);
+    });
 
     log('done', 'all 15 steps passed');
   } finally {
