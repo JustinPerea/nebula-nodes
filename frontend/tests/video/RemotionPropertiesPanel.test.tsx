@@ -102,4 +102,26 @@ describe('RemotionPropertiesPanel — Transform section', () => {
       unmount();
     }
   });
+
+  it('renders Scale X/Y/Z inputs below Position fields', () => {
+    seedAndSelect(makeTrackItem({ spatial: { x: 100, y: 50, z: 0, scale: [2, 3, 4], rotation: [0, 0, 0] } }));
+    const { getByLabelText } = render(<RemotionPropertiesPanel remotionNodeId="r1" />);
+
+    expect((getByLabelText('Scale X') as HTMLInputElement).value).toBe('2');
+    expect((getByLabelText('Scale Y') as HTMLInputElement).value).toBe('3');
+    expect((getByLabelText('Scale Z') as HTMLInputElement).value).toBe('4');
+  });
+
+  it('typing in Scale X updates spatial.scale while preserving position and other scale axes', () => {
+    seedAndSelect(makeTrackItem({ spatial: { x: 100, y: 50, z: 0, scale: [2, 3, 4], rotation: [0, 0, 0] } }));
+    const { getByLabelText } = render(<RemotionPropertiesPanel remotionNodeId="r1" />);
+
+    fireEvent.change(getByLabelText('Scale X'), { target: { value: '5' } });
+
+    const remotion = useGraphStore.getState().nodes.find((n) => n.id === 'r1');
+    const manifest = (remotion?.data.params as { manifest: { timeline: TrackItem[] } }).manifest;
+    expect(manifest.timeline[0].spatial.x).toBe(100);
+    expect(manifest.timeline[0].spatial.y).toBe(50);
+    expect(manifest.timeline[0].spatial.scale).toEqual([5, 3, 4]);
+  });
 });

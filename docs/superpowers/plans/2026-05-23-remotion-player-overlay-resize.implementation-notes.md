@@ -90,3 +90,15 @@ Running log of decisions, deviations, and tradeoffs for
   proportional corner resize, Shift independent corner resize, right-edge
   scale.x stretch, and bottom-edge scale.y stretch.
 - Added Slava-scoped handle CSS with corner and edge cursors.
+
+## Task 4 — Properties Panel Scale fields
+
+### Decisions outside the spec
+
+- None so far. Scale inputs reuse `SpatialAxisInput`, and edits rebuild the
+  scale tuple before dispatching `updateTrackItemSpatial`.
+
+### Changes
+
+- Added tests for Scale X/Y/Z rendering and preserving position / other scale
+  axes when Scale X changes.

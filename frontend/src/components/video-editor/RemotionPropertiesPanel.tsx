@@ -49,6 +49,15 @@ export function RemotionPropertiesPanel({ remotionNodeId }: RemotionPropertiesPa
   const onSpatialPatch = (patch: Partial<TrackItem['spatial']>) => {
     updateTrackItemSpatial(remotionNodeId, item.id, patch);
   };
+  const onScaleValue = (index: 0 | 1 | 2, value: number) => {
+    const nextScale: TrackItem['spatial']['scale'] = [
+      item.spatial.scale[0],
+      item.spatial.scale[1],
+      item.spatial.scale[2],
+    ];
+    nextScale[index] = value;
+    onSpatialPatch({ scale: nextScale });
+  };
 
   return (
     <aside className="remotion-properties-panel">
@@ -97,6 +106,24 @@ export function RemotionPropertiesPanel({ remotionNodeId }: RemotionPropertiesPa
           label="Position Z"
           value={item.spatial.z}
           onValueChange={(value) => onSpatialPatch({ z: value })}
+        />
+        <SpatialAxisInput
+          axis="x"
+          label="Scale X"
+          value={item.spatial.scale[0]}
+          onValueChange={(value) => onScaleValue(0, value)}
+        />
+        <SpatialAxisInput
+          axis="y"
+          label="Scale Y"
+          value={item.spatial.scale[1]}
+          onValueChange={(value) => onScaleValue(1, value)}
+        />
+        <SpatialAxisInput
+          axis="z"
+          label="Scale Z"
+          value={item.spatial.scale[2]}
+          onValueChange={(value) => onScaleValue(2, value)}
         />
       </section>
 
