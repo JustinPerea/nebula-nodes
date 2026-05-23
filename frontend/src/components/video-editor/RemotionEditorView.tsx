@@ -104,7 +104,11 @@ export function RemotionEditorView() {
             style={{ width: '100%', maxWidth: 1280, aspectRatio: '16 / 9' }}
             acknowledgeRemotionLicense
           />
-          <PlayerOverlay remotionNodeId={targetNodeId} playerFrameRef={playerFrameRef} />
+          <PlayerOverlay
+            remotionNodeId={targetNodeId}
+            playerFrameRef={playerFrameRef}
+            currentFrame={currentFrame}
+          />
         </div>
       </div>
       <aside className="remotion-editor-view__panel" data-testid="remotion-panel-slot">

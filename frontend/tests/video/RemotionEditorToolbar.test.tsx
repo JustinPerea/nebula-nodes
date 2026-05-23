@@ -17,13 +17,22 @@ vi.mock('../../src/store/graphStore', () => ({
 }));
 
 let mockSelectedId: string | null = null;
+let mockIsRecording = false;
 const setSelectedMock = vi.fn();
+const toggleRecordingMock = vi.fn();
 vi.mock('../../src/store/uiStore', () => ({
   useUIStore: (selector: (s: {
     selectedTrackItemId: string | null;
     setSelectedTrackItem: typeof setSelectedMock;
+    isKeyframeRecording: boolean;
+    toggleKeyframeRecording: typeof toggleRecordingMock;
   }) => unknown) =>
-    selector({ selectedTrackItemId: mockSelectedId, setSelectedTrackItem: setSelectedMock }),
+    selector({
+      selectedTrackItemId: mockSelectedId,
+      setSelectedTrackItem: setSelectedMock,
+      isKeyframeRecording: mockIsRecording,
+      toggleKeyframeRecording: toggleRecordingMock,
+    }),
 }));
 
 describe('RemotionEditorToolbar', () => {
@@ -31,7 +40,9 @@ describe('RemotionEditorToolbar', () => {
     addMock.mockReset();
     deleteMock.mockReset();
     setSelectedMock.mockReset();
+    toggleRecordingMock.mockReset();
     mockSelectedId = null;
+    mockIsRecording = false;
   });
 
   it('renders six add buttons', () => {
@@ -82,5 +93,22 @@ describe('RemotionEditorToolbar', () => {
     fireEvent.click(del);
     expect(deleteMock).toHaveBeenCalledWith('r1', 'track-1');
     expect(setSelectedMock).toHaveBeenCalledWith(null);
+  });
+
+  it('REC button toggles keyframe recording', () => {
+    render(<RemotionEditorToolbar remotionNodeId="r1" />);
+    const rec = screen.getByRole('button', { name: /rec/i });
+    expect(rec).toHaveClass('remotion-editor-toolbar__record');
+    expect(rec).not.toHaveClass('remotion-editor-toolbar__record--active');
+    fireEvent.click(rec);
+    expect(toggleRecordingMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('REC button reflects active recording state', () => {
+    mockIsRecording = true;
+    render(<RemotionEditorToolbar remotionNodeId="r1" />);
+    const rec = screen.getByRole('button', { name: /rec/i });
+    expect(rec).toHaveClass('remotion-editor-toolbar__record--active');
+    expect(rec).toHaveAttribute('title', 'Recording keyframes - click to stop');
   });
 });

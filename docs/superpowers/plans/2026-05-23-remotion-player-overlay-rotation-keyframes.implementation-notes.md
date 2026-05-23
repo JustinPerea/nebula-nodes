@@ -99,3 +99,32 @@ Running log of decisions, deviations, and tradeoffs for
 - Added `addOrUpdateKeyframe` to the graph store interface and implementation.
 - Added tests for insert, same-frame replace, frame sorting, missing target
   no-ops, static spatial preservation, and undo debounce behavior.
+
+## Task 6 — REC UI + SelectionBox record-mode drag routing
+
+### Decisions outside the spec
+
+- Added `currentFrame` as an optional prop with a default of `0` on
+  `PlayerOverlay` / `SelectionBox`. The editor passes the real frame, while
+  existing focused tests can keep their smaller render helpers.
+- SelectionBox now subscribes to the selected item's `keyframes` and the
+  `currentFrame` prop as well as static spatial. Record-mode drag changes do
+  not mutate `spatial`, but they can still move the rendered layer via
+  interpolation at the current frame; the box needs those changes to recalc its
+  bounds.
+- Used ASCII hyphens in the REC title text to match the repo's default ASCII
+  editing discipline.
+
+### Changes
+
+- Added toolbar `REC` button with active styling.
+- Routed move/resize/rotate gestures to `addOrUpdateKeyframe` when recording is
+  active.
+- Added tests for toolbar state and record-mode keyframe writes for position,
+  scale, and rotation.
+
+### Verification notes
+
+- First focused/full/build attempt failed because `currentFrame` was added to
+  the prop type and call sites but not destructured in `SelectionBox`. Fixed the
+  destructuring and removed the now-unneeded nullish fallback at call sites.

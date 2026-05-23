@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { PointerEvent, RefObject } from 'react';
 import { useGraphStore } from '../../store/graphStore';
+import { useUIStore } from '../../store/uiStore';
 import type { VideoGraphManifest } from '../../types/video';
 import { screenToComposition } from '../../lib/video/coordinates';
 import { computeResizeScale } from '../../lib/video/resizeMath';
@@ -11,6 +12,7 @@ interface SelectionBoxProps {
   remotionNodeId: string;
   trackItemId: string;
   playerFrameRef: RefObject<HTMLElement | null>;
+  currentFrame?: number;
 }
 
 interface ScreenRect {
@@ -27,6 +29,7 @@ interface MoveDragSession {
   startClientY: number;
   startSpatialX: number;
   startSpatialY: number;
+  startSpatialZ: number;
   moved: boolean;
 }
 
@@ -70,9 +73,16 @@ const RESIZE_HANDLES: ResizeHandle[] = [
   'edge-left',
 ];
 
-export function SelectionBox({ remotionNodeId, trackItemId, playerFrameRef }: SelectionBoxProps) {
+export function SelectionBox({
+  remotionNodeId,
+  trackItemId,
+  playerFrameRef,
+  currentFrame = 0,
+}: SelectionBoxProps) {
   const [rect, setRect] = useState<ScreenRect | null>(null);
   const updateTrackItemSpatial = useGraphStore((s) => s.updateTrackItemSpatial);
+  const addOrUpdateKeyframe = useGraphStore((s) => s.addOrUpdateKeyframe);
+  const isKeyframeRecording = useUIStore((s) => s.isKeyframeRecording);
   // Subscribe to the selected item's spatial so SelectionBox re-renders after
   // every updateTrackItemSpatial dispatch (drag tick OR Properties Panel edit).
   // The selector result is used only as a useEffect dep — its value isn't read
@@ -89,6 +99,11 @@ export function SelectionBox({ remotionNodeId, trackItemId, playerFrameRef }: Se
     const manifest = (node?.data.params as { manifest?: VideoGraphManifest } | undefined)?.manifest;
     return manifest?.timeline.find((t) => t.id === trackItemId)?.spatial ?? null;
   });
+  const keyframes = useGraphStore((s) => {
+    const node = s.nodes.find((n) => n.id === remotionNodeId);
+    const manifest = (node?.data.params as { manifest?: VideoGraphManifest } | undefined)?.manifest;
+    return manifest?.timeline.find((t) => t.id === trackItemId)?.keyframes ?? null;
+  });
   const dragRef = useRef<DragSession | null>(null);
 
   useEffect(() => {
@@ -101,7 +116,7 @@ export function SelectionBox({ remotionNodeId, trackItemId, playerFrameRef }: Se
     }
     const r = el.getBoundingClientRect();
     setRect({ left: r.left, top: r.top, width: r.width, height: r.height });
-  }, [trackItemId, spatial]);
+  }, [trackItemId, spatial, keyframes, currentFrame]);
 
   if (!rect) return null;
 
@@ -124,6 +139,7 @@ export function SelectionBox({ remotionNodeId, trackItemId, playerFrameRef }: Se
       startClientY: e.clientY,
       startSpatialX: item.spatial.x,
       startSpatialY: item.spatial.y,
+      startSpatialZ: item.spatial.z,
       moved: false,
     };
 
@@ -191,10 +207,20 @@ export function SelectionBox({ remotionNodeId, trackItemId, playerFrameRef }: Se
       const playerEl = playerFrameRef.current;
       if (!playerEl) return;
       const { x: dxComp, y: dyComp } = screenToComposition(dxScreen, dyScreen, playerEl);
-      updateTrackItemSpatial(remotionNodeId, trackItemId, {
-        x: drag.startSpatialX + dxComp,
-        y: drag.startSpatialY + dyComp,
-      });
+      const nextX = drag.startSpatialX + dxComp;
+      const nextY = drag.startSpatialY + dyComp;
+      if (isKeyframeRecording) {
+        addOrUpdateKeyframe(remotionNodeId, trackItemId, 'position', currentFrame, [
+          nextX,
+          nextY,
+          drag.startSpatialZ,
+        ]);
+      } else {
+        updateTrackItemSpatial(remotionNodeId, trackItemId, {
+          x: nextX,
+          y: nextY,
+        });
+      }
       return;
     }
 
@@ -204,7 +230,11 @@ export function SelectionBox({ remotionNodeId, trackItemId, playerFrameRef }: Se
         drag.startRotation[1],
         computeRotationZ(drag.startRect, e.clientX, e.clientY),
       ];
-      updateTrackItemSpatial(remotionNodeId, trackItemId, { rotation: nextRotation });
+      if (isKeyframeRecording) {
+        addOrUpdateKeyframe(remotionNodeId, trackItemId, 'rotation', currentFrame, nextRotation);
+      } else {
+        updateTrackItemSpatial(remotionNodeId, trackItemId, { rotation: nextRotation });
+      }
       return;
     }
 
@@ -216,7 +246,11 @@ export function SelectionBox({ remotionNodeId, trackItemId, playerFrameRef }: Se
       dyScreen,
       shiftKey: e.shiftKey,
     });
-    updateTrackItemSpatial(remotionNodeId, trackItemId, { scale });
+    if (isKeyframeRecording) {
+      addOrUpdateKeyframe(remotionNodeId, trackItemId, 'scale', currentFrame, scale);
+    } else {
+      updateTrackItemSpatial(remotionNodeId, trackItemId, { scale });
+    }
   };
 
   const endDrag = (e: PointerEvent<HTMLDivElement>) => {

@@ -5,6 +5,7 @@ import { SelectionBox } from './SelectionBox';
 interface PlayerOverlayProps {
   remotionNodeId: string;
   playerFrameRef: RefObject<HTMLElement | null>;
+  currentFrame?: number;
 }
 
 function hitTestTrackItem(x: number, y: number): string | null {
@@ -16,7 +17,7 @@ function hitTestTrackItem(x: number, y: number): string | null {
   return null;
 }
 
-export function PlayerOverlay({ remotionNodeId, playerFrameRef }: PlayerOverlayProps) {
+export function PlayerOverlay({ remotionNodeId, playerFrameRef, currentFrame = 0 }: PlayerOverlayProps) {
   const selectedTrackItemId = useUIStore((s) => s.selectedTrackItemId);
   const setSelectedTrackItem = useUIStore((s) => s.setSelectedTrackItem);
 
@@ -40,6 +41,7 @@ export function PlayerOverlay({ remotionNodeId, playerFrameRef }: PlayerOverlayP
           remotionNodeId={remotionNodeId}
           trackItemId={selectedTrackItemId}
           playerFrameRef={playerFrameRef}
+          currentFrame={currentFrame}
         />
       )}
     </div>

@@ -70,6 +70,12 @@ function readSelectedRotation(): TrackItem['spatial']['rotation'] {
   return manifest.timeline[0].spatial.rotation;
 }
 
+function readSelectedItem(): TrackItem {
+  const remotion = useGraphStore.getState().nodes.find((n) => n.id === 'r1');
+  const manifest = (remotion?.data.params as { manifest: { timeline: TrackItem[] } }).manifest;
+  return manifest.timeline[0];
+}
+
 function dragHandle(container: HTMLElement, handle: ResizeHandle, options: { dx: number; dy: number; shiftKey?: boolean }) {
   const el = container.querySelector(`[data-resize-handle="${handle}"]`) as HTMLElement;
   el.setPointerCapture = vi.fn();
@@ -428,6 +434,74 @@ describe('SelectionBox — rotation handle', () => {
     dragRotationHandle(container, { toX: 200, toY: 200 });
 
     expect(readSelectedRotation()).toEqual([15, 30, 180]);
+    document.body.removeChild(layerEl);
+  });
+});
+
+describe('SelectionBox — record-mode drag routing', () => {
+  beforeEach(() => {
+    useUIStore.setState(INITIAL_UI_STATE, true);
+    useGraphStore.setState(INITIAL_GRAPH_STATE, true);
+    document.querySelectorAll('[data-track-item-id], [data-track-item-content-id]').forEach((el) => el.remove());
+  });
+
+  it('body drag with recording on inserts a position keyframe and leaves static position unchanged', () => {
+    const layerEl = setupSelectedLayer({ x: 10, y: 20, z: 5, scale: [1, 1, 1], rotation: [0, 0, 0] });
+    useUIStore.setState({ isKeyframeRecording: true });
+    const playerFrameRef = makePlayerFrameRef(640, 360);
+    const { container } = render(
+      <SelectionBox remotionNodeId="r1" trackItemId="track-xyz" playerFrameRef={playerFrameRef} currentFrame={30} />,
+    );
+    const body = container.querySelector('.remotion-selection-box__body') as HTMLElement;
+    body.setPointerCapture = vi.fn();
+    body.releasePointerCapture = vi.fn();
+
+    fireEvent.pointerDown(body, { pointerId: 1, clientX: 200, clientY: 150 });
+    fireEvent.pointerMove(body, { pointerId: 1, clientX: 250, clientY: 175 });
+    fireEvent.pointerUp(body, { pointerId: 1, clientX: 250, clientY: 175 });
+
+    const item = readSelectedItem();
+    expect(item.spatial.x).toBe(10);
+    expect(item.spatial.y).toBe(20);
+    expect(item.keyframes.position).toEqual([
+      { frame: 30, value: [110, 70, 5], easing: 'linear' },
+    ]);
+    document.body.removeChild(layerEl);
+  });
+
+  it('resize drag with recording on inserts a scale keyframe and leaves static scale unchanged', () => {
+    const layerEl = setupSelectedLayer({ x: 0, y: 0, z: 0, scale: [2, 3, 4], rotation: [0, 0, 0] });
+    useUIStore.setState({ isKeyframeRecording: true });
+    const playerFrameRef = makePlayerFrameRef();
+    const { container } = render(
+      <SelectionBox remotionNodeId="r1" trackItemId="track-xyz" playerFrameRef={playerFrameRef} currentFrame={31} />,
+    );
+
+    dragHandle(container, 'edge-right', { dx: 40, dy: 80 });
+
+    const item = readSelectedItem();
+    expect(item.spatial.scale).toEqual([2, 3, 4]);
+    expect(item.keyframes.scale).toEqual([
+      { frame: 31, value: [2.4, 3, 4], easing: 'linear' },
+    ]);
+    document.body.removeChild(layerEl);
+  });
+
+  it('rotation drag with recording on inserts a rotation keyframe and leaves static rotation unchanged', () => {
+    const layerEl = setupSelectedLayer({ x: 0, y: 0, z: 0, scale: [1, 1, 1], rotation: [15, 30, 45] });
+    useUIStore.setState({ isKeyframeRecording: true });
+    const playerFrameRef = makePlayerFrameRef();
+    const { container } = render(
+      <SelectionBox remotionNodeId="r1" trackItemId="track-xyz" playerFrameRef={playerFrameRef} currentFrame={32} />,
+    );
+
+    dragRotationHandle(container, { toX: 300, toY: 150 });
+
+    const item = readSelectedItem();
+    expect(item.spatial.rotation).toEqual([15, 30, 45]);
+    expect(item.keyframes.rotation).toEqual([
+      { frame: 32, value: [15, 30, 90], easing: 'linear' },
+    ]);
     document.body.removeChild(layerEl);
   });
 });

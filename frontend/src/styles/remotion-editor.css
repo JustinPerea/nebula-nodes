@@ -276,7 +276,8 @@ body.app-slava-restraint .remotion-editor-toolbar {
 }
 
 body.app-slava-restraint .remotion-editor-toolbar__add,
-body.app-slava-restraint .remotion-editor-toolbar__delete {
+body.app-slava-restraint .remotion-editor-toolbar__delete,
+body.app-slava-restraint .remotion-editor-toolbar__record {
   background: none;
   border: 1px solid var(--sr-edge);
   color: var(--sr-ink);
@@ -298,6 +299,15 @@ body.app-slava-restraint .remotion-editor-toolbar__delete:not(:disabled):hover {
 body.app-slava-restraint .remotion-editor-toolbar__delete:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+}
+
+body.app-slava-restraint .remotion-editor-toolbar__record:hover {
+  border-color: var(--sr-accent);
+}
+
+body.app-slava-restraint .remotion-editor-toolbar__record--active {
+  border-color: #ff4d5e;
+  color: #ff4d5e;
 }
 
 /* ── RemotionPropertiesPanel ────────────────────────────────────────────────── */
