@@ -26,7 +26,15 @@ export function ImageRenderer({ item }: ImageRendererProps) {
   if (!src) {
     return (
       <AbsoluteFill data-track-item-id={item.id} style={{ display: 'grid', placeItems: 'center', color: '#888' }}>
-        <span data-track-item-content-id={item.id}>[no image src]</span>
+        <span
+          data-track-item-content-id={item.id}
+          style={{
+            opacity,
+            transform: `translate3d(${position[0]}px, ${position[1]}px, ${position[2]}px) rotateX(${rotation[0]}deg) rotateY(${rotation[1]}deg) rotateZ(${rotation[2]}deg) scale3d(${scale[0]}, ${scale[1]}, ${scale[2]})`,
+          }}
+        >
+          [no image src]
+        </span>
       </AbsoluteFill>
     );
   }

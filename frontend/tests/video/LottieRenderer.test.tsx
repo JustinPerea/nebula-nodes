@@ -3,6 +3,15 @@ import { render, screen, waitFor } from '@testing-library/react';
 import { LottieRenderer } from '../../src/components/video-editor/components/LottieRenderer';
 import type { TrackItem } from '../../src/types/video';
 
+// Mock Remotion's useCurrentFrame so LottieRenderer doesn't require a Composition context.
+vi.mock('remotion', async () => {
+  const actual = await vi.importActual<typeof import('remotion')>('remotion');
+  return {
+    ...actual,
+    useCurrentFrame: () => 0,
+  };
+});
+
 // Mock @remotion/lottie's Lottie component so the test doesn't need
 // the real Lottie player (which expects animationData JSON).
 vi.mock('@remotion/lottie', () => ({

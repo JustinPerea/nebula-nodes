@@ -420,3 +420,46 @@ The Puppeteer smoke doesn't add an SVG/Image/Video/Lottie in its empty state,
 so it didn't catch the bug. Worth adding a Step 16 in a future plan that does:
 add an SVG with no src, click somewhere else, assert that PlayerOverlay's
 hit-test still fires (i.e., the full-canvas trap doesn't happen).
+
+---
+
+## Second post-merge fix — Empty-state transforms (commit TBD)
+
+### Bug
+
+After `19fd431` (the empty-state content-id wrap fix), the placeholders were
+draggable but didn't visibly move — the `translate3d` transform was applied
+only to happy-path content (`<Img>` / `<Video>` / `<Lottie>` / text `<div>`),
+not to the empty-state `<span>` placeholders. Store mutation worked
+(`updateTrackItemSpatial` fired correctly, Properties Panel values updated),
+but the placeholder rendered at composition center regardless of `spatial.x/y`.
+
+### Fix
+
+Apply the same `opacity` + `transform: translate3d(...) rotateX(...) rotateY(...)
+rotateZ(...) scale3d(...)` to every empty-state / loading-state `<span>` that
+already carries `data-track-item-content-id`. Three renderers already computed
+the interpolated values at function top (SVG/Image/Video) — added the style to
+the spans. LottieRenderer needed `useCurrentFrame` + interpolation helpers
+added since the happy-path Lottie doesn't currently apply spatial — added them
+for the placeholders only; the actual `<Lottie>` element still ignores spatial
+(pre-existing 2.2 gap, see deferred list).
+
+### Lesson
+
+This is the SAME class of bug as `19fd431` — a partial pass over the renderer
+branches. The pre-merge fix (`4c8f173`) only handled happy-path; the first
+post-merge fix (`19fd431`) only handled empty-state `data-track-item-content-id`;
+this fix handles empty-state TRANSFORMS. The grep-style invariant should be:
+"if a render branch has `data-track-item-content-id`, it must ALSO have the
+same opacity+transform style as the happy path."
+
+### Lottie happy-path spatial: still broken
+
+`<Lottie>` ignores `spatial` because the happy-path renderer doesn't apply the
+transform to it (the existing code from Phase 2.2 just renders `<Lottie
+animationData={data} style={{ width: 100%, height: 100% }} />`). After this
+fix, Lottie placeholders move correctly; Lottie actual content does not. Note
+in the deferred list, address in a future Lottie polish task — probably wrap
+`<Lottie>` in a `<div style={{ transform, opacity }}>` since `<Lottie>` itself
+may not accept arbitrary style passthrough.
