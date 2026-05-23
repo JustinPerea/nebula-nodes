@@ -74,4 +74,18 @@ describe('IsometricBlockRenderer', () => {
     );
     expect(container.querySelector('[data-iso-geometry="gltf"]')).not.toBeNull();
   });
+
+  it('routes geometry=voxel through the Voxel primitive case', () => {
+    const voxels = [
+      { x: 0, y: 0, z: 0, color: '#ff0000' },
+      { x: 1, y: 0, z: 0 },
+      { x: 0, y: 1, z: 0, color: '#00ff00' },
+    ];
+    const { container } = render(
+      <IsometricBlockRenderer item={makeItem({ props: { geometry: 'voxel', voxels } })} />,
+    );
+    expect(container.querySelector('[data-iso-geometry="voxel"]')).not.toBeNull();
+    // The outer wrapper exposes data-voxel-count for JSDOM testability.
+    expect(container.querySelector('[data-voxel-count="3"]')).not.toBeNull();
+  });
 });
