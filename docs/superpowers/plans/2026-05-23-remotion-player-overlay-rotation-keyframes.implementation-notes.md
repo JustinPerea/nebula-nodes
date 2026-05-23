@@ -24,3 +24,20 @@ Running log of decisions, deviations, and tradeoffs for
   direct-eval warnings.
 - Baseline `npm test`: 28 files / 222 assertions pass, but Vitest exits 1 due
   the WebSocket unhandled errors described above.
+
+## Task 1 — Test harness WebSocket isolation
+
+### Decisions outside the spec
+
+- Stubbed `globalThis.WebSocket` in the shared Vitest setup instead of mocking
+  `wsClient` in each Remotion test. The import side effect is in `graphStore`,
+  and most video tests import that store directly; a single setup stub keeps the
+  suite hermetic without broad per-file mocks.
+- The stub intentionally does not auto-fire `open` / `message` events. Current
+  unit tests do not assert socket behavior, and silent no-op transport is enough
+  to prevent real backend connections.
+
+### Changes
+
+- Added a minimal browser-compatible `MockWebSocket` with static ready-state
+  constants and no-op `send` / `close` methods.
