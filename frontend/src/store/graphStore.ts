@@ -212,6 +212,11 @@ interface GraphState {
     trackItemId: string,
     timePatch: Partial<{ startFrame: number; durationInFrames: number }>,
   ) => void;
+  updateTrackItemSpatial: (
+    remotionNodeId: string,
+    trackItemId: string,
+    spatialPatch: Partial<TrackItem['spatial']>,
+  ) => void;
   executeGraph: () => Promise<void>;
   resetExecution: () => void;
   handleExecutionEvent: (event: ExecutionEvent) => void;
@@ -1311,6 +1316,39 @@ export const useGraphStore = create<GraphState>((set, get) => ({
               },
             };
           }),
+        };
+        return {
+          ...n,
+          data: { ...n.data, params: { ...params, manifest: nextManifest } },
+        };
+      });
+      return { nodes: updatedNodes };
+    });
+  },
+
+  updateTrackItemSpatial: (remotionNodeId, trackItemId, spatialPatch) => {
+    const state = get();
+    const remotion = state.nodes.find((n) => n.id === remotionNodeId);
+    if (!remotion) return;
+    const currentParams = (remotion.data.params ?? {}) as Record<string, unknown>;
+    const manifest = currentParams.manifest as VideoGraphManifest | undefined;
+    if (!manifest) return;
+    if (!manifest.timeline.some((t) => t.id === trackItemId)) return;
+
+    maybePushUndo(set, get, remotionNodeId);
+
+    set((s) => {
+      const updatedNodes = s.nodes.map((n) => {
+        if (n.id !== remotionNodeId) return n;
+        const params = (n.data.params ?? {}) as Record<string, unknown>;
+        const m = params.manifest as VideoGraphManifest;
+        const nextManifest: VideoGraphManifest = {
+          ...m,
+          timeline: m.timeline.map((t) =>
+            t.id === trackItemId
+              ? { ...t, spatial: { ...t.spatial, ...spatialPatch } }
+              : t,
+          ),
         };
         return {
           ...n,

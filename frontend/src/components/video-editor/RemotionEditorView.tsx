@@ -9,11 +9,13 @@ import { createEmptyManifest, DEFAULT_FPS, type VideoGraphManifest } from '../..
 import { RemotionComposition } from './RemotionComposition';
 import { RemotionEditorToolbar } from './RemotionEditorToolbar';
 import { RemotionPropertiesPanel } from './RemotionPropertiesPanel';
+import { PlayerOverlay } from './PlayerOverlay';
 import { useRemotionKeyboard } from './useRemotionKeyboard';
 import '../../styles/remotion-editor.css';
 
 export function RemotionEditorView() {
   const playerRef = useRef<PlayerRef>(null);
+  const playerFrameRef = useRef<HTMLDivElement>(null);
   const [currentFrame, setCurrentFrame] = useState(0);
   const timelineStateRef = useRef<TimelineState | null>(null);
   const targetNodeId = useUIStore((s) => s.remotionEditorTargetNodeId);
@@ -82,25 +84,28 @@ export function RemotionEditorView() {
         </span>
       </header>
       <div className="remotion-editor-view__player" data-testid="remotion-player-slot">
-        <Player
-          ref={playerRef}
-          component={RemotionComposition}
-          inputProps={{ manifest }}
-          durationInFrames={Math.max(
-            DEFAULT_FPS * 5,
-            ...manifest.timeline.map(
-              (i) => i.time.startFrame + i.time.durationInFrames,
-            ),
-            DEFAULT_FPS,
-          )}
-          compositionWidth={1280}
-          compositionHeight={720}
-          fps={DEFAULT_FPS}
-          controls
-          loop
-          style={{ width: '100%', maxWidth: 1280, aspectRatio: '16 / 9' }}
-          acknowledgeRemotionLicense
-        />
+        <div className="remotion-editor-view__player-frame" ref={playerFrameRef}>
+          <Player
+            ref={playerRef}
+            component={RemotionComposition}
+            inputProps={{ manifest }}
+            durationInFrames={Math.max(
+              DEFAULT_FPS * 5,
+              ...manifest.timeline.map(
+                (i) => i.time.startFrame + i.time.durationInFrames,
+              ),
+              DEFAULT_FPS,
+            )}
+            compositionWidth={1280}
+            compositionHeight={720}
+            fps={DEFAULT_FPS}
+            controls
+            loop
+            style={{ width: '100%', maxWidth: 1280, aspectRatio: '16 / 9' }}
+            acknowledgeRemotionLicense
+          />
+          <PlayerOverlay remotionNodeId={targetNodeId} playerFrameRef={playerFrameRef} />
+        </div>
       </div>
       <aside className="remotion-editor-view__panel" data-testid="remotion-panel-slot">
         <RemotionPropertiesPanel remotionNodeId={targetNodeId} />

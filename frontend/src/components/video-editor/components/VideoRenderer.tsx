@@ -25,24 +25,26 @@ export function VideoRenderer({ item }: VideoRendererProps) {
 
   if (!src) {
     return (
-      <AbsoluteFill style={{ display: 'grid', placeItems: 'center', color: '#888' }}>
+      <AbsoluteFill data-track-item-id={item.id} style={{ display: 'grid', placeItems: 'center', color: '#888' }}>
         [no video src]
       </AbsoluteFill>
     );
   }
 
   return (
-    <AbsoluteFill style={{ display: 'grid', placeItems: 'center' }}>
-      <Video
-        src={src}
-        volume={muted ? 0 : volume}
-        style={{
-          opacity,
-          maxWidth: '100%',
-          maxHeight: '100%',
-          transform: `translate3d(${position[0]}px, ${position[1]}px, ${position[2]}px) rotateX(${rotation[0]}deg) rotateY(${rotation[1]}deg) rotateZ(${rotation[2]}deg) scale3d(${scale[0]}, ${scale[1]}, ${scale[2]})`,
-        }}
-      />
+    <AbsoluteFill data-track-item-id={item.id} style={{ display: 'grid', placeItems: 'center' }}>
+      <div data-track-item-content-id={item.id} style={{ maxWidth: '100%', maxHeight: '100%' }}>
+        <Video
+          src={src}
+          volume={muted ? 0 : volume}
+          style={{
+            opacity,
+            maxWidth: '100%',
+            maxHeight: '100%',
+            transform: `translate3d(${position[0]}px, ${position[1]}px, ${position[2]}px) rotateX(${rotation[0]}deg) rotateY(${rotation[1]}deg) rotateZ(${rotation[2]}deg) scale3d(${scale[0]}, ${scale[1]}, ${scale[2]})`,
+          }}
+        />
+      </div>
     </AbsoluteFill>
   );
 }

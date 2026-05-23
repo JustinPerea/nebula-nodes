@@ -320,7 +320,71 @@ async function main() {
     }
     await page.screenshot({ path: join(OUT_DIR, 'step14-isoblock-add.png') });
 
-    log('done', 'all 14 steps passed');
+    // Step 15 — Drag the first Text TrackItem via the Player overlay
+    log('test-15', 'select Text layer in store, then drag its selection box body');
+    // Identify the first Text TrackItem on the timeline
+    const textItem = await page.evaluate(() => {
+      const s = window.__nebulaGraphStore.getState();
+      const remotion = s.nodes.find((n) => n.data.definitionId === 'remotion-node');
+      const tl = remotion?.data.params?.manifest?.timeline ?? [];
+      const text = tl.find((t) => t.componentType === 'TextNode');
+      return text
+        ? { id: text.id, beforeX: text.spatial.x, beforeY: text.spatial.y }
+        : null;
+    });
+    if (!textItem) {
+      throw new Error('[smoke] Step 15: no Text TrackItem on timeline');
+    }
+    // Select the Text item via the uiStore so PlayerOverlay renders SelectionBox
+    await page.evaluate((id) => {
+      window.__nebulaUIStore.getState().setSelectedTrackItem(id);
+    }, textItem.id);
+    await sleep(300);
+
+    // Read the selection box body's bounding rect to compute drag start point
+    const dragRect = await page.evaluate(() => {
+      const body = document.querySelector('.remotion-selection-box__body');
+      if (!body) return null;
+      const r = body.getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2, width: r.width, height: r.height };
+    });
+    if (!dragRect) {
+      throw new Error('[smoke] Step 15: .remotion-selection-box__body not in DOM after selecting Text layer');
+    }
+
+    // Drag: start at body center, move +200 screen pixels right
+    await page.mouse.move(dragRect.x, dragRect.y);
+    await page.mouse.down();
+    // Two intermediate moves so PlayerOverlay/SelectionBox see a clean pointermove sequence
+    await page.mouse.move(dragRect.x + 100, dragRect.y, { steps: 5 });
+    await page.mouse.move(dragRect.x + 200, dragRect.y, { steps: 5 });
+    await page.mouse.up();
+    await sleep(300);
+
+    const afterDrag = await page.evaluate((id) => {
+      const s = window.__nebulaGraphStore.getState();
+      const remotion = s.nodes.find((n) => n.data.definitionId === 'remotion-node');
+      const tl = remotion?.data.params?.manifest?.timeline ?? [];
+      const item = tl.find((t) => t.id === id);
+      return item ? { x: item.spatial.x, y: item.spatial.y } : null;
+    }, textItem.id);
+    if (!afterDrag) {
+      throw new Error(`[smoke] Step 15: Text TrackItem ${textItem.id} disappeared after drag`);
+    }
+    // beforeX is 0 (IDENTITY_TRANSFORM default) unless a prior step moved the item.
+    // If this assertion false-fails, check that no step between 13 and 15 mutates spatial.x.
+    if (afterDrag.x <= textItem.beforeX) {
+      throw new Error(
+        `[smoke] Step 15: spatial.x did not increase. before=${textItem.beforeX} after=${afterDrag.x}`,
+      );
+    }
+    await page.screenshot({ path: join(OUT_DIR, 'step15-text-dragged.png') });
+    // Clear selection so any future Step 16+ starts with no SelectionBox mounted.
+    await page.evaluate(() => {
+      window.__nebulaUIStore.getState().setSelectedTrackItem(null);
+    });
+
+    log('done', 'all 15 steps passed');
   } finally {
     await browser.close();
   }

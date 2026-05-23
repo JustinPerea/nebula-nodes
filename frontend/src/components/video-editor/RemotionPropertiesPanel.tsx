@@ -25,6 +25,7 @@ export function RemotionPropertiesPanel({ remotionNodeId }: RemotionPropertiesPa
   const node = useGraphStore((s) => s.nodes.find((n) => n.id === remotionNodeId));
   const updateTrackItemProps = useGraphStore((s) => s.updateTrackItemProps);
   const updateTrackItemTime = useGraphStore((s) => s.updateTrackItemTime);
+  const updateTrackItemSpatial = useGraphStore((s) => s.updateTrackItemSpatial);
 
   const manifest = ((node?.data.params as { manifest?: VideoGraphManifest } | undefined)?.manifest) ?? null;
   const item: TrackItem | null = manifest?.timeline.find((t) => t.id === selectedTrackItemId) ?? null;
@@ -43,6 +44,9 @@ export function RemotionPropertiesPanel({ remotionNodeId }: RemotionPropertiesPa
   };
   const onPropsPatch = (patch: Record<string, unknown>) => {
     updateTrackItemProps(remotionNodeId, item.id, patch);
+  };
+  const onSpatialPatch = (patch: Partial<TrackItem['spatial']>) => {
+    updateTrackItemSpatial(remotionNodeId, item.id, patch);
   };
 
   return (
@@ -69,6 +73,37 @@ export function RemotionPropertiesPanel({ remotionNodeId }: RemotionPropertiesPa
             min={1}
             value={item.time.durationInFrames}
             onChange={(e) => onTimePatch({ durationInFrames: Number(e.target.value) })}
+          />
+        </label>
+      </section>
+
+      <section className="remotion-properties-panel__section">
+        <h4>Transform</h4>
+        <label>
+          Position X
+          <input
+            type="number"
+            data-spatial-axis="x"
+            value={item.spatial.x}
+            onChange={(e) => onSpatialPatch({ x: Number(e.target.value) })}
+          />
+        </label>
+        <label>
+          Position Y
+          <input
+            type="number"
+            data-spatial-axis="y"
+            value={item.spatial.y}
+            onChange={(e) => onSpatialPatch({ y: Number(e.target.value) })}
+          />
+        </label>
+        <label>
+          Position Z
+          <input
+            type="number"
+            data-spatial-axis="z"
+            value={item.spatial.z}
+            onChange={(e) => onSpatialPatch({ z: Number(e.target.value) })}
           />
         </label>
       </section>

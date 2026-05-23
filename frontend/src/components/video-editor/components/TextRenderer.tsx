@@ -23,8 +23,9 @@ export function TextRenderer({ item }: TextRendererProps) {
   const color = (item.props.color as string) ?? '#ffffff';
 
   return (
-    <AbsoluteFill style={{ display: 'grid', placeItems: 'center' }}>
+    <AbsoluteFill data-track-item-id={item.id} style={{ display: 'grid', placeItems: 'center' }}>
       <div
+        data-track-item-content-id={item.id}
         style={{
           opacity,
           color,

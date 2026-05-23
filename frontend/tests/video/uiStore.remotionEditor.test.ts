@@ -60,3 +60,30 @@ describe('uiStore — TrackItem selection', () => {
     expect(useUIStore.getState().selectedTrackItemId).toBeNull();
   });
 });
+
+describe('uiStore — keyframe recording', () => {
+  beforeEach(() => {
+    useUIStore.setState(INITIAL_STATE, true);
+  });
+
+  it('isKeyframeRecording defaults to false', () => {
+    expect(useUIStore.getState().isKeyframeRecording).toBe(false);
+  });
+
+  it('toggleKeyframeRecording flips the field', () => {
+    useUIStore.getState().toggleKeyframeRecording();
+    expect(useUIStore.getState().isKeyframeRecording).toBe(true);
+    useUIStore.getState().toggleKeyframeRecording();
+    expect(useUIStore.getState().isKeyframeRecording).toBe(false);
+  });
+
+  it('exitRemotionEditor resets isKeyframeRecording to false', () => {
+    useUIStore.setState({
+      viewMode: 'remotion-editor',
+      remotionEditorTargetNodeId: 'r1',
+      isKeyframeRecording: true,
+    });
+    useUIStore.getState().exitRemotionEditor();
+    expect(useUIStore.getState().isKeyframeRecording).toBe(false);
+  });
+});
