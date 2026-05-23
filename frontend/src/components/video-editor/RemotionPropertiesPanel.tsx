@@ -1,6 +1,7 @@
 import { useGraphStore } from '../../store/graphStore';
 import { useUIStore } from '../../store/uiStore';
 import type { TrackItem, VideoGraphManifest } from '../../types/video';
+import { SpatialAxisInput } from './SpatialAxisInput';
 
 function isVoxelCellArray(
   v: unknown,
@@ -79,33 +80,24 @@ export function RemotionPropertiesPanel({ remotionNodeId }: RemotionPropertiesPa
 
       <section className="remotion-properties-panel__section">
         <h4>Transform</h4>
-        <label>
-          Position X
-          <input
-            type="number"
-            data-spatial-axis="x"
-            value={item.spatial.x}
-            onChange={(e) => onSpatialPatch({ x: Number(e.target.value) })}
-          />
-        </label>
-        <label>
-          Position Y
-          <input
-            type="number"
-            data-spatial-axis="y"
-            value={item.spatial.y}
-            onChange={(e) => onSpatialPatch({ y: Number(e.target.value) })}
-          />
-        </label>
-        <label>
-          Position Z
-          <input
-            type="number"
-            data-spatial-axis="z"
-            value={item.spatial.z}
-            onChange={(e) => onSpatialPatch({ z: Number(e.target.value) })}
-          />
-        </label>
+        <SpatialAxisInput
+          axis="x"
+          label="Position X"
+          value={item.spatial.x}
+          onValueChange={(value) => onSpatialPatch({ x: value })}
+        />
+        <SpatialAxisInput
+          axis="y"
+          label="Position Y"
+          value={item.spatial.y}
+          onValueChange={(value) => onSpatialPatch({ y: value })}
+        />
+        <SpatialAxisInput
+          axis="z"
+          label="Position Z"
+          value={item.spatial.z}
+          onValueChange={(value) => onSpatialPatch({ z: value })}
+        />
       </section>
 
       {item.componentType === 'TextNode' && (
