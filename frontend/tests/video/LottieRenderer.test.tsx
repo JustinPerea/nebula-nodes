@@ -1,0 +1,52 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen, waitFor } from '@testing-library/react';
+import { LottieRenderer } from '../../src/components/video-editor/components/LottieRenderer';
+import type { TrackItem } from '../../src/types/video';
+
+// Mock @remotion/lottie's Lottie component so the test doesn't need
+// the real Lottie player (which expects animationData JSON).
+vi.mock('@remotion/lottie', () => ({
+  Lottie: ({ animationData }: { animationData: unknown }) => (
+    <div data-testid="lottie-mounted" data-has-data={animationData ? 'true' : 'false'} />
+  ),
+}));
+
+function makeItem(overrides: Partial<TrackItem> = {}): TrackItem {
+  return {
+    id: 't1',
+    sourceNodeId: 'src-1',
+    componentType: 'LottieNode',
+    time: { startFrame: 0, durationInFrames: 60 },
+    spatial: { x: 0, y: 0, z: 0, scale: [1, 1, 1], rotation: [0, 0, 0] },
+    keyframes: {},
+    props: {},
+    ...overrides,
+  };
+}
+
+describe('LottieRenderer', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('renders empty state when src is missing', () => {
+    render(<LottieRenderer item={makeItem({ props: {} })} />);
+    expect(screen.getByText(/no lottie src/i)).toBeInTheDocument();
+    expect(screen.queryByTestId('lottie-mounted')).toBeNull();
+  });
+
+  it('fetches the Lottie JSON from props.src and mounts <Lottie>', async () => {
+    const fakeJson = { v: '5.7.1', layers: [] };
+    const fetchMock = vi.fn().mockResolvedValue({
+      json: () => Promise.resolve(fakeJson),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<LottieRenderer item={makeItem({ props: { src: 'https://example.com/anim.json' } })} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('lottie-mounted')).toBeInTheDocument();
+    });
+    expect(fetchMock).toHaveBeenCalledWith('https://example.com/anim.json');
+  });
+});
