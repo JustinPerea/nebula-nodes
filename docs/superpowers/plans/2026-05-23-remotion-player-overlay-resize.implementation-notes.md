@@ -75,3 +75,18 @@ Running log of decisions, deviations, and tradeoffs for
   `computeResizeScale`.
 - Covered proportional corners, Shift independent corners, edge-only stretch,
   inverted left/top deltas, and zero-size rect fallback.
+
+## Task 3 — SelectionBox resize handles
+
+### Decisions outside the spec
+
+- None so far. The SelectionBox handler keeps the same snapshot-then-delta
+  discipline as body drag: pointerdown records `startScale` and `startRect`,
+  pointermove computes the absolute next scale from that snapshot.
+
+### Changes
+
+- Added eight handle tests covering stable handle attributes, default
+  proportional corner resize, Shift independent corner resize, right-edge
+  scale.x stretch, and bottom-edge scale.y stretch.
+- Added Slava-scoped handle CSS with corner and edge cursors.

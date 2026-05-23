@@ -3,6 +3,8 @@ import type { PointerEvent, RefObject } from 'react';
 import { useGraphStore } from '../../store/graphStore';
 import type { VideoGraphManifest } from '../../types/video';
 import { screenToComposition } from '../../lib/video/coordinates';
+import { computeResizeScale } from '../../lib/video/resizeMath';
+import type { ResizeHandle } from '../../lib/video/resizeMath';
 
 interface SelectionBoxProps {
   remotionNodeId: string;
@@ -17,7 +19,8 @@ interface ScreenRect {
   height: number;
 }
 
-interface DragSession {
+interface MoveDragSession {
+  type: 'move';
   pointerId: number;
   startClientX: number;
   startClientY: number;
@@ -26,11 +29,35 @@ interface DragSession {
   moved: boolean;
 }
 
+interface ResizeDragSession {
+  type: 'resize';
+  pointerId: number;
+  handle: ResizeHandle;
+  startClientX: number;
+  startClientY: number;
+  startScale: [number, number, number];
+  startRect: ScreenRect;
+  moved: boolean;
+}
+
+type DragSession = MoveDragSession | ResizeDragSession;
+
 const POINTER_DEAD_ZONE_PX = 4;
 
 function hasMovedPastDeadZone(dxScreen: number, dyScreen: number): boolean {
   return Math.hypot(dxScreen, dyScreen) > POINTER_DEAD_ZONE_PX;
 }
+
+const RESIZE_HANDLES: ResizeHandle[] = [
+  'corner-tl',
+  'corner-tr',
+  'corner-bl',
+  'corner-br',
+  'edge-top',
+  'edge-right',
+  'edge-bottom',
+  'edge-left',
+];
 
 export function SelectionBox({ remotionNodeId, trackItemId, playerFrameRef }: SelectionBoxProps) {
   const [rect, setRect] = useState<ScreenRect | null>(null);
@@ -67,7 +94,7 @@ export function SelectionBox({ remotionNodeId, trackItemId, playerFrameRef }: Se
 
   if (!rect) return null;
 
-  const handlePointerDown = (e: PointerEvent<HTMLDivElement>) => {
+  const handleBodyPointerDown = (e: PointerEvent<HTMLDivElement>) => {
     // Stop the event from bubbling to PlayerOverlay's onPointerDown — clicking
     // the box body should NOT trigger select/deselect logic; it starts a drag.
     e.stopPropagation();
@@ -80,6 +107,7 @@ export function SelectionBox({ remotionNodeId, trackItemId, playerFrameRef }: Se
     if (!item) return;
 
     dragRef.current = {
+      type: 'move',
       pointerId: e.pointerId,
       startClientX: e.clientX,
       startClientY: e.clientY,
@@ -91,15 +119,34 @@ export function SelectionBox({ remotionNodeId, trackItemId, playerFrameRef }: Se
     e.currentTarget.setPointerCapture(e.pointerId);
   };
 
+  const handleResizePointerDown = (handle: ResizeHandle) => (e: PointerEvent<HTMLDivElement>) => {
+    e.stopPropagation();
+
+    const remotion = useGraphStore.getState().nodes.find((n) => n.id === remotionNodeId);
+    const manifest = (remotion?.data.params as { manifest?: VideoGraphManifest } | undefined)?.manifest;
+    const item = manifest?.timeline.find((t) => t.id === trackItemId);
+    if (!item) return;
+
+    dragRef.current = {
+      type: 'resize',
+      pointerId: e.pointerId,
+      handle,
+      startClientX: e.clientX,
+      startClientY: e.clientY,
+      startScale: item.spatial.scale,
+      startRect: rect,
+      moved: false,
+    };
+
+    e.currentTarget.setPointerCapture(e.pointerId);
+  };
+
   const handlePointerMove = (e: PointerEvent<HTMLDivElement>) => {
     const drag = dragRef.current;
     if (!drag || drag.pointerId !== e.pointerId) return;
-    const playerEl = playerFrameRef.current;
-    if (!playerEl) return;
 
     const dxScreen = e.clientX - drag.startClientX;
     const dyScreen = e.clientY - drag.startClientY;
-    const { x: dxComp, y: dyComp } = screenToComposition(dxScreen, dyScreen, playerEl);
 
     // Mark the drag as moved on the first non-zero pointermove so a true click
     // (down → up with no move) doesn't flush an undo entry.
@@ -108,10 +155,26 @@ export function SelectionBox({ remotionNodeId, trackItemId, playerFrameRef }: Se
     }
     if (!drag.moved) return;
 
-    updateTrackItemSpatial(remotionNodeId, trackItemId, {
-      x: drag.startSpatialX + dxComp,
-      y: drag.startSpatialY + dyComp,
+    if (drag.type === 'move') {
+      const playerEl = playerFrameRef.current;
+      if (!playerEl) return;
+      const { x: dxComp, y: dyComp } = screenToComposition(dxScreen, dyScreen, playerEl);
+      updateTrackItemSpatial(remotionNodeId, trackItemId, {
+        x: drag.startSpatialX + dxComp,
+        y: drag.startSpatialY + dyComp,
+      });
+      return;
+    }
+
+    const scale = computeResizeScale({
+      handle: drag.handle,
+      startScale: drag.startScale,
+      rect: drag.startRect,
+      dxScreen,
+      dyScreen,
+      shiftKey: e.shiftKey,
     });
+    updateTrackItemSpatial(remotionNodeId, trackItemId, { scale });
   };
 
   const endDrag = (e: PointerEvent<HTMLDivElement>) => {
@@ -137,11 +200,22 @@ export function SelectionBox({ remotionNodeId, trackItemId, playerFrameRef }: Se
     >
       <div
         className="remotion-selection-box__body"
-        onPointerDown={handlePointerDown}
+        onPointerDown={handleBodyPointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={endDrag}
         onPointerCancel={endDrag}
       />
+      {RESIZE_HANDLES.map((handle) => (
+        <div
+          key={handle}
+          className={`remotion-selection-box__handle remotion-selection-box__handle--${handle}`}
+          data-resize-handle={handle}
+          onPointerDown={handleResizePointerDown(handle)}
+          onPointerMove={handlePointerMove}
+          onPointerUp={endDrag}
+          onPointerCancel={endDrag}
+        />
+      ))}
     </div>
   );
 }
