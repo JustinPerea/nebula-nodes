@@ -33,7 +33,7 @@ export function LottieRenderer({ item }: LottieRendererProps) {
   if (!src) {
     return (
       <AbsoluteFill data-track-item-id={item.id} style={{ display: 'grid', placeItems: 'center', color: '#888' }}>
-        [no lottie src]
+        <span data-track-item-content-id={item.id}>[no lottie src]</span>
       </AbsoluteFill>
     );
   }
@@ -41,7 +41,7 @@ export function LottieRenderer({ item }: LottieRendererProps) {
   if (!animationData) {
     return (
       <AbsoluteFill data-track-item-id={item.id} style={{ display: 'grid', placeItems: 'center', color: '#888' }}>
-        [loading lottie…]
+        <span data-track-item-content-id={item.id}>[loading lottie…]</span>
       </AbsoluteFill>
     );
   }

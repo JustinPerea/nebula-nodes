@@ -36,7 +36,7 @@ export function SVGRenderer({ item }: SVGRendererProps) {
   if (!src) {
     return (
       <AbsoluteFill data-track-item-id={item.id} style={{ display: 'grid', placeItems: 'center', color: '#888' }}>
-        [no svg source]
+        <span data-track-item-content-id={item.id}>[no svg source]</span>
       </AbsoluteFill>
     );
   }

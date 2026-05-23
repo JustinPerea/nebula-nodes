@@ -371,3 +371,52 @@ full canvas overlay.
   `describe('SelectionBox — content-id fallback')` block verifies the `??`
   fallback: when only `data-track-item-id` is present (no content-id), the box
   still renders at the correct position.
+
+---
+
+## Post-merge fix — Empty-state bounding box (commit TBD)
+
+### Bug
+
+After Plan 2.3.a merged (`f010c0d`), Justin opened the editor and reported:
+adding a layer with no configured content (e.g., `+ SVG` with no svg source)
+caused the selection outline to cover the whole 1280×720 Player area, and then
+the SelectionBox body intercepted every subsequent click — UI became
+unresponsive.
+
+### Root cause
+
+The pre-merge fix at `4c8f173` (commit "fix(remotion): SelectionBox traces layer
+bounds via data-track-item-content-id") added `data-track-item-content-id` only
+to the happy-path content element of each renderer. Empty-state and loading-
+state branches still had only `data-track-item-id` on the full-canvas
+`<AbsoluteFill>`. `SelectionBox`'s query fell back to the AbsoluteFill, got the
+full-canvas rect, rendered a full-canvas box, and trapped all clicks via the
+body's `pointer-events: auto`.
+
+### Fix
+
+Wrap the placeholder text in each empty/loading branch in
+`<span data-track-item-content-id={item.id}>...</span>`. The span's bounding
+box is just the text's natural size, so the SelectionBox traces a small area
+around the placeholder — clickable, doesn't trap the rest of the Player.
+
+Renderers touched: SVGRenderer (1 branch), ImageRenderer (1 branch),
+VideoRenderer (1 branch), LottieRenderer (2 branches — empty + loading). Five
+total empty/loading branches.
+
+### Lesson for future plans
+
+The "data attribute placement" decision needs to cover every render branch a
+renderer can produce, not just the happy path. The plan-template review caught
+the happy/empty distinction but only for `data-track-item-id`; when
+`data-track-item-content-id` was added in the pre-merge fix, it didn't fan out
+to all the same branches. A grep-style "every AbsoluteFill return gets the
+attribute" rule would have caught this.
+
+### Smoke gap
+
+The Puppeteer smoke doesn't add an SVG/Image/Video/Lottie in its empty state,
+so it didn't catch the bug. Worth adding a Step 16 in a future plan that does:
+add an SVG with no src, click somewhere else, assert that PlayerOverlay's
+hit-test still fires (i.e., the full-canvas trap doesn't happen).

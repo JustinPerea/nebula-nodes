@@ -26,7 +26,7 @@ export function ImageRenderer({ item }: ImageRendererProps) {
   if (!src) {
     return (
       <AbsoluteFill data-track-item-id={item.id} style={{ display: 'grid', placeItems: 'center', color: '#888' }}>
-        [no image src]
+        <span data-track-item-content-id={item.id}>[no image src]</span>
       </AbsoluteFill>
     );
   }

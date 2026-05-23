@@ -61,6 +61,7 @@ describe('CSS-driven renderers — data-track-item-id', () => {
   it('SVGRenderer empty-state ([no svg source]) also puts data-track-item-id', () => {
     const { container } = render(<SVGRenderer item={makeItem({ componentType: 'SVGInput', props: {} })} />);
     expect(container.querySelector('[data-track-item-id="track-abc"]')).not.toBeNull();
+    expect(container.querySelector('[data-track-item-content-id="track-abc"]')).not.toBeNull();
   });
 
   it('ImageRenderer happy path puts data-track-item-id on its root', () => {
@@ -71,16 +72,19 @@ describe('CSS-driven renderers — data-track-item-id', () => {
   it('ImageRenderer empty-state also puts data-track-item-id', () => {
     const { container } = render(<ImageRenderer item={makeItem({ componentType: 'ImageAssetNode', props: {} })} />);
     expect(container.querySelector('[data-track-item-id="track-abc"]')).not.toBeNull();
+    expect(container.querySelector('[data-track-item-content-id="track-abc"]')).not.toBeNull();
   });
 
   it('VideoRenderer empty-state puts data-track-item-id (happy path requires media context)', () => {
     const { container } = render(<VideoRenderer item={makeItem({ componentType: 'VideoAssetNode', props: {} })} />);
     expect(container.querySelector('[data-track-item-id="track-abc"]')).not.toBeNull();
+    expect(container.querySelector('[data-track-item-content-id="track-abc"]')).not.toBeNull();
   });
 
   it('LottieRenderer empty-state ([no lottie src]) puts data-track-item-id', () => {
     const { container } = render(<LottieRenderer item={makeItem({ componentType: 'LottieNode', props: {} })} />);
     expect(container.querySelector('[data-track-item-id="track-abc"]')).not.toBeNull();
+    expect(container.querySelector('[data-track-item-content-id="track-abc"]')).not.toBeNull();
   });
 });
 

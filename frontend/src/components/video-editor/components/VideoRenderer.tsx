@@ -26,7 +26,7 @@ export function VideoRenderer({ item }: VideoRendererProps) {
   if (!src) {
     return (
       <AbsoluteFill data-track-item-id={item.id} style={{ display: 'grid', placeItems: 'center', color: '#888' }}>
-        [no video src]
+        <span data-track-item-content-id={item.id}>[no video src]</span>
       </AbsoluteFill>
     );
   }
