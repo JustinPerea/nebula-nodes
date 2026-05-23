@@ -102,3 +102,30 @@ Running log of decisions, deviations, and tradeoffs for
 
 - Added tests for Scale X/Y/Z rendering and preserving position / other scale
   axes when Scale X changes.
+
+## Task 5 — Smoke Step 16
+
+### Decisions outside the spec
+
+- Step 16 follows the existing Step 15 store-select pattern and
+  drags the `corner-br` handle through Puppeteer mouse events.
+- First smoke attempt failed before navigation because Chromium hit a macOS
+  sandbox Mach port permission denial. Retried with approved Puppeteer launch
+  permissions.
+- The first approved smoke attempt failed early with Puppeteer's `Promise was
+  collected` protocol error before app steps logged. Retried against the warmed
+  Vite page; the second approved run passed all 16 steps.
+
+### Changes
+
+- Added a Step 15 assertion that a purely horizontal body drag does not mutate
+  `spatial.y`.
+- Added Step 16 to resize the first Text layer and assert both scale.x and
+  scale.y increase.
+
+### Verification
+
+- Smoke final line on passing run: `[done] all 16 steps passed`.
+- Full frontend suite after smoke: 28 files, 222 tests passed.
+- Frontend build after smoke: exit 0 with pre-existing Vite chunk-size and
+  Lottie direct-eval warnings.

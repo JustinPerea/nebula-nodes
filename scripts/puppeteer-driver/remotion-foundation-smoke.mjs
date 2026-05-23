@@ -378,13 +378,78 @@ async function main() {
         `[smoke] Step 15: spatial.x did not increase. before=${textItem.beforeX} after=${afterDrag.x}`,
       );
     }
+    if (afterDrag.y !== textItem.beforeY) {
+      throw new Error(
+        `[smoke] Step 15: spatial.y changed during horizontal drag. before=${textItem.beforeY} after=${afterDrag.y}`,
+      );
+    }
     await page.screenshot({ path: join(OUT_DIR, 'step15-text-dragged.png') });
     // Clear selection so any future Step 16+ starts with no SelectionBox mounted.
     await page.evaluate(() => {
       window.__nebulaUIStore.getState().setSelectedTrackItem(null);
     });
 
-    log('done', 'all 15 steps passed');
+    // Step 16 - Resize the first Text TrackItem via the bottom-right corner handle
+    log('test-16', 'select Text layer, then drag bottom-right resize handle');
+    const scaleTarget = await page.evaluate(() => {
+      const s = window.__nebulaGraphStore.getState();
+      const remotion = s.nodes.find((n) => n.data.definitionId === 'remotion-node');
+      const tl = remotion?.data.params?.manifest?.timeline ?? [];
+      const text = tl.find((t) => t.componentType === 'TextNode');
+      return text
+        ? { id: text.id, beforeScale: text.spatial.scale }
+        : null;
+    });
+    if (!scaleTarget) {
+      throw new Error('[smoke] Step 16: no Text TrackItem on timeline');
+    }
+    await page.evaluate((id) => {
+      window.__nebulaUIStore.getState().setSelectedTrackItem(id);
+    }, scaleTarget.id);
+    await sleep(300);
+
+    const handleRect = await page.evaluate(() => {
+      const handle = document.querySelector('[data-resize-handle="corner-br"]');
+      if (!handle) return null;
+      const r = handle.getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    });
+    if (!handleRect) {
+      throw new Error('[smoke] Step 16: bottom-right resize handle not in DOM after selecting Text layer');
+    }
+
+    await page.mouse.move(handleRect.x, handleRect.y);
+    await page.mouse.down();
+    await page.mouse.move(handleRect.x + 120, handleRect.y + 90, { steps: 10 });
+    await page.mouse.up();
+    await sleep(300);
+
+    const afterResize = await page.evaluate((id) => {
+      const s = window.__nebulaGraphStore.getState();
+      const remotion = s.nodes.find((n) => n.data.definitionId === 'remotion-node');
+      const tl = remotion?.data.params?.manifest?.timeline ?? [];
+      const item = tl.find((t) => t.id === id);
+      return item ? { scale: item.spatial.scale } : null;
+    }, scaleTarget.id);
+    if (!afterResize) {
+      throw new Error(`[smoke] Step 16: Text TrackItem ${scaleTarget.id} disappeared after resize`);
+    }
+    if (afterResize.scale[0] <= scaleTarget.beforeScale[0]) {
+      throw new Error(
+        `[smoke] Step 16: scale.x did not increase. before=${scaleTarget.beforeScale[0]} after=${afterResize.scale[0]}`,
+      );
+    }
+    if (afterResize.scale[1] <= scaleTarget.beforeScale[1]) {
+      throw new Error(
+        `[smoke] Step 16: scale.y did not increase. before=${scaleTarget.beforeScale[1]} after=${afterResize.scale[1]}`,
+      );
+    }
+    await page.screenshot({ path: join(OUT_DIR, 'step16-text-resized.png') });
+    await page.evaluate(() => {
+      window.__nebulaUIStore.getState().setSelectedTrackItem(null);
+    });
+
+    log('done', 'all 16 steps passed');
   } finally {
     await browser.close();
   }
