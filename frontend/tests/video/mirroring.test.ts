@@ -6,16 +6,13 @@ import {
 import type { TrackItem, VideoGraphManifest } from '../../src/types/video';
 
 describe('componentTypeToCanvasDefId', () => {
-  it('maps each Phase 2.1.b componentType to its canvas node id', () => {
+  it('maps each componentType to its canvas node id', () => {
     expect(componentTypeToCanvasDefId('TextNode')).toBe('text-input');
     expect(componentTypeToCanvasDefId('SVGInput')).toBe('text-input');
     expect(componentTypeToCanvasDefId('ImageAssetNode')).toBe('image-input');
     expect(componentTypeToCanvasDefId('VideoAssetNode')).toBe('video-input');
-  });
-
-  it('returns null for Phase 2.2 deferred types', () => {
-    expect(componentTypeToCanvasDefId('IsometricBlock')).toBeNull();
-    expect(componentTypeToCanvasDefId('LottieNode')).toBeNull();
+    expect(componentTypeToCanvasDefId('IsometricBlock')).toBe('text-input');
+    expect(componentTypeToCanvasDefId('LottieNode')).toBe('image-input');
   });
 });
 

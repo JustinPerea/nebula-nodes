@@ -34,12 +34,14 @@ describe('RemotionEditorToolbar', () => {
     mockSelectedId = null;
   });
 
-  it('renders four add buttons', () => {
+  it('renders six add buttons', () => {
     render(<RemotionEditorToolbar remotionNodeId="r1" />);
     expect(screen.getByRole('button', { name: /\+ text/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /\+ svg/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /\+ image/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /\+ video/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /\+ iso block/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /\+ lottie/i })).toBeInTheDocument();
   });
 
   it('+ Text dispatches addTrackItemWithCanvasMirror with TextNode', () => {
@@ -52,6 +54,18 @@ describe('RemotionEditorToolbar', () => {
     render(<RemotionEditorToolbar remotionNodeId="r1" />);
     fireEvent.click(screen.getByRole('button', { name: /\+ image/i }));
     expect(addMock).toHaveBeenCalledWith('r1', expect.objectContaining({ componentType: 'ImageAssetNode' }));
+  });
+
+  it('+ Iso Block dispatches addTrackItemWithCanvasMirror with IsometricBlock', () => {
+    render(<RemotionEditorToolbar remotionNodeId="r1" />);
+    fireEvent.click(screen.getByRole('button', { name: /\+ iso block/i }));
+    expect(addMock).toHaveBeenCalledWith('r1', expect.objectContaining({ componentType: 'IsometricBlock' }));
+  });
+
+  it('+ Lottie dispatches addTrackItemWithCanvasMirror with LottieNode', () => {
+    render(<RemotionEditorToolbar remotionNodeId="r1" />);
+    fireEvent.click(screen.getByRole('button', { name: /\+ lottie/i }));
+    expect(addMock).toHaveBeenCalledWith('r1', expect.objectContaining({ componentType: 'LottieNode' }));
   });
 
   it('Delete button is disabled when nothing is selected', () => {
