@@ -219,8 +219,8 @@ async function main() {
     log('test-10', 'toolbar + Text click');
     await page.waitForSelector('.remotion-editor-toolbar', { timeout: 2000 });
     const addButtons = await page.$$('.remotion-editor-toolbar__add');
-    if (addButtons.length !== 4) {
-      throw new Error(`[smoke] Toolbar add buttons expected 4, got ${addButtons.length}`);
+    if (addButtons.length !== 6) {
+      throw new Error(`[smoke] Toolbar add buttons expected 6, got ${addButtons.length}`);
     }
     // Click the first add button (+ Text)
     await addButtons[0].click();
@@ -294,7 +294,33 @@ async function main() {
     }
     await page.screenshot({ path: join(OUT_DIR, 'step13-duplicated.png') });
 
-    log('done', 'all 13 steps passed');
+    // Step 14 — Toolbar UI: click + Iso Block to add a 3D TrackItem
+    log('test-14', 'toolbar + Iso Block click');
+    const isoBlockBtn = await page.evaluateHandle(() => {
+      const buttons = Array.from(document.querySelectorAll('.remotion-editor-toolbar__add'));
+      return buttons.find((b) => /iso block/i.test(b.textContent ?? ''));
+    });
+    if (!isoBlockBtn) {
+      throw new Error('[smoke] Step 14: + Iso Block button not found');
+    }
+    await isoBlockBtn.click();
+    await sleep(800); // R3F + ThreeCanvas need a tick to mount
+    const afterIso = await page.evaluate(() => {
+      const s = window.__nebulaGraphStore.getState();
+      const remotion = s.nodes.find((n) => n.data.definitionId === 'remotion-node');
+      const tl = remotion?.data.params?.manifest?.timeline ?? [];
+      const lastItem = tl[tl.length - 1];
+      return {
+        timelineLength: tl.length,
+        lastComponentType: lastItem?.componentType,
+      };
+    });
+    if (afterIso.lastComponentType !== 'IsometricBlock') {
+      throw new Error(`[smoke] Step 14: last TrackItem expected IsometricBlock, got ${afterIso.lastComponentType}`);
+    }
+    await page.screenshot({ path: join(OUT_DIR, 'step14-isoblock-add.png') });
+
+    log('done', 'all 14 steps passed');
   } finally {
     await browser.close();
   }
