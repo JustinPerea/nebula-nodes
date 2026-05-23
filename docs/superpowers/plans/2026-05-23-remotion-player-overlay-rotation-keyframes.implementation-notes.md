@@ -41,3 +41,16 @@ Running log of decisions, deviations, and tradeoffs for
 
 - Added a minimal browser-compatible `MockWebSocket` with static ready-state
   constants and no-op `send` / `close` methods.
+
+## Task 2 — Rotation math helper
+
+### Decisions outside the spec
+
+- Normalized rotation degrees into `[0, 360)` in the pure helper. The spec's
+  atan2 formula can produce `-90` for left-of-center; stable positive degrees
+  make Properties Panel display and tests easier to reason about.
+
+### Changes
+
+- Added `rotationMath.ts` with `computeRotationZ`.
+- Added tests for above/right/below/left cardinal pointer positions.
