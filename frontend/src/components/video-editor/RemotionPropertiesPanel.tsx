@@ -134,6 +134,89 @@ export function RemotionPropertiesPanel({ remotionNodeId }: RemotionPropertiesPa
           </label>
         </section>
       )}
+
+      {item.componentType === 'IsometricBlock' && (
+        <section className="remotion-properties-panel__section">
+          <h4>Iso Block</h4>
+          <label>
+            geometry
+            <select
+              value={(item.props.geometry as string) ?? 'cube'}
+              onChange={(e) => onPropsPatch({ geometry: e.target.value })}
+            >
+              <option value="cube">Cube</option>
+              <option value="sphere">Sphere</option>
+              <option value="cylinder">Cylinder</option>
+              <option value="cone">Cone</option>
+              <option value="plane">Plane</option>
+              <option value="gltf">GLTF</option>
+              <option value="voxel">Voxel</option>
+            </select>
+          </label>
+          <label>
+            color
+            <input
+              type="color"
+              value={(item.props.color as string) ?? '#888888'}
+              onChange={(e) => onPropsPatch({ color: e.target.value })}
+            />
+          </label>
+          <label>
+            size
+            <input
+              type="number"
+              min={0.1}
+              step={0.1}
+              value={(item.props.size as number) ?? 1}
+              onChange={(e) => onPropsPatch({ size: Number(e.target.value) })}
+            />
+          </label>
+          {item.props.geometry === 'gltf' && (
+            <label>
+              gltfUrl
+              <input
+                type="text"
+                value={(item.props.gltfUrl as string) ?? ''}
+                onChange={(e) => onPropsPatch({ gltfUrl: e.target.value })}
+              />
+            </label>
+          )}
+          {item.props.geometry === 'voxel' && (
+            <label>
+              voxels (JSON array)
+              <textarea
+                rows={6}
+                spellCheck={false}
+                value={JSON.stringify(item.props.voxels ?? [], null, 0)}
+                onChange={(e) => {
+                  try {
+                    const parsed = JSON.parse(e.target.value);
+                    if (Array.isArray(parsed)) {
+                      onPropsPatch({ voxels: parsed });
+                    }
+                  } catch {
+                    // ignore invalid JSON — user is mid-edit
+                  }
+                }}
+              />
+            </label>
+          )}
+        </section>
+      )}
+
+      {item.componentType === 'LottieNode' && (
+        <section className="remotion-properties-panel__section">
+          <h4>Lottie</h4>
+          <label>
+            src (URL)
+            <input
+              type="text"
+              value={(item.props.src as string) ?? ''}
+              onChange={(e) => onPropsPatch({ src: e.target.value })}
+            />
+          </label>
+        </section>
+      )}
     </aside>
   );
 }
