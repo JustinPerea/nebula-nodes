@@ -2,6 +2,20 @@ import { useGraphStore } from '../../store/graphStore';
 import { useUIStore } from '../../store/uiStore';
 import type { TrackItem, VideoGraphManifest } from '../../types/video';
 
+function isVoxelCellArray(
+  v: unknown,
+): v is Array<{ x: number; y: number; z: number; color?: string }> {
+  if (!Array.isArray(v)) return false;
+  return v.every(
+    (cell) =>
+      typeof cell === 'object' &&
+      cell !== null &&
+      typeof (cell as Record<string, unknown>).x === 'number' &&
+      typeof (cell as Record<string, unknown>).y === 'number' &&
+      typeof (cell as Record<string, unknown>).z === 'number',
+  );
+}
+
 interface RemotionPropertiesPanelProps {
   remotionNodeId: string;
 }
@@ -191,11 +205,11 @@ export function RemotionPropertiesPanel({ remotionNodeId }: RemotionPropertiesPa
                 onChange={(e) => {
                   try {
                     const parsed = JSON.parse(e.target.value);
-                    if (Array.isArray(parsed)) {
+                    if (isVoxelCellArray(parsed)) {
                       onPropsPatch({ voxels: parsed });
                     }
                   } catch {
-                    // ignore invalid JSON — user is mid-edit
+                    // ignore invalid JSON or wrong shape — user is mid-edit
                   }
                 }}
               />
