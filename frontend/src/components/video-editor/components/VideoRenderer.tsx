@@ -25,14 +25,14 @@ export function VideoRenderer({ item }: VideoRendererProps) {
 
   if (!src) {
     return (
-      <AbsoluteFill style={{ display: 'grid', placeItems: 'center', color: '#888' }}>
+      <AbsoluteFill data-track-item-id={item.id} style={{ display: 'grid', placeItems: 'center', color: '#888' }}>
         [no video src]
       </AbsoluteFill>
     );
   }
 
   return (
-    <AbsoluteFill style={{ display: 'grid', placeItems: 'center' }}>
+    <AbsoluteFill data-track-item-id={item.id} style={{ display: 'grid', placeItems: 'center' }}>
       <Video
         src={src}
         volume={muted ? 0 : volume}

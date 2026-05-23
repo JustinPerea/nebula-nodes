@@ -25,14 +25,14 @@ export function ImageRenderer({ item }: ImageRendererProps) {
 
   if (!src) {
     return (
-      <AbsoluteFill style={{ display: 'grid', placeItems: 'center', color: '#888' }}>
+      <AbsoluteFill data-track-item-id={item.id} style={{ display: 'grid', placeItems: 'center', color: '#888' }}>
         [no image src]
       </AbsoluteFill>
     );
   }
 
   return (
-    <AbsoluteFill style={{ display: 'grid', placeItems: 'center' }}>
+    <AbsoluteFill data-track-item-id={item.id} style={{ display: 'grid', placeItems: 'center' }}>
       <Img
         src={src}
         alt={alt}
