@@ -58,4 +58,30 @@ describe('LottieRenderer', () => {
     });
     expect(fetchMock).toHaveBeenCalledWith('https://example.com/anim.json');
   });
+
+  it('applies spatial transform to the successful Lottie wrapper', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      json: () => Promise.resolve({ v: '5.7.1', layers: [] }),
+    }));
+
+    const { container } = render(<LottieRenderer item={makeItem({
+      spatial: {
+        x: 10,
+        y: 20,
+        z: 30,
+        scale: [2, 3, 4],
+        rotation: [5, 15, 25],
+      },
+      props: { src: 'https://example.com/anim.json' },
+    })} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('lottie-mounted')).toBeInTheDocument();
+    });
+    const wrapper = container.querySelector('[data-track-item-content-id="t1"]') as HTMLElement;
+    expect(wrapper).not.toBeNull();
+    expect(wrapper.style.transform).toBe(
+      'translate3d(10px, 20px, 30px) rotateX(5deg) rotateY(15deg) rotateZ(25deg) scale3d(2, 3, 4)',
+    );
+  });
 });
