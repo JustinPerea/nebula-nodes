@@ -113,3 +113,29 @@ more intuitive for a human editor user?
   deliberate instead of sticky.
 - True object-level picking should still be treated as a future 3D-specific
   interaction, not hidden inside the 2D overlay path.
+
+## Task 5 — Multi-select selection/drag
+
+### Decisions outside the spec
+
+- Preserved `selectedTrackItemId` as the primary selection so the Properties
+  Panel, Z-order controls, and keyboard shortcuts keep their existing mental
+  model. Added `selectedTrackItemIds` for additive selection and group movement.
+- Player and timeline clicks now use Shift/Cmd/Ctrl as additive selection
+  modifiers. Plain click still replaces the selection; blank Player click still
+  clears it.
+- Group drag is intentionally move-only in this pass. Resize and rotation
+  handles stay on the primary selection box to avoid ambiguous multi-layer
+  scaling/rotation rules.
+
+### Human/intuitive review
+
+- The primary selected layer keeps the solid outline and handles. Secondary
+  selected layers use dashed outlines with no resize/rotate handles, which
+  makes it clear which layer owns the detailed Properties Panel controls.
+- Dragging any selected box moves the whole selected group by the same
+  composition-space delta. That matches how humans expect multi-select to work:
+  the group preserves relative spacing.
+- Bulk delete and group Z-order can be added later, but keeping this pass to
+  selection plus group move avoids surprising destructive commands while the
+  selection model is new.

@@ -70,6 +70,30 @@ describe('PlayerOverlay', () => {
     document.body.removeChild(layerEl);
   });
 
+  it('modifier-click adds a hit layer to the current multi-selection', () => {
+    const layerEl = document.createElement('div');
+    layerEl.setAttribute('data-track-item-id', 'track-b');
+    const contentEl = document.createElement('div');
+    contentEl.setAttribute('data-track-item-content-id', 'track-b');
+    layerEl.appendChild(contentEl);
+    document.body.appendChild(layerEl);
+    useUIStore.setState({ selectedTrackItemId: 'track-a', selectedTrackItemIds: ['track-a'] });
+
+    const elementsFromPointSpy = vi
+      .spyOn(document, 'elementsFromPoint')
+      .mockReturnValue([contentEl, layerEl] as unknown as Element[]);
+
+    const { container } = renderOverlay();
+    const overlay = container.querySelector('.remotion-player-overlay') as HTMLElement;
+    fireEvent.pointerDown(overlay, { clientX: 100, clientY: 100, shiftKey: true });
+
+    expect(useUIStore.getState().selectedTrackItemId).toBe('track-b');
+    expect(useUIStore.getState().selectedTrackItemIds).toEqual(['track-a', 'track-b']);
+
+    elementsFromPointSpy.mockRestore();
+    document.body.removeChild(layerEl);
+  });
+
   it('does not select a full-frame root when its content wrapper was missed', () => {
     const layerEl = document.createElement('div');
     layerEl.setAttribute('data-track-item-id', 'track-xyz');
@@ -116,5 +140,30 @@ describe('PlayerOverlay', () => {
     const { container } = renderOverlay();
     expect(container.querySelector('.remotion-selection-box')).not.toBeNull();
     document.body.removeChild(layerEl);
+  });
+
+  it('renders a SelectionBox for each selected TrackItem', () => {
+    const layerA = document.createElement('div');
+    layerA.setAttribute('data-track-item-id', 'track-a');
+    layerA.setAttribute('data-track-item-content-id', 'track-a');
+    vi.spyOn(layerA, 'getBoundingClientRect').mockReturnValue({
+      left: 10, top: 20, width: 100, height: 50, right: 110, bottom: 70, x: 10, y: 20, toJSON: () => ({}),
+    });
+    const layerB = document.createElement('div');
+    layerB.setAttribute('data-track-item-id', 'track-b');
+    layerB.setAttribute('data-track-item-content-id', 'track-b');
+    vi.spyOn(layerB, 'getBoundingClientRect').mockReturnValue({
+      left: 140, top: 160, width: 80, height: 60, right: 220, bottom: 220, x: 140, y: 160, toJSON: () => ({}),
+    });
+    document.body.append(layerA, layerB);
+    useUIStore.setState({ selectedTrackItemId: 'track-b', selectedTrackItemIds: ['track-a', 'track-b'] });
+
+    const { container } = renderOverlay();
+
+    expect(container.querySelectorAll('.remotion-selection-box')).toHaveLength(2);
+    expect(container.querySelectorAll('.remotion-selection-box--secondary')).toHaveLength(1);
+
+    document.body.removeChild(layerA);
+    document.body.removeChild(layerB);
   });
 });

@@ -77,18 +77,29 @@ export function RemotionTimeline({
 
   const updateTrackItemTime = useGraphStore((s) => s.updateTrackItemTime);
   const setSelectedTrackItem = useUIStore((s) => s.setSelectedTrackItem);
+  const toggleSelectedTrackItem = useUIStore((s) => s.toggleSelectedTrackItem);
   const selectedTrackItemId = useUIStore((s) => s.selectedTrackItemId);
+  const selectedTrackItemIds = useUIStore((s) => s.selectedTrackItemIds);
 
   // data-selected-id is a hook for T10 CSS styling — gives the selected track
   // item's id to the DOM so the row highlight rule can target it.
   return (
-    <div style={{ height: '100%' }} data-selected-id={selectedTrackItemId ?? ''}>
+    <div
+      style={{ height: '100%' }}
+      data-selected-id={selectedTrackItemId ?? ''}
+      data-selected-ids={selectedTrackItemIds.join(' ')}
+    >
       <XzdarcyTimeline
         ref={timelineState}
         editorData={editorData}
         effects={EFFECTS}
         autoScroll
-        onClickAction={(_e, { action }) => {
+        onClickAction={(e, { action }) => {
+          const event = e as unknown as MouseEvent;
+          if (event.shiftKey || event.metaKey || event.ctrlKey) {
+            toggleSelectedTrackItem(action.id);
+            return;
+          }
           setSelectedTrackItem(action.id);
         }}
         onActionMoveEnd={({ action, start }) => {

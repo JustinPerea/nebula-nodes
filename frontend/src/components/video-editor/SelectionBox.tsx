@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { PointerEvent, RefObject } from 'react';
 import { useGraphStore } from '../../store/graphStore';
 import { useUIStore } from '../../store/uiStore';
-import type { VideoGraphManifest } from '../../types/video';
+import type { TrackItem, VideoGraphManifest } from '../../types/video';
 import { screenToComposition } from '../../lib/video/coordinates';
 import { computeResizeScale } from '../../lib/video/resizeMath';
 import type { ResizeHandle } from '../../lib/video/resizeMath';
@@ -14,6 +14,7 @@ interface SelectionBoxProps {
   trackItemId: string;
   playerFrameRef: RefObject<HTMLElement | null>;
   currentFrame?: number;
+  isPrimary?: boolean;
 }
 
 interface ScreenRect {
@@ -29,9 +30,12 @@ interface MoveDragSession {
   pointerId: number;
   startClientX: number;
   startClientY: number;
-  startSpatialX: number;
-  startSpatialY: number;
-  startSpatialZ: number;
+  items: Array<{
+    id: string;
+    startSpatialX: number;
+    startSpatialY: number;
+    startSpatialZ: number;
+  }>;
   moved: boolean;
 }
 
@@ -112,11 +116,13 @@ export function SelectionBox({
   trackItemId,
   playerFrameRef,
   currentFrame = 0,
+  isPrimary = true,
 }: SelectionBoxProps) {
   const [rect, setRect] = useState<ScreenRect | null>(null);
   const updateTrackItemSpatial = useGraphStore((s) => s.updateTrackItemSpatial);
   const addOrUpdateKeyframe = useGraphStore((s) => s.addOrUpdateKeyframe);
   const isKeyframeRecording = useUIStore((s) => s.isKeyframeRecording);
+  const selectedTrackItemIds = useUIStore((s) => s.selectedTrackItemIds);
   // Subscribe to the selected item so SelectionBox re-renders after
   // every updateTrackItemSpatial dispatch (drag tick OR Properties Panel edit).
   // Each spatial/keyframe change produces a new item object reference, so
@@ -174,17 +180,26 @@ export function SelectionBox({
     // pointermove computes against a stable origin (avoids cumulative drift).
     const remotion = useGraphStore.getState().nodes.find((n) => n.id === remotionNodeId);
     const manifest = (remotion?.data.params as { manifest?: VideoGraphManifest } | undefined)?.manifest;
-    const item = manifest?.timeline.find((t) => t.id === trackItemId);
-    if (!item) return;
+    const dragTrackItemIds =
+      selectedTrackItemIds.includes(trackItemId) && selectedTrackItemIds.length > 1
+        ? selectedTrackItemIds
+        : [trackItemId];
+    const dragItems = dragTrackItemIds
+      .map((id) => manifest?.timeline.find((t) => t.id === id))
+      .filter((item): item is TrackItem => Boolean(item));
+    if (dragItems.length === 0) return;
 
     dragRef.current = {
       type: 'move',
       pointerId: e.pointerId,
       startClientX: e.clientX,
       startClientY: e.clientY,
-      startSpatialX: item.spatial.x,
-      startSpatialY: item.spatial.y,
-      startSpatialZ: item.spatial.z,
+      items: dragItems.map((item) => ({
+        id: item.id,
+        startSpatialX: item.spatial.x,
+        startSpatialY: item.spatial.y,
+        startSpatialZ: item.spatial.z,
+      })),
       moved: false,
     };
 
@@ -252,20 +267,22 @@ export function SelectionBox({
       const playerEl = playerFrameRef.current;
       if (!playerEl) return;
       const { x: dxComp, y: dyComp } = screenToComposition(dxScreen, dyScreen, playerEl);
-      const nextX = drag.startSpatialX + dxComp;
-      const nextY = drag.startSpatialY + dyComp;
-      if (isKeyframeRecording) {
-        addOrUpdateKeyframe(remotionNodeId, trackItemId, 'position', currentFrame, [
-          nextX,
-          nextY,
-          drag.startSpatialZ,
-        ]);
-      } else {
-        updateTrackItemSpatial(remotionNodeId, trackItemId, {
-          x: nextX,
-          y: nextY,
-        });
-      }
+      drag.items.forEach((dragItem) => {
+        const nextX = dragItem.startSpatialX + dxComp;
+        const nextY = dragItem.startSpatialY + dyComp;
+        if (isKeyframeRecording) {
+          addOrUpdateKeyframe(remotionNodeId, dragItem.id, 'position', currentFrame, [
+            nextX,
+            nextY,
+            dragItem.startSpatialZ,
+          ]);
+        } else {
+          updateTrackItemSpatial(remotionNodeId, dragItem.id, {
+            x: nextX,
+            y: nextY,
+          });
+        }
+      });
       return;
     }
 
@@ -311,7 +328,7 @@ export function SelectionBox({
 
   return (
     <div
-      className="remotion-selection-box"
+      className={`remotion-selection-box${isPrimary ? '' : ' remotion-selection-box--secondary'}`}
       style={{
         left: `${rect.left}px`,
         top: `${rect.top}px`,
@@ -327,7 +344,7 @@ export function SelectionBox({
         onPointerUp={endDrag}
         onPointerCancel={endDrag}
       />
-      {RESIZE_HANDLES.map((handle) => (
+      {isPrimary && RESIZE_HANDLES.map((handle) => (
         <div
           key={handle}
           className={`remotion-selection-box__handle remotion-selection-box__handle--${handle}`}
@@ -338,14 +355,16 @@ export function SelectionBox({
           onPointerCancel={endDrag}
         />
       ))}
-      <div
-        className="remotion-selection-box__rotation-handle"
-        data-rotation-handle="z"
-        onPointerDown={handleRotatePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={endDrag}
-        onPointerCancel={endDrag}
-      />
+      {isPrimary && (
+        <div
+          className="remotion-selection-box__rotation-handle"
+          data-rotation-handle="z"
+          onPointerDown={handleRotatePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={endDrag}
+          onPointerCancel={endDrag}
+        />
+      )}
     </div>
   );
 }
