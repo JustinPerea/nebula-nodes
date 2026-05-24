@@ -59,3 +59,29 @@ more intuitive for a human editor user?
   front/back when organizing a composition.
 - Disabled impossible endpoint actions so buttons explain the current stack
   position without a failed click.
+
+## Task 3 — Keyframe management UI
+
+### Decisions outside the spec
+
+- Added store-level `updateKeyframe` and `deleteKeyframe` commands instead of
+  making the Properties Panel rewrite manifest data inline. This keeps undo
+  behavior and manifest updates in the same place as the existing spatial and
+  add-keyframe commands.
+- Kept this pass to frame/value/delete controls grouped by property. Easing
+  edits and timeline-lane drag handles are still separate UX work; this makes
+  existing keyframes visible and correctable without expanding the editor
+  surface yet.
+- Guarded numeric edits against non-finite input so a temporary invalid number
+  field state does not write `NaN` into the manifest.
+
+### Human/intuitive review
+
+- Keyframes are shown directly under Transform because that is where users look
+  when a selected layer is moving. Hiding them elsewhere would make animation
+  feel like invisible state.
+- Each row keeps frame, value, and delete together. That makes a keyframe feel
+  like one editable object instead of scattering related controls across the
+  panel.
+- Delete buttons include the property and frame in their accessible name, so a
+  long list of keyframes is still understandable outside the visual layout.

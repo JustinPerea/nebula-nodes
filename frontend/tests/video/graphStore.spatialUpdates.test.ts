@@ -308,4 +308,41 @@ describe('graphStore — addOrUpdateKeyframe', () => {
     const manifestAfterUndo = (remotionAfterUndo?.data.params as { manifest: { timeline: TrackItem[] } }).manifest;
     expect(manifestAfterUndo.timeline[0].keyframes).toEqual({});
   });
+
+  it('updates an existing keyframe value and keeps the list sorted after frame edits', () => {
+    seedRemotionWithItem(makeTrackItem({
+      keyframes: {
+        position: [
+          { frame: 10, value: [10, 0, 0], easing: 'linear' },
+          { frame: 30, value: [30, 0, 0], easing: 'linear' },
+        ],
+      },
+    }));
+
+    useGraphStore.getState().updateKeyframe('r1', 't1', 'position', 30, {
+      frame: 5,
+      value: [5, 1, 2],
+    });
+
+    const item = (useGraphStore.getState().nodes.find((n) => n.id === 'r1')?.data.params as { manifest: { timeline: TrackItem[] } }).manifest.timeline[0];
+    expect(item.keyframes.position).toEqual([
+      { frame: 5, value: [5, 1, 2], easing: 'linear' },
+      { frame: 10, value: [10, 0, 0], easing: 'linear' },
+    ]);
+  });
+
+  it('deletes a keyframe and removes the prop bucket when empty', () => {
+    seedRemotionWithItem(makeTrackItem({
+      keyframes: {
+        rotation: [
+          { frame: 20, value: [0, 0, 90], easing: 'linear' },
+        ],
+      },
+    }));
+
+    useGraphStore.getState().deleteKeyframe('r1', 't1', 'rotation', 20);
+
+    const item = (useGraphStore.getState().nodes.find((n) => n.id === 'r1')?.data.params as { manifest: { timeline: TrackItem[] } }).manifest.timeline[0];
+    expect(item.keyframes.rotation).toBeUndefined();
+  });
 });

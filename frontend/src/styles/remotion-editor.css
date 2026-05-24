@@ -395,3 +395,55 @@ body.app-slava-restraint .remotion-properties-panel__section textarea:focus {
   outline: none;
   border-color: var(--sr-accent);
 }
+
+body.app-slava-restraint .remotion-properties-panel__keyframes {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+body.app-slava-restraint .remotion-properties-panel__keyframe-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--sr-edge);
+}
+
+body.app-slava-restraint .remotion-properties-panel__keyframe-prop {
+  color: var(--sr-ink);
+  font-family: monospace;
+  font-size: 11px;
+}
+
+body.app-slava-restraint .remotion-properties-panel__keyframe-row {
+  display: grid;
+  grid-template-columns: 64px 1fr auto;
+  gap: 6px;
+  align-items: end;
+}
+
+body.app-slava-restraint .remotion-properties-panel__keyframe-row label {
+  margin-bottom: 0;
+}
+
+body.app-slava-restraint .remotion-properties-panel__keyframe-vector {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+}
+
+body.app-slava-restraint .remotion-properties-panel__keyframe-delete {
+  background: none;
+  border: 1px solid var(--sr-edge);
+  color: var(--sr-ink);
+  padding: 4px 8px;
+  border-radius: 2px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+}
+
+body.app-slava-restraint .remotion-properties-panel__keyframe-delete:hover {
+  border-color: var(--sr-accent);
+}

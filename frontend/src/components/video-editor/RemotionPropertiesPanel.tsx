@@ -1,6 +1,6 @@
 import { useGraphStore } from '../../store/graphStore';
 import { useUIStore } from '../../store/uiStore';
-import type { TrackItem, VideoGraphManifest } from '../../types/video';
+import type { KeyframeData, TrackItem, VideoGraphManifest } from '../../types/video';
 import { SpatialAxisInput } from './SpatialAxisInput';
 
 function isVoxelCellArray(
@@ -27,6 +27,8 @@ export function RemotionPropertiesPanel({ remotionNodeId }: RemotionPropertiesPa
   const updateTrackItemProps = useGraphStore((s) => s.updateTrackItemProps);
   const updateTrackItemTime = useGraphStore((s) => s.updateTrackItemTime);
   const updateTrackItemSpatial = useGraphStore((s) => s.updateTrackItemSpatial);
+  const updateKeyframe = useGraphStore((s) => s.updateKeyframe);
+  const deleteKeyframe = useGraphStore((s) => s.deleteKeyframe);
 
   const manifest = ((node?.data.params as { manifest?: VideoGraphManifest } | undefined)?.manifest) ?? null;
   const item: TrackItem | null = manifest?.timeline.find((t) => t.id === selectedTrackItemId) ?? null;
@@ -66,6 +68,36 @@ export function RemotionPropertiesPanel({ remotionNodeId }: RemotionPropertiesPa
     ];
     nextRotation[index] = value;
     onSpatialPatch({ rotation: nextRotation });
+  };
+  const keyframeGroups = Object.entries(item.keyframes)
+    .filter(([, keyframes]) => keyframes.length > 0)
+    .sort(([a], [b]) => a.localeCompare(b));
+  const onKeyframeFrameChange = (propName: string, keyframe: KeyframeData, frame: number) => {
+    updateKeyframe(remotionNodeId, item.id, propName, keyframe.frame, { frame });
+  };
+  const onKeyframeScalarValueChange = (propName: string, keyframe: KeyframeData, value: number) => {
+    updateKeyframe(remotionNodeId, item.id, propName, keyframe.frame, { value });
+  };
+  const onKeyframeVectorValueChange = (
+    propName: string,
+    keyframe: KeyframeData,
+    axis: 0 | 1 | 2,
+    value: number,
+  ) => {
+    if (!Array.isArray(keyframe.value)) return;
+    const nextValue: [number, number, number] = [
+      keyframe.value[0],
+      keyframe.value[1],
+      keyframe.value[2],
+    ];
+    nextValue[axis] = value;
+    updateKeyframe(remotionNodeId, item.id, propName, keyframe.frame, { value: nextValue });
+  };
+  const handleFiniteNumber = (input: HTMLInputElement, onValue: (value: number) => void) => {
+    const value = input.valueAsNumber;
+    if (Number.isFinite(value)) {
+      onValue(value);
+    }
   };
 
   return (
@@ -152,6 +184,88 @@ export function RemotionPropertiesPanel({ remotionNodeId }: RemotionPropertiesPa
           value={item.spatial.rotation[2]}
           onValueChange={(value) => onRotationValue(2, value)}
         />
+      </section>
+
+      <section className="remotion-properties-panel__section">
+        <h4>Keyframes</h4>
+        {keyframeGroups.length === 0 ? (
+          <p className="remotion-properties-panel__hint">No keyframes recorded.</p>
+        ) : (
+          <div className="remotion-properties-panel__keyframes">
+            {keyframeGroups.map(([propName, keyframes]) => (
+              <div key={propName} className="remotion-properties-panel__keyframe-group">
+                <div className="remotion-properties-panel__keyframe-prop">{propName}</div>
+                {keyframes.map((keyframe) => {
+                  const keyframeValue = keyframe.value;
+                  return (
+                    <div key={`${propName}-${keyframe.frame}`} className="remotion-properties-panel__keyframe-row">
+                      <label>
+                        frame
+                        <input
+                          aria-label={`${propName} keyframe frame ${keyframe.frame}`}
+                          type="number"
+                          value={keyframe.frame}
+                          onChange={(e) =>
+                            handleFiniteNumber(e.currentTarget, (value) => onKeyframeFrameChange(propName, keyframe, value))
+                          }
+                        />
+                      </label>
+                      {Array.isArray(keyframeValue) ? (
+                        <div className="remotion-properties-panel__keyframe-vector">
+                          {(['X', 'Y', 'Z'] as const).map((axisLabel, axisIndex) => (
+                            <label key={axisLabel}>
+                              {axisLabel}
+                              <input
+                                aria-label={`${propName} keyframe ${axisLabel} ${keyframe.frame}`}
+                                type="number"
+                                value={keyframeValue[axisIndex]}
+                                onChange={(e) =>
+                                  handleFiniteNumber(
+                                    e.currentTarget,
+                                    (value) =>
+                                      onKeyframeVectorValueChange(
+                                        propName,
+                                        keyframe,
+                                        axisIndex as 0 | 1 | 2,
+                                        value,
+                                      ),
+                                  )
+                                }
+                              />
+                            </label>
+                          ))}
+                        </div>
+                      ) : (
+                        <label>
+                          value
+                          <input
+                            aria-label={`${propName} keyframe value ${keyframe.frame}`}
+                            type="number"
+                            value={keyframeValue}
+                            onChange={(e) =>
+                              handleFiniteNumber(e.currentTarget, (value) =>
+                                onKeyframeScalarValueChange(propName, keyframe, value),
+                              )
+                            }
+                          />
+                        </label>
+                      )}
+                      <button
+                        type="button"
+                        className="remotion-properties-panel__keyframe-delete"
+                        aria-label={`Delete ${propName} keyframe ${keyframe.frame}`}
+                        title={`Delete ${propName} keyframe ${keyframe.frame}`}
+                        onClick={() => deleteKeyframe(remotionNodeId, item.id, propName, keyframe.frame)}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        )}
       </section>
 
       {item.componentType === 'TextNode' && (
