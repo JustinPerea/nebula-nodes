@@ -20,7 +20,7 @@ function renderOverlay() {
 describe('PlayerOverlay', () => {
   beforeEach(() => {
     useUIStore.setState(INITIAL_UI_STATE, true);
-    document.querySelectorAll('[data-track-item-id]').forEach((el) => el.remove());
+    document.querySelectorAll('[data-track-item-id], [data-track-item-content-id]').forEach((el) => el.remove());
   });
 
   it('renders a transparent overlay div', () => {
@@ -43,6 +43,50 @@ describe('PlayerOverlay', () => {
     fireEvent.pointerDown(overlay, { clientX: 100, clientY: 100 });
 
     expect(useUIStore.getState().selectedTrackItemId).toBe('track-xyz');
+
+    elementsFromPointSpy.mockRestore();
+    document.body.removeChild(layerEl);
+  });
+
+  it('prefers content wrapper hits over full-frame layer roots', () => {
+    const layerEl = document.createElement('div');
+    layerEl.setAttribute('data-track-item-id', 'track-xyz');
+    const contentEl = document.createElement('div');
+    contentEl.setAttribute('data-track-item-content-id', 'track-xyz');
+    layerEl.appendChild(contentEl);
+    document.body.appendChild(layerEl);
+
+    const elementsFromPointSpy = vi
+      .spyOn(document, 'elementsFromPoint')
+      .mockReturnValue([contentEl, layerEl] as unknown as Element[]);
+
+    const { container } = renderOverlay();
+    const overlay = container.querySelector('.remotion-player-overlay') as HTMLElement;
+    fireEvent.pointerDown(overlay, { clientX: 100, clientY: 100 });
+
+    expect(useUIStore.getState().selectedTrackItemId).toBe('track-xyz');
+
+    elementsFromPointSpy.mockRestore();
+    document.body.removeChild(layerEl);
+  });
+
+  it('does not select a full-frame root when its content wrapper was missed', () => {
+    const layerEl = document.createElement('div');
+    layerEl.setAttribute('data-track-item-id', 'track-xyz');
+    const contentEl = document.createElement('div');
+    contentEl.setAttribute('data-track-item-content-id', 'track-xyz');
+    layerEl.appendChild(contentEl);
+    document.body.appendChild(layerEl);
+
+    const elementsFromPointSpy = vi
+      .spyOn(document, 'elementsFromPoint')
+      .mockReturnValue([layerEl] as unknown as Element[]);
+
+    const { container } = renderOverlay();
+    const overlay = container.querySelector('.remotion-player-overlay') as HTMLElement;
+    fireEvent.pointerDown(overlay, { clientX: 100, clientY: 100 });
+
+    expect(useUIStore.getState().selectedTrackItemId).toBeNull();
 
     elementsFromPointSpy.mockRestore();
     document.body.removeChild(layerEl);

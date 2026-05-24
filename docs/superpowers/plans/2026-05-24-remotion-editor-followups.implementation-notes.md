@@ -85,3 +85,31 @@ more intuitive for a human editor user?
   panel.
 - Delete buttons include the property and frame in their accessible name, so a
   long list of keyframes is still understandable outside the visual layout.
+
+## Task 4 — IsoBlock Player hit-testing/drag substitute
+
+### Decisions outside the spec
+
+- Did not implement true Three.js mesh raycasting in this pass. Instead,
+  IsometricBlock now uses the same 2D layer wrapper contract as the CSS-backed
+  renderers: `data-track-item-id` on the layer root,
+  `data-track-item-content-id` on the transformed content wrapper, and
+  interpolated opacity/position/rotation/scale on that wrapper.
+- Made the IsoBlock content wrapper a finite 360px square viewport instead of a
+  full-composition transparent surface. This gives SelectionBox a tangible
+  layer box to measure and prevents one 3D layer from acting like the entire
+  Player is clickable.
+- Tightened PlayerOverlay hit-testing to prefer content-wrapper hits. It falls
+  back to `data-track-item-id` only for legacy/empty renderers that do not have
+  a content wrapper.
+
+### Human/intuitive review
+
+- A 3D block now behaves like a draggable viewport layer. That is less precise
+  than clicking the mesh itself, but it is understandable: the user moves and
+  resizes the box that contains the 3D scene.
+- Clicks outside the visible layer wrapper no longer select a full-frame
+  transparent root. This makes deselection and selecting lower layers feel
+  deliberate instead of sticky.
+- True object-level picking should still be treated as a future 3D-specific
+  interaction, not hidden inside the 2D overlay path.

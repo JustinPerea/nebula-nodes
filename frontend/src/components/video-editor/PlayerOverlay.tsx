@@ -11,8 +11,13 @@ interface PlayerOverlayProps {
 function hitTestTrackItem(x: number, y: number): string | null {
   const els = document.elementsFromPoint(x, y);
   for (const el of els) {
-    const id = el.closest('[data-track-item-id]')?.getAttribute('data-track-item-id');
+    const id = el.closest('[data-track-item-content-id]')?.getAttribute('data-track-item-content-id');
     if (id) return id;
+  }
+  for (const el of els) {
+    const root = el.closest('[data-track-item-id]');
+    const id = root?.getAttribute('data-track-item-id');
+    if (id && !document.querySelector(`[data-track-item-content-id="${id}"]`)) return id;
   }
   return null;
 }

@@ -18,10 +18,15 @@ vi.mock('@react-three/drei', () => ({
   useGLTF: (url: string) => ({ scene: { name: `mock-scene-${url}` } }),
 }));
 
-// Stub remotion's useVideoConfig so the component can run outside a composition.
-vi.mock('remotion', () => ({
-  useVideoConfig: () => ({ width: 1920, height: 1080, fps: 30, durationInFrames: 300 }),
-}));
+// Stub remotion hooks so the component can run outside a composition.
+vi.mock('remotion', async () => {
+  const actual = await vi.importActual<typeof import('remotion')>('remotion');
+  return {
+    ...actual,
+    useCurrentFrame: () => 0,
+    useVideoConfig: () => ({ width: 1920, height: 1080, fps: 30, durationInFrames: 300 }),
+  };
+});
 
 function makeItem(overrides: Partial<TrackItem> = {}): TrackItem {
   return {
@@ -41,6 +46,28 @@ describe('IsometricBlockRenderer', () => {
     const { getByTestId } = render(<IsometricBlockRenderer item={makeItem()} />);
     expect(getByTestId('three-canvas')).toBeInTheDocument();
     expect(getByTestId('ortho-camera')).toBeInTheDocument();
+  });
+
+  it('exposes track-item attributes on a finite draggable layer wrapper', () => {
+    const { container } = render(<IsometricBlockRenderer item={makeItem()} />);
+    const root = container.querySelector('[data-track-item-id="t1"]');
+    const content = container.querySelector('[data-track-item-content-id="t1"]') as HTMLElement | null;
+
+    expect(root).not.toBeNull();
+    expect(content).not.toBeNull();
+    expect(content?.style.width).toBe('360px');
+    expect(content?.style.height).toBe('360px');
+  });
+
+  it('applies static spatial transform to the draggable layer wrapper', () => {
+    const { container } = render(<IsometricBlockRenderer item={makeItem({
+      spatial: { x: 10, y: 20, z: 5, scale: [2, 3, 1], rotation: [1, 2, 45] },
+    })} />);
+    const content = container.querySelector('[data-track-item-content-id="t1"]') as HTMLElement;
+
+    expect(content.style.transform).toContain('translate3d(10px, 20px, 5px)');
+    expect(content.style.transform).toContain('rotateZ(45deg)');
+    expect(content.style.transform).toContain('scale3d(2, 3, 1)');
   });
 
   it('positions the default camera at the 45° isometric angle', () => {
