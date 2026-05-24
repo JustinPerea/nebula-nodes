@@ -20,10 +20,12 @@ import {
 import { wsClient, type ExecutionEvent } from '../lib/wsClient';
 import { useUIStore } from './uiStore';
 import { clipSpeed, type EditClip } from '../lib/editor/virtualPlayback';
-import type { VideoGraphManifest, TrackItem } from '../types/video';
+import type { KeyframeData, VideoGraphManifest, TrackItem } from '../types/video';
 import { createEmptyManifest, DEFAULT_FPS } from '../types/video';
 import { validateManifest } from '../lib/video/manifestValidator';
 import { componentTypeToCanvasDefId, pruneTrackItemsForDeletedNode } from '../lib/video/mirroring';
+
+export type TrackItemOrderAction = 'send-to-back' | 'send-backward' | 'bring-forward' | 'bring-to-front';
 
 /** Backend contract: video-edit's ffmpeg pipeline still operates on
  * sourceIn/sourceOut/speed even though the frontend stores `duration` as
@@ -217,12 +219,30 @@ interface GraphState {
     trackItemId: string,
     spatialPatch: Partial<TrackItem['spatial']>,
   ) => void;
+  reorderTrackItem: (
+    remotionNodeId: string,
+    trackItemId: string,
+    action: TrackItemOrderAction,
+  ) => void;
   addOrUpdateKeyframe: (
     remotionNodeId: string,
     trackItemId: string,
     propName: string,
     frame: number,
     value: number | [number, number, number],
+  ) => void;
+  updateKeyframe: (
+    remotionNodeId: string,
+    trackItemId: string,
+    propName: string,
+    frame: number,
+    patch: Partial<Pick<KeyframeData, 'frame' | 'value' | 'easing'>>,
+  ) => void;
+  deleteKeyframe: (
+    remotionNodeId: string,
+    trackItemId: string,
+    propName: string,
+    frame: number,
   ) => void;
   executeGraph: () => Promise<void>;
   resetExecution: () => void;
@@ -1366,6 +1386,51 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     });
   },
 
+  reorderTrackItem: (remotionNodeId, trackItemId, action) => {
+    const state = get();
+    const remotion = state.nodes.find((n) => n.id === remotionNodeId);
+    if (!remotion) return;
+    const currentParams = (remotion.data.params ?? {}) as Record<string, unknown>;
+    const manifest = currentParams.manifest as VideoGraphManifest | undefined;
+    if (!manifest) return;
+
+    const fromIndex = manifest.timeline.findIndex((t) => t.id === trackItemId);
+    if (fromIndex < 0) return;
+
+    const lastIndex = manifest.timeline.length - 1;
+    const toIndex =
+      action === 'send-to-back'
+        ? 0
+        : action === 'send-backward'
+          ? Math.max(0, fromIndex - 1)
+          : action === 'bring-forward'
+            ? Math.min(lastIndex, fromIndex + 1)
+            : lastIndex;
+    if (toIndex === fromIndex) return;
+
+    pushUndo(set, get);
+
+    set((s) => {
+      const updatedNodes = s.nodes.map((n) => {
+        if (n.id !== remotionNodeId) return n;
+        const params = (n.data.params ?? {}) as Record<string, unknown>;
+        const m = params.manifest as VideoGraphManifest;
+        const nextTimeline = [...m.timeline];
+        const [item] = nextTimeline.splice(fromIndex, 1);
+        nextTimeline.splice(toIndex, 0, item);
+        const nextManifest: VideoGraphManifest = {
+          ...m,
+          timeline: nextTimeline,
+        };
+        return {
+          ...n,
+          data: { ...n.data, params: { ...params, manifest: nextManifest } },
+        };
+      });
+      return { nodes: updatedNodes };
+    });
+  },
+
   addOrUpdateKeyframe: (remotionNodeId, trackItemId, propName, frame, value) => {
     const state = get();
     const remotion = state.nodes.find((n) => n.id === remotionNodeId);
@@ -1400,6 +1465,103 @@ export const useGraphStore = create<GraphState>((set, get) => ({
                 [propName]: nextKeyframes,
               },
             };
+          }),
+        };
+        return {
+          ...n,
+          data: { ...n.data, params: { ...params, manifest: nextManifest } },
+        };
+      });
+      return { nodes: updatedNodes };
+    });
+  },
+
+  updateKeyframe: (remotionNodeId, trackItemId, propName, frame, patch) => {
+    const state = get();
+    const remotion = state.nodes.find((n) => n.id === remotionNodeId);
+    if (!remotion) return;
+    const currentParams = (remotion.data.params ?? {}) as Record<string, unknown>;
+    const manifest = currentParams.manifest as VideoGraphManifest | undefined;
+    if (!manifest) return;
+    const item = manifest.timeline.find((t) => t.id === trackItemId);
+    const existing = item?.keyframes[propName] ?? [];
+    const target = existing.find((k) => k.frame === frame);
+    if (!target) return;
+
+    const nextFrame = patch.frame !== undefined ? Math.round(patch.frame) : target.frame;
+    const nextValue = patch.value !== undefined
+      ? Array.isArray(patch.value)
+        ? ([...patch.value] as [number, number, number])
+        : patch.value
+      : Array.isArray(target.value)
+        ? ([...target.value] as [number, number, number])
+        : target.value;
+    const nextEasing = patch.easing ?? target.easing;
+
+    maybePushUndo(set, get, remotionNodeId);
+
+    set((s) => {
+      const updatedNodes = s.nodes.map((n) => {
+        if (n.id !== remotionNodeId) return n;
+        const params = (n.data.params ?? {}) as Record<string, unknown>;
+        const m = params.manifest as VideoGraphManifest;
+        const nextManifest: VideoGraphManifest = {
+          ...m,
+          timeline: m.timeline.map((t) => {
+            if (t.id !== trackItemId) return t;
+            const rest = (t.keyframes[propName] ?? []).filter((k) => k.frame !== frame);
+            const nextKeyframes = [
+              ...rest.filter((k) => k.frame !== nextFrame),
+              { frame: nextFrame, value: nextValue, easing: nextEasing },
+            ].sort((a, b) => a.frame - b.frame);
+            return {
+              ...t,
+              keyframes: {
+                ...t.keyframes,
+                [propName]: nextKeyframes,
+              },
+            };
+          }),
+        };
+        return {
+          ...n,
+          data: { ...n.data, params: { ...params, manifest: nextManifest } },
+        };
+      });
+      return { nodes: updatedNodes };
+    });
+  },
+
+  deleteKeyframe: (remotionNodeId, trackItemId, propName, frame) => {
+    const state = get();
+    const remotion = state.nodes.find((n) => n.id === remotionNodeId);
+    if (!remotion) return;
+    const currentParams = (remotion.data.params ?? {}) as Record<string, unknown>;
+    const manifest = currentParams.manifest as VideoGraphManifest | undefined;
+    if (!manifest) return;
+    const item = manifest.timeline.find((t) => t.id === trackItemId);
+    const existing = item?.keyframes[propName] ?? [];
+    if (!existing.some((k) => k.frame === frame)) return;
+
+    maybePushUndo(set, get, remotionNodeId);
+
+    set((s) => {
+      const updatedNodes = s.nodes.map((n) => {
+        if (n.id !== remotionNodeId) return n;
+        const params = (n.data.params ?? {}) as Record<string, unknown>;
+        const m = params.manifest as VideoGraphManifest;
+        const nextManifest: VideoGraphManifest = {
+          ...m,
+          timeline: m.timeline.map((t) => {
+            if (t.id !== trackItemId) return t;
+            const nextForProp = (t.keyframes[propName] ?? []).filter((k) => k.frame !== frame);
+            const nextKeyframes = { ...t.keyframes };
+            if (nextForProp.length === 0) {
+              delete nextKeyframes[propName];
+            } else {
+              nextKeyframes[propName] = nextForProp;
+            }
+            return { ...t, keyframes: nextKeyframes };
           }),
         };
         return {

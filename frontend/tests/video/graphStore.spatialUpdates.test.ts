@@ -41,6 +41,31 @@ function seedRemotionWithItem(trackItem: TrackItem, remotionId = 'r1') {
   useGraphStore.setState({ nodes: [remotionNode as never, sourceNode as never], undoStack: [], redoStack: [] });
 }
 
+function seedRemotionWithTimeline(trackItems: TrackItem[], remotionId = 'r1') {
+  const remotionNode = {
+    id: remotionId,
+    type: 'remotionNode',
+    position: { x: 0, y: 0 },
+    data: {
+      definitionId: 'remotion-node',
+      label: 'R',
+      params: {
+        manifest: { graph: { nodes: [], edges: [] }, timeline: trackItems },
+      },
+      state: 'idle' as const,
+      outputs: {},
+    },
+  };
+  useGraphStore.setState({ nodes: [remotionNode as never], undoStack: [], redoStack: [] });
+}
+
+function readTimelineIds(remotionId = 'r1'): string[] {
+  const state = useGraphStore.getState();
+  const remotion = state.nodes.find((n) => n.id === remotionId);
+  const manifest = (remotion?.data.params as { manifest: { timeline: TrackItem[] } }).manifest;
+  return manifest.timeline.map((t) => t.id);
+}
+
 describe('graphStore — updateTrackItemSpatial', () => {
   beforeEach(() => {
     useGraphStore.setState(INITIAL_GRAPH_STATE, true);
@@ -114,6 +139,65 @@ describe('graphStore — updateTrackItemSpatial', () => {
     const remotionAfterUndo = stateAfterUndo.nodes.find((n) => n.id === 'r-undo-test');
     const manifestAfterUndo = (remotionAfterUndo?.data.params as { manifest: { timeline: TrackItem[] } }).manifest;
     expect(manifestAfterUndo.timeline[0].spatial.x).toBe(0);
+  });
+});
+
+describe('graphStore — reorderTrackItem', () => {
+  beforeEach(() => {
+    useGraphStore.setState(INITIAL_GRAPH_STATE, true);
+  });
+
+  it('moves a selected TrackItem one layer forward', () => {
+    seedRemotionWithTimeline([
+      makeTrackItem({ id: 'back' }),
+      makeTrackItem({ id: 'middle' }),
+      makeTrackItem({ id: 'front' }),
+    ]);
+
+    useGraphStore.getState().reorderTrackItem('r1', 'middle', 'bring-forward');
+
+    expect(readTimelineIds()).toEqual(['back', 'front', 'middle']);
+  });
+
+  it('sends a selected TrackItem to back and brings it to front', () => {
+    seedRemotionWithTimeline([
+      makeTrackItem({ id: 'a' }),
+      makeTrackItem({ id: 'b' }),
+      makeTrackItem({ id: 'c' }),
+      makeTrackItem({ id: 'd' }),
+    ]);
+
+    useGraphStore.getState().reorderTrackItem('r1', 'c', 'send-to-back');
+    expect(readTimelineIds()).toEqual(['c', 'a', 'b', 'd']);
+
+    useGraphStore.getState().reorderTrackItem('r1', 'c', 'bring-to-front');
+    expect(readTimelineIds()).toEqual(['a', 'b', 'd', 'c']);
+  });
+
+  it('does not push undo for endpoint no-ops', () => {
+    seedRemotionWithTimeline([
+      makeTrackItem({ id: 'a' }),
+      makeTrackItem({ id: 'b' }),
+    ]);
+
+    useGraphStore.getState().reorderTrackItem('r1', 'a', 'send-backward');
+
+    expect(readTimelineIds()).toEqual(['a', 'b']);
+    expect(useGraphStore.getState().undoStack).toHaveLength(0);
+  });
+
+  it('pushes an undo snapshot for real order changes', () => {
+    seedRemotionWithTimeline([
+      makeTrackItem({ id: 'a' }),
+      makeTrackItem({ id: 'b' }),
+    ]);
+
+    const state = useGraphStore.getState();
+    state.reorderTrackItem('r1', 'a', 'bring-to-front');
+    expect(readTimelineIds()).toEqual(['b', 'a']);
+
+    useGraphStore.getState().undo();
+    expect(readTimelineIds()).toEqual(['a', 'b']);
   });
 });
 
@@ -223,5 +307,42 @@ describe('graphStore — addOrUpdateKeyframe', () => {
     const remotionAfterUndo = stateAfterUndo.nodes.find((n) => n.id === 'r-keyframe-undo');
     const manifestAfterUndo = (remotionAfterUndo?.data.params as { manifest: { timeline: TrackItem[] } }).manifest;
     expect(manifestAfterUndo.timeline[0].keyframes).toEqual({});
+  });
+
+  it('updates an existing keyframe value and keeps the list sorted after frame edits', () => {
+    seedRemotionWithItem(makeTrackItem({
+      keyframes: {
+        position: [
+          { frame: 10, value: [10, 0, 0], easing: 'linear' },
+          { frame: 30, value: [30, 0, 0], easing: 'linear' },
+        ],
+      },
+    }));
+
+    useGraphStore.getState().updateKeyframe('r1', 't1', 'position', 30, {
+      frame: 5,
+      value: [5, 1, 2],
+    });
+
+    const item = (useGraphStore.getState().nodes.find((n) => n.id === 'r1')?.data.params as { manifest: { timeline: TrackItem[] } }).manifest.timeline[0];
+    expect(item.keyframes.position).toEqual([
+      { frame: 5, value: [5, 1, 2], easing: 'linear' },
+      { frame: 10, value: [10, 0, 0], easing: 'linear' },
+    ]);
+  });
+
+  it('deletes a keyframe and removes the prop bucket when empty', () => {
+    seedRemotionWithItem(makeTrackItem({
+      keyframes: {
+        rotation: [
+          { frame: 20, value: [0, 0, 90], easing: 'linear' },
+        ],
+      },
+    }));
+
+    useGraphStore.getState().deleteKeyframe('r1', 't1', 'rotation', 20);
+
+    const item = (useGraphStore.getState().nodes.find((n) => n.id === 'r1')?.data.params as { manifest: { timeline: TrackItem[] } }).manifest.timeline[0];
+    expect(item.keyframes.rotation).toBeUndefined();
   });
 });

@@ -3,6 +3,7 @@ import { AbsoluteFill, useCurrentFrame } from 'remotion';
 import { Lottie, type LottieAnimationData } from '@remotion/lottie';
 import type { TrackItem } from '../../../types/video';
 import { interpolateScalar, interpolateVec3 } from '../../../lib/video/keyframeInterp';
+import { transformOriginFromAnchor } from '../../../lib/video/spatialCss';
 
 interface LottieRendererProps {
   item: TrackItem;
@@ -19,6 +20,7 @@ export function LottieRenderer({ item }: LottieRendererProps) {
   ]);
   const rotation = interpolateVec3(localFrame, item.keyframes.rotation ?? [], item.spatial.rotation);
   const scale = interpolateVec3(localFrame, item.keyframes.scale ?? [], item.spatial.scale);
+  const transformOrigin = transformOriginFromAnchor(item.spatial.anchor);
 
   const src = typeof item.props.src === 'string' ? item.props.src : null;
   const [animationData, setAnimationData] = useState<LottieAnimationData | null>(null);
@@ -49,6 +51,7 @@ export function LottieRenderer({ item }: LottieRendererProps) {
           data-track-item-content-id={item.id}
           style={{
             opacity,
+            transformOrigin,
             transform: `translate3d(${position[0]}px, ${position[1]}px, ${position[2]}px) rotateX(${rotation[0]}deg) rotateY(${rotation[1]}deg) rotateZ(${rotation[2]}deg) scale3d(${scale[0]}, ${scale[1]}, ${scale[2]})`,
           }}
         >
@@ -65,6 +68,7 @@ export function LottieRenderer({ item }: LottieRendererProps) {
           data-track-item-content-id={item.id}
           style={{
             opacity,
+            transformOrigin,
             transform: `translate3d(${position[0]}px, ${position[1]}px, ${position[2]}px) rotateX(${rotation[0]}deg) rotateY(${rotation[1]}deg) rotateZ(${rotation[2]}deg) scale3d(${scale[0]}, ${scale[1]}, ${scale[2]})`,
           }}
         >
@@ -76,7 +80,16 @@ export function LottieRenderer({ item }: LottieRendererProps) {
 
   return (
     <AbsoluteFill data-track-item-id={item.id} style={{ display: 'grid', placeItems: 'center' }}>
-      <div data-track-item-content-id={item.id} style={{ width: '100%', height: '100%' }}>
+      <div
+        data-track-item-content-id={item.id}
+        style={{
+          width: '100%',
+          height: '100%',
+          opacity,
+          transformOrigin,
+          transform: `translate3d(${position[0]}px, ${position[1]}px, ${position[2]}px) rotateX(${rotation[0]}deg) rotateY(${rotation[1]}deg) rotateZ(${rotation[2]}deg) scale3d(${scale[0]}, ${scale[1]}, ${scale[2]})`,
+        }}
+      >
         <Lottie animationData={animationData} style={{ width: '100%', height: '100%' }} />
       </div>
     </AbsoluteFill>

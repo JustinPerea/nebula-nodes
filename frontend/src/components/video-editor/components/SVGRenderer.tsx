@@ -1,6 +1,7 @@
 import { useCurrentFrame, AbsoluteFill, Img } from 'remotion';
 import type { TrackItem } from '../../../types/video';
 import { interpolateScalar, interpolateVec3 } from '../../../lib/video/keyframeInterp';
+import { transformOriginFromAnchor } from '../../../lib/video/spatialCss';
 
 interface SVGRendererProps {
   item: TrackItem;
@@ -24,6 +25,7 @@ export function SVGRenderer({ item }: SVGRendererProps) {
   ]);
   const rotation = interpolateVec3(localFrame, item.keyframes.rotation ?? [], item.spatial.rotation);
   const scale = interpolateVec3(localFrame, item.keyframes.scale ?? [], item.spatial.scale);
+  const transformOrigin = transformOriginFromAnchor(item.spatial.anchor);
 
   // Two source paths: inline markup or external URL. Inline wins if present.
   const svgMarkup = typeof item.props.svg === 'string' ? item.props.svg : null;
@@ -40,6 +42,7 @@ export function SVGRenderer({ item }: SVGRendererProps) {
           data-track-item-content-id={item.id}
           style={{
             opacity,
+            transformOrigin,
             transform: `translate3d(${position[0]}px, ${position[1]}px, ${position[2]}px) rotateX(${rotation[0]}deg) rotateY(${rotation[1]}deg) rotateZ(${rotation[2]}deg) scale3d(${scale[0]}, ${scale[1]}, ${scale[2]})`,
           }}
         >
@@ -61,6 +64,7 @@ export function SVGRenderer({ item }: SVGRendererProps) {
           height,
           maxWidth: '100%',
           maxHeight: '100%',
+          transformOrigin,
           transform: `translate3d(${position[0]}px, ${position[1]}px, ${position[2]}px) rotateX(${rotation[0]}deg) rotateY(${rotation[1]}deg) rotateZ(${rotation[2]}deg) scale3d(${scale[0]}, ${scale[1]}, ${scale[2]})`,
         }}
       />

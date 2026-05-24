@@ -42,12 +42,31 @@ describe('uiStore — TrackItem selection', () => {
   it('setSelectedTrackItem stores the id', () => {
     useUIStore.getState().setSelectedTrackItem('track-1');
     expect(useUIStore.getState().selectedTrackItemId).toBe('track-1');
+    expect(useUIStore.getState().selectedTrackItemIds).toEqual(['track-1']);
   });
 
   it('setSelectedTrackItem(null) clears the selection', () => {
-    useUIStore.setState({ selectedTrackItemId: 'track-1' });
+    useUIStore.setState({ selectedTrackItemId: 'track-1', selectedTrackItemIds: ['track-1'] });
     useUIStore.getState().setSelectedTrackItem(null);
     expect(useUIStore.getState().selectedTrackItemId).toBeNull();
+    expect(useUIStore.getState().selectedTrackItemIds).toEqual([]);
+  });
+
+  it('setSelectedTrackItems stores a unique selection list and primary id', () => {
+    useUIStore.getState().setSelectedTrackItems(['track-1', 'track-2', 'track-1'], 'track-2');
+    expect(useUIStore.getState().selectedTrackItemId).toBe('track-2');
+    expect(useUIStore.getState().selectedTrackItemIds).toEqual(['track-1', 'track-2']);
+  });
+
+  it('toggleSelectedTrackItem adds and removes ids while keeping a primary selection', () => {
+    useUIStore.getState().setSelectedTrackItem('track-1');
+    useUIStore.getState().toggleSelectedTrackItem('track-2');
+    expect(useUIStore.getState().selectedTrackItemId).toBe('track-2');
+    expect(useUIStore.getState().selectedTrackItemIds).toEqual(['track-1', 'track-2']);
+
+    useUIStore.getState().toggleSelectedTrackItem('track-2');
+    expect(useUIStore.getState().selectedTrackItemId).toBe('track-1');
+    expect(useUIStore.getState().selectedTrackItemIds).toEqual(['track-1']);
   });
 
   it('exitRemotionEditor also clears selectedTrackItemId', () => {
@@ -55,9 +74,11 @@ describe('uiStore — TrackItem selection', () => {
       viewMode: 'remotion-editor',
       remotionEditorTargetNodeId: 'r1',
       selectedTrackItemId: 'track-1',
+      selectedTrackItemIds: ['track-1', 'track-2'],
     });
     useUIStore.getState().exitRemotionEditor();
     expect(useUIStore.getState().selectedTrackItemId).toBeNull();
+    expect(useUIStore.getState().selectedTrackItemIds).toEqual([]);
   });
 });
 

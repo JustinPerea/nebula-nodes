@@ -29,6 +29,8 @@ export interface SpatialTransform {
   x: number;
   y: number;
   z: number;
+  /** Normalized transform origin. [0,0]=top-left, [0.5,0.5]=center. */
+  anchor?: [number, number];
   /** Per-axis scale. Use [1, 1, 1] for identity. */
   scale: [number, number, number];
   /** Per-axis rotation. Standardized to DEGREES — convert to radians at the
@@ -85,12 +87,14 @@ export interface VideoGraphManifest {
 
 export const DEFAULT_FPS = 30;
 export const DEFAULT_DURATION_FRAMES = DEFAULT_FPS * 5; // 5 seconds
+export const DEFAULT_ANCHOR: NonNullable<SpatialTransform['anchor']> = [0.5, 0.5];
 
 /** Identity transform — origin, no rotation, unit scale. */
 export const IDENTITY_TRANSFORM: SpatialTransform = {
   x: 0,
   y: 0,
   z: 0,
+  anchor: DEFAULT_ANCHOR,
   scale: [1, 1, 1],
   rotation: [0, 0, 0],
 };

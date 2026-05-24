@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { render } from '@testing-library/react';
+import { describe, it, expect, vi } from 'vitest';
+import { render, waitFor } from '@testing-library/react';
 import type { TrackItem } from '../../src/types/video';
 import { TextRenderer } from '../../src/components/video-editor/components/TextRenderer';
 import { SVGRenderer } from '../../src/components/video-editor/components/SVGRenderer';
@@ -102,5 +102,28 @@ describe('CSS-driven renderers — data-track-item-content-id', () => {
   it('ImageRenderer happy path puts data-track-item-content-id on the Img element', () => {
     const { container } = render(<ImageRenderer item={makeItem({ componentType: 'ImageAssetNode', props: { src: 'data:image/png;base64,AAAA' } })} />);
     expect(container.querySelector('[data-track-item-content-id="track-abc"]')).not.toBeNull();
+  });
+
+  it('VideoRenderer happy path puts data-track-item-content-id on the transformed wrapper', () => {
+    const { container } = render(<VideoRenderer item={makeItem({
+      componentType: 'VideoAssetNode',
+      spatial: { x: 0, y: 0, z: 0, scale: [1, 1, 1], rotation: [0, 0, 0], anchor: [0, 1] },
+      props: { src: 'https://example.com/video.mp4' },
+    })} />);
+    const wrapper = container.querySelector('[data-track-item-content-id="track-abc"]') as HTMLElement | null;
+    expect(wrapper).not.toBeNull();
+    expect(wrapper?.style.transformOrigin).toBe('0% 100%');
+  });
+
+  it('LottieRenderer happy path puts data-track-item-content-id on the transformed wrapper', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      json: () => Promise.resolve({ v: '5.7.1', layers: [] }),
+    }));
+
+    const { container } = render(<LottieRenderer item={makeItem({ componentType: 'LottieNode', props: { src: 'https://example.com/anim.json' } })} />);
+
+    await waitFor(() => {
+      expect(container.querySelector('[data-track-item-content-id="track-abc"]')).not.toBeNull();
+    });
   });
 });

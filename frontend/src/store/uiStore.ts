@@ -63,6 +63,7 @@ interface UIState {
   // Phase 2 Remotion editor
   remotionEditorTargetNodeId: string | null;
   selectedTrackItemId: string | null;
+  selectedTrackItemIds: string[];
   isKeyframeRecording: boolean;
   selectedClipId: string | null;
   playheadOutputTime: number;
@@ -108,6 +109,8 @@ interface UIState {
   enterRemotionEditor: (remotionNodeId: string) => void;
   exitRemotionEditor: () => void;
   setSelectedTrackItem: (id: string | null) => void;
+  setSelectedTrackItems: (ids: string[], primaryId?: string | null) => void;
+  toggleSelectedTrackItem: (id: string) => void;
   toggleKeyframeRecording: () => void;
   setSelectedClip: (id: string | null) => void;
   setPlayheadOutputTime: (t: number) => void;
@@ -146,6 +149,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   editorTargetNodeId: null,
   remotionEditorTargetNodeId: null,
   selectedTrackItemId: null,
+  selectedTrackItemIds: [],
   isKeyframeRecording: false,
   selectedClipId: null,
   playheadOutputTime: 0,
@@ -207,13 +211,47 @@ export const useUIStore = create<UIState>((set, get) => ({
       viewMode: 'canvas',
       remotionEditorTargetNodeId: null,
       selectedTrackItemId: null,
+      selectedTrackItemIds: [],
       isKeyframeRecording: false,
       isPlaying: false,
     });
   },
 
   setSelectedTrackItem: (id) => {
-    set({ selectedTrackItemId: id });
+    set({ selectedTrackItemId: id, selectedTrackItemIds: id ? [id] : [] });
+  },
+
+  setSelectedTrackItems: (ids, primaryId) => {
+    const uniqueIds = Array.from(new Set(ids));
+    const primary =
+      primaryId && uniqueIds.includes(primaryId)
+        ? primaryId
+        : uniqueIds[uniqueIds.length - 1] ?? null;
+    set({ selectedTrackItemId: primary, selectedTrackItemIds: uniqueIds });
+  },
+
+  toggleSelectedTrackItem: (id) => {
+    set((state) => {
+      const currentIds =
+        state.selectedTrackItemIds.length > 0
+          ? state.selectedTrackItemIds
+          : state.selectedTrackItemId
+            ? [state.selectedTrackItemId]
+            : [];
+      const isSelected = currentIds.includes(id);
+      const selectedTrackItemIds = isSelected
+        ? currentIds.filter((selectedId) => selectedId !== id)
+        : [...currentIds, id];
+      const selectedTrackItemId = isSelected
+        ? state.selectedTrackItemId === id
+          ? selectedTrackItemIds[selectedTrackItemIds.length - 1] ?? null
+          : state.selectedTrackItemId
+        : id;
+      return {
+        selectedTrackItemId,
+        selectedTrackItemIds,
+      };
+    });
   },
 
   toggleKeyframeRecording: () => {

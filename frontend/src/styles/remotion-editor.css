@@ -90,6 +90,18 @@ body.app-slava-restraint .remotion-selection-box {
   pointer-events: none;
 }
 
+body.app-slava-restraint .remotion-selection-box--secondary {
+  border-style: dashed;
+}
+
+body.app-slava-restraint .remotion-selection-guide {
+  position: fixed;
+  background: var(--sr-accent);
+  opacity: 0.85;
+  pointer-events: none;
+  z-index: 5;
+}
+
 body.app-slava-restraint .remotion-selection-box__body {
   position: absolute;
   inset: 0;
@@ -275,9 +287,18 @@ body.app-slava-restraint .remotion-editor-toolbar {
   align-items: center;
 }
 
+body.app-slava-restraint .remotion-editor-toolbar__group {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  padding-left: 4px;
+  border-left: 1px solid var(--sr-edge);
+}
+
 body.app-slava-restraint .remotion-editor-toolbar__add,
 body.app-slava-restraint .remotion-editor-toolbar__delete,
-body.app-slava-restraint .remotion-editor-toolbar__record {
+body.app-slava-restraint .remotion-editor-toolbar__record,
+body.app-slava-restraint .remotion-editor-toolbar__zorder {
   background: none;
   border: 1px solid var(--sr-edge);
   color: var(--sr-ink);
@@ -296,7 +317,12 @@ body.app-slava-restraint .remotion-editor-toolbar__delete:not(:disabled):hover {
   border-color: var(--sr-accent);
 }
 
-body.app-slava-restraint .remotion-editor-toolbar__delete:disabled {
+body.app-slava-restraint .remotion-editor-toolbar__zorder:not(:disabled):hover {
+  border-color: var(--sr-accent);
+}
+
+body.app-slava-restraint .remotion-editor-toolbar__delete:disabled,
+body.app-slava-restraint .remotion-editor-toolbar__zorder:disabled {
   opacity: 0.4;
   cursor: not-allowed;
 }
@@ -379,5 +405,90 @@ body.app-slava-restraint .remotion-properties-panel__section textarea {
 body.app-slava-restraint .remotion-properties-panel__section input:focus,
 body.app-slava-restraint .remotion-properties-panel__section textarea:focus {
   outline: none;
+  border-color: var(--sr-accent);
+}
+
+body.app-slava-restraint .remotion-properties-panel__field-label {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--sr-ink-meta);
+  font-size: 11px;
+}
+
+body.app-slava-restraint .remotion-properties-panel__anchor {
+  margin-top: 4px;
+}
+
+body.app-slava-restraint .remotion-properties-panel__anchor-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 18px);
+  gap: 4px;
+}
+
+body.app-slava-restraint .remotion-properties-panel__anchor-button {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid var(--sr-edge);
+  border-radius: 2px;
+  background: transparent;
+  cursor: pointer;
+}
+
+body.app-slava-restraint .remotion-properties-panel__anchor-button:hover,
+body.app-slava-restraint .remotion-properties-panel__anchor-button[data-active="true"] {
+  border-color: var(--sr-accent);
+  background: var(--sr-accent);
+}
+
+body.app-slava-restraint .remotion-properties-panel__keyframes {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+body.app-slava-restraint .remotion-properties-panel__keyframe-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--sr-edge);
+}
+
+body.app-slava-restraint .remotion-properties-panel__keyframe-prop {
+  color: var(--sr-ink);
+  font-family: monospace;
+  font-size: 11px;
+}
+
+body.app-slava-restraint .remotion-properties-panel__keyframe-row {
+  display: grid;
+  grid-template-columns: 64px 1fr auto;
+  gap: 6px;
+  align-items: end;
+}
+
+body.app-slava-restraint .remotion-properties-panel__keyframe-row label {
+  margin-bottom: 0;
+}
+
+body.app-slava-restraint .remotion-properties-panel__keyframe-vector {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+}
+
+body.app-slava-restraint .remotion-properties-panel__keyframe-delete {
+  background: none;
+  border: 1px solid var(--sr-edge);
+  color: var(--sr-ink);
+  padding: 4px 8px;
+  border-radius: 2px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+}
+
+body.app-slava-restraint .remotion-properties-panel__keyframe-delete:hover {
   border-color: var(--sr-accent);
 }

@@ -1,6 +1,7 @@
 import { useCurrentFrame, AbsoluteFill } from 'remotion';
 import type { TrackItem } from '../../../types/video';
 import { interpolateScalar, interpolateVec3 } from '../../../lib/video/keyframeInterp';
+import { transformOriginFromAnchor } from '../../../lib/video/spatialCss';
 
 interface TextRendererProps {
   item: TrackItem;
@@ -17,6 +18,7 @@ export function TextRenderer({ item }: TextRendererProps) {
   ]);
   const rotation = interpolateVec3(localFrame, item.keyframes.rotation ?? [], item.spatial.rotation);
   const scale = interpolateVec3(localFrame, item.keyframes.scale ?? [], item.spatial.scale);
+  const transformOrigin = transformOriginFromAnchor(item.spatial.anchor);
 
   const text = (item.props.text as string) ?? 'Hello World';
   const fontSize = (item.props.fontSize as number) ?? 64;
@@ -35,7 +37,7 @@ export function TextRenderer({ item }: TextRendererProps) {
           display: 'inline-block',
           lineHeight: 1,
           whiteSpace: 'pre',
-          transformOrigin: 'center center',
+          transformOrigin,
           transform: `translate3d(${position[0]}px, ${position[1]}px, ${position[2]}px) rotateX(${rotation[0]}deg) rotateY(${rotation[1]}deg) rotateZ(${rotation[2]}deg) scale3d(${scale[0]}, ${scale[1]}, ${scale[2]})`,
         }}
       >

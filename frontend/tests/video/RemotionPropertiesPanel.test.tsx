@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { render, fireEvent } from '@testing-library/react';
+import { render, fireEvent, screen } from '@testing-library/react';
 import { RemotionPropertiesPanel } from '../../src/components/video-editor/RemotionPropertiesPanel';
 import { useUIStore } from '../../src/store/uiStore';
 import { useGraphStore } from '../../src/store/graphStore';
@@ -146,5 +146,59 @@ describe('RemotionPropertiesPanel — Transform section', () => {
     expect(manifest.timeline[0].spatial.y).toBe(50);
     expect(manifest.timeline[0].spatial.scale).toEqual([2, 3, 4]);
     expect(manifest.timeline[0].spatial.rotation).toEqual([10, 20, 90]);
+  });
+
+  it('writes anchor point presets through the Transform section', () => {
+    seedAndSelect(makeTrackItem());
+    render(<RemotionPropertiesPanel remotionNodeId="r1" />);
+
+    const center = screen.getByRole('button', { name: 'Anchor center' });
+    const bottomRight = screen.getByRole('button', { name: 'Anchor bottom right' });
+    expect(center).toHaveAttribute('aria-pressed', 'true');
+
+    fireEvent.click(bottomRight);
+
+    const remotion = useGraphStore.getState().nodes.find((n) => n.id === 'r1');
+    const manifest = (remotion?.data.params as { manifest: { timeline: TrackItem[] } }).manifest;
+    expect(manifest.timeline[0].spatial.anchor).toEqual([1, 1]);
+  });
+
+  it('shows an empty keyframes state when the selected layer has no keyframes', () => {
+    seedAndSelect(makeTrackItem());
+    render(<RemotionPropertiesPanel remotionNodeId="r1" />);
+
+    expect(screen.getByText('No keyframes recorded.')).toBeInTheDocument();
+  });
+
+  it('edits and deletes selected layer keyframes', () => {
+    seedAndSelect(makeTrackItem({
+      keyframes: {
+        position: [
+          { frame: 30, value: [10, 20, 5], easing: 'linear' },
+        ],
+      },
+    }));
+    render(<RemotionPropertiesPanel remotionNodeId="r1" />);
+
+    expect(screen.getByText('position')).toBeInTheDocument();
+    expect((screen.getByLabelText('position keyframe X 30') as HTMLInputElement).value).toBe('10');
+
+    fireEvent.change(screen.getByLabelText('position keyframe X 30'), { target: { value: '99' } });
+
+    let remotion = useGraphStore.getState().nodes.find((n) => n.id === 'r1');
+    let manifest = (remotion?.data.params as { manifest: { timeline: TrackItem[] } }).manifest;
+    expect(manifest.timeline[0].keyframes.position[0].value).toEqual([99, 20, 5]);
+
+    fireEvent.change(screen.getByLabelText('position keyframe frame 30'), { target: { value: '42' } });
+
+    remotion = useGraphStore.getState().nodes.find((n) => n.id === 'r1');
+    manifest = (remotion?.data.params as { manifest: { timeline: TrackItem[] } }).manifest;
+    expect(manifest.timeline[0].keyframes.position[0].frame).toBe(42);
+
+    fireEvent.click(screen.getByRole('button', { name: /delete/i }));
+
+    remotion = useGraphStore.getState().nodes.find((n) => n.id === 'r1');
+    manifest = (remotion?.data.params as { manifest: { timeline: TrackItem[] } }).manifest;
+    expect(manifest.timeline[0].keyframes.position).toBeUndefined();
   });
 });

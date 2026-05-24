@@ -2,6 +2,7 @@ import { useCurrentFrame, AbsoluteFill } from 'remotion';
 import { Video } from '@remotion/media';
 import type { TrackItem } from '../../../types/video';
 import { interpolateScalar, interpolateVec3 } from '../../../lib/video/keyframeInterp';
+import { transformOriginFromAnchor } from '../../../lib/video/spatialCss';
 
 interface VideoRendererProps {
   item: TrackItem;
@@ -18,6 +19,7 @@ export function VideoRenderer({ item }: VideoRendererProps) {
   ]);
   const rotation = interpolateVec3(localFrame, item.keyframes.rotation ?? [], item.spatial.rotation);
   const scale = interpolateVec3(localFrame, item.keyframes.scale ?? [], item.spatial.scale);
+  const transformOrigin = transformOriginFromAnchor(item.spatial.anchor);
 
   const src = typeof item.props.src === 'string' ? item.props.src : null;
   const volume = typeof item.props.volume === 'number' ? item.props.volume : 1;
@@ -30,6 +32,7 @@ export function VideoRenderer({ item }: VideoRendererProps) {
           data-track-item-content-id={item.id}
           style={{
             opacity,
+            transformOrigin,
             transform: `translate3d(${position[0]}px, ${position[1]}px, ${position[2]}px) rotateX(${rotation[0]}deg) rotateY(${rotation[1]}deg) rotateZ(${rotation[2]}deg) scale3d(${scale[0]}, ${scale[1]}, ${scale[2]})`,
           }}
         >
@@ -41,15 +44,22 @@ export function VideoRenderer({ item }: VideoRendererProps) {
 
   return (
     <AbsoluteFill data-track-item-id={item.id} style={{ display: 'grid', placeItems: 'center' }}>
-      <div data-track-item-content-id={item.id} style={{ maxWidth: '100%', maxHeight: '100%' }}>
+      <div
+        data-track-item-content-id={item.id}
+        style={{
+          maxWidth: '100%',
+          maxHeight: '100%',
+          opacity,
+          transformOrigin,
+          transform: `translate3d(${position[0]}px, ${position[1]}px, ${position[2]}px) rotateX(${rotation[0]}deg) rotateY(${rotation[1]}deg) rotateZ(${rotation[2]}deg) scale3d(${scale[0]}, ${scale[1]}, ${scale[2]})`,
+        }}
+      >
         <Video
           src={src}
           volume={muted ? 0 : volume}
           style={{
-            opacity,
             maxWidth: '100%',
             maxHeight: '100%',
-            transform: `translate3d(${position[0]}px, ${position[1]}px, ${position[2]}px) rotateX(${rotation[0]}deg) rotateY(${rotation[1]}deg) rotateZ(${rotation[2]}deg) scale3d(${scale[0]}, ${scale[1]}, ${scale[2]})`,
           }}
         />
       </div>

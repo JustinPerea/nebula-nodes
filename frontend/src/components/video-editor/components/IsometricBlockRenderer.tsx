@@ -1,8 +1,10 @@
 import { Suspense } from 'react';
 import { ThreeCanvas } from '@remotion/three';
 import { OrthographicCamera, useGLTF } from '@react-three/drei';
-import { useVideoConfig } from 'remotion';
+import { AbsoluteFill, useCurrentFrame, useVideoConfig } from 'remotion';
 import type { TrackItem } from '../../../types/video';
+import { interpolateScalar, interpolateVec3 } from '../../../lib/video/keyframeInterp';
+import { transformOriginFromAnchor } from '../../../lib/video/spatialCss';
 
 interface IsometricBlockRendererProps {
   item: TrackItem;
@@ -17,6 +19,7 @@ interface CameraConfig {
 const DEFAULT_AZIMUTH = 45;
 const DEFAULT_ELEVATION = (Math.atan(1 / Math.SQRT2) * 180) / Math.PI; // ≈ 35.264
 const DEFAULT_ZOOM = 10;
+const DEFAULT_LAYER_SIZE = 360;
 const CAMERA_RADIUS = 20;
 
 /** Spherical → Cartesian for an orbiting camera looking at origin.
@@ -108,42 +111,65 @@ function VoxelGrid({ voxels, fallbackColor }: { voxels: VoxelCell[]; fallbackCol
 }
 
 export function IsometricBlockRenderer({ item }: IsometricBlockRendererProps) {
+  const localFrame = useCurrentFrame();
   const { width, height } = useVideoConfig();
+
+  const opacity = interpolateScalar(localFrame, item.keyframes.opacity ?? [], 1);
+  const layerPosition = interpolateVec3(localFrame, item.keyframes.position ?? [], [
+    item.spatial.x,
+    item.spatial.y,
+    item.spatial.z,
+  ]);
+  const layerRotation = interpolateVec3(localFrame, item.keyframes.rotation ?? [], item.spatial.rotation);
+  const layerScale = interpolateVec3(localFrame, item.keyframes.scale ?? [], item.spatial.scale);
+  const transformOrigin = transformOriginFromAnchor(item.spatial.anchor);
+
   const geometry = (item.props.geometry as string) ?? 'cube';
   const color = (item.props.color as string) ?? '#888888';
   const size = (item.props.size as number) ?? 1;
   const camera = (item.props.camera as CameraConfig | undefined) ?? {};
   const position = cameraPositionFromAngles(camera);
   const zoom = camera.zoom ?? DEFAULT_ZOOM;
+  const layerWidth = Math.min(width, DEFAULT_LAYER_SIZE);
+  const layerHeight = Math.min(height, DEFAULT_LAYER_SIZE);
 
   const voxels = geometry === 'voxel'
     ? ((item.props.voxels as VoxelCell[] | undefined) ?? [])
     : null;
 
   return (
-    <div
-      data-iso-geometry={geometry}
-      data-voxel-count={voxels?.length}
-      style={{ width: '100%', height: '100%' }}
-    >
-      <ThreeCanvas width={width} height={height}>
-        <OrthographicCamera makeDefault position={position} zoom={zoom} />
-        <ambientLight intensity={0.5} />
-        <directionalLight position={[10, 10, 10]} intensity={1.0} />
-        <Suspense fallback={null}>
-          {geometry === 'cube'     && <PrimitiveCube     color={color} size={size} />}
-          {geometry === 'sphere'   && <PrimitiveSphere   color={color} size={size} />}
-          {geometry === 'cylinder' && <PrimitiveCylinder color={color} size={size} />}
-          {geometry === 'cone'     && <PrimitiveCone     color={color} size={size} />}
-          {geometry === 'plane'    && <PrimitivePlane    color={color} size={size} />}
-          {geometry === 'gltf' && (item.props.gltfUrl as string) && (
-            <GLTFPrimitive url={item.props.gltfUrl as string} />
-          )}
-          {geometry === 'voxel' && voxels && (
-            <VoxelGrid voxels={voxels} fallbackColor={color} />
-          )}
-        </Suspense>
-      </ThreeCanvas>
-    </div>
+    <AbsoluteFill data-track-item-id={item.id} style={{ display: 'grid', placeItems: 'center' }}>
+      <div
+        data-track-item-content-id={item.id}
+        data-iso-geometry={geometry}
+        data-voxel-count={voxels?.length}
+        style={{
+          width: layerWidth,
+          height: layerHeight,
+          opacity,
+          transformOrigin,
+          transform: `translate3d(${layerPosition[0]}px, ${layerPosition[1]}px, ${layerPosition[2]}px) rotateX(${layerRotation[0]}deg) rotateY(${layerRotation[1]}deg) rotateZ(${layerRotation[2]}deg) scale3d(${layerScale[0]}, ${layerScale[1]}, ${layerScale[2]})`,
+        }}
+      >
+        <ThreeCanvas width={layerWidth} height={layerHeight}>
+          <OrthographicCamera makeDefault position={position} zoom={zoom} />
+          <ambientLight intensity={0.5} />
+          <directionalLight position={[10, 10, 10]} intensity={1.0} />
+          <Suspense fallback={null}>
+            {geometry === 'cube'     && <PrimitiveCube     color={color} size={size} />}
+            {geometry === 'sphere'   && <PrimitiveSphere   color={color} size={size} />}
+            {geometry === 'cylinder' && <PrimitiveCylinder color={color} size={size} />}
+            {geometry === 'cone'     && <PrimitiveCone     color={color} size={size} />}
+            {geometry === 'plane'    && <PrimitivePlane    color={color} size={size} />}
+            {geometry === 'gltf' && (item.props.gltfUrl as string) && (
+              <GLTFPrimitive url={item.props.gltfUrl as string} />
+            )}
+            {geometry === 'voxel' && voxels && (
+              <VoxelGrid voxels={voxels} fallbackColor={color} />
+            )}
+          </Suspense>
+        </ThreeCanvas>
+      </div>
+    </AbsoluteFill>
   );
 }
