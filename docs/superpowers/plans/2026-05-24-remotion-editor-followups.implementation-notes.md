@@ -162,3 +162,27 @@ more intuitive for a human editor user?
   pointer up/cancel. That keeps the Player clean between gestures.
 - Applying the snap correction to the group, not each item independently,
   avoids collapsing multi-selected layers into the same center point.
+
+## Task 7 — Anchor-point controls
+
+### Decisions outside the spec
+
+- Added optional `spatial.anchor` as normalized `[x, y]` coordinates with a
+  center default. Existing manifests without the field continue to render as
+  center-origin layers.
+- Routed all Remotion renderers through a shared `transformOriginFromAnchor`
+  helper. Video's happy path now puts the transform on the
+  `data-track-item-content-id` wrapper, matching the other wrapper-driven
+  renderers.
+- Exposed anchors as a 3x3 preset grid in the Properties Panel instead of raw
+  percentage fields.
+
+### Human/intuitive review
+
+- A 3x3 picker matches how editors usually describe anchors: top-left, center,
+  bottom-right, and so on. It is faster and less error-prone than typing
+  normalized values.
+- Keeping the center preset active for old layers avoids surprising existing
+  compositions.
+- Advanced arbitrary anchor coordinates can be added later, but presets cover
+  the common rotate/scale origin use cases without crowding the panel.

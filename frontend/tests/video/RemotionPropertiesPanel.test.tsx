@@ -148,6 +148,21 @@ describe('RemotionPropertiesPanel — Transform section', () => {
     expect(manifest.timeline[0].spatial.rotation).toEqual([10, 20, 90]);
   });
 
+  it('writes anchor point presets through the Transform section', () => {
+    seedAndSelect(makeTrackItem());
+    render(<RemotionPropertiesPanel remotionNodeId="r1" />);
+
+    const center = screen.getByRole('button', { name: 'Anchor center' });
+    const bottomRight = screen.getByRole('button', { name: 'Anchor bottom right' });
+    expect(center).toHaveAttribute('aria-pressed', 'true');
+
+    fireEvent.click(bottomRight);
+
+    const remotion = useGraphStore.getState().nodes.find((n) => n.id === 'r1');
+    const manifest = (remotion?.data.params as { manifest: { timeline: TrackItem[] } }).manifest;
+    expect(manifest.timeline[0].spatial.anchor).toEqual([1, 1]);
+  });
+
   it('shows an empty keyframes state when the selected layer has no keyframes', () => {
     seedAndSelect(makeTrackItem());
     render(<RemotionPropertiesPanel remotionNodeId="r1" />);

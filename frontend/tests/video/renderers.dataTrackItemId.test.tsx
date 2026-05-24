@@ -104,6 +104,17 @@ describe('CSS-driven renderers — data-track-item-content-id', () => {
     expect(container.querySelector('[data-track-item-content-id="track-abc"]')).not.toBeNull();
   });
 
+  it('VideoRenderer happy path puts data-track-item-content-id on the transformed wrapper', () => {
+    const { container } = render(<VideoRenderer item={makeItem({
+      componentType: 'VideoAssetNode',
+      spatial: { x: 0, y: 0, z: 0, scale: [1, 1, 1], rotation: [0, 0, 0], anchor: [0, 1] },
+      props: { src: 'https://example.com/video.mp4' },
+    })} />);
+    const wrapper = container.querySelector('[data-track-item-content-id="track-abc"]') as HTMLElement | null;
+    expect(wrapper).not.toBeNull();
+    expect(wrapper?.style.transformOrigin).toBe('0% 100%');
+  });
+
   it('LottieRenderer happy path puts data-track-item-content-id on the transformed wrapper', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       json: () => Promise.resolve({ v: '5.7.1', layers: [] }),

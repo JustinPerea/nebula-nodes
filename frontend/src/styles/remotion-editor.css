@@ -408,6 +408,39 @@ body.app-slava-restraint .remotion-properties-panel__section textarea:focus {
   border-color: var(--sr-accent);
 }
 
+body.app-slava-restraint .remotion-properties-panel__field-label {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--sr-ink-meta);
+  font-size: 11px;
+}
+
+body.app-slava-restraint .remotion-properties-panel__anchor {
+  margin-top: 4px;
+}
+
+body.app-slava-restraint .remotion-properties-panel__anchor-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 18px);
+  gap: 4px;
+}
+
+body.app-slava-restraint .remotion-properties-panel__anchor-button {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid var(--sr-edge);
+  border-radius: 2px;
+  background: transparent;
+  cursor: pointer;
+}
+
+body.app-slava-restraint .remotion-properties-panel__anchor-button:hover,
+body.app-slava-restraint .remotion-properties-panel__anchor-button[data-active="true"] {
+  border-color: var(--sr-accent);
+  background: var(--sr-accent);
+}
+
 body.app-slava-restraint .remotion-properties-panel__keyframes {
   display: flex;
   flex-direction: column;

@@ -4,6 +4,7 @@ import { OrthographicCamera, useGLTF } from '@react-three/drei';
 import { AbsoluteFill, useCurrentFrame, useVideoConfig } from 'remotion';
 import type { TrackItem } from '../../../types/video';
 import { interpolateScalar, interpolateVec3 } from '../../../lib/video/keyframeInterp';
+import { transformOriginFromAnchor } from '../../../lib/video/spatialCss';
 
 interface IsometricBlockRendererProps {
   item: TrackItem;
@@ -121,6 +122,7 @@ export function IsometricBlockRenderer({ item }: IsometricBlockRendererProps) {
   ]);
   const layerRotation = interpolateVec3(localFrame, item.keyframes.rotation ?? [], item.spatial.rotation);
   const layerScale = interpolateVec3(localFrame, item.keyframes.scale ?? [], item.spatial.scale);
+  const transformOrigin = transformOriginFromAnchor(item.spatial.anchor);
 
   const geometry = (item.props.geometry as string) ?? 'cube';
   const color = (item.props.color as string) ?? '#888888';
@@ -145,7 +147,7 @@ export function IsometricBlockRenderer({ item }: IsometricBlockRendererProps) {
           width: layerWidth,
           height: layerHeight,
           opacity,
-          transformOrigin: 'center center',
+          transformOrigin,
           transform: `translate3d(${layerPosition[0]}px, ${layerPosition[1]}px, ${layerPosition[2]}px) rotateX(${layerRotation[0]}deg) rotateY(${layerRotation[1]}deg) rotateZ(${layerRotation[2]}deg) scale3d(${layerScale[0]}, ${layerScale[1]}, ${layerScale[2]})`,
         }}
       >

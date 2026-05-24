@@ -1,7 +1,24 @@
 import { useGraphStore } from '../../store/graphStore';
 import { useUIStore } from '../../store/uiStore';
+import { DEFAULT_ANCHOR } from '../../types/video';
 import type { KeyframeData, TrackItem, VideoGraphManifest } from '../../types/video';
 import { SpatialAxisInput } from './SpatialAxisInput';
+
+const ANCHOR_PRESETS: Array<{ label: string; value: NonNullable<TrackItem['spatial']['anchor']> }> = [
+  { label: 'top left', value: [0, 0] },
+  { label: 'top center', value: [0.5, 0] },
+  { label: 'top right', value: [1, 0] },
+  { label: 'middle left', value: [0, 0.5] },
+  { label: 'center', value: [0.5, 0.5] },
+  { label: 'middle right', value: [1, 0.5] },
+  { label: 'bottom left', value: [0, 1] },
+  { label: 'bottom center', value: [0.5, 1] },
+  { label: 'bottom right', value: [1, 1] },
+];
+
+function anchorsEqual(a: NonNullable<TrackItem['spatial']['anchor']>, b: NonNullable<TrackItem['spatial']['anchor']>): boolean {
+  return a[0] === b[0] && a[1] === b[1];
+}
 
 function isVoxelCellArray(
   v: unknown,
@@ -99,6 +116,7 @@ export function RemotionPropertiesPanel({ remotionNodeId }: RemotionPropertiesPa
       onValue(value);
     }
   };
+  const anchor = item.spatial.anchor ?? DEFAULT_ANCHOR;
 
   return (
     <aside className="remotion-properties-panel">
@@ -184,6 +202,22 @@ export function RemotionPropertiesPanel({ remotionNodeId }: RemotionPropertiesPa
           value={item.spatial.rotation[2]}
           onValueChange={(value) => onRotationValue(2, value)}
         />
+        <div className="remotion-properties-panel__anchor">
+          <span className="remotion-properties-panel__field-label">Anchor</span>
+          <div className="remotion-properties-panel__anchor-grid" aria-label="Anchor point">
+            {ANCHOR_PRESETS.map((preset) => (
+              <button
+                key={preset.label}
+                type="button"
+                className="remotion-properties-panel__anchor-button"
+                aria-label={`Anchor ${preset.label}`}
+                aria-pressed={anchorsEqual(anchor, preset.value)}
+                data-active={anchorsEqual(anchor, preset.value) ? 'true' : undefined}
+                onClick={() => onSpatialPatch({ anchor: preset.value })}
+              />
+            ))}
+          </div>
+        </div>
       </section>
 
       <section className="remotion-properties-panel__section">
