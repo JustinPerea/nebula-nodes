@@ -25,6 +25,8 @@ import { createEmptyManifest, DEFAULT_FPS } from '../types/video';
 import { validateManifest } from '../lib/video/manifestValidator';
 import { componentTypeToCanvasDefId, pruneTrackItemsForDeletedNode } from '../lib/video/mirroring';
 
+export type TrackItemOrderAction = 'send-to-back' | 'send-backward' | 'bring-forward' | 'bring-to-front';
+
 /** Backend contract: video-edit's ffmpeg pipeline still operates on
  * sourceIn/sourceOut/speed even though the frontend stores `duration` as
  * primary. Derive `speed` at the network boundary so the handler's snap-
@@ -216,6 +218,11 @@ interface GraphState {
     remotionNodeId: string,
     trackItemId: string,
     spatialPatch: Partial<TrackItem['spatial']>,
+  ) => void;
+  reorderTrackItem: (
+    remotionNodeId: string,
+    trackItemId: string,
+    action: TrackItemOrderAction,
   ) => void;
   addOrUpdateKeyframe: (
     remotionNodeId: string,
@@ -1356,6 +1363,51 @@ export const useGraphStore = create<GraphState>((set, get) => ({
               ? { ...t, spatial: { ...t.spatial, ...spatialPatch } }
               : t,
           ),
+        };
+        return {
+          ...n,
+          data: { ...n.data, params: { ...params, manifest: nextManifest } },
+        };
+      });
+      return { nodes: updatedNodes };
+    });
+  },
+
+  reorderTrackItem: (remotionNodeId, trackItemId, action) => {
+    const state = get();
+    const remotion = state.nodes.find((n) => n.id === remotionNodeId);
+    if (!remotion) return;
+    const currentParams = (remotion.data.params ?? {}) as Record<string, unknown>;
+    const manifest = currentParams.manifest as VideoGraphManifest | undefined;
+    if (!manifest) return;
+
+    const fromIndex = manifest.timeline.findIndex((t) => t.id === trackItemId);
+    if (fromIndex < 0) return;
+
+    const lastIndex = manifest.timeline.length - 1;
+    const toIndex =
+      action === 'send-to-back'
+        ? 0
+        : action === 'send-backward'
+          ? Math.max(0, fromIndex - 1)
+          : action === 'bring-forward'
+            ? Math.min(lastIndex, fromIndex + 1)
+            : lastIndex;
+    if (toIndex === fromIndex) return;
+
+    pushUndo(set, get);
+
+    set((s) => {
+      const updatedNodes = s.nodes.map((n) => {
+        if (n.id !== remotionNodeId) return n;
+        const params = (n.data.params ?? {}) as Record<string, unknown>;
+        const m = params.manifest as VideoGraphManifest;
+        const nextTimeline = [...m.timeline];
+        const [item] = nextTimeline.splice(fromIndex, 1);
+        nextTimeline.splice(toIndex, 0, item);
+        const nextManifest: VideoGraphManifest = {
+          ...m,
+          timeline: nextTimeline,
         };
         return {
           ...n,

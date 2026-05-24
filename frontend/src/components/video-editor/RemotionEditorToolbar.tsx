@@ -1,6 +1,7 @@
 import { useGraphStore } from '../../store/graphStore';
+import type { TrackItemOrderAction } from '../../store/graphStore';
 import { useUIStore } from '../../store/uiStore';
-import type { TrackComponentType } from '../../types/video';
+import type { TrackComponentType, VideoGraphManifest } from '../../types/video';
 
 interface RemotionEditorToolbarProps {
   remotionNodeId: string;
@@ -15,13 +16,32 @@ const ADD_BUTTONS: Array<{ label: string; componentType: TrackComponentType }> =
   { label: '+ Lottie', componentType: 'LottieNode' },
 ];
 
+const Z_ORDER_BUTTONS: Array<{ label: string; title: string; action: TrackItemOrderAction }> = [
+  { label: 'To Back', title: 'Send selected layer to back', action: 'send-to-back' },
+  { label: 'Back', title: 'Send selected layer backward', action: 'send-backward' },
+  { label: 'Forward', title: 'Bring selected layer forward', action: 'bring-forward' },
+  { label: 'To Front', title: 'Bring selected layer to front', action: 'bring-to-front' },
+];
+
 export function RemotionEditorToolbar({ remotionNodeId }: RemotionEditorToolbarProps) {
   const addTrackItemWithCanvasMirror = useGraphStore((s) => s.addTrackItemWithCanvasMirror);
   const deleteTrackItem = useGraphStore((s) => s.deleteTrackItem);
+  const reorderTrackItem = useGraphStore((s) => s.reorderTrackItem);
   const selectedTrackItemId = useUIStore((s) => s.selectedTrackItemId);
   const setSelectedTrackItem = useUIStore((s) => s.setSelectedTrackItem);
   const isKeyframeRecording = useUIStore((s) => s.isKeyframeRecording);
   const toggleKeyframeRecording = useUIStore((s) => s.toggleKeyframeRecording);
+  const selectedTrackItemIndex = useGraphStore((s) => {
+    if (!selectedTrackItemId) return -1;
+    const node = s.nodes.find((n) => n.id === remotionNodeId);
+    const manifest = (node?.data.params as { manifest?: VideoGraphManifest } | undefined)?.manifest;
+    return manifest?.timeline.findIndex((t) => t.id === selectedTrackItemId) ?? -1;
+  });
+  const trackItemCount = useGraphStore((s) => {
+    const node = s.nodes.find((n) => n.id === remotionNodeId);
+    const manifest = (node?.data.params as { manifest?: VideoGraphManifest } | undefined)?.manifest;
+    return manifest?.timeline.length ?? 0;
+  });
 
   const handleAdd = (componentType: TrackComponentType) => {
     addTrackItemWithCanvasMirror(remotionNodeId, { componentType });
@@ -32,6 +52,14 @@ export function RemotionEditorToolbar({ remotionNodeId }: RemotionEditorToolbarP
     deleteTrackItem(remotionNodeId, selectedTrackItemId);
     setSelectedTrackItem(null);
   };
+
+  const handleZOrder = (action: TrackItemOrderAction) => {
+    if (!selectedTrackItemId) return;
+    reorderTrackItem(remotionNodeId, selectedTrackItemId, action);
+  };
+
+  const canMoveBackward = selectedTrackItemIndex > 0;
+  const canMoveForward = selectedTrackItemIndex >= 0 && selectedTrackItemIndex < trackItemCount - 1;
 
   return (
     <div className="remotion-editor-toolbar">
@@ -45,6 +73,24 @@ export function RemotionEditorToolbar({ remotionNodeId }: RemotionEditorToolbarP
           {btn.label}
         </button>
       ))}
+      <div className="remotion-editor-toolbar__group" aria-label="Layer order controls">
+        {Z_ORDER_BUTTONS.map((btn) => (
+          <button
+            key={btn.action}
+            type="button"
+            className="remotion-editor-toolbar__zorder"
+            onClick={() => handleZOrder(btn.action)}
+            disabled={
+              btn.action === 'send-to-back' || btn.action === 'send-backward'
+                ? !canMoveBackward
+                : !canMoveForward
+            }
+            title={btn.title}
+          >
+            {btn.label}
+          </button>
+        ))}
+      </div>
       <button
         type="button"
         className="remotion-editor-toolbar__delete"

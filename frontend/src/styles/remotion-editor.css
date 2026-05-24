@@ -275,9 +275,18 @@ body.app-slava-restraint .remotion-editor-toolbar {
   align-items: center;
 }
 
+body.app-slava-restraint .remotion-editor-toolbar__group {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  padding-left: 4px;
+  border-left: 1px solid var(--sr-edge);
+}
+
 body.app-slava-restraint .remotion-editor-toolbar__add,
 body.app-slava-restraint .remotion-editor-toolbar__delete,
-body.app-slava-restraint .remotion-editor-toolbar__record {
+body.app-slava-restraint .remotion-editor-toolbar__record,
+body.app-slava-restraint .remotion-editor-toolbar__zorder {
   background: none;
   border: 1px solid var(--sr-edge);
   color: var(--sr-ink);
@@ -296,7 +305,12 @@ body.app-slava-restraint .remotion-editor-toolbar__delete:not(:disabled):hover {
   border-color: var(--sr-accent);
 }
 
-body.app-slava-restraint .remotion-editor-toolbar__delete:disabled {
+body.app-slava-restraint .remotion-editor-toolbar__zorder:not(:disabled):hover {
+  border-color: var(--sr-accent);
+}
+
+body.app-slava-restraint .remotion-editor-toolbar__delete:disabled,
+body.app-slava-restraint .remotion-editor-toolbar__zorder:disabled {
   opacity: 0.4;
   cursor: not-allowed;
 }

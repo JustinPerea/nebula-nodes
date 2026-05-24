@@ -4,15 +4,35 @@ import { RemotionEditorToolbar } from '../../src/components/video-editor/Remotio
 
 const addMock = vi.fn();
 const deleteMock = vi.fn();
+const reorderMock = vi.fn();
+let mockTimelineIds: string[] = [];
 
 vi.mock('../../src/store/graphStore', () => ({
   useGraphStore: (selector: (s: {
     addTrackItemWithCanvasMirror: typeof addMock;
     deleteTrackItem: typeof deleteMock;
+    reorderTrackItem: typeof reorderMock;
+    nodes: Array<{
+      id: string;
+      data: { params: { manifest: { timeline: Array<{ id: string }> } } };
+    }>;
   }) => unknown) =>
     selector({
       addTrackItemWithCanvasMirror: addMock,
       deleteTrackItem: deleteMock,
+      reorderTrackItem: reorderMock,
+      nodes: [
+        {
+          id: 'r1',
+          data: {
+            params: {
+              manifest: {
+                timeline: mockTimelineIds.map((id) => ({ id })),
+              },
+            },
+          },
+        },
+      ],
     }),
 }));
 
@@ -39,10 +59,12 @@ describe('RemotionEditorToolbar', () => {
   beforeEach(() => {
     addMock.mockReset();
     deleteMock.mockReset();
+    reorderMock.mockReset();
     setSelectedMock.mockReset();
     toggleRecordingMock.mockReset();
     mockSelectedId = null;
     mockIsRecording = false;
+    mockTimelineIds = [];
   });
 
   it('renders six add buttons', () => {
@@ -93,6 +115,39 @@ describe('RemotionEditorToolbar', () => {
     fireEvent.click(del);
     expect(deleteMock).toHaveBeenCalledWith('r1', 'track-1');
     expect(setSelectedMock).toHaveBeenCalledWith(null);
+  });
+
+  it('Z-order buttons are disabled when nothing is selected', () => {
+    render(<RemotionEditorToolbar remotionNodeId="r1" />);
+    expect(screen.getByRole('button', { name: /to back/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /^back$/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /^forward$/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /to front/i })).toBeDisabled();
+  });
+
+  it('Z-order buttons dispatch reorderTrackItem for the selected layer', () => {
+    mockSelectedId = 'track-1';
+    mockTimelineIds = ['track-0', 'track-1', 'track-2'];
+    render(<RemotionEditorToolbar remotionNodeId="r1" />);
+
+    fireEvent.click(screen.getByRole('button', { name: /^forward$/i }));
+
+    expect(reorderMock).toHaveBeenCalledWith('r1', 'track-1', 'bring-forward');
+  });
+
+  it('Z-order buttons disable impossible endpoint moves', () => {
+    mockSelectedId = 'track-0';
+    mockTimelineIds = ['track-0', 'track-1', 'track-2'];
+    const { rerender } = render(<RemotionEditorToolbar remotionNodeId="r1" />);
+    expect(screen.getByRole('button', { name: /to back/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /^back$/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /^forward$/i })).not.toBeDisabled();
+
+    mockSelectedId = 'track-2';
+    rerender(<RemotionEditorToolbar remotionNodeId="r1" />);
+    expect(screen.getByRole('button', { name: /to front/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /^forward$/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /^back$/i })).not.toBeDisabled();
   });
 
   it('REC button toggles keyframe recording', () => {

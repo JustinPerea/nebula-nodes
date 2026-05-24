@@ -40,3 +40,22 @@ more intuitive for a human editor user?
 - The user should not have to know that a Lottie is in a different loading
   state. Empty, loading, and successful Lottie layers should all select, move,
   resize, and rotate the same way.
+
+## Task 2 — Z-order controls
+
+### Decisions outside the spec
+
+- Added store-level `reorderTrackItem` with four explicit actions:
+  `send-to-back`, `send-backward`, `bring-forward`, and `bring-to-front`.
+  The renderer already treats timeline order as visual stacking order, so the UI
+  only needs to reorder manifest timeline entries.
+- Used discrete undo snapshots instead of `maybePushUndo`; each button click is
+  one intentional editor command, not a high-frequency drag stream.
+
+### Human/intuitive review
+
+- Exposed both step controls and jump controls. Humans usually need both:
+  nudging one layer forward for fine stacking and sending an item straight to
+  front/back when organizing a composition.
+- Disabled impossible endpoint actions so buttons explain the current stack
+  position without a failed click.
