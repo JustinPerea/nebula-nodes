@@ -8,6 +8,7 @@ import { computeResizeScale } from '../../lib/video/resizeMath';
 import type { ResizeHandle } from '../../lib/video/resizeMath';
 import { computeRotationZ } from '../../lib/video/rotationMath';
 import { interpolateVec3 } from '../../lib/video/keyframeInterp';
+import { SNAP_GUIDE_SCREEN_THRESHOLD_PX, snapMovementToCenter } from '../../lib/video/snapGuides';
 
 interface SelectionBoxProps {
   remotionNodeId: string;
@@ -23,6 +24,14 @@ interface ScreenRect {
   width: number;
   height: number;
   rotationZ: number;
+}
+
+interface SnapGuideLine {
+  orientation: 'vertical' | 'horizontal';
+  left: number;
+  top: number;
+  width: number;
+  height: number;
 }
 
 interface MoveDragSession {
@@ -119,6 +128,7 @@ export function SelectionBox({
   isPrimary = true,
 }: SelectionBoxProps) {
   const [rect, setRect] = useState<ScreenRect | null>(null);
+  const [snapGuides, setSnapGuides] = useState<SnapGuideLine[]>([]);
   const updateTrackItemSpatial = useGraphStore((s) => s.updateTrackItemSpatial);
   const addOrUpdateKeyframe = useGraphStore((s) => s.addOrUpdateKeyframe);
   const isKeyframeRecording = useUIStore((s) => s.isKeyframeRecording);
@@ -138,6 +148,30 @@ export function SelectionBox({
     return manifest?.timeline.find((t) => t.id === trackItemId) ?? null;
   });
   const dragRef = useRef<DragSession | null>(null);
+
+  const computeCenterGuides = (playerEl: HTMLElement, snappedX: boolean, snappedY: boolean): SnapGuideLine[] => {
+    const playerRect = playerEl.getBoundingClientRect();
+    const guides: SnapGuideLine[] = [];
+    if (snappedX) {
+      guides.push({
+        orientation: 'vertical',
+        left: playerRect.left + playerRect.width / 2,
+        top: playerRect.top,
+        width: 1,
+        height: playerRect.height,
+      });
+    }
+    if (snappedY) {
+      guides.push({
+        orientation: 'horizontal',
+        left: playerRect.left,
+        top: playerRect.top + playerRect.height / 2,
+        width: playerRect.width,
+        height: 1,
+      });
+    }
+    return guides;
+  };
 
   useEffect(() => {
     const el =
@@ -267,9 +301,24 @@ export function SelectionBox({
       const playerEl = playerFrameRef.current;
       if (!playerEl) return;
       const { x: dxComp, y: dyComp } = screenToComposition(dxScreen, dyScreen, playerEl);
+      const anchorItem = drag.items.find((dragItem) => dragItem.id === trackItemId) ?? drag.items[0];
+      const snapThreshold = screenToComposition(
+        SNAP_GUIDE_SCREEN_THRESHOLD_PX,
+        SNAP_GUIDE_SCREEN_THRESHOLD_PX,
+        playerEl,
+      );
+      const snappedMovement = snapMovementToCenter({
+        anchorStartX: anchorItem.startSpatialX,
+        anchorStartY: anchorItem.startSpatialY,
+        dx: dxComp,
+        dy: dyComp,
+        thresholdX: snapThreshold.x,
+        thresholdY: snapThreshold.y,
+      });
+      setSnapGuides(computeCenterGuides(playerEl, snappedMovement.snappedX, snappedMovement.snappedY));
       drag.items.forEach((dragItem) => {
-        const nextX = dragItem.startSpatialX + dxComp;
-        const nextY = dragItem.startSpatialY + dyComp;
+        const nextX = dragItem.startSpatialX + snappedMovement.dx;
+        const nextY = dragItem.startSpatialY + snappedMovement.dy;
         if (isKeyframeRecording) {
           addOrUpdateKeyframe(remotionNodeId, dragItem.id, 'position', currentFrame, [
             nextX,
@@ -287,6 +336,7 @@ export function SelectionBox({
     }
 
     if (drag.type === 'rotate') {
+      setSnapGuides([]);
       const nextRotation: [number, number, number] = [
         drag.startRotation[0],
         drag.startRotation[1],
@@ -309,8 +359,10 @@ export function SelectionBox({
       shiftKey: e.shiftKey,
     });
     if (isKeyframeRecording) {
+      setSnapGuides([]);
       addOrUpdateKeyframe(remotionNodeId, trackItemId, 'scale', currentFrame, scale);
     } else {
+      setSnapGuides([]);
       updateTrackItemSpatial(remotionNodeId, trackItemId, { scale });
     }
   };
@@ -324,47 +376,62 @@ export function SelectionBox({
       // Pointer capture may already be released by the browser during cancel.
     }
     dragRef.current = null;
+    setSnapGuides([]);
   };
 
   return (
-    <div
-      className={`remotion-selection-box${isPrimary ? '' : ' remotion-selection-box--secondary'}`}
-      style={{
-        left: `${rect.left}px`,
-        top: `${rect.top}px`,
-        width: `${rect.width}px`,
-        height: `${rect.height}px`,
-        transform: `rotateZ(${rect.rotationZ}deg)`,
-      }}
-    >
-      <div
-        className="remotion-selection-box__body"
-        onPointerDown={handleBodyPointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={endDrag}
-        onPointerCancel={endDrag}
-      />
-      {isPrimary && RESIZE_HANDLES.map((handle) => (
+    <>
+      {snapGuides.map((guide) => (
         <div
-          key={handle}
-          className={`remotion-selection-box__handle remotion-selection-box__handle--${handle}`}
-          data-resize-handle={handle}
-          onPointerDown={handleResizePointerDown(handle)}
-          onPointerMove={handlePointerMove}
-          onPointerUp={endDrag}
-          onPointerCancel={endDrag}
+          key={guide.orientation}
+          className={`remotion-selection-guide remotion-selection-guide--${guide.orientation}`}
+          style={{
+            left: `${guide.left}px`,
+            top: `${guide.top}px`,
+            width: `${guide.width}px`,
+            height: `${guide.height}px`,
+          }}
         />
       ))}
-      {isPrimary && (
+      <div
+        className={`remotion-selection-box${isPrimary ? '' : ' remotion-selection-box--secondary'}`}
+        style={{
+          left: `${rect.left}px`,
+          top: `${rect.top}px`,
+          width: `${rect.width}px`,
+          height: `${rect.height}px`,
+          transform: `rotateZ(${rect.rotationZ}deg)`,
+        }}
+      >
         <div
-          className="remotion-selection-box__rotation-handle"
-          data-rotation-handle="z"
-          onPointerDown={handleRotatePointerDown}
+          className="remotion-selection-box__body"
+          onPointerDown={handleBodyPointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={endDrag}
           onPointerCancel={endDrag}
         />
-      )}
-    </div>
+        {isPrimary && RESIZE_HANDLES.map((handle) => (
+          <div
+            key={handle}
+            className={`remotion-selection-box__handle remotion-selection-box__handle--${handle}`}
+            data-resize-handle={handle}
+            onPointerDown={handleResizePointerDown(handle)}
+            onPointerMove={handlePointerMove}
+            onPointerUp={endDrag}
+            onPointerCancel={endDrag}
+          />
+        ))}
+        {isPrimary && (
+          <div
+            className="remotion-selection-box__rotation-handle"
+            data-rotation-handle="z"
+            onPointerDown={handleRotatePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={endDrag}
+            onPointerCancel={endDrag}
+          />
+        )}
+      </div>
+    </>
   );
 }

@@ -257,6 +257,40 @@ describe('SelectionBox — body drag', () => {
     document.body.removeChild(layerEl);
   });
 
+  it('snaps the dragged layer to composition center and shows center guides', () => {
+    const layerEl = document.createElement('div');
+    layerEl.setAttribute('data-track-item-id', 'track-xyz');
+    layerEl.setAttribute('data-track-item-content-id', 'track-xyz');
+    vi.spyOn(layerEl, 'getBoundingClientRect').mockReturnValue({
+      left: 100, top: 100, width: 200, height: 100, right: 300, bottom: 200, x: 100, y: 100, toJSON: () => ({}),
+    });
+    document.body.appendChild(layerEl);
+    seedRemotionWithItem(makeTrackItem({ spatial: { x: 10, y: -8, z: 0, scale: [1, 1, 1], rotation: [0, 0, 0] } }));
+
+    const playerFrameRef = makePlayerFrameRef();
+    const { container } = render(
+      <SelectionBox remotionNodeId="r1" trackItemId="track-xyz" playerFrameRef={playerFrameRef} />,
+    );
+    const body = container.querySelector('.remotion-selection-box__body') as HTMLElement;
+    body.setPointerCapture = vi.fn();
+    body.releasePointerCapture = vi.fn();
+
+    fireEvent.pointerDown(body, { pointerId: 1, clientX: 200, clientY: 150 });
+    fireEvent.pointerMove(body, { pointerId: 1, clientX: 192, clientY: 156 });
+
+    const remotion = useGraphStore.getState().nodes.find((n) => n.id === 'r1');
+    const manifest = (remotion?.data.params as { manifest: { timeline: TrackItem[] } }).manifest;
+    expect(manifest.timeline[0].spatial.x).toBe(0);
+    expect(manifest.timeline[0].spatial.y).toBe(0);
+    expect(container.querySelector('.remotion-selection-guide--vertical')).not.toBeNull();
+    expect(container.querySelector('.remotion-selection-guide--horizontal')).not.toBeNull();
+
+    fireEvent.pointerUp(body, { pointerId: 1, clientX: 192, clientY: 156 });
+    expect(container.querySelector('.remotion-selection-guide--vertical')).toBeNull();
+
+    document.body.removeChild(layerEl);
+  });
+
   it('dragging one selected box moves every selected TrackItem by the same delta', () => {
     const layerA = document.createElement('div');
     layerA.setAttribute('data-track-item-id', 'track-a');

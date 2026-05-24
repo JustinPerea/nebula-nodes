@@ -139,3 +139,26 @@ more intuitive for a human editor user?
 - Bulk delete and group Z-order can be added later, but keeping this pass to
   selection plus group move avoids surprising destructive commands while the
   selection model is new.
+
+## Task 6 — Snapping/guides
+
+### Decisions outside the spec
+
+- Implemented smart center snapping for move drags only. Resize/rotate snapping
+  and grid snapping are left out because they need separate interaction rules
+  and visual language.
+- Kept the snapping threshold in screen pixels, then converted it to composition
+  pixels per drag tick. This makes snapping feel consistent whether the Player
+  is shown at full width or scaled down.
+- For multi-select drags, the dragged layer is the snap anchor and the same
+  adjusted delta is applied to every selected layer. Relative spacing is
+  preserved.
+
+### Human/intuitive review
+
+- Center snapping is the first guide users expect in a composition editor. It is
+  useful without introducing a grid setting or a new toolbar mode.
+- Guides appear only while the pointer is within snap range and disappear on
+  pointer up/cancel. That keeps the Player clean between gestures.
+- Applying the snap correction to the group, not each item independently,
+  avoids collapsing multi-selected layers into the same center point.
