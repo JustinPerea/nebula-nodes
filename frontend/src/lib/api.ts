@@ -76,6 +76,34 @@ export async function fetchNousModels(): Promise<{ models: NousModel[]; count: n
   return response.json();
 }
 
+export interface CodexStatus {
+  installed: boolean;
+  loggedIn: boolean;
+  mode: 'chatgpt' | 'api' | 'access_token' | null;
+  message: string;
+}
+
+export interface ClaudeStatus {
+  installed: boolean;
+  loggedIn: boolean;
+  authMethod: string | null;
+  subscriptionType: string | null;
+  email: string | null;
+  message: string;
+}
+
+export async function fetchClaudeStatus(): Promise<ClaudeStatus> {
+  const response = await fetch(`${API_BASE}/agents/claude/status`);
+  if (!response.ok) throw new Error(`Fetch Claude status failed: ${response.status}`);
+  return response.json();
+}
+
+export async function fetchCodexStatus(): Promise<CodexStatus> {
+  const response = await fetch(`${API_BASE}/agents/codex/status`);
+  if (!response.ok) throw new Error(`Fetch Codex status failed: ${response.status}`);
+  return response.json();
+}
+
 export interface QuiverModel {
   id: string;
   name: string;

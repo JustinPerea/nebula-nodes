@@ -1,0 +1,32 @@
+# Image-to-Video Models
+
+Animate a still image into a video, often the best quality path for controlled video generation. Flagships: Kling 3, Veo 3.1, Seedance 2, Sora 2 I2V.
+
+**20 models documented in this category.**
+
+| Model | Slug | Creator | Summary |
+|---|---|---|---|
+| [Wan-2.2 Animate Move (14B)](../skills/fal-ai__wan__v2.2-14b__animate__move.md) | `fal-ai/wan/v2.2-14b/animate/move` | Alibaba (Tongyi Lab) | A high-fidelity character animation model by Alibaba that replicates expressions and movements from reference videos onto static images usin |
+| [Seedance 1.0 Pro (Image-to-Video)](../skills/fal-ai__bytedance__seedance__v1__pro__image-to-video.md) | `fal-ai/bytedance/seedance/v1/pro/image-to-video` | ByteDance | High-performance video generation model by ByteDance featuring superior spatiotemporal fluidity and cinematic consistency. |
+| [Seedance 2.0 Fast Image to Video](../skills/bytedance__seedance-2.0__fast__image-to-video.md) | `bytedance/seedance-2.0/fast/image-to-video` | ByteDance | ByteDance's high-speed multimodal video model generating cinematic 720p video with synchronized audio and precise start/end frame control. |
+| [Seedance 2.0 Image-to-Video](../skills/bytedance__seedance-2.0__image-to-video.md) | `bytedance/seedance-2.0/image-to-video` | ByteDance | ByteDance's premium image-to-video model featuring synchronized audio, precise start/end frame control, and a unified multimodal architectur |
+| [Seedance 2.0 Reference to Video](../skills/bytedance__seedance-2.0__reference-to-video.md) | `bytedance/seedance-2.0/reference-to-video` | ByteDance | ByteDance's unified audio-video model that generates cinematic sequences using multiple image, video, and audio references with native sound |
+| [Google Veo 3.1 (Image to Video)](../skills/fal-ai__veo3.1__image-to-video.md) | `fal-ai/veo3.1/image-to-video` | Google DeepMind | Google DeepMind's flagship cinematic video generation model, optimized for high-fidelity animation of still images with native audio. |
+| [Google Veo 3.1 First-Last Frame to Video](../skills/fal-ai__veo3.1__first-last-frame-to-video.md) | `fal-ai/veo3.1/first-last-frame-to-video` | Google DeepMind | A high-fidelity video generation model that creates seamless transitions between two provided image frames with native audio and up to 4K re |
+| [Veo 3.1 Fast | Image to Video](../skills/fal-ai__veo3.1__fast__image-to-video.md) | `fal-ai/veo3.1/fast/image-to-video` | Google DeepMind | Google's premier video generation model on FAL.ai, featuring native audio, 4K support, and cinematic narrative control. |
+| [Kling Video v2.6 Motion Control [Pro]](../skills/fal-ai__kling-video__v2.6__pro__motion-control.md) | `fal-ai/kling-video/v2.6/pro/motion-control` | Kling AI (Kuaishou Technology) | High-fidelity motion transfer model that applies movements from a reference video to a static character image. |
+| [Kling Video v3 Image to Video [Pro]](../skills/fal-ai__kling-video__v3__pro__image-to-video.md) | `fal-ai/kling-video/v3/pro/image-to-video` | Kling AI (Kuaishou) | Top-tier image-to-video model with cinematic visuals, fluid motion, native audio generation, and advanced subject consistency support. |
+| [Kling Video v3 Standard (Image-to-Video)](../skills/fal-ai__kling-video__v3__standard__image-to-video.md) | `fal-ai/kling-video/v3/standard/image-to-video` | Kling AI (Kuaishou) | A top-tier image-to-video model with cinematic visuals, fluid motion, native audio generation, and custom element support. |
+| [Kling 2.6 Pro Image-to-Video](../skills/fal-ai__kling-video__v2.6__pro__image-to-video.md) | `fal-ai/kling-video/v2.6/pro/image-to-video` | Kuaishou | Professional-grade image-to-video model with 1080p cinematic visuals, physics-aware motion, and native synchronized audio generation. |
+| [Kling 2.5 Turbo Pro (Image to Video)](../skills/fal-ai__kling-video__v2.5-turbo__pro__image-to-video.md) | `fal-ai/kling-video/v2.5-turbo/pro/image-to-video` | Kuaishou (Kling AI) | High-performance image-to-video model delivering 1080p cinematic results with fluid motion and precise start-to-end frame control. |
+| [Kling O3 Image to Video [Pro]](../skills/fal-ai__kling-video__o3__pro__image-to-video.md) | `fal-ai/kling-video/o3/pro/image-to-video` | Kuaishou Technology | Professional-grade image-to-video model supporting 3-15s clips with start/end frame control, native audio, and 1080p output. |
+| [Kling O3 Pro Reference to Video](../skills/fal-ai__kling-video__o3__pro__reference-to-video.md) | `fal-ai/kling-video/o3/pro/reference-to-video` | Kuaishou Technology (Kling AI) | A state-of-the-art multimodal video generation model that preserves character and object identity using multiple reference images and precis |
+| [Kling v1.6 Pro (Image-to-Video)](../skills/fal-ai__kling-video__v1.6__pro__image-to-video.md) | `fal-ai/kling-video/v1.6/pro/image-to-video` | Kuaishou Technology (Kling AI) | State-of-the-art image-to-video model from Kuaishou, featuring high-fidelity 1080p generation and precise motion control. |
+| [LTX-2.3: Image-to-Video AI Generator](../skills/fal-ai__ltx-2.3__image-to-video.md) | `fal-ai/ltx-2.3/image-to-video` | Lightricks | A 22B parameter Diffusion Transformer (DiT) model by Lightricks that generates high-fidelity 1080p-4K video with synchronized native audio f |
+| [Luma Dream Machine (Image to Video)](../skills/fal-ai__luma-dream-machine__image-to-video.md) | `fal-ai/luma-dream-machine/image-to-video` | Luma AI | A high-fidelity image-to-video model capable of generating realistic visuals with natural motion physics from static images. |
+| [Pika 2.2 Image-to-Video](../skills/fal-ai__pika__v2.2__image-to-video.md) | `fal-ai/pika/v2.2/image-to-video` | Pika Labs | A high-fidelity image-to-video model capable of generating up to 10-second cinematic clips in 1080p resolution. |
+| [Grok Imagine Video (Image to Video)](../skills/xai__grok-imagine-video__image-to-video.md) | `xai/grok-imagine-video/image-to-video` | xAI | A high-performance image-to-video model by xAI that generates cinematic 6–15 second clips with native audio and exceptional subject consiste |
+
+## When to pick what
+
+See each individual model's skill file for full prompting tips, parameter tuning, and alternatives.

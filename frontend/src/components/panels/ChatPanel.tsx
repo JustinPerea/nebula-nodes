@@ -6,10 +6,18 @@ import { useGraphStore } from '../../store/graphStore';
 import { useDelayedUnmount } from '../../hooks/useDelayedUnmount';
 import '../../styles/panels.css';
 import '../../styles/hermes.css';
-import { fetchNousModels, type NousModel } from '../../lib/api';
+import {
+  fetchClaudeStatus,
+  fetchCodexStatus,
+  fetchNousModels,
+  type ClaudeStatus,
+  type CodexStatus,
+  type NousModel,
+} from '../../lib/api';
 import type { SkinId } from '../../lib/skins';
 
 // Daedalus mode palette. Persisted so the user's choice survives reloads.
+type ChatAgent = 'claude' | 'codex' | 'daedalus';
 type HermesTone = 'verdant' | 'obsidian';
 const HERMES_TONE_KEY = 'nebula:hermes-tone';
 function loadHermesTone(): HermesTone {
@@ -365,7 +373,7 @@ export function ChatPanel() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [model, setModel] = useState<string>(DEFAULT_MODEL);
-  const [agent, setAgent] = useState<'claude' | 'daedalus'>('claude');
+  const [agent, setAgent] = useState<ChatAgent>('claude');
   const [autonomy, setAutonomy] = useState<'auto' | 'step'>('auto');
   const [hermesTone, setHermesTone] = useState<HermesTone>(loadHermesTone);
   // Bumped on every claude→daedalus transition so the sigil-bloom FX
@@ -439,6 +447,10 @@ export function ChatPanel() {
   const [nousModelsLoading, setNousModelsLoading] = useState(false);
   const [nousModelsError, setNousModelsError] = useState<string | null>(null);
   const [daedalusModelSearch, setDaedalusModelSearch] = useState('');
+  const [claudeStatus, setClaudeStatus] = useState<ClaudeStatus | null>(null);
+  const [claudeStatusError, setClaudeStatusError] = useState<string | null>(null);
+  const [codexStatus, setCodexStatus] = useState<CodexStatus | null>(null);
+  const [codexStatusError, setCodexStatusError] = useState<string | null>(null);
 
   const changeDaedalusModel = useCallback((modelId: string, fromProvider: DaedalusProvider = 'nous') => {
     setDaedalusModel(modelId);
@@ -538,6 +550,103 @@ export function ChatPanel() {
     };
   }, [daedalusProvider, chatCapableNousModels, daedalusModel]);
 
+  useEffect(() => {
+    if (agent !== 'claude') return;
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (!cancelled) setClaudeStatusError(null);
+    });
+    fetchClaudeStatus()
+      .then((status) => {
+        if (!cancelled) setClaudeStatus(status);
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          setClaudeStatus(null);
+          setClaudeStatusError(err instanceof Error ? err.message : String(err));
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [agent]);
+
+  useEffect(() => {
+    if (agent !== 'codex') return;
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (!cancelled) setCodexStatusError(null);
+    });
+    fetchCodexStatus()
+      .then((status) => {
+        if (!cancelled) setCodexStatus(status);
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          setCodexStatus(null);
+          setCodexStatusError(err instanceof Error ? err.message : String(err));
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [agent]);
+
+  const claudeStatusLabel = useMemo(() => {
+    if (claudeStatusError) return 'Claude status unavailable';
+    if (!claudeStatus) return 'Checking Claude…';
+    if (!claudeStatus.installed) return 'Claude not installed';
+    if (!claudeStatus.loggedIn) return 'Claude login needed';
+    if (claudeStatus.subscriptionType) return `Claude · ${claudeStatus.subscriptionType}`;
+    if (claudeStatus.authMethod) return `Claude · ${claudeStatus.authMethod}`;
+    return 'Claude logged in';
+  }, [claudeStatus, claudeStatusError]);
+
+  const codexStatusLabel = useMemo(() => {
+    if (codexStatusError) return 'Codex status unavailable';
+    if (!codexStatus) return 'Checking Codex…';
+    if (!codexStatus.installed) return 'Codex not installed';
+    if (!codexStatus.loggedIn) return 'Codex login needed';
+    if (codexStatus.mode === 'chatgpt') return 'Codex · ChatGPT';
+    if (codexStatus.mode === 'api') return 'Codex · API key';
+    if (codexStatus.mode === 'access_token') return 'Codex · access token';
+    return 'Codex logged in';
+  }, [codexStatus, codexStatusError]);
+
+  const agentConnectHint = useMemo(() => {
+    if (agent === 'claude') {
+      const needsConnection = Boolean(claudeStatusError || !claudeStatus?.installed || !claudeStatus?.loggedIn);
+      return {
+        agent: 'claude' as const,
+        open: needsConnection,
+        title: needsConnection ? 'Connect Claude' : 'Claude connected',
+        status: claudeStatusLabel,
+        detail: 'Use the local Claude Code login on this machine.',
+        commands: [
+          'claude auth login --claudeai',
+          'claude auth login --console',
+          'claude auth status',
+        ],
+      };
+    }
+    if (agent === 'codex') {
+      const needsConnection = Boolean(codexStatusError || !codexStatus?.installed || !codexStatus?.loggedIn);
+      return {
+        agent: 'codex' as const,
+        open: needsConnection,
+        title: needsConnection ? 'Connect Codex' : 'Codex connected',
+        status: codexStatusLabel,
+        detail: 'Use the local Codex login on this machine.',
+        commands: [
+          'codex login',
+          'printenv OPENAI_API_KEY | codex login --with-api-key',
+          'codex login status',
+        ],
+      };
+    }
+    return null;
+  }, [agent, claudeStatus, claudeStatusError, claudeStatusLabel, codexStatus, codexStatusError, codexStatusLabel]);
+
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -552,7 +661,7 @@ export function ChatPanel() {
   // Switch the active agent. Each agent has its own session thread, so we
   // clear sessionId on change — the next turn starts fresh on the new agent.
   const handleAgentChange = useCallback(
-    (next: 'claude' | 'daedalus') => {
+    (next: ChatAgent) => {
       if (next === agent) return;
 
       if (next === 'daedalus') {
@@ -1029,6 +1138,8 @@ export function ChatPanel() {
       if (agent === 'daedalus') {
         resolved = rawName;
         changeDaedalusModel(resolved);
+      } else if (agent === 'codex') {
+        resolved = 'Codex CLI config';
       } else {
         const lower = rawName.toLowerCase();
         resolved = MODEL_ALIASES[lower] ?? lower;
@@ -1041,7 +1152,12 @@ export function ChatPanel() {
           role: 'assistant',
           id: newId(),
           streaming: false,
-          parts: [{ kind: 'system', text: `Model set to: ${resolved}` }],
+          parts: [{
+            kind: 'system',
+            text: agent === 'codex'
+              ? 'Codex uses the model configured in the Codex CLI.'
+              : `Model set to: ${resolved}`,
+          }],
         },
       ]);
       setInput('');
@@ -1095,7 +1211,7 @@ export function ChatPanel() {
         type: 'send',
         message: raw,
         sessionId,
-        model: agent === 'daedalus' ? daedalusModel : model,
+        model: agent === 'daedalus' ? daedalusModel : agent === 'codex' ? null : model,
         agent,
         autonomy,
         // Provider is only meaningful for Daedalus turns. Backend treats
@@ -1157,7 +1273,7 @@ export function ChatPanel() {
           type: 'send',
           message: response,
           sessionId,
-          model: agent === 'daedalus' ? daedalusModel : model,
+          model: agent === 'daedalus' ? daedalusModel : agent === 'codex' ? null : model,
           agent,
           autonomy,
           provider: agent === 'daedalus' ? daedalusProvider : null,
@@ -1429,6 +1545,17 @@ export function ChatPanel() {
             <button
               type="button"
               className={
+                agent === 'codex'
+                  ? 'chat-panel__agent-btn--active'
+                  : 'chat-panel__agent-btn'
+              }
+              onClick={() => handleAgentChange('codex')}
+            >
+              Codex
+            </button>
+            <button
+              type="button"
+              className={
                 agent === 'daedalus'
                   ? 'chat-panel__agent-btn--active'
                   : 'chat-panel__agent-btn'
@@ -1526,8 +1653,14 @@ export function ChatPanel() {
                   />
                 )}
               </button>
+            ) : agent === 'codex' ? (
+              <span title={codexStatus?.message || codexStatusError || 'Checking Codex login status'}>
+                {codexStatusLabel}
+              </span>
             ) : (
-              <span>{model}</span>
+              <span title={claudeStatus?.message || claudeStatusError || 'Checking Claude login status'}>
+                {model} · {claudeStatusLabel}
+              </span>
             )}
             <span> · {status}</span>
             {sessionId && (
@@ -1681,6 +1814,27 @@ export function ChatPanel() {
       </div>
 
       <div className="chat-panel__input">
+        {agentConnectHint && (
+          <details
+            key={agentConnectHint.agent}
+            className="chat-panel__connect"
+            open={agentConnectHint.open}
+            data-chat-agent-connect={agentConnectHint.agent}
+          >
+            <summary className="chat-panel__connect-summary">
+              <span>{agentConnectHint.title}</span>
+              <span className="chat-panel__connect-status">{agentConnectHint.status}</span>
+            </summary>
+            <div className="chat-panel__connect-body">
+              <div>{agentConnectHint.detail}</div>
+              <div className="chat-panel__connect-commands">
+                {agentConnectHint.commands.map((command) => (
+                  <code key={command}>{command}</code>
+                ))}
+              </div>
+            </div>
+          </details>
+        )}
         {notice && <div className="chat-panel__notice" data-chat-notice="true">{notice}</div>}
         {pendingImages.length > 0 && (
           <div className="chat-panel__chips">

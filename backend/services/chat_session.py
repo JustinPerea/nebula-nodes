@@ -159,6 +159,58 @@ NEBULA_SYSTEM_PRIMER = (
 )
 
 
+async def claude_login_status() -> dict[str, Any]:
+    """Return the local Claude Code authentication status."""
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "claude",
+            "auth",
+            "status",
+            "--json",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            cwd=str(PROJECT_ROOT),
+        )
+    except FileNotFoundError:
+        return {
+            "installed": False,
+            "loggedIn": False,
+            "authMethod": None,
+            "subscriptionType": None,
+            "email": None,
+            "message": "`claude` binary not found in PATH",
+        }
+
+    stdout, stderr = await proc.communicate()
+    text = stdout.decode("utf-8", errors="replace").strip()
+    err = stderr.decode("utf-8", errors="replace").strip()
+    payload: dict[str, Any] = {}
+    if text:
+        try:
+            loaded = json.loads(text)
+            if isinstance(loaded, dict):
+                payload = loaded
+        except json.JSONDecodeError:
+            payload = {}
+
+    logged_in = bool(payload.get("loggedIn")) if payload else proc.returncode == 0
+    message = (
+        payload.get("authMethod")
+        or payload.get("message")
+        or text
+        or err
+        or ("Logged in" if logged_in else "Not logged in")
+    )
+    return {
+        "installed": True,
+        "loggedIn": logged_in,
+        "authMethod": payload.get("authMethod"),
+        "subscriptionType": payload.get("subscriptionType"),
+        "email": payload.get("email"),
+        "message": str(message),
+    }
+
+
 def _extract_blocks(message: dict[str, Any]) -> list[dict[str, Any]]:
     """Extract content blocks from an assistant or user message."""
     content = message.get("content")
@@ -345,9 +397,11 @@ async def run_claude(
 
 # Agent dispatch registry — keyed by the 'agent' field on /ws/chat payloads.
 # Keep this at the bottom so both run_claude and run_hermes are in scope.
+from services.codex_session import run_codex as _run_codex  # noqa: E402
 from services.hermes_session import run_hermes as _run_hermes  # noqa: E402
 
 AGENT_RUNNERS: dict[str, Any] = {
     "claude": run_claude,
+    "codex": _run_codex,
     "daedalus": _run_hermes,
 }

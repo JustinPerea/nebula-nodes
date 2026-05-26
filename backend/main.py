@@ -735,8 +735,8 @@ async def chat_websocket(websocket: WebSocket) -> None:
         type: "send",
         message: str,
         sessionId: str|null,
-        model: str,
-        agent: "claude" | "daedalus" (default "claude"),
+        model: str|null,
+        agent: "claude" | "daedalus" | "codex" (default "claude"),
         autonomy: "auto" | "step" (default "auto", daedalus-only)
     }
     Server sends events matching AGENT_RUNNERS' event contract.
@@ -825,8 +825,13 @@ async def chat_websocket(websocket: WebSocket) -> None:
 
             user_message = payload.get("message", "")
             session_id = payload.get("sessionId") or None
-            model = payload.get("model") or "claude-sonnet-4-6"
             agent = payload.get("agent") or "claude"
+            model_raw = payload.get("model")
+            model = (
+                str(model_raw)
+                if model_raw
+                else ("claude-sonnet-4-6" if agent == "claude" else "")
+            )
             autonomy = payload.get("autonomy") or "auto"
             # Optional per-turn provider override (e.g. "nous" / "openrouter").
             # When omitted, the runner falls back to its default provider.
@@ -850,6 +855,20 @@ async def chat_websocket(websocket: WebSocket) -> None:
 @app.get("/api/health")
 async def health() -> dict:
     return {"status": "ok", "version": "0.1.0"}
+
+
+@app.get("/api/agents/claude/status")
+async def get_claude_status() -> dict[str, Any]:
+    from services.chat_session import claude_login_status
+
+    return await claude_login_status()
+
+
+@app.get("/api/agents/codex/status")
+async def get_codex_status() -> dict[str, Any]:
+    from services.codex_session import codex_login_status
+
+    return await codex_login_status()
 
 
 # ---------- Zoom manifest (demo-video editing chain telemetry) ----------

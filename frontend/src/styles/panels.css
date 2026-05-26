@@ -1731,6 +1731,82 @@ body:not(.app-slava-restraint) .chat-panel__input {
   background: #151515;
 }
 
+.chat-panel__connect {
+  margin: 0 0 6px 0;
+  overflow: hidden;
+}
+
+body:not(.app-slava-restraint) .chat-panel__connect {
+  border: 1px solid #2b3440;
+  border-radius: 7px;
+  background: #1b222a;
+  color: #b9c4cf;
+  font-size: 11px;
+}
+
+.chat-panel__connect-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.chat-panel__connect-summary::-webkit-details-marker {
+  display: none;
+}
+
+body:not(.app-slava-restraint) .chat-panel__connect-summary {
+  color: #d2dae4;
+}
+
+.chat-panel__connect-status {
+  min-width: 0;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+body:not(.app-slava-restraint) .chat-panel__connect-status {
+  color: #8ea5bc;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+}
+
+.chat-panel__connect-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0 8px 8px 8px;
+}
+
+body:not(.app-slava-restraint) .chat-panel__connect-body {
+  color: #9ca9b6;
+  line-height: 1.35;
+}
+
+.chat-panel__connect-commands {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.chat-panel__connect-commands code {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  padding: 2px 5px;
+}
+
+body:not(.app-slava-restraint) .chat-panel__connect-commands code {
+  border: 1px solid #344253;
+  border-radius: 4px;
+  background: #10161d;
+  color: #d5dfeb;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+}
+
 .chat-panel__input-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) var(--chat-composer-action);
@@ -2126,6 +2202,12 @@ body:not(.app-slava-restraint) .chat-panel--agent-claude {
   --chat-accent: #7c6bef; /* indigo */
   --chat-accent-bg: rgba(124, 107, 239, 0.08);
   --chat-accent-border: rgba(124, 107, 239, 0.4);
+}
+
+body:not(.app-slava-restraint) .chat-panel--agent-codex {
+  --chat-accent: #28a0b8; /* blue-green */
+  --chat-accent-bg: rgba(40, 160, 184, 0.08);
+  --chat-accent-border: rgba(40, 160, 184, 0.4);
 }
 
 body:not(.app-slava-restraint) .chat-panel--agent-daedalus {
