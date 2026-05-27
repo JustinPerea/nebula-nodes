@@ -9,16 +9,15 @@ import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
 import { useSlavaNodeEntranceClass } from '../../hooks/useSlavaNodeEntrance';
 import { MeshPreview } from './MeshPreview';
+import { apiFetch } from '../../lib/backend';
 import '../../styles/nodes.css';
 
 // Trigger a browser download for a URL produced by the backend. We fetch the
-// blob ourselves so the `download` attribute is honoured even across the
-// localhost:5173 → localhost:8000 origin boundary (which is technically cross-
-// origin and would otherwise open the asset inline).
+// blob ourselves so the `download` attribute is honoured even across localhost
+// port boundaries, which would otherwise open the asset inline.
 async function downloadOutput(url: string, filename: string): Promise<void> {
   try {
-    const absolute = url.startsWith('http') ? url : `http://localhost:8000${url}`;
-    const res = await fetch(absolute);
+    const res = url.startsWith('http') ? await fetch(url) : await apiFetch(url);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const blob = await res.blob();
     const blobUrl = URL.createObjectURL(blob);

@@ -14,6 +14,7 @@ import {
   type CodexStatus,
   type NousModel,
 } from '../../lib/api';
+import { apiFetch, backendAssetUrlSync, backendWebSocketUrl } from '../../lib/backend';
 import type { SkinId } from '../../lib/skins';
 
 // Daedalus mode palette. Persisted so the user's choice survives reloads.
@@ -757,10 +758,7 @@ export function ChatPanel() {
       form.append('file', file);
       form.append('create_node', 'true');
       try {
-        const resp = await fetch(
-          `http://${window.location.hostname}:8000/api/uploads`,
-          { method: 'POST', body: form },
-        );
+        const resp = await apiFetch('/api/uploads', { method: 'POST', body: form });
         if (!resp.ok) {
           const detail = await resp.text().catch(() => '');
           const errMsg =
@@ -803,7 +801,7 @@ export function ChatPanel() {
                   id: chipId,
                   status: 'ready',
                   nodeId: body.nodeId,
-                  thumbUrl: body.thumbUrl,
+                  thumbUrl: backendAssetUrlSync(body.thumbUrl),
                   label: body.filename,
                 }
               : p,
@@ -880,146 +878,159 @@ export function ChatPanel() {
   useEffect(() => {
     if (!visible) return;
 
-    const ws = new WebSocket(`ws://${window.location.hostname}:8000/ws/chat`);
-    wsRef.current = ws;
+    let cancelled = false;
+    let ws: WebSocket | null = null;
 
-    ws.onopen = () => setConnected(true);
-    ws.onclose = () => {
-      setConnected(false);
-      setBusy(false);
-    };
-    ws.onerror = () => setConnected(false);
+    backendWebSocketUrl('/ws/chat')
+      .then((url) => {
+        if (cancelled) return;
+        ws = new WebSocket(url);
+        wsRef.current = ws;
 
-    ws.onmessage = (ev) => {
-      let event: Record<string, unknown>;
-      try {
-        event = JSON.parse(ev.data);
-      } catch {
-        return;
-      }
+        ws.onopen = () => setConnected(true);
+        ws.onclose = () => {
+          setConnected(false);
+          setBusy(false);
+        };
+        ws.onerror = () => setConnected(false);
 
-      const type = event.type;
-      if (type === 'session') {
-        setSessionId(String(event.sessionId));
-        return;
-      }
-      if (type === 'thinking') {
-        // Route thinking stream into the Agent Log instead of cluttering
-        // the chat. AgentLog listens for nebula:agent-log-entry events.
-        const line = String(event.text ?? '').trim();
-        if (line) {
-          window.dispatchEvent(
-            new CustomEvent('nebula:agent-log-entry', {
-              detail: { source: 'hermes', message: line },
-            }),
-          );
-        }
-        return;
-      }
-      if (type === 'approval_request') {
-        setMessages((prev) => [
-          ...markThinkingCompleted(prev),
-          {
-            id: newId(),
-            role: 'approval',
-            summary: String(event.summary ?? ''),
-            plan: String(event.plan ?? ''),
-            cost: String(event.cost ?? ''),
-          },
-        ]);
-        return;
-      }
-      if (type === 'learning_saved') {
-        setMessages((prev) => [
-          ...markThinkingCompleted(prev),
-          {
-            id: newId(),
-            role: 'system',
-            text: `→ Saved learning: ${String(event.topic ?? '')}`,
-          },
-        ]);
-        return;
-      }
-      if (type === 'text') {
-        const text = String(event.text ?? '');
-        setMessages((prev) => markThinkingCompleted(prev));
-        upsertAssistant((msg) => {
-          const parts = [...msg.parts];
-          const last = parts[parts.length - 1];
-          if (last && last.kind === 'text') {
-            parts[parts.length - 1] = { kind: 'text', text: last.text + text };
-          } else {
-            parts.push({ kind: 'text', text });
+        ws.onmessage = (ev) => {
+          let event: Record<string, unknown>;
+          try {
+            event = JSON.parse(ev.data);
+          } catch {
+            return;
           }
-          return { ...msg, parts };
-        });
-        return;
-      }
-      if (type === 'tool_use') {
-        const toolUseId = String(event.toolUseId ?? '');
-        const tool = String(event.tool ?? '');
-        const input = event.input;
-        upsertAssistant((msg) => ({
-          ...msg,
-          parts: [...msg.parts, { kind: 'tool', toolUseId, tool, input }],
-        }));
-        return;
-      }
-      if (type === 'tool_result') {
-        const toolUseId = String(event.toolUseId ?? '');
-        const content = String(event.content ?? '');
-        const isError = Boolean(event.isError);
-        upsertAssistant((msg) => {
-          const parts = msg.parts.map((p) =>
-            p.kind === 'tool' && p.toolUseId === toolUseId
-              ? { ...p, result: content, isError }
-              : p,
-          );
-          return { ...msg, parts };
-        });
-        return;
-      }
-      if (type === 'result') {
-        upsertAssistant((msg) => ({ ...msg, streaming: false }));
-        return;
-      }
-      if (type === 'error') {
-        const errText = String(event.message ?? 'unknown error');
-        setMessages((prev) => markThinkingCompleted(prev));
-        upsertAssistant((msg) => ({
-          ...msg,
-          parts: [
-            ...msg.parts.map((p) =>
-              p.kind === 'tool' && p.result === undefined
-                ? { ...p, result: '(stream ended before this tool returned)', isError: true }
-                : p,
-            ),
-            { kind: 'system', text: `Warning: ${errText}`, tone: 'error' },
-          ],
-          streaming: false,
-        }));
-        return;
-      }
-      if (type === 'done') {
+
+          const type = event.type;
+          if (type === 'session') {
+            setSessionId(String(event.sessionId));
+            return;
+          }
+          if (type === 'thinking') {
+            // Route thinking stream into the Agent Log instead of cluttering
+            // the chat. AgentLog listens for nebula:agent-log-entry events.
+            const line = String(event.text ?? '').trim();
+            if (line) {
+              window.dispatchEvent(
+                new CustomEvent('nebula:agent-log-entry', {
+                  detail: { source: 'hermes', message: line },
+                }),
+              );
+            }
+            return;
+          }
+          if (type === 'approval_request') {
+            setMessages((prev) => [
+              ...markThinkingCompleted(prev),
+              {
+                id: newId(),
+                role: 'approval',
+                summary: String(event.summary ?? ''),
+                plan: String(event.plan ?? ''),
+                cost: String(event.cost ?? ''),
+              },
+            ]);
+            return;
+          }
+          if (type === 'learning_saved') {
+            setMessages((prev) => [
+              ...markThinkingCompleted(prev),
+              {
+                id: newId(),
+                role: 'system',
+                text: `→ Saved learning: ${String(event.topic ?? '')}`,
+              },
+            ]);
+            return;
+          }
+          if (type === 'text') {
+            const text = String(event.text ?? '');
+            setMessages((prev) => markThinkingCompleted(prev));
+            upsertAssistant((msg) => {
+              const parts = [...msg.parts];
+              const last = parts[parts.length - 1];
+              if (last && last.kind === 'text') {
+                parts[parts.length - 1] = { kind: 'text', text: last.text + text };
+              } else {
+                parts.push({ kind: 'text', text });
+              }
+              return { ...msg, parts };
+            });
+            return;
+          }
+          if (type === 'tool_use') {
+            const toolUseId = String(event.toolUseId ?? '');
+            const tool = String(event.tool ?? '');
+            const input = event.input;
+            upsertAssistant((msg) => ({
+              ...msg,
+              parts: [...msg.parts, { kind: 'tool', toolUseId, tool, input }],
+            }));
+            return;
+          }
+          if (type === 'tool_result') {
+            const toolUseId = String(event.toolUseId ?? '');
+            const content = String(event.content ?? '');
+            const isError = Boolean(event.isError);
+            upsertAssistant((msg) => {
+              const parts = msg.parts.map((p) =>
+                p.kind === 'tool' && p.toolUseId === toolUseId
+                  ? { ...p, result: content, isError }
+                  : p,
+              );
+              return { ...msg, parts };
+            });
+            return;
+          }
+          if (type === 'result') {
+            upsertAssistant((msg) => ({ ...msg, streaming: false }));
+            return;
+          }
+          if (type === 'error') {
+            const errText = String(event.message ?? 'unknown error');
+            setMessages((prev) => markThinkingCompleted(prev));
+            upsertAssistant((msg) => ({
+              ...msg,
+              parts: [
+                ...msg.parts.map((p) =>
+                  p.kind === 'tool' && p.result === undefined
+                    ? { ...p, result: '(stream ended before this tool returned)', isError: true }
+                    : p,
+                ),
+                { kind: 'system', text: `Warning: ${errText}`, tone: 'error' },
+              ],
+              streaming: false,
+            }));
+            return;
+          }
+          if (type === 'done') {
+            setBusy(false);
+            setMessages((prev) => collapseAllThinking(prev));
+            upsertAssistant((msg) => ({
+              ...msg,
+              streaming: false,
+              // Any tool still marked running at stream end gets flagged so the UI
+              // doesn't dangle with a permanent "running..." indicator.
+              parts: msg.parts.map((p) =>
+                p.kind === 'tool' && p.result === undefined
+                  ? { ...p, result: '(no result returned)', isError: true }
+                  : p,
+              ),
+            }));
+            return;
+          }
+        };
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setConnected(false);
         setBusy(false);
-        setMessages((prev) => collapseAllThinking(prev));
-        upsertAssistant((msg) => ({
-          ...msg,
-          streaming: false,
-          // Any tool still marked running at stream end gets flagged so the UI
-          // doesn't dangle with a permanent "running..." indicator.
-          parts: msg.parts.map((p) =>
-            p.kind === 'tool' && p.result === undefined
-              ? { ...p, result: '(no result returned)', isError: true }
-              : p,
-          ),
-        }));
-        return;
-      }
-    };
+      });
 
     return () => {
-      ws.close();
+      cancelled = true;
+      ws?.close();
       wsRef.current = null;
     };
   }, [visible, upsertAssistant]);
@@ -1207,7 +1218,7 @@ export function ChatPanel() {
       // Also wipe cli_graph on the backend so Claude starts with a clean canvas,
       // not whatever nodes accumulated from prior sessions. graphSync handles the
       // frontend side — cli-origin nodes drop out, library-dragged work survives.
-      fetch(`http://${window.location.hostname}:8000/api/graph`, { method: 'DELETE' }).catch(() => {});
+      apiFetch('/api/graph', { method: 'DELETE' }).catch(() => {});
       setMessages([
         {
           role: 'assistant',

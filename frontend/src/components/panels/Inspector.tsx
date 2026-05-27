@@ -7,6 +7,7 @@ import { CATEGORY_COLORS } from '../../constants/ports';
 import { PORT_COLORS } from '../../lib/portCompatibility';
 import type { NodeData, DynamicNodeData, DynamicParamDefinition, ParamDefinition } from '../../types';
 import { fetchOpenRouterModels, fetchNousModels, fetchQuiverModels, getSettings, updateSettings, type OpenRouterModel, type QuiverModel } from '../../lib/api';
+import { apiFetch, backendAssetUrlSync } from '../../lib/backend';
 import { useDelayedUnmount } from '../../hooks/useDelayedUnmount';
 import '../../styles/panels.css';
 
@@ -477,11 +478,11 @@ export function Inspector({ embedded = false }: InspectorProps) {
                 if (!file) return;
                 const formData = new FormData();
                 formData.append('file', file);
-                fetch('http://localhost:8000/api/uploads', { method: 'POST', body: formData })
+                apiFetch('/api/uploads', { method: 'POST', body: formData })
                   .then((r) => r.json())
                   .then((data: { filePath: string; url: string }) => {
                     updateNodeData(activeNode.id, {
-                      params: { ...activeNodeData.params, [param.key]: data.filePath, _previewUrl: data.url },
+                      params: { ...activeNodeData.params, [param.key]: data.filePath, _previewUrl: backendAssetUrlSync(data.url) },
                     });
                   })
                   .catch((err) => console.error('Upload failed:', err));

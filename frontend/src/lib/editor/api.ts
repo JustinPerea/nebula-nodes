@@ -1,4 +1,5 @@
 import { type EditClip, clipSpeed } from './virtualPlayback';
+import { apiFetch } from '../backend';
 
 interface PreviewRenderResponse {
   previewUrl: string;
@@ -18,7 +19,7 @@ export async function renderPreview(req: { sourceUrl: string; clips: EditClip[] 
     sourceUrl: req.sourceUrl,
     clips: req.clips.map(augmentForBackend),
   };
-  const response = await fetch('/api/video-edit/preview-render', {
+  const response = await apiFetch('/api/video-edit/preview-render', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),

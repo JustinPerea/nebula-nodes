@@ -16,6 +16,7 @@ import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
 import { saveToFile, loadFromFile } from '../../lib/graphFile';
 import { fetchCLIGraph } from '../../lib/api';
+import { apiFetch } from '../../lib/backend';
 import type { NodeData } from '../../types';
 import type { Edge, Node } from '@xyflow/react';
 import '../../styles/panels.css';
@@ -49,7 +50,7 @@ export function Toolbar() {
     // first so the merge starts from a blank slate.
     useGraphStore.getState().loadGraph([], []);
     try {
-      const res = await fetch('http://localhost:8000/api/graph/import', {
+      const res = await apiFetch('/api/graph/import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -91,7 +92,7 @@ export function Toolbar() {
     useGraphStore.getState().clearGraph();
     // Also wipe the backend's in-memory cli_graph so Claude starts fresh and
     // nothing from prior sessions comes back on the next graphSync.
-    fetch('http://localhost:8000/api/graph', { method: 'DELETE' }).catch(() => {});
+    apiFetch('/api/graph', { method: 'DELETE' }).catch(() => {});
   }, []);
 
   const handleResetLayout = useCallback(() => {

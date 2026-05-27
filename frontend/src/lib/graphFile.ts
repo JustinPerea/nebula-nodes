@@ -2,6 +2,7 @@ import JSZip from 'jszip';
 import type { Node, Edge, Viewport } from '@xyflow/react';
 import type { NodeData, NodeState } from '../types';
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
+import { apiFetch, backendAssetUrlSync } from './backend';
 
 /**
  * .nebula.zip / .nebula file format — graph persistence.
@@ -154,9 +155,21 @@ function collectAssetPaths(file: NebulaFile): Map<string, string> {
   const PREFIX = '/api/outputs/';
 
   const record = (value: unknown) => {
-    if (typeof value !== 'string' || !value.startsWith(PREFIX)) return;
-    const rel = value.slice(PREFIX.length);
-    if (rel && !paths.has(rel)) paths.set(rel, value);
+    if (typeof value !== 'string') return;
+    let rel: string | null = null;
+    if (value.startsWith(PREFIX)) {
+      rel = value.slice(PREFIX.length);
+    } else {
+      try {
+        const url = new URL(value);
+        if ((url.hostname === 'localhost' || url.hostname === '127.0.0.1') && url.pathname.startsWith(PREFIX)) {
+          rel = url.pathname.slice(PREFIX.length);
+        }
+      } catch {
+        /* Non-URL strings are ignored. */
+      }
+    }
+    if (rel && !paths.has(rel)) paths.set(rel, backendAssetUrlSync(value));
   };
 
   const walk = (v: unknown) => {
@@ -269,9 +282,21 @@ function rewriteAssetUrls(
 ): void {
   const PREFIX = '/api/outputs/';
   const remap = (v: unknown): unknown => {
-    if (typeof v === 'string' && v.startsWith(PREFIX)) {
-      const rel = v.slice(PREFIX.length);
-      return mapping[rel] ?? v;
+    if (typeof v === 'string') {
+      let rel: string | null = null;
+      if (v.startsWith(PREFIX)) {
+        rel = v.slice(PREFIX.length);
+      } else {
+        try {
+          const url = new URL(v);
+          if ((url.hostname === 'localhost' || url.hostname === '127.0.0.1') && url.pathname.startsWith(PREFIX)) {
+            rel = url.pathname.slice(PREFIX.length);
+          }
+        } catch {
+          /* Non-URL strings are ignored. */
+        }
+      }
+      return rel ? backendAssetUrlSync(mapping[rel] ?? v) : v;
     }
     if (Array.isArray(v)) return v.map(remap);
     if (v && typeof v === 'object') {
@@ -372,7 +397,7 @@ export async function loadFromFile(): Promise<{
       // send exactly what JSZip already decompressed / normalized.
       const blob = new Blob([buffer], { type: 'application/zip' });
       try {
-        const resp = await fetch('http://localhost:8000/api/outputs/restore', {
+        const resp = await apiFetch('/api/outputs/restore', {
           method: 'POST',
           headers: { 'Content-Type': 'application/zip' },
           body: blob,

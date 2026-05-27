@@ -17,6 +17,7 @@ import {
   fetchReplicateSchema,
   type OpenRouterModel,
 } from '../lib/api';
+import { apiFetch, backendAssetUrlSync, rewriteBackendAssetUrls } from '../lib/backend';
 import { wsClient, type ExecutionEvent } from '../lib/wsClient';
 import { useUIStore } from './uiStore';
 import { clipSpeed, type EditClip } from '../lib/editor/virtualPlayback';
@@ -340,12 +341,12 @@ async function ensureBackendFreshForLocalCanvas(
   if (!localCanvasWasEmpty && !get().backendFreshStartPending) return true;
 
   try {
-    const exportRes = await fetch('http://localhost:8000/api/graph/export');
+    const exportRes = await apiFetch('/api/graph/export');
     if (!exportRes.ok) throw new Error(`Export failed: ${exportRes.status}`);
     const exported = (await exportRes.json()) as { empty?: boolean };
 
     if (exported.empty === false) {
-      const clearRes = await fetch('http://localhost:8000/api/graph', { method: 'DELETE' });
+      const clearRes = await apiFetch('/api/graph', { method: 'DELETE' });
       if (!clearRes.ok) throw new Error(`Clear failed: ${clearRes.status}`);
     }
 
@@ -363,9 +364,10 @@ wsClient.subscribe((event) => {
     // Real-time sync: MERGE cli_graph into the canvas. Key invariant: frontend-only
     // nodes (library drags, undo'd results, etc.) must survive graphSync — only
     // cli-origin nodes are authoritative from the server. Same for edges.
-    const { nodes: cliNodes, edges: cliEdges, empty } = event as {
+    const { nodes: rawCliNodes, edges: cliEdges, empty } = event as {
       type: 'graphSync'; nodes: Node<NodeData>[]; edges: Edge[]; empty: boolean;
     };
+    const cliNodes = rewriteBackendAssetUrls(rawCliNodes);
 
     const state = useGraphStore.getState();
 
@@ -701,7 +703,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       const backendFresh = await ensureBackendFreshForLocalCanvas(localCanvasWasEmpty, set, get);
       if (!backendFresh) throw new Error('Backend fresh-start guard failed');
 
-      const res = await fetch('http://localhost:8000/api/graph/node', {
+      const res = await apiFetch('/api/graph/node', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ definitionId, params: defaults, position }),
@@ -752,7 +754,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     }
 
     try {
-      const res = await fetch('http://localhost:8000/api/graph/node-and-connect', {
+      const res = await apiFetch('/api/graph/node-and-connect', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ definitionId, params: defaults, position, connect }),
@@ -821,7 +823,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     ensureBackendFreshForLocalCanvas(localCanvasWasEmpty, set, get)
       .then((backendFresh) => {
         if (!backendFresh) throw new Error('Backend fresh-start guard failed');
-        return fetch('http://localhost:8000/api/graph/node', {
+        return apiFetch('/api/graph/node', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ definitionId, params: defaults, position }),
@@ -858,7 +860,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       // them on the next graphSync. Frontend-only UUIDs have no backend twin.
       for (const id of removedIds) {
         if (CLI_ID_RE.test(id)) {
-          fetch(`http://localhost:8000/api/graph/node/${id}`, { method: 'DELETE' }).catch((err) =>
+          apiFetch(`/api/graph/node/${id}`, { method: 'DELETE' }).catch((err) =>
             console.warn(`[nebula] DELETE node ${id} failed:`, err),
           );
         }
@@ -912,7 +914,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         const edge = currentEdges.find((e) => e.id === id);
         if (!edge) continue;
         if (CLI_ID_RE.test(edge.source) && CLI_ID_RE.test(edge.target)) {
-          fetch('http://localhost:8000/api/graph/edge', {
+          apiFetch('/api/graph/edge', {
             method: 'DELETE',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -1024,7 +1026,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       (async () => {
         for (const edge of edgesToReplace) {
           if (!CLI_ID_RE.test(edge.source) || !CLI_ID_RE.test(edge.target)) continue;
-          await fetch('http://localhost:8000/api/graph/edge', {
+          await apiFetch('/api/graph/edge', {
             method: 'DELETE',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -1035,7 +1037,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
             }),
           });
         }
-        await fetch('http://localhost:8000/api/graph/connect', {
+        await apiFetch('/api/graph/connect', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -1074,7 +1076,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         delete paramPushTimers[nodeId];
         const node = useGraphStore.getState().nodes.find((n) => n.id === nodeId);
         if (!node) return;
-        fetch(`http://localhost:8000/api/graph/node/${nodeId}`, {
+        apiFetch(`/api/graph/node/${nodeId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ params: node.data.params }),
@@ -1663,7 +1665,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       edges: state.edges.filter((e) => e.source !== nodeId && e.target !== nodeId),
     }));
     if (CLI_ID_RE.test(nodeId)) {
-      fetch(`http://localhost:8000/api/graph/node/${nodeId}`, { method: 'DELETE' }).catch((err) =>
+      apiFetch(`/api/graph/node/${nodeId}`, { method: 'DELETE' }).catch((err) =>
         console.warn(`[nebula] DELETE node ${nodeId} failed:`, err),
       );
     }
@@ -2006,7 +2008,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
               const outputIdx = outputVal.value.indexOf('/output/');
               if (outputIdx !== -1) {
                 const relativePath = outputVal.value.substring(outputIdx + '/output/'.length);
-                outputs[key] = { type: outputVal.type, value: `/api/outputs/${relativePath}` };
+                outputs[key] = { type: outputVal.type, value: backendAssetUrlSync(`/api/outputs/${relativePath}`) };
               } else {
                 outputs[key] = outputVal;
               }

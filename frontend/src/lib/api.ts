@@ -1,10 +1,10 @@
-const API_BASE = '/api';
+import { apiFetch, rewriteBackendAssetUrls } from './backend';
 
 export async function executeGraph(
   nodes: Array<{ id: string; definitionId: string; params: Record<string, unknown>; outputs: Record<string, unknown> }>,
   edges: Array<{ id: string; source: string; sourceHandle: string | null | undefined; target: string; targetHandle: string | null | undefined }>,
 ): Promise<{ status: string; errorCount?: number }> {
-  const response = await fetch(`${API_BASE}/execute`, {
+  const response = await apiFetch('/api/execute', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ nodes, edges }),
@@ -18,7 +18,7 @@ export async function executeNode(
   edges: Array<{ id: string; source: string; sourceHandle: string | null | undefined; target: string; targetHandle: string | null | undefined }>,
   targetNodeId: string,
 ): Promise<{ status: string; nodeCount?: number; errorCount?: number }> {
-  const response = await fetch(`${API_BASE}/execute-node`, {
+  const response = await apiFetch('/api/execute-node', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ nodes, edges, targetNodeId }),
@@ -28,13 +28,13 @@ export async function executeNode(
 }
 
 export async function getSettings(): Promise<Record<string, unknown>> {
-  const response = await fetch(`${API_BASE}/settings`);
+  const response = await apiFetch('/api/settings');
   if (!response.ok) throw new Error(`Get settings failed: ${response.status}`);
   return response.json();
 }
 
 export async function updateSettings(settings: Record<string, unknown>): Promise<{ status: string }> {
-  const response = await fetch(`${API_BASE}/settings`, {
+  const response = await apiFetch('/api/settings', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(settings),
@@ -53,7 +53,7 @@ export interface OpenRouterModel {
 }
 
 export async function fetchOpenRouterModels(): Promise<{ models: OpenRouterModel[]; count: number }> {
-  const response = await fetch(`${API_BASE}/openrouter/models`);
+  const response = await apiFetch('/api/openrouter/models');
   if (!response.ok) throw new Error(`Fetch OpenRouter models failed: ${response.status}`);
   return response.json();
 }
@@ -63,7 +63,7 @@ export async function fetchOpenRouterModels(): Promise<{ models: OpenRouterModel
 export type NousModel = OpenRouterModel;
 
 export async function fetchNousModels(): Promise<{ models: NousModel[]; count: number }> {
-  const response = await fetch(`${API_BASE}/nous/models`);
+  const response = await apiFetch('/api/nous/models');
   if (!response.ok) {
     // Surface the backend's auth message verbatim — usually instructs the
     // user to run `hermes auth`.
@@ -93,13 +93,13 @@ export interface ClaudeStatus {
 }
 
 export async function fetchClaudeStatus(): Promise<ClaudeStatus> {
-  const response = await fetch(`${API_BASE}/agents/claude/status`);
+  const response = await apiFetch('/api/agents/claude/status');
   if (!response.ok) throw new Error(`Fetch Claude status failed: ${response.status}`);
   return response.json();
 }
 
 export async function fetchCodexStatus(): Promise<CodexStatus> {
-  const response = await fetch(`${API_BASE}/agents/codex/status`);
+  const response = await apiFetch('/api/agents/codex/status');
   if (!response.ok) throw new Error(`Fetch Codex status failed: ${response.status}`);
   return response.json();
 }
@@ -115,7 +115,7 @@ export interface QuiverModel {
 }
 
 export async function fetchQuiverModels(): Promise<{ models: QuiverModel[]; count: number }> {
-  const response = await fetch(`${API_BASE}/quiver/models`);
+  const response = await apiFetch('/api/quiver/models');
   if (!response.ok) {
     // 400 is the offline-fallback signal — frontend uses hardcoded
     // arrow-1 / arrow-1.1 / arrow-1.1-max if QUIVER_API_KEY is unset.
@@ -137,13 +137,13 @@ export interface ReplicateSchema {
 }
 
 export async function fetchCLIGraph(): Promise<{ nodes: unknown[]; edges: unknown[]; empty: boolean }> {
-  const response = await fetch(`${API_BASE}/graph/export`);
+  const response = await apiFetch('/api/graph/export');
   if (!response.ok) throw new Error(`Fetch CLI graph failed: ${response.status}`);
-  return response.json();
+  return rewriteBackendAssetUrls(await response.json());
 }
 
 export async function fetchReplicateSchema(owner: string, name: string): Promise<ReplicateSchema> {
-  const response = await fetch(`${API_BASE}/replicate/schema/${encodeURIComponent(owner)}/${encodeURIComponent(name)}`);
+  const response = await apiFetch(`/api/replicate/schema/${encodeURIComponent(owner)}/${encodeURIComponent(name)}`);
   if (!response.ok) throw new Error(`Fetch Replicate schema failed: ${response.status}`);
   return response.json();
 }

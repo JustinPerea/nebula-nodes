@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { useReactFlow } from '@xyflow/react';
+import { apiFetch } from '../lib/backend';
 
 /**
  * Captures canvas-mutation events with each node's screen-space bounding
@@ -29,7 +30,7 @@ export function useZoomManifest(): void {
   useEffect(() => {
     let cancelled = false;
 
-    fetch('/api/zoom-manifest/init', { method: 'POST' })
+    apiFetch('/api/zoom-manifest/init', { method: 'POST' })
       .then((r) => r.json())
       .then((data) => {
         if (cancelled) return;
@@ -60,7 +61,7 @@ export function useZoomManifest(): void {
         const rect = el.getBoundingClientRect();
         const node = getNode(id);
         const kind = (node?.type as string | undefined) ?? 'unknown';
-        fetch('/api/zoom-manifest/entry', {
+        apiFetch('/api/zoom-manifest/entry', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

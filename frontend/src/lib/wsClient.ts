@@ -1,3 +1,5 @@
+import { backendWebSocketUrl } from './backend';
+
 export type ExecutionEvent =
   | { type: 'queued'; nodeId: string }
   | { type: 'executing'; nodeId: string }
@@ -17,44 +19,62 @@ class WebSocketClient {
   private ws: WebSocket | null = null;
   private handlers: Set<EventHandler> = new Set();
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-  private url: string;
+  private path: string;
+  private connecting = false;
+  private connectRun = 0;
 
-  constructor(url: string) {
-    this.url = url;
+  constructor(path: string) {
+    this.path = path;
   }
 
   connect(): void {
-    if (this.ws?.readyState === WebSocket.OPEN) return;
+    if (this.ws?.readyState === WebSocket.OPEN || this.connecting) return;
 
-    this.ws = new WebSocket(this.url);
+    this.connecting = true;
+    const run = ++this.connectRun;
 
-    this.ws.onopen = () => {
-      console.log('[ws] connected');
-    };
+    backendWebSocketUrl(this.path)
+      .then((url) => {
+        if (run !== this.connectRun) return;
+        this.connecting = false;
+        this.ws = new WebSocket(url);
 
-    this.ws.onmessage = (event: MessageEvent) => {
-      try {
-        const parsed = JSON.parse(event.data) as ExecutionEvent;
-        for (const handler of this.handlers) {
-          handler(parsed);
-        }
-      } catch (err) {
-        console.error('[ws] failed to parse message:', err);
-      }
-    };
+        this.ws.onopen = () => {
+          console.log('[ws] connected');
+        };
 
-    this.ws.onclose = () => {
-      console.log('[ws] disconnected, reconnecting in 3s...');
-      this.scheduleReconnect();
-    };
+        this.ws.onmessage = (event: MessageEvent) => {
+          try {
+            const parsed = JSON.parse(event.data) as ExecutionEvent;
+            for (const handler of this.handlers) {
+              handler(parsed);
+            }
+          } catch (err) {
+            console.error('[ws] failed to parse message:', err);
+          }
+        };
 
-    this.ws.onerror = (err) => {
-      console.error('[ws] error:', err);
-      this.ws?.close();
-    };
+        this.ws.onclose = () => {
+          console.log('[ws] disconnected, reconnecting in 3s...');
+          this.scheduleReconnect();
+        };
+
+        this.ws.onerror = (err) => {
+          console.error('[ws] error:', err);
+          this.ws?.close();
+        };
+      })
+      .catch((err) => {
+        if (run !== this.connectRun) return;
+        this.connecting = false;
+        console.error('[ws] backend discovery failed:', err);
+        this.scheduleReconnect();
+      });
   }
 
   disconnect(): void {
+    this.connectRun += 1;
+    this.connecting = false;
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
@@ -82,4 +102,4 @@ class WebSocketClient {
   }
 }
 
-export const wsClient = new WebSocketClient('ws://localhost:8000/ws');
+export const wsClient = new WebSocketClient('/ws');

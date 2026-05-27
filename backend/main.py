@@ -854,7 +854,7 @@ async def chat_websocket(websocket: WebSocket) -> None:
 
 @app.get("/api/health")
 async def health() -> dict:
-    return {"status": "ok", "version": "0.1.0"}
+    return {"status": "ok", "app": "nebula", "version": "0.1.0"}
 
 
 @app.get("/api/agents/claude/status")

@@ -23,6 +23,7 @@ import { RemotionNode } from './nodes/RemotionNode';
 import { TypedEdge } from './edges/TypedEdge';
 import { ContextMenu } from './ContextMenu';
 import { ConnectionPopup } from './ConnectionPopup';
+import { apiFetch } from '../lib/backend';
 import '../styles/canvas.css';
 
 const nodeTypes: NodeTypes = {
@@ -380,7 +381,7 @@ export function Canvas() {
             const formData = new FormData();
             formData.append('file', file);
             formData.append('create_node', 'true');
-            fetch('http://localhost:8000/api/uploads', { method: 'POST', body: formData })
+            apiFetch('/api/uploads', { method: 'POST', body: formData })
               .then((r) => r.json())
               .catch((err) => console.error('Upload/create failed:', err));
           });
