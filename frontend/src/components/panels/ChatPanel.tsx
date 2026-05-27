@@ -569,42 +569,62 @@ export function ChatPanel() {
   useEffect(() => {
     if (agent !== 'claude') return;
     let cancelled = false;
-    queueMicrotask(() => {
-      if (!cancelled) setClaudeStatusError(null);
-    });
-    fetchClaudeStatus()
-      .then((status) => {
-        if (!cancelled) setClaudeStatus(status);
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) {
+    let retryTimer: number | null = null;
+
+    const refresh = () => {
+      if (cancelled) return;
+      setClaudeStatusError(null);
+      fetchClaudeStatus()
+        .then((status) => {
+          if (cancelled) return;
+          setClaudeStatus(status);
+          if (!status.installed || !status.loggedIn) {
+            retryTimer = window.setTimeout(refresh, 5000);
+          }
+        })
+        .catch((err: unknown) => {
+          if (cancelled) return;
           setClaudeStatus(null);
           setClaudeStatusError(err instanceof Error ? err.message : String(err));
-        }
-      });
+          retryTimer = window.setTimeout(refresh, 3000);
+        });
+    };
+
+    refresh();
     return () => {
       cancelled = true;
+      if (retryTimer) window.clearTimeout(retryTimer);
     };
   }, [agent]);
 
   useEffect(() => {
     if (agent !== 'codex') return;
     let cancelled = false;
-    queueMicrotask(() => {
-      if (!cancelled) setCodexStatusError(null);
-    });
-    fetchCodexStatus()
-      .then((status) => {
-        if (!cancelled) setCodexStatus(status);
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) {
+    let retryTimer: number | null = null;
+
+    const refresh = () => {
+      if (cancelled) return;
+      setCodexStatusError(null);
+      fetchCodexStatus()
+        .then((status) => {
+          if (cancelled) return;
+          setCodexStatus(status);
+          if (!status.installed || !status.loggedIn) {
+            retryTimer = window.setTimeout(refresh, 5000);
+          }
+        })
+        .catch((err: unknown) => {
+          if (cancelled) return;
           setCodexStatus(null);
           setCodexStatusError(err instanceof Error ? err.message : String(err));
-        }
-      });
+          retryTimer = window.setTimeout(refresh, 3000);
+        });
+    };
+
+    refresh();
     return () => {
       cancelled = true;
+      if (retryTimer) window.clearTimeout(retryTimer);
     };
   }, [agent]);
 
@@ -880,27 +900,43 @@ export function ChatPanel() {
 
     let cancelled = false;
     let ws: WebSocket | null = null;
+    let retryTimer: number | null = null;
 
-    backendWebSocketUrl('/ws/chat')
-      .then((url) => {
-        if (cancelled) return;
-        ws = new WebSocket(url);
-        wsRef.current = ws;
+    const scheduleReconnect = () => {
+      if (cancelled || retryTimer) return;
+      retryTimer = window.setTimeout(() => {
+        retryTimer = null;
+        connect();
+      }, 3000);
+    };
 
-        ws.onopen = () => setConnected(true);
-        ws.onclose = () => {
-          setConnected(false);
-          setBusy(false);
-        };
-        ws.onerror = () => setConnected(false);
+    const connect = () => {
+      backendWebSocketUrl('/ws/chat')
+        .then((url) => {
+          if (cancelled) return;
+          const socket = new WebSocket(url);
+          ws = socket;
+          wsRef.current = socket;
 
-        ws.onmessage = (ev) => {
-          let event: Record<string, unknown>;
-          try {
-            event = JSON.parse(ev.data);
-          } catch {
-            return;
-          }
+          socket.onopen = () => setConnected(true);
+          socket.onclose = () => {
+            if (wsRef.current === socket) wsRef.current = null;
+            setConnected(false);
+            setBusy(false);
+            scheduleReconnect();
+          };
+          socket.onerror = () => {
+            setConnected(false);
+            socket.close();
+          };
+
+          socket.onmessage = (ev) => {
+            let event: Record<string, unknown>;
+            try {
+              event = JSON.parse(ev.data);
+            } catch {
+              return;
+            }
 
           const type = event.type;
           if (type === 'session') {
@@ -1020,16 +1056,21 @@ export function ChatPanel() {
             }));
             return;
           }
-        };
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setConnected(false);
-        setBusy(false);
-      });
+          };
+        })
+        .catch(() => {
+          if (cancelled) return;
+          setConnected(false);
+          setBusy(false);
+          scheduleReconnect();
+        });
+    };
+
+    connect();
 
     return () => {
       cancelled = true;
+      if (retryTimer) window.clearTimeout(retryTimer);
       ws?.close();
       wsRef.current = null;
     };

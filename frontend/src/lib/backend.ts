@@ -131,7 +131,7 @@ async function discoverBackendBaseUrl(): Promise<string> {
   const candidates = candidateBaseUrls();
   const results = await Promise.all(candidates.map((candidate) => probeBackendBaseUrl(candidate)));
   const found = results.find((candidate): candidate is string => candidate != null);
-  if (!found) {
+  if (found == null) {
     throw new Error(`Nebula backend not found on localhost ports ${configuredBackendPorts().join(', ')}`);
   }
 
