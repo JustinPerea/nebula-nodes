@@ -40,6 +40,7 @@ const DEFAULT_DAEDALUS_MODEL = 'moonshotai/kimi-k2.6';
 // from the Nous catalog (which means they've authed via `hermes-daedalus
 // model`). This keeps fresh users from hitting a 401 on their first turn.
 type DaedalusProvider = 'openrouter' | 'nous';
+const BACKEND_START_COMMAND = 'cd backend && .venv/bin/python -m uvicorn main:app --host 127.0.0.1 --port 8000';
 const CHAT_PANEL_RESIZE_CURSORS: Record<string, string> = {
   l: 'ew-resize',
   r: 'ew-resize',
@@ -65,6 +66,20 @@ function loadDaedalusProvider(): DaedalusProvider {
   } catch {
     return 'openrouter';
   }
+}
+
+function isBackendUnavailableError(message: string | null): boolean {
+  if (!message) return false;
+  const lower = message.toLowerCase();
+  return (
+    lower.includes('failed to fetch') ||
+    lower.includes('load failed') ||
+    lower.includes('network') ||
+    lower.includes('status failed: 500') ||
+    lower.includes('status failed: 502') ||
+    lower.includes('status failed: 503') ||
+    lower.includes('status failed: 504')
+  );
 }
 
 type ToolCall = {
@@ -593,6 +608,7 @@ export function ChatPanel() {
   }, [agent]);
 
   const claudeStatusLabel = useMemo(() => {
+    if (isBackendUnavailableError(claudeStatusError)) return 'Nebula backend offline';
     if (claudeStatusError) return 'Claude status unavailable';
     if (!claudeStatus) return 'Checking Claude…';
     if (!claudeStatus.installed) return 'Claude not installed';
@@ -603,6 +619,7 @@ export function ChatPanel() {
   }, [claudeStatus, claudeStatusError]);
 
   const codexStatusLabel = useMemo(() => {
+    if (isBackendUnavailableError(codexStatusError)) return 'Nebula backend offline';
     if (codexStatusError) return 'Codex status unavailable';
     if (!codexStatus) return 'Checking Codex…';
     if (!codexStatus.installed) return 'Codex not installed';
@@ -615,7 +632,18 @@ export function ChatPanel() {
 
   const agentConnectHint = useMemo(() => {
     if (agent === 'claude') {
+      const backendUnavailable = isBackendUnavailableError(claudeStatusError);
       const needsConnection = Boolean(claudeStatusError || !claudeStatus?.installed || !claudeStatus?.loggedIn);
+      if (backendUnavailable) {
+        return {
+          agent: 'claude' as const,
+          open: true,
+          title: 'Start Nebula backend',
+          status: 'Backend offline',
+          detail: 'Claude may already be logged in, but Nebula cannot reach FastAPI on port 8000.',
+          commands: [BACKEND_START_COMMAND],
+        };
+      }
       return {
         agent: 'claude' as const,
         open: needsConnection,
@@ -630,7 +658,18 @@ export function ChatPanel() {
       };
     }
     if (agent === 'codex') {
+      const backendUnavailable = isBackendUnavailableError(codexStatusError);
       const needsConnection = Boolean(codexStatusError || !codexStatus?.installed || !codexStatus?.loggedIn);
+      if (backendUnavailable) {
+        return {
+          agent: 'codex' as const,
+          open: true,
+          title: 'Start Nebula backend',
+          status: 'Backend offline',
+          detail: 'Codex may already be logged in, but Nebula cannot reach FastAPI on port 8000.',
+          commands: [BACKEND_START_COMMAND],
+        };
+      }
       return {
         agent: 'codex' as const,
         open: needsConnection,
