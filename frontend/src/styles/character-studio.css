@@ -1,0 +1,565 @@
+/*
+ * Character Studio + Character palette styles — Slava-restraint skin.
+ *
+ * All rules scoped under body.app-slava-restraint, mirroring cinema-studio.css.
+ * Two surfaces live here:
+ *   1. The full-screen Character Studio (.character-studio-view) — a focused
+ *      workspace with a top toolbar, a left library rail, and a main column
+ *      (definition form + guards + test panel).
+ *   2. The Character palette (.panel--character-library) — canvas chrome that
+ *      reuses the shared .panel chrome and adds character-specific list items.
+ *
+ * Tokens reused from slava-restraint.css:
+ *   --sr-canvas / --sr-glass / --sr-glass-strong  → surfaces
+ *   --sr-ink / --sr-ink-meta / --sr-ink-faint     → type
+ *   --sr-edge / --sr-edge-strong                   → hairlines
+ *   --sr-accent                                     → accent
+ */
+
+/* ── Studio host layout ──────────────────────────────────────────────────── */
+body.app-slava-restraint .character-studio-view {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  grid-template-rows: 44px 1fr;
+  grid-template-columns: 240px 1fr;
+  grid-template-areas:
+    "toolbar toolbar"
+    "rail    main";
+  background: var(--sr-canvas);
+  color: var(--sr-ink);
+  font-family: var(--sr-ui);
+  z-index: 50;
+  overflow: hidden;
+}
+
+body.app-slava-restraint .character-studio-view__header { grid-area: toolbar; }
+body.app-slava-restraint .character-studio-view__rail { grid-area: rail; }
+body.app-slava-restraint .character-studio-view__main { grid-area: main; }
+
+body.app-slava-restraint .character-studio-view__loading {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  color: var(--sr-ink-meta);
+  font-size: 13px;
+}
+
+body.app-slava-restraint .character-studio-view__main {
+  overflow-y: auto;
+  padding: 18px 22px 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* ── Toolbar ─────────────────────────────────────────────────────────────── */
+body.app-slava-restraint .character-studio-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 100%;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--sr-edge-strong);
+  background: var(--sr-glass);
+}
+
+body.app-slava-restraint .character-studio-toolbar__back,
+body.app-slava-restraint .character-studio-toolbar__retry {
+  background: none;
+  border: 1px solid var(--sr-edge);
+  color: var(--sr-ink);
+  padding: 4px 10px;
+  border-radius: 2px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+}
+
+body.app-slava-restraint .character-studio-toolbar__back:hover,
+body.app-slava-restraint .character-studio-toolbar__retry:hover {
+  border-color: var(--sr-accent);
+}
+
+body.app-slava-restraint .character-studio-toolbar__crumb {
+  font-weight: 600;
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  color: var(--sr-accent);
+}
+
+body.app-slava-restraint .character-studio-toolbar__spacer { flex: 1; }
+
+body.app-slava-restraint .character-studio-toolbar__state {
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  color: var(--sr-ink-meta);
+}
+
+body.app-slava-restraint .character-studio-toolbar__state--saving {
+  color: var(--sr-ink-meta);
+}
+
+body.app-slava-restraint .character-studio-toolbar__state--saved {
+  color: var(--sr-accent);
+}
+
+body.app-slava-restraint .character-studio-toolbar__state--draft {
+  color: var(--sr-ink-faint);
+}
+
+body.app-slava-restraint .character-studio-toolbar__state--error {
+  color: #e0796b;
+}
+
+/* ── Library rail ────────────────────────────────────────────────────────── */
+body.app-slava-restraint .character-rail {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 12px;
+  border-right: 1px solid var(--sr-edge-strong);
+  background: var(--sr-glass-strong);
+  overflow-y: auto;
+}
+
+body.app-slava-restraint .character-rail__scope {
+  display: flex;
+  gap: 4px;
+}
+
+body.app-slava-restraint .character-rail__scope-tab,
+body.app-slava-restraint .character-palette__scope-tab {
+  flex: 1;
+  background: none;
+  border: 1px solid var(--sr-edge);
+  color: var(--sr-ink-meta);
+  padding: 4px 8px;
+  border-radius: 2px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+body.app-slava-restraint .character-rail__scope-tab--active,
+body.app-slava-restraint .character-palette__scope-tab--active {
+  border-color: var(--sr-accent);
+  color: var(--sr-accent);
+}
+
+body.app-slava-restraint .character-rail__new,
+body.app-slava-restraint .character-palette__new {
+  background: none;
+  border: 1px dashed var(--sr-edge-strong);
+  color: var(--sr-ink);
+  padding: 7px 8px;
+  border-radius: 3px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+}
+
+body.app-slava-restraint .character-rail__new:hover,
+body.app-slava-restraint .character-palette__new:hover {
+  border-color: var(--sr-accent);
+  color: var(--sr-accent);
+}
+
+body.app-slava-restraint .character-rail__list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+body.app-slava-restraint .character-rail__empty,
+body.app-slava-restraint .character-palette__empty {
+  color: var(--sr-ink-faint);
+  font-size: 11px;
+  padding: 6px 2px;
+  line-height: 1.4;
+}
+
+body.app-slava-restraint .character-rail__empty--error,
+body.app-slava-restraint .character-palette__empty--error {
+  color: #e0796b;
+}
+
+body.app-slava-restraint .character-rail__item,
+body.app-slava-restraint .character-palette__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  background: none;
+  border: 1px solid var(--sr-edge);
+  border-radius: 3px;
+  padding: 6px;
+  cursor: pointer;
+  color: var(--sr-ink);
+  text-align: left;
+  font: inherit;
+}
+
+body.app-slava-restraint .character-rail__item:hover,
+body.app-slava-restraint .character-palette__item:hover {
+  border-color: var(--sr-accent);
+}
+
+body.app-slava-restraint .character-rail__item--active {
+  border-color: var(--sr-accent);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+body.app-slava-restraint .character-rail__thumb,
+body.app-slava-restraint .character-palette__thumb {
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--sr-edge);
+  border-radius: 3px;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+body.app-slava-restraint .character-rail__thumb img,
+body.app-slava-restraint .character-palette__thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+body.app-slava-restraint .character-rail__thumb-empty,
+body.app-slava-restraint .character-palette__thumb-empty {
+  color: var(--sr-ink-faint);
+  font-size: 14px;
+}
+
+body.app-slava-restraint .character-rail__meta,
+body.app-slava-restraint .character-palette__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+body.app-slava-restraint .character-rail__name,
+body.app-slava-restraint .character-palette__name {
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+body.app-slava-restraint .character-rail__sub,
+body.app-slava-restraint .character-palette__sub {
+  font-size: 10px;
+  color: var(--sr-ink-faint);
+  letter-spacing: 0.03em;
+}
+
+/* ── Definition panel ────────────────────────────────────────────────────── */
+body.app-slava-restraint .character-def {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 720px;
+}
+
+body.app-slava-restraint .character-def__head {
+  display: flex;
+  gap: 16px;
+}
+
+body.app-slava-restraint .character-def__thumb {
+  flex: 0 0 auto;
+  width: 96px;
+  height: 96px;
+  border: 1px solid var(--sr-edge);
+  border-radius: 4px;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+body.app-slava-restraint .character-def__thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+body.app-slava-restraint .character-def__thumb-empty {
+  color: var(--sr-ink-faint);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+body.app-slava-restraint .character-def__head-fields {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  justify-content: center;
+}
+
+body.app-slava-restraint .character-def__field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+body.app-slava-restraint .character-def__section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+body.app-slava-restraint .character-def__section--row {
+  flex-direction: row;
+  gap: 18px;
+  align-items: flex-end;
+}
+
+body.app-slava-restraint .character-def__field--narrow { width: 120px; }
+body.app-slava-restraint .character-def__field--grow { flex: 1; }
+
+body.app-slava-restraint .character-def__section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+body.app-slava-restraint .character-def__label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--sr-ink-meta);
+}
+
+body.app-slava-restraint .character-def__hint {
+  font-size: 11px;
+  color: var(--sr-ink-faint);
+  line-height: 1.4;
+}
+
+body.app-slava-restraint .character-def__error {
+  font-size: 11px;
+  color: #e0796b;
+}
+
+body.app-slava-restraint .character-def__input,
+body.app-slava-restraint .character-def__select,
+body.app-slava-restraint .character-def__textarea {
+  background: var(--sr-surface-control, rgba(255, 255, 255, 0.04));
+  border: 1px solid var(--sr-edge);
+  color: var(--sr-ink);
+  border-radius: 3px;
+  padding: 6px 8px;
+  font: inherit;
+  font-size: 12px;
+}
+
+body.app-slava-restraint .character-def__input:focus,
+body.app-slava-restraint .character-def__select:focus,
+body.app-slava-restraint .character-def__textarea:focus {
+  outline: none;
+  border-color: var(--sr-accent);
+}
+
+body.app-slava-restraint .character-def__textarea {
+  resize: vertical;
+  min-height: 72px;
+  line-height: 1.5;
+}
+
+/* Reference views grid */
+body.app-slava-restraint .character-def__refs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+body.app-slava-restraint .character-def__ref {
+  position: relative;
+  width: 72px;
+  height: 72px;
+  border: 1px solid var(--sr-edge);
+  border-radius: 3px;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.2);
+}
+
+body.app-slava-restraint .character-def__ref img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+body.app-slava-restraint .character-def__ref-badge {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  text-align: center;
+  padding: 1px 0;
+  background: rgba(0, 0, 0, 0.55);
+  color: var(--sr-accent);
+}
+
+body.app-slava-restraint .character-def__ref-remove {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 16px;
+  height: 16px;
+  line-height: 14px;
+  text-align: center;
+  border: none;
+  border-radius: 2px;
+  background: rgba(0, 0, 0, 0.6);
+  color: var(--sr-ink);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 0;
+}
+
+body.app-slava-restraint .character-def__ref-remove:hover {
+  color: var(--sr-accent);
+}
+
+body.app-slava-restraint .character-def__ref-add {
+  width: 72px;
+  height: 72px;
+  border: 1px dashed var(--sr-edge-strong);
+  border-radius: 3px;
+  background: none;
+  color: var(--sr-ink-meta);
+  cursor: pointer;
+  font-size: 20px;
+}
+
+body.app-slava-restraint .character-def__ref-add:hover:not(:disabled) {
+  border-color: var(--sr-accent);
+  color: var(--sr-accent);
+}
+
+body.app-slava-restraint .character-def__ref-add:disabled {
+  opacity: var(--sr-disabled-opacity, 0.5);
+  cursor: default;
+}
+
+/* ── Inline notices (load / guard / save errors) ─────────────────────────── */
+body.app-slava-restraint .character-studio-view__notice {
+  font-size: 12px;
+  line-height: 1.45;
+  padding: 8px 12px;
+  border-radius: 3px;
+  border: 1px solid var(--sr-edge);
+  max-width: 720px;
+}
+
+body.app-slava-restraint .character-studio-view__notice--guard {
+  border-color: var(--sr-accent);
+  color: var(--sr-ink);
+}
+
+body.app-slava-restraint .character-studio-view__notice--warn {
+  border-color: var(--sr-edge-strong);
+  color: var(--sr-ink-meta);
+}
+
+body.app-slava-restraint .character-studio-view__notice--error {
+  border-color: #e0796b;
+  color: #e0796b;
+}
+
+body.app-slava-restraint .character-studio-view__retry {
+  background: none;
+  border: 1px solid currentColor;
+  color: inherit;
+  padding: 2px 8px;
+  border-radius: 2px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  margin-left: 4px;
+}
+
+/* ── Test panel ──────────────────────────────────────────────────────────── */
+body.app-slava-restraint .character-test {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 720px;
+  padding-top: 8px;
+  border-top: 1px solid var(--sr-edge);
+}
+
+body.app-slava-restraint .character-test__head {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+body.app-slava-restraint .character-test__run {
+  align-self: flex-start;
+  background: none;
+  border: 1px solid var(--sr-edge);
+  color: var(--sr-ink);
+  padding: 6px 14px;
+  border-radius: 2px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+}
+
+body.app-slava-restraint .character-test__run:hover:not(:disabled) {
+  border-color: var(--sr-accent);
+  color: var(--sr-accent);
+}
+
+body.app-slava-restraint .character-test__run:disabled {
+  opacity: var(--sr-disabled-opacity, 0.5);
+  cursor: default;
+}
+
+/* ── Character palette (canvas chrome, sibling of NodeLibrary) ───────────── */
+body.app-slava-restraint .panel--character-library {
+  left: var(--sr-space-4, 16px);
+  top: 360px;
+  width: 232px;
+  z-index: calc(var(--sr-layer-panel) + 1);
+}
+
+body.app-slava-restraint .panel__body--character-library {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+}
+
+body.app-slava-restraint .character-palette__scope {
+  display: flex;
+  gap: 4px;
+}
+
+body.app-slava-restraint .character-palette__list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow-y: auto;
+}

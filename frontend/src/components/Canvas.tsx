@@ -26,6 +26,7 @@ import { TypedEdge } from './edges/TypedEdge';
 import { ContextMenu } from './ContextMenu';
 import { ConnectionPopup } from './ConnectionPopup';
 import { CrabMark } from './brand/CrabMark';
+import { CHARACTER_DRAG_MIME } from './panels/CharacterLibrary';
 import { apiFetch } from '../lib/backend';
 import '../styles/canvas.css';
 
@@ -392,6 +393,27 @@ export function Canvas() {
           });
           return;
         }
+      }
+
+      // Character palette drag → drop a `character` node referencing that asset.
+      // The payload carries { id, name, thumbnail } (set by CharacterLibrary's
+      // onDragStart) so the dropped node renders with denormalized name/thumb,
+      // mirroring click-to-add's addCharacterNode(id, pos, meta) path.
+      const characterPayload = event.dataTransfer.getData(CHARACTER_DRAG_MIME);
+      if (characterPayload) {
+        try {
+          const { id, name, thumbnail } = JSON.parse(characterPayload) as {
+            id: string;
+            name?: string;
+            thumbnail?: string;
+          };
+          if (!id) return;
+          const position = screenToFlowPosition({ x: event.clientX, y: event.clientY });
+          void useGraphStore.getState().addCharacterNode(id, position, { name, thumbnail });
+        } catch (err) {
+          console.error('[nebula] character drop failed to parse payload:', err);
+        }
+        return;
       }
 
       const definitionId = event.dataTransfer.getData('application/nebula-node');

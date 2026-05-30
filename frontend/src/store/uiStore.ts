@@ -58,7 +58,7 @@ interface UIState {
   selectedNodeId: string | null;
 
   // Editor view state — Phase 1 video-editor pivot
-  viewMode: 'canvas' | 'editor' | 'remotion-editor' | 'cinema-editor';
+  viewMode: 'canvas' | 'editor' | 'remotion-editor' | 'cinema-editor' | 'character-editor';
   editorTargetNodeId: string | null;
   // Phase 2 Remotion editor
   remotionEditorTargetNodeId: string | null;
@@ -67,9 +67,8 @@ interface UIState {
   // when this is set.
   cinemaEditorNodeId: string | null;
   // Nebula Character editor — which Character (by id) is open for editing.
-  // Mirrors cinemaEditorNodeId. Task 5 mounts the Character editor view when
-  // this is set; this task only provides the minimal store surface the
-  // CharacterNode "Open Character" button needs to typecheck.
+  // Mirrors cinemaEditorNodeId. App.tsx mounts CharacterStudioView when this is
+  // set (viewMode 'character-editor'). The 'new' sentinel opens a fresh draft.
   characterEditorId: string | null;
   selectedTrackItemId: string | null;
   selectedTrackItemIds: string[];
@@ -249,19 +248,21 @@ export const useUIStore = create<UIState>((set, get) => ({
     });
   },
 
-  // Nebula Character editor — mirrors enterCinemaEditor. Only tracks which
-  // Character is open; Task 5 wires the editor view that reads this. We do not
-  // flip viewMode here yet (no Character editor view exists until Task 5), so
-  // this stays a minimal, non-breaking store surface for the CharacterNode
-  // "Open Character" button.
+  // Nebula Character editor — mirrors enterCinemaEditor. Flips into the
+  // full-screen Character Studio (App.tsx mounts CharacterStudioView on
+  // viewMode 'character-editor') and tracks which Character is open. The
+  // sentinel id 'new' opens a fresh local draft (the Studio treats any id that
+  // doesn't resolve to a stored Character as a draft).
   enterCharacterEditor: (characterId) => {
     set({
+      viewMode: 'character-editor',
       characterEditorId: characterId,
     });
   },
 
   exitCharacterEditor: () => {
     set({
+      viewMode: 'canvas',
       characterEditorId: null,
     });
   },

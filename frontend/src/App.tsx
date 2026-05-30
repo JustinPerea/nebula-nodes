@@ -6,7 +6,9 @@ import { CanvasTabs } from './components/CanvasTabs';
 import { EditorView } from './components/editor/EditorView';
 import { RemotionEditorView } from './components/video-editor/RemotionEditorView';
 import { CinemaStudioView } from './components/cinema-studio/CinemaStudioView';
+import { CharacterStudioView } from './components/character-studio/CharacterStudioView';
 import { NodeLibrary } from './components/panels/NodeLibrary';
+import { CharacterLibrary } from './components/panels/CharacterLibrary';
 import { Settings } from './components/panels/Settings';
 import { Toolbar } from './components/panels/Toolbar';
 import { PanelLaunchers } from './components/panels/PanelLaunchers';
@@ -129,6 +131,7 @@ export default function App() {
   const isCanvas = viewMode === 'canvas';
   const isRemotion = viewMode === 'remotion-editor';
   const isCinema = viewMode === 'cinema-editor';
+  const isCharacter = viewMode === 'character-editor';
 
   let mainView;
   if (isCanvas) {
@@ -137,6 +140,8 @@ export default function App() {
     mainView = <RemotionEditorView />;
   } else if (isCinema) {
     mainView = <CinemaStudioView />;
+  } else if (isCharacter) {
+    mainView = <CharacterStudioView />;
   } else {
     mainView = <EditorView />;
   }
@@ -150,6 +155,7 @@ export default function App() {
       {/* Canvas-only chrome: library, inspector, settings, launchers, toolbar, agent log.
           The editor view is a focused workspace — only the pill control and chat remain. */}
       {isCanvas && <NodeLibrary />}
+      {isCanvas && <CharacterLibrary />}
       {isCanvas && <NodeInspectorPopover />}
       {isCanvas && <Settings />}
       <ChatPanel />
