@@ -336,6 +336,15 @@ interface GraphState {
   addShot: (nodeId: string) => string | null;
   removeShot: (nodeId: string, shotId: string) => void;
   updateScene: (nodeId: string, spec: CinemaSceneSpec) => void;
+
+  // Character node helper. Creates a `character` static node with
+  // params.characterId set, plus denormalized name/thumbnail for canvas
+  // rendering. Mirrors addNode's static path.
+  addCharacterNode: (
+    characterId: string,
+    position: { x: number; y: number },
+    meta?: { name?: string; thumbnail?: string },
+  ) => Promise<string | null>;
 }
 
 // CLI nodes use short sequential IDs like n1, n2. Frontend-only (library-dragged)
@@ -2096,6 +2105,52 @@ export const useGraphStore = create<GraphState>((set, get) => ({
 
     applySceneToNode(set, nodeId, spec);
     persistSceneParam(nodeId, spec);
+  },
+
+  // Character node — mirrors addNode's static path. Writes characterId +
+  // denormalized name/thumbnail so CharacterNode.tsx renders without fetching.
+  addCharacterNode: async (characterId, position, meta) => {
+    const definition = NODE_DEFINITIONS['character'];
+    if (!definition) return null;
+
+    // Build param defaults from the definition, then layer in runtime refs.
+    const defaults: Record<string, unknown> = {};
+    for (const param of definition.params) {
+      if (param.default !== undefined) defaults[param.key] = param.default;
+    }
+    const params: Record<string, unknown> = {
+      ...defaults,
+      characterId,
+      characterName: meta?.name ?? '',
+      characterThumbnail: meta?.thumbnail ?? '',
+    };
+
+    const localCanvasWasEmpty = get().nodes.length === 0 && get().edges.length === 0;
+
+    try {
+      const backendFresh = await ensureBackendFreshForLocalCanvas(localCanvasWasEmpty, set, get);
+      if (!backendFresh) throw new Error('Backend fresh-start guard failed');
+
+      const res = await apiFetch('/api/graph/node', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ definitionId: 'character', params, position }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const node = (await res.json()) as { id?: string };
+      return node.id ?? null;
+    } catch (err) {
+      console.warn('[nebula] addCharacterNode backend push failed — adding locally only:', err);
+      pushUndo(set, get);
+      const newNode: Node<NodeData> = {
+        id: uuidv4(),
+        type: 'characterNode',
+        position,
+        data: { label: definition.displayName, definitionId: 'character', params, state: 'idle', outputs: {} },
+      };
+      set((state) => ({ nodes: [...state.nodes, newNode] }));
+      return newNode.id;
+    }
   },
 
   loadGraph: (nodes, edges) => {

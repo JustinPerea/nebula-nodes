@@ -1,4 +1,5 @@
 import { apiFetch, rewriteBackendAssetUrls } from './backend';
+import type { Character } from '../types';
 
 export async function executeGraph(
   nodes: Array<{ id: string; definitionId: string; params: Record<string, unknown>; outputs: Record<string, unknown> }>,
@@ -146,4 +147,44 @@ export async function fetchReplicateSchema(owner: string, name: string): Promise
   const response = await apiFetch(`/api/replicate/schema/${encodeURIComponent(owner)}/${encodeURIComponent(name)}`);
   if (!response.ok) throw new Error(`Fetch Replicate schema failed: ${response.status}`);
   return response.json();
+}
+
+// ---------------------------------------------------------------------------
+// Character CRUD helpers
+// ---------------------------------------------------------------------------
+
+type CharacterCreateInput = Omit<Character, 'id' | 'version' | 'thumbnail' | 'createdAt' | 'updatedAt'>;
+type CharacterUpdateInput = Partial<CharacterCreateInput>;
+
+export async function fetchCharacters(scope: 'project' | 'global', projectId?: string): Promise<Character[]> {
+  const params = new URLSearchParams({ scope });
+  if (scope === 'project' && projectId) params.append('projectId', projectId);
+  const response = await apiFetch(`/api/characters?${params.toString()}`);
+  if (!response.ok) throw new Error(`Fetch characters failed: ${response.status}`);
+  return response.json();
+}
+
+export async function createCharacter(body: CharacterCreateInput): Promise<Character> {
+  const response = await apiFetch('/api/characters', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) throw new Error(`Create character failed: ${response.status}`);
+  return response.json();
+}
+
+export async function updateCharacter(id: string, body: CharacterUpdateInput): Promise<Character> {
+  const response = await apiFetch(`/api/characters/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) throw new Error(`Update character failed: ${response.status}`);
+  return response.json();
+}
+
+export async function deleteCharacter(id: string): Promise<void> {
+  const response = await apiFetch(`/api/characters/${id}`, { method: 'DELETE' });
+  if (!response.ok) throw new Error(`Delete character failed: ${response.status}`);
 }
