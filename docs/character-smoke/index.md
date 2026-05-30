@@ -202,3 +202,140 @@ does at runtime.
 
 *Verdict recorded in §3 above: identity **HOLDS** across both multi-ref scene edits → the
 `nano-banana-2/edit` default is kept (no fallback to seedream needed).*
+
+---
+
+## 6. Human empirical run — Pheme (2026-05-30)
+
+### Subject
+
+**Pheme** — the project's marketing-agent avatar, defined by a locked character bible.
+
+Bible source path:
+`/Users/justinperea/Documents/Workspace/Agents/system/pheme/build/character/pheme/`
+
+The **frozenTraitString** used as the identity text is quoted verbatim from her manifest
+(the string used in `expand_character` calls). No paraphrase.
+
+---
+
+### Generation mechanism
+
+Same harness as §5 — direct Gemini REST API (`gemini-3.1-flash-image-preview` /
+nano-banana-2), reading `GOOGLE_API_KEY` from `settings.json`.
+Script: `docs/character-smoke/generate_pheme.py`
+
+**Seed:** N/A — Gemini's `generateContent` API has no seed parameter for image generation.
+Identity comes from the reference images, not a seed. The manifest's "seed 84" applied to
+a different model (GPT Image 2) and is not carried into this test.
+
+**Generations produced:** 2 (pheme_scene1, pheme_scene2).
+
+**Generation config per request:**
+```json
+{ "responseModalities": ["IMAGE", "TEXT"], "imageConfig": { "aspectRatio": "1:1", "imageSize": "1K" } }
+```
+
+---
+
+### Reference images used
+
+All 3 refs passed together as inline base64 `inlineData` parts:
+
+| Artifact name | Source path |
+|---|---|
+| `pheme_ref_front.png` | `.../pheme/refs/front.png` |
+| `pheme_ref_3q.png` | `.../pheme/refs/three-quarter.png` |
+| `pheme_ref_waist.png` | `.../pheme/reference-packs/v1.7/gpt-image-2-candidates/waist_up_standing_front_blank_room__candidate-01.png` |
+
+---
+
+### Scene prompts used
+
+The prompt for each scene was constructed as
+`"{frozenTraitString}. {scene instruction}"` — exactly mirroring `expand_character`.
+
+**pheme_scene1:**
+> (frozenTraitString). sitting outdoors at a sunny café table reviewing a tablet,
+> candid three-quarter angle, warm golden-hour light, shallow depth of field.
+> Preserve ALL identity features exactly — face, dark blonde hair with the pink
+> front-left strand, freckles, the gold laurel choker, the gold laurel earring on
+> her right ear, and the fine-line bird-in-flight tattoo below her right collarbone.
+
+**pheme_scene2:**
+> (frozenTraitString). standing on a city rooftop at dusk, looking back over her
+> shoulder toward camera, cinematic wide shot. Preserve ALL identity features exactly
+> — face, dark blonde hair with the pink front-left strand, freckles, gold laurel
+> choker, gold laurel earring (right ear), and the bird-in-flight tattoo below her
+> right collarbone.
+
+---
+
+### Artifact file list
+
+| File | Description |
+|---|---|
+| `pheme_ref_front.png` | Reference image 1: front facing, studio neutral |
+| `pheme_ref_3q.png` | Reference image 2: three-quarter angle |
+| `pheme_ref_waist.png` | Reference image 3: waist-up, front, blank room |
+| `pheme_scene1.jpg` | Scene 1 output: café, golden-hour, three-quarter |
+| `pheme_scene2.jpg` | Scene 2 output: city rooftop, dusk, looking back |
+
+---
+
+### Objective per-image drift-detector description (no verdict)
+
+Drift-detectors: (1) fine-line bird-in-flight tattoo below RIGHT collarbone, (2) gold
+laurel-leaf earring on RIGHT ear only, (3) dainty gold laurel-wreath choker, (4) pink
+peekaboo strand front-left, (5) light freckles, (6) age ~24, (7) overall face likeness.
+
+---
+
+**pheme_scene1.jpg** (café, golden-hour, three-quarter)
+
+- **Tattoo (right collarbone):** Present. A bird-in-flight fine-line tattoo is clearly
+  visible below the right collarbone, above the wide neckline of the shirt. The wings
+  are spread in a flying silhouette; ink is soft black, delicate line weight. Placement
+  is right-of-center chest, consistent with "below right collarbone." ✓
+- **Earring (right ear only):** Present on the right ear. A gold leaf/laurel-sprig drop
+  earring is visible. The left ear is not visible in the three-quarter framing (camera
+  faces her left side), so single-ear constraint cannot be confirmed — but the right-ear
+  earring is there as specified. ✓ (laterality partially verifiable)
+- **Laurel-wreath choker:** Present. A gold chain choker with laurel-leaf links sits at
+  the base of the neck, clearly visible above the shirt collar. ✓
+- **Pink peekaboo strand:** Present. A single saturated pink strand is visible falling
+  loose at the front-left of the hairline across the cheek. Color is clearly saturated
+  rose/bubblegum-pink, not pastel. ✓
+- **Freckles:** Present. Light freckles are visible across the bridge of the nose and
+  upper cheeks. Density is light and natural. ✓
+- **Age ~24:** Apparent age reads early-mid 20s — youthful dewy skin, soft cheek line,
+  unlined face. Does not read late-20s or 30s. ✓
+- **Face likeness:** Strong match to references — same facial structure, same proportions,
+  same focused expression with a slight knowing quality. ✓
+
+---
+
+**pheme_scene2.jpg** (city rooftop, dusk, looking back over shoulder)
+
+- **Tattoo (right collarbone):** Present. A bird-in-flight fine-line tattoo is visible
+  below the right collarbone area, partially visible above the wide neckline. Wings are
+  spread; ink is soft black, fine-line. The "looking back over her shoulder" pose makes
+  the right-side collarbone partially face-forward in the frame, and the tattoo is
+  readable. ✓
+- **Earring (right ear only):** Present on the right ear. The same gold laurel-sprig
+  drop earring is visible on the right ear, which is closest to camera in the
+  three-quarter-facing pose. The left ear is partially obscured by hair and turned away;
+  no earring is visible there — consistent with right-ear-only. ✓
+- **Laurel-wreath choker:** Present. The same gold laurel-chain choker sits at the base
+  of the neck, clearly visible against the shirt neckline. ✓
+- **Pink peekaboo strand:** Present. A saturated rose-pink strand is visible loose at the
+  front of the hair, falling across the face in the three-quarter pose. Color matches the
+  bubblegum-rose description; not pastel or neon. ✓
+- **Freckles:** Present but lighter than scene 1 — the dusk cinematic lighting slightly
+  reduces freckle contrast vs. golden-hour. Light freckles are still discernible across
+  the nose bridge and upper cheeks under inspection. ✓ (subtle)
+- **Age ~24:** Apparent age reads early-mid 20s — same youthful quality as scene 1,
+  consistent with the reference. ✓
+- **Face likeness:** Strong match to references and to scene 1 — same bone structure,
+  same proportions, same eyes. The dusk lighting shifts color temperature but the identity
+  reads as the same person. ✓
