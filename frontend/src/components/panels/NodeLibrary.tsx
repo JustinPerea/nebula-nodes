@@ -24,6 +24,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   'utility': 'Utility',
   'universal': 'Universal',
   'cinematic': 'Cinematic',
+  'character': 'Character',
 };
 
 export function NodeLibrary() {

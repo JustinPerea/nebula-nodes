@@ -7,6 +7,7 @@ export type PortDataType =
   | 'Array'
   | 'SVG'
   | 'Mesh'
+  | 'Character'
   | 'Any';
 
 export type NodeCategory =
@@ -19,7 +20,8 @@ export type NodeCategory =
   | 'analyzer'
   | 'utility'
   | 'universal'
-  | 'cinematic';
+  | 'cinematic'
+  | 'character';
 
 export type NodeState = 'idle' | 'queued' | 'executing' | 'complete' | 'error';
 
@@ -141,6 +143,34 @@ export interface CinemaSceneSpec {
   /** '16:9' | '2.39:1' | '4:5' | '1:1' | '9:16'. */
   aspectRatio: string;
   shots: CinemaShot[];
+}
+
+/** A persistent, reusable identity asset that flows through the graph on a
+ *  Character-typed port. The frozenTraitString is re-emitted VERBATIM into
+ *  prompts — paraphrase breaks identity (Seedance finding). */
+export interface Character {
+  id: string;
+  name: string;
+  version: number;
+  subjectType: 'human' | 'non-human' | 'stylized';
+  referenceViews: string[];        // the multi-view bundle (required, >=3); /api/outputs or /api/uploads URLs
+  frozenTraitString: string;       // re-emitted VERBATIM into prompts — paraphrase breaks identity (Seedance finding)
+  seed: number;                    // fixed seed for repeatability (Pheme "seed 84" pattern)
+  consistencyStrength: number;     // 0..1 — the --ow / IP-adherence analog
+  thumbnail: string;               // auto-picked from referenceViews
+  projectId?: string;              // project-scoped; absent = global
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Lightweight bundle passed on a Character port between nodes. */
+export interface CharacterBundle {
+  characterId: string;
+  name: string;
+  referenceViews: string[];
+  frozenTraitString: string;
+  seed: number;
+  consistencyStrength: number;
 }
 
 export interface PortValue {

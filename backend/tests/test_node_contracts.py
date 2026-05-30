@@ -24,6 +24,7 @@ VALID_CATEGORIES = {
     "utility",
     "universal",
     "cinematic",
+    "character",
 }
 VALID_PROVIDERS = {
     "openai",
@@ -49,7 +50,7 @@ VALID_PROVIDERS = {
     "utility",
 }
 VALID_EXECUTION_PATTERNS = {"sync", "async-poll", "stream"}
-VALID_PORT_TYPES = {"Text", "Image", "Video", "Audio", "Mask", "Array", "SVG", "Mesh", "Any"}
+VALID_PORT_TYPES = {"Text", "Image", "Video", "Audio", "Mask", "Array", "SVG", "Mesh", "Character", "Any"}
 VALID_PARAM_TYPES = {"string", "integer", "float", "boolean", "enum", "textarea", "file", "palette"}
 PARAM_GROUPS = ("params", "sharedParams", "falParams", "directParams")
 
