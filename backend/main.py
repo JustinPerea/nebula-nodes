@@ -1931,5 +1931,117 @@ async def quick_execute(body: dict[str, Any]) -> dict:
     return {"outputs": main_outputs, "duration": round(duration, 2)}
 
 
+# ---------- Characters: project-scoped & global character store ----------
+
+from pydantic import BaseModel
+
+
+class CharacterCreate(BaseModel):
+    name: str
+    subjectType: str
+    referenceViews: list[str]
+    frozenTraitString: str
+    seed: int
+    consistencyStrength: float
+    projectId: str | None = None
+
+
+class CharacterUpdate(BaseModel):
+    name: str | None = None
+    subjectType: str | None = None
+    referenceViews: list[str] | None = None
+    frozenTraitString: str | None = None
+    seed: int | None = None
+    consistencyStrength: float | None = None
+
+
+def _char_store():
+    from services.character_store import CharacterStore
+    return CharacterStore()
+
+
+def _validate_project_id_param(project_id: str | None) -> None:
+    """Raise HTTP 400 if *project_id* is present but fails the safe-charset check.
+
+    Reuses the same regex enforced by the store layer so the route gives a clean
+    400 (not a 500 or 422) before any filesystem path is constructed.
+    """
+    if project_id is None:
+        return
+    import re as _re
+    _safe = _re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+    if not _safe.fullmatch(project_id):
+        raise HTTPException(status_code=400, detail="invalid projectId")
+
+
+@app.get("/api/characters")
+async def list_characters(scope: str = "global", projectId: str | None = None) -> list[dict]:
+    """List Characters by scope.
+
+    scope=global           → global characters
+    scope=project&projectId=X → project-scoped characters for project X
+    """
+    _validate_project_id_param(projectId)
+    store = _char_store()
+    try:
+        return store.list(scope=scope, projectId=projectId)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.post("/api/characters")
+async def create_character(body: CharacterCreate) -> dict:
+    """Create a new Character."""
+    _validate_project_id_param(body.projectId)
+    store = _char_store()
+    try:
+        return store.create(
+            name=body.name,
+            subjectType=body.subjectType,
+            referenceViews=body.referenceViews,
+            frozenTraitString=body.frozenTraitString,
+            seed=body.seed,
+            consistencyStrength=body.consistencyStrength,
+            projectId=body.projectId,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+
+@app.get("/api/characters/{char_id}")
+async def get_character(char_id: str) -> dict:
+    """Fetch a Character by id."""
+    store = _char_store()
+    try:
+        char = store.get(char_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail=f"Character '{char_id}' not found")
+    if char is None:
+        raise HTTPException(status_code=404, detail=f"Character '{char_id}' not found")
+    return char
+
+
+@app.put("/api/characters/{char_id}")
+async def update_character(char_id: str, body: CharacterUpdate) -> dict:
+    """Update mutable fields on a Character; bumps version."""
+    store = _char_store()
+    updates = {k: v for k, v in body.model_dump().items() if v is not None}
+    try:
+        return store.update(char_id, **updates)
+    except (KeyError, ValueError):
+        raise HTTPException(status_code=404, detail=f"Character '{char_id}' not found")
+
+
+@app.delete("/api/characters/{char_id}")
+async def delete_character(char_id: str) -> dict:
+    """Delete a Character by id."""
+    store = _char_store()
+    try:
+        store.delete(char_id)
+    except (KeyError, ValueError):
+        raise HTTPException(status_code=404, detail=f"Character '{char_id}' not found")
+    return {"status": "deleted", "id": char_id}
+
+
 # Static mount MUST come after all dynamic routes — it is a catch-all for /api/outputs
 app.mount("/api/outputs", StaticFiles(directory=str(OUTPUT_ROOT)), name="outputs")
