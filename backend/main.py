@@ -1882,10 +1882,21 @@ async def quick_execute(body: dict[str, Any]) -> dict:
             input_type = "text-input"
             port_type = "Text"
 
+        # File-backed inputs (image/video/audio) are resolved by the engine via
+        # ``params["filePath"]`` (see execution/engine.py), NOT ``params["value"]``
+        # — the latter is only read by text-input. Mirror the /api/uploads param
+        # shape (absolute filePath) so a local file reference is actually readable.
+        if input_type == "text-input":
+            input_params: dict[str, Any] = {"value": value}
+        else:
+            input_params = _normalize_image_input_params(
+                {"filePath": str(Path(value).expanduser().resolve())}
+            )
+
         temp_nodes.append(GraphNode(
             id=input_node_id,
             definition_id=input_type,
-            params={"value": value},
+            params=input_params,
             outputs={},
         ))
         temp_edges.append(GraphEdge(

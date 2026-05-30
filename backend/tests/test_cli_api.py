@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -793,3 +795,82 @@ class TestCinemaScenePersistsScene:
             assert node["params"]["scene"] == self._SCENE
         finally:
             client.delete(f"/api/graph/node/{short_id}")
+
+
+class TestQuickImageInputParams:
+    """Regression: /api/quick previously built image-input nodes with
+    ``params={"value": <path>}``, but the engine resolves image/video/audio
+    inputs via ``params["filePath"]`` (execution/engine.py). The mismatch made a
+    local file reference unreadable (observed: ``[Errno 21] Is a directory: '.'``).
+    """
+
+    def test_quick_image_reference_writes_filePath_not_value(
+        self, client, tmp_path, monkeypatch
+    ):
+        import main
+
+        img = tmp_path / "ref.png"
+        img.write_bytes(b"\x89PNG\r\n\x1a\n")  # minimal PNG-ish bytes
+
+        captured = {}
+
+        async def _fake_execute_graph(*, nodes, edges, **kwargs):
+            captured["nodes"] = nodes
+            captured["edges"] = edges
+            # No real model call — just record what the route assembled.
+
+        monkeypatch.setattr(main, "execute_graph", _fake_execute_graph)
+
+        resp = client.post(
+            "/api/quick",
+            json={
+                "definitionId": "gpt-image-1-edit",
+                "inputs": {"image": str(img)},
+                "params": {"prompt": "make it blue"},
+            },
+        )
+        assert resp.status_code == 200, resp.text
+
+        input_nodes = [
+            n for n in captured["nodes"] if n.definition_id == "image-input"
+        ]
+        assert len(input_nodes) == 1, "quick image ref should build one image-input node"
+        params = input_nodes[0].params
+
+        # The handler reads `filePath` (absolute) — `value` alone is unreadable.
+        assert "filePath" in params, f"missing filePath; got {params!r}"
+        file_path = params["filePath"]
+        assert isinstance(file_path, str) and file_path
+        assert Path(file_path).is_absolute(), file_path
+        # Must resolve to a real file, not a bare dir like '.' (the old bug).
+        assert Path(file_path).is_file(), file_path
+        assert params.get("value") != "."
+
+        # And the engine's own resolution would read a non-empty path.
+        assert input_nodes[0].params.get("filePath", "") != ""
+
+    def test_quick_text_input_still_uses_value(self, client, monkeypatch):
+        import main
+
+        captured = {}
+
+        async def _fake_execute_graph(*, nodes, edges, **kwargs):
+            captured["nodes"] = nodes
+
+        monkeypatch.setattr(main, "execute_graph", _fake_execute_graph)
+
+        resp = client.post(
+            "/api/quick",
+            json={
+                "definitionId": "gpt-image-1-generate",
+                "inputs": {"prompt": "a red balloon"},
+                "params": {},
+            },
+        )
+        assert resp.status_code == 200, resp.text
+
+        text_nodes = [
+            n for n in captured["nodes"] if n.definition_id == "text-input"
+        ]
+        assert len(text_nodes) == 1
+        assert text_nodes[0].params == {"value": "a red balloon"}
