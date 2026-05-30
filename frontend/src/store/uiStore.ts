@@ -66,6 +66,11 @@ interface UIState {
   // Mirrors remotionEditorTargetNodeId. App.tsx mounts CinemaStudioView (Wave 5)
   // when this is set.
   cinemaEditorNodeId: string | null;
+  // Nebula Character editor — which Character (by id) is open for editing.
+  // Mirrors cinemaEditorNodeId. Task 5 mounts the Character editor view when
+  // this is set; this task only provides the minimal store surface the
+  // CharacterNode "Open Character" button needs to typecheck.
+  characterEditorId: string | null;
   selectedTrackItemId: string | null;
   selectedTrackItemIds: string[];
   isKeyframeRecording: boolean;
@@ -114,6 +119,8 @@ interface UIState {
   exitRemotionEditor: () => void;
   enterCinemaEditor: (cinemaSceneNodeId: string) => void;
   exitCinemaEditor: () => void;
+  enterCharacterEditor: (characterId: string) => void;
+  exitCharacterEditor: () => void;
   setSelectedTrackItem: (id: string | null) => void;
   setSelectedTrackItems: (ids: string[], primaryId?: string | null) => void;
   toggleSelectedTrackItem: (id: string) => void;
@@ -155,6 +162,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   editorTargetNodeId: null,
   remotionEditorTargetNodeId: null,
   cinemaEditorNodeId: null,
+  characterEditorId: null,
   selectedTrackItemId: null,
   selectedTrackItemIds: [],
   isKeyframeRecording: false,
@@ -238,6 +246,23 @@ export const useUIStore = create<UIState>((set, get) => ({
     set({
       viewMode: 'canvas',
       cinemaEditorNodeId: null,
+    });
+  },
+
+  // Nebula Character editor — mirrors enterCinemaEditor. Only tracks which
+  // Character is open; Task 5 wires the editor view that reads this. We do not
+  // flip viewMode here yet (no Character editor view exists until Task 5), so
+  // this stays a minimal, non-breaking store surface for the CharacterNode
+  // "Open Character" button.
+  enterCharacterEditor: (characterId) => {
+    set({
+      characterEditorId: characterId,
+    });
+  },
+
+  exitCharacterEditor: () => {
+    set({
+      characterEditorId: null,
     });
   },
 

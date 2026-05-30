@@ -1683,6 +1683,8 @@ async def export_graph_for_frontend() -> dict:
             if definition_id == "remotion-node"
             else "cinemaSceneNode"
             if definition_id == "cinema-scene"
+            else "characterNode"
+            if definition_id == "character"
             else "dynamic-node"
             if is_dynamic_node
             else "model-node"

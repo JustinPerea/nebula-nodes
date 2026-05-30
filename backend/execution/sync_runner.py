@@ -599,6 +599,10 @@ def get_handler_registry(
             from handlers.cinema_scene import handle_cinema_scene
             return await handle_cinema_scene(node, inputs, api_keys, emit=emit)
 
+        async def _character_handler(node, inputs, api_keys):
+            from handlers.character_node import handle_character_node
+            return await handle_character_node(node, inputs, api_keys, emit=emit)
+
         async def _video_edit_handler(
             node: GraphNode,
             inputs: dict[str, PortValueDict],
@@ -621,6 +625,7 @@ def get_handler_registry(
         registry["cinema-color"] = _cinema_color_handler
         registry["cinema-look"] = _cinema_look_handler
         registry["cinema-scene"] = _cinema_scene_handler
+        registry["character"] = _character_handler
         registry["video-edit"] = _video_edit_handler
         registry["remotion-node"] = _remotion_node_handler
 

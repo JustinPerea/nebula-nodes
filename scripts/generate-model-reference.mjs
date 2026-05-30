@@ -30,6 +30,7 @@ const CATEGORY_ORDER = [
   'analyzer',
   'universal',
   'cinematic',
+  'character',
   'utility',
 ];
 const CATEGORY_LABELS = {
@@ -42,6 +43,7 @@ const CATEGORY_LABELS = {
   'analyzer': 'Analyzer',
   'universal': 'Universal',
   'cinematic': 'Cinematic',
+  'character': 'Character',
   'utility': 'Utility',
 };
 

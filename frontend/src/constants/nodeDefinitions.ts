@@ -1470,6 +1470,36 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     params: [],
   },
 
+  'character': {
+    id: 'character',
+    displayName: 'Character',
+    category: 'character',
+    apiProvider: 'utility',
+    apiEndpoint: '',
+    envKeyName: [],
+    executionPattern: 'sync',
+    // No inputs — the identity asset is loaded from the project Character store
+    // by id (params.characterId), not wired in on a port.
+    inputPorts: [],
+    outputPorts: [
+      { id: 'character', label: 'Character', dataType: 'Character', required: false },
+    ],
+    params: [
+      {
+        key: 'override_prompt',
+        label: 'Override Prompt',
+        type: 'textarea',
+        required: false,
+        default: '',
+        placeholder: 'Optional per-shot direction: pose, expression, wardrobe, framing',
+      },
+      // Optional extra Image refs layered on top of the stored referenceViews.
+      { key: 'override_refs', label: 'Override Refs', type: 'file', required: false, default: '' },
+      // Empty string = inherit the Character's stored consistencyStrength.
+      { key: 'strength_override', label: 'Strength Override', type: 'float', required: false, default: '', min: 0, max: 1, step: 0.05 },
+    ],
+  },
+
   'preview': {
     id: 'preview',
     displayName: 'Preview',
@@ -6608,6 +6638,7 @@ export function getNodeDefinition(definitionId: string): ModelNodeDefinition | u
 const CATEGORY_ORDER: readonly string[] = [
   'utility',
   'cinematic',
+  'character',
   'text-gen',
   'image-gen',
   'video-gen',

@@ -2632,6 +2632,51 @@
     "outputPorts": [],
     "params": []
   },
+  "character": {
+    "id": "character",
+    "displayName": "Character",
+    "category": "character",
+    "apiProvider": "utility",
+    "apiEndpoint": "",
+    "envKeyName": [],
+    "executionPattern": "sync",
+    "inputPorts": [],
+    "outputPorts": [
+      {
+        "id": "character",
+        "label": "Character",
+        "dataType": "Character",
+        "required": false
+      }
+    ],
+    "params": [
+      {
+        "key": "override_prompt",
+        "label": "Override Prompt",
+        "type": "textarea",
+        "required": false,
+        "default": "",
+        "placeholder": "Optional per-shot direction: pose, expression, wardrobe, framing"
+      },
+      {
+        "key": "override_refs",
+        "label": "Override Refs",
+        "type": "file",
+        "required": false,
+        "default": ""
+      },
+      {
+        "key": "strength_override",
+        "label": "Strength Override",
+        "type": "float",
+        "required": false,
+        "default": "",
+        "min": 0,
+        "max": 1,
+        "step": 0.05
+      }
+    ]
+  },
   "preview": {
     "id": "preview",
     "displayName": "Preview",

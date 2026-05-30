@@ -1,0 +1,79 @@
+/* CharacterNode canvas card. Imported eagerly by CharacterNode.tsx so the node
+ * is styled the moment it renders. Mirrors the CinemaSceneNode card in
+ * cinema-node.css. Scoped to the Slava skin (Default + Hermes are deprecated). */
+
+body.app-slava-restraint .character-node {
+  width: 200px;
+  padding: 10px 14px 12px;
+  background: var(--sr-glass);
+  border: 1px solid var(--sr-edge);
+  border-radius: var(--sr-radius-node, 6px);
+  color: var(--sr-ink);
+  font-size: 13px;
+  cursor: default;
+  position: relative;
+}
+
+body.app-slava-restraint .character-node--selected {
+  border-color: var(--sr-accent);
+}
+
+body.app-slava-restraint .character-node__title {
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  margin-bottom: 8px;
+}
+
+body.app-slava-restraint .character-node__thumb {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  margin-bottom: 8px;
+  border: 1px solid var(--sr-edge);
+  border-radius: 3px;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.18);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+body.app-slava-restraint .character-node__thumb-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+body.app-slava-restraint .character-node__thumb-placeholder {
+  color: var(--sr-ink-meta);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+body.app-slava-restraint .character-node__summary {
+  color: var(--sr-ink-meta);
+  font-size: 11px;
+  margin-bottom: 8px;
+  word-break: break-word;
+}
+
+body.app-slava-restraint .character-node__open {
+  display: block;
+  width: 100%;
+  padding: 5px 0;
+  background: none;
+  border: 1px solid var(--sr-edge);
+  border-radius: 2px;
+  color: var(--sr-ink);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  text-align: center;
+}
+
+body.app-slava-restraint .character-node__open:hover {
+  border-color: var(--sr-accent);
+  color: var(--sr-accent);
+}

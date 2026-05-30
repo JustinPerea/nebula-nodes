@@ -21,6 +21,7 @@ import { RerouteNode } from './nodes/RerouteNode';
 import { EditNode } from './nodes/EditNode';
 import { RemotionNode } from './nodes/RemotionNode';
 import { CinemaSceneNode } from './nodes/CinemaSceneNode';
+import { CharacterNode } from './nodes/CharacterNode';
 import { TypedEdge } from './edges/TypedEdge';
 import { ContextMenu } from './ContextMenu';
 import { ConnectionPopup } from './ConnectionPopup';
@@ -35,6 +36,7 @@ const nodeTypes: NodeTypes = {
   editNode: EditNode,
   remotionNode: RemotionNode,
   cinemaSceneNode: CinemaSceneNode,
+  characterNode: CharacterNode,
 };
 
 // fitView padding that reserves space for every floating panel that overlaps
