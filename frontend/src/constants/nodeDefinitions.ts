@@ -1463,6 +1463,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     executionPattern: 'async-poll',
     inputPorts: [
       { id: 'character_refs', label: 'Character Refs', dataType: 'Image', required: false, multiple: true },
+      { id: 'character', label: 'Character', dataType: 'Character', required: false },
     ],
     // Output ports are dynamic — one Image port per shot, written at runtime from
     // the editor-managed scene spec. Starts empty (mirrors remotion-node).

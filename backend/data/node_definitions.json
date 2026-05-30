@@ -2627,6 +2627,12 @@
         "dataType": "Image",
         "required": false,
         "multiple": true
+      },
+      {
+        "id": "character",
+        "label": "Character",
+        "dataType": "Character",
+        "required": false
       }
     ],
     "outputPorts": [],

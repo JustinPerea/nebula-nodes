@@ -2083,7 +2083,7 @@ Generated: 2026-05-30 | Nodes: 108 | Source: [`backend/data/node_definitions.jso
 | **Provider** | Utility |
 | **API Key** | — |
 | **Execution** | async-poll |
-| **Inputs** | Character Refs (Image ×n) |
+| **Inputs** | Character Refs (Image ×n), Character (Character) |
 | **Outputs** | — |
 | **Audited** | — |
 

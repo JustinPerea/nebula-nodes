@@ -35,6 +35,7 @@ import httpx
 from PIL import Image
 
 from cinema.color import transfer_to_palette
+from cinema.identity import expand_character, max_refs_for
 from cinema.look import apply_look
 from models.events import ExecutionEvent, ProgressEvent
 from models.graph import GraphNode, PortValueDict
@@ -215,13 +216,40 @@ async def handle_cinema_scene(
     character_refs: list[str] = list(character.get("refImageUrls") or [])
 
     # character_refs may also arrive on the connected input port (multiple).
-    char_port = inputs.get("character_refs")
-    if char_port and char_port.value:
-        raw = char_port.value
+    # NOTE: this is the per-scene character_refs *config* (a list of Image
+    # URLs) — DISTINCT from the typed `character` Character port below, which
+    # carries a full CharacterBundle from the character node.
+    char_refs_port = inputs.get("character_refs")
+    if char_refs_port and char_refs_port.value:
+        raw = char_refs_port.value
         if isinstance(raw, list):
             character_refs = [str(v) for v in raw if v] + character_refs
         else:
             character_refs = [str(raw)] + character_refs
+
+    # The typed Character input port carries a CharacterBundle from the
+    # character node ({type: 'Character', value: <bundle>}). When present, each
+    # shot's base generation is expanded with the bundle's verbatim trait
+    # string, reference views, and seed (see cinema.identity.expand_character).
+    # When absent, behaviour is byte-identical to the no-Character path.
+    char_port = inputs.get("character")
+    bundle = char_port.value if char_port and char_port.value else None
+    model_max_refs = max_refs_for(base_model)
+
+    # Fail-fast capability guardrail (anti-FLORA): base_model + bundle are
+    # scene-level constants, so if the bundle's stored views + the scene-level
+    # character_refs already exceed the model's reference cap, every shot would
+    # fail identically. Raise ONCE for the whole scene with the clear message
+    # rather than emitting N duplicate per-shot errors. (Per-shot refs that
+    # additionally push a single shot over the cap are still caught inside the
+    # loop by expand_character.)
+    if bundle:
+        expand_character(
+            bundle,
+            base_prompt="",
+            override_refs=character_refs,
+            model_max_refs=model_max_refs,
+        )
 
     scene_palette = scene.get("palette") or None
     scene_look = scene.get("look") or None
@@ -259,16 +287,33 @@ async def handle_cinema_scene(
                            if base_prompt else shot_prompt)
 
             shot_refs: list[str] = list(shot.get("refImageUrls") or [])
-            image_urls = character_refs + shot_refs
 
             overrides = shot.get("overrides") or {}
             palette = _merge_palette(scene_palette, overrides.get("palette"))
             look = _merge_look(scene_look, overrides.get("look"))
 
+            # Fold in the Character bundle when present. With no bundle this is
+            # a no-op: prompt == full_prompt, image_urls == character_refs +
+            # shot_refs, seed == None (byte-identical to the pre-Character path).
+            expanded = expand_character(
+                bundle,
+                base_prompt=full_prompt,
+                override_refs=(character_refs + shot_refs),
+                model_max_refs=model_max_refs,
+            )
+            full_prompt = expanded["prompt"]
+            image_urls = expanded["image_urls"]
+
+            # Inject the bundle's seed for deterministic identity — ONLY when a
+            # bundle is present, so the existing seedless behaviour is untouched.
+            shot_extra_params = dict(base_extra_params)
+            if expanded["seed"] is not None:
+                shot_extra_params["seed"] = expanded["seed"]
+
             # 1. Base / identity — reuse the registered base handler.
             base_node, base_inputs = _build_base_node(
                 base_model, full_prompt, image_urls, aspect_ratio,
-                base_extra_params, node.id,
+                shot_extra_params, node.id,
             )
             base_outputs = await base_handler(base_node, base_inputs, api_keys)
             base_image_value = _extract_image_url(base_outputs)
@@ -290,7 +335,7 @@ async def handle_cinema_scene(
             url = _save_output_image(img)
             shot_hash = _shot_hash(
                 base_model, full_prompt, image_urls, aspect_ratio,
-                palette, look, base_extra_params,
+                palette, look, shot_extra_params,
             )
             shot["output"] = {"imageUrl": url, "status": "done", "hash": shot_hash}
             outputs[port_id] = {"type": "Image", "value": url}

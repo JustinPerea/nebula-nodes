@@ -241,3 +241,149 @@ async def test_character_refs_passed_to_base(monkeypatch) -> None:
     # Prompt combines scene prompt + shot prompt.
     assert captured["prompt"].value == "cinematic close-up"
     assert captured["aspectRatio"] == "4:5"
+
+
+# ---------- typed Character bundle input expands verbatim ----------
+
+
+_BUNDLE_TRAIT = (
+    "freckled olive skin, deep-set hazel eyes, asymmetric undercut (left side), "
+    "a faint scar above the RIGHT brow; 1.78m; wears a worn leather aviator jacket"
+)
+
+
+def _bundle(views: list[str], seed: int = 84) -> dict[str, Any]:
+    return {
+        "characterId": "char_1",
+        "name": "Iris Vane",
+        "referenceViews": list(views),
+        "frozenTraitString": _BUNDLE_TRAIT,
+        "seed": seed,
+        "consistencyStrength": 0.65,
+    }
+
+
+@pytest.mark.asyncio
+async def test_character_bundle_expands_verbatim(monkeypatch) -> None:
+    """A typed `character` input expands each shot's base call: trait string
+    prepended verbatim, referenceViews first then per-use refs, seed injected."""
+    v1 = _write_base_image(rgb=(10, 200, 10))
+    v2 = _write_base_image(rgb=(200, 10, 10))
+    v3 = _write_base_image(rgb=(10, 10, 200))
+    shot_ref = _write_base_image(rgb=(50, 50, 50))
+
+    captured: dict[str, Any] = {}
+
+    async def capture(node, inputs, api_keys):
+        captured["images"] = inputs.get("images")
+        captured["prompt"] = inputs.get("prompt")
+        captured["seed"] = node.params.get("seed")
+        return {"image": {"type": "Image", "value": _write_base_image()}}
+
+    _patch_base(monkeypatch, capture)
+
+    bundle = _bundle([v1, v2, v3], seed=84)
+    scene = {
+        "version": 1,
+        "base": {"model": "seedream-4-5"},  # maxRefs = 10, comfortably above 4
+        "prompt": "a forest at dawn",
+        "aspectRatio": "16:9",
+        "shots": [{"id": "s1", "prompt": "wide shot", "refImageUrls": [shot_ref]}],
+    }
+    await handle_cinema_scene(
+        _scene_node(scene),
+        inputs={"character": PortValueDict(type="Character", value=bundle)},
+        api_keys={"FAL_KEY": "x"},
+        emit=None,
+    )
+
+    # Trait string prepended VERBATIM, then the base (scene + shot) prompt.
+    assert captured["prompt"].value == f"{_BUNDLE_TRAIT}. a forest at dawn wide shot"
+    # referenceViews FIRST (stored order), then the per-use shot ref.
+    assert captured["images"].value == [v1, v2, v3, shot_ref]
+    # Seed injected into the base node params.
+    assert captured["seed"] == 84
+
+
+@pytest.mark.asyncio
+async def test_character_bundle_exceeding_max_refs_raises(monkeypatch) -> None:
+    """A bundle whose view count exceeds the base model's reference cap fails
+    fast for the whole scene with the clear anti-FLORA capability error."""
+
+    async def ok(node, inputs, api_keys):
+        return {"image": {"type": "Image", "value": _write_base_image()}}
+
+    _patch_base(monkeypatch, ok)
+
+    # 12 views > seedream-4-5's cap of 10 -> raise up-front (scene-level).
+    views = [_write_base_image() for _ in range(12)]
+    bundle = _bundle(views, seed=7)
+    scene = {
+        "version": 1,
+        "base": {"model": "seedream-4-5"},
+        "prompt": "a forest at dawn",
+        "aspectRatio": "16:9",
+        "shots": [{"id": "s1", "prompt": "wide shot"}],
+    }
+    with pytest.raises(ValueError) as exc:
+        await handle_cinema_scene(
+            _scene_node(scene),
+            inputs={"character": PortValueDict(type="Character", value=bundle)},
+            api_keys={"FAL_KEY": "x"},
+            emit=None,
+        )
+    msg = str(exc.value)
+    assert "10" in msg  # the cap
+    assert "12" in msg  # the required ref count
+    assert "reference" in msg.lower()
+
+
+@pytest.mark.asyncio
+async def test_character_bundle_on_nano_banana_default_does_not_raise(monkeypatch) -> None:
+    """The spec §5 headline default base — `nano-banana` (its model enum
+    defaults to Nano Banana 2, 14 refs) — must ACCEPT a real multi-view Character
+    bundle and expand it verbatim, NOT reject it with the capability error.
+
+    Regression guard for the dead-key bug: `MODEL_MAX_REFS` used to key the 14
+    cap on the unreachable `nano-banana-2` def id, so a `nano-banana` base fell
+    through to DEFAULT_MAX_REFS (1) and rejected the spec's own default bundle.
+    """
+    v1 = _write_base_image(rgb=(10, 200, 10))
+    v2 = _write_base_image(rgb=(200, 10, 10))
+    v3 = _write_base_image(rgb=(10, 10, 200))
+    shot_ref = _write_base_image(rgb=(50, 50, 50))
+
+    captured: dict[str, Any] = {}
+
+    async def capture(node, inputs, api_keys):
+        captured["images"] = inputs.get("images")
+        captured["prompt"] = inputs.get("prompt")
+        captured["seed"] = node.params.get("seed")
+        return {"image": {"type": "Image", "value": _write_base_image()}}
+
+    _patch_base(monkeypatch, capture)
+
+    bundle = _bundle([v1, v2, v3], seed=84)
+    scene = {
+        "version": 1,
+        "base": {"model": "nano-banana"},  # defaults to NB2 -> maxRefs = 14
+        "prompt": "a forest at dawn",
+        "aspectRatio": "16:9",
+        "shots": [{"id": "s1", "prompt": "wide shot", "refImageUrls": [shot_ref]}],
+    }
+    outputs = await handle_cinema_scene(
+        _scene_node(scene),
+        inputs={"character": PortValueDict(type="Character", value=bundle)},
+        api_keys={"FAL_KEY": "x"},
+        emit=None,
+    )
+
+    # Shot completed (no capability error) — output port carries an image URL.
+    assert outputs["shot_s1"]["value"] is not None
+    assert scene["shots"][0]["output"]["status"] == "done"
+    # Trait string prepended VERBATIM, then the base (scene + shot) prompt.
+    assert captured["prompt"].value == f"{_BUNDLE_TRAIT}. a forest at dawn wide shot"
+    # referenceViews FIRST (stored order), then the per-use shot ref.
+    assert captured["images"].value == [v1, v2, v3, shot_ref]
+    # Seed injected into the base node params.
+    assert captured["seed"] == 84
