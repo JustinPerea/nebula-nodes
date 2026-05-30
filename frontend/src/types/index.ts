@@ -130,8 +130,11 @@ export interface CinemaSceneSpec {
   look?: {
     /** 'kodak-portra' | 'fuji-400h' | 'cinestill-800t' | 'bw-tri-x' | 'teal-orange' | 'custom'. */
     preset?: string;
-    grain: number; halation: number; vignette: number;
-    contrast: number; saturation: number; temperature: number;
+    /** Sliders are 'custom'-mode only. A named preset omits them so they can't
+     *  clobber the preset's grade in the backend (which lets explicit floats
+     *  override a preset). Optional for that reason. */
+    grain?: number; halation?: number; vignette?: number;
+    contrast?: number; saturation?: number; temperature?: number;
     /** Optional .cube LUT id. */
     lutId?: string;
   };

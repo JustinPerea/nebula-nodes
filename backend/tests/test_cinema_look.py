@@ -278,3 +278,70 @@ def test_one_d_lut_is_rejected(tmp_path) -> None:
     cube = tmp_path / "oned.cube"
     cube.write_text("LUT_1D_SIZE 2\n0 0 0\n1 1 1\n")
     assert load_cube_lut(str(cube)) is None
+
+
+# ---------- handler _build_look: named presets must not be clobbered ----------
+#
+# Regression: the cinema-look node always carries its slider params (the catalog
+# defines defaults: grain 0.2 / halation 0.2 / vignette 0.25 / contrast 0 /
+# saturation 0 / temperature 0), and the frontend sends them even when they are
+# hidden (visibleWhen preset==='custom'). _resolve_params lets explicit floats
+# override the preset, so forwarding those neutral defaults flattened a selected
+# named preset down to "grain+vignette only, no colour grade" — the bug that made
+# a kodak-portra look like an untouched (slightly darker) copy.
+
+
+def test_build_look_named_preset_drops_neutral_sliders() -> None:
+    from handlers.cinema_look import _build_look
+
+    params = {
+        "preset": "kodak-portra",
+        "grain": 0.2, "halation": 0.2, "vignette": 0.25,
+        "contrast": 0, "saturation": 0, "temperature": 0, "lut": "",
+    }
+    look = _build_look(params)
+    assert look.get("preset") == "kodak-portra"
+    for k in ("grain", "halation", "vignette", "contrast", "saturation", "temperature"):
+        assert k not in look, f"named preset must not forward slider {k!r}"
+
+
+def test_build_look_named_preset_survives_to_full_grade() -> None:
+    """The node's default sliders must NOT change a named preset's output."""
+    img = _textured_image()
+    params = {
+        "preset": "kodak-portra",
+        "grain": 0.2, "halation": 0.2, "vignette": 0.25,
+        "contrast": 0, "saturation": 0, "temperature": 0,
+    }
+    from handlers.cinema_look import _build_look
+
+    via_node = apply_look(img, _build_look(params))
+    preset_only = apply_look(img, {"preset": "kodak-portra"})
+    assert _raw_bytes(via_node) == _raw_bytes(preset_only)
+
+
+def test_build_look_custom_forwards_sliders() -> None:
+    from handlers.cinema_look import _build_look
+
+    look = _build_look({"preset": "custom", "grain": 0.3, "contrast": 0.2})
+    assert look.get("preset") == "custom"
+    assert look["grain"] == 0.3
+    assert look["contrast"] == 0.2
+
+
+def test_build_look_no_preset_forwards_sliders() -> None:
+    from handlers.cinema_look import _build_look
+
+    look = _build_look({"grain": 0.4})
+    assert look["grain"] == 0.4
+
+
+def test_build_look_lut_honoured_with_named_preset(tmp_path) -> None:
+    """A LUT applies on top of any preset, so it is always forwarded."""
+    from handlers.cinema_look import _build_look
+
+    cube = tmp_path / "x.cube"
+    cube.write_text("LUT_3D_SIZE 2\n0 0 0\n1 1 1\n0 0 0\n1 1 1\n0 0 0\n1 1 1\n0 0 0\n1 1 1\n")
+    look = _build_look({"preset": "kodak-portra", "lut": str(cube)})
+    assert look.get("preset") == "kodak-portra"
+    assert look.get("lutId") == str(cube)

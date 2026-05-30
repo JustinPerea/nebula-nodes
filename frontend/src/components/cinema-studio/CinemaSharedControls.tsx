@@ -64,6 +64,15 @@ export function CinemaSharedControls({ scene, onChange }: CinemaSharedControlsPr
     onChange({ ...scene, palette: { ...palette, ...next } });
   const setLook = (next: Partial<NonNullable<CinemaSceneSpec['look']>>) =>
     onChange({ ...scene, look: { ...look, ...next } });
+  // Selecting a named preset drops the neutral default sliders: the backend lets
+  // explicit float values override a preset, so carrying the editor's defaults
+  // (grain 0.2 / contrast 0 / temperature 0 …) would flatten the preset's grade
+  // back to a plain darken. 'custom' restores the editable sliders.
+  const selectPreset = (id: string) =>
+    onChange({
+      ...scene,
+      look: id === 'custom' ? { ...defaultLook(), ...look, preset: 'custom' } : { preset: id },
+    });
 
   const setSwatches = (swatches: string[]) => setPalette({ swatches });
 
@@ -245,7 +254,7 @@ export function CinemaSharedControls({ scene, onChange }: CinemaSharedControlsPr
               key={p.id}
               type="button"
               className={`cinema-shared-controls__chip ${look.preset === p.id ? 'cinema-shared-controls__chip--active' : ''}`}
-              onClick={() => setLook({ preset: p.id })}
+              onClick={() => selectPreset(p.id)}
             >
               {p.label}
             </button>

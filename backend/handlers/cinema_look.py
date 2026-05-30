@@ -17,7 +17,7 @@ from uuid import uuid4
 
 from PIL import Image
 
-from cinema.look import apply_look
+from cinema.look import PRESETS, apply_look
 from models.events import ExecutionEvent
 from models.graph import GraphNode, PortValueDict
 from services.output import OUTPUT_ROOT, get_run_dir
@@ -88,11 +88,19 @@ def _build_look(params: dict[str, Any]) -> dict[str, Any]:
     pillar skips it with a warning."""
     look: dict[str, Any] = {}
     preset = params.get("preset")
+    is_named_preset = isinstance(preset, str) and preset in PRESETS
     if isinstance(preset, str) and preset:
         look["preset"] = preset
-    for key in _LOOK_FLOAT_KEYS:
-        if key in params and params[key] is not None and params[key] != "":
-            look[key] = params[key]
+    # The float sliders are 'custom'-mode controls (hidden via visibleWhen for
+    # named presets), but the node still carries their neutral default values and
+    # the frontend forwards them. _resolve_params lets explicit floats override the
+    # preset, so forwarding those defaults would clobber a selected preset's grade
+    # (e.g. kodak-portra's warmth) back to zero. Only forward sliders when NOT on a
+    # named preset (custom / unset); a named preset uses its own bundle.
+    if not is_named_preset:
+        for key in _LOOK_FLOAT_KEYS:
+            if key in params and params[key] is not None and params[key] != "":
+                look[key] = params[key]
 
     lut_ref = params.get("lut") or params.get("lutId")
     if lut_ref:
