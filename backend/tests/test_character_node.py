@@ -11,6 +11,12 @@ Identity-correctness contract (the whole point of this node):
     finding documented on the Character type).
 
 A missing / unknown id raises a clear ValueError("Character not found: ...").
+
+The id (and denormalized display fields) live on the node params under the
+`_`-prefixed keys ``_characterId`` / ``_characterName`` / ``_characterThumbnail``
+— they are frontend-internal runtime references (which Character the node points
+at), not declared model params, so the `_` prefix lets them survive the
+``/api/graph/node`` persist-path validator (see test_character_api.py).
 """
 
 from __future__ import annotations
@@ -52,7 +58,7 @@ def _seed_character(monkeypatch, tmp_path) -> dict:
 
 
 def _character_node(character_id: str | None, **overrides) -> GraphNode:
-    params = {"characterId": character_id} if character_id is not None else {}
+    params = {"_characterId": character_id} if character_id is not None else {}
     params.update(overrides)
     return GraphNode(id="char1", definitionId="character", params=params)
 

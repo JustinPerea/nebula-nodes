@@ -160,6 +160,74 @@ class TestCharacterCharIdValidation:
         assert resp.status_code == 404
 
 
+class TestCharacterNodePersistViaGraphNode:
+    """Regression for the P1 where dropping a Character onto the canvas failed.
+
+    `POST /api/graph/node` runs `_validate_params`, which rejects any non-`_`
+    param key the node definition doesn't declare. The character node only
+    declares the 3 override params (override_prompt / override_refs /
+    strength_override), so the runtime references the canvas writes
+    (_characterId / _characterName / _characterThumbnail) MUST be `_`-prefixed
+    to ride through the validator (same allowance as _previewUrl). Before the
+    fix these were bare keys → HTTP 400, so the node could never be dropped.
+
+    These tests run against the FastAPI TestClient. The conftest sandbox sets
+    NEBULA_STATE_DIR so cli_graph persistence doesn't touch the real state.
+    """
+
+    def test_drop_character_node_persists_with_underscore_keys(self, client):
+        # Seed a real Character so the id is a plausible, store-resolvable one.
+        char_id = client.post("/api/characters", json=_VALID_BODY).json()["id"]
+
+        resp = client.post(
+            "/api/graph/node",
+            json={
+                "definitionId": "character",
+                "params": {
+                    "_characterId": char_id,
+                    "_characterName": "Rina",
+                    "_characterThumbnail": "/api/outputs/chat-uploads/abc.png",
+                },
+                "position": {"x": 120, "y": 740},
+            },
+        )
+        # The whole point: NOT a 400.
+        assert resp.status_code == 200, resp.text
+        node = resp.json()
+        short_id = node["id"]
+        assert short_id  # got a short id back
+
+        try:
+            # The runtime ref must survive into the persisted node params.
+            assert node["params"]["_characterId"] == char_id
+            assert node["params"]["_characterName"] == "Rina"
+            assert node["params"]["_characterThumbnail"] == "/api/outputs/chat-uploads/abc.png"
+        finally:
+            # Don't leave a stray node behind for other tests / the live canvas.
+            client.delete(f"/api/graph/node/{short_id}")
+
+    def test_drop_character_node_with_bare_keys_still_rejected(self, client):
+        """Guard: we fixed this by `_`-prefixing the keys, NOT by weakening the
+        validator. The OLD bare `characterId`/`characterName`/`characterThumbnail`
+        keys must still be rejected with 400 — otherwise the validator no longer
+        catches param typos for the character node."""
+        resp = client.post(
+            "/api/graph/node",
+            json={
+                "definitionId": "character",
+                "params": {
+                    "characterId": "bd72cbc6782f",
+                    "characterName": "Rina",
+                    "characterThumbnail": "/api/outputs/chat-uploads/abc.png",
+                },
+                "position": {"x": 0, "y": 0},
+            },
+        )
+        assert resp.status_code == 400
+        detail = resp.json()["detail"]
+        assert "characterId" in detail
+
+
 class TestCharacterDelete:
     def test_delete_then_get_returns_404(self, client):
         post_resp = client.post("/api/characters", json=_VALID_BODY)

@@ -338,7 +338,7 @@ interface GraphState {
   updateScene: (nodeId: string, spec: CinemaSceneSpec) => void;
 
   // Character node helper. Creates a `character` static node with
-  // params.characterId set, plus denormalized name/thumbnail for canvas
+  // params._characterId set, plus denormalized name/thumbnail for canvas
   // rendering. Mirrors addNode's static path.
   addCharacterNode: (
     characterId: string,
@@ -2107,8 +2107,12 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     persistSceneParam(nodeId, spec);
   },
 
-  // Character node — mirrors addNode's static path. Writes characterId +
+  // Character node — mirrors addNode's static path. Writes _characterId +
   // denormalized name/thumbnail so CharacterNode.tsx renders without fetching.
+  // These are `_`-prefixed runtime references (which Character the node points
+  // at), NOT declared model params — the prefix lets them pass the backend's
+  // _validate_params on the /api/graph/node persist path (same mechanism as
+  // _previewUrl) without polluting the Inspector.
   addCharacterNode: async (characterId, position, meta) => {
     const definition = NODE_DEFINITIONS['character'];
     if (!definition) return null;
@@ -2120,9 +2124,9 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     }
     const params: Record<string, unknown> = {
       ...defaults,
-      characterId,
-      characterName: meta?.name ?? '',
-      characterThumbnail: meta?.thumbnail ?? '',
+      _characterId: characterId,
+      _characterName: meta?.name ?? '',
+      _characterThumbnail: meta?.thumbnail ?? '',
     };
 
     const localCanvasWasEmpty = get().nodes.length === 0 && get().edges.length === 0;

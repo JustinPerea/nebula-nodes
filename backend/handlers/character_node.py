@@ -1,8 +1,16 @@
 """Character source node.
 
 A pure utility/glue node: it loads a persisted Character from the project
-CharacterStore by id (params.characterId) and re-emits it as a CharacterBundle
+CharacterStore by id (params._characterId) and re-emits it as a CharacterBundle
 on the `character` output port. Downstream cinematic nodes consume the bundle.
+
+``_characterId`` (and the denormalized display fields ``_characterName`` /
+``_characterThumbnail`` the canvas card reads) are ``_``-prefixed because they
+are frontend-internal runtime references — which Character the node points at —
+not user-editable model params. The ``_`` prefix is what lets them ride through
+``_validate_params`` (same mechanism as ``_previewUrl``) on the
+``/api/graph/node`` persist path without being declared params (which would
+pollute the Inspector).
 
 Identity-correctness contract — copied VERBATIM from the stored Character:
   - referenceViews are emitted in stored order (never sorted/reordered).
@@ -39,11 +47,11 @@ async def handle_character_node(
 ) -> dict[str, Any]:
     """Load the stored Character by id and emit it as a CharacterBundle.
 
-    Raises ValueError with a clear message when characterId is absent or points
+    Raises ValueError with a clear message when _characterId is absent or points
     at a Character that does not exist in the store.
     """
     params = node.params or {}
-    character_id = params.get("characterId")
+    character_id = params.get("_characterId")
 
     character = CharacterStore().get(character_id) if character_id else None
     if character is None:

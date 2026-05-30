@@ -8,25 +8,28 @@ import '../../styles/character-node.css';
 // asset lives in the backend CharacterStore and flows through the graph as a
 // CharacterBundle at execution time (handlers/character_node.py). For the
 // canvas card we only need the denormalized fields that Task 5/6's
-// addCharacterNode / library populate onto params:
-//   - characterId    (always present once a Character is attached)
-//   - characterName   (denormalized display name; optional)
-//   - characterThumbnail (denormalized thumbnail URL; optional)
+// addCharacterNode / library populate onto params. These are `_`-prefixed
+// runtime references (not declared model params) so they ride through the
+// backend's _validate_params on the /api/graph/node persist path (same
+// mechanism as _previewUrl):
+//   - _characterId    (always present once a Character is attached)
+//   - _characterName   (denormalized display name; optional)
+//   - _characterThumbnail (denormalized thumbnail URL; optional)
 // Missing fields fall back to neutral placeholders so the node always renders.
 interface CharacterNodeData {
   params?: {
-    characterId?: string;
-    characterName?: string;
-    characterThumbnail?: string;
+    _characterId?: string;
+    _characterName?: string;
+    _characterThumbnail?: string;
   };
 }
 
 export function CharacterNode({ data, selected }: NodeProps) {
   const enterCharacterEditor = useUIStore((s) => s.enterCharacterEditor);
   const params = (data as CharacterNodeData).params ?? {};
-  const characterId = params.characterId ?? '';
-  const name = params.characterName?.trim() || 'Character';
-  const thumbUrl = params.characterThumbnail || null;
+  const characterId = params._characterId ?? '';
+  const name = params._characterName?.trim() || 'Character';
+  const thumbUrl = params._characterThumbnail || null;
 
   // Surface the id (short) so an unnamed-but-attached character is still
   // identifiable on the canvas; empty when no character is attached yet.

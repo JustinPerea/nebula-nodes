@@ -1480,7 +1480,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     envKeyName: [],
     executionPattern: 'sync',
     // No inputs — the identity asset is loaded from the project Character store
-    // by id (params.characterId), not wired in on a port.
+    // by id (params._characterId, a `_`-prefixed runtime ref, not a declared
+    // model param), not wired in on a port.
     inputPorts: [],
     outputPorts: [
       { id: 'character', label: 'Character', dataType: 'Character', required: false },
