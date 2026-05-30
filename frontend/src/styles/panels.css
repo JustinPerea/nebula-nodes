@@ -452,6 +452,89 @@ body:not(.app-slava-restraint) .inspector__file-preview {
   border-radius: 4px;
 }
 
+/* Palette param control — editable hex swatch list (cinematic nodes). */
+.inspector__palette-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.inspector__palette-empty {
+  font-size: 11px;
+}
+
+body:not(.app-slava-restraint) .inspector__palette-empty {
+  color: #666;
+}
+
+.inspector__palette-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.inspector__palette-color {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+}
+
+body:not(.app-slava-restraint) .inspector__palette-color {
+  border: 1px solid #333;
+  border-radius: 4px;
+}
+
+.inspector__palette-color::-webkit-color-swatch-wrapper {
+  padding: 2px;
+}
+
+.inspector__palette-color::-webkit-color-swatch {
+  border: none;
+  border-radius: 3px;
+}
+
+.inspector__palette-hex {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.inspector__palette-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+}
+
+body:not(.app-slava-restraint) .inspector__palette-remove {
+  color: #777;
+}
+
+body:not(.app-slava-restraint) .inspector__palette-remove:hover {
+  color: #c05a4a;
+}
+
+.inspector__palette-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.inspector__palette-actions .inspector__action-button,
+.inspector__palette-actions .inspector__file-button {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
 .inspector__checkbox-row {
   display: flex;
   align-items: center;
@@ -1784,6 +1867,85 @@ body:not(.app-slava-restraint) .chat-panel__connect-status {
 body:not(.app-slava-restraint) .chat-panel__connect-body {
   color: #9ca9b6;
   line-height: 1.35;
+}
+
+.chat-panel__connect-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.chat-panel__connect-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 26px;
+  max-width: 100%;
+  border: 0;
+  padding: 0 9px;
+  font: inherit;
+  cursor: pointer;
+}
+
+body:not(.app-slava-restraint) .chat-panel__connect-btn {
+  border: 1px solid #3a4550;
+  border-radius: 6px;
+  background: #141a21;
+  color: #d8e3ee;
+}
+
+body:not(.app-slava-restraint) .chat-panel__connect-btn--primary {
+  border-color: #8a3f24;
+  background: #7b2d16;
+  color: #fff7f2;
+}
+
+.chat-panel__connect-btn:disabled {
+  cursor: default;
+  opacity: 0.58;
+}
+
+.chat-panel__connect-btn-icon,
+.chat-panel__connect-link-icon {
+  flex: 0 0 auto;
+}
+
+.chat-panel__connect-progress {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  overflow-wrap: anywhere;
+}
+
+body:not(.app-slava-restraint) .chat-panel__connect-progress {
+  color: #c0cad5;
+}
+
+.chat-panel__connect-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  text-decoration: none;
+}
+
+body:not(.app-slava-restraint) .chat-panel__connect-link {
+  color: #ffc29d;
+}
+
+.chat-panel__connect-code {
+  padding: 2px 5px;
+}
+
+body:not(.app-slava-restraint) .chat-panel__connect-code {
+  border: 1px solid #415064;
+  border-radius: 4px;
+  background: #0e141a;
+  color: #f2f7ff;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
 }
 
 .chat-panel__connect-commands {

@@ -23,6 +23,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   'analyzer': 'Analyzer',
   'utility': 'Utility',
   'universal': 'Universal',
+  'cinematic': 'Cinematic',
 };
 
 export function NodeLibrary() {

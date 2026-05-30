@@ -5,6 +5,7 @@ import { Canvas } from './components/Canvas';
 import { CanvasTabs } from './components/CanvasTabs';
 import { EditorView } from './components/editor/EditorView';
 import { RemotionEditorView } from './components/video-editor/RemotionEditorView';
+import { CinemaStudioView } from './components/cinema-studio/CinemaStudioView';
 import { NodeLibrary } from './components/panels/NodeLibrary';
 import { Settings } from './components/panels/Settings';
 import { Toolbar } from './components/panels/Toolbar';
@@ -127,12 +128,15 @@ export default function App() {
 
   const isCanvas = viewMode === 'canvas';
   const isRemotion = viewMode === 'remotion-editor';
+  const isCinema = viewMode === 'cinema-editor';
 
   let mainView;
   if (isCanvas) {
     mainView = <Canvas />;
   } else if (isRemotion) {
     mainView = <RemotionEditorView />;
+  } else if (isCinema) {
+    mainView = <CinemaStudioView />;
   } else {
     mainView = <EditorView />;
   }

@@ -90,6 +90,22 @@ body.app-slava-restraint {
   --sr-disabled-opacity-strong: 0.36;
   --sr-disabled-opacity-muted: 0.50;
 
+  /* Brand-surface palette — Crab (M1, NN-45) gradient, radial.
+   * BRAND SURFACES ONLY — README hero, OG card, swag, in-app splash.
+   * Product UI keeps --sr-accent (#FF5A1F). Per the brand guide:
+   * "the brand can sing, the product has to work." */
+  --nn-crab-peak: rgb(180, 240, 250);  /* t=0.00 · interior */
+  --nn-crab-teal: rgb(120, 220, 200);  /* t=0.32 · mid */
+  --nn-crab-warm: rgb(240, 150, 90);   /* t=0.62 · filaments */
+  --nn-crab-void: rgb(120,  50, 30);   /* t=1.00 · outer falloff */
+  --nn-crab-gradient: radial-gradient(
+    closest-side,
+    var(--nn-crab-peak) 0%,
+    var(--nn-crab-teal) 32%,
+    var(--nn-crab-warm) 62%,
+    var(--nn-crab-void) 100%
+  );
+
   /* Type system — clean grotesk only, no display heavy. The dot-matrix
    * face is reserved for the wordmark and tabular numerics. */
   --sr-ui: 'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif;
@@ -2229,6 +2245,31 @@ body.app-slava-restraint .inspector__action-button--danger:hover {
 body.app-slava-restraint .inspector__file-preview {
   border: 1px solid var(--sr-edge);
   border-radius: var(--sr-radius-control);
+}
+
+/* Palette param control — restraint skin. */
+body.app-slava-restraint .inspector__palette-empty {
+  color: var(--sr-ink-faint);
+  font-family: var(--sr-mono);
+  font-size: var(--sr-type-label);
+}
+
+body.app-slava-restraint .inspector__palette-color {
+  border: 1px solid var(--sr-edge);
+  border-radius: var(--sr-radius-control);
+}
+
+body.app-slava-restraint .inspector__palette-hex {
+  font-family: var(--sr-mono);
+}
+
+body.app-slava-restraint .inspector__palette-remove {
+  color: var(--sr-ink-faint);
+  transition: color var(--sr-motion-fast);
+}
+
+body.app-slava-restraint .inspector__palette-remove:hover {
+  color: var(--sr-accent);
 }
 
 /* Settings save — primary CTA pill. Single place orange shows up in chrome. */

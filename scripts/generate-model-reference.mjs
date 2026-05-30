@@ -29,6 +29,7 @@ const CATEGORY_ORDER = [
   'transform',
   'analyzer',
   'universal',
+  'cinematic',
   'utility',
 ];
 const CATEGORY_LABELS = {
@@ -40,6 +41,7 @@ const CATEGORY_LABELS = {
   'transform': 'Transform',
   'analyzer': 'Analyzer',
   'universal': 'Universal',
+  'cinematic': 'Cinematic',
   'utility': 'Utility',
 };
 

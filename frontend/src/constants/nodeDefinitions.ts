@@ -1380,6 +1380,96 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     params: [],
   },
 
+  'cinema-color': {
+    id: 'cinema-color',
+    displayName: 'Cinema Color',
+    category: 'cinematic',
+    apiProvider: 'utility',
+    apiEndpoint: '',
+    envKeyName: [],
+    executionPattern: 'sync',
+    inputPorts: [
+      { id: 'image', label: 'Image', dataType: 'Image', required: true },
+    ],
+    outputPorts: [
+      { id: 'image', label: 'Image', dataType: 'Image', required: false },
+    ],
+    params: [
+      { key: 'palette', label: 'Palette', type: 'palette', required: false, default: [] },
+      { key: 'strength', label: 'Strength', type: 'float', required: false, default: 0.7, min: 0, max: 1, step: 0.05 },
+      {
+        key: 'method',
+        label: 'Method',
+        type: 'enum',
+        required: false,
+        default: 'lab-transfer',
+        options: [
+          { label: 'Lab Transfer', value: 'lab-transfer' },
+          { label: 'Reinhard', value: 'reinhard' },
+          { label: 'Histogram', value: 'histogram' },
+        ],
+      },
+      { key: 'source_image', label: 'Palette Source', type: 'file', required: false, default: '' },
+    ],
+  },
+
+  'cinema-look': {
+    id: 'cinema-look',
+    displayName: 'Cinema Look',
+    category: 'cinematic',
+    apiProvider: 'utility',
+    apiEndpoint: '',
+    envKeyName: [],
+    executionPattern: 'sync',
+    inputPorts: [
+      { id: 'image', label: 'Image', dataType: 'Image', required: true },
+    ],
+    outputPorts: [
+      { id: 'image', label: 'Image', dataType: 'Image', required: false },
+    ],
+    params: [
+      {
+        key: 'preset',
+        label: 'Preset',
+        type: 'enum',
+        required: false,
+        default: 'custom',
+        options: [
+          { label: 'Kodak Portra', value: 'kodak-portra' },
+          { label: 'Fuji 400H', value: 'fuji-400h' },
+          { label: 'CineStill 800T', value: 'cinestill-800t' },
+          { label: 'B&W Tri-X', value: 'bw-tri-x' },
+          { label: 'Teal & Orange', value: 'teal-orange' },
+          { label: 'Custom', value: 'custom' },
+        ],
+      },
+      { key: 'grain', label: 'Grain', type: 'float', required: false, default: 0.2, min: 0, max: 1, step: 0.05, visibleWhen: { preset: ['custom'] } },
+      { key: 'halation', label: 'Halation', type: 'float', required: false, default: 0.2, min: 0, max: 1, step: 0.05, visibleWhen: { preset: ['custom'] } },
+      { key: 'vignette', label: 'Vignette', type: 'float', required: false, default: 0.25, min: 0, max: 1, step: 0.05, visibleWhen: { preset: ['custom'] } },
+      { key: 'contrast', label: 'Contrast', type: 'float', required: false, default: 0, min: -1, max: 1, step: 0.05, visibleWhen: { preset: ['custom'] } },
+      { key: 'saturation', label: 'Saturation', type: 'float', required: false, default: 0, min: -1, max: 1, step: 0.05, visibleWhen: { preset: ['custom'] } },
+      { key: 'temperature', label: 'Temperature', type: 'float', required: false, default: 0, min: -1, max: 1, step: 0.05, visibleWhen: { preset: ['custom'] } },
+      { key: 'lut', label: 'LUT (.cube)', type: 'file', required: false, default: '' },
+    ],
+  },
+
+  'cinema-scene': {
+    id: 'cinema-scene',
+    displayName: 'Cinema Scene',
+    category: 'cinematic',
+    apiProvider: 'utility',
+    apiEndpoint: '',
+    envKeyName: [],
+    executionPattern: 'async-poll',
+    inputPorts: [
+      { id: 'character_refs', label: 'Character Refs', dataType: 'Image', required: false, multiple: true },
+    ],
+    // Output ports are dynamic — one Image port per shot, written at runtime from
+    // the editor-managed scene spec. Starts empty (mirrors remotion-node).
+    outputPorts: [],
+    params: [],
+  },
+
   'preview': {
     id: 'preview',
     displayName: 'Preview',
@@ -6517,6 +6607,7 @@ export function getNodeDefinition(definitionId: string): ModelNodeDefinition | u
 // here fall to the bottom in the order they're first encountered.
 const CATEGORY_ORDER: readonly string[] = [
   'utility',
+  'cinematic',
   'text-gen',
   'image-gen',
   'video-gen',

@@ -58,10 +58,14 @@ interface UIState {
   selectedNodeId: string | null;
 
   // Editor view state — Phase 1 video-editor pivot
-  viewMode: 'canvas' | 'editor' | 'remotion-editor';
+  viewMode: 'canvas' | 'editor' | 'remotion-editor' | 'cinema-editor';
   editorTargetNodeId: string | null;
   // Phase 2 Remotion editor
   remotionEditorTargetNodeId: string | null;
+  // Soul Cinema Studio editor — which cinema-scene node is being edited.
+  // Mirrors remotionEditorTargetNodeId. App.tsx mounts CinemaStudioView (Wave 5)
+  // when this is set.
+  cinemaEditorNodeId: string | null;
   selectedTrackItemId: string | null;
   selectedTrackItemIds: string[];
   isKeyframeRecording: boolean;
@@ -108,6 +112,8 @@ interface UIState {
   exitEditor: () => void;
   enterRemotionEditor: (remotionNodeId: string) => void;
   exitRemotionEditor: () => void;
+  enterCinemaEditor: (cinemaSceneNodeId: string) => void;
+  exitCinemaEditor: () => void;
   setSelectedTrackItem: (id: string | null) => void;
   setSelectedTrackItems: (ids: string[], primaryId?: string | null) => void;
   toggleSelectedTrackItem: (id: string) => void;
@@ -148,6 +154,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   viewMode: 'canvas',
   editorTargetNodeId: null,
   remotionEditorTargetNodeId: null,
+  cinemaEditorNodeId: null,
   selectedTrackItemId: null,
   selectedTrackItemIds: [],
   isKeyframeRecording: false,
@@ -214,6 +221,23 @@ export const useUIStore = create<UIState>((set, get) => ({
       selectedTrackItemIds: [],
       isKeyframeRecording: false,
       isPlaying: false,
+    });
+  },
+
+  // Soul Cinema Studio — mirrors enterRemotionEditor. We only track which
+  // cinema-scene node is being edited; the Studio view (Wave 5) reads the
+  // node's data.params.scene and writes back through graphStore.updateScene.
+  enterCinemaEditor: (cinemaSceneNodeId) => {
+    set({
+      viewMode: 'cinema-editor',
+      cinemaEditorNodeId: cinemaSceneNodeId,
+    });
+  },
+
+  exitCinemaEditor: () => {
+    set({
+      viewMode: 'canvas',
+      cinemaEditorNodeId: null,
     });
   },
 

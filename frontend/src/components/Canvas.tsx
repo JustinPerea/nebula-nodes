@@ -20,9 +20,11 @@ import { DynamicNode } from './nodes/DynamicNode';
 import { RerouteNode } from './nodes/RerouteNode';
 import { EditNode } from './nodes/EditNode';
 import { RemotionNode } from './nodes/RemotionNode';
+import { CinemaSceneNode } from './nodes/CinemaSceneNode';
 import { TypedEdge } from './edges/TypedEdge';
 import { ContextMenu } from './ContextMenu';
 import { ConnectionPopup } from './ConnectionPopup';
+import { CrabMark } from './brand/CrabMark';
 import { apiFetch } from '../lib/backend';
 import '../styles/canvas.css';
 
@@ -32,6 +34,7 @@ const nodeTypes: NodeTypes = {
   'reroute-node': RerouteNode,
   editNode: EditNode,
   remotionNode: RemotionNode,
+  cinemaSceneNode: CinemaSceneNode,
 };
 
 // fitView padding that reserves space for every floating panel that overlaps
@@ -540,6 +543,21 @@ export function Canvas() {
           patternClassName={isSlavaSkin ? 'slava-canvas-background__dot' : undefined}
         />
       </ReactFlow>
+      {isSlavaSkin && nodes.length === 0 ? (
+        <div className="nn-splash" aria-hidden="true">
+          <CrabMark size={200} className="nn-splash__mark" />
+          <div className="nn-splash__wordmark">
+            <span className="nn-splash__wordmark-line">NEBULA</span>
+            <span className="nn-splash__wordmark-line nn-splash__wordmark-line--warm">
+              NODES
+            </span>
+          </div>
+          <div className="nn-splash__caption">empty canvas</div>
+          <div className="nn-splash__hint">
+            drag a node from the library to begin
+          </div>
+        </div>
+      ) : null}
       <ContextMenu />
       <ConnectionPopup />
     </div>

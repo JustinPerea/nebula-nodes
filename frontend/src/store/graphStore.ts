@@ -9,7 +9,8 @@ import {
   type Connection,
 } from '@xyflow/react';
 import { v4 as uuidv4 } from 'uuid';
-import type { NodeData, DynamicNodeData, DynamicPortDefinition, DynamicParamDefinition, PortDataType } from '../types';
+import type { NodeData, DynamicNodeData, DynamicPortDefinition, DynamicParamDefinition, PortDataType, CinemaSceneSpec, CinemaShot } from '../types';
+import { shotPortId } from '../constants/ports';
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 import {
   executeGraph as apiExecuteGraph,
@@ -38,6 +39,67 @@ function paramsForBackend(definitionId: string, params: Record<string, unknown>)
   const clips = Array.isArray(params.clips) ? (params.clips as EditClip[]) : null;
   if (!clips) return params;
   return { ...params, clips: clips.map((c) => ({ ...c, speed: clipSpeed(c) })) };
+}
+
+function nodesInExecutionScope(nodes: Node<NodeData>[], edges: Edge[], targetNodeId?: string): Node<NodeData>[] {
+  if (!targetNodeId) return nodes;
+  const ids = new Set<string>([targetNodeId]);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const edge of edges) {
+      if (ids.has(edge.target) && !ids.has(edge.source)) {
+        ids.add(edge.source);
+        changed = true;
+      }
+    }
+  }
+  return nodes.filter((node) => ids.has(node.id));
+}
+
+function markExecutionScopeQueued(
+  nodes: Node<NodeData>[],
+  edges: Edge[],
+  targetNodeId?: string,
+): Node<NodeData>[] {
+  const scopeIds = new Set(nodesInExecutionScope(nodes, edges, targetNodeId).map((node) => node.id));
+  return nodes.map((node) => {
+    if (!scopeIds.has(node.id)) return node;
+    return {
+      ...node,
+      data: {
+        ...node.data,
+        state: 'queued' as const,
+        error: undefined,
+        progress: undefined,
+        streamingText: undefined,
+        streamingPartials: undefined,
+        streamingSvg: undefined,
+      },
+    };
+  });
+}
+
+function markNodesErrored(
+  nodes: Node<NodeData>[],
+  nodeIds: Set<string>,
+  message: string,
+): Node<NodeData>[] {
+  return nodes.map((node) => {
+    if (!nodeIds.has(node.id)) return node;
+    return {
+      ...node,
+      data: {
+        ...node.data,
+        state: 'error' as const,
+        error: message,
+        progress: undefined,
+        streamingText: undefined,
+        streamingPartials: undefined,
+        streamingSvg: undefined,
+      },
+    };
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -266,6 +328,14 @@ interface GraphState {
   ) => void;
   cutEditNodeAtSource: (nodeId: string, sourceTime: number) => void;
   removeEditNodeClip: (nodeId: string, clipId: string) => void;
+
+  // Cinema-scene (Soul Cinema) helpers. addShot/removeShot rewrite the node's
+  // dynamic OUTPUT ports (one Image port per shot) and prune now-dead edges,
+  // mirroring configureOpenRouterModel. updateScene persists an editor-authored
+  // spec (without changing the shot set).
+  addShot: (nodeId: string) => string | null;
+  removeShot: (nodeId: string, shotId: string) => void;
+  updateScene: (nodeId: string, spec: CinemaSceneSpec) => void;
 }
 
 // CLI nodes use short sequential IDs like n1, n2. Frontend-only (library-dragged)
@@ -321,6 +391,92 @@ function toDynamicPort(p: {
     multiple: p.multiple,
     maxConnections: p.maxConnections,
   };
+}
+
+// ---------- Cinema-scene (Soul Cinema) helpers ----------
+
+/** A minimal valid scene used when a cinema-scene node has no spec yet (e.g. a
+ *  freshly dragged node before the Studio editor seeds it). License guard
+ *  (spec §10): the default base must be commercial-OK — never FLUX.1-dev. */
+function createDefaultScene(): CinemaSceneSpec {
+  return {
+    version: 1,
+    base: { model: 'seedream-4-5' },
+    aspectRatio: '16:9',
+    shots: [],
+  };
+}
+
+/** Read the editor-managed scene off a node, falling back to a default. */
+function sceneFromNode(node: Node<NodeData>): CinemaSceneSpec {
+  const params = (node.data.params ?? {}) as Record<string, unknown>;
+  const scene = params.scene as CinemaSceneSpec | undefined;
+  if (scene && Array.isArray(scene.shots)) return scene;
+  return createDefaultScene();
+}
+
+/** One Image OUTPUT port per shot, ids via shotPortId so handles/edges/validator
+ *  agree. Mirrors configureOpenRouterModel's dynamicOutputPorts contract. */
+function shotOutputPorts(scene: CinemaSceneSpec): DynamicPortDefinition[] {
+  return scene.shots.map((shot, idx) => ({
+    id: shotPortId(shot.id),
+    label: `Shot ${idx + 1}`,
+    dataType: 'Image' as PortDataType,
+    required: false,
+  }));
+}
+
+/** Optimistically write the scene + rebuilt dynamic output ports onto the node,
+ *  and prune any source edge whose handle no longer exists. Mirrors the
+ *  set(...) body of configureOpenRouterModel. */
+function applySceneToNode(set: GraphSet, nodeId: string, scene: CinemaSceneSpec): void {
+  const outputPorts = shotOutputPorts(scene);
+  const validHandleIds = new Set(outputPorts.map((p) => p.id));
+
+  set((state) => ({
+    nodes: state.nodes.map((n) => {
+      if (n.id !== nodeId) return n;
+      const data = n.data as unknown as DynamicNodeData;
+      return {
+        ...n,
+        data: {
+          ...data,
+          // Marking the node dynamic lets useIsValidConnection resolve the
+          // per-shot ports from dynamicOutputPorts. providerType is inert here
+          // because the node renders via the custom 'cinemaSceneNode' React Flow
+          // type, not 'dynamic-node'.
+          isDynamic: true,
+          providerType: data.providerType ?? 'fal',
+          params: { ...data.params, scene },
+          dynamicInputPorts: data.dynamicInputPorts ?? [],
+          dynamicOutputPorts: outputPorts,
+          dynamicParams: data.dynamicParams ?? [],
+          providerMeta: data.providerMeta ?? {},
+        } as unknown as NodeData,
+      };
+    }),
+    // Remove source edges pointing at a shot port that no longer exists.
+    edges: state.edges.filter((e) => {
+      if (e.source === nodeId && e.sourceHandle?.startsWith('shot_')) {
+        return validHandleIds.has(e.sourceHandle);
+      }
+      return true;
+    }),
+  }));
+}
+
+/** Sync the scene spec back to cli_graph so Claude's `nebula graph` reflects
+ *  shot edits. CLI-origin nodes only (UUID/frontend-only nodes aren't on the
+ *  backend yet); fire-and-forget like updateNodeData's param push. */
+function persistSceneParam(nodeId: string, scene: CinemaSceneSpec): void {
+  if (!CLI_ID_RE.test(nodeId)) return;
+  const node = useGraphStore.getState().nodes.find((n) => n.id === nodeId);
+  if (!node) return;
+  apiFetch(`/api/graph/node/${nodeId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ params: { ...node.data.params, scene } }),
+  }).catch((err) => console.warn(`[nebula] Scene sync for ${nodeId} failed:`, err));
 }
 
 // Per-node timers for debounced param-sync to the backend. Keyed by node id
@@ -1596,15 +1752,31 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     const { nodes, edges, isExecuting, resetExecution } = get();
     if (isExecuting) return;
     resetExecution();
-    set({ isExecuting: true });
+    set((state) => ({ nodes: markExecutionScopeQueued(state.nodes, state.edges), isExecuting: true }));
     const graphNodes = nodes.map((n) => ({ id: n.id, definitionId: n.data.definitionId, params: paramsForBackend(n.data.definitionId, n.data.params as Record<string, unknown>), outputs: {} }));
     const graphEdges = edges.map((e) => ({ id: e.id, source: e.source, sourceHandle: e.sourceHandle, target: e.target, targetHandle: e.targetHandle }));
     try {
       const result = await apiExecuteGraph(graphNodes, graphEdges);
-      if (result.status === 'validation_error') set({ isExecuting: false });
+      if (result.status === 'validation_error') {
+        set((state) => ({
+          nodes: markNodesErrored(
+            state.nodes,
+            new Set(nodesInExecutionScope(state.nodes, state.edges).map((node) => node.id)),
+            'Validation failed before execution. Check required inputs and API keys.',
+          ),
+          isExecuting: false,
+        }));
+      }
     } catch (err) {
       console.error('Failed to start execution:', err);
-      set({ isExecuting: false });
+      set((state) => ({
+        nodes: markNodesErrored(
+          state.nodes,
+          new Set(nodesInExecutionScope(state.nodes, state.edges).map((node) => node.id)),
+          err instanceof Error ? err.message : 'Failed to start execution.',
+        ),
+        isExecuting: false,
+      }));
     }
   },
 
@@ -1612,7 +1784,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     const { nodes, edges, isExecuting, resetExecution } = get();
     if (isExecuting) return;
     resetExecution();
-    set({ isExecuting: true });
+    set((state) => ({ nodes: markExecutionScopeQueued(state.nodes, state.edges, nodeId), isExecuting: true }));
     const graphNodes = nodes.map((n) => ({
       id: n.id,
       definitionId: n.data.definitionId,
@@ -1628,10 +1800,26 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     }));
     try {
       const result = await apiExecuteNode(graphNodes, graphEdges, nodeId);
-      if (result.status === 'validation_error') set({ isExecuting: false });
+      if (result.status === 'validation_error') {
+        set((state) => ({
+          nodes: markNodesErrored(
+            state.nodes,
+            new Set(nodesInExecutionScope(state.nodes, state.edges, nodeId).map((node) => node.id)),
+            'Validation failed before execution. Check required inputs and API keys.',
+          ),
+          isExecuting: false,
+        }));
+      }
     } catch (err) {
       console.error('Failed to start node execution:', err);
-      set({ isExecuting: false });
+      set((state) => ({
+        nodes: markNodesErrored(
+          state.nodes,
+          new Set(nodesInExecutionScope(state.nodes, state.edges, nodeId).map((node) => node.id)),
+          err instanceof Error ? err.message : 'Failed to start node execution.',
+        ),
+        isExecuting: false,
+      }));
     }
   },
 
@@ -1824,6 +2012,90 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         return { ...n, data: { ...n.data, params: { ...params, clips: reflowed } } };
       }),
     }));
+  },
+
+  addShot: (nodeId) => {
+    const node = get().nodes.find((n) => n.id === nodeId);
+    if (!node) return null;
+
+    pushUndo(set, get);
+
+    const scene = sceneFromNode(node);
+    const newShot: CinemaShot = {
+      id: uuidv4(),
+      prompt: '',
+      output: { status: 'idle' },
+    };
+    const nextScene: CinemaSceneSpec = { ...scene, shots: [...scene.shots, newShot] };
+    applySceneToNode(set, nodeId, nextScene);
+    persistSceneParam(nodeId, nextScene);
+    return newShot.id;
+  },
+
+  removeShot: (nodeId, shotId) => {
+    const node = get().nodes.find((n) => n.id === nodeId);
+    if (!node) return;
+
+    const scene = sceneFromNode(node);
+    if (!scene.shots.some((s) => s.id === shotId)) return;
+
+    pushUndo(set, get);
+
+    const nextScene: CinemaSceneSpec = {
+      ...scene,
+      shots: scene.shots.filter((s) => s.id !== shotId),
+    };
+
+    // Edges feeding off the removed shot's output port are now dangling — drop
+    // them on the backend too (CLI-origin edges only), mirroring onEdgesChange.
+    const deadPortId = shotPortId(shotId);
+    for (const edge of get().edges) {
+      if (edge.source !== nodeId || edge.sourceHandle !== deadPortId) continue;
+      if (CLI_ID_RE.test(edge.source) && CLI_ID_RE.test(edge.target)) {
+        apiFetch('/api/graph/edge', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            source: edge.source,
+            sourceHandle: edge.sourceHandle ?? '',
+            target: edge.target,
+            targetHandle: edge.targetHandle ?? '',
+          }),
+        }).catch((err) => console.warn('[nebula] DELETE cinema shot edge failed:', err));
+      }
+    }
+
+    applySceneToNode(set, nodeId, nextScene);
+    persistSceneParam(nodeId, nextScene);
+  },
+
+  updateScene: (nodeId, spec) => {
+    const node = get().nodes.find((n) => n.id === nodeId);
+    if (!node) return;
+
+    maybePushUndo(set, get, nodeId);
+
+    // Prune edges that point at a shot port the new spec no longer has.
+    const validPortIds = new Set(spec.shots.map((s) => shotPortId(s.id)));
+    for (const edge of get().edges) {
+      if (edge.source !== nodeId || !edge.sourceHandle?.startsWith('shot_')) continue;
+      if (validPortIds.has(edge.sourceHandle)) continue;
+      if (CLI_ID_RE.test(edge.source) && CLI_ID_RE.test(edge.target)) {
+        apiFetch('/api/graph/edge', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            source: edge.source,
+            sourceHandle: edge.sourceHandle ?? '',
+            target: edge.target,
+            targetHandle: edge.targetHandle ?? '',
+          }),
+        }).catch((err) => console.warn('[nebula] DELETE cinema shot edge failed:', err));
+      }
+    }
+
+    applySceneToNode(set, nodeId, spec);
+    persistSceneParam(nodeId, spec);
   },
 
   loadGraph: (nodes, edges) => {

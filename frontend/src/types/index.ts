@@ -18,7 +18,8 @@ export type NodeCategory =
   | 'transform'
   | 'analyzer'
   | 'utility'
-  | 'universal';
+  | 'universal'
+  | 'cinematic';
 
 export type NodeState = 'idle' | 'queued' | 'executing' | 'complete' | 'error';
 
@@ -66,7 +67,7 @@ export interface ParamOption {
 export interface ParamDefinition {
   key: string;
   label: string;
-  type: 'string' | 'integer' | 'float' | 'boolean' | 'enum' | 'textarea' | 'file';
+  type: 'string' | 'integer' | 'float' | 'boolean' | 'enum' | 'textarea' | 'file' | 'palette';
   required: boolean;
   default?: unknown;
   options?: ParamOption[];
@@ -101,6 +102,42 @@ export interface ModelNodeDefinition {
    *  to decide which param set to show. e.g. 'MESHY_API_KEY' or 'GOOGLE_API_KEY'. */
   directKeyName?: string;
   docUrl?: string;
+}
+
+/** A single shot within a cinema-scene storyboard. Each shot carries its own
+ *  prompt and (optionally) overrides the shared palette/look, and produces one
+ *  dynamic Image output port keyed off its id. */
+export interface CinemaShot {
+  id: string;
+  prompt: string;
+  /** Per-shot composition refs (optional), layered on top of the shared character refs. */
+  refImageUrls?: string[];
+  /** Lets one shot deviate from the shared palette/look without breaking the rest. */
+  overrides?: { palette?: Partial<CinemaSceneSpec['palette']>; look?: Partial<CinemaSceneSpec['look']> };
+  output?: { imageUrl?: string; status: 'idle' | 'running' | 'done' | 'error'; error?: string; hash?: string };
+}
+
+/** The editor-managed spec stored on `cinema-scene` node's `data.params.scene`
+ *  — exactly how `remotion-node` stores `data.params.manifest`. Shared
+ *  character/palette/look across many shots; each shot has its own prompt. */
+export interface CinemaSceneSpec {
+  version: 1;
+  /** e.g. 'seedream-4-5' | 'nano-banana' | 'flux-kontext'. */
+  base: { model: string; params?: Record<string, unknown> };
+  /** Shared character identity via reference-edit. */
+  character?: { refImageUrls: string[]; strength: number; sheetUrl?: string };
+  palette?: { swatches: string[]; sourceImageUrl?: string; strength: number; method: 'lab-transfer' | 'reinhard' | 'histogram' };
+  look?: {
+    /** 'kodak-portra' | 'fuji-400h' | 'cinestill-800t' | 'bw-tri-x' | 'teal-orange' | 'custom'. */
+    preset?: string;
+    grain: number; halation: number; vignette: number;
+    contrast: number; saturation: number; temperature: number;
+    /** Optional .cube LUT id. */
+    lutId?: string;
+  };
+  /** '16:9' | '2.39:1' | '4:5' | '1:1' | '9:16'. */
+  aspectRatio: string;
+  shots: CinemaShot[];
 }
 
 export interface PortValue {

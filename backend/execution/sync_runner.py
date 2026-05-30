@@ -5,6 +5,10 @@ from typing import Any, Awaitable, Callable
 
 from models.graph import GraphNode, PortValueDict
 from models.events import ExecutionEvent
+# Single source of truth for hex/{r,g,b} color parsing lives in cinema.color.
+# Re-exported here so existing imports (and the Recraft handler / its tests)
+# keep working: `from execution.sync_runner import _parse_recraft_color`.
+from cinema.color import _parse_recraft_color
 from handlers.openai_image import handle_openai_image_generate
 from handlers.openai_image_edit import handle_openai_image_edit
 from handlers.google_gemini import handle_imagen4, handle_nano_banana, handle_lyria3, handle_gemini_tts, handle_gemini_embeddings
@@ -36,31 +40,6 @@ SYNC_HANDLERS: dict[
     "gemini-tts": handle_gemini_tts,
     "gemini-embeddings": handle_gemini_embeddings,
 }
-
-
-def _parse_recraft_color(value: str) -> dict[str, int] | None:
-    """Parse a single color value into an RGBColor dict {r, g, b}.
-
-    Accepts:
-    - Hex string: "#FF0000" or "FF0000"  → {"r": 255, "g": 0, "b": 0}
-    - RGB dict JSON: {"r": 255, "g": 0, "b": 0} (already correct, returned as-is)
-    Returns None if the value cannot be parsed.
-    """
-    if isinstance(value, dict):
-        if "r" in value and "g" in value and "b" in value:
-            return {"r": int(value["r"]), "g": int(value["g"]), "b": int(value["b"])}
-        return None
-    s = str(value).strip().lstrip("#")
-    if len(s) == 6:
-        try:
-            return {
-                "r": int(s[0:2], 16),
-                "g": int(s[2:4], 16),
-                "b": int(s[4:6], 16),
-            }
-        except ValueError:
-            return None
-    return None
 
 
 def _apply_recraft_color_params(node: GraphNode) -> None:
@@ -608,6 +587,18 @@ def get_handler_registry(
             from handlers.style_reference import handle_style_reference
             return await handle_style_reference(node, inputs, api_keys, emit=emit)
 
+        async def _cinema_color_handler(node, inputs, api_keys):
+            from handlers.cinema_color import handle_cinema_color
+            return await handle_cinema_color(node, inputs, api_keys, emit=emit)
+
+        async def _cinema_look_handler(node, inputs, api_keys):
+            from handlers.cinema_look import handle_cinema_look
+            return await handle_cinema_look(node, inputs, api_keys, emit=emit)
+
+        async def _cinema_scene_handler(node, inputs, api_keys):
+            from handlers.cinema_scene import handle_cinema_scene
+            return await handle_cinema_scene(node, inputs, api_keys, emit=emit)
+
         async def _video_edit_handler(
             node: GraphNode,
             inputs: dict[str, PortValueDict],
@@ -627,6 +618,9 @@ def get_handler_registry(
         registry["quiver-arrow-generate"] = _quiver_generate_handler
         registry["quiver-arrow-vectorize"] = _quiver_vectorize_handler
         registry["style-reference"] = _style_reference_handler
+        registry["cinema-color"] = _cinema_color_handler
+        registry["cinema-look"] = _cinema_look_handler
+        registry["cinema-scene"] = _cinema_scene_handler
         registry["video-edit"] = _video_edit_handler
         registry["remotion-node"] = _remotion_node_handler
 

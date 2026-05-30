@@ -19,6 +19,7 @@ const VALID_CATEGORIES = new Set([
   'analyzer',
   'utility',
   'universal',
+  'cinematic',
 ]);
 const VALID_PROVIDERS = new Set([
   'openai',
@@ -45,7 +46,7 @@ const VALID_PROVIDERS = new Set([
 ]);
 const VALID_EXECUTION_PATTERNS = new Set(['sync', 'async-poll', 'stream']);
 const VALID_PORT_TYPES = new Set(['Text', 'Image', 'Video', 'Audio', 'Mask', 'Array', 'SVG', 'Mesh', 'Any']);
-const VALID_PARAM_TYPES = new Set(['string', 'integer', 'float', 'boolean', 'enum', 'textarea', 'file']);
+const VALID_PARAM_TYPES = new Set(['string', 'integer', 'float', 'boolean', 'enum', 'textarea', 'file', 'palette']);
 const PARAM_GROUPS = ['params', 'sharedParams', 'falParams', 'directParams'];
 const LOCAL_EXECUTION_NODE_IDS = new Set([
   'text-input',

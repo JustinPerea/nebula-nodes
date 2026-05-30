@@ -1,0 +1,545 @@
+/*
+ * CinemaStudioView styles — Slava-restraint skin.
+ *
+ * All rules scoped under body.app-slava-restraint, mirroring remotion-editor.css.
+ * The studio is a focused full-screen workspace: a top toolbar, a shared-controls
+ * header band, a horizontal shots rail, and a selected-shot panel — laid out per
+ * spec §8 / the approved storyboard mock. Tokens reused from slava-restraint.css:
+ *   --sr-canvas / --sr-glass / --sr-glass-strong  → surfaces
+ *   --sr-ink / --sr-ink-meta                       → type
+ *   --sr-edge / --sr-edge-strong                   → hairlines
+ *   --sr-accent                                     → filmic gold accent
+ */
+
+body.app-slava-restraint .cinema-studio-view {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  grid-template-rows: 44px auto auto 1fr;
+  grid-template-areas:
+    "toolbar"
+    "shared"
+    "rail"
+    "panel";
+  background: var(--sr-canvas);
+  color: var(--sr-ink);
+  z-index: 50;
+  overflow: hidden;
+}
+
+body.app-slava-restraint .cinema-studio-view__empty,
+body.app-slava-restraint .cinema-studio-view__panel-empty {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  color: var(--sr-ink-meta);
+  font-size: 13px;
+}
+
+body.app-slava-restraint .cinema-studio-view__empty button {
+  margin-left: 6px;
+  background: none;
+  border: 1px solid var(--sr-edge);
+  color: var(--sr-ink);
+  padding: 3px 8px;
+  border-radius: 2px;
+  cursor: pointer;
+  font: inherit;
+}
+
+/* ── Toolbar ───────────────────────────────────────────────────────────────── */
+body.app-slava-restraint .cinema-studio-view__header { grid-area: toolbar; }
+
+body.app-slava-restraint .cinema-studio-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 100%;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--sr-edge-strong);
+  background: var(--sr-glass);
+}
+
+body.app-slava-restraint .cinema-studio-toolbar__back,
+body.app-slava-restraint .cinema-studio-toolbar__action {
+  background: none;
+  border: 1px solid var(--sr-edge);
+  color: var(--sr-ink);
+  padding: 4px 10px;
+  border-radius: 2px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+}
+
+body.app-slava-restraint .cinema-studio-toolbar__back:hover,
+body.app-slava-restraint .cinema-studio-toolbar__action:hover:not(:disabled) {
+  border-color: var(--sr-accent);
+}
+
+body.app-slava-restraint .cinema-studio-toolbar__action:disabled {
+  opacity: var(--sr-disabled-opacity, 0.5);
+  cursor: default;
+}
+
+body.app-slava-restraint .cinema-studio-toolbar__crumb {
+  font-weight: 600;
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  color: var(--sr-accent);
+}
+
+body.app-slava-restraint .cinema-studio-toolbar__spacer { flex: 1; }
+
+/* ── Shared controls header band ─────────────────────────────────────────────── */
+body.app-slava-restraint .cinema-studio-view__shared {
+  grid-area: shared;
+  border-bottom: 1px solid var(--sr-edge-strong);
+  background: var(--sr-glass-strong);
+  overflow-x: auto;
+}
+
+body.app-slava-restraint .cinema-shared-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  padding: 12px 16px;
+}
+
+body.app-slava-restraint .cinema-shared-controls__section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 120px;
+}
+
+body.app-slava-restraint .cinema-shared-controls__section--wide { min-width: 200px; }
+
+body.app-slava-restraint .cinema-shared-controls__label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--sr-ink-meta);
+}
+
+body.app-slava-restraint .cinema-shared-controls__sub {
+  font-size: 11px;
+  color: var(--sr-ink-meta);
+  min-width: 64px;
+}
+
+body.app-slava-restraint .cinema-shared-controls__select {
+  background: var(--sr-surface-control, rgba(255, 255, 255, 0.04));
+  border: 1px solid var(--sr-edge);
+  color: var(--sr-ink);
+  border-radius: 3px;
+  padding: 4px 6px;
+  font: inherit;
+  font-size: 12px;
+}
+
+body.app-slava-restraint .cinema-shared-controls__select--sm { padding: 2px 4px; font-size: 11px; }
+
+body.app-slava-restraint .cinema-shared-controls__inline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Refs (character + composition share the same chip look) */
+body.app-slava-restraint .cinema-shared-controls__refs,
+body.app-slava-restraint .cinema-shot-panel__refs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+body.app-slava-restraint .cinema-shared-controls__ref,
+body.app-slava-restraint .cinema-shot-panel__ref {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--sr-edge);
+  border-radius: 3px;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.2);
+}
+
+body.app-slava-restraint .cinema-shared-controls__ref img,
+body.app-slava-restraint .cinema-shot-panel__ref img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+body.app-slava-restraint .cinema-shared-controls__ref-remove,
+body.app-slava-restraint .cinema-shot-panel__ref-remove {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 16px;
+  height: 16px;
+  line-height: 14px;
+  background: rgba(0, 0, 0, 0.6);
+  border: none;
+  color: #fff;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 0;
+}
+
+body.app-slava-restraint .cinema-shared-controls__ref-add,
+body.app-slava-restraint .cinema-shot-panel__ref-add {
+  width: 44px;
+  height: 44px;
+  border: 1px dashed var(--sr-edge-strong);
+  border-radius: 3px;
+  background: none;
+  color: var(--sr-ink-meta);
+  cursor: pointer;
+  font-size: 18px;
+}
+
+body.app-slava-restraint .cinema-shared-controls__ref-add:hover,
+body.app-slava-restraint .cinema-shot-panel__ref-add:hover {
+  border-color: var(--sr-accent);
+  color: var(--sr-accent);
+}
+
+/* Palette swatches */
+body.app-slava-restraint .cinema-shared-controls__swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+body.app-slava-restraint .cinema-shared-controls__swatch {
+  position: relative;
+  display: inline-flex;
+}
+
+body.app-slava-restraint .cinema-shared-controls__swatch input[type="color"] {
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--sr-edge);
+  border-radius: 3px;
+  padding: 0;
+  background: none;
+  cursor: pointer;
+}
+
+body.app-slava-restraint .cinema-shared-controls__swatch-remove {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  width: 14px;
+  height: 14px;
+  line-height: 12px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0, 0, 0, 0.7);
+  color: #fff;
+  cursor: pointer;
+  font-size: 10px;
+  padding: 0;
+}
+
+body.app-slava-restraint .cinema-shared-controls__swatch-add {
+  width: 26px;
+  height: 26px;
+  border: 1px dashed var(--sr-edge-strong);
+  border-radius: 3px;
+  background: none;
+  color: var(--sr-ink-meta);
+  cursor: pointer;
+  font-size: 14px;
+}
+
+/* Film-look chips + sliders */
+body.app-slava-restraint .cinema-shared-controls__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+body.app-slava-restraint .cinema-shared-controls__chip {
+  background: var(--sr-surface-control, rgba(255, 255, 255, 0.04));
+  border: 1px solid var(--sr-edge);
+  color: var(--sr-ink);
+  border-radius: 2px;
+  padding: 3px 8px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+}
+
+body.app-slava-restraint .cinema-shared-controls__chip--active {
+  border-color: var(--sr-accent);
+  color: var(--sr-accent);
+}
+
+body.app-slava-restraint .cinema-shared-controls__sliders {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+body.app-slava-restraint .cinema-shared-controls__slider-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ── Shots rail ──────────────────────────────────────────────────────────────── */
+body.app-slava-restraint .cinema-studio-view__rail {
+  grid-area: rail;
+  border-bottom: 1px solid var(--sr-edge-strong);
+  background: var(--sr-glass);
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+body.app-slava-restraint .cinema-shots-rail {
+  display: flex;
+  gap: 10px;
+  padding: 12px 16px;
+  align-items: stretch;
+  min-height: 116px;
+}
+
+body.app-slava-restraint .cinema-shots-rail__shot {
+  flex: 0 0 auto;
+  width: 132px;
+  border: 1px solid var(--sr-edge);
+  border-radius: 4px;
+  background: var(--sr-glass-strong);
+  cursor: pointer;
+  overflow: hidden;
+}
+
+body.app-slava-restraint .cinema-shots-rail__shot--selected { border-color: var(--sr-accent); }
+body.app-slava-restraint .cinema-shots-rail__shot--dragging { opacity: 0.5; }
+
+body.app-slava-restraint .cinema-shots-rail__thumb {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: rgba(0, 0, 0, 0.25);
+}
+
+body.app-slava-restraint .cinema-shots-rail__thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+body.app-slava-restraint .cinema-shots-rail__thumb-empty {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  color: var(--sr-ink-meta);
+  font-size: 18px;
+}
+
+body.app-slava-restraint .cinema-shots-rail__badge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 16px;
+  height: 16px;
+  line-height: 16px;
+  text-align: center;
+  border-radius: 50%;
+  font-size: 10px;
+}
+
+body.app-slava-restraint .cinema-shots-rail__badge--running { background: var(--sr-accent); color: #000; }
+body.app-slava-restraint .cinema-shots-rail__badge--done { background: rgba(40, 160, 90, 0.9); color: #fff; }
+body.app-slava-restraint .cinema-shots-rail__badge--error { background: var(--sr-danger, #c0392b); color: #fff; }
+
+body.app-slava-restraint .cinema-shots-rail__caption {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px;
+  font-size: 11px;
+  color: var(--sr-ink-meta);
+}
+
+body.app-slava-restraint .cinema-shots-rail__remove {
+  background: none;
+  border: none;
+  color: var(--sr-ink-meta);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0 2px;
+}
+
+body.app-slava-restraint .cinema-shots-rail__remove:hover { color: var(--sr-danger, #c0392b); }
+
+body.app-slava-restraint .cinema-shots-rail__add {
+  flex: 0 0 auto;
+  width: 132px;
+  border: 1px dashed var(--sr-edge-strong);
+  border-radius: 4px;
+  background: none;
+  color: var(--sr-ink-meta);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+}
+
+body.app-slava-restraint .cinema-shots-rail__add:hover {
+  border-color: var(--sr-accent);
+  color: var(--sr-accent);
+}
+
+/* ── Selected-shot panel ─────────────────────────────────────────────────────── */
+body.app-slava-restraint .cinema-studio-view__panel {
+  grid-area: panel;
+  overflow: auto;
+  background: var(--sr-canvas);
+}
+
+body.app-slava-restraint .cinema-shot-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  max-width: 920px;
+  margin: 0 auto;
+}
+
+body.app-slava-restraint .cinema-shot-panel__preview {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border: 1px solid var(--sr-edge);
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.3);
+  overflow: hidden;
+}
+
+body.app-slava-restraint .cinema-shot-panel__preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+body.app-slava-restraint .cinema-shot-panel__preview-empty {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  color: var(--sr-ink-meta);
+  font-size: 13px;
+}
+
+body.app-slava-restraint .cinema-shot-panel__error {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 6px 10px;
+  background: rgba(192, 57, 43, 0.85);
+  color: #fff;
+  font-size: 12px;
+}
+
+body.app-slava-restraint .cinema-shot-panel__variations {
+  display: flex;
+  gap: 8px;
+}
+
+body.app-slava-restraint .cinema-shot-panel__variation {
+  width: 88px;
+  aspect-ratio: 16 / 9;
+  border: 1px solid var(--sr-edge);
+  border-radius: 3px;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.25);
+}
+
+body.app-slava-restraint .cinema-shot-panel__variation--active { border-color: var(--sr-accent); }
+
+body.app-slava-restraint .cinema-shot-panel__variation img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+body.app-slava-restraint .cinema-shot-panel__variation--empty {
+  display: grid;
+  place-items: center;
+  color: var(--sr-ink-meta);
+  font-size: 14px;
+}
+
+body.app-slava-restraint .cinema-shot-panel__label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--sr-ink-meta);
+}
+
+body.app-slava-restraint .cinema-shot-panel__prompt {
+  width: 100%;
+  min-height: 72px;
+  resize: vertical;
+  background: var(--sr-surface-control, rgba(255, 255, 255, 0.04));
+  border: 1px solid var(--sr-edge);
+  color: var(--sr-ink);
+  border-radius: 3px;
+  padding: 8px;
+  font: inherit;
+  font-size: 13px;
+}
+
+body.app-slava-restraint .cinema-shot-panel__toggles {
+  display: flex;
+  gap: 16px;
+}
+
+body.app-slava-restraint .cinema-shot-panel__toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--sr-ink);
+  cursor: pointer;
+}
+
+body.app-slava-restraint .cinema-shot-panel__actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+body.app-slava-restraint .cinema-shot-panel__action {
+  background: var(--sr-surface-control, rgba(255, 255, 255, 0.04));
+  border: 1px solid var(--sr-edge);
+  color: var(--sr-ink);
+  border-radius: 3px;
+  padding: 7px 14px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+}
+
+body.app-slava-restraint .cinema-shot-panel__action:hover:not(:disabled) { border-color: var(--sr-accent); }
+
+body.app-slava-restraint .cinema-shot-panel__action--primary {
+  background: var(--sr-accent);
+  border-color: var(--sr-accent);
+  color: #000;
+  font-weight: 600;
+}
+
+body.app-slava-restraint .cinema-shot-panel__action:disabled {
+  opacity: var(--sr-disabled-opacity, 0.5);
+  cursor: default;
+}

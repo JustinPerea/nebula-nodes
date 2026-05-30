@@ -142,15 +142,22 @@ _OUTPUTS_URL_PREFIX = "/api/outputs/"
 
 def _safe_output_relative_path(value: str) -> Path | None:
     """Return a safe relative path under OUTPUT_ROOT, or None."""
-    rel = Path(value)
-    if rel.is_absolute():
-        return None
-    candidate = (OUTPUT_ROOT / rel).resolve()
     try:
+        rel = Path(value)
+        if rel.is_absolute():
+            return None
+        candidate = (OUTPUT_ROOT / rel).resolve()
         candidate.relative_to(OUTPUT_ROOT.resolve())
-    except ValueError:
+    except (OSError, ValueError):
         return None
     return rel
+
+
+def _path_exists(path: Path) -> bool:
+    try:
+        return path.exists()
+    except OSError:
+        return False
 
 
 def _moved_output_relative_path(value: str) -> Path | None:
@@ -172,7 +179,7 @@ def _moved_output_relative_path(value: str) -> Path | None:
         if rel is None:
             continue
         candidate = (OUTPUT_ROOT / rel).resolve()
-        if candidate.exists():
+        if _path_exists(candidate):
             return rel
     return None
 
@@ -186,7 +193,7 @@ def _output_relative_from_ref(value: str) -> Path | None:
         return _safe_output_relative_path(value[len(_OUTPUTS_URL_PREFIX):])
 
     rel = _safe_output_relative_path(value)
-    if rel is not None and (OUTPUT_ROOT / rel).exists():
+    if rel is not None and _path_exists(OUTPUT_ROOT / rel):
         return rel
 
     try:
@@ -869,6 +876,28 @@ async def get_codex_status() -> dict[str, Any]:
     from services.codex_session import codex_login_status
 
     return await codex_login_status()
+
+
+@app.post("/api/agents/codex/login/chatgpt")
+async def start_codex_chatgpt_login(request: Request) -> dict[str, Any]:
+    from services.codex_session import start_codex_chatgpt_login as start_login
+
+    payload: dict[str, Any] = {}
+    if request.headers.get("content-type", "").startswith("application/json"):
+        try:
+            loaded = await request.json()
+            if isinstance(loaded, dict):
+                payload = loaded
+        except json.JSONDecodeError:
+            payload = {}
+    return await start_login(device_auth=bool(payload.get("deviceAuth")))
+
+
+@app.get("/api/agents/codex/login/chatgpt")
+async def get_codex_chatgpt_login_state() -> dict[str, Any]:
+    from services.codex_session import codex_chatgpt_login_state
+
+    return await codex_chatgpt_login_state()
 
 
 # ---------- Zoom manifest (demo-video editing chain telemetry) ----------
@@ -1652,6 +1681,8 @@ async def export_graph_for_frontend() -> dict:
             if definition_id == "video-edit"
             else "remotionNode"
             if definition_id == "remotion-node"
+            else "cinemaSceneNode"
+            if definition_id == "cinema-scene"
             else "dynamic-node"
             if is_dynamic_node
             else "model-node"

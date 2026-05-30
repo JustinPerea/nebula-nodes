@@ -23,6 +23,7 @@ VALID_CATEGORIES = {
     "analyzer",
     "utility",
     "universal",
+    "cinematic",
 }
 VALID_PROVIDERS = {
     "openai",
@@ -49,7 +50,7 @@ VALID_PROVIDERS = {
 }
 VALID_EXECUTION_PATTERNS = {"sync", "async-poll", "stream"}
 VALID_PORT_TYPES = {"Text", "Image", "Video", "Audio", "Mask", "Array", "SVG", "Mesh", "Any"}
-VALID_PARAM_TYPES = {"string", "integer", "float", "boolean", "enum", "textarea", "file"}
+VALID_PARAM_TYPES = {"string", "integer", "float", "boolean", "enum", "textarea", "file", "palette"}
 PARAM_GROUPS = ("params", "sharedParams", "falParams", "directParams")
 
 
@@ -646,7 +647,7 @@ def test_researched_provider_corrections_are_pinned(definitions: dict[str, dict[
 def test_video_edit_node_present_with_required_shape() -> None:
     """video-edit must be registered with the documented port shape."""
     import json
-    with open("data/node_definitions.json") as f:
+    with open(REPO_ROOT / "backend" / "data" / "node_definitions.json") as f:
         defs = json.load(f)
     node = defs["video-edit"]
     assert node["category"] == "utility"

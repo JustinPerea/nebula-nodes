@@ -1,5 +1,5 @@
 import { useRef, useEffect, useState, useMemo } from 'react';
-import { Copy, Info, Play, RefreshCw, Star, Trash2, Upload, X } from 'lucide-react';
+import { Copy, Info, Play, Plus, RefreshCw, Star, Trash2, Upload, X } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
 import { NODE_DEFINITIONS } from '../../constants/nodeDefinitions';
@@ -16,6 +16,140 @@ type InspectorParamDefinition = ParamDefinition | DynamicParamDefinition;
 type InspectorProps = {
   embedded?: boolean;
 };
+
+// --- Palette param helpers -------------------------------------------------
+// The 'palette' control stores a string[] of `#rrggbb` hex values. Extraction
+// runs client-side (k-means on a downscaled canvas) so v1 needs no backend
+// endpoint — see spec §7. If this grows, a /api/cinema/extract-palette endpoint
+// can replace `extractPaletteFromImage` without touching the render branch.
+
+function clampByte(n: number): number {
+  return Math.max(0, Math.min(255, Math.round(n)));
+}
+
+function rgbToHex(r: number, g: number, b: number): string {
+  const toHex = (n: number) => clampByte(n).toString(16).padStart(2, '0');
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+}
+
+/** Normalize arbitrary user/text input into a `#rrggbb` hex string. Returns
+ *  null when the input can't be coerced to a valid 6-digit hex. */
+function normalizeHex(input: string): string | null {
+  let v = input.trim().toLowerCase();
+  if (!v) return null;
+  if (!v.startsWith('#')) v = `#${v}`;
+  // Expand shorthand #rgb -> #rrggbb
+  if (/^#[0-9a-f]{3}$/.test(v)) {
+    v = `#${v[1]}${v[1]}${v[2]}${v[2]}${v[3]}${v[3]}`;
+  }
+  return /^#[0-9a-f]{6}$/.test(v) ? v : null;
+}
+
+/** Deterministic k-means over RGB pixels. Fixed initial centroids (evenly
+ *  sampled) + fixed iteration count → stable output for the same image. */
+function kMeansColors(pixels: number[][], k: number, iterations = 8): number[][] {
+  if (pixels.length === 0) return [];
+  const clusterCount = Math.min(k, pixels.length);
+  // Deterministic seeding: evenly spaced samples across the pixel list.
+  const centroids: number[][] = [];
+  for (let i = 0; i < clusterCount; i++) {
+    const idx = Math.floor((i * pixels.length) / clusterCount);
+    centroids.push([...pixels[idx]]);
+  }
+
+  for (let iter = 0; iter < iterations; iter++) {
+    const sums = centroids.map(() => [0, 0, 0]);
+    const counts = new Array(clusterCount).fill(0);
+    for (const px of pixels) {
+      let best = 0;
+      let bestDist = Infinity;
+      for (let c = 0; c < clusterCount; c++) {
+        const dr = px[0] - centroids[c][0];
+        const dg = px[1] - centroids[c][1];
+        const db = px[2] - centroids[c][2];
+        const dist = dr * dr + dg * dg + db * db;
+        if (dist < bestDist) {
+          bestDist = dist;
+          best = c;
+        }
+      }
+      sums[best][0] += px[0];
+      sums[best][1] += px[1];
+      sums[best][2] += px[2];
+      counts[best] += 1;
+    }
+    for (let c = 0; c < clusterCount; c++) {
+      if (counts[c] > 0) {
+        centroids[c] = [
+          sums[c][0] / counts[c],
+          sums[c][1] / counts[c],
+          sums[c][2] / counts[c],
+        ];
+      }
+    }
+  }
+
+  // Order clusters by population (most-dominant first) for a stable, useful order.
+  const finalCounts = new Array(clusterCount).fill(0);
+  for (const px of pixels) {
+    let best = 0;
+    let bestDist = Infinity;
+    for (let c = 0; c < clusterCount; c++) {
+      const dr = px[0] - centroids[c][0];
+      const dg = px[1] - centroids[c][1];
+      const db = px[2] - centroids[c][2];
+      const dist = dr * dr + dg * dg + db * db;
+      if (dist < bestDist) {
+        bestDist = dist;
+        best = c;
+      }
+    }
+    finalCounts[best] += 1;
+  }
+  return centroids
+    .map((c, i) => ({ c, n: finalCounts[i] }))
+    .sort((a, b) => b.n - a.n)
+    .map((entry) => entry.c);
+}
+
+/** Load an image URL, downscale onto a canvas, and k-means the pixels into
+ *  `k` dominant `#rrggbb` swatches. Resolves to [] on any failure. */
+async function extractPaletteFromImage(url: string, k = 6): Promise<string[]> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      try {
+        const maxDim = 96;
+        const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+        const w = Math.max(1, Math.round(img.width * scale));
+        const h = Math.max(1, Math.round(img.height * scale));
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve([]);
+          return;
+        }
+        ctx.drawImage(img, 0, 0, w, h);
+        const { data } = ctx.getImageData(0, 0, w, h);
+        const pixels: number[][] = [];
+        for (let i = 0; i < data.length; i += 4) {
+          // Skip mostly-transparent pixels so the palette reflects visible color.
+          if (data[i + 3] < 128) continue;
+          pixels.push([data[i], data[i + 1], data[i + 2]]);
+        }
+        const centroids = kMeansColors(pixels, k);
+        resolve(centroids.map((c) => rgbToHex(c[0], c[1], c[2])));
+      } catch {
+        resolve([]);
+      }
+    };
+    img.onerror = () => resolve([]);
+    img.src = url;
+  });
+}
 
 export function Inspector({ embedded = false }: InspectorProps) {
   const panelVisible = useUIStore((s) => s.panels.inspector.visible);
@@ -42,6 +176,10 @@ export function Inspector({ embedded = false }: InspectorProps) {
 
   // Replicate schema fetch state
   const [schemaLoading, setSchemaLoading] = useState(false);
+
+  // Palette extraction in-flight state, keyed by param key (a node may have
+  // more than one 'palette' control). Null/absent = idle.
+  const [paletteExtracting, setPaletteExtracting] = useState<Record<string, boolean>>({});
 
   // Quiver Arrow dynamic model list (cached for the session). Loaded on
   // first selection of any Quiver node so the `model` enum reflects
@@ -448,6 +586,139 @@ export function Inspector({ embedded = false }: InspectorProps) {
           max={param.max}
           step={param.step ?? (param.type === 'float' ? 0.1 : 1)}
         />
+      );
+    }
+
+    if (param.type === 'palette') {
+      const raw = activeNodeData.params[param.key] ?? param.default ?? [];
+      const swatches: string[] = Array.isArray(raw)
+        ? raw.filter((s): s is string => typeof s === 'string')
+        : [];
+      const extracting = Boolean(paletteExtracting[param.key]);
+
+      const writeSwatches = (next: string[]) => onParamChange(param.key, next);
+
+      return (
+        <div className="inspector__control-stack inspector__palette">
+          {swatches.length === 0 ? (
+            <div className="inspector__palette-empty">No swatches yet</div>
+          ) : (
+            <div className="inspector__palette-list">
+              {swatches.map((hex, idx) => {
+                const safeHex = normalizeHex(hex) ?? '#000000';
+                return (
+                  <div key={idx} className="inspector__palette-row">
+                    <input
+                      type="color"
+                      className="inspector__palette-color"
+                      value={safeHex}
+                      aria-label={`Swatch ${idx + 1} color`}
+                      onChange={(e) => {
+                        const next = [...swatches];
+                        next[idx] = e.target.value;
+                        writeSwatches(next);
+                      }}
+                    />
+                    <input
+                      type="text"
+                      className="inspector__field inspector__palette-hex"
+                      value={hex}
+                      spellCheck={false}
+                      aria-label={`Swatch ${idx + 1} hex`}
+                      onChange={(e) => {
+                        const next = [...swatches];
+                        next[idx] = e.target.value;
+                        writeSwatches(next);
+                      }}
+                      onBlur={(e) => {
+                        const normalized = normalizeHex(e.target.value);
+                        if (normalized && normalized !== swatches[idx]) {
+                          const next = [...swatches];
+                          next[idx] = normalized;
+                          writeSwatches(next);
+                        }
+                      }}
+                    />
+                    <button
+                      type="button"
+                      className="inspector__palette-remove"
+                      title="Remove swatch"
+                      aria-label={`Remove swatch ${idx + 1}`}
+                      onClick={() => writeSwatches(swatches.filter((_, i) => i !== idx))}
+                    >
+                      <X
+                        className="inspector__action-icon"
+                        size={13}
+                        strokeWidth={1.75}
+                        aria-hidden="true"
+                        focusable="false"
+                      />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          <div className="inspector__palette-actions">
+            <button
+              type="button"
+              className="inspector__action-button"
+              title="Add a swatch"
+              onClick={() => writeSwatches([...swatches, '#808080'])}
+            >
+              <Plus
+                className="inspector__action-icon"
+                size={14}
+                strokeWidth={1.75}
+                aria-hidden="true"
+                focusable="false"
+              />
+              <span>Add</span>
+            </button>
+            <label className="inspector__file-button" title="Extract a palette from an image">
+              <Upload
+                className="inspector__action-icon"
+                size={14}
+                strokeWidth={1.75}
+                aria-hidden="true"
+                focusable="false"
+              />
+              <span>{extracting ? 'Extracting...' : 'Extract from reference'}</span>
+              <input
+                type="file"
+                accept="image/*"
+                className="inspector__file-input"
+                disabled={extracting}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  // Reset the input so the same file can be picked again later.
+                  e.target.value = '';
+                  const paramKey = param.key;
+                  setPaletteExtracting((prev) => ({ ...prev, [paramKey]: true }));
+                  const formData = new FormData();
+                  formData.append('file', file);
+                  apiFetch('/api/uploads', { method: 'POST', body: formData })
+                    .then((r) => r.json())
+                    .then((data: { filePath: string; url: string }) =>
+                      extractPaletteFromImage(backendAssetUrlSync(data.url)),
+                    )
+                    .then((extracted) => {
+                      if (extracted.length > 0) writeSwatches(extracted);
+                    })
+                    .catch((err) => console.error('Palette extraction failed:', err))
+                    .finally(() => {
+                      setPaletteExtracting((prev) => {
+                        const next = { ...prev };
+                        delete next[paramKey];
+                        return next;
+                      });
+                    });
+                }}
+              />
+            </label>
+          </div>
+        </div>
       );
     }
 
