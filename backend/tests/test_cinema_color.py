@@ -200,3 +200,44 @@ def test_transfer_returns_rgb_same_size() -> None:
     out = transfer_to_palette(img, ["#1b3a4b"], strength=0.5)
     assert out.mode == "RGB"
     assert out.size == img.size
+
+
+# ---------- handler guard: empty palette is not a silent no-op ----------
+
+
+def _write_input_image() -> str:
+    from uuid import uuid4
+
+    from services.output import OUTPUT_ROOT
+
+    run_dir = OUTPUT_ROOT / "cinema-color-test"
+    run_dir.mkdir(parents=True, exist_ok=True)
+    p = run_dir / f"{uuid4().hex[:12]}.png"
+    _gradient_image(40, 24).save(p, format="PNG")
+    rel = p.resolve().relative_to(OUTPUT_ROOT.resolve())
+    return f"/api/outputs/{rel}"
+
+
+@pytest.mark.asyncio
+async def test_handler_empty_palette_raises() -> None:
+    from handlers.cinema_color import handle_cinema_color
+    from models.graph import GraphNode, PortValueDict
+
+    node = GraphNode(id="c1", definitionId="cinema-color", params={})
+    inputs = {"image": PortValueDict(type="Image", value=_write_input_image())}
+    with pytest.raises(ValueError, match="target palette"):
+        await handle_cinema_color(node, inputs, api_keys={}, emit=None)
+
+
+@pytest.mark.asyncio
+async def test_handler_with_palette_returns_image() -> None:
+    from handlers.cinema_color import handle_cinema_color
+    from models.graph import GraphNode, PortValueDict
+
+    node = GraphNode(
+        id="c1", definitionId="cinema-color", params={"palette": ["#1b3a4b", "#d98841"]}
+    )
+    inputs = {"image": PortValueDict(type="Image", value=_write_input_image())}
+    out = await handle_cinema_color(node, inputs, api_keys={}, emit=None)
+    assert out["image"]["type"] == "Image"
+    assert str(out["image"]["value"]).startswith("/api/outputs/")

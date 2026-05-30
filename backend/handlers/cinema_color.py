@@ -123,6 +123,17 @@ async def handle_cinema_color(
             with Image.open(source_path) as src_img:
                 swatches = extract_palette(src_img.convert("RGB"))
 
+    # An empty palette would pass the image through unchanged, which reads as
+    # "the node did nothing". Surface it as actionable feedback instead of a
+    # silent no-op. (The scene path uses cinema.color directly and is unaffected:
+    # there an empty palette is a deliberate skip of the optional colour stage.)
+    if not swatches:
+        raise ValueError(
+            "Cinema Color needs a target palette. Add hex swatches in the Palette "
+            "field (or click 'Extract from reference'), or set a Source Image to "
+            "pull a palette from. With no palette the image passes through unchanged."
+        )
+
     try:
         strength = float(params.get("strength", 0.7))
     except (TypeError, ValueError):
