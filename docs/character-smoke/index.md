@@ -49,23 +49,32 @@ entry from Task 4 (reachable base id `nano-banana` → 14; `seedream-4-5` → 10
 conservative guard). A code-review bug where the cap was keyed on the unreachable id
 `nano-banana-2` (silently capping the real default at 1) was found and fixed in Task 4.
 
-**Empirical identity-hold test status:** PENDING. The test requires (a) ≥3 reference views
-of a single non-human subject, (b) a real `nano-banana-2/edit` generation (paid fal call —
-`FAL_KEY` is configured and the dev servers are live at `127.0.0.1:8000` / `:5180`), and
-(c) a subjective judgment of whether non-human identity is preserved across the generation.
+**Empirical identity-hold test status:** RUN on 2026-05-30 (see §5 for artifacts + method).
+A distinctive non-human subject (a moss-covered stone golem with a glowing teal geode chest)
+was generated, expanded to a 3-view reference bundle, and edited into two new scenes through
+nano-banana-2 (Gemini 3.1 Flash Image, via the project's `GOOGLE_API_KEY` — note: in this
+codebase `nano-banana` is a **Google Gemini** node, not a fal endpoint, so the test used
+`GOOGLE_API_KEY`).
 
-**Gate logic (unchanged from the plan):**
-- If non-human identity **holds** → keep `nano-banana-2/edit` as the default.
-- If it **underperforms** → fall back to `seedream-4-5/edit` (10 refs) or a per-`subjectType`
-  default, and update spec §5.
+**Verdict: identity HOLDS (strongly).** The teal cracked-geode chest, amber eyes,
+moss-on-stone texture, bioluminescent mushrooms, and chunky proportions all carried faithfully
+from the references into both new scenes (forest stream at dawn; sleeping in a hollow tree).
+Side observation: the base model rendered 2 eyes vs the prompted 3 in the initial
+text-to-image, but *consistently* across all 5 generations — a prompt-adherence quirk, not a
+consistency failure; for the reference-edit Character use case the refs lock identity
+regardless.
 
-Until the empirical test is run and judged, v1 ships with the spec default
-(`nano-banana-2/edit`). Before/after artifacts and the verdict will be added to this
-directory when the test is executed.
+**Decision (gate outcome): KEEP `nano-banana-2/edit` (Gemini 3.1 Flash Image) as the default
+base.** Non-human support is now empirically confirmed, not inferred — no fallback to
+`seedream-4-5/edit` is needed. This matches spec §5 and the Task-4-verified `MODEL_MAX_REFS`
+entry (`nano-banana` → 14).
 
 ## 4. Artifacts
 
-_(before/after generation images + per-run notes land here once the §3 empirical test runs.)_
+See §5 below — `ref1.jpg` / `ref2.jpg` / `ref3.jpg` (the 3-view reference bundle),
+`scene_out.jpg` / `scene_out2.jpg` (multi-ref edits into new scenes), and `generate.py`
+(the reproducible generation harness; reads the key from the settings store at runtime —
+no secret embedded).
 
 ---
 
@@ -89,7 +98,7 @@ does at runtime.
 **Model id:** `gemini-3.1-flash-image-preview`
 
 **GOOGLE_API_KEY source:** `settings.json → apiKeys.GOOGLE_API_KEY`
-(loaded at runtime, prefix `AIzaSyB8…`)
+(loaded from the settings store at runtime; key value intentionally not recorded here)
 
 **Generation config per request:**
 ```json
@@ -191,4 +200,5 @@ does at runtime.
 
 ---
 
-*Verdict/decision deferred to orchestrator. Objective observations above describe identity feature carry-through without editorial judgment on pass/fail.*
+*Verdict recorded in §3 above: identity **HOLDS** across both multi-ref scene edits → the
+`nano-banana-2/edit` default is kept (no fallback to seedream needed).*
