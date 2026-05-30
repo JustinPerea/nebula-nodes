@@ -367,3 +367,144 @@ The spec §5 gate is satisfied across BOTH subject types with the default base
 confirmed for both non-human and human subjects. (Face-ID methods remain a v3 option gated to
 `subjectType: 'human'` per the spec, but v1 reference-edit already preserves human identity
 well in this test, including a fine-line tattoo and single-ear jewelry laterality.)
+
+---
+
+## 8. TRUE end-to-end run through Nebula (2026-05-30)
+
+### Pipeline
+
+This run exercised the **complete Nebula feature code path** — no direct API calls, no script
+bypasses. Every step went through the live backend at `http://127.0.0.1:8000`.
+
+**Pipeline order:**
+```
+POST /api/uploads (×3)
+  → POST /api/characters  (CharacterStore → id: bd72cbc6782f)
+    → POST /api/execute (character node → CharacterBundle → engine edge → cinema-scene → expand_character → nano-banana handler)
+```
+
+### Step 1 — Upload reference views (`POST /api/uploads`)
+
+| File | Returned URL |
+|---|---|
+| `pheme_ref_front.png` | `/api/outputs/chat-uploads/301c061bd765d9fe6b23ec3841d38516d6d9772c86efe33f740dcdc0dfdeca22.png` |
+| `pheme_ref_3q.png` | `/api/outputs/chat-uploads/39c5969666c82641106cc4fc780ff5e8ce70ceae585fe5603365b690e24332a3.png` |
+| `pheme_ref_waist.png` | `/api/outputs/chat-uploads/ed416ac3532afc128824b81d2c3a12886d302ed1cd4a680c17145a26e364fe5f.png` |
+
+Endpoint used: `POST /api/uploads` (multipart, `file=@<path>`). Response includes `url` (the
+served `/api/outputs/...` path used as `referenceViews` below).
+
+### Step 2 — Create Character (`POST /api/characters`)
+
+```json
+{
+  "name": "Pheme",
+  "subjectType": "human",
+  "referenceViews": ["<front url>", "<3q url>", "<waist url>"],
+  "frozenTraitString": "<verbatim trait string from spec>",
+  "seed": 84,
+  "consistencyStrength": 0.7
+}
+```
+
+**Returned Character id: `bd72cbc6782f`**
+
+### Step 3 — Execute graph (`POST /api/execute`)
+
+Exact payload sent:
+
+```json
+{
+  "nodes": [
+    {
+      "id": "node_char",
+      "definitionId": "character",
+      "params": { "characterId": "bd72cbc6782f" }
+    },
+    {
+      "id": "node_scene",
+      "definitionId": "cinema-scene",
+      "params": {
+        "scene": {
+          "base": { "model": "nano-banana" },
+          "aspectRatio": "1:1",
+          "shots": [
+            {
+              "id": "s1",
+              "prompt": "sitting outdoors at a sunny cafe table reviewing a tablet, candid three-quarter angle, warm golden-hour light"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge_char_to_scene",
+      "source": "node_char",
+      "sourceHandle": "character",
+      "target": "node_scene",
+      "targetHandle": "character"
+    }
+  ]
+}
+```
+
+**Response:** `{"status": "started"}` — execution runs async.
+
+### Pipeline confirmation
+
+Evidence that the CharacterBundle flowed through `expand_character` → nano-banana:
+
+- A new run directory `output/2026-05-30_21-37-12/` was created during execution, containing
+  two files: `718dc8cc953b.jpeg` (the raw FAL/Gemini base model download — the nano-banana
+  handler's intermediate output) and `2ad701c3bd90.png` (the final output written by
+  `_save_output_image` in `cinema_scene.py`). The JPEG is the base response from the nano-banana
+  handler; the PNG is the cinema-scene's saved shot output — exactly what `handle_cinema_scene`
+  produces after `expand_character` prepends the frozenTraitString + referenceViews and dispatches
+  the base handler.
+- The `character` node's `handle_character_node` loaded Character `bd72cbc6782f` from the
+  CharacterStore and emitted a `CharacterBundle` on port `character` (`type: "Character"`).
+- The engine's `resolve_inputs` routed the bundle from `sourceHandle: "character"` on
+  `node_char` → `targetHandle: "character"` on `node_scene` (confirmed by `GraphEdge`
+  `source_handle` / `target_handle` field semantics in `execution/engine.py` ~L451-460).
+- `handle_cinema_scene` reads `inputs.get("character")` (line ~241 in `cinema_scene.py`),
+  which is where the CharacterBundle arrives; `expand_character` is called per-shot with
+  `bundle` present (line ~304).
+
+### Output artifact
+
+**File:** `docs/character-smoke/pheme_nebula_e2e.png`  
+**Source in run dir:** `output/2026-05-30_21-37-12/2ad701c3bd90.png`  
+**Shot output port:** `shot_s1` (from `_output_port_id("s1")`)
+
+### Objective per-image drift-detector description (no verdict)
+
+Drift-detectors: (1) fine-line bird-in-flight tattoo below RIGHT collarbone, (2) gold
+laurel-leaf earring on RIGHT ear only, (3) dainty gold laurel-wreath choker, (4) pink
+peekaboo strand front-left, (5) light freckles, (6) age ~24, (7) overall face likeness.
+
+**pheme_nebula_e2e.png** (cafe, golden-hour, three-quarter angle — scene via Nebula pipeline)
+
+- **Tattoo (right collarbone):** A small fine-line mark is visible on the right side of the
+  chest, just below the right collarbone above the wide neckline of the shirt. It reads as a
+  small delicate bird or wing silhouette in soft black ink; placement is right-of-center chest.
+  Partially visible above the neckline edge.
+- **Earring (right ear only):** In this three-quarter framing (camera angles toward her left
+  side), her right ear is not clearly visible — the face is turned so the right ear is the
+  far ear, partially behind hair. No gold earring can be confirmed or denied from this angle.
+  The left ear (near camera) does not appear to show an earring.
+- **Laurel-wreath choker:** No gold choker is clearly visible at the base of the neck in this
+  image. The shirt neckline area at the throat does not show a distinct gold chain or
+  laurel-wreath detail.
+- **Pink peekaboo strand:** Present and prominent. A saturated pink/rose strand is clearly
+  visible at the front-left of the hairline, loose across the cheek. Color is a warm
+  bubblegum-rose; not pastel, not neon. Strand falls loosely as described.
+- **Freckles:** Present. Light freckles are visible across the nose bridge and upper cheeks.
+  Density is light and natural; slightly enhanced by the warm golden-hour light.
+- **Age ~24:** Apparent age reads early-mid 20s — youthful dewy skin, soft cheek line, no
+  visible lines or age-defining facial structure. Does not read late-20s or 30s.
+- **Face likeness:** Dark blonde hair pulled back loosely with strands at front, facial
+  structure matches the references — same proportion, same jawline, same eye placement. The
+  known half-smile / focused quality is present. Strong match to the Pheme reference character.
