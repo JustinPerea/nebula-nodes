@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
 import { CinemaStudioToolbar } from './CinemaStudioToolbar';
@@ -34,11 +34,42 @@ export function CinemaStudioView() {
   const updateScene = useGraphStore((s) => s.updateScene);
   const addShot = useGraphStore((s) => s.addShot);
   const removeShot = useGraphStore((s) => s.removeShot);
+  const edges = useGraphStore((s) => s.edges);
+  const nodes = useGraphStore((s) => s.nodes);
 
   const [selectedShotId, setSelectedShotId] = useState<string | null>(null);
 
   const scene: CinemaSceneSpec =
     (node?.data as { params?: { scene?: CinemaSceneSpec } } | undefined)?.params?.scene ?? emptyScene();
+
+  // Canvas ↔ Studio parity: character refs wired into the node's `character_refs`
+  // input port on the canvas must show here too (the backend already conditions
+  // on them — handlers/cinema_scene.py reads inputs['character_refs']). Resolve
+  // each connected edge to its source node's output image URL.
+  const connectedCharacterRefs = useMemo(() => {
+    if (!cinemaNodeId) return [];
+    const urls: string[] = [];
+    const asStr = (v: unknown): string | undefined => (typeof v === 'string' && v ? v : undefined);
+    for (const e of edges) {
+      if (e.target !== cinemaNodeId || e.targetHandle !== 'character_refs') continue;
+      const sdata = nodes.find((n) => n.id === e.source)?.data as
+        | { outputs?: Record<string, { value?: unknown }>; params?: Record<string, unknown> }
+        | undefined;
+      const outputs = sdata?.outputs;
+      const params = sdata?.params;
+      // A generated source (e.g. gpt-image-2) keeps its result in data.outputs;
+      // a static image-input keeps it in params (_previewUrl / filePath) and may
+      // have empty outputs until run. Cover both.
+      const val =
+        (e.sourceHandle ? asStr(outputs?.[e.sourceHandle]?.value) : undefined) ??
+        asStr(outputs?.image?.value) ??
+        (outputs ? asStr(Object.values(outputs).map((o) => o?.value).find((v) => asStr(v))) : undefined) ??
+        asStr(params?._previewUrl) ??
+        asStr(params?.filePath);
+      if (val) urls.push(val);
+    }
+    return urls;
+  }, [cinemaNodeId, edges, nodes]);
 
   // Keep a valid selection: prefer the existing one, else the first shot. Runs
   // after render to avoid setState-during-render; declared before any early
@@ -95,6 +126,7 @@ export function CinemaStudioView() {
       <div className="cinema-studio-view__shared">
         <CinemaSharedControls
           scene={scene}
+          connectedRefs={connectedCharacterRefs}
           onChange={(next) => updateScene(cinemaNodeId, next)}
         />
       </div>

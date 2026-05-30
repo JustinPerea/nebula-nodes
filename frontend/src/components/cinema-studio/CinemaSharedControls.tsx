@@ -4,6 +4,10 @@ import type { CinemaSceneSpec } from '../../types';
 
 interface CinemaSharedControlsProps {
   scene: CinemaSceneSpec;
+  /** Character refs wired into the node's `character_refs` port on the canvas.
+   *  Shown read-only here (disconnect on the canvas to remove) so the Studio and
+   *  the node view stay in sync. */
+  connectedRefs?: string[];
   onChange: (next: CinemaSceneSpec) => void;
 }
 
@@ -49,7 +53,7 @@ function normalizeHex(input: string): string | null {
   return /^#[0-9a-f]{6}$/.test(v) ? v : null;
 }
 
-export function CinemaSharedControls({ scene, onChange }: CinemaSharedControlsProps) {
+export function CinemaSharedControls({ scene, connectedRefs = [], onChange }: CinemaSharedControlsProps) {
   const refInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
 
@@ -150,6 +154,16 @@ export function CinemaSharedControls({ scene, onChange }: CinemaSharedControlsPr
       <section className="cinema-shared-controls__section cinema-shared-controls__section--wide">
         <label className="cinema-shared-controls__label">Character refs</label>
         <div className="cinema-shared-controls__refs">
+          {connectedRefs.map((url, idx) => (
+            <div
+              key={`linked-${url}-${idx}`}
+              className="cinema-shared-controls__ref cinema-shared-controls__ref--linked"
+              title="Connected from the canvas — disconnect on the canvas to remove"
+            >
+              <img src={backendAssetUrlSync(url)} alt="" draggable={false} />
+              <span className="cinema-shared-controls__ref-link" aria-label="Connected on canvas">🔗</span>
+            </div>
+          ))}
           {characterRefs.map((url, idx) => (
             <div key={`${url}-${idx}`} className="cinema-shared-controls__ref">
               <img src={backendAssetUrlSync(url)} alt="" draggable={false} />

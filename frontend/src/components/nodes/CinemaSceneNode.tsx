@@ -24,10 +24,16 @@ export function CinemaSceneNode({ id, data, selected }: NodeProps) {
     shots.find((s) => s.output?.imageUrl)?.output?.imageUrl ??
     null;
 
-  const summary =
-    shotCount === 0
-      ? 'no shots yet'
-      : `${shotCount} shot${shotCount === 1 ? '' : 's'}`;
+  // Uploaded character refs (those wired in on the canvas already show as the
+  // edge into character_refs). Surfacing the count keeps the card in sync with
+  // refs added inside the Studio.
+  const refCount = scene?.character?.refImageUrls?.length ?? 0;
+  const summary = [
+    shotCount === 0 ? 'no shots yet' : `${shotCount} shot${shotCount === 1 ? '' : 's'}`,
+    refCount > 0 ? `${refCount} ref${refCount === 1 ? '' : 's'}` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
 
   return (
     <div className={`cinema-scene-node ${selected ? 'cinema-scene-node--selected' : ''}`}>

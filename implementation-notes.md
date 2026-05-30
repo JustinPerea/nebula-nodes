@@ -127,3 +127,12 @@ First live test surfaced a real bug: a `cinema-look` node with `preset='kodak-po
 **Gotcha for re-testing:** `cinema-color`/`cinema-look` are deterministic and cached (`services/cache.py` `ExecutionCache`, in-memory). Re-running a node with identical params returns the cached result — switch the preset (or restart the backend, which clears the cache) to see a fresh render. Also: running a node re-executes its whole subgraph, so re-running a `cinema-look` wired off a `gpt-image-2` node will re-generate the (paid) base image; wire film-look off a static image-input to iterate for free.
 
 **Follow-up (not done, user's call):** the node/scene default preset is `'custom'` (subtle grain+vignette, no colour) — consider defaulting to a named preset like `kodak-portra` so a freshly-dropped node obviously "does the film thing."
+
+### 2026-05-30 — Canvas ↔ Studio parity for character refs
+
+User principle: "what happens in the node view should happen in all views and vice versa." Gap found while testing: an image wired into the `cinema-scene` node's `character_refs` port on the canvas was used by generation (the handler reads `inputs['character_refs']`) but was **invisible** in the Studio's CHARACTER REFS box (which only rendered uploaded `scene.character.refImageUrls`).
+
+- `CinemaStudioView` now resolves canvas edges into the node's `character_refs` port to image URLs (robust to both a generated source — `data.outputs[handle].value` — and a static `image-input` — `data.params._previewUrl`/`filePath`, whose `outputs` may be empty until run) and passes them to `CinemaSharedControls`.
+- `CinemaSharedControls` renders connected refs read-only with a 🔗 badge (disconnect on the canvas to remove); uploaded refs keep their × remove button.
+- Reverse direction: `CinemaSceneNode`'s card summary now shows the uploaded-ref count (`2 shots · 1 ref`), so refs added inside the Studio are reflected on the canvas (connected refs already show as the edge).
+- Verified live: constructed `image-input → cinema-scene:character_refs` via the API and ran the exact resolution logic against `/api/graph/export` → resolved the ref URL; tsc + vite build clean.

@@ -189,6 +189,23 @@ body.app-slava-restraint .cinema-shot-panel__ref-remove {
   padding: 0;
 }
 
+body.app-slava-restraint .cinema-shared-controls__ref--linked {
+  border-color: var(--sr-accent);
+}
+
+body.app-slava-restraint .cinema-shared-controls__ref-link {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 16px;
+  height: 16px;
+  line-height: 16px;
+  text-align: center;
+  background: rgba(0, 0, 0, 0.6);
+  font-size: 9px;
+  pointer-events: none;
+}
+
 body.app-slava-restraint .cinema-shared-controls__ref-add,
 body.app-slava-restraint .cinema-shot-panel__ref-add {
   width: 44px;
