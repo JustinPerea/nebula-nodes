@@ -4,9 +4,22 @@ A *consumer* (today: ``cinema-scene``; later: the standalone edit nodes) takes a
 :class:`CharacterBundle` and folds it into its base-generation call:
 
   - the bundle's ``frozenTraitString`` is prepended to the prompt VERBATIM,
+  - the bundle's ``overridePrompt`` (per-use direction) is appended AFTER the
+    base prompt when set (see PROMPT ORDER below),
   - the bundle's ``referenceViews`` are placed FIRST in the reference-image list
-    (stored order), with the per-use override refs appended after,
-  - the bundle's ``seed`` is surfaced so the consumer can force determinism.
+    (stored order), then the node-level per-use ``overrideRefs``, then the
+    scene/shot ``override_refs`` parameter — all order-preserving,
+  - the bundle's ``seed`` is surfaced so the consumer can force determinism,
+  - an effective ``strength`` (``strengthOverride`` if set, else
+    ``consistencyStrength``) is surfaced so the consumer can pass it to a base
+    model that exposes an IP-adherence knob (see :data:`MODEL_STRENGTH_PARAM`).
+
+PROMPT ORDER (documented choice — see implementation notes):
+  - override set:   ``"{trait}. {base_prompt}. {overridePrompt}"``
+  - override unset: ``"{trait}. {base_prompt}"``
+  The trait string always leads (identity anchor); the per-use override trails
+  the base prompt as additional directive, so it refines rather than displaces
+  the scene/shot intent.
 
 Two correctness invariants the rest of the feature depends on:
 
@@ -76,6 +89,44 @@ MODEL_MAX_REFS: dict[str, int] = {
 DEFAULT_MAX_REFS = 1
 
 
+# Per-base-model IP-adherence / consistency-strength PARAM NAME.
+#
+# HONEST FINDING (v1, reference-edit bases): none of the reachable v1 base
+# models expose a usable IP-adherence / reference-strength knob.
+#   - ``nano-banana`` (gemini-3.1-flash-image-preview, "Nano Banana 2") drives
+#     identity purely by re-feeding reference images; the Gemini generateContent
+#     imageConfig accepts only ``aspectRatio`` + ``imageSize`` — NO strength /
+#     guidance / adherence field (verified in handlers/google_gemini.py
+#     handle_nano_banana).
+#   - ``seedream-4-5`` (fal-ai/bytedance/seedream/v4.5/text-to-image) likewise
+#     publishes no reference-strength param — its node def exposes only
+#     image_size / num_images / max_images / enable_safety_checker / seed
+#     (frontend/src/constants/nodeDefinitions.ts), and reference-edit keeps
+#     identity by re-feeding refs, not by a strength dial.
+#   - ``flux-kontext`` is reference-edit (kontext) with no published adherence
+#     knob either.
+#
+# So this map is EMPTY for v1: ``consistencyStrength`` / ``strength_override``
+# are carried in the bundle and surfaced by ``expand_character`` as
+# ``strength``, but the consumer only injects them when a base model has a real
+# param here. Fabricating one for a model that ignores it would be a silent
+# no-op (the anti-pattern this feature explicitly avoids). The dial becomes
+# active in v2 (trained-LoRA), where a LoRA scale IS a real adherence knob.
+# When a base gains a confirmed adherence param, add it here (e.g. a future
+# {"some-base": "image_prompt_strength"}) and it flows automatically.
+MODEL_STRENGTH_PARAM: dict[str, str] = {}
+
+
+def strength_param_for(base_model: str) -> str | None:
+    """Return the IP-adherence param NAME for ``base_model``, or None.
+
+    None (the v1 default for every reachable base) means the model has no
+    usable strength knob — the consumer must NOT inject one (silent-no-op
+    anti-pattern). See :data:`MODEL_STRENGTH_PARAM`.
+    """
+    return MODEL_STRENGTH_PARAM.get(str(base_model or "").strip().lower())
+
+
 def max_refs_for(base_model: str) -> int:
     """Return the reference-image cap for ``base_model``.
 
@@ -112,33 +163,59 @@ def expand_character(
 
     Returns
     -------
-    ``{"prompt": str, "image_urls": list[str], "seed": int | None}``
+    ``{"prompt": str, "image_urls": list[str], "seed": int | None,
+    "strength": float | None}``
 
     Behaviour
     ---------
     * **No-op** (``bundle`` falsy): returns the base prompt unchanged, the
-      override refs as-is, and ``seed = None`` — base generation proceeds exactly
-      as it did before Character existed. No trait prefix, no forced seed.
+      override refs as-is, ``seed = None`` and ``strength = None`` — base
+      generation proceeds exactly as it did before Character existed. No trait
+      prefix, no forced seed, no strength.
     * **Active** (``bundle`` present):
-        - ``prompt = f"{frozenTraitString}. {base_prompt}"`` (trait VERBATIM),
-        - ``image_urls = referenceViews + override_refs`` (views first, order
-          preserved, no reordering / order-changing dedup),
+        - ``prompt``: trait VERBATIM, then the base prompt, then the bundle's
+          per-use ``overridePrompt`` when set (see PROMPT ORDER in the module
+          docstring): ``f"{trait}. {base_prompt}. {overridePrompt}"`` (or
+          ``f"{trait}. {base_prompt}"`` when no override).
+        - ``image_urls``: ``referenceViews`` (stored order) ++ the bundle's
+          node-level ``overrideRefs`` ++ the ``override_refs`` parameter
+          (scene/shot refs). Order preserved, no reordering / order-changing
+          dedup.
         - ``seed = bundle["seed"]``.
+        - ``strength``: ``strengthOverride`` if set (not None), else
+          ``consistencyStrength``. The CONSUMER decides whether to inject it
+          (only for a base model with a real adherence param — see
+          :func:`strength_param_for`); a model without one carries it unused.
       Raises :class:`ValueError` if ``len(image_urls) > model_max_refs`` — the
-      anti-FLORA guardrail (never silently truncate or single-ref-fail).
+      anti-FLORA guardrail (never silently truncate or single-ref-fail). The
+      count includes ``overrideRefs`` and the ``override_refs`` parameter.
     """
     overrides = list(override_refs or [])
 
     # No-op: base generation proceeds exactly as before.
     if not bundle:
-        return {"prompt": base_prompt, "image_urls": overrides, "seed": None}
+        return {
+            "prompt": base_prompt,
+            "image_urls": overrides,
+            "seed": None,
+            "strength": None,
+        }
 
     trait = bundle["frozenTraitString"]
     # Verbatim prefix — exactly this f-string, never paraphrased/normalized.
-    prompt = f"{trait}. {base_prompt}"
+    # The per-use overridePrompt (when set) trails the base prompt as additional
+    # direction so it refines rather than displaces scene/shot intent.
+    override_prompt = str(bundle.get("overridePrompt") or "").strip()
+    if override_prompt:
+        prompt = f"{trait}. {base_prompt}. {override_prompt}"
+    else:
+        prompt = f"{trait}. {base_prompt}"
 
-    # referenceViews FIRST (stored order), then the per-use overrides.
-    image_urls = list(bundle["referenceViews"]) + overrides
+    # referenceViews FIRST (stored order), then the node-level per-use
+    # overrideRefs from the bundle, then the consumer's override_refs parameter
+    # (scene/shot refs). All order-preserving; the guardrail counts the total.
+    node_override_refs = [str(r) for r in (bundle.get("overrideRefs") or []) if r]
+    image_urls = list(bundle["referenceViews"]) + node_override_refs + overrides
 
     # Anti-FLORA capability guardrail — check the FINAL ref count.
     if len(image_urls) > model_max_refs:
@@ -149,4 +226,17 @@ def expand_character(
             f"reduce the views."
         )
 
-    return {"prompt": prompt, "image_urls": image_urls, "seed": bundle["seed"]}
+    # Effective strength: per-use override wins over the stored default.
+    strength_override = bundle.get("strengthOverride")
+    strength = (
+        strength_override
+        if strength_override is not None
+        else bundle.get("consistencyStrength")
+    )
+
+    return {
+        "prompt": prompt,
+        "image_urls": image_urls,
+        "seed": bundle["seed"],
+        "strength": strength,
+    }

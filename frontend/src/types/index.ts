@@ -163,7 +163,15 @@ export interface Character {
   updatedAt: string;
 }
 
-/** Lightweight bundle passed on a Character port between nodes. */
+/** Lightweight bundle passed on a Character port between nodes.
+ *
+ *  The identity fields (characterId..consistencyStrength) come VERBATIM from the
+ *  stored Character. The optional override* fields are the PER-USE override
+ *  layer read from the `character` node's own params (override_prompt /
+ *  override_refs / strength_override) — pose/expression/wardrobe/framing
+ *  direction layered on top of the stored asset. They are applied by the
+ *  consumer (cinema-scene / edit nodes) via expand_character, not by the
+ *  character node itself. Absent/empty = no override for that field. */
 export interface CharacterBundle {
   characterId: string;
   name: string;
@@ -171,6 +179,13 @@ export interface CharacterBundle {
   frozenTraitString: string;
   seed: number;
   consistencyStrength: number;
+  /** Per-use prompt direction folded in AFTER the base prompt (empty = none). */
+  overridePrompt?: string;
+  /** Per-use extra reference images, appended after referenceViews (empty = none). */
+  overrideRefs?: string[];
+  /** Per-use consistency strength; overrides consistencyStrength when set.
+   *  null/absent = inherit consistencyStrength. */
+  strengthOverride?: number | null;
 }
 
 export interface PortValue {

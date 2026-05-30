@@ -21,7 +21,14 @@ from __future__ import annotations
 
 import pytest
 
-from cinema.identity import DEFAULT_MAX_REFS, MODEL_MAX_REFS, expand_character, max_refs_for
+from cinema.identity import (
+    DEFAULT_MAX_REFS,
+    MODEL_MAX_REFS,
+    MODEL_STRENGTH_PARAM,
+    expand_character,
+    max_refs_for,
+    strength_param_for,
+)
 
 
 # A distinctive, punctuation-heavy trait string so any normalization
@@ -38,8 +45,8 @@ _VIEWS = [
 ]
 
 
-def _bundle(views: list[str] | None = None, seed: int = 84) -> dict:
-    return {
+def _bundle(views: list[str] | None = None, seed: int = 84, **overrides) -> dict:
+    bundle = {
         "characterId": "char_1",
         "name": "Iris Vane",
         "referenceViews": list(views if views is not None else _VIEWS),
@@ -47,6 +54,10 @@ def _bundle(views: list[str] | None = None, seed: int = 84) -> dict:
         "seed": seed,
         "consistencyStrength": 0.65,
     }
+    # Optional per-use override layer (overridePrompt / overrideRefs /
+    # strengthOverride) — only present when the test sets it.
+    bundle.update(overrides)
+    return bundle
 
 
 # ---------- active bundle ----------
@@ -65,6 +76,79 @@ def test_active_bundle_prepends_trait_verbatim_and_orders_refs() -> None:
     # referenceViews FIRST (stored order), then per-use overrides.
     assert out["image_urls"] == bundle["referenceViews"] + ["o1.png"]
     assert out["seed"] == bundle["seed"]
+    # No strengthOverride -> effective strength falls back to consistencyStrength.
+    assert out["strength"] == bundle["consistencyStrength"]
+
+
+# ---------- per-use override layer ----------
+
+
+def test_override_prompt_folded_in_documented_order() -> None:
+    """overridePrompt trails the base prompt: "{trait}. {base}. {override}"."""
+    bundle = _bundle(overridePrompt="low-angle, dramatic rim light")
+    out = expand_character(
+        bundle,
+        base_prompt="a forest at dawn",
+        override_refs=None,
+        model_max_refs=14,
+    )
+    assert out["prompt"] == (
+        f"{_TRAIT}. a forest at dawn. low-angle, dramatic rim light"
+    )
+
+
+def test_empty_override_prompt_does_not_alter_prompt() -> None:
+    bundle = _bundle(overridePrompt="")
+    out = expand_character(
+        bundle, base_prompt="a forest at dawn", override_refs=None, model_max_refs=14
+    )
+    assert out["prompt"] == f"{_TRAIT}. a forest at dawn"
+
+
+def test_override_refs_appear_after_reference_views() -> None:
+    """The bundle's node-level overrideRefs slot in AFTER referenceViews and
+    BEFORE the consumer's override_refs parameter (scene/shot refs)."""
+    bundle = _bundle(overrideRefs=["node-ref.png"])
+    out = expand_character(
+        bundle,
+        base_prompt="x",
+        override_refs=["scene-ref.png"],
+        model_max_refs=14,
+    )
+    assert out["image_urls"] == _VIEWS + ["node-ref.png", "scene-ref.png"]
+
+
+def test_strength_override_wins_over_consistency_strength() -> None:
+    bundle = _bundle(strengthOverride=0.9)  # consistencyStrength is 0.65
+    out = expand_character(
+        bundle, base_prompt="x", override_refs=None, model_max_refs=14
+    )
+    assert out["strength"] == 0.9
+
+
+def test_strength_override_none_falls_back_to_consistency_strength() -> None:
+    bundle = _bundle(strengthOverride=None)
+    out = expand_character(
+        bundle, base_prompt="x", override_refs=None, model_max_refs=14
+    )
+    assert out["strength"] == bundle["consistencyStrength"]
+
+
+def test_capability_guardrail_counts_override_refs_in_total() -> None:
+    """The anti-FLORA guard counts the FINAL total INCLUDING the bundle's
+    overrideRefs (not just referenceViews + the parameter)."""
+    # 3 views + 1 node overrideRef + 1 scene ref = 5 final refs; cap 4 -> raise.
+    bundle = _bundle(overrideRefs=["node-ref.png"])
+    with pytest.raises(ValueError) as exc:
+        expand_character(
+            bundle,
+            base_prompt="x",
+            override_refs=["scene-ref.png"],
+            model_max_refs=4,
+        )
+    msg = str(exc.value)
+    assert "4" in msg  # the cap
+    assert "5" in msg  # the required total (incl. overrideRefs)
 
 
 def test_capability_guardrail_raises_when_refs_exceed_cap() -> None:
@@ -97,11 +181,12 @@ def test_no_bundle_is_a_noop(empty) -> None:
     assert out["prompt"] == "a forest at dawn"  # unchanged, no trait prefix
     assert out["image_urls"] == ["o1.png"]  # just the overrides
     assert out["seed"] is None  # no forced seed
+    assert out["strength"] is None  # no strength on the no-character path
 
 
 def test_no_bundle_with_no_overrides_returns_empty_list() -> None:
     out = expand_character(None, base_prompt="x", override_refs=None, model_max_refs=14)
-    assert out == {"prompt": "x", "image_urls": [], "seed": None}
+    assert out == {"prompt": "x", "image_urls": [], "seed": None, "strength": None}
 
 
 # ---------- maxRefs table + lookup ----------
@@ -141,3 +226,19 @@ def test_max_refs_normalizes_stray_whitespace() -> None:
     # A stray-whitespace id must not silently fall to the conservative default.
     assert max_refs_for("  nano-banana  ") == 14
     assert max_refs_for("seedream-4-5\n") == 10
+
+
+# ---------- strength-param support map (the honest finding) ----------
+
+
+def test_no_v1_base_exposes_a_strength_param() -> None:
+    """HONEST FINDING: every reachable v1 reference-edit base lacks an
+    IP-adherence knob, so the support map is empty and strength_param_for
+    returns None for all of them. The consumer must therefore NOT inject a
+    strength param for these models (silent-no-op anti-pattern)."""
+    assert MODEL_STRENGTH_PARAM == {}
+    assert strength_param_for("nano-banana") is None
+    assert strength_param_for("seedream-4-5") is None
+    assert strength_param_for("flux-kontext") is None
+    assert strength_param_for("nano-banana-pro") is None
+    assert strength_param_for("  nano-banana  ") is None  # normalized, still None

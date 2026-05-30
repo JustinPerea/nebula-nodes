@@ -8,6 +8,12 @@ Self-contained handler that, per shot, runs the Soul Cinema stack:
    The base model is dispatched by REUSING the existing handler registry — we
    synthesize a ``GraphNode`` for the base model and invoke its registered
    closure exactly as ``execute_graph`` would. No new network channel.
+   When a typed Character bundle is wired in, ``cinema.identity.expand_character``
+   folds in the verbatim trait string, the per-use override layer
+   (overridePrompt / overrideRefs / strengthOverride), reference views, and seed.
+   The effective consistency strength is injected into the base params ONLY for
+   a base model that exposes a real IP-adherence knob (``strength_param_for``);
+   v1 reference-edit bases have none, so it is carried but not applied (spec §4.4).
 2. **Color** — :func:`cinema.color.transfer_to_palette` with the shared palette
    (or the shot's ``overrides.palette``).
 3. **Look** — :func:`cinema.look.apply_look` with the shared look (or the
@@ -35,7 +41,7 @@ import httpx
 from PIL import Image
 
 from cinema.color import transfer_to_palette
-from cinema.identity import expand_character, max_refs_for
+from cinema.identity import expand_character, max_refs_for, strength_param_for
 from cinema.look import apply_look
 from models.events import ExecutionEvent, ProgressEvent
 from models.graph import GraphNode, PortValueDict
@@ -309,6 +315,19 @@ async def handle_cinema_scene(
             shot_extra_params = dict(base_extra_params)
             if expanded["seed"] is not None:
                 shot_extra_params["seed"] = expanded["seed"]
+
+            # Apply the effective consistency strength HONESTLY: only when this
+            # base model exposes a real IP-adherence param (strength_param_for).
+            # For v1 reference-edit bases (nano-banana / seedream-4-5 /
+            # flux-kontext) there is NO such knob, so the strength is carried in
+            # the bundle but deliberately NOT injected — fabricating a param the
+            # model ignores would be a silent no-op. See cinema.identity
+            # MODEL_STRENGTH_PARAM and spec §4.4. Only fires when a bundle is
+            # present (expanded["strength"] is None on the no-character path).
+            if expanded["strength"] is not None:
+                strength_key = strength_param_for(base_model)
+                if strength_key is not None:
+                    shot_extra_params[strength_key] = expanded["strength"]
 
             # 1. Base / identity — reuse the registered base handler.
             base_node, base_inputs = _build_base_node(

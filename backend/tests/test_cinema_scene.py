@@ -387,3 +387,139 @@ async def test_character_bundle_on_nano_banana_default_does_not_raise(monkeypatc
     assert captured["images"].value == [v1, v2, v3, shot_ref]
     # Seed injected into the base node params.
     assert captured["seed"] == 84
+
+
+# ---------- per-use override layer flows through to the base call ----------
+
+
+@pytest.mark.asyncio
+async def test_override_prompt_and_refs_flow_to_base_call(monkeypatch) -> None:
+    """A bundle carrying the per-use override layer (overridePrompt /
+    overrideRefs) expands each shot's base call: the override prompt trails the
+    base prompt, and the node-level overrideRefs slot in after referenceViews and
+    before the scene/shot refs."""
+    v1 = _write_base_image(rgb=(10, 200, 10))
+    v2 = _write_base_image(rgb=(200, 10, 10))
+    node_ref = _write_base_image(rgb=(120, 120, 0))
+    shot_ref = _write_base_image(rgb=(50, 50, 50))
+
+    captured: dict[str, Any] = {}
+
+    async def capture(node, inputs, api_keys):
+        captured["images"] = inputs.get("images")
+        captured["prompt"] = inputs.get("prompt")
+        captured["params"] = dict(node.params)
+        return {"image": {"type": "Image", "value": _write_base_image()}}
+
+    _patch_base(monkeypatch, capture)
+
+    bundle = _bundle([v1, v2], seed=84)
+    bundle["overridePrompt"] = "low-angle, dramatic rim light"
+    bundle["overrideRefs"] = [node_ref]
+    scene = {
+        "version": 1,
+        "base": {"model": "seedream-4-5"},  # maxRefs = 10
+        "prompt": "a forest at dawn",
+        "aspectRatio": "16:9",
+        "shots": [{"id": "s1", "prompt": "wide shot", "refImageUrls": [shot_ref]}],
+    }
+    await handle_cinema_scene(
+        _scene_node(scene),
+        inputs={"character": PortValueDict(type="Character", value=bundle)},
+        api_keys={"FAL_KEY": "x"},
+        emit=None,
+    )
+
+    # PROMPT ORDER: "{trait}. {base}. {override}".
+    assert captured["prompt"].value == (
+        f"{_BUNDLE_TRAIT}. a forest at dawn wide shot. low-angle, dramatic rim light"
+    )
+    # referenceViews FIRST, then node overrideRefs, then the scene/shot ref.
+    assert captured["images"].value == [v1, v2, node_ref, shot_ref]
+
+
+# ---------- strength applied HONESTLY: only where the base supports it ----------
+
+
+@pytest.mark.asyncio
+async def test_strength_omitted_for_base_without_adherence_param(monkeypatch) -> None:
+    """The HONEST behaviour for v1 reference-edit bases: seedream-4-5 has NO
+    IP-adherence knob, so the effective strength is carried in the bundle but
+    NOT injected into the base call's params (no silent no-op)."""
+    v1 = _write_base_image(rgb=(10, 200, 10))
+    v2 = _write_base_image(rgb=(200, 10, 10))
+    v3 = _write_base_image(rgb=(10, 10, 200))
+
+    captured: dict[str, Any] = {}
+
+    async def capture(node, inputs, api_keys):
+        captured["params"] = dict(node.params)
+        return {"image": {"type": "Image", "value": _write_base_image()}}
+
+    _patch_base(monkeypatch, capture)
+
+    bundle = _bundle([v1, v2, v3], seed=84)
+    bundle["strengthOverride"] = 0.9  # would-be strength value
+    scene = {
+        "version": 1,
+        "base": {"model": "seedream-4-5"},
+        "prompt": "a forest at dawn",
+        "aspectRatio": "16:9",
+        "shots": [{"id": "s1", "prompt": "wide shot"}],
+    }
+    await handle_cinema_scene(
+        _scene_node(scene),
+        inputs={"character": PortValueDict(type="Character", value=bundle)},
+        api_keys={"FAL_KEY": "x"},
+        emit=None,
+    )
+
+    params = captured["params"]
+    # No fabricated strength key reached the base for a model without the knob.
+    assert "strength" not in params
+    assert "image_prompt_strength" not in params
+    assert "consistencyStrength" not in params
+    assert "strengthOverride" not in params
+    # The seed (a real, supported param) still flows through.
+    assert params.get("seed") == 84
+
+
+@pytest.mark.asyncio
+async def test_strength_injected_for_base_with_adherence_param(monkeypatch) -> None:
+    """When a base model DOES expose an IP-adherence param (mapped in
+    MODEL_STRENGTH_PARAM), the effective strength is injected under that key.
+
+    v1 has no such base, so we register a hypothetical one for this test to
+    prove the wiring fires when a real knob exists (e.g. v2 trained-LoRA)."""
+    import cinema.identity as identity
+
+    monkeypatch.setitem(identity.MODEL_STRENGTH_PARAM, "seedream-4-5", "ip_strength")
+
+    v1 = _write_base_image(rgb=(10, 200, 10))
+    v2 = _write_base_image(rgb=(200, 10, 10))
+
+    captured: dict[str, Any] = {}
+
+    async def capture(node, inputs, api_keys):
+        captured["params"] = dict(node.params)
+        return {"image": {"type": "Image", "value": _write_base_image()}}
+
+    _patch_base(monkeypatch, capture)
+
+    bundle = _bundle([v1, v2], seed=84)  # consistencyStrength = 0.65
+    scene = {
+        "version": 1,
+        "base": {"model": "seedream-4-5"},
+        "prompt": "a forest at dawn",
+        "aspectRatio": "16:9",
+        "shots": [{"id": "s1", "prompt": "wide shot"}],
+    }
+    await handle_cinema_scene(
+        _scene_node(scene),
+        inputs={"character": PortValueDict(type="Character", value=bundle)},
+        api_keys={"FAL_KEY": "x"},
+        emit=None,
+    )
+
+    # Effective strength (no override -> consistencyStrength) under the mapped key.
+    assert captured["params"]["ip_strength"] == 0.65
