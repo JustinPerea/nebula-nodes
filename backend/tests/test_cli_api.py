@@ -688,6 +688,22 @@ class TestOutputsArchive:
         assert "chat-uploads" not in resp.json()["archived"]
 
 
+class TestOpenAIApiBillingDoesNotBlock:
+    """OpenAI-direct image nodes should not be blocked by a separate billing
+    acknowledgement. Normal graph validation still applies."""
+
+    def test_execute_reaches_normal_validation_without_billing_ack(self, client):
+        resp = client.post("/api/execute", json={
+            "nodes": [
+                {"id": "n1", "definitionId": "gpt-image-2-generate", "params": {}, "outputs": {}},
+            ],
+            "edges": [],
+        })
+
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "validation_error"
+
+
 class TestChatAgentDispatch:
     """WebSocket /ws/chat accepts an 'agent' field and routes to the right runner."""
 
@@ -719,3 +735,61 @@ class TestChatAgentDispatch:
 
             second = ws.receive_json()
             assert second["type"] == "done"
+
+
+class TestCinemaScenePersistsScene:
+    """Regression for the scene-parity gap: agents and the Cinema Studio must be
+    able to persist a `scene` spec on a cinema-scene node via the standard graph
+    API. Before the fix, cinema-scene declared `params: []`, so `_validate_params`
+    rejected the `scene` key with HTTP 400 — the Studio's persistSceneParam PUT
+    failed silently and no agent could author a scene. The fix declares `scene`
+    as a (hidden) param on the cinema-scene def so `_valid_param_keys` includes
+    it and the validator accepts it through its normal declared-keys path.
+
+    These run against the FastAPI TestClient, which imports `main` fresh and so
+    loads the regenerated node_definitions.json without needing the live restart.
+    """
+
+    _SCENE = {
+        "base": {"model": "nano-banana"},
+        "aspectRatio": "1:1",
+        "shots": [{"id": "s1", "prompt": "x"}],
+    }
+
+    def test_create_cinema_scene_node_with_scene_returns_200(self, client):
+        resp = client.post(
+            "/api/graph/node",
+            json={"definitionId": "cinema-scene", "params": {"scene": self._SCENE}},
+        )
+        # The whole point: NOT a 400.
+        assert resp.status_code == 200, resp.text
+        node = resp.json()
+        short_id = node["id"]
+        try:
+            assert node["params"]["scene"] == self._SCENE
+        finally:
+            client.delete(f"/api/graph/node/{short_id}")
+
+    def test_put_scene_on_cinema_scene_node_persists(self, client):
+        # Create an empty cinema-scene node first (mirrors the Studio flow:
+        # node dropped, then persistSceneParam PUTs the scene).
+        create = client.post(
+            "/api/graph/node",
+            json={"definitionId": "cinema-scene", "params": {}},
+        )
+        assert create.status_code == 200, create.text
+        short_id = create.json()["id"]
+        try:
+            resp = client.put(
+                f"/api/graph/node/{short_id}",
+                json={"params": {"scene": self._SCENE}},
+            )
+            assert resp.status_code == 200, resp.text
+            # The scene must survive into the persisted node params.
+            # GET /api/graph returns cli_graph.get_state(): nodes are flat
+            # dicts with params at the top level (not under a `data` key).
+            graph = client.get("/api/graph").json()
+            node = next(n for n in graph["nodes"] if n["id"] == short_id)
+            assert node["params"]["scene"] == self._SCENE
+        finally:
+            client.delete(f"/api/graph/node/{short_id}")

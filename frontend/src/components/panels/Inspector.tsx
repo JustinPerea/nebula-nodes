@@ -231,6 +231,10 @@ export function Inspector({ embedded = false }: InspectorProps) {
   const visibleParams = useMemo(() => {
     if (!nodeData) return resolvedParams;
     return resolvedParams.filter((param) => {
+      // Hidden params are editor-managed internal state (e.g. cinema-scene's
+      // `scene` spec, authored via the Cinema Studio). They're declared only so
+      // the backend validator accepts the key — never an editable field here.
+      if (param.hidden) return false;
       if (!param.visibleWhen) return true;
       return Object.entries(param.visibleWhen).every(([key, allowedValues]) => {
         const currentValue = nodeData.params[key];

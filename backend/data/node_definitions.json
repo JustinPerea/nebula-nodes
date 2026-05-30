@@ -2636,7 +2636,15 @@
       }
     ],
     "outputPorts": [],
-    "params": []
+    "params": [
+      {
+        "key": "scene",
+        "label": "Scene",
+        "type": "string",
+        "required": false,
+        "hidden": true
+      }
+    ]
   },
   "character": {
     "id": "character",

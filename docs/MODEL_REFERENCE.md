@@ -2087,6 +2087,10 @@ Generated: 2026-05-30 | Nodes: 108 | Source: [`backend/data/node_definitions.jso
 | **Outputs** | — |
 | **Audited** | — |
 
+| Parameter | Type | Default | Options/Range |
+|-----------|------|---------|---------------|
+| Scene | string | — | — |
+
 ---
 
 ## Character

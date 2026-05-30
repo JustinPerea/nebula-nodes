@@ -81,6 +81,12 @@ export interface ParamDefinition {
   /** Show this param only when another param's value is in the given list.
    *  e.g. { model: ['gemini-3.1-flash-image-preview', 'gemini-3-pro-image-preview'] } */
   visibleWhen?: Record<string, (string | number | boolean)[]>;
+  /** Internal/editor-managed param. Declared so the backend validator accepts
+   *  it as a known key (see backend/main.py::_valid_param_keys), but never
+   *  rendered as an editable field in the Inspector. Used for complex state
+   *  that has a dedicated editor surface — e.g. cinema-scene's `scene` spec,
+   *  authored via the Cinema Studio rather than a generic param control. */
+  hidden?: boolean;
 }
 
 export interface ModelNodeDefinition {

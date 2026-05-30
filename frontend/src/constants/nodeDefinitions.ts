@@ -1468,7 +1468,15 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     // Output ports are dynamic — one Image port per shot, written at runtime from
     // the editor-managed scene spec. Starts empty (mirrors remotion-node).
     outputPorts: [],
-    params: [],
+    // The `scene` spec (a complex object: base model, aspect ratio, shots) is
+    // authored via the Cinema Studio, not a generic param control. It's declared
+    // here so the backend validator (_valid_param_keys) accepts it as a known key
+    // — agents and the Studio both persist it via PUT/POST /api/graph/node — and
+    // marked `hidden` so the Inspector never renders it as a broken editable
+    // field. The handler (cinema_scene.py) reads params.get("scene") unchanged.
+    params: [
+      { key: 'scene', label: 'Scene', type: 'string', required: false, hidden: true },
+    ],
   },
 
   'character': {
