@@ -339,3 +339,31 @@ peekaboo strand front-left, (5) light freckles, (6) age ~24, (7) overall face li
 - **Face likeness:** Strong match to references and to scene 1 — same bone structure,
   same proportions, same eyes. The dusk lighting shifts color temperature but the identity
   reads as the same person. ✓
+
+---
+
+### Verdict (orchestrator) — human subject
+
+**Identity HOLDS — strongly, including the fine-grained drift-detectors.** Reviewed both
+outputs against the references: face likeness is unmistakable in both, and every precise
+marker survived multi-reference editing into substantially different pose / setting / lighting
+— the bird-in-flight tattoo (right collarbone), the gold laurel earring (right ear), the gold
+laurel choker, the pink peekaboo strand (front-left), and the freckles. Only minor drift: in
+the dusk shot the tattoo line-work is slightly looser, but its placement and all
+identity-level features hold. A human face + a fine-line tattoo is exactly where
+reference-edit models tend to drift — nano-banana-2 (Gemini 3.1 Flash Image) passed it.
+
+## 7. Overall conclusion (both subjects)
+
+The spec §5 gate is satisfied across BOTH subject types with the default base
+`nano-banana-2/edit` (Gemini 3.1 Flash Image):
+
+- **Non-human / stylized** (moss-stone golem, §5): identity holds.
+- **Human with fine-grained distinctive marks** (Pheme — tattoo + right-ear earring + laurel
+  choker + dyed strand + freckles, §6): identity holds, including every precise marker.
+
+**Decision: keep `nano-banana-2/edit` as the default Character base.** No fallback to
+`seedream-4-5/edit` is warranted — multi-reference identity preservation is now empirically
+confirmed for both non-human and human subjects. (Face-ID methods remain a v3 option gated to
+`subjectType: 'human'` per the spec, but v1 reference-edit already preserves human identity
+well in this test, including a fine-line tattoo and single-ear jewelry laterality.)
