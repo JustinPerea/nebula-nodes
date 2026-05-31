@@ -14,6 +14,12 @@ from handlers.openai_image_edit import handle_openai_image_edit
 from handlers.google_gemini import handle_imagen4, handle_nano_banana, handle_lyria3, handle_gemini_tts, handle_gemini_embeddings
 from handlers.elevenlabs import handle_elevenlabs_tts, handle_elevenlabs_sfx, handle_elevenlabs_sts, handle_elevenlabs_isolation, handle_elevenlabs_dubbing
 from handlers.openai_audio import handle_openai_stt, handle_openai_translate, handle_openai_tts
+from handlers.krea import (
+    handle_krea_image_style_reference,
+    handle_krea_moodboard,
+    handle_krea_style,
+    handle_krea_style_search,
+)
 
 
 SYNC_HANDLERS: dict[
@@ -39,6 +45,10 @@ SYNC_HANDLERS: dict[
     "lyria-3": handle_lyria3,
     "gemini-tts": handle_gemini_tts,
     "gemini-embeddings": handle_gemini_embeddings,
+    "krea-image-style-reference": handle_krea_image_style_reference,
+    "krea-moodboard": handle_krea_moodboard,
+    "krea-style": handle_krea_style,
+    "krea-style-search": handle_krea_style_search,
 }
 
 
@@ -141,6 +151,7 @@ def get_handler_registry(
         from handlers.openrouter import handle_openrouter_universal
         from handlers.replicate_universal import handle_replicate_universal
         from handlers.fal_universal import handle_fal_universal
+        from handlers.krea import handle_krea_generate, handle_krea_style_train
 
         async def _runway_video_handler(
             node: GraphNode,
@@ -223,6 +234,20 @@ def get_handler_registry(
             api_keys: dict[str, str],
         ) -> dict[str, Any]:
             return await handle_fal_universal(node, inputs, api_keys, emit=emit)
+
+        async def _krea_generate_handler(
+            node: GraphNode,
+            inputs: dict[str, PortValueDict],
+            api_keys: dict[str, str],
+        ) -> dict[str, Any]:
+            return await handle_krea_generate(node, inputs, api_keys, emit=emit)
+
+        async def _krea_style_train_handler(
+            node: GraphNode,
+            inputs: dict[str, PortValueDict],
+            api_keys: dict[str, str],
+        ) -> dict[str, Any]:
+            return await handle_krea_style_train(node, inputs, api_keys, emit=emit)
 
         async def _flux_ultra_handler(
             node: GraphNode,
@@ -734,5 +759,7 @@ def get_handler_registry(
         registry["gpt-image-2-fal-edit"] = _gpt_image_2_fal_edit_handler
         registry["seedvr2-upscale"] = _seedvr2_upscale_handler
         registry["seedream-4-5"] = _seedream45_handler
+        registry["krea-2-generate"] = _krea_generate_handler
+        registry["krea-style-train"] = _krea_style_train_handler
 
     return registry

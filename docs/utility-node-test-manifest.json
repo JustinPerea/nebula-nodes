@@ -17,6 +17,9 @@
     { "id": "iterator-image", "backend": "native", "browser": "execute" },
     { "id": "iterator-text", "backend": "native", "browser": "execute" },
     { "id": "style-reference", "backend": "mocked-handler", "browser": "mocked-event" },
+    { "id": "krea-image-style-reference", "backend": "mocked-handler", "browser": "mocked-event" },
+    { "id": "krea-moodboard", "backend": "mocked-handler", "browser": "mocked-event" },
+    { "id": "krea-style", "backend": "mocked-handler", "browser": "mocked-event" },
     { "id": "video-edit", "backend": "mocked-handler", "browser": "mocked-event" },
     { "id": "remotion-node", "backend": "mocked-handler", "browser": "mocked-event" }
   ]

@@ -36,6 +36,7 @@ SKILL_TRIGGER_KEYWORDS: dict[str, tuple[str, ...]] = {
         "gpt-image-2", "gpt image 2", "gpt 2 image", "openai image",
         "image 2", "gpt-image",
     ),
+    "krea": ("krea", "krea 2", "krea-2", "moodboard", "moodboards"),
     "meshy": ("meshy", "3d", "text-to-3d", "image-to-3d", "rig", "rigging", "remesh"),
     "runway": ("runway", "gen-4", "gen4", "act-two", "aleph"),
 }
@@ -112,7 +113,7 @@ def _select_skill_names(message: str, skills: list[dict[str, str]]) -> list[str]
     # Provider meta-skills are cheap and high-value when the user is asking
     # about graph/API capability rather than a specific model.
     if any(term in lower for term in ("skill", "api", "node", "model", "graph")):
-        for name in ("gpt-image-2", "fal"):
+        for name in ("gpt-image-2", "krea", "fal"):
             if any(skill["name"] == name for skill in skills) and name not in selected:
                 selected.append(name)
 
@@ -152,6 +153,7 @@ def _build_skill_bootstrap(message: str) -> str:
         "",
         "Additional tracked knowledge roots:",
         "- docs/model-providers/openai/gpt-image-2.md",
+        "- docs/model-providers/krea/krea-2.md",
         "- docs/model-providers/fal/",
         "- docs/model-providers/google/gemini-nano-banana.md",
         "- docs/fal-model-schemas.md",

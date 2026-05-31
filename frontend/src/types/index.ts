@@ -47,6 +47,7 @@ export type APIProvider =
   | 'higgsfield'
   | 'meshy'
   | 'quiver'
+  | 'krea'
   | 'nous'
   | 'utility';
 

@@ -46,6 +46,7 @@ VALID_PROVIDERS = {
     "higgsfield",
     "meshy",
     "quiver",
+    "krea",
     "nous",
     "utility",
 }

@@ -67,6 +67,7 @@ const PROVIDER_LABELS = {
   bfl: 'BFL',
   higgsfield: 'Higgsfield',
   meshy: 'Meshy',
+  krea: 'Krea',
   nous: 'Nous',
   utility: 'Utility',
 };

@@ -136,3 +136,21 @@ User principle: "what happens in the node view should happen in all views and vi
 - `CinemaSharedControls` renders connected refs read-only with a 🔗 badge (disconnect on the canvas to remove); uploaded refs keep their × remove button.
 - Reverse direction: `CinemaSceneNode`'s card summary now shows the uploaded-ref count (`2 shots · 1 ref`), so refs added inside the Studio are reflected on the canvas (connected refs already show as the edge).
 - Verified live: constructed `image-input → cinema-scene:character_refs` via the API and ran the exact resolution logic against `/api/graph/export` → resolved the ref URL; tsc + vite build clean.
+
+### 2026-05-30 — Krea 2 direct provider plan
+
+- Created branch `codex/krea-2-direct-provider` from the current dirty `main` state as requested; unrelated existing worktree changes are being left untouched.
+- Scope decision: implement Krea direct API only. FAL Krea endpoints are intentionally skipped for this goal even though they exist, because Krea-native style IDs, moodboards, assets, and style training are not covered equivalently by the generic FAL node.
+- Node-family decision: add one main `krea-2-generate` node plus Krea resource wrapper/training/search nodes. This keeps simple prompt-to-image easy while allowing graph-native use of `image_style_references`, `moodboards`, and `styles`.
+- Moodboard limitation: verified Krea docs expose moodboard use by ID but no public create/list moodboard endpoints, so Nebula will model moodboards as existing-ID wrapper nodes and direct fallback params.
+- Asset handling decision: local or generated images connected as Krea style references will be uploaded internally via `POST /assets`; users should not have to paste URLs for normal graph workflows.
+- Shipped direct Krea implementation: `krea-2-generate`, `krea-image-style-reference`, `krea-style`, `krea-moodboard`, `krea-style-search`, and `krea-style-train`.
+- `krea-2-generate` accepts raw image style inputs and typed Krea resource objects together; the handler merges them into Krea's documented `image_style_references`, `styles`, and `moodboards` request fields, enforcing max 10 image refs and max 1 moodboard.
+- Style training uploads local graph images to Krea assets before calling `/styles/train`, polls `/jobs/{id}`, emits a reusable style object, and optionally shares the style with the API workspace.
+- Verification: Krea handler tests, node registry/contract tests, Codex skill bootstrap tests, full backend suite (`827 passed`), frontend production build, and `git diff --check` all passed. No live Krea smoke was run because no `KREA_API_TOKEN` was available in this session.
+
+### 2026-05-31 — Krea agent skill
+
+- Added/expanded the project-local Krea agent skill at `.agents/skills/krea/SKILL.md` so Codex/Daedalus agents know the direct-Krea node IDs, graph wiring patterns, resource wrapper shapes, API key naming, and Krea-specific live-test caveats.
+- Kept the skill as one concise `SKILL.md` rather than adding extra docs, because detailed provider research already lives in `docs/model-providers/krea/krea-2.md` and skills should stay lightweight.
+- Included the `402` API-balance caveat from live testing: a valid Krea token can authenticate and still fail generation until the separate API balance is topped up.
