@@ -1,10 +1,5 @@
 import { useEffect, useState } from 'react';
-import type {
-  CSSProperties,
-  DragEvent as ReactDragEvent,
-  KeyboardEvent as ReactKeyboardEvent,
-  MouseEvent as ReactMouseEvent,
-} from 'react';
+import type { DragEvent as ReactDragEvent } from 'react';
 import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
 import { fetchCharacters } from '../../lib/api';
@@ -23,19 +18,14 @@ export const CHARACTER_DRAG_MIME = 'application/nebula-character';
 
 /** Character palette — a sibling of NodeLibrary mounted as canvas chrome.
  *  Lists saved Characters (project ⇄ global toggle), "New Character" opens a
- *  fresh draft in the Studio.
- *
- *  Interaction model (see the dual-handler race fixed here): clicking a row is
- *  the PRIMARY action and opens the Character Studio — one synchronous
- *  enterCharacterEditor() flip, no async backend round-trip, no single/double
- *  click ambiguity. Adding the asset to the canvas is EXPLICIT: either the
- *  in-row "+ Add" button (stops propagation so it never also opens the Studio)
- *  or the existing drag (CHARACTER_DRAG_MIME). The row is a real role="button"
- *  div so the nested add <button> is valid HTML and keyboard a11y is preserved
- *  (Enter/Space open the Studio).
+ *  fresh draft in the Studio, and clicking/dragging an item drops a `character`
+ *  node referencing that asset onto the canvas via graphStore.addCharacterNode.
  *
  *  projectId note: the frontend has no current-project concept yet, so the
- *  toggle defaults to 'global'; 'project' is best-effort (usually empty in v1). */
+ *  toggle defaults to 'global'; 'project' is best-effort (usually empty in v1).
+ *
+ *  Drag emits CHARACTER_DRAG_MIME (id) for a future canvas drop handler; the
+ *  always-reachable path today is click → add at a default position. */
 export function CharacterLibrary() {
   const enterCharacterEditor = useUIStore((s) => s.enterCharacterEditor);
   const addCharacterNode = useGraphStore((s) => s.addCharacterNode);
@@ -79,22 +69,7 @@ export function CharacterLibrary() {
     );
   };
 
-  /** Explicit add-to-canvas. Stop propagation so the click does NOT also bubble
-   *  to the row's open-in-Studio handler. */
-  const handleAddClick = (e: ReactMouseEvent, c: Character) => {
-    e.stopPropagation();
-    handleAdd(c);
-  };
-
-  /** Keyboard a11y for the role="button" row: Enter/Space open the Studio. */
-  const handleRowKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>, c: Character) => {
-    if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') {
-      e.preventDefault();
-      enterCharacterEditor(c.id);
-    }
-  };
-
-  const onDragStart = (e: ReactDragEvent<HTMLDivElement>, c: Character) => {
+  const onDragStart = (e: ReactDragEvent<HTMLButtonElement>, c: Character) => {
     // Carry the denormalized name/thumbnail (not just the id) so Canvas.onDrop
     // can hand them to addCharacterNode for immediate canvas rendering —
     // consistent with the meta passed by click-to-add (handleAdd).
@@ -156,20 +131,15 @@ export function CharacterLibrary() {
             </div>
           )}
           {characters.map((c) => (
-            // Row is a role="button" div (not a real <button>) so the nested
-            // "+ Add" <button> is valid HTML. Single-click / Enter / Space opens
-            // the Studio — one synchronous enterCharacterEditor() flip, no
-            // async add-node race, no single/double-click ambiguity.
-            <div
+            <button
               key={c.id}
-              role="button"
-              tabIndex={0}
+              type="button"
               className="character-palette__item"
               draggable
               onDragStart={(e) => onDragStart(e, c)}
-              onClick={() => enterCharacterEditor(c.id)}
-              onKeyDown={(e) => handleRowKeyDown(e, c)}
-              title="Click to open in Studio · use Add or drag to place on canvas"
+              onClick={() => handleAdd(c)}
+              onDoubleClick={() => enterCharacterEditor(c.id)}
+              title="Click to add to canvas · double-click to edit"
             >
               <span className="character-palette__thumb">
                 {c.thumbnail ? (
@@ -182,40 +152,7 @@ export function CharacterLibrary() {
                 <span className="character-palette__name">{c.name || 'Untitled'}</span>
                 <span className="character-palette__sub">{c.referenceViews.length} views</span>
               </span>
-
-              {/* Explicit add-to-canvas. stopPropagation (in handleAddClick) so
-                  it never also triggers the row's open-in-Studio handler. */}
-              <button
-                type="button"
-                className="character-palette__add"
-                onClick={(e) => handleAddClick(e, c)}
-                title={`Add ${c.name || 'Untitled'} to canvas`}
-                aria-label={`Add ${c.name || 'Untitled'} to canvas`}
-              >
-                + Add
-              </button>
-
-              {/* Branch-out fan. Hidden until row :hover / :focus-within.
-                  Each thumb gets a --fan-i index for the staggered cascade.
-                  aria-hidden because it is a redundant visual preview of the
-                  same referenceViews; the "N views" label conveys the count. */}
-              {c.referenceViews.length > 0 && (
-                <span className="character-palette__fan" aria-hidden="true">
-                  {c.referenceViews.map((url, i) => (
-                    <span
-                      key={`${url}-${i}`}
-                      className="character-palette__fan-thumb"
-                      // --fan-i is a geometry/data value (the stagger index), not
-                      // a static visual prop, so it is allowed by the inline-style
-                      // guard which only forbids VISUAL_PROPS. Cast keeps TS happy.
-                      style={{ ['--fan-i' as string]: i } as CSSProperties}
-                    >
-                      <img src={backendAssetUrlSync(url)} alt="" draggable={false} />
-                    </span>
-                  ))}
-                </span>
-              )}
-            </div>
+            </button>
           ))}
         </div>
       </div>
