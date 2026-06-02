@@ -343,13 +343,17 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
         </div>
       )}
 
-      {nodeData.state === 'executing' && (
+      {(nodeData.state === 'queued' || nodeData.state === 'executing') && (
         <div className="model-node__loading">
           <div className="model-node__loading-spinner" />
           <span className="model-node__loading-text">
-            {nodeData.progress !== undefined ? `${Math.round(nodeData.progress * 100)}%` : 'Starting...'}
+            {nodeData.state === 'queued'
+              ? 'Queued...'
+              : nodeData.progress !== undefined
+                ? `${Math.round(nodeData.progress * 100)}%`
+                : 'Starting...'}
           </span>
-          {nodeData.progress !== undefined && (
+          {nodeData.state === 'executing' && nodeData.progress !== undefined && (
             <div className="model-node__progress">
               <div className="model-node__progress-bar" style={{ width: `${Math.round(nodeData.progress * 100)}%` }} />
             </div>

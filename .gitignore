@@ -62,3 +62,18 @@ frontend/public/demo/
 # Ad-hoc smoke-test screenshots in repo root
 smoke-*.png
 page-*.png
+audit-*.png
+polish-*.png
+fix-verify.png
+
+# HyperFrames demo compositions + local saved graphs (heavy, local render only)
+/hyperframes/
+/.hyperframes/
+/saved/
+/labpage-*.png
+
+# Heavy demo artifacts (renders, mp4, embedded compositions) — local only
+docs/demo/hyperframes-simple/
+docs/demo/remotion-editor-followups-showcase/
+docs/demo/*.mp4
+docs/demo/nebula-nodes-hyperframes.html

@@ -466,6 +466,23 @@ def test_sync_outputs_to_cli_graph_wraps_bare_values(client):
     assert node["outputs"] == {"image": {"type": "Any", "value": "/api/outputs/bare.png"}}
 
 
+def test_sync_outputs_to_cli_graph_keeps_long_text_values(client):
+    """Long prompt text is a Text output, not a candidate media path."""
+    value = (
+        "Create a square app-character concept image of a cute Shiba Inu inside "
+        "an isometric cutaway dog house. " * 20
+    ).strip()
+
+    main_module.cli_graph.add_node("text-input", {"value": value})
+    main_module._sync_outputs_to_cli_graph(
+        "n1",
+        {"text": {"type": "Text", "value": value}},
+    )
+
+    node = main_module.cli_graph.nodes["n1"]
+    assert node["outputs"] == {"text": {"type": "Text", "value": value}}
+
+
 def test_sync_outputs_to_cli_graph_stores_current_output_urls(client):
     rel = Path("generated") / "synced-output.png"
     current = OUTPUT_ROOT / rel

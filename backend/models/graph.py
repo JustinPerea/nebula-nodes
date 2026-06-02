@@ -33,6 +33,8 @@ class ExecuteRequest(BaseModel):
     nodes: list[GraphNode]
     edges: list[GraphEdge]
 
+    model_config = {"populate_by_name": True}
+
 
 class ExecuteNodeRequest(BaseModel):
     nodes: list[GraphNode]
