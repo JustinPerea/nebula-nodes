@@ -320,6 +320,78 @@ async def _collect_image_style_references(
     return refs
 
 
+def _native_moodboard_values(inputs: dict[str, PortValueDict]) -> list[dict[str, Any]]:
+    values: list[dict[str, Any]] = []
+    for item in _port_values(inputs.get("moodboard")):
+        if isinstance(item, dict) and _resource_kind(item) == "nebula_moodboard":
+            values.append(item)
+    return values
+
+
+async def _collect_native_moodboard_style_references(
+    client: httpx.AsyncClient,
+    api_key: str,
+    inputs: dict[str, PortValueDict],
+    *,
+    remaining_slots: int,
+) -> list[dict[str, Any]]:
+    if remaining_slots <= 0:
+        return []
+
+    refs: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for moodboard in _native_moodboard_values(inputs):
+        strength = _float_value(moodboard.get("strength"), 0.7, 0.0, 1.0)
+        analysis = moodboard.get("analysis") if isinstance(moodboard.get("analysis"), dict) else {}
+        hints = analysis.get("providerHints") if isinstance(analysis, dict) else {}
+        krea_hints = hints.get("krea") if isinstance(hints, dict) and isinstance(hints.get("krea"), dict) else {}
+        raw_images = krea_hints.get("representativeImages") or moodboard.get("representativeImages")
+        if not raw_images:
+            raw_images = [
+                img.get("url")
+                for img in moodboard.get("images", [])
+                if isinstance(img, dict) and not bool(img.get("excluded")) and img.get("url")
+            ]
+        image_weights = {
+            str(img.get("url")): _float_value(img.get("weight"), 1.0, 0.0, 1.0)
+            for img in moodboard.get("images", [])
+            if isinstance(img, dict) and img.get("url")
+        }
+        for raw in _as_list(raw_images):
+            url_key = _clean_str(raw)
+            if not url_key or url_key in seen:
+                continue
+            seen.add(url_key)
+            refs.append({
+                "url": await _image_value_to_url(
+                    client,
+                    api_key,
+                    raw,
+                    description="Nebula native moodboard reference",
+                ),
+                "strength": _float_value(strength * image_weights.get(url_key, 1.0), strength, 0.0, 1.0),
+            })
+            if len(refs) >= remaining_slots:
+                return refs
+    return refs
+
+
+def _native_moodboard_prompt_suffix(inputs: dict[str, PortValueDict]) -> str:
+    briefs: list[str] = []
+    for moodboard in _native_moodboard_values(inputs):
+        analysis = moodboard.get("analysis") if isinstance(moodboard.get("analysis"), dict) else {}
+        hints = analysis.get("providerHints") if isinstance(analysis, dict) else {}
+        krea_hints = hints.get("krea") if isinstance(hints, dict) and isinstance(hints.get("krea"), dict) else {}
+        brief = _clean_str(
+            krea_hints.get("styleBrief")
+            or moodboard.get("styleBrief")
+            or (analysis.get("styleBrief") if isinstance(analysis, dict) else "")
+        )
+        if brief:
+            briefs.append(brief)
+    return "\n\n".join(briefs)
+
+
 def _collect_styles(node: GraphNode, inputs: dict[str, PortValueDict]) -> list[dict[str, Any]]:
     styles: list[dict[str, Any]] = []
     default_strength = _float_value(node.params.get("style_strength"), 1.0, -2.0, 2.0)
@@ -400,8 +472,19 @@ async def handle_krea_generate(
             body["seed"] = _int_value(seed, 0)
 
         image_refs = await _collect_image_style_references(client, api_key, node, inputs)
+        native_refs = await _collect_native_moodboard_style_references(
+            client,
+            api_key,
+            inputs,
+            remaining_slots=max(0, 10 - len(image_refs)),
+        )
+        image_refs.extend(native_refs)
         if image_refs:
             body["image_style_references"] = image_refs
+
+        native_prompt_suffix = _native_moodboard_prompt_suffix(inputs)
+        if native_prompt_suffix:
+            body["prompt"] = f"{body['prompt']}\n\nNebula moodboard direction: {native_prompt_suffix}"
 
         styles = _collect_styles(node, inputs)
         if styles:

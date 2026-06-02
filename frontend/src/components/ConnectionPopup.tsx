@@ -18,6 +18,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   'analyzer': 'Analyzer',
   'utility': 'Utility',
   'universal': 'Universal',
+  'moodboard': 'Moodboard',
 };
 
 interface CompatibleNode {

@@ -1,5 +1,5 @@
 import { apiFetch, rewriteBackendAssetUrls } from './backend';
-import type { Character } from '../types';
+import type { Character, Moodboard } from '../types';
 
 export async function executeGraph(
   nodes: Array<{ id: string; definitionId: string; params: Record<string, unknown>; outputs: Record<string, unknown> }>,
@@ -10,7 +10,13 @@ export async function executeGraph(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ nodes, edges }),
   });
-  if (!response.ok) throw new Error(`Execute failed: ${response.status} ${response.statusText}`);
+  if (!response.ok) {
+    let detail = '';
+    try { detail = (await response.json()).detail ?? ''; } catch {
+      /* Non-JSON error responses still fall back to status text. */
+    }
+    throw new Error(detail || `Execute failed: ${response.status} ${response.statusText}`);
+  }
   return response.json();
 }
 
@@ -24,7 +30,13 @@ export async function executeNode(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ nodes, edges, targetNodeId }),
   });
-  if (!response.ok) throw new Error(`Execute node failed: ${response.status} ${response.statusText}`);
+  if (!response.ok) {
+    let detail = '';
+    try { detail = (await response.json()).detail ?? ''; } catch {
+      /* Non-JSON error responses still fall back to status text. */
+    }
+    throw new Error(detail || `Execute node failed: ${response.status} ${response.statusText}`);
+  }
   return response.json();
 }
 
@@ -84,6 +96,16 @@ export interface CodexStatus {
   message: string;
 }
 
+export interface CodexChatGPTLoginState {
+  running: boolean;
+  mode: 'browser' | 'device';
+  authUrl: string | null;
+  deviceCode: string | null;
+  message: string;
+  output: string[];
+  exitCode: number | null;
+}
+
 export interface ClaudeStatus {
   installed: boolean;
   loggedIn: boolean;
@@ -102,6 +124,22 @@ export async function fetchClaudeStatus(): Promise<ClaudeStatus> {
 export async function fetchCodexStatus(): Promise<CodexStatus> {
   const response = await apiFetch('/api/agents/codex/status');
   if (!response.ok) throw new Error(`Fetch Codex status failed: ${response.status}`);
+  return response.json();
+}
+
+export async function startCodexChatGPTLogin(deviceAuth = false): Promise<CodexChatGPTLoginState> {
+  const response = await apiFetch('/api/agents/codex/login/chatgpt', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ deviceAuth }),
+  });
+  if (!response.ok) throw new Error(`Start Codex ChatGPT login failed: ${response.status}`);
+  return response.json();
+}
+
+export async function fetchCodexChatGPTLoginState(): Promise<CodexChatGPTLoginState> {
+  const response = await apiFetch('/api/agents/codex/login/chatgpt');
+  if (!response.ok) throw new Error(`Fetch Codex ChatGPT login failed: ${response.status}`);
   return response.json();
 }
 
@@ -187,4 +225,50 @@ export async function updateCharacter(id: string, body: CharacterUpdateInput): P
 export async function deleteCharacter(id: string): Promise<void> {
   const response = await apiFetch(`/api/characters/${id}`, { method: 'DELETE' });
   if (!response.ok) throw new Error(`Delete character failed: ${response.status}`);
+}
+
+// ---------------------------------------------------------------------------
+// Moodboard CRUD helpers
+// ---------------------------------------------------------------------------
+
+type MoodboardCreateInput = Omit<Moodboard, 'id' | 'version' | 'thumbnail' | 'createdAt' | 'updatedAt'>;
+type MoodboardUpdateInput = Partial<MoodboardCreateInput>;
+
+export async function fetchMoodboards(scope: 'project' | 'global', projectId?: string): Promise<Moodboard[]> {
+  const params = new URLSearchParams({ scope });
+  if (scope === 'project' && projectId) params.append('projectId', projectId);
+  const response = await apiFetch(`/api/moodboards?${params.toString()}`);
+  if (!response.ok) throw new Error(`Fetch moodboards failed: ${response.status}`);
+  return response.json();
+}
+
+export async function createMoodboard(body: MoodboardCreateInput): Promise<Moodboard> {
+  const response = await apiFetch('/api/moodboards', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) throw new Error(`Create moodboard failed: ${response.status}`);
+  return response.json();
+}
+
+export async function updateMoodboard(id: string, body: MoodboardUpdateInput): Promise<Moodboard> {
+  const response = await apiFetch(`/api/moodboards/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) throw new Error(`Update moodboard failed: ${response.status}`);
+  return response.json();
+}
+
+export async function analyzeMoodboard(id: string): Promise<Moodboard> {
+  const response = await apiFetch(`/api/moodboards/${id}/analyze`, { method: 'POST' });
+  if (!response.ok) throw new Error(`Analyze moodboard failed: ${response.status}`);
+  return response.json();
+}
+
+export async function deleteMoodboard(id: string): Promise<void> {
+  const response = await apiFetch(`/api/moodboards/${id}`, { method: 'DELETE' });
+  if (!response.ok) throw new Error(`Delete moodboard failed: ${response.status}`);
 }

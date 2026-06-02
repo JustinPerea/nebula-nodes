@@ -22,11 +22,13 @@ import { EditNode } from './nodes/EditNode';
 import { RemotionNode } from './nodes/RemotionNode';
 import { CinemaSceneNode } from './nodes/CinemaSceneNode';
 import { CharacterNode } from './nodes/CharacterNode';
+import { MoodboardNode } from './nodes/MoodboardNode';
 import { TypedEdge } from './edges/TypedEdge';
 import { ContextMenu } from './ContextMenu';
 import { ConnectionPopup } from './ConnectionPopup';
 import { CrabMark } from './brand/CrabMark';
 import { CHARACTER_DRAG_MIME } from './panels/CharacterLibrary';
+import { MOODBOARD_DRAG_MIME } from './panels/MoodboardLibrary';
 import { apiFetch } from '../lib/backend';
 import '../styles/canvas.css';
 
@@ -38,6 +40,7 @@ const nodeTypes: NodeTypes = {
   remotionNode: RemotionNode,
   cinemaSceneNode: CinemaSceneNode,
   characterNode: CharacterNode,
+  moodboardNode: MoodboardNode,
 };
 
 // fitView padding that reserves space for every floating panel that overlaps
@@ -412,6 +415,25 @@ export function Canvas() {
           void useGraphStore.getState().addCharacterNode(id, position, { name, thumbnail });
         } catch (err) {
           console.error('[nebula] character drop failed to parse payload:', err);
+        }
+        return;
+      }
+
+      const moodboardPayload = event.dataTransfer.getData(MOODBOARD_DRAG_MIME);
+      if (moodboardPayload) {
+        try {
+          const { id, name, thumbnail, imageCount, mode } = JSON.parse(moodboardPayload) as {
+            id: string;
+            name?: string;
+            thumbnail?: string;
+            imageCount?: number;
+            mode?: string;
+          };
+          if (!id) return;
+          const position = screenToFlowPosition({ x: event.clientX, y: event.clientY });
+          void useGraphStore.getState().addMoodboardNode(id, position, { name, thumbnail, imageCount, mode });
+        } catch (err) {
+          console.error('[nebula] moodboard drop failed to parse payload:', err);
         }
         return;
       }

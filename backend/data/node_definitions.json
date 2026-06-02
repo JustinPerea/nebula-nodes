@@ -2691,6 +2691,57 @@
       }
     ]
   },
+  "nebula-moodboard": {
+    "id": "nebula-moodboard",
+    "displayName": "Moodboard",
+    "category": "moodboard",
+    "apiProvider": "utility",
+    "apiEndpoint": "",
+    "envKeyName": [],
+    "executionPattern": "sync",
+    "inputPorts": [],
+    "outputPorts": [
+      {
+        "id": "moodboard",
+        "label": "Moodboard",
+        "dataType": "Moodboard",
+        "required": false
+      },
+      {
+        "id": "style_brief",
+        "label": "Style Brief",
+        "dataType": "Text",
+        "required": false
+      },
+      {
+        "id": "negative_prompt",
+        "label": "Negative Prompt",
+        "dataType": "Text",
+        "required": false
+      },
+      {
+        "id": "representative_images",
+        "label": "Images",
+        "dataType": "Array",
+        "required": false
+      },
+      {
+        "id": "palette",
+        "label": "Palette",
+        "dataType": "Array",
+        "required": false
+      }
+    ],
+    "params": [
+      {
+        "key": "moodboard",
+        "label": "Moodboard",
+        "type": "string",
+        "required": false,
+        "hidden": true
+      }
+    ]
+  },
   "preview": {
     "id": "preview",
     "displayName": "Preview",

@@ -8,6 +8,7 @@ export type PortDataType =
   | 'SVG'
   | 'Mesh'
   | 'Character'
+  | 'Moodboard'
   | 'Any';
 
 export type NodeCategory =
@@ -21,7 +22,8 @@ export type NodeCategory =
   | 'utility'
   | 'universal'
   | 'cinematic'
-  | 'character';
+  | 'character'
+  | 'moodboard';
 
 export type NodeState = 'idle' | 'queued' | 'executing' | 'complete' | 'error';
 
@@ -195,9 +197,57 @@ export interface CharacterBundle {
   strengthOverride?: number | null;
 }
 
+export interface MoodboardImage {
+  id: string;
+  url: string;
+  weight: number;
+  notes: string;
+  excluded: boolean;
+}
+
+export interface MoodboardAnalysis {
+  version: number;
+  sourceHash: string;
+  mode: 'look' | 'world' | 'subject';
+  modeIntent: string;
+  strength: number;
+  summary: string;
+  tasteProfile: string;
+  styleBrief: string;
+  negativePrompt: string;
+  keywords: string[];
+  avoids: string[];
+  palette: string[];
+  lighting: string;
+  composition: string;
+  materials: string[];
+  textures: string[];
+  motifs: string[];
+  subjectBias: string[];
+  representativeImages: string[];
+  providerHints: Record<string, unknown>;
+  images: Array<Record<string, unknown>>;
+  warnings: string[];
+}
+
+export interface Moodboard {
+  id: string;
+  name: string;
+  version: number;
+  images: MoodboardImage[];
+  notes: string;
+  mode: 'look' | 'world' | 'subject';
+  strength: number;
+  analysis: MoodboardAnalysis | null;
+  thumbnail: string;
+  projectId?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface PortValue {
   type: PortDataType;
-  value: string | string[] | { url: string; mimeType: string } | ArrayBuffer | null;
+  value: string | string[] | { url: string; mimeType: string } | Record<string, unknown> | ArrayBuffer | null;
 }
 
 export interface NodeData {

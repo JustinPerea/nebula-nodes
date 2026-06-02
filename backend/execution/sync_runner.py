@@ -20,6 +20,7 @@ from handlers.krea import (
     handle_krea_style,
     handle_krea_style_search,
 )
+from handlers.moodboard import handle_moodboard_node
 
 
 SYNC_HANDLERS: dict[
@@ -49,6 +50,7 @@ SYNC_HANDLERS: dict[
     "krea-moodboard": handle_krea_moodboard,
     "krea-style": handle_krea_style,
     "krea-style-search": handle_krea_style_search,
+    "nebula-moodboard": handle_moodboard_node,
 }
 
 
