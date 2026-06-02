@@ -97,8 +97,9 @@ class NebulaClient:
         return self._request("POST", "/api/graph/run", json=body)
 
     def quick(self, definition_id: str, inputs: dict[str, str], params: dict[str, Any]) -> dict[str, Any]:
-        return self._request("POST", "/api/quick", json={
+        body = {
             "definitionId": definition_id,
             "inputs": inputs,
             "params": params,
-        })
+        }
+        return self._request("POST", "/api/quick", json=body)
