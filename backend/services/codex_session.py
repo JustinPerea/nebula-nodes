@@ -24,6 +24,31 @@ CODEX_BIN = os.environ.get("NEBULA_CODEX_BIN", "codex")
 SKILL_ROOT = PROJECT_ROOT / ".agents" / "skills"
 MAX_SKILL_DOC_CHARS = 12000
 MAX_SKILL_BOOTSTRAP_CHARS = 28000
+CODEX_LOGIN_OUTPUT_LIMIT = 20
+CODEX_AUTH_URL_RE = re.compile(r"https://[^\s]+")
+CODEX_DEVICE_CODE_RE = re.compile(r"\b[A-Z0-9]{4}-[A-Z0-9]{4}\b")
+CODEX_FORBIDDEN_API_ENV_KEYS = (
+    "OPENAI_API_KEY",
+    "OPENAI_ACCESS_TOKEN",
+    "CODEX_ACCESS_TOKEN",
+)
+CODEX_CHATGPT_REQUIRED_MESSAGE = (
+    "Codex agent is restricted to ChatGPT account login in Nebula. "
+    "Current Codex auth is {mode}. Use Connect ChatGPT Account in Nebula, "
+    "or run `codex logout` then `codex login` without `--with-api-key`."
+)
+
+_codex_login_lock = asyncio.Lock()
+_codex_login_task: asyncio.Task[None] | None = None
+_codex_login_state: dict[str, Any] = {
+    "running": False,
+    "mode": "browser",
+    "authUrl": None,
+    "deviceCode": None,
+    "message": "No Codex ChatGPT login is running.",
+    "output": [],
+    "exitCode": None,
+}
 
 SKILL_TRIGGER_KEYWORDS: dict[str, tuple[str, ...]] = {
     "fal": (
@@ -40,6 +65,133 @@ SKILL_TRIGGER_KEYWORDS: dict[str, tuple[str, ...]] = {
     "meshy": ("meshy", "3d", "text-to-3d", "image-to-3d", "rig", "rigging", "remesh"),
     "runway": ("runway", "gen-4", "gen4", "act-two", "aleph"),
 }
+
+
+def _codex_login_state_copy() -> dict[str, Any]:
+    return {
+        **_codex_login_state,
+        "output": list(_codex_login_state.get("output") or []),
+    }
+
+
+def _reset_codex_login_state(*, mode: str) -> None:
+    _codex_login_state.clear()
+    _codex_login_state.update({
+        "running": True,
+        "mode": mode,
+        "authUrl": None,
+        "deviceCode": None,
+        "message": "Starting Codex ChatGPT login...",
+        "output": [],
+        "exitCode": None,
+    })
+
+
+def _record_codex_login_output(line: str) -> None:
+    clean = line.strip()
+    if not clean:
+        return
+
+    output = list(_codex_login_state.get("output") or [])
+    output.append(clean)
+    _codex_login_state["output"] = output[-CODEX_LOGIN_OUTPUT_LIMIT:]
+    _codex_login_state["message"] = clean
+
+    for raw_url in CODEX_AUTH_URL_RE.findall(clean):
+        url = raw_url.rstrip(").,;")
+        if "auth.openai.com" in url or "openai.com" in url:
+            _codex_login_state["authUrl"] = url
+
+    device_code = CODEX_DEVICE_CODE_RE.search(clean)
+    if device_code:
+        _codex_login_state["deviceCode"] = device_code.group(0)
+
+
+async def _read_codex_login_stream(stream: asyncio.StreamReader | None) -> None:
+    if stream is None:
+        return
+    while True:
+        raw = await stream.readline()
+        if not raw:
+            break
+        _record_codex_login_output(raw.decode("utf-8", errors="replace"))
+
+
+async def _codex_logout_before_chatgpt_login() -> None:
+    proc = await asyncio.create_subprocess_exec(
+        CODEX_BIN,
+        "logout",
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+        cwd=str(PROJECT_ROOT),
+    )
+    try:
+        await asyncio.wait_for(proc.communicate(), timeout=10)
+    except asyncio.TimeoutError:
+        proc.kill()
+        await proc.wait()
+
+
+async def _codex_chatgpt_login_worker(*, device_auth: bool) -> None:
+    try:
+        # If Codex is currently logged in with an API key, `codex login` may
+        # keep that mode. The explicit ChatGPT button means "switch accounts",
+        # so clear stored credentials before starting the official OAuth flow.
+        await _codex_logout_before_chatgpt_login()
+
+        args = [CODEX_BIN, "login"]
+        if device_auth:
+            args.append("--device-auth")
+
+        proc = await asyncio.create_subprocess_exec(
+            *args,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            cwd=str(PROJECT_ROOT),
+        )
+    except FileNotFoundError:
+        _codex_login_state.update({
+            "running": False,
+            "message": "`codex` binary not found in PATH",
+            "exitCode": None,
+        })
+        return
+    except Exception as exc:
+        _codex_login_state.update({
+            "running": False,
+            "message": f"Could not start Codex ChatGPT login: {exc}",
+            "exitCode": None,
+        })
+        return
+
+    stdout_task = asyncio.create_task(_read_codex_login_stream(proc.stdout))
+    stderr_task = asyncio.create_task(_read_codex_login_stream(proc.stderr))
+    return_code = await proc.wait()
+    await asyncio.gather(stdout_task, stderr_task, return_exceptions=True)
+
+    _codex_login_state["running"] = False
+    _codex_login_state["exitCode"] = return_code
+    if return_code == 0:
+        _codex_login_state["message"] = "Codex ChatGPT login completed."
+    elif not _codex_login_state.get("message"):
+        _codex_login_state["message"] = f"Codex login exited with code {return_code}."
+
+
+async def start_codex_chatgpt_login(*, device_auth: bool = False) -> dict[str, Any]:
+    """Start Codex's official ChatGPT OAuth flow from Nebula."""
+    global _codex_login_task
+    async with _codex_login_lock:
+        if _codex_login_task is not None and not _codex_login_task.done():
+            return _codex_login_state_copy()
+
+        _reset_codex_login_state(mode="device" if device_auth else "browser")
+        _codex_login_task = asyncio.create_task(_codex_chatgpt_login_worker(device_auth=device_auth))
+        return _codex_login_state_copy()
+
+
+async def codex_chatgpt_login_state() -> dict[str, Any]:
+    """Return progress for a Codex ChatGPT login launched from Nebula."""
+    return _codex_login_state_copy()
 
 
 def _read_text(path: Path, limit: int | None = None) -> str:
@@ -221,6 +373,42 @@ def _codex_base_args(model: str | None) -> list[str]:
     return args
 
 
+def _codex_exec_env() -> dict[str, str]:
+    """Environment for Nebula-owned Codex turns.
+
+    Nebula's Codex agent is subscription-auth only. Even after verifying
+    `codex login status`, strip API credential env vars so the subprocess
+    cannot silently fall back to project billing.
+    """
+    env = {**os.environ, "NEBULA_DISABLE_QUICK": "1", "NO_COLOR": "1"}
+    for key in CODEX_FORBIDDEN_API_ENV_KEYS:
+        env.pop(key, None)
+    return env
+
+
+async def _require_codex_chatgpt_login() -> dict[str, Any] | None:
+    status = await codex_login_status()
+    if status.get("installed") and status.get("loggedIn") and status.get("mode") == "chatgpt":
+        return None
+
+    mode = status.get("mode")
+    if not status.get("installed"):
+        mode_label = "not installed"
+    elif not status.get("loggedIn"):
+        mode_label = "not logged in"
+    elif mode == "api":
+        mode_label = "API-key billing mode"
+    elif mode == "access_token":
+        mode_label = "access-token mode"
+    else:
+        mode_label = str(mode or "unknown mode")
+
+    return {
+        "type": "error",
+        "message": CODEX_CHATGPT_REQUIRED_MESSAGE.format(mode=mode_label),
+    }
+
+
 def _normalize_codex_event(ev: dict[str, Any]) -> list[dict[str, Any]]:
     event_type = ev.get("type")
     normalized: list[dict[str, Any]] = []
@@ -287,13 +475,19 @@ async def run_codex(
     del autonomy
     del provider
 
+    auth_error = await _require_codex_chatgpt_login()
+    if auth_error:
+        yield auth_error
+        yield {"type": "done"}
+        return
+
     args = _codex_base_args(model)
     if session_id:
         args.extend(["resume", session_id, "-"])
     else:
         args.append("-")
 
-    env = {**os.environ, "NEBULA_DISABLE_QUICK": "1", "NO_COLOR": "1"}
+    env = _codex_exec_env()
     prompt = _build_prompt(message)
 
     try:

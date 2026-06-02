@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowUp, ChevronDown, ChevronRight, Square, X } from 'lucide-react';
+import { ArrowUp, ChevronDown, ChevronRight, ExternalLink, LogIn, Square, X } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
 import { useDelayedUnmount } from '../../hooks/useDelayedUnmount';
@@ -8,9 +8,12 @@ import '../../styles/panels.css';
 import '../../styles/hermes.css';
 import {
   fetchClaudeStatus,
+  fetchCodexChatGPTLoginState,
   fetchCodexStatus,
   fetchNousModels,
+  startCodexChatGPTLogin,
   type ClaudeStatus,
+  type CodexChatGPTLoginState,
   type CodexStatus,
   type NousModel,
 } from '../../lib/api';
@@ -467,6 +470,14 @@ export function ChatPanel() {
   const [claudeStatusError, setClaudeStatusError] = useState<string | null>(null);
   const [codexStatus, setCodexStatus] = useState<CodexStatus | null>(null);
   const [codexStatusError, setCodexStatusError] = useState<string | null>(null);
+  const [codexLoginState, setCodexLoginState] = useState<CodexChatGPTLoginState | null>(null);
+  const [codexLoginError, setCodexLoginError] = useState<string | null>(null);
+  const [codexLoginBusy, setCodexLoginBusy] = useState(false);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [connected, setConnected] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [pendingImages, setPendingImages] = useState<PendingImage[]>([]);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const changeDaedalusModel = useCallback((modelId: string, fromProvider: DaedalusProvider = 'nous') => {
     setDaedalusModel(modelId);
@@ -609,7 +620,7 @@ export function ChatPanel() {
         .then((status) => {
           if (cancelled) return;
           setCodexStatus(status);
-          if (!status.installed || !status.loggedIn) {
+          if (!status.installed || !status.loggedIn || status.mode !== 'chatgpt') {
             retryTimer = window.setTimeout(refresh, 5000);
           }
         })
@@ -627,6 +638,52 @@ export function ChatPanel() {
       if (retryTimer) window.clearTimeout(retryTimer);
     };
   }, [agent]);
+
+  const handleStartCodexChatGPTLogin = useCallback(async (deviceAuth = false) => {
+    setCodexLoginBusy(true);
+    setCodexLoginError(null);
+    try {
+      const state = await startCodexChatGPTLogin(deviceAuth);
+      setCodexLoginState(state);
+      setNotice(deviceAuth ? 'Codex device login started.' : 'ChatGPT account login started.');
+    } catch (err) {
+      setCodexLoginError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setCodexLoginBusy(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (agent !== 'codex' || !codexLoginState?.running) return;
+    let cancelled = false;
+    let retryTimer: number | null = null;
+
+    const poll = async () => {
+      try {
+        const [loginState, status] = await Promise.all([
+          fetchCodexChatGPTLoginState(),
+          fetchCodexStatus(),
+        ]);
+        if (cancelled) return;
+        setCodexLoginState(loginState);
+        setCodexStatus(status);
+        setCodexStatusError(null);
+        if (loginState.running || !status.loggedIn || status.mode !== 'chatgpt') {
+          retryTimer = window.setTimeout(poll, 1500);
+        }
+      } catch (err) {
+        if (cancelled) return;
+        setCodexLoginError(err instanceof Error ? err.message : String(err));
+        retryTimer = window.setTimeout(poll, 2500);
+      }
+    };
+
+    retryTimer = window.setTimeout(poll, 800);
+    return () => {
+      cancelled = true;
+      if (retryTimer) window.clearTimeout(retryTimer);
+    };
+  }, [agent, codexLoginState?.running]);
 
   const claudeStatusLabel = useMemo(() => {
     if (isBackendUnavailableError(claudeStatusError)) return 'Nebula backend offline';
@@ -646,7 +703,7 @@ export function ChatPanel() {
     if (!codexStatus.installed) return 'Codex not installed';
     if (!codexStatus.loggedIn) return 'Codex login needed';
     if (codexStatus.mode === 'chatgpt') return 'Codex · ChatGPT';
-    if (codexStatus.mode === 'api') return 'Codex · API key';
+    if (codexStatus.mode === 'api') return 'Codex · API billing';
     if (codexStatus.mode === 'access_token') return 'Codex · access token';
     return 'Codex logged in';
   }, [codexStatus, codexStatusError]);
@@ -662,6 +719,7 @@ export function ChatPanel() {
           title: 'Start Nebula backend',
           status: 'Backend offline',
           detail: 'Claude may already be logged in, but Nebula cannot reach FastAPI on port 8000.',
+          canStartLogin: false,
           commands: [BACKEND_START_COMMAND],
         };
       }
@@ -671,6 +729,7 @@ export function ChatPanel() {
         title: needsConnection ? 'Connect Claude' : 'Claude connected',
         status: claudeStatusLabel,
         detail: 'Use the local Claude Code login on this machine.',
+        canStartLogin: false,
         commands: [
           'claude auth login --claudeai',
           'claude auth login --console',
@@ -680,7 +739,12 @@ export function ChatPanel() {
     }
     if (agent === 'codex') {
       const backendUnavailable = isBackendUnavailableError(codexStatusError);
-      const needsConnection = Boolean(codexStatusError || !codexStatus?.installed || !codexStatus?.loggedIn);
+      const needsConnection = Boolean(
+        codexStatusError ||
+        !codexStatus?.installed ||
+        !codexStatus?.loggedIn ||
+        codexStatus.mode !== 'chatgpt',
+      );
       if (backendUnavailable) {
         return {
           agent: 'codex' as const,
@@ -688,18 +752,23 @@ export function ChatPanel() {
           title: 'Start Nebula backend',
           status: 'Backend offline',
           detail: 'Codex may already be logged in, but Nebula cannot reach FastAPI on port 8000.',
+          canStartLogin: false,
           commands: [BACKEND_START_COMMAND],
         };
       }
+      const detail = codexStatus?.mode === 'api'
+        ? 'Codex is using API billing. Switch to ChatGPT account login for subscription access.'
+        : "Sign in through Codex's local ChatGPT OAuth flow. Nebula starts it and keeps checking status.";
       return {
         agent: 'codex' as const,
         open: needsConnection,
-        title: needsConnection ? 'Connect Codex' : 'Codex connected',
+        title: needsConnection ? 'Connect ChatGPT Account' : 'ChatGPT account connected',
         status: codexStatusLabel,
-        detail: 'Use the local Codex login on this machine.',
+        detail,
+        canStartLogin: true,
         commands: [
           'codex login',
-          'printenv OPENAI_API_KEY | codex login --with-api-key',
+          'codex login --device-auth',
           'codex login status',
         ],
       };
@@ -707,11 +776,6 @@ export function ChatPanel() {
     return null;
   }, [agent, claudeStatus, claudeStatusError, claudeStatusLabel, codexStatus, codexStatusError, codexStatusLabel]);
 
-  const [sessionId, setSessionId] = useState<string | null>(null);
-  const [connected, setConnected] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [pendingImages, setPendingImages] = useState<PendingImage[]>([]);
-  const [notice, setNotice] = useState<string | null>(null);
   useEffect(() => {
     if (!notice) return;
     const t = window.setTimeout(() => setNotice(null), 3000);
@@ -1918,6 +1982,60 @@ export function ChatPanel() {
             </summary>
             <div className="chat-panel__connect-body">
               <div>{agentConnectHint.detail}</div>
+              {agentConnectHint.agent === 'codex' && agentConnectHint.canStartLogin && (
+                <>
+                  <div className="chat-panel__connect-actions">
+                    <button
+                      type="button"
+                      className="chat-panel__connect-btn chat-panel__connect-btn--primary"
+                      onClick={() => handleStartCodexChatGPTLogin(false)}
+                      disabled={codexLoginBusy || codexLoginState?.running}
+                    >
+                      <LogIn
+                        className="chat-panel__connect-btn-icon"
+                        size={13}
+                        strokeWidth={2}
+                        aria-hidden="true"
+                        focusable="false"
+                      />
+                      {codexLoginState?.running ? 'Opening ChatGPT...' : 'Connect ChatGPT Account'}
+                    </button>
+                    <button
+                      type="button"
+                      className="chat-panel__connect-btn"
+                      onClick={() => handleStartCodexChatGPTLogin(true)}
+                      disabled={codexLoginBusy || codexLoginState?.running}
+                    >
+                      Device Code
+                    </button>
+                  </div>
+                  {(codexLoginState || codexLoginError) && (
+                    <div className="chat-panel__connect-progress">
+                      {codexLoginError || codexLoginState?.message}
+                      {codexLoginState?.authUrl && (
+                        <a
+                          className="chat-panel__connect-link"
+                          href={codexLoginState.authUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          Open ChatGPT login
+                          <ExternalLink
+                            className="chat-panel__connect-link-icon"
+                            size={12}
+                            strokeWidth={2}
+                            aria-hidden="true"
+                            focusable="false"
+                          />
+                        </a>
+                      )}
+                      {codexLoginState?.deviceCode && (
+                        <code className="chat-panel__connect-code">{codexLoginState.deviceCode}</code>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
               <div className="chat-panel__connect-commands">
                 {agentConnectHint.commands.map((command) => (
                   <code key={command}>{command}</code>
