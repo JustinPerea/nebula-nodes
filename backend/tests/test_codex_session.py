@@ -10,7 +10,28 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import services.codex_session as codex_session
-from services.codex_session import codex_login_status, run_codex
+from services.codex_session import (
+    codex_chatgpt_login_state,
+    codex_login_status,
+    run_codex,
+    start_codex_chatgpt_login,
+)
+
+
+@pytest.fixture(autouse=True)
+def reset_codex_login_state():
+    codex_session._codex_login_task = None
+    codex_session._codex_login_state.clear()
+    codex_session._codex_login_state.update({
+        "running": False,
+        "mode": "browser",
+        "authUrl": None,
+        "deviceCode": None,
+        "message": "No Codex ChatGPT login is running.",
+        "output": [],
+        "exitCode": None,
+    })
+    yield
 
 
 async def _collect(agen):
@@ -49,10 +70,24 @@ def _proc(stdout: bytes, stderr: bytes = b"", returncode: int = 0) -> AsyncMock:
     proc = AsyncMock()
     proc.stdin = _FakeStdin()
     proc.stdout.readline = AsyncMock(side_effect=_readline_chunks(stdout))
+    proc.stderr.readline = AsyncMock(side_effect=_readline_chunks(stderr))
     proc.stderr.read = AsyncMock(return_value=stderr)
     proc.wait = AsyncMock(return_value=returncode)
     proc.returncode = returncode
     return proc
+
+
+def _communicate_proc(stdout: bytes = b"", stderr: bytes = b"", returncode: int = 0) -> AsyncMock:
+    proc = AsyncMock()
+    proc.communicate = AsyncMock(return_value=(stdout, stderr))
+    proc.wait = AsyncMock(return_value=returncode)
+    proc.kill = AsyncMock()
+    proc.returncode = returncode
+    return proc
+
+
+def _chatgpt_status_proc() -> AsyncMock:
+    return _communicate_proc(b"Logged in using ChatGPT\n")
 
 
 @pytest.mark.asyncio
@@ -67,8 +102,13 @@ async def test_codex_jsonl_yields_session_tool_text_result_and_done():
     ]) + b"\n"
     proc = _proc(stdout)
 
+    async def fake_create(*args, **kwargs):
+        if args[:3] == ("codex", "login", "status"):
+            return _chatgpt_status_proc()
+        return proc
+
     with patch("services.codex_session._build_prompt", return_value="prompt"), \
-         patch("services.codex_session.asyncio.create_subprocess_exec", return_value=proc):
+         patch("services.codex_session.asyncio.create_subprocess_exec", side_effect=fake_create):
         events = await _collect(run_codex("hi", None))
 
     assert events[0] == {"type": "session", "sessionId": "thread-123"}
@@ -97,6 +137,8 @@ async def test_codex_resume_uses_exec_resume_command():
     proc = _proc(b'{"type":"item.completed","item":{"id":"item_1","type":"agent_message","text":"ok"}}\n')
 
     async def fake_create(*args, **kwargs):
+        if args[:3] == ("codex", "login", "status"):
+            return _chatgpt_status_proc()
         captured_args.extend(args)
         return proc
 
@@ -112,6 +154,53 @@ async def test_codex_resume_uses_exec_resume_command():
 
 
 @pytest.mark.asyncio
+async def test_run_codex_refuses_api_key_auth_before_exec():
+    captured_args: list[tuple[str, ...]] = []
+    status_proc = _communicate_proc(b"Logged in using an API key - sk-proj-***test\n")
+
+    async def fake_create(*args, **kwargs):
+        captured_args.append(tuple(args))
+        if args[:3] == ("codex", "login", "status"):
+            return status_proc
+        raise AssertionError("codex exec should not start in API-key mode")
+
+    with patch("services.codex_session.asyncio.create_subprocess_exec", side_effect=fake_create):
+        events = await _collect(run_codex("hi", None))
+
+    assert captured_args == [("codex", "login", "status")]
+    assert events[0]["type"] == "error"
+    assert "ChatGPT account login" in events[0]["message"]
+    assert "API-key billing mode" in events[0]["message"]
+    assert events[-1] == {"type": "done"}
+
+
+@pytest.mark.asyncio
+async def test_run_codex_strips_openai_api_credentials_from_exec_env(monkeypatch):
+    proc = _proc(b'{"type":"item.completed","item":{"id":"item_1","type":"agent_message","text":"ok"}}\n')
+    exec_env: dict[str, str] | None = None
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-proj-test")
+    monkeypatch.setenv("OPENAI_ACCESS_TOKEN", "openai-access-test")
+    monkeypatch.setenv("CODEX_ACCESS_TOKEN", "codex-access-test")
+
+    async def fake_create(*args, **kwargs):
+        nonlocal exec_env
+        if args[:3] == ("codex", "login", "status"):
+            return _chatgpt_status_proc()
+        exec_env = kwargs.get("env")
+        return proc
+
+    with patch("services.codex_session._build_prompt", return_value="prompt"), \
+         patch("services.codex_session.asyncio.create_subprocess_exec", side_effect=fake_create):
+        events = await _collect(run_codex("hi", None))
+
+    assert {"type": "text", "text": "ok"} in events
+    assert exec_env is not None
+    assert "OPENAI_API_KEY" not in exec_env
+    assert "OPENAI_ACCESS_TOKEN" not in exec_env
+    assert "CODEX_ACCESS_TOKEN" not in exec_env
+
+
+@pytest.mark.asyncio
 async def test_codex_login_status_detects_chatgpt_login():
     proc = AsyncMock()
     proc.communicate = AsyncMock(return_value=(b"Logged in using ChatGPT\n", b""))
@@ -123,6 +212,60 @@ async def test_codex_login_status_detects_chatgpt_login():
     assert status["installed"] is True
     assert status["loggedIn"] is True
     assert status["mode"] == "chatgpt"
+
+
+@pytest.mark.asyncio
+async def test_start_codex_chatgpt_login_logs_out_then_launches_oauth():
+    captured_args: list[tuple[str, ...]] = []
+    logout_proc = _communicate_proc(b"Logged out\n")
+    login_proc = _proc(
+        b"Starting local login server\n"
+        b"https://auth.openai.com/oauth/authorize?state=abc123\n"
+        b"Successfully logged in\n"
+    )
+
+    async def fake_create(*args, **kwargs):
+        captured_args.append(tuple(args))
+        return logout_proc if args[:2] == ("codex", "logout") else login_proc
+
+    with patch("services.codex_session.asyncio.create_subprocess_exec", side_effect=fake_create):
+        state = await start_codex_chatgpt_login()
+        assert state["running"] is True
+        assert state["mode"] == "browser"
+        assert codex_session._codex_login_task is not None
+        await codex_session._codex_login_task
+
+    final_state = await codex_chatgpt_login_state()
+
+    assert captured_args[0][:2] == ("codex", "logout")
+    assert captured_args[1][:2] == ("codex", "login")
+    assert "--device-auth" not in captured_args[1]
+    assert final_state["running"] is False
+    assert final_state["exitCode"] == 0
+    assert final_state["authUrl"] == "https://auth.openai.com/oauth/authorize?state=abc123"
+    assert final_state["message"] == "Codex ChatGPT login completed."
+
+
+@pytest.mark.asyncio
+async def test_start_codex_chatgpt_login_supports_device_auth():
+    captured_args: list[tuple[str, ...]] = []
+    logout_proc = _communicate_proc()
+    login_proc = _proc(b"Enter code ABCD-1234\n")
+
+    async def fake_create(*args, **kwargs):
+        captured_args.append(tuple(args))
+        return logout_proc if args[:2] == ("codex", "logout") else login_proc
+
+    with patch("services.codex_session.asyncio.create_subprocess_exec", side_effect=fake_create):
+        state = await start_codex_chatgpt_login(device_auth=True)
+        assert state["mode"] == "device"
+        assert codex_session._codex_login_task is not None
+        await codex_session._codex_login_task
+
+    final_state = await codex_chatgpt_login_state()
+
+    assert captured_args[1][:3] == ("codex", "login", "--device-auth")
+    assert final_state["deviceCode"] == "ABCD-1234"
 
 
 def test_skill_bootstrap_indexes_and_preloads_relevant_repo_skill(tmp_path, monkeypatch):
