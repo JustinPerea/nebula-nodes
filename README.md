@@ -22,7 +22,7 @@ features:
   - Save / load graphs as JSON
   - Daedalus chat agent (Hermes Agent persona, optional)
   - Live-smoke-verified handler contracts (632 backend tests)
-hero: docs/assets/banner-slava.svg
+hero: docs/assets/banner.svg
 links:
   github: https://github.com/JustinPerea/nebula-nodes
   lab: https://justinperea.com/lab/nebula-quiver
@@ -31,7 +31,11 @@ lastUpdated: 2026-05-20
 ---
 
 <div align="center">
-  <img src="docs/assets/banner-slava.svg" alt="Nebula Nodes — a BYOK node-graph for AI" width="900">
+  <img src="docs/assets/banner.svg" alt="Nebula Nodes — an open-source canvas for AI graphs" width="900">
+</div>
+
+<div align="center">
+  <sub><em>Plotted with light. &nbsp;·&nbsp; An open-source canvas for AI graphs.</em></sub>
 </div>
 
 ```
@@ -55,16 +59,16 @@ https://github.com/user-attachments/assets/3a83187d-e186-4378-8a36-822b0a4055cb
 
 <div align="center">
 
-  <a href="LICENSE"><img alt="LICENSE — AGPL-3.0" src="https://img.shields.io/badge/LICENSE-AGPL--3.0-ff5a1f?style=flat-square&labelColor=000000"></a>
-  <img alt="NODES — 102" src="https://img.shields.io/badge/NODES-102-ffffff?style=flat-square&labelColor=000000">
-  <img alt="PROVIDERS — 15 DIRECT · 300%2B VIA UNIVERSAL" src="https://img.shields.io/badge/PROVIDERS-15%20DIRECT%20%C2%B7%20300%2B%20VIA%20UNIVERSAL-ffffff?style=flat-square&labelColor=000000">
-  <img alt="BYOK — BRING YOUR OWN KEYS" src="https://img.shields.io/badge/BYOK-BRING%20YOUR%20OWN%20KEYS-ff5a1f?style=flat-square&labelColor=000000">
+  <a href="LICENSE"><img alt="LICENSE — AGPL-3.0" src="https://img.shields.io/badge/LICENSE-AGPL--3.0-6ba8d6?style=flat-square&labelColor=0a1612"></a>
+  <img alt="NODES — 102" src="https://img.shields.io/badge/NODES-102-f3e6c4?style=flat-square&labelColor=0a1612">
+  <img alt="PROVIDERS — 15 DIRECT · 300%2B VIA UNIVERSAL" src="https://img.shields.io/badge/PROVIDERS-15%20DIRECT%20%C2%B7%20300%2B%20VIA%20UNIVERSAL-f3e6c4?style=flat-square&labelColor=0a1612">
+  <img alt="BYOK — BRING YOUR OWN KEYS" src="https://img.shields.io/badge/BYOK-BRING%20YOUR%20OWN%20KEYS-6ba8d6?style=flat-square&labelColor=0a1612">
   <br>
-  <img alt="PYTHON 3.12+" src="https://img.shields.io/badge/PYTHON-3.12%2B-ffffff?style=flat-square&labelColor=000000">
-  <img alt="NODE 18+" src="https://img.shields.io/badge/NODE-18%2B-ffffff?style=flat-square&labelColor=000000">
-  <img alt="REACT 19" src="https://img.shields.io/badge/REACT-19-ffffff?style=flat-square&labelColor=000000">
-  <img alt="FASTAPI" src="https://img.shields.io/badge/FASTAPI-BACKEND-ffffff?style=flat-square&labelColor=000000">
-  <img alt="TESTS — 632 PASSING" src="https://img.shields.io/badge/TESTS-650%20PASSING-ff5a1f?style=flat-square&labelColor=000000">
+  <img alt="PYTHON 3.12+" src="https://img.shields.io/badge/PYTHON-3.12%2B-f3e6c4?style=flat-square&labelColor=0a1612">
+  <img alt="NODE 18+" src="https://img.shields.io/badge/NODE-18%2B-f3e6c4?style=flat-square&labelColor=0a1612">
+  <img alt="REACT 19" src="https://img.shields.io/badge/REACT-19-f3e6c4?style=flat-square&labelColor=0a1612">
+  <img alt="FASTAPI" src="https://img.shields.io/badge/FASTAPI-BACKEND-f3e6c4?style=flat-square&labelColor=0a1612">
+  <img alt="TESTS — 632 PASSING" src="https://img.shields.io/badge/TESTS-632%20PASSING-6ba8d6?style=flat-square&labelColor=0a1612">
 
 </div>
 
@@ -295,15 +299,15 @@ graph LR
     UI <-.->|optional WebSocket /chat| CHAT[Daedalus session]
     CHAT -.-> HERMES[hermes-daedalus subprocess]
 
-    style UI fill:#000000,color:#ffffff,stroke:#ff5a1f
-    style API fill:#000000,color:#ffffff,stroke:#ffffff
-    style ENGINE fill:#0a0a0a,color:#ffffff,stroke:#ffffff
-    style HANDLERS fill:#0a0a0a,color:#ffffff,stroke:#ffffff
-    style PROVIDERS fill:#141414,color:#ffffff,stroke:#ffffff
-    style OUT fill:#0a0a0a,color:#ffffff,stroke:#ffffff
-    style WS fill:#0a0a0a,color:#ffffff,stroke:#ffffff
-    style CHAT fill:#000000,color:#ff5a1f,stroke:#ff5a1f,stroke-dasharray: 5 5
-    style HERMES fill:#000000,color:#ff5a1f,stroke:#ff5a1f,stroke-dasharray: 5 5
+    style UI fill:#0a1612,color:#f3e6c4,stroke:#6ba8d6
+    style API fill:#0a1612,color:#f3e6c4,stroke:#f3e6c4
+    style ENGINE fill:#0e1c18,color:#f3e6c4,stroke:#f3e6c4
+    style HANDLERS fill:#0e1c18,color:#f3e6c4,stroke:#f3e6c4
+    style PROVIDERS fill:#13231e,color:#f3e6c4,stroke:#f3e6c4
+    style OUT fill:#0e1c18,color:#f3e6c4,stroke:#f3e6c4
+    style WS fill:#0e1c18,color:#f3e6c4,stroke:#f3e6c4
+    style CHAT fill:#0a1612,color:#6ba8d6,stroke:#6ba8d6,stroke-dasharray: 5 5
+    style HERMES fill:#0a1612,color:#6ba8d6,stroke:#6ba8d6,stroke-dasharray: 5 5
 ```
 
 - **FRONTEND** — React 19 + Vite SPA. `@xyflow/react` powers the canvas. [Zustand](https://github.com/pmndrs/zustand) holds all graph and UI state, with `node.data` as the single source of truth for params, outputs, and execution status.
