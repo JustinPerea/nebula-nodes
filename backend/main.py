@@ -1685,6 +1685,8 @@ async def export_graph_for_frontend() -> dict:
             if definition_id == "cinema-scene"
             else "characterNode"
             if definition_id == "character"
+            else "moodboardNode"
+            if definition_id == "nebula-moodboard"
             else "dynamic-node"
             if is_dynamic_node
             else "model-node"
@@ -1946,7 +1948,7 @@ async def quick_execute(body: dict[str, Any]) -> dict:
 
 # ---------- Characters: project-scoped & global character store ----------
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class CharacterCreate(BaseModel):
@@ -1968,9 +1970,41 @@ class CharacterUpdate(BaseModel):
     consistencyStrength: float | None = None
 
 
+class MoodboardImageModel(BaseModel):
+    id: str | None = None
+    url: str
+    weight: float = 1.0
+    notes: str = ""
+    excluded: bool = False
+
+
+class MoodboardCreate(BaseModel):
+    name: str
+    images: list[MoodboardImageModel] = Field(default_factory=list)
+    notes: str = ""
+    mode: str = "look"
+    strength: float = 0.7
+    analysis: dict[str, Any] | None = None
+    projectId: str | None = None
+
+
+class MoodboardUpdate(BaseModel):
+    name: str | None = None
+    images: list[MoodboardImageModel] | None = None
+    notes: str | None = None
+    mode: str | None = None
+    strength: float | None = None
+    analysis: dict[str, Any] | None = None
+
+
 def _char_store():
     from services.character_store import CharacterStore
     return CharacterStore()
+
+
+def _moodboard_store():
+    from services.moodboard_store import MoodboardStore
+    return MoodboardStore()
 
 
 def _validate_project_id_param(project_id: str | None) -> None:
@@ -2054,6 +2088,95 @@ async def delete_character(char_id: str) -> dict:
     except (KeyError, ValueError):
         raise HTTPException(status_code=404, detail=f"Character '{char_id}' not found")
     return {"status": "deleted", "id": char_id}
+
+
+# ---------- Moodboards: provider-neutral creative-direction store ----------
+
+@app.get("/api/moodboards")
+async def list_moodboards(scope: str = "global", projectId: str | None = None) -> list[dict]:
+    _validate_project_id_param(projectId)
+    store = _moodboard_store()
+    try:
+        return store.list(scope=scope, projectId=projectId)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.post("/api/moodboards")
+async def create_moodboard(body: MoodboardCreate) -> dict:
+    _validate_project_id_param(body.projectId)
+    store = _moodboard_store()
+    try:
+        return store.create(
+            name=body.name,
+            images=[img.model_dump() for img in body.images],
+            notes=body.notes,
+            mode=body.mode,
+            strength=body.strength,
+            analysis=body.analysis,
+            projectId=body.projectId,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+
+@app.get("/api/moodboards/{moodboard_id}")
+async def get_moodboard(moodboard_id: str) -> dict:
+    store = _moodboard_store()
+    try:
+        moodboard = store.get(moodboard_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail=f"Moodboard '{moodboard_id}' not found")
+    if moodboard is None:
+        raise HTTPException(status_code=404, detail=f"Moodboard '{moodboard_id}' not found")
+    return moodboard
+
+
+@app.put("/api/moodboards/{moodboard_id}")
+async def update_moodboard(moodboard_id: str, body: MoodboardUpdate) -> dict:
+    store = _moodboard_store()
+    updates = {
+        key: value
+        for key, value in body.model_dump().items()
+        if value is not None
+    }
+    if "images" in updates:
+        updates["images"] = [img.model_dump() if hasattr(img, "model_dump") else img for img in body.images or []]
+    try:
+        return store.update(moodboard_id, **updates)
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"Moodboard '{moodboard_id}' not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+
+@app.post("/api/moodboards/{moodboard_id}/analyze")
+async def analyze_moodboard_route(moodboard_id: str) -> dict:
+    store = _moodboard_store()
+    try:
+        moodboard = store.get(moodboard_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail=f"Moodboard '{moodboard_id}' not found")
+    if moodboard is None:
+        raise HTTPException(status_code=404, detail=f"Moodboard '{moodboard_id}' not found")
+
+    from services.moodboard_analysis import analyze_moodboard
+
+    analysis = analyze_moodboard(moodboard)
+    try:
+        return store.update(moodboard_id, analysis=analysis)
+    except (KeyError, ValueError):
+        raise HTTPException(status_code=404, detail=f"Moodboard '{moodboard_id}' not found")
+
+
+@app.delete("/api/moodboards/{moodboard_id}")
+async def delete_moodboard(moodboard_id: str) -> dict:
+    store = _moodboard_store()
+    try:
+        store.delete(moodboard_id)
+    except (KeyError, ValueError):
+        raise HTTPException(status_code=404, detail=f"Moodboard '{moodboard_id}' not found")
+    return {"status": "deleted", "id": moodboard_id}
 
 
 # Static mount MUST come after all dynamic routes — it is a catch-all for /api/outputs

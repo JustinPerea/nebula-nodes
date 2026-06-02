@@ -7,8 +7,10 @@ import { EditorView } from './components/editor/EditorView';
 import { RemotionEditorView } from './components/video-editor/RemotionEditorView';
 import { CinemaStudioView } from './components/cinema-studio/CinemaStudioView';
 import { CharacterStudioView } from './components/character-studio/CharacterStudioView';
+import { MoodboardStudioView } from './components/moodboard-studio/MoodboardStudioView';
 import { NodeLibrary } from './components/panels/NodeLibrary';
 import { CharacterLibrary } from './components/panels/CharacterLibrary';
+import { MoodboardLibrary } from './components/panels/MoodboardLibrary';
 import { Settings } from './components/panels/Settings';
 import { Toolbar } from './components/panels/Toolbar';
 import { PanelLaunchers } from './components/panels/PanelLaunchers';
@@ -132,6 +134,7 @@ export default function App() {
   const isRemotion = viewMode === 'remotion-editor';
   const isCinema = viewMode === 'cinema-editor';
   const isCharacter = viewMode === 'character-editor';
+  const isMoodboard = viewMode === 'moodboard-editor';
 
   let mainView;
   if (isCanvas) {
@@ -142,6 +145,8 @@ export default function App() {
     mainView = <CinemaStudioView />;
   } else if (isCharacter) {
     mainView = <CharacterStudioView />;
+  } else if (isMoodboard) {
+    mainView = <MoodboardStudioView />;
   } else {
     mainView = <EditorView />;
   }
@@ -156,6 +161,7 @@ export default function App() {
           The editor view is a focused workspace — only the pill control and chat remain. */}
       {isCanvas && <NodeLibrary />}
       {isCanvas && <CharacterLibrary />}
+      {isCanvas && <MoodboardLibrary />}
       {isCanvas && <NodeInspectorPopover />}
       {isCanvas && <Settings />}
       <ChatPanel />

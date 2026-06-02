@@ -58,7 +58,7 @@ interface UIState {
   selectedNodeId: string | null;
 
   // Editor view state — Phase 1 video-editor pivot
-  viewMode: 'canvas' | 'editor' | 'remotion-editor' | 'cinema-editor' | 'character-editor';
+  viewMode: 'canvas' | 'editor' | 'remotion-editor' | 'cinema-editor' | 'character-editor' | 'moodboard-editor';
   editorTargetNodeId: string | null;
   // Phase 2 Remotion editor
   remotionEditorTargetNodeId: string | null;
@@ -70,6 +70,9 @@ interface UIState {
   // Mirrors cinemaEditorNodeId. App.tsx mounts CharacterStudioView when this is
   // set (viewMode 'character-editor'). The 'new' sentinel opens a fresh draft.
   characterEditorId: string | null;
+  // Nebula Moodboard editor — provider-neutral creative-direction assets.
+  // App.tsx mounts MoodboardStudioView when this is set.
+  moodboardEditorId: string | null;
   selectedTrackItemId: string | null;
   selectedTrackItemIds: string[];
   isKeyframeRecording: boolean;
@@ -120,6 +123,8 @@ interface UIState {
   exitCinemaEditor: () => void;
   enterCharacterEditor: (characterId: string) => void;
   exitCharacterEditor: () => void;
+  enterMoodboardEditor: (moodboardId: string) => void;
+  exitMoodboardEditor: () => void;
   setSelectedTrackItem: (id: string | null) => void;
   setSelectedTrackItems: (ids: string[], primaryId?: string | null) => void;
   toggleSelectedTrackItem: (id: string) => void;
@@ -162,6 +167,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   remotionEditorTargetNodeId: null,
   cinemaEditorNodeId: null,
   characterEditorId: null,
+  moodboardEditorId: null,
   selectedTrackItemId: null,
   selectedTrackItemIds: [],
   isKeyframeRecording: false,
@@ -264,6 +270,20 @@ export const useUIStore = create<UIState>((set, get) => ({
     set({
       viewMode: 'canvas',
       characterEditorId: null,
+    });
+  },
+
+  enterMoodboardEditor: (moodboardId) => {
+    set({
+      viewMode: 'moodboard-editor',
+      moodboardEditorId: moodboardId,
+    });
+  },
+
+  exitMoodboardEditor: () => {
+    set({
+      viewMode: 'canvas',
+      moodboardEditorId: null,
     });
   },
 

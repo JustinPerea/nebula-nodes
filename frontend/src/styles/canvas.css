@@ -43,3 +43,70 @@ body:not(.app-slava-restraint) .react-flow__edge.animated path {
 @keyframes edge-flow {
   to { stroke-dashoffset: -10; }
 }
+
+/* ─────────────────────────────────────────────────────────────────────
+ * Empty-canvas splash — NN-45 Crab mark + NEBULA / NODES wordmark.
+ * Only the splash uses the brand gradient. Product UI (toolbar, nodes,
+ * panels, focus rings) stays locked to --sr-accent #FF5A1F.
+ * ───────────────────────────────────────────────────────────────────── */
+.canvas-wrapper--slava-empty .nn-splash {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  pointer-events: none;
+  z-index: 2;
+  user-select: none;
+}
+
+.nn-splash__mark {
+  opacity: 0.95;
+}
+
+.nn-splash__wordmark {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  margin-top: 12px;
+}
+
+.nn-splash__wordmark-line {
+  font-family: var(--sr-ui, 'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif);
+  font-weight: 200;
+  font-size: 36px;
+  letter-spacing: 0.3em;
+  line-height: 1;
+  color: #fff;
+  padding-left: 0.3em; /* visual recentering for the tracked-out caps */
+}
+
+.nn-splash__wordmark-line--warm {
+  font-weight: 300;
+  color: var(--nn-crab-warm, rgb(240, 150, 90));
+  margin-top: 6px;
+}
+
+.nn-splash__caption {
+  font-family: var(--sr-mono, 'JetBrains Mono', 'IBM Plex Mono', 'SF Mono', Menlo, monospace);
+  font-size: 12px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.4);
+  margin-top: 6px;
+}
+
+.nn-splash__hint {
+  font-family: var(--sr-ui, 'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif);
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+/* Soften the splash when the canvas wrapper isn't actually empty
+ * (defensive — Canvas.tsx already guards on nodes.length === 0). */
+.canvas-wrapper:not(.canvas-wrapper--slava-empty) .nn-splash {
+  display: none;
+}

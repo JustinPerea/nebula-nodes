@@ -25,6 +25,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   'universal': 'Universal',
   'cinematic': 'Cinematic',
   'character': 'Character',
+  'moodboard': 'Moodboard',
 };
 
 export function NodeLibrary() {

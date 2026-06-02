@@ -345,6 +345,11 @@ interface GraphState {
     position: { x: number; y: number },
     meta?: { name?: string; thumbnail?: string },
   ) => Promise<string | null>;
+  addMoodboardNode: (
+    moodboardId: string,
+    position: { x: number; y: number },
+    meta?: { name?: string; thumbnail?: string; imageCount?: number; mode?: string },
+  ) => Promise<string | null>;
 }
 
 // CLI nodes use short sequential IDs like n1, n2. Frontend-only (library-dragged)
@@ -881,7 +886,12 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       // Fallback: frontend-only UUID node. Claude won't see it until the
       // backend comes back and /api/graph/import or equivalent is called.
       pushUndo(set, get);
-      const nodeType = definitionId === 'reroute' ? 'reroute-node' : 'model-node';
+      const nodeType =
+        definitionId === 'reroute'
+          ? 'reroute-node'
+          : definitionId === 'nebula-moodboard'
+            ? 'moodboardNode'
+            : 'model-node';
       let keyStatus: 'missing' | undefined;
       const { settingsCache } = useUIStore.getState();
       if (settingsCache.loaded && definition.envKeyName) {
@@ -2151,6 +2161,54 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         type: 'characterNode',
         position,
         data: { label: definition.displayName, definitionId: 'character', params, state: 'idle', outputs: {} },
+      };
+      set((state) => ({ nodes: [...state.nodes, newNode] }));
+      return newNode.id;
+    }
+  },
+
+  // Moodboard node — mirrors Character node but points at a provider-neutral
+  // saved Moodboard asset. The canvas card uses denormalized fields for instant
+  // rendering; execution resolves the canonical resource from MoodboardStore.
+  addMoodboardNode: async (moodboardId, position, meta) => {
+    const definition = NODE_DEFINITIONS['nebula-moodboard'];
+    if (!definition) return null;
+
+    const defaults: Record<string, unknown> = {};
+    for (const param of definition.params) {
+      if (param.default !== undefined) defaults[param.key] = param.default;
+    }
+    const params: Record<string, unknown> = {
+      ...defaults,
+      _moodboardId: moodboardId,
+      _moodboardName: meta?.name ?? '',
+      _moodboardThumbnail: meta?.thumbnail ?? '',
+      _moodboardImageCount: meta?.imageCount ?? 0,
+      _moodboardMode: meta?.mode ?? 'look',
+    };
+
+    const localCanvasWasEmpty = get().nodes.length === 0 && get().edges.length === 0;
+
+    try {
+      const backendFresh = await ensureBackendFreshForLocalCanvas(localCanvasWasEmpty, set, get);
+      if (!backendFresh) throw new Error('Backend fresh-start guard failed');
+
+      const res = await apiFetch('/api/graph/node', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ definitionId: 'nebula-moodboard', params, position }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const node = (await res.json()) as { id?: string };
+      return node.id ?? null;
+    } catch (err) {
+      console.warn('[nebula] addMoodboardNode backend push failed — adding locally only:', err);
+      pushUndo(set, get);
+      const newNode: Node<NodeData> = {
+        id: uuidv4(),
+        type: 'moodboardNode',
+        position,
+        data: { label: definition.displayName, definitionId: 'nebula-moodboard', params, state: 'idle', outputs: {} },
       };
       set((state) => ({ nodes: [...state.nodes, newNode] }));
       return newNode.id;

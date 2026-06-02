@@ -10,6 +10,7 @@ export const PORT_COLORS: Record<PortDataType, string> = {
   SVG: '#795548',
   Mesh: '#00BCD4',
   Character: '#a78bfa',
+  Moodboard: '#f59e0b',
   Any: '#9E9E9E',
 };
 
@@ -23,7 +24,8 @@ const COMPATIBILITY: Record<PortDataType, PortDataType[]> = {
   SVG: ['SVG', 'Any'],
   Mesh: ['Mesh', 'Any'],
   Character: ['Character', 'Any'],
-  Any: ['Text', 'Image', 'Video', 'Audio', 'Mask', 'Array', 'SVG', 'Mesh', 'Character', 'Any'],
+  Moodboard: ['Moodboard', 'Any'],
+  Any: ['Text', 'Image', 'Video', 'Audio', 'Mask', 'Array', 'SVG', 'Mesh', 'Character', 'Moodboard', 'Any'],
 };
 
 export function isPortCompatible(

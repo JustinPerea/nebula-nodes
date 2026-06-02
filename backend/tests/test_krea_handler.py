@@ -96,6 +96,69 @@ async def test_generate_builds_full_krea_body_and_uploads_local_style_image(tmp_
 
 
 @pytest.mark.asyncio
+async def test_generate_adapts_native_nebula_moodboard_to_krea_style_refs() -> None:
+    captured: dict[str, object] = {}
+
+    def capture_generate(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content.decode())
+        return httpx.Response(
+            200,
+            json={
+                "job_id": "job-native",
+                "status": "completed",
+                "created_at": "2026-05-30T00:00:00Z",
+                "completed_at": "2026-05-30T00:00:02Z",
+                "result": {"urls": ["https://cdn.krea.ai/native.png"]},
+            },
+        )
+
+    native_moodboard = {
+        "kind": "nebula_moodboard",
+        "name": "Nebula Board",
+        "mode": "look",
+        "strength": 0.6,
+        "images": [
+            {"url": "https://assets.example/a.png", "weight": 0.5},
+            {"url": "https://assets.example/b.png", "weight": 1.0},
+        ],
+        "analysis": {
+            "styleBrief": "Use amber editorial lighting.",
+            "providerHints": {
+                "krea": {
+                    "strategy": "image_style_references",
+                    "representativeImages": ["https://assets.example/a.png", "https://assets.example/b.png"],
+                    "styleBrief": "Use amber editorial lighting.",
+                }
+            },
+        },
+    }
+
+    with respx.mock:
+        respx.post(f"{KREA_BASE_URL}/generate/image/krea/krea-2/medium").mock(side_effect=capture_generate)
+        respx.get("https://cdn.krea.ai/native.png").mock(
+            return_value=httpx.Response(200, content=b"png", headers={"Content-Type": "image/png"})
+        )
+
+        await handle_krea_generate(
+            _node("krea-2-generate"),
+            {
+                "prompt": PortValueDict(type="Text", value="A product photograph"),
+                "moodboard": PortValueDict(type="Moodboard", value=native_moodboard),
+            },
+            {"KREA_API_TOKEN": "krea-token"},
+        )
+
+    body = captured["body"]
+    assert body["prompt"].startswith("A product photograph")
+    assert "Use amber editorial lighting." in body["prompt"]
+    assert body["image_style_references"] == [
+        {"url": "https://assets.example/a.png", "strength": 0.3},
+        {"url": "https://assets.example/b.png", "strength": 0.6},
+    ]
+    assert "moodboards" not in body
+
+
+@pytest.mark.asyncio
 async def test_generate_supports_manual_style_and_moodboard_params() -> None:
     captured: dict[str, object] = {}
 

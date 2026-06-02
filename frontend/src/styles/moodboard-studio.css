@@ -1,0 +1,473 @@
+body.app-slava-restraint .moodboard-studio-view {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  grid-template-rows: 44px 1fr;
+  grid-template-columns: 250px 1fr;
+  grid-template-areas:
+    "toolbar toolbar"
+    "rail main";
+  background: var(--sr-canvas);
+  color: var(--sr-ink);
+  font-family: var(--sr-ui);
+  overflow: hidden;
+}
+
+body.app-slava-restraint .moodboard-studio-toolbar {
+  grid-area: toolbar;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--sr-edge-strong);
+  background: var(--sr-glass);
+}
+
+body.app-slava-restraint .moodboard-studio-toolbar__button,
+body.app-slava-restraint .moodboard-dropzone__file-button,
+body.app-slava-restraint .moodboard-analysis button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--sr-edge);
+  border-radius: 2px;
+  background: none;
+  color: var(--sr-ink);
+  padding: 5px 10px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+body.app-slava-restraint .moodboard-studio-toolbar__button:hover,
+body.app-slava-restraint .moodboard-dropzone__file-wrap:hover .moodboard-dropzone__file-button,
+body.app-slava-restraint .moodboard-analysis button:hover {
+  border-color: #f59e0b;
+  color: #f59e0b;
+}
+
+body.app-slava-restraint .moodboard-dropzone__file-wrap--disabled,
+body.app-slava-restraint .moodboard-analysis button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+body.app-slava-restraint .moodboard-dropzone__file-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+body.app-slava-restraint .moodboard-dropzone__file-button {
+  user-select: none;
+}
+
+body.app-slava-restraint .moodboard-dropzone__file-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  opacity: 0;
+  cursor: pointer;
+}
+
+body.app-slava-restraint .moodboard-dropzone__file-input:disabled {
+  cursor: default;
+}
+
+body.app-slava-restraint .moodboard-studio-toolbar__title {
+  color: #f59e0b;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+body.app-slava-restraint .moodboard-studio-toolbar__spacer {
+  flex: 1;
+}
+
+body.app-slava-restraint .moodboard-studio-toolbar__state {
+  color: var(--sr-ink-meta);
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+body.app-slava-restraint .moodboard-studio-toolbar__state--saved {
+  color: #f59e0b;
+}
+
+body.app-slava-restraint .moodboard-studio-toolbar__state--error,
+body.app-slava-restraint .moodboard-studio__notice--error,
+body.app-slava-restraint .moodboard-palette__empty--error,
+body.app-slava-restraint .moodboard-rail__empty--error {
+  color: #e0796b;
+}
+
+body.app-slava-restraint .moodboard-studio-view__rail {
+  grid-area: rail;
+  min-width: 0;
+  border-right: 1px solid var(--sr-edge-strong);
+  background: var(--sr-glass-strong);
+  overflow: hidden;
+}
+
+body.app-slava-restraint .moodboard-studio-view__main {
+  grid-area: main;
+  overflow-y: auto;
+  padding: 18px 22px 44px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+body.app-slava-restraint .moodboard-studio-view__loading,
+body.app-slava-restraint .moodboard-analysis__empty {
+  color: var(--sr-ink-meta);
+  font-size: 12px;
+}
+
+body.app-slava-restraint .moodboard-studio__notice {
+  border-left: 2px solid currentColor;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.035);
+  font-size: 12px;
+}
+
+body.app-slava-restraint .moodboard-studio__notice--warn {
+  color: #d9a441;
+}
+
+body.app-slava-restraint .moodboard-def {
+  display: grid;
+  grid-template-columns: minmax(180px, 240px) minmax(0, 1fr);
+  gap: 16px;
+}
+
+body.app-slava-restraint .moodboard-def__cover {
+  aspect-ratio: 4 / 3;
+  border: 1px solid var(--sr-edge);
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.22);
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  color: var(--sr-ink-faint);
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+body.app-slava-restraint .moodboard-def__cover img,
+body.app-slava-restraint .moodboard-tile__image img,
+body.app-slava-restraint .moodboard-rail__thumb img,
+body.app-slava-restraint .moodboard-palette__thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+body.app-slava-restraint .moodboard-def__fields,
+body.app-slava-restraint .moodboard-analysis__body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+body.app-slava-restraint .moodboard-def__row {
+  display: flex;
+  gap: 12px;
+  align-items: end;
+}
+
+body.app-slava-restraint .moodboard-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  color: var(--sr-ink-meta);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+body.app-slava-restraint .moodboard-field--grow {
+  flex: 1;
+}
+
+body.app-slava-restraint .moodboard-field input,
+body.app-slava-restraint .moodboard-field select,
+body.app-slava-restraint .moodboard-field textarea,
+body.app-slava-restraint .moodboard-tile textarea {
+  width: 100%;
+  border: 1px solid var(--sr-edge);
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.22);
+  color: var(--sr-ink);
+  font: inherit;
+  font-size: 12px;
+  padding: 7px 8px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+body.app-slava-restraint .moodboard-field textarea,
+body.app-slava-restraint .moodboard-tile textarea {
+  resize: vertical;
+  line-height: 1.35;
+}
+
+body.app-slava-restraint .moodboard-dropzone,
+body.app-slava-restraint .moodboard-analysis {
+  border-top: 1px solid var(--sr-edge-strong);
+  padding-top: 14px;
+}
+
+body.app-slava-restraint .moodboard-dropzone__head,
+body.app-slava-restraint .moodboard-analysis__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+body.app-slava-restraint .moodboard-dropzone__label,
+body.app-slava-restraint .moodboard-analysis__label {
+  display: block;
+  color: var(--sr-ink);
+  font-weight: 700;
+  font-size: 13px;
+}
+
+body.app-slava-restraint .moodboard-dropzone__hint,
+body.app-slava-restraint .moodboard-analysis__hint {
+  display: block;
+  margin-top: 2px;
+  color: var(--sr-ink-meta);
+  font-size: 11px;
+}
+
+body.app-slava-restraint .moodboard-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+body.app-slava-restraint .moodboard-tile {
+  border: 1px solid var(--sr-edge);
+  border-radius: 4px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+body.app-slava-restraint .moodboard-tile--excluded {
+  opacity: 0.48;
+}
+
+body.app-slava-restraint .moodboard-tile__image {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  background: rgba(0, 0, 0, 0.22);
+}
+
+body.app-slava-restraint .moodboard-tile__remove {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 22px;
+  height: 22px;
+  border: 1px solid rgba(0, 0, 0, 0.35);
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  cursor: pointer;
+}
+
+body.app-slava-restraint .moodboard-tile__controls {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 9px;
+}
+
+body.app-slava-restraint .moodboard-tile__controls label,
+body.app-slava-restraint .moodboard-tile__toggle {
+  color: var(--sr-ink-meta);
+  font-size: 11px;
+}
+
+body.app-slava-restraint .moodboard-tile__toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+body.app-slava-restraint .moodboard-palette {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+body.app-slava-restraint .moodboard-palette__swatch {
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--sr-edge-strong);
+  border-radius: 3px;
+}
+
+body.app-slava-restraint .moodboard-analysis__summary {
+  color: var(--sr-ink-meta);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+body.app-slava-restraint .moodboard-rail,
+body.app-slava-restraint .panel__body--moodboard-library {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+body.app-slava-restraint .moodboard-rail {
+  height: 100%;
+  padding: 14px 12px;
+  overflow-y: auto;
+}
+
+body.app-slava-restraint .moodboard-rail__scope,
+body.app-slava-restraint .moodboard-palette__scope {
+  display: flex;
+  gap: 4px;
+}
+
+body.app-slava-restraint .moodboard-rail__scope-tab,
+body.app-slava-restraint .moodboard-palette__scope-tab,
+body.app-slava-restraint .moodboard-rail__new,
+body.app-slava-restraint .moodboard-palette__new {
+  flex: 1;
+  border: 1px solid var(--sr-edge);
+  border-radius: 2px;
+  background: none;
+  color: var(--sr-ink-meta);
+  padding: 5px 8px;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+body.app-slava-restraint .moodboard-rail__new,
+body.app-slava-restraint .moodboard-palette__new {
+  width: 100%;
+  flex: 0 0 auto;
+  border-style: dashed;
+  color: var(--sr-ink);
+}
+
+body.app-slava-restraint .moodboard-rail__scope-tab--active,
+body.app-slava-restraint .moodboard-palette__scope-tab--active {
+  border-color: #f59e0b;
+  color: #f59e0b;
+}
+
+body.app-slava-restraint .moodboard-rail__list,
+body.app-slava-restraint .moodboard-palette__list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+body.app-slava-restraint .moodboard-rail__empty,
+body.app-slava-restraint .moodboard-palette__empty {
+  color: var(--sr-ink-faint);
+  font-size: 11px;
+  line-height: 1.4;
+  padding: 4px 2px;
+}
+
+body.app-slava-restraint .moodboard-rail__item,
+body.app-slava-restraint .moodboard-palette__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: 1px solid var(--sr-edge);
+  border-radius: 3px;
+  background: none;
+  color: var(--sr-ink);
+  padding: 6px;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+body.app-slava-restraint .moodboard-rail__item:hover,
+body.app-slava-restraint .moodboard-palette__item:hover,
+body.app-slava-restraint .moodboard-rail__item--active {
+  border-color: #f59e0b;
+}
+
+body.app-slava-restraint .moodboard-rail__thumb,
+body.app-slava-restraint .moodboard-palette__thumb {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--sr-edge);
+  border-radius: 3px;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.24);
+  color: var(--sr-ink-faint);
+  font-size: 10px;
+}
+
+body.app-slava-restraint .moodboard-rail__meta,
+body.app-slava-restraint .moodboard-palette__meta {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+body.app-slava-restraint .moodboard-rail__name,
+body.app-slava-restraint .moodboard-palette__name {
+  overflow: hidden;
+  color: var(--sr-ink);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body.app-slava-restraint .moodboard-rail__sub,
+body.app-slava-restraint .moodboard-palette__sub {
+  color: var(--sr-ink-meta);
+  font-size: 10px;
+}
+
+body.app-slava-restraint .panel--moodboard-library {
+  top: 16px;
+  left: 260px;
+  width: 230px;
+}
+
+@media (max-width: 760px) {
+  body.app-slava-restraint .moodboard-studio-view {
+    grid-template-columns: 1fr;
+    grid-template-rows: 44px auto 1fr;
+    grid-template-areas:
+      "toolbar"
+      "rail"
+      "main";
+  }
+
+  body.app-slava-restraint .moodboard-studio-view__rail {
+    max-height: 150px;
+    border-right: 0;
+    border-bottom: 1px solid var(--sr-edge-strong);
+  }
+
+  body.app-slava-restraint .moodboard-def {
+    grid-template-columns: 1fr;
+  }
+}

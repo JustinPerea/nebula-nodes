@@ -17,6 +17,7 @@ Source of truth for provider behavior: `docs/model-providers/krea/krea-2.md`.
 | `krea-image-style-reference` | Wrap one image with per-reference strength `0..1` |
 | `krea-style` | Wrap an existing Krea style/LoRA ID with strength `-2..2` |
 | `krea-moodboard` | Wrap an existing Krea moodboard ID with strength `0..1` |
+| `nebula-moodboard` | Nebula-native provider-neutral moodboard; Krea consumes it as style image references plus a style-brief prompt suffix |
 | `krea-style-search` | List/search Krea styles from the authenticated API workspace/public filters |
 | `krea-style-train` | Train a Krea style from image inputs and emit a style object plus style ID |
 
@@ -36,6 +37,7 @@ Optional ports:
 - `image_style_references` (`Any`, multiple, max 10): outputs from `krea-image-style-reference`.
 - `styles` (`Any`, multiple): outputs from `krea-style` or `krea-style-train`.
 - `moodboard` (`Any`, max 1): output from `krea-moodboard`.
+  - Can also accept a Nebula-native `Moodboard` output from `nebula-moodboard`; the handler adapts representative images to Krea `image_style_references` because Krea does not expose public moodboard creation.
 
 Params:
 - `variant`: `medium` or `large`
@@ -90,13 +92,20 @@ Existing moodboard ID:
 krea-moodboard:moodboard -> krea-2-generate:moodboard
 ```
 
+Nebula-native moodboard:
+
+```text
+nebula-moodboard:moodboard -> krea-2-generate:moodboard
+```
+
 ## Resource Rules
 
 - Use `krea-image-style-reference` when different style images need different strengths.
 - Use raw `style_images` only when one fallback `style_reference_strength` is acceptable for every image.
 - Use `krea-style-search` to find style IDs, then `krea-style` to pass one into `krea-2-generate`.
 - Use `krea-style-train` when the user wants to create a new Krea style from images. Its `style` output can feed directly into `krea-2-generate.styles`.
-- Krea moodboards are referenced by existing ID. The verified Krea API docs did not expose public moodboard create/list endpoints, so Nebula cannot create moodboards directly yet.
+- Krea moodboards are referenced by existing ID. The verified Krea API docs did not expose public moodboard create/list endpoints, so Nebula cannot create Krea-owned moodboards directly yet.
+- Nebula-native moodboards are separate provider-neutral assets. When wired into Krea 2, representative images become Krea image style references and the extracted style brief is appended to the prompt.
 - `krea-2-generate` accepts at most 10 image style references and at most 1 moodboard.
 - `krea-style` strength supports `-2..2`; image style reference and moodboard strengths support `0..1`.
 
@@ -106,7 +115,8 @@ Wrapper nodes intentionally emit provider-specific objects on `Any` ports:
 
 - Image style reference: `{ kind: "krea_image_style_reference", image, strength }`
 - Style: `{ kind: "krea_style", id, strength }`
-- Moodboard: `{ kind: "krea_moodboard", id, strength }`
+- Krea moodboard: `{ kind: "krea_moodboard", id, strength }`
+- Nebula moodboard: `{ kind: "nebula_moodboard", moodboardId, name, mode, strength, images, analysis, styleBrief, negativePrompt, palette, representativeImages, providerHints }`
 
 Do not hand-roll these shapes unless necessary. Prefer the wrapper nodes so the graph is inspectable and users can tune strengths from the UI.
 
