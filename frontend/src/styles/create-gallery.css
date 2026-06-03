@@ -232,3 +232,75 @@ body.app-slava-restraint .result-card__btn--danger:hover {
   background: rgba(220, 50, 50, 0.45);
   border-color: rgba(220, 50, 50, 0.6);
 }
+
+/* ─── Styles button ──────────────────────────────────────────────────────── */
+
+body.app-slava-restraint .create-composer__styles {
+  background: var(--sr-glass-raised);
+  border: 1px solid var(--sr-edge);
+  border-radius: 10px;
+  padding: 7px 12px;
+  color: var(--sr-ink);
+  font-size: 13px;
+  cursor: pointer;
+}
+body.app-slava-restraint .create-composer__styles:hover { border-color: var(--sr-edge-strong); }
+
+/* ─── Preset library popover ─────────────────────────────────────────────── */
+
+body.app-slava-restraint .preset-library {
+  position: absolute;
+  left: 50%;
+  bottom: 96px;
+  transform: translateX(-50%);
+  width: min(680px, calc(100vw - 48px));
+  max-height: 60vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--sr-glass-strong);
+  border: 1px solid var(--sr-edge-strong);
+  border-radius: 16px;
+  backdrop-filter: blur(18px);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+  z-index: 60;
+  overflow: hidden;
+}
+body.app-slava-restraint .preset-library__top { display: flex; gap: 8px; padding: 12px; border-bottom: 1px solid var(--sr-edge); }
+body.app-slava-restraint .preset-library__search { flex: 1; display: flex; align-items: center; gap: 8px; color: var(--sr-ink-meta); }
+body.app-slava-restraint .preset-library__search input { flex: 1; background: transparent; border: none; outline: none; color: var(--sr-ink); font-family: inherit; font-size: 13px; }
+body.app-slava-restraint .preset-library__save { display: inline-flex; align-items: center; gap: 6px; background: var(--sr-glass-raised); border: 1px solid var(--sr-edge); border-radius: 9px; padding: 6px 10px; color: var(--sr-ink); font-size: 12px; cursor: pointer; }
+body.app-slava-restraint .preset-library__cats { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 12px; border-bottom: 1px solid var(--sr-edge); }
+body.app-slava-restraint .preset-library__cat { background: transparent; border: 1px solid var(--sr-edge); border-radius: 999px; padding: 4px 11px; color: var(--sr-ink-meta); font-size: 12px; cursor: pointer; }
+body.app-slava-restraint .preset-library__cat.is-active { border-color: var(--sr-accent); color: var(--sr-ink-bold); }
+body.app-slava-restraint .preset-library__grid { overflow-y: auto; padding: 12px; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+body.app-slava-restraint .preset-library__empty { grid-column: 1 / -1; text-align: center; color: var(--sr-ink-faint); padding: 28px 0; font-size: 13px; }
+
+/* ─── Preset card ────────────────────────────────────────────────────────── */
+
+body.app-slava-restraint .preset-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  aspect-ratio: 4 / 3;
+  padding: 10px;
+  border-radius: 12px;
+  border: 1px solid var(--sr-edge);
+  background: var(--sr-glass);
+  overflow: hidden;
+  cursor: pointer;
+  text-align: left;
+}
+body.app-slava-restraint .preset-card__gradient,
+body.app-slava-restraint .preset-card__thumb {
+  position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0;
+}
+body.app-slava-restraint .preset-card__gradient {
+  background: linear-gradient(150deg,
+    hsl(var(--preset-hue, 20) 55% 22%) 0%,
+    hsl(calc(var(--preset-hue, 20) + 40) 45% 12%) 100%);
+}
+body.app-slava-restraint .preset-card::after { content: ''; position: absolute; inset: 0; background: linear-gradient(to top, rgba(0,0,0,0.6), transparent 60%); z-index: 1; }
+body.app-slava-restraint .preset-card__name { position: relative; z-index: 2; color: #fff; font-size: 13px; font-weight: 600; letter-spacing: 0.02em; text-transform: uppercase; }
+body.app-slava-restraint .preset-card__category { position: relative; z-index: 2; color: rgba(255,255,255,0.7); font-size: 11px; }
+body.app-slava-restraint .preset-card:hover { border-color: var(--sr-accent); }
