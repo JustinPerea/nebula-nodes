@@ -37,7 +37,10 @@ def _scope_dir(scope: str, projectId: str | None) -> Path:
     if scope == "project" and projectId:
         if not _ID_RE.fullmatch(projectId):
             raise ValueError("invalid projectId")
-        return _root() / projectId
+        candidate = _root() / projectId
+        if not candidate.resolve().is_relative_to(_root().resolve()):
+            raise ValueError("invalid projectId")
+        return candidate
     return _root() / _GLOBAL_DIR
 
 
@@ -90,7 +93,12 @@ class PresetStore:
         directory = _scope_dir(scope, projectId)
         if not directory.exists():
             return []
-        items = [json.loads(p.read_text(encoding="utf-8")) for p in directory.glob("*.json")]
+        items: list[dict[str, Any]] = []
+        for p in directory.glob("*.json"):
+            try:
+                items.append(json.loads(p.read_text(encoding="utf-8")))
+            except (json.JSONDecodeError, OSError):
+                continue
         items.sort(key=lambda x: x.get("createdAt", ""))
         return items
 

@@ -2326,6 +2326,8 @@ async def update_preset(preset_id: str, body: PresetUpdate) -> dict:
         return preset_store.update(preset_id, **body.model_dump(exclude_none=True))
     except KeyError:
         raise HTTPException(status_code=404, detail="preset not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
 
 
 @app.delete("/api/presets/{preset_id}")

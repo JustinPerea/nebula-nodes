@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+import importlib
+
 import pytest
 
 
 @pytest.fixture()
 def store(tmp_path, monkeypatch):
     monkeypatch.setenv("NEBULA_PRESET_ROOT", str(tmp_path))
-    from services.preset_store import PresetStore
-    return PresetStore()
+    import services.preset_store as ps
+    importlib.reload(ps)
+    return ps.PresetStore()
 
 
 def test_create_and_get_roundtrip(store):
@@ -44,3 +47,9 @@ def test_delete_removes(store):
     p = store.create(name="A", category="X", prompt="", params={}, modelId=None, refImages=[], scope="global", projectId=None)
     store.delete(p["id"])
     assert store.get(p["id"]) is None
+
+
+def test_rejects_traversal_project_id(store):
+    import pytest as _pytest
+    with _pytest.raises(ValueError):
+        store.list("project", "../escape")
