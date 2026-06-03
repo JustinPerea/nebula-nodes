@@ -154,3 +154,28 @@ describe('authorGenerationCluster (backend-first)', () => {
     expect(modelNodeIds).toContain('n2');
   });
 });
+
+describe('deleteGeneration', () => {
+  it('removes the given model nodes and their now-orphaned input nodes + touching edges', () => {
+    resetStore();
+    useGraphStore.setState({
+      nodes: [
+        node('t1', 'text-input'), node('m1', 'nano-banana'), node('m2', 'nano-banana'),
+        node('keep', 'flux-schnell'),
+      ],
+      edges: [
+        { id: 'e1', source: 't1', sourceHandle: 'text', target: 'm1', targetHandle: 'prompt', type: 'typed-edge' },
+        { id: 'e2', source: 't1', sourceHandle: 'text', target: 'm2', targetHandle: 'prompt', type: 'typed-edge' },
+      ],
+    });
+    // delete only m1 → t1 still feeds m2, so t1 stays
+    useGraphStore.getState().deleteGeneration(['m1']);
+    let ids = useGraphStore.getState().nodes.map((n) => n.id).sort();
+    expect(ids).toEqual(['keep', 'm2', 't1']);
+    // delete m2 → t1 now orphaned → removed too
+    useGraphStore.getState().deleteGeneration(['m2']);
+    ids = useGraphStore.getState().nodes.map((n) => n.id).sort();
+    expect(ids).toEqual(['keep']);
+    expect(useGraphStore.getState().edges).toHaveLength(0);
+  });
+});

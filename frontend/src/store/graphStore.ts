@@ -331,6 +331,7 @@ interface GraphState {
   executeNode: (nodeId: string) => Promise<void>;
   executeCluster: (nodeIds: string[]) => Promise<void>;
   authorGenerationCluster: (request: GenerationRequest) => Promise<{ modelNodeIds: string[]; allNodeIds: string[] }>;
+  deleteGeneration: (modelNodeIds: string[]) => void;
   duplicateNode: (nodeId: string) => void;
   deleteNode: (nodeId: string) => void;
   loadGraph: (nodes: Node<NodeData>[], edges: Edge[]) => void;
@@ -1997,6 +1998,30 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     const modelNodeIds = modelTemps.map((t) => idMap[t]).filter(Boolean);
     const allNodeIds = [...modelTemps, ...(textTemp ? [textTemp] : []), ...imageTemps].map((t) => idMap[t]).filter(Boolean);
     return { modelNodeIds, allNodeIds };
+  },
+
+  deleteGeneration: (modelNodeIds) => {
+    const { nodes, edges } = get();
+    const toRemove = new Set(modelNodeIds);
+    // Input nodes feeding ONLY removed model nodes become orphans → also remove.
+    const inputIds = new Set(
+      edges.filter((e) => toRemove.has(e.target)).map((e) => e.source),
+    );
+    for (const inputId of inputIds) {
+      const stillUsed = edges.some((e) => e.source === inputId && !toRemove.has(e.target));
+      const inputNode = nodes.find((n) => n.id === inputId);
+      const isCreateInput = inputNode?.data.definitionId === 'text-input' || inputNode?.data.definitionId === 'image-input';
+      if (!stillUsed && isCreateInput) toRemove.add(inputId);
+    }
+    pushUndo(set, get);
+    set((state) => ({
+      nodes: state.nodes.filter((n) => !toRemove.has(n.id)),
+      edges: state.edges.filter((e) => !toRemove.has(e.source) && !toRemove.has(e.target)),
+    }));
+    // Best-effort backend removal so persistence reflects the deletion.
+    for (const id of toRemove) {
+      void apiFetch(`/api/graph/node/${id}`, { method: 'DELETE' }).catch(() => {});
+    }
   },
 
   duplicateNode: (nodeId) => {
