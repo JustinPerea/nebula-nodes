@@ -18,14 +18,19 @@ export function OutputRenderer({
   error,
   streamingText,
   streamingPartials,
+  streamingSvg,
 }: {
   outputs: Record<string, PortValue>;
   state: NodeState;
   error?: string;
   streamingText?: string;
   streamingPartials?: { index: number; src: string }[];
+  streamingSvg?: { index: number; svg: string; isFinal: boolean };
 }) {
   if (state === 'queued' || state === 'executing') {
+    if (streamingSvg?.svg) {
+      return <img className="create-output__media" src={`data:image/svg+xml;utf8,${encodeURIComponent(streamingSvg.svg)}`} alt="Generating preview" />;
+    }
     const lastPartial = streamingPartials && streamingPartials.length > 0
       ? streamingPartials[streamingPartials.length - 1]
       : null;
@@ -46,10 +51,11 @@ export function OutputRenderer({
     return <div className="create-output create-output--error">{error ?? 'Generation failed'}</div>;
   }
 
-  const video = findByType(outputs, 'Video');
-  const image = findByType(outputs, 'Image') ?? findByType(outputs, 'SVG');
-  const mesh = findByType(outputs, 'Mesh');
-  const audio = findByType(outputs, 'Audio');
+  const isComplete = state === 'complete';
+  const video = isComplete ? findByType(outputs, 'Video') : undefined;
+  const image = isComplete ? (findByType(outputs, 'Image') ?? findByType(outputs, 'SVG')) : undefined;
+  const mesh = isComplete ? findByType(outputs, 'Mesh') : undefined;
+  const audio = isComplete ? findByType(outputs, 'Audio') : undefined;
   const text = findByType(outputs, 'Text');
 
   if (video) return <video className="create-output__media" src={urlOf(video.value) ?? ''} controls loop playsInline />;
