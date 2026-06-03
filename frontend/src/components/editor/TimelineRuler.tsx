@@ -40,8 +40,12 @@ export function TimelineRuler({ sourceUrl, sourceDuration, totalOutputDuration, 
       }
     })();
     return () => { cancelled = true; };
+    // sourceStepTimes is a fresh array each render, derived from sourceDuration
+    // and stepCount (which tracks totalOutputDuration). Key on those primitives
+    // so the strip re-syncs when an edit changes the sample set; getThumbnail is
+    // cached, so a re-sync only fetches genuinely-new times.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sourceUrl, sourceDuration]);
+  }, [sourceUrl, sourceDuration, stepCount]);
 
   // Positions each ruler tick at its proportional position on the timeline.
   // Timeline width represents sourceDuration; ticks are output-time values,

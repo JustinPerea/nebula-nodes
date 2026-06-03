@@ -28,14 +28,7 @@ export function useZoomManifest(): void {
   const { getNode } = useReactFlow();
 
   useEffect(() => {
-    let cancelled = false;
-
     apiFetch('/api/zoom-manifest/init', { method: 'POST' })
-      .then((r) => r.json())
-      .then((data) => {
-        if (cancelled) return;
-        console.log('[zoom-manifest] init', data);
-      })
       .catch((e) => console.warn('[zoom-manifest] init failed:', e));
 
     function handler(e: Event) {
@@ -82,7 +75,6 @@ export function useZoomManifest(): void {
 
     window.addEventListener('nebula:agent-log-entry', handler);
     return () => {
-      cancelled = true;
       window.removeEventListener('nebula:agent-log-entry', handler);
     };
   }, [getNode]);

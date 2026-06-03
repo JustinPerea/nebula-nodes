@@ -144,6 +144,9 @@ export function MoodboardStudioView() {
     return () => {
       cancelled = true;
     };
+    // moodboardEditorId is the only reactive input — the loader sets
+    // draft/saved/thumbnail imperatively from the fetch result; the helpers
+    // (fetchMoodboards, *Draft, setters) are stable. Mirrors CharacterStudioView.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [moodboardEditorId]);
 
