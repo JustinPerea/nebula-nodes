@@ -25,3 +25,6 @@ os.environ["NEBULA_OUTPUT_ROOT"] = str(_TEST_OUTPUT_DIR)
 
 _TEST_CHARACTER_DIR = Path(tempfile.mkdtemp(prefix="nebula-test-characters-"))
 os.environ["NEBULA_CHARACTER_ROOT"] = str(_TEST_CHARACTER_DIR)
+
+_TEST_PRESET_DIR = Path(tempfile.mkdtemp(prefix="nebula-test-presets-"))
+os.environ["NEBULA_PRESET_ROOT"] = str(_TEST_PRESET_DIR)
