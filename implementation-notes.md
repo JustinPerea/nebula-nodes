@@ -1,5 +1,18 @@
 # Implementation Notes
 
+## 2026-06-03 — Create view Phase 3 (presets / styles library)
+
+Branch `feat/create-view-p2-p3` (same branch as P2). A library of named "styles" — prompt fragment + params + optional model — that pre-fill the composer, plus save-current-as-style. Plan: `docs/superpowers/plans/2026-06-03-create-view-phase-3.md`.
+
+**Decisions / non-obvious calls:**
+- **Typographic preset cards, no shipped thumbnails.** Higgsfield merchandises styles with auto-playing video tiles; we ship ALL-CAPS name + category over a deterministic per-id Slava gradient. This sidesteps two real constraints at once: (1) shipping binary PNGs through the toolchain is awkward, and (2) the backend serves **only** `OUTPUT_ROOT` (one `StaticFiles` mount) — there's no arbitrary-file route, so a repo-shipped thumbnail isn't directly servable without copying it into the outputs dir at seed time. Real thumbnails are deferred to P4. The one allowed inline style is `PresetCard`'s `--preset-hue` custom property (a dynamic data value — `check:inline-styles` only flags static visual props).
+- **First-run seeding is a NEW pattern.** No seeding existed anywhere in the codebase (verified). Added `seed_presets_if_empty()` (idempotent — only when the global store is empty; wrapped in try/except so it can never break boot) reading 12 curated styles from `backend/data/presets/seed.json` (JSON only, no binaries). Placed at the END of `main.py` (Python executes top-to-bottom; the fn must be defined first), running once at import. `conftest.py` sets `NEBULA_PRESET_ROOT` to a temp dir at module-eval time so the boot seeder never writes into the user's real `~/.nebula/presets` during tests.
+- **Mirror the store pattern faithfully.** `preset_store.py` clones `moodboard_store.py`. Code review caught that the first cut simplified away three guards the moodboard store has — added back: `_scope_dir`'s `resolve().is_relative_to()` path-containment check, `list`'s per-file `try/except (JSONDecodeError, OSError)`, and the route's `ValueError → 422`. "Reuse verbatim" means *including* the defensive bits.
+- **`applyPresetToComposer` rebuilds model defaults on a model switch.** When a preset hints a different model, we re-seed that model's defaults (`buildDefaultParamsForUi`) before overlaying the preset's params, so stale params from the previously-selected model don't leak through. Pure function, unit-tested.
+- **Repeated lesson — global-singleton test isolation.** Same trap as P2's cluster route: backend tests must pass in the FULL suite, not just isolation. The preset tests use the module-attribute swap (`monkeypatch.setattr(main, "preset_store", ...)`) + `NEBULA_PRESET_ROOT` sandbox + reference the store through the module (never a stale `from main import preset_store`).
+
+**Verification:** backend `pytest` 847 passed; frontend `tsc` clean, 300 vitest tests, `vite build`, `eslint`, `check:slava-css-scope` green. **Live (isolated uvicorn, temp dirs, port 8001):** boot seeder produced 12 presets (`GET /api/presets` → 200, 12 files on disk); `POST /api/graph/cluster` persisted the cluster to `state.json` (confirming P2 reload-survival) — the user's real `~/.nebula` was never touched.
+
 ## 2026-06-03 — Create view Phase 2 (gallery, refs, variations, persistence)
 
 Branch `feat/create-view-p2-p3`. Five sub-features: results gallery/History, reference-image attach, quantity>1 variations, all output types in the stage, and **backend-authored persistence**. Built subagent-driven in batches (Phase A persistence → B/C refs+quantity → D/E gallery+output-alignment) with spec + code-quality reviews. Plan: `docs/superpowers/plans/2026-06-03-create-view-phase-2.md`.

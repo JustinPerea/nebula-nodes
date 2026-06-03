@@ -285,6 +285,14 @@ Component breakdown (each unit: one purpose, a clear interface, minimal deps):
   composer (merge prompt fragment, apply params, set model if hinted, attach refImages).
   "Save current as style" captures the composer state into a new project-scope preset.
 
+> **P3 build note (2026-06-03):** shipped with **typographic** preset cards (ALL-CAPS name +
+> category over a deterministic per-id gradient) instead of static-image thumbnails — the
+> backend serves only `OUTPUT_ROOT` (no arbitrary-file route) and shipping binaries is
+> friction; real thumbnails are deferred to P4. The seed set is ~12 presets in a single
+> `backend/data/presets/seed.json`, copied into the global store by an idempotent first-run
+> `seed_presets_if_empty()` (no prior seeding pattern existed). `thumbnail` stays on the
+> `Preset` model (optional) for the future P4 thumbnail work.
+
 ---
 
 ## 7. Files to create / modify
