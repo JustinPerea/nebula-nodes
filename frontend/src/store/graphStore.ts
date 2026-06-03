@@ -1870,7 +1870,25 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     if (clusterNodes.length === 0) return;
     const clusterEdges = edges.filter((e) => idSet.has(e.source) && idSet.has(e.target));
     resetExecution();
-    set({ isExecuting: true });
+    set((state) => ({
+      nodes: state.nodes.map((n) =>
+        idSet.has(n.id)
+          ? {
+              ...n,
+              data: {
+                ...n.data,
+                state: 'queued' as const,
+                error: undefined,
+                progress: undefined,
+                streamingText: undefined,
+                streamingPartials: undefined,
+                streamingSvg: undefined,
+              },
+            }
+          : n,
+      ),
+      isExecuting: true,
+    }));
     const graphNodes = clusterNodes.map((n) => ({
       id: n.id,
       definitionId: n.data.definitionId,
@@ -1912,6 +1930,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       definitionId: string,
       params: Record<string, unknown>,
       position: { x: number; y: number },
+      tag?: CreateOriginTag,
     ): Node<NodeData> => ({
       id: uuidv4(),
       type: 'model-node',
@@ -1922,7 +1941,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         params,
         state: 'idle',
         outputs: {},
-        _createOrigin: origin,
+        _createOrigin: tag,
       },
     });
     const makeEdge = (
@@ -1941,7 +1960,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     const textPort = def.inputPorts.find((p) => p.dataType === 'Text');
     let textNodeId: string | null = null;
     if (textPort && request.prompt.trim()) {
-      const textNode = makeNode('text-input', { value: request.prompt }, { x: baseX, y: baseY });
+      const textNode = makeNode('text-input', { value: request.prompt }, { x: baseX, y: baseY }, undefined);
       textNodeId = textNode.id;
       created.push(textNode);
       allNodeIds.push(textNode.id);
@@ -1951,7 +1970,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     const imageNodeIds: string[] = [];
     if (imagePort) {
       request.refPaths.forEach((path, i) => {
-        const imgNode = makeNode('image-input', { filePath: path }, { x: baseX, y: baseY + 140 + i * 120 });
+        const imgNode = makeNode('image-input', { filePath: path }, { x: baseX, y: baseY + 140 + i * 120 }, undefined);
         imageNodeIds.push(imgNode.id);
         created.push(imgNode);
         allNodeIds.push(imgNode.id);
@@ -1966,7 +1985,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         const baseSeed = typeof request.params.seed === 'number' ? request.params.seed : 0;
         params.seed = baseSeed + v;
       }
-      const modelNode = makeNode(def.id, params, { x: baseX + 360, y: baseY + v * 220 });
+      const modelNode = makeNode(def.id, params, { x: baseX + 360, y: baseY + v * 220 }, origin);
       modelNodeIds.push(modelNode.id);
       created.push(modelNode);
       allNodeIds.push(modelNode.id);

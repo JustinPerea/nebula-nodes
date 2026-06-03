@@ -66,6 +66,8 @@ describe('executeCluster', () => {
     expect(postedNodes.map((n: { id: string }) => n.id).sort()).toEqual(['m1', 't1']);
     expect(postedEdges.map((e: { id: string }) => e.id)).toEqual(['e1']);
     expect(useGraphStore.getState().isExecuting).toBe(true);
+    expect(useGraphStore.getState().nodes.find((n) => n.id === 'm1')?.data.state).toBe('queued');
+    expect(useGraphStore.getState().nodes.find((n) => n.id === 't1')?.data.state).toBe('queued');
   });
 
   it('is a no-op when already executing', async () => {
@@ -90,6 +92,7 @@ describe('authorGenerationCluster', () => {
     expect(modelNode?.data.params.model).toBe('gemini-3.1-flash-image-preview');
     expect(modelNode?.data.params.aspect_ratio).toBe('16:9');
     expect((modelNode?.data._createOrigin as { sessionId: string }).sessionId).toBe('s1');
+    expect(textNode?.data._createOrigin).toBeUndefined();
 
     expect(edges).toHaveLength(1);
     expect(edges[0]).toMatchObject({
