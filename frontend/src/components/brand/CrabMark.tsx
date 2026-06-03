@@ -1,3 +1,5 @@
+import '../../styles/brand.css';
+
 /**
  * Nebula Nodes brand mark — NN-45 Crab (M1).
  *
@@ -128,8 +130,7 @@ export function CrabMark({
       viewBox={viewBox}
       width={size}
       height={size}
-      style={{ display: 'block' }}
-      className={className}
+      className={['nn-crabmark', className].filter(Boolean).join(' ')}
       role={title ? 'img' : 'presentation'}
       aria-label={title}
     >

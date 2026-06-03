@@ -1,0 +1,10 @@
+/**
+ * Brand component structural styles.
+ * Non-skin-dependent layout/display rules for shared brand marks.
+ */
+
+/* SVG brand marks render as block so they don't inherit inline-element
+ * baseline spacing (the default inline 4 px descender gap). */
+.nn-crabmark {
+  display: block;
+}
