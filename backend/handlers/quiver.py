@@ -80,35 +80,39 @@ def _to_quiver_image_arg(value: str) -> tuple[str | None, str | None]:
     return None, base64.b64encode(local.read_bytes()).decode("ascii")
 
 
-def _ref_to_quiver_string(value: str) -> str:
-    """Convert one reference image to a string accepted by Quiver's `references` array.
+def _ref_to_quiver_item(value: str) -> str | dict[str, str]:
+    """Convert one reference image to an item for Quiver's `references` array.
 
-    Quiver accepts URLs or base64 data URIs in the array. External URLs
-    pass through; Nebula-internal paths become full data URIs (Quiver
-    can't fetch from localhost).
+    Per Quiver's OpenAPI schema, each `references` item is
+    ``anyOf[{url: string}, {base64: string}, string(format: uri)]``.
+    A plain string is only valid as an http(s) URL. Base64 and data-URI
+    references MUST be wrapped as ``{"base64": "<raw base64, NO data: prefix>"}``.
+
+    - External http(s) URL      → plain string (Quiver fetches directly)
+    - data:...;base64,<b64>     → {"base64": "<b64>"} (prefix stripped)
+    - Nebula /api/outputs/... or local path → read bytes, {"base64": "<b64>"}
+
+    Raises ValueError if the value cannot be resolved to a fetchable form.
     """
     if _is_external_url(value):
         return value
-    if value.startswith("data:"):
-        return value
+    m = _DATA_URI_RE.match(value)
+    if m:
+        return {"base64": m.group(1)}
     local = _resolve_local_path(value)
     if local is None:
         raise ValueError(f"Cannot resolve reference image: {value!r}")
-    suffix = local.suffix.lstrip(".").lower()
-    mime_map = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg",
-                "webp": "image/webp", "gif": "image/gif"}
-    mime = mime_map.get(suffix, "image/png")
     b64 = base64.b64encode(local.read_bytes()).decode("ascii")
-    return f"data:{mime};base64,{b64}"
+    return {"base64": b64}
 
 
-def _coerce_references(value: Any) -> list[str]:
+def _coerce_references(value: Any) -> list[str | dict[str, str]]:
     """References input is Image+ (multiple), so it may be a single string OR a list."""
     if value is None:
         return []
     if isinstance(value, list):
-        return [_ref_to_quiver_string(str(v)) for v in value if v]
-    return [_ref_to_quiver_string(str(value))]
+        return [_ref_to_quiver_item(str(v)) for v in value if v]
+    return [_ref_to_quiver_item(str(value))]
 
 
 def _make_emit(emit: Callable[[ExecutionEvent], Awaitable[None]] | None) -> Callable[[ExecutionEvent], Awaitable[None]]:

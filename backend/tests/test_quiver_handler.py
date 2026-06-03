@@ -20,7 +20,7 @@ from httpx import Response
 import handlers.quiver as quiver_handler
 from handlers.quiver import (
     _coerce_references,
-    _ref_to_quiver_string,
+    _ref_to_quiver_item,
     _to_quiver_image_arg,
     handle_quiver_arrow_generate,
     handle_quiver_arrow_vectorize,
@@ -130,21 +130,55 @@ def test_coerce_references_skips_empty_items() -> None:
     assert _coerce_references(["", "https://b.png", None]) == ["https://b.png"]
 
 
-def test_ref_to_quiver_string_passes_external_url() -> None:
-    assert _ref_to_quiver_string("https://x.png") == "https://x.png"
+# ---------- _ref_to_quiver_item: correct per-schema reference format ----------
 
 
-def test_ref_to_quiver_string_passes_data_uri() -> None:
-    assert _ref_to_quiver_string("data:image/png;base64,XXX") == "data:image/png;base64,XXX"
+def test_ref_to_quiver_item_http_url_stays_plain_string() -> None:
+    """External http(s) URLs pass through as plain strings — valid per Quiver schema."""
+    assert _ref_to_quiver_item("https://x.png") == "https://x.png"
+    assert _ref_to_quiver_item("http://example.com/img.jpg") == "http://example.com/img.jpg"
 
 
-def test_ref_to_quiver_string_converts_local_to_data_uri(tmp_path) -> None:
+def test_ref_to_quiver_item_data_uri_becomes_base64_object() -> None:
+    """data:...;base64,<b64> must become {"base64": "<b64>"} with the prefix stripped.
+
+    Quiver returns 400 when a data-URI string is passed as a plain string in the
+    references array — the schema requires the {base64} object discriminator.
+    """
+    result = _ref_to_quiver_item("data:image/png;base64,AAAA")
+    assert result == {"base64": "AAAA"}
+
+
+def test_ref_to_quiver_item_data_uri_with_long_payload_strips_prefix() -> None:
+    b64_payload = base64.b64encode(_png_bytes()).decode("ascii")
+    result = _ref_to_quiver_item(f"data:image/png;base64,{b64_payload}")
+    assert result == {"base64": b64_payload}
+
+
+def test_ref_to_quiver_item_local_file_becomes_base64_object(tmp_path) -> None:
+    """Local file paths must become {"base64": "<raw b64>"} — no data: prefix."""
     f = tmp_path / "ref.png"
     f.write_bytes(_png_bytes())
-    result = _ref_to_quiver_string(str(f))
-    assert result.startswith("data:image/png;base64,")
-    encoded = result.split(",", 1)[1]
-    assert encoded == base64.b64encode(_png_bytes()).decode("ascii")
+    result = _ref_to_quiver_item(str(f))
+    assert isinstance(result, dict)
+    assert set(result.keys()) == {"base64"}
+    assert result["base64"] == base64.b64encode(_png_bytes()).decode("ascii")
+
+
+def test_ref_to_quiver_item_raises_on_unresolvable() -> None:
+    with pytest.raises(ValueError, match="Cannot resolve reference image"):
+        _ref_to_quiver_item("/nonexistent/path/that/never/was.png")
+
+
+def test_coerce_references_data_uri_produces_base64_objects() -> None:
+    """_coerce_references must propagate {base64} objects, not plain data-URI strings."""
+    result = _coerce_references("data:image/png;base64,AAAA")
+    assert result == [{"base64": "AAAA"}]
+
+
+def test_coerce_references_mixed_url_and_data_uri() -> None:
+    result = _coerce_references(["https://a.png", "data:image/png;base64,BBBB"])
+    assert result == ["https://a.png", {"base64": "BBBB"}]
 
 
 # ---------- handler: missing key ----------
