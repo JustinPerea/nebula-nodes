@@ -1622,6 +1622,53 @@ async def import_graph(body: dict[str, Any]) -> dict:
     }
 
 
+@app.post("/api/graph/cluster")
+async def add_graph_cluster(body: dict[str, Any]) -> dict:
+    """Additively add a node cluster (e.g. authored from the Create view) to the
+    CLI graph and persist it. Mirrors /api/graph/import but does NOT clear the
+    existing graph. Incoming nodes carry a client 'tempId'; this maps each to a
+    fresh 'n{N}' id and returns the created nodes/edges in React Flow format so
+    the client can apply them without waiting for the graphSync broadcast.
+
+    Body: {nodes: [{tempId, definitionId, params, position?}], edges: [{source, sourceHandle, target, targetHandle}]}
+    where edge source/target reference tempIds.
+    """
+    id_map: dict[str, str] = {}
+    for n in body.get("nodes", []):
+        definition_id = n.get("definitionId")
+        if not definition_id:
+            continue
+        params = n.get("params", {}) or {}
+        _validate_params(definition_id, params)
+        params = _coerce_params(definition_id, params)
+        if definition_id == "image-input":
+            params = _normalize_image_input_params(params)
+        new_id = cli_graph.add_node(definition_id, params, position=n.get("position"))
+        temp_id = n.get("tempId")
+        if temp_id:
+            id_map[temp_id] = new_id
+    created_edge_ids: list[str] = []
+    for e in body.get("edges", []):
+        src = id_map.get(e.get("source"))
+        dst = id_map.get(e.get("target"))
+        if not src or not dst:
+            continue
+        try:
+            edge = cli_graph.connect(src, e.get("sourceHandle", ""), dst, e.get("targetHandle", ""))
+            created_edge_ids.append(edge["id"])
+        except ValueError:
+            continue
+    await _broadcast_graph_sync()
+    publish_action(f"Created cluster ({len(id_map)} nodes)")
+
+    # Return the new subset in React Flow shape (reuse the export converter).
+    full = await export_graph_for_frontend()
+    new_ids = set(id_map.values())
+    rf_nodes = [n for n in full.get("nodes", []) if n["id"] in new_ids]
+    rf_edges = [e for e in full.get("edges", []) if e["id"] in created_edge_ids]
+    return {"idMap": id_map, "nodes": rf_nodes, "edges": rf_edges}
+
+
 def _rewrite_output_paths(outputs: dict[str, Any]) -> dict[str, Any]:
     """Convert local file paths in outputs to /api/outputs/ URLs for the frontend."""
     rewritten: dict[str, Any] = {}
