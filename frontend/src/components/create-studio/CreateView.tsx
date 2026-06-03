@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useState } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { ArrowLeft } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
@@ -6,8 +6,9 @@ import { useGraphStore } from '../../store/graphStore';
 import { NODE_DEFINITIONS } from '../../constants/nodeDefinitions';
 import { buildDefaultParamsForUi } from '../../lib/createParams';
 import { uploadReference } from '../../lib/createUploads';
+import { type GenerationRecord } from '../../lib/createGallery';
 import { CreateComposer } from './CreateComposer';
-import { OutputRenderer } from './OutputRenderer';
+import { ResultsGallery } from './ResultsGallery';
 import { ReferenceTray } from './ReferenceTray';
 import type { AttachedRef } from './ReferenceTray';
 import '../../styles/create-studio.css';
@@ -17,22 +18,18 @@ export function CreateView() {
   const exitCreateView = useUIStore((s) => s.exitCreateView);
   const sessionId = useUIStore((s) => s.createSessionId);
   const isExecuting = useGraphStore((s) => s.isExecuting);
+  const allNodes = useGraphStore((s) => s.nodes);
 
   const [modelId, setModelId] = useState<string | null>('nano-banana');
   const [prompt, setPrompt] = useState('');
   const [params, setParams] = useState<Record<string, unknown>>(() =>
     buildDefaultParamsForUi(NODE_DEFINITIONS['nano-banana']),
   );
-  const [lastModelNodeIds, setLastModelNodeIds] = useState<string[]>([]);
+  const [generations, setGenerations] = useState<GenerationRecord[]>([]);
   const [refs, setRefs] = useState<AttachedRef[]>([]);
   const [quantity, setQuantity] = useState(1);
-  const cursor = useRef({ x: 80, y: 80 });
 
   const modelDef = modelId ? NODE_DEFINITIONS[modelId] ?? null : null;
-
-  const resultNode = useGraphStore((s) =>
-    lastModelNodeIds[0] ? s.nodes.find((n) => n.id === lastModelNodeIds[0]) : undefined,
-  );
 
   const handleSelectModel = (id: string) => {
     setModelId(id);
@@ -51,6 +48,7 @@ export function CreateView() {
   const handleGenerate = async () => {
     if (!modelDef || !sessionId || isExecuting) return;
     const { authorGenerationCluster, executeCluster } = useGraphStore.getState();
+    const genId = uuidv4();
     const { modelNodeIds, allNodeIds } = await authorGenerationCluster({
       definitionId: modelDef.id,
       prompt,
@@ -58,15 +56,32 @@ export function CreateView() {
       refPaths: refs.map((r) => r.filePath),
       quantity,
       sessionId,
-      genId: uuidv4(),
-      layoutOrigin: { ...cursor.current },
+      genId,
+      layoutOrigin: { x: 80, y: 80 + generations.length * 320 },
     });
-    cursor.current = { x: cursor.current.x, y: cursor.current.y + 320 };
-    setLastModelNodeIds(modelNodeIds);
+    if (modelNodeIds.length > 0) {
+      setGenerations((prev) => [...prev, { genId, prompt, ts: Date.now(), modelNodeIds }]);
+    }
     await executeCluster(allNodeIds);
   };
 
-  const heroEmpty = useMemo(() => lastModelNodeIds.length === 0, [lastModelNodeIds]);
+  const handleOpenInCanvas = (nodeId: string) => {
+    exitCreateView();
+    useUIStore.getState().selectNode(nodeId);
+  };
+
+  const handleUseAsInput = (url: string) => {
+    setRefs((prev) => prev.some((r) => r.filePath === url) ? prev : [...prev, { filePath: url, previewUrl: url }]);
+  };
+
+  const handleDelete = (nodeId: string) => {
+    useGraphStore.getState().deleteGeneration([nodeId]);
+    setGenerations((prev) =>
+      prev
+        .map((g) => ({ ...g, modelNodeIds: g.modelNodeIds.filter((id) => id !== nodeId) }))
+        .filter((g) => g.modelNodeIds.length > 0),
+    );
+  };
 
   return (
     <div className="create-view">
@@ -82,23 +97,19 @@ export function CreateView() {
         onDragOver={(e) => e.preventDefault()}
         onDrop={(e) => { e.preventDefault(); if (e.dataTransfer.files?.length) void handleAttach(e.dataTransfer.files); }}
       >
-        {heroEmpty ? (
+        {generations.length === 0 ? (
           <div className="create-view__hero">
             <div className="create-view__hero-title">Start creating</div>
             <div className="create-view__hero-sub">Describe an idea, pick a model, and generate. Your nodes build on the canvas as you go.</div>
           </div>
         ) : (
-          <div className="create-view__result">
-            {resultNode && (
-              <OutputRenderer
-                outputs={resultNode.data.outputs}
-                state={resultNode.data.state}
-                error={resultNode.data.error}
-                streamingText={resultNode.data.streamingText}
-                streamingPartials={resultNode.data.streamingPartials}
-              />
-            )}
-          </div>
+          <ResultsGallery
+            records={generations}
+            nodes={allNodes}
+            onOpenInCanvas={handleOpenInCanvas}
+            onUseAsInput={handleUseAsInput}
+            onDelete={handleDelete}
+          />
         )}
       </div>
 
