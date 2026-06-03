@@ -15,11 +15,26 @@ function findByType(outputs: Record<string, PortValue>, type: PortValue['type'])
 export function OutputRenderer({
   outputs,
   state,
+  error,
+  streamingText,
+  streamingPartials,
 }: {
   outputs: Record<string, PortValue>;
   state: NodeState;
+  error?: string;
+  streamingText?: string;
+  streamingPartials?: { index: number; src: string }[];
 }) {
   if (state === 'queued' || state === 'executing') {
+    const lastPartial = streamingPartials && streamingPartials.length > 0
+      ? streamingPartials[streamingPartials.length - 1]
+      : null;
+    if (lastPartial) {
+      return <img className="create-output__media" src={lastPartial.src} alt="Generating preview" />;
+    }
+    if (streamingText) {
+      return <div className="create-output__text">{streamingText}</div>;
+    }
     return (
       <div className="create-output create-output--loading" role="status" aria-live="polite">
         <span className="create-output__spinner" aria-hidden="true" />
@@ -28,7 +43,7 @@ export function OutputRenderer({
     );
   }
   if (state === 'error') {
-    return <div className="create-output create-output--error">Generation failed</div>;
+    return <div className="create-output create-output--error">{error ?? 'Generation failed'}</div>;
   }
 
   const video = findByType(outputs, 'Video');

@@ -57,7 +57,10 @@ export function ParamPills({ def, params, onChange }: ParamPillsProps) {
               min={p.min}
               max={p.max}
               step={p.step ?? (p.type === 'integer' ? 1 : 0.1)}
-              onChange={(e) => set(p.key, p.type === 'integer' ? parseInt(e.target.value, 10) : parseFloat(e.target.value))}
+              onChange={(e) => {
+                const n = p.type === 'integer' ? parseInt(e.target.value, 10) : parseFloat(e.target.value);
+                set(p.key, Number.isNaN(n) ? (p.default ?? p.min ?? 0) : n);
+              }}
             />
           </label>
         );

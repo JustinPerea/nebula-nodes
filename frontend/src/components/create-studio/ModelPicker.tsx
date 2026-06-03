@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Search, Check } from 'lucide-react';
 import type { ModelNodeDefinition } from '../../types';
 import { getCreateModels, getFeaturedModels, searchModels } from '../../lib/createModels';
@@ -11,6 +11,12 @@ interface ModelPickerProps {
 
 export function ModelPicker({ value, onSelect, onClose }: ModelPickerProps) {
   const [query, setQuery] = useState('');
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
 
   const groups = useMemo(() => {
     if (query.trim()) {

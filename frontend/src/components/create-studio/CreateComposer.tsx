@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { ChevronDown, Sparkles } from 'lucide-react';
 import type { ModelNodeDefinition } from '../../types';
 import { ModelPicker } from './ModelPicker';
@@ -21,6 +21,11 @@ export function CreateComposer({
 }: CreateComposerProps) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const canGenerate = Boolean(modelDef) && !isExecuting;
+  const promptRef = useRef<HTMLTextAreaElement>(null);
+  const autoGrow = (el: HTMLTextAreaElement) => {
+    el.style.height = 'auto';
+    el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+  };
 
   return (
     <div className="create-composer">
@@ -31,11 +36,12 @@ export function CreateComposer({
         </>
       )}
       <textarea
+        ref={promptRef}
         className="create-composer__prompt"
         placeholder="Describe what you want to create…"
         value={prompt}
         rows={1}
-        onChange={(e) => onPromptChange(e.target.value)}
+        onChange={(e) => { onPromptChange(e.target.value); autoGrow(e.target); }}
         onKeyDown={(e) => {
           if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && canGenerate) {
             e.preventDefault();

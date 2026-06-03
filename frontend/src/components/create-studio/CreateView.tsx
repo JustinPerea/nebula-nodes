@@ -71,7 +71,13 @@ export function CreateView() {
         ) : (
           <div className="create-view__result">
             {resultNode && (
-              <OutputRenderer outputs={resultNode.data.outputs} state={resultNode.data.state} />
+              <OutputRenderer
+                outputs={resultNode.data.outputs}
+                state={resultNode.data.state}
+                error={resultNode.data.error}
+                streamingText={resultNode.data.streamingText}
+                streamingPartials={resultNode.data.streamingPartials}
+              />
             )}
           </div>
         )}
