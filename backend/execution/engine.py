@@ -8,6 +8,7 @@ from typing import Any, Callable, Awaitable
 
 from models.graph import GraphNode, GraphEdge, PortValueDict
 from services.cache import ExecutionCache
+from services.output import resolve_output_ref
 from models.events import (
     ExecutionEvent,
     QueuedEvent,
@@ -19,6 +20,11 @@ from models.events import (
 )
 
 CycleError = _GraphlibCycleError
+
+
+def _image_input_output(params: dict) -> dict:
+    file_path = resolve_output_ref(str(params.get("filePath", "")))
+    return {"image": {"type": "Image", "value": file_path}}
 
 
 async def _maybe_probe_video_output(node: GraphNode, node_outputs: dict[str, Any]) -> None:
@@ -490,8 +496,7 @@ async def execute_graph(
                     text_value = node.params.get("value", "")
                     node_outputs = {"text": {"type": "Text", "value": str(text_value)}}
                 elif node.definition_id == "image-input":
-                    file_path = node.params.get("filePath", "")
-                    node_outputs = {"image": {"type": "Image", "value": str(file_path)}}
+                    node_outputs = _image_input_output(node.params)
                 elif node.definition_id == "video-input":
                     file_path = node.params.get("filePath", "")
                     node_outputs = {"video": {"type": "Video", "value": str(file_path)}}
