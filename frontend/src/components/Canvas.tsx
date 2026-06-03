@@ -229,6 +229,7 @@ export function Canvas() {
   const isExecuting = useGraphStore((s) => s.isExecuting);
   const isValidConnection = useIsValidConnection();
   const skin = useUIStore((s) => s.skin);
+  const canvasTool = useUIStore((s) => s.canvasTool);
   const showContextMenu = useUIStore((s) => s.showContextMenu);
   const hideContextMenu = useUIStore((s) => s.hideContextMenu);
   const showConnectionPopup = useUIStore((s) => s.showConnectionPopup);
@@ -549,7 +550,7 @@ export function Canvas() {
 
   return (
     <div
-      className={`canvas-wrapper${isSlavaSkin ? ' canvas-wrapper--slava' : ''}${isSlavaSkin && nodes.length === 0 ? ' canvas-wrapper--slava-empty' : ''}`}
+      className={`canvas-wrapper${isSlavaSkin ? ' canvas-wrapper--slava' : ''}${isSlavaSkin && nodes.length === 0 ? ' canvas-wrapper--slava-empty' : ''}${canvasTool === 'select' ? ' canvas--select' : ''}`}
       onKeyDown={onKeyDown}
       tabIndex={0}
       onDrop={onDrop}
@@ -577,6 +578,7 @@ export function Canvas() {
         multiSelectionKeyCode="Shift"
         selectionKeyCode={null}
         selectionOnDrag
+        panOnDrag={canvasTool === 'select' ? [1, 2] : true}
         panOnScroll={false}
         selectionMode={SelectionMode.Partial}
       >

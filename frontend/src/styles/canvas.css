@@ -110,3 +110,7 @@ body:not(.app-slava-restraint) .react-flow__edge.animated path {
 .canvas-wrapper:not(.canvas-wrapper--slava-empty) .nn-splash {
   display: none;
 }
+
+/* Marquee select tool — crosshair cursor on the pane in select mode.
+ * Scoped to app-slava-restraint (the only active skin). */
+body.app-slava-restraint .canvas--select .react-flow__pane { cursor: crosshair; }

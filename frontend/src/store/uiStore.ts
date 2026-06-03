@@ -121,6 +121,7 @@ interface UIState {
   skin: SkinId;
   agentLogEnabled: boolean;
   inspectorPinned: boolean;
+  canvasTool: 'pan' | 'select';
 
   enterEditor: (sourceNodeId: string) => void;
   exitEditor: () => void;
@@ -166,6 +167,7 @@ interface UIState {
   setSettingsCache: (apiKeys: Record<string, string>) => void;
   setSkin: (skin: SkinId) => void;
   setAgentLogEnabled: (enabled: boolean) => void;
+  setCanvasTool: (tool: 'pan' | 'select') => void;
   resetPanelsForFreshCanvas: () => void;
 }
 
@@ -206,6 +208,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   skin: loadSkin(),
   agentLogEnabled: loadAgentLogEnabled(),
   inspectorPinned: false,
+  canvasTool: 'pan',
 
   enterEditor: (sourceNodeId) => {
     const editNodeId = useGraphStore.getState().getOrCreateEditNodeDownstream(sourceNodeId);
@@ -488,6 +491,8 @@ export const useUIStore = create<UIState>((set, get) => ({
     persistAgentLogEnabled(enabled);
     set({ agentLogEnabled: enabled });
   },
+
+  setCanvasTool: (tool) => set({ canvasTool: tool }),
 
   resetPanelsForFreshCanvas: () => {
     set({

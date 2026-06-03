@@ -1,6 +1,7 @@
 import { useEffect, useCallback } from 'react';
 import { useReactFlow } from '@xyflow/react';
 import {
+  BoxSelect,
   FolderOpen,
   Maximize2,
   Play,
@@ -25,6 +26,8 @@ export function Toolbar() {
   const { fitView, getViewport } = useReactFlow();
   const togglePanel = useUIStore((s) => s.togglePanel);
   const panels = useUIStore((s) => s.panels);
+  const canvasTool = useUIStore((s) => s.canvasTool);
+  const setCanvasTool = useUIStore((s) => s.setCanvasTool);
   const executeGraph = useGraphStore((s) => s.executeGraph);
   const resetExecution = useGraphStore((s) => s.resetExecution);
   const isExecuting = useGraphStore((s) => s.isExecuting);
@@ -206,6 +209,15 @@ export function Toolbar() {
         <ToolbarIcon name="fit" />
         <span className="toolbar__label">Fit</span>
       </button>
+      <button
+        className={`toolbar__button${canvasTool === 'select' ? ' toolbar__button--active' : ''}`}
+        onClick={() => setCanvasTool(canvasTool === 'select' ? 'pan' : 'select')}
+        title="Marquee select — drag to select nodes"
+        aria-pressed={canvasTool === 'select'}
+      >
+        <ToolbarIcon name="select" />
+        <span className="toolbar__label">Select</span>
+      </button>
       <button className="toolbar__button" onClick={handleResetLayout} title="Reset panel positions and sizes">
         <ToolbarIcon name="reset" />
         <span className="toolbar__label">Reset</span>
@@ -232,6 +244,7 @@ type IconName =
   | 'cli'
   | 'clear'
   | 'fit'
+  | 'select'
   | 'reset'
   | 'settings';
 
@@ -243,6 +256,7 @@ const TOOLBAR_ICONS: Record<IconName, LucideIcon> = {
   cli: Terminal,
   clear: Trash2,
   fit: Maximize2,
+  select: BoxSelect,
   reset: RotateCcw,
   settings: Settings,
 };
