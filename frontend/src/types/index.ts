@@ -271,6 +271,25 @@ export interface NodeData {
    *  graphStore.removeEmptyEditNode (Task 10) to auto-remove no-op
    *  Edit nodes when the editor is exited without making real edits. */
   spawnedThisSession?: boolean;
+  _createOrigin?: CreateOriginTag;
+}
+
+export interface CreateOriginTag {
+  sessionId: string;
+  genId: string;
+  ts: number;
+  prompt: string;
+}
+
+export interface GenerationRequest {
+  definitionId: string;
+  prompt: string;
+  params: Record<string, unknown>;
+  refPaths: string[];
+  quantity: number;
+  sessionId: string;
+  genId: string;
+  layoutOrigin: { x: number; y: number };
 }
 
 export interface DynamicPortDefinition {
