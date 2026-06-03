@@ -9,7 +9,7 @@ import {
   type Connection,
 } from '@xyflow/react';
 import { v4 as uuidv4 } from 'uuid';
-import type { NodeData, DynamicNodeData, DynamicPortDefinition, DynamicParamDefinition, PortDataType, CinemaSceneSpec, CinemaShot } from '../types';
+import type { NodeData, DynamicNodeData, DynamicPortDefinition, DynamicParamDefinition, PortDataType, CinemaSceneSpec, CinemaShot, ModelNodeDefinition, GenerationRequest, CreateOriginTag } from '../types';
 import { shotPortId } from '../constants/ports';
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 import {
@@ -39,6 +39,24 @@ function paramsForBackend(definitionId: string, params: Record<string, unknown>)
   const clips = Array.isArray(params.clips) ? (params.clips as EditClip[]) : null;
   if (!clips) return params;
   return { ...params, clips: clips.map((c) => ({ ...c, speed: clipSpeed(c) })) };
+}
+
+function buildDefaultParams(def: ModelNodeDefinition): Record<string, unknown> {
+  const defaults: Record<string, unknown> = {};
+  const sources = def.sharedParams
+    ? [...def.sharedParams, ...(def.falParams ?? []), ...(def.directParams ?? [])]
+    : def.params;
+  for (const p of sources) {
+    if (p.default !== undefined) defaults[p.key] = p.default;
+  }
+  return defaults;
+}
+
+function defHasParam(def: ModelNodeDefinition, key: string): boolean {
+  const sources = def.sharedParams
+    ? [...def.sharedParams, ...(def.falParams ?? []), ...(def.directParams ?? [])]
+    : def.params;
+  return sources.some((p) => p.key === key);
 }
 
 function nodesInExecutionScope(nodes: Node<NodeData>[], edges: Edge[], targetNodeId?: string): Node<NodeData>[] {
@@ -312,6 +330,7 @@ interface GraphState {
   handleExecutionEvent: (event: ExecutionEvent) => void;
   executeNode: (nodeId: string) => Promise<void>;
   executeCluster: (nodeIds: string[]) => Promise<void>;
+  authorGenerationCluster: (request: GenerationRequest) => { modelNodeIds: string[]; allNodeIds: string[] };
   duplicateNode: (nodeId: string) => void;
   deleteNode: (nodeId: string) => void;
   loadGraph: (nodes: Node<NodeData>[], edges: Edge[]) => void;
@@ -1876,6 +1895,89 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         isExecuting: false,
       }));
     }
+  },
+
+  authorGenerationCluster: (request) => {
+    const def = NODE_DEFINITIONS[request.definitionId];
+    if (!def) return { modelNodeIds: [], allNodeIds: [] };
+    pushUndo(set, get);
+
+    const origin: CreateOriginTag = {
+      sessionId: request.sessionId,
+      genId: request.genId,
+      ts: Date.now(),
+      prompt: request.prompt,
+    };
+    const makeNode = (
+      definitionId: string,
+      params: Record<string, unknown>,
+      position: { x: number; y: number },
+    ): Node<NodeData> => ({
+      id: uuidv4(),
+      type: 'model-node',
+      position,
+      data: {
+        label: NODE_DEFINITIONS[definitionId]?.displayName ?? definitionId,
+        definitionId,
+        params,
+        state: 'idle',
+        outputs: {},
+        _createOrigin: origin,
+      },
+    });
+    const makeEdge = (
+      source: string, sourceHandle: string, target: string, targetHandle: string, dataType: string,
+    ): Edge => ({
+      id: uuidv4(), source, sourceHandle, target, targetHandle, type: 'typed-edge', data: { dataType },
+    });
+
+    const created: Node<NodeData>[] = [];
+    const newEdges: Edge[] = [];
+    const allNodeIds: string[] = [];
+    const modelNodeIds: string[] = [];
+
+    const { x: baseX, y: baseY } = request.layoutOrigin;
+
+    const textPort = def.inputPorts.find((p) => p.dataType === 'Text');
+    let textNodeId: string | null = null;
+    if (textPort && request.prompt.trim()) {
+      const textNode = makeNode('text-input', { value: request.prompt }, { x: baseX, y: baseY });
+      textNodeId = textNode.id;
+      created.push(textNode);
+      allNodeIds.push(textNode.id);
+    }
+
+    const imagePort = def.inputPorts.find((p) => p.dataType === 'Image');
+    const imageNodeIds: string[] = [];
+    if (imagePort) {
+      request.refPaths.forEach((path, i) => {
+        const imgNode = makeNode('image-input', { filePath: path }, { x: baseX, y: baseY + 140 + i * 120 });
+        imageNodeIds.push(imgNode.id);
+        created.push(imgNode);
+        allNodeIds.push(imgNode.id);
+      });
+    }
+
+    const count = Math.max(1, request.quantity);
+    const hasSeed = defHasParam(def, 'seed');
+    for (let v = 0; v < count; v++) {
+      const params = { ...buildDefaultParams(def), ...request.params };
+      if (count > 1 && hasSeed) {
+        const baseSeed = typeof request.params.seed === 'number' ? request.params.seed : 0;
+        params.seed = baseSeed + v;
+      }
+      const modelNode = makeNode(def.id, params, { x: baseX + 360, y: baseY + v * 220 });
+      modelNodeIds.push(modelNode.id);
+      created.push(modelNode);
+      allNodeIds.push(modelNode.id);
+      if (textNodeId) newEdges.push(makeEdge(textNodeId, 'text', modelNode.id, textPort!.id, 'Text'));
+      imageNodeIds.forEach((imgId) =>
+        newEdges.push(makeEdge(imgId, 'image', modelNode.id, imagePort!.id, 'Image')),
+      );
+    }
+
+    set((state) => ({ nodes: [...state.nodes, ...created], edges: [...state.edges, ...newEdges] }));
+    return { modelNodeIds, allNodeIds };
   },
 
   duplicateNode: (nodeId) => {
