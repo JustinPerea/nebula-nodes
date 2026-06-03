@@ -311,6 +311,7 @@ interface GraphState {
   resetExecution: () => void;
   handleExecutionEvent: (event: ExecutionEvent) => void;
   executeNode: (nodeId: string) => Promise<void>;
+  executeCluster: (nodeIds: string[]) => Promise<void>;
   duplicateNode: (nodeId: string) => void;
   deleteNode: (nodeId: string) => void;
   loadGraph: (nodes: Node<NodeData>[], edges: Edge[]) => void;
@@ -1837,6 +1838,41 @@ export const useGraphStore = create<GraphState>((set, get) => ({
           new Set(nodesInExecutionScope(state.nodes, state.edges, nodeId).map((node) => node.id)),
           err instanceof Error ? err.message : 'Failed to start node execution.',
         ),
+        isExecuting: false,
+      }));
+    }
+  },
+
+  executeCluster: async (nodeIds) => {
+    const { nodes, edges, isExecuting, resetExecution } = get();
+    if (isExecuting) return;
+    const idSet = new Set(nodeIds);
+    const clusterNodes = nodes.filter((n) => idSet.has(n.id));
+    if (clusterNodes.length === 0) return;
+    const clusterEdges = edges.filter((e) => idSet.has(e.source) && idSet.has(e.target));
+    resetExecution();
+    set({ isExecuting: true });
+    const graphNodes = clusterNodes.map((n) => ({
+      id: n.id,
+      definitionId: n.data.definitionId,
+      params: paramsForBackend(n.data.definitionId, n.data.params as Record<string, unknown>),
+      outputs: {},
+    }));
+    const graphEdges = clusterEdges.map((e) => ({
+      id: e.id, source: e.source, sourceHandle: e.sourceHandle, target: e.target, targetHandle: e.targetHandle,
+    }));
+    try {
+      const result = await apiExecuteGraph(graphNodes, graphEdges);
+      if (result.status === 'validation_error') {
+        set((state) => ({
+          nodes: markNodesErrored(state.nodes, idSet, 'Validation failed before generation. Check required inputs and API keys.'),
+          isExecuting: false,
+        }));
+      }
+    } catch (err) {
+      console.error('Failed to start generation:', err);
+      set((state) => ({
+        nodes: markNodesErrored(state.nodes, idSet, err instanceof Error ? err.message : 'Failed to start generation.'),
         isExecuting: false,
       }));
     }
