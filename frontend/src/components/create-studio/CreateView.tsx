@@ -36,7 +36,7 @@ export function CreateView() {
   const handleGenerate = async () => {
     if (!modelDef || !sessionId || isExecuting) return;
     const { authorGenerationCluster, executeCluster } = useGraphStore.getState();
-    const { modelNodeIds, allNodeIds } = authorGenerationCluster({
+    const { modelNodeIds, allNodeIds } = await authorGenerationCluster({
       definitionId: modelDef.id,
       prompt,
       params,
