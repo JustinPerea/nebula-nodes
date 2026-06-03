@@ -1,0 +1,14 @@
+[
+  {"name": "Cinematic Noir", "category": "Cinematic", "prompt": "high-contrast black-and-white film noir, dramatic chiaroscuro lighting, deep shadows, 35mm grain", "params": {"aspect_ratio": "16:9"}, "modelId": "nano-banana"},
+  {"name": "Golden Hour Portrait", "category": "Portrait", "prompt": "warm golden-hour backlight, soft bokeh, intimate shallow depth of field, natural skin tones", "params": {"aspect_ratio": "3:4"}, "modelId": "nano-banana"},
+  {"name": "Editorial Flash", "category": "Editorial", "prompt": "direct on-camera flash, glossy magazine editorial look, crisp shadows, high fashion", "params": {"aspect_ratio": "4:5"}, "modelId": "nano-banana"},
+  {"name": "Risograph Print", "category": "Illustration", "prompt": "two-color risograph print, halftone texture, slight misregistration, muted retro palette", "params": {"aspect_ratio": "1:1"}, "modelId": "nano-banana"},
+  {"name": "Studio Product", "category": "Product", "prompt": "clean studio product shot, seamless white sweep, soft gradient lighting, sharp focus, commercial", "params": {"aspect_ratio": "1:1"}, "modelId": "nano-banana"},
+  {"name": "Anime Cel", "category": "Anime", "prompt": "hand-drawn anime cel style, bold linework, flat cel shading, vibrant saturated colors", "params": {"aspect_ratio": "16:9"}, "modelId": "nano-banana"},
+  {"name": "Cyberpunk Neon", "category": "Sci-Fi", "prompt": "rain-slicked cyberpunk street at night, neon signage, volumetric haze, teal and magenta", "params": {"aspect_ratio": "16:9"}, "modelId": "nano-banana"},
+  {"name": "Watercolor Wash", "category": "Illustration", "prompt": "loose watercolor wash, wet-on-wet blooms, soft pigment edges, paper texture", "params": {"aspect_ratio": "3:4"}, "modelId": "nano-banana"},
+  {"name": "Vintage Film", "category": "Photography", "prompt": "expired 35mm film aesthetic, faded colors, light leaks, halation, nostalgic grain", "params": {"aspect_ratio": "3:2"}, "modelId": "nano-banana"},
+  {"name": "Isometric Diorama", "category": "3D", "prompt": "cute isometric 3D diorama, soft clay materials, tilt-shift, pastel palette, studio lighting", "params": {"aspect_ratio": "1:1"}, "modelId": "nano-banana"},
+  {"name": "Minimal Line Art", "category": "Illustration", "prompt": "single continuous black line art on white, minimal, elegant, lots of negative space", "params": {"aspect_ratio": "1:1"}, "modelId": "nano-banana"},
+  {"name": "Epic Concept Art", "category": "Cinematic", "prompt": "sweeping fantasy concept art, dramatic scale, atmospheric perspective, painterly, golden rim light", "params": {"aspect_ratio": "21:9"}, "modelId": "nano-banana"}
+]
