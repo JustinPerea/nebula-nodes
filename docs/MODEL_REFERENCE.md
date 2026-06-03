@@ -449,7 +449,7 @@ Nodes: 115 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Model | enum | nano-banana | Nano Banana, Nano Banana Pro |
+| Model | enum | nano-banana | Nano Banana, Nano Banana 2, Nano Banana Pro, GPT Image 2 |
 | Multi-View | bool | false | — |
 
 ---
@@ -469,7 +469,7 @@ Nodes: 115 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Model | enum | nano-banana | Nano Banana, Nano Banana Pro |
+| Model | enum | nano-banana | Nano Banana, Nano Banana 2, Nano Banana Pro, GPT Image 2 |
 | Multi-View | bool | false | — |
 | Aspect Ratio | enum | 1:1 | 1:1, 16:9, 9:16, 4:3, 3:4 |
 | Pose Mode | enum | — | None, A-Pose, T-Pose |
@@ -1774,6 +1774,7 @@ Nodes: 115 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |-----------|------|---------|---------------|
 | AI Model | enum | latest | Latest (Meshy 6), Meshy 6, Meshy 5 |
 | Mesh Type | enum | standard | Standard, Low Poly |
+| HD Texture (4K) | bool | false | — |
 | Image Enhancement | bool | true | — |
 | Remove Lighting | bool | true | — |
 | Output Formats | string | glb | — |
@@ -1799,10 +1800,11 @@ Nodes: 115 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | Remesh | bool | false | — |
 | Topology | enum | triangle | Triangle, Quad |
 | Polycount | int | 30000 | 100–300000 |
-| Symmetry | enum | auto | Off, Auto, On |
+| Symmetry (deprecated) | enum | auto | Off, Auto, On |
 | Texture | bool | true | — |
 | PBR Materials | bool | false | — |
 | Pose Mode | enum | — | None, A-Pose, T-Pose |
+| HD Texture (4K) | bool | false | — |
 | Image Enhancement | bool | true | — |
 | Remove Lighting | bool | true | — |
 
@@ -1912,6 +1914,8 @@ Nodes: 115 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
 | AI Model | enum | latest | Latest (Meshy 6), Meshy 6, Meshy 5 |
+| HD Texture (4K) | bool | false | — |
+| Remove Lighting | bool | true | — |
 | Output Formats | string | glb | — |
 
 ---

@@ -159,7 +159,7 @@ async def handle_meshy_text_to_3d(
                     "moderation", "auto_size", "origin_at"}
     # Refine-only params
     REFINE_KEYS = {"enable_pbr", "topology", "target_polycount", "ai_model",
-                   "remove_lighting", "target_formats"}
+                   "hd_texture", "remove_lighting", "target_formats"}
     SKIP_KEYS = {"endpoint_id", "mode", "enable_rigging", "seed"}
 
     body: dict[str, Any] = {

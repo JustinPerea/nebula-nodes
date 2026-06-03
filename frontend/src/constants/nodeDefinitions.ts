@@ -3160,6 +3160,20 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         ],
       },
       {
+        key: 'hd_texture',
+        label: 'HD Texture (4K)',
+        type: 'boolean',
+        required: false,
+        default: false,
+      },
+      {
+        key: 'remove_lighting',
+        label: 'Remove Lighting',
+        type: 'boolean',
+        required: false,
+        default: true,
+      },
+      {
         key: 'target_formats',
         label: 'Output Formats',
         type: 'string',
@@ -3308,6 +3322,13 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         ],
       },
       {
+        key: 'hd_texture',
+        label: 'HD Texture (4K)',
+        type: 'boolean',
+        required: false,
+        default: false,
+      },
+      {
         key: 'image_enhancement',
         label: 'Image Enhancement',
         type: 'boolean',
@@ -3411,10 +3432,11 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'symmetry_mode',
-        label: 'Symmetry',
+        label: 'Symmetry (deprecated)',
         type: 'enum',
         required: false,
         default: 'auto',
+        hidden: true,
         options: [
           { label: 'Off', value: 'off' },
           { label: 'Auto', value: 'auto' },
@@ -3446,6 +3468,13 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
           { label: 'A-Pose', value: 'a-pose' },
           { label: 'T-Pose', value: 't-pose' },
         ],
+      },
+      {
+        key: 'hd_texture',
+        label: 'HD Texture (4K)',
+        type: 'boolean',
+        required: false,
+        default: false,
       },
       {
         key: 'image_enhancement',
@@ -3684,7 +3713,9 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         default: 'nano-banana',
         options: [
           { label: 'Nano Banana', value: 'nano-banana' },
+          { label: 'Nano Banana 2', value: 'nano-banana-2' },
           { label: 'Nano Banana Pro', value: 'nano-banana-pro' },
+          { label: 'GPT Image 2', value: 'gpt-image-2' },
         ],
       },
       {
@@ -3748,7 +3779,9 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         default: 'nano-banana',
         options: [
           { label: 'Nano Banana', value: 'nano-banana' },
+          { label: 'Nano Banana 2', value: 'nano-banana-2' },
           { label: 'Nano Banana Pro', value: 'nano-banana-pro' },
+          { label: 'GPT Image 2', value: 'gpt-image-2' },
         ],
       },
       {
@@ -4163,6 +4196,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     executionPattern: 'stream',
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
+      // maxConnections:16 is the arrow-1.1-max ceiling; arrow-1 and arrow-1.1 only allow 4 refs at runtime — the backend returns 400 if exceeded.
       { id: 'references', label: 'References', dataType: 'Image', required: false, multiple: true, maxConnections: 16 },
     ],
     outputPorts: [

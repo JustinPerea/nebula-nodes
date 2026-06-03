@@ -5424,6 +5424,20 @@
         ]
       },
       {
+        "key": "hd_texture",
+        "label": "HD Texture (4K)",
+        "type": "boolean",
+        "required": false,
+        "default": false
+      },
+      {
+        "key": "remove_lighting",
+        "label": "Remove Lighting",
+        "type": "boolean",
+        "required": false,
+        "default": true
+      },
+      {
         "key": "target_formats",
         "label": "Output Formats",
         "type": "string",
@@ -5623,6 +5637,13 @@
         ]
       },
       {
+        "key": "hd_texture",
+        "label": "HD Texture (4K)",
+        "type": "boolean",
+        "required": false,
+        "default": false
+      },
+      {
         "key": "image_enhancement",
         "label": "Image Enhancement",
         "type": "boolean",
@@ -5751,10 +5772,11 @@
       },
       {
         "key": "symmetry_mode",
-        "label": "Symmetry",
+        "label": "Symmetry (deprecated)",
         "type": "enum",
         "required": false,
         "default": "auto",
+        "hidden": true,
         "options": [
           {
             "label": "Off",
@@ -5804,6 +5826,13 @@
             "value": "t-pose"
           }
         ]
+      },
+      {
+        "key": "hd_texture",
+        "label": "HD Texture (4K)",
+        "type": "boolean",
+        "required": false,
+        "default": false
       },
       {
         "key": "image_enhancement",
@@ -6164,8 +6193,16 @@
             "value": "nano-banana"
           },
           {
+            "label": "Nano Banana 2",
+            "value": "nano-banana-2"
+          },
+          {
             "label": "Nano Banana Pro",
             "value": "nano-banana-pro"
+          },
+          {
+            "label": "GPT Image 2",
+            "value": "gpt-image-2"
           }
         ]
       },
@@ -6277,8 +6314,16 @@
             "value": "nano-banana"
           },
           {
+            "label": "Nano Banana 2",
+            "value": "nano-banana-2"
+          },
+          {
             "label": "Nano Banana Pro",
             "value": "nano-banana-pro"
+          },
+          {
+            "label": "GPT Image 2",
+            "value": "gpt-image-2"
           }
         ]
       },
@@ -6912,7 +6957,8 @@
         "dataType": "Image",
         "required": false,
         "multiple": true,
-        "maxConnections": 16
+        "maxConnections": 16,
+        "_note": "16 is the arrow-1.1-max ceiling; arrow-1 and arrow-1.1 allow only 4 refs at runtime — backend enforces with 400."
       }
     ],
     "outputPorts": [
