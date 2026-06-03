@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Download, SquareArrowOutUpRight, ImagePlus, Trash2, FolderOpen, FolderDown } from 'lucide-react';
+import { Download, SquareArrowOutUpRight, ImagePlus, Trash2, FolderOpen, FolderDown, Maximize2 } from 'lucide-react';
 import type { Node } from '@xyflow/react';
 import type { NodeData, PortValue } from '../../types';
 import { OutputRenderer } from './OutputRenderer';
@@ -19,13 +19,24 @@ export interface ResultCardProps {
   onDelete: () => void;
   onReveal?: (url: string) => void;
   onSaveToFolder?: (url: string) => void;
+  onZoom?: () => void;
 }
 
-export function ResultCard({ node, onOpenInCanvas, onUseAsInput, onDelete, onReveal, onSaveToFolder }: ResultCardProps) {
+export function ResultCard({ node, onOpenInCanvas, onUseAsInput, onDelete, onReveal, onSaveToFolder, onZoom }: ResultCardProps) {
   const [saved, setSaved] = useState(false);
 
   if (!node) return null;
   const url = firstMediaUrl(node.data.outputs);
+
+  // Only completed image/video results are zoomable. Images get a full-area
+  // click target; video gets only the corner button so its controls stay live.
+  const complete = node.data.state === 'complete';
+  const outs = node.data.outputs;
+  const hasVideo = complete && Object.values(outs).some((o) => o.type === 'Video' && o.value);
+  const hasImage = complete && Object.values(outs).some((o) => (o.type === 'Image' || o.type === 'SVG') && o.value);
+  const mediaKind = hasVideo ? 'video' : hasImage ? 'image' : 'other';
+  const canZoom = mediaKind !== 'other' && !!onZoom;
+  const imageClickable = mediaKind === 'image' && canZoom;
 
   const handleSave = () => {
     if (!url || !onSaveToFolder) return;
@@ -45,6 +56,25 @@ export function ResultCard({ node, onOpenInCanvas, onUseAsInput, onDelete, onRev
           streamingSvg={node.data.streamingSvg}
           error={node.data.error}
         />
+        {canZoom && (
+          <button
+            type="button"
+            className="result-card__zoom-btn"
+            onClick={() => onZoom?.()}
+            title="View full screen"
+            aria-label="View full screen"
+          >
+            <Maximize2 size={15} strokeWidth={1.75} />
+          </button>
+        )}
+        {imageClickable && (
+          <button
+            type="button"
+            className="result-card__zoom-overlay"
+            onClick={() => onZoom?.()}
+            aria-label="View full screen"
+          />
+        )}
       </div>
       <div className="result-card__actions">
         {url && <a className="result-card__btn" href={url} download title="Download"><Download size={15} strokeWidth={1.75} /></a>}

@@ -1,11 +1,47 @@
 import type { Node } from '@xyflow/react';
-import type { NodeData } from '../types';
+import type { NodeData, PortValue } from '../types';
 
 export interface GenerationRecord {
   genId: string;
   prompt: string;
   ts: number;
   modelNodeIds: string[];
+}
+
+export type ViewableKind = 'image' | 'video';
+
+export interface ViewableMedia {
+  url: string;
+  kind: ViewableKind;
+}
+
+function resolveMediaUrl(v: PortValue['value']): string | null {
+  if (typeof v === 'string') return v;
+  if (v && typeof v === 'object' && 'url' in (v as Record<string, unknown>)) {
+    return (v as { url: string }).url;
+  }
+  return null;
+}
+
+/**
+ * The single image/video a completed result node should show in the fullscreen
+ * lightbox, or null if there's nothing zoomable. Video takes precedence over
+ * image/SVG to match OutputRenderer's render order.
+ */
+export function firstViewableMedia(node: Node<NodeData> | undefined): ViewableMedia | null {
+  if (!node || node.data.state !== 'complete') return null;
+  const outputs = node.data.outputs ?? {};
+  const video = Object.values(outputs).find((o) => o && o.type === 'Video' && o.value);
+  if (video) {
+    const url = resolveMediaUrl(video.value);
+    if (url) return { url, kind: 'video' };
+  }
+  const image = Object.values(outputs).find((o) => o && (o.type === 'Image' || o.type === 'SVG') && o.value);
+  if (image) {
+    const url = resolveMediaUrl(image.value);
+    if (url) return { url, kind: 'image' };
+  }
+  return null;
 }
 
 export interface GalleryItem {

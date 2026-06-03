@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import type { Node } from '@xyflow/react';
 import type { NodeData } from '../../types';
-import { galleryItemsFromSession, galleryItemsFromCanvas, type GenerationRecord } from '../../lib/createGallery';
+import { galleryItemsFromSession, galleryItemsFromCanvas, firstViewableMedia, type GenerationRecord, type ViewableMedia } from '../../lib/createGallery';
 import { ResultCard } from './ResultCard';
+import { Lightbox } from './Lightbox';
 
 export interface ResultsGalleryProps {
   records: GenerationRecord[];
@@ -30,11 +31,28 @@ export function ResultsGallery({
   const [tab, setTab] = useState<'session' | 'canvas'>(defaultTab ?? 'session');
   const [layout, setLayout] = useState<'grid' | 'list'>('grid');
   const [showSelectedOnly, setShowSelectedOnly] = useState(true);
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
   const items =
     tab === 'session'
       ? galleryItemsFromSession(records, nodes)
       : galleryItemsFromCanvas(nodes, showSelectedOnly && selectedIds.size > 0 ? selectedIds : undefined);
+
+  // Zoomable media in the same order as the cards, so a clicked card maps to a
+  // lightbox index and ←/→ steps through exactly what's on screen.
+  const viewable: { nodeId: string; media: ViewableMedia }[] = [];
+  for (const it of items) {
+    const media = firstViewableMedia(it.node);
+    if (media) viewable.push({ nodeId: it.nodeId, media });
+  }
+  const openLightbox = (nodeId: string) => {
+    const idx = viewable.findIndex((v) => v.nodeId === nodeId);
+    if (idx >= 0) setLightboxIndex(idx);
+  };
+  const switchTab = (next: 'session' | 'canvas') => {
+    setLightboxIndex(null); // viewable set changes with the tab — don't keep a stale index open
+    setTab(next);
+  };
 
   const emptyMessage =
     tab === 'session'
@@ -49,14 +67,14 @@ export function ResultsGallery({
           <button
             type="button"
             className={`results-gallery__tab${tab === 'session' ? ' is-active' : ''}`}
-            onClick={() => setTab('session')}
+            onClick={() => switchTab('session')}
           >
             Session
           </button>
           <button
             type="button"
             className={`results-gallery__tab${tab === 'canvas' ? ' is-active' : ''}`}
-            onClick={() => setTab('canvas')}
+            onClick={() => switchTab('canvas')}
           >
             Canvas
           </button>
@@ -108,9 +126,19 @@ export function ResultsGallery({
               onDelete={() => onDelete(it.nodeId)}
               onReveal={onReveal}
               onSaveToFolder={onSaveToFolder}
+              onZoom={() => openLightbox(it.nodeId)}
             />
           ))}
         </div>
+      )}
+
+      {lightboxIndex !== null && viewable.length > 0 && (
+        <Lightbox
+          items={viewable.map((v) => v.media)}
+          index={lightboxIndex}
+          onClose={() => setLightboxIndex(null)}
+          onIndexChange={setLightboxIndex}
+        />
       )}
     </div>
   );

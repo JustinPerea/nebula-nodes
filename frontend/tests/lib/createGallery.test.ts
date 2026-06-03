@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { galleryItemsFromSession, galleryItemsFromCanvas, type GenerationRecord } from '../../src/lib/createGallery';
+import { galleryItemsFromSession, galleryItemsFromCanvas, firstViewableMedia, type GenerationRecord } from '../../src/lib/createGallery';
 import type { Node } from '@xyflow/react';
 import type { NodeData } from '../../src/types';
 
@@ -111,5 +111,43 @@ describe('galleryItemsFromCanvas', () => {
     expect(item.genId).toBe('n1');
     expect(item.prompt).toBe('n1');
     expect(item.ts).toBe(0);
+  });
+});
+
+// ─── firstViewableMedia ────────────────────────────────────────────────────
+
+describe('firstViewableMedia', () => {
+  it('returns the image url + kind for a completed image node', () => {
+    const n = node('n1', 'complete', { image: { type: 'Image', value: '/api/outputs/a.png' } });
+    expect(firstViewableMedia(n)).toEqual({ url: '/api/outputs/a.png', kind: 'image' });
+  });
+
+  it('prefers video over image (matches OutputRenderer order)', () => {
+    const n = node('n1', 'complete', {
+      image: { type: 'Image', value: '/api/outputs/a.png' },
+      video: { type: 'Video', value: '/api/outputs/a.mp4' },
+    });
+    expect(firstViewableMedia(n)).toEqual({ url: '/api/outputs/a.mp4', kind: 'video' });
+  });
+
+  it('treats SVG as an image', () => {
+    const n = node('n1', 'complete', { svg: { type: 'SVG', value: '/api/outputs/a.svg' } });
+    expect(firstViewableMedia(n)).toEqual({ url: '/api/outputs/a.svg', kind: 'image' });
+  });
+
+  it('resolves an object {url} value', () => {
+    const n = node('n1', 'complete', { image: { type: 'Image', value: { url: 'https://x/a.png' } as never } });
+    expect(firstViewableMedia(n)).toEqual({ url: 'https://x/a.png', kind: 'image' });
+  });
+
+  it('returns null when the node is not complete', () => {
+    const n = node('n1', 'executing', { image: { type: 'Image', value: '/api/outputs/a.png' } });
+    expect(firstViewableMedia(n)).toBeNull();
+  });
+
+  it('returns null when there is no image/video/svg output', () => {
+    const n = node('n1', 'complete', { text: { type: 'Text', value: 'hello' } });
+    expect(firstViewableMedia(n)).toBeNull();
+    expect(firstViewableMedia(undefined)).toBeNull();
   });
 });
