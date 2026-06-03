@@ -134,4 +134,23 @@ describe('authorGenerationCluster (backend-first)', () => {
     expect(nodes.filter((n) => n.data.definitionId === 'text-input')).toHaveLength(1);
     expect(nodes.filter((n) => n.data.definitionId === 'image-input')).toHaveLength(1);
   });
+
+  it('applies _createOrigin even when graphSync delivered the node first (upsert, no clobber)', async () => {
+    // Simulate the WS graphSync having already added the model node (untagged, mid-execution).
+    useGraphStore.setState({
+      nodes: [{
+        id: 'n2', type: 'model-node', position: { x: 0, y: 0 },
+        data: { label: 'nano-banana', definitionId: 'nano-banana', params: {}, state: 'executing',
+          outputs: { image: { type: 'Image', value: '/api/outputs/partial.png' } } },
+      }] as never,
+      edges: [],
+    });
+    const { modelNodeIds } = await useGraphStore.getState().authorGenerationCluster(baseRequest({}));
+    const matches = useGraphStore.getState().nodes.filter((n) => n.id === 'n2');
+    expect(matches).toHaveLength(1);                          // no duplicate
+    expect((matches[0].data._createOrigin as { sessionId: string }).sessionId).toBe('s1'); // tag applied
+    expect(matches[0].data.state).toBe('executing');         // existing state preserved
+    expect(matches[0].data.outputs.image?.value).toBe('/api/outputs/partial.png'); // outputs preserved
+    expect(modelNodeIds).toContain('n2');
+  });
 });

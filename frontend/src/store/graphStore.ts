@@ -1978,11 +1978,19 @@ export const useGraphStore = create<GraphState>((set, get) => ({
 
     pushUndo(set, get);
     set((state) => {
-      const existing = new Set(state.nodes.map((n) => n.id));
-      const existingEdges = new Set(state.edges.map((e) => e.id));
+      const taggedById = new Map(taggedNodes.map((n) => [n.id, n]));
+      const existingIds = new Set(state.nodes.map((n) => n.id));
+      const mergedNodes = state.nodes.map((n) => {
+        const incoming = taggedById.get(n.id);
+        return incoming?.data._createOrigin
+          ? { ...n, data: { ...n.data, _createOrigin: incoming.data._createOrigin } }
+          : n;
+      });
+      const newNodes = taggedNodes.filter((n) => !existingIds.has(n.id));
+      const existingEdgeIds = new Set(state.edges.map((e) => e.id));
       return {
-        nodes: [...state.nodes, ...taggedNodes.filter((n) => !existing.has(n.id))],
-        edges: [...state.edges, ...rfEdges.filter((e) => !existingEdges.has(e.id))],
+        nodes: [...mergedNodes, ...newNodes],
+        edges: [...state.edges, ...rfEdges.filter((e) => !existingEdgeIds.has(e.id))],
       };
     });
 
