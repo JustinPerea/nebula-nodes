@@ -1,12 +1,18 @@
 from __future__ import annotations
 
 import base64
+import mimetypes
 import os
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
 from services.settings import load_settings
+
+# Ensure video/3D mime types are registered (mimetypes may lack these on some
+# platforms; FileResponse and inline <video> need the right content-type).
+mimetypes.add_type("video/webm", ".webm")
+mimetypes.add_type("model/gltf-binary", ".glb")
 
 # Project-local output dir by default; override via NEBULA_OUTPUT_ROOT so the
 # test suite can sandbox to a tmp dir (pytest conftest sets this) and ops can
@@ -18,17 +24,46 @@ def _resolve_output_root() -> Path:
     """Resolve the output root with precedence: env override > persisted setting > default.
 
     Computed once at import time; applies after backend restart.
+
+    Guarantees:
+    - Relative paths are anchored to the repo root (sibling of DEFAULT_OUTPUT_ROOT),
+      not the process CWD, so the resolved path is deterministic regardless of where
+      uvicorn was started from.
+    - The chosen directory is always created before returning, so callers never
+      encounter a missing directory.
+    - If the candidate directory cannot be created (unwritable path, non-directory
+      component, etc.) we fall back to DEFAULT_OUTPUT_ROOT so startup never bricks.
     """
     env = os.environ.get("NEBULA_OUTPUT_ROOT")
     if env:
-        return Path(env).expanduser()
+        candidate: Path | None = Path(env).expanduser()
+    else:
+        candidate = None
+        try:
+            sp = load_settings().get("outputPath")
+            if sp:
+                candidate = Path(str(sp)).expanduser()
+        except Exception:
+            candidate = None
+        if candidate is None:
+            candidate = DEFAULT_OUTPUT_ROOT
+
+    # Fix 3: anchor relative paths to the repo root for deterministic resolution.
+    if not candidate.is_absolute():
+        candidate = DEFAULT_OUTPUT_ROOT.parent / candidate
+
+    # Fix 1: guarantee the directory exists; fall back if it can't be created.
     try:
-        sp = load_settings().get("outputPath")
-        if sp:
-            return Path(str(sp)).expanduser()
-    except Exception:
-        pass
-    return DEFAULT_OUTPUT_ROOT
+        candidate.mkdir(parents=True, exist_ok=True)
+        return candidate
+    except OSError as exc:
+        print(
+            f"[output] cannot use output root {candidate}: {exc}"
+            f" — falling back to {DEFAULT_OUTPUT_ROOT}",
+            flush=True,
+        )
+        DEFAULT_OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
+        return DEFAULT_OUTPUT_ROOT
 
 
 OUTPUT_ROOT = _resolve_output_root()

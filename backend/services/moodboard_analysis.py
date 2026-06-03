@@ -17,7 +17,7 @@ import numpy as np
 from PIL import Image, UnidentifiedImageError
 
 from cinema.color import extract_palette
-from services.output import OUTPUT_ROOT
+from services.output import OUTPUT_ROOT, DEFAULT_OUTPUT_ROOT
 
 _MODE_LABELS = {
     "look": "visual style only; avoid copying specific subjects or identities",
@@ -158,23 +158,36 @@ def resolve_moodboard_image_path(value: str) -> Path | None:
         else:
             return None
 
+    # Dual-root resolution: prefer OUTPUT_ROOT, fall back to DEFAULT_OUTPUT_ROOT
+    # so assets created before a relocation remain accessible.
+    _roots = (
+        (OUTPUT_ROOT, DEFAULT_OUTPUT_ROOT)
+        if DEFAULT_OUTPUT_ROOT != OUTPUT_ROOT
+        else (OUTPUT_ROOT,)
+    )
+
     if raw.startswith("/api/outputs/"):
         rel = raw[len("/api/outputs/"):].lstrip("/")
-        candidate = (OUTPUT_ROOT / rel).resolve()
-        try:
-            candidate.relative_to(OUTPUT_ROOT.resolve())
-        except ValueError:
-            return None
-        return candidate if candidate.exists() else None
+        for root in _roots:
+            try:
+                candidate = (root / rel).resolve()
+                candidate.relative_to(root.resolve())
+            except (ValueError, OSError):
+                continue
+            if candidate.exists():
+                return candidate
+        return None
 
     candidate = Path(raw).expanduser()
     if candidate.is_absolute():
         resolved = candidate.resolve()
-        try:
-            resolved.relative_to(OUTPUT_ROOT.resolve())
-        except ValueError:
-            return None
-        return resolved if resolved.exists() else None
+        for root in _roots:
+            try:
+                resolved.relative_to(root.resolve())
+                return resolved if resolved.exists() else None
+            except ValueError:
+                continue
+        return None
 
     return None
 

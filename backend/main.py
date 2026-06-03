@@ -639,15 +639,21 @@ async def convert_to_glb(path: str) -> Any:
     """Convert a non-GLB 3D file to GLB for preview. Caches the result."""
     import trimesh
 
-    source_path = OUTPUT_ROOT / path
-    if not source_path.exists():
-        raise HTTPException(status_code=404, detail="Source file not found")
+    # Dual-root resolution: prefer OUTPUT_ROOT, fall back to DEFAULT_OUTPUT_ROOT
+    # so assets created before a relocation remain accessible.
+    source_path: Path | None = None
+    for root in (OUTPUT_ROOT, DEFAULT_OUTPUT_ROOT) if DEFAULT_OUTPUT_ROOT != OUTPUT_ROOT else (OUTPUT_ROOT,):
+        try:
+            candidate = (root / path).resolve()
+            candidate.relative_to(root.resolve())  # containment — block ../ traversal
+        except (ValueError, OSError):
+            continue
+        if candidate.exists():
+            source_path = candidate
+            break
 
-    # Security: ensure path stays within OUTPUT_ROOT
-    try:
-        source_path.resolve().relative_to(OUTPUT_ROOT.resolve())
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid path")
+    if source_path is None:
+        raise HTTPException(status_code=404, detail="Source file not found")
 
     # If already GLB, serve directly
     if source_path.suffix.lower() == ".glb":

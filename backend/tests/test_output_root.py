@@ -4,18 +4,21 @@ Covers:
 - _resolve_output_root() precedence (env > setting > default)
 - GET /api/outputs/<rel> serve route (200, traversal → 404, missing → 404, fallback root)
 - HTTP Range request returns 206 (video seeking parity)
+- Traversal guard tested directly via the route handler (not httpx-normalised URLs)
 """
 from __future__ import annotations
 
+import asyncio
 import sys
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from main import app  # noqa: E402
+from main import app, serve_output  # noqa: E402
 from services import output as output_mod
 from services.output import _resolve_output_root, DEFAULT_OUTPUT_ROOT
 
@@ -155,3 +158,35 @@ def test_serve_range_request_returns_206():
             run_dir.rmdir()
         except OSError:
             pass
+
+
+# ─── Traversal guard — tested directly via the route handler ──────────────────
+#
+# The existing test_serve_path_traversal_returns_404 sends the request through
+# httpx/TestClient which normalises "../" segments before they reach the app,
+# so the containment check in serve_output is never exercised (false green).
+#
+# These tests call serve_output() directly with a raw traversal string so the
+# guard is actually triggered.  They would FAIL if the relative_to containment
+# check inside serve_output were removed.
+
+def test_serve_output_blocks_raw_traversal():
+    """Calling serve_output() directly with a ../ traversal must raise HTTPException(404).
+
+    This test exercises the containment guard inside the route handler, which
+    httpx/TestClient normalises away before the handler is reached.
+    """
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(serve_output("../../../../etc/passwd"))
+    assert exc_info.value.status_code == 404
+
+
+def test_serve_output_blocks_url_encoded_traversal():
+    """URL-encoded traversal (%2F..) must also be blocked.
+
+    Python's Path will decode percent-encoded segments when constructing the
+    candidate path; the containment check must still catch the escape.
+    """
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(serve_output("%2F..%2F..%2Fetc%2Fpasswd"))
+    assert exc_info.value.status_code == 404
