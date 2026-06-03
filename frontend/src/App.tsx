@@ -130,6 +130,7 @@ export default function App() {
   }, []);
 
   const viewMode = useUIStore((s) => s.viewMode);
+  const moodboardPanelVisible = useUIStore((s) => s.panels.moodboard.visible);
 
   const isCanvas = viewMode === 'canvas';
   const isRemotion = viewMode === 'remotion-editor';
@@ -165,7 +166,7 @@ export default function App() {
           The editor view is a focused workspace — only the pill control and chat remain. */}
       {isCanvas && <NodeLibrary />}
       {isCanvas && <CharacterLibrary />}
-      {isCanvas && <MoodboardLibrary />}
+      {isCanvas && moodboardPanelVisible && <MoodboardLibrary />}
       {isCanvas && <NodeInspectorPopover />}
       {isCanvas && <Settings />}
       <ChatPanel />

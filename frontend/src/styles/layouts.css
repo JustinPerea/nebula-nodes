@@ -102,6 +102,16 @@ body.app-hermes .toolbar::before {
   top: var(--page-gutter);
 }
 
+.panel-launcher--create {
+  left: calc(var(--page-gutter) + 52px);
+  top: var(--page-gutter);
+}
+
+.panel-launcher--moodboard {
+  left: calc(var(--page-gutter) + 104px);
+  top: var(--page-gutter);
+}
+
 .panel-launcher--chat {
   right: var(--page-gutter);
   bottom: var(--space-4);

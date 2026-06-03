@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { DragEvent as ReactDragEvent } from 'react';
+import { X } from 'lucide-react';
 import { useGraphStore } from '../../store/graphStore';
 import { useUIStore } from '../../store/uiStore';
 import { fetchMoodboards } from '../../lib/api';
@@ -15,6 +16,7 @@ export const MOODBOARD_DRAG_MIME = 'application/nebula-moodboard';
 
 export function MoodboardLibrary() {
   const enterMoodboardEditor = useUIStore((s) => s.enterMoodboardEditor);
+  const togglePanel = useUIStore((s) => s.togglePanel);
   const addMoodboardNode = useGraphStore((s) => s.addMoodboardNode);
 
   const [scope, setScope] = useState<Scope>('global');
@@ -70,6 +72,21 @@ export function MoodboardLibrary() {
     <div className="panel panel--moodboard-library">
       <div className="panel__header">
         <span className="panel__title">Moodboards</span>
+        <button
+          type="button"
+          className="panel__header-action panel__close"
+          onClick={() => togglePanel('moodboard')}
+          aria-label="Close moodboard library"
+          title="Close"
+        >
+          <X
+            className="panel__close-icon"
+            size={16}
+            strokeWidth={1.75}
+            aria-hidden="true"
+            focusable="false"
+          />
+        </button>
       </div>
       <div className="panel__body panel__body--moodboard-library">
         <div className="moodboard-palette__scope" role="tablist" aria-label="Moodboard scope">
