@@ -53,6 +53,45 @@ function baseRequest(overrides: Partial<GenerationRequest>): GenerationRequest {
   };
 }
 
+describe('executeClusterConcurrent', () => {
+  it('posts only the cluster nodes and their internal edges without touching isExecuting', async () => {
+    const t = node('t1', 'text-input');
+    const m = node('m1', 'nano-banana');
+    const unrelated = node('u1', 'flux-schnell');
+    const clusterEdge: Edge = {
+      id: 'e1', source: 't1', sourceHandle: 'text', target: 'm1', targetHandle: 'prompt', type: 'typed-edge',
+    };
+    useGraphStore.setState({ nodes: [t, m, unrelated], edges: [clusterEdge], isExecuting: false });
+
+    await useGraphStore.getState().executeClusterConcurrent(['t1', 'm1']);
+
+    expect(executeGraphMock).toHaveBeenCalledTimes(1);
+    const [postedNodes, postedEdges] = executeGraphMock.mock.calls[0];
+    expect(postedNodes.map((n: { id: string }) => n.id).sort()).toEqual(['m1', 't1']);
+    expect(postedEdges.map((e: { id: string }) => e.id)).toEqual(['e1']);
+    // isExecuting must stay false — concurrent path never touches the global lock
+    expect(useGraphStore.getState().isExecuting).toBe(false);
+    // cluster nodes should be queued
+    expect(useGraphStore.getState().nodes.find((n) => n.id === 'm1')?.data.state).toBe('queued');
+    expect(useGraphStore.getState().nodes.find((n) => n.id === 't1')?.data.state).toBe('queued');
+    // unrelated node untouched
+    expect(useGraphStore.getState().nodes.find((n) => n.id === 'u1')?.data.state).toBe('idle');
+  });
+
+  it('a 2nd call while a 1st is in-flight still posts (not a no-op)', async () => {
+    // Simulate first call already running: isExecuting=true (set by canvas path, not us)
+    // executeClusterConcurrent must ignore isExecuting entirely
+    useGraphStore.setState({ nodes: [node('m1', 'nano-banana'), node('m2', 'nano-banana')], edges: [], isExecuting: true });
+
+    await useGraphStore.getState().executeClusterConcurrent(['m1']);
+    await useGraphStore.getState().executeClusterConcurrent(['m2']);
+
+    expect(executeGraphMock).toHaveBeenCalledTimes(2);
+    // isExecuting was never touched by the concurrent path
+    expect(useGraphStore.getState().isExecuting).toBe(true);
+  });
+});
+
 describe('executeCluster', () => {
   it('posts only the cluster nodes and their internal edges', async () => {
     const t = node('t1', 'text-input');

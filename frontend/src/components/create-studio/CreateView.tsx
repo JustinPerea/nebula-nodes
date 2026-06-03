@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { ArrowLeft } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
@@ -19,10 +19,11 @@ import type { AttachedRef } from './ReferenceTray';
 import '../../styles/create-studio.css';
 import '../../styles/create-gallery.css';
 
+const MAX_CONCURRENT = 2;
+
 export function CreateView() {
   const exitCreateView = useUIStore((s) => s.exitCreateView);
   const sessionId = useUIStore((s) => s.createSessionId);
-  const isExecuting = useGraphStore((s) => s.isExecuting);
   const allNodes = useGraphStore((s) => s.nodes);
 
   // Snapshot selection once on mount — used to prefill composer + default tab.
@@ -47,12 +48,26 @@ export function CreateView() {
     return buildDefaultParamsForUi(NODE_DEFINITIONS['nano-banana']);
   });
   const [generations, setGenerations] = useState<GenerationRecord[]>([]);
+  const genIndexRef = useRef(0);
   const [refs, setRefs] = useState<AttachedRef[]>([]);
   const [quantity, setQuantity] = useState(1);
   const [stylesOpen, setStylesOpen] = useState(false);
   const [presetReloadKey, setPresetReloadKey] = useState(0);
 
   const modelDef = modelId ? NODE_DEFINITIONS[modelId] ?? null : null;
+
+  // activeCount: number of generations whose model nodes are not all settled.
+  // A generation is settled when every modelNodeId resolves to a node with
+  // state 'complete' or 'error', or the node is gone (was deleted).
+  const activeCount = useMemo(() => {
+    return generations.filter((g) => {
+      return g.modelNodeIds.some((id) => {
+        const n = allNodes.find((node) => node.id === id);
+        if (!n) return false; // gone = settled
+        return n.data.state !== 'complete' && n.data.state !== 'error';
+      });
+    }).length;
+  }, [generations, allNodes]);
 
   const handleSelectModel = (id: string) => {
     setModelId(id);
@@ -94,9 +109,11 @@ export function CreateView() {
   };
 
   const handleGenerate = async () => {
-    if (!modelDef || !sessionId || isExecuting) return;
-    const { authorGenerationCluster, executeCluster } = useGraphStore.getState();
+    if (!modelDef || !sessionId) return;
+    if (activeCount >= MAX_CONCURRENT) return;
+    const { authorGenerationCluster, executeClusterConcurrent } = useGraphStore.getState();
     const genId = uuidv4();
+    const genIndex = genIndexRef.current++;
     const { modelNodeIds, allNodeIds } = await authorGenerationCluster({
       definitionId: modelDef.id,
       prompt,
@@ -105,12 +122,12 @@ export function CreateView() {
       quantity,
       sessionId,
       genId,
-      layoutOrigin: { x: 80, y: 80 + generations.length * 320 },
+      layoutOrigin: { x: 80, y: 80 + genIndex * 320 },
     });
     if (modelNodeIds.length > 0) {
       setGenerations((prev) => [...prev, { genId, prompt, ts: Date.now(), modelNodeIds }]);
     }
-    await executeCluster(allNodeIds);
+    await executeClusterConcurrent(allNodeIds);
   };
 
   const handleOpenInCanvas = (nodeId: string) => {
@@ -215,7 +232,8 @@ export function CreateView() {
         modelDef={modelDef}
         prompt={prompt}
         params={params}
-        isExecuting={isExecuting}
+        activeCount={activeCount}
+        maxConcurrent={MAX_CONCURRENT}
         quantity={quantity}
         onPromptChange={setPrompt}
         onSelectModel={handleSelectModel}
