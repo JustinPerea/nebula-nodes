@@ -1,5 +1,29 @@
 # Implementation Notes
 
+## 2026-06-02 — Create view (Higgsfield-style creation surface), Phase 1
+
+Branch `feat/create-view`. A new full-screen `viewMode: 'create'` surface (4th studio) with a Higgsfield-style bottom-floating composer. Each **Generate** authors a real `text-input → model` node cluster and runs only that cluster via the existing engine. Spec: `docs/superpowers/specs/2026-06-02-higgsfield-create-view-design.md`; plan: `docs/superpowers/plans/2026-06-02-create-view-phase-1.md`.
+
+**Architecture — graph-builder (chosen over single-node / hybrid).** `graphStore.authorGenerationCluster(request)` builds nodes/edges and `executeCluster(nodeIds)` POSTs only the cluster to `/api/execute` (reusing `lib/api.executeGraph`). Zero changes to the execution engine, handlers, or node definitions — the surface inherits output rendering, WS streaming, error handling, undo, and canvas editability for free. This is why it's ~640 lines of source for a full creation UI.
+
+**Decisions made beyond the spec:**
+- **Local node authoring, not backend-authored.** `authorGenerationCluster` creates nodes client-side (like `addDynamicNode`/paste) in one `set()`, for atomicity + testability + immediate ids. Consequence (verified in live smoke): **Create-authored clusters are client-only and do NOT persist to the backend `~/.nebula/state.json`** — after a generation, `state.json` still held only the pre-existing moodboard node. In-session "fill in" works (nodes are in the client graphStore, render on the canvas, and execute correctly). **Cross-reload durability is NOT wired in P1.** If we want authored clusters to survive a reload, P2 should author via `/api/graph/node-and-connect` (backend-authored, persisted) or push the cluster to the backend graph. Spec §4.3 was updated to reflect this.
+- **`_createOrigin` tags model nodes only** (not the `text-input`/`image-input` wiring nodes) — from code review; the P2 results gallery filters on this tag, so tagging input nodes would pollute it.
+- **`executeCluster` pre-marks cluster nodes `queued`** (clearing stale `error`/`progress`/streaming fields) before POSTing — from review; without it the stage flashed the previous result on every 2nd Generate.
+- **Dropped `cinematic` + `universal` from the picker's `CREATE_MODEL_CATEGORIES`.** `cinematic` = post-process nodes (`cinema-color`/`cinema-look`/`cinema-scene`), not prompt-first generators. `universal` = the 4 dynamic nodes (OpenRouter/Replicate/FAL) — deferred to P4 (they need a model-schema fetch step). v1 picker = `image-gen`/`video-gen`/`audio-gen`/`3d-gen`/`text-gen`.
+- **Accent = Slava orange (`--sr-accent`), not Higgsfield lime.** Copy the layout/interactions, render in the house skin.
+- **`model-viewer` rendered via the existing `types/model-viewer.d.ts` JSX declaration** (no `@ts-expect-error` — that would be an unused-directive error), mirroring `MeshPreview.tsx`.
+
+**Known debt / deferred:**
+- DRY: `buildDefaultParams` (graphStore) duplicates `buildDefaultParamsForUi` (createParams) and the inline logic in `addNode`. Consolidate post-P1 (a shared param-defaults util imported by all three).
+- Image-required models (e.g. `runway-video`, `meshy-image-to-3d`) appear in the picker but will fail backend validation without a reference image until P2 adds reference attach — acceptable; surfaces the real validation error.
+- P2: results gallery/History, reference-image attach, quantity>1 UI, all output types in the stage. P3: presets/styles library. P4: universal dynamic nodes, generated preset thumbnails, draw/mask, @-mention elements.
+
+**Verification:**
+- Gates: `tsc` clean, **288 vitest tests pass** (incl. new createCluster/createModels/createParams/uiStore tests), `vite build` succeeds, `eslint` clean on all new/changed files, `check:slava-css-scope` passes. (`npm run lint` is red on `main` due to **pre-existing** `CrabMark.tsx` inline-style debt — unrelated to this branch.)
+- Live smoke (real browser, not lspace): entered Create, opened the model picker (full catalog), typed a prompt, hit Generate → a **real nano-banana image of exactly the prompt** was generated end-to-end (`POST /api/execute → [exec] _run completed → output/.../*.jpeg`). The prompt-faithful output proves the `text-input → model` wiring carried the prompt.
+- **Environment gotcha:** background dev servers get reaped (SIGTERM 143) in this harness; when Vite's dev server dies, its `@vite/client` intercepts `console.error` and recursively tries to `send` over the dead HMR socket → a multi-million-line "send was called before connect" storm. This is a Vite-client failure mode, NOT app code. The canvas-cluster screenshot wasn't captured for this reason; the cluster's existence is proven by the unit tests + the successful generation.
+
 ## 2026-05-26 — Codex chat agent
 
 - Added Codex as a separate chat runtime rather than overloading the Claude runner. Codex has its own JSONL event stream, auth state, and resume command shape, so a dedicated adapter keeps the existing Claude/Daedalus paths untouched.

@@ -153,9 +153,16 @@ pipelines, and reuses 100% of the execution machinery. Cost: cluster authoring +
 + a small `executeCluster` action.
 
 ### 4.3 Persistence
-Authored nodes live in the normal graph and persist through the existing graph-file /
-`cli_graph` mechanism — nothing new. The Create "session History" is *derived* from
-`_createOrigin`-tagged nodes in the current graph; no separate results store. A
+Authored nodes live in the client graph store (created locally, like dynamic/paste nodes)
+and render on the canvas in-session. **P1 caveat (verified in the live smoke):** because
+`authorGenerationCluster` builds nodes client-side and only sends them to `/api/execute`
+(not `/api/graph/node`), the authored clusters are **client-only and do NOT auto-persist to
+the backend `~/.nebula/state.json`** — they will not survive a page reload in P1. In-session
+"fill in" (switch to canvas → see the cluster) works fully. To make clusters durable across
+reloads, **P2 should author via `/api/graph/node-and-connect`** (backend-authored +
+persisted) or push the cluster to the backend graph. The Create "session History" is
+*derived* from `_createOrigin`-tagged model nodes in the current graph; no separate results
+store. A
 `sessionId` is minted per Create-view entry (stored in the Create session state) so the
 History tab shows the current session, while an "All outputs" tab can show every
 `_createOrigin` node in the graph.
