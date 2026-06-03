@@ -7,7 +7,10 @@ import { NODE_DEFINITIONS } from '../../constants/nodeDefinitions';
 import { buildDefaultParamsForUi } from '../../lib/createParams';
 import { uploadReference } from '../../lib/createUploads';
 import { type GenerationRecord } from '../../lib/createGallery';
+import { applyPresetToComposer } from '../../lib/applyPreset';
+import { createPreset, type Preset } from '../../lib/createPresets';
 import { CreateComposer } from './CreateComposer';
+import { PresetLibrary } from './PresetLibrary';
 import { ResultsGallery } from './ResultsGallery';
 import { ReferenceTray } from './ReferenceTray';
 import type { AttachedRef } from './ReferenceTray';
@@ -28,12 +31,39 @@ export function CreateView() {
   const [generations, setGenerations] = useState<GenerationRecord[]>([]);
   const [refs, setRefs] = useState<AttachedRef[]>([]);
   const [quantity, setQuantity] = useState(1);
+  const [stylesOpen, setStylesOpen] = useState(false);
+  const [presetReloadKey, setPresetReloadKey] = useState(0);
 
   const modelDef = modelId ? NODE_DEFINITIONS[modelId] ?? null : null;
 
   const handleSelectModel = (id: string) => {
     setModelId(id);
     setParams(buildDefaultParamsForUi(NODE_DEFINITIONS[id]));
+  };
+
+  const handleApplyPreset = (preset: Preset) => {
+    const next = applyPresetToComposer(preset, { modelId, prompt, params });
+    if (next.modelId && next.modelId !== modelId) setModelId(next.modelId);
+    setPrompt(next.prompt);
+    setParams(next.params);
+    if (preset.refImages.length > 0) {
+      setRefs((prev) => {
+        const add = preset.refImages
+          .filter((fp) => !prev.some((r) => r.filePath === fp))
+          .map((fp) => ({ filePath: fp, previewUrl: fp }));
+        return [...prev, ...add];
+      });
+    }
+  };
+
+  const handleSaveCurrentStyle = async () => {
+    if (!modelDef) return;
+    const name = window.prompt('Name this style:', prompt.slice(0, 40) || modelDef.displayName);
+    if (!name) return;
+    try {
+      await createPreset({ name, category: 'My Styles', prompt, params, modelId: modelDef.id, refImages: refs.map((r) => r.filePath), scope: 'project' });
+      setPresetReloadKey((k) => k + 1);
+    } catch (err) { console.error('save style failed', err); }
   };
 
   const handleAttach = async (files: FileList) => {
@@ -128,6 +158,14 @@ export function CreateView() {
       </div>
 
       <ReferenceTray refs={refs} onRemove={(fp) => setRefs((p) => p.filter((r) => r.filePath !== fp))} />
+      {stylesOpen && (
+        <PresetLibrary
+          onApply={handleApplyPreset}
+          onSaveCurrent={handleSaveCurrentStyle}
+          onClose={() => setStylesOpen(false)}
+          reloadKey={presetReloadKey}
+        />
+      )}
       <CreateComposer
         modelDef={modelDef}
         prompt={prompt}
@@ -140,6 +178,7 @@ export function CreateView() {
         onGenerate={handleGenerate}
         onAttach={handleAttach}
         onQuantityChange={setQuantity}
+        onOpenStyles={() => setStylesOpen(true)}
       />
     </div>
   );

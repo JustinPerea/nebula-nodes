@@ -16,11 +16,12 @@ interface CreateComposerProps {
   onGenerate: () => void;
   onAttach: (files: FileList) => void;
   onQuantityChange: (n: number) => void;
+  onOpenStyles: () => void;
 }
 
 export function CreateComposer({
   modelDef, prompt, params, isExecuting, quantity,
-  onPromptChange, onSelectModel, onParamsChange, onGenerate, onAttach, onQuantityChange,
+  onPromptChange, onSelectModel, onParamsChange, onGenerate, onAttach, onQuantityChange, onOpenStyles,
 }: CreateComposerProps) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const canGenerate = Boolean(modelDef) && !isExecuting;
@@ -66,6 +67,9 @@ export function CreateComposer({
         >
           {modelDef?.displayName ?? 'Select model'}
           <ChevronDown size={15} strokeWidth={1.75} aria-hidden="true" />
+        </button>
+        <button type="button" className="create-composer__styles" onClick={onOpenStyles} title="Browse styles">
+          Styles
         </button>
         {modelDef && <ParamPills def={modelDef} params={params} onChange={onParamsChange} />}
         <div className="create-composer__qty" role="group" aria-label="Number of variations">
