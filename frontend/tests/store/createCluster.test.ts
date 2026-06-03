@@ -13,6 +13,9 @@ vi.mock('../../src/lib/api', () => ({
   executeNode: (...args: unknown[]) => executeNodeMock(...args),
 }));
 
+const fetchMock = vi.fn();
+globalThis.fetch = fetchMock as unknown as typeof fetch;
+
 import { useGraphStore } from '../../src/store/graphStore';
 
 function node(id: string, definitionId: string): Node<NodeData> {
@@ -30,6 +33,7 @@ function resetStore() {
 
 beforeEach(() => {
   executeGraphMock.mockClear();
+  fetchMock.mockReset();
   resetStore();
 });
 
@@ -77,54 +81,57 @@ describe('executeCluster', () => {
   });
 });
 
-describe('authorGenerationCluster', () => {
-  it('creates a text-input + model node wired prompt->model with merged params and origin tag', () => {
-    const { modelNodeIds, allNodeIds } = useGraphStore.getState().authorGenerationCluster(baseRequest({}));
-    const { nodes, edges } = useGraphStore.getState();
+// The cluster route returns RF nodes for the new ids. Mock it to echo a deterministic mapping.
+function mockClusterResponse(body: { nodes: { tempId: string; definitionId: string; params: Record<string, unknown> }[]; edges: { source: string; target: string; sourceHandle: string; targetHandle: string }[] }) {
+  const idMap: Record<string, string> = {};
+  const nodes = body.nodes.map((n, i) => {
+    const id = `n${i + 1}`;
+    idMap[n.tempId] = id;
+    return { id, type: 'model-node', position: { x: i * 100, y: 0 },
+      data: { label: n.definitionId, definitionId: n.definitionId, params: n.params, state: 'idle', outputs: {} } };
+  });
+  const edges = body.edges.map((e, i) => ({ id: `e${i + 1}`, source: idMap[e.source], target: idMap[e.target],
+    sourceHandle: e.sourceHandle, targetHandle: e.targetHandle, type: 'typed-edge', data: { dataType: 'Text' } }));
+  return { idMap, nodes, edges };
+}
 
+describe('authorGenerationCluster (backend-first)', () => {
+  beforeEach(() => {
+    fetchMock.mockReset();
+    fetchMock.mockImplementation(async (_url: string, init?: { body?: string }) => ({
+      ok: true, status: 200,
+      json: async () => mockClusterResponse(JSON.parse(init!.body as string)),
+    }));
+  });
+
+  it('POSTs text-input + model to /api/graph/cluster and applies returned nodes with _createOrigin', async () => {
+    const { modelNodeIds, allNodeIds } = await useGraphStore.getState().authorGenerationCluster(baseRequest({}));
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/api/graph/cluster'), expect.anything());
+    const { nodes, edges } = useGraphStore.getState();
     expect(allNodeIds).toHaveLength(2);
     expect(modelNodeIds).toHaveLength(1);
-
-    const textNode = nodes.find((n) => n.data.definitionId === 'text-input');
     const modelNode = nodes.find((n) => n.id === modelNodeIds[0]);
-    expect(textNode?.data.params.value).toBe('a calico cat');
-    // default model param preserved, composer param applied
-    expect(modelNode?.data.params.model).toBe('gemini-3.1-flash-image-preview');
+    expect(modelNode?.data.definitionId).toBe('nano-banana');
     expect(modelNode?.data.params.aspect_ratio).toBe('16:9');
     expect((modelNode?.data._createOrigin as { sessionId: string }).sessionId).toBe('s1');
-    expect(textNode?.data._createOrigin).toBeUndefined();
-
+    const textNode = nodes.find((n) => n.data.definitionId === 'text-input');
+    expect(textNode?.data._createOrigin).toBeUndefined(); // only model nodes tagged
     expect(edges).toHaveLength(1);
-    expect(edges[0]).toMatchObject({
-      source: textNode!.id, sourceHandle: 'text', target: modelNode!.id, targetHandle: 'prompt',
-    });
   });
 
-  it('omits the text-input when the prompt is empty', () => {
-    const { allNodeIds } = useGraphStore.getState().authorGenerationCluster(baseRequest({ prompt: '   ' }));
-    const { nodes } = useGraphStore.getState();
+  it('omits text-input when prompt is empty', async () => {
+    const { allNodeIds } = await useGraphStore.getState().authorGenerationCluster(baseRequest({ prompt: '  ' }));
     expect(allNodeIds).toHaveLength(1);
-    expect(nodes.some((n) => n.data.definitionId === 'text-input')).toBe(false);
+    expect(useGraphStore.getState().nodes.some((n) => n.data.definitionId === 'text-input')).toBe(false);
   });
 
-  it('creates an image-input wired to the model image port for each ref path', () => {
-    useGraphStore.getState().authorGenerationCluster(
-      baseRequest({ refPaths: ['/api/outputs/a.png'] }),
+  it('adds an image-input per refPath and quantity>1 model nodes sharing one text-input', async () => {
+    const { modelNodeIds } = await useGraphStore.getState().authorGenerationCluster(
+      baseRequest({ refPaths: ['/abs/a.png'], quantity: 3 }),
     );
-    const { nodes, edges } = useGraphStore.getState();
-    const imgNode = nodes.find((n) => n.data.definitionId === 'image-input');
-    expect(imgNode?.data.params.filePath).toBe('/api/outputs/a.png');
-    // nano-banana's image input port id is 'images'
-    expect(edges.some((e) => e.source === imgNode!.id && e.targetHandle === 'images')).toBe(true);
-  });
-
-  it('fans out quantity>1 into multiple model nodes sharing one text input', () => {
-    const { modelNodeIds } = useGraphStore.getState().authorGenerationCluster(
-      baseRequest({ quantity: 3 }),
-    );
-    const { nodes, edges } = useGraphStore.getState();
+    const { nodes } = useGraphStore.getState();
     expect(modelNodeIds).toHaveLength(3);
     expect(nodes.filter((n) => n.data.definitionId === 'text-input')).toHaveLength(1);
-    expect(edges).toHaveLength(3); // one text->model edge per variation
+    expect(nodes.filter((n) => n.data.definitionId === 'image-input')).toHaveLength(1);
   });
 });

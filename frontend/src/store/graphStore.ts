@@ -330,7 +330,7 @@ interface GraphState {
   handleExecutionEvent: (event: ExecutionEvent) => void;
   executeNode: (nodeId: string) => Promise<void>;
   executeCluster: (nodeIds: string[]) => Promise<void>;
-  authorGenerationCluster: (request: GenerationRequest) => { modelNodeIds: string[]; allNodeIds: string[] };
+  authorGenerationCluster: (request: GenerationRequest) => Promise<{ modelNodeIds: string[]; allNodeIds: string[] }>;
   duplicateNode: (nodeId: string) => void;
   deleteNode: (nodeId: string) => void;
   loadGraph: (nodes: Node<NodeData>[], edges: Edge[]) => void;
@@ -1915,87 +1915,79 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     }
   },
 
-  authorGenerationCluster: (request) => {
+  authorGenerationCluster: async (request) => {
     const def = NODE_DEFINITIONS[request.definitionId];
     if (!def) return { modelNodeIds: [], allNodeIds: [] };
-    pushUndo(set, get);
 
-    const origin: CreateOriginTag = {
-      sessionId: request.sessionId,
-      genId: request.genId,
-      ts: Date.now(),
-      prompt: request.prompt,
-    };
-    const makeNode = (
-      definitionId: string,
-      params: Record<string, unknown>,
-      position: { x: number; y: number },
-      tag?: CreateOriginTag,
-    ): Node<NodeData> => ({
-      id: uuidv4(),
-      type: 'model-node',
-      position,
-      data: {
-        label: NODE_DEFINITIONS[definitionId]?.displayName ?? definitionId,
-        definitionId,
-        params,
-        state: 'idle',
-        outputs: {},
-        _createOrigin: tag,
-      },
-    });
-    const makeEdge = (
-      source: string, sourceHandle: string, target: string, targetHandle: string, dataType: string,
-    ): Edge => ({
-      id: uuidv4(), source, sourceHandle, target, targetHandle, type: 'typed-edge', data: { dataType },
-    });
-
-    const created: Node<NodeData>[] = [];
-    const newEdges: Edge[] = [];
-    const allNodeIds: string[] = [];
-    const modelNodeIds: string[] = [];
-
+    const specNodes: { tempId: string; definitionId: string; params: Record<string, unknown>; position: { x: number; y: number } }[] = [];
+    const specEdges: { source: string; sourceHandle: string; target: string; targetHandle: string }[] = [];
     const { x: baseX, y: baseY } = request.layoutOrigin;
 
     const textPort = def.inputPorts.find((p) => p.dataType === 'Text');
-    let textNodeId: string | null = null;
+    let textTemp: string | null = null;
     if (textPort && request.prompt.trim()) {
-      const textNode = makeNode('text-input', { value: request.prompt }, { x: baseX, y: baseY }, undefined);
-      textNodeId = textNode.id;
-      created.push(textNode);
-      allNodeIds.push(textNode.id);
+      textTemp = uuidv4();
+      specNodes.push({ tempId: textTemp, definitionId: 'text-input', params: { value: request.prompt }, position: { x: baseX, y: baseY } });
     }
-
     const imagePort = def.inputPorts.find((p) => p.dataType === 'Image');
-    const imageNodeIds: string[] = [];
+    const imageTemps: string[] = [];
     if (imagePort) {
       request.refPaths.forEach((path, i) => {
-        const imgNode = makeNode('image-input', { filePath: path }, { x: baseX, y: baseY + 140 + i * 120 }, undefined);
-        imageNodeIds.push(imgNode.id);
-        created.push(imgNode);
-        allNodeIds.push(imgNode.id);
+        const t = uuidv4();
+        imageTemps.push(t);
+        specNodes.push({ tempId: t, definitionId: 'image-input', params: { filePath: path }, position: { x: baseX, y: baseY + 140 + i * 120 } });
       });
     }
-
     const count = Math.max(1, request.quantity);
     const hasSeed = defHasParam(def, 'seed');
+    const modelTemps: string[] = [];
     for (let v = 0; v < count; v++) {
+      const t = uuidv4();
+      modelTemps.push(t);
       const params = { ...buildDefaultParams(def), ...request.params };
       if (count > 1 && hasSeed) {
         const baseSeed = typeof request.params.seed === 'number' ? request.params.seed : 0;
         params.seed = baseSeed + v;
       }
-      const modelNode = makeNode(def.id, params, { x: baseX + 360, y: baseY + v * 220 }, origin);
-      modelNodeIds.push(modelNode.id);
-      created.push(modelNode);
-      allNodeIds.push(modelNode.id);
-      if (textNodeId) newEdges.push(makeEdge(textNodeId, 'text', modelNode.id, textPort!.id, 'Text'));
-      imageNodeIds.forEach((imgId) =>
-        newEdges.push(makeEdge(imgId, 'image', modelNode.id, imagePort!.id, 'Image')),
-      );
+      specNodes.push({ tempId: t, definitionId: def.id, params, position: { x: baseX + 360, y: baseY + v * 220 } });
+      if (textTemp) specEdges.push({ source: textTemp, sourceHandle: 'text', target: t, targetHandle: textPort!.id });
+      imageTemps.forEach((it) => specEdges.push({ source: it, sourceHandle: 'image', target: t, targetHandle: imagePort!.id }));
     }
 
-    set((state) => ({ nodes: [...state.nodes, ...created], edges: [...state.edges, ...newEdges] }));
+    let idMap: Record<string, string> = {};
+    let rfNodes: Node<NodeData>[] = [];
+    let rfEdges: Edge[] = [];
+    try {
+      const res = await apiFetch('/api/graph/cluster', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nodes: specNodes, edges: specEdges }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = (await res.json()) as { idMap: Record<string, string>; nodes: Node<NodeData>[]; edges: Edge[] };
+      idMap = data.idMap; rfNodes = data.nodes ?? []; rfEdges = data.edges ?? [];
+    } catch (err) {
+      console.error('[nebula] authorGenerationCluster persist failed:', err);
+      return { modelNodeIds: [], allNodeIds: [] };
+    }
+
+    const origin: CreateOriginTag = { sessionId: request.sessionId, genId: request.genId, ts: Date.now(), prompt: request.prompt };
+    const modelIds = new Set(modelTemps.map((t) => idMap[t]).filter(Boolean));
+    const taggedNodes = rfNodes.map((n) =>
+      modelIds.has(n.id) ? { ...n, data: { ...n.data, _createOrigin: origin } } : n,
+    );
+
+    pushUndo(set, get);
+    set((state) => {
+      const existing = new Set(state.nodes.map((n) => n.id));
+      const existingEdges = new Set(state.edges.map((e) => e.id));
+      return {
+        nodes: [...state.nodes, ...taggedNodes.filter((n) => !existing.has(n.id))],
+        edges: [...state.edges, ...rfEdges.filter((e) => !existingEdges.has(e.id))],
+      };
+    });
+
+    const modelNodeIds = modelTemps.map((t) => idMap[t]).filter(Boolean);
+    const allNodeIds = [...modelTemps, ...(textTemp ? [textTemp] : []), ...imageTemps].map((t) => idMap[t]).filter(Boolean);
     return { modelNodeIds, allNodeIds };
   },
 
