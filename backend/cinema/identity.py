@@ -65,18 +65,10 @@ from typing import Any, Mapping, Sequence
 #                              model the design spec §5 names as the Character
 #                              default; research synthesis firmly publishes 14)
 #
-# WHY ``nano-banana-pro`` IS *NOT* MAPPED: although Nano Banana Pro
-# (``gemini-3-pro-image-preview``) is a selectable sub-model of the same node and
-# is widely believed to support many references, the research synthesis only
-# *firmly publishes* a multi-ref cap for Nano Banana 2 (14) and Seedream (10) —
-# Pro's exact ref cap is NOT confirmed in the repo/research. Mapping it to a high
-# guess would be the opposite guardrail failure (letting too many refs silently
-# reach a model that may single-ref-fail). It is left to DEFAULT_MAX_REFS (1) so
-# a multi-view bundle on Pro surfaces the clear capability error rather than
-# silently failing. (Note: cinema_scene's _guard_base_model can technically
-# yield "nano-banana-pro" as a base id, so this default is reachable, not dead.)
-# When Pro's cap is confirmed from a primary source, add it here.
-# TODO: confirm nano-banana-pro (gemini-3-pro-image-preview) ref cap, then map it.
+# ``nano-banana-pro`` (``gemini-3-pro-image-preview``): confirmed 14 reference
+# images per Google AI docs (verified 2026-06-03). Mapped here so a multi-view
+# Character bundle on the Pro sub-model passes the guardrail rather than hitting
+# the conservative DEFAULT_MAX_REFS (1) and raising a spurious capability error.
 #
 # ``flux-kontext`` likewise has no confirmed multi-ref cap (kontext-multi is
 # unpublished by fal) -> falls through to DEFAULT_MAX_REFS (1). Conservative is
@@ -84,6 +76,7 @@ from typing import Any, Mapping, Sequence
 MODEL_MAX_REFS: dict[str, int] = {
     "seedream-4-5": 10,
     "nano-banana": 14,
+    "nano-banana-pro": 14,
 }
 
 DEFAULT_MAX_REFS = 1

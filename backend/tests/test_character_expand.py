@@ -217,9 +217,13 @@ def test_max_refs_flux_kontext_is_conservative_default() -> None:
 def test_max_refs_unknown_model_defaults_conservative() -> None:
     assert max_refs_for("totally-unknown-model") == DEFAULT_MAX_REFS
     assert DEFAULT_MAX_REFS == 1
-    # nano-banana-pro's exact ref cap is unconfirmed in repo/research, so it is
-    # deliberately NOT mapped and falls through to the conservative default.
-    assert max_refs_for("nano-banana-pro") == DEFAULT_MAX_REFS
+
+
+def test_max_refs_nano_banana_pro_is_14() -> None:
+    # Confirmed 14 reference images per Google AI docs (verified 2026-06-03).
+    # Keyed as "nano-banana-pro" to match cinema_scene's _guard_base_model output.
+    assert max_refs_for("nano-banana-pro") == 14
+    assert MODEL_MAX_REFS["nano-banana-pro"] == 14
 
 
 def test_max_refs_normalizes_stray_whitespace() -> None:
