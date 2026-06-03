@@ -2402,10 +2402,15 @@ def seed_presets_if_empty() -> None:
 
 
 def backfill_preset_thumbnails() -> None:
-    """Idempotent: for each seeded global preset whose thumbnail webp exists on
-    disk, write the /api/presets/thumbnails/<slug> URL into the preset record
-    if it isn't already set.  Runs every boot; skips user-created presets (only
-    touches names that appear in seed.json); never raises (boot must not break)."""
+    """Idempotent: for each seeded global preset that has NO thumbnail yet and a
+    shipped thumbnail webp on disk, write the /api/presets/thumbnails/<slug> URL
+    into the preset record. Runs every boot; never raises (boot must not break).
+
+    Only fills *empty* thumbnails — so a user who creates a global preset that
+    happens to share a seed name AND captures a custom thumbnail keeps it (we
+    never overwrite a non-empty thumbnail). This also makes it naturally
+    idempotent: once filled the thumbnail is non-empty, so later boots skip it
+    (no version churn)."""
     try:
         if not _PRESET_SEED_PATH.exists():
             return
@@ -2419,14 +2424,13 @@ def backfill_preset_thumbnails() -> None:
             preset = global_presets.get(name)
             if preset is None:
                 continue  # not yet seeded — seed_presets_if_empty handles it
+            if preset.get("thumbnail"):
+                continue  # already has a thumbnail (shipped or user-custom) — never clobber
             slug = slug_for_preset(name)
             webp = thumbnails_dir / f"{slug}.webp"
             if not webp.exists():
                 continue  # thumbnail not shipped for this preset
-            url = f"/api/presets/thumbnails/{slug}"
-            if preset.get("thumbnail") == url:
-                continue  # already set — idempotent, skip version bump
-            preset_store.update(preset["id"], thumbnail=url)
+            preset_store.update(preset["id"], thumbnail=f"/api/presets/thumbnails/{slug}")
     except Exception as exc:
         print(f"[presets] thumbnail backfill failed: {exc}", flush=True)
 

@@ -155,6 +155,31 @@ def test_backfill_does_not_touch_user_presets(fresh, tmp_path, monkeypatch):
     assert refreshed["version"] == original_version
 
 
+def test_backfill_preserves_custom_thumbnail_on_seed_named_preset(fresh, tmp_path, monkeypatch):
+    """A user-created global preset that happens to share a seed name AND has a
+    custom (non-empty) thumbnail must NOT be clobbered by backfill — we only
+    fill empty thumbnails."""
+    seed_path, _ = _make_seed_and_thumbnails(tmp_path)  # seeds "Cinematic Noir"
+    monkeypatch.setattr(m, "_PRESET_SEED_PATH", seed_path)
+
+    # User makes a global preset named exactly like the seed, with their own thumbnail.
+    custom = fresh.create(
+        name="Cinematic Noir", category="My Styles", prompt="my take", params={},
+        modelId=None, refImages=[], scope="global", projectId=None,
+        thumbnail="/api/outputs/my-custom.webp",
+    )
+    original_version = custom["version"]
+
+    # Because a global preset already exists, seed_presets_if_empty is a no-op;
+    # backfill must still leave the user's custom thumbnail intact.
+    m.seed_presets_if_empty()
+    m.backfill_preset_thumbnails()
+
+    refreshed = fresh.get(custom["id"])
+    assert refreshed["thumbnail"] == "/api/outputs/my-custom.webp"  # not overwritten
+    assert refreshed["version"] == original_version  # no version bump
+
+
 # ---------------------------------------------------------------------------
 # (c) PresetUpdate thumbnail round-trips through PUT
 # ---------------------------------------------------------------------------

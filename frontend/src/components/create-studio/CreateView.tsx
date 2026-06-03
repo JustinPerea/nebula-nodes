@@ -49,6 +49,10 @@ export function CreateView() {
   });
   const [generations, setGenerations] = useState<GenerationRecord[]>([]);
   const genIndexRef = useRef(0);
+  // Counts launches that are mid-flight inside handleGenerate's async author
+  // window (before their nodes exist in the store for activeCount to see). The
+  // cap is gated on activeCount + launchingRef so rapid clicks can't bypass it.
+  const launchingRef = useRef(0);
   const [refs, setRefs] = useState<AttachedRef[]>([]);
   const [quantity, setQuantity] = useState(1);
   const [stylesOpen, setStylesOpen] = useState(false);
@@ -128,24 +132,34 @@ export function CreateView() {
 
   const handleGenerate = async () => {
     if (!modelDef || !sessionId) return;
-    if (activeCount >= MAX_CONCURRENT) return;
+    // launchingRef bridges the async author window: activeCount can't see the
+    // new generation's nodes until they're in the store, so without this a
+    // rapid second click would pass the cap before the first set queued.
+    if (activeCount + launchingRef.current >= MAX_CONCURRENT) return;
     const { authorGenerationCluster, executeClusterConcurrent } = useGraphStore.getState();
     const genId = uuidv4();
     const genIndex = genIndexRef.current++;
-    const { modelNodeIds, allNodeIds } = await authorGenerationCluster({
-      definitionId: modelDef.id,
-      prompt,
-      params,
-      refPaths: refs.map((r) => r.filePath),
-      quantity,
-      sessionId,
-      genId,
-      layoutOrigin: { x: 80, y: 80 + genIndex * 320 },
-    });
-    if (modelNodeIds.length > 0) {
-      setGenerations((prev) => [...prev, { genId, prompt, ts: Date.now(), modelNodeIds }]);
+    launchingRef.current += 1;
+    try {
+      const { modelNodeIds, allNodeIds } = await authorGenerationCluster({
+        definitionId: modelDef.id,
+        prompt,
+        params,
+        refPaths: refs.map((r) => r.filePath),
+        quantity,
+        sessionId,
+        genId,
+        layoutOrigin: { x: 80, y: 80 + genIndex * 320 },
+      });
+      if (modelNodeIds.length > 0) {
+        setGenerations((prev) => [...prev, { genId, prompt, ts: Date.now(), modelNodeIds }]);
+      }
+      // By the time executeClusterConcurrent resolves, its nodes are marked
+      // 'queued' in the store, so activeCount picks them up as launchingRef drops.
+      await executeClusterConcurrent(allNodeIds);
+    } finally {
+      launchingRef.current -= 1;
     }
-    await executeClusterConcurrent(allNodeIds);
   };
 
   const handleOpenInCanvas = (nodeId: string) => {

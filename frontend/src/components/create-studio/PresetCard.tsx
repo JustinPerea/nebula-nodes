@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { Preset } from '../../lib/createPresets';
+import { backendAssetUrlSync } from '../../lib/backend';
 
 // Deterministic hue from the preset id so each card gets a stable gradient.
 function hueOf(id: string): number {
@@ -23,7 +24,7 @@ export function PresetCard({ preset, onApply }: { preset: Preset; onApply: (p: P
       {showThumb ? (
         <img
           className="preset-card__thumb"
-          src={preset.thumbnail}
+          src={backendAssetUrlSync(preset.thumbnail)}
           alt=""
           onError={() => setThumbError(true)}
         />

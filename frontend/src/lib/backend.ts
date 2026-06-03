@@ -204,14 +204,24 @@ export async function backendWebSocketUrl(path: string): Promise<string> {
   return url.toString();
 }
 
+// Server-relative paths the backend serves and that must be rewritten to the
+// discovered backend origin (the frontend may be on a different origin/port,
+// e.g. the Vite dev server or a packaged shell). Generated media live under
+// /api/outputs/; shipped preset thumbnails under /api/presets/thumbnails/.
+const BACKEND_ASSET_PREFIXES = ['/api/outputs/', '/api/presets/thumbnails/'];
+
+function hasBackendAssetPrefix(pathname: string): boolean {
+  return BACKEND_ASSET_PREFIXES.some((prefix) => pathname.startsWith(prefix));
+}
+
 function isLocalBackendAssetUrl(value: string): boolean {
-  if (value.startsWith('/api/outputs/')) return true;
+  if (hasBackendAssetPrefix(value)) return true;
 
   try {
     const url = new URL(value);
     return (
       (url.hostname === 'localhost' || url.hostname === '127.0.0.1') &&
-      url.pathname.startsWith('/api/outputs/')
+      hasBackendAssetPrefix(url.pathname)
     );
   } catch {
     return false;
@@ -219,7 +229,7 @@ function isLocalBackendAssetUrl(value: string): boolean {
 }
 
 export function backendAssetUrlSync(value: string): string {
-  if (value.startsWith('/api/outputs/')) return backendUrlSync(value);
+  if (hasBackendAssetPrefix(value)) return backendUrlSync(value);
 
   try {
     const url = new URL(value);
