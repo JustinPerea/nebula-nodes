@@ -6,6 +6,7 @@ import { useGraphStore } from '../../store/graphStore';
 import { NODE_DEFINITIONS } from '../../constants/nodeDefinitions';
 import { buildDefaultParamsForUi } from '../../lib/createParams';
 import { uploadReference } from '../../lib/createUploads';
+import { revealInFinder, saveToFolder } from '../../lib/createFiles';
 import { type GenerationRecord, galleryItemsFromCanvas } from '../../lib/createGallery';
 import { composerStateFromSelection } from '../../lib/createSelection';
 import { applyPresetToComposer } from '../../lib/applyPreset';
@@ -144,6 +145,18 @@ export function CreateView() {
     );
   };
 
+  const handleReveal = (url: string) => {
+    void revealInFinder(url);
+  };
+
+  const handleSaveToFolder = async (url: string) => {
+    try {
+      await saveToFolder(url);
+    } catch (e) {
+      console.error('save failed', e);
+    }
+  };
+
   return (
     <div className="create-view">
       <header className="create-view__topbar">
@@ -182,6 +195,8 @@ export function CreateView() {
               onOpenInCanvas={handleOpenInCanvas}
               onUseAsInput={handleUseAsInput}
               onDelete={handleDelete}
+              onReveal={handleReveal}
+              onSaveToFolder={handleSaveToFolder}
             />
           );
         })()}

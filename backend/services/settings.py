@@ -12,6 +12,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "outputPath": None,
     "executionMode": "manual",
     "batchSizeCap": 25,
+    "exportFolder": None,
 }
 
 

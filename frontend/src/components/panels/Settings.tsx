@@ -60,6 +60,7 @@ export function Settings() {
   const [apiKeys, setApiKeys] = useState<Record<string, string>>({});
   const [routing, setRouting] = useState<Record<string, string>>({});
   const [outputPath, setOutputPath] = useState('');
+  const [exportFolder, setExportFolder] = useState('');
   const [revealedKeys, setRevealedKeys] = useState<Set<string>>(new Set());
   const [apiKeysOpen, setApiKeysOpen] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
@@ -82,10 +83,12 @@ export function Settings() {
           apiKeys?: Record<string, string>;
           routing?: Record<string, string>;
           outputPath?: string;
+          exportFolder?: string;
         };
         setApiKeys(settings.apiKeys ?? {});
         setRouting(settings.routing ?? {});
         setOutputPath(settings.outputPath ?? '');
+        setExportFolder(settings.exportFolder ?? '');
         setSaveStatus('idle');
       })
       .catch((err) => {
@@ -125,7 +128,7 @@ export function Settings() {
   const handleSave = useCallback(async () => {
     setSaveStatus('saving');
     try {
-      await updateSettings({ apiKeys, routing, outputPath: outputPath || null });
+      await updateSettings({ apiKeys, routing, outputPath: outputPath || null, exportFolder: exportFolder || null });
       setSaveStatus('saved');
       window.dispatchEvent(new CustomEvent('nebula:settings-saved'));
       setTimeout(() => setSaveStatus('idle'), 2000);
@@ -134,7 +137,7 @@ export function Settings() {
       setSaveStatus('error');
       setTimeout(() => setSaveStatus('idle'), 3000);
     }
-  }, [apiKeys, routing, outputPath]);
+  }, [apiKeys, routing, outputPath, exportFolder]);
 
   const toggleReveal = useCallback((key: string) => {
     setRevealedKeys((prev) => {
@@ -328,6 +331,16 @@ export function Settings() {
                 value={outputPath}
                 onChange={(e) => setOutputPath(e.target.value)}
                 placeholder="Default: ./output"
+              />
+            </div>
+            <div className="inspector__section">
+              <div className="inspector__label">Default Save Folder</div>
+              <input
+                className="inspector__field"
+                type="text"
+                value={exportFolder}
+                onChange={(e) => setExportFolder(e.target.value)}
+                placeholder="Default: ~/Downloads"
               />
             </div>
 

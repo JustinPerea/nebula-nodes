@@ -1,4 +1,5 @@
-import { Download, SquareArrowOutUpRight, ImagePlus, Trash2 } from 'lucide-react';
+import { useState } from 'react';
+import { Download, SquareArrowOutUpRight, ImagePlus, Trash2, FolderOpen, FolderDown } from 'lucide-react';
 import type { Node } from '@xyflow/react';
 import type { NodeData, PortValue } from '../../types';
 import { OutputRenderer } from './OutputRenderer';
@@ -16,11 +17,23 @@ export interface ResultCardProps {
   onOpenInCanvas: () => void;
   onUseAsInput: (url: string) => void;
   onDelete: () => void;
+  onReveal?: (url: string) => void;
+  onSaveToFolder?: (url: string) => void;
 }
 
-export function ResultCard({ node, onOpenInCanvas, onUseAsInput, onDelete }: ResultCardProps) {
+export function ResultCard({ node, onOpenInCanvas, onUseAsInput, onDelete, onReveal, onSaveToFolder }: ResultCardProps) {
+  const [saved, setSaved] = useState(false);
+
   if (!node) return null;
   const url = firstMediaUrl(node.data.outputs);
+
+  const handleSave = () => {
+    if (!url || !onSaveToFolder) return;
+    onSaveToFolder(url);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  };
+
   return (
     <div className="result-card">
       <div className="result-card__media">
@@ -37,6 +50,16 @@ export function ResultCard({ node, onOpenInCanvas, onUseAsInput, onDelete }: Res
         {url && <a className="result-card__btn" href={url} download title="Download"><Download size={15} strokeWidth={1.75} /></a>}
         <button className="result-card__btn" type="button" onClick={onOpenInCanvas} title="Open in canvas"><SquareArrowOutUpRight size={15} strokeWidth={1.75} /></button>
         {url && <button className="result-card__btn" type="button" onClick={() => onUseAsInput(url)} title="Use as input"><ImagePlus size={15} strokeWidth={1.75} /></button>}
+        {url && onReveal && (
+          <button className="result-card__btn" type="button" onClick={() => onReveal(url)} title="Reveal in Finder">
+            <FolderOpen size={15} strokeWidth={1.75} />
+          </button>
+        )}
+        {url && onSaveToFolder && (
+          <button className="result-card__btn" type="button" onClick={handleSave} title={saved ? 'Saved!' : 'Save to folder'}>
+            <FolderDown size={15} strokeWidth={1.75} />
+          </button>
+        )}
         <button className="result-card__btn result-card__btn--danger" type="button" onClick={onDelete} title="Delete"><Trash2 size={15} strokeWidth={1.75} /></button>
       </div>
     </div>

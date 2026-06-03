@@ -939,7 +939,7 @@ async def update_settings(body: dict[str, Any]) -> dict:
             if v and not v.startswith("***"):
                 current_keys[k] = v
         current["apiKeys"] = current_keys
-    for key in ("routing", "outputPath", "executionMode", "batchSizeCap", "favorites"):
+    for key in ("routing", "outputPath", "executionMode", "batchSizeCap", "favorites", "exportFolder"):
         if key in body:
             current[key] = body[key]
     save_settings(current)
@@ -2361,6 +2361,72 @@ def seed_presets_if_empty() -> None:
             )
     except Exception as exc:  # never let seeding break boot
         print(f"[presets] seed failed: {exc}", flush=True)
+
+
+# ---------- File actions (Reveal in Finder / Save to folder) ----------
+
+@app.post("/api/reveal")
+async def reveal_in_finder(body: dict[str, Any]) -> dict:
+    """Reveal an output file in the OS file manager (Finder / Nautilus / Explorer)."""
+    url = body.get("url", "")
+    local = _output_path_from_ref(url)
+    if local is None:
+        raise HTTPException(status_code=400, detail="not a local output path")
+
+    import sys as _sys
+
+    platform = _sys.platform
+    if platform == "darwin":
+        cmd = ["open", "-R", str(local)]
+    elif platform == "win32":
+        cmd = ["explorer", f"/select,{local}"]
+    else:
+        # Linux: open the parent directory
+        cmd = ["xdg-open", str(local.parent)]
+
+    await asyncio.create_subprocess_exec(
+        *cmd,
+        stdout=asyncio.subprocess.DEVNULL,
+        stderr=asyncio.subprocess.DEVNULL,
+    )
+    return {"status": "ok"}
+
+
+@app.post("/api/export")
+async def export_file(body: dict[str, Any]) -> dict:
+    """Copy an output file to the user's configured export folder (default ~/Downloads)."""
+    import shutil as _shutil
+
+    url = body.get("url", "")
+    src = _output_path_from_ref(url)
+    if src is None:
+        raise HTTPException(status_code=400, detail="not a local output path")
+
+    settings = load_settings()
+    folder = settings.get("exportFolder")
+    dest_dir = Path(folder).expanduser() if folder else Path.home() / "Downloads"
+
+    try:
+        dest_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+    # Determine filename with collision avoidance
+    filename = body.get("filename") or src.name
+    stem = Path(filename).stem
+    suffix = Path(filename).suffix
+    dest = dest_dir / filename
+    counter = 1
+    while dest.exists():
+        dest = dest_dir / f"{stem} -{counter}{suffix}"
+        counter += 1
+
+    try:
+        _shutil.copy2(src, dest)
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+    return {"status": "ok", "savedPath": str(dest)}
 
 
 # Static mount MUST come after all dynamic routes — it is a catch-all for /api/outputs

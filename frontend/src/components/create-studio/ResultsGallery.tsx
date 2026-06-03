@@ -12,6 +12,8 @@ export interface ResultsGalleryProps {
   onOpenInCanvas: (nodeId: string) => void;
   onUseAsInput: (url: string) => void;
   onDelete: (nodeId: string) => void;
+  onReveal?: (url: string) => void;
+  onSaveToFolder?: (url: string) => void;
 }
 
 export function ResultsGallery({
@@ -22,6 +24,8 @@ export function ResultsGallery({
   onOpenInCanvas,
   onUseAsInput,
   onDelete,
+  onReveal,
+  onSaveToFolder,
 }: ResultsGalleryProps) {
   const [tab, setTab] = useState<'session' | 'canvas'>(defaultTab ?? 'session');
   const [layout, setLayout] = useState<'grid' | 'list'>('grid');
@@ -102,6 +106,8 @@ export function ResultsGallery({
               onOpenInCanvas={() => onOpenInCanvas(it.nodeId)}
               onUseAsInput={onUseAsInput}
               onDelete={() => onDelete(it.nodeId)}
+              onReveal={onReveal}
+              onSaveToFolder={onSaveToFolder}
             />
           ))}
         </div>
