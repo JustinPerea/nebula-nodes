@@ -1,5 +1,20 @@
 # Implementation Notes
 
+## 2026-06-03 — Output storage: Reveal in Finder, Save-to-folder, configurable output dir
+
+Three follow-on features after the user asked where generated images live (answer: `<repo>/output/<UTC-timestamp>/<uuid>.<ext>`, served at `/api/outputs/...`, never auto-deleted).
+
+- **Reveal in Finder** — `POST /api/reveal {url}` resolves via the existing `_output_path_from_ref` (containment-checked under the output root), then `open -R` (macOS) / `xdg-open` (Linux) / `explorer /select,` (Windows) via `asyncio.create_subprocess_exec`. ResultCard gets a FolderOpen button.
+- **Save to a default export folder** — new `exportFolder` setting (added to `DEFAULT_SETTINGS` + the `PUT /api/settings` allowlist + a Settings field). `POST /api/export {url}` copies the output file into `exportFolder` (default `~/Downloads`), de-duping the filename on collision. ResultCard gets a FolderDown "Save" button.
+- **Configurable output directory** — wired the previously-DORMANT `outputPath` setting (the Settings field + persistence already existed but nothing honored it). `_resolve_output_root()` now sets `OUTPUT_ROOT` from `NEBULA_OUTPUT_ROOT` env > `outputPath` setting > default, at import (applies on restart). **Replaced the `/api/outputs` StaticFiles mount with a dynamic `@app.get("/api/outputs/{rel:path}")` FileResponse route** that serves from `OUTPUT_ROOT` and falls back to `DEFAULT_OUTPUT_ROOT`, so outputs created before a relocation still serve. Starlette `FileResponse` preserves content-type + HTTP Range/206 (video seeking) + HEAD — verified live.
+
+**Review-caught fixes (opus, on the serving-path change):**
+- **Critical — startup brick:** once `outputPath` is user-set, the unguarded `OUTPUT_ROOT.mkdir()` at import could crash uvicorn on a bad/unwritable path. Fixed inside `_resolve_output_root()`: anchor relative paths to the repo root, then `mkdir`-or-fall-back-to-default so `OUTPUT_ROOT` is always a usable dir. Live-verified: `NEBULA_OUTPUT_ROOT=/dev/null/nope` boots via fallback instead of bricking.
+- **False-green traversal test:** the original `client.get("/api/outputs/../../etc/passwd")` passed only because httpx normalizes `../` client-side, never hitting the guard. Replaced with a direct `serve_output("../../../../etc/passwd")` test that actually exercises the `relative_to` containment (and a server-side `curl --path-as-is` live check → 404).
+- Relative `outputPath` was CWD-dependent → anchored to repo root. Dual-root fallback also applied to `convert_to_glb` + `resolve_moodboard_image_path` for consistency. Registered `.webm`/`.glb` mime types.
+
+**Verification:** backend `pytest` 865 passed (twice); frontend `tsc` clean, 322 vitest, build/eslint/css-scope green. Live (running backend): image 200 (image/png), video full 200 + Range 206 (seek), server-side traversal 404, missing 404, no-brick boot on bad path. Commits: 14a4d83 (reveal+export), a53cbb5 (configurable dir), 782b4ef (review fixes).
+
 ## 2026-06-03 — Create view Phase 3 (presets / styles library)
 
 Branch `feat/create-view-p2-p3` (same branch as P2). A library of named "styles" — prompt fragment + params + optional model — that pre-fill the composer, plus save-current-as-style. Plan: `docs/superpowers/plans/2026-06-03-create-view-phase-3.md`.
