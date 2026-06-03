@@ -175,7 +175,9 @@ Sources fetched:
 
 Re-verified CLEAN (no drift) for: `meshy-retexture`, `meshy-rigging`, `meshy-animate`, `meshy-remesh`, `meshy-3d-print`. Endpoint paths, auth headers, request body field names, poll URL patterns, and output field paths all match the live docs.
 
-⚠️ DRIFT (2026-06-03): Four findings below require code or node-def attention.
+✅ RESOLVED (2026-06-03, commit 55e6f6a): Drifts 1–3 fixed — added `nano-banana-2` + `gpt-image-2` ai_model options; added `hd_texture`/`image_enhancement`/`remove_lighting` meshy-6 params to the relevant 3D nodes; marked `symmetry_mode` deprecated (hidden). Drift 4 was informational (no change needed). Original findings retained below for provenance.
+
+⚠️ Original finding (drift at audit time): Four findings below required code or node-def attention.
 
 #### Drift 1 — `meshy-text-to-image` and `meshy-image-to-image`: `nano-banana-2` model missing from node-def
 

@@ -43,7 +43,9 @@ facts (auth, rate limits, error codes, model catalog) see
 
 ## Reference image conversion
 
-⚠️ DRIFT (2026-06-03): The canonical API schema (fetched 2026-06-03)
+✅ RESOLVED (2026-06-03): base64-reference fix shipped (commit 381e31a — refs now sent as `{base64}` objects, not plain data-URI strings); per-model ref cap documented on the node-def references port (backend enforces the 4-ref limit for arrow-1/1.1 via 400). Original finding retained below for provenance.
+
+⚠️ Original finding (drift at audit time): The canonical API schema (fetched 2026-06-03)
 defines `references` items as `anyOf[{url}, {base64}, string(uri)]`.
 The plain-string variant is `format: uri` — meaning only plain HTTPS
 URLs are valid as bare strings. **Data URIs (`data:...;base64,...`) are
