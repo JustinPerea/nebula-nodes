@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { ArrowLeft } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
@@ -6,7 +6,8 @@ import { useGraphStore } from '../../store/graphStore';
 import { NODE_DEFINITIONS } from '../../constants/nodeDefinitions';
 import { buildDefaultParamsForUi } from '../../lib/createParams';
 import { uploadReference } from '../../lib/createUploads';
-import { type GenerationRecord } from '../../lib/createGallery';
+import { type GenerationRecord, galleryItemsFromCanvas } from '../../lib/createGallery';
+import { composerStateFromSelection } from '../../lib/createSelection';
 import { applyPresetToComposer } from '../../lib/applyPreset';
 import { createPreset, type Preset } from '../../lib/createPresets';
 import { CreateComposer } from './CreateComposer';
@@ -23,11 +24,27 @@ export function CreateView() {
   const isExecuting = useGraphStore((s) => s.isExecuting);
   const allNodes = useGraphStore((s) => s.nodes);
 
-  const [modelId, setModelId] = useState<string | null>('nano-banana');
-  const [prompt, setPrompt] = useState('');
-  const [params, setParams] = useState<Record<string, unknown>>(() =>
-    buildDefaultParamsForUi(NODE_DEFINITIONS['nano-banana']),
+  // Snapshot selection once on mount — used to prefill composer + default tab.
+  // Empty deps array is intentional: we only want the canvas state at open time.
+  const initial = useMemo(
+    () =>
+      composerStateFromSelection(
+        useGraphStore.getState().nodes,
+        useGraphStore.getState().edges,
+      ),
+    [],
   );
+
+  const selectedIds = useMemo(() => new Set(initial.selectedIds), [initial]);
+
+  const [modelId, setModelId] = useState<string | null>(
+    () => initial.prefill?.modelId ?? 'nano-banana',
+  );
+  const [prompt, setPrompt] = useState(() => initial.prefill?.prompt ?? '');
+  const [params, setParams] = useState<Record<string, unknown>>(() => {
+    if (initial.prefill) return initial.prefill.params;
+    return buildDefaultParamsForUi(NODE_DEFINITIONS['nano-banana']);
+  });
   const [generations, setGenerations] = useState<GenerationRecord[]>([]);
   const [refs, setRefs] = useState<AttachedRef[]>([]);
   const [quantity, setQuantity] = useState(1);
@@ -141,20 +158,33 @@ export function CreateView() {
         onDragOver={(e) => e.preventDefault()}
         onDrop={(e) => { e.preventDefault(); if (e.dataTransfer.files?.length) void handleAttach(e.dataTransfer.files); }}
       >
-        {generations.length === 0 ? (
-          <div className="create-view__hero">
-            <div className="create-view__hero-title">Start creating</div>
-            <div className="create-view__hero-sub">Describe an idea, pick a model, and generate. Your nodes build on the canvas as you go.</div>
-          </div>
-        ) : (
-          <ResultsGallery
-            records={generations}
-            nodes={allNodes}
-            onOpenInCanvas={handleOpenInCanvas}
-            onUseAsInput={handleUseAsInput}
-            onDelete={handleDelete}
-          />
-        )}
+        {(() => {
+          const hasSessionResults = generations.length > 0;
+          const hasCanvasResults = galleryItemsFromCanvas(allNodes).length > 0;
+          if (!hasSessionResults && !hasCanvasResults) {
+            return (
+              <div className="create-view__hero">
+                <div className="create-view__hero-title">Start creating</div>
+                <div className="create-view__hero-sub">Describe an idea, pick a model, and generate. Your nodes build on the canvas as you go.</div>
+              </div>
+            );
+          }
+          const defaultTab: 'session' | 'canvas' =
+            selectedIds.size > 0 || (!hasSessionResults && hasCanvasResults)
+              ? 'canvas'
+              : 'session';
+          return (
+            <ResultsGallery
+              records={generations}
+              nodes={allNodes}
+              selectedIds={selectedIds}
+              defaultTab={defaultTab}
+              onOpenInCanvas={handleOpenInCanvas}
+              onUseAsInput={handleUseAsInput}
+              onDelete={handleDelete}
+            />
+          );
+        })()}
       </div>
 
       <ReferenceTray refs={refs} onRemove={(fp) => setRefs((p) => p.filter((r) => r.filePath !== fp))} />

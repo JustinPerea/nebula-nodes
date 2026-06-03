@@ -167,6 +167,66 @@ body.app-slava-restraint .results-gallery__items--list {
   gap: 8px;
 }
 
+/* ─── Results gallery tabs ───────────────────────────────────────────────── */
+
+body.app-slava-restraint .results-gallery__tabs {
+  display: inline-flex;
+  gap: 2px;
+  background: var(--sr-glass-raised);
+  border: 1px solid var(--sr-edge);
+  border-radius: 9px;
+  padding: 3px;
+}
+
+body.app-slava-restraint .results-gallery__tab {
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 12px;
+  color: var(--sr-ink-meta);
+  cursor: pointer;
+  transition: background 120ms, color 120ms;
+}
+
+body.app-slava-restraint .results-gallery__tab:hover {
+  color: var(--sr-ink);
+  background: var(--sr-glass);
+}
+
+body.app-slava-restraint .results-gallery__tab.is-active {
+  background: var(--sr-glass-strong);
+  border: 1px solid var(--sr-edge-strong);
+  color: var(--sr-ink-bold);
+}
+
+/* ─── Selected-only toggle ───────────────────────────────────────────────── */
+
+body.app-slava-restraint .results-gallery__selected-toggle {
+  background: transparent;
+  border: 1px solid var(--sr-edge);
+  border-radius: 8px;
+  padding: 4px 9px;
+  font-size: 11px;
+  color: var(--sr-ink-meta);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+body.app-slava-restraint .results-gallery__selected-toggle:hover {
+  border-color: var(--sr-edge-strong);
+  color: var(--sr-ink);
+}
+
+/* ─── Per-tab empty state ────────────────────────────────────────────────── */
+
+body.app-slava-restraint .results-gallery__empty {
+  padding: 32px 0;
+  text-align: center;
+  font-size: 13px;
+  color: var(--sr-ink-faint);
+}
+
 /* ─── Result card ────────────────────────────────────────────────────────── */
 
 body.app-slava-restraint .result-card {
