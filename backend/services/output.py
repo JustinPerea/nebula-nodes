@@ -63,6 +63,23 @@ async def save_mesh_from_url(url: str, run_dir: Path, extension: str = "glb") ->
     return file_path
 
 
+def resolve_output_ref(value: str) -> str:
+    """Map a served '/api/outputs/<rel>' URL back to its absolute on-disk path.
+
+    Local paths, http(s) URLs, and data: URIs pass through unchanged. Refuses
+    (returns unchanged) any path that escapes OUTPUT_ROOT.
+    """
+    if not isinstance(value, str) or not value.startswith("/api/outputs/"):
+        return value
+    rel = value[len("/api/outputs/"):]
+    candidate = (OUTPUT_ROOT / rel).resolve()
+    try:
+        candidate.relative_to(OUTPUT_ROOT.resolve())
+    except ValueError:
+        return value  # traversal attempt — refuse
+    return str(candidate)
+
+
 def image_to_data_uri(file_path: Path) -> str:
     image_bytes = file_path.read_bytes()
     b64 = base64.b64encode(image_bytes).decode("ascii")
