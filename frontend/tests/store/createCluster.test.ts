@@ -153,6 +153,18 @@ describe('authorGenerationCluster (backend-first)', () => {
     expect(matches[0].data.outputs.image?.value).toBe('/api/outputs/partial.png'); // outputs preserved
     expect(modelNodeIds).toContain('n2');
   });
+
+  it('gives each variation a distinct cache-busting _variant (no-seed model)', async () => {
+    // nano-banana has no seed param, so each model node needs a distinct `_variant`
+    // or the backend ExecutionCache returns the same image for every variation.
+    const { modelNodeIds } = await useGraphStore.getState().authorGenerationCluster(baseRequest({ quantity: 3 }));
+    const variants = useGraphStore.getState().nodes
+      .filter((n) => modelNodeIds.includes(n.id))
+      .map((n) => n.data.params._variant as string | undefined);
+    expect(variants).toHaveLength(3);
+    expect(variants.every((x) => typeof x === 'string' && x.length > 0)).toBe(true);
+    expect(new Set(variants).size).toBe(3); // all distinct → distinct cache keys
+  });
 });
 
 describe('deleteGeneration', () => {

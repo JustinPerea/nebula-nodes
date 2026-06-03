@@ -1941,14 +1941,27 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     }
     const count = Math.max(1, request.quantity);
     const hasSeed = defHasParam(def, 'seed');
+    // Every authored model node must be a DISTINCT backend execution, or the
+    // ExecutionCache (keyed on definitionId + params + inputs) returns the SAME
+    // cached image for every variation and every re-generation of the same prompt.
+    // Seed-capable models get a fresh seed (respecting an explicit one, offset per
+    // variation). Models without a seed param (e.g. nano-banana) get a `_variant`
+    // nonce: underscore-prefixed so the backend accepts it and handlers ignore it,
+    // but it's part of the cache key so each node busts the cache and the model's
+    // own non-determinism yields a different image.
+    const seedBase =
+      typeof request.params.seed === 'number'
+        ? request.params.seed
+        : Math.floor(Math.random() * 1_000_000_000);
     const modelTemps: string[] = [];
     for (let v = 0; v < count; v++) {
       const t = uuidv4();
       modelTemps.push(t);
       const params = { ...buildDefaultParams(def), ...request.params };
-      if (count > 1 && hasSeed) {
-        const baseSeed = typeof request.params.seed === 'number' ? request.params.seed : 0;
-        params.seed = baseSeed + v;
+      if (hasSeed) {
+        params.seed = seedBase + v;
+      } else {
+        params._variant = uuidv4();
       }
       specNodes.push({ tempId: t, definitionId: def.id, params, position: { x: baseX + 360, y: baseY + v * 220 } });
       if (textTemp) specEdges.push({ source: textTemp, sourceHandle: 'text', target: t, targetHandle: textPort!.id });
