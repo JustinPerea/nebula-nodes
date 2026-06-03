@@ -27,6 +27,7 @@ export function LottieRenderer({ item }: LottieRendererProps) {
 
   useEffect(() => {
     if (!src) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- early-exit guard: clears stale data when src is removed; not derived render state, no cascade
       setAnimationData(null);
       return;
     }

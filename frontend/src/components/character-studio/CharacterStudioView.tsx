@@ -262,7 +262,6 @@ export function CharacterStudioView() {
     } finally {
       createInFlight.current = false;
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draft, savedId, isValid, characterEditorId, enterCharacterEditor]);
 
   // auto-thumbnail = referenceViews[0] (mirrors the backend's auto-pick) so the

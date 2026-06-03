@@ -178,6 +178,7 @@ export function SelectionBox({
       document.querySelector(`[data-track-item-content-id="${trackItemId}"]`) ??
       document.querySelector(`[data-track-item-id="${trackItemId}"]`);
     if (!el) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- DOM query result: element not yet mounted or unmounted; null is the correct rect state, not derived render state
       setRect(null);
       return;
     }

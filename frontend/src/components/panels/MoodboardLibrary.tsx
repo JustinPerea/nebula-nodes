@@ -26,6 +26,7 @@ export function MoodboardLibrary() {
 
   useEffect(() => {
     let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- loading gate before async fetch; not derived state, does not cascade
     setLoading(true);
     setError(null);
     fetchMoodboards(scope)

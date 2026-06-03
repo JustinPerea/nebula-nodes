@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
 import { CinemaStudioToolbar } from './CinemaStudioToolbar';
@@ -42,6 +42,15 @@ export function CinemaStudioView() {
   const scene: CinemaSceneSpec =
     (node?.data as { params?: { scene?: CinemaSceneSpec } } | undefined)?.params?.scene ?? emptyScene();
 
+  // Derive a valid effective selection during render: keep the stored id when it
+  // still refers to a real shot, otherwise fall back to the first shot (or null).
+  // Avoids a setState-in-effect cycle — selection validity is purely derived from
+  // scene.shots, so it can be computed without a side-effect.
+  const shotIds = scene.shots.map((s) => s.id);
+  const effectiveShotId = selectedShotId && shotIds.includes(selectedShotId)
+    ? selectedShotId
+    : (shotIds[0] ?? null);
+
   // Canvas ↔ Studio parity: character refs wired into the node's `character_refs`
   // input port on the canvas must show here too (the backend already conditions
   // on them — handlers/cinema_scene.py reads inputs['character_refs']). Resolve
@@ -71,16 +80,6 @@ export function CinemaStudioView() {
     return urls;
   }, [cinemaNodeId, edges, nodes]);
 
-  // Keep a valid selection: prefer the existing one, else the first shot. Runs
-  // after render to avoid setState-during-render; declared before any early
-  // return to satisfy the Rules of Hooks.
-  useEffect(() => {
-    if (!cinemaNodeId) return;
-    const ids = scene.shots.map((s) => s.id);
-    if (selectedShotId && ids.includes(selectedShotId)) return;
-    setSelectedShotId(ids[0] ?? null);
-  }, [cinemaNodeId, scene.shots, selectedShotId]);
-
   if (!cinemaNodeId || !node) {
     return (
       <div className="cinema-studio-view">
@@ -94,7 +93,7 @@ export function CinemaStudioView() {
     );
   }
 
-  const selectedShot = scene.shots.find((s) => s.id === selectedShotId) ?? null;
+  const selectedShot = scene.shots.find((s) => s.id === effectiveShotId) ?? null;
 
   const handleAddShot = () => {
     const id = addShot(cinemaNodeId);
@@ -103,6 +102,7 @@ export function CinemaStudioView() {
 
   const handleRemoveShot = (shotId: string) => {
     removeShot(cinemaNodeId, shotId);
+    // Clear stored id; effectiveShotId will auto-fall-back to the next shot.
     if (selectedShotId === shotId) setSelectedShotId(null);
   };
 
@@ -134,7 +134,7 @@ export function CinemaStudioView() {
       <div className="cinema-studio-view__rail">
         <CinemaShotsRail
           scene={scene}
-          selectedShotId={selectedShotId}
+          selectedShotId={effectiveShotId}
           onSelect={setSelectedShotId}
           onAddShot={handleAddShot}
           onRemoveShot={handleRemoveShot}
