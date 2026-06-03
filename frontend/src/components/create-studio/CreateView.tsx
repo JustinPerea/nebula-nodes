@@ -5,9 +5,13 @@ import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
 import { NODE_DEFINITIONS } from '../../constants/nodeDefinitions';
 import { buildDefaultParamsForUi } from '../../lib/createParams';
+import { uploadReference } from '../../lib/createUploads';
 import { CreateComposer } from './CreateComposer';
 import { OutputRenderer } from './OutputRenderer';
+import { ReferenceTray } from './ReferenceTray';
+import type { AttachedRef } from './ReferenceTray';
 import '../../styles/create-studio.css';
+import '../../styles/create-gallery.css';
 
 export function CreateView() {
   const exitCreateView = useUIStore((s) => s.exitCreateView);
@@ -20,6 +24,8 @@ export function CreateView() {
     buildDefaultParamsForUi(NODE_DEFINITIONS['nano-banana']),
   );
   const [lastModelNodeIds, setLastModelNodeIds] = useState<string[]>([]);
+  const [refs, setRefs] = useState<AttachedRef[]>([]);
+  const [quantity, setQuantity] = useState(1);
   const cursor = useRef({ x: 80, y: 80 });
 
   const modelDef = modelId ? NODE_DEFINITIONS[modelId] ?? null : null;
@@ -33,6 +39,15 @@ export function CreateView() {
     setParams(buildDefaultParamsForUi(NODE_DEFINITIONS[id]));
   };
 
+  const handleAttach = async (files: FileList) => {
+    for (const file of Array.from(files)) {
+      try {
+        const up = await uploadReference(file);
+        setRefs((prev) => prev.some((r) => r.filePath === up.filePath) ? prev : [...prev, up]);
+      } catch (err) { console.error('reference upload failed', err); }
+    }
+  };
+
   const handleGenerate = async () => {
     if (!modelDef || !sessionId || isExecuting) return;
     const { authorGenerationCluster, executeCluster } = useGraphStore.getState();
@@ -40,8 +55,8 @@ export function CreateView() {
       definitionId: modelDef.id,
       prompt,
       params,
-      refPaths: [],
-      quantity: 1,
+      refPaths: refs.map((r) => r.filePath),
+      quantity,
       sessionId,
       genId: uuidv4(),
       layoutOrigin: { ...cursor.current },
@@ -62,7 +77,11 @@ export function CreateView() {
         <span className="create-view__title">Create</span>
       </header>
 
-      <div className="create-view__stage">
+      <div
+        className="create-view__stage"
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={(e) => { e.preventDefault(); if (e.dataTransfer.files?.length) void handleAttach(e.dataTransfer.files); }}
+      >
         {heroEmpty ? (
           <div className="create-view__hero">
             <div className="create-view__hero-title">Start creating</div>
@@ -83,15 +102,19 @@ export function CreateView() {
         )}
       </div>
 
+      <ReferenceTray refs={refs} onRemove={(fp) => setRefs((p) => p.filter((r) => r.filePath !== fp))} />
       <CreateComposer
         modelDef={modelDef}
         prompt={prompt}
         params={params}
         isExecuting={isExecuting}
+        quantity={quantity}
         onPromptChange={setPrompt}
         onSelectModel={handleSelectModel}
         onParamsChange={setParams}
         onGenerate={handleGenerate}
+        onAttach={handleAttach}
+        onQuantityChange={setQuantity}
       />
     </div>
   );
