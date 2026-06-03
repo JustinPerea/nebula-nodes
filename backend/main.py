@@ -35,6 +35,7 @@ from routes.nous_proxy import router as nous_router
 from routes.quiver_proxy import router as quiver_router
 from routes.video_edit_preview import router as video_edit_preview_router
 from services.ffmpeg import ffprobe_video
+from services.preset_store import preset_store
 
 execution_cache = ExecutionCache(ttl=3600)
 node_registry = NodeRegistry()
@@ -2092,6 +2093,26 @@ class MoodboardUpdate(BaseModel):
     analysis: dict[str, Any] | None = None
 
 
+class PresetCreate(BaseModel):
+    name: str
+    category: str = "Style"
+    prompt: str = ""
+    params: dict[str, Any] = Field(default_factory=dict)
+    modelId: str | None = None
+    refImages: list[str] = Field(default_factory=list)
+    scope: str = "global"
+    projectId: str | None = None
+
+
+class PresetUpdate(BaseModel):
+    name: str | None = None
+    category: str | None = None
+    prompt: str | None = None
+    params: dict[str, Any] | None = None
+    modelId: str | None = None
+    refImages: list[str] | None = None
+
+
 def _char_store():
     from services.character_store import CharacterStore
     return CharacterStore()
@@ -2274,5 +2295,75 @@ async def delete_moodboard(moodboard_id: str) -> dict:
     return {"status": "deleted", "id": moodboard_id}
 
 
+# ---------- Presets: named styles / prompt fragments + params ----------
+
+@app.get("/api/presets")
+async def list_presets(scope: str = "global", projectId: str | None = None) -> list[dict]:
+    _validate_project_id_param(projectId)
+    return preset_store.list(scope, projectId)
+
+
+@app.post("/api/presets")
+async def create_preset(body: PresetCreate) -> dict:
+    _validate_project_id_param(body.projectId)
+    return preset_store.create(
+        name=body.name, category=body.category, prompt=body.prompt, params=body.params,
+        modelId=body.modelId, refImages=body.refImages, scope=body.scope, projectId=body.projectId,
+    )
+
+
+@app.get("/api/presets/{preset_id}")
+async def get_preset(preset_id: str) -> dict:
+    preset = preset_store.get(preset_id)
+    if preset is None:
+        raise HTTPException(status_code=404, detail="preset not found")
+    return preset
+
+
+@app.put("/api/presets/{preset_id}")
+async def update_preset(preset_id: str, body: PresetUpdate) -> dict:
+    try:
+        return preset_store.update(preset_id, **body.model_dump(exclude_none=True))
+    except KeyError:
+        raise HTTPException(status_code=404, detail="preset not found")
+
+
+@app.delete("/api/presets/{preset_id}")
+async def delete_preset(preset_id: str) -> dict:
+    try:
+        preset_store.delete(preset_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="preset not found")
+    return {"status": "deleted", "id": preset_id}
+
+
+# ---------- Preset seeding (first-run starter styles) ----------
+
+_PRESET_SEED_PATH = Path(__file__).resolve().parent / "data" / "presets" / "seed.json"
+
+
+def seed_presets_if_empty() -> None:
+    """Populate the global preset store with shipped starter styles on first run.
+    Idempotent: does nothing if any global preset already exists."""
+    try:
+        if preset_store.list("global"):
+            return
+        if not _PRESET_SEED_PATH.exists():
+            return
+        seeds = json.loads(_PRESET_SEED_PATH.read_text(encoding="utf-8"))
+        for s in seeds:
+            preset_store.create(
+                name=s["name"], category=s.get("category", "Style"), prompt=s.get("prompt", ""),
+                params=s.get("params", {}), modelId=s.get("modelId"), refImages=s.get("refImages", []),
+                scope="global", projectId=None,
+            )
+    except Exception as exc:  # never let seeding break boot
+        print(f"[presets] seed failed: {exc}", flush=True)
+
+
 # Static mount MUST come after all dynamic routes — it is a catch-all for /api/outputs
 app.mount("/api/outputs", StaticFiles(directory=str(OUTPUT_ROOT)), name="outputs")
+
+# Seed starter presets on first boot. seed_presets_if_empty() is defined above
+# and is idempotent + wrapped in try/except so it can never break startup.
+seed_presets_if_empty()
