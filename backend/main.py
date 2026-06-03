@@ -14,7 +14,6 @@ from uuid import uuid4
 from fastapi import FastAPI, Form, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
-from fastapi.staticfiles import StaticFiles
 
 from models import ExecuteRequest, ExecuteNodeRequest, ValidationErrorEvent, GraphNode, GraphEdge
 from models.events import ExecutionEvent, ExecutedEvent, ErrorEvent
@@ -23,7 +22,7 @@ from execution.sync_runner import get_handler_registry
 from services.settings import load_settings, save_settings, get_api_key
 from services.node_registry import NodeRegistry
 from services.cli_graph import CLIGraph
-from services.output import OUTPUT_ROOT
+from services.output import OUTPUT_ROOT, DEFAULT_OUTPUT_ROOT
 from services.cache import ExecutionCache
 from services.chat_session import run_claude
 from services.chat_actions import publish_action
@@ -208,7 +207,19 @@ def _output_path_from_ref(value: str) -> Path | None:
     rel = _output_relative_from_ref(value)
     if rel is None:
         return None
-    return (OUTPUT_ROOT / rel).resolve()
+    primary = (OUTPUT_ROOT / rel).resolve()
+    if primary.exists():
+        return primary
+    # Fallback: check DEFAULT_OUTPUT_ROOT for outputs created before a relocation.
+    if DEFAULT_OUTPUT_ROOT != OUTPUT_ROOT:
+        try:
+            candidate = (DEFAULT_OUTPUT_ROOT / rel).resolve()
+            candidate.relative_to(DEFAULT_OUTPUT_ROOT.resolve())  # containment check
+            if candidate.exists():
+                return candidate
+        except (ValueError, OSError):
+            pass
+    return primary  # let callers handle missing-file errors normally
 
 
 def _output_url_from_ref(value: str) -> str | None:
@@ -2429,8 +2440,21 @@ async def export_file(body: dict[str, Any]) -> dict:
     return {"status": "ok", "savedPath": str(dest)}
 
 
-# Static mount MUST come after all dynamic routes — it is a catch-all for /api/outputs
-app.mount("/api/outputs", StaticFiles(directory=str(OUTPUT_ROOT)), name="outputs")
+# Dynamic catch-all replaces the old StaticFiles mount so the serve root can
+# change without restarting. Also falls back to DEFAULT_OUTPUT_ROOT so outputs
+# created before a relocation remain accessible. MUST be last — it is a catch-all.
+@app.get("/api/outputs/{rel:path}")
+async def serve_output(rel: str):
+    roots = [OUTPUT_ROOT] + ([DEFAULT_OUTPUT_ROOT] if DEFAULT_OUTPUT_ROOT != OUTPUT_ROOT else [])
+    for root in roots:
+        try:
+            candidate = (root / rel).resolve()
+            candidate.relative_to(root.resolve())  # containment — block ../ traversal
+        except (ValueError, OSError):
+            continue
+        if candidate.is_file():
+            return FileResponse(candidate)
+    raise HTTPException(status_code=404, detail="output not found")
 
 # Seed starter presets on first boot. seed_presets_if_empty() is defined above
 # and is idempotent + wrapped in try/except so it can never break startup.

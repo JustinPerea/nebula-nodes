@@ -6,15 +6,32 @@ from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
+from services.settings import load_settings
+
 # Project-local output dir by default; override via NEBULA_OUTPUT_ROOT so the
 # test suite can sandbox to a tmp dir (pytest conftest sets this) and ops can
 # point a prod deploy at persistent storage without editing source.
-_DEFAULT_OUTPUT_ROOT = Path(__file__).resolve().parent.parent.parent / "output"
-OUTPUT_ROOT = (
-    Path(os.environ["NEBULA_OUTPUT_ROOT"])
-    if os.environ.get("NEBULA_OUTPUT_ROOT")
-    else _DEFAULT_OUTPUT_ROOT
-)
+DEFAULT_OUTPUT_ROOT = Path(__file__).resolve().parent.parent.parent / "output"
+
+
+def _resolve_output_root() -> Path:
+    """Resolve the output root with precedence: env override > persisted setting > default.
+
+    Computed once at import time; applies after backend restart.
+    """
+    env = os.environ.get("NEBULA_OUTPUT_ROOT")
+    if env:
+        return Path(env).expanduser()
+    try:
+        sp = load_settings().get("outputPath")
+        if sp:
+            return Path(str(sp)).expanduser()
+    except Exception:
+        pass
+    return DEFAULT_OUTPUT_ROOT
+
+
+OUTPUT_ROOT = _resolve_output_root()
 
 
 def get_run_dir() -> Path:

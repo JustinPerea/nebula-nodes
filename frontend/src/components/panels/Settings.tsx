@@ -330,7 +330,7 @@ export function Settings() {
                 type="text"
                 value={outputPath}
                 onChange={(e) => setOutputPath(e.target.value)}
-                placeholder="Default: ./output"
+                placeholder="Default: ./output — absolute path; applies after backend restart"
               />
             </div>
             <div className="inspector__section">
