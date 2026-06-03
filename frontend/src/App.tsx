@@ -8,6 +8,7 @@ import { RemotionEditorView } from './components/video-editor/RemotionEditorView
 import { CinemaStudioView } from './components/cinema-studio/CinemaStudioView';
 import { CharacterStudioView } from './components/character-studio/CharacterStudioView';
 import { MoodboardStudioView } from './components/moodboard-studio/MoodboardStudioView';
+import { CreateView } from './components/create-studio/CreateView';
 import { NodeLibrary } from './components/panels/NodeLibrary';
 import { CharacterLibrary } from './components/panels/CharacterLibrary';
 import { MoodboardLibrary } from './components/panels/MoodboardLibrary';
@@ -135,6 +136,7 @@ export default function App() {
   const isCinema = viewMode === 'cinema-editor';
   const isCharacter = viewMode === 'character-editor';
   const isMoodboard = viewMode === 'moodboard-editor';
+  const isCreate = viewMode === 'create';
 
   let mainView;
   if (isCanvas) {
@@ -147,6 +149,8 @@ export default function App() {
     mainView = <CharacterStudioView />;
   } else if (isMoodboard) {
     mainView = <MoodboardStudioView />;
+  } else if (isCreate) {
+    mainView = <CreateView />;
   } else {
     mainView = <EditorView />;
   }
