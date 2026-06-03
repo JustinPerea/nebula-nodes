@@ -67,4 +67,21 @@ describe('uiStore', () => {
     useUIStore.getState().setRenderedPreviewUrl(null);
     expect(useUIStore.getState().renderedPreviewUrl).toBeNull();
   });
+
+  it('enterCreateView sets create mode and mints a session id', () => {
+    useUIStore.setState({ viewMode: 'canvas', createSessionId: null });
+    useUIStore.getState().enterCreateView();
+    const state = useUIStore.getState();
+    expect(state.viewMode).toBe('create');
+    expect(typeof state.createSessionId).toBe('string');
+    expect((state.createSessionId as string).length).toBeGreaterThan(0);
+  });
+
+  it('exitCreateView returns to canvas and clears the session id', () => {
+    useUIStore.getState().enterCreateView();
+    useUIStore.getState().exitCreateView();
+    const state = useUIStore.getState();
+    expect(state.viewMode).toBe('canvas');
+    expect(state.createSessionId).toBeNull();
+  });
 });

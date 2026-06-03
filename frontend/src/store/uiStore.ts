@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { v4 as uuidv4 } from 'uuid';
 import { type SkinId, loadSkin, persistSkin, applySkinBodyClass } from '../lib/skins';
 import { useGraphStore } from './graphStore';
 
@@ -58,7 +59,7 @@ interface UIState {
   selectedNodeId: string | null;
 
   // Editor view state — Phase 1 video-editor pivot
-  viewMode: 'canvas' | 'editor' | 'remotion-editor' | 'cinema-editor' | 'character-editor' | 'moodboard-editor';
+  viewMode: 'canvas' | 'editor' | 'remotion-editor' | 'cinema-editor' | 'character-editor' | 'moodboard-editor' | 'create';
   editorTargetNodeId: string | null;
   // Phase 2 Remotion editor
   remotionEditorTargetNodeId: string | null;
@@ -73,6 +74,9 @@ interface UIState {
   // Nebula Moodboard editor — provider-neutral creative-direction assets.
   // App.tsx mounts MoodboardStudioView when this is set.
   moodboardEditorId: string | null;
+  // Create view — Higgsfield-style graph-builder surface. App.tsx mounts CreateView
+  // when viewMode === 'create'. createSessionId tags nodes authored this session.
+  createSessionId: string | null;
   selectedTrackItemId: string | null;
   selectedTrackItemIds: string[];
   isKeyframeRecording: boolean;
@@ -125,6 +129,8 @@ interface UIState {
   exitCharacterEditor: () => void;
   enterMoodboardEditor: (moodboardId: string) => void;
   exitMoodboardEditor: () => void;
+  enterCreateView: () => void;
+  exitCreateView: () => void;
   setSelectedTrackItem: (id: string | null) => void;
   setSelectedTrackItems: (ids: string[], primaryId?: string | null) => void;
   toggleSelectedTrackItem: (id: string) => void;
@@ -168,6 +174,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   cinemaEditorNodeId: null,
   characterEditorId: null,
   moodboardEditorId: null,
+  createSessionId: null,
   selectedTrackItemId: null,
   selectedTrackItemIds: [],
   isKeyframeRecording: false,
@@ -285,6 +292,13 @@ export const useUIStore = create<UIState>((set, get) => ({
       viewMode: 'canvas',
       moodboardEditorId: null,
     });
+  },
+
+  enterCreateView: () => {
+    set({ viewMode: 'create', createSessionId: uuidv4() });
+  },
+  exitCreateView: () => {
+    set({ viewMode: 'canvas', createSessionId: null });
   },
 
   setSelectedTrackItem: (id) => {
