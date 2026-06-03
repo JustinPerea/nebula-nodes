@@ -94,7 +94,25 @@ export function CreateView() {
     const name = window.prompt('Name this style:', prompt.slice(0, 40) || modelDef.displayName);
     if (!name) return;
     try {
-      await createPreset({ name, category: 'My Styles', prompt, params, modelId: modelDef.id, refImages: refs.map((r) => r.filePath), scope: 'project' });
+      // Capture the first image output from the most-recent completed generation
+      // as the thumbnail so saved user styles show a real result instead of the
+      // gradient placeholder.
+      let thumbnail = '';
+      const nodes = useGraphStore.getState().nodes;
+      const latestGen = [...generations].sort((a, b) => b.ts - a.ts)[0];
+      if (latestGen) {
+        outer: for (const nodeId of latestGen.modelNodeIds) {
+          const node = nodes.find((n) => n.id === nodeId);
+          if (!node || node.data.state !== 'complete') continue;
+          for (const output of Object.values(node.data.outputs ?? {})) {
+            if (output?.type === 'Image' && typeof output.value === 'string' && output.value) {
+              thumbnail = output.value;
+              break outer;
+            }
+          }
+        }
+      }
+      await createPreset({ name, category: 'My Styles', prompt, params, modelId: modelDef.id, refImages: refs.map((r) => r.filePath), scope: 'project', thumbnail });
       setPresetReloadKey((k) => k + 1);
     } catch (err) { console.error('save style failed', err); }
   };

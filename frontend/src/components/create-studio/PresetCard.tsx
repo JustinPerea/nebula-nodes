@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { Preset } from '../../lib/createPresets';
 
 // Deterministic hue from the preset id so each card gets a stable gradient.
@@ -9,6 +10,8 @@ function hueOf(id: string): number {
 
 export function PresetCard({ preset, onApply }: { preset: Preset; onApply: (p: Preset) => void }) {
   const hue = hueOf(preset.id);
+  const [thumbError, setThumbError] = useState(false);
+  const showThumb = !!preset.thumbnail && !thumbError;
   return (
     <button
       type="button"
@@ -17,8 +20,13 @@ export function PresetCard({ preset, onApply }: { preset: Preset; onApply: (p: P
       style={{ ['--preset-hue' as string]: `${hue}` }}
       title={preset.prompt}
     >
-      {preset.thumbnail ? (
-        <img className="preset-card__thumb" src={preset.thumbnail} alt="" />
+      {showThumb ? (
+        <img
+          className="preset-card__thumb"
+          src={preset.thumbnail}
+          alt=""
+          onError={() => setThumbError(true)}
+        />
       ) : (
         <span className="preset-card__gradient" aria-hidden="true" />
       )}
