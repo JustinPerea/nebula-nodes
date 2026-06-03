@@ -71,7 +71,21 @@ export function CreateView() {
   };
 
   const handleUseAsInput = (url: string) => {
-    setRefs((prev) => prev.some((r) => r.filePath === url) ? prev : [...prev, { filePath: url, previewUrl: url }]);
+    // Store a backend-relative /api/outputs/... path as the ref filePath: the backend
+    // resolves relative refs on both the execution and persistence paths, but an
+    // absolute http://host/... URL (non-same-origin backend) reaches external providers
+    // unresolved. Keep the absolute URL for the preview thumbnail.
+    let filePath = url;
+    if (/^https?:\/\//i.test(url)) {
+      try {
+        filePath = new URL(url).pathname;
+      } catch {
+        filePath = url;
+      }
+    }
+    setRefs((prev) =>
+      prev.some((r) => r.filePath === filePath) ? prev : [...prev, { filePath, previewUrl: url }],
+    );
   };
 
   const handleDelete = (nodeId: string) => {
