@@ -5,7 +5,7 @@ project: nebula_nodes
 provider: quiver
 model: arrow-1 / arrow-1.1 / arrow-1.1-max (svg_vectorize)
 status: active
-verified: 2026-05-19
+verified: 2026-06-03
 stale_after_days: 14
 ---
 
@@ -17,8 +17,8 @@ facts (auth, rate limits, error codes, model catalog) see
 
 ## Sources
 
-- `https://docs.quiver.ai/api-reference/vectorize-svg/image-to-svg` — fetched 2026-05-19
-- `https://docs.quiver.ai/models/image-to-svg` — fetched 2026-05-19
+- `https://docs.quiver.ai/api-reference/vectorize-svg/image-to-svg` — fetched 2026-05-19 + re-verified 2026-06-03
+- `https://docs.quiver.ai/models/image-to-svg` — fetched 2026-05-19 + re-verified 2026-06-03
 
 ## Endpoint
 
@@ -88,8 +88,13 @@ Identical to `arrow-generate` — `generating` -> `reasoning` -> `draft`
 
 ## Findings
 
-None. Endpoint matches documented shape; image object discriminator
-behaves as expected.
+Re-verified 2026-06-03 — no drift. Endpoint path, image object
+discriminator (`{url}` / `{base64}`), `auto_crop`, `target_size`,
+sampling params, streaming event sequence, response shape, and credit
+costs all match canonical docs. Our handler correctly strips the
+`data:...;base64,` prefix before placing raw base64 into `{"base64":
+"..."}` — this is the correct format per spec (unlike the generate
+handler's handling of references; see `arrow-generate.md`).
 
 ## Operational notes
 

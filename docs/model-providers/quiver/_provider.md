@@ -4,7 +4,7 @@ kind: project-provider-integration
 project: nebula_nodes
 provider: quiver
 status: active
-verified: 2026-05-19
+verified: 2026-06-03
 stale_after_days: 14
 ---
 
@@ -17,10 +17,11 @@ contracts.
 ## Sources
 
 - `https://docs.quiver.ai` — fetched 2026-05-19 (landing + getting-started)
-- `https://docs.quiver.ai/api-reference/introduction` — fetched 2026-05-19
+- `https://docs.quiver.ai/api-reference/introduction` — fetched 2026-05-19 + re-verified 2026-06-03
   (auth, rate limits, error codes)
-- `https://docs.quiver.ai/api-reference/models/list-models` — fetched 2026-05-19
-- `https://docs.quiver.ai/api-reference/pricing` — fetched 2026-05-19
+- `https://docs.quiver.ai/api-reference/models/list-models` — fetched 2026-05-19 + re-verified 2026-06-03
+- `https://docs.quiver.ai/api-reference/pricing` — fetched 2026-05-19 (returned 404 on 2026-06-03)
+- `https://quiver.ai/pricing` — fetched 2026-06-03 (canonical pricing page; replaces /api-reference/pricing)
 - `https://quiver.ai/blog/announcing-our-seed-round` — fetched 2026-05-19 (Arrow positioning)
 - `https://api.quiver.ai/v1/openapi.json` — referenced; canonical machine spec
 
@@ -66,14 +67,29 @@ level refactor.
 
 ## Pricing tier reminder (2026)
 
-- Free: 20 SVGs / week (any combination of generate + vectorize)
-- Basic $20/mo: 100 SVGs
-- Pro $40/mo: 250 SVGs
+⚠️ DRIFT (2026-06-03): The previous note described an SVG-count model
+(20 / 100 / 250 SVGs per week). The canonical quiver.ai/pricing page
+(fetched 2026-06-03) now describes a **credit-pool model** with weekly
+refresh. No "SVG count" limits are mentioned. Updated below.
 
-Users on the free tier can burn through 25 generates fast. The `credits`
-field on every Quiver response carries the per-call cost, which we
-surface in the model dropdown labels (e.g. "Arrow 1.1 max (25 credits)")
-so users see the price before picking a variant.
+| Tier | Price | Credits / week | Models |
+|---|---|---|---|
+| Free | $0 | 200 | Arrow 1.0 + Arrow 1.1 only |
+| Basic | $20/mo | 1,000 | Arrow 1.1 Max included |
+| Pro | $40/mo | 3,000 | Arrow 1.1 Max included |
+| Enterprise | Custom | Custom | SSO, on-premise, custom models |
+
+Credit costs per operation are unchanged (see model catalog above).
+Example: Arrow 1.1 generate costs 20 credits → a Free user gets ~10
+generates per week (200 ÷ 20). The `credits` field on every Quiver
+response carries the per-call cost, which we surface in the model
+dropdown labels (e.g. "Arrow 1.1 max (25 credits)") so users see the
+price before picking a variant.
+
+**Code impact:** None — our credit-cost accounting was already correct
+(costs are read from the API response, not hardcoded from tier limits).
+The dropdown labels showing per-call credits remain accurate. No handler
+or node-def change needed; the tier description was documentation-only.
 
 ## Backend implementation references
 
@@ -84,5 +100,11 @@ so users see the price before picking a variant.
 
 ## Findings
 
-None. The four endpoints behave as documented; no doc/API drift observed
-during initial integration.
+Re-verified 2026-06-03. Auth, rate limit, rate-limit headers, error
+codes, model IDs, and per-operation credit costs all match canonical
+docs. One drift found:
+
+- **Pricing tier description was stale** — old note described an SVG-count
+  model; canonical quiver.ai/pricing now uses a credit-pool model.
+  Updated in the "Pricing tier reminder" section above. No code change
+  needed (credit accounting reads from API responses).

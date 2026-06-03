@@ -4,7 +4,7 @@ kind: project-model-integration
 project: nebula_nodes
 provider: meshy
 status: active
-verified: 2026-05-17
+verified: 2026-06-03
 stale_after_days: 14
 ---
 
@@ -163,6 +163,59 @@ after remesh/retexture. Humanoid characters may continue into rigging/animation.
   agent identity files.
 
 ## Audit Log
+
+### 2026-06-03 — Re-verification audit
+
+Sources fetched:
+- `https://docs.meshy.ai/api/text-to-3d` (2026-06-03)
+- `https://docs.meshy.ai/api/image-to-3d` (2026-06-03)
+- `https://docs.meshy.ai/api/multi-image-to-3d` (2026-06-03)
+- `https://docs.meshy.ai/api/text-to-image` (2026-06-03)
+- `https://docs.meshy.ai/api/rigging` (2026-06-03)
+
+Re-verified CLEAN (no drift) for: `meshy-retexture`, `meshy-rigging`, `meshy-animate`, `meshy-remesh`, `meshy-3d-print`. Endpoint paths, auth headers, request body field names, poll URL patterns, and output field paths all match the live docs.
+
+⚠️ DRIFT (2026-06-03): Four findings below require code or node-def attention.
+
+#### Drift 1 — `meshy-text-to-image` and `meshy-image-to-image`: `nano-banana-2` model missing from node-def
+
+The canonical docs now list four `ai_model` values for the text-to-image endpoint:
+- `nano-banana` (3 credits)
+- `nano-banana-2` (6 credits) — **missing from our node-def**
+- `nano-banana-pro` (9 credits)
+- `gpt-image-2` (9 credits) — **missing from our node-def**
+
+The 2026-05-17 audit log claims `nano-banana-2` was added, but it is **not present** in `frontend/src/constants/nodeDefinitions.ts` as of 2026-06-03 (lines 3684–3688 and 3748–3751 only show `nano-banana` and `nano-banana-pro`). The handler at `backend/handlers/meshy.py` passes `ai_model` through from node params, so the handler itself is fine — this is a node-def gap only.
+
+**CODE CHANGE needed:** Add `nano-banana-2` and `gpt-image-2` options to the `ai_model` enum in both `meshy-text-to-image` and `meshy-image-to-image` node definitions in `frontend/src/constants/nodeDefinitions.ts`.
+
+#### Drift 2 — `meshy-multi-image-to-3d`: `symmetry_mode` is deprecated; new meshy-6 params not exposed
+
+The canonical docs mark `symmetry_mode` as **deprecated** ("no longer affects output"). Our node-def and handler still pass it through.
+
+New meshy-6/latest-only params now documented that are not exposed in Nebula:
+- `hd_texture` (boolean, default `false`) — 4K base color
+- `image_enhancement` (boolean, default `true`, meshy-6/latest only) — input image cleanup
+- `remove_lighting` (boolean, default `true`, meshy-6/latest only) — cleaner base color
+
+The `should_remesh` default has also changed: for `meshy-6`/`latest` it is now `false` (was `true` for older models). Our node-def exposes `should_remesh` with default `false` — this matches the meshy-6 default, so no functional regression, but agents using `meshy-5` explicitly should note the behavior difference.
+
+**CODE CHANGE needed (optional, low urgency):** Remove or mark `symmetry_mode` as deprecated in the `meshy-multi-image-to-3d` node-def. Adding `hd_texture`, `image_enhancement`, `remove_lighting` as optional params would expose new meshy-6 capability.
+
+#### Drift 3 — `meshy-text-to-3d` and `meshy-image-to-3d`: new meshy-6 refine/preview params not exposed
+
+Text-to-3d (v2 endpoint, confirmed current) and image-to-3d (v1 endpoint, confirmed current) both now document:
+- `hd_texture` (boolean, default `false`, meshy-6/latest only) — 4K base color on refine pass
+- `remove_lighting` (boolean, default `true`, meshy-6/latest only) — on refine pass for text-to-3d
+- `image_enhancement` (boolean, default `true`, meshy-6/latest only) — on image-to-3d
+
+These are additive capability gaps, not breaking changes. Existing calls without these params continue to work.
+
+**CODE CHANGE needed (optional):** Expose `hd_texture` on the refine pass of `meshy-text-to-3d` and on `meshy-image-to-3d` to unlock 4K textures with meshy-6.
+
+#### Drift 4 — `meshy-multi-image-to-3d` node-def still lists `meshy-6` as a named option; `latest` now equals meshy-6
+
+The canonical docs confirm `latest` maps to Meshy 6. Our node-def lists `latest`, `meshy-6`, `meshy-5` — this remains valid. No action required.
 
 ### 2026-05-17 — Full 10-node audit (node-contract-hardening-meshy)
 

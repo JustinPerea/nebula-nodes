@@ -1,5 +1,6 @@
 ---
-audited: 2026-05-17
+verified: 2026-05-17
+stale_after_days: 90
 nodes: [replicate-universal, openrouter-universal, nous-portal-universal]
 status: clean
 fixes: 3

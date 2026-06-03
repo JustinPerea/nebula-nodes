@@ -4,7 +4,7 @@ kind: project-model-integration
 project: nebula_nodes
 provider: google
 status: active
-verified: 2026-05-17
+verified: 2026-06-03
 stale_after_days: 14
 ---
 
@@ -15,6 +15,46 @@ Nebula-specific integration notes for Google's Gemini family in Nebula Nodes.
 Read the shared provider reference first:
 
 `~/Documents/Workspace/Reference/model-providers/google/gemini-nano-banana.md`
+
+## Re-verification 2026-06-03
+
+Re-verified 2026-06-03 against [ai.google.dev/gemini-api/docs/image-generation](https://ai.google.dev/gemini-api/docs/image-generation) and [ai.google.dev/gemini-api/docs/models](https://ai.google.dev/gemini-api/docs/models).
+
+Checked: model IDs, aspect_ratio values per model, imageSize values per model, imageConfig path, reference-image caps.
+
+### nano-banana-Pro reference-image cap (closes TODO in `backend/cinema/identity.py:79`)
+
+The canonical docs now publish the following per-model reference-image caps:
+
+| Model | Object refs | Character refs | Total |
+|---|---|---|---|
+| `gemini-3.1-flash-image` (Nano Banana 2) | up to 10 | up to 4 | **14** |
+| `gemini-3-pro-image` (Nano Banana Pro) | up to 6 | up to 5 | **14** |
+
+`identity.py` maps `nano-banana` → 14 but leaves Nano Banana Pro at `DEFAULT_MAX_REFS` (1) pending confirmation. The docs confirm Pro also supports **14 total references**. A CODE CHANGE is needed: add `"nano-banana-pro": 14` to `MODEL_MAX_REFS` in `backend/cinema/identity.py` and remove the TODO comment at line 79.
+
+---
+
+⚠️ DRIFT (2026-06-03): Model IDs — `-preview` suffix dropped in canonical docs
+
+The canonical docs (fetched 2026-06-03) now document stable model IDs **without** the `-preview` suffix. Every code example on the image-generation docs page uses:
+
+| Docs-canonical ID | Our code/node-def ID | Display name |
+|---|---|---|
+| `gemini-3.1-flash-image` | `gemini-3.1-flash-image-preview` | Nano Banana 2 |
+| `gemini-3-pro-image` | `gemini-3-pro-image-preview` | Nano Banana Pro |
+| `gemini-2.5-flash-image` | `gemini-2.5-flash-image` | Nano Banana (no drift) |
+
+The REST examples on the docs page show `/v1/models/gemini-3.1-flash-image:generateContent` — no `-preview`.
+
+**Risk assessment:** Google typically keeps `-preview` aliases alive for backward compatibility, so the current handler likely still works. However, the documented stable IDs should be used in production.
+
+**CODE CHANGE needed (do not change here — flag only):**
+- `backend/handlers/google_gemini.py`: default model in `handle_nano_banana` is `"gemini-3.1-flash-image-preview"` — should become `"gemini-3.1-flash-image"`.
+- `frontend/src/constants/nodeDefinitions.ts`: `nano-banana` node params list `gemini-3.1-flash-image-preview` and `gemini-3-pro-image-preview` — both values and labels should be updated to the stable IDs.
+- `backend/cinema/identity.py`: any `"nano-banana"` references tied to model ID strings are fine (these are internal aliases, not sent to the API); only the `handle_nano_banana` default and node-def `value` fields send the model ID to the wire.
+
+Other params (aspect_ratio values, imageSize values, imageConfig path, generationConfig structure) — **no drift**. All confirmed matching the canonical docs.
 
 ## Audit Log
 

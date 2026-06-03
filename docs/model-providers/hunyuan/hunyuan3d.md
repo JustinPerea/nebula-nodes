@@ -4,7 +4,7 @@ kind: project-model-integration
 project: nebula_nodes
 provider: hunyuan
 status: active
-verified: 2026-05-17
+verified: 2026-06-03
 stale_after_days: 14
 ---
 
@@ -137,6 +137,16 @@ When the agent has only a prompt and no reference image, prefer the
 Hephaestus chain that generates a Nano Banana Pro reference first, then
 feeds it into `hunyuan3d-image-to-3d`. This typically beats
 `hunyuan3d-text-to-3d` for fidelity at similar cost.
+
+## Re-verification 2026-06-03
+
+Re-verified 2026-06-03 against FAL model cards:
+- `https://fal.ai/models/fal-ai/hunyuan3d-v3/text-to-3d/api`
+- `https://fal.ai/models/fal-ai/hunyuan3d-v3/image-to-3d/api`
+
+Checked: endpoint URLs, all param names/types/defaults/ranges, required vs optional fields, output field structure.
+
+Re-verified CLEAN — no drift. Both `fal-ai/hunyuan3d-v3/text-to-3d` and `fal-ai/hunyuan3d-v3/image-to-3d` remain current (no deprecation notice). All params confirmed identical to the 2026-05-17 audit: `prompt` (max 1024 chars), `generate_type` (Normal/LowPoly/Geometry, default Normal), `face_count` (40000–1500000, default 500000), `enable_pbr` (boolean), `polygon_type` (triangle/quadrilateral, default triangle). Image-to-3d required field is `input_image_url` (confirmed, not `image_url`). Optional view fields `back_image_url`, `left_image_url`, `right_image_url` all confirmed present. Output structure (`model_glb` File dict, `model_urls` object, `thumbnail`, `seed`) unchanged. Handler mapping and node definition remain in sync with the live API.
 
 ## Audit Notes — 2026-05-17
 

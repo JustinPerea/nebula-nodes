@@ -365,7 +365,7 @@ Nodes: 115 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **Execution** | sync |
 | **Inputs** | Prompt (Text)* |
 | **Outputs** | Image (Image) |
-| **Audited** | 2026-05-17 |
+| **Audited** | 2026-06-03 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -445,7 +445,7 @@ Nodes: 115 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text)*, Reference Images (Image ×n)* |
 | **Outputs** | Image (Image) |
-| **Audited** | 2026-05-17 |
+| **Audited** | 2026-06-03 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -465,7 +465,7 @@ Nodes: 115 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text)* |
 | **Outputs** | Image (Image) |
-| **Audited** | 2026-05-17 |
+| **Audited** | 2026-06-03 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -487,7 +487,7 @@ Nodes: 115 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **Execution** | sync |
 | **Inputs** | Prompt (Text)*, Images (Image ×n) |
 | **Outputs** | Image (Image), Text (Text) |
-| **Audited** | 2026-05-17 |
+| **Audited** | 2026-06-03 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -508,7 +508,7 @@ Nodes: 115 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **Execution** | stream |
 | **Inputs** | Prompt (Text)*, References (Image ×n) |
 | **Outputs** | SVG (SVG) |
-| **Audited** | 2026-05-19 |
+| **Audited** | 2026-06-03 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -533,7 +533,7 @@ Nodes: 115 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **Execution** | stream |
 | **Inputs** | Image (Image)* |
 | **Outputs** | SVG (SVG) |
-| **Audited** | 2026-05-19 |
+| **Audited** | 2026-06-03 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -1325,7 +1325,7 @@ Nodes: 115 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **Execution** | stream |
 | **Inputs** | Messages (Text)*, Images (Image ×n) |
 | **Outputs** | Text (Text) |
-| **Audited** | 2026-05-17 |
+| **Audited** | 2026-06-03 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -1492,7 +1492,7 @@ Nodes: 115 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **Execution** | sync |
 | **Inputs** | Text (Text)* |
 | **Outputs** | Audio (Audio) |
-| **Audited** | 2026-05-17 |
+| **Audited** | 2026-06-03 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -1512,7 +1512,7 @@ Nodes: 115 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **Execution** | sync |
 | **Inputs** | Prompt (Text)*, Images (Image ×n) |
 | **Outputs** | Audio (Audio), Lyrics (Text) |
-| **Audited** | 2026-05-17 |
+| **Audited** | 2026-06-03 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -1662,7 +1662,7 @@ Nodes: 115 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **Execution** | async-poll |
 | **Inputs** | Front Image (Image)*, Back Image (Image), Left Image (Image), Right Image (Image) |
 | **Outputs** | Mesh (Mesh) |
-| **Audited** | 2026-05-17 |
+| **Audited** | 2026-06-03 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -1684,7 +1684,7 @@ Nodes: 115 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text)* |
 | **Outputs** | Mesh (Mesh) |
-| **Audited** | 2026-05-17 |
+| **Audited** | 2026-06-03 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -1706,7 +1706,7 @@ Nodes: 115 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **Execution** | async-poll |
 | **Inputs** | Task ID (Text)* |
 | **Outputs** | Print File (Mesh) |
-| **Audited** | 2026-05-17 |
+| **Audited** | 2026-06-03 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -1726,7 +1726,7 @@ Nodes: 115 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **Execution** | async-poll |
 | **Inputs** | Rig Task ID (Text)* |
 | **Outputs** | Animated Mesh (Mesh) |
-| **Audited** | 2026-05-17 |
+| **Audited** | 2026-06-03 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -1746,7 +1746,7 @@ Nodes: 115 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **Execution** | async-poll |
 | **Inputs** | Image (Image)* |
 | **Outputs** | Mesh (Mesh) |
-| **Audited** | 2026-05-17 |
+| **Audited** | 2026-06-03 |
 
 **Shared Parameters**
 
@@ -1791,7 +1791,7 @@ Nodes: 115 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **Execution** | async-poll |
 | **Inputs** | Images (1-4) (Image ×n)* |
 | **Outputs** | Mesh (Mesh) |
-| **Audited** | 2026-05-17 |
+| **Audited** | 2026-06-03 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -1819,7 +1819,7 @@ Nodes: 115 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **Execution** | async-poll |
 | **Inputs** | Model URL (Text)* |
 | **Outputs** | Mesh (Mesh) |
-| **Audited** | 2026-05-17 |
+| **Audited** | 2026-06-03 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -1842,7 +1842,7 @@ Nodes: 115 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **Execution** | async-poll |
 | **Inputs** | Model URL (Text)*, Style Prompt (Text) |
 | **Outputs** | Mesh (Mesh) |
-| **Audited** | 2026-05-17 |
+| **Audited** | 2026-06-03 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -1864,7 +1864,7 @@ Nodes: 115 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **Execution** | async-poll |
 | **Inputs** | Model URL (Text)* |
 | **Outputs** | Rigged Mesh (Mesh), Rig Task ID (Text) |
-| **Audited** | 2026-05-17 |
+| **Audited** | 2026-06-03 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -1883,7 +1883,7 @@ Nodes: 115 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text)* |
 | **Outputs** | Mesh (Mesh) |
-| **Audited** | 2026-05-17 |
+| **Audited** | 2026-06-03 |
 
 **Shared Parameters**
 
@@ -2059,7 +2059,7 @@ Nodes: 115 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **Execution** | stream |
 | **Inputs** | Messages (Text)*, Images (Image ×n) |
 | **Outputs** | Text (Text) |
-| **Audited** | — |
+| **Audited** | 2026-05-17 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -2080,7 +2080,7 @@ Nodes: 115 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **Execution** | stream |
 | **Inputs** | Messages (Text)* |
 | **Outputs** | Text (Text) |
-| **Audited** | — |
+| **Audited** | 2026-05-17 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -2101,7 +2101,7 @@ Nodes: 115 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **Execution** | async-poll |
 | **Inputs** | — |
 | **Outputs** | — |
-| **Audited** | — |
+| **Audited** | 2026-05-17 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -2280,7 +2280,7 @@ Nodes: 115 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **Execution** | sync |
 | **Inputs** | Text (Text)* |
 | **Outputs** | Embedding (Text), Dimensions (Text) |
-| **Audited** | 2026-05-17 |
+| **Audited** | 2026-06-03 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
