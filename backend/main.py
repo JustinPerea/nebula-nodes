@@ -1661,11 +1661,46 @@ async def add_graph_cluster(body: dict[str, Any]) -> dict:
     await _broadcast_graph_sync()
     publish_action(f"Created cluster ({len(id_map)} nodes)")
 
-    # Return the new subset in React Flow shape (reuse the export converter).
-    full = await export_graph_for_frontend()
-    new_ids = set(id_map.values())
-    rf_nodes = [n for n in full.get("nodes", []) if n["id"] in new_ids]
-    rf_edges = [e for e in full.get("edges", []) if e["id"] in created_edge_ids]
+    # Build the response directly from the nodes and edges we just created.
+    # Constructing the React Flow shape from cli_graph.nodes (keyed by the
+    # id_map values) avoids a full graph re-export whose filtering step is
+    # sensitive to unrelated global state and export-time normalization of
+    # OTHER nodes. This also makes the route correct even when test fixtures
+    # (or production code) replace the module-level cli_graph reference.
+    all_defs = node_registry.get_all()
+    rf_nodes = []
+    for new_id in id_map.values():
+        node = cli_graph.nodes.get(new_id)
+        if node is None:
+            continue
+        # Assign a simple default position; the client and graphSync broadcast
+        # will apply the real layout.  Nodes with a stored position keep it.
+        pos = node.get("position") or {"x": 0.0, "y": 0.0}
+        rf_nodes.append(_cli_node_to_rf(node, pos, all_defs))
+
+    # Build rf_edges for only the edges created in this request.
+    created_edge_id_set = set(created_edge_ids)
+    rf_edges = []
+    for e in cli_graph.edges:
+        if e["id"] not in created_edge_id_set:
+            continue
+        src_node = cli_graph.nodes.get(e["source"], {})
+        src_def = all_defs.get(src_node.get("definitionId", ""), {})
+        data_type = "Any"
+        for port in src_def.get("outputPorts", []):
+            if port["id"] == e["sourceHandle"]:
+                data_type = port["dataType"]
+                break
+        rf_edges.append({
+            "id": e["id"],
+            "source": e["source"],
+            "sourceHandle": e["sourceHandle"],
+            "target": e["target"],
+            "targetHandle": e["targetHandle"],
+            "type": "typed-edge",
+            "data": {"dataType": data_type},
+        })
+
     return {"idMap": id_map, "nodes": rf_nodes, "edges": rf_edges}
 
 
@@ -1679,6 +1714,71 @@ def _rewrite_output_paths(outputs: dict[str, Any]) -> dict[str, Any]:
         else:
             rewritten[port_id] = port_val
     return rewritten
+
+
+def _cli_node_to_rf(n: dict[str, Any], position: dict[str, float], all_defs: dict) -> dict:
+    """Convert a single cli_graph node dict to a React Flow node dict.
+
+    *position* must be pre-computed by the caller (stored or auto-laid-out).
+    *all_defs* is the full node_registry snapshot (``node_registry.get_all()``).
+
+    This helper is the single source of truth for the cli→RF shape so both
+    ``export_graph_for_frontend`` and ``add_graph_cluster`` produce identical
+    node representations.
+    """
+    definition_id = n["definitionId"]
+    defn = all_defs.get(definition_id, {})
+    is_dynamic_node = definition_id in DYNAMIC_NODE_PROVIDER_BY_DEFINITION
+    node_type = (
+        "reroute-node"
+        if definition_id == "reroute"
+        else "editNode"
+        if definition_id == "video-edit"
+        else "remotionNode"
+        if definition_id == "remotion-node"
+        else "cinemaSceneNode"
+        if definition_id == "cinema-scene"
+        else "characterNode"
+        if definition_id == "character"
+        else "moodboardNode"
+        if definition_id == "nebula-moodboard"
+        else "dynamic-node"
+        if is_dynamic_node
+        else "model-node"
+    )
+    outputs = _rewrite_output_paths(n.get("outputs", {}))
+    node_state = "complete" if outputs else "idle"
+
+    # For image-input nodes: keep file paths current after repo moves and
+    # derive _previewUrl from local output refs when it was not stored.
+    params = dict(n.get("params", {}))
+    if definition_id == "image-input":
+        params = _normalize_image_input_params(params)
+
+    data: dict[str, Any] = {
+        "label": defn.get("displayName", definition_id),
+        "definitionId": definition_id,
+        "params": params,
+        "state": node_state,
+        "outputs": outputs,
+    }
+    if is_dynamic_node:
+        data.update({
+            "isDynamic": True,
+            "providerType": DYNAMIC_NODE_PROVIDER_BY_DEFINITION[definition_id],
+            "modelId": params.get("model") or params.get("model_id") or params.get("endpoint_id"),
+            "dynamicInputPorts": defn.get("inputPorts", []),
+            "dynamicOutputPorts": defn.get("outputPorts", []),
+            "dynamicParams": [],
+            "providerMeta": {},
+        })
+
+    return {
+        "id": n["id"],
+        "type": node_type,
+        "position": position,
+        "data": data,
+    }
 
 
 @app.get("/api/graph/export")
@@ -1717,60 +1817,8 @@ async def export_graph_for_frontend() -> dict:
             max_x += 300.0
             computed_positions[n["id"]] = {"x": max_x, "y": float(y_offset)}
 
-    for i, n in enumerate(state["nodes"]):
-        defn = all_defs.get(n["definitionId"], {})
-        definition_id = n["definitionId"]
-        is_dynamic_node = definition_id in DYNAMIC_NODE_PROVIDER_BY_DEFINITION
-        node_type = (
-            "reroute-node"
-            if definition_id == "reroute"
-            else "editNode"
-            if definition_id == "video-edit"
-            else "remotionNode"
-            if definition_id == "remotion-node"
-            else "cinemaSceneNode"
-            if definition_id == "cinema-scene"
-            else "characterNode"
-            if definition_id == "character"
-            else "moodboardNode"
-            if definition_id == "nebula-moodboard"
-            else "dynamic-node"
-            if is_dynamic_node
-            else "model-node"
-        )
-        outputs = _rewrite_output_paths(n.get("outputs", {}))
-        node_state = "complete" if outputs else "idle"
-
-        # For image-input nodes: keep file paths current after repo moves and
-        # derive _previewUrl from local output refs when it was not stored.
-        params = dict(n.get("params", {}))
-        if n["definitionId"] == "image-input":
-            params = _normalize_image_input_params(params)
-
-        data = {
-            "label": defn.get("displayName", n["definitionId"]),
-            "definitionId": n["definitionId"],
-            "params": params,
-            "state": node_state,
-            "outputs": outputs,
-        }
-        if is_dynamic_node:
-            data.update({
-                "isDynamic": True,
-                "providerType": DYNAMIC_NODE_PROVIDER_BY_DEFINITION[definition_id],
-                "modelId": params.get("model") or params.get("model_id") or params.get("endpoint_id"),
-                "dynamicInputPorts": defn.get("inputPorts", []),
-                "dynamicOutputPorts": defn.get("outputPorts", []),
-                "dynamicParams": [],
-                "providerMeta": {},
-            })
-
-        rf_nodes.append({
-            "id": n["id"],
-            "type": node_type,
-            "position": computed_positions[n["id"]],
-            "data": data,
-        })
+    for n in state["nodes"]:
+        rf_nodes.append(_cli_node_to_rf(n, computed_positions[n["id"]], all_defs))
 
     rf_edges = []
     for e in state["edges"]:

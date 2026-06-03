@@ -5,16 +5,22 @@ import pytest
 from fastapi.testclient import TestClient
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from main import app, cli_graph  # noqa: E402
+import main as main_module  # noqa: E402
+from main import app  # noqa: E402
 from execution import engine
 from services import output as output_mod
+from services.cli_graph import CLIGraph
 
 
 @pytest.fixture(autouse=True)
 def clear_graph():
-    cli_graph.clear()
+    # Replace main.cli_graph with a fresh, persist-free instance so prior
+    # tests that swap the reference (e.g. test_chat_uploads) don't leave a
+    # stale object here.  The route and the test body both access
+    # main_module.cli_graph, so they always see the same object.
+    main_module.cli_graph = CLIGraph()
     yield
-    cli_graph.clear()
+    main_module.cli_graph = CLIGraph()
 
 
 def test_image_input_resolves_api_outputs_url(tmp_path, monkeypatch):
@@ -29,7 +35,7 @@ def test_image_input_resolves_api_outputs_url(tmp_path, monkeypatch):
 
 
 def test_cluster_route_adds_nodes_additively_and_returns_idmap():
-    cli_graph.add_node("text-input", {"value": "preexisting"})  # n1 stays
+    main_module.cli_graph.add_node("text-input", {"value": "preexisting"})  # n1 stays
     client = TestClient(app)
     body = {
         "nodes": [
@@ -53,7 +59,7 @@ def test_cluster_route_adds_nodes_additively_and_returns_idmap():
     assert any(e["source"] == data["idMap"]["t-text"] and e["target"] == data["idMap"]["t-model"]
                for e in data["edges"])
     # cli_graph still holds the preexisting node + the 2 new ones (additive)
-    assert len(cli_graph.nodes) == 3
+    assert len(main_module.cli_graph.nodes) == 3
 
 
 def test_cluster_route_normalizes_image_input():
@@ -67,4 +73,4 @@ def test_cluster_route_normalizes_image_input():
     assert resp.status_code == 200
     new_id = resp.json()["idMap"]["t-img"]
     # _normalize_image_input_params ran (filePath rewritten away from the URL form)
-    assert cli_graph.nodes[new_id]["params"]["filePath"] != "/api/outputs/run1/x.png"
+    assert main_module.cli_graph.nodes[new_id]["params"]["filePath"] != "/api/outputs/run1/x.png"
