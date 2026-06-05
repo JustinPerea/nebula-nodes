@@ -347,6 +347,17 @@ def get_handler_registry(
             node.params.setdefault("endpoint_id", "fal-ai/ltx-2/image-to-video")
             return await handle_fal_universal(node, inputs, api_keys, emit=emit)
 
+        async def _stable_audio_handler(
+            node: GraphNode,
+            inputs: dict[str, PortValueDict],
+            api_keys: dict[str, str],
+        ) -> dict[str, Any]:
+            # Stable Audio 2.5 text-to-audio (music + SFX) via FAL. No new logic —
+            # the universal handler maps the `prompt` input + params and parses the
+            # audio output URL.
+            node.params.setdefault("endpoint_id", "fal-ai/stable-audio-25/text-to-audio")
+            return await handle_fal_universal(node, inputs, api_keys, emit=emit)
+
         async def _meshy_text_to_3d_handler(
             node: GraphNode,
             inputs: dict[str, PortValueDict],
@@ -580,6 +591,7 @@ def get_handler_registry(
         registry["wan-2-6-t2v"] = _wan26_t2v_handler
         registry["luma-ray2-t2v"] = _luma_ray2_handler
         registry["ltx-video-2"] = _ltx_video2_handler
+        registry["stable-audio-25"] = _stable_audio_handler
         registry["meshy-text-to-3d"] = _meshy_text_to_3d_handler
         registry["meshy-image-to-3d"] = _meshy_image_to_3d_handler
         registry["meshy-multi-image-to-3d"] = _meshy_multi_image_to_3d_handler
