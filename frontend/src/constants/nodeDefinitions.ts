@@ -1217,6 +1217,59 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     ],
   },
 
+  'stable-audio-25': {
+    id: 'stable-audio-25',
+    displayName: 'Stable Audio 2.5',
+    category: 'audio-gen',
+    apiProvider: 'fal',
+    apiEndpoint: 'fal-ai/stable-audio-25/text-to-audio',
+    envKeyName: 'FAL_KEY',
+    executionPattern: 'async-poll',
+    inputPorts: [
+      { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
+    ],
+    outputPorts: [
+      { id: 'audio', label: 'Audio', dataType: 'Audio', required: false },
+    ],
+    params: [
+      {
+        key: 'seconds_total',
+        label: 'Duration (seconds)',
+        type: 'integer',
+        required: false,
+        default: 60,
+        min: 1,
+        max: 190,
+      },
+      {
+        key: 'num_inference_steps',
+        label: 'Steps',
+        type: 'integer',
+        required: false,
+        default: 8,
+        min: 1,
+        max: 50,
+      },
+      {
+        key: 'guidance_scale',
+        label: 'Guidance Scale',
+        type: 'float',
+        required: false,
+        default: 7.5,
+        min: 0,
+        max: 20,
+        step: 0.5,
+      },
+      {
+        key: 'seed',
+        label: 'Seed',
+        type: 'integer',
+        required: false,
+        placeholder: 'Random',
+      },
+    ],
+  },
+
   'flux-1-1-ultra': {
     id: 'flux-1-1-ultra',
     displayName: 'FLUX 1.1 Ultra',
