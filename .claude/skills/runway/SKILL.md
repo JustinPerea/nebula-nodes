@@ -1,53 +1,144 @@
 ---
 name: runway
-description: Runway API — Gen-4, Gen-4 Image, Gen-4 Aleph, Act-Two character performance, Veo 3/3.1 pass-through, Seedance 2, Eleven-Labs-backed TTS/STS/dubbing. Activate when the user configures any `runway-*` node or asks about Runway's API. Sourced from the official Stainless-generated Python SDK (github.com/runwayml/sdk-python) on 2026-04-17.
+description: Runway API in Nebula — image-to-video & text-to-video (Gen-4.5, Gen-4 Turbo, Gen-3a Turbo, Veo 3.1, Veo 3.1 Fast, Veo 3), Gen-4 Aleph video restyle, Gen-4 Image / Gemini 2.5 Flash stills, Act-Two character performance, and ElevenLabs-backed TTS / speech-to-speech / voice dubbing. Activate when the user configures any of the Nebula nodes runway-video, runway-aleph, runway-image, runway-act-two, runway-tts, runway-sts, or runway-dubbing, or asks about Runway in Nebula. Sourced from the official Runway Python SDK (github.com/runwayml/sdk-python) cross-checked against backend/handlers/runway.py and backend/data/node_definitions.json, plus the Nebula audit guide (docs/api-guides/runway.md), on 2026-06-04.
 ---
 
 # Runway Skill
 
 ## When to use
 
-- User configures any `runway-*` node (runway-video, runway-aleph, runway-image, runway-act-two, runway-tts, runway-sts, runway-dubbing)
-- User asks about Runway models: Gen-4.5, Gen-4 Turbo, Gen-3a Turbo, Gen-4 Aleph, Gen-4 Image (Turbo), Act-Two, Veo 3, Veo 3.1, Seedance 2, Gemini 2.5 Flash (via Runway)
-- User asks about Runway pricing, ratios, durations, voice presets, or dubbing target languages
+- User configures any of the seven Runway nodes: `runway-video`, `runway-aleph`, `runway-image`, `runway-act-two`, `runway-tts`, `runway-sts`, `runway-dubbing`.
+- User asks to animate a still into a clip, generate video from text, restyle/edit existing footage, make a portrait act out a performance video, generate a still image, or produce/restyle/dub voiceover — using Runway inside Nebula.
+- User asks which Runway model to pick (Gen-4.5 vs Veo 3.1 vs Gen-3a Turbo, Gen-4 Image vs Gemini 2.5 Flash), or about ratios, durations, voice presets, or dubbing languages **as exposed in Nebula's node dropdowns**.
+- User asks what Runway can do that Nebula does **not** expose (sound effects, voice isolation, image upscale, custom voice cloning, Seedance 2, avatars). See **Capability boundaries**.
 
-## Universal rules (all Runway endpoints)
+## Universal rules
 
-1. **Every task is async.** Submit returns `{"id": "<task_id>"}`. Poll `GET /v1/tasks/{id}` until `status` is `SUCCEEDED` or `FAILED`. Our backend uses `AsyncPollConfig` with 2s interval, 300 poll cap.
-2. **Base URL:** `https://api.dev.runwayml.com/v1` (yes — `dev.runwayml.com`, the API gateway).
-3. **Required headers:** `Authorization: Bearer <RUNWAY_API_KEY>`, `Content-Type: application/json`, `X-Runway-Version: 2024-11-06`.
-4. **Input URIs must be HTTPS.** Data URIs work for images (`_resolve_image` in handler converts local paths). No raw file uploads in the submit body — use `POST /v1/uploads` first if you need to host a local file.
-5. **camelCase over the wire.** The SDK uses snake_case (`prompt_text`), but the HTTP API uses camelCase (`promptText`, `videoUri`, `promptImage`, `referenceImages`, `contentModeration`, `bodyControl`, `expressionIntensity`, `publicFigureThreshold`, `outputCount`, `audioUri`, `targetLang`, `disableVoiceCloning`, `dropBackgroundAudio`, `numSpeakers`, `referenceVideos`, `removeBackgroundNoise`, `presetId`). The Runway handler already sends camelCase — don't re-translate.
-6. **Content moderation knob:** `contentModeration.publicFigureThreshold` — `"auto"` (default) or `"low"` (less strict on recognizable faces). Available on Gen-4.5, Gen-4 Turbo, Gen-3a Turbo, Gen-4 Image (Turbo + base), Gen-4 Aleph, Act-Two.
-7. **Cancel/delete:** `DELETE /v1/tasks/{id}` cancels a running task or deletes a completed one.
+1. **Auth & env var.** Single key for all seven nodes: `RUNWAY_API_KEY` (env key name is exactly `RUNWAY_API_KEY`, read from the repo-root `.env`). Sent as header `Authorization: Bearer <RUNWAY_API_KEY>`. Get the key from the Runway developer dashboard at dev.runwayml.com.
+2. **Base URL.** `https://api.dev.runwayml.com/v1` (note: `api.dev.runwayml.com` is the production API gateway — not a staging host). Constant `RUNWAY_API_BASE` in the handler.
+3. **Required headers** (set by the handler — do not re-add): `Authorization: Bearer …`, `Content-Type: application/json`, `X-Runway-Version: 2024-11-06`.
+4. **Execution pattern = async-poll** for all seven nodes. The handler POSTs the submit body, gets back `{"id": "<task_id>"}`, then polls `GET /v1/tasks/{id}` every **2 s**, up to **300 polls** (~10 min cap), until `status` is `SUCCEEDED` (success) or `FAILED` (failure). There is no sync or streaming path. Expect a video/character node to take a minute or more before its output port lights up.
+5. **Response shape.** A finished task returns `output: ["<url>", …]` (an array of URLs, or occasionally a single URL string). The handler takes `output[0]`, downloads it, and writes a local file — MP4 for video nodes, PNG for `runway-image`, MP3 for the audio nodes. No `outputCount` is exposed, so treat every node as single-output.
+6. **Status / error codes.** Task `status` flows `PENDING`/`THROTTLED`/`RUNNING` → `SUCCEEDED` / `FAILED`. HTTP: `401` = missing/invalid `RUNWAY_API_KEY`; `403` = account/plan lacks access to that model (Runway API is gated per plan); `400` = bad params, most often a model-specific ratio/duration the node let you pick but the chosen model rejects, or an Act-Two reference video outside 3–30 s; `429` = rate limited (the poll loop will keep retrying within the 300-poll cap).
+7. **Input-URI rules.** Inputs that are already `http(s)://` or `data:` URIs are passed through untouched. **Local file paths are auto-encoded to base64 data URIs by the handler** (`_resolve_image` for images; inline base64 for video/audio), so you do *not* need to pre-upload. There is **no** `POST /v1/uploads` step in this integration — host externally over HTTPS only if a source file is too large to inline comfortably. All non-local URIs must be HTTPS.
+8. **camelCase on the wire.** The handler emits camelCase keys (`promptText`, `promptImage`, `videoUri`, `audioUri`, `referenceImages`, `bodyControl`, `expressionIntensity`, `targetLang`, `disableVoiceCloning`, `dropBackgroundAudio`, `numSpeakers`, `removeBackgroundNoise`) and nested objects for references/voices. You configure nodes via the param **keys** below (which already match the wire names) — never hand-translate to snake_case.
+9. **Prompt length.** The handler truncates `promptText` to **1000 characters** for every node (`[:1000]`). Longer prompts are silently clipped.
+10. **Key gotchas.**
+    - `runway-video` switches endpoint by input: **image connected → `image_to_video`**, **no image (prompt only) → `text_to_video`**. Text-only is restricted by the handler to models `{gen4.5, veo3.1, veo3.1_fast, veo3}` and ratios `{1280:720, 720:1280}` — picking `gen4_turbo`/`gen3a_turbo` or any other ratio without an image raises a `ValueError` before submit.
+    - `runway-aleph` always runs `gen4_aleph` (no model param). Output resolution is inherited from the input video; there is no ratio control.
+    - Voice nodes nest the preset: the handler sends `voice: {"type": "runway-preset", "presetId": <voiceId>}`. Preset IDs are **case-sensitive** — `"Maya"` works, `"maya"` 400s.
+    - Reference images for Aleph go as `references: [{"type": "image", "uri": …}]`; for Image as `referenceImages: [{"uri": …}]` (first 3 only).
 
-## Pick the right endpoint
+## Pick the right node
 
-| User wants | Endpoint | Models | Nebula node |
+| Nebula node (id) | Display name | Endpoint → model(s) | Key params (node keys) |
 |---|---|---|---|
-| Animate an image → video | `POST /v1/image_to_video` | gen4.5, gen4_turbo, gen3a_turbo, veo3, veo3.1, veo3.1_fast, seedance2 | `runway-video` (with image input) |
-| Generate video from text | `POST /v1/text_to_video` | gen4.5, veo3, veo3.1, veo3.1_fast, seedance2 | `runway-video` (no image) |
-| Restyle / edit a video | `POST /v1/video_to_video` | gen4_aleph, seedance2 | `runway-aleph` |
-| Generate image from text (± refs) | `POST /v1/text_to_image` | gen4_image_turbo, gen4_image, gemini_2.5_flash | `runway-image` |
-| Make character perform a reference video | `POST /v1/character_performance` | act_two | `runway-act-two` |
-| Text → speech | `POST /v1/text_to_speech` | eleven_multilingual_v2 | `runway-tts` |
-| Audio/video → restyled speech | `POST /v1/speech_to_speech` | eleven_multilingual_sts_v2 | `runway-sts` |
-| Dub audio to another language | `POST /v1/voice_dubbing` | eleven_voice_dubbing | `runway-dubbing` |
+| `runway-video` | Runway Video | `POST /v1/image_to_video` when an **image** is wired, else `POST /v1/text_to_video` | `model` (gen4.5 / gen4_turbo / gen3a_turbo / veo3.1 / veo3.1_fast / veo3), `duration` (2–10, def 5), `ratio` (6 opts, def 1280:720), `seed`. Ports: `prompt` (opt), `image` (opt) → `video`. |
+| `runway-aleph` | Runway Aleph | `POST /v1/video_to_video` → **gen4_aleph** (fixed) | `seed` only. Ports: `video` (req), `prompt` (req), `reference` image (opt) → `video`. |
+| `runway-image` | Runway Image | `POST /v1/text_to_image` | `model` (gen4_image / gen4_image_turbo / gemini_2.5_flash), `ratio` (11 opts, def 1360:768), `seed`. Ports: `prompt` (req), `images` reference (opt, multiple, first 3 used) → `image`. |
+| `runway-act-two` | Runway Act-Two | `POST /v1/character_performance` → **act_two** (fixed) | `bodyControl` (bool, def false), `expressionIntensity` (1–5, def 3), `ratio` (6 opts, def 1280:720), `seed`. Ports: `character_image` OR `character_video` (one required), `reference` performance video (req) → `video`. |
+| `runway-tts` | Runway TTS | `POST /v1/text_to_speech` → **eleven_multilingual_v2** (fixed) | `voiceId` (30 presets, def Maya). Ports: `text` (req) → `audio`. |
+| `runway-sts` | Runway Speech-to-Speech | `POST /v1/speech_to_speech` → **eleven_multilingual_sts_v2** (fixed) | `voiceId` (19 presets, def Maya), `removeBackgroundNoise` (bool, def false). Ports: `audio` OR `video` (one required) → `audio`. |
+| `runway-dubbing` | Runway Voice Dubbing | `POST /v1/voice_dubbing` → **eleven_voice_dubbing** (fixed) | `targetLang` (28 langs, def es), `disableVoiceCloning` (bool, def false), `dropBackgroundAudio` (bool, def false), `numSpeakers` (1–10, auto-detect if unset). Ports: `audio` (req) → `audio`. |
 
-## Detailed references
+## Param reference
 
-- **Video generation** (text→video, image→video, video→video): see `video.md`
-- **Image generation** (text→image with references): see `image.md`
-- **Character performance** (Act-Two): see `character-performance.md`
-- **Audio** (TTS, STS, dubbing, voice presets, language codes): see `audio.md`
-- **Raw SDK types** at https://github.com/runwayml/sdk-python/tree/main/src/runwayml/types
+Values below are the **exact** node enums/ranges from `node_definitions.json` (what the inspector lets you pick). The API itself accepts more in some cases — those extras are flagged under **Capability boundaries**, not here, so an agent never sets a value the node can't send.
 
-## Response parsing
+### `runway-video`
+- `model` (enum, **required**, default `gen4.5`): `gen4.5` · `gen4_turbo` · `gen3a_turbo` · `veo3.1` · `veo3.1_fast` · `veo3`. (No Seedance 2 — the API has it, this node does not.)
+- `duration` (int, default `5`, min `2`, max `10`). Note real model limits are stricter than the slider: `veo3` is effectively 8 s only; Veo 3.1 favors 4/6/8; Gen-3a favors 5/10. An out-of-range value for the chosen model returns `400`.
+- `ratio` (enum, default `1280:720`): `1280:720` (16:9) · `720:1280` (9:16) · `1104:832` (4:3) · `832:1104` (3:4) · `960:960` (1:1) · `1584:672` (21:9). **Text-only mode (no image) is locked to `1280:720` / `720:1280`** by the handler.
+- `seed` (int, optional, min `0`, max `4294967295`; blank = random).
 
-Every non-audio endpoint returns a task with `output: [{"url": "..."}]` once `SUCCEEDED`. Video endpoints return one MP4 URL per output (`outputCount` default 1). Image endpoints return one or more image URLs. TTS/STS/dubbing return audio URLs.
+### `runway-aleph`
+- `seed` (int, optional, 0–4294967295). That is the only param. Model is fixed to `gen4_aleph`; `prompt` and `video` come in via ports; `reference` image is an optional port (not a param). No ratio/duration control — output matches the input video.
 
-## Auth failure playbook
+### `runway-image`
+- `model` (enum, **required**, default `gen4_image`): `gen4_image` · `gen4_image_turbo` · `gemini_2.5_flash`.
+- `ratio` (enum, default `1360:768`, 11 options): `1360:768` (16:9) · `720:1280` (9:16) · `1024:1024` (1:1) · `1080:1080` · `1168:880` · `1440:1080` · `1080:1440` · `1920:1080` · `1080:1920` · `1808:768` · `2112:912`.
+- `seed` (int, optional, 0–4294967295).
+- Reference images arrive on the `images` port (multiple allowed; handler uses the **first 3**). Note: `gen4_image_turbo` on the API requires ≥1 reference image, and the API supports per-image `tag` for `@tag` prompt references — **Nebula sends no tags**, so references act as ambient style only (see boundaries).
 
-- `401`: `RUNWAY_API_KEY` env var missing or invalid. The key must come from dev.runwayml.com dashboard.
-- `403`: API is in limited preview — some accounts lack access to specific models. Confirm the user's plan tier.
-- `400` on a ratio: model-specific. See per-endpoint tables; Gen-4.5 accepts different ratios than Veo 3.1 etc.
+### `runway-act-two`
+- `bodyControl` (bool, default `false`): when true, body/gesture motion transfers too, not just face.
+- `expressionIntensity` (int, default `3`, min `1`, max `5`).
+- `ratio` (enum, default `1280:720`): `1280:720` · `720:1280` · `960:960` · `1104:832` · `832:1104` · `1584:672`.
+- `seed` (int, optional, 0–4294967295).
+- Character comes from **either** `character_image` **or** `character_video` (provide exactly one); `reference` is the performance video and is required. Reference video must be **3–30 s** or the API returns `400`; the face must stay in frame throughout the character asset.
+
+### `runway-tts`
+- `voiceId` (enum, default `Maya`, **30 presets**): `Maya`, `Arjun`, `Serene`, `Bernard`, `Billy`, `Mark`, `Clint`, `Mabel`, `Chad`, `Leslie`, `Eleanor`, `Elias`, `Elliot`, `Brodie`, `Sandra`, `Kirk`, `Kylie`, `Lara`, `Lisa`, `Maggie`, `Jack`, `Katie`, `Noah`, `James`, `Rina`, `Ella`, `Frank`, `Rachel`, `Tom`, `Benjamin`. Case-sensitive. Model fixed to `eleven_multilingual_v2`; `text` arrives on the port.
+
+### `runway-sts`
+- `voiceId` (enum, default `Maya`, **19 presets** — a subset of the TTS list): `Maya`, `Arjun`, `Serene`, `Bernard`, `Billy`, `Mark`, `Clint`, `Mabel`, `Chad`, `Leslie`, `Eleanor`, `Maggie`, `Jack`, `Noah`, `James`, `Ella`, `Frank`, `Rachel`, `Tom`.
+- `removeBackgroundNoise` (bool, default `false`).
+- Source comes from `audio` **or** `video` port (video → its audio track is used). Model fixed to `eleven_multilingual_sts_v2`.
+
+### `runway-dubbing`
+- `targetLang` (enum, **required**, default `es`, **28 languages**): `en`, `es`, `fr`, `de`, `it`, `pt`, `ja`, `ko`, `zh`, `ar`, `ru`, `hi`, `nl`, `tr`, `pl`, `sv`, `fil`, `id`, `ro`, `uk`, `el`, `cs`, `da`, `fi`, `bg`, `hr`, `sk`, `ta`.
+- `disableVoiceCloning` (bool, default `false`): true → generic voice instead of cloning the original speaker.
+- `dropBackgroundAudio` (bool, default `false`): true → strip music/ambient.
+- `numSpeakers` (int, optional, min `1`, max `10`; blank = auto-detect).
+- Source on the `audio` port (required). Model fixed to `eleven_voice_dubbing`.
+
+Deeper wire-format detail (full per-model ratio/duration matrices, the full API-level voice/language sets, exact request JSON) lives in the topic files: `video.md`, `image.md`, `character-performance.md`, `audio.md`.
+
+## Recipes
+
+**Recipe 1 — Still photo → moving clip (image-to-video).**
+1. `runway-image` (or any image source) → produces an `image`.
+2. Wire that `image` into `runway-video`'s `image` port; type a `prompt` like "slow dolly-in, cinematic lighting"; set `model` = `gen4.5`, `duration` = 8, `ratio` = `1280:720`.
+3. Run → `runway-video` emits an MP4 on its `video` port. (Because an image is connected, it hits `image_to_video`.)
+
+**Recipe 2 — Generated character performs a line, then localized (avatar dialogue).**
+1. `runway-image` with `prompt` "studio portrait of a friendly news anchor facing camera" → `image`.
+2. Wire that `image` into `runway-act-two`'s `character_image` port. Record/import a 3–30 s performance clip and wire it into the `reference` port. Set `bodyControl` = true, `expressionIntensity` = 4.
+3. Run → `runway-act-two` emits the performed clip.
+4. (Optional) Take the spoken audio from that clip into `runway-dubbing` with `targetLang` = `fr` to ship a French version (leave `disableVoiceCloning` off to keep the speaker's voice).
+
+**Recipe 3 — Narrated text-to-video scene.**
+1. `runway-tts`: put narration into `text`, pick `voiceId` = `Maya` → an `audio` clip.
+2. `runway-video` with **no image**, `prompt` describing the scene, `model` = `gen4.5`, `ratio` = `1280:720` → a text-to-video MP4. (Text-only requires one of gen4.5/veo3.1/veo3.1_fast/veo3 and a 16:9 or 9:16 ratio.)
+3. Combine audio + video in a downstream compositing/merge node. To re-voice existing narration into a different preset instead of generating fresh, route the audio through `runway-sts`.
+
+## In the nebula_nodes context
+
+- **Node ids:** `runway-video`, `runway-aleph`, `runway-act-two` (category `video-gen`); `runway-image` (`image-gen`); `runway-tts`, `runway-sts`, `runway-dubbing` (`audio-gen`). All defined in `backend/data/node_definitions.json` with `apiProvider: "runway"`, `envKeyName: "RUNWAY_API_KEY"`, `executionPattern: "async-poll"`.
+- **Handler:** all seven dispatch to `backend/handlers/runway.py` — `handle_runway_video`, `handle_runway_aleph`, `handle_runway_image`, `handle_runway_act_two`, `handle_runway_tts`, `handle_runway_speech_to_speech`, `handle_runway_voice_dubbing`. Shared helpers: `_runway_poll_config` (2 s / 300-poll `AsyncPollConfig`), `_resolve_image` (local path → data URI), `_save_audio_from_url`.
+- **Ports (input → output):**
+  - `runway-video`: `prompt` (Text, opt) + `image` (Image, opt) → `video` (Video).
+  - `runway-aleph`: `video` (Video, req) + `prompt` (Text, req) + `reference` (Image, opt) → `video` (Video).
+  - `runway-image`: `prompt` (Text, req) + `images` (Image, opt, multiple) → `image` (Image).
+  - `runway-act-two`: `character_image` (Image, opt) / `character_video` (Video, opt) + `reference` (Video, req) → `video` (Video).
+  - `runway-tts`: `text` (Text, req) → `audio` (Audio).
+  - `runway-sts`: `audio` (Audio, opt) / `video` (Video, opt) → `audio` (Audio).
+  - `runway-dubbing`: `audio` (Audio, req) → `audio` (Audio).
+- **Chaining rules.** Outputs are concrete media values (a local file path under the run dir), so any `Video`/`Image`/`Audio` output port can feed a matching input port. Common chains: `runway-image` → `runway-video` (still → motion) or → `runway-act-two` (`character_image`); `runway-video`/`runway-act-two` → `runway-sts`/`runway-dubbing` via the produced clip's audio; `runway-aleph` to restyle any upstream `Video`. For text-only `runway-video`, leave the `image` port unconnected and supply a `prompt` (and keep `model`/`ratio` within the text-only allow-list, or the node errors before submit).
+- **How outputs render.** The handler downloads `output[0]` and saves it locally (MP4 / PNG / MP3) under the run directory; the file path is returned on the output port and served to the canvas via the standard outputs route. Video previews play inline; images show in the image preview; audio shows an audio player.
+
+### Capability boundaries (what Nebula does NOT expose)
+
+Do not promise these via Runway nodes — there is no node or param behind them. (From the audit gap table in `docs/api-guides/runway.md`.)
+
+- **Seedance 2 video model** — the Runway API offers Seedance 2 for both text/image-to-video and a rich video-to-video path (multi-image + multi-video references, `outputCount`). `runway-video`'s model enum does **not** include it, and `runway-aleph` is fixed to `gen4_aleph`. No Seedance 2 in Nebula.
+- **`outputCount` / multiple variations** — every node returns a single output; you cannot request N variations in one run.
+- **Veo `audio` toggle, first+last keyframes, `contentModeration.publicFigureThreshold`** — the API supports a Veo audio flag, two-keyframe (`first`/`last`) prompt images, and a public-figure moderation knob on several models. None are surfaced as node params (the handler sends a single first-frame image and no moderation override).
+- **Text-to-image tagged references** — the API lets each reference image carry a `tag` for `@tag` prompt callouts; `runway-image` sends references without tags, so they act as ambient style only (and you can't address them by name in the prompt).
+- **Custom / cloned voices** — TTS and STS expose only built-in presets (`voice.type: "runway-preset"`). The Voices API (`POST /v1/voices`, preview, list/retrieve/delete) for creating and using cloned voices is not wired in. Preset counts are also capped below the API's full set: TTS exposes 30 and STS 19, vs the larger ElevenLabs-backed catalog.
+- **Sound-effect generation** (`POST /v1/sound_effect`) — no node.
+- **Voice isolation / cleanup** (`POST /v1/voice_isolation`) — no node.
+- **Image upscale** (`POST /v1/image_upscale`) — no node.
+- **Avatars & avatar videos** (`/v1/avatars`, `/v1/avatar_videos`) — no node.
+- **Saved workflows & invocations, realtime sessions, documents, organization/usage** — no nodes; out of scope for the batch node model.
+- **User-facing job cancel/delete** — `DELETE /v1/tasks/{id}` exists, but Nebula only polls task status internally and does not expose cancel/delete to the user.
+
+Roughly: ~8 of ~12 media-generation endpoints are wired up; counting the full resource surface (voices, avatars, workflows, documents, account) it's closer to ~40%. The most natural near-term adds are Sound Effect, Image Upscale, and Voice Isolation nodes (single-in/single-out, fit the existing pattern).
+
+## Sources
+
+- Runway API docs (landing): https://docs.dev.runwayml.com/
+- Runway Python SDK API manifest (authoritative endpoint + resource list): https://raw.githubusercontent.com/runwayml/sdk-python/main/api.md
+- Runway Python SDK repository (raw request/response types): https://github.com/runwayml/sdk-python
+- Nebula audit guide (node table, params, full capability surface, gap table, cited sources): `docs/api-guides/runway.md`
+- Ground truth cross-checked in this repo: `backend/data/node_definitions.json` (node ids, ports, param enums/ranges) and `backend/handlers/runway.py` (request building, endpoint switching, voice/reference nesting, async-poll config).
