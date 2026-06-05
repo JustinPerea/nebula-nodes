@@ -11,6 +11,7 @@ from handlers.elevenlabs import (
     handle_elevenlabs_isolation,
     handle_elevenlabs_sfx,
     handle_elevenlabs_sts,
+    handle_elevenlabs_stt,
     handle_elevenlabs_tts,
 )
 from models.graph import GraphNode, PortValueDict
@@ -689,4 +690,210 @@ async def test_dubbing_optional_flags_forwarded(tmp_path: Path) -> None:
     data = mock_client.post.call_args.kwargs["data"]
     assert data["drop_background_audio"] == "true"
     assert data["disable_voice_cloning"] == "true"
+
+
+# ---------------------------------------------------------------------------
+# STT (Speech-to-Text / Scribe) tests
+# ---------------------------------------------------------------------------
+
+def _make_stt_node(params: dict | None = None) -> GraphNode:
+    return GraphNode(
+        id="stt-1",
+        definitionId="elevenlabs-stt",
+        params=params
+        or {
+            "model_id": "scribe_v1",
+            "language_code": "auto",
+            "diarize": False,
+            "tag_audio_events": True,
+            "transcript_format": "text",
+        },
+    )
+
+
+def _stt_response(payload: dict) -> MagicMock:
+    r = MagicMock()
+    r.status_code = 200
+    r.json.return_value = payload
+    r.text = ""
+    return r
+
+
+@pytest.mark.asyncio
+async def test_stt_sends_multipart_file_and_model(tmp_path: Path) -> None:
+    audio_file, audio_port = _mock_audio_input(tmp_path)
+    resp = _stt_response({"text": "hello world", "language_code": "eng"})
+
+    with patch("handlers.elevenlabs.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = resp
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        result = await handle_elevenlabs_stt(
+            _make_stt_node(),
+            {"audio": audio_port},
+            {"ELEVENLABS_API_KEY": "el-test"},
+        )
+
+    call = mock_client.post.call_args
+    url = call.args[0]
+    files = call.kwargs["files"]
+    data = call.kwargs["data"]
+    headers = call.kwargs["headers"]
+
+    assert "speech-to-text" in url
+    assert "file" in files
+    assert data["model_id"] == "scribe_v1"
+    assert headers["xi-api-key"] == "el-test"
+    assert result["text"]["type"] == "Text"
+    assert result["text"]["value"] == "hello world"
+
+
+@pytest.mark.asyncio
+async def test_stt_language_auto_omitted(tmp_path: Path) -> None:
+    audio_file, audio_port = _mock_audio_input(tmp_path)
+    resp = _stt_response({"text": "hi"})
+
+    with patch("handlers.elevenlabs.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = resp
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        await handle_elevenlabs_stt(
+            _make_stt_node({"model_id": "scribe_v1", "language_code": "auto"}),
+            {"audio": audio_port},
+            {"ELEVENLABS_API_KEY": "el-test"},
+        )
+
+    data = mock_client.post.call_args.kwargs["data"]
+    assert "language_code" not in data
+
+
+@pytest.mark.asyncio
+async def test_stt_explicit_language_forwarded(tmp_path: Path) -> None:
+    audio_file, audio_port = _mock_audio_input(tmp_path)
+    resp = _stt_response({"text": "bonjour"})
+
+    with patch("handlers.elevenlabs.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = resp
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        await handle_elevenlabs_stt(
+            _make_stt_node({"model_id": "scribe_v1", "language_code": "fr"}),
+            {"audio": audio_port},
+            {"ELEVENLABS_API_KEY": "el-test"},
+        )
+
+    data = mock_client.post.call_args.kwargs["data"]
+    assert data["language_code"] == "fr"
+
+
+@pytest.mark.asyncio
+async def test_stt_diarize_and_num_speakers_forwarded(tmp_path: Path) -> None:
+    audio_file, audio_port = _mock_audio_input(tmp_path)
+    resp = _stt_response({"text": "two people talking"})
+
+    with patch("handlers.elevenlabs.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = resp
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        await handle_elevenlabs_stt(
+            _make_stt_node({"model_id": "scribe_v1", "diarize": True, "num_speakers": 2}),
+            {"audio": audio_port},
+            {"ELEVENLABS_API_KEY": "el-test"},
+        )
+
+    data = mock_client.post.call_args.kwargs["data"]
+    assert data["diarize"] == "true"
+    assert data["num_speakers"] == "2"
+
+
+@pytest.mark.asyncio
+async def test_stt_tag_audio_events_disabled_forwarded(tmp_path: Path) -> None:
+    """tag_audio_events defaults true on the API; only send when disabled."""
+    audio_file, audio_port = _mock_audio_input(tmp_path)
+    resp = _stt_response({"text": "no events"})
+
+    with patch("handlers.elevenlabs.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = resp
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        await handle_elevenlabs_stt(
+            _make_stt_node({"model_id": "scribe_v1", "tag_audio_events": False}),
+            {"audio": audio_port},
+            {"ELEVENLABS_API_KEY": "el-test"},
+        )
+
+    data = mock_client.post.call_args.kwargs["data"]
+    assert data["tag_audio_events"] == "false"
+
+
+@pytest.mark.asyncio
+async def test_stt_srt_format_requests_and_returns_subtitles(tmp_path: Path) -> None:
+    """transcript_format=srt requests additional_formats and returns the SRT content."""
+    audio_file, audio_port = _mock_audio_input(tmp_path)
+    srt = "1\n00:00:00,000 --> 00:00:01,000\nhello world\n"
+    resp = _stt_response({
+        "text": "hello world",
+        "additional_formats": [
+            {"requested_format": "srt", "file_extension": "srt",
+             "content_type": "text/plain", "is_base64_encoded": False, "content": srt},
+        ],
+    })
+
+    with patch("handlers.elevenlabs.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = resp
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        result = await handle_elevenlabs_stt(
+            _make_stt_node({"model_id": "scribe_v1", "transcript_format": "srt"}),
+            {"audio": audio_port},
+            {"ELEVENLABS_API_KEY": "el-test"},
+        )
+
+    data = mock_client.post.call_args.kwargs["data"]
+    assert json.loads(data["additional_formats"]) == [{"format": "srt"}]
+    # ElevenLabs rejects additional_formats unless diarization + timestamps are
+    # enabled (HTTP 400 invalid_parameters). Caught by live smoke 2026-06-05.
+    assert data["diarize"] == "true"
+    assert data["timestamps_granularity"] == "word"
+    assert result["text"]["value"] == srt
+
+
+@pytest.mark.asyncio
+async def test_stt_raises_on_api_error(tmp_path: Path) -> None:
+    audio_file, audio_port = _mock_audio_input(tmp_path)
+    err = MagicMock()
+    err.status_code = 422
+    err.text = "validation error"
+
+    with patch("handlers.elevenlabs.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = err
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with pytest.raises(RuntimeError, match="422"):
+            await handle_elevenlabs_stt(
+                _make_stt_node(),
+                {"audio": audio_port},
+                {"ELEVENLABS_API_KEY": "el-test"},
+            )
 
