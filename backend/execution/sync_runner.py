@@ -12,7 +12,7 @@ from cinema.color import _parse_recraft_color
 from handlers.openai_image import handle_openai_image_generate
 from handlers.openai_image_edit import handle_openai_image_edit
 from handlers.google_gemini import handle_imagen4, handle_nano_banana, handle_lyria3, handle_gemini_tts, handle_gemini_embeddings
-from handlers.elevenlabs import handle_elevenlabs_tts, handle_elevenlabs_sfx, handle_elevenlabs_sts, handle_elevenlabs_isolation, handle_elevenlabs_dubbing
+from handlers.elevenlabs import handle_elevenlabs_tts, handle_elevenlabs_sfx, handle_elevenlabs_sts, handle_elevenlabs_isolation, handle_elevenlabs_dubbing, handle_elevenlabs_stt
 from handlers.openai_audio import handle_openai_stt, handle_openai_translate, handle_openai_tts
 from handlers.krea import (
     handle_krea_image_style_reference,
@@ -40,6 +40,7 @@ SYNC_HANDLERS: dict[
     "elevenlabs-sts": handle_elevenlabs_sts,
     "elevenlabs-isolation": handle_elevenlabs_isolation,
     "elevenlabs-dubbing": handle_elevenlabs_dubbing,
+    "elevenlabs-stt": handle_elevenlabs_stt,
     "openai-stt": handle_openai_stt,
     "openai-translate": handle_openai_translate,
     "openai-tts": handle_openai_tts,

@@ -1146,6 +1146,77 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     ],
   },
 
+  'elevenlabs-stt': {
+    id: 'elevenlabs-stt',
+    displayName: 'ElevenLabs STT',
+    category: 'audio-gen',
+    apiProvider: 'elevenlabs',
+    apiEndpoint: '/v1/speech-to-text',
+    envKeyName: 'ELEVENLABS_API_KEY',
+    executionPattern: 'sync',
+    inputPorts: [
+      { id: 'audio', label: 'Audio', dataType: 'Audio', required: true },
+    ],
+    outputPorts: [
+      { id: 'text', label: 'Text', dataType: 'Text', required: false },
+    ],
+    params: [
+      {
+        key: 'model_id',
+        label: 'Model',
+        type: 'enum',
+        required: false,
+        default: 'scribe_v1',
+        options: [
+          { label: 'Scribe v1', value: 'scribe_v1' },
+          { label: 'Scribe v2', value: 'scribe_v2' },
+        ],
+      },
+      {
+        key: 'language_code',
+        label: 'Language',
+        type: 'string',
+        required: false,
+        placeholder: 'Auto-detect (ISO code, e.g. en)',
+      },
+      {
+        key: 'diarize',
+        label: 'Diarize (label speakers)',
+        type: 'boolean',
+        required: false,
+        default: false,
+      },
+      {
+        key: 'num_speakers',
+        label: 'Max Speakers',
+        type: 'integer',
+        required: false,
+        placeholder: 'Auto',
+        min: 1,
+        max: 32,
+      },
+      {
+        key: 'tag_audio_events',
+        label: 'Tag Audio Events',
+        type: 'boolean',
+        required: false,
+        default: true,
+      },
+      {
+        key: 'transcript_format',
+        label: 'Output Format',
+        type: 'enum',
+        required: false,
+        default: 'text',
+        options: [
+          { label: 'Plain Text', value: 'text' },
+          { label: 'SRT Subtitles', value: 'srt' },
+          { label: 'VTT Subtitles', value: 'vtt' },
+        ],
+      },
+    ],
+  },
+
   'flux-1-1-ultra': {
     id: 'flux-1-1-ultra',
     displayName: 'FLUX 1.1 Ultra',

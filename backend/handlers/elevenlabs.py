@@ -363,3 +363,79 @@ async def handle_elevenlabs_dubbing(
                 raise RuntimeError(f"ElevenLabs Dubbing failed: {status_data.get('error', 'Unknown')}")
 
         raise RuntimeError("ElevenLabs Dubbing timed out")
+
+
+async def handle_elevenlabs_stt(
+    node: GraphNode,
+    inputs: dict[str, PortValueDict],
+    api_keys: dict[str, str],
+) -> dict[str, Any]:
+    """Transcribe audio to text via ElevenLabs Scribe (POST /v1/speech-to-text).
+
+    Returns plain transcript text by default. When ``transcript_format`` is
+    "srt" or "vtt", requests that subtitle format via ``additional_formats`` and
+    returns the generated subtitle content instead of the plain transcript.
+    """
+    audio_input = inputs.get("audio")
+    if not audio_input or not audio_input.value:
+        raise ValueError("Audio input is required for transcription")
+
+    api_key = api_keys.get("ELEVENLABS_API_KEY")
+    if not api_key:
+        raise ValueError("ELEVENLABS_API_KEY is required")
+
+    audio_path = Path(str(audio_input.value))
+    if not audio_path.exists():
+        raise ValueError(f"Audio file not found: {audio_path}")
+
+    model_id = node.params.get("model_id", "scribe_v1") or "scribe_v1"
+
+    files = {"file": (audio_path.name, audio_path.read_bytes(), "audio/mpeg")}
+    data: dict[str, str] = {"model_id": model_id}
+
+    language_code = node.params.get("language_code")
+    if language_code and language_code != "auto":
+        data["language_code"] = str(language_code)
+
+    if node.params.get("diarize"):
+        data["diarize"] = "true"
+
+    num_speakers = node.params.get("num_speakers")
+    if num_speakers is not None and num_speakers != "" and int(num_speakers) > 0:
+        data["num_speakers"] = str(int(num_speakers))
+
+    # tag_audio_events defaults to true on the API — only send it to disable.
+    if node.params.get("tag_audio_events", True) is False:
+        data["tag_audio_events"] = "false"
+
+    transcript_format = node.params.get("transcript_format", "text")
+    if transcript_format in ("srt", "vtt"):
+        # Multipart form fields must be strings; JSON-encode the array.
+        data["additional_formats"] = _json.dumps([{"format": transcript_format}])
+        # ElevenLabs rejects additional_formats (HTTP 400 invalid_parameters)
+        # unless diarization AND timestamps are enabled, so force both on here.
+        data["diarize"] = "true"
+        data["timestamps_granularity"] = "word"
+
+    async with httpx.AsyncClient(timeout=120.0) as client:
+        response = await client.post(
+            "https://api.elevenlabs.io/v1/speech-to-text",
+            headers={"xi-api-key": api_key},
+            files=files,
+            data=data,
+        )
+        if response.status_code != 200:
+            raise RuntimeError(f"ElevenLabs STT error {response.status_code}: {response.text}")
+
+    result_data = response.json()
+    text = result_data.get("text", "")
+
+    if transcript_format in ("srt", "vtt"):
+        for fmt in result_data.get("additional_formats") or []:
+            if transcript_format in (fmt.get("requested_format"), fmt.get("format")):
+                content = fmt.get("content")
+                if content:
+                    text = content
+                    break
+
+    return {"text": {"type": "Text", "value": text}}
