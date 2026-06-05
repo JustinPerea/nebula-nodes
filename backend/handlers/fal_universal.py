@@ -332,3 +332,115 @@ def _parse_fal_output(data: dict[str, Any]) -> dict[str, Any]:
 
     # Last resort — return the raw JSON as text
     return {"text": {"type": "Text", "value": json.dumps(data, indent=2)}}
+
+
+def _parse_demucs_output(data: dict[str, Any]) -> dict[str, Any]:
+    """Map a Demucs stem-separation response to per-stem Audio output ports.
+
+    Unlike most FAL endpoints (one output), Demucs returns a top-level key per stem
+    (vocals/drums/bass/other, plus guitar/piano on 6-stem models), each a File dict
+    {"url": ...} or a bare URL string. Each present stem becomes its own Audio port.
+    """
+    out: dict[str, Any] = {}
+    for stem in ("vocals", "drums", "bass", "other", "guitar", "piano"):
+        entry = data.get(stem)
+        if isinstance(entry, dict):
+            url = entry.get("url")
+        elif isinstance(entry, str):
+            url = entry
+        else:
+            url = None
+        if url:
+            out[stem] = {"type": "Audio", "value": url}
+    if not out:
+        raise RuntimeError(f"Demucs returned no recognizable stems (keys: {list(data.keys())})")
+    return out
+
+
+async def _fal_queue_run(
+    endpoint_id: str,
+    fal_input: dict[str, Any],
+    api_key: str,
+    emit: Callable[[ExecutionEvent], Awaitable[None]] | None,
+    node_id: str,
+) -> dict[str, Any]:
+    """Submit a job to the FAL queue, poll to completion, and return the raw result JSON.
+
+    Shared queue plumbing for FAL handlers that need custom output parsing (e.g. Demucs'
+    multi-stem response). ``handle_fal_universal`` keeps its own inline copy; consolidating
+    the two is a deliberate future cleanup, kept separate here to avoid touching the
+    universal handler that 39 nodes depend on.
+    """
+    headers = {"Authorization": f"Key {api_key}", "Content-Type": "application/json"}
+
+    async def _noop(event: ExecutionEvent) -> None:
+        pass
+
+    _emit = emit or _noop
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        submit_resp = await client.post(f"{FAL_QUEUE_BASE}/{endpoint_id}", headers=headers, json=fal_input)
+        if submit_resp.status_code not in (200, 201):
+            raise RuntimeError(f"FAL submit failed ({submit_resp.status_code}): {submit_resp.text}")
+
+        submit_data = submit_resp.json()
+        request_id = submit_data.get("request_id")
+        if not request_id:
+            return submit_data
+
+        status_url = submit_data.get("status_url") or f"{FAL_QUEUE_BASE}/{endpoint_id}/requests/{request_id}/status"
+        result_url = submit_data.get("response_url") or f"{FAL_QUEUE_BASE}/{endpoint_id}/requests/{request_id}"
+
+        max_polls = 300
+        for poll_num in range(1, max_polls + 1):
+            await asyncio.sleep(2.0)
+            status_resp = await client.get(status_url, headers=headers)
+            if status_resp.status_code not in (200, 202):
+                raise RuntimeError(f"FAL status poll failed ({status_resp.status_code}): {status_resp.text}")
+            status_data = status_resp.json()
+            status = status_data.get("status", "")
+            await _emit(ProgressEvent(node_id=node_id, value=min(poll_num / max_polls, 0.99)))
+            if status == "COMPLETED":
+                break
+            if status in ("FAILED", "CANCELLED"):
+                raise RuntimeError(f"FAL job failed: {status_data.get('error', status)}")
+        else:
+            raise RuntimeError(f"FAL job timed out after {max_polls} polls")
+
+        result_resp = await client.get(result_url, headers=headers)
+        if result_resp.status_code != 200:
+            raise RuntimeError(f"FAL result fetch failed ({result_resp.status_code}): {result_resp.text}")
+        return result_resp.json()
+
+
+async def handle_demucs(
+    node: GraphNode,
+    inputs: dict[str, PortValueDict],
+    api_keys: dict[str, str],
+    emit: Callable[[ExecutionEvent], Awaitable[None]] | None = None,
+) -> dict[str, Any]:
+    """Demucs stem separation (fal-ai/demucs): one audio input -> separate stem outputs.
+
+    Needs a dedicated handler because the response carries per-stem top-level keys, not
+    the single-output shape ``_parse_fal_output`` expects.
+    """
+    api_key = api_keys.get("FAL_KEY")
+    if not api_key:
+        raise ValueError("FAL_KEY is required")
+
+    audio_input = inputs.get("audio")
+    if not audio_input or not audio_input.value:
+        raise ValueError("Audio input is required for stem separation")
+
+    fal_input: dict[str, Any] = {"audio_url": _to_fal_url(str(audio_input.value))}
+    for key, val in node.params.items():
+        if key != "endpoint_id" and val is not None and val != "":
+            fal_input[key] = val
+
+    # The node exposes exactly these 4 stem output ports, and the 4-stem models
+    # (htdemucs_ft etc.) return HTTP 422 if the request also asks for guitar/piano,
+    # so pin the requested stems to the supported set unless explicitly overridden.
+    fal_input.setdefault("stems", ["vocals", "drums", "bass", "other"])
+
+    result = await _fal_queue_run("fal-ai/demucs", fal_input, api_key, emit, node.id)
+    return _parse_demucs_output(result)

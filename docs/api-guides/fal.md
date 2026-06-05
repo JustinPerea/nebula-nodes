@@ -4,7 +4,7 @@
 
 ## What you can make
 
-FAL is a *universal gateway* — a single provider that proxies many different downstream models. In Nebula, that surfaces as 41 ready-to-use nodes spanning five media types:
+FAL is a *universal gateway* — a single provider that proxies many different downstream models. In Nebula, that surfaces as 42 ready-to-use nodes spanning five media types:
 
 - **Images** (text-to-image): photoreal and stylized stills with FLUX 1.1 Ultra, FLUX 2 Pro, FLUX Schnell (fast), Fast SDXL, Seedream 4.5, Recraft V4, GPT Image 1.5, and GPT Image 2.
 - **Vector art (SVG):** true scalable vector graphics from a text prompt with Recraft V4 SVG — logos, icons, flat illustrations.
@@ -16,11 +16,12 @@ FAL is a *universal gateway* — a single provider that proxies many different d
 - **3D models (.glb mesh):** generate game-/web-ready 3D from text or images with Meshy 6 (text & image to 3D), Hunyuan3D V3 (text to 3D, and multi-view image to 3D using front/back/left/right photos).
 - **Audio (text-to-music + sound effects):** high-fidelity instrumental music and sound effects from a text prompt with Stable Audio 2.5 — up to 3 minutes at 44.1kHz, instrumental only (no lyrics/vocals). For music *with* vocals, ACE-Step turns genre/style tags plus lyrics into full songs with synthesized vocals (up to 60s).
 - **Audio (video → audio Foley):** generate synchronized sound effects / ambient audio for a (typically silent) video with MMAudio V2 — feed a video clip plus an audio prompt and get the same clip back muxed with newly generated, synchronized audio.
+- **Audio (stem separation):** split a mixed track into isolated stems with Demucs — feed one audio clip and get four separate audio outputs (vocals, drums, bass, other).
 - **Utilities / transforms:** Remove Background (cutouts), and SeedVR2 Upscale (increase image resolution up to 4×).
 
-> FAL's audio catalog is now *partly* wired: Stable Audio 2.5 covers instrumental text-to-music and sound effects, ACE-Step adds music with vocals/lyrics (full songs, up to 60s), and MMAudio V2 covers video-to-audio Foley (synchronized SFX/ambient audio for a video). The rest of the catalog — TTS, speech-to-text, voice cloning, dubbing, lipsync, stem separation — is still not exposed through Nebula's FAL nodes. See the coverage section below.
+> FAL's audio catalog is now *partly* wired: Stable Audio 2.5 covers instrumental text-to-music and sound effects, ACE-Step adds music with vocals/lyrics (full songs, up to 60s), MMAudio V2 covers video-to-audio Foley (synchronized SFX/ambient audio for a video), and Demucs covers stem separation (splits a mixed track into vocals/drums/bass/other). The rest of the catalog — TTS, speech-to-text, voice cloning, dubbing, lipsync — is still not exposed through Nebula's FAL nodes. See the coverage section below.
 
-## Nodes available in Nebula (41)
+## Nodes available in Nebula (42)
 
 Names, node IDs, and parameter keys below are taken directly from `backend/data/node_definitions.json`. "Key inputs" are the node's input ports; "Notable params" are the exposed settings (every node also implicitly takes a `prompt` and/or `image` where listed).
 
@@ -67,6 +68,7 @@ Names, node IDs, and parameter keys below are taken directly from `backend/data/
 | Stable Audio 2.5 | `stable-audio-25` | audio-gen | prompt | `seconds_total`, `num_inference_steps`, `guidance_scale`, `seed` | Text → instrumental music + sound effects |
 | ACE-Step (Music + Vocals) | `ace-step` | audio-gen | *(none — param-only)* | `tags`, `lyrics`, `duration`, `number_of_steps`, `guidance_scale`, `seed` | Text → full songs with vocals & lyrics |
 | MMAudio V2 (Video Foley) | `mmaudio-v2` | audio-gen | video, prompt ("Audio Prompt", Text) → video (with audio) | `negative_prompt`, `duration`, `num_steps`, `cfg_strength`, `mask_away_clip`, `seed` | Generate synchronized Foley/SFX audio for a video |
+| Demucs (Stem Separation) | `demucs` | audio-gen | audio → vocals, drums, bass, other (4 Audio ports) | `model`, `shifts`, `overlap`, `output_format` | Split a track into vocals/drums/bass/other stems |
 
 ## How to use it in Nebula
 
@@ -128,24 +130,25 @@ FAL is a gateway, so "the API surface" here means *capabilities* — auth, the c
 | **3D — text-to-3D & image-to-3D** | Yes | **full** | Meshy 6, Hunyuan3D V3 (incl. multi-view image-to-3D). |
 | **Audio — text-to-music / SFX** | Yes | **partial** | `stable-audio-25` (`fal-ai/stable-audio-25/text-to-audio`) wires instrumental text-to-music + sound effects (up to 3 min, 44.1kHz), and `ace-step` (`fal-ai/ace-step`) adds music *with* vocals/lyrics (full songs, up to 60s). FAL hosts other music/SFX models that remain unwired. |
 | **Audio — video-to-audio / Foley** | Yes | **full** | `mmaudio-v2` (`fal-ai/mmaudio-v2`) generates synchronized SFX/ambient audio for a video and returns the clip muxed with that audio. |
-| **Audio — TTS / STT / voice clone / dubbing / isolation / lipsync / stems** | Yes | **none** | Rest of the large FAL audio catalog (ElevenLabs, MiniMax, Whisper, sync-lipsync, demucs, etc.); no Nebula FAL node targets these endpoints. |
+| **Audio — stem separation** | Yes | **full** | `demucs` (`fal-ai/demucs`) splits a mixed track into four isolated stems (vocals, drums, bass, other). |
+| **Audio — TTS / STT / voice clone / dubbing / isolation / lipsync** | Yes | **none** | Rest of the large FAL audio catalog (ElevenLabs, MiniMax, Whisper, sync-lipsync, etc.); no Nebula FAL node targets these endpoints. |
 | **LLM / vision (text + multimodal)** | Yes | **none** | FAL hosts LLM and vision endpoints; no Nebula FAL node exposes them (handler has a text fallback but nothing routes to it). |
 | **LoRA / model training** | Yes | **none** | FAL training endpoints (e.g. FLUX LoRA trainers) are not exposed; `fast-sdxl` can *consume* a LoRA but Nebula can't *train* one. |
 
-**Coverage: ~49% of the FAL (fal.ai) API surface is exposed in Nebula.** Image, video, and 3D *generation* are well covered (the heart of what most users want), music is now wired both ways — instrumental/SFX via Stable Audio 2.5 and vocals/lyrics via ACE-Step — and video-to-audio Foley is wired via MMAudio V2; but most of the rest of the audio catalog (TTS/STT, voice cloning, dubbing, lipsync, stems), LLM/vision, training, and most of the advanced transport/control surface (streaming for non-GPT models, webhooks, cancel, sync URL, priority headers, real upload API) remain unused.
+**Coverage: ~50% of the FAL (fal.ai) API surface is exposed in Nebula.** Image, video, and 3D *generation* are well covered (the heart of what most users want), music is now wired both ways — instrumental/SFX via Stable Audio 2.5 and vocals/lyrics via ACE-Step — video-to-audio Foley is wired via MMAudio V2, and stem separation via Demucs; but most of the rest of the audio catalog (TTS/STT, voice cloning, dubbing, lipsync), LLM/vision, training, and most of the advanced transport/control surface (streaming for non-GPT models, webhooks, cancel, sync URL, priority headers, real upload API) remain unused.
 
-**Notable unused capabilities:** most of the **audio catalog** (TTS, speech-to-text, voice cloning, dubbing, audio isolation, lipsync, stem separation — music is now wired both ways: instrumental/SFX via `stable-audio-25` and vocals/lyrics via `ace-step`, and video-to-audio/Foley is wired via `mmaudio-v2`); **LLM / vision** endpoints; **LoRA/model training**; **inpainting/masked image editing**; the broader **upscaler** and **video-to-video** families; **webhooks** and **request cancellation** (so long jobs can't be aborted); **real-time WebSocket** and broader **SSE streaming** (only GPT Image 2 streams today); the **synchronous `fal.run`** path for fast models; the **file-storage upload API** (Nebula inlines base64 instead); and the **`X-Fal-*` queue controls** (priority, server-side timeout, no-retry, runner affinity) plus **real log streaming**.
+**Notable unused capabilities:** most of the **audio catalog** (TTS, speech-to-text, voice cloning, dubbing, audio isolation, lipsync — music is now wired both ways: instrumental/SFX via `stable-audio-25` and vocals/lyrics via `ace-step`, video-to-audio/Foley is wired via `mmaudio-v2`, and stem separation via `demucs`); **LLM / vision** endpoints; **LoRA/model training**; **inpainting/masked image editing**; the broader **upscaler** and **video-to-video** families; **webhooks** and **request cancellation** (so long jobs can't be aborted); **real-time WebSocket** and broader **SSE streaming** (only GPT Image 2 streams today); the **synchronous `fal.run`** path for fast models; the **file-storage upload API** (Nebula inlines base64 instead); and the **`X-Fal-*` queue controls** (priority, server-side timeout, no-retry, runner affinity) plus **real log streaming**.
 
 ## Agent skill coverage
 
-**A complete skill exists** at `.claude/skills/fal/SKILL.md` (refreshed 2026-06-04). It is the most complete provider skill in the repo and covers all **41** FAL-backed Nebula nodes, plus the catch-all `fal-universal` slug node for reaching un-wrapped FAL catalog models. It gives an agent the node IDs and ports, per-node params and ranges, wiring/chaining rules, and the provider's capability boundaries — so an agent can drive any FAL pipeline without reading the handlers.
+**A complete skill exists** at `.claude/skills/fal/SKILL.md` (refreshed 2026-06-04). It is the most complete provider skill in the repo and covers all **42** FAL-backed Nebula nodes, plus the catch-all `fal-universal` slug node for reaching un-wrapped FAL catalog models. It gives an agent the node IDs and ports, per-node params and ranges, wiring/chaining rules, and the provider's capability boundaries — so an agent can drive any FAL pipeline without reading the handlers.
 
 What it covers:
 
 - **Universal FAL conventions** — the auth header, the two base URLs, the full queue lifecycle (submit → poll → result, with status states and HTTP codes), and per-modality output shapes.
-- **The Nebula node → FAL endpoint map**, reconciled to the authoritative **41-node** roster in `node_definitions.json` (the stale 39/160 framing and non-current models were dropped and the `kling-v2-1` slug fixed).
-- **Nebula-specific wiring** — the input-port → FAL-key mapping (`image`→`image_url`, `images`→`image_urls`, `front_image`→`input_image_url`, etc.), base64 data-URI inlining of local files, and that **only the two GPT Image 2 nodes stream** (all 38 others queue-poll).
-- **Capability boundaries** — which FAL capabilities Nebula **cannot** reach (most audio plus LLM/training nodes are not wired; music is now wired both ways — instrumental/SFX via `stable-audio-25`, vocals/lyrics via `ace-step` — and video-to-audio/Foley via `mmaudio-v2`), so an agent doesn't over-promise a modality no node delivers.
+- **The Nebula node → FAL endpoint map**, reconciled to the authoritative **42-node** roster in `node_definitions.json` (the stale 39/160 framing and non-current models were dropped and the `kling-v2-1` slug fixed).
+- **Nebula-specific wiring** — the input-port → FAL-key mapping (`image`→`image_url`, `images`→`image_urls`, `front_image`→`input_image_url`, etc.), base64 data-URI inlining of local files, and that **only the two GPT Image 2 nodes stream** (all 40 others queue-poll).
+- **Capability boundaries** — which FAL capabilities Nebula **cannot** reach (most audio plus LLM/training nodes are not wired; music is now wired both ways — instrumental/SFX via `stable-audio-25`, vocals/lyrics via `ace-step` — video-to-audio/Foley via `mmaudio-v2`, and stem separation via `demucs`), so an agent doesn't over-promise a modality no node delivers.
 
 ## Sources
 

@@ -4,7 +4,12 @@ from unittest.mock import AsyncMock, patch, MagicMock
 
 import pytest
 
-from handlers.fal_universal import handle_fal_universal, _parse_fal_output
+from handlers.fal_universal import (
+    handle_fal_universal,
+    _parse_fal_output,
+    _parse_demucs_output,
+    handle_demucs,
+)
 from models.graph import GraphNode, PortValueDict
 
 
@@ -14,6 +19,63 @@ def _make_node(params=None):
         definitionId="fal-universal",
         params=params or {"endpoint_id": "fal-ai/flux-pro/v1.1-ultra"},
     )
+
+
+class TestParseDemucsOutput:
+    def test_four_stems_dict(self) -> None:
+        data = {
+            "vocals": {"url": "https://fal.ai/vocals.mp3"},
+            "drums": {"url": "https://fal.ai/drums.mp3"},
+            "bass": {"url": "https://fal.ai/bass.mp3"},
+            "other": {"url": "https://fal.ai/other.mp3"},
+        }
+        r = _parse_demucs_output(data)
+        assert set(r.keys()) == {"vocals", "drums", "bass", "other"}
+        assert r["vocals"] == {"type": "Audio", "value": "https://fal.ai/vocals.mp3"}
+        assert r["bass"]["type"] == "Audio"
+
+    def test_string_url_stem(self) -> None:
+        r = _parse_demucs_output({"vocals": "https://fal.ai/v.mp3"})
+        assert r["vocals"]["value"] == "https://fal.ai/v.mp3"
+
+    def test_omits_missing_stems(self) -> None:
+        r = _parse_demucs_output({"vocals": {"url": "https://fal.ai/v.mp3"}})
+        assert set(r.keys()) == {"vocals"}
+
+    def test_raises_when_no_stems(self) -> None:
+        with pytest.raises(RuntimeError):
+            _parse_demucs_output({"unexpected_field": 1})
+
+
+@pytest.mark.asyncio
+async def test_demucs_requires_audio_input() -> None:
+    node = GraphNode(id="demucs-1", definitionId="demucs", params={})
+    with pytest.raises(ValueError, match="[Aa]udio"):
+        await handle_demucs(node, {}, {"FAL_KEY": "k"})
+
+
+@pytest.mark.asyncio
+async def test_demucs_requests_the_four_supported_stems() -> None:
+    """FAL rejects (422) the default 6-stem request on 4-stem models, so the handler
+    must explicitly request only vocals/drums/bass/other. Caught by live smoke 2026-06-05."""
+    captured: dict = {}
+
+    async def fake_run(endpoint_id, fal_input, api_key, emit, node_id):
+        captured["fal_input"] = fal_input
+        return {
+            "vocals": {"url": "u"}, "drums": {"url": "u"},
+            "bass": {"url": "u"}, "other": {"url": "u"},
+        }
+
+    node = GraphNode(id="demucs-2", definitionId="demucs", params={"model": "htdemucs_ft"})
+    with patch("handlers.fal_universal._fal_queue_run", side_effect=fake_run):
+        res = await handle_demucs(
+            node, {"audio": PortValueDict(type="Audio", value="fake.mp3")}, {"FAL_KEY": "k"}
+        )
+
+    assert captured["fal_input"]["stems"] == ["vocals", "drums", "bass", "other"]
+    assert captured["fal_input"]["model"] == "htdemucs_ft"
+    assert set(res.keys()) == {"vocals", "drums", "bass", "other"}
 
 
 class TestParseFalOutput:

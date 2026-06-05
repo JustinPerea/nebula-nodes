@@ -4841,6 +4841,116 @@
       }
     ]
   },
+  "demucs": {
+    "id": "demucs",
+    "displayName": "Demucs (Stem Separation)",
+    "category": "audio-gen",
+    "apiProvider": "fal",
+    "apiEndpoint": "fal-ai/demucs",
+    "envKeyName": "FAL_KEY",
+    "executionPattern": "async-poll",
+    "inputPorts": [
+      {
+        "id": "audio",
+        "label": "Audio",
+        "dataType": "Audio",
+        "required": true
+      }
+    ],
+    "outputPorts": [
+      {
+        "id": "vocals",
+        "label": "Vocals",
+        "dataType": "Audio",
+        "required": false
+      },
+      {
+        "id": "drums",
+        "label": "Drums",
+        "dataType": "Audio",
+        "required": false
+      },
+      {
+        "id": "bass",
+        "label": "Bass",
+        "dataType": "Audio",
+        "required": false
+      },
+      {
+        "id": "other",
+        "label": "Other",
+        "dataType": "Audio",
+        "required": false
+      }
+    ],
+    "params": [
+      {
+        "key": "model",
+        "label": "Model",
+        "type": "enum",
+        "required": false,
+        "default": "htdemucs_ft",
+        "options": [
+          {
+            "label": "HT-Demucs FT (best 4-stem)",
+            "value": "htdemucs_ft"
+          },
+          {
+            "label": "HT-Demucs",
+            "value": "htdemucs"
+          },
+          {
+            "label": "HDemucs MMI",
+            "value": "hdemucs_mmi"
+          },
+          {
+            "label": "MDX",
+            "value": "mdx"
+          },
+          {
+            "label": "MDX Extra",
+            "value": "mdx_extra"
+          }
+        ]
+      },
+      {
+        "key": "shifts",
+        "label": "Quality (Shifts)",
+        "type": "integer",
+        "required": false,
+        "default": 1,
+        "min": 1,
+        "max": 10
+      },
+      {
+        "key": "overlap",
+        "label": "Overlap",
+        "type": "float",
+        "required": false,
+        "default": 0.25,
+        "min": 0,
+        "max": 1,
+        "step": 0.05
+      },
+      {
+        "key": "output_format",
+        "label": "Output Format",
+        "type": "enum",
+        "required": false,
+        "default": "mp3",
+        "options": [
+          {
+            "label": "MP3",
+            "value": "mp3"
+          },
+          {
+            "label": "WAV",
+            "value": "wav"
+          }
+        ]
+      }
+    ]
+  },
   "mmaudio-v2": {
     "id": "mmaudio-v2",
     "displayName": "MMAudio V2 (Video Foley)",

@@ -153,7 +153,7 @@ def get_handler_registry(
         from handlers.google_gemini import handle_gemini_chat
         from handlers.openrouter import handle_openrouter_universal
         from handlers.replicate_universal import handle_replicate_universal
-        from handlers.fal_universal import handle_fal_universal
+        from handlers.fal_universal import handle_fal_universal, handle_demucs
         from handlers.krea import handle_krea_generate, handle_krea_style_train
 
         async def _runway_video_handler(
@@ -381,6 +381,15 @@ def get_handler_registry(
             # parses the video output.
             node.params.setdefault("endpoint_id", "fal-ai/mmaudio-v2")
             return await handle_fal_universal(node, inputs, api_keys, emit=emit)
+
+        async def _demucs_handler(
+            node: GraphNode,
+            inputs: dict[str, PortValueDict],
+            api_keys: dict[str, str],
+        ) -> dict[str, Any]:
+            # Demucs returns multiple stems -> dedicated handler (multi-output),
+            # not the single-output universal handler.
+            return await handle_demucs(node, inputs, api_keys, emit=emit)
 
         async def _meshy_text_to_3d_handler(
             node: GraphNode,
@@ -618,6 +627,7 @@ def get_handler_registry(
         registry["stable-audio-25"] = _stable_audio_handler
         registry["ace-step"] = _ace_step_handler
         registry["mmaudio-v2"] = _mmaudio_handler
+        registry["demucs"] = _demucs_handler
         registry["meshy-text-to-3d"] = _meshy_text_to_3d_handler
         registry["meshy-image-to-3d"] = _meshy_image_to_3d_handler
         registry["meshy-multi-image-to-3d"] = _meshy_multi_image_to_3d_handler
