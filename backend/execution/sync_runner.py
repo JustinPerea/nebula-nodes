@@ -370,6 +370,18 @@ def get_handler_registry(
             node.params.setdefault("endpoint_id", "fal-ai/ace-step")
             return await handle_fal_universal(node, inputs, api_keys, emit=emit)
 
+        async def _mmaudio_handler(
+            node: GraphNode,
+            inputs: dict[str, PortValueDict],
+            api_keys: dict[str, str],
+        ) -> dict[str, Any]:
+            # MMAudio V2 Foley via FAL: a video + an audio-prompt produce the same
+            # video muxed with newly generated, synchronized audio. The universal
+            # handler maps the `video` input (-> video_url) and `prompt` input and
+            # parses the video output.
+            node.params.setdefault("endpoint_id", "fal-ai/mmaudio-v2")
+            return await handle_fal_universal(node, inputs, api_keys, emit=emit)
+
         async def _meshy_text_to_3d_handler(
             node: GraphNode,
             inputs: dict[str, PortValueDict],
@@ -605,6 +617,7 @@ def get_handler_registry(
         registry["ltx-video-2"] = _ltx_video2_handler
         registry["stable-audio-25"] = _stable_audio_handler
         registry["ace-step"] = _ace_step_handler
+        registry["mmaudio-v2"] = _mmaudio_handler
         registry["meshy-text-to-3d"] = _meshy_text_to_3d_handler
         registry["meshy-image-to-3d"] = _meshy_image_to_3d_handler
         registry["meshy-multi-image-to-3d"] = _meshy_multi_image_to_3d_handler

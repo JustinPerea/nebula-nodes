@@ -10,7 +10,7 @@ Sorted by node count (desc). **API coverage** = share of the provider's publishe
 
 | Provider | Nodes | API coverage | Agent skill | Top unused capability |
 |---|---:|---|---|---|
-| [FAL (fal.ai)](./fal.md) | 40 | ~48% | complete | FAL music wired — instrumental via Stable Audio 2.5, vocals/lyrics via ACE-Step; remaining audio gaps: TTS, voice cloning, lipsync (sync-lipsync), video-to-audio/Foley (mmaudio), stem separation (demucs) |
+| [FAL (fal.ai)](./fal.md) | 41 | ~49% | complete | Video-to-audio/Foley now wired (MMAudio V2); remaining FAL audio gaps: TTS, voice cloning, lipsync (sync-lipsync), stem separation (demucs) |
 | [OpenAI](./openai.md) | 9 | ~60% | complete | Image variations endpoint (dall-e-2) — no node |
 | [Meshy](./meshy.md) | 8 | ~35% | complete | Creative Lab product line (Keychain, Fridge Magnet, Figure, Lamp) — entirely unused |
 | [Google (Gemini / Imagen / Veo / Lyria)](./google.md) | 8 | ~45% | complete | Veo reference images (up to 3) and video extension (clips longer than 8s, up to ~148s) |
@@ -61,7 +61,7 @@ Across all 15 providers, the most valuable **unused** API capabilities, ranked. 
 1. **Speech-to-Text / transcription** — now wired on two direct providers: OpenAI (Whisper STT, pre-existing) and **ElevenLabs STT** (`elevenlabs-stt`, shipped 2026-06-05 — diarization, plain text or SRT/VTT subtitles, feeds Nebula's text-driven nodes directly). The remaining transcription gap is in **FAL's audio catalog**, whose STT models are still unwired.
 2. **Real-time output streaming (SSE)** — Replicate's `urls.stream` and FAL's broader `/stream` are unused; the big win for chat/LLM models that currently block-and-poll.
 3. **Tool / function calling + structured (JSON-schema) output** — unexposed across every LLM-capable provider (Anthropic, OpenAI, OpenRouter, Google). Blocks agentic and reliably-parseable workflows.
-4. **The FAL audio catalog** — text-to-music/SFX is now wired (Stable Audio 2.5, `stable-audio-25`, 2026-06-05), and **ACE-Step** (`ace-step`, music with vocals/lyrics, shipped 2026-06-05 alongside Stable Audio 2.5) covers full songs with synthesized vocals. The remaining FAL audio gaps are TTS, voice cloning, lipsync (sync-lipsync), video-to-audio/Foley (mmaudio), and stem separation (demucs).
+4. **The FAL audio catalog** — text-to-music/SFX is now wired (Stable Audio 2.5, `stable-audio-25`, 2026-06-05), **ACE-Step** (`ace-step`, music with vocals/lyrics, shipped 2026-06-05 alongside Stable Audio 2.5) covers full songs with synthesized vocals, and **MMAudio V2** (`mmaudio-v2`, video→audio Foley, shipped 2026-06-05) generates synchronized sound effects for a video. The remaining FAL audio gaps are TTS, voice cloning, lipsync (sync-lipsync), and stem separation (demucs).
 5. **Video edit / extend / reference modes** — xAI video edits+extensions, Veo reference images + extension (up to ~148s), FAL/Runway video-to-video families. Extends Nebula past one-shot clips.
 6. **Krea's gateway breadth** — 30+ video models, image editing (Flux Kontext/SeedEdit/Seedream), and Topaz upscaling (to 22K) all unwired; some are covered by other providers, upscaling and node-apps are not.
 7. **Image upscaling** — no node on Runway (image_upscale) and only one upscaler exposed on FAL; a common, high-demand post-step.

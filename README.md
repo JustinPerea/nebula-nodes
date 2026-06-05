@@ -3,7 +3,7 @@ name: Nebula Nodes
 slug: nebula-nodes
 status: active
 tagline: A multi-surface AI creation studio — node graph, Create view, Cinema, Character, and Moodboard — running locally on your own keys.
-description: AI creation studio built around a visual node graph. 118 built-in nodes across 14 provider families, four universal nodes that reach 300+ more (OpenRouter, Nous Portal, Replicate, FAL), seven specialized workspaces (Canvas, Create, Cinema Studio, Character Studio, Moodboard Studio, Video Editor, Remotion Editor), smart subgraph caching, real-time streaming, and an optional chat agent that builds graphs from natural language.
+description: AI creation studio built around a visual node graph. 119 built-in nodes across 14 provider families, four universal nodes that reach 300+ more (OpenRouter, Nous Portal, Replicate, FAL), seven specialized workspaces (Canvas, Create, Cinema Studio, Character Studio, Moodboard Studio, Video Editor, Remotion Editor), smart subgraph caching, real-time streaming, and an optional chat agent that builds graphs from natural language.
 stack:
   - Python 3.12+
   - FastAPI
@@ -15,7 +15,7 @@ stack:
   - WebSockets
   - Hermes Agent (optional)
 features:
-  - 118-node BYOK catalog across 14 provider families
+  - 119-node BYOK catalog across 14 provider families
   - Universal nodes for OpenRouter / Nous Portal / Replicate / FAL
   - Seven workspaces: Canvas, Create, Cinema Studio, Character Studio, Moodboard Studio, Video Editor, Remotion Editor
   - Smart subgraph caching with topological execution
@@ -62,7 +62,7 @@ https://github.com/user-attachments/assets/3a83187d-e186-4378-8a36-822b0a4055cb
 <div align="center">
 
   <a href="LICENSE"><img alt="LICENSE — AGPL-3.0" src="https://img.shields.io/badge/LICENSE-AGPL--3.0-6ba8d6?style=flat-square&labelColor=0a1612"></a>
-  <img alt="NODES — 118" src="https://img.shields.io/badge/NODES-118-f3e6c4?style=flat-square&labelColor=0a1612">
+  <img alt="NODES — 119" src="https://img.shields.io/badge/NODES-119-f3e6c4?style=flat-square&labelColor=0a1612">
   <img alt="PROVIDERS — 14 DIRECT · 300%2B VIA UNIVERSAL" src="https://img.shields.io/badge/PROVIDERS-14%20DIRECT%20%C2%B7%20300%2B%20VIA%20UNIVERSAL-f3e6c4?style=flat-square&labelColor=0a1612">
   <img alt="BYOK — BRING YOUR OWN KEYS" src="https://img.shields.io/badge/BYOK-BRING%20YOUR%20OWN%20KEYS-6ba8d6?style=flat-square&labelColor=0a1612">
   <br>
@@ -82,7 +82,7 @@ There's a cambrian explosion of image, video, 3D, audio, and text models happeni
 
 **Nebula Nodes is the multi-surface studio for that stitching.** At its core is a visual node graph — drop nodes, wire them up, hit Run. Wrapped around the graph are seven specialized workspaces: a Higgsfield-style **Create** view for prompt-driven generation with a presets library and results gallery; **Soul Cinema** for shot-based storyboard editing; **Nebula Character** for reusable character identities across shots; **Moodboard Studio** for style briefs that feed generators; plus a **Video Editor**, a **Remotion Editor**, and the node **Canvas** itself. An agent chat (Claude, Codex, or Daedalus) can build and edit the graph from natural language.
 
-118 built-in nodes across 14 provider families, plus four **universal nodes** that proxy 300+ more models on OpenRouter, Nous Portal, Replicate, and FAL. Smart caching skips unchanged subgraphs. Streaming nodes show text / video / audio / SVG previews live as they generate.
+119 built-in nodes across 14 provider families, plus four **universal nodes** that proxy 300+ more models on OpenRouter, Nous Portal, Replicate, and FAL. Smart caching skips unchanged subgraphs. Streaming nodes show text / video / audio / SVG previews live as they generate.
 
 Everything runs locally against your own API keys. No platform markup. No data leaving your machine to a middleman. No rate-limited hosted tier. You see the graph, you see the outputs, you own the keys.
 
@@ -97,7 +97,7 @@ SPEC // MULTI-SURFACE STUDIO
 
 | | |
 |---|---|
-| **118-NODE CATALOG** | Every major provider as a first-class node. Image, video, 3D, audio, and text generation across 14 provider families — see [CATALOG](#-catalog) for the breakdown. |
+| **119-NODE CATALOG** | Every major provider as a first-class node. Image, video, 3D, audio, and text generation across 14 provider families — see [CATALOG](#-catalog) for the breakdown. |
 | **7 WORKSPACES** | Canvas (node graph), Create, Cinema Studio, Character Studio, Moodboard Studio, Video Editor, Remotion Editor. See [WORKSPACES](#-workspaces). |
 | **CREATE VIEW** | Prompt → generate with a model picker, parameter pills, reference image slots, quantity/variations control, a results gallery (Session + Canvas tabs), a Presets/Styles library, and per-result actions: download, open-in-canvas, use-as-input, Reveal in Finder, Save to folder, delete. Generations author real nodes onto the canvas and persist. |
 | **UNIVERSAL NODES** | One node each for OpenRouter, Nous Portal, Replicate, and FAL. The universal node pattern means a single node reaches every model on that platform — 300+ models total, no per-model wrapper needed. |
@@ -129,7 +129,7 @@ SPEC // 7 SURFACES · ONE STUDIO
 ## ◆ CATALOG
 
 ```
-SPEC // 118 NODES · 14 PROVIDER FAMILIES · 11 CATEGORIES
+SPEC // 119 NODES · 14 PROVIDER FAMILIES · 11 CATEGORIES
 ```
 
 Full per-node reference (params, endpoints, exec patterns, audit status) lives in [`docs/MODEL_REFERENCE.md`](docs/MODEL_REFERENCE.md), generated from the registry.
@@ -141,7 +141,7 @@ Prefer a guided tour? [`docs/api-guides/`](docs/api-guides/) has a **user-facing
 | **Video generation** | 28 | Veo 3.1 (direct + FAL), Runway Gen-4.5 / Aleph / Act-Two, Sora 2, Kling v2.1 / v3 / Omni 3, Wan 2.6 (T2V / I2V / R2V), Luma Ray 2 (T2V / I2V / Modify), LTX 2 / 2.3, Seedance 1.5 / 2 (T2V / I2V / R2V / Fast), MiniMax Hailuo / S2V, Higgsfield, Grok Imagine, PixVerse V4.5 |
 | **Image generation** | 26 | GPT Image 1 / 1.5 / 2 (direct + FAL, gen + edit), DALL-E 3, Imagen 4, FLUX 1.1 Ultra / Schnell / 2 Pro / Kontext, Nano Banana (Gemini), Recraft V4 (raster + SVG), Seedream 4.5, Krea 2 / Style Train, Meshy T2I / I2I, Quiver Arrow, Fast SDXL, Runway Image |
 | **Utility** | 21 | Text / Image / Audio / Video inputs, Combine Text, Gemini Embeddings, Image Iterator / Text Iterator, Array Builder / Selector, Image Compare, Preview, Reroute, Router, Sticky Note, Style Reference, Krea Style / Image Style Ref / Moodboard, Remotion Composition, Video Edit |
-| **Audio generation** | 16 | ElevenLabs TTS / STT / SFX / STS / Isolation / Dubbing, Lyria 3, Gemini TTS, Stable Audio 2.5, ACE-Step, OpenAI TTS / Whisper STT / Translate, Runway TTS / STS / Dubbing |
+| **Audio generation** | 17 | ElevenLabs TTS / STT / SFX / STS / Isolation / Dubbing, Lyria 3, Gemini TTS, Stable Audio 2.5, ACE-Step, MMAudio V2, OpenAI TTS / Whisper STT / Translate, Runway TTS / STS / Dubbing |
 | **3D generation** | 10 | Meshy 6 Text/Image to 3D (direct + FAL), Meshy Multi-Image / Retexture / Rigging / Animate / Remesh / 3D Print, Hunyuan3D V3 Text/Image to 3D |
 | **Universal** | 4 | OpenRouter, **Nous Portal**, Replicate, FAL — each reaches its full catalog. See [UNIVERSAL NODES](#-universal-nodes). |
 | **Transform** | 4 | Quiver Arrow Vectorize (raster → SVG), Remove Background, SeedVR2 Upscale, SVG Rasterize |
