@@ -8,7 +8,8 @@ interface CreateComposerProps {
   modelDef: ModelNodeDefinition | null;
   prompt: string;
   params: Record<string, unknown>;
-  isExecuting: boolean;
+  activeCount: number;
+  maxConcurrent: number;
   quantity: number;
   onPromptChange: (value: string) => void;
   onSelectModel: (definitionId: string) => void;
@@ -20,11 +21,11 @@ interface CreateComposerProps {
 }
 
 export function CreateComposer({
-  modelDef, prompt, params, isExecuting, quantity,
+  modelDef, prompt, params, activeCount, maxConcurrent, quantity,
   onPromptChange, onSelectModel, onParamsChange, onGenerate, onAttach, onQuantityChange, onOpenStyles,
 }: CreateComposerProps) {
   const [pickerOpen, setPickerOpen] = useState(false);
-  const canGenerate = Boolean(modelDef) && !isExecuting;
+  const canGenerate = Boolean(modelDef) && activeCount < maxConcurrent;
   const promptRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const autoGrow = (el: HTMLTextAreaElement) => {
@@ -84,7 +85,7 @@ export function CreateComposer({
           onClick={onGenerate}
         >
           <Sparkles size={16} strokeWidth={1.9} aria-hidden="true" />
-          {isExecuting ? 'Generating…' : 'Generate'}
+          {activeCount > 0 ? `Generating… (${activeCount})` : 'Generate'}
         </button>
       </div>
     </div>

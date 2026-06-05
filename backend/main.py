@@ -2119,6 +2119,7 @@ class PresetCreate(BaseModel):
     refImages: list[str] = Field(default_factory=list)
     scope: str = "global"
     projectId: str | None = None
+    thumbnail: str = ""
 
 
 class PresetUpdate(BaseModel):
@@ -2128,6 +2129,7 @@ class PresetUpdate(BaseModel):
     params: dict[str, Any] | None = None
     modelId: str | None = None
     refImages: list[str] | None = None
+    thumbnail: str | None = None
 
 
 def _char_store():
@@ -2326,7 +2328,26 @@ async def create_preset(body: PresetCreate) -> dict:
     return preset_store.create(
         name=body.name, category=body.category, prompt=body.prompt, params=body.params,
         modelId=body.modelId, refImages=body.refImages, scope=body.scope, projectId=body.projectId,
+        thumbnail=body.thumbnail,
     )
+
+
+@app.get("/api/presets/thumbnails/{slug}")
+async def get_preset_thumbnail(slug: str):
+    """Serve a shipped preset thumbnail by slug. Defined ABOVE /{preset_id} to
+    prevent FastAPI from shadowing it with the parameterised route."""
+    if not re.fullmatch(r"[a-z0-9-]{1,64}", slug):
+        raise HTTPException(status_code=404, detail="thumbnail not found")
+    thumbnails_dir = (_PRESET_SEED_PATH.parent / "thumbnails").resolve()
+    path = (thumbnails_dir / f"{slug}.webp").resolve()
+    # Traversal guard: resolved path must stay inside the thumbnails dir
+    try:
+        path.relative_to(thumbnails_dir)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="thumbnail not found")
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="thumbnail not found")
+    return FileResponse(str(path), media_type="image/webp")
 
 
 @app.get("/api/presets/{preset_id}")
@@ -2378,6 +2399,40 @@ def seed_presets_if_empty() -> None:
             )
     except Exception as exc:  # never let seeding break boot
         print(f"[presets] seed failed: {exc}", flush=True)
+
+
+def backfill_preset_thumbnails() -> None:
+    """Idempotent: for each seeded global preset that has NO thumbnail yet and a
+    shipped thumbnail webp on disk, write the /api/presets/thumbnails/<slug> URL
+    into the preset record. Runs every boot; never raises (boot must not break).
+
+    Only fills *empty* thumbnails — so a user who creates a global preset that
+    happens to share a seed name AND captures a custom thumbnail keeps it (we
+    never overwrite a non-empty thumbnail). This also makes it naturally
+    idempotent: once filled the thumbnail is non-empty, so later boots skip it
+    (no version churn)."""
+    try:
+        if not _PRESET_SEED_PATH.exists():
+            return
+        seeds = json.loads(_PRESET_SEED_PATH.read_text(encoding="utf-8"))
+        thumbnails_dir = _PRESET_SEED_PATH.parent / "thumbnails"
+        # Build a name→preset map for all global presets
+        global_presets = {p["name"]: p for p in preset_store.list("global")}
+        from services.preset_store import slug_for_preset
+        for s in seeds:
+            name = s["name"]
+            preset = global_presets.get(name)
+            if preset is None:
+                continue  # not yet seeded — seed_presets_if_empty handles it
+            if preset.get("thumbnail"):
+                continue  # already has a thumbnail (shipped or user-custom) — never clobber
+            slug = slug_for_preset(name)
+            webp = thumbnails_dir / f"{slug}.webp"
+            if not webp.exists():
+                continue  # thumbnail not shipped for this preset
+            preset_store.update(preset["id"], thumbnail=f"/api/presets/thumbnails/{slug}")
+    except Exception as exc:
+        print(f"[presets] thumbnail backfill failed: {exc}", flush=True)
 
 
 # ---------- File actions (Reveal in Finder / Save to folder) ----------
@@ -2465,3 +2520,5 @@ async def serve_output(rel: str):
 # Seed starter presets on first boot. seed_presets_if_empty() is defined above
 # and is idempotent + wrapped in try/except so it can never break startup.
 seed_presets_if_empty()
+# Backfill thumbnail URLs on every boot (idempotent, only touches seeded presets).
+backfill_preset_thumbnails()

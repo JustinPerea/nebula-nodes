@@ -25,6 +25,7 @@ export type PresetCreateInput = {
   refImages: string[];
   scope: 'global' | 'project';
   projectId?: string;
+  thumbnail?: string;
 };
 
 export async function fetchPresets(scope: 'global' | 'project', projectId?: string): Promise<Preset[]> {

@@ -44,6 +44,19 @@ def _scope_dir(scope: str, projectId: str | None) -> Path:
     return _root() / _GLOBAL_DIR
 
 
+def slug_for_preset(name: str) -> str:
+    """Stable slug from a preset name.
+
+    Shared single source of truth for the shipped-thumbnail filename
+    (``backend/data/presets/thumbnails/<slug>.webp``, written by
+    ``scripts/generate_preset_thumbnails.py``) and the seeded
+    ``Preset.thumbnail`` URL (``/api/presets/thumbnails/<slug>``). Keeping one
+    implementation means the generator and the seeder can never drift.
+    """
+    slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
+    return slug or "preset"
+
+
 def _find_file(preset_id: str) -> Path | None:
     if not _ID_RE.fullmatch(preset_id):
         return None
@@ -62,7 +75,8 @@ class PresetStore:
     _IMMUTABLE = {"id", "createdAt", "projectId"}
 
     def create(self, *, name: str, category: str, prompt: str, params: dict[str, Any],
-               modelId: str | None, refImages: list[str], scope: str, projectId: str | None) -> dict[str, Any]:
+               modelId: str | None, refImages: list[str], scope: str, projectId: str | None,
+               thumbnail: str = "") -> dict[str, Any]:
         preset_id = uuid.uuid4().hex[:12]
         now = _now()
         preset = {
@@ -73,7 +87,7 @@ class PresetStore:
             "params": dict(params or {}),
             "modelId": modelId,
             "refImages": list(refImages or []),
-            "thumbnail": "",
+            "thumbnail": thumbnail,
             "version": 1,
             "scope": "project" if (scope == "project" and projectId) else "global",
             "projectId": projectId if scope == "project" else None,

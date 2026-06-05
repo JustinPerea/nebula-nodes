@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { ArrowLeft } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
@@ -19,10 +19,11 @@ import type { AttachedRef } from './ReferenceTray';
 import '../../styles/create-studio.css';
 import '../../styles/create-gallery.css';
 
+const MAX_CONCURRENT = 2;
+
 export function CreateView() {
   const exitCreateView = useUIStore((s) => s.exitCreateView);
   const sessionId = useUIStore((s) => s.createSessionId);
-  const isExecuting = useGraphStore((s) => s.isExecuting);
   const allNodes = useGraphStore((s) => s.nodes);
 
   // Snapshot selection once on mount — used to prefill composer + default tab.
@@ -47,12 +48,30 @@ export function CreateView() {
     return buildDefaultParamsForUi(NODE_DEFINITIONS['nano-banana']);
   });
   const [generations, setGenerations] = useState<GenerationRecord[]>([]);
+  const genIndexRef = useRef(0);
+  // Counts launches that are mid-flight inside handleGenerate's async author
+  // window (before their nodes exist in the store for activeCount to see). The
+  // cap is gated on activeCount + launchingRef so rapid clicks can't bypass it.
+  const launchingRef = useRef(0);
   const [refs, setRefs] = useState<AttachedRef[]>([]);
   const [quantity, setQuantity] = useState(1);
   const [stylesOpen, setStylesOpen] = useState(false);
   const [presetReloadKey, setPresetReloadKey] = useState(0);
 
   const modelDef = modelId ? NODE_DEFINITIONS[modelId] ?? null : null;
+
+  // activeCount: number of generations whose model nodes are not all settled.
+  // A generation is settled when every modelNodeId resolves to a node with
+  // state 'complete' or 'error', or the node is gone (was deleted).
+  const activeCount = useMemo(() => {
+    return generations.filter((g) => {
+      return g.modelNodeIds.some((id) => {
+        const n = allNodes.find((node) => node.id === id);
+        if (!n) return false; // gone = settled
+        return n.data.state !== 'complete' && n.data.state !== 'error';
+      });
+    }).length;
+  }, [generations, allNodes]);
 
   const handleSelectModel = (id: string) => {
     setModelId(id);
@@ -79,7 +98,25 @@ export function CreateView() {
     const name = window.prompt('Name this style:', prompt.slice(0, 40) || modelDef.displayName);
     if (!name) return;
     try {
-      await createPreset({ name, category: 'My Styles', prompt, params, modelId: modelDef.id, refImages: refs.map((r) => r.filePath), scope: 'project' });
+      // Capture the first image output from the most-recent completed generation
+      // as the thumbnail so saved user styles show a real result instead of the
+      // gradient placeholder.
+      let thumbnail = '';
+      const nodes = useGraphStore.getState().nodes;
+      const latestGen = [...generations].sort((a, b) => b.ts - a.ts)[0];
+      if (latestGen) {
+        outer: for (const nodeId of latestGen.modelNodeIds) {
+          const node = nodes.find((n) => n.id === nodeId);
+          if (!node || node.data.state !== 'complete') continue;
+          for (const output of Object.values(node.data.outputs ?? {})) {
+            if (output?.type === 'Image' && typeof output.value === 'string' && output.value) {
+              thumbnail = output.value;
+              break outer;
+            }
+          }
+        }
+      }
+      await createPreset({ name, category: 'My Styles', prompt, params, modelId: modelDef.id, refImages: refs.map((r) => r.filePath), scope: 'project', thumbnail });
       setPresetReloadKey((k) => k + 1);
     } catch (err) { console.error('save style failed', err); }
   };
@@ -94,23 +131,35 @@ export function CreateView() {
   };
 
   const handleGenerate = async () => {
-    if (!modelDef || !sessionId || isExecuting) return;
-    const { authorGenerationCluster, executeCluster } = useGraphStore.getState();
+    if (!modelDef || !sessionId) return;
+    // launchingRef bridges the async author window: activeCount can't see the
+    // new generation's nodes until they're in the store, so without this a
+    // rapid second click would pass the cap before the first set queued.
+    if (activeCount + launchingRef.current >= MAX_CONCURRENT) return;
+    const { authorGenerationCluster, executeClusterConcurrent } = useGraphStore.getState();
     const genId = uuidv4();
-    const { modelNodeIds, allNodeIds } = await authorGenerationCluster({
-      definitionId: modelDef.id,
-      prompt,
-      params,
-      refPaths: refs.map((r) => r.filePath),
-      quantity,
-      sessionId,
-      genId,
-      layoutOrigin: { x: 80, y: 80 + generations.length * 320 },
-    });
-    if (modelNodeIds.length > 0) {
-      setGenerations((prev) => [...prev, { genId, prompt, ts: Date.now(), modelNodeIds }]);
+    const genIndex = genIndexRef.current++;
+    launchingRef.current += 1;
+    try {
+      const { modelNodeIds, allNodeIds } = await authorGenerationCluster({
+        definitionId: modelDef.id,
+        prompt,
+        params,
+        refPaths: refs.map((r) => r.filePath),
+        quantity,
+        sessionId,
+        genId,
+        layoutOrigin: { x: 80, y: 80 + genIndex * 320 },
+      });
+      if (modelNodeIds.length > 0) {
+        setGenerations((prev) => [...prev, { genId, prompt, ts: Date.now(), modelNodeIds }]);
+      }
+      // By the time executeClusterConcurrent resolves, its nodes are marked
+      // 'queued' in the store, so activeCount picks them up as launchingRef drops.
+      await executeClusterConcurrent(allNodeIds);
+    } finally {
+      launchingRef.current -= 1;
     }
-    await executeCluster(allNodeIds);
   };
 
   const handleOpenInCanvas = (nodeId: string) => {
@@ -215,7 +264,8 @@ export function CreateView() {
         modelDef={modelDef}
         prompt={prompt}
         params={params}
-        isExecuting={isExecuting}
+        activeCount={activeCount}
+        maxConcurrent={MAX_CONCURRENT}
         quantity={quantity}
         onPromptChange={setPrompt}
         onSelectModel={handleSelectModel}

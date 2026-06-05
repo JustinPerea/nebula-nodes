@@ -238,6 +238,7 @@ body.app-slava-restraint .result-card {
 }
 
 body.app-slava-restraint .result-card__media {
+  position: relative;
   aspect-ratio: 1;
   display: flex;
   align-items: center;
@@ -258,12 +259,50 @@ body.app-slava-restraint .result-card__actions {
   bottom: 0;
   left: 0;
   right: 0;
+  z-index: 2; /* above the full-area zoom overlay (z-index: 1) so actions stay clickable */
   padding: 6px;
   gap: 4px;
   background: linear-gradient(to top, rgba(0,0,0,0.65) 0%, transparent 100%);
   flex-direction: row;
   align-items: center;
   justify-content: flex-end;
+}
+
+/* Full-area invisible click target that opens the lightbox (images only). */
+body.app-slava-restraint .result-card__zoom-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  padding: 0;
+  background: transparent;
+  border: none;
+  cursor: zoom-in;
+}
+
+/* Corner expand affordance, shown on hover (images + video). */
+body.app-slava-restraint .result-card__zoom-btn {
+  display: none;
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 3;
+  width: 28px;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 7px;
+  color: #fff;
+  cursor: pointer;
+}
+
+body.app-slava-restraint .result-card:hover .result-card__zoom-btn {
+  display: inline-flex;
+}
+
+body.app-slava-restraint .result-card__zoom-btn:hover {
+  background: rgba(0, 0, 0, 0.65);
 }
 
 body.app-slava-restraint .result-card:hover .result-card__actions {
@@ -364,3 +403,93 @@ body.app-slava-restraint .preset-card::after { content: ''; position: absolute; 
 body.app-slava-restraint .preset-card__name { position: relative; z-index: 2; color: #fff; font-size: 13px; font-weight: 600; letter-spacing: 0.02em; text-transform: uppercase; }
 body.app-slava-restraint .preset-card__category { position: relative; z-index: 2; color: rgba(255,255,255,0.7); font-size: 11px; }
 body.app-slava-restraint .preset-card:hover { border-color: var(--sr-accent); }
+
+/* ─── Lightbox (fullscreen viewer) ───────────────────────────────────────── */
+
+body.app-slava-restraint.lightbox-open { overflow: hidden; }
+
+body.app-slava-restraint .lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  background: rgba(0, 0, 0, 0.82);
+  backdrop-filter: blur(8px);
+  animation: lightbox-fade 140ms ease-out;
+}
+
+@keyframes lightbox-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+body.app-slava-restraint .lightbox__stage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 92vw;
+  max-height: 92vh;
+}
+
+body.app-slava-restraint .lightbox__media {
+  max-width: 92vw;
+  max-height: 92vh;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  border-radius: 8px;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.6);
+}
+
+body.app-slava-restraint .lightbox__close {
+  position: absolute;
+  top: 18px;
+  right: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 10px;
+  color: #fff;
+  cursor: pointer;
+}
+
+body.app-slava-restraint .lightbox__close:hover { background: rgba(255, 255, 255, 0.2); }
+
+body.app-slava-restraint .lightbox__nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 50%;
+  color: #fff;
+  cursor: pointer;
+}
+
+body.app-slava-restraint .lightbox__nav:hover { background: rgba(255, 255, 255, 0.2); }
+body.app-slava-restraint .lightbox__nav--prev { left: 20px; }
+body.app-slava-restraint .lightbox__nav--next { right: 20px; }
+
+body.app-slava-restraint .lightbox__counter {
+  position: absolute;
+  bottom: 22px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 13px;
+  background: rgba(0, 0, 0, 0.4);
+  padding: 4px 12px;
+  border-radius: 999px;
+}

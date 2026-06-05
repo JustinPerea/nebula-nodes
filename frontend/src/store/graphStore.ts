@@ -330,6 +330,7 @@ interface GraphState {
   handleExecutionEvent: (event: ExecutionEvent) => void;
   executeNode: (nodeId: string) => Promise<void>;
   executeCluster: (nodeIds: string[]) => Promise<void>;
+  executeClusterConcurrent: (nodeIds: string[]) => Promise<void>;
   authorGenerationCluster: (request: GenerationRequest) => Promise<{ modelNodeIds: string[]; allNodeIds: string[] }>;
   deleteGeneration: (modelNodeIds: string[]) => void;
   duplicateNode: (nodeId: string) => void;
@@ -1912,6 +1913,55 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       set((state) => ({
         nodes: markNodesErrored(state.nodes, idSet, err instanceof Error ? err.message : 'Failed to start generation.'),
         isExecuting: false,
+      }));
+    }
+  },
+
+  executeClusterConcurrent: async (nodeIds) => {
+    const { nodes, edges } = get();
+    const idSet = new Set(nodeIds);
+    const clusterNodes = nodes.filter((n) => idSet.has(n.id));
+    if (clusterNodes.length === 0) return;
+    const clusterEdges = edges.filter((e) => idSet.has(e.source) && idSet.has(e.target));
+    // Mark ONLY the cluster nodes queued — no global resetExecution, no isExecuting touch.
+    set((state) => ({
+      nodes: state.nodes.map((n) =>
+        idSet.has(n.id)
+          ? {
+              ...n,
+              data: {
+                ...n.data,
+                state: 'queued' as const,
+                error: undefined,
+                progress: undefined,
+                streamingText: undefined,
+                streamingPartials: undefined,
+                streamingSvg: undefined,
+              },
+            }
+          : n,
+      ),
+    }));
+    const graphNodes = clusterNodes.map((n) => ({
+      id: n.id,
+      definitionId: n.data.definitionId,
+      params: paramsForBackend(n.data.definitionId, n.data.params as Record<string, unknown>),
+      outputs: {},
+    }));
+    const graphEdges = clusterEdges.map((e) => ({
+      id: e.id, source: e.source, sourceHandle: e.sourceHandle, target: e.target, targetHandle: e.targetHandle,
+    }));
+    try {
+      const result = await apiExecuteGraph(graphNodes, graphEdges);
+      if (result.status === 'validation_error') {
+        set((state) => ({
+          nodes: markNodesErrored(state.nodes, idSet, 'Validation failed before generation. Check required inputs and API keys.'),
+        }));
+      }
+    } catch (err) {
+      console.error('Failed to start concurrent generation:', err);
+      set((state) => ({
+        nodes: markNodesErrored(state.nodes, idSet, err instanceof Error ? err.message : 'Failed to start generation.'),
       }));
     }
   },
