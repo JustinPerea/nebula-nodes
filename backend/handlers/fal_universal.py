@@ -13,6 +13,45 @@ from services.output import get_run_dir, save_base64_image
 FAL_QUEUE_BASE = "https://queue.fal.run"
 STREAMING_FAL_ENDPOINTS = {"openai/gpt-image-2", "openai/gpt-image-2/edit"}
 
+# Detached best-effort provider-cancellation tasks, kept referenced so the event loop
+# does not garbage-collect them before they finish.
+_pending_cancel_tasks: set[asyncio.Task[Any]] = set()
+
+
+def _fal_cancel_url(submit_data: dict[str, Any], endpoint_id: str, request_id: str) -> str:
+    """The cancel URL for a queued request. FAL returns ``cancel_url`` in the submit
+    response — prefer it, because the canonical request URL uses the *app_id*, which for a
+    sub-pathed endpoint (e.g. ``fal-ai/stable-audio-25/text-to-audio``) is NOT the full
+    endpoint_id (rebuilding from endpoint_id yields a 405). Fall back to deriving from
+    response_url, then a last-resort construct."""
+    url = submit_data.get("cancel_url")
+    if url:
+        return str(url)
+    base = submit_data.get("response_url") or f"{FAL_QUEUE_BASE}/{endpoint_id}/requests/{request_id}"
+    return str(base).rstrip("/") + "/cancel"
+
+
+async def _cancel_fal_request(cancel_url: str, api_key: str) -> None:
+    """Best-effort: PUT FAL's cancel endpoint so a queued/in-flight request stops on their
+    side instead of running to completion (~10 min). Swallow all errors — fire-and-forget."""
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            await client.put(cancel_url, headers={"Authorization": f"Key {api_key}"})
+    except Exception:
+        pass
+
+
+def _schedule_fal_cancel(cancel_url: str, api_key: str) -> None:
+    """Fire the provider-side cancel on a DETACHED task so it survives the cancellation
+    of the node's own task (which is what triggered this in the first place)."""
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return
+    task = loop.create_task(_cancel_fal_request(cancel_url, api_key))
+    _pending_cancel_tasks.add(task)
+    task.add_done_callback(_pending_cancel_tasks.discard)
+
 
 def _to_fal_url(value: str) -> str:
     """Convert a local file path to a data URI, or pass URLs through."""
@@ -225,9 +264,14 @@ async def handle_fal_universal(
         poll_interval = 2.0
 
         for poll_num in range(1, max_polls + 1):
-            await asyncio.sleep(poll_interval)
+            try:
+                await asyncio.sleep(poll_interval)
+                status_resp = await client.get(status_url, headers=headers)
+            except asyncio.CancelledError:
+                # User/engine cancelled — stop the FAL job upstream, then re-raise.
+                _schedule_fal_cancel(_fal_cancel_url(submit_data, endpoint_id, request_id), api_key)
+                raise
 
-            status_resp = await client.get(status_url, headers=headers)
             if status_resp.status_code not in (200, 202):
                 raise RuntimeError(f"FAL status poll failed ({status_resp.status_code}): {status_resp.text}")
 
@@ -393,8 +437,13 @@ async def _fal_queue_run(
 
         max_polls = 300
         for poll_num in range(1, max_polls + 1):
-            await asyncio.sleep(2.0)
-            status_resp = await client.get(status_url, headers=headers)
+            try:
+                await asyncio.sleep(2.0)
+                status_resp = await client.get(status_url, headers=headers)
+            except asyncio.CancelledError:
+                # User/engine cancelled — stop the FAL job upstream, then re-raise.
+                _schedule_fal_cancel(_fal_cancel_url(submit_data, endpoint_id, request_id), api_key)
+                raise
             if status_resp.status_code not in (200, 202):
                 raise RuntimeError(f"FAL status poll failed ({status_resp.status_code}): {status_resp.text}")
             status_data = status_resp.json()

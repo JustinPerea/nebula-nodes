@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+
 from unittest.mock import AsyncMock, patch, MagicMock
 
 import pytest
@@ -9,6 +11,7 @@ from handlers.fal_universal import (
     _parse_fal_output,
     _parse_demucs_output,
     handle_demucs,
+    _fal_queue_run,
 )
 from models.graph import GraphNode, PortValueDict
 
@@ -76,6 +79,71 @@ async def test_demucs_requests_the_four_supported_stems() -> None:
     assert captured["fal_input"]["stems"] == ["vocals", "drums", "bass", "other"]
     assert captured["fal_input"]["model"] == "htdemucs_ft"
     assert set(res.keys()) == {"vocals", "drums", "bass", "other"}
+
+
+@pytest.mark.asyncio
+async def test_fal_queue_run_propagates_cancel_to_provider() -> None:
+    """When the poll is cancelled, the in-flight FAL request is cancelled upstream (so it
+    stops on FAL instead of running to completion ~10 min), then CancelledError re-raises."""
+    submit = MagicMock()
+    submit.status_code = 200
+    submit.json.return_value = {
+        "request_id": "req-abc",
+        "status_url": "https://queue.fal.run/x/requests/req-abc/status",
+        "response_url": "https://queue.fal.run/x/requests/req-abc",
+        "cancel_url": "https://queue.fal.run/x/requests/req-abc/cancel",
+    }
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient, \
+         patch("handlers.fal_universal._schedule_fal_cancel") as mock_sched, \
+         patch("handlers.fal_universal.asyncio.sleep", new=AsyncMock(side_effect=asyncio.CancelledError())):
+        mock_client = AsyncMock()
+        mock_client.post.return_value = submit
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with pytest.raises(asyncio.CancelledError):
+            await _fal_queue_run("fal-ai/test", {"x": 1}, "fal-key", None, "node-1")
+
+    mock_sched.assert_called_once()
+    assert mock_sched.call_args.args[0] == "https://queue.fal.run/x/requests/req-abc/cancel"
+    assert mock_sched.call_args.args[1] == "fal-key"
+
+
+@pytest.mark.asyncio
+async def test_handle_fal_universal_propagates_cancel_to_provider() -> None:
+    submit = MagicMock()
+    submit.status_code = 200
+    submit.json.return_value = {
+        "request_id": "req-xyz",
+        "status_url": "https://queue.fal.run/y/requests/req-xyz/status",
+        "response_url": "https://queue.fal.run/y/requests/req-xyz",
+        "cancel_url": "https://queue.fal.run/y/requests/req-xyz/cancel",
+    }
+    node = GraphNode(
+        id="n1",
+        definitionId="fal-universal",
+        params={"endpoint_id": "fal-ai/flux-pro/v1.1-ultra"},
+    )
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient, \
+         patch("handlers.fal_universal._schedule_fal_cancel") as mock_sched, \
+         patch("handlers.fal_universal.asyncio.sleep", new=AsyncMock(side_effect=asyncio.CancelledError())):
+        mock_client = AsyncMock()
+        mock_client.post.return_value = submit
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with pytest.raises(asyncio.CancelledError):
+            await handle_fal_universal(
+                node,
+                {"prompt": PortValueDict(type="Text", value="hi")},
+                {"FAL_KEY": "fal-key"},
+            )
+
+    mock_sched.assert_called_once()
+    assert mock_sched.call_args.args[0] == "https://queue.fal.run/y/requests/req-xyz/cancel"
+    assert mock_sched.call_args.args[1] == "fal-key"
 
 
 class TestParseFalOutput:

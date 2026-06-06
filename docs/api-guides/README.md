@@ -67,7 +67,7 @@ Across all 15 providers, the most valuable **unused** API capabilities, ranked. 
 7. **Image upscaling** — FAL now exposes two image upscalers: `seedvr2-upscale` (faithful) and `clarity-upscaler` (creative/added detail, shipped 2026-06-05). **Video upscaling** is now also wired: SeedVR2 Video Upscale (`seedvr-video-upscale`, shipped 2026-06-05) — temporally-consistent video upscale to up to 4K, the first video upscaler in Nebula. The remaining upscaling gap is Runway's `image_upscale` (no node); a common, high-demand post-step.
 8. **Inpainting / masked image editing** — FAL hosts inpainting models with no Nebula node.
 9. **Prompt caching** — Anthropic/OpenRouter `cache_control` unused; repeated long system prompts pay full input cost every run (cache reads ~90% cheaper) — pure cost savings.
-10. **Webhooks + cancellation** — every async provider (FAL, Meshy, Replicate, Runway, Higgsfield, Krea) block-and-polls and exposes no user-facing cancel; in-flight jobs can only time out.
+10. **Webhooks + cancellation** — **FAL cancellation is now wired** (2026-06-05): a cancelled node PUTs FAL's `cancel_url` so the queued/in-flight job stops upstream instead of running to completion. The other async providers (Meshy, Replicate, Runway, Higgsfield, Krea) still block-and-poll with no upstream cancel; webhooks remain unused (a local BYOK app has no public callback URL to receive them).
 
 ## Verification notes
 
