@@ -23,7 +23,15 @@ describe('createModels', () => {
 
   it('search matches display name, provider, and category (case-insensitive)', () => {
     expect(searchModels('nano').some((m) => m.id === 'nano-banana')).toBe(true);
-    expect(searchModels('VIDEO').every((m) => m.category === 'video-gen')).toBe(true);
+    // Category substring match: a 'VIDEO' search surfaces every video-gen model.
+    // It also legitimately surfaces non-video-gen tools whose displayName contains
+    // "video" (e.g. MMAudio "Video Foley", an audio-gen node) since matching spans
+    // displayName too — so we assert it COVERS video-gen, not that the set is
+    // video-gen-only (which a well-named audio tool can correctly violate).
+    const videoGen = getCreateModels().filter((m) => m.category === 'video-gen');
+    const videoHits = searchModels('VIDEO');
+    expect(videoGen.length).toBeGreaterThan(0);
+    expect(videoGen.every((vm) => videoHits.some((h) => h.id === vm.id))).toBe(true);
     expect(searchModels('')).toEqual(getCreateModels());
   });
 });
