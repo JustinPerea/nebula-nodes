@@ -11907,6 +11907,86 @@
     ],
     "docUrl": "docs/model-providers/krea/krea-2.md"
   },
+  "clarity-upscaler": {
+    "id": "clarity-upscaler",
+    "displayName": "Clarity Upscaler",
+    "category": "transform",
+    "apiProvider": "fal",
+    "apiEndpoint": "fal-ai/clarity-upscaler",
+    "envKeyName": "FAL_KEY",
+    "executionPattern": "async-poll",
+    "inputPorts": [
+      {
+        "id": "image",
+        "label": "Image",
+        "dataType": "Image",
+        "required": true
+      }
+    ],
+    "outputPorts": [
+      {
+        "id": "image",
+        "label": "Image",
+        "dataType": "Image",
+        "required": false
+      }
+    ],
+    "params": [
+      {
+        "key": "prompt",
+        "label": "Enhancement Prompt",
+        "type": "string",
+        "required": false,
+        "default": "masterpiece, best quality, highres"
+      },
+      {
+        "key": "upscale_factor",
+        "label": "Upscale Factor",
+        "type": "float",
+        "required": false,
+        "default": 2,
+        "min": 1,
+        "max": 4,
+        "step": 0.5
+      },
+      {
+        "key": "creativity",
+        "label": "Creativity (added detail)",
+        "type": "float",
+        "required": false,
+        "default": 0.35,
+        "min": 0,
+        "max": 1,
+        "step": 0.05
+      },
+      {
+        "key": "resemblance",
+        "label": "Resemblance (fidelity)",
+        "type": "float",
+        "required": false,
+        "default": 0.6,
+        "min": 0,
+        "max": 1,
+        "step": 0.05
+      },
+      {
+        "key": "num_inference_steps",
+        "label": "Steps",
+        "type": "integer",
+        "required": false,
+        "default": 18,
+        "min": 10,
+        "max": 50
+      },
+      {
+        "key": "seed",
+        "label": "Seed",
+        "type": "integer",
+        "required": false,
+        "placeholder": "Random"
+      }
+    ]
+  },
   "seedvr2-upscale": {
     "id": "seedvr2-upscale",
     "displayName": "SeedVR2 Upscale",
