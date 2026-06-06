@@ -131,7 +131,7 @@ Do not promise these via Runway nodes — there is no node or param behind them.
 - **Image upscale** (`POST /v1/image_upscale`) — no node.
 - **Avatars & avatar videos** (`/v1/avatars`, `/v1/avatar_videos`) — no node.
 - **Saved workflows & invocations, realtime sessions, documents, organization/usage** — no nodes; out of scope for the batch node model.
-- **User-facing job cancel/delete** — `DELETE /v1/tasks/{id}` exists, but Nebula only polls task status internally and does not expose cancel/delete to the user.
+- **User-facing job cancel/delete** — `DELETE /v1/tasks/{id}` exists; there is still no user-facing cancel/delete node, but as of 2026-06-05 a poll cancellation fires a best-effort `DELETE /v1/tasks/{id}` so the in-flight Runway job stops upstream instead of running to completion.
 
 Roughly: ~8 of ~12 media-generation endpoints are wired up; counting the full resource surface (voices, avatars, workflows, documents, account) it's closer to ~40%. The most natural near-term adds are Sound Effect, Image Upscale, and Voice Isolation nodes (single-in/single-out, fit the existing pattern).
 

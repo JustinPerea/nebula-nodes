@@ -114,6 +114,8 @@ async def handle_replicate_universal(
         poll_interval=2.0,
         max_polls=300,
         timeout=30.0,
+        cancel_url_template=f"{REPLICATE_API_BASE}/predictions/{{task_id}}/cancel",
+        cancel_method="POST",
     )
 
     async def noop_emit(event: ExecutionEvent) -> None:

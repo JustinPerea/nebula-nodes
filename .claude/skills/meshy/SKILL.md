@@ -22,7 +22,7 @@ description: Meshy 3D generation API — text-to-3D, image-to-3D, multi-image-to
 5. **Status values:** `PENDING` → `IN_PROGRESS` → `SUCCEEDED` / `FAILED` / `CANCELED`.
 6. **Error codes:** `400` bad params · `401` auth · `402` insufficient credits · `404` not found · `422` pose estimation failed (rigging only) · `429` rate limit.
 7. **Task ID format:** k-sortable UUID. Docs say *"you should not make any assumptions about the format of the id"* — treat as opaque.
-8. **Delete is irreversible.** `DELETE /{endpoint}/{task_id}` permanently removes the task and all assets.
+8. **Delete is irreversible.** `DELETE /{endpoint}/{task_id}` permanently removes the task and all assets. As of 2026-06-05, a poll cancellation fires a best-effort `DELETE /{endpoint}/{task_id}` so the in-flight Meshy task stops upstream instead of running to completion.
 
 ## Pick the right endpoint
 

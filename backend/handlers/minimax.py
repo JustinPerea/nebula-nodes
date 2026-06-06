@@ -124,6 +124,7 @@ async def handle_minimax_video(
         max_polls = 300
         poll_interval = 5.0
 
+        # MiniMax exposes no documented cancel endpoint — task cancels locally only.
         for poll_num in range(1, max_polls + 1):
             await asyncio.sleep(poll_interval)
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -309,6 +310,54 @@ async def test_unknown_model_raises_value_error() -> None:
             {"prompt": PortValueDict(type="Text", value="test")},
             _API_KEYS,
         )
+
+
+# ---------------------------------------------------------------------------
+# Provider-side cancellation
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_cancel_propagates_to_provider_when_cancel_url_present() -> None:
+    """When the poll is cancelled and the submit response carried a cancel_url, the
+    in-flight Higgsfield job is cancelled upstream, then CancelledError re-raises."""
+    submit = {"request_id": "req-abc123", "status": "queued",
+              "cancel_url": "https://platform.higgsfield.ai/requests/req-abc123/cancel"}
+    mock_client = _mock_client(submit, _POLL_COMPLETED)
+
+    with patch("handlers.higgsfield.httpx.AsyncClient", return_value=mock_client), \
+         patch("handlers.higgsfield.schedule_detached_cancel") as mock_sched, \
+         patch("handlers.higgsfield.asyncio.sleep", new=AsyncMock(side_effect=asyncio.CancelledError())):
+
+        with pytest.raises(asyncio.CancelledError):
+            await handle_higgsfield(
+                _make_node(),
+                {"prompt": PortValueDict(type="Text", value="a sunset timelapse")},
+                _API_KEYS,
+            )
+
+    mock_sched.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_cancel_skipped_when_no_cancel_url() -> None:
+    """If the submit response has no cancel_url, cancellation cannot be propagated — the
+    handler must NOT schedule a detached cancel, but must still re-raise CancelledError."""
+    submit = {"request_id": "req-abc123", "status": "queued"}  # no cancel_url
+    mock_client = _mock_client(submit, _POLL_COMPLETED)
+
+    with patch("handlers.higgsfield.httpx.AsyncClient", return_value=mock_client), \
+         patch("handlers.higgsfield.schedule_detached_cancel") as mock_sched, \
+         patch("handlers.higgsfield.asyncio.sleep", new=AsyncMock(side_effect=asyncio.CancelledError())):
+
+        with pytest.raises(asyncio.CancelledError):
+            await handle_higgsfield(
+                _make_node(),
+                {"prompt": PortValueDict(type="Text", value="a sunset timelapse")},
+                _API_KEYS,
+            )
+
+    mock_sched.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

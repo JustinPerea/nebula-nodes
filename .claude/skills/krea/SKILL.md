@@ -147,7 +147,7 @@ Nebula deliberately scopes this provider to **Krea's own Krea 2 model + the styl
 - **Node apps** (saved Krea workflows, `POST /node-apps/{id}/execute`) — not exposed.
 - **Style CRUD beyond train + share:** get a single style (`GET /styles/{id}`), update (`PATCH /styles/{id}`), shareable link, remove-from-workspace — not exposed. Sharing exists **only** as the `share_with_workspace` toggle inside `krea-style-train`, not as a standalone node.
 - **Asset management** — list/get/delete assets — not exposed (upload is used internally only, no user-facing asset node).
-- **Job management** — list jobs (`GET /jobs`), delete (`DELETE /jobs/{id}`) — not exposed (polling-by-id only).
+- **Job management** — list jobs (`GET /jobs`), delete (`DELETE /jobs/{id}`) — not exposed as nodes (polling-by-id only). As of 2026-06-05, a poll cancellation fires a best-effort `DELETE /jobs/{id}` so the in-flight Krea job stops upstream instead of running to completion.
 - **Moodboard creation/listing** — Krea has no public create/list moodboard endpoint; `krea-2-generate` can only *reference* an existing Krea `moodboard_id`, or consume a Nebula-native moodboard object.
 - **Webhooks** — job-completion callbacks exist in the API but Nebula uses polling instead.
 - **3D generation** — Krea has a user-facing 3D feature but no documented public API endpoint; not available here.

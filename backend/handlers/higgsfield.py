@@ -9,6 +9,7 @@ import httpx
 
 from models.graph import GraphNode, PortValueDict
 from models.events import ExecutionEvent, ProgressEvent
+from services.cancellation import schedule_detached_cancel
 from services.output import get_run_dir
 
 
@@ -17,6 +18,17 @@ def _log(msg: str) -> None:
 
 
 HIGGSFIELD_BASE = "https://platform.higgsfield.ai"
+
+
+async def _cancel_higgsfield_request(cancel_url: str, headers: dict[str, str]) -> None:
+    """Best-effort: POST Higgsfield's cancel_url (from the submit response) so a running
+    job stops on their side instead of running to completion. Swallow all errors —
+    fire-and-forget on a detached task with its own fresh client."""
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            await client.post(cancel_url, headers=headers)
+    except Exception:
+        pass
 
 # Model ID → platform path mapping.
 # Paths sourced from https://docs.higgsfield.ai/docs/guides/video.md (2026-05-16).
@@ -100,14 +112,26 @@ async def handle_higgsfield(
         if not gen_id:
             raise RuntimeError(f"Higgsfield returned unexpected response: {result}")
 
+        # The submit response also carries a cancel_url (POST endpoint). Capture it so a
+        # poll cancellation can stop the job upstream; skip if the field is absent.
+        cancel_url = result.get("cancel_url")
+
         _log(f"polling request {gen_id}")
         max_polls = 300
         for poll_num in range(1, max_polls + 1):
-            await asyncio.sleep(3.0)
-            poll_resp = await client.get(
-                f"{HIGGSFIELD_BASE}/requests/{gen_id}/status",
-                headers=headers,
-            )
+            try:
+                await asyncio.sleep(3.0)
+                poll_resp = await client.get(
+                    f"{HIGGSFIELD_BASE}/requests/{gen_id}/status",
+                    headers=headers,
+                )
+            except asyncio.CancelledError:
+                # User/engine cancelled — stop the Higgsfield job upstream, then re-raise.
+                if cancel_url:
+                    schedule_detached_cancel(
+                        lambda: _cancel_higgsfield_request(cancel_url, headers)
+                    )
+                raise
             if poll_resp.status_code != 200:
                 raise RuntimeError(f"Higgsfield poll failed ({poll_resp.status_code}): {poll_resp.text}")
 

@@ -8,14 +8,11 @@ import httpx
 
 from models.graph import GraphNode, PortValueDict
 from models.events import ExecutionEvent, ProgressEvent
+from services.cancellation import schedule_detached_cancel
 from services.output import get_run_dir, save_base64_image
 
 FAL_QUEUE_BASE = "https://queue.fal.run"
 STREAMING_FAL_ENDPOINTS = {"openai/gpt-image-2", "openai/gpt-image-2/edit"}
-
-# Detached best-effort provider-cancellation tasks, kept referenced so the event loop
-# does not garbage-collect them before they finish.
-_pending_cancel_tasks: set[asyncio.Task[Any]] = set()
 
 
 def _fal_cancel_url(submit_data: dict[str, Any], endpoint_id: str, request_id: str) -> str:
@@ -44,13 +41,7 @@ async def _cancel_fal_request(cancel_url: str, api_key: str) -> None:
 def _schedule_fal_cancel(cancel_url: str, api_key: str) -> None:
     """Fire the provider-side cancel on a DETACHED task so it survives the cancellation
     of the node's own task (which is what triggered this in the first place)."""
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        return
-    task = loop.create_task(_cancel_fal_request(cancel_url, api_key))
-    _pending_cancel_tasks.add(task)
-    task.add_done_callback(_pending_cancel_tasks.discard)
+    schedule_detached_cancel(lambda: _cancel_fal_request(cancel_url, api_key))
 
 
 def _to_fal_url(value: str) -> str:

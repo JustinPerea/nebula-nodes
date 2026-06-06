@@ -102,7 +102,7 @@ Do not promise these through the `higgsfield` node — none are wired (from the 
 - **Soul styles & SoulID character references** (`getSoulStyles()`, `createSoulId()`, `style_id`/`style_strength`, `custom_reference_id`) — no style presets or character-consistency controls.
 - **Soul quality / size / batch / seed** (`SoulQuality`, `SoulSize`, `BatchSize`, `seed`) — no image-side params.
 - **Speak** — audio-driven talking-head / lipsync video (`/v1/speak/higgsfield`, image + audio → lipsync). Not exposed.
-- **Request cancellation** (`POST /requests/{id}/cancel`) — the submit response includes a `cancel_url`, but Nebula never calls it. A running job runs to completion or times out at the 300-poll cap.
+- **Request cancellation** (`POST /requests/{id}/cancel`) — the submit response includes a `cancel_url`. As of 2026-06-05, a poll cancellation fires a best-effort POST to that `cancel_url` so the in-flight job stops upstream instead of running to completion (skipped if the submit response carried no `cancel_url`).
 - **Direct image upload** (`uploadImage` / `upload`) — the node only accepts an existing `http(s)` image URL; it cannot upload a local file.
 - **Webhook delivery** (`hf_webhook` / `webhook_url`) — Nebula polls instead (expected for this architecture).
 - **Broader model catalog** — the same `POST /{model_id}` pattern can reach any model at `cloud.higgsfield.ai/explore`, but Nebula hard-codes only the 4 models above.

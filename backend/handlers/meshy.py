@@ -7,6 +7,7 @@ import httpx
 
 from models.graph import GraphNode, PortValueDict
 from models.events import ExecutionEvent, ProgressEvent
+from services.cancellation import schedule_detached_cancel
 from services.output import image_to_data_uri
 from pathlib import Path
 
@@ -17,6 +18,17 @@ MESHY_API_BASE = "https://api.meshy.ai/openapi"
 
 def _log(msg: str) -> None:
     print(f"[meshy] {msg}", file=sys.stderr, flush=True)
+
+
+async def _cancel_meshy_task(poll_url: str, api_key: str) -> None:
+    """Best-effort: DELETE the task so a running Meshy job stops on their side instead of
+    running to completion. Meshy's ``DELETE /{endpoint}/{task_id}`` is the same URL we poll.
+    Swallow all errors — fire-and-forget on a detached task with its own fresh client."""
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            await client.delete(poll_url, headers={"Authorization": f"Bearer {api_key}"})
+    except Exception:
+        pass
 
 
 async def handle_meshy_image_to_3d(
@@ -256,9 +268,13 @@ async def _poll_meshy_task(
 ) -> dict[str, Any]:
     """Poll a Meshy task until completion."""
     for poll_num in range(1, max_polls + 1):
-        await asyncio.sleep(poll_interval)
-
-        resp = await client.get(poll_url, headers={"Authorization": f"Bearer {api_key}"})
+        try:
+            await asyncio.sleep(poll_interval)
+            resp = await client.get(poll_url, headers={"Authorization": f"Bearer {api_key}"})
+        except asyncio.CancelledError:
+            # User/engine cancelled — stop the Meshy task upstream, then re-raise.
+            schedule_detached_cancel(lambda: _cancel_meshy_task(poll_url, api_key))
+            raise
         if resp.status_code != 200:
             raise RuntimeError(f"Meshy poll failed ({resp.status_code}): {resp.text}")
 

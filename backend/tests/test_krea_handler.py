@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from unittest.mock import AsyncMock, patch
 
@@ -9,6 +10,7 @@ import respx
 
 from handlers.krea import (
     KREA_BASE_URL,
+    _poll_krea_job,
     handle_krea_generate,
     handle_krea_image_style_reference,
     handle_krea_moodboard,
@@ -342,3 +344,17 @@ async def test_style_train_uploads_images_polls_and_emits_style(tmp_path) -> Non
 async def test_missing_krea_api_key_raises() -> None:
     with pytest.raises(ValueError, match="KREA_API_TOKEN"):
         await handle_krea_style_search(_node("krea-style-search"), {}, {})
+
+
+@pytest.mark.asyncio
+async def test_poll_krea_job_propagates_cancel_to_provider() -> None:
+    """When the poll is cancelled, the in-flight Krea job is DELETE'd upstream (so it stops
+    on Krea instead of running to completion), then CancelledError re-raises."""
+    mock_client = AsyncMock()
+
+    with patch("handlers.krea.schedule_detached_cancel") as mock_sched, \
+         patch("handlers.krea.asyncio.sleep", new=AsyncMock(side_effect=asyncio.CancelledError())):
+        with pytest.raises(asyncio.CancelledError):
+            await _poll_krea_job(mock_client, "krea-key", "job-abc", node_id="node-1")
+
+    mock_sched.assert_called_once()

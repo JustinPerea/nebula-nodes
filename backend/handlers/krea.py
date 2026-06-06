@@ -13,6 +13,7 @@ import httpx
 
 from models.events import ExecutionEvent, ProgressEvent
 from models.graph import GraphNode, PortValueDict
+from services.cancellation import schedule_detached_cancel
 from services.output import OUTPUT_ROOT, get_run_dir
 
 KREA_BASE_URL = "https://api.krea.ai"
@@ -238,6 +239,17 @@ def _result_urls(job: dict[str, Any]) -> list[str]:
     return [str(url) for url in urls if url]
 
 
+async def _cancel_krea_job(job_id: str, api_key: str) -> None:
+    """Best-effort: DELETE the job so a running Krea job stops on their side instead of
+    running to completion. Swallow all errors — fire-and-forget on a detached task with
+    its own fresh client (the poller's client is being torn down by the cancellation)."""
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            await client.delete(f"{KREA_BASE_URL}/jobs/{job_id}", headers=_auth_headers(api_key))
+    except Exception:
+        pass
+
+
 async def _poll_krea_job(
     client: httpx.AsyncClient,
     api_key: str,
@@ -253,11 +265,16 @@ async def _poll_krea_job(
 
     _emit = emit or noop_emit
     for poll_num in range(1, max_polls + 1):
-        await asyncio.sleep(poll_interval)
-        response = await client.get(
-            f"{KREA_BASE_URL}/jobs/{job_id}",
-            headers=_auth_headers(api_key),
-        )
+        try:
+            await asyncio.sleep(poll_interval)
+            response = await client.get(
+                f"{KREA_BASE_URL}/jobs/{job_id}",
+                headers=_auth_headers(api_key),
+            )
+        except asyncio.CancelledError:
+            # User/engine cancelled — stop the Krea job upstream, then re-raise.
+            schedule_detached_cancel(lambda: _cancel_krea_job(job_id, api_key))
+            raise
         _raise_for_krea_response(response, "job poll")
         job = response.json()
         status = str(job.get("status", "")).lower()

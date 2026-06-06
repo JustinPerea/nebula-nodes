@@ -120,7 +120,7 @@ Never promise these through the `replicate-universal` node — they're in the AP
 - **No streaming** (SSE via `urls.stream`). Token-by-token LLM/text output is not surfaced — results arrive whole at completion.
 - **No synchronous mode** (`Prefer: wait` header). Always polls at 2 s; fast models can't return faster via a held request.
 - **No webhooks** (`webhook_events_filter`). Completion is detected by polling only; no callbacks.
-- **No cancel** (`POST /v1/predictions/{id}/cancel`) and **no `Cancel-After`** runtime cap. A run can only end by finishing or hitting the 10-min poll ceiling.
+- **Cancellation IS wired** (2026-06-05, best-effort): on node cancellation the shared async-poll runner POSTs `/v1/predictions/{id}/cancel` so the run stops upstream instead of running to the 10-min ceiling. (No **`Cancel-After`** runtime cap, though.)
 - **No prediction history / listing** (`GET /v1/predictions`).
 - **No deployments** (`/v1/deployments…`) — private/auto-scaling endpoints aren't reachable.
 - **No trainings / fine-tuning** (`/v1/…/trainings`, `GET /v1/trainings/{id}`).

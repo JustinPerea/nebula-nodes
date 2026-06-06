@@ -14,6 +14,7 @@ patch at `services.output.<name>` (the source), not on the meshy module.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 from pathlib import Path
 from typing import Any
@@ -24,6 +25,7 @@ import respx
 from httpx import Response
 
 from handlers.meshy import (
+    _poll_meshy_task,
     handle_meshy_image_to_image,
     handle_meshy_multi_image_to_3d,
     handle_meshy_text_to_3d,
@@ -362,3 +364,19 @@ async def test_text_to_3d_hd_texture_in_refine_body(tmp_path):
         "hd_texture must be forwarded in the refine request"
     )
     assert refine_submit_body.get("remove_lighting") is True
+
+
+@pytest.mark.asyncio
+async def test_poll_meshy_task_propagates_cancel_to_provider() -> None:
+    """When the poll is cancelled, the in-flight Meshy task is DELETE'd upstream (so it
+    stops on Meshy instead of running to completion), then CancelledError re-raises."""
+    poll_url = "https://api.meshy.ai/openapi/v2/text-to-3d/task-abc"
+
+    mock_client = AsyncMock()
+
+    with patch("handlers.meshy.schedule_detached_cancel") as mock_sched, \
+         patch("handlers.meshy.asyncio.sleep", new=AsyncMock(side_effect=asyncio.CancelledError())):
+        with pytest.raises(asyncio.CancelledError):
+            await _poll_meshy_task(mock_client, "meshy-key", poll_url, AsyncMock(), "node-1")
+
+    mock_sched.assert_called_once()

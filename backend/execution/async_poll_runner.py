@@ -7,6 +7,19 @@ from typing import Any, Awaitable, Callable
 import httpx
 
 from models.events import ExecutionEvent, ProgressEvent
+from services.cancellation import schedule_detached_cancel
+
+
+async def _cancel_async_poll(cancel_url: str, method: str, headers: dict[str, str]) -> None:
+    """Best-effort: stop a running provider job upstream on cancellation. Method/URL vary by
+    provider — Runway is ``DELETE`` on the task URL (= the poll URL); Replicate is
+    ``POST .../cancel``. Swallow all errors — fire-and-forget on a detached task whose own
+    client must be opened fresh (the poller's client is being torn down)."""
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            await client.request(method, cancel_url, headers=headers)
+    except Exception:
+        pass
 
 
 @dataclass
@@ -21,6 +34,11 @@ class AsyncPollConfig:
     poll_interval: float = 2.0
     max_polls: int = 300
     timeout: float = 30.0
+    # Cancellation (best-effort, fired on CancelledError). Default: DELETE the poll URL
+    # (correct for Runway, whose cancel is DELETE /v1/tasks/{id} = the poll URL). Providers
+    # whose cancel differs (e.g. Replicate's POST .../cancel) set these.
+    cancel_url_template: str | None = None
+    cancel_method: str = "DELETE"
 
 
 def _get_nested(data: dict[str, Any], path: str) -> Any:
@@ -52,10 +70,16 @@ async def async_poll_execute(
         submit_data = submit_resp.json()
         task_id = str(_get_nested(submit_data, config.task_id_path))
         poll_url = config.poll_url_template.format(task_id=task_id)
+        cancel_url = config.cancel_url_template.format(task_id=task_id) if config.cancel_url_template else poll_url
 
         for poll_num in range(1, config.max_polls + 1):
-            await asyncio.sleep(config.poll_interval)
-            poll_resp = await client.get(poll_url, headers=config.headers)
+            try:
+                await asyncio.sleep(config.poll_interval)
+                poll_resp = await client.get(poll_url, headers=config.headers)
+            except asyncio.CancelledError:
+                # User/engine cancelled — stop the provider job upstream, then re-raise.
+                schedule_detached_cancel(lambda: _cancel_async_poll(cancel_url, config.cancel_method, config.headers))
+                raise
             if poll_resp.status_code != 200:
                 raise RuntimeError(f"Poll request failed ({poll_resp.status_code}): {poll_resp.text}")
 
