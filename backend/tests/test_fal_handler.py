@@ -82,6 +82,35 @@ async def test_demucs_requests_the_four_supported_stems() -> None:
 
 
 @pytest.mark.asyncio
+async def test_mask_input_maps_to_mask_url() -> None:
+    """A `mask` input port (for inpainting endpoints like flux-pro/v1/fill) maps to mask_url,
+    alongside image_url + prompt."""
+    submit = MagicMock()
+    submit.status_code = 200
+    submit.json.return_value = {"images": [{"url": "https://fal.ai/out.png"}]}
+    node = GraphNode(id="ip", definitionId="flux-fill-inpaint", params={"endpoint_id": "fal-ai/flux-pro/v1/fill"})
+    inputs = {
+        "prompt": PortValueDict(type="Text", value="a red wool beanie"),
+        "image": PortValueDict(type="Image", value="https://x/img.png"),
+        "mask": PortValueDict(type="Image", value="https://x/mask.png"),
+    }
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = submit
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        result = await handle_fal_universal(node, inputs, {"FAL_KEY": "k"})
+
+    body = mock_client.post.call_args.kwargs["json"]
+    assert body["mask_url"] == "https://x/mask.png"
+    assert body["image_url"] == "https://x/img.png"
+    assert body["prompt"] == "a red wool beanie"
+    assert result["image"]["value"] == "https://fal.ai/out.png"
+
+
+@pytest.mark.asyncio
 async def test_fal_queue_run_propagates_cancel_to_provider() -> None:
     """When the poll is cancelled, the in-flight FAL request is cancelled upstream (so it
     stops on FAL instead of running to completion ~10 min), then CancelledError re-raises."""

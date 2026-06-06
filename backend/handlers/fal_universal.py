@@ -184,6 +184,11 @@ async def handle_fal_universal(
     if audio_input and audio_input.value:
         fal_input["audio_url"] = _to_fal_url(str(audio_input.value))
 
+    # Mask input (flux-pro/v1/fill inpainting) → mask_url
+    mask_input = inputs.get("mask")
+    if mask_input and mask_input.value:
+        fal_input["mask_url"] = _to_fal_url(str(mask_input.value))
+
     texture_image_input = inputs.get("texture_image")
     if texture_image_input and texture_image_input.value:
         fal_input["texture_image_url"] = _to_fal_url(str(texture_image_input.value))

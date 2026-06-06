@@ -3046,6 +3046,40 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     ],
   },
 
+  'flux-fill-inpaint': {
+    id: 'flux-fill-inpaint',
+    displayName: 'FLUX Fill (Inpaint)',
+    category: 'image-gen',
+    apiProvider: 'fal',
+    apiEndpoint: 'fal-ai/flux-pro/v1/fill',
+    envKeyName: 'FAL_KEY',
+    executionPattern: 'async-poll',
+    inputPorts: [
+      { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
+      { id: 'image', label: 'Base Image', dataType: 'Image', required: true },
+      { id: 'mask', label: 'Mask (white = edit)', dataType: 'Image', required: true },
+    ],
+    outputPorts: [
+      { id: 'image', label: 'Image', dataType: 'Image', required: false },
+    ],
+    params: [
+      { key: 'num_images', label: 'Count', type: 'integer', required: false, default: 1, min: 1, max: 4 },
+      {
+        key: 'output_format',
+        label: 'Format',
+        type: 'enum',
+        required: false,
+        default: 'jpeg',
+        options: [
+          { label: 'JPEG', value: 'jpeg' },
+          { label: 'PNG', value: 'png' },
+        ],
+      },
+      { key: 'enhance_prompt', label: 'Enhance Prompt', type: 'boolean', required: false, default: false },
+      { key: 'seed', label: 'Seed', type: 'integer', required: false, placeholder: 'Random' },
+    ],
+  },
+
   'fast-sdxl': {
     id: 'fast-sdxl',
     displayName: 'Fast SDXL',

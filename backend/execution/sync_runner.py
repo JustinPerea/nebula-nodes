@@ -323,6 +323,10 @@ def get_handler_registry(
                             node.params.pop(array_key, None)
             return await handle_fal_universal(node, inputs, api_keys, emit=emit)
 
+        async def _flux_fill_inpaint_handler(node, inputs, api_keys):
+            node.params.setdefault("endpoint_id", "fal-ai/flux-pro/v1/fill")
+            return await handle_fal_universal(node, inputs, api_keys, emit=emit)
+
         async def _wan26_t2v_handler(
             node: GraphNode,
             inputs: dict[str, PortValueDict],
@@ -621,6 +625,7 @@ def get_handler_registry(
         registry["veo-3"] = _veo3_handler
         registry["flux-schnell"] = _flux_schnell_handler
         registry["fast-sdxl"] = _fast_sdxl_handler
+        registry["flux-fill-inpaint"] = _flux_fill_inpaint_handler
         registry["wan-2-6-t2v"] = _wan26_t2v_handler
         registry["luma-ray2-t2v"] = _luma_ray2_handler
         registry["ltx-video-2"] = _ltx_video2_handler

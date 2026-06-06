@@ -10,7 +10,7 @@ Sorted by node count (desc). **API coverage** = share of the provider's publishe
 
 | Provider | Nodes | API coverage | Agent skill | Top unused capability |
 |---|---:|---|---|---|
-| [FAL (fal.ai)](./fal.md) | 44 | ~52% | complete | Stem separation now wired (Demucs); remaining FAL audio gaps: TTS, voice cloning |
+| [FAL (fal.ai)](./fal.md) | 45 | ~53% | complete | Stem separation now wired (Demucs); remaining FAL audio gaps: TTS, voice cloning |
 | [OpenAI](./openai.md) | 9 | ~60% | complete | Image variations endpoint (dall-e-2) — no node |
 | [Meshy](./meshy.md) | 8 | ~35% | complete | Creative Lab product line (Keychain, Fridge Magnet, Figure, Lamp) — entirely unused |
 | [Google (Gemini / Imagen / Veo / Lyria)](./google.md) | 8 | ~45% | complete | Veo reference images (up to 3) and video extension (clips longer than 8s, up to ~148s) |
@@ -65,7 +65,7 @@ Across all 15 providers, the most valuable **unused** API capabilities, ranked. 
 5. **Video edit / extend / reference modes** — xAI video edits+extensions, Veo reference images + extension (up to ~148s), FAL/Runway video-to-video families. Extends Nebula past one-shot clips.
 6. **Krea's gateway breadth** — 30+ video models, image editing (Flux Kontext/SeedEdit/Seedream), and Topaz upscaling (to 22K) all unwired; some are covered by other providers, upscaling and node-apps are not.
 7. **Image upscaling** — FAL now exposes two image upscalers: `seedvr2-upscale` (faithful) and `clarity-upscaler` (creative/added detail, shipped 2026-06-05). **Video upscaling** is now also wired: SeedVR2 Video Upscale (`seedvr-video-upscale`, shipped 2026-06-05) — temporally-consistent video upscale to up to 4K, the first video upscaler in Nebula. The remaining upscaling gap is Runway's `image_upscale` (no node); a common, high-demand post-step.
-8. **Inpainting / masked image editing** — FAL hosts inpainting models with no Nebula node.
+8. **Inpainting / masked image editing** — **CLOSED** (2026-06-05): `flux-fill-inpaint` (FAL FLUX.1 [pro] Fill, `fal-ai/flux-pro/v1/fill`) wires mask-based editing — image + mask + prompt → edited image, where the white region of the mask is the area to edit (inpaint to replace objects, outpaint to extend borders) and unmasked regions stay untouched. The first Nebula node to use a `mask` input.
 9. **Prompt caching** — **addressed** (2026-06-05): `claude-chat` and `openrouter-universal` now have an opt-in `prompt_caching` toggle (default off) that sets `cache_control: {type: ephemeral}` breakpoints on the system prefix + last content block, making re-runs within ~5 min a ~90%-cheaper cache read. Opt-in because of a small cache-write premium; Anthropic ignores prefixes under ~1024 tokens so it's safe on short prompts. OpenAI nodes (`gpt-4o-chat`) cache automatically with no param.
 10. **Webhooks + cancellation** — **cancellation is now wired across the async providers** (2026-06-05): on node cancellation each handler fires the provider's cancel endpoint (best-effort, on a detached task) so the queued/in-flight job stops upstream instead of running to completion — FAL (`PUT cancel_url`), Runway (`DELETE /tasks/{id}`), Replicate (`POST /predictions/{id}/cancel`), Meshy (`DELETE` the task), Krea (`DELETE /jobs/{id}`), Higgsfield (`POST cancel_url`). MiniMax exposes no documented cancel endpoint (task cancels locally only). **Webhooks** remain unused — a local BYOK app has no public callback URL to receive them.
 
