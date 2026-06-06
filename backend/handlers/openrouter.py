@@ -55,6 +55,12 @@ async def handle_openrouter_universal(
                     data_uri = f"data:{mime_map.get(suffix, 'image/png')};base64,{b64}"
                     content.append({"type": "image_url", "image_url": {"url": data_uri}})
 
+    if node.params.get("prompt_caching"):
+        # OpenRouter passes cache_control through to Anthropic-family models (cache
+        # read ~90% cheaper on re-runs); other providers ignore it. OpenAI models
+        # cache automatically with no param, so this toggle is a no-op for them.
+        content[-1] = {**content[-1], "cache_control": {"type": "ephemeral"}}
+
     messages = [{"role": "user", "content": content}]
 
     # Check if this is an image generation model

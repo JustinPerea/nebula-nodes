@@ -1311,6 +1311,7 @@ Nodes: 122 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | Stop Sequences | string | — | — |
 | Extended Thinking | bool | false | — |
 | Thinking Budget | int | 10000 | 1024–200000 |
+| Prompt Caching | bool | false | — |
 
 ---
 
@@ -2256,6 +2257,7 @@ Nodes: 122 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | Temperature | float | 1 | 0–2 |
 | Max Tokens | int | 4096 | 1–200000 |
 | Response Format | enum | text | Text, JSON |
+| Prompt Caching | bool | false | — |
 
 ---
 

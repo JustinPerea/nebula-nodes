@@ -39,7 +39,7 @@ There is exactly one OpenRouter node. The model dropdown is what varies.
 
 | Node (in app) | Node ID | Endpoint / model | Key params | Use it for |
 |---|---|---|---|---|
-| **OpenRouter** | `openrouter-universal` | `POST https://openrouter.ai/api/v1/chat/completions` — model chosen live from `/api/openrouter/models` (OpenRouter's full catalog) | `model` (required, string; from the live searchable list), `temperature` (float 0–2, default 1, text only), `max_tokens` (int 1–200000, default 4096, text only), `response_format` (Text / JSON, text only — JSON mode, model-dependent) | One node for the whole OpenRouter catalog. Text chat/reasoning/coding with any text model · vision Q&A (image-in → text-out) with a vision model · image generation (text → image) with an image-output model. The chosen model decides which. |
+| **OpenRouter** | `openrouter-universal` | `POST https://openrouter.ai/api/v1/chat/completions` — model chosen live from `/api/openrouter/models` (OpenRouter's full catalog) | `model` (required, string; from the live searchable list), `temperature` (float 0–2, default 1, text only), `max_tokens` (int 1–200000, default 4096, text only), `response_format` (Text / JSON, text only — JSON mode, model-dependent), `prompt_caching` (boolean, default off — opt-in `cache_control` for Anthropic-family models) | One node for the whole OpenRouter catalog. Text chat/reasoning/coding with any text model · vision Q&A (image-in → text-out) with a vision model · image generation (text → image) with an image-output model. The chosen model decides which. |
 
 The model list is **live and per-account** (backend proxies OpenRouter's `/api/v1/models`, slimmed to `id` / `name` / `input_modalities` / `output_modalities` / `context_length` / `pricing`, cached 5 min). You are not limited to a hardcoded set — use the Inspector search box to filter. To do a given job, **pick a model whose modalities match it**: text-out for chat, `image` in `input_modalities` for vision, `image` in `output_modalities` to generate pictures.
 
@@ -53,10 +53,11 @@ The model list is **live and per-account** (backend proxies OpenRouter's `/api/v
 | Temperature | `temperature` | float | 0 – 2, step 0.1, default **1** | **text/vision only** | Higher = more random. Lower (e.g. 0.2–0.4) = more focused/deterministic. Ignored by image generation. |
 | Max Tokens | `max_tokens` | integer | 1 – 200000, default **4096** | **text/vision only** | Upper bound on generated tokens. Ignored by image generation. |
 | Response Format | `response_format` | enum | Text / JSON, default **Text** | **text only** | **JSON mode** (added 2026-06-05). When set to JSON the handler forwards `response_format: {"type":"json_object"}`, so the reply is valid JSON. **Model-dependent** — the chosen model must support JSON output. Live-verified against the API. |
+| Prompt Caching | `prompt_caching` | boolean | default **off** | text/vision | **Opt-in** prompt caching (added 2026-06-05). When on, the handler attaches `cache_control: {type: ephemeral}` to the last user content block. OpenRouter passes it through to **Anthropic-family models** (cache read ~90% cheaper on a re-run within ~5 min); **other providers ignore it**, and **OpenAI models cache automatically** so the toggle is a no-op for them. Off by default because a never-reused large prefix pays a small cache-write premium. |
 
 **Internal / not user-set:** `_output_image` (boolean) — written by the frontend when you pick a model with `image` output; it routes the run to the image path. Don't expose or hand-edit it.
 
-**Not exposed (the API supports them; the node does not send them):** `top_p`, `top_k`, `seed`, `stop`, `frequency_penalty`, `presence_penalty`, `repetition_penalty`, `min_p`, `logit_bias`, `tools` / `tool_choice`, strict `json_schema` / grammar (basic `json_object` JSON mode *is* now exposed via `response_format` — see above), `reasoning` / `reasoning_effort`, `provider` routing, `image_config` (aspect ratio / size / style / strength), web-search plugins, `cache_control`. See **Capability boundaries**.
+**Not exposed (the API supports them; the node does not send them):** `top_p`, `top_k`, `seed`, `stop`, `frequency_penalty`, `presence_penalty`, `repetition_penalty`, `min_p`, `logit_bias`, `tools` / `tool_choice`, strict `json_schema` / grammar (basic `json_object` JSON mode *is* now exposed via `response_format` — see above), `reasoning` / `reasoning_effort`, `provider` routing, `image_config` (aspect ratio / size / style / strength), web-search plugins. (`cache_control` *is* now exposed via the opt-in `prompt_caching` toggle — see above.) See **Capability boundaries**.
 
 ## Recipes
 
@@ -108,7 +109,7 @@ Do not promise these through the node. They're real OpenRouter API features, jus
 | PDF/document & video **input** (`file` / `video_url` parts) | Yes | **No** | Not wired. |
 | Provider routing & fallbacks (`provider`, `models`, `route`) | Yes | **No** | Can't pin/exclude providers, set price/latency prefs, or define fallback chains. |
 | Web Search server tool (`openrouter:web_search`, `:online`, plugins) | Yes | **No** | No web-grounded answers. |
-| Prompt caching (`cache_control`) | Yes | **No** | No cache breakpoints set. |
+| Prompt caching (`cache_control`) | Yes | **Yes (opt-in)** | The `prompt_caching` toggle (default off, added 2026-06-05) sets an ephemeral `cache_control` breakpoint on the last content block. Passed through to Anthropic-family models (~90%-cheaper cache reads on re-runs); other providers ignore it; OpenAI caches automatically. |
 | Embeddings (`POST /api/v1/embeddings`) · legacy completions · generation-stats (`GET /api/v1/generation`) · credits/key endpoints | Yes | **No** | Separate endpoints; not wired. The model-list proxy also ignores `category` / `supported_parameters` filters. |
 
 ## Sources

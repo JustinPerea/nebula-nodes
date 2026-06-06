@@ -172,6 +172,13 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         max: 200000,
         condition: 'extended_thinking',
       },
+      {
+        key: 'prompt_caching',
+        label: 'Prompt Caching',
+        type: 'boolean',
+        required: false,
+        default: false,
+      },
     ],
   },
 
@@ -1993,6 +2000,13 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
           { label: 'Text', value: 'text' },
           { label: 'JSON', value: 'json_object' },
         ],
+      },
+      {
+        key: 'prompt_caching',
+        label: 'Prompt Caching',
+        type: 'boolean',
+        required: false,
+        default: false,
       },
     ],
   },

@@ -41,7 +41,7 @@ Only one Anthropic node exists. Pick the **model**, not the node.
 
 | Nebula node (id · display) | Endpoint / model | Inputs → output | Key params |
 |---|---|---|---|
-| `claude-chat` · **Claude** | `POST /v1/messages` (host `api.anthropic.com`), model picked from enum (default `claude-sonnet-4-6`) | `messages` (Text, required) + `images` (Image, optional, multiple) → `text` (Text, streamed) | `model`, `max_tokens` (required), `temperature`, `system`, `top_p`, `stop_sequences`, `extended_thinking` + `thinkingBudget` |
+| `claude-chat` · **Claude** | `POST /v1/messages` (host `api.anthropic.com`), model picked from enum (default `claude-sonnet-4-6`) | `messages` (Text, required) + `images` (Image, optional, multiple) → `text` (Text, streamed) | `model`, `max_tokens` (required), `temperature`, `system`, `top_p`, `stop_sequences`, `extended_thinking` + `thinkingBudget`, `prompt_caching` |
 
 **Model choice (enum values — use the `value`, not the label):**
 
@@ -66,8 +66,9 @@ All params live on the `claude-chat` node (`backend/data/node_definitions.json`)
 | `stop_sequences` | string | no | (unset) | comma-separated list | `stop_sequences` (array) | Split on `,`, trimmed, empties dropped. e.g. `END,###` → `["END", "###"]`. |
 | `extended_thinking` | boolean | no | `false` | true/false | `thinking.type = "enabled"` | Turns on the reasoning pass; forces `temperature=1`; reasoning is **not** surfaced (only final text). |
 | `thinkingBudget` | integer | no | `10000` | min `1024`, max `200000` | `thinking.budget_tokens` | Only visible/active when `extended_thinking` is on (`condition: extended_thinking`). Floored to 1024; keep **below** `max_tokens`. |
+| `prompt_caching` | boolean | no | `false` | true/false | `cache_control: {type: ephemeral}` on `system` (sent as a content-block array) + the last user content block | **Opt-in** prompt caching. When on, a re-run within ~5 min reads the cached prefix at ~90% lower input cost. Off by default because a never-reused large prefix pays a small cache-**write** premium; Anthropic **ignores prefixes under ~1024 tokens**, so it's a safe no-op on short prompts. Turn on when the same long `system`/prompt is reused across runs. |
 
-**What never reaches the request body:** `top_k`, `tools`/`tool_choice`, `output_config`/structured-output, `cache_control`, `document` content blocks, multi-turn `messages` arrays, `metadata`, `service_tier`. See Capability boundaries.
+**What never reaches the request body:** `top_k`, `tools`/`tool_choice`, `output_config`/structured-output, `document` content blocks, multi-turn `messages` arrays, `metadata`, `service_tier`. (`cache_control` *is* now sent when `prompt_caching` is on — see that param.) See Capability boundaries.
 
 ## Recipes
 
@@ -102,7 +103,7 @@ Never promise these through the `claude-chat` node (from the audit gap table in 
 - **Server tools** (web search, web fetch, code execution, tool search) — none wired.
 - **Client tools** (bash, text editor) — none.
 - **Structured / JSON output** — **NOT available.** Anthropic has no native `response_format`/JSON-mode param (unlike OpenAI `gpt-4o-chat`, Gemini `gemini-chat`, and OpenRouter `openrouter-universal`, which got JSON mode 2026-06-05). On Anthropic, reliable structured output requires **tool-use or prompt/prefill**, neither of which `claude-chat` exposes. If you need JSON, prompt for it in `system`/`messages` as plain text — no guarantee it's valid.
-- **Prompt caching** (`cache_control`) — not used. A long repeated `system` prompt pays full input cost every run.
+- **Prompt caching** (`cache_control`) — **now exposed** as the opt-in `prompt_caching` toggle (default off; added 2026-06-05). When on, the handler attaches `cache_control: {type: ephemeral}` to the `system` block (sent as a content-block array) and the last user content block, so a re-run within ~5 min reads the cached prefix at ~90% lower input cost. Anthropic ignores prefixes under ~1024 tokens, so it's a no-op (no write premium) on short prompts.
 - **PDF / document input** (`document` content block) — not supported. Only `image` and `text` content. No PDFs.
 - **`top_k` sampling** — not exposed (only `temperature`, `top_p`*, `stop_sequences`). *and `top_p` is itself suppressed unless temperature is cleared.
 - **Extended-thinking reasoning chain** — requested but **filtered out** of the stream (only the final text is surfaced). `adaptive` thinking mode also not exposed.

@@ -257,6 +257,13 @@
         "min": 1024,
         "max": 200000,
         "condition": "extended_thinking"
+      },
+      {
+        "key": "prompt_caching",
+        "label": "Prompt Caching",
+        "type": "boolean",
+        "required": false,
+        "default": false
       }
     ]
   },
@@ -3043,6 +3050,13 @@
             "value": "json_object"
           }
         ]
+      },
+      {
+        "key": "prompt_caching",
+        "label": "Prompt Caching",
+        "type": "boolean",
+        "required": false,
+        "default": false
       }
     ]
   },

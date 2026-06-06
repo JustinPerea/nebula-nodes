@@ -336,6 +336,56 @@ async def test_top_p_omitted_when_temperature_set():
     assert "top_p" not in body, "top_p must be omitted when temperature is also set (Anthropic API constraint)"
 
 
+@pytest.mark.asyncio
+async def test_prompt_caching_on_marks_system_and_last_content_block():
+    """When prompt_caching is on, system is sent as a content-block array with an
+    ephemeral cache_control breakpoint, and the last user content block also carries one."""
+    fake_response = FakeStreamResponse(_make_sse_lines(["ok"]))
+    with patch("execution.stream_runner.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.stream = MagicMock(return_value=fake_response)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        await handle_claude_chat(
+            _make_node({"model": "claude-sonnet-4-6", "max_tokens": 1024, "system": "You are a pirate.", "prompt_caching": True}),
+            {"messages": PortValueDict(type="Text", value="hello")},
+            {"ANTHROPIC_API_KEY": "sk-ant-test"},
+        )
+
+    body = mock_client.stream.call_args.kwargs.get("json") or mock_client.stream.call_args[1].get("json")
+    assert body["system"] == [
+        {"type": "text", "text": "You are a pirate.", "cache_control": {"type": "ephemeral"}}
+    ], "system must be a content-block array with an ephemeral cache_control breakpoint when caching is on"
+    assert body["messages"][0]["content"][-1]["cache_control"] == {"type": "ephemeral"}, (
+        "last user content block must carry an ephemeral cache_control breakpoint when caching is on"
+    )
+
+
+@pytest.mark.asyncio
+async def test_prompt_caching_off_by_default_keeps_string_system_and_no_cache_control():
+    """Default (no prompt_caching): system stays a plain string and no content block has cache_control."""
+    fake_response = FakeStreamResponse(_make_sse_lines(["ok"]))
+    with patch("execution.stream_runner.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.stream = MagicMock(return_value=fake_response)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        await handle_claude_chat(
+            _make_node({"model": "claude-sonnet-4-6", "max_tokens": 1024, "system": "You are a pirate."}),
+            {"messages": PortValueDict(type="Text", value="hello")},
+            {"ANTHROPIC_API_KEY": "sk-ant-test"},
+        )
+
+    body = mock_client.stream.call_args.kwargs.get("json") or mock_client.stream.call_args[1].get("json")
+    assert body["system"] == "You are a pirate.", "system must remain a plain string when caching is off"
+    for block in body["messages"][0]["content"]:
+        assert "cache_control" not in block, "no content block may carry cache_control when caching is off"
+
+
 def test_model_lineup_current():
     """Pin: registry model values must match the current Anthropic model lineup.
 

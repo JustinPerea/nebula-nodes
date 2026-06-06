@@ -192,6 +192,39 @@ async def test_openrouter_json_sets_response_format():
 
 
 @pytest.mark.asyncio
+async def test_prompt_caching_on_marks_last_content_block():
+    """When prompt_caching is on, the last user content block carries an ephemeral cache_control breakpoint."""
+    with patch("handlers.openrouter.stream_execute", new_callable=AsyncMock) as mock_stream:
+        mock_stream.return_value = "ok"
+        await handle_openrouter_universal(
+            _make_node({"model": "anthropic/claude-3.5-sonnet", "prompt_caching": True}),
+            {"messages": PortValueDict(type="Text", value="hello")},
+            {"OPENROUTER_API_KEY": "sk-or-test"},
+            emit=AsyncMock(),
+        )
+    body = mock_stream.call_args.kwargs["request_body"]
+    assert body["messages"][0]["content"][-1]["cache_control"] == {"type": "ephemeral"}, (
+        "last content block must carry an ephemeral cache_control breakpoint when caching is on"
+    )
+
+
+@pytest.mark.asyncio
+async def test_prompt_caching_off_by_default_has_no_cache_control():
+    """Default (no prompt_caching): no content block carries cache_control."""
+    with patch("handlers.openrouter.stream_execute", new_callable=AsyncMock) as mock_stream:
+        mock_stream.return_value = "ok"
+        await handle_openrouter_universal(
+            _make_node({"model": "anthropic/claude-3.5-sonnet"}),
+            {"messages": PortValueDict(type="Text", value="hello")},
+            {"OPENROUTER_API_KEY": "sk-or-test"},
+            emit=AsyncMock(),
+        )
+    body = mock_stream.call_args.kwargs["request_body"]
+    for block in body["messages"][0]["content"]:
+        assert "cache_control" not in block, "no content block may carry cache_control when caching is off"
+
+
+@pytest.mark.asyncio
 async def test_openrouter_text_omits_response_format():
     with patch("handlers.openrouter.stream_execute", new_callable=AsyncMock) as mock_stream:
         mock_stream.return_value = "plain"

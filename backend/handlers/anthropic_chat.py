@@ -26,6 +26,8 @@ async def handle_claude_chat(
     if not api_key:
         raise ValueError("ANTHROPIC_API_KEY is required")
 
+    caching = bool(node.params.get("prompt_caching"))
+
     content: list[dict[str, Any]] = [{"type": "text", "text": messages_text}]
 
     images_input = inputs.get("images")
@@ -50,6 +52,12 @@ async def handle_claude_chat(
                     mime_map = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg", "webp": "image/webp"}
                     content.append({"type": "image", "source": {"type": "base64", "media_type": mime_map.get(suffix, "image/png"), "data": b64_data}})
 
+    if caching:
+        # Cache breakpoint on the last content block — caches the whole user-turn
+        # prefix. Anthropic ignores prefixes under ~1024 tokens, so this is a no-op
+        # (no cache-write premium) on short prompts.
+        content[-1] = {**content[-1], "cache_control": {"type": "ephemeral"}}
+
     messages = [{"role": "user", "content": content}]
 
     model = node.params.get("model", "claude-sonnet-4-6")
@@ -73,7 +81,14 @@ async def handle_claude_chat(
 
     system_prompt = node.params.get("system")
     if system_prompt:
-        request_body["system"] = str(system_prompt)
+        if caching:
+            # Send system as a content-block array so the cache_control breakpoint
+            # caches the (often-repeated) system prefix.
+            request_body["system"] = [
+                {"type": "text", "text": str(system_prompt), "cache_control": {"type": "ephemeral"}}
+            ]
+        else:
+            request_body["system"] = str(system_prompt)
 
     if node.params.get("extended_thinking"):
         budget = int(node.params.get("thinkingBudget", 10000))
