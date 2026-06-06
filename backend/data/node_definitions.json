@@ -12004,6 +12004,97 @@
       }
     ]
   },
+  "seedvr-video-upscale": {
+    "id": "seedvr-video-upscale",
+    "displayName": "SeedVR2 Video Upscale",
+    "category": "transform",
+    "apiProvider": "fal",
+    "apiEndpoint": "fal-ai/seedvr/upscale/video",
+    "envKeyName": "FAL_KEY",
+    "executionPattern": "async-poll",
+    "inputPorts": [
+      {
+        "id": "video",
+        "label": "Video",
+        "dataType": "Video",
+        "required": true
+      }
+    ],
+    "outputPorts": [
+      {
+        "id": "video",
+        "label": "Video",
+        "dataType": "Video",
+        "required": false
+      }
+    ],
+    "params": [
+      {
+        "key": "upscale_mode",
+        "label": "Mode",
+        "type": "enum",
+        "required": false,
+        "default": "factor",
+        "options": [
+          { "label": "Factor (multiplier)", "value": "factor" },
+          { "label": "Target resolution", "value": "target" }
+        ]
+      },
+      {
+        "key": "upscale_factor",
+        "label": "Upscale Factor",
+        "type": "float",
+        "required": false,
+        "default": 2,
+        "min": 1,
+        "max": 4,
+        "step": 0.5
+      },
+      {
+        "key": "target_resolution",
+        "label": "Target Resolution",
+        "type": "enum",
+        "required": false,
+        "default": "1080p",
+        "options": [
+          { "label": "720p", "value": "720p" },
+          { "label": "1080p", "value": "1080p" },
+          { "label": "1440p", "value": "1440p" },
+          { "label": "2160p (4K)", "value": "2160p" }
+        ]
+      },
+      {
+        "key": "noise_scale",
+        "label": "Noise Scale",
+        "type": "float",
+        "required": false,
+        "default": 0.1,
+        "min": 0,
+        "max": 1,
+        "step": 0.05
+      },
+      {
+        "key": "output_quality",
+        "label": "Output Quality",
+        "type": "enum",
+        "required": false,
+        "default": "high",
+        "options": [
+          { "label": "Low", "value": "low" },
+          { "label": "Medium", "value": "medium" },
+          { "label": "High", "value": "high" },
+          { "label": "Maximum", "value": "maximum" }
+        ]
+      },
+      {
+        "key": "seed",
+        "label": "Seed",
+        "type": "integer",
+        "required": false,
+        "placeholder": "Random"
+      }
+    ]
+  },
   "seedvr2-upscale": {
     "id": "seedvr2-upscale",
     "displayName": "SeedVR2 Upscale",

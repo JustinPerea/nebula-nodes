@@ -787,6 +787,10 @@ def get_handler_registry(
             node.params.setdefault("endpoint_id", "fal-ai/clarity-upscaler")
             return await handle_fal_universal(node, inputs, api_keys, emit=emit)
 
+        async def _seedvr_video_upscale_handler(node, inputs, api_keys):
+            node.params.setdefault("endpoint_id", "fal-ai/seedvr/upscale/video")
+            return await handle_fal_universal(node, inputs, api_keys, emit=emit)
+
         async def _seedream45_handler(node, inputs, api_keys):
             node.params.setdefault("endpoint_id", "fal-ai/bytedance/seedream/v4.5/text-to-image")
             return await handle_fal_universal(node, inputs, api_keys, emit=emit)
@@ -814,6 +818,7 @@ def get_handler_registry(
         registry["gpt-image-2-fal-edit"] = _gpt_image_2_fal_edit_handler
         registry["seedvr2-upscale"] = _seedvr2_upscale_handler
         registry["clarity-upscaler"] = _clarity_upscaler_handler
+        registry["seedvr-video-upscale"] = _seedvr_video_upscale_handler
         registry["seedream-4-5"] = _seedream45_handler
         registry["krea-2-generate"] = _krea_generate_handler
         registry["krea-style-train"] = _krea_style_train_handler
