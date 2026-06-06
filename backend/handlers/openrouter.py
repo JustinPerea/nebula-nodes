@@ -73,6 +73,11 @@ async def handle_openrouter_universal(
     if temperature is not None:
         request_body["temperature"] = float(temperature)
 
+    # Structured output (JSON mode) for text models — forwarded OpenAI-style.
+    response_format = node.params.get("response_format")
+    if response_format and response_format != "text" and not wants_image:
+        request_body["response_format"] = {"type": response_format}
+
     if wants_image:
         # Image generation via chat/completions
         request_body["modalities"] = ["text", "image"]

@@ -1983,6 +1983,17 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         min: 1,
         max: 200000,
       },
+      {
+        key: 'response_format',
+        label: 'Response Format',
+        type: 'enum',
+        required: false,
+        default: 'text',
+        options: [
+          { label: 'Text', value: 'text' },
+          { label: 'JSON', value: 'json_object' },
+        ],
+      },
     ],
   },
 

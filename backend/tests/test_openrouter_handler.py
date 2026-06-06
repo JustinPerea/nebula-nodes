@@ -174,3 +174,32 @@ async def test_image_generation_uses_bearer_header():
     assert captured_headers.get("Authorization") == "Bearer sk-or-xyz"
     assert "X-OpenRouter-Title" in captured_headers
     assert "X-Title" not in captured_headers
+
+
+@pytest.mark.asyncio
+async def test_openrouter_json_sets_response_format():
+    """response_format=json_object must be forwarded as {"type": "json_object"}."""
+    with patch("handlers.openrouter.stream_execute", new_callable=AsyncMock) as mock_stream:
+        mock_stream.return_value = '{"ok": true}'
+        await handle_openrouter_universal(
+            _make_node({"model": "openai/gpt-4o", "response_format": "json_object"}),
+            {"messages": PortValueDict(type="Text", value="Return JSON")},
+            {"OPENROUTER_API_KEY": "sk-or-test"},
+            emit=AsyncMock(),
+        )
+    body = mock_stream.call_args.kwargs["request_body"]
+    assert body["response_format"] == {"type": "json_object"}
+
+
+@pytest.mark.asyncio
+async def test_openrouter_text_omits_response_format():
+    with patch("handlers.openrouter.stream_execute", new_callable=AsyncMock) as mock_stream:
+        mock_stream.return_value = "plain"
+        await handle_openrouter_universal(
+            _make_node({"model": "openai/gpt-4o"}),
+            {"messages": PortValueDict(type="Text", value="Hi")},
+            {"OPENROUTER_API_KEY": "sk-or-test"},
+            emit=AsyncMock(),
+        )
+    body = mock_stream.call_args.kwargs["request_body"]
+    assert "response_format" not in body

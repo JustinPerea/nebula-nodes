@@ -79,6 +79,12 @@ async def handle_gemini_chat(
     if max_tokens:
         generation_config["maxOutputTokens"] = int(max_tokens)
 
+    # Structured output: response_format carries the MIME type (e.g. application/json).
+    # The node exposed this param but the handler previously ignored it.
+    response_format = node.params.get("response_format")
+    if response_format and response_format != "text/plain":
+        generation_config["responseMimeType"] = response_format
+
     request_body: dict[str, Any] = {
         "contents": [{"role": "user", "parts": parts}],
     }

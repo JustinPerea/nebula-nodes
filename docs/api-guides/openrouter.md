@@ -16,12 +16,13 @@ The node adapts to the model: choose a text model and you get a text node; choos
 
 | Node (as shown in app) | Node ID | Type | Key inputs | Notable params | Use it for |
 |---|---|---|---|---|---|
-| OpenRouter | `openrouter-universal` | Universal gateway (`category: universal`) | `messages` (Text, required); `images` (Image, multiple) appears automatically when you pick a vision/image model | `model` (required — chosen from a live, searchable model list); `temperature` (0–2, default 1); `max_tokens` (1–200000, default 4096) | One node for the whole OpenRouter catalog: chat/reasoning/coding with any text model, asking questions about images, or generating images — depending on the model picked |
+| OpenRouter | `openrouter-universal` | Universal gateway (`category: universal`) | `messages` (Text, required); `images` (Image, multiple) appears automatically when you pick a vision/image model | `model` (required — chosen from a live, searchable model list); `temperature` (0–2, default 1); `max_tokens` (1–200000, default 4096); `response_format` (Text / JSON — JSON mode for text models, 2026-06-05) | One node for the whole OpenRouter catalog: chat/reasoning/coding with any text model, asking questions about images, or generating images — depending on the model picked |
 
 Notes that matter for using the node:
 - The **model list is loaded live** from your account (the backend proxies OpenRouter's `/api/v1/models` and caches it for 5 minutes), so the dropdown reflects whatever models OpenRouter currently offers — you are not limited to a hardcoded list. Use the search box in the Inspector to filter.
 - **Ports change with the model.** Picking a model with image *input* adds an `images` input port; picking a model with image *output* adds an `image` output port. This is driven by the model's declared modalities, so you don't configure it by hand.
 - `temperature` and `max_tokens` only apply to text generation. Image generation ignores them.
+- **JSON mode** (added 2026-06-05): set `response_format` to JSON and the handler forwards `response_format: {"type":"json_object"}` for text models, so the reply is valid JSON. It's **model-dependent** — the chosen model must support JSON output. Live-verified against the OpenRouter API.
 
 ## How to use it in Nebula
 
@@ -67,7 +68,7 @@ OpenRouter is a large unified API. Nebula wires up the core chat-completions sur
 | `GET /api/v1/models` — list models | Yes | partial | Used to populate the dropdown; the backend slims the payload to id/name/modalities/context/pricing and ignores filters like `category` / `supported_parameters`. |
 | Core sampling params (`temperature`, `max_tokens`) | Yes | partial | Only `temperature` and `max_tokens` are surfaced. `top_p`, `top_k`, `seed`, `stop`, `frequency_penalty`, `presence_penalty`, `repetition_penalty`, `min_p`, `logit_bias`, etc. are not. |
 | Tool / function calling (`tools`, `tool_choice`, `parallel_tool_calls`) | Yes | none | OpenAI-compatible function calling is fully supported by the API; the node never sends `tools`. |
-| Structured outputs (`response_format`: json_object / json_schema / grammar) | Yes | none | No way to request JSON-schema-constrained output from the node. |
+| Structured outputs (`response_format`: json_object / json_schema / grammar) | Yes | partial | **JSON mode now supported** (2026-06-05, live-verified) — the `response_format` param (Text / JSON) makes the handler forward `response_format: {"type":"json_object"}` for text models (model-dependent). `json_schema` / grammar constraints still not exposed. |
 | Reasoning controls (`reasoning`, `reasoning_effort`) | Yes | none | Reasoning-model effort/summary controls are not exposed. |
 | Audio **input** — `input_audio` content parts | Yes | none | Handler only builds `text` and `image_url` content parts. |
 | Audio **output** — `modalities: ["audio"]` | Yes | none | Not requested; no audio output port exists. |
@@ -83,7 +84,7 @@ OpenRouter is a large unified API. Nebula wires up the core chat-completions sur
 
 **Coverage: ~30% of the OpenRouter API surface is exposed in Nebula.** (The high-traffic core — text chat, streaming, vision input, and basic image generation — is covered; the long tail of advanced controls and side endpoints is not.)
 
-**Notable unused capabilities:** tool/function calling, structured/JSON-schema outputs, reasoning-effort controls, audio input *and* output, PDF/document and video input, provider routing & model fallbacks, the web-search server tool, prompt caching, `image_config` for image generation (aspect ratio / size / style), embeddings, and the generation-stats endpoint.
+**Notable unused capabilities:** tool/function calling, strict `json_schema` / grammar structured outputs (basic `json_object` JSON mode *is* now wired — see above), reasoning-effort controls, audio input *and* output, PDF/document and video input, provider routing & model fallbacks, the web-search server tool, prompt caching, `image_config` for image generation (aspect ratio / size / style), embeddings, and the generation-stats endpoint.
 
 ## Agent skill coverage
 
@@ -95,7 +96,7 @@ What it covers:
 - **Params** — `temperature` (0–2) and `max_tokens` (1–200000) apply to text only; image generation ignores them.
 - **Auth** — `OPENROUTER_API_KEY` must be set (Settings or `.env`) both to run *and* to load the model list; plus the real `X-OpenRouter-Title` header (not the legacy `X-Title`).
 - **Recipes** — the three canonical flows (text chat, vision Q&A, image generation) with real port names.
-- **Capability boundaries** — no tool calling, no structured-output mode, no audio/PDF/video, no provider routing, no `image_config` controls, no web search.
+- **Capability boundaries** — JSON mode (`response_format`) is now wired for text models, but no tool calling, no strict `json_schema`/grammar, no audio/PDF/video, no provider routing, no `image_config` controls, no web search.
 
 ## Sources
 

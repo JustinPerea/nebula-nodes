@@ -67,7 +67,7 @@ Restart the backend after editing `.env`. One key covers every OpenAI node. Two 
 | Chat completions `/v1/chat/completions` (text) | yes | full | gpt-4o, gpt-4o-mini, gpt-4.1 / mini / nano |
 | Chat vision (image input) | yes | full | `images` port accepts URLs, data URIs, and local files (base64-encoded) |
 | Chat tools / function calling | yes | none | No tool/function-calling support in the node |
-| Chat structured outputs (`json_schema`) | yes | partial | Only `json_object` mode exposed; no strict JSON-schema enforcement |
+| Chat structured outputs (JSON) | yes | partial | **JSON mode supported** via `gpt-4o-chat`'s `response_format` (Text / `json_object`) — handler sends `response_format: {"type":"json_object"}`. Only `json_object` mode; no strict `json_schema` enforcement |
 | Chat audio in/out (`gpt-4o-audio-preview`) | yes | none | Audio-modality chat not wired up |
 | Realtime API (gpt-realtime, speech-to-speech) | yes | none | Entire Realtime/voice-agent family unsupported |
 | Responses API `/v1/responses` | yes | none | Nebula uses the older Chat Completions endpoint, not Responses |

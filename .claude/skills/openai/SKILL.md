@@ -109,7 +109,7 @@ Types/ranges/enums/defaults are from `node_definitions.json`; behavior notes are
 - `temperature` *(float 0–2, step 0.1, default 1)*.
 - `top_p` *(float 0–1, step 0.05, default unset/blank)* — only sent when set.
 - `frequency_penalty` / `presence_penalty` *(float −2–2, step 0.1, default 0)*.
-- `response_format` *(enum, default `text`)*: `text` · `json_object`. `json_object` sends `{"type":"json_object"}` — **JSON-mode only, no strict `json_schema`** (see boundaries). When using JSON mode, your prompt must instruct the model to produce JSON or OpenAI errors.
+- `response_format` *(enum, default `text`)*: `text` · `json_object`. `json_object` sends `{"type":"json_object"}` and enables **JSON mode** — **JSON-mode only, no strict `json_schema`** (see boundaries). **Gotcha:** OpenAI requires the literal word **"json"** to appear somewhere in the prompt (`messages`/`system`) when `json_object` is set, or the request errors. Instruct the model to "respond in JSON."
 - Inputs: `messages` (req, Text — becomes the user message text) and `images` (optional, **multiple** — each appended as an `image_url` content part for vision). A single user message is constructed; there is no multi-turn history or system-role port.
 
 ## Recipes

@@ -35,6 +35,36 @@ def _make_gemini_node(params=None):
     )
 
 
+@pytest.mark.asyncio
+async def test_gemini_chat_json_sets_response_mime_type() -> None:
+    """response_format=application/json must set generationConfig.responseMimeType.
+    The param existed in the node but the handler ignored it (silent no-op)."""
+    with patch("handlers.google_gemini.stream_execute", new_callable=AsyncMock) as mock_stream:
+        mock_stream.return_value = '{"ok": true}'
+        await handle_gemini_chat(
+            _make_gemini_node({"model": "gemini-2.5-flash", "response_format": "application/json"}),
+            {"messages": PortValueDict(type="Text", value="Return JSON")},
+            {"GOOGLE_API_KEY": "g-test"},
+            emit=AsyncMock(),
+        )
+    body = mock_stream.call_args.kwargs["request_body"]
+    assert body["generationConfig"]["responseMimeType"] == "application/json"
+
+
+@pytest.mark.asyncio
+async def test_gemini_chat_text_omits_response_mime_type() -> None:
+    with patch("handlers.google_gemini.stream_execute", new_callable=AsyncMock) as mock_stream:
+        mock_stream.return_value = "plain"
+        await handle_gemini_chat(
+            _make_gemini_node({"model": "gemini-2.5-flash", "response_format": "text/plain"}),
+            {"messages": PortValueDict(type="Text", value="Hi")},
+            {"GOOGLE_API_KEY": "g-test"},
+            emit=AsyncMock(),
+        )
+    body = mock_stream.call_args.kwargs["request_body"]
+    assert "responseMimeType" not in body.get("generationConfig", {})
+
+
 def _make_imagen_node(params=None):
     return GraphNode(
         id="test-imagen-1",

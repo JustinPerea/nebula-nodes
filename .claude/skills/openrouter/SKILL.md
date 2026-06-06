@@ -31,7 +31,7 @@ It's one node that *reconfigures itself* based on the chosen model. There is no 
    - **Ports are dynamic, set when you pick the model — not configured by hand.** Picking a model with `image` *input* adds the `images` input port; picking one with `image` *output* adds the `image` output port and flips the internal `_output_image` flag. Changing the model **drops edges connected to ports that no longer exist.**
    - **`temperature` and `max_tokens` are text-only.** The image path never sends them; they're ignored for image generation. (The handler *does* still attach them to the request body if present, but image models disregard sampling params.)
    - **Vision needs both inputs.** `messages` (your question) is always required; `images` is the picture. A vision model with no `images` wired just behaves like a text model.
-   - **No tools, no JSON-schema output, no audio/PDF/video, no provider routing, no image_config, no web search.** See **Capability boundaries** — never promise these.
+   - **JSON mode works (`response_format`=JSON, model-dependent); but no tools, no strict `json_schema`/grammar, no audio/PDF/video, no provider routing, no image_config, no web search.** See **Capability boundaries** — never promise these.
 
 ## Pick the right node
 
@@ -39,7 +39,7 @@ There is exactly one OpenRouter node. The model dropdown is what varies.
 
 | Node (in app) | Node ID | Endpoint / model | Key params | Use it for |
 |---|---|---|---|---|
-| **OpenRouter** | `openrouter-universal` | `POST https://openrouter.ai/api/v1/chat/completions` — model chosen live from `/api/openrouter/models` (OpenRouter's full catalog) | `model` (required, string; from the live searchable list), `temperature` (float 0–2, default 1, text only), `max_tokens` (int 1–200000, default 4096, text only) | One node for the whole OpenRouter catalog. Text chat/reasoning/coding with any text model · vision Q&A (image-in → text-out) with a vision model · image generation (text → image) with an image-output model. The chosen model decides which. |
+| **OpenRouter** | `openrouter-universal` | `POST https://openrouter.ai/api/v1/chat/completions` — model chosen live from `/api/openrouter/models` (OpenRouter's full catalog) | `model` (required, string; from the live searchable list), `temperature` (float 0–2, default 1, text only), `max_tokens` (int 1–200000, default 4096, text only), `response_format` (Text / JSON, text only — JSON mode, model-dependent) | One node for the whole OpenRouter catalog. Text chat/reasoning/coding with any text model · vision Q&A (image-in → text-out) with a vision model · image generation (text → image) with an image-output model. The chosen model decides which. |
 
 The model list is **live and per-account** (backend proxies OpenRouter's `/api/v1/models`, slimmed to `id` / `name` / `input_modalities` / `output_modalities` / `context_length` / `pricing`, cached 5 min). You are not limited to a hardcoded set — use the Inspector search box to filter. To do a given job, **pick a model whose modalities match it**: text-out for chat, `image` in `input_modalities` for vision, `image` in `output_modalities` to generate pictures.
 
@@ -52,10 +52,11 @@ The model list is **live and per-account** (backend proxies OpenRouter's `/api/v
 | Model | `model` | string | **required**, default `""` (placeholder "Loading models…") | all modes | The OpenRouter model id (e.g. `openai/gpt-4o`, `anthropic/claude-3.5-sonnet`, `google/gemini-2.5-flash-image`). Chosen from the live list; selecting it reconfigures ports and sets `_output_image` automatically. |
 | Temperature | `temperature` | float | 0 – 2, step 0.1, default **1** | **text/vision only** | Higher = more random. Lower (e.g. 0.2–0.4) = more focused/deterministic. Ignored by image generation. |
 | Max Tokens | `max_tokens` | integer | 1 – 200000, default **4096** | **text/vision only** | Upper bound on generated tokens. Ignored by image generation. |
+| Response Format | `response_format` | enum | Text / JSON, default **Text** | **text only** | **JSON mode** (added 2026-06-05). When set to JSON the handler forwards `response_format: {"type":"json_object"}`, so the reply is valid JSON. **Model-dependent** — the chosen model must support JSON output. Live-verified against the API. |
 
 **Internal / not user-set:** `_output_image` (boolean) — written by the frontend when you pick a model with `image` output; it routes the run to the image path. Don't expose or hand-edit it.
 
-**Not exposed (the API supports them; the node does not send them):** `top_p`, `top_k`, `seed`, `stop`, `frequency_penalty`, `presence_penalty`, `repetition_penalty`, `min_p`, `logit_bias`, `tools` / `tool_choice`, `response_format`, `reasoning` / `reasoning_effort`, `provider` routing, `image_config` (aspect ratio / size / style / strength), web-search plugins, `cache_control`. See **Capability boundaries**.
+**Not exposed (the API supports them; the node does not send them):** `top_p`, `top_k`, `seed`, `stop`, `frequency_penalty`, `presence_penalty`, `repetition_penalty`, `min_p`, `logit_bias`, `tools` / `tool_choice`, strict `json_schema` / grammar (basic `json_object` JSON mode *is* now exposed via `response_format` — see above), `reasoning` / `reasoning_effort`, `provider` routing, `image_config` (aspect ratio / size / style / strength), web-search plugins, `cache_control`. See **Capability boundaries**.
 
 ## Recipes
 
@@ -98,7 +99,8 @@ Do not promise these through the node. They're real OpenRouter API features, jus
 | Capability | API | Nebula | Note |
 |---|---|---|---|
 | Tool / function calling (`tools`, `tool_choice`, `parallel_tool_calls`) | Yes | **No** | The node never sends `tools`. No function calling. |
-| Structured outputs (`response_format`: json_object / json_schema / grammar) | Yes | **No** | Can't request JSON-schema-constrained output. |
+| Structured outputs — `json_object` JSON mode | Yes | **Yes** | Wired 2026-06-05, live-verified. `response_format`=JSON → `{"type":"json_object"}` for text models (model-dependent). |
+| Structured outputs — strict `json_schema` / grammar | Yes | **No** | Can't request JSON-schema-constrained or grammar-constrained output; only `json_object` JSON mode. |
 | Reasoning controls (`reasoning`, `reasoning_effort`) | Yes | **No** | No reasoning effort / summary controls. |
 | Extra sampling params (`top_p`, `top_k`, `seed`, `stop`, penalties, `min_p`, `logit_bias`) | Yes | **No** | Only `temperature` + `max_tokens` are exposed. |
 | Image-gen controls (`image_config`: aspect ratio / image_size / style / strength) | Yes | **No** | Image gen uses the model's defaults; no size/aspect/style knobs. |

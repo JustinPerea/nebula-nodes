@@ -101,7 +101,7 @@ Never promise these through the `claude-chat` node (from the audit gap table in 
 - **Tool use / function calling** — none. `tools` / `tool_choice` aren't exposed; Claude can't call your functions from the node.
 - **Server tools** (web search, web fetch, code execution, tool search) — none wired.
 - **Client tools** (bash, text editor) — none.
-- **Structured / JSON output** (`output_config`, strict tools) — none. No schema-constrained output; if you need JSON, prompt for it in `system`/`messages` as plain text (no guarantee).
+- **Structured / JSON output** — **NOT available.** Anthropic has no native `response_format`/JSON-mode param (unlike OpenAI `gpt-4o-chat`, Gemini `gemini-chat`, and OpenRouter `openrouter-universal`, which got JSON mode 2026-06-05). On Anthropic, reliable structured output requires **tool-use or prompt/prefill**, neither of which `claude-chat` exposes. If you need JSON, prompt for it in `system`/`messages` as plain text — no guarantee it's valid.
 - **Prompt caching** (`cache_control`) — not used. A long repeated `system` prompt pays full input cost every run.
 - **PDF / document input** (`document` content block) — not supported. Only `image` and `text` content. No PDFs.
 - **`top_k` sampling** — not exposed (only `temperature`, `top_p`*, `stop_sequences`). *and `top_p` is itself suppressed unless temperature is cleared.

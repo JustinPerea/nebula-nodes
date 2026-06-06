@@ -62,7 +62,7 @@ For a multi-step request ("plan a 5-shot product video and write a prompt for ea
 | Tool use / function calling (custom/client tools) | Yes | none | `tools` / `tool_choice` not exposed — Claude can't call your functions from the node. |
 | Server tools: web search, web fetch, code execution, tool search | Yes | none | None of the Anthropic-executed tools are wired. |
 | Client tools: bash, text editor | Yes | none | Not exposed. |
-| Structured / JSON output (`output_config`, strict tools) | Yes | none | No JSON-schema-constrained output; you'd prompt for JSON in plain text. |
+| Structured / JSON output | Yes (via tool-use / prefill) | none | **NOT supported.** Anthropic has no native `response_format`/JSON-mode param (unlike OpenAI, Gemini, and OpenRouter, which got JSON mode 2026-06-05); reliable JSON needs tool-use or prompt/prefill, which `claude-chat` doesn't expose. You'd prompt for JSON in plain text (no guarantee). Remains a boundary. |
 | Prompt caching (`cache_control`) | Yes | none | Not used — repeated long system prompts pay full input cost each run. |
 | PDF / document input | Yes | none | `document` content block not supported; only `image` and `text`. |
 | Citations | Yes | none | Not surfaced. |

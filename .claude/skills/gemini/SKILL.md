@@ -60,7 +60,7 @@ Defaults, ranges, and enums per node, straight from `node_definitions.json` + ha
 - `thinkingLevel` (enum, **Gemini 3 models only**: `""`/minimal/low/medium/high) → `thinkingConfig.thinkingLevel`. `""` = model default.
 - `thinkingBudget` (int, **2.5 models only**, 0–65536) → `thinkingConfig.thinkingBudget`. Mutually exclusive with `thinkingLevel`.
 - `top_p` (float, 0–1, step 0.05), `top_k` (int, hint 64), `stop_sequences` (comma-separated string).
-- `response_format` (enum, default `text/plain`; or `application/json`). **JSON toggle only — there is no `responseSchema` field**, so a strict schema must be prompt-engineered.
+- `response_format` (enum, default `text/plain`; or `application/json`). **JSON mode is now wired** (2026-06-05): `application/json` sets `generationConfig.responseMimeType = "application/json"` so the reply is valid JSON. **There is still no `responseSchema` field**, so a strict schema must be prompt-engineered. Unit-tested.
 - Output: single `text` port. Streams token-by-token to the canvas.
 
 ### `imagen-4-generate`
@@ -147,7 +147,7 @@ Concrete graphs using real node IDs.
 Never promise these through the current nodes — they exist in the Google API but are not surfaced. (Source: gap table in `docs/api-guides/google.md`.)
 
 - **Gemini text tools — all absent.** No function calling, no Google Search grounding, no URL-context tool, no code execution. `gemini-chat` is plain `generateContent` with vision-in.
-- **Structured output is JSON-toggle only.** `response_format=application/json` exists, but there's **no `responseSchema`** — strict schemas must be prompt-engineered.
+- **Structured output: JSON mode works, no schema.** `response_format=application/json` is honored (sets `generationConfig.responseMimeType`, wired 2026-06-05), but there's **no `responseSchema`** — strict schemas must be prompt-engineered.
 - **Vision-in only for understanding.** `gemini-chat` accepts images; video / audio / PDF understanding is not wired.
 - **Nano Banana:** image-search grounding and explicit `thinkingLevel` control are not surfaced (text-to-image, edit, and multi-image compose are).
 - **Imagen edit / inpaint / customize / upscale:** not available — those live in **Vertex AI**, not the Gemini Developer API Nebula targets. (Not a Nebula gap, an API-surface boundary.)

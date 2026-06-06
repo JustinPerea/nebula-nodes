@@ -2231,6 +2231,7 @@ Nodes: 121 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | Model | string | — | — |
 | Temperature | float | 1 | 0–2 |
 | Max Tokens | int | 4096 | 1–200000 |
+| Response Format | enum | text | Text, JSON |
 
 ---
 

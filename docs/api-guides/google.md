@@ -76,7 +76,7 @@ Restart the backend so it picks up the new value. One key covers all eight nodes
 |---|---|---|---|
 | Text generation (`generateContent` / streaming) | Yes | **full** | `gemini-chat` streams responses; model, temperature, max tokens, system prompt all wired |
 | Thinking / reasoning control | Yes | **full** | `thinkingLevel` (Gemini 3) and `thinkingBudget` (2.5) both exposed |
-| Structured / JSON output | Yes | **partial** | `response_format` toggles JSON, but no `responseSchema` field — schema must be prompt-engineered |
+| Structured / JSON output | Yes | **partial** | **JSON mode now wired** (2026-06-05) — `gemini-chat`'s `response_format` maps to `generationConfig.responseMimeType` (`application/json`). No `responseSchema` field, so a strict schema must still be prompt-engineered |
 | Vision / image understanding (text models) | Yes | **partial** | `gemini-chat` accepts an `images` input; video/audio/PDF understanding not surfaced |
 | Function calling / tools | Yes | **none** | No tool/function-calling param on the node |
 | Grounding with Google Search | Yes | **none** | Not exposed on `gemini-chat` (nor image-search grounding on Nano Banana) |
