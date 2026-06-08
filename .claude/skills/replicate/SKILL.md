@@ -19,7 +19,7 @@ This is the ONLY Replicate node. There is no per-model node, no image/video/audi
 
 1. **Auth — bearer token from one env var.** The handler reads `REPLICATE_API_TOKEN` and refuses to run without it (`raise ValueError("REPLICATE_API_TOKEN is required")`). Every HTTP call sends `Authorization: Bearer <REPLICATE_API_TOKEN>`. Get a token at <https://replicate.com/account/api-tokens> (format `r8_...`), set `REPLICATE_API_TOKEN=r8_...` in the backend's `.env` / shell env, then restart the backend so it loads the variable.
 2. **Base URL.** `https://api.replicate.com/v1`. Three routes are used: `GET /v1/models/{owner}/{name}` (resolve the version), `POST /v1/predictions` (create), `GET /v1/predictions/{id}` (poll).
-3. **Execution pattern — async-poll (confirmed from the handler).** No sync `Prefer: wait`, no SSE streaming, no webhooks. The flow is:
+3. **Execution pattern — async-poll for media, SSE for text (confirmed from the handler).** No sync `Prefer: wait`, no webhooks. Text/LLM models that return `urls.stream` now stream token deltas live (auto-detected — see gotcha 6); everything else async-polls. The poll flow is:
    1. Split `model_id` on `/` into `owner` and `name`.
    2. `GET /v1/models/{owner}/{name}` → read `latest_version.id`. This becomes the `version` hash the create call requires. (If a private `_version_id` param is already set on the node, that is used instead and the lookup is skipped.)
    3. `POST /v1/predictions` with body `{"version": <id>, "input": <merged inputs>}`.
@@ -33,7 +33,7 @@ This is the ONLY Replicate node. There is no per-model node, no image/video/audi
    - **Latest version only.** The handler always resolves `latest_version`; there's no version picker. If you need a pinned older version, that's not exposed (the private `_version_id` is an implementation detail, not a user control).
    - **Empty params are dropped.** Params that are `None` or `""` are not sent. To pass a value you must give it a non-empty value.
    - **Progress is fake.** The progress bar is just `poll_number / 300`, not real model progress — Replicate's prediction progress/logs are not surfaced. Don't promise a live percentage.
-   - **No token streaming.** LLM/text models return their full text only at completion; there is no incremental streaming, even though Replicate supports SSE.
+   - **Token streaming (text/LLM), auto-detected (2026-06-08).** When the created prediction returns `urls.stream`, the handler consumes the SSE stream and emits live token deltas (rendered as `streamingText`) — no param, no node change. Replicate's `output` SSE data is RAW TEXT (not JSON, unlike the chat providers). Non-text models (image/video/audio/mesh) have no token stream and poll as before. The 30 s idle-reconnect (`Last-Event-ID`) is not implemented, so a very long idle gap could truncate.
 
 ## Pick the right node
 

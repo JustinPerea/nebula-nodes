@@ -4499,6 +4499,13 @@
         "label": "Last Frame",
         "dataType": "Image",
         "required": false
+      },
+      {
+        "id": "video",
+        "label": "Extend Video",
+        "dataType": "Video",
+        "required": false,
+        "_note": "Veo video extension — continue an existing clip. Wire the upstream Veo node's 'Source URI' output here (Veo only accepts its own files/... URI, not external/re-uploaded video). veo-3.0/3.1 (not lite/veo-2.0); output locked to 720p; URI valid ~2 days."
       }
     ],
     "outputPorts": [
@@ -4507,6 +4514,13 @@
         "label": "Video",
         "dataType": "Video",
         "required": false
+      },
+      {
+        "id": "source_uri",
+        "label": "Source URI",
+        "dataType": "Video",
+        "required": false,
+        "_note": "This generation's Veo files/... URI — wire into a downstream Veo node's 'Extend Video' input to continue the clip. Valid ~2 days."
       }
     ],
     "params": [],

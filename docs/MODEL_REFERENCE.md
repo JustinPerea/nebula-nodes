@@ -1198,8 +1198,8 @@ Nodes: 123 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **API Key** | GOOGLE_API_KEY, FAL_KEY |
 | **Endpoint** | `veo-3.1-generate-preview` |
 | **Execution** | async-poll |
-| **Inputs** | Prompt (Text)*, First Frame (Image), Last Frame (Image) |
-| **Outputs** | Video (Video) |
+| **Inputs** | Prompt (Text)*, First Frame (Image), Last Frame (Image), Extend Video (Video) |
+| **Outputs** | Video (Video), Source URI (Video) |
 | **Audited** | 2026-05-17 |
 
 **Shared Parameters**

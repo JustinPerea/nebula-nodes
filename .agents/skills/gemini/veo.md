@@ -97,6 +97,12 @@ The image is used as the **starting frame**.
 
 ## Reference images (Veo 3.1 main + fast)
 
+> **⚠️ NOT EXPOSED IN NEBULA (verified live 2026-06-08).** Although documented below, the live
+> Gemini API rejects reference images ("Your use case is currently not supported") on BOTH
+> `veo-3.1-generate-preview` and `veo-3.1-fast-generate-preview` with an AI-Studio `GOOGLE_API_KEY`.
+> The `veo-3` node has **no** reference-image port. Don't promise subject/wardrobe consistency via
+> Veo refs in Nebula; the section below is upstream-API reference only.
+
 Up to 3 asset references preserve subject appearance across the video.
 
 ```python
@@ -193,5 +199,5 @@ Expect 11 seconds minimum, up to 6 minutes during peak. In nebula this is alread
 
 - Nebula nodes for Veo are `veo-3`, `veo-3.1` etc. Check `nebula graph` for the exact definition ids available.
 - Pair Veo with an `image-input` node to do image-to-video (wire image-input.image → veo.startingFrame or whatever port name the node definition uses).
-- For extension workflows, the prior video output node can feed a new Veo node via a Video port.
+- **Extension (wired 2026-06-08):** wire the upstream `veo-3` node's **`source_uri`** output → the downstream `veo-3` node's **`Extend Video`** input. Veo only accepts its OWN generated `files/...` URI — wiring the regular `video` output (a downloaded local file) is rejected with a `ValueError`. Extension is `veo-3.0`/`3.1` generate+fast only (not lite/veo-2.0), output is locked to **720p**, and the source URI is valid ~2 days.
 - Nebula backs `/api/graph/run` on this with the Veo handler that polls and downloads — you'll see `[veo] poll #N: done=False` in backend logs. Expect 1–6 minutes per 8s clip.

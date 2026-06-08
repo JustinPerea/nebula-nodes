@@ -1,13 +1,15 @@
 from __future__ import annotations
 
+import asyncio
 from typing import Any, Awaitable, Callable
 
 import httpx
 
 from models.graph import GraphNode, PortValueDict
 from models.events import ExecutionEvent
-from execution.async_poll_runner import AsyncPollConfig, async_poll_execute
-from services.output import get_run_dir, save_base64_image
+from execution.async_poll_runner import AsyncPollConfig, poll_until_terminal, _cancel_async_poll
+from execution.stream_runner import stream_execute_replicate
+from services.cancellation import schedule_detached_cancel
 
 REPLICATE_API_BASE = "https://api.replicate.com/v1"
 
@@ -121,12 +123,45 @@ async def handle_replicate_universal(
     async def noop_emit(event: ExecutionEvent) -> None:
         pass
 
-    result = await async_poll_execute(
-        config=config,
-        submit_body=submit_body,
-        node_id=node.id,
-        emit=emit or noop_emit,
-    )
+    emit_fn = emit or noop_emit
+
+    # Submit the prediction ourselves so we can detect streaming support before
+    # committing to a poll loop. Replicate returns `urls.stream` (an SSE endpoint)
+    # only for models that stream token deltas (language models); image/video/audio/
+    # mesh models omit it and we poll as before.
+    async with httpx.AsyncClient(timeout=config.timeout) as client:
+        submit_resp = await client.post(config.submit_url, headers=config.headers, json=submit_body)
+        if submit_resp.status_code not in (200, 201):
+            raise RuntimeError(f"Replicate submit failed ({submit_resp.status_code}): {submit_resp.text}")
+
+        submit_data = submit_resp.json()
+        task_id = submit_data.get("id")
+        if not task_id:
+            raise RuntimeError(f"Replicate submit returned no prediction id: {submit_data}")
+        task_id = str(task_id)
+        stream_url = (submit_data.get("urls") or {}).get("stream")
+
+        if stream_url and emit is not None:
+            # Streaming-capable text model: consume the SSE token stream live. The
+            # frontend already renders StreamDeltaEvent -> node.data.streamingText, so
+            # no frontend change is needed. On cancel, stop the prediction upstream.
+            try:
+                text = await stream_execute_replicate(
+                    stream_url=stream_url,
+                    headers={"Authorization": config.headers["Authorization"]},
+                    node_id=node.id,
+                    emit=emit_fn,
+                )
+            except asyncio.CancelledError:
+                cancel_url = config.cancel_url_template.format(task_id=task_id)
+                schedule_detached_cancel(
+                    lambda: _cancel_async_poll(cancel_url, config.cancel_method, config.headers)
+                )
+                raise
+            return {"text": {"type": "Text", "value": text}}
+
+        # Non-streaming output (images/video/audio/mesh/structured) — poll to terminal.
+        result = await poll_until_terminal(client, config, task_id, node.id, emit_fn)
 
     output = result.get("output")
     if output is None:

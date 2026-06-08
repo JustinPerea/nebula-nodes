@@ -89,6 +89,107 @@ async def stream_execute(
     return accumulated
 
 
+async def stream_execute_replicate(
+    stream_url: str,
+    headers: dict[str, str],
+    node_id: str,
+    emit: Callable[[ExecutionEvent], Awaitable[None]],
+    timeout: float = 600.0,
+) -> str:
+    """Consume Replicate's per-prediction SSE token stream (``prediction.urls.stream``).
+
+    Replicate's SSE differs from the OpenAI/Anthropic chat streams this module's
+    ``stream_execute`` handles, so it can't reuse that path:
+    - ``output`` events carry RAW TEXT in ``data:`` (a token delta) — NOT JSON. Multiple
+      ``data:`` lines in one event are joined with ``\\n`` per the SSE spec.
+    - ``error`` events carry JSON (e.g. ``{"detail": "..."}``).
+    - ``done`` ends the stream (``{}`` on success).
+
+    Docs: https://replicate.com/docs/topics/predictions/streaming
+    Returns the full concatenated text. Emits one StreamDeltaEvent per ``output`` event.
+
+    A buffered event is flushed at every boundary — a blank line, the next ``event:`` line,
+    OR end-of-stream — so a missing blank-line separator can't drop the final token. If the
+    stream closes before a ``done`` event (idle timeout / dropped connection), this fails loud
+    rather than returning truncated text as a success.
+    """
+    accumulated = ""
+    saw_done = False
+    current_event_type: str | None = None
+    data_lines: list[str] = []
+
+    req_headers = {**headers, "Accept": "text/event-stream"}
+
+    async def _dispatch() -> None:
+        """Flush the buffered SSE event: output -> emit a delta; error -> raise; done -> mark."""
+        nonlocal accumulated, saw_done
+        if current_event_type == "output":
+            delta = "\n".join(data_lines)
+            if delta:
+                accumulated += delta
+                await emit(StreamDeltaEvent(node_id=node_id, delta=delta, accumulated=accumulated))
+        elif current_event_type == "error":
+            # An `error` event terminates the stream as a failure, with or without a detail.
+            raw = "\n".join(data_lines)
+            detail = raw
+            try:
+                parsed = json.loads(raw) if raw else {}
+                if isinstance(parsed, dict):
+                    detail = parsed.get("detail", raw)
+            except (ValueError, TypeError):
+                pass
+            raise RuntimeError(f"Replicate stream error: {detail or '(no detail)'}")
+        elif current_event_type == "done":
+            saw_done = True
+
+    async with httpx.AsyncClient(timeout=httpx.Timeout(timeout, read=None)) as client:
+        async with client.stream("GET", stream_url, headers=req_headers) as response:
+            if response.status_code != 200:
+                error_body = ""
+                async for chunk in response.aiter_text():
+                    error_body += chunk
+                raise RuntimeError(f"Replicate stream failed ({response.status_code}): {error_body}")
+
+            async for line in response.aiter_lines():
+                # A blank line OR a new `event:` line ends the previous event — flush first.
+                if not line:
+                    await _dispatch()
+                    if saw_done:
+                        break
+                    current_event_type, data_lines = None, []
+                    continue
+
+                if line.startswith("event:"):
+                    await _dispatch()
+                    if saw_done:
+                        break
+                    current_event_type, data_lines = line[len("event:"):].strip(), []
+                    continue
+
+                if line.startswith("data:"):
+                    # SSE: a single leading space after the colon is part of the syntax, not data.
+                    value = line[len("data:"):]
+                    if value.startswith(" "):
+                        value = value[1:]
+                    data_lines.append(value)
+                    continue
+
+                # ``id:`` (reconnection cursor) and ``:`` comments (e.g. the 30s ``:408``
+                # idle keepalive) carry no payload — ignore.
+
+            # Stream ended: flush an event left un-terminated by a trailing blank line, then
+            # fail loud on a premature close so truncated text isn't reported as success.
+            if not saw_done:
+                await _dispatch()
+            if not saw_done:
+                raise RuntimeError(
+                    "Replicate stream closed without a 'done' event "
+                    "(connection dropped or timed out before completion)"
+                )
+
+    return accumulated
+
+
 async def stream_execute_image(
     config: StreamConfig,
     request_body: dict[str, Any],

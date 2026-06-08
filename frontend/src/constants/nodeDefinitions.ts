@@ -2833,9 +2833,11 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
       { id: 'image', label: 'First Frame', dataType: 'Image', required: false },
       { id: 'last_frame', label: 'Last Frame', dataType: 'Image', required: false },
+      { id: 'video', label: 'Extend Video', dataType: 'Video', required: false },
     ],
     outputPorts: [
       { id: 'video', label: 'Video', dataType: 'Video', required: false },
+      { id: 'source_uri', label: 'Source URI', dataType: 'Video', required: false },
     ],
     params: [],
     sharedParams: [

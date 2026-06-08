@@ -62,9 +62,9 @@ Replicate's HTTP API surface is large; the Nebula node deliberately uses only th
 | Resolve model version — `GET /v1/models/{owner}/{name}` | Yes | **full** | Used internally to turn `owner/name` into the version hash the create call needs. |
 | Official-model predictions — `POST /v1/models/{owner}/{name}/predictions` | Yes | **none** | Nebula always resolves a version and uses the generic `/v1/predictions` route instead of this convenience route. |
 | Synchronous mode — `Prefer: wait` header | Yes | **none** | Handler always polls; it never asks the API to hold the request open. |
-| Streaming output — SSE via `urls.stream` | Yes | **none** | Handler ignores the `urls.stream` field; token-by-token text streaming from LLMs is not surfaced. |
+| Streaming output — SSE via `urls.stream` | Yes | **full** (text models) | Auto-detected (2026-06-08): when the created prediction returns `urls.stream`, the handler consumes the SSE token stream and emits live deltas to the canvas (`streamingText`). Image/video/audio/mesh models have no token stream and poll as before. |
 | Webhooks + `webhook_events_filter` (`start`/`output`/`logs`/`completed`) | Yes | **none** | No webhook is registered; completion is detected purely by polling. |
-| Cancel prediction — `POST /v1/predictions/{id}/cancel` | Yes | **none** | No cancel control; a run can only time out at the 10-min poll cap. |
+| Cancel prediction — `POST /v1/predictions/{id}/cancel` | Yes | **full** | Cancelling a run fires a best-effort `POST .../cancel` upstream (both the polling and streaming paths) so a cancelled prediction stops billing. |
 | `Cancel-After` runtime cap header | Yes | **none** | Not sent. |
 | List predictions — `GET /v1/predictions` | Yes | **none** | No history/listing in the node. |
 | File upload — `POST /v1/files` (and URL / data-URL input files) | Yes | **none** | Nebula forwards input values as-is; it never uploads to the Files API. Users must supply file inputs as URLs/data URLs themselves. |
@@ -76,9 +76,9 @@ Replicate's HTTP API surface is large; the Nebula node deliberately uses only th
 | Account info — `GET /v1/account` | Yes | **none** | Not used. |
 | Webhook signing secret — `GET /v1/webhooks/default/secret` | Yes | **none** | N/A — no webhooks. |
 
-**Coverage: ~20% of the Replicate API surface is exposed in Nebula.** (Three of ~16 capability areas are wired — create, poll, and version-resolve — which together cover the full run-a-model happy path but none of the management, streaming, or async-callback surface.)
+**Coverage: ~30% of the Replicate API surface is exposed in Nebula.** (Five of ~16 capability areas are wired — create, poll, version-resolve, **streaming** (text models), and **cancel** — covering the run-a-model happy path, live token streaming, and upstream cancellation, but none of the webhook/deployment/training/discovery surface.)
 
-**Notable unused capabilities:** real-time **streaming** of model output (SSE, the big one for chat/LLM models); **synchronous `Prefer: wait`** mode (would cut latency for fast models vs. 2s-interval polling); **webhooks** for completion callbacks; **prediction cancellation** and **`Cancel-After`** runtime caps; the **Files API** (`POST /v1/files`) for direct input uploads; **deployments** (private, auto-scaling endpoints); **trainings / fine-tuning**; and **model search / collections** for in-app discovery instead of hand-typing slugs.
+**Notable unused capabilities:** **synchronous `Prefer: wait`** mode (would cut latency for fast models vs. 2s-interval polling); **webhooks** for completion callbacks; the **`Cancel-After`** runtime-cap header; the **Files API** (`POST /v1/files`) for direct input uploads; **deployments** (private, auto-scaling endpoints); **trainings / fine-tuning**; and **model search / collections** for in-app discovery instead of hand-typing slugs. *(Real-time streaming and prediction cancellation are now wired — 2026-06-08.)*
 
 ## Agent skill coverage
 
@@ -90,7 +90,7 @@ What it covers:
 - **The single node contract** — `replicate-universal` has exactly one required param (`model_id`, `owner/name` format) and **no fixed ports**; every other model input is passed through by name. (The non-obvious bit an agent must understand to build a working graph.)
 - **Per-model input discovery** — how to look up a model's input field names (model page / API) and map graph ports to those exact names, plus a recommended default-slug cheat-sheet per media type (image / video / audio / 3D / text).
 - **Output-type inference rules** — how the handler decides Image vs. Video vs. Audio vs. Text from the result (URL extension or string/list shape).
-- **Execution expectations** — async-poll, the ~10-minute (300 × 2s) ceiling, and that there's no streaming, no cancel, and no progress beyond poll status.
+- **Execution expectations** — async-poll for media (the ~10-minute 300 × 2s ceiling); **text/LLM models stream token deltas live** (`urls.stream`, auto-detected, rendered as `streamingText`); **cancellation propagates upstream**; non-text progress is poll status only.
 - **Known gaps to route around** — no Files API upload (supply file inputs as URLs/data URLs), no fine-tuning, no deployments, no in-app model search.
 
 ## Sources
