@@ -184,10 +184,22 @@ async def handle_fal_universal(
     if audio_input and audio_input.value:
         fal_input["audio_url"] = _to_fal_url(str(audio_input.value))
 
-    # Mask input (flux-pro/v1/fill inpainting) → mask_url
+    # Mask input (flux-pro/v1/fill, ideogram/v3/edit inpainting) → mask_url
     mask_input = inputs.get("mask")
     if mask_input and mask_input.value:
         fal_input["mask_url"] = _to_fal_url(str(mask_input.value))
+
+    # Character reference images (fal-ai/ideogram/character) → reference_image_urls
+    reference_images_input = inputs.get("reference_images")
+    if reference_images_input and reference_images_input.value:
+        raw_refs = reference_images_input.value
+        ref_urls = (
+            [_to_fal_url(str(v)) for v in raw_refs if v]
+            if isinstance(raw_refs, list)
+            else [_to_fal_url(str(raw_refs))]
+        )
+        if ref_urls:
+            fal_input["reference_image_urls"] = ref_urls
 
     texture_image_input = inputs.get("texture_image")
     if texture_image_input and texture_image_input.value:

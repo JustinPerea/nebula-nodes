@@ -1,5 +1,23 @@
 # Implementation Notes
 
+## 2026-06-10 (later) — Ideogram editing suite: six capability nodes, not just t2i
+
+User caught that the morning's Ideogram add was text-to-image only while Ideogram's whole pitch includes region editing. Wired the full capability surface as 6 new nodes (registry 124 → **130**), all via FAL (FAL_KEY, existing handler):
+
+- `ideogram-edit` (fal-ai/ideogram/v3/edit) — masked inpaint. **Mask polarity is BLACK = edit, the inverse of FLUX Fill** (verified against developer.ideogram.ai: "Black regions in the mask should match up with the regions of the image that you would like to edit"). Surfaced in the port label ("Mask (black = edit)") and pinned by a registry contract test, since a silent polarity flip would invert every edit.
+- `ideogram-remix` (v3/remix) — image+prompt restructure with `strength`.
+- `ideogram-reframe` (v3/reframe) — outpaint to a required target `image_size`; schema takes NO prompt (contract-tested).
+- `ideogram-replace-background` (v3/replace-background).
+- `ideogram-character` (fal-ai/ideogram/character) — consistent identity from reference photos; needed a NEW handler mapping `reference_images` port → `reference_image_urls` (style refs ride the existing `images` → `image_urls`). Style enum here is AUTO/REALISTIC/FICTION (different from the v3 AUTO/GENERAL/REALISTIC/DESIGN).
+- `ideogram-upscale` (fal-ai/ideogram/upscale) — `resemblance`/`detail` 1-100; `expand_prompt` defaults FALSE on this endpoint (true elsewhere).
+
+Decisions:
+- **v3 endpoints for the editing suite** — probed FAL's OpenAPI: `ideogram/v4/{edit,remix,reframe,replace-background}` all 404; only `ideogram/v4` + `ideogram/v4/lora` exist. The direct Ideogram API has a v4 Remix but FAL doesn't host it yet. Swap slugs when FAL ships v4 editing (node ids stay stable).
+- **Skipped params:** `style_codes` / `style_preset` / `color_palette` (array/object types the param UI can't express — reachable via fal-universal), `reference_mask_urls` on character (must count-match refs; awkward in graph UI), v4 LoRA node (needs a loras array; fal-universal covers it).
+- All six endpoints return `{images: [...]}` → existing `_parse_fal_output` handles them; no output changes.
+
+949 backend (+3: edit body-shape, character ref-mapping, 7-node registry contract incl. mask-polarity + reframe-promptless pins) + 347 frontend; contracts parity 130; lint/build green.
+
 ## 2026-06-10 — Gap-audit remediation: dead DALL·E removal, GPT-5.x/Fable-5/Gemini-3.5 refresh, Ideogram 4 + Runway Upscale, doc sync
 
 Full-session remediation of the comprehensive gap review (4 subagent audits + canonical-source verification). Registry: 123 → **124 nodes** (−dalle-3-generate, +ideogram-v4, +runway-upscale). Tests: 946 backend + 347 frontend, node-contracts parity green.

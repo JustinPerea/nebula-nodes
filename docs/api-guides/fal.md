@@ -4,7 +4,7 @@
 
 ## What you can make
 
-FAL is a *universal gateway* — a single provider that proxies many different downstream models. In Nebula, that surfaces as 46 ready-to-use nodes spanning five media types:
+FAL is a *universal gateway* — a single provider that proxies many different downstream models. In Nebula, that surfaces as 52 ready-to-use nodes spanning five media types:
 
 - **Images** (text-to-image): photoreal and stylized stills with FLUX 1.1 Ultra, FLUX 2 Pro, FLUX Schnell (fast), Fast SDXL, Seedream 4.5, Recraft V4, GPT Image 1.5, GPT Image 2, and Ideogram 4 (Ideogram 4.0, released 2026-06-03 — open weights + hosted, frontier text rendering/typography).
 - **Vector art (SVG):** true scalable vector graphics from a text prompt with Recraft V4 SVG — logos, icons, flat illustrations.
@@ -22,7 +22,7 @@ FAL is a *universal gateway* — a single provider that proxies many different d
 
 > FAL's audio catalog is now *partly* wired: Stable Audio 2.5 covers instrumental text-to-music and sound effects, ACE-Step adds music with vocals/lyrics (full songs, up to 60s), MMAudio V2 covers video-to-audio Foley (synchronized SFX/ambient audio for a video), and Demucs covers stem separation (splits a mixed track into vocals/drums/bass/other). The rest of the catalog — TTS, speech-to-text, voice cloning, dubbing, lipsync — is still not exposed through Nebula's FAL nodes. See the coverage section below.
 
-## Nodes available in Nebula (46) (updated 2026-06-10)
+## Nodes available in Nebula (52) (updated 2026-06-10)
 
 Names, node IDs, and parameter keys below are taken directly from `backend/data/node_definitions.json`. "Key inputs" are the node's input ports; "Notable params" are the exposed settings (every node also implicitly takes a `prompt` and/or `image` where listed).
 
@@ -70,6 +70,12 @@ Names, node IDs, and parameter keys below are taken directly from `backend/data/
 | SeedVR2 Video Upscale | `seedvr-video-upscale` | transform | video | `upscale_mode`, `upscale_factor`, `target_resolution`, `noise_scale`, `output_quality`, `seed` | Upscale a video to up to 4K (temporally consistent) |
 | Seedream 4.5 | `seedream-4-5` | image-gen | prompt | `image_size`, `num_images`, `max_images`, `enable_safety_checker`, `seed` | ByteDance Seedream high-quality stills |
 | Ideogram 4 | `ideogram-v4` | image-gen | prompt | `rendering_speed` (TURBO/BALANCED/QUALITY), `image_size`, `expansion_model` (magic-prompt expansion), `num_images`, `output_format`, `seed`, `enable_safety_checker` | Frontier text rendering / typography — Ideogram 4.0 (released 2026-06-03, open weights + hosted) |
+| Ideogram Edit (Inpaint) | `ideogram-edit` | image-gen | prompt, image, mask (**black = edit** — inverse of FLUX Fill), images (style refs) | `rendering_speed`, `expand_prompt`, `num_images`, `seed` | Change a specific masked region of an image (v3 endpoint — FAL hosts no v4 edit surface yet; added 2026-06-10) |
+| Ideogram Remix | `ideogram-remix` | image-gen | prompt, image, images (style refs) | `strength` (0–1, default 0.8), `image_size`, `style` (AUTO/GENERAL/REALISTIC/DESIGN), `negative_prompt`, `rendering_speed`, `expand_prompt`, `num_images`, `seed` | Re-generate an image under a new prompt while keeping its structure (added 2026-06-10) |
+| Ideogram Reframe (Outpaint) | `ideogram-reframe` | transform | image, images (style refs) — no prompt | `image_size` (required), `style`, `rendering_speed`, `num_images`, `seed` | Expand an image onto a larger/new-aspect canvas (added 2026-06-10) |
+| Ideogram Replace Background | `ideogram-replace-background` | image-gen | prompt (new background), image (subject), images (style refs) | `style`, `rendering_speed`, `expand_prompt`, `num_images`, `seed` | Keep the subject, regenerate everything behind it (added 2026-06-10) |
+| Ideogram Character | `ideogram-character` | image-gen | prompt, reference_images (required, multi), images (style refs) | `style` (AUTO/REALISTIC/FICTION), `image_size`, `negative_prompt`, `rendering_speed`, `expand_prompt`, `num_images`, `seed` | Consistent character from 1+ reference photos (added 2026-06-10) |
+| Ideogram Upscale | `ideogram-upscale` | transform | image, prompt (optional guidance) | `resemblance` (1–100), `detail` (1–100), `expand_prompt` (default off), `seed` | Ideogram's own 2x-style enhancing upscaler (added 2026-06-10) |
 | Stable Audio 2.5 | `stable-audio-25` | audio-gen | prompt | `seconds_total`, `num_inference_steps`, `guidance_scale`, `seed` | Text → instrumental music + sound effects |
 | ACE-Step (Music + Vocals) | `ace-step` | audio-gen | *(none — param-only)* | `tags`, `lyrics`, `duration`, `number_of_steps`, `guidance_scale`, `seed` | Text → full songs with vocals & lyrics |
 | MMAudio V2 (Video Foley) | `mmaudio-v2` | audio-gen | video, prompt ("Audio Prompt", Text) → video (with audio) | `negative_prompt`, `duration`, `num_steps`, `cfg_strength`, `mask_away_clip`, `seed` | Generate synchronized Foley/SFX audio for a video |
@@ -147,13 +153,13 @@ FAL is a gateway, so "the API surface" here means *capabilities* — auth, the c
 
 ## Agent skill coverage
 
-**A complete skill exists** at `.claude/skills/fal/SKILL.md` (refreshed 2026-06-04, updated 2026-06-10). It is the most complete provider skill in the repo and covers all **46** FAL-backed Nebula nodes, plus the catch-all `fal-universal` slug node for reaching un-wrapped FAL catalog models. It gives an agent the node IDs and ports, per-node params and ranges, wiring/chaining rules, and the provider's capability boundaries — so an agent can drive any FAL pipeline without reading the handlers.
+**A complete skill exists** at `.claude/skills/fal/SKILL.md` (refreshed 2026-06-04, updated 2026-06-10). It is the most complete provider skill in the repo and covers all **52** FAL-backed Nebula nodes, plus the catch-all `fal-universal` slug node for reaching un-wrapped FAL catalog models. It gives an agent the node IDs and ports, per-node params and ranges, wiring/chaining rules, and the provider's capability boundaries — so an agent can drive any FAL pipeline without reading the handlers.
 
 What it covers:
 
 - **Universal FAL conventions** — the auth header, the two base URLs, the full queue lifecycle (submit → poll → result, with status states and HTTP codes), and per-modality output shapes.
-- **The Nebula node → FAL endpoint map**, reconciled to the authoritative **46-node** roster in `node_definitions.json` (the stale 39/160 framing and non-current models were dropped and the `kling-v2-1` slug fixed; `ideogram-v4` added 2026-06-10).
-- **Nebula-specific wiring** — the input-port → FAL-key mapping (`image`→`image_url`, `images`→`image_urls`, `mask`→`mask_url`, `front_image`→`input_image_url`, etc.), base64 data-URI inlining of local files, and that **only the two GPT Image 2 nodes stream** (all 44 others queue-poll).
+- **The Nebula node → FAL endpoint map**, reconciled to the authoritative **52-node** roster in `node_definitions.json` (the stale 39/160 framing and non-current models were dropped and the `kling-v2-1` slug fixed; `ideogram-v4` plus the six-node Ideogram editing suite — edit/remix/reframe/replace-background/character/upscale — added 2026-06-10).
+- **Nebula-specific wiring** — the input-port → FAL-key mapping (`image`→`image_url`, `images`→`image_urls`, `mask`→`mask_url`, `reference_images`→`reference_image_urls`, `front_image`→`input_image_url`, etc.), base64 data-URI inlining of local files, and that **only the two GPT Image 2 nodes stream** (all 50 others queue-poll).
 - **Capability boundaries** — which FAL capabilities Nebula **cannot** reach (most audio plus LLM/training nodes are not wired; music is now wired both ways — instrumental/SFX via `stable-audio-25`, vocals/lyrics via `ace-step` — video-to-audio/Foley via `mmaudio-v2`, and stem separation via `demucs`), so an agent doesn't over-promise a modality no node delivers.
 
 ## Sources

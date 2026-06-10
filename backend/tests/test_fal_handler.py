@@ -111,6 +111,116 @@ async def test_mask_input_maps_to_mask_url() -> None:
 
 
 @pytest.mark.asyncio
+async def test_ideogram_edit_body_shape() -> None:
+    """ideogram-edit (fal-ai/ideogram/v3/edit): prompt + image_url + mask_url required;
+    style-ref images map to image_urls; params pass through."""
+    submit = MagicMock()
+    submit.status_code = 200
+    submit.json.return_value = {"images": [{"url": "https://fal.ai/edited.png"}]}
+    node = GraphNode(
+        id="ie",
+        definitionId="ideogram-edit",
+        params={"endpoint_id": "fal-ai/ideogram/v3/edit", "rendering_speed": "QUALITY", "expand_prompt": True},
+    )
+    inputs = {
+        "prompt": PortValueDict(type="Text", value="replace the sign text with OPEN"),
+        "image": PortValueDict(type="Image", value="https://x/base.png"),
+        "mask": PortValueDict(type="Image", value="https://x/mask.png"),
+        "images": PortValueDict(type="Image", value=["https://x/style1.png", "https://x/style2.png"]),
+    }
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = submit
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        result = await handle_fal_universal(node, inputs, {"FAL_KEY": "k"})
+
+    body = mock_client.post.call_args.kwargs["json"]
+    assert body["prompt"] == "replace the sign text with OPEN"
+    assert body["image_url"] == "https://x/base.png"
+    assert body["mask_url"] == "https://x/mask.png"
+    assert body["image_urls"] == ["https://x/style1.png", "https://x/style2.png"]
+    assert body["rendering_speed"] == "QUALITY"
+    assert body["expand_prompt"] is True
+    assert result["image"]["value"] == "https://fal.ai/edited.png"
+
+
+@pytest.mark.asyncio
+async def test_ideogram_character_reference_images_map_to_reference_image_urls() -> None:
+    """The reference_images port (fal-ai/ideogram/character) maps to reference_image_urls,
+    distinct from the style-ref images port (image_urls)."""
+    submit = MagicMock()
+    submit.status_code = 200
+    submit.json.return_value = {"images": [{"url": "https://fal.ai/char.png"}]}
+    node = GraphNode(
+        id="ic",
+        definitionId="ideogram-character",
+        params={"endpoint_id": "fal-ai/ideogram/character", "style": "FICTION"},
+    )
+    inputs = {
+        "prompt": PortValueDict(type="Text", value="the explorer crossing a rope bridge"),
+        "reference_images": PortValueDict(type="Image", value=["https://x/ref1.png", "https://x/ref2.png"]),
+    }
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = submit
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        await handle_fal_universal(node, inputs, {"FAL_KEY": "k"})
+
+    body = mock_client.post.call_args.kwargs["json"]
+    assert body["reference_image_urls"] == ["https://x/ref1.png", "https://x/ref2.png"]
+    assert "image_urls" not in body  # style refs not connected
+    assert body["style"] == "FICTION"
+
+
+@pytest.mark.asyncio
+async def test_ideogram_suite_registry_contract() -> None:
+    """The six Ideogram capability nodes are registered with the verified FAL endpoints,
+    correct port shapes, and the black-equals-edit mask convention surfaced in the label."""
+    import json as _json
+    import pathlib
+
+    defs = _json.loads(
+        (pathlib.Path(__file__).parent.parent / "data" / "node_definitions.json").read_text()
+    )
+    expected_endpoints = {
+        "ideogram-v4": "ideogram/v4",
+        "ideogram-edit": "fal-ai/ideogram/v3/edit",
+        "ideogram-remix": "fal-ai/ideogram/v3/remix",
+        "ideogram-reframe": "fal-ai/ideogram/v3/reframe",
+        "ideogram-replace-background": "fal-ai/ideogram/v3/replace-background",
+        "ideogram-character": "fal-ai/ideogram/character",
+        "ideogram-upscale": "fal-ai/ideogram/upscale",
+    }
+    for node_id, endpoint in expected_endpoints.items():
+        assert node_id in defs, f"{node_id} missing from registry"
+        assert defs[node_id]["apiEndpoint"] == endpoint
+        assert defs[node_id]["envKeyName"] == "FAL_KEY"
+
+    # Edit: mask is required and the label must encode Ideogram's inverted polarity
+    # (black = edit — the OPPOSITE of FLUX Fill's white = edit).
+    edit_ports = {prt["id"]: prt for prt in defs["ideogram-edit"]["inputPorts"]}
+    assert edit_ports["mask"]["required"] is True
+    assert "black" in edit_ports["mask"]["label"].lower()
+
+    # Reframe: image-only (no prompt port per the FAL schema); image_size is required.
+    reframe_port_ids = {prt["id"] for prt in defs["ideogram-reframe"]["inputPorts"]}
+    assert "prompt" not in reframe_port_ids
+    size_param = next(prm for prm in defs["ideogram-reframe"]["params"] if prm["key"] == "image_size")
+    assert size_param["required"] is True
+
+    # Character: reference_images is a required multi-port.
+    char_ports = {prt["id"]: prt for prt in defs["ideogram-character"]["inputPorts"]}
+    assert char_ports["reference_images"]["required"] is True
+    assert char_ports["reference_images"].get("multiple") is True
+
+
+@pytest.mark.asyncio
 async def test_fal_queue_run_propagates_cancel_to_provider() -> None:
     """When the poll is cancelled, the in-flight FAL request is cancelled upstream (so it
     stops on FAL instead of running to completion ~10 min), then CancelledError re-raises."""

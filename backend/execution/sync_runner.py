@@ -808,6 +808,31 @@ def get_handler_registry(
             node.params.setdefault("endpoint_id", "ideogram/v4")
             return await handle_fal_universal(node, inputs, api_keys, emit=emit)
 
+        # Ideogram editing suite — v3 endpoints (FAL hosts no v4 edit surfaces yet)
+        async def _ideogram_edit_handler(node, inputs, api_keys):
+            node.params.setdefault("endpoint_id", "fal-ai/ideogram/v3/edit")
+            return await handle_fal_universal(node, inputs, api_keys, emit=emit)
+
+        async def _ideogram_remix_handler(node, inputs, api_keys):
+            node.params.setdefault("endpoint_id", "fal-ai/ideogram/v3/remix")
+            return await handle_fal_universal(node, inputs, api_keys, emit=emit)
+
+        async def _ideogram_reframe_handler(node, inputs, api_keys):
+            node.params.setdefault("endpoint_id", "fal-ai/ideogram/v3/reframe")
+            return await handle_fal_universal(node, inputs, api_keys, emit=emit)
+
+        async def _ideogram_replace_bg_handler(node, inputs, api_keys):
+            node.params.setdefault("endpoint_id", "fal-ai/ideogram/v3/replace-background")
+            return await handle_fal_universal(node, inputs, api_keys, emit=emit)
+
+        async def _ideogram_character_handler(node, inputs, api_keys):
+            node.params.setdefault("endpoint_id", "fal-ai/ideogram/character")
+            return await handle_fal_universal(node, inputs, api_keys, emit=emit)
+
+        async def _ideogram_upscale_handler(node, inputs, api_keys):
+            node.params.setdefault("endpoint_id", "fal-ai/ideogram/upscale")
+            return await handle_fal_universal(node, inputs, api_keys, emit=emit)
+
         registry["seedance-2-t2v"] = _seedance2_t2v_handler
         registry["seedance-2-i2v"] = _seedance2_i2v_handler
         registry["seedance-2-r2v"] = _seedance2_r2v_handler
@@ -834,6 +859,12 @@ def get_handler_registry(
         registry["seedvr-video-upscale"] = _seedvr_video_upscale_handler
         registry["seedream-4-5"] = _seedream45_handler
         registry["ideogram-v4"] = _ideogram_v4_handler
+        registry["ideogram-edit"] = _ideogram_edit_handler
+        registry["ideogram-remix"] = _ideogram_remix_handler
+        registry["ideogram-reframe"] = _ideogram_reframe_handler
+        registry["ideogram-replace-background"] = _ideogram_replace_bg_handler
+        registry["ideogram-character"] = _ideogram_character_handler
+        registry["ideogram-upscale"] = _ideogram_upscale_handler
         registry["krea-2-generate"] = _krea_generate_handler
         registry["krea-style-train"] = _krea_style_train_handler
 
