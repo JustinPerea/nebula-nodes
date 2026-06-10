@@ -96,14 +96,23 @@ async def _post_multipart(
     fields: dict[str, Any],
     files: list[tuple[str, tuple[str, bytes, str]]],
 ) -> dict[str, Any]:
-    """POST a multipart request and return the parsed JSON response."""
-    data = {k: str(v) for k, v in fields.items() if v is not None and v != ""}
+    """POST a multipart request and return the parsed JSON response.
+
+    Ideogram rejects ``application/x-www-form-urlencoded`` (httpx's default when
+    only ``data=`` is passed). Encode scalar fields as multipart text parts so
+    text-only endpoints like v4 generate still hit ``multipart/form-data``.
+    """
+    multipart: list[tuple[str, Any]] = [
+        (key, (None, str(value)))
+        for key, value in fields.items()
+        if value is not None and value != ""
+    ]
+    multipart.extend(files)
     async with httpx.AsyncClient(timeout=300.0) as client:
         resp = await client.post(
             f"{IDEOGRAM_API_BASE}{path}",
             headers={"Api-Key": api_key},
-            data=data,
-            files=files or None,
+            files=multipart or None,
         )
     if resp.status_code != 200:
         raise RuntimeError(f"Ideogram API error {resp.status_code}: {resp.text}")
@@ -160,7 +169,7 @@ async def handle_ideogram_v4_generate(
 ) -> dict[str, Any]:
     api_key = _require_key(api_keys)
     fields: dict[str, Any] = {"text_prompt": _required_text(inputs, "prompt", "Prompt")}
-    _field(node, fields, "resolution", "rendering_speed")
+    _field(node, fields, "resolution", "rendering_speed", "magic_prompt", "num_images", "seed")
     result = await _post_multipart("/v1/ideogram-v4/generate", api_key, fields, [])
     return await _save_first_image(result)
 

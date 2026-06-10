@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { DragEvent as ReactDragEvent } from 'react';
+import { X } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
 import { fetchCharacters } from '../../lib/api';
@@ -28,6 +29,7 @@ export const CHARACTER_DRAG_MIME = 'application/nebula-character';
  *  always-reachable path today is click → add at a default position. */
 export function CharacterLibrary() {
   const enterCharacterEditor = useUIStore((s) => s.enterCharacterEditor);
+  const togglePanel = useUIStore((s) => s.togglePanel);
   const addCharacterNode = useGraphStore((s) => s.addCharacterNode);
 
   const [scope, setScope] = useState<Scope>('global');
@@ -85,6 +87,21 @@ export function CharacterLibrary() {
     <div className="panel panel--character-library">
       <div className="panel__header">
         <span className="panel__title">Characters</span>
+        <button
+          type="button"
+          className="panel__header-action panel__close"
+          onClick={() => togglePanel('character')}
+          aria-label="Close character library"
+          title="Close"
+        >
+          <X
+            className="panel__close-icon"
+            size={16}
+            strokeWidth={1.75}
+            aria-hidden="true"
+            focusable="false"
+          />
+        </button>
       </div>
 
       <div className="panel__body panel__body--character-library">

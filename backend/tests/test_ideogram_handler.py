@@ -82,6 +82,24 @@ def _post_kwargs(mock_client) -> dict:
     return mock_client.post.call_args.kwargs
 
 
+def _multipart_text_fields(kwargs: dict) -> dict[str, str]:
+    """Scalar multipart fields encoded as ``(name, (None, value))``."""
+    out: dict[str, str] = {}
+    for name, part in kwargs.get("files") or []:
+        if isinstance(part, tuple) and len(part) == 2 and part[0] is None:
+            out[name] = part[1]
+    return out
+
+
+def _multipart_file_names(kwargs: dict) -> list[str]:
+    """Binary file field names: ``(name, (filename, bytes, mime))``."""
+    names: list[str] = []
+    for name, part in kwargs.get("files") or []:
+        if isinstance(part, tuple) and len(part) == 3:
+            names.append(name)
+    return names
+
+
 @pytest.mark.asyncio
 async def test_v4_generate_body_shape(tmp_path):
     with patch("handlers.ideogram.get_run_dir", return_value=tmp_path):
@@ -97,10 +115,11 @@ async def test_v4_generate_body_shape(tmp_path):
     assert url == f"{IDEOGRAM_API_BASE}/v1/ideogram-v4/generate"
     kwargs = _post_kwargs(client)
     assert kwargs["headers"] == {"Api-Key": "ideo-test-key"}
-    assert kwargs["data"]["text_prompt"] == "a poster that says OPEN"
-    assert kwargs["data"]["resolution"] == "2048x2048"
-    assert kwargs["data"]["rendering_speed"] == "QUALITY"
-    assert not kwargs["files"]
+    fields = _multipart_text_fields(kwargs)
+    assert fields["text_prompt"] == "a poster that says OPEN"
+    assert fields["resolution"] == "2048x2048"
+    assert fields["rendering_speed"] == "QUALITY"
+    assert not _multipart_file_names(kwargs)
     assert result["image"]["type"] == "Image"
     assert Path(result["image"]["value"]).exists()
 
@@ -135,11 +154,11 @@ async def test_edit_posts_inpaint_with_image_and_mask(tmp_path):
     url = client.post.call_args.args[0]
     assert url.endswith("/v1/ideogram-v3/inpaint")
     kwargs = _post_kwargs(client)
-    assert kwargs["data"]["prompt"] == "make the sign neon"
-    assert kwargs["data"]["magic_prompt"] == "OFF"
-    assert kwargs["data"]["num_images"] == "2"
-    field_names = [f[0] for f in kwargs["files"]]
-    assert field_names == ["image", "mask", "style_reference_images"]
+    fields = _multipart_text_fields(kwargs)
+    assert fields["prompt"] == "make the sign neon"
+    assert fields["magic_prompt"] == "OFF"
+    assert fields["num_images"] == "2"
+    assert _multipart_file_names(kwargs) == ["image", "mask", "style_reference_images"]
 
 
 @pytest.mark.asyncio
@@ -160,9 +179,10 @@ async def test_remix_rides_v4_endpoint(tmp_path):
     url = client.post.call_args.args[0]
     assert url.endswith("/v1/ideogram-v4/remix")
     kwargs = _post_kwargs(client)
-    assert kwargs["data"]["text_prompt"] == "same scene at night"
-    assert kwargs["data"]["image_weight"] == "70"
-    assert [f[0] for f in kwargs["files"]] == ["image"]
+    fields = _multipart_text_fields(kwargs)
+    assert fields["text_prompt"] == "same scene at night"
+    assert fields["image_weight"] == "70"
+    assert _multipart_file_names(kwargs) == ["image"]
 
 
 @pytest.mark.asyncio
@@ -189,8 +209,9 @@ async def test_reframe_body_shape(tmp_path):
     url = client.post.call_args.args[0]
     assert url.endswith("/v1/ideogram-v3/reframe")
     kwargs = _post_kwargs(client)
-    assert kwargs["data"]["resolution"] == "1280x800"
-    assert "prompt" not in kwargs["data"]  # reframe takes no prompt
+    fields = _multipart_text_fields(kwargs)
+    assert fields["resolution"] == "1280x800"
+    assert "prompt" not in fields  # reframe takes no prompt
 
 
 @pytest.mark.asyncio
@@ -210,8 +231,9 @@ async def test_replace_background_body_shape(tmp_path):
     url = client.post.call_args.args[0]
     assert url.endswith("/v1/ideogram-v3/replace-background")
     kwargs = _post_kwargs(client)
-    assert kwargs["data"]["prompt"] == "a beach at golden hour"
-    assert [f[0] for f in kwargs["files"]] == ["image"]
+    fields = _multipart_text_fields(kwargs)
+    assert fields["prompt"] == "a beach at golden hour"
+    assert _multipart_file_names(kwargs) == ["image"]
 
 
 @pytest.mark.asyncio
@@ -231,10 +253,13 @@ async def test_character_posts_v3_generate_with_character_refs(tmp_path):
     url = client.post.call_args.args[0]
     assert url.endswith("/v1/ideogram-v3/generate")
     kwargs = _post_kwargs(client)
-    assert kwargs["data"]["style_type"] == "FICTION"
-    assert kwargs["data"]["aspect_ratio"] == "16x9"
-    field_names = [f[0] for f in kwargs["files"]]
-    assert field_names == ["character_reference_images", "character_reference_images"]
+    fields = _multipart_text_fields(kwargs)
+    assert fields["style_type"] == "FICTION"
+    assert fields["aspect_ratio"] == "16x9"
+    assert _multipart_file_names(kwargs) == [
+        "character_reference_images",
+        "character_reference_images",
+    ]
 
 
 @pytest.mark.asyncio
@@ -264,11 +289,12 @@ async def test_upscale_sends_image_request_blob(tmp_path):
     url = client.post.call_args.args[0]
     assert url.endswith("/upscale")
     kwargs = _post_kwargs(client)
-    blob = json.loads(kwargs["data"]["image_request"])
+    fields = _multipart_text_fields(kwargs)
+    blob = json.loads(fields["image_request"])
     assert blob["resemblance"] == 70
     assert blob["detail"] == 30
     assert blob["prompt"] == "sharper text"
-    assert [f[0] for f in kwargs["files"]] == ["image_file"]
+    assert _multipart_file_names(kwargs) == ["image_file"]
 
 
 @pytest.mark.asyncio
@@ -487,8 +513,9 @@ async def test_describe_returns_description_and_json_prompt():
     url = client.post.call_args.args[0]
     assert url.endswith("/v1/ideogram-v4/describe")
     kwargs = _post_kwargs(client)
-    assert kwargs["data"]["include_bbox"] == "true"
-    assert [f[0] for f in kwargs["files"]] == ["image_file"]
+    fields = _multipart_text_fields(kwargs)
+    assert fields["include_bbox"] == "true"
+    assert _multipart_file_names(kwargs) == ["image_file"]
     assert result["description"]["value"] == (
         "A neon diner sign at dusk. retro photographic, warm tungsten palette"
     )
@@ -527,9 +554,10 @@ async def test_transparent_body_shape(tmp_path):
     url = client.post.call_args.args[0]
     assert url.endswith("/v1/ideogram-v3/generate-transparent")
     kwargs = _post_kwargs(client)
-    assert kwargs["data"]["prompt"] == "a sticker of a fox"
-    assert kwargs["data"]["upscale_factor"] == "X2"
-    assert not kwargs["files"]
+    fields = _multipart_text_fields(kwargs)
+    assert fields["prompt"] == "a sticker of a fox"
+    assert fields["upscale_factor"] == "X2"
+    assert not _multipart_file_names(kwargs)
 
 
 @pytest.mark.asyncio
@@ -545,7 +573,7 @@ async def test_remove_background_body_shape(tmp_path):
 
     url = client.post.call_args.args[0]
     assert url.endswith("/v1/remove-background")
-    assert [f[0] for f in _post_kwargs(client)["files"]] == ["image"]
+    assert _multipart_file_names(_post_kwargs(client)) == ["image"]
 
 
 @pytest.mark.asyncio
@@ -591,10 +619,11 @@ async def test_edit_prompt_accepts_single_or_multi_images(tmp_path):
     url = client.post.call_args.args[0]
     assert url.endswith("/v1/edit")
     kwargs = _post_kwargs(client)
-    assert kwargs["data"]["prompt"] == "remove the lamp post"
-    assert kwargs["data"]["transparent_background"] == "true"
+    fields = _multipart_text_fields(kwargs)
+    assert fields["prompt"] == "remove the lamp post"
+    assert fields["transparent_background"] == "true"
     # single `image` port leads, then the multi `images` port
-    assert [f[0] for f in kwargs["files"]] == ["images", "images"]
+    assert _multipart_file_names(kwargs) == ["images", "images"]
 
 
 @pytest.mark.asyncio
@@ -691,4 +720,4 @@ async def test_character_forwards_custom_model_uri(tmp_path):
                 },
                 _KEYS,
             )
-    assert _post_kwargs(client)["data"]["custom_model_uri"] == "ideogram://models/mdl-1"
+        assert _multipart_text_fields(_post_kwargs(client))["custom_model_uri"] == "ideogram://models/mdl-1"

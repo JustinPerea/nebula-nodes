@@ -8286,9 +8286,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         default: 'AUTO',
         options: [
           { label: 'Auto', value: 'AUTO' },
-          { label: 'General', value: 'GENERAL' },
           { label: 'Realistic', value: 'REALISTIC' },
-          { label: 'Design', value: 'DESIGN' },
           { label: 'Fiction', value: 'FICTION' },
         ],
       },

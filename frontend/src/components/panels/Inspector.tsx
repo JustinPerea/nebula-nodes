@@ -966,6 +966,21 @@ export function Inspector({ embedded = false }: InspectorProps) {
             return null;
           })();
           const maskData = typeof nodeData.params._maskData === 'string' ? nodeData.params._maskData : null;
+          const maskOutEdge = edges.find(
+            (edge) => edge.source === renderNode.id && (edge.sourceHandle ?? 'mask') === 'mask',
+          );
+          const editTarget = maskOutEdge
+            ? nodes.find((node) => node.id === maskOutEdge.target)
+            : undefined;
+          const editDefId = (editTarget?.data as NodeData | undefined)?.definitionId;
+          const editDef = editDefId ? NODE_DEFINITIONS[editDefId] : undefined;
+          const editNeedsBaseImage = Boolean(
+            editDef?.inputPorts.some((port) => port.id === 'image')
+            && editDef?.inputPorts.some((port) => port.id === 'mask'),
+          );
+          const editHasBaseImageWire = editNeedsBaseImage && editTarget && edges.some(
+            (edge) => edge.target === editTarget.id && (edge.targetHandle ?? 'image') === 'image',
+          );
           return (
             <div className="inspector__section">
               <div className="inspector__label">Mask</div>
@@ -982,6 +997,12 @@ export function Inspector({ embedded = false }: InspectorProps) {
                 </span>
               </div>
               {maskData && <img src={maskData} alt="Painted mask" className="mask-painter__thumb" />}
+              {editNeedsBaseImage && !editHasBaseImageWire && (
+                <p className="mask-painter__hint">
+                  Connect the source image to the edit node&apos;s Image port too — mask-painter only passes the mask.
+                  Re-connect the mask wire to auto-wire the base image.
+                </p>
+              )}
               {maskPainterOpen && (
                 <MaskPainterModal
                   imageUrl={upstreamImage}

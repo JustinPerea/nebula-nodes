@@ -13981,16 +13981,8 @@
             "value": "AUTO"
           },
           {
-            "label": "General",
-            "value": "GENERAL"
-          },
-          {
             "label": "Realistic",
             "value": "REALISTIC"
-          },
-          {
-            "label": "Design",
-            "value": "DESIGN"
           },
           {
             "label": "Fiction",

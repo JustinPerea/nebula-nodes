@@ -151,6 +151,7 @@ export default function App() {
 
   const viewMode = useUIStore((s) => s.viewMode);
   const moodboardPanelVisible = useUIStore((s) => s.panels.moodboard.visible);
+  const characterPanelVisible = useUIStore((s) => s.panels.character.visible);
 
   const isCanvas = viewMode === 'canvas';
   const isRemotion = viewMode === 'remotion-editor';
@@ -188,7 +189,7 @@ export default function App() {
       {/* Canvas-only chrome: library, inspector, settings, launchers, toolbar, agent log.
           The editor view is a focused workspace — only the pill control and chat remain. */}
       {isCanvas && <NodeLibrary />}
-      {isCanvas && <CharacterLibrary />}
+      {isCanvas && characterPanelVisible && <CharacterLibrary />}
       {isCanvas && moodboardPanelVisible && <MoodboardLibrary />}
       {isCanvas && <NodeInspectorPopover />}
       {isCanvas && <Settings />}

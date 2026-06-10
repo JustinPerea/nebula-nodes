@@ -120,6 +120,22 @@ body:not(.app-slava-restraint) .model-node__handle:hover { transform: scale(1.4)
   position: relative;
 }
 
+.model-node__mask-composite .model-node__preview-image,
+.model-node__mask-composite .model-node__mask-overlay {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.model-node__mask-overlay {
+  position: absolute;
+  inset: 0;
+  object-fit: contain;
+  opacity: 0.55;
+  pointer-events: none;
+  mix-blend-mode: screen;
+}
+
 body:not(.app-slava-restraint) .model-node__preview {
   padding: 6px 10px;
   border-top: 1px solid #2a2a2a;

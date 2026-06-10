@@ -296,6 +296,23 @@ def _import_external_image_to_output_root(file_path_value: str) -> tuple[Path, s
     return saved_path.resolve(), f"/api/outputs/chat-uploads/{saved_path.name}"
 
 
+_PRESET_THUMBNAIL_URL_RE = re.compile(r"^/api/presets/thumbnails/([a-z0-9-]{1,64})$")
+
+
+def _preset_thumbnail_path_from_ref(value: str) -> Path | None:
+    """Map a shipped preset thumbnail URL to its on-disk .webp path."""
+    match = _PRESET_THUMBNAIL_URL_RE.match(value.strip())
+    if not match:
+        return None
+    thumbnails_dir = (Path(__file__).resolve().parent / "data" / "presets" / "thumbnails").resolve()
+    path = (thumbnails_dir / f"{match.group(1)}.webp").resolve()
+    try:
+        path.relative_to(thumbnails_dir)
+    except ValueError:
+        return None
+    return path if path.is_file() else None
+
+
 def _normalize_image_input_params(params: dict[str, Any]) -> dict[str, Any]:
     """Normalize image-input file paths after repo/output-root moves."""
     rewritten = dict(params)
@@ -321,6 +338,15 @@ def _normalize_image_input_params(params: dict[str, Any]) -> dict[str, Any]:
             new_path, new_url = imported
             rewritten["filePath"] = str(new_path)
             rewritten["_previewUrl"] = new_url
+
+    # Preset thumbnails only populate _previewUrl in the UI — resolve to a
+    # local filePath so execution can read the bytes (mask-painter, inpaint, etc.).
+    if not rewritten.get("filePath"):
+        preview = rewritten.get("_previewUrl")
+        if isinstance(preview, str) and preview:
+            preset_path = _preset_thumbnail_path_from_ref(preview)
+            if preset_path is not None:
+                rewritten["filePath"] = str(preset_path)
 
     preview = rewritten.get("_previewUrl")
     if isinstance(preview, str) and preview:

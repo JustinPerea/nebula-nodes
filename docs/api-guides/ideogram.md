@@ -1,9 +1,32 @@
 # Ideogram in Nebula — direct API guide
 
 > Audited 2026-06-10 against developer.ideogram.ai (OpenAPI specs fetched per
-> endpoint). Ideogram nodes are **dual-route**: with `IDEOGRAM_API_KEY` set they
-> call `api.ideogram.ai` directly; without it they fall back to FAL
-> (`FAL_KEY`) — see [fal.md](fal.md) for the FAL dialect.
+> endpoint). **Live-smoked 2026-06-10 (direct route, `IDEOGRAM_API_KEY`):**
+> `ideogram-v4`, `ideogram-edit`, `ideogram-transparent`, `ideogram-remove-background`,
+> `ideogram-edit-prompt`, and `ideogram-describe` → `ideogram-magic-prompt` all
+> returned outputs on `feat/inpainting` (`backend/scripts/smoke_ideogram_live.py`).
+> Earlier FAL-route smokes also passed before the direct key was added. Mask Painter
+> UI opens from the Inspector and loads upstream images via `/api/presets/thumbnails/…`.
+> **Canvas E2E (2026-06-10):** `text-input` + `image-input` → `mask-painter` (Inspector
+> brush, polarity *Black = edit*) → `ideogram-edit` → **Run** — all nodes `complete`
+> in ~6s; inpaint visible in the brushed region (studio-product ref + “shiny gold coin”).
+> **Agent playbook:** `.claude/skills/ideogram/SKILL.md` + `references/canvas-inpaint.md`
+> — four wires (image must also hit `ideogram-edit.image`), filled mask over the target
+> (not a hairline on empty white), `expand_prompt: true`, verify visible change in the
+> painted bbox before claiming success.
+> **Dual-route smokes (direct, 2026-06-10):** `ideogram-remix` (v4 remix),
+> `ideogram-reframe`, `ideogram-replace-background`, `ideogram-upscale`, and
+> `ideogram-character` all returned images. **Live gotchas:** character `style_type`
+> must be `AUTO`/`REALISTIC`/`FICTION` only (GENERAL/DESIGN 400); the API allows
+> **one** `character_reference_images` file per request (not multiple). Reframe
+> `resolution` must be an Ideogram pixel enum (e.g. `1280x800`, not `1280x720`).
+> **Bug fixed during smoke:** text-only multipart endpoints (v4 generate, transparent)
+> were hitting `application/x-www-form-urlencoded` and 415'd — `_post_multipart` now
+> encodes scalar fields as multipart text parts.
+>
+> Ideogram nodes are **dual-route**: with `IDEOGRAM_API_KEY` set they call
+> `api.ideogram.ai` directly; without it they fall back to FAL (`FAL_KEY`) — see
+> [fal.md](fal.md) for the FAL dialect.
 
 Ideogram is the typography/design-first image model family (Ideogram 4.0,
 released 2026-06-03 — frontier text rendering, open weights + hosted API). The

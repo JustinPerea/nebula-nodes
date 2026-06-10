@@ -134,6 +134,17 @@ def test_backfill_is_idempotent(fresh, tmp_path, monkeypatch):
     assert noir_v2["version"] == version_after_first  # no extra bump
 
 
+def test_normalize_image_input_resolves_preset_preview_to_file_path():
+    """Preset thumbnails stored as _previewUrl must gain a filePath for execution."""
+    normalized = m._normalize_image_input_params(
+        {"_previewUrl": "/api/presets/thumbnails/studio-product"},
+    )
+    file_path = normalized.get("filePath")
+    assert isinstance(file_path, str) and file_path
+    assert Path(file_path).name == "studio-product.webp"
+    assert Path(file_path).is_file()
+
+
 def test_backfill_does_not_touch_user_presets(fresh, tmp_path, monkeypatch):
     """User presets (names not in seed.json) are untouched by backfill."""
     seed_path, _ = _make_seed_and_thumbnails(tmp_path)

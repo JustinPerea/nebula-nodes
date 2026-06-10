@@ -1,4 +1,4 @@
-import { memo, useCallback, useState } from 'react';
+import { memo, useCallback, useMemo, useState } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { Download, Repeat2, Sparkles } from 'lucide-react';
 import type { NodeData } from '../../types';
@@ -152,7 +152,33 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
   const isStreaming = nodeData.state === 'executing' && nodeData.streamingText != null;
   const isTextSurface = isInlineTextNode || Boolean(displayText && !isInlineTextNode);
   const isImageInput = nodeData.definitionId === 'image-input';
+  const isMaskPainter = nodeData.definitionId === 'mask-painter';
+  const edges = useGraphStore((s) => s.edges);
+  const nodes = useGraphStore((s) => s.nodes);
   const imageInputPreview = isImageInput && nodeData.params._previewUrl ? String(nodeData.params._previewUrl) : null;
+  const maskOverlayData = isMaskPainter && typeof nodeData.params._maskData === 'string'
+    ? nodeData.params._maskData
+    : null;
+  const maskSourcePreview = useMemo(() => {
+    if (!isMaskPainter) return null;
+    const inEdge = edges.find(
+      (edge) => edge.target === id && (edge.targetHandle ?? 'image') === 'image',
+    );
+    if (!inEdge) return null;
+    const src = nodes.find((node) => node.id === inEdge.source);
+    if (!src) return null;
+    const sd = src.data as NodeData;
+    if (sd.definitionId === 'image-input' && sd.params._previewUrl) {
+      return String(sd.params._previewUrl);
+    }
+    const imgOut = Object.values(sd.outputs ?? {}).find(
+      (output) => output.type === 'Image' && typeof output.value === 'string' && output.value,
+    );
+    if (imgOut) return String(imgOut.value);
+    if (sd.params._previewUrl) return String(sd.params._previewUrl);
+    return null;
+  }, [isMaskPainter, id, edges, nodes]);
+  const showMaskComposite = Boolean(isMaskPainter && maskSourcePreview && maskOverlayData);
   const finalImageOutput = nodeData.state === 'complete' && imageOutput && typeof imageOutput.value === 'string'
     ? imageOutput.value
     : null;
@@ -165,7 +191,13 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
   const finalSvgOutput = nodeData.state === 'complete' && svgOutput && typeof svgOutput.value === 'string'
     ? svgOutput.value
     : null;
-  const isImageSurface = Boolean(imageInputPreview || finalImageOutput || streamingSvgPreview || finalSvgOutput);
+  const isImageSurface = Boolean(
+    imageInputPreview
+    || finalImageOutput
+    || streamingSvgPreview
+    || finalSvgOutput
+    || (isMaskPainter && maskSourcePreview),
+  );
   const imageClassName = isSlavaSkin ? 'model-node__preview-image' : 'model-node__preview-image nodrag';
   const downloadableOutput =
     finalImageOutput
@@ -343,6 +375,36 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
         </div>
       )}
 
+      {showMaskComposite && maskSourcePreview && maskOverlayData && (
+        <div className="model-node__preview model-node__mask-composite">
+          <img
+            src={maskSourcePreview}
+            alt="Mask source"
+            className={imageClassName}
+            loading="lazy"
+            draggable={false}
+          />
+          <img
+            src={maskOverlayData}
+            alt="Painted mask overlay"
+            className="model-node__mask-overlay nodrag"
+            draggable={false}
+          />
+        </div>
+      )}
+
+      {isMaskPainter && maskSourcePreview && !maskOverlayData && (
+        <div className="model-node__preview">
+          <img
+            src={maskSourcePreview}
+            alt="Mask source preview"
+            className={imageClassName}
+            loading="lazy"
+            draggable={false}
+          />
+        </div>
+      )}
+
       {(nodeData.state === 'queued' || nodeData.state === 'executing') && (
         <div className="model-node__loading">
           <div className="model-node__loading-spinner" />
@@ -361,7 +423,7 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
         </div>
       )}
 
-      {finalImageOutput && !imageInputPreview && (
+      {finalImageOutput && !imageInputPreview && !(isMaskPainter && maskSourcePreview) && (
         <div className="model-node__preview">
           <img
             src={finalImageOutput}

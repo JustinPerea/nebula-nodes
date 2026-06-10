@@ -59,6 +59,27 @@ function defHasParam(def: ModelNodeDefinition, key: string): boolean {
   return sources.some((p) => p.key === key);
 }
 
+function definitionHasImageAndMaskPorts(definitionId: string): boolean {
+  const def = NODE_DEFINITIONS[definitionId];
+  if (!def) return false;
+  const portIds = new Set(def.inputPorts.map((port) => port.id));
+  return portIds.has('image') && portIds.has('mask');
+}
+
+function upstreamImageConnectionForMaskPainter(
+  maskPainterId: string,
+  edges: Edge[],
+): Pick<Connection, 'source' | 'sourceHandle'> | null {
+  const imageEdge = edges.find(
+    (edge) => edge.target === maskPainterId && (edge.targetHandle ?? 'image') === 'image',
+  );
+  if (!imageEdge) return null;
+  return {
+    source: imageEdge.source,
+    sourceHandle: imageEdge.sourceHandle ?? 'image',
+  };
+}
+
 function nodesInExecutionScope(nodes: Node<NodeData>[], edges: Edge[], targetNodeId?: string): Node<NodeData>[] {
   if (!targetNodeId) return nodes;
   const ids = new Set<string>([targetNodeId]);
@@ -272,7 +293,7 @@ interface GraphState {
   ) => Promise<string | null>;
   onNodesChange: (changes: NodeChange[]) => void;
   onEdgesChange: (changes: EdgeChange[]) => void;
-  onConnect: (connection: Connection) => void;
+  onConnect: (connection: Connection, options?: { skipUndo?: boolean }) => void;
   updateNodeData: (nodeId: string, data: Partial<NodeData>) => void;
   updateRemotionManifest: (nodeId: string, patch: Partial<VideoGraphManifest>) => void;
   addTrackItemWithCanvasMirror: (
@@ -1173,13 +1194,15 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     });
   },
 
-  onConnect: (connection) => {
+  onConnect: (connection, options) => {
     if (!connection.source || !connection.target) return;
     const sourceNode = get().nodes.find((n) => n.id === connection.source);
     const targetNode = get().nodes.find((n) => n.id === connection.target);
     if (!sourceNode || !targetNode) return;
 
-    pushUndo(set, get);
+    if (!options?.skipUndo) {
+      pushUndo(set, get);
+    }
 
     // Resolve source port data type — static or dynamic
     let dataType: PortDataType = 'Any';
@@ -1245,6 +1268,33 @@ export const useGraphStore = create<GraphState>((set, get) => ({
           }),
         });
       })().catch((err) => console.warn('[nebula] onConnect backend push failed:', err));
+    }
+
+    // mask-painter only outputs a mask bitmap — inpaint nodes also need the base
+    // image on a separate wire. Auto-connect upstream image → edit.image when the
+    // user chains image → mask-painter → edit.
+    if (
+      !options?.skipUndo
+      && sourceNode.data.definitionId === 'mask-painter'
+      && connection.sourceHandle === 'mask'
+      && connection.targetHandle === 'mask'
+      && definitionHasImageAndMaskPorts(targetNode.data.definitionId)
+    ) {
+      const upstream = upstreamImageConnectionForMaskPainter(connection.source, get().edges);
+      const alreadyWired = get().edges.some(
+        (edge) => edge.target === connection.target && (edge.targetHandle ?? 'image') === 'image',
+      );
+      if (upstream && !alreadyWired) {
+        get().onConnect(
+          {
+            source: upstream.source,
+            sourceHandle: upstream.sourceHandle,
+            target: connection.target,
+            targetHandle: 'image',
+          },
+          { skipUndo: true },
+        );
+      }
     }
   },
 

@@ -13,6 +13,7 @@ const DEFAULT_PANELS = {
   // until chatResized flips, so the CSS clamp drives the rendered width.
   chat: { visible: false, position: { x: 16, y: 16 }, width: 300 },
   moodboard: { visible: false, position: { x: 16, y: 16 } },
+  character: { visible: true, position: { x: 16, y: 360 } },
 };
 
 function createDefaultPanels(): UIState['panels'] {
@@ -22,6 +23,7 @@ function createDefaultPanels(): UIState['panels'] {
     settings: { ...DEFAULT_PANELS.settings, position: { ...DEFAULT_PANELS.settings.position } },
     chat: { ...DEFAULT_PANELS.chat, position: { ...DEFAULT_PANELS.chat.position } },
     moodboard: { ...DEFAULT_PANELS.moodboard, position: { ...DEFAULT_PANELS.moodboard.position } },
+    character: { ...DEFAULT_PANELS.character, position: { ...DEFAULT_PANELS.character.position } },
   };
 }
 
@@ -105,6 +107,7 @@ interface UIState {
     settings: PanelState;
     chat: ChatPanelState;
     moodboard: PanelState;
+    character: PanelState;
   };
   librarySearch: string;
   libraryCollapsed: Record<string, boolean>;
@@ -156,8 +159,8 @@ interface UIState {
   selectNode: (nodeId: string | null) => void;
   setInspectorVisible: (visible: boolean) => void;
   setInspectorPinned: (pinned: boolean) => void;
-  togglePanel: (panel: 'library' | 'inspector' | 'settings' | 'chat' | 'moodboard') => void;
-  setPanelPosition: (panel: 'library' | 'inspector' | 'settings' | 'chat' | 'moodboard', position: { x: number; y: number }) => void;
+  togglePanel: (panel: 'library' | 'inspector' | 'settings' | 'chat' | 'moodboard' | 'character') => void;
+  setPanelPosition: (panel: 'library' | 'inspector' | 'settings' | 'chat' | 'moodboard' | 'character', position: { x: number; y: number }) => void;
   setLibrarySearch: (search: string) => void;
   toggleLibraryCategory: (category: string) => void;
   setAllLibraryCategories: (collapsed: boolean, categories: string[]) => void;
