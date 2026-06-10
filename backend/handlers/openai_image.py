@@ -32,10 +32,7 @@ async def handle_openai_image_generate(
         "prompt": prompt_text,
     }
 
-    # gpt-image-1 always returns b64_json by default — no response_format needed.
-    # DALL-E models use response_format.
-    if model.startswith("dall-e"):
-        body["response_format"] = "b64_json"
+    # gpt-image models always return b64_json by default — no response_format needed.
 
     size = node.params.get("size")
     if size and size != "auto":
@@ -49,23 +46,15 @@ async def handle_openai_image_generate(
     if n and int(n) > 1:
         body["n"] = int(n)
 
-    # GPT image models support output_format (png/jpeg/webp); dall-e models do not.
+    # GPT image models support output_format (png/jpeg/webp).
     # Capture output_format here so we can use it for the saved file extension below.
-    output_format: str | None = None
-    if not model.startswith("dall-e"):
-        output_format = node.params.get("output_format")
-        if output_format and output_format != "png":
-            body["output_format"] = output_format
+    output_format: str | None = node.params.get("output_format")
+    if output_format and output_format != "png":
+        body["output_format"] = output_format
 
-        background = node.params.get("background")
-        if background and background != "auto":
-            body["background"] = background
-
-    # dall-e-3 supports a style param (vivid/natural); other models do not.
-    if model == "dall-e-3":
-        style = node.params.get("style")
-        if style:
-            body["style"] = style
+    background = node.params.get("background")
+    if background and background != "auto":
+        body["background"] = background
 
     async with httpx.AsyncClient(timeout=120.0) as client:
         response = await client.post(
@@ -85,7 +74,6 @@ async def handle_openai_image_generate(
     b64_data = data["data"][0]["b64_json"]
 
     # Match the saved file extension to the format actually returned by the API.
-    # DALL-E models always return PNG (response_format controls url vs b64, not format).
     # GPT image models honour output_format, so jpeg/webp need the matching extension
     # so that downstream MIME inference (e.g. image_to_data_uri) is correct.
     extension = output_format if output_format in ("png", "jpeg", "webp") else "png"

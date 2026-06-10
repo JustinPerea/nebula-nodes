@@ -315,6 +315,49 @@ async def test_extended_thinking_not_sent_when_disabled():
 
 
 @pytest.mark.asyncio
+async def test_fable5_never_sends_thinking_block():
+    """Claude Fable/Mythos 5 use always-on adaptive thinking and reject the extended-thinking
+    param — the thinking block must be suppressed even when the node has it enabled."""
+    fake_response = FakeStreamResponse(_make_sse_lines(["ok"]))
+    with patch("execution.stream_runner.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.stream = MagicMock(return_value=fake_response)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        await handle_claude_chat(
+            _make_node({"model": "claude-fable-5", "max_tokens": 16000, "temperature": 0.5, "extended_thinking": True, "thinkingBudget": 5000}),
+            {"messages": PortValueDict(type="Text", value="think hard")},
+            {"ANTHROPIC_API_KEY": "sk-ant-test"},
+        )
+
+    body = mock_client.stream.call_args.kwargs.get("json") or mock_client.stream.call_args[1].get("json")
+    assert body["model"] == "claude-fable-5"
+    assert "thinking" not in body, "Fable 5 must never receive an extended-thinking block"
+    assert body.get("temperature") == 0.5, "user temperature must not be overridden for Fable 5"
+
+
+@pytest.mark.asyncio
+async def test_registry_claude_model_list():
+    """Registry must carry the current Anthropic lineup (June 2026)."""
+    import json, pathlib
+    defs_path = pathlib.Path(__file__).parent.parent / "data" / "node_definitions.json"
+    defs = json.loads(defs_path.read_text())
+    model_param = next(p for p in defs["claude-chat"]["params"] if p["key"] == "model")
+    model_values = [opt["value"] for opt in model_param["options"]]
+    assert "claude-fable-5" in model_values
+    assert "claude-opus-4-8" in model_values
+    assert "claude-sonnet-4-6" in model_values
+    # extended-thinking params must be hidden for Fable/Mythos models
+    for key in ("extended_thinking", "thinkingBudget"):
+        prm = next(p for p in defs["claude-chat"]["params"] if p["key"] == key)
+        visible_models = prm.get("visibleWhen", {}).get("model", [])
+        assert visible_models, f"{key} must declare visibleWhen.model"
+        assert not any(m.startswith(("claude-fable", "claude-mythos")) for m in visible_models)
+
+
+@pytest.mark.asyncio
 async def test_top_p_omitted_when_temperature_set():
     """Anthropic API requires temperature OR top_p, not both — top_p drops when both are set."""
     fake_response = FakeStreamResponse(_make_sse_lines(["ok"]))

@@ -69,7 +69,7 @@ async def handle_gemini_chat(
                         }
                     })
 
-    model = node.params.get("model", "gemini-2.5-flash")
+    model = node.params.get("model", "gemini-3.5-flash")
 
     generation_config: dict[str, Any] = {}
     temperature = node.params.get("temperature")

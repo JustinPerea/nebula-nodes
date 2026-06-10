@@ -90,6 +90,8 @@ async def handle_grok_video(
 
         _log(f"polling generation {gen_id}")
         # Poll GET /v1/videos/{request_id}
+        # xAI exposes no documented cancel endpoint — task cancels locally only
+        # (CancelledError propagates at the awaits; the upstream job runs to completion).
         max_polls = 300
         for poll_num in range(1, max_polls + 1):
             await asyncio.sleep(3.0)

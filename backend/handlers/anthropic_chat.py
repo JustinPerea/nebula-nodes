@@ -90,7 +90,10 @@ async def handle_claude_chat(
         else:
             request_body["system"] = str(system_prompt)
 
-    if node.params.get("extended_thinking"):
+    # Claude Fable/Mythos 5 use always-on adaptive thinking and reject the
+    # extended-thinking param; only pre-5 models accept a thinking budget.
+    supports_extended_thinking = not model.startswith(("claude-fable", "claude-mythos"))
+    if node.params.get("extended_thinking") and supports_extended_thinking:
         budget = int(node.params.get("thinkingBudget", 10000))
         budget = max(1024, budget)
         request_body["thinking"] = {"type": "enabled", "budget_tokens": budget}

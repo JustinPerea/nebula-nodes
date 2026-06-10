@@ -104,9 +104,11 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: true,
         default: 'claude-sonnet-4-6',
         options: [
-          { label: 'Claude Opus 4.7', value: 'claude-opus-4-7' },
+          { label: 'Claude Fable 5 (flagship)', value: 'claude-fable-5' },
+          { label: 'Claude Opus 4.8', value: 'claude-opus-4-8' },
           { label: 'Claude Sonnet 4.6', value: 'claude-sonnet-4-6' },
           { label: 'Claude Haiku 4.5', value: 'claude-haiku-4-5-20251001' },
+          { label: 'Claude Opus 4.7 (legacy)', value: 'claude-opus-4-7' },
           { label: 'Claude Opus 4.6 (legacy)', value: 'claude-opus-4-6' },
         ],
       },
@@ -160,6 +162,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         type: 'boolean',
         required: false,
         default: false,
+        // Fable/Mythos 5 use always-on adaptive thinking — no extended-thinking param.
+        visibleWhen: { model: ['claude-opus-4-8', 'claude-sonnet-4-6', 'claude-haiku-4-5-20251001', 'claude-opus-4-7', 'claude-opus-4-6'] },
       },
       {
         key: 'thinkingBudget',
@@ -171,6 +175,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         min: 1024,
         max: 200000,
         condition: 'extended_thinking',
+        visibleWhen: { model: ['claude-opus-4-8', 'claude-sonnet-4-6', 'claude-haiku-4-5-20251001', 'claude-opus-4-7', 'claude-opus-4-6'] },
       },
       {
         key: 'prompt_caching',
@@ -206,8 +211,11 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         default: 'gen4.5',
         options: [
           { label: 'Gen-4.5', value: 'gen4.5' },
+          { label: 'Seedance 2.0', value: 'seedance2' },
+          { label: 'Seedance 2.0 Fast', value: 'seedance2_fast' },
+          { label: 'HappyHorse 1.0', value: 'happyhorse_1_0' },
           { label: 'Gen-4 Turbo', value: 'gen4_turbo' },
-          { label: 'Gen-3a Turbo', value: 'gen3a_turbo' },
+          { label: 'Gen-3a Turbo (legacy)', value: 'gen3a_turbo' },
           { label: 'Veo 3.1', value: 'veo3.1' },
           { label: 'Veo 3.1 Fast', value: 'veo3.1_fast' },
           { label: 'Veo 3', value: 'veo3' },
@@ -267,6 +275,17 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     ],
     params: [
       {
+        key: 'model',
+        label: 'Model',
+        type: 'enum',
+        required: false,
+        default: 'gen4_aleph',
+        options: [
+          { label: 'Aleph 2.0', value: 'aleph2' },
+          { label: 'Gen-4 Aleph', value: 'gen4_aleph' },
+        ],
+      },
+      {
         key: 'seed',
         label: 'Seed',
         type: 'integer',
@@ -303,6 +322,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         options: [
           { label: 'Gen-4 Image', value: 'gen4_image' },
           { label: 'Gen-4 Image Turbo', value: 'gen4_image_turbo' },
+          { label: 'Nano Banana Pro (Gemini 3)', value: 'gemini_image3_pro' },
+          { label: 'GPT Image 2', value: 'gpt_image_2' },
           { label: 'Gemini 2.5 Flash', value: 'gemini_2.5_flash' },
         ],
       },
@@ -334,6 +355,76 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         placeholder: 'Random',
         min: 0,
         max: 4294967295,
+      },
+    ],
+  },
+
+  'runway-upscale': {
+    id: 'runway-upscale',
+    displayName: 'Runway Upscale',
+    category: 'transform',
+    apiProvider: 'runway',
+    apiEndpoint: '/v1/image_upscale',
+    envKeyName: 'RUNWAY_API_KEY',
+    executionPattern: 'async-poll',
+    inputPorts: [
+      { id: 'image', label: 'Image', dataType: 'Image', required: true },
+    ],
+    outputPorts: [
+      { id: 'image', label: 'Image', dataType: 'Image', required: false },
+    ],
+    params: [
+      {
+        key: 'scaleFactor',
+        label: 'Scale Factor',
+        type: 'enum',
+        required: false,
+        default: 2,
+        options: [
+          { label: '2x', value: 2 },
+          { label: '4x', value: 4 },
+          { label: '8x', value: 8 },
+          { label: '16x', value: 16 },
+        ],
+      },
+      {
+        key: 'flavor',
+        label: 'Flavor',
+        type: 'enum',
+        required: false,
+        default: 'photo',
+        options: [
+          { label: 'Photo', value: 'photo' },
+          { label: 'Photo Denoiser', value: 'photo_denoiser' },
+          { label: 'Sublime (illustration)', value: 'sublime' },
+        ],
+      },
+      {
+        key: 'sharpen',
+        label: 'Sharpen',
+        type: 'integer',
+        required: false,
+        min: 0,
+        max: 100,
+        placeholder: '0-100 (default none)',
+      },
+      {
+        key: 'smartGrain',
+        label: 'Smart Grain',
+        type: 'integer',
+        required: false,
+        min: 0,
+        max: 100,
+        placeholder: '0-100 (default none)',
+      },
+      {
+        key: 'ultraDetail',
+        label: 'Ultra Detail',
+        type: 'integer',
+        required: false,
+        min: 0,
+        max: 100,
+        placeholder: '0-100 (default none)',
       },
     ],
   },
@@ -2111,72 +2202,12 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     ],
   },
 
-  'dalle-3-generate': {
-    id: 'dalle-3-generate',
-    displayName: 'DALL-E 3',
-    category: 'image-gen',
-    apiProvider: 'openai',
-    apiEndpoint: '/v1/images/generations',
-    envKeyName: 'OPENAI_API_KEY',
-    executionPattern: 'sync',
-    inputPorts: [
-      { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
-    ],
-    outputPorts: [
-      { id: 'image', label: 'Image', dataType: 'Image', required: false },
-    ],
-    params: [
-      {
-        key: 'model',
-        label: 'Model',
-        type: 'enum',
-        required: true,
-        default: 'dall-e-3',
-        options: [
-          { label: 'DALL-E 3', value: 'dall-e-3' },
-          { label: 'DALL-E 2', value: 'dall-e-2' },
-        ],
-      },
-      {
-        key: 'size',
-        label: 'Size',
-        type: 'enum',
-        required: false,
-        default: '1024x1024',
-        options: [
-          { label: '1024×1024', value: '1024x1024' },
-          { label: '1024×1792', value: '1024x1792' },
-          { label: '1792×1024', value: '1792x1024' },
-        ],
-      },
-      {
-        key: 'quality',
-        label: 'Quality',
-        type: 'enum',
-        required: false,
-        default: 'standard',
-        options: [
-          { label: 'Standard', value: 'standard' },
-          { label: 'HD', value: 'hd' },
-        ],
-      },
-      {
-        key: 'style',
-        label: 'Style',
-        type: 'enum',
-        required: false,
-        default: 'vivid',
-        options: [
-          { label: 'Vivid', value: 'vivid' },
-          { label: 'Natural', value: 'natural' },
-        ],
-      },
-    ],
-  },
+  // dalle-3-generate removed 2026-06: OpenAI shut down dall-e-2/dall-e-3 on 2026-05-12.
+  // gpt-image-1 / gpt-image-1.5 / gpt-image-2 nodes are the replacements.
 
   'gpt-4o-chat': {
     id: 'gpt-4o-chat',
-    displayName: 'GPT-4o Chat',
+    displayName: 'OpenAI Chat',
     category: 'text-gen',
     apiProvider: 'openai',
     apiEndpoint: '/v1/chat/completions',
@@ -2195,14 +2226,33 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         label: 'Model',
         type: 'enum',
         required: true,
-        default: 'gpt-4o',
+        default: 'gpt-5.4',
         options: [
-          { label: 'GPT-4o', value: 'gpt-4o' },
-          { label: 'GPT-4o Mini', value: 'gpt-4o-mini' },
-          { label: 'GPT-4.1', value: 'gpt-4.1' },
-          { label: 'GPT-4.1 Mini', value: 'gpt-4.1-mini' },
-          { label: 'GPT-4.1 Nano', value: 'gpt-4.1-nano' },
+          { label: 'GPT-5.5 (flagship)', value: 'gpt-5.5' },
+          { label: 'GPT-5.4', value: 'gpt-5.4' },
+          { label: 'GPT-5.4 Mini', value: 'gpt-5.4-mini' },
+          { label: 'GPT-5.4 Nano', value: 'gpt-5.4-nano' },
+          { label: 'GPT-4o (legacy)', value: 'gpt-4o' },
+          { label: 'GPT-4o Mini (legacy)', value: 'gpt-4o-mini' },
+          { label: 'GPT-4.1 (legacy)', value: 'gpt-4.1' },
+          { label: 'GPT-4.1 Mini (legacy)', value: 'gpt-4.1-mini' },
+          { label: 'GPT-4.1 Nano (legacy, sunsets 2026-10-23)', value: 'gpt-4.1-nano' },
         ],
+      },
+      {
+        key: 'reasoning_effort',
+        label: 'Reasoning Effort',
+        type: 'enum',
+        required: false,
+        default: 'medium',
+        options: [
+          { label: 'None', value: 'none' },
+          { label: 'Low', value: 'low' },
+          { label: 'Medium', value: 'medium' },
+          { label: 'High', value: 'high' },
+          { label: 'X-High', value: 'xhigh' },
+        ],
+        visibleWhen: { model: ['gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini', 'gpt-5.4-nano'] },
       },
       {
         key: 'max_completion_tokens',
@@ -2222,6 +2272,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         min: 0,
         max: 2,
         step: 0.1,
+        visibleWhen: { model: ['gpt-4o', 'gpt-4o-mini', 'gpt-4.1', 'gpt-4.1-mini', 'gpt-4.1-nano'] },
       },
       {
         key: 'top_p',
@@ -2232,6 +2283,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         max: 1,
         step: 0.05,
         placeholder: 'Default',
+        visibleWhen: { model: ['gpt-4o', 'gpt-4o-mini', 'gpt-4.1', 'gpt-4.1-mini', 'gpt-4.1-nano'] },
       },
       {
         key: 'frequency_penalty',
@@ -2242,6 +2294,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         min: -2,
         max: 2,
         step: 0.1,
+        visibleWhen: { model: ['gpt-4o', 'gpt-4o-mini', 'gpt-4.1', 'gpt-4.1-mini', 'gpt-4.1-nano'] },
       },
       {
         key: 'presence_penalty',
@@ -2252,6 +2305,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         min: -2,
         max: 2,
         step: 0.1,
+        visibleWhen: { model: ['gpt-4o', 'gpt-4o-mini', 'gpt-4.1', 'gpt-4.1-mini', 'gpt-4.1-nano'] },
       },
       {
         key: 'response_format',
@@ -2288,14 +2342,15 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         label: 'Model',
         type: 'enum',
         required: true,
-        default: 'gemini-2.5-flash',
+        default: 'gemini-3.5-flash',
         options: [
-          { label: 'Gemini 3.1 Pro', value: 'gemini-3.1-pro-preview' },
-          { label: 'Gemini 3 Flash', value: 'gemini-3-flash-preview' },
-          { label: 'Gemini 3.1 Flash Lite', value: 'gemini-3.1-flash-lite-preview' },
+          { label: 'Gemini 3.5 Flash', value: 'gemini-3.5-flash' },
+          { label: 'Gemini 3.1 Pro (preview)', value: 'gemini-3.1-pro-preview' },
+          { label: 'Gemini 3 Flash (preview)', value: 'gemini-3-flash-preview' },
+          { label: 'Gemini 3.1 Flash-Lite', value: 'gemini-3.1-flash-lite' },
           { label: 'Gemini 2.5 Pro', value: 'gemini-2.5-pro' },
           { label: 'Gemini 2.5 Flash', value: 'gemini-2.5-flash' },
-          { label: 'Gemini 2.5 Flash Lite', value: 'gemini-2.5-flash-lite' },
+          { label: 'Gemini 2.5 Flash-Lite', value: 'gemini-2.5-flash-lite' },
         ],
       },
       {
@@ -2331,7 +2386,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         type: 'enum',
         required: false,
         default: '',
-        visibleWhen: { model: ['gemini-3.1-pro-preview', 'gemini-3-flash-preview', 'gemini-3.1-flash-lite-preview'] },
+        visibleWhen: { model: ['gemini-3.5-flash', 'gemini-3.1-pro-preview', 'gemini-3-flash-preview', 'gemini-3.1-flash-lite'] },
         options: [
           { label: 'Default', value: '' },
           { label: 'Minimal', value: 'minimal' },
@@ -2529,7 +2584,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
 
   'sora-2': {
     id: 'sora-2',
-    displayName: 'Sora 2',
+    displayName: "Sora 2 (sunsets Sep '26)",
     category: 'video-gen',
     apiProvider: 'fal',
     apiEndpoint: 'fal-ai/sora-2/text-to-video',
@@ -2715,6 +2770,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: false,
         default: 'gemini-2.5-flash-preview-tts',
         options: [
+          { label: '3.1 Flash TTS (preview)', value: 'gemini-3.1-flash-tts-preview' },
           { label: '2.5 Flash TTS', value: 'gemini-2.5-flash-preview-tts' },
           { label: '2.5 Pro TTS', value: 'gemini-2.5-pro-preview-tts' },
         ],
@@ -4358,7 +4414,6 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
           { label: 'GPT Image 1', value: 'gpt-image-1' },
           { label: 'GPT Image 1.5', value: 'gpt-image-1.5' },
           { label: 'GPT Image 1 Mini', value: 'gpt-image-1-mini' },
-          { label: 'DALL-E 2', value: 'dall-e-2' },
         ],
       },
       {
@@ -4673,7 +4728,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         default: 'MiniMax-Hailuo-2.3',
         options: [
           { label: 'Hailuo 2.3', value: 'MiniMax-Hailuo-2.3' },
-          { label: 'Hailuo 02', value: 'MiniMax-Hailuo-02' },
+          { label: 'Hailuo 2.3 Fast', value: 'MiniMax-Hailuo-2.3-Fast' },
+          { label: 'Hailuo 02 (legacy)', value: 'MiniMax-Hailuo-02' },
         ],
       },
       {
@@ -4725,7 +4781,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         default: 'MiniMax-Hailuo-2.3',
         options: [
           { label: 'Hailuo 2.3', value: 'MiniMax-Hailuo-2.3' },
-          { label: 'Hailuo 02', value: 'MiniMax-Hailuo-02' },
+          { label: 'Hailuo 2.3 Fast', value: 'MiniMax-Hailuo-2.3-Fast' },
+          { label: 'Hailuo 02 (legacy)', value: 'MiniMax-Hailuo-02' },
         ],
       },
       {
@@ -7530,6 +7587,96 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         type: 'integer',
         required: false,
         placeholder: 'Random',
+      },
+    ],
+  },
+
+  'ideogram-v4': {
+    id: 'ideogram-v4',
+    displayName: 'Ideogram 4',
+    category: 'image-gen',
+    apiProvider: 'fal',
+    apiEndpoint: 'ideogram/v4',
+    envKeyName: 'FAL_KEY',
+    executionPattern: 'async-poll',
+    inputPorts: [
+      { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
+    ],
+    outputPorts: [
+      { id: 'image', label: 'Image', dataType: 'Image', required: false },
+    ],
+    params: [
+      {
+        key: 'rendering_speed',
+        label: 'Rendering Speed',
+        type: 'enum',
+        required: false,
+        default: 'BALANCED',
+        options: [
+          { label: 'Turbo', value: 'TURBO' },
+          { label: 'Balanced', value: 'BALANCED' },
+          { label: 'Quality', value: 'QUALITY' },
+        ],
+      },
+      {
+        key: 'image_size',
+        label: 'Size',
+        type: 'enum',
+        required: false,
+        default: 'square_hd',
+        options: [
+          { label: 'Square HD', value: 'square_hd' },
+          { label: 'Square', value: 'square' },
+          { label: 'Portrait 4:3', value: 'portrait_4_3' },
+          { label: 'Portrait 16:9', value: 'portrait_16_9' },
+          { label: 'Landscape 4:3', value: 'landscape_4_3' },
+          { label: 'Landscape 16:9', value: 'landscape_16_9' },
+        ],
+      },
+      {
+        key: 'expansion_model',
+        label: 'Prompt Expansion',
+        type: 'enum',
+        required: false,
+        default: 'Medium',
+        options: [
+          { label: 'Medium', value: 'Medium' },
+          { label: 'Large', value: 'Large' },
+        ],
+      },
+      {
+        key: 'num_images',
+        label: 'Images',
+        type: 'integer',
+        required: false,
+        default: 1,
+        min: 1,
+        max: 4,
+      },
+      {
+        key: 'output_format',
+        label: 'Format',
+        type: 'enum',
+        required: false,
+        default: 'png',
+        options: [
+          { label: 'PNG', value: 'png' },
+          { label: 'JPEG', value: 'jpeg' },
+        ],
+      },
+      {
+        key: 'seed',
+        label: 'Seed',
+        type: 'integer',
+        required: false,
+        placeholder: 'Random',
+      },
+      {
+        key: 'enable_safety_checker',
+        label: 'Safety Checker',
+        type: 'boolean',
+        required: false,
+        default: true,
       },
     ],
   },

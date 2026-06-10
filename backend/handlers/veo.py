@@ -11,6 +11,7 @@ import httpx
 
 from models.graph import GraphNode, PortValueDict
 from models.events import ExecutionEvent, ProgressEvent
+from services.cancellation import schedule_detached_cancel
 from services.output import get_run_dir
 
 VEO_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
@@ -18,6 +19,21 @@ VEO_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
 
 def _log(msg: str) -> None:
     print(f"[veo] {msg}", file=sys.stderr, flush=True)
+
+
+async def _cancel_veo_operation(op_name: str, api_key: str) -> None:
+    """Best-effort upstream cancel via the standard google.longrunning Operations
+    interface (POST {op_name}:cancel). The server may return UNIMPLEMENTED."""
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            await client.post(
+                f"https://generativelanguage.googleapis.com/v1beta/{op_name}:cancel",
+                headers={"x-goog-api-key": api_key},
+                json={},
+            )
+        _log(f"requested upstream cancel for {op_name}")
+    except Exception:
+        pass
 
 
 async def _image_to_veo_payload(img_str: str) -> dict[str, Any]:
@@ -171,63 +187,83 @@ async def handle_veo(
         max_polls = 300
         poll_interval = 3.0
 
-        for poll_num in range(1, max_polls + 1):
-            await asyncio.sleep(poll_interval)
+        try:
+            return await _poll_veo_operation(
+                client, node, poll_url, api_key, max_polls, poll_interval, _emit
+            )
+        except asyncio.CancelledError:
+            # User/engine cancelled — fire a best-effort upstream cancel on a
+            # detached task (this task's client is being torn down), then re-raise.
+            schedule_detached_cancel(lambda: _cancel_veo_operation(op_name, api_key))
+            raise
 
-            poll_resp = await client.get(poll_url, headers={"x-goog-api-key": api_key})
-            if poll_resp.status_code != 200:
-                _log(f"poll FAILED: {poll_resp.status_code}")
-                raise RuntimeError(f"Veo poll failed ({poll_resp.status_code}): {poll_resp.text}")
 
-            poll_data = poll_resp.json()
-            done = poll_data.get("done", False)
+async def _poll_veo_operation(
+    client: httpx.AsyncClient,
+    node: GraphNode,
+    poll_url: str,
+    api_key: str,
+    max_polls: int,
+    poll_interval: float,
+    _emit: Callable[[ExecutionEvent], Awaitable[None]],
+) -> dict[str, Any]:
+    for poll_num in range(1, max_polls + 1):
+        await asyncio.sleep(poll_interval)
 
-            progress = min(poll_num / max_polls, 0.99)
-            await _emit(ProgressEvent(node_id=node.id, value=progress))
+        poll_resp = await client.get(poll_url, headers={"x-goog-api-key": api_key})
+        if poll_resp.status_code != 200:
+            _log(f"poll FAILED: {poll_resp.status_code}")
+            raise RuntimeError(f"Veo poll failed ({poll_resp.status_code}): {poll_resp.text}")
 
-            if poll_num % 10 == 1:
-                _log(f"poll #{poll_num}: done={done}")
+        poll_data = poll_resp.json()
+        done = poll_data.get("done", False)
 
-            if done:
-                response = poll_data.get("response", {})
-                videos = response.get("generateVideoResponse", {}).get("generatedSamples", [])
-                if not videos:
-                    # Try alternate response format
-                    videos = response.get("generatedVideos", [])
+        progress = min(poll_num / max_polls, 0.99)
+        await _emit(ProgressEvent(node_id=node.id, value=progress))
 
-                if videos:
-                    video_info = videos[0]
-                    # Video might be a file reference or direct data
-                    video_uri = video_info.get("video", {}).get("uri", "")
-                    if video_uri:
-                        # Download the video
-                        _log(f"downloading video from {video_uri[:80]}...")
-                        run_dir = get_run_dir()
-                        filename = f"{uuid4().hex[:12]}.mp4"
-                        file_path = run_dir / filename
-                        dl_resp = await client.get(
-                            video_uri,
-                            headers={"x-goog-api-key": api_key},
-                            timeout=120.0,
-                            follow_redirects=True,
-                        )
-                        dl_resp.raise_for_status()
-                        file_path.write_bytes(dl_resp.content)
-                        _log(f"saved to {file_path}")
-                        # Expose the Veo source URI so a downstream Veo node can extend this
-                        # clip (extension only accepts a Veo-generated files/... URI, not the
-                        # downloaded file). The URI is valid for ~2 days.
-                        return {
-                            "video": {"type": "Video", "value": str(file_path)},
-                            "source_uri": {"type": "Video", "value": video_uri},
-                        }
+        if poll_num % 10 == 1:
+            _log(f"poll #{poll_num}: done={done}")
 
-                # Fallback: check for error
-                error = poll_data.get("error")
-                if error:
-                    raise RuntimeError(f"Veo failed: {error}")
+        if done:
+            response = poll_data.get("response", {})
+            videos = response.get("generateVideoResponse", {}).get("generatedSamples", [])
+            if not videos:
+                # Try alternate response format
+                videos = response.get("generatedVideos", [])
 
-                raise RuntimeError(f"Veo completed but no video found: {list(poll_data.keys())}")
+            if videos:
+                video_info = videos[0]
+                # Video might be a file reference or direct data
+                video_uri = video_info.get("video", {}).get("uri", "")
+                if video_uri:
+                    # Download the video
+                    _log(f"downloading video from {video_uri[:80]}...")
+                    run_dir = get_run_dir()
+                    filename = f"{uuid4().hex[:12]}.mp4"
+                    file_path = run_dir / filename
+                    dl_resp = await client.get(
+                        video_uri,
+                        headers={"x-goog-api-key": api_key},
+                        timeout=120.0,
+                        follow_redirects=True,
+                    )
+                    dl_resp.raise_for_status()
+                    file_path.write_bytes(dl_resp.content)
+                    _log(f"saved to {file_path}")
+                    # Expose the Veo source URI so a downstream Veo node can extend this
+                    # clip (extension only accepts a Veo-generated files/... URI, not the
+                    # downloaded file). The URI is valid for ~2 days.
+                    return {
+                        "video": {"type": "Video", "value": str(file_path)},
+                        "source_uri": {"type": "Video", "value": video_uri},
+                    }
 
-        _log("TIMED OUT")
-        raise RuntimeError(f"Veo timed out after {max_polls} polls")
+            # Fallback: check for error
+            error = poll_data.get("error")
+            if error:
+                raise RuntimeError(f"Veo failed: {error}")
+
+            raise RuntimeError(f"Veo completed but no video found: {list(poll_data.keys())}")
+
+    _log("TIMED OUT")
+    raise RuntimeError(f"Veo timed out after {max_polls} polls")

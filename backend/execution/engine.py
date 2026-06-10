@@ -94,7 +94,7 @@ NODE_DEFS: dict[str, dict[str, Any]] = {
             {"id": "image", "required": False},
         ],
         "outputPorts": [{"id": "image"}],
-        "envKeyName": ["FAL_KEY", "BFL_API_KEY"],
+        "envKeyName": "FAL_KEY",
     },
     "text-input": {
         "inputPorts": [],
@@ -129,11 +129,6 @@ NODE_DEFS: dict[str, dict[str, Any]] = {
         "inputPorts": [{"id": "input", "required": True}],
         "outputPorts": [{"id": "output"}],
         "envKeyName": [],
-    },
-    "dalle-3-generate": {
-        "inputPorts": [{"id": "prompt", "required": True}],
-        "outputPorts": [{"id": "image"}],
-        "envKeyName": "OPENAI_API_KEY",
     },
     "gpt-4o-chat": {
         "inputPorts": [

@@ -32,7 +32,6 @@ SYNC_HANDLERS: dict[
 ] = {
     "gpt-image-1-generate": handle_openai_image_generate,
     "gpt-image-1-edit": handle_openai_image_edit,
-    "dalle-3-generate": handle_openai_image_generate,
     "imagen-4-generate": handle_imagen4,
     "nano-banana": handle_nano_banana,
     "elevenlabs-tts": handle_elevenlabs_tts,
@@ -179,6 +178,10 @@ def get_handler_registry(
         ) -> dict[str, Any]:
             from handlers.runway import handle_runway_image
             return await handle_runway_image(node, inputs, api_keys, emit=emit)
+
+        async def _runway_upscale_handler(node, inputs, api_keys):
+            from handlers.runway import handle_runway_image_upscale
+            return await handle_runway_image_upscale(node, inputs, api_keys, emit=emit)
 
         async def _runway_act_two_handler(node, inputs, api_keys):
             from handlers.runway import handle_runway_act_two
@@ -608,6 +611,7 @@ def get_handler_registry(
         registry["runway-video"] = _runway_video_handler
         registry["runway-aleph"] = _runway_aleph_handler
         registry["runway-image"] = _runway_image_handler
+        registry["runway-upscale"] = _runway_upscale_handler
         registry["runway-act-two"] = _runway_act_two_handler
         registry["runway-tts"] = _runway_tts_handler
         registry["runway-sts"] = _runway_sts_handler
@@ -800,6 +804,10 @@ def get_handler_registry(
             node.params.setdefault("endpoint_id", "fal-ai/bytedance/seedream/v4.5/text-to-image")
             return await handle_fal_universal(node, inputs, api_keys, emit=emit)
 
+        async def _ideogram_v4_handler(node, inputs, api_keys):
+            node.params.setdefault("endpoint_id", "ideogram/v4")
+            return await handle_fal_universal(node, inputs, api_keys, emit=emit)
+
         registry["seedance-2-t2v"] = _seedance2_t2v_handler
         registry["seedance-2-i2v"] = _seedance2_i2v_handler
         registry["seedance-2-r2v"] = _seedance2_r2v_handler
@@ -825,6 +833,7 @@ def get_handler_registry(
         registry["clarity-upscaler"] = _clarity_upscaler_handler
         registry["seedvr-video-upscale"] = _seedvr_video_upscale_handler
         registry["seedream-4-5"] = _seedream45_handler
+        registry["ideogram-v4"] = _ideogram_v4_handler
         registry["krea-2-generate"] = _krea_generate_handler
         registry["krea-style-train"] = _krea_style_train_handler
 

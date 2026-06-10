@@ -22,13 +22,13 @@ const API_KEY_FIELDS: ApiKeyField[] = [
   { key: 'REPLICATE_API_TOKEN', label: 'Replicate', placeholder: 'r8_...', url: 'https://replicate.com/account/api-tokens' },
   { key: 'FAL_KEY', label: 'fal.ai', placeholder: 'fal_...', url: 'https://fal.ai/dashboard/keys' },
   { key: 'MESHY_API_KEY', label: 'Meshy', placeholder: 'msy_...', url: 'https://app.meshy.ai/settings/api' },
-  { key: 'BFL_API_KEY', label: 'Black Forest Labs', placeholder: 'bfl-...', url: 'https://api.bfl.ml/auth/profile' },
   { key: 'RUNWAY_API_KEY', label: 'Runway', placeholder: 'key_...', url: 'https://app.runwayml.com/settings/api-keys' },
   { key: 'ELEVENLABS_API_KEY', label: 'ElevenLabs', placeholder: 'el_...', url: 'https://elevenlabs.io/app/settings/api-keys' },
   { key: 'MINIMAX_API_KEY', label: 'MiniMax', placeholder: 'eyJ...', url: 'https://www.minimaxi.com/platform' },
   { key: 'XAI_API_KEY', label: 'xAI (Grok)', placeholder: 'xai-...', url: 'https://console.x.ai' },
   { key: 'HIGGSFIELD_API_KEY', label: 'Higgsfield', placeholder: 'hf_...', url: 'https://app.higgsfield.ai/settings' },
   { key: 'QUIVER_API_KEY', label: 'QuiverAI (Arrow)', placeholder: 'qvr-...', url: 'https://app.quiver.ai/settings/api-keys' },
+  { key: 'KREA_API_TOKEN', label: 'Krea', placeholder: 'krea_...', url: 'https://www.krea.ai/api-keys' },
 ];
 
 interface RoutingOption {
@@ -37,16 +37,10 @@ interface RoutingOption {
   options: Array<{ value: string; label: string }>;
 }
 
-const ROUTING_OPTIONS: RoutingOption[] = [
-  {
-    provider: 'flux',
-    label: 'FLUX Routing',
-    options: [
-      { value: 'fal', label: 'fal.ai (default)' },
-      { value: 'bfl', label: 'BFL Direct' },
-    ],
-  },
-];
+// Empty for now: the only entry ("FLUX Routing" fal vs BFL Direct) was UI scaffolding —
+// no handler ever read the routing setting and BFL direct was never implemented.
+// The section hides itself while this is empty; re-add entries when a real route exists.
+const ROUTING_OPTIONS: RoutingOption[] = [];
 
 export function Settings() {
   const visible = useUIStore((s) => s.panels.settings.visible);

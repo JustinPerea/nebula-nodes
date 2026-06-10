@@ -213,20 +213,84 @@ async def test_registry_model_list():
     model_param = next(p for p in node_def["params"] if p["key"] == "model")
     model_values = [opt["value"] for opt in model_param["options"]]
 
-    # Must contain the current flagship models
-    assert "gpt-4o" in model_values
-    assert "gpt-4o-mini" in model_values
-    assert "gpt-4.1" in model_values
-    assert "gpt-4.1-mini" in model_values
-    assert "gpt-4.1-nano" in model_values
+    # Must contain the current GPT-5.x flagship lineup (June 2026)
+    assert "gpt-5.5" in model_values
+    assert "gpt-5.4" in model_values
+    assert "gpt-5.4-mini" in model_values
+    assert "gpt-5.4-nano" in model_values
+    # Default must be a current-generation model
+    assert model_param["default"].startswith("gpt-5")
 
-    # Must NOT contain deprecated legacy models
+    # Legacy models still callable until their 2026-10-23 shutdown
+    assert "gpt-4o" in model_values
+    assert "gpt-4.1" in model_values
+
+    # Must NOT contain shut-down models
     deprecated = {"gpt-4-32k", "gpt-4-32k-0314", "gpt-4-32k-0613", "gpt-3.5-turbo"}
     assert not deprecated & set(model_values), f"Deprecated models found: {deprecated & set(model_values)}"
 
-    # Reasoning models not in registry (no temperature guards needed)
+    # o-series reasoning models not in registry (replaced by gpt-5.x which has its own guard)
     reasoning = {"o1", "o1-mini", "o3", "o3-mini", "o4-mini"}
-    assert not reasoning & set(model_values), f"Reasoning models in registry require temperature guard: {reasoning & set(model_values)}"
+    assert not reasoning & set(model_values), f"o-series models in registry: {reasoning & set(model_values)}"
+
+
+@pytest.mark.asyncio
+async def test_gpt5_omits_sampler_params_and_sends_reasoning_effort():
+    """GPT-5.x rejects non-default temperature/top_p/penalties; reasoning_effort is forwarded."""
+    fake_response = FakeStreamResponse(_make_openai_sse_lines(["ok"]))
+
+    with patch("execution.stream_runner.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.stream = MagicMock(return_value=fake_response)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        await handle_openai_chat(
+            _make_node(
+                {
+                    "model": "gpt-5.5",
+                    "reasoning_effort": "high",
+                    "temperature": 0.5,
+                    "top_p": 0.9,
+                    "frequency_penalty": 1.0,
+                    "presence_penalty": 1.0,
+                }
+            ),
+            {"messages": PortValueDict(type="Text", value="hi")},
+            {"OPENAI_API_KEY": "sk-test-key"},
+        )
+
+    body = mock_client.stream.call_args.kwargs.get("json") or mock_client.stream.call_args[1].get("json")
+    assert body["model"] == "gpt-5.5"
+    assert body["reasoning_effort"] == "high"
+    assert "temperature" not in body
+    assert "top_p" not in body
+    assert "frequency_penalty" not in body
+    assert "presence_penalty" not in body
+
+
+@pytest.mark.asyncio
+async def test_legacy_gpt4o_still_forwards_samplers_and_omits_reasoning_effort():
+    """Legacy gpt-4o keeps sampler params; reasoning_effort must never be sent to it."""
+    fake_response = FakeStreamResponse(_make_openai_sse_lines(["ok"]))
+
+    with patch("execution.stream_runner.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.stream = MagicMock(return_value=fake_response)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        await handle_openai_chat(
+            _make_node({"model": "gpt-4o", "temperature": 0.5, "reasoning_effort": "high"}),
+            {"messages": PortValueDict(type="Text", value="hi")},
+            {"OPENAI_API_KEY": "sk-test-key"},
+        )
+
+    body = mock_client.stream.call_args.kwargs.get("json") or mock_client.stream.call_args[1].get("json")
+    assert body["temperature"] == 0.5
+    assert "reasoning_effort" not in body
 
 
 @pytest.mark.asyncio

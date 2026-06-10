@@ -206,3 +206,54 @@ async def test_image_to_video_still_uses_bytesbase64(tmp_path):
 async def test_missing_api_key_raises():
     with pytest.raises(ValueError, match="GOOGLE_API_KEY"):
         await handle_veo(_make_node(), {"prompt": PortValueDict(type="Text", value="x")}, {})
+
+# ----------------------------- cancellation -----------------------------
+
+@pytest.mark.asyncio
+async def test_cancellation_fires_detached_upstream_cancel(tmp_path):
+    """On CancelledError mid-poll, the handler must schedule a detached best-effort
+    operation cancel (google.longrunning :cancel) and re-raise."""
+    import asyncio as _asyncio
+
+    class _CancellingMock(_VeoMock):
+        async def get(self, url, headers=None, timeout=None, follow_redirects=None):
+            raise _asyncio.CancelledError()
+
+    mock = _CancellingMock()
+    p_httpx, p_sleep, p_dir = _patches(mock, tmp_path)
+    with p_httpx, p_sleep, p_dir:
+        with patch("handlers.veo.schedule_detached_cancel") as mock_sched:
+            with pytest.raises(_asyncio.CancelledError):
+                await handle_veo(
+                    _make_node(),
+                    {"prompt": PortValueDict(type="Text", value="a fox")},
+                    {"GOOGLE_API_KEY": "k"},
+                )
+
+    mock_sched.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_cancel_helper_posts_operation_cancel():
+    """_cancel_veo_operation must POST {op_name}:cancel with the API key header."""
+    from handlers.veo import _cancel_veo_operation
+
+    posted = {}
+
+    class _CancelClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            return False
+
+        async def post(self, url, headers=None, json=None):
+            posted["url"] = url
+            posted["headers"] = headers
+            return _Resp(200, {})
+
+    with patch("handlers.veo.httpx.AsyncClient", return_value=_CancelClient()):
+        await _cancel_veo_operation("operations/abc", "test-key")
+
+    assert posted["url"].endswith("operations/abc:cancel")
+    assert posted["headers"]["x-goog-api-key"] == "test-key"

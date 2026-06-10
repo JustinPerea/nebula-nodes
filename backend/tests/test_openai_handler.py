@@ -173,72 +173,9 @@ async def test_gpt_image_1_does_not_send_response_format() -> None:
     assert "response_format" not in body
 
 
-# ---------------------------------------------------------------------------
-# Request body shape — dall-e-3
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.asyncio
-async def test_dalle3_sends_response_format_b64_json() -> None:
-    """DALL-E 3 must include response_format=b64_json (otherwise API returns URL)."""
-    mock_resp = _mock_response(RED_PIXEL_B64)
-    patcher, mock_client = _patch_client(mock_resp)
-
-    with patcher:
-        node = _make_node(
-            definition_id="dalle-3-generate",
-            params={"model": "dall-e-3", "size": "1024x1024", "quality": "standard"},
-        )
-        inputs = {"prompt": PortValueDict(type="Text", value="a landscape")}
-        await handle_openai_image_generate(node, inputs, _API_KEYS)
-
-    body = mock_client.post.call_args.kwargs["json"]
-    assert body["model"] == "dall-e-3"
-    assert body["response_format"] == "b64_json"
-    # DALL-E 3 does not support GPT-image-only params
-    assert "output_format" not in body
-    assert "background" not in body
-
-
-@pytest.mark.asyncio
-async def test_dalle3_forwards_style_vivid() -> None:
-    """style=vivid must appear in the request body for dall-e-3."""
-    mock_resp = _mock_response(RED_PIXEL_B64)
-    patcher, mock_client = _patch_client(mock_resp)
-
-    with patcher:
-        node = _make_node(
-            definition_id="dalle-3-generate",
-            params={"model": "dall-e-3", "style": "vivid"},
-        )
-        inputs = {"prompt": PortValueDict(type="Text", value="dramatic scene")}
-        await handle_openai_image_generate(node, inputs, _API_KEYS)
-
-    body = mock_client.post.call_args.kwargs["json"]
-    assert body["style"] == "vivid"
-
-
-@pytest.mark.asyncio
-async def test_dalle3_forwards_style_natural() -> None:
-    """style=natural must appear in the request body for dall-e-3."""
-    mock_resp = _mock_response(RED_PIXEL_B64)
-    patcher, mock_client = _patch_client(mock_resp)
-
-    with patcher:
-        node = _make_node(
-            definition_id="dalle-3-generate",
-            params={"model": "dall-e-3", "style": "natural"},
-        )
-        inputs = {"prompt": PortValueDict(type="Text", value="a calm scene")}
-        await handle_openai_image_generate(node, inputs, _API_KEYS)
-
-    body = mock_client.post.call_args.kwargs["json"]
-    assert body["style"] == "natural"
-
-
 @pytest.mark.asyncio
 async def test_gpt_image_1_does_not_send_style() -> None:
-    """style is dall-e-3 only; must never appear for gpt-image-1."""
+    """style was a dall-e-3-only param; must never appear for gpt-image models."""
     mock_resp = _mock_response(RED_PIXEL_B64)
     patcher, mock_client = _patch_client(mock_resp)
 
@@ -365,51 +302,3 @@ async def test_gpt_image_1_saves_webp_extension() -> None:
         result = await handle_openai_image_generate(node, inputs, _API_KEYS)
 
     assert result["image"]["value"].endswith(".webp")
-
-
-@pytest.mark.asyncio
-async def test_dalle3_saves_png_extension_regardless_of_output_format() -> None:
-    """DALL-E models ignore output_format — the saved file must always be .png."""
-    mock_resp = _mock_response(RED_PIXEL_B64)
-    patcher, mock_client = _patch_client(mock_resp)
-
-    with patcher:
-        node = _make_node(
-            definition_id="dalle-3-generate",
-            # output_format should be a no-op for dall-e models
-            params={"model": "dall-e-3", "output_format": "jpeg"},
-        )
-        inputs = {"prompt": PortValueDict(type="Text", value="test")}
-        result = await handle_openai_image_generate(node, inputs, _API_KEYS)
-
-    assert result["image"]["value"].endswith(".png")
-    # Confirm output_format was NOT forwarded to the API for dall-e
-    body = mock_client.post.call_args.kwargs["json"]
-    assert "output_format" not in body
-
-
-# ---------------------------------------------------------------------------
-# dall-e-2 negative test
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.asyncio
-async def test_dalle2_omits_style_and_sends_response_format() -> None:
-    """dall-e-2 must include response_format=b64_json and must never send style."""
-    mock_resp = _mock_response(RED_PIXEL_B64)
-    patcher, mock_client = _patch_client(mock_resp)
-
-    with patcher:
-        node = _make_node(
-            definition_id="dalle-3-generate",
-            params={"model": "dall-e-2", "style": "vivid"},
-        )
-        inputs = {"prompt": PortValueDict(type="Text", value="a landscape")}
-        await handle_openai_image_generate(node, inputs, _API_KEYS)
-
-    body = mock_client.post.call_args.kwargs["json"]
-    assert body["response_format"] == "b64_json"
-    assert "style" not in body
-    # dall-e-2 does not support GPT-image-only params either
-    assert "output_format" not in body
-    assert "background" not in body

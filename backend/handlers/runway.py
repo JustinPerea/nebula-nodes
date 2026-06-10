@@ -18,7 +18,7 @@ RUNWAY_HEADERS_BASE = {
 }
 
 # Models that support text-to-video (no image required)
-TEXT_TO_VIDEO_MODELS = {"gen4.5", "veo3.1", "veo3.1_fast", "veo3"}
+TEXT_TO_VIDEO_MODELS = {"gen4.5", "veo3.1", "veo3.1_fast", "veo3", "seedance2", "seedance2_fast", "happyhorse_1_0"}
 
 
 def _runway_headers(api_key: str) -> dict[str, str]:
@@ -85,7 +85,8 @@ async def handle_runway_video(
         if not prompt_text:
             raise ValueError("Either an image or a text prompt is required")
         if model not in TEXT_TO_VIDEO_MODELS:
-            raise ValueError(f"Model '{model}' requires an image input. Use gen4.5, veo3.1, veo3.1_fast, or veo3 for text-only.")
+            text_capable = ", ".join(sorted(TEXT_TO_VIDEO_MODELS))
+            raise ValueError(f"Model '{model}' requires an image input. Text-only models: {text_capable}.")
         TEXT_ONLY_RATIOS = {"1280:720", "720:1280"}
         if ratio not in TEXT_ONLY_RATIOS:
             raise ValueError(f"Text-only mode only supports 1280:720 and 720:1280 ratios. Got '{ratio}'. Connect an image to use other ratios.")
@@ -153,7 +154,7 @@ async def handle_runway_aleph(
         video_value = f"data:video/mp4;base64,{b64}"
 
     submit_body: dict[str, Any] = {
-        "model": "gen4_aleph",
+        "model": node.params.get("model", "gen4_aleph"),
         "videoUri": video_value,
         "promptText": str(prompt_input.value)[:1000],
     }
@@ -251,6 +252,65 @@ async def handle_runway_image(
     # Download image
     run_dir = get_run_dir()
     async with httpx.AsyncClient(timeout=60.0) as client:
+        resp = await client.get(image_url, follow_redirects=True)
+        resp.raise_for_status()
+    b64_data = base64.b64encode(resp.content).decode("ascii")
+    file_path = save_base64_image(b64_data, run_dir, extension="png")
+
+    return {"image": {"type": "Image", "value": str(file_path)}}
+
+
+async def handle_runway_image_upscale(
+    node: GraphNode,
+    inputs: dict[str, PortValueDict],
+    api_keys: dict[str, str],
+    emit: Callable[[ExecutionEvent], Awaitable[None]] | None = None,
+) -> dict[str, Any]:
+    api_key = api_keys.get("RUNWAY_API_KEY")
+    if not api_key:
+        raise ValueError("RUNWAY_API_KEY is required")
+
+    image_input = inputs.get("image")
+    if not image_input or not image_input.value:
+        raise ValueError("Image input is required for Runway Upscale")
+
+    image_uri = await _resolve_image(str(image_input.value))
+
+    submit_body: dict[str, Any] = {
+        "model": "magnific_precision_upscaler_v2",
+        "imageUri": image_uri,
+        "scaleFactor": int(node.params.get("scaleFactor", 2)),
+    }
+
+    flavor = node.params.get("flavor")
+    if flavor:
+        submit_body["flavor"] = flavor
+
+    for key in ("sharpen", "smartGrain", "ultraDetail"):
+        value = node.params.get(key)
+        if value is not None and value != "":
+            submit_body[key] = int(value)
+
+    config = _runway_poll_config(api_key, f"{RUNWAY_API_BASE}/image_upscale")
+
+    async def noop_emit(event: ExecutionEvent) -> None:
+        pass
+
+    result = await async_poll_execute(
+        config=config,
+        submit_body=submit_body,
+        node_id=node.id,
+        emit=emit or noop_emit,
+    )
+
+    output_urls = result.get("output", [])
+    if not output_urls:
+        raise RuntimeError("Runway Upscale returned no output URLs")
+
+    image_url = output_urls[0] if isinstance(output_urls, list) else str(output_urls)
+
+    run_dir = get_run_dir()
+    async with httpx.AsyncClient(timeout=120.0) as client:
         resp = await client.get(image_url, follow_redirects=True)
         resp.raise_for_status()
     b64_data = base64.b64encode(resp.content).decode("ascii")

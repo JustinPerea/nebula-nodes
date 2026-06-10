@@ -17,7 +17,7 @@ async def handle_openai_chat(
 ) -> dict[str, Any]:
     messages_input = inputs.get("messages")
     if not messages_input or not messages_input.value:
-        raise ValueError("Messages input is required for GPT-4o chat")
+        raise ValueError("Messages input is required for OpenAI chat")
 
     messages_text = str(messages_input.value)
 
@@ -47,7 +47,7 @@ async def handle_openai_chat(
 
     messages = [{"role": "user", "content": content}]
 
-    model = node.params.get("model", "gpt-4o")
+    model = node.params.get("model", "gpt-5.4")
     request_body: dict[str, Any] = {
         "model": model,
         "messages": messages,
@@ -58,21 +58,30 @@ async def handle_openai_chat(
     if max_completion_tokens:
         request_body["max_completion_tokens"] = int(max_completion_tokens)
 
-    temperature = node.params.get("temperature")
-    if temperature is not None:
-        request_body["temperature"] = float(temperature)
+    # GPT-5.x are reasoning models: they accept reasoning_effort and reject
+    # non-default sampler params (temperature/top_p/penalties), so those are
+    # only forwarded for legacy gpt-4o/gpt-4.1 models.
+    is_gpt5 = model.startswith("gpt-5")
+    if is_gpt5:
+        reasoning_effort = node.params.get("reasoning_effort")
+        if reasoning_effort:
+            request_body["reasoning_effort"] = reasoning_effort
+    else:
+        temperature = node.params.get("temperature")
+        if temperature is not None:
+            request_body["temperature"] = float(temperature)
 
-    top_p = node.params.get("top_p")
-    if top_p is not None:
-        request_body["top_p"] = float(top_p)
+        top_p = node.params.get("top_p")
+        if top_p is not None:
+            request_body["top_p"] = float(top_p)
 
-    frequency_penalty = node.params.get("frequency_penalty")
-    if frequency_penalty is not None:
-        request_body["frequency_penalty"] = float(frequency_penalty)
+        frequency_penalty = node.params.get("frequency_penalty")
+        if frequency_penalty is not None:
+            request_body["frequency_penalty"] = float(frequency_penalty)
 
-    presence_penalty = node.params.get("presence_penalty")
-    if presence_penalty is not None:
-        request_body["presence_penalty"] = float(presence_penalty)
+        presence_penalty = node.params.get("presence_penalty")
+        if presence_penalty is not None:
+            request_body["presence_penalty"] = float(presence_penalty)
 
     response_format = node.params.get("response_format")
     if response_format and response_format != "text":

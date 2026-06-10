@@ -35,6 +35,7 @@ from handlers.runway import (
     _runway_poll_config,
     handle_runway_act_two,
     handle_runway_image,
+    handle_runway_image_upscale,
     handle_runway_speech_to_speech,
     handle_runway_tts,
     handle_runway_video,
@@ -148,11 +149,14 @@ def test_poll_config_terminal_states():
 
 
 def test_text_to_video_models_set():
-    """gen4.5/veo3.1/veo3.1_fast/veo3 support text-only per SDK text_to_video_create_params."""
+    """Text-only-capable models per docs.dev.runwayml.com/guides/models (2026-06)."""
     assert "gen4.5" in TEXT_TO_VIDEO_MODELS
     assert "veo3.1" in TEXT_TO_VIDEO_MODELS
     assert "veo3.1_fast" in TEXT_TO_VIDEO_MODELS
     assert "veo3" in TEXT_TO_VIDEO_MODELS
+    assert "seedance2" in TEXT_TO_VIDEO_MODELS
+    assert "seedance2_fast" in TEXT_TO_VIDEO_MODELS
+    assert "happyhorse_1_0" in TEXT_TO_VIDEO_MODELS
     # gen4_turbo requires an image per SDK image_to_video_create_params
     assert "gen4_turbo" not in TEXT_TO_VIDEO_MODELS
     assert "gen3a_turbo" not in TEXT_TO_VIDEO_MODELS
@@ -385,6 +389,28 @@ async def test_aleph_uses_correct_endpoint():
     assert config.submit_url.endswith("/video_to_video")
 
 
+@pytest.mark.asyncio
+async def test_aleph_model_param_selects_aleph2(tmp_path):
+    """The model param must flow through so Aleph 2.0 is selectable (default stays gen4_aleph)."""
+    video_path = _create_test_video(tmp_path)
+    with patch("handlers.runway.async_poll_execute", new_callable=AsyncMock) as mock_poll:
+        mock_poll.return_value = {"id": "t3b", "status": "SUCCEEDED", "output": ["https://ex.com/v.mp4"]}
+        with patch("handlers.runway.save_video_from_url", new_callable=AsyncMock) as mock_save:
+            mock_save.return_value = tmp_path / "out.mp4"
+            (tmp_path / "out.mp4").write_bytes(FAKE_VIDEO_BYTES)
+            await handle_runway_aleph(
+                _aleph_node({"model": "aleph2"}),
+                {
+                    "video": PortValueDict(type="Video", value=str(video_path)),
+                    "prompt": PortValueDict(type="Text", value="Make it rain"),
+                },
+                {"RUNWAY_API_KEY": "rw-test"},
+            )
+
+    body = mock_poll.call_args.kwargs.get("submit_body") or mock_poll.call_args[1]["submit_body"]
+    assert body["model"] == "aleph2"
+
+
 # ---------------------------------------------------------------------------
 # handle_runway_image
 # ---------------------------------------------------------------------------
@@ -467,6 +493,94 @@ async def test_image_no_output_raises():
                 {"prompt": PortValueDict(type="Text", value="Sky")},
                 {"RUNWAY_API_KEY": "rw-test"},
             )
+
+
+# ---------------------------------------------------------------------------
+# handle_runway_image_upscale
+# ---------------------------------------------------------------------------
+
+
+def _upscale_node(params=None):
+    return _make_node("runway-upscale", params or {})
+
+
+def _mock_image_download():
+    """Patch context for the post-poll image download."""
+    mock_resp = MagicMock()
+    mock_resp.content = base64.b64decode(RED_PIXEL_B64)
+    mock_resp.raise_for_status = MagicMock()
+    mock_ctx = AsyncMock()
+    mock_ctx.__aenter__ = AsyncMock(return_value=mock_ctx)
+    mock_ctx.__aexit__ = AsyncMock(return_value=False)
+    mock_ctx.get = AsyncMock(return_value=mock_resp)
+    return mock_ctx
+
+
+@pytest.mark.asyncio
+async def test_upscale_submits_model_image_and_scale(tmp_path):
+    """Body must pin magnific_precision_upscaler_v2 with imageUri (data URI) + scaleFactor."""
+    img_path = _create_test_image(tmp_path)
+    with patch("handlers.runway.async_poll_execute", new_callable=AsyncMock) as mock_poll:
+        mock_poll.return_value = {"id": "t8", "status": "SUCCEEDED", "output": ["https://ex.com/up.png"]}
+        with patch("handlers.runway.httpx.AsyncClient") as mock_client_cls:
+            mock_client_cls.return_value = _mock_image_download()
+            with patch("handlers.runway.save_base64_image") as mock_save_img:
+                mock_save_img.return_value = Path("/tmp/fake.png")
+                result = await handle_runway_image_upscale(
+                    _upscale_node({"scaleFactor": 4, "flavor": "photo"}),
+                    {"image": PortValueDict(type="Image", value=str(img_path))},
+                    {"RUNWAY_API_KEY": "rw-test"},
+                )
+
+    assert result["image"]["type"] == "Image"
+    body = mock_poll.call_args.kwargs.get("submit_body") or mock_poll.call_args[1]["submit_body"]
+    assert body["model"] == "magnific_precision_upscaler_v2"
+    assert body["imageUri"].startswith("data:image/")
+    assert body["scaleFactor"] == 4
+    assert body["flavor"] == "photo"
+    config = mock_poll.call_args.kwargs.get("config") or mock_poll.call_args[1]["config"]
+    assert config.submit_url.endswith("/image_upscale")
+
+
+@pytest.mark.asyncio
+async def test_upscale_optional_enhancers_forwarded(tmp_path):
+    """sharpen/smartGrain/ultraDetail forwarded only when set."""
+    img_path = _create_test_image(tmp_path)
+    with patch("handlers.runway.async_poll_execute", new_callable=AsyncMock) as mock_poll:
+        mock_poll.return_value = {"id": "t9", "status": "SUCCEEDED", "output": ["https://ex.com/up.png"]}
+        with patch("handlers.runway.httpx.AsyncClient") as mock_client_cls:
+            mock_client_cls.return_value = _mock_image_download()
+            with patch("handlers.runway.save_base64_image") as mock_save_img:
+                mock_save_img.return_value = Path("/tmp/fake.png")
+                await handle_runway_image_upscale(
+                    _upscale_node({"sharpen": 40, "ultraDetail": 60}),
+                    {"image": PortValueDict(type="Image", value=str(img_path))},
+                    {"RUNWAY_API_KEY": "rw-test"},
+                )
+
+    body = mock_poll.call_args.kwargs.get("submit_body") or mock_poll.call_args[1]["submit_body"]
+    assert body["sharpen"] == 40
+    assert body["ultraDetail"] == 60
+    assert "smartGrain" not in body
+    # default scale factor applies when unset
+    assert body["scaleFactor"] == 2
+
+
+@pytest.mark.asyncio
+async def test_upscale_missing_image_raises():
+    with pytest.raises(ValueError, match="[Ii]mage"):
+        await handle_runway_image_upscale(_upscale_node(), {}, {"RUNWAY_API_KEY": "rw-test"})
+
+
+@pytest.mark.asyncio
+async def test_upscale_missing_api_key_raises(tmp_path):
+    img_path = _create_test_image(tmp_path)
+    with pytest.raises(ValueError, match="RUNWAY_API_KEY"):
+        await handle_runway_image_upscale(
+            _upscale_node(),
+            {"image": PortValueDict(type="Image", value=str(img_path))},
+            {},
+        )
 
 
 # ---------------------------------------------------------------------------

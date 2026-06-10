@@ -348,14 +348,9 @@ def test_researched_provider_corrections_are_pinned(definitions: dict[str, dict[
     assert "auto" in gpt1_edit_size_values, "gpt-image-1-edit size must include 'auto'"
     assert _param_by_key(gpt1_edit, "size")["default"] == "auto"
 
-    # dalle-3-generate: must have style param with vivid/natural options; must NOT have
-    # output_format or background (DALL-E 3 does not support GPT-image-only params).
-    dalle3 = definitions["dalle-3-generate"]
-    dalle3_style_values = {o["value"] for o in _param_by_key(dalle3, "style")["options"]}
-    assert dalle3_style_values == {"vivid", "natural"}, "dalle-3 style must be vivid or natural"
-    assert _param_by_key(dalle3, "style")["default"] == "vivid"
-    dalle3_quality_values = {o["value"] for o in _param_by_key(dalle3, "quality")["options"]}
-    assert dalle3_quality_values == {"standard", "hd"}, "dalle-3 quality must be standard or hd"
+    # dalle-3-generate was removed 2026-06: OpenAI shut down dall-e-2/dall-e-3 on
+    # 2026-05-12 (see platform.openai.com/docs/deprecations). gpt-image nodes replace it.
+    assert "dalle-3-generate" not in definitions, "dalle-3-generate is dead — API removed by OpenAI"
 
     # gpt-image-2-generate: must have moderation param with auto/low; no background or style.
     gpt2_gen = definitions["gpt-image-2-generate"]
