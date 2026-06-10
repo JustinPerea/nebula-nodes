@@ -1,6 +1,6 @@
 ---
 name: minimax
-description: MiniMax (Hailuo) video generation in Nebula — text-to-video, image-to-video (first frame), and subject-reference (face-consistent) video via Hailuo 2.3 / Hailuo 02 / S2V-01 on the async /v1/video_generation endpoint. VIDEO ONLY in Nebula (the API also offers TTS, voice clone, music, and image gen, but no Nebula node wires those). Activate when the user configures any minimax-t2v, minimax-i2v, or minimax-s2v node, or asks about MiniMax / Hailuo in Nebula. Sourced from the official MiniMax platform docs (platform.minimax.io) and the Nebula audit guide docs/api-guides/minimax.md, cross-checked against backend/handlers/minimax.py and node_definitions.json on 2026-06-04.
+description: MiniMax (Hailuo) video generation in Nebula — text-to-video, image-to-video (first frame), and subject-reference (face-consistent) video via Hailuo 2.3 / Hailuo 2.3 Fast / Hailuo 02 / S2V-01 on the async /v1/video_generation endpoint. VIDEO ONLY in Nebula (the API also offers TTS, voice clone, music, and image gen, but no Nebula node wires those). Activate when the user configures any minimax-t2v, minimax-i2v, or minimax-s2v node, or asks about MiniMax / Hailuo in Nebula. Sourced from the official MiniMax platform docs (platform.minimax.io) and the Nebula audit guide docs/api-guides/minimax.md, cross-checked against backend/handlers/minimax.py and node_definitions.json on 2026-06-04 (model enums updated 2026-06-10).
 ---
 
 # MiniMax (Hailuo) Skill
@@ -9,7 +9,7 @@ description: MiniMax (Hailuo) video generation in Nebula — text-to-video, imag
 
 - User configures any `minimax-*` node (`minimax-t2v`, `minimax-i2v`, `minimax-s2v`)
 - User wants a short AI video clip from a text prompt, a starting still image, or a reference face
-- User asks about MiniMax / Hailuo models (Hailuo 2.3, Hailuo 02, S2V-01), durations, resolutions, or in-prompt camera moves
+- User asks about MiniMax / Hailuo models (Hailuo 2.3, Hailuo 2.3 Fast, Hailuo 02, S2V-01), durations, resolutions, or in-prompt camera moves
 - User asks why MiniMax TTS / music / image generation isn't available as a node (see Capability boundaries)
 
 ## Universal rules (all MiniMax nodes)
@@ -34,8 +34,8 @@ All three are `video-gen` nodes, share `backend/handlers/minimax.py`, and hit th
 
 | Node (display name) | Node ID | Endpoint / model | Required inputs | Key params |
 |---|---|---|---|---|
-| **MiniMax T2V** | `minimax-t2v` | `POST /v1/video_generation` · Hailuo 2.3 / Hailuo 02 | `prompt` (Text) | `model`, `duration` {6,10}, `resolution` {768P,1080P} |
-| **MiniMax I2V** | `minimax-i2v` | `POST /v1/video_generation` · Hailuo 2.3 / Hailuo 02 | `first_frame_image` (Image) + `prompt` (Text) | `model`, `duration` {6,10}, `resolution` {768P,1080P} |
+| **MiniMax T2V** | `minimax-t2v` | `POST /v1/video_generation` · Hailuo 2.3 / 2.3 Fast / 02 | `prompt` (Text) | `model`, `duration` {6,10}, `resolution` {768P,1080P} |
+| **MiniMax I2V** | `minimax-i2v` | `POST /v1/video_generation` · Hailuo 2.3 / 2.3 Fast / 02 | `first_frame_image` (Image) + `prompt` (Text) | `model`, `duration` {6,10}, `resolution` {768P,1080P} |
 | **MiniMax S2V** | `minimax-s2v` | `POST /v1/video_generation` · `S2V-01` only | `subject_reference` (Image, human face) + `prompt` (Text) | `model` (`S2V-01` only) — **no duration/resolution** |
 
 ## Param reference
@@ -44,14 +44,14 @@ All three are `video-gen` nodes, share `backend/handlers/minimax.py`, and hit th
 - **Inputs:** `prompt` (Text, required).
 - **Output:** `video` (Video).
 - **Params:**
-  - `model` — enum, default `MiniMax-Hailuo-2.3`. Options: `MiniMax-Hailuo-2.3` (label "Hailuo 2.3"), `MiniMax-Hailuo-02` (label "Hailuo 02").
+  - `model` — enum, default `MiniMax-Hailuo-2.3`. Options: `MiniMax-Hailuo-2.3` (label "Hailuo 2.3"), `MiniMax-Hailuo-2.3-Fast` (label "Hailuo 2.3 Fast", added 2026-06-10), `MiniMax-Hailuo-02` (label "Hailuo 02 (legacy)").
   - `duration` — enum (number), default `6`. Options: `6`, `10`. **10 only valid at 768P.**
   - `resolution` — enum, default `768P`. Options: `768P`, `1080P`. **1080P only valid at duration 6.**
 
 ### `minimax-i2v` (MiniMax I2V)
 - **Inputs:** `first_frame_image` (Image, required — the opening frame), `prompt` (Text, required — describes the motion).
 - **Output:** `video` (Video).
-- **Params:** same as T2V — `model` (default `MiniMax-Hailuo-2.3`; `MiniMax-Hailuo-2.3` / `MiniMax-Hailuo-02`), `duration` (default `6`; {6,10}), `resolution` (default `768P`; {768P,1080P}). Body sends `first_frame_image` as the resolved image string.
+- **Params:** same as T2V — `model` (default `MiniMax-Hailuo-2.3`; `MiniMax-Hailuo-2.3` / `MiniMax-Hailuo-2.3-Fast` / `MiniMax-Hailuo-02`), `duration` (default `6`; {6,10}), `resolution` (default `768P`; {768P,1080P}). Body sends `first_frame_image` as the resolved image string.
 
 ### `minimax-s2v` (MiniMax S2V)
 - **Inputs:** `subject_reference` (Image, required — a human face; display label "Character Image"), `prompt` (Text, required).
@@ -84,7 +84,6 @@ Camera direction lives **inside the prompt text**, not as a param. Use bracketed
 MiniMax-in-Nebula is **video only**. Do not promise or invent nodes for the following — the API supports them, but no Nebula node wires them (per the audit gap table, only ~12% of the MiniMax surface is exposed):
 
 - **First-and-last-frame video** (`last_frame_image` start+end mode) — no node exposes it. Only `first_frame_image` (I2V) is wired.
-- **`Hailuo-2.3-Fast` model** — faster video model in the API, not in any node's `model` enum.
 - **`prompt_optimizer` toggle** — API can auto-optimize prompts; not surfaced as a node param.
 - **Director / legacy video models** (`T2V-01-Director`, `I2V-01-Director`, `I2V-01-live`) — not in the Nebula model enums.
 - **Video Generation Agent** (`/v1/.../video-agent`, templated action clips like Diving/Climbing) — no node.

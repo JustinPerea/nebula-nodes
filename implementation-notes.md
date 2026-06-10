@@ -1,5 +1,30 @@
 # Implementation Notes
 
+## 2026-06-10 — Gap-audit remediation: dead DALL·E removal, GPT-5.x/Fable-5/Gemini-3.5 refresh, Ideogram 4 + Runway Upscale, doc sync
+
+Full-session remediation of the comprehensive gap review (4 subagent audits + canonical-source verification). Registry: 123 → **124 nodes** (−dalle-3-generate, +ideogram-v4, +runway-upscale). Tests: 946 backend + 347 frontend, node-contracts parity green.
+
+**Decisions not dictated by the spec:**
+- **`dalle-3-generate` removed outright** (not aliased): OpenAI shut down dall-e-2/3 on 2026-05-12, and gpt-image nodes already cover the category. Saved graphs containing it will fail validation — acceptable since the API itself is dead. Also dropped the dall-e branches from `openai_image.py` and the dead `dall-e-2` option from `gpt-image-1-edit`'s enum (caught by the docs subagent).
+- **`gpt-4o-chat` keeps its node id** (saved-graph compat) but displayName → "OpenAI Chat"; default model gpt-4o → **gpt-5.4**; new `reasoning_effort` param (gpt-5.x only, default medium). Handler omits temperature/top_p/penalties for gpt-5.x (reasoning models reject them) — guarded in code, not just UI visibleWhen.
+- **`claude-chat`**: added claude-fable-5 + claude-opus-4-8; **default stays sonnet-4-6** (cost/perf for graph work). Handler suppresses the extended-thinking block for fable/mythos models (adaptive thinking is always-on there; the param 400s).
+- **`gemini-chat` default** 2.5-flash → **3.5-flash** (now the stable frontier model). `gemini-3.1-flash-lite-preview` → stable `gemini-3.1-flash-lite` id. `thinkingLevel` visibleWhen refreshed to the 3.x set incl. 3.5-flash (was stale → param would never show for new models).
+- **Runway**: video options += seedance2/seedance2_fast/happyhorse_1_0 (all text-capable per docs); aleph gets a model param (default **stays gen4_aleph**, aleph2 opt-in); image += gemini_image3_pro + gpt_image_2; **new `runway-upscale` node** (magnific_precision_upscaler_v2, schema from runwayml SDK 4.18.0 via opensrc: scaleFactor 2/4/8/16, flavor, sharpen/smartGrain/ultraDetail). gen3a_turbo kept but labeled legacy (dropped from Runway's models table, still priced).
+- **Ideogram 4 wired via FAL** (`ideogram/v4`, schema fetched from fal.ai OpenAPI) rather than direct api.ideogram.ai — zero new auth, matches the 40+ existing FAL preset nodes. Direct integration (IDEOGRAM_API_KEY) deferred; key removed from .env.example with the other never-wired keys (BFL/BYTEDANCE/RECRAFT).
+- **Sora 2 sunset surfaced in displayName** ("Sora 2 (sunsets Sep '26)") since node defs have no description field — OpenAI kills the Videos API 2026-09-24 and the FAL endpoints proxy it. Plan removal mid-September.
+- **Cancellation**: veo.py now schedules a detached `{op_name}:cancel` (standard google.longrunning interface, best-effort) on CancelledError; grok_video.py documented local-only (xAI has no cancel endpoint) matching the MiniMax precedent. The 342e86e claim of "all poll-based providers" had skipped both.
+- **Settings UI**: added KREA_API_TOKEN (was un-keyable via UI); removed the BFL field + the dead "FLUX Routing" control — the `routing` setting was persisted but no handler ever read it (scaffolding for an unbuilt BFL-direct path; ROUTING_OPTIONS left in place, emptied).
+- **node_definitions.json formatting normalized** to plain `json.dump(indent=2)` — a few hand-compacted option blocks (seedvr resolution etc.) re-expanded; future scripted edits now produce clean diffs.
+
+**Verified-false subagent claims (do NOT "fix" these):** `anthropic-version: 2023-06-01` is still Anthropic's latest API version; `api.dev.runwayml.com` IS Runway's production host.
+
+**Deferred / follow-ups:**
+- README still says "seven workspaces" deliberately — brand-showcase is in-flight uncommitted work; its README mention should ride that commit.
+- runway-image caps reference images at 3; gemini_image3_pro supports 14 and gpt_image_2 supports 16 — widen when someone needs it.
+- Frontend/backend node-def duplication: parity is gated (`npm run check:node-contracts` + backend contract tests) but codegen from the backend JSON is the structural fix — sized as its own session.
+- minimax handler still on `api.minimaxi.com` (works; docs now say `api.minimax.io`) — flip after a live smoke.
+- Eleven Music (`/v1/music`, model music_v1) is API-ready at ElevenLabs but unintegrated — candidate next node.
+
 ## 2026-06-03 — Output storage: Reveal in Finder, Save-to-folder, configurable output dir
 
 Three follow-on features after the user asked where generated images live (answer: `<repo>/output/<UTC-timestamp>/<uuid>.<ext>`, served at `/api/outputs/...`, never auto-deleted).

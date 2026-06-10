@@ -1,13 +1,13 @@
 ---
 name: fal
-description: FAL (fal.ai) is Nebula's all-purpose generation gateway — one API key fronts 45 ready-to-use nodes for image, video, 3D, and audio generation (FLUX, GPT Image 1.5/2, Seedream, Recraft, Sora 2, Kling, Wan, Luma Ray 2, PixVerse, LTX, Seedance, Hunyuan3D, Meshy, Stable Audio 2.5, ACE-Step, MMAudio V2, Demucs, Clarity Upscaler, SeedVR2 Video Upscale) plus the catch-all `fal-universal` slug node. Activate when the user configures any FAL node — flux-1-1-ultra, flux-2-pro, flux-schnell, fast-sdxl, flux-kontext, flux-fill-inpaint, gpt-image-1-5, gpt-image-1-5-edit, gpt-image-2-fal-generate, gpt-image-2-fal-edit, seedream-4-5, recraft-v4-raster, recraft-v4-svg, sora-2, kling-v2-1, kling-v3, kling-o3, wan-2-6-t2v, wan-2-6-i2v, wan-2-6-r2v, luma-ray2-t2v, luma-ray2-i2v, luma-ray2-flash-modify, pixverse-v4-5, ltx-video-2, ltx-2-3, seedance-2-t2v, seedance-2-i2v, seedance-2-r2v, seedance-2-fast-t2v, seedance-2-fast-i2v, seedance-v1-5, meshy-text-to-3d, meshy-image-to-3d, hunyuan3d-text-to-3d, hunyuan3d-image-to-3d, remove-background, seedvr2-upscale, clarity-upscaler, seedvr-video-upscale, stable-audio-25, ace-step, mmaudio-v2, demucs, fal-universal — or asks about FAL in Nebula, which `fal-ai/*` model to use, or how a FAL node is wired. Sourced from the Nebula audit guide `docs/api-guides/fal.md`, the live node roster in `backend/data/node_definitions.json`, the handler `backend/handlers/fal_universal.py`, and FAL's official docs (https://fal.ai/docs) on 2026-06-04.
+description: FAL (fal.ai) is Nebula's all-purpose generation gateway — one API key fronts 46 ready-to-use nodes for image, video, 3D, and audio generation (FLUX, GPT Image 1.5/2, Seedream, Ideogram 4, Recraft, Sora 2, Kling, Wan, Luma Ray 2, PixVerse, LTX, Seedance, Hunyuan3D, Meshy, Stable Audio 2.5, ACE-Step, MMAudio V2, Demucs, Clarity Upscaler, SeedVR2 Video Upscale) plus the catch-all `fal-universal` slug node. Activate when the user configures any FAL node — flux-1-1-ultra, flux-2-pro, flux-schnell, fast-sdxl, flux-kontext, flux-fill-inpaint, gpt-image-1-5, gpt-image-1-5-edit, gpt-image-2-fal-generate, gpt-image-2-fal-edit, seedream-4-5, ideogram-v4, recraft-v4-raster, recraft-v4-svg, sora-2, kling-v2-1, kling-v3, kling-o3, wan-2-6-t2v, wan-2-6-i2v, wan-2-6-r2v, luma-ray2-t2v, luma-ray2-i2v, luma-ray2-flash-modify, pixverse-v4-5, ltx-video-2, ltx-2-3, seedance-2-t2v, seedance-2-i2v, seedance-2-r2v, seedance-2-fast-t2v, seedance-2-fast-i2v, seedance-v1-5, meshy-text-to-3d, meshy-image-to-3d, hunyuan3d-text-to-3d, hunyuan3d-image-to-3d, remove-background, seedvr2-upscale, clarity-upscaler, seedvr-video-upscale, stable-audio-25, ace-step, mmaudio-v2, demucs, fal-universal — or asks about FAL in Nebula, which `fal-ai/*` model to use, or how a FAL node is wired. Sourced from the Nebula audit guide `docs/api-guides/fal.md`, the live node roster in `backend/data/node_definitions.json`, the handler `backend/handlers/fal_universal.py`, and FAL's official docs (https://fal.ai/docs) on 2026-06-04 (updated 2026-06-10).
 ---
 
 # FAL Skill
 
 ## When to use
 
-- The user configures or builds with any of the 45 FAL-backed Nebula nodes (full list in **Pick the right node**).
+- The user configures or builds with any of the 46 FAL-backed Nebula nodes (full list in **Pick the right node**).
 - The user asks "which FAL model for X" or mentions a specific `fal-ai/*`, `bytedance/*`, `wan/*`, or `openai/gpt-image-2` slug.
 - The user wants to reach a FAL catalog model Nebula has no dedicated node for (use the `fal-universal` escape-hatch node).
 - Claude is building a graph with a FAL node and needs exact input ports, param names, valid ranges, and output ports.
@@ -15,11 +15,11 @@ description: FAL (fal.ai) is Nebula's all-purpose generation gateway — one API
 
 ## Universal rules
 
-These describe how Nebula's single shared handler (`backend/handlers/fal_universal.py`) talks to FAL. Every one of the 45 nodes routes through it.
+These describe how Nebula's single shared handler (`backend/handlers/fal_universal.py`) talks to FAL. Every one of the 46 nodes routes through it.
 
 1. **Auth header + env var.** `Authorization: Key <FAL_KEY>`. The backend reads a single `FAL_KEY` (set in the repo-root `.env`, then restart the backend). Missing key → `ValueError("FAL_KEY is required")` at run time. Two nodes have a fallback preference: `meshy-text-to-3d` and `meshy-image-to-3d` use the **direct Meshy API** when `MESHY_API_KEY` is set, and only fall back to FAL when it is not. No other FAL node accepts a native-provider key in this handler.
 2. **Base URL.** Always `https://queue.fal.run/{endpoint_id}` (the queue transport). The handler never uses the synchronous `https://fal.run/...` host, even for "fast" models. `{endpoint_id}` is the slug from the **Pick the right node** table, injected per-node by `sync_runner.py` via `node.params.setdefault("endpoint_id", ...)`.
-3. **Execution pattern (confirmed from the handler):** **queue submit → poll → fetch result** for 43 of 45 nodes. The two exceptions are the GPT Image 2 nodes (`gpt-image-2-fal-generate` and `gpt-image-2-fal-edit`), which use **SSE streaming** (`POST {endpoint}/stream`, `Accept: text/event-stream`) for progressive image preview. Queue flow:
+3. **Execution pattern (confirmed from the handler):** **queue submit → poll → fetch result** for 44 of 46 nodes. The two exceptions are the GPT Image 2 nodes (`gpt-image-2-fal-generate` and `gpt-image-2-fal-edit`), which use **SSE streaming** (`POST {endpoint}/stream`, `Accept: text/event-stream`) for progressive image preview. Queue flow:
    1. `POST https://queue.fal.run/{endpoint_id}` with the JSON body → `{"request_id", "status_url", "response_url"}`.
    2. Poll `GET {status_url}` every **2s, up to 300 times** (~10 min cap) until `"status": "COMPLETED"`. States: `IN_QUEUE`, `IN_PROGRESS`, `COMPLETED`, `FAILED`, `CANCELLED`.
    3. `GET {response_url}` to fetch the result, then parse (`_parse_fal_output`).
@@ -55,7 +55,7 @@ These describe how Nebula's single shared handler (`backend/handlers/fal_univers
 
 ## Pick the right node
 
-All 45 nodes below carry `apiProvider: "fal"` in `backend/data/node_definitions.json`. Endpoint = the slug injected as `endpoint_id`. The right-most column links the matching per-model spec file under `skills/` where one exists (use it for pricing + deep param notes).
+All 46 nodes below carry `apiProvider: "fal"` in `backend/data/node_definitions.json`. Endpoint = the slug injected as `endpoint_id`. The right-most column links the matching per-model spec file under `skills/` where one exists (use it for pricing + deep param notes).
 
 | Nebula node id | Display name | Category | FAL endpoint | Key inputs → ports | Per-model file |
 |---|---|---|---|---|---|
@@ -70,9 +70,10 @@ All 45 nodes below carry `apiProvider: "fal"` in `backend/data/node_definitions.
 | `gpt-image-2-fal-generate` | GPT Image 2 (FAL) | image (**stream**) | `openai/gpt-image-2` | prompt | — |
 | `gpt-image-2-fal-edit` | GPT Image 2 Edit (FAL) | image (**stream**, edit) | `openai/gpt-image-2/edit` | images, prompt | — |
 | `seedream-4-5` | Seedream 4.5 | image | `fal-ai/bytedance/seedream/v4.5/text-to-image` | prompt | [`skills/fal-ai__bytedance__seedream__v4.5__text-to-image.md`](skills/fal-ai__bytedance__seedream__v4.5__text-to-image.md) |
+| `ideogram-v4` | Ideogram 4 | image | `ideogram/v4` | prompt | — |
 | `recraft-v4-raster` | Recraft V4 | image | `fal-ai/recraft/v4/text-to-image` | prompt | [`skills/fal-ai__recraft__v4__text-to-image.md`](skills/fal-ai__recraft__v4__text-to-image.md) |
 | `recraft-v4-svg` | Recraft V4 SVG | image (vector) | `fal-ai/recraft/v4/text-to-vector` | prompt → **svg** out | — |
-| `sora-2` | Sora 2 | video (t2v) | `fal-ai/sora-2/text-to-video` (`/pro` when `model=pro`) | prompt | [`skills/fal-ai__sora-2__text-to-video.md`](skills/fal-ai__sora-2__text-to-video.md) |
+| `sora-2` | Sora 2 (sunsets Sep '26) | video (t2v) | `fal-ai/sora-2/text-to-video` (`/pro` when `model=pro`) | prompt | [`skills/fal-ai__sora-2__text-to-video.md`](skills/fal-ai__sora-2__text-to-video.md) |
 | `kling-v2-1` | Kling v2.1 | video (i2v) | `fal-ai/kling-video/v2.1/pro/image-to-video` | image, prompt, tail_image | [`skills/fal-ai__kling-video__v2.1__pro__image-to-video.md`](skills/fal-ai__kling-video__v2.1__pro__image-to-video.md) |
 | `kling-v3` | Kling V3 | video (t2v/i2v) | `fal-ai/kling-video/v3/standard/text-to-video` | prompt, image, end_image | [`skills/fal-ai__kling-video__v3__standard__text-to-video.md`](skills/fal-ai__kling-video__v3__standard__text-to-video.md) |
 | `kling-o3` | Kling Omni 3 | video (i2v) | `fal-ai/kling-video/o3/standard/image-to-video` | image, prompt, end_image | [`skills/fal-ai__kling-video__o3__standard__image-to-video.md`](skills/fal-ai__kling-video__o3__standard__image-to-video.md) |
@@ -105,7 +106,7 @@ All 45 nodes below carry `apiProvider: "fal"` in `backend/data/node_definitions.
 | `demucs` | Demucs | audio | `fal-ai/demucs` | audio → vocals/drums/bass/other | [`skills/fal-ai__demucs.md`](skills/fal-ai__demucs.md) |
 | `fal-universal` | FAL | universal | user-set `endpoint_id` (default `fal-ai/flux-pro/v1.1-ultra`) | prompt, image | route to matching file under `skills/` |
 
-> The bundle ships **169 per-model spec files** under `skills/` and **16 category overviews** under `categories/` covering the full FAL catalog (including audio, LLM, vision, and training models that Nebula does **not** wrap). Those extra files are reference material for the `fal-universal` escape hatch, not 169 Nebula nodes. The authoritative Nebula roster is the **45 ids above**.
+> The bundle ships **169 per-model spec files** under `skills/` and **16 category overviews** under `categories/` covering the full FAL catalog (including audio, LLM, vision, and training models that Nebula does **not** wrap). Those extra files are reference material for the `fal-universal` escape hatch, not 169 Nebula nodes. The authoritative Nebula roster is the **46 ids above**.
 
 ## Param reference
 
@@ -120,6 +121,7 @@ Types, defaults, ranges, and enums below come straight from `backend/data/node_d
 - `gpt-image-1-5` — in: `prompt*`. out: `image`. Params: `image_size` enum [1024x1024 (default), 1536x1024, 1024x1536]; `quality` enum [low, medium, high (default)]; `background` enum [auto (default), transparent, opaque]; `num_images` int 1–4 (default 1); `output_format` enum [png (default), jpeg, webp].
 - `gpt-image-2-fal-generate` — **streams**. in: `prompt*`. out: `image`. Params: `image_size` enum (default landscape_4_3); `quality` enum [auto, low, medium, high (default)]; `num_images` int 1–4 (default 1); `output_format` enum [png (default), jpeg, webp]; `partial_images` int 0–3 (default 2, controls preview frames).
 - `seedream-4-5` — in: `prompt*`. out: `image`. Params: `image_size` enum [square_hd (default), square, portrait_4_3, portrait_16_9, landscape_4_3, landscape_16_9, auto_2K, auto_4K]; `num_images` int 1–6 (default 1); `max_images` int 1–6 (default 1); `enable_safety_checker` bool (default true); `seed` int.
+- `ideogram-v4` — **new 2026-06-10**. in: `prompt*`. out: `image`. Params: `rendering_speed` enum [TURBO, BALANCED (default), QUALITY]; `image_size` enum [square_hd (default), square, portrait_4_3, portrait_16_9, landscape_4_3, landscape_16_9]; `expansion_model` enum [Medium (default), Large] (magic-prompt expansion); `num_images` int 1–4 (default 1); `output_format` enum [png (default), jpeg]; `seed` int; `enable_safety_checker` bool (default true). Ideogram 4.0 (released 2026-06-03, open weights + hosted) — frontier text rendering/typography; pick it when legible in-image text matters.
 - `recraft-v4-raster` — in: `prompt*`. out: `image`. Params: `image_size` enum (default square_hd); `style_id` str; `colors` str (comma-sep hex); `background_color` str; `enable_safety_checker` bool (default true).
 - `recraft-v4-svg` — in: `prompt*`. out: **`svg`** (vector). Params: same as `recraft-v4-raster`.
 
@@ -131,7 +133,7 @@ Types, defaults, ranges, and enums below come straight from `backend/data/node_d
 
 **Video — text-to-video**
 
-- `sora-2` — in: `prompt*`. out: `video`. Params: `resolution` enum [720p (default), 1080p]; `aspect_ratio` enum [16:9 (default), 9:16]; `duration` enum [4 (default), 8, 12, 16, 20]. (A UI `model` toggle picks Standard vs Pro endpoint; it is consumed by the wrapper, not sent to FAL.)
+- `sora-2` — display name now "Sora 2 (sunsets Sep '26)". in: `prompt*`. out: `video`. Params: `resolution` enum [720p (default), 1080p]; `aspect_ratio` enum [16:9 (default), 9:16]; `duration` enum [4 (default), 8, 12, 16, 20]. (A UI `model` toggle picks Standard vs Pro endpoint; it is consumed by the wrapper, not sent to FAL.) **Sunset:** OpenAI announced (2026-03-24) the Videos API + sora-2/sora-2-pro shut down on 2026-09-24 — the FAL endpoints proxy OpenAI, so this node dies then too; plan migrations to another t2v node.
 - `wan-2-6-t2v` — in: `prompt*`. out: `video`. Params: `duration` enum [5 (default), 10, 15]; `resolution` enum [720p (default), 1080p]; `aspect_ratio` enum [16:9 (default), 9:16, 1:1, 4:3, 3:4]; `negative_prompt` str; `seed` int; `generate_audio` bool (default true); `enable_prompt_expansion` bool (default true); `multi_shots` bool (default true); `enable_safety_checker` bool (default true).
 - `luma-ray2-t2v` — in: `prompt*`. out: `video`. Params: `aspect_ratio` enum [16:9 (default), 9:16, 4:3, 3:4, 21:9, 9:21]; `duration` enum [5s (default), 9s]; `loop` bool (default false); `resolution` enum [540p (default), 720p, 1080p].
 - `seedance-2-t2v` / `seedance-2-fast-t2v` — in: `prompt*`. out: `video`. Params: `aspect_ratio` enum [auto (default), 21:9, 16:9, 4:3, 1:1, 3:4, 9:16]; `duration` enum [auto (default), 4, 5, 6, 8, 10, 12, 15]; `resolution` enum (t2v: [480p, 720p (default), 1080p]; fast: [480p, 720p (default)]); `generate_audio` bool (default true); `seed` int.
@@ -190,13 +192,13 @@ Types, defaults, ranges, and enums below come straight from `backend/data/node_d
 
 ## In the nebula_nodes context
 
-- **Node ids:** the 45 ids in **Pick the right node** (all carry `apiProvider: "fal"`, `envKeyName: "FAL_KEY"` — except the two `meshy-*` nodes whose `envKeyName` is `["MESHY_API_KEY", "FAL_KEY"]`, preferring direct Meshy).
+- **Node ids:** the 46 ids in **Pick the right node** (all carry `apiProvider: "fal"`, `envKeyName: "FAL_KEY"` — except the two `meshy-*` nodes whose `envKeyName` is `["MESHY_API_KEY", "FAL_KEY"]`, preferring direct Meshy).
 - **Handler files:** `backend/handlers/fal_universal.py` (the single shared handler — submit/poll/parse, port→key mapping, base64 inlining, output detection). Dispatch + `endpoint_id` injection + per-node param pre-processing (`sora-2` tier select, `fast-sdxl` JSON arrays, `kling-v3` `multi_prompt`, `wan-2-6-r2v` `video_urls` collation, `recraft` color params, `meshy` direct-API preference) live in `backend/execution/sync_runner.py`. SSE streaming for the two GPT Image 2 nodes goes through `backend/execution/stream_runner.py`. Deeper infra notes: `docs/model-providers/fal/fal-universal.md`.
 - **Input/output ports:** image nodes output an `image` port (Recraft SVG outputs `svg`); video nodes output `video`; 3D nodes output `mesh`; `fal-universal` exposes all four output ports and the runtime picks one. Input ports use canvas-friendly names (`image`, `images`, `end_image`, `front_image`, …) that the handler remaps to FAL keys (`image_url`, `image_urls`, `end_image_url`, `input_image_url`, …) — see the mapping table in **Universal rules**.
 - **Chaining rules:** connect an upstream `image` output to a downstream `image` input for i2v / edit / 3D / upscale chains; `mesh` outputs feed 3D-consuming nodes; `video` outputs feed `luma-ray2-flash-modify` / `wan-2-6-r2v` (its `video1`/`video2`/`video3` ports). Multi-image ports (`gpt-image-1-5-edit`, `gpt-image-2-fal-edit`, `seedance-2-r2v` `images`) accept a list; the two edit nodes **error if no image is provided**.
 - **How outputs render:** the handler returns a signed FAL URL per output port. Nebula downloads it locally and serves it via `/api/outputs/…`; images render in the canvas image preview, videos in the video player, meshes via the GLB/`model-viewer` preview, SVG inline. URLs are time-limited, so render/download promptly.
 
-### Capability boundaries (what FAL's API can do that these 45 Nebula nodes CANNOT)
+### Capability boundaries (what FAL's API can do that these 46 Nebula nodes CANNOT)
 
 State these plainly when a user asks — do not over-promise.
 
@@ -206,13 +208,13 @@ State these plainly when a user asks — do not over-promise.
 - **Inpainting / masked editing is wired.** `flux-fill-inpaint` (`fal-ai/flux-pro/v1/fill`, FLUX.1 [pro] Fill) edits only the masked region of an image — wire `prompt` + `image` + `mask` (white = the region to edit); inpaint to replace objects in a frame or outpaint to extend its borders, leaving unmasked regions untouched. It is the only mask-based node; the other edit nodes (`flux-kontext`, the GPT Image edit nodes) are whole-image.
 - **Three upscalers (two image, one video) / one video-modify model.** `seedvr2-upscale` (faithful) and `clarity-upscaler` (creative/added detail) are the wired *image* upscalers, and `seedvr-video-upscale` (ByteDance SeedVR2, one-step, temporally-consistent to up to 4K) is the wired *video* upscaler (FAL also has ESRGAN and other upscalers/restorers, etc.); `luma-ray2-flash-modify` is the lone video-to-video / restyle node (FAL has many more).
 - **Transport/control surface is minimal.** Nebula always uses the **queue** transport (never the synchronous `fal.run` host), polls status (no SSE status-stream). **Cancellation is wired** (2026-06-05): when a node's task is cancelled (client disconnect, agent cancel, etc.) the handler PUTs FAL's `cancel_url` on a detached best-effort task so the queued/in-flight job stops upstream instead of running to completion (~10 min). It still does not use: **webhooks** (`?fal_webhook=`), **real-time WebSocket**, the **file-storage upload API** (it base64-inlines local files instead, which bloats large requests), **real log streaming** (`?logs=1` — progress is a synthetic poll-count bar), or the **`X-Fal-*` queue headers** (priority, server-side timeout, no-retry, runner affinity). The only SSE path wired is streaming for the two **GPT Image 2** nodes.
-- **Catalog reach via escape hatch only.** ~53% of FAL's overall capability surface is exposed as dedicated nodes. Anything outside the 45 ids (and outside the rest of the audio catalog plus LLM/training, which need different transport or inputs) is reachable **only** through `fal-universal` by pasting a slug — and only if the model needs nothing beyond a `prompt` and a single `image`.
+- **Catalog reach via escape hatch only.** ~53% of FAL's overall capability surface is exposed as dedicated nodes. Anything outside the 46 ids (and outside the rest of the audio catalog plus LLM/training, which need different transport or inputs) is reachable **only** through `fal-universal` by pasting a slug — and only if the model needs nothing beyond a `prompt` and a single `image`.
 
 ## Sources
 
 - Nebula audit guide (primary, source-cited): `docs/api-guides/fal.md`.
-- Live node roster, ports, params, defaults: `backend/data/node_definitions.json` (45 nodes with `apiProvider: "fal"`).
+- Live node roster, ports, params, defaults: `backend/data/node_definitions.json` (46 nodes with `apiProvider: "fal"`).
 - Handler behavior (submit/poll/stream, port→key mapping, base64 inlining, output detection): `backend/handlers/fal_universal.py`, `backend/execution/sync_runner.py`, `backend/execution/stream_runner.py`; infra notes in `docs/model-providers/fal/fal-universal.md`.
 - Per-model specs + category overviews (full FAL catalog, for the `fal-universal` escape hatch): `skills/` (169 files) and `categories/` (16 files) in this bundle; machine-readable `by_category.json`.
 - FAL official docs — capability overview <https://fal.ai/docs>; Queue API (submit/status/result/cancel, webhooks, `X-Fal-*`) <https://fal.ai/docs/model-endpoints/queue>; calling patterns (sync `fal.run` vs `queue.fal.run`, subscribe/submit/stream/realtime) <https://fal.ai/docs/model-endpoints>; file storage/upload <https://fal.ai/docs/documentation/development/file-storage>; model catalog <https://fal.ai/models>. For any single model's exact params, the canonical LLM-friendly spec is `https://fal.ai/models/{slug}/llms.txt`.
-- Verified 2026-06-04 against the live roster and handler.
+- Verified 2026-06-04 against the live roster and handler (node roster updated 2026-06-10: `ideogram-v4` added, `sora-2` renamed for its Sep '26 sunset).

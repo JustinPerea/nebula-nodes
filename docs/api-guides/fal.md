@@ -1,16 +1,16 @@
 # FAL (fal.ai) in Nebula Nodes
 
-> FAL is Nebula's all-purpose generation gateway: one API key unlocks dozens of top image, video, and 3D models — FLUX, Sora 2, Kling, Seedance, Luma, Wan, Recraft, Hunyuan3D, Meshy, GPT Image, and more — that you wire together on the canvas.
+> FAL is Nebula's all-purpose generation gateway: one API key unlocks dozens of top image, video, and 3D models — FLUX, Sora 2, Kling, Seedance, Luma, Wan, Recraft, Ideogram, Hunyuan3D, Meshy, GPT Image, and more — that you wire together on the canvas.
 
 ## What you can make
 
-FAL is a *universal gateway* — a single provider that proxies many different downstream models. In Nebula, that surfaces as 45 ready-to-use nodes spanning five media types:
+FAL is a *universal gateway* — a single provider that proxies many different downstream models. In Nebula, that surfaces as 46 ready-to-use nodes spanning five media types:
 
-- **Images** (text-to-image): photoreal and stylized stills with FLUX 1.1 Ultra, FLUX 2 Pro, FLUX Schnell (fast), Fast SDXL, Seedream 4.5, Recraft V4, GPT Image 1.5, and GPT Image 2.
+- **Images** (text-to-image): photoreal and stylized stills with FLUX 1.1 Ultra, FLUX 2 Pro, FLUX Schnell (fast), Fast SDXL, Seedream 4.5, Recraft V4, GPT Image 1.5, GPT Image 2, and Ideogram 4 (Ideogram 4.0, released 2026-06-03 — open weights + hosted, frontier text rendering/typography).
 - **Vector art (SVG):** true scalable vector graphics from a text prompt with Recraft V4 SVG — logos, icons, flat illustrations.
 - **Image editing / reference images:** edit or remix existing images with FLUX Kontext, GPT Image 1.5 Edit, and GPT Image 2 Edit (feed one or more reference images + an instruction).
 - **Image editing — inpaint / outpaint (mask-based):** edit only the masked region of an image with FLUX Fill (Inpaint) — feed an image, a mask (white = the region to edit), and a prompt; inpaint to replace objects in a frame or outpaint to extend its borders, while unmasked regions stay untouched.
-- **Video — from text:** Sora 2, Kling V3, Wan 2.6 T2V, Luma Ray 2, PixVerse V4.5, Seedance 2.0 (+ Fast).
+- **Video — from text:** Sora 2 (sunsets 2026-09-24 — see the node table), Kling V3, Wan 2.6 T2V, Luma Ray 2, PixVerse V4.5, Seedance 2.0 (+ Fast).
 - **Video — from a still image:** animate a photo with Kling v2.1, Kling Omni 3, Luma Ray 2 I2V, Wan 2.6 I2V, LTX Video 2, LTX 2.3, Seedance V1.5 Pro, Seedance 2.0 I2V (+ Fast). Many support a start frame *and* an end frame.
 - **Video — from reference clips/images:** drive a new video off reference footage with Wan 2.6 R2V (up to 3 reference videos) and Seedance 2.0 R2V (reference image set).
 - **Video — modify existing video:** restyle/edit a clip you already have with Luma Ray 2 Flash Modify.
@@ -22,7 +22,7 @@ FAL is a *universal gateway* — a single provider that proxies many different d
 
 > FAL's audio catalog is now *partly* wired: Stable Audio 2.5 covers instrumental text-to-music and sound effects, ACE-Step adds music with vocals/lyrics (full songs, up to 60s), MMAudio V2 covers video-to-audio Foley (synchronized SFX/ambient audio for a video), and Demucs covers stem separation (splits a mixed track into vocals/drums/bass/other). The rest of the catalog — TTS, speech-to-text, voice cloning, dubbing, lipsync — is still not exposed through Nebula's FAL nodes. See the coverage section below.
 
-## Nodes available in Nebula (45)
+## Nodes available in Nebula (46) (updated 2026-06-10)
 
 Names, node IDs, and parameter keys below are taken directly from `backend/data/node_definitions.json`. "Key inputs" are the node's input ports; "Notable params" are the exposed settings (every node also implicitly takes a `prompt` and/or `image` where listed).
 
@@ -31,7 +31,7 @@ Names, node IDs, and parameter keys below are taken directly from `backend/data/
 | FLUX 1.1 Ultra | `flux-1-1-ultra` | image-gen | prompt, image | *(defaults only)* | High-end photoreal stills |
 | FAL | `fal-universal` | universal | prompt, image | `endpoint_id` | Power-user escape hatch: paste any `fal-ai/...` slug to reach a model Nebula has no dedicated node for |
 | Kling v2.1 | `kling-v2-1` | video-gen | image, prompt, tail_image | `duration`, `negative_prompt`, `cfg_scale` | Animate a photo (with optional end frame) |
-| Sora 2 | `sora-2` | video-gen | prompt | `resolution`, `aspect_ratio`, `duration` | Text-to-video, OpenAI Sora 2 |
+| Sora 2 (sunsets Sep '26) | `sora-2` | video-gen | prompt | `resolution`, `aspect_ratio`, `duration` | Text-to-video, OpenAI Sora 2. **Sunset warning:** OpenAI announced (2026-03-24) the Videos API + sora-2/sora-2-pro shut down 2026-09-24; the FAL endpoints proxy OpenAI, so this node dies then too |
 | FLUX Schnell | `flux-schnell` | image-gen | prompt | `image_size`, `num_inference_steps`, `guidance_scale`, `num_images`, `output_format`, `acceleration`, `enable_safety_checker`, `seed` | Fast, cheap image drafts |
 | Fast SDXL | `fast-sdxl` | image-gen | prompt | `image_size`, `num_images`, `num_inference_steps`, `guidance_scale`, `negative_prompt`, `expand_prompt`, `loras`, `embeddings`, `format`, `enable_safety_checker`, `safety_checker_version`, `seed` | SDXL with LoRA/embedding support |
 | Wan 2.6 T2V | `wan-2-6-t2v` | video-gen | prompt | `duration`, `resolution`, `aspect_ratio`, `negative_prompt`, `seed`, `generate_audio`, `enable_prompt_expansion`, `multi_shots`, `enable_safety_checker` | Text-to-video with optional audio |
@@ -69,6 +69,7 @@ Names, node IDs, and parameter keys below are taken directly from `backend/data/
 | Clarity Upscaler | `clarity-upscaler` | transform | image | `prompt`, `upscale_factor`, `creativity`, `resemblance`, `num_inference_steps`, `seed` | Upscale + enhance an image with added realistic detail |
 | SeedVR2 Video Upscale | `seedvr-video-upscale` | transform | video | `upscale_mode`, `upscale_factor`, `target_resolution`, `noise_scale`, `output_quality`, `seed` | Upscale a video to up to 4K (temporally consistent) |
 | Seedream 4.5 | `seedream-4-5` | image-gen | prompt | `image_size`, `num_images`, `max_images`, `enable_safety_checker`, `seed` | ByteDance Seedream high-quality stills |
+| Ideogram 4 | `ideogram-v4` | image-gen | prompt | `rendering_speed` (TURBO/BALANCED/QUALITY), `image_size`, `expansion_model` (magic-prompt expansion), `num_images`, `output_format`, `seed`, `enable_safety_checker` | Frontier text rendering / typography — Ideogram 4.0 (released 2026-06-03, open weights + hosted) |
 | Stable Audio 2.5 | `stable-audio-25` | audio-gen | prompt | `seconds_total`, `num_inference_steps`, `guidance_scale`, `seed` | Text → instrumental music + sound effects |
 | ACE-Step (Music + Vocals) | `ace-step` | audio-gen | *(none — param-only)* | `tags`, `lyrics`, `duration`, `number_of_steps`, `guidance_scale`, `seed` | Text → full songs with vocals & lyrics |
 | MMAudio V2 (Video Foley) | `mmaudio-v2` | audio-gen | video, prompt ("Audio Prompt", Text) → video (with audio) | `negative_prompt`, `duration`, `num_steps`, `cfg_strength`, `mask_away_clip`, `seed` | Generate synchronized Foley/SFX audio for a video |
@@ -121,14 +122,14 @@ FAL is a gateway, so "the API surface" here means *capabilities* — auth, the c
 | Queue priority / timeout / no-retry / runner-hint headers (`X-Fal-*`) | Yes | **none** | None of the `X-Fal-Queue-Priority`, `X-Fal-Request-Timeout`, `X-Fal-No-Retry`, `X-Fal-Runner-Hint` controls are surfaced. |
 | File storage upload API (`upload_file`) | Yes | **partial** | Nebula doesn't call the upload API; it inlines local files as base64 **data URIs** (works, but large files bloat the request) and passes public URLs through. |
 | Logs on status (`?logs=1`) | Yes | **none** | Progress is shown as a synthetic poll-count bar, not FAL's real logs. |
-| **Image — text-to-image** | Yes | **full** | FLUX (Schnell/1.1 Ultra/2 Pro), Fast SDXL, Seedream 4.5, Recraft V4, GPT Image 1.5 / 2. |
+| **Image — text-to-image** | Yes | **full** | FLUX (Schnell/1.1 Ultra/2 Pro), Fast SDXL, Seedream 4.5, Recraft V4, GPT Image 1.5 / 2, Ideogram 4 (added 2026-06-10). |
 | **Image — editing / reference** | Yes | **full** | FLUX Kontext, GPT Image 1.5 Edit, GPT Image 2 Edit. |
 | **Image — vector (SVG)** | Yes | **full** | Recraft V4 SVG (`text-to-vector`); SVG output type detected by handler. |
 | **Image — inpainting / masked edit** | Yes | **full** | `flux-fill-inpaint` (`fal-ai/flux-pro/v1/fill`, FLUX.1 [pro] Fill) — image + mask + prompt → edited image; inpaint (replace objects) or outpaint (extend borders), unmasked regions untouched. |
 | **Image — background removal** | Yes | **full** | `remove-background` (`imageutils/rembg`). |
 | **Image — upscaling** | Yes | **partial** | Two image upscalers exposed: `seedvr2-upscale` (faithful) and `clarity-upscaler` (creative/added detail); FAL has more (ESRGAN, etc.). |
 | **Video — upscaling / restoration** | Yes | **partial** | `seedvr-video-upscale` (`fal-ai/seedvr/upscale/video`, ByteDance SeedVR2 — one-step, temporally-consistent upscale to up to 4K); FAL hosts other video upscalers/restorers that remain unwired. |
-| **Video — text-to-video** | Yes | **full** | Sora 2, Kling V3, Wan 2.6, Luma Ray 2, PixVerse, Seedance 2.0 (+ Fast). |
+| **Video — text-to-video** | Yes | **full** | Sora 2 (until its 2026-09-24 sunset), Kling V3, Wan 2.6, Luma Ray 2, PixVerse, Seedance 2.0 (+ Fast). |
 | **Video — image-to-video** | Yes | **full** | Kling v2.1/Omni 3, Luma Ray 2 I2V, Wan 2.6 I2V, LTX 2 / 2.3, Seedance V1.5 / 2.0. |
 | **Video — reference-to-video** | Yes | **full** | Wan 2.6 R2V, Seedance 2.0 R2V. |
 | **Video — video-to-video / modify** | Yes | **partial** | Only Luma Ray 2 Flash Modify; FAL has many v2v / video-edit models. |
@@ -146,13 +147,13 @@ FAL is a gateway, so "the API surface" here means *capabilities* — auth, the c
 
 ## Agent skill coverage
 
-**A complete skill exists** at `.claude/skills/fal/SKILL.md` (refreshed 2026-06-04). It is the most complete provider skill in the repo and covers all **45** FAL-backed Nebula nodes, plus the catch-all `fal-universal` slug node for reaching un-wrapped FAL catalog models. It gives an agent the node IDs and ports, per-node params and ranges, wiring/chaining rules, and the provider's capability boundaries — so an agent can drive any FAL pipeline without reading the handlers.
+**A complete skill exists** at `.claude/skills/fal/SKILL.md` (refreshed 2026-06-04, updated 2026-06-10). It is the most complete provider skill in the repo and covers all **46** FAL-backed Nebula nodes, plus the catch-all `fal-universal` slug node for reaching un-wrapped FAL catalog models. It gives an agent the node IDs and ports, per-node params and ranges, wiring/chaining rules, and the provider's capability boundaries — so an agent can drive any FAL pipeline without reading the handlers.
 
 What it covers:
 
 - **Universal FAL conventions** — the auth header, the two base URLs, the full queue lifecycle (submit → poll → result, with status states and HTTP codes), and per-modality output shapes.
-- **The Nebula node → FAL endpoint map**, reconciled to the authoritative **45-node** roster in `node_definitions.json` (the stale 39/160 framing and non-current models were dropped and the `kling-v2-1` slug fixed).
-- **Nebula-specific wiring** — the input-port → FAL-key mapping (`image`→`image_url`, `images`→`image_urls`, `mask`→`mask_url`, `front_image`→`input_image_url`, etc.), base64 data-URI inlining of local files, and that **only the two GPT Image 2 nodes stream** (all 43 others queue-poll).
+- **The Nebula node → FAL endpoint map**, reconciled to the authoritative **46-node** roster in `node_definitions.json` (the stale 39/160 framing and non-current models were dropped and the `kling-v2-1` slug fixed; `ideogram-v4` added 2026-06-10).
+- **Nebula-specific wiring** — the input-port → FAL-key mapping (`image`→`image_url`, `images`→`image_urls`, `mask`→`mask_url`, `front_image`→`input_image_url`, etc.), base64 data-URI inlining of local files, and that **only the two GPT Image 2 nodes stream** (all 44 others queue-poll).
 - **Capability boundaries** — which FAL capabilities Nebula **cannot** reach (most audio plus LLM/training nodes are not wired; music is now wired both ways — instrumental/SFX via `stable-audio-25`, vocals/lyrics via `ace-step` — video-to-audio/Foley via `mmaudio-v2`, and stem separation via `demucs`), so an agent doesn't over-promise a modality no node delivers.
 
 ## Sources

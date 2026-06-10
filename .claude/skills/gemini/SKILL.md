@@ -26,7 +26,7 @@ Nebula exposes Google's generative stack as **8 nodes**, all keyed on one `GOOGL
 5. **Input-URI rules.** Image inputs on `gemini-chat`, `nano-banana`, `lyria-3`, and `veo-3` accept three forms and the handler converts each: a **local file path** (base64-inlined; png/jpg/jpeg/webp mapped, anything else defaults to `image/png`), an **`http(s)://` URL** (sent as `fileData`/`file_data`; for Veo it's downloaded then inlined), or a **`data:` URI** (split into mime + base64). So you can wire another node's `Image` output straight in. `style-reference` is the exception — it takes **no input port**; you set its `filePath` param to a local image.
 6. **Key gotchas.**
    - **Gemini 3 vs 2.5 thinking is mutually exclusive.** `thinkingLevel` only shows on the Gemini 3 models; `thinkingBudget` only on the 2.5 models. The handler sends one or the other — never both (the API 400s on both).
-   - **Model IDs are literal preview enums.** The exact strings below (e.g. `gemini-3.1-flash-image-preview`, `gemini-3-flash-preview`, `lyria-3-clip-preview`, `veo-3.1-generate-preview`) are the values the node's `model` enum actually sends. **Do not "modernize" them** by stripping `-preview` — those are the strings Nebula ships, and a non-preview form is not an option the node offers. (The prompting-craft topic files sometimes use shorthand like `imagen-4`; the IDs in this file are the ground truth for wiring.)
+   - **Model IDs are the literal enum strings.** The exact strings below (e.g. `gemini-3.1-flash-image-preview`, `gemini-3-flash-preview`, `lyria-3-clip-preview`, `veo-3.1-generate-preview`) are the values the node's `model` enum actually sends. **Do not "modernize" them** by stripping or adding `-preview` — most are pinned preview ids, but a few are stable ids with no suffix (`gemini-3.5-flash`, `gemini-3.1-flash-lite`, the 2.5 text models). Use each id exactly as listed. (The prompting-craft topic files sometimes use shorthand like `imagen-4`; the IDs in this file are the ground truth for wiring.)
    - **Nano Banana / Imagen / Veo have no transparent-background mode.** Ask for "white background" in the prompt for stickers/cutouts.
    - **Veo outputs expire on Google's side (~2 days).** Nebula downloads the MP4 to the run folder automatically on completion, so the local copy is yours; don't rely on the remote URI later.
    - **Lyria WAV uses a proto-enum mime.** When `outputFormat=wav` on the Pro model, the handler sends `responseFormat.audio.mimeType = "AUDIO_WAV"` (not the literal `"audio/wav"`, which the API rejects). WAV is Pro-only; the Clip model returns MP3.
@@ -39,12 +39,12 @@ One row per Nebula Google node. IDs, ports, and param keys are ground-truth from
 
 | Node (display) | Node ID | Category · pattern | Endpoint verb | Key inputs → outputs | Model enum (literal values) | Headline params |
 |---|---|---|---|---|---|---|
-| Gemini | `gemini-chat` | text-gen · **stream** | `:streamGenerateContent?alt=sse` | `messages` (Text, req), `images` (Image, multi) → `text` | `gemini-3.1-pro-preview`, `gemini-3-flash-preview`, `gemini-3.1-flash-lite-preview`, `gemini-2.5-pro`, `gemini-2.5-flash` (default), `gemini-2.5-flash-lite` | `temperature`, `max_tokens`, `system`, `thinkingLevel` (G3) / `thinkingBudget` (2.5), `top_p`, `top_k`, `stop_sequences`, `response_format` |
+| Gemini | `gemini-chat` | text-gen · **stream** | `:streamGenerateContent?alt=sse` | `messages` (Text, req), `images` (Image, multi) → `text` | `gemini-3.5-flash` (default, stable), `gemini-3.1-pro-preview`, `gemini-3-flash-preview`, `gemini-3.1-flash-lite` (stable), `gemini-2.5-pro`, `gemini-2.5-flash`, `gemini-2.5-flash-lite` | `temperature`, `max_tokens`, `system`, `thinkingLevel` (G3) / `thinkingBudget` (2.5), `top_p`, `top_k`, `stop_sequences`, `response_format` |
 | Imagen 4 | `imagen-4-generate` | image-gen · **sync** | `:predict` | `prompt` (Text, req) → `image` | `imagen-4.0-generate-001` (default), `imagen-4.0-ultra-generate-001`, `imagen-4.0-fast-generate-001` | `aspectRatio`, `numberOfImages`, `seed`, `enhancePrompt`, `imageSize` (1K/2K, base+Ultra only), `personGeneration` |
 | Nano Banana | `nano-banana` | image-gen · **sync** | `:generateContent` | `prompt` (Text, req), `images` (Image, multi) → `image`, `text` | `gemini-3.1-flash-image-preview` (default, "Nano Banana 2"), `gemini-3-pro-image-preview` ("Pro"), `gemini-2.5-flash-image` ("2.5 Flash") | `aspect_ratio`, `imageSize` (512/1K/2K/4K) |
 | Veo 3.1 | `veo-3` | video-gen · **async-poll** | `:predictLongRunning` → poll | `prompt` (Text, req), `image` (First Frame), `last_frame` (Last Frame), `video` (Extend Video) → `video`, `source_uri` | `veo-3.1-generate-preview` (default), `veo-3.1-fast-generate-preview`, `veo-3.1-lite-generate-preview`, `veo-3.0-generate-001`, `veo-3.0-fast-generate-001`, `veo-2.0-generate-001` | `aspectRatio`, `duration`, `resolution`, `personGeneration`, `seed` (direct); `negative_prompt`/`safety_tolerance` (FAL path only) |
 | Lyria 3 | `lyria-3` | audio-gen · **sync** | `:generateContent` | `prompt` (Text, req), `images` (Image, multi) → `audio`, `text` (Lyrics) | `lyria-3-clip-preview` (default, 30 s), `lyria-3-pro-preview` (full song) | `outputFormat` (MP3/WAV — WAV is Pro-only) |
-| Gemini TTS | `gemini-tts` | audio-gen · **sync** | `:generateContent` | `text` (Text, req) → `audio` | `gemini-2.5-flash-preview-tts` (default), `gemini-2.5-pro-preview-tts` | `voiceName` (30 voices) |
+| Gemini TTS | `gemini-tts` | audio-gen · **sync** | `:generateContent` | `text` (Text, req) → `audio` | `gemini-3.1-flash-tts-preview`, `gemini-2.5-flash-preview-tts` (default), `gemini-2.5-pro-preview-tts` | `voiceName` (30 voices) |
 | Gemini Embeddings | `gemini-embeddings` | utility · **sync** | `:embedContent` | `text` (Text, req) → `embedding`, `dimensions` | `gemini-embedding-001` (default, text), `gemini-embedding-2-preview` (multimodal — reaches API as text only) | `taskType` (8 enums), `outputDimensionality` (768/1536/3072) |
 | Style Reference | `style-reference` | utility · **sync** | `gemini-2.5-flash:generateContent` | **no input port** → `image` (Reference), `style_description` (Style) | fixed `gemini-2.5-flash` | `filePath` (req), `mode`, `manual_description`, `focus`, `strength` |
 
@@ -53,7 +53,7 @@ One row per Nebula Google node. IDs, ports, and param keys are ground-truth from
 Defaults, ranges, and enums per node, straight from `node_definitions.json` + handler behavior.
 
 ### `gemini-chat`
-- `model` (enum, req, default `gemini-2.5-flash`) — six values; see table. The display picks the family.
+- `model` (enum, req, default `gemini-3.5-flash`) — seven values; see table (updated 2026-06-10: `gemini-3.5-flash` is the new stable default, replacing `gemini-2.5-flash`; `gemini-3.1-flash-lite` replaced the old `gemini-3.1-flash-lite-preview` id). The display picks the family.
 - `max_tokens` (int, default 8192, 1–65535) → `generationConfig.maxOutputTokens`.
 - `temperature` (float, default 1, 0–2, step 0.1). Keep at 1.0 for Gemini 3 (lowering can loop/degrade).
 - `system` (textarea) → `systemInstruction`.
@@ -95,7 +95,7 @@ Params split three ways in the def (this is a dual-provider node):
 - Sends `responseModalities: ["AUDIO","TEXT"]`.
 
 ### `gemini-tts`
-- `model` (enum, default `gemini-2.5-flash-preview-tts`) or `gemini-2.5-pro-preview-tts`.
+- `model` (enum, default `gemini-2.5-flash-preview-tts`): `gemini-3.1-flash-tts-preview` (added 2026-06-10) · `gemini-2.5-flash-preview-tts` · `gemini-2.5-pro-preview-tts`.
 - `voiceName` (enum, default `Kore`) — **30 prebuilt voices**, each labeled with a character: e.g. `Kore` (Firm), `Puck` (Upbeat), `Zephyr` (Bright), `Charon` (Informative), `Fenrir` (Excitable), `Leda` (Youthful), `Aoede` (Breezy), `Enceladus` (Breathy), `Algieba` (Smooth), `Sulafat` (Warm), `Achird` (Friendly), `Gacrux` (Mature) … through `Sadaltager` (Knowledgeable). Pick by the vibe label.
 - Input: `text` (req) — this is the script to speak. Output: `audio` (WAV).
 - Single-speaker only; sends `speechConfig.voiceConfig.prebuiltVoiceConfig.voiceName`.
@@ -154,7 +154,7 @@ Never promise these through the current nodes — they exist in the Google API b
 - **Nano Banana:** image-search grounding and explicit `thinkingLevel` control are not surfaced (text-to-image, edit, and multi-image compose are).
 - **Imagen edit / inpaint / customize / upscale:** not available — those live in **Vertex AI**, not the Gemini Developer API Nebula targets. (Not a Nebula gap, an API-surface boundary.)
 - **Veo:** **reference images (up to 3)** and **video extension (longer-than-8 s clips, up to ~148 s)** are not exposed on the direct path; negative prompt only via the FAL route.
-- **TTS:** **multi-speaker (2-voice) dialogue** and the **3.1 Flash TTS** model are not surfaced — single-speaker, 2.5 Flash/Pro only.
+- **TTS:** **multi-speaker (2-voice) dialogue** is not surfaced — single-speaker only (the 3.1 Flash TTS preview model joined the enum 2026-06-10).
 - **Lyria:** **Lyria RealTime** (streaming/WebSocket music, weighted-prompt steering) is not exposed — only the batch Clip/Pro models.
 - **Embeddings:** **true multimodal embedding** (image/audio/video/PDF via Embedding 2) only reaches the API as text here.
 - **Operational endpoints — none:** no Live API (realtime voice), no Computer Use, no File Search / managed RAG, no Batch API, no context caching, no token counting.
@@ -173,7 +173,7 @@ Prompt-writing depth lives in topic files — load the relevant one before autho
 - **`reference/model-ids.md`** — full model-ID catalog incl. Live, computer-use, deep-research (broader than the 8 Nebula nodes).
 - **`reference/official-docs.md`** — canonical ai.google.dev URLs to fetch when content smells stale.
 
-These topic files are prompt-craft references synthesized 2026-04-16 and may lag the live API; the node IDs/params in **this** SKILL.md were re-verified against the repo on 2026-06-04 and are authoritative for wiring.
+These topic files are prompt-craft references synthesized 2026-04-16 and may lag the live API; the node IDs/params in **this** SKILL.md were re-verified against the repo on 2026-06-04 (model enums updated 2026-06-10) and are authoritative for wiring.
 
 ## Sources
 

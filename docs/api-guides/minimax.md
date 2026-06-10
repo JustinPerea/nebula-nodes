@@ -5,21 +5,21 @@
 ## What you can make
 
 **Video** (this is everything Nebula currently wires up)
-- **Text-to-video** — describe a scene in words and get a 6s or 10s clip at 768P or 1080P, powered by Hailuo 2.3 or Hailuo 02.
+- **Text-to-video** — describe a scene in words and get a 6s or 10s clip at 768P or 1080P, powered by Hailuo 2.3, Hailuo 2.3 Fast, or Hailuo 02.
 - **Image-to-video** — hand it a starting frame (a photo or an image from an upstream node) plus a prompt, and it animates from that first frame.
 - **Subject-reference video** — give it a photo of a person's face and a prompt; the clip keeps that character's likeness consistent (model `S2V-01`).
 - Camera direction works inside the prompt itself — phrases like `[pan]`, `[zoom]`, `[static]` steer the shot.
 
 **Not yet in Nebula** (the MiniMax API offers these, but no Nebula node calls them — see the coverage table): text-to-speech and voice cloning, music generation, image generation, the chat/LLM models, first-and-last-frame video, and the templated "video agent." See *API coverage* below if you want the full picture.
 
-## Nodes available in Nebula (3)
+## Nodes available in Nebula (3) (updated 2026-06-10)
 
 All three are **video-gen** nodes, all share one backend handler, and all hit the same endpoint (`POST /v1/video_generation`) — Nebula picks the mode based on which input you connect.
 
 | Node (as shown in app) | Node ID | Type | Key inputs | Notable params | Use it for |
 |---|---|---|---|---|---|
-| **MiniMax T2V** | `minimax-t2v` | video-gen | `Prompt` (Text, required) | `model` (Hailuo 2.3 / Hailuo 02), `duration` (6 / 10s), `resolution` (768P / 1080P) | Generating a clip purely from a written description. |
-| **MiniMax I2V** | `minimax-i2v` | video-gen | `First Frame` (Image, required), `Prompt` (Text, required) | `model` (Hailuo 2.3 / Hailuo 02), `duration` (6 / 10s), `resolution` (768P / 1080P) | Animating a still image, using it as the opening frame. |
+| **MiniMax T2V** | `minimax-t2v` | video-gen | `Prompt` (Text, required) | `model` (Hailuo 2.3 / Hailuo 2.3 Fast / Hailuo 02 legacy), `duration` (6 / 10s), `resolution` (768P / 1080P) | Generating a clip purely from a written description. |
+| **MiniMax I2V** | `minimax-i2v` | video-gen | `First Frame` (Image, required), `Prompt` (Text, required) | `model` (Hailuo 2.3 / Hailuo 2.3 Fast / Hailuo 02 legacy), `duration` (6 / 10s), `resolution` (768P / 1080P) | Animating a still image, using it as the opening frame. |
 | **MiniMax S2V** | `minimax-s2v` | video-gen | `Character Image` (Image, required), `Prompt` (Text, required) | `model` (`S2V-01` only) — no duration/resolution controls | Keeping one person's face consistent across a generated clip. |
 
 Notes grounded in the registry:
@@ -53,11 +53,11 @@ Notes grounded in the registry:
 
 | Capability / Endpoint | In the API | In Nebula | Notes |
 |---|---|---|---|
-| Text-to-video (`/v1/video_generation`, T2V) | Yes | **full** | `minimax-t2v`. Hailuo 2.3 / Hailuo 02 exposed. |
+| Text-to-video (`/v1/video_generation`, T2V) | Yes | **full** | `minimax-t2v`. Hailuo 2.3 / 2.3 Fast / 02 exposed. |
 | Image-to-video (first frame) | Yes | **full** | `minimax-i2v`. |
 | Subject-reference video (`S2V-01`) | Yes | **full** | `minimax-s2v`, character/face only. |
 | First-and-last-frame video (`last_frame_image`) | Yes | **none** | API supports a start+end frame mode; no Nebula node exposes `last_frame_image`. |
-| `Hailuo-2.3-Fast` model | Yes | **none** | Faster video model in the API; not in the node's model enum. |
+| `Hailuo-2.3-Fast` model | Yes | **full** | `MiniMax-Hailuo-2.3-Fast` joined the t2v/i2v model enums 2026-06-10. |
 | `prompt_optimizer` toggle | Yes | **none** | API auto-optimizes prompts; not surfaced as a node param. |
 | Director/legacy video models (`T2V-01-Director`, `I2V-01-Director`, `I2V-01-live`) | Yes | **none** | Not in the Nebula model enums. |
 | Video Generation Agent (`/v1/.../video-agent`, templates) | Yes | **none** | Templated action clips (Diving, Climbing, etc.) — no node. |
@@ -70,9 +70,9 @@ Notes grounded in the registry:
 | Chat / LLM text models (MiniMax M-series, OpenAI/Anthropic-compatible) | Yes | **none** | No text node uses MiniMax. |
 | File management (upload/list/retrieve/delete) | Yes | **partial** | Handler only calls `/v1/files/retrieve/{id}` to fetch the finished video; upload/list/delete unused. |
 
-**Coverage: ~12% of the MiniMax (Hailuo) API surface is exposed in Nebula.** (Of roughly ten capability families — text/LLM, video, video-agent, sync-TTS, async-TTS, voice-cloning, voice-design, image, music, file-management — Nebula meaningfully uses only video generation, and even there it skips first-last-frame, the fast model, the video agent, and `prompt_optimizer`.)
+**Coverage: ~12% of the MiniMax (Hailuo) API surface is exposed in Nebula.** (Of roughly ten capability families — text/LLM, video, video-agent, sync-TTS, async-TTS, voice-cloning, voice-design, image, music, file-management — Nebula meaningfully uses only video generation, and even there it skips first-last-frame, the video agent, and `prompt_optimizer`.)
 
-**Notable unused capabilities:** the entire **audio stack** (TTS in 40+ languages, voice cloning, voice design), **music generation**, **image generation** (`image-01`), the **chat/LLM M-series models**, the **first-and-last-frame** video mode, the **`Hailuo-2.3-Fast`** model, and the **templated Video Agent**.
+**Notable unused capabilities:** the entire **audio stack** (TTS in 40+ languages, voice cloning, voice design), **music generation**, **image generation** (`image-01`), the **chat/LLM M-series models**, the **first-and-last-frame** video mode, and the **templated Video Agent**.
 
 ## Agent skill coverage
 
@@ -80,7 +80,7 @@ Notes grounded in the registry:
 
 What it covers:
 - **The three node IDs and their ports** — `minimax-t2v` (`prompt`→`video`), `minimax-i2v` (`first_frame_image` + `prompt`→`video`), `minimax-s2v` (`subject_reference` + `prompt`→`video`) — and the rule that the *connected input* selects the mode (so an agent doesn't expect, e.g., a duration param to work on S2V).
-- **Param value sets and constraints** — model enums (Hailuo 2.3 / Hailuo 02; S2V-01 only), `duration` ∈ {6, 10}, `resolution` ∈ {768P, 1080P}, and the 10s-only-at-768P / 1080P-only-at-6s constraint.
+- **Param value sets and constraints** — model enums (Hailuo 2.3 / Hailuo 2.3 Fast / Hailuo 02; S2V-01 only), `duration` ∈ {6, 10}, `resolution` ∈ {768P, 1080P}, and the 10s-only-at-768P / 1080P-only-at-6s constraint.
 - **The async lifecycle** — these are long-running poll nodes (minutes); submit → poll → download.
 - **In-prompt camera syntax** (`[pan]`, `[zoom]`, `[static]`) as a steering lever.
 - **Scope boundary** — MiniMax-in-Nebula is **video only**; the API's TTS, music, and image generation are not wired as nodes, so an agent shouldn't hallucinate one.

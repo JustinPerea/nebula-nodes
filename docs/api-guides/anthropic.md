@@ -12,11 +12,11 @@ Anthropic's Claude is a **text-generation** model. In Nebula it gives you one th
 
 It does **not** generate images, video, audio, or 3D itself — those come from other provider nodes. Claude is the "brain" you wire in to write, plan, and describe between the visual nodes.
 
-## Nodes available in Nebula (1)
+## Nodes available in Nebula (1) (updated 2026-06-10)
 
 | Node (as shown in app) | Node ID | Type | Key inputs | Notable params | Use it for |
 |---|---|---|---|---|---|
-| Claude | `claude-chat` | text-gen | `messages` (Text, required), `images` (Image, optional, multiple) | `model` (Opus 4.7 / Sonnet 4.6 / Haiku 4.5 / Opus 4.6 legacy), `max_tokens`, `temperature`, `system` (system prompt), `top_p`, `stop_sequences`, `extended_thinking` + `thinkingBudget` | Writing, summarizing, translating, captioning images, and drafting prompts to feed other nodes |
+| Claude | `claude-chat` | text-gen | `messages` (Text, required), `images` (Image, optional, multiple) | `model` (Fable 5 flagship / Opus 4.8 / Sonnet 4.6 / Haiku 4.5 / Opus 4.7 legacy / Opus 4.6 legacy), `max_tokens`, `temperature`, `system` (system prompt), `top_p`, `stop_sequences`, `extended_thinking` + `thinkingBudget` (hidden on Fable 5 — always-on adaptive thinking) | Writing, summarizing, translating, captioning images, and drafting prompts to feed other nodes |
 
 Output port: `text` (Text) — the written response, streamed token-by-token as it generates.
 
@@ -35,7 +35,7 @@ Output port: `text` (Text) — the written response, streamed token-by-token as 
 
 **Wiring it up.** Connect a Text source into the `messages` port (this is your prompt / question). Optionally connect one or more Image outputs into the `images` port to let Claude see them. Run the graph; the written answer flows out of the `text` port and can feed any node that accepts Text.
 
-**Pick a model.** Default is **Claude Sonnet 4.6** (fast and capable — good for almost everything). Use **Claude Opus 4.7** for the hardest reasoning, **Claude Haiku 4.5** when you want the fastest/cheapest pass, or **Claude Opus 4.6 (legacy)** if you specifically need it.
+**Pick a model.** Default is **Claude Sonnet 4.6** (fast and capable — good for almost everything). Use **Claude Fable 5** (the flagship, GA 2026-06-09 — note it thinks adaptively on its own, so the Extended Thinking toggle doesn't appear for it) or **Claude Opus 4.8** for the hardest reasoning, **Claude Haiku 4.5** when you want the fastest/cheapest pass, or **Claude Opus 4.7 / 4.6 (legacy)** if you specifically need them.
 
 ### Example recipes
 
@@ -46,7 +46,7 @@ Type a rough idea into a Text node ("a lighthouse in a storm, moody"), feed it i
 Take the image output of any generator node and connect it to the `images` port of `claude-chat`. Put *"Write a one-sentence caption and a short alt-text for this image."* into `messages`. The `text` output is ready-made caption copy.
 
 **3. Hard planning step with extended thinking.**
-For a multi-step request ("plan a 5-shot product video and write a prompt for each shot"), enable **Extended Thinking** on the node and give it a `thinkingBudget` (e.g. 10000). Claude reasons through the plan before answering. Feed each resulting shot prompt into your video nodes. *(Note: the final answer is what streams to the `text` port — the internal reasoning itself is not surfaced as output in Nebula today.)*
+For a multi-step request ("plan a 5-shot product video and write a prompt for each shot"), enable **Extended Thinking** on the node and give it a `thinkingBudget` (e.g. 10000). Claude reasons through the plan before answering. Feed each resulting shot prompt into your video nodes. *(Note: the final answer is what streams to the `text` port — the internal reasoning itself is not surfaced as output in Nebula today. On Claude Fable 5 the toggle doesn't appear at all — it uses always-on adaptive thinking.)*
 
 ## API coverage — what Nebula uses vs. what Anthropic (Claude) offers
 
@@ -57,7 +57,7 @@ For a multi-step request ("plan a 5-shot product video and write a prompt for ea
 | Vision / image input | Yes | full | `images` port supports base64 data URLs, http(s) URLs, and local paths (PNG/JPG/JPEG/WebP). |
 | System prompt | Yes | full | `system` param → top-level `system` field. |
 | Sampling: `temperature`, `top_p`, `stop_sequences` | Yes | partial | All three wired. `top_k` is **not** exposed. |
-| Extended thinking | Yes | partial | Toggle + `thinkingBudget` wired; but the thinking deltas are filtered out, so the reasoning chain isn't shown — only the final text. `adaptive` thinking mode not exposed. |
+| Extended thinking | Yes | partial | Toggle + `thinkingBudget` wired for the pre-Fable models; the thinking deltas are filtered out, so the reasoning chain isn't shown — only the final text. Claude Fable/Mythos 5 use always-on adaptive thinking and do **not** support the extended-thinking param — the handler suppresses the thinking block for those models and the UI hides `extended_thinking`/`thinkingBudget` for them (2026-06-10). |
 | Multi-turn conversation history | Yes | none | The node sends a single user turn built from `messages` text; no assistant/prior-turn history is constructed. |
 | Tool use / function calling (custom/client tools) | Yes | none | `tools` / `tool_choice` not exposed — Claude can't call your functions from the node. |
 | Server tools: web search, web fetch, code execution, tool search | Yes | none | None of the Anthropic-executed tools are wired. |
@@ -85,7 +85,7 @@ Notable unused capabilities: tool use / function calling (custom + server tools 
 What it covers:
 
 - **The node contract** — node ID `claude-chat`, category `text-gen`, the `messages` (required) and `images` (optional, multiple) input ports, the `text` output port, and the streaming execution pattern.
-- **Param reference** — exact keys and ranges: `model` (the valid enum values), `max_tokens` (1–200000, required), `temperature` (0–1), `top_p` (silently dropped), `stop_sequences` (comma-separated string), `system`, and the `extended_thinking` + `thinkingBudget` (min 1024) pairing — including that thinking forces `temperature=1` and that the thinking chain is filtered out.
+- **Param reference** — exact keys and ranges: `model` (the valid enum values), `max_tokens` (1–200000, required), `temperature` (0–1), `top_p` (silently dropped), `stop_sequences` (comma-separated string), `system`, and the `extended_thinking` + `thinkingBudget` (min 1024) pairing — including that thinking forces `temperature=1`, that the thinking chain is filtered out, and that Fable/Mythos 5 don't take the param at all (always-on adaptive thinking; handler suppresses it, UI hides it).
 - **Image input formats** — base64 data URLs, http(s) URLs, local file paths; PNG/JPG/JPEG/WebP.
 - **Wiring patterns** — text → prompt expansion → image node; image → caption; plan → fan-out to multiple media nodes.
 - **Capability boundaries** — single-turn only, no tools, no JSON-schema output, no PDF input, and a hardcoded model list (may drift from the live `GET /v1/models`).

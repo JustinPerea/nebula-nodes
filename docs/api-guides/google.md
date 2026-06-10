@@ -23,18 +23,18 @@
 - Chat, reasoning, summarization, and structured (JSON) output from the Gemini text models, with adjustable "thinking" effort and vision input (drop images in for it to describe or analyze).
 - Vector embeddings of text for semantic search, RAG, clustering, and classification (Gemini Embeddings).
 
-## Nodes available in Nebula (8)
+## Nodes available in Nebula (8) (updated 2026-06-10)
 
 All eight nodes authenticate with the same `GOOGLE_API_KEY` and call Google's `generativelanguage.googleapis.com` endpoints directly.
 
 | Node (as shown in app) | Node ID | Type | Key inputs | Notable params | Use it for |
 |---|---|---|---|---|---|
-| Gemini | `gemini-chat` | text-gen | `messages` (text), `images` | `model` (Gemini 3.1 Pro / 3 Flash / 3.1 Flash Lite / 2.5 Pro / 2.5 Flash / 2.5 Flash Lite), `max_tokens`, `temperature`, `system`, `thinkingLevel`, `thinkingBudget`, `top_p`, `top_k`, `stop_sequences`, `response_format` (text / JSON) | Chat, reasoning, summarization, JSON extraction, describing/analyzing images |
+| Gemini | `gemini-chat` | text-gen | `messages` (text), `images` | `model` (Gemini 3.5 Flash default / 3.1 Pro / 3 Flash / 3.1 Flash Lite / 2.5 Pro / 2.5 Flash / 2.5 Flash Lite), `max_tokens`, `temperature`, `system`, `thinkingLevel`, `thinkingBudget`, `top_p`, `top_k`, `stop_sequences`, `response_format` (text / JSON) | Chat, reasoning, summarization, JSON extraction, describing/analyzing images |
 | Imagen 4 | `imagen-4-generate` | image-gen | `prompt` | `model` (Imagen 4 / Ultra / Fast), `aspectRatio` (1:1, 4:3, 3:4, 16:9, 9:16), `numberOfImages`, `seed`, `enhancePrompt`, `imageSize` (1K / 2K), `personGeneration` | Clean text-to-image when you don't need editing or references |
 | Nano Banana | `nano-banana` | image-gen | `prompt`, `images` | `model` (Nano Banana 2 / Nano Banana Pro / Nano Banana 2.5 Flash), `aspect_ratio` (1:1 … 21:9, plus 1:4/4:1/1:8/8:1 on Nano Banana 2), `imageSize` (512 / 1K / 2K / 4K) | Image editing, multi-image composition, character/product consistency, legible in-image text |
 | Veo 3.1 | `veo-3` | video-gen | `prompt`, `image` (First Frame), `last_frame` (Last Frame) | `model` (Veo 3.1 / Fast / Lite / Veo 3 / Veo 2), `aspectRatio` (16:9, 9:16), `duration` (4/6/8s), `resolution` (720p / 1080p / 4K), `personGeneration`, `seed` | Cinematic clips with sound, image-to-video, first→last frame interpolation |
 | Lyria 3 | `lyria-3` | audio-gen | `prompt`, `images` | `model` (Lyria 3 Clip 30s / Lyria 3 Pro full song), `outputFormat` (MP3 / WAV) | Background music, songs with lyrics, mood-from-image scoring |
-| Gemini TTS | `gemini-tts` | audio-gen | `text` | `model` (2.5 Flash TTS / 2.5 Pro TTS), `voiceName` (30 voices: Kore, Puck, Zephyr, Charon, …) | Voiceover, narration, spoken-word from a script |
+| Gemini TTS | `gemini-tts` | audio-gen | `text` | `model` (3.1 Flash TTS preview / 2.5 Flash TTS default / 2.5 Pro TTS), `voiceName` (30 voices: Kore, Puck, Zephyr, Charon, …) | Voiceover, narration, spoken-word from a script |
 | Gemini Embeddings | `gemini-embeddings` | utility | `text` | `model` (Embedding 001 / Embedding 2 multimodal), `taskType` (Semantic Similarity, Retrieval Query/Document, Classification, Clustering, Code Retrieval, Question Answering, Fact Verification), `outputDimensionality` (768 / 1536 / 3072) | Semantic search, RAG, clustering, similarity scoring |
 | Style Reference | `style-reference` | utility | _(none — uploads a file)_ | `filePath` (reference image), `mode` (Auto via Gemini / Manual / Image only), `focus` (all / palette / lighting / medium), `strength` (0–1) | Turn one image into a reusable style description + reference to feed image generators |
 
@@ -87,7 +87,7 @@ Restart the backend so it picks up the new value. One key covers all eight nodes
 | Video — Veo (text/image-to-video, last frame) | Yes | **partial** | `veo-3` covers t2v, first frame, last frame, aspect/resolution/duration/seed. Missing: **reference images** (up to 3), **video extension** (up to ~148s), negative prompt (direct path) |
 | Music — Lyria 3 (clip + full song) | Yes | **full** | `lyria-3` covers both models, image input, MP3/WAV. (No control over weighted-prompt steering, but that's a realtime-only feature.) |
 | Music — Lyria RealTime (streaming/WebSocket) | Yes | **none** | Realtime music over the Live API is not exposed |
-| Text-to-speech (single speaker) | Yes | **partial** | `gemini-tts` does single-speaker with 30 voices; **multi-speaker (2-voice)** dialogue and the 3.1 Flash TTS model are not surfaced |
+| Text-to-speech (single speaker) | Yes | **partial** | `gemini-tts` does single-speaker with 30 voices (incl. the 3.1 Flash TTS preview model, added 2026-06-10); **multi-speaker (2-voice)** dialogue is not surfaced |
 | Embeddings (text + multimodal) | Yes | **partial** | `gemini-embeddings` covers task types + dimensionality; multimodal embedding (image/audio/video/PDF via Embedding 2) only reaches the API as text |
 | Live API (realtime audio dialogue) | Yes | **none** | No realtime voice/agent node |
 | Computer Use (UI automation) | Yes | **none** | Not exposed |
@@ -107,7 +107,7 @@ Notable unused capabilities: Veo **reference images** and **video extension** (l
 
 What it covers:
 - **All 8 nodes by Nebula ID** — `gemini-chat`, `imagen-4-generate`, `nano-banana`, `veo-3`, `lyria-3`, `gemini-tts`, `gemini-embeddings`, and `style-reference` — with their param keys (the previously-missing TTS, Lyria, Embeddings, and Style Reference nodes are now documented, not just catalog entries).
-- **Locked model IDs** — all 24 model IDs are pinned to the literal `-preview` enum strings the nodes actually ship (no blind suffix-stripping).
+- **Locked model IDs** — all 26 model IDs are pinned to the literal enum strings the nodes actually ship (preview ids keep their `-preview` suffix, stable ids like `gemini-3.5-flash` / `gemini-3.1-flash-lite` don't carry one — no blind suffix-stripping either way; refreshed 2026-06-10).
 - **Prompting depth** — the preserved topic files cover Gemini text, Imagen, Nano Banana, and Veo prompt structure and model-picking, with Nebula hand-off notes.
 - **Capability boundaries** — which advanced features Nebula does *not* surface (Veo references/extension, multi-speaker TTS, tools/grounding), so an agent doesn't promise capabilities the nodes can't deliver.
 
