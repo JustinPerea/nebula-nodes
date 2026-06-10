@@ -249,7 +249,7 @@ async def handle_ideogram_character(
     _field(
         node, fields,
         "aspect_ratio", "style_type", "magic_prompt", "negative_prompt",
-        "rendering_speed", "num_images", "seed",
+        "rendering_speed", "num_images", "seed", "custom_model_uri",
     )
     files = await _multi_file_parts("character_reference_images", inputs.get("reference_images"))
     if not files:
@@ -337,3 +337,231 @@ def expand_character_inputs(
         node.params["seed"] = expanded["seed"]
 
     return new_inputs
+
+
+# ---------------------------------------------------------------------------
+# Direct-only capabilities (no FAL equivalents): describe, magic prompt,
+# transparent generation, remove background, layerize text, prompt-based edit,
+# and custom model training. All verified against developer.ideogram.ai
+# openapi.json on 2026-06-10.
+# ---------------------------------------------------------------------------
+
+
+async def _post_json(path: str, api_key: str, body: dict[str, Any]) -> dict[str, Any]:
+    """POST an application/json request (magic-prompt, datasets, train-model)."""
+    async with httpx.AsyncClient(timeout=120.0) as client:
+        resp = await client.post(
+            f"{IDEOGRAM_API_BASE}{path}",
+            headers={"Api-Key": api_key, "Content-Type": "application/json"},
+            json=body,
+        )
+    if resp.status_code != 200:
+        raise RuntimeError(f"Ideogram API error {resp.status_code}: {resp.text}")
+    return resp.json()
+
+
+def _json_prompt_outputs(json_prompt: dict[str, Any]) -> dict[str, Any]:
+    """Split a V4JsonPrompt into a readable description + the raw JSON contract."""
+    high_level = str(json_prompt.get("high_level_description") or "").strip()
+    style = str(json_prompt.get("style_description") or "").strip()
+    description = ". ".join(part for part in (high_level, style) if part)
+    return {
+        "description": {"type": "Text", "value": description},
+        "json_prompt": {"type": "Text", "value": json.dumps(json_prompt, ensure_ascii=False)},
+    }
+
+
+async def handle_ideogram_describe(
+    node: GraphNode,
+    inputs: dict[str, PortValueDict],
+    api_keys: dict[str, str],
+    emit: Callable[[ExecutionEvent], Awaitable[None]] | None = None,
+) -> dict[str, Any]:
+    """v4 describe: image -> V4JsonPrompt (caption + style + composition)."""
+    api_key = _require_key(api_keys)
+    fields: dict[str, Any] = {}
+    include_bbox = node.params.get("include_bbox")
+    if include_bbox is not None and include_bbox != "":
+        fields["include_bbox"] = "true" if include_bbox else "false"
+    files = [
+        ("image_file", (await _file_part("image_file", _required_image_ref(inputs, "image", "Image")))[1]),
+    ]
+    result = await _post_multipart("/v1/ideogram-v4/describe", api_key, fields, files)
+    json_prompt = result.get("json_prompt") or {}
+    if not json_prompt:
+        raise RuntimeError(f"Ideogram describe returned no json_prompt: {list(result.keys())}")
+    return _json_prompt_outputs(json_prompt)
+
+
+async def handle_ideogram_magic_prompt(
+    node: GraphNode,
+    inputs: dict[str, PortValueDict],
+    api_keys: dict[str, str],
+    emit: Callable[[ExecutionEvent], Awaitable[None]] | None = None,
+) -> dict[str, Any]:
+    """v4 magic prompt: text -> expanded V4JsonPrompt (the structured 4.0 contract)."""
+    api_key = _require_key(api_keys)
+    body: dict[str, Any] = {"text_prompt": _required_text(inputs, "prompt", "Prompt")}
+    aspect_ratio = node.params.get("aspect_ratio")
+    if aspect_ratio:
+        body["aspect_ratio"] = aspect_ratio
+    result = await _post_json("/v1/ideogram-v4/magic-prompt", api_key, body)
+    json_prompt = result.get("json_prompt") or {}
+    if not json_prompt:
+        raise RuntimeError(f"Ideogram magic-prompt returned no json_prompt: {list(result.keys())}")
+    return _json_prompt_outputs(json_prompt)
+
+
+async def handle_ideogram_transparent(
+    node: GraphNode,
+    inputs: dict[str, PortValueDict],
+    api_keys: dict[str, str],
+    emit: Callable[[ExecutionEvent], Awaitable[None]] | None = None,
+) -> dict[str, Any]:
+    """v3 generate-transparent: prompt -> PNG with a transparent background."""
+    api_key = _require_key(api_keys)
+    fields: dict[str, Any] = {"prompt": _required_text(inputs, "prompt", "Prompt")}
+    _field(
+        node, fields,
+        "aspect_ratio", "upscale_factor", "rendering_speed", "magic_prompt",
+        "negative_prompt", "num_images", "seed",
+    )
+    result = await _post_multipart("/v1/ideogram-v3/generate-transparent", api_key, fields, [])
+    return await _save_first_image(result)
+
+
+async def handle_ideogram_remove_background(
+    node: GraphNode,
+    inputs: dict[str, PortValueDict],
+    api_keys: dict[str, str],
+    emit: Callable[[ExecutionEvent], Awaitable[None]] | None = None,
+) -> dict[str, Any]:
+    api_key = _require_key(api_keys)
+    files = [await _file_part("image", _required_image_ref(inputs, "image", "Image"))]
+    result = await _post_multipart("/v1/remove-background", api_key, {}, files)
+    return await _save_first_image(result)
+
+
+async def handle_ideogram_layerize(
+    node: GraphNode,
+    inputs: dict[str, PortValueDict],
+    api_keys: dict[str, str],
+    emit: Callable[[ExecutionEvent], Awaitable[None]] | None = None,
+) -> dict[str, Any]:
+    """Layerize Text: strips rendered text from an image and returns the clean
+    base plate (the editable text layers live in Ideogram's own editor)."""
+    api_key = _require_key(api_keys)
+    fields: dict[str, Any] = {}
+    _field(node, fields, "seed")
+    prompt_input = inputs.get("prompt")
+    if prompt_input and prompt_input.value:
+        fields["prompt"] = str(prompt_input.value)
+    files = [await _file_part("image", _required_image_ref(inputs, "image", "Image"))]
+    result = await _post_multipart("/v1/ideogram-v3/layerize-text", api_key, fields, files)
+    base_url = result.get("base_image_url")
+    if not base_url:
+        raise RuntimeError(f"Ideogram layerize returned no base_image_url: {list(result.keys())}")
+    return await _save_first_image({"data": [{"url": base_url}]})
+
+
+async def handle_ideogram_edit_prompt(
+    node: GraphNode,
+    inputs: dict[str, PortValueDict],
+    api_keys: dict[str, str],
+    emit: Callable[[ExecutionEvent], Awaitable[None]] | None = None,
+) -> dict[str, Any]:
+    """/v1/edit: maskless, prompt-driven editing of one or more images."""
+    api_key = _require_key(api_keys)
+    fields: dict[str, Any] = {"prompt": _required_text(inputs, "prompt", "Prompt")}
+    _field(node, fields, "magic_prompt", "aspect_ratio", "num_images", "seed")
+    transparent = node.params.get("transparent_background")
+    if transparent is not None and transparent != "":
+        fields["transparent_background"] = "true" if transparent else "false"
+    files = await _multi_file_parts("images", inputs.get("images"))
+    single = inputs.get("image")
+    if single and single.value:
+        files = [await _file_part("images", str(single.value))] + files
+    if not files:
+        raise ValueError("Image input is required (connect Image or Images)")
+    result = await _post_multipart("/v1/edit", api_key, fields, files)
+    return await _save_first_image(result)
+
+
+async def handle_ideogram_train_model(
+    node: GraphNode,
+    inputs: dict[str, PortValueDict],
+    api_keys: dict[str, str],
+    emit: Callable[[ExecutionEvent], Awaitable[None]] | None = None,
+) -> dict[str, Any]:
+    """Custom model training: create dataset -> upload assets -> train -> poll.
+
+    Emits progress while polling GET /models/{model_id} until the model reaches
+    COMPLETED (or fails on ERRORED/ARCHIVED). Outputs the model id and the
+    custom_model_uri consumable by ideogram-character's Custom Model URI param.
+    """
+    import asyncio
+
+    from models.events import ProgressEvent
+
+    api_key = _require_key(api_keys)
+    model_name = str(node.params.get("model_name") or "").strip()
+    if not model_name:
+        raise ValueError("model_name is required for Ideogram model training")
+
+    images_input = inputs.get("images")
+    if not images_input or not images_input.value:
+        raise ValueError("Training images are required")
+    raw = images_input.value if isinstance(images_input.value, list) else [images_input.value]
+    refs = [str(v) for v in raw if v]
+    if not refs:
+        raise ValueError("Training images are required")
+
+    async def noop_emit(event: ExecutionEvent) -> None:
+        pass
+
+    _emit = emit or noop_emit
+
+    # 1. Create the dataset.
+    dataset = await _post_json("/datasets", api_key, {"name": model_name})
+    dataset_id = dataset.get("dataset_id")
+    if not dataset_id:
+        raise RuntimeError(f"Ideogram dataset creation failed: {dataset}")
+
+    # 2. Upload the training assets (repeated `files` parts).
+    files = [await _file_part("files", ref) for ref in refs]
+    upload = await _post_multipart(f"/datasets/{dataset_id}/upload_assets", api_key, {}, files)
+    if upload.get("success_count", 0) == 0:
+        raise RuntimeError(f"Ideogram asset upload failed: {upload}")
+
+    # 3. Start training.
+    train = await _post_json(
+        "/v1/ideogram-v3/train-model", api_key,
+        {"dataset_id": dataset_id, "model_name": model_name},
+    )
+    model_id = train.get("model_id")
+    if not model_id:
+        raise RuntimeError(f"Ideogram training start failed: {train}")
+
+    # 4. Poll until COMPLETED (statuses: CREATING/DRAFT/TRAINING/COMPLETED/ERRORED/ARCHIVED).
+    max_polls = 360
+    poll_interval = 30.0
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        for poll_num in range(1, max_polls + 1):
+            await asyncio.sleep(poll_interval)
+            resp = await client.get(
+                f"{IDEOGRAM_API_BASE}/models/{model_id}", headers={"Api-Key": api_key}
+            )
+            if resp.status_code != 200:
+                raise RuntimeError(f"Ideogram model poll failed ({resp.status_code}): {resp.text}")
+            model = (resp.json() or {}).get("model") or {}
+            status = model.get("status", "")
+            await _emit(ProgressEvent(node_id=node.id, value=min(poll_num / max_polls, 0.99)))
+            if status == "COMPLETED" and model.get("is_available_for_generation"):
+                return {
+                    "model_id": {"type": "Text", "value": str(model_id)},
+                    "custom_model_uri": {"type": "Text", "value": str(model.get("custom_model_uri") or "")},
+                }
+            if status in ("ERRORED", "ARCHIVED"):
+                raise RuntimeError(f"Ideogram training failed: status={status}")
+
+    raise RuntimeError(f"Ideogram training timed out after {max_polls} polls")

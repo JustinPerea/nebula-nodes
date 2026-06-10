@@ -20,10 +20,17 @@ from handlers.ideogram import (
     IDEOGRAM_API_BASE,
     expand_character_inputs,
     handle_ideogram_character,
+    handle_ideogram_describe,
     handle_ideogram_edit,
+    handle_ideogram_edit_prompt,
+    handle_ideogram_layerize,
+    handle_ideogram_magic_prompt,
     handle_ideogram_reframe,
     handle_ideogram_remix,
+    handle_ideogram_remove_background,
     handle_ideogram_replace_background,
+    handle_ideogram_train_model,
+    handle_ideogram_transparent,
     handle_ideogram_upscale,
     handle_ideogram_v4_generate,
 )
@@ -445,3 +452,243 @@ async def test_character_router_requires_refs_or_character():
             {"prompt": PortValueDict(type="Text", value="x")},
             {"FAL_KEY": "fal"},
         )
+
+
+# ---------------------------------------------------------------------------
+# Direct-only capabilities: describe, magic prompt, transparent, remove-bg,
+# layerize, prompt edit, custom model training
+# ---------------------------------------------------------------------------
+
+
+def _json_prompt_response() -> MagicMock:
+    resp = MagicMock()
+    resp.status_code = 200
+    resp.json.return_value = {
+        "json_prompt": {
+            "high_level_description": "A neon diner sign at dusk",
+            "style_description": "retro photographic, warm tungsten palette",
+            "compositional_deconstruction": {"background": "dusk sky", "elements": []},
+        },
+        "aspect_ratio": "16x9",
+    }
+    return resp
+
+
+@pytest.mark.asyncio
+async def test_describe_returns_description_and_json_prompt():
+    patcher, client = _patch_client(_json_prompt_response())
+    with patcher:
+        result = await handle_ideogram_describe(
+            _make_node("ideogram-describe", {"include_bbox": True}),
+            {"image": PortValueDict(type="Image", value=RED_PIXEL_URI)},
+            _KEYS,
+        )
+
+    url = client.post.call_args.args[0]
+    assert url.endswith("/v1/ideogram-v4/describe")
+    kwargs = _post_kwargs(client)
+    assert kwargs["data"]["include_bbox"] == "true"
+    assert [f[0] for f in kwargs["files"]] == ["image_file"]
+    assert result["description"]["value"] == (
+        "A neon diner sign at dusk. retro photographic, warm tungsten palette"
+    )
+    parsed = json.loads(result["json_prompt"]["value"])
+    assert parsed["high_level_description"] == "A neon diner sign at dusk"
+
+
+@pytest.mark.asyncio
+async def test_magic_prompt_posts_json():
+    patcher, client = _patch_client(_json_prompt_response())
+    with patcher:
+        result = await handle_ideogram_magic_prompt(
+            _make_node("ideogram-magic-prompt", {"aspect_ratio": "16x9"}),
+            {"prompt": PortValueDict(type="Text", value="diner sign")},
+            _KEYS,
+        )
+
+    url = client.post.call_args.args[0]
+    assert url.endswith("/v1/ideogram-v4/magic-prompt")
+    body = _post_kwargs(client)["json"]
+    assert body == {"text_prompt": "diner sign", "aspect_ratio": "16x9"}
+    assert "neon diner" in result["description"]["value"]
+
+
+@pytest.mark.asyncio
+async def test_transparent_body_shape(tmp_path):
+    with patch("handlers.ideogram.get_run_dir", return_value=tmp_path):
+        patcher, client = _patch_client(_ideogram_response())
+        with patcher:
+            await handle_ideogram_transparent(
+                _make_node("ideogram-transparent", {"upscale_factor": "X2", "aspect_ratio": "1x1"}),
+                {"prompt": PortValueDict(type="Text", value="a sticker of a fox")},
+                _KEYS,
+            )
+
+    url = client.post.call_args.args[0]
+    assert url.endswith("/v1/ideogram-v3/generate-transparent")
+    kwargs = _post_kwargs(client)
+    assert kwargs["data"]["prompt"] == "a sticker of a fox"
+    assert kwargs["data"]["upscale_factor"] == "X2"
+    assert not kwargs["files"]
+
+
+@pytest.mark.asyncio
+async def test_remove_background_body_shape(tmp_path):
+    with patch("handlers.ideogram.get_run_dir", return_value=tmp_path):
+        patcher, client = _patch_client(_ideogram_response())
+        with patcher:
+            await handle_ideogram_remove_background(
+                _make_node("ideogram-remove-background"),
+                {"image": PortValueDict(type="Image", value=RED_PIXEL_URI)},
+                _KEYS,
+            )
+
+    url = client.post.call_args.args[0]
+    assert url.endswith("/v1/remove-background")
+    assert [f[0] for f in _post_kwargs(client)["files"]] == ["image"]
+
+
+@pytest.mark.asyncio
+async def test_layerize_downloads_base_plate(tmp_path):
+    resp = MagicMock()
+    resp.status_code = 200
+    resp.json.return_value = {
+        "base_image_url": "https://ideogram.ai/api/images/ephemeral/base.png",
+        "original_image_url": None,
+        "seed": 11,
+    }
+    with patch("handlers.ideogram.get_run_dir", return_value=tmp_path):
+        patcher, client = _patch_client(resp)
+        with patcher:
+            result = await handle_ideogram_layerize(
+                _make_node("ideogram-layerize"),
+                {"image": PortValueDict(type="Image", value=RED_PIXEL_URI)},
+                _KEYS,
+            )
+
+    url = client.post.call_args.args[0]
+    assert url.endswith("/v1/ideogram-v3/layerize-text")
+    assert result["image"]["type"] == "Image"
+    # the base plate URL is what gets downloaded
+    assert client.get.call_args.args[0].endswith("base.png")
+
+
+@pytest.mark.asyncio
+async def test_edit_prompt_accepts_single_or_multi_images(tmp_path):
+    with patch("handlers.ideogram.get_run_dir", return_value=tmp_path):
+        patcher, client = _patch_client(_ideogram_response())
+        with patcher:
+            await handle_ideogram_edit_prompt(
+                _make_node("ideogram-edit-prompt", {"transparent_background": True}),
+                {
+                    "prompt": PortValueDict(type="Text", value="remove the lamp post"),
+                    "image": PortValueDict(type="Image", value=RED_PIXEL_URI),
+                    "images": PortValueDict(type="Image", value=[RED_PIXEL_URI]),
+                },
+                _KEYS,
+            )
+
+    url = client.post.call_args.args[0]
+    assert url.endswith("/v1/edit")
+    kwargs = _post_kwargs(client)
+    assert kwargs["data"]["prompt"] == "remove the lamp post"
+    assert kwargs["data"]["transparent_background"] == "true"
+    # single `image` port leads, then the multi `images` port
+    assert [f[0] for f in kwargs["files"]] == ["images", "images"]
+
+
+@pytest.mark.asyncio
+async def test_edit_prompt_requires_an_image():
+    with pytest.raises(ValueError, match="[Ii]mage"):
+        await handle_ideogram_edit_prompt(
+            _make_node("ideogram-edit-prompt"),
+            {"prompt": PortValueDict(type="Text", value="x")},
+            _KEYS,
+        )
+
+
+@pytest.mark.asyncio
+async def test_train_model_full_flow(tmp_path):
+    """dataset create -> asset upload -> train -> poll to COMPLETED -> outputs."""
+    create_resp = MagicMock(status_code=200)
+    create_resp.json.return_value = {"dataset_id": "ds-1", "name": "my-style"}
+    upload_resp = MagicMock(status_code=200)
+    upload_resp.json.return_value = {"total_count": 2, "success_count": 2, "failure_count": 0}
+    train_resp = MagicMock(status_code=200)
+    train_resp.json.return_value = {"model_id": "mdl-1", "dataset_id": "ds-1", "training_status": "TRAINING"}
+    poll_training = MagicMock(status_code=200)
+    poll_training.json.return_value = {"model": {"model_id": "mdl-1", "status": "TRAINING"}}
+    poll_done = MagicMock(status_code=200)
+    poll_done.json.return_value = {
+        "model": {
+            "model_id": "mdl-1", "status": "COMPLETED",
+            "is_available_for_generation": True,
+            "custom_model_uri": "ideogram://models/mdl-1",
+        }
+    }
+
+    mock_client = AsyncMock()
+    mock_client.post = AsyncMock(side_effect=[create_resp, upload_resp, train_resp])
+    mock_client.get = AsyncMock(side_effect=[poll_training, poll_done])
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
+
+    with patch("handlers.ideogram.httpx.AsyncClient", return_value=mock_client):
+        with patch("asyncio.sleep", new_callable=AsyncMock):
+            result = await handle_ideogram_train_model(
+                _make_node("ideogram-train-model", {"model_name": "my-style"}),
+                {"images": PortValueDict(type="Image", value=[RED_PIXEL_URI, RED_PIXEL_URI])},
+                _KEYS,
+            )
+
+    assert result["model_id"]["value"] == "mdl-1"
+    assert result["custom_model_uri"]["value"] == "ideogram://models/mdl-1"
+    # call order: create dataset, upload assets, start training
+    urls = [c.args[0] for c in mock_client.post.call_args_list]
+    assert urls[0].endswith("/datasets")
+    assert urls[1].endswith("/datasets/ds-1/upload_assets")
+    assert urls[2].endswith("/v1/ideogram-v3/train-model")
+
+
+@pytest.mark.asyncio
+async def test_train_model_errored_status_raises():
+    create_resp = MagicMock(status_code=200)
+    create_resp.json.return_value = {"dataset_id": "ds-1"}
+    upload_resp = MagicMock(status_code=200)
+    upload_resp.json.return_value = {"success_count": 1}
+    train_resp = MagicMock(status_code=200)
+    train_resp.json.return_value = {"model_id": "mdl-1"}
+    poll_err = MagicMock(status_code=200)
+    poll_err.json.return_value = {"model": {"status": "ERRORED"}}
+
+    mock_client = AsyncMock()
+    mock_client.post = AsyncMock(side_effect=[create_resp, upload_resp, train_resp])
+    mock_client.get = AsyncMock(return_value=poll_err)
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
+
+    with patch("handlers.ideogram.httpx.AsyncClient", return_value=mock_client):
+        with patch("asyncio.sleep", new_callable=AsyncMock):
+            with pytest.raises(RuntimeError, match="ERRORED"):
+                await handle_ideogram_train_model(
+                    _make_node("ideogram-train-model", {"model_name": "x"}),
+                    {"images": PortValueDict(type="Image", value=[RED_PIXEL_URI])},
+                    _KEYS,
+                )
+
+
+@pytest.mark.asyncio
+async def test_character_forwards_custom_model_uri(tmp_path):
+    """A trained model URI flows into the v3 generate call (fine-tuned character gen)."""
+    with patch("handlers.ideogram.get_run_dir", return_value=tmp_path):
+        patcher, client = _patch_client(_ideogram_response())
+        with patcher:
+            await handle_ideogram_character(
+                _make_node("ideogram-character", {"custom_model_uri": "ideogram://models/mdl-1"}),
+                {
+                    "prompt": PortValueDict(type="Text", value="x"),
+                    "reference_images": PortValueDict(type="Image", value=[RED_PIXEL_URI]),
+                },
+                _KEYS,
+            )
+    assert _post_kwargs(client)["data"]["custom_model_uri"] == "ideogram://models/mdl-1"

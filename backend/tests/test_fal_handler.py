@@ -232,6 +232,27 @@ async def test_ideogram_suite_registry_contract() -> None:
     assert char_ports["character"]["dataType"] == "Character"
     assert char_ports["character"]["required"] is False
 
+    # Direct-only capabilities (no FAL equivalents): IDEOGRAM_API_KEY only.
+    direct_only = {
+        "ideogram-describe": "/v1/ideogram-v4/describe",
+        "ideogram-magic-prompt": "/v1/ideogram-v4/magic-prompt",
+        "ideogram-transparent": "/v1/ideogram-v3/generate-transparent",
+        "ideogram-remove-background": "/v1/remove-background",
+        "ideogram-layerize": "/v1/ideogram-v3/layerize-text",
+        "ideogram-edit-prompt": "/v1/edit",
+        "ideogram-train-model": "/v1/ideogram-v3/train-model",
+    }
+    for node_id, endpoint in direct_only.items():
+        assert node_id in defs, f"{node_id} missing from registry"
+        assert defs[node_id]["apiEndpoint"] == endpoint
+        assert defs[node_id]["envKeyName"] == "IDEOGRAM_API_KEY"
+        assert defs[node_id]["apiProvider"] == "ideogram"
+
+    # Training output feeds the character node's Custom Model URI directParam.
+    train_outs = {prt["id"] for prt in defs["ideogram-train-model"]["outputPorts"]}
+    assert {"custom_model_uri", "model_id"} <= train_outs
+    assert any(prm["key"] == "custom_model_uri" for prm in defs["ideogram-character"]["directParams"])
+
 
 @pytest.mark.asyncio
 async def test_fal_queue_run_propagates_cancel_to_provider() -> None:

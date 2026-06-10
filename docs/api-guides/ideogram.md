@@ -69,13 +69,30 @@ route the configured key selects).
   to your prompt, and the stored seed applies unless you set one (same
   identity contract as cinema-scene; see `backend/cinema/identity.py`).
 
-## Direct-only capabilities not yet wired
+## Direct-only nodes (IDEOGRAM_API_KEY required, no FAL fallback)
 
-Describe (image→caption), Remove Background, Layerize Text (text→editable
-layers), Generate with Transparent Background, Magic Prompt generation, and
-Custom Model Training (v3 fine-tunes) exist on the direct API but have no
-Nebula nodes yet. The v4 structured `json_prompt` contract (bounding-box
-layout control) is also unexposed — the node sends `text_prompt`.
+The rest of the current API surface is wired as direct-only nodes (added
+2026-06-10):
+
+| Node | Endpoint | What it does |
+|---|---|---|
+| `ideogram-describe` | POST `/v1/ideogram-v4/describe` | Image → caption. Outputs a readable `description` AND the raw v4 `json_prompt` (the structured contract with `compositional_deconstruction` bounding boxes when `include_bbox` is on) |
+| `ideogram-magic-prompt` | POST `/v1/ideogram-v4/magic-prompt` (JSON) | Text → expanded v4 `json_prompt` + readable expanded prompt. Chain into other generators |
+| `ideogram-transparent` | POST `/v1/ideogram-v3/generate-transparent` | Prompt → PNG with a real alpha channel (stickers, logos, overlays). `upscale_factor` X1/X2/X4 |
+| `ideogram-remove-background` | POST `/v1/remove-background` | Ideogram's own subject cutout (distinct from the FAL rembg `remove-background` node) |
+| `ideogram-layerize` | POST `/v1/ideogram-v3/layerize-text` | Strips rendered text from an image and returns the clean base plate (the editable text layers live in Ideogram's own editor — the API returns the base) |
+| `ideogram-edit-prompt` | POST `/v1/edit` | **Maskless** prompt-driven editing ("remove the lamp post") of one or more images; optional `transparent_background` |
+| `ideogram-train-model` | POST `/datasets` → `/datasets/{id}/upload_assets` → `/v1/ideogram-v3/train-model` → poll `/models/{id}` | One node runs the full custom-model pipeline: feed training images, get back `custom_model_uri` + `model_id` when status hits COMPLETED (statuses: CREATING/DRAFT/TRAINING/COMPLETED/ERRORED/ARCHIVED; polls every 30s, up to 3h) |
+
+**Custom-model loop:** wire `ideogram-train-model` → `custom_model_uri` into
+`ideogram-character`'s *Custom Model URI* param (direct route) to generate with
+your fine-tune — optionally combined with the Character node's reference
+bundle.
+
+Still unexposed: sending a raw `json_prompt` to v4 generate (the node sends
+`text_prompt`; the magic-prompt/describe nodes OUTPUT json_prompt for a future
+structured-input param), dataset management beyond the training node
+(list/get datasets, list models), and per-character-ref masks.
 
 ## Sources
 

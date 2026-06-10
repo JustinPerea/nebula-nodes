@@ -822,10 +822,17 @@ def get_handler_registry(
         from handlers.ideogram import (
             expand_character_inputs,
             handle_ideogram_character,
+            handle_ideogram_describe,
             handle_ideogram_edit,
+            handle_ideogram_edit_prompt,
+            handle_ideogram_layerize,
+            handle_ideogram_magic_prompt,
             handle_ideogram_reframe,
             handle_ideogram_remix,
+            handle_ideogram_remove_background,
             handle_ideogram_replace_background,
+            handle_ideogram_train_model,
+            handle_ideogram_transparent,
             handle_ideogram_upscale,
             handle_ideogram_v4_generate,
         )
@@ -854,6 +861,21 @@ def get_handler_registry(
                     "or attach a Character node"
                 )
             return await _ideogram_character_route(node, expanded, api_keys)
+
+        # Direct-only Ideogram capabilities (no FAL equivalents) — these require
+        # IDEOGRAM_API_KEY and bind the engine's emit for progress events.
+        def _ideogram_direct(handler):
+            async def _run(node, inputs, api_keys):
+                return await handler(node, inputs, api_keys, emit=emit)
+            return _run
+
+        _ideogram_describe_handler = _ideogram_direct(handle_ideogram_describe)
+        _ideogram_magic_prompt_handler = _ideogram_direct(handle_ideogram_magic_prompt)
+        _ideogram_transparent_handler = _ideogram_direct(handle_ideogram_transparent)
+        _ideogram_remove_bg_handler = _ideogram_direct(handle_ideogram_remove_background)
+        _ideogram_layerize_handler = _ideogram_direct(handle_ideogram_layerize)
+        _ideogram_edit_prompt_handler = _ideogram_direct(handle_ideogram_edit_prompt)
+        _ideogram_train_model_handler = _ideogram_direct(handle_ideogram_train_model)
 
         registry["seedance-2-t2v"] = _seedance2_t2v_handler
         registry["seedance-2-i2v"] = _seedance2_i2v_handler
@@ -887,6 +909,13 @@ def get_handler_registry(
         registry["ideogram-replace-background"] = _ideogram_replace_bg_handler
         registry["ideogram-character"] = _ideogram_character_handler
         registry["ideogram-upscale"] = _ideogram_upscale_handler
+        registry["ideogram-describe"] = _ideogram_describe_handler
+        registry["ideogram-magic-prompt"] = _ideogram_magic_prompt_handler
+        registry["ideogram-transparent"] = _ideogram_transparent_handler
+        registry["ideogram-remove-background"] = _ideogram_remove_bg_handler
+        registry["ideogram-layerize"] = _ideogram_layerize_handler
+        registry["ideogram-edit-prompt"] = _ideogram_edit_prompt_handler
+        registry["ideogram-train-model"] = _ideogram_train_model_handler
         registry["krea-2-generate"] = _krea_generate_handler
         registry["krea-style-train"] = _krea_style_train_handler
 

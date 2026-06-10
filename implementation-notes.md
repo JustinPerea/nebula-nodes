@@ -1,5 +1,24 @@
 # Implementation Notes
 
+## 2026-06-10 (night) — Full Ideogram direct-API surface: 7 direct-only nodes incl. custom-model training
+
+User wanted EVERYTHING the direct API offers, not just the dual-route nodes. Pulled the full OpenAPI (developer.ideogram.ai/openapi.json), enumerated all 27 endpoints, and wired every current (non-legacy) one. Registry 131 → **138**.
+
+New direct-only nodes (envKeyName IDEOGRAM_API_KEY, apiProvider 'ideogram', no FAL fallback):
+- `ideogram-describe` (v4): image → readable `description` + raw `json_prompt` (the v4 structured contract incl. bbox layout when include_bbox on). Category analyzer.
+- `ideogram-magic-prompt` (v4, **application/json** not multipart): text → expanded json_prompt. Category text-gen.
+- `ideogram-transparent` (v3 generate-transparent): prompt → real-alpha PNG, upscale_factor X1/X2/X4.
+- `ideogram-remove-background`: Ideogram's own cutout — deliberately separate node id from the FAL rembg `remove-background`.
+- `ideogram-layerize` (layerize-text): returns the clean **base plate** (text stripped); the response is NOT the standard data[] shape — base_image_url/original_image_url/seed, normalized through `_save_first_image({"data":[{"url": base}]})`.
+- `ideogram-edit-prompt` (`/v1/edit`): MASKLESS prompt-driven edit, 1+ images (single `image` port leads, multi `images` appends), optional transparent_background. Response schema is V1EditImageObject but the endpoint is NOT marked legacy.
+- `ideogram-train-model`: one node = the whole training pipeline (POST /datasets → upload_assets multipart `files` array → train-model → poll GET /models/{id} every 30s, ≤3h, statuses CREATING/DRAFT/TRAINING/COMPLETED/ERRORED/ARCHIVED; requires is_available_for_generation). Outputs `custom_model_uri` + `model_id` Texts.
+
+Closing the loop: `custom_model_uri` directParam added to ideogram-character (v3 generate accepts it) → train-model output wires straight into fine-tuned character generation.
+
+Still consciously unexposed (in ideogram.md): raw json_prompt INPUT on v4 generate (we only OUTPUT it from describe/magic-prompt so far), dataset/model list-get endpoints, per-character-ref masks, all 5 legacy endpoints.
+
+980 backend (+10: per-endpoint body shapes incl. the JSON-vs-multipart split, train full-flow ordering + ERRORED failure, custom_model_uri forwarding) + 347 frontend; parity 138. NOTE: `npm run lint` currently fails on BrandShowcaseView.tsx inline-style violations — that's the user's in-flight brand work, not this session's files (mask-painter/inspector pass the checker).
+
 ## 2026-06-10 (evening) — Ideogram direct API (dual-route), Character Studio integration, Mask Painter
 
 Three asks in one pass: stop depending on FAL alone for Ideogram, wire Character Studio into ideogram-character, and give masks an in-app painting UI. Registry 130 → **131** (+mask-painter).
