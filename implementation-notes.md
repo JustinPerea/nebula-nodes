@@ -1,5 +1,26 @@
 # Implementation Notes
 
+## 2026-06-10 (evening) — Ideogram direct API (dual-route), Character Studio integration, Mask Painter
+
+Three asks in one pass: stop depending on FAL alone for Ideogram, wire Character Studio into ideogram-character, and give masks an in-app painting UI. Registry 130 → **131** (+mask-painter).
+
+**1. Ideogram direct API — dual-route conversion (not new nodes).** All 7 ideogram nodes now follow the veo-3/meshy dual-route pattern: `envKeyName: [IDEOGRAM_API_KEY, FAL_KEY]`, `directKeyName`, params split into shared/fal/direct. New `backend/handlers/ideogram.py` (multipart/form-data, Api-Key header, SYNC endpoints, ephemeral result URLs downloaded immediately). Schemas all fetched from developer.ideogram.ai OpenAPI (.md suffix trick). Notables:
+- **Direct remix rides V4** (`/v1/ideogram-v4/remix`, `image_weight` 1-100) while FAL remix is still v3 — the direct route is a real upgrade, not just margin-avoidance.
+- **Param dialects differ per route** and the dual-param architecture was built for exactly this: rendering_speed TURBO/DEFAULT/QUALITY (direct) vs TURBO/BALANCED/QUALITY (FAL); magic_prompt enum vs expand_prompt bool; resolution pixel enums vs image_size presets; v4 generate/remix take no seed/num_images.
+- **Router fallback nuance:** direct reframe REQUIRES `resolution`; the router falls back to FAL when it's unset rather than 400ing (`require_param` hook in `_ideogram_router`).
+- Skipped on direct: v4 `json_prompt` structured contract, describe/remove-bg/layerize-text/transparent-bg/custom-model training (documented in docs/api-guides/ideogram.md as unwired).
+
+**2. Character Studio → ideogram-character.** Optional `character` input port (Character dataType). `expand_character_inputs` in handlers/ideogram.py reuses `cinema.identity.expand_character` — the SINGLE identity-correctness implementation (trait string VERBATIM prefix, stored views first, per-use overrides appended, max-refs guardrail at 10) — and the sync_runner wrapper applies it to BOTH routes before delegation. Bundle seed lands in params only when the user left seed unset. `reference_images` port went required→optional (refs OR character, enforced in the wrapper with a clear error).
+
+**3. Mask Painter.** New utility node + canvas paint modal:
+- Storage contract: `params._maskData` = white-on-black PNG data URI (underscore param rides `_validate_params` like `_characterId`). **Polarity applied at EXECUTION** by the engine branch (`white-edit` FLUX / `black-edit` Ideogram) so flipping the param never requires repainting.
+- Engine branch resizes the mask to the source image's EXACT dims (PIL, NEAREST to keep edges hard) — Ideogram 422s on any mismatch.
+- Modal exports only the strokes layer (never the photo canvas) → cross-origin upstream images can't taint the export. Paints at natural resolution, CSS-scaled display.
+- **UI lives in the Inspector, not a custom canvas node** — deliberate: Canvas.tsx is mid-flight with the user's uncommitted brand-showcase work, and a custom node type would have forced edits there. Inspector section finds the upstream image via edges→source outputs (falls back to image-input `_previewUrl`).
+- Added to docs/utility-node-test-manifest.json (the manifest gate requires every utility node covered).
+
+Tests: 970 backend (+21: direct body-shapes per endpoint, router direct/fallback/require_param, FAL-route bundle expansion, mask polarity/resize/error) + 347 frontend; contracts parity 131. The earlier FAL-session contract test pinning `envKeyName == "FAL_KEY"` was updated to pin the dual-route shape instead (intended evolution, not a regression).
+
 ## 2026-06-10 (later) — Ideogram editing suite: six capability nodes, not just t2i
 
 User caught that the morning's Ideogram add was text-to-image only while Ideogram's whole pitch includes region editing. Wired the full capability surface as 6 new nodes (registry 124 → **130**), all via FAL (FAL_KEY, existing handler):

@@ -1,5 +1,5 @@
 import { useRef, useEffect, useState, useMemo } from 'react';
-import { Copy, Info, Play, Plus, RefreshCw, Star, Trash2, Upload, X } from 'lucide-react';
+import { Brush, Copy, Info, Play, Plus, RefreshCw, Star, Trash2, Upload, X } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
 import { NODE_DEFINITIONS } from '../../constants/nodeDefinitions';
@@ -9,7 +9,9 @@ import type { NodeData, DynamicNodeData, DynamicParamDefinition, ParamDefinition
 import { fetchOpenRouterModels, fetchNousModels, fetchQuiverModels, getSettings, updateSettings, type OpenRouterModel, type QuiverModel } from '../../lib/api';
 import { apiFetch, backendAssetUrlSync } from '../../lib/backend';
 import { useDelayedUnmount } from '../../hooks/useDelayedUnmount';
+import { MaskPainterModal } from './MaskPainterModal';
 import '../../styles/panels.css';
+import '../../styles/mask-painter.css';
 
 type InspectorParamDefinition = ParamDefinition | DynamicParamDefinition;
 
@@ -159,6 +161,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
   const togglePanel = useUIStore((s) => s.togglePanel);
   const setPanelPosition = useUIStore((s) => s.setPanelPosition);
   const nodes = useGraphStore((s) => s.nodes);
+  const edges = useGraphStore((s) => s.edges);
   const updateNodeData = useGraphStore((s) => s.updateNodeData);
   const executeNode = useGraphStore((s) => s.executeNode);
   const duplicateNode = useGraphStore((s) => s.duplicateNode);
@@ -190,6 +193,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
 
   // Info panel toggle
   const [showInfo, setShowInfo] = useState(false);
+  const [maskPainterOpen, setMaskPainterOpen] = useState(false);
 
   // Favorites state
   const [favorites, setFavorites] = useState<Record<string, string[]>>({});
@@ -940,6 +944,58 @@ export function Inspector({ embedded = false }: InspectorProps) {
         )}
 
         {visibleParams.map((param) => renderParamSection(param, 'definition'))}
+
+        {/* Mask Painter: paint the mask over the connected upstream image. The
+            painted data rides params._maskData (white = painted; polarity is
+            applied at execution by the backend mask-painter branch). */}
+        {nodeData.definitionId === 'mask-painter' && (() => {
+          const imageEdge = edges.find(
+            (e) => e.target === renderNode.id && (e.targetHandle ?? 'image') === 'image',
+          );
+          const sourceNode = imageEdge ? nodes.find((n) => n.id === imageEdge.source) : undefined;
+          const sourceOutputs = (sourceNode?.data as NodeData | undefined)?.outputs ?? {};
+          const sourceParams = (sourceNode?.data as NodeData | undefined)?.params ?? {};
+          const upstreamImage = (() => {
+            const out = Object.values(sourceOutputs).find(
+              (o) => o && o.type === 'Image' && typeof o.value === 'string' && o.value,
+            );
+            if (out) return backendAssetUrlSync(String(out.value));
+            // image-input nodes carry their picked file as a preview param
+            // before any execution has happened.
+            if (sourceParams._previewUrl) return backendAssetUrlSync(String(sourceParams._previewUrl));
+            return null;
+          })();
+          const maskData = typeof nodeData.params._maskData === 'string' ? nodeData.params._maskData : null;
+          return (
+            <div className="inspector__section">
+              <div className="inspector__label">Mask</div>
+              <div className="mask-painter__inspector-row">
+                <button
+                  type="button"
+                  className="mask-painter__paint-btn"
+                  onClick={() => setMaskPainterOpen(true)}
+                >
+                  <Brush size={13} /> {maskData ? 'Edit Mask' : 'Paint Mask'}
+                </button>
+                <span className="mask-painter__status">
+                  {maskData ? 'Mask painted' : 'No mask yet'}
+                </span>
+              </div>
+              {maskData && <img src={maskData} alt="Painted mask" className="mask-painter__thumb" />}
+              {maskPainterOpen && (
+                <MaskPainterModal
+                  imageUrl={upstreamImage}
+                  initialMask={maskData}
+                  onSave={(dataUri) => {
+                    onParamChange('_maskData', dataUri);
+                    setMaskPainterOpen(false);
+                  }}
+                  onClose={() => setMaskPainterOpen(false)}
+                />
+              )}
+            </div>
+          );
+        })()}
 
         {/* Dynamic params for dynamic nodes */}
         {(() => {

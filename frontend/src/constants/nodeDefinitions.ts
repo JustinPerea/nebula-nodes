@@ -7597,15 +7597,18 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     category: 'image-gen',
     apiProvider: 'fal',
     apiEndpoint: 'ideogram/v4',
-    envKeyName: 'FAL_KEY',
+    envKeyName: ['IDEOGRAM_API_KEY', 'FAL_KEY'],
     executionPattern: 'async-poll',
+    directKeyName: 'IDEOGRAM_API_KEY',
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
     ],
     outputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: false },
     ],
-    params: [
+    params: [],
+    sharedParams: [],
+    falParams: [
       {
         key: 'rendering_speed',
         label: 'Rendering Speed',
@@ -7679,6 +7682,40 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         default: true,
       },
     ],
+    directParams: [
+      {
+        key: 'resolution',
+        label: 'Resolution (2K)',
+        type: 'enum',
+        required: false,
+        default: '2048x2048',
+        options: [
+          { label: '2048x2048', value: '2048x2048' },
+          { label: '1440x2880', value: '1440x2880' },
+          { label: '2880x1440', value: '2880x1440' },
+          { label: '1664x2496', value: '1664x2496' },
+          { label: '2496x1664', value: '2496x1664' },
+          { label: '1792x2240', value: '1792x2240' },
+          { label: '2240x1792', value: '2240x1792' },
+          { label: '1440x2560', value: '1440x2560' },
+          { label: '2560x1440', value: '2560x1440' },
+          { label: '1600x2560', value: '1600x2560' },
+          { label: '2560x1600', value: '2560x1600' },
+        ],
+      },
+      {
+        key: 'rendering_speed',
+        label: 'Rendering Speed',
+        type: 'enum',
+        required: false,
+        default: 'DEFAULT',
+        options: [
+          { label: 'Turbo', value: 'TURBO' },
+          { label: 'Default', value: 'DEFAULT' },
+          { label: 'Quality', value: 'QUALITY' },
+        ],
+      },
+    ],
   },
 
   'ideogram-edit': {
@@ -7687,8 +7724,9 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     category: 'image-gen',
     apiProvider: 'fal',
     apiEndpoint: 'fal-ai/ideogram/v3/edit',
-    envKeyName: 'FAL_KEY',
+    envKeyName: ['IDEOGRAM_API_KEY', 'FAL_KEY'],
     executionPattern: 'async-poll',
+    directKeyName: 'IDEOGRAM_API_KEY',
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
       { id: 'image', label: 'Base Image', dataType: 'Image', required: true },
@@ -7698,7 +7736,26 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     outputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: false },
     ],
-    params: [
+    params: [],
+    sharedParams: [
+      {
+        key: 'num_images',
+        label: 'Images',
+        type: 'integer',
+        required: false,
+        default: 1,
+        min: 1,
+        max: 4,
+      },
+      {
+        key: 'seed',
+        label: 'Seed',
+        type: 'integer',
+        required: false,
+        placeholder: 'Random',
+      },
+    ],
+    falParams: [
       {
         key: 'rendering_speed',
         label: 'Rendering Speed',
@@ -7718,21 +7775,31 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: false,
         default: true,
       },
+    ],
+    directParams: [
       {
-        key: 'num_images',
-        label: 'Images',
-        type: 'integer',
+        key: 'rendering_speed',
+        label: 'Rendering Speed',
+        type: 'enum',
         required: false,
-        default: 1,
-        min: 1,
-        max: 4,
+        default: 'DEFAULT',
+        options: [
+          { label: 'Turbo', value: 'TURBO' },
+          { label: 'Default', value: 'DEFAULT' },
+          { label: 'Quality', value: 'QUALITY' },
+        ],
       },
       {
-        key: 'seed',
-        label: 'Seed',
-        type: 'integer',
+        key: 'magic_prompt',
+        label: 'Magic Prompt',
+        type: 'enum',
         required: false,
-        placeholder: 'Random',
+        default: 'AUTO',
+        options: [
+          { label: 'Auto', value: 'AUTO' },
+          { label: 'On', value: 'ON' },
+          { label: 'Off', value: 'OFF' },
+        ],
       },
     ],
   },
@@ -7743,8 +7810,9 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     category: 'image-gen',
     apiProvider: 'fal',
     apiEndpoint: 'fal-ai/ideogram/v3/remix',
-    envKeyName: 'FAL_KEY',
+    envKeyName: ['IDEOGRAM_API_KEY', 'FAL_KEY'],
     executionPattern: 'async-poll',
+    directKeyName: 'IDEOGRAM_API_KEY',
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
       { id: 'image', label: 'Source Image', dataType: 'Image', required: true },
@@ -7753,7 +7821,9 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     outputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: false },
     ],
-    params: [
+    params: [],
+    sharedParams: [],
+    falParams: [
       {
         key: 'strength',
         label: 'Image Strength',
@@ -7835,6 +7905,50 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         placeholder: 'Random',
       },
     ],
+    directParams: [
+      {
+        key: 'image_weight',
+        label: 'Image Weight',
+        type: 'integer',
+        required: false,
+        min: 1,
+        max: 100,
+        placeholder: 'Auto (from prompt)',
+      },
+      {
+        key: 'resolution',
+        label: 'Resolution (2K)',
+        type: 'enum',
+        required: false,
+        default: '',
+        options: [
+          { label: 'Auto', value: '' },
+          { label: '2048x2048', value: '2048x2048' },
+          { label: '1440x2880', value: '1440x2880' },
+          { label: '2880x1440', value: '2880x1440' },
+          { label: '1664x2496', value: '1664x2496' },
+          { label: '2496x1664', value: '2496x1664' },
+          { label: '1792x2240', value: '1792x2240' },
+          { label: '2240x1792', value: '2240x1792' },
+          { label: '1440x2560', value: '1440x2560' },
+          { label: '2560x1440', value: '2560x1440' },
+          { label: '1600x2560', value: '1600x2560' },
+          { label: '2560x1600', value: '2560x1600' },
+        ],
+      },
+      {
+        key: 'rendering_speed',
+        label: 'Rendering Speed',
+        type: 'enum',
+        required: false,
+        default: 'DEFAULT',
+        options: [
+          { label: 'Turbo', value: 'TURBO' },
+          { label: 'Default', value: 'DEFAULT' },
+          { label: 'Quality', value: 'QUALITY' },
+        ],
+      },
+    ],
   },
 
   'ideogram-reframe': {
@@ -7843,8 +7957,9 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     category: 'transform',
     apiProvider: 'fal',
     apiEndpoint: 'fal-ai/ideogram/v3/reframe',
-    envKeyName: 'FAL_KEY',
+    envKeyName: ['IDEOGRAM_API_KEY', 'FAL_KEY'],
     executionPattern: 'async-poll',
+    directKeyName: 'IDEOGRAM_API_KEY',
     inputPorts: [
       { id: 'image', label: 'Source Image', dataType: 'Image', required: true },
       { id: 'images', label: 'Style Refs', dataType: 'Image', required: false, multiple: true },
@@ -7852,7 +7967,26 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     outputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: false },
     ],
-    params: [
+    params: [],
+    sharedParams: [
+      {
+        key: 'num_images',
+        label: 'Images',
+        type: 'integer',
+        required: false,
+        default: 1,
+        min: 1,
+        max: 4,
+      },
+      {
+        key: 'seed',
+        label: 'Seed',
+        type: 'integer',
+        required: false,
+        placeholder: 'Random',
+      },
+    ],
+    falParams: [
       {
         key: 'image_size',
         label: 'Target Size',
@@ -7893,6 +8027,61 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
           { label: 'Quality', value: 'QUALITY' },
         ],
       },
+    ],
+    directParams: [
+      {
+        key: 'resolution',
+        label: 'Target Resolution',
+        type: 'enum',
+        required: true,
+        default: '1024x1024',
+        options: [
+          { label: '1024x1024', value: '1024x1024' },
+          { label: '1280x800', value: '1280x800' },
+          { label: '800x1280', value: '800x1280' },
+          { label: '1344x768', value: '1344x768' },
+          { label: '768x1344', value: '768x1344' },
+          { label: '1152x896', value: '1152x896' },
+          { label: '896x1152', value: '896x1152' },
+          { label: '1216x832', value: '1216x832' },
+          { label: '832x1216', value: '832x1216' },
+          { label: '1536x640', value: '1536x640' },
+        ],
+      },
+      {
+        key: 'rendering_speed',
+        label: 'Rendering Speed',
+        type: 'enum',
+        required: false,
+        default: 'DEFAULT',
+        options: [
+          { label: 'Turbo', value: 'TURBO' },
+          { label: 'Default', value: 'DEFAULT' },
+          { label: 'Quality', value: 'QUALITY' },
+        ],
+      },
+    ],
+  },
+
+  'ideogram-replace-background': {
+    id: 'ideogram-replace-background',
+    displayName: 'Ideogram Replace Background',
+    category: 'image-gen',
+    apiProvider: 'fal',
+    apiEndpoint: 'fal-ai/ideogram/v3/replace-background',
+    envKeyName: ['IDEOGRAM_API_KEY', 'FAL_KEY'],
+    executionPattern: 'async-poll',
+    directKeyName: 'IDEOGRAM_API_KEY',
+    inputPorts: [
+      { id: 'prompt', label: 'New Background', dataType: 'Text', required: true },
+      { id: 'image', label: 'Subject Image', dataType: 'Image', required: true },
+      { id: 'images', label: 'Style Refs', dataType: 'Image', required: false, multiple: true },
+    ],
+    outputPorts: [
+      { id: 'image', label: 'Image', dataType: 'Image', required: false },
+    ],
+    params: [],
+    sharedParams: [
       {
         key: 'num_images',
         label: 'Images',
@@ -7910,25 +8099,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         placeholder: 'Random',
       },
     ],
-  },
-
-  'ideogram-replace-background': {
-    id: 'ideogram-replace-background',
-    displayName: 'Ideogram Replace Background',
-    category: 'image-gen',
-    apiProvider: 'fal',
-    apiEndpoint: 'fal-ai/ideogram/v3/replace-background',
-    envKeyName: 'FAL_KEY',
-    executionPattern: 'async-poll',
-    inputPorts: [
-      { id: 'prompt', label: 'New Background', dataType: 'Text', required: true },
-      { id: 'image', label: 'Subject Image', dataType: 'Image', required: true },
-      { id: 'images', label: 'Style Refs', dataType: 'Image', required: false, multiple: true },
-    ],
-    outputPorts: [
-      { id: 'image', label: 'Image', dataType: 'Image', required: false },
-    ],
-    params: [
+    falParams: [
       {
         key: 'style',
         label: 'Style',
@@ -7961,6 +8132,62 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: false,
         default: true,
       },
+    ],
+    directParams: [
+      {
+        key: 'magic_prompt',
+        label: 'Magic Prompt',
+        type: 'enum',
+        required: false,
+        default: 'AUTO',
+        options: [
+          { label: 'Auto', value: 'AUTO' },
+          { label: 'On', value: 'ON' },
+          { label: 'Off', value: 'OFF' },
+        ],
+      },
+      {
+        key: 'rendering_speed',
+        label: 'Rendering Speed',
+        type: 'enum',
+        required: false,
+        default: 'DEFAULT',
+        options: [
+          { label: 'Turbo', value: 'TURBO' },
+          { label: 'Default', value: 'DEFAULT' },
+          { label: 'Quality', value: 'QUALITY' },
+        ],
+      },
+    ],
+  },
+
+  'ideogram-character': {
+    id: 'ideogram-character',
+    displayName: 'Ideogram Character',
+    category: 'image-gen',
+    apiProvider: 'fal',
+    apiEndpoint: 'fal-ai/ideogram/character',
+    envKeyName: ['IDEOGRAM_API_KEY', 'FAL_KEY'],
+    executionPattern: 'async-poll',
+    directKeyName: 'IDEOGRAM_API_KEY',
+    inputPorts: [
+      { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
+      { id: 'character', label: 'Character', dataType: 'Character', required: false },
+      { id: 'reference_images', label: 'Character Refs', dataType: 'Image', required: false, multiple: true },
+      { id: 'images', label: 'Style Refs', dataType: 'Image', required: false, multiple: true },
+    ],
+    outputPorts: [
+      { id: 'image', label: 'Image', dataType: 'Image', required: false },
+    ],
+    params: [],
+    sharedParams: [
+      {
+        key: 'negative_prompt',
+        label: 'Negative Prompt',
+        type: 'string',
+        required: false,
+        placeholder: 'What to avoid',
+      },
       {
         key: 'num_images',
         label: 'Images',
@@ -7978,25 +8205,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         placeholder: 'Random',
       },
     ],
-  },
-
-  'ideogram-character': {
-    id: 'ideogram-character',
-    displayName: 'Ideogram Character',
-    category: 'image-gen',
-    apiProvider: 'fal',
-    apiEndpoint: 'fal-ai/ideogram/character',
-    envKeyName: 'FAL_KEY',
-    executionPattern: 'async-poll',
-    inputPorts: [
-      { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
-      { id: 'reference_images', label: 'Character Refs', dataType: 'Image', required: true, multiple: true },
-      { id: 'images', label: 'Style Refs', dataType: 'Image', required: false, multiple: true },
-    ],
-    outputPorts: [
-      { id: 'image', label: 'Image', dataType: 'Image', required: false },
-    ],
-    params: [
+    falParams: [
       {
         key: 'style',
         label: 'Style',
@@ -8025,13 +8234,6 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         ],
       },
       {
-        key: 'negative_prompt',
-        label: 'Negative Prompt',
-        type: 'string',
-        required: false,
-        placeholder: 'What to avoid',
-      },
-      {
         key: 'rendering_speed',
         label: 'Rendering Speed',
         type: 'enum',
@@ -8050,21 +8252,69 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: false,
         default: true,
       },
+    ],
+    directParams: [
       {
-        key: 'num_images',
-        label: 'Images',
-        type: 'integer',
+        key: 'aspect_ratio',
+        label: 'Aspect Ratio',
+        type: 'enum',
         required: false,
-        default: 1,
-        min: 1,
-        max: 4,
+        default: '1x1',
+        options: [
+          { label: '1:1', value: '1x1' },
+          { label: '16:9', value: '16x9' },
+          { label: '9:16', value: '9x16' },
+          { label: '4:3', value: '4x3' },
+          { label: '3:4', value: '3x4' },
+          { label: '3:2', value: '3x2' },
+          { label: '2:3', value: '2x3' },
+          { label: '16:10', value: '16x10' },
+          { label: '10:16', value: '10x16' },
+          { label: '5:4', value: '5x4' },
+          { label: '4:5', value: '4x5' },
+          { label: '2:1', value: '2x1' },
+          { label: '1:2', value: '1x2' },
+          { label: '3:1', value: '3x1' },
+          { label: '1:3', value: '1x3' },
+        ],
       },
       {
-        key: 'seed',
-        label: 'Seed',
-        type: 'integer',
+        key: 'style_type',
+        label: 'Style Type',
+        type: 'enum',
         required: false,
-        placeholder: 'Random',
+        default: 'AUTO',
+        options: [
+          { label: 'Auto', value: 'AUTO' },
+          { label: 'General', value: 'GENERAL' },
+          { label: 'Realistic', value: 'REALISTIC' },
+          { label: 'Design', value: 'DESIGN' },
+          { label: 'Fiction', value: 'FICTION' },
+        ],
+      },
+      {
+        key: 'magic_prompt',
+        label: 'Magic Prompt',
+        type: 'enum',
+        required: false,
+        default: 'AUTO',
+        options: [
+          { label: 'Auto', value: 'AUTO' },
+          { label: 'On', value: 'ON' },
+          { label: 'Off', value: 'OFF' },
+        ],
+      },
+      {
+        key: 'rendering_speed',
+        label: 'Rendering Speed',
+        type: 'enum',
+        required: false,
+        default: 'DEFAULT',
+        options: [
+          { label: 'Turbo', value: 'TURBO' },
+          { label: 'Default', value: 'DEFAULT' },
+          { label: 'Quality', value: 'QUALITY' },
+        ],
       },
     ],
   },
@@ -8075,8 +8325,9 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     category: 'transform',
     apiProvider: 'fal',
     apiEndpoint: 'fal-ai/ideogram/upscale',
-    envKeyName: 'FAL_KEY',
+    envKeyName: ['IDEOGRAM_API_KEY', 'FAL_KEY'],
     executionPattern: 'async-poll',
+    directKeyName: 'IDEOGRAM_API_KEY',
     inputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: true },
       { id: 'prompt', label: 'Guidance (optional)', dataType: 'Text', required: false },
@@ -8084,7 +8335,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     outputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: false },
     ],
-    params: [
+    params: [],
+    sharedParams: [
       {
         key: 'resemblance',
         label: 'Resemblance',
@@ -8104,18 +8356,63 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         max: 100,
       },
       {
+        key: 'seed',
+        label: 'Seed',
+        type: 'integer',
+        required: false,
+        placeholder: 'Random',
+      },
+    ],
+    falParams: [
+      {
         key: 'expand_prompt',
         label: 'Magic Prompt',
         type: 'boolean',
         required: false,
         default: false,
       },
+    ],
+    directParams: [
       {
-        key: 'seed',
-        label: 'Seed',
-        type: 'integer',
+        key: 'magic_prompt',
+        label: 'Magic Prompt',
+        type: 'enum',
         required: false,
-        placeholder: 'Random',
+        default: 'AUTO',
+        options: [
+          { label: 'Auto', value: 'AUTO' },
+          { label: 'On', value: 'ON' },
+          { label: 'Off', value: 'OFF' },
+        ],
+      },
+    ],
+  },
+
+  'mask-painter': {
+    id: 'mask-painter',
+    displayName: 'Mask Painter',
+    category: 'utility',
+    apiProvider: 'utility',
+    apiEndpoint: '',
+    envKeyName: [],
+    executionPattern: 'sync',
+    inputPorts: [
+      { id: 'image', label: 'Image', dataType: 'Image', required: true },
+    ],
+    outputPorts: [
+      { id: 'mask', label: 'Mask', dataType: 'Image', required: false },
+    ],
+    params: [
+      {
+        key: 'polarity',
+        label: 'Painted Area Means',
+        type: 'enum',
+        required: false,
+        default: 'white-edit',
+        options: [
+          { label: 'White = edit (FLUX Fill)', value: 'white-edit' },
+          { label: 'Black = edit (Ideogram)', value: 'black-edit' },
+        ],
       },
     ],
   },

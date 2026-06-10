@@ -29,6 +29,7 @@ const API_KEY_FIELDS: ApiKeyField[] = [
   { key: 'HIGGSFIELD_API_KEY', label: 'Higgsfield', placeholder: 'hf_...', url: 'https://app.higgsfield.ai/settings' },
   { key: 'QUIVER_API_KEY', label: 'QuiverAI (Arrow)', placeholder: 'qvr-...', url: 'https://app.quiver.ai/settings/api-keys' },
   { key: 'KREA_API_TOKEN', label: 'Krea', placeholder: 'krea_...', url: 'https://www.krea.ai/api-keys' },
+  { key: 'IDEOGRAM_API_KEY', label: 'Ideogram', placeholder: 'ideogram_...', url: 'https://developer.ideogram.ai' },
 ];
 
 interface RoutingOption {

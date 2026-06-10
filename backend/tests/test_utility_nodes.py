@@ -201,3 +201,67 @@ async def test_gemini_embeddings_contract_with_mocked_handler() -> None:
         "embedding": {"type": "Text", "value": "[0.1, 0.2, 0.3]"},
         "dimensions": {"type": "Text", "value": "3"},
     }
+
+
+def _white_square_mask_uri(size: int = 4) -> str:
+    """A small all-white mask as a PNG data URI (painted everywhere)."""
+    import base64
+    import io
+
+    from PIL import Image
+
+    img = Image.new("L", (size, size), 255)
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
+
+
+def _source_image_file(tmp_path: Path, w: int = 8, h: int = 6) -> str:
+    from PIL import Image
+
+    p = tmp_path / "src.png"
+    Image.new("RGB", (w, h), (200, 30, 30)).save(p, format="PNG")
+    return str(p)
+
+
+@pytest.mark.asyncio
+async def test_mask_painter_exports_resized_mask_and_polarity(tmp_path) -> None:
+    """The painted mask is resized to the source image's exact dimensions and the
+    polarity param decides whether painted regions export white or black."""
+    from PIL import Image
+
+    src = _source_image_file(tmp_path, 8, 6)
+    mask_uri = _white_square_mask_uri(4)  # 4x4 — must be resized to 8x6
+
+    for polarity, expected_pixel in (("white-edit", 255), ("black-edit", 0)):
+        nodes = [
+            _node("img1", "image-input", {"filePath": src}),
+            _node("mp1", "mask-painter", {"polarity": polarity, "_maskData": mask_uri}),
+        ]
+        edges = [_edge("img1", "mp1", "image", "image")]
+        executed = await _execute(nodes, edges)
+        mask_path = _latest(executed, "mp1")["mask"]["value"]
+        out = Image.open(mask_path).convert("L")
+        assert out.size == (8, 6), "mask must match the source image dimensions exactly"
+        assert out.getpixel((4, 3)) == expected_pixel, f"{polarity} polarity wrong"
+
+
+@pytest.mark.asyncio
+async def test_mask_painter_without_painting_raises() -> None:
+    src_nodes = [
+        _node("img1", "image-input", {"filePath": "/nonexistent.png"}),
+        _node("mp1", "mask-painter", {}),
+    ]
+    edges = [_edge("img1", "mp1", "image", "image")]
+    executed: dict[str, list[dict[str, Any]]] = {}
+    errors: list[str] = []
+
+    async def emit(event) -> None:
+        if isinstance(event, ExecutedEvent):
+            executed.setdefault(event.node_id, []).append(event.outputs)
+        elif type(event).__name__ == "ErrorEvent":
+            errors.append(event.error)
+
+    await execute_graph(src_nodes, edges, {}, {}, emit)
+    assert "mp1" not in executed
+    assert any("paint" in e.lower() for e in errors)

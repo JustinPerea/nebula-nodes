@@ -804,34 +804,56 @@ def get_handler_registry(
             node.params.setdefault("endpoint_id", "fal-ai/bytedance/seedream/v4.5/text-to-image")
             return await handle_fal_universal(node, inputs, api_keys, emit=emit)
 
-        async def _ideogram_v4_handler(node, inputs, api_keys):
-            node.params.setdefault("endpoint_id", "ideogram/v4")
-            return await handle_fal_universal(node, inputs, api_keys, emit=emit)
+        # Ideogram dual-route nodes: direct api.ideogram.ai when IDEOGRAM_API_KEY is
+        # set, else FAL. Editing suite rides v3 on FAL (no v4 edit surfaces hosted
+        # yet); the direct remix rides v4. Direct reframe needs `resolution` (the
+        # FAL dialect uses `image_size`), so an unset resolution falls back to FAL.
+        def _ideogram_router(direct_handler, fal_endpoint, *, require_param: str | None = None):
+            async def _route(node, inputs, api_keys):
+                use_direct = bool(api_keys.get("IDEOGRAM_API_KEY"))
+                if use_direct and require_param and not node.params.get(require_param):
+                    use_direct = False
+                if use_direct:
+                    return await direct_handler(node, inputs, api_keys, emit=emit)
+                node.params.setdefault("endpoint_id", fal_endpoint)
+                return await handle_fal_universal(node, inputs, api_keys, emit=emit)
+            return _route
 
-        # Ideogram editing suite — v3 endpoints (FAL hosts no v4 edit surfaces yet)
-        async def _ideogram_edit_handler(node, inputs, api_keys):
-            node.params.setdefault("endpoint_id", "fal-ai/ideogram/v3/edit")
-            return await handle_fal_universal(node, inputs, api_keys, emit=emit)
+        from handlers.ideogram import (
+            expand_character_inputs,
+            handle_ideogram_character,
+            handle_ideogram_edit,
+            handle_ideogram_reframe,
+            handle_ideogram_remix,
+            handle_ideogram_replace_background,
+            handle_ideogram_upscale,
+            handle_ideogram_v4_generate,
+        )
 
-        async def _ideogram_remix_handler(node, inputs, api_keys):
-            node.params.setdefault("endpoint_id", "fal-ai/ideogram/v3/remix")
-            return await handle_fal_universal(node, inputs, api_keys, emit=emit)
+        _ideogram_v4_handler = _ideogram_router(handle_ideogram_v4_generate, "ideogram/v4")
+        _ideogram_edit_handler = _ideogram_router(handle_ideogram_edit, "fal-ai/ideogram/v3/edit")
+        _ideogram_remix_handler = _ideogram_router(handle_ideogram_remix, "fal-ai/ideogram/v3/remix")
+        _ideogram_reframe_handler = _ideogram_router(
+            handle_ideogram_reframe, "fal-ai/ideogram/v3/reframe", require_param="resolution"
+        )
+        _ideogram_replace_bg_handler = _ideogram_router(
+            handle_ideogram_replace_background, "fal-ai/ideogram/v3/replace-background"
+        )
+        _ideogram_upscale_handler = _ideogram_router(handle_ideogram_upscale, "fal-ai/ideogram/upscale")
 
-        async def _ideogram_reframe_handler(node, inputs, api_keys):
-            node.params.setdefault("endpoint_id", "fal-ai/ideogram/v3/reframe")
-            return await handle_fal_universal(node, inputs, api_keys, emit=emit)
-
-        async def _ideogram_replace_bg_handler(node, inputs, api_keys):
-            node.params.setdefault("endpoint_id", "fal-ai/ideogram/v3/replace-background")
-            return await handle_fal_universal(node, inputs, api_keys, emit=emit)
+        _ideogram_character_route = _ideogram_router(handle_ideogram_character, "fal-ai/ideogram/character")
 
         async def _ideogram_character_handler(node, inputs, api_keys):
-            node.params.setdefault("endpoint_id", "fal-ai/ideogram/character")
-            return await handle_fal_universal(node, inputs, api_keys, emit=emit)
-
-        async def _ideogram_upscale_handler(node, inputs, api_keys):
-            node.params.setdefault("endpoint_id", "fal-ai/ideogram/upscale")
-            return await handle_fal_universal(node, inputs, api_keys, emit=emit)
+            # Fold an attached Character bundle into prompt + reference_images for
+            # BOTH routes (trait string verbatim, stored views first — identity.py).
+            expanded = expand_character_inputs(node, inputs)
+            refs = expanded.get("reference_images")
+            if not refs or not refs.value:
+                raise ValueError(
+                    "Ideogram Character needs reference images — connect Character Refs "
+                    "or attach a Character node"
+                )
+            return await _ideogram_character_route(node, expanded, api_keys)
 
         registry["seedance-2-t2v"] = _seedance2_t2v_handler
         registry["seedance-2-i2v"] = _seedance2_i2v_handler

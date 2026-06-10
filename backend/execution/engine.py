@@ -219,6 +219,7 @@ LOCAL_EXECUTION_NODE_IDS = frozenset(
         "array-selector",
         "image-compare",
         "svg-rasterize",
+        "mask-painter",
         "iterator-image",
         "iterator-text",
         "preview",
@@ -613,6 +614,55 @@ async def execute_graph(
                         node_outputs = {"image": {"type": "Image", "value": str(out_path)}}
                     except ImportError:
                         raise ValueError("cairosvg not installed — run: pip install cairosvg")
+                elif node.definition_id == "mask-painter":
+                    # Painted strokes are stored WHITE-on-BLACK in params._maskData
+                    # (a PNG data URI written by the paint modal). Export resizes the
+                    # mask to the input image's exact dimensions (Ideogram 422s on a
+                    # mismatch) and applies the polarity the consumer expects:
+                    #   white-edit (FLUX Fill)  -> painted stays white
+                    #   black-edit (Ideogram)   -> inverted, painted becomes black
+                    mask_data = node.params.get("_maskData")
+                    if not mask_data or not str(mask_data).startswith("data:image"):
+                        raise ValueError("No mask painted yet — open the Mask Painter node and paint one")
+                    image_input = resolved_inputs.get("image")
+                    if not image_input or not image_input.value:
+                        raise ValueError("Image input is required (the mask must match its dimensions)")
+
+                    import base64 as _b64
+                    import io as _io
+
+                    from PIL import Image as _PILImage, ImageOps as _ImageOps
+                    from services.output import get_run_dir
+                    from uuid import uuid4
+
+                    mask_bytes = _b64.b64decode(str(mask_data).partition(",")[2])
+                    mask_img = _PILImage.open(_io.BytesIO(mask_bytes)).convert("L")
+
+                    # Match the source image dimensions exactly. The source may be a
+                    # local path or a data URI; remote URLs are downloaded.
+                    src_value = str(image_input.value)
+                    if src_value.startswith("data:image"):
+                        src_bytes = _b64.b64decode(src_value.partition(",")[2])
+                        src_img = _PILImage.open(_io.BytesIO(src_bytes))
+                    elif src_value.startswith(("http://", "https://")):
+                        import httpx as _httpx
+                        async with _httpx.AsyncClient(timeout=60.0) as _client:
+                            _resp = await _client.get(src_value, follow_redirects=True)
+                            _resp.raise_for_status()
+                        src_img = _PILImage.open(_io.BytesIO(_resp.content))
+                    else:
+                        src_img = _PILImage.open(src_value)
+
+                    if mask_img.size != src_img.size:
+                        # NEAREST keeps mask edges hard instead of introducing greys.
+                        mask_img = mask_img.resize(src_img.size, _PILImage.NEAREST)
+
+                    if node.params.get("polarity", "white-edit") == "black-edit":
+                        mask_img = _ImageOps.invert(mask_img)
+
+                    out_path = get_run_dir() / f"{uuid4().hex[:12]}.png"
+                    mask_img.save(out_path, format="PNG")
+                    node_outputs = {"mask": {"type": "Image", "value": str(out_path)}}
                 elif node.definition_id in ("iterator-image", "iterator-text"):
                     array_input = resolved_inputs.get("array")
                     if array_input and isinstance(array_input.value, list) and len(array_input.value) > 0:

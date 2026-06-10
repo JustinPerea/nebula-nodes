@@ -180,8 +180,9 @@ async def test_ideogram_character_reference_images_map_to_reference_image_urls()
 
 @pytest.mark.asyncio
 async def test_ideogram_suite_registry_contract() -> None:
-    """The six Ideogram capability nodes are registered with the verified FAL endpoints,
-    correct port shapes, and the black-equals-edit mask convention surfaced in the label."""
+    """The seven Ideogram nodes are dual-route (direct api.ideogram.ai preferred,
+    FAL fallback) with the verified FAL endpoints, correct port shapes, and the
+    black-equals-edit mask convention surfaced in the label."""
     import json as _json
     import pathlib
 
@@ -200,7 +201,12 @@ async def test_ideogram_suite_registry_contract() -> None:
     for node_id, endpoint in expected_endpoints.items():
         assert node_id in defs, f"{node_id} missing from registry"
         assert defs[node_id]["apiEndpoint"] == endpoint
-        assert defs[node_id]["envKeyName"] == "FAL_KEY"
+        # Dual-route: direct key preferred, FAL fallback (order matters for display).
+        assert defs[node_id]["envKeyName"] == ["IDEOGRAM_API_KEY", "FAL_KEY"]
+        assert defs[node_id]["directKeyName"] == "IDEOGRAM_API_KEY"
+        assert defs[node_id]["params"] == [], f"{node_id} params must live in shared/fal/direct lists"
+        assert defs[node_id].get("falParams") is not None
+        assert defs[node_id].get("directParams") is not None
 
     # Edit: mask is required and the label must encode Ideogram's inverted polarity
     # (black = edit — the OPPOSITE of FLUX Fill's white = edit).
@@ -208,16 +214,23 @@ async def test_ideogram_suite_registry_contract() -> None:
     assert edit_ports["mask"]["required"] is True
     assert "black" in edit_ports["mask"]["label"].lower()
 
-    # Reframe: image-only (no prompt port per the FAL schema); image_size is required.
+    # Reframe: image-only (no prompt port per both schemas); sizing is required on
+    # each route in its own dialect (FAL image_size preset / direct resolution enum).
     reframe_port_ids = {prt["id"] for prt in defs["ideogram-reframe"]["inputPorts"]}
     assert "prompt" not in reframe_port_ids
-    size_param = next(prm for prm in defs["ideogram-reframe"]["params"] if prm["key"] == "image_size")
+    size_param = next(prm for prm in defs["ideogram-reframe"]["falParams"] if prm["key"] == "image_size")
     assert size_param["required"] is True
+    res_param = next(prm for prm in defs["ideogram-reframe"]["directParams"] if prm["key"] == "resolution")
+    assert res_param["required"] is True
 
-    # Character: reference_images is a required multi-port.
+    # Character: reference_images is a multi-port; with the Character port present
+    # it is no longer required at the PORT level (refs OR a Character bundle —
+    # enforced by the handler), and the Character port itself is optional.
     char_ports = {prt["id"]: prt for prt in defs["ideogram-character"]["inputPorts"]}
-    assert char_ports["reference_images"]["required"] is True
     assert char_ports["reference_images"].get("multiple") is True
+    assert char_ports["reference_images"]["required"] is False
+    assert char_ports["character"]["dataType"] == "Character"
+    assert char_ports["character"]["required"] is False
 
 
 @pytest.mark.asyncio
