@@ -61,7 +61,7 @@ interface UIState {
   selectedNodeId: string | null;
 
   // Editor view state — Phase 1 video-editor pivot
-  viewMode: 'canvas' | 'editor' | 'remotion-editor' | 'cinema-editor' | 'character-editor' | 'moodboard-editor' | 'create';
+  viewMode: 'canvas' | 'editor' | 'remotion-editor' | 'cinema-editor' | 'character-editor' | 'moodboard-editor' | 'create' | 'brand-showcase';
   editorTargetNodeId: string | null;
   // Phase 2 Remotion editor
   remotionEditorTargetNodeId: string | null;
@@ -135,6 +135,10 @@ interface UIState {
   exitMoodboardEditor: () => void;
   enterCreateView: () => void;
   exitCreateView: () => void;
+  // Brand / Dynamic Mark showcase — a standalone reference + demo surface
+  // (not product chrome). Reachable via the `#brand` hash route.
+  enterBrandShowcase: () => void;
+  exitBrandShowcase: () => void;
   setSelectedTrackItem: (id: string | null) => void;
   setSelectedTrackItems: (ids: string[], primaryId?: string | null) => void;
   toggleSelectedTrackItem: (id: string) => void;
@@ -305,6 +309,13 @@ export const useUIStore = create<UIState>((set, get) => ({
   },
   exitCreateView: () => {
     set({ viewMode: 'canvas', createSessionId: null });
+  },
+
+  enterBrandShowcase: () => {
+    set({ viewMode: 'brand-showcase' });
+  },
+  exitBrandShowcase: () => {
+    set({ viewMode: 'canvas' });
   },
 
   setSelectedTrackItem: (id) => {

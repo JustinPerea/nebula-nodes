@@ -9,6 +9,7 @@ import { CinemaStudioView } from './components/cinema-studio/CinemaStudioView';
 import { CharacterStudioView } from './components/character-studio/CharacterStudioView';
 import { MoodboardStudioView } from './components/moodboard-studio/MoodboardStudioView';
 import { CreateView } from './components/create-studio/CreateView';
+import { BrandShowcaseView } from './components/brand/BrandShowcaseView';
 import { NodeLibrary } from './components/panels/NodeLibrary';
 import { CharacterLibrary } from './components/panels/CharacterLibrary';
 import { MoodboardLibrary } from './components/panels/MoodboardLibrary';
@@ -129,6 +130,25 @@ export default function App() {
     return () => window.removeEventListener('nebula:settings-saved', handleSettingsSaved);
   }, []);
 
+  // Hash route for the Dynamic Mark showcase. `#brand` (or `#dynamic-mark`)
+  // opens the standalone brand demo surface; clearing the hash leaves it.
+  // Kept out of the product toolbar on purpose — it's a reference/demo page.
+  useEffect(() => {
+    const BRAND_HASHES = new Set(['#brand', '#dynamic-mark']);
+    const sync = () => {
+      const ui = useUIStore.getState();
+      const wantShowcase = BRAND_HASHES.has(window.location.hash);
+      if (wantShowcase && ui.viewMode !== 'brand-showcase') {
+        ui.enterBrandShowcase();
+      } else if (!wantShowcase && ui.viewMode === 'brand-showcase') {
+        ui.exitBrandShowcase();
+      }
+    };
+    sync();
+    window.addEventListener('hashchange', sync);
+    return () => window.removeEventListener('hashchange', sync);
+  }, []);
+
   const viewMode = useUIStore((s) => s.viewMode);
   const moodboardPanelVisible = useUIStore((s) => s.panels.moodboard.visible);
 
@@ -138,10 +158,13 @@ export default function App() {
   const isCharacter = viewMode === 'character-editor';
   const isMoodboard = viewMode === 'moodboard-editor';
   const isCreate = viewMode === 'create';
+  const isBrandShowcase = viewMode === 'brand-showcase';
 
   let mainView;
   if (isCanvas) {
     mainView = <Canvas />;
+  } else if (isBrandShowcase) {
+    mainView = <BrandShowcaseView />;
   } else if (isRemotion) {
     mainView = <RemotionEditorView />;
   } else if (isCinema) {
@@ -160,7 +183,7 @@ export default function App() {
     <ReactFlowProvider>
       <GraphHydrator />
       <ZoomManifestRecorder />
-      <CanvasTabs />
+      {!isBrandShowcase && <CanvasTabs />}
       {mainView}
       {/* Canvas-only chrome: library, inspector, settings, launchers, toolbar, agent log.
           The editor view is a focused workspace — only the pill control and chat remain. */}
@@ -169,7 +192,7 @@ export default function App() {
       {isCanvas && moodboardPanelVisible && <MoodboardLibrary />}
       {isCanvas && <NodeInspectorPopover />}
       {isCanvas && <Settings />}
-      <ChatPanel />
+      {!isBrandShowcase && <ChatPanel />}
       {isCanvas && <PanelLaunchers />}
       {isCanvas && <Toolbar />}
       {isCanvas && <AgentLog />}

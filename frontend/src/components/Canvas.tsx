@@ -26,7 +26,7 @@ import { MoodboardNode } from './nodes/MoodboardNode';
 import { TypedEdge } from './edges/TypedEdge';
 import { ContextMenu } from './ContextMenu';
 import { ConnectionPopup } from './ConnectionPopup';
-import { CrabMark } from './brand/CrabMark';
+import { CrabMarkAnimated } from './brand/CrabMarkAnimated';
 import { CHARACTER_DRAG_MIME } from './panels/CharacterLibrary';
 import { MOODBOARD_DRAG_MIME } from './panels/MoodboardLibrary';
 import { apiFetch } from '../lib/backend';
@@ -593,7 +593,11 @@ export function Canvas() {
       </ReactFlow>
       {isSlavaSkin && nodes.length === 0 ? (
         <div className="nn-splash" aria-hidden="true">
-          <CrabMark size={200} className="nn-splash__mark" />
+          <CrabMarkAnimated
+            mode="breathe"
+            size={200}
+            className="nn-splash__mark"
+          />
           <div className="nn-splash__wordmark">
             <span className="nn-splash__wordmark-line">NEBULA</span>
             <span className="nn-splash__wordmark-line nn-splash__wordmark-line--warm">

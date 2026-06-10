@@ -278,3 +278,71 @@ console.log(`wrote ${docsOg} (copy of og-card.svg)`);
 const markOnly = resolve(REPO_ROOT, 'docs', 'assets', 'crab-mark.svg');
 writeFileSync(markOnly, svgCrab({ size: 480 }) + '\n');
 console.log(`wrote ${markOnly} (standalone mark)`);
+
+// ─── Helix — phase 1 core (sync with helixGeometry.ts) ───────────────
+const HELIX_CORE = [
+  { t: 0.0, rgb: [250, 254, 255] },
+  { t: 0.15, rgb: [220, 244, 252] },
+  { t: 0.55, rgb: [72, 130, 210] },
+  { t: 0.72, rgb: [48, 98, 178] },
+  { t: 1.0, rgb: [150, 200, 235] },
+];
+const HELIX_CORE_R = 34;
+
+function helixMask(x, y) {
+  const dx = x - 100;
+  const dy = y - 100;
+  const r = Math.sqrt(dx * dx + dy * dy);
+  if (r > HELIX_CORE_R) return 0;
+  const paleCore = Math.exp(-(r * r) / (2 * 4 * 4)) * 0.62;
+  const darkRing = Math.exp(-((r - 18) ** 2) / (2 * 10 * 10)) * 1;
+  const outerSoft = Math.exp(-((r - 28) ** 2) / (2 * 7 * 7)) * 0.38;
+  const edge = 1 - (Math.max(0, (r - 31) / 3) ** 2);
+  return Math.min(1, Math.max(paleCore, darkRing, outerSoft) * edge);
+}
+
+function helixColorT(r) {
+  if (r < 7) return 0.01 + (r / 7) * 0.06;
+  if (r < 29) {
+    const ringPeak = Math.exp(-((r - 18) ** 2) / (2 * 8.5 * 8.5));
+    return 0.5 + ringPeak * 0.22;
+  }
+  return 0.22 + ((HELIX_CORE_R - r) / (HELIX_CORE_R - 29)) * 0.12;
+}
+
+function renderHelixDots(opts = {}) {
+  const { palette = HELIX_CORE, step = 5 } = opts;
+  const out = [];
+  for (let y = 4; y < 200; y += step) {
+    for (let x = 4; x < 200; x += step) {
+      const dx = x - 100;
+      const dy = y - 100;
+      const r = Math.sqrt(dx * dx + dy * dy);
+      if (r > HELIX_CORE_R) continue;
+      const intensity = Math.max(0, Math.min(1, helixMask(x, y)));
+      if (intensity < 0.05) continue;
+      const t = helixColorT(r);
+      const minSz = step * 0.14;
+      const maxSz = step * 0.46;
+      const sz = minSz + intensity * (maxSz - minSz);
+      if (sz < step * 0.12) continue;
+      const fill = paletteColor(palette, t);
+      const op = (r < 7 ? 0.55 + intensity * 0.35 : 0.62 + intensity * 0.36).toFixed(
+        3,
+      );
+      out.push(
+        `<circle cx="${x}" cy="${y}" r="${sz.toFixed(2)}" fill="${fill}" opacity="${op}"/>`,
+      );
+    }
+  }
+  return out.join('');
+}
+
+function svgHelix({ size = 200, tight = true, ...opts } = {}) {
+  const viewBox = tight ? '62 62 76 76' : '0 0 200 200';
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${viewBox}" width="${size}" height="${size}">${renderHelixDots(opts)}</svg>`;
+}
+
+const helixMark = resolve(REPO_ROOT, 'docs', 'assets', 'helix-mark.svg');
+writeFileSync(helixMark, svgHelix({ size: 480 }) + '\n');
+console.log(`wrote ${helixMark} (Helix exploratory mark)`);
