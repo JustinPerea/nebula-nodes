@@ -4,10 +4,12 @@ import asyncio
 import time
 from collections import deque
 from graphlib import TopologicalSorter, CycleError as _GraphlibCycleError
+from pathlib import Path
 from typing import Any, Callable, Awaitable
 
 from models.graph import GraphNode, GraphEdge, PortValueDict
 from services.cache import ExecutionCache
+from services.image_input import is_remote_or_data_uri
 from services.output import resolve_output_ref
 from models.events import (
     ExecutionEvent,
@@ -24,6 +26,15 @@ CycleError = _GraphlibCycleError
 
 def _image_input_output(params: dict) -> dict:
     file_path = resolve_output_ref(str(params.get("filePath", "")))
+    # Fail at the source when the configured file is gone, rather than passing a
+    # dead path downstream where a vision node would otherwise silently analyze
+    # zero references. An empty path (unconfigured node) and remote/data values
+    # pass through untouched.
+    if file_path and not is_remote_or_data_uri(file_path) and not Path(file_path).exists():
+        raise ValueError(
+            f"Image Input file not found: {file_path!r}. Set a valid path — "
+            "downstream nodes would otherwise receive a reference no model can load."
+        )
     return {"image": {"type": "Image", "value": file_path}}
 
 

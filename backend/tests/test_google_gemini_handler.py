@@ -65,6 +65,44 @@ async def test_gemini_chat_text_omits_response_mime_type() -> None:
     assert "responseMimeType" not in body.get("generationConfig", {})
 
 
+@pytest.mark.asyncio
+async def test_gemini_chat_missing_image_path_raises(tmp_path) -> None:
+    """A wired image whose local path doesn't exist must surface as an error, not
+    be silently dropped — otherwise the node 'succeeds' having sent zero of the
+    references the user connected."""
+    missing = tmp_path / "gone.png"
+    with pytest.raises(ValueError, match="not found"):
+        await handle_gemini_chat(
+            _make_gemini_node(),
+            {
+                "messages": PortValueDict(type="Text", value="describe this"),
+                "images": PortValueDict(type="Image", value=str(missing)),
+            },
+            {"GOOGLE_API_KEY": "g-test"},
+            emit=AsyncMock(),
+        )
+
+
+@pytest.mark.asyncio
+async def test_gemini_chat_data_uri_image_preserved() -> None:
+    """data: URIs keep their existing behavior — parsed into an inline_data part, no file I/O."""
+    with patch("handlers.google_gemini.stream_execute", new_callable=AsyncMock) as mock_stream:
+        mock_stream.return_value = "ok"
+        await handle_gemini_chat(
+            _make_gemini_node(),
+            {
+                "messages": PortValueDict(type="Text", value="describe"),
+                "images": PortValueDict(type="Image", value="data:image/png;base64,QUJD"),
+            },
+            {"GOOGLE_API_KEY": "g-test"},
+            emit=AsyncMock(),
+        )
+    body = mock_stream.call_args.kwargs["request_body"]
+    inline = [p for p in body["contents"][0]["parts"] if "inline_data" in p]
+    assert len(inline) == 1
+    assert inline[0]["inline_data"] == {"mime_type": "image/png", "data": "QUJD"}
+
+
 def _make_imagen_node(params=None):
     return GraphNode(
         id="test-imagen-1",

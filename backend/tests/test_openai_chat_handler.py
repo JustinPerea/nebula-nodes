@@ -314,3 +314,46 @@ async def test_max_completion_tokens_not_sent_when_absent():
     body = mock_client.stream.call_args.kwargs.get("json") or mock_client.stream.call_args[1].get("json")
     assert "max_completion_tokens" not in body
     assert "max_tokens" not in body
+
+
+@pytest.mark.asyncio
+async def test_missing_image_path_raises(tmp_path):
+    """A wired image whose local path doesn't exist must surface as an error, not
+    be silently dropped — otherwise the node 'succeeds' having sent zero of the
+    references the user connected."""
+    missing = tmp_path / "gone.png"
+    with pytest.raises(ValueError, match="not found"):
+        await handle_openai_chat(
+            _make_node(),
+            {
+                "messages": PortValueDict(type="Text", value="describe this"),
+                "images": PortValueDict(type="Image", value=str(missing)),
+            },
+            {"OPENAI_API_KEY": "sk-test-key"},
+        )
+
+
+@pytest.mark.asyncio
+async def test_data_uri_image_preserved():
+    """data: URIs keep their existing behavior — forwarded verbatim as an image_url."""
+    fake_response = FakeStreamResponse(_make_openai_sse_lines(["ok"]))
+    with patch("execution.stream_runner.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.stream = MagicMock(return_value=fake_response)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        await handle_openai_chat(
+            _make_node(),
+            {
+                "messages": PortValueDict(type="Text", value="describe"),
+                "images": PortValueDict(type="Image", value="data:image/png;base64,QUJD"),
+            },
+            {"OPENAI_API_KEY": "sk-test-key"},
+        )
+
+    body = mock_client.stream.call_args.kwargs.get("json") or mock_client.stream.call_args[1].get("json")
+    image_blocks = [b for b in body["messages"][0]["content"] if b.get("type") == "image_url"]
+    assert len(image_blocks) == 1
+    assert image_blocks[0]["image_url"]["url"] == "data:image/png;base64,QUJD"

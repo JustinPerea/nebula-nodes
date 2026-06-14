@@ -5,6 +5,7 @@ from typing import Any, Awaitable, Callable
 from models.graph import GraphNode, PortValueDict
 from models.events import ExecutionEvent
 from execution.stream_runner import StreamConfig, stream_execute
+from services.image_input import load_local_image
 
 OPENAI_CHAT_URL = "https://api.openai.com/v1/chat/completions"
 
@@ -35,15 +36,13 @@ async def handle_openai_chat(
             if img_str.startswith(("http://", "https://", "data:")):
                 content.append({"type": "image_url", "image_url": {"url": img_str}})
             else:
-                from pathlib import Path
-                import base64
-                img_path = Path(img_str)
-                if img_path.exists():
-                    b64 = base64.b64encode(img_path.read_bytes()).decode("ascii")
-                    suffix = img_path.suffix.lstrip(".").lower()
-                    mime_map = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg", "webp": "image/webp"}
-                    data_uri = f"data:{mime_map.get(suffix, 'image/png')};base64,{b64}"
-                    content.append({"type": "image_url", "image_url": {"url": data_uri}})
+                # Local path. load_local_image raises (rather than silently
+                # skipping) if the file is missing/unreadable/unsupported, so a
+                # misconfigured reference fails the node instead of producing a
+                # "success" that quietly analyzed zero of the wired-up images.
+                mime_type, b64 = load_local_image(img_str)
+                data_uri = f"data:{mime_type};base64,{b64}"
+                content.append({"type": "image_url", "image_url": {"url": data_uri}})
 
     messages = [{"role": "user", "content": content}]
 

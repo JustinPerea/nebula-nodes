@@ -5,6 +5,7 @@ from typing import Any, Awaitable, Callable
 from models.graph import GraphNode, PortValueDict
 from models.events import ExecutionEvent
 from execution.stream_runner import StreamConfig, stream_execute
+from services.image_input import load_local_image
 
 ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
 ANTHROPIC_VERSION = "2023-06-01"
@@ -43,14 +44,12 @@ async def handle_claude_chat(
             elif img_str.startswith(("http://", "https://")):
                 content.append({"type": "image", "source": {"type": "url", "url": img_str}})
             else:
-                from pathlib import Path
-                import base64
-                img_path = Path(img_str)
-                if img_path.exists():
-                    b64_data = base64.b64encode(img_path.read_bytes()).decode("ascii")
-                    suffix = img_path.suffix.lstrip(".").lower()
-                    mime_map = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg", "webp": "image/webp"}
-                    content.append({"type": "image", "source": {"type": "base64", "media_type": mime_map.get(suffix, "image/png"), "data": b64_data}})
+                # Local path. load_local_image raises (rather than silently
+                # skipping) if the file is missing/unreadable/unsupported, so a
+                # misconfigured reference fails the node instead of producing a
+                # "success" that quietly analyzed zero of the wired-up images.
+                media_type, b64_data = load_local_image(img_str)
+                content.append({"type": "image", "source": {"type": "base64", "media_type": media_type, "data": b64_data}})
 
     if caching:
         # Cache breakpoint on the last content block — caches the whole user-turn

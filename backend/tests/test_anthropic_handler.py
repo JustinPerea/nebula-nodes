@@ -465,3 +465,86 @@ def test_model_lineup_current():
     # Deprecated/wrong models must not appear
     assert "claude-opus-4-20250514" not in values, "claude-opus-4-20250514 is deprecated (retires 2026-06-15)"
     assert "claude-haiku-3-5-20241022" not in values, "claude-haiku-3-5-20241022 does not exist (superseded by haiku-4-5)"
+
+
+# A minimal valid 1x1 PNG, reused by the image-input tests below.
+_PNG_BYTES = bytes.fromhex(
+    "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4"
+    "890000000d49444154789c6300010000000500010d0a2db40000000049454e44"
+    "ae426082"
+)
+
+
+@pytest.mark.asyncio
+async def test_missing_image_path_raises(tmp_path):
+    """A wired image whose local path doesn't exist must surface as an error, not
+    be silently dropped — otherwise the node 'succeeds' having sent zero of the
+    references the user connected."""
+    missing = tmp_path / "gone.png"
+    with pytest.raises(ValueError, match="not found"):
+        await handle_claude_chat(
+            _make_node(),
+            {
+                "messages": PortValueDict(type="Text", value="describe this"),
+                "images": PortValueDict(type="Image", value=str(missing)),
+            },
+            {"ANTHROPIC_API_KEY": "sk-ant-test"},
+        )
+
+
+@pytest.mark.asyncio
+async def test_data_uri_image_preserved_as_base64_block():
+    """data: URIs keep their existing behavior — parsed into a base64 image block, no file I/O."""
+    fake_response = FakeStreamResponse(_make_sse_lines(["ok"]))
+    with patch("execution.stream_runner.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.stream = MagicMock(return_value=fake_response)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        await handle_claude_chat(
+            _make_node(),
+            {
+                "messages": PortValueDict(type="Text", value="describe"),
+                "images": PortValueDict(type="Image", value="data:image/png;base64,QUJD"),
+            },
+            {"ANTHROPIC_API_KEY": "sk-ant-test"},
+        )
+
+    body = mock_client.stream.call_args.kwargs.get("json") or mock_client.stream.call_args[1].get("json")
+    image_blocks = [b for b in body["messages"][0]["content"] if b.get("type") == "image"]
+    assert len(image_blocks) == 1
+    assert image_blocks[0]["source"] == {"type": "base64", "media_type": "image/png", "data": "QUJD"}
+
+
+@pytest.mark.asyncio
+async def test_local_image_file_sent_as_base64_block(tmp_path):
+    """A valid local image is loaded and sent as a base64 image block (happy path)."""
+    png = tmp_path / "ref.png"
+    png.write_bytes(_PNG_BYTES)
+
+    fake_response = FakeStreamResponse(_make_sse_lines(["ok"]))
+    with patch("execution.stream_runner.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.stream = MagicMock(return_value=fake_response)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        await handle_claude_chat(
+            _make_node(),
+            {
+                "messages": PortValueDict(type="Text", value="describe"),
+                "images": PortValueDict(type="Image", value=str(png)),
+            },
+            {"ANTHROPIC_API_KEY": "sk-ant-test"},
+        )
+
+    body = mock_client.stream.call_args.kwargs.get("json") or mock_client.stream.call_args[1].get("json")
+    image_blocks = [b for b in body["messages"][0]["content"] if b.get("type") == "image"]
+    assert len(image_blocks) == 1
+    assert image_blocks[0]["source"]["type"] == "base64"
+    assert image_blocks[0]["source"]["media_type"] == "image/png"
+    import base64 as _b64
+    assert _b64.b64decode(image_blocks[0]["source"]["data"]) == _PNG_BYTES
