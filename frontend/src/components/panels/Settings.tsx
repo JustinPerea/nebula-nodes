@@ -54,6 +54,8 @@ export function Settings() {
   const setCanvasPerfMode = useUIStore((s) => s.setCanvasPerfMode);
   const canvasLowDetail = useUIStore((s) => s.canvasLowDetail);
   const setCanvasLowDetail = useUIStore((s) => s.setCanvasLowDetail);
+  const notificationPrefs = useUIStore((s) => s.notificationPrefs);
+  const setNotificationPrefs = useUIStore((s) => s.setNotificationPrefs);
   const dragRef = useRef<{ startX: number; startY: number; panelX: number; panelY: number } | null>(null);
 
   const [apiKeys, setApiKeys] = useState<Record<string, string>>({});
@@ -345,6 +347,36 @@ export function Settings() {
                 </span>
               </span>
             </label>
+            <label className="settings__toggle-row">
+              <input
+                className="settings__toggle-input"
+                type="checkbox"
+                checked={notificationPrefs.enabled}
+                onChange={(e) => setNotificationPrefs({ enabled: e.target.checked })}
+              />
+              <span className="settings__toggle-copy">
+                <span className="settings__toggle-title">Job notifications</span>
+                <span className="settings__toggle-description">
+                  Notify when a pipeline finishes while this tab is in the background, or after a long run.
+                </span>
+              </span>
+            </label>
+            {notificationPrefs.enabled && (
+              <label className="settings__toggle-row">
+                <input
+                  className="settings__toggle-input"
+                  type="checkbox"
+                  checked={notificationPrefs.sound}
+                  onChange={(e) => setNotificationPrefs({ sound: e.target.checked })}
+                />
+                <span className="settings__toggle-copy">
+                  <span className="settings__toggle-title">Completion sound</span>
+                  <span className="settings__toggle-description">
+                    Play a short tone when a pipeline finishes.
+                  </span>
+                </span>
+              </label>
+            )}
 
             {/* Output Path Section */}
             <div className="settings__section-label settings__section-label--stacked">

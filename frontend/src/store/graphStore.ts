@@ -20,6 +20,7 @@ import {
 } from '../lib/api';
 import { apiFetch, backendAssetUrlSync, rewriteBackendAssetUrls } from '../lib/backend';
 import { wsClient, type ExecutionEvent } from '../lib/wsClient';
+import { notifyJobComplete } from '../lib/jobNotifications';
 import { useUIStore } from './uiStore';
 import { clipSpeed, type EditClip } from '../lib/editor/virtualPlayback';
 import type { KeyframeData, VideoGraphManifest, TrackItem } from '../types/video';
@@ -233,6 +234,11 @@ function pushUndo(
 // Debounce state for updateNodeData undo pushes
 let lastUndoPush = 0;
 let lastUndoNodeId = '';
+
+// Whether the current run has produced any node error / validation error. Reset
+// at run start (resetExecution) and read at graphComplete so job notifications
+// can report ok vs failed — the backend has no single terminal "failed" event.
+let currentRunHadError = false;
 
 /** Like pushUndo but debounces rapid param changes on the same node (500ms window). */
 function maybePushUndo(
@@ -1823,6 +1829,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   },
 
   resetExecution: () => {
+    currentRunHadError = false;
     set((state) => ({
       isExecuting: false,
       nodes: state.nodes.map((node) => ({
@@ -2724,6 +2731,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         break;
       }
       case 'error':
+        currentRunHadError = true;
         get().updateNodeData(event.nodeId, {
           state: 'error',
           error: event.error,
@@ -2735,14 +2743,22 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         });
         break;
       case 'validationError':
+        currentRunHadError = true;
         for (const err of event.errors) {
           if (err.nodeId) get().updateNodeData(err.nodeId, { state: 'error', error: err.message });
         }
         set({ isExecuting: false });
+        // validationError ends the run with no following graphComplete, so notify here.
+        notifyJobComplete({ ok: false, durationSec: 0, nodesExecuted: 0 });
         break;
       case 'graphComplete':
         console.log(`[execution] complete in ${event.duration}s, ${event.nodesExecuted} nodes executed`);
         set({ isExecuting: false });
+        notifyJobComplete({
+          ok: !currentRunHadError,
+          durationSec: event.duration,
+          nodesExecuted: event.nodesExecuted,
+        });
         break;
     }
   },

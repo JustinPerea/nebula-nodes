@@ -1,6 +1,13 @@
 import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
 import { type SkinId, loadSkin, persistSkin, applySkinBodyClass } from '../lib/skins';
+import {
+  getNotificationPrefs,
+  setNotificationPrefs as persistNotificationPrefs,
+  ensureNotificationPermission,
+  primeAudio,
+  type NotificationPrefs,
+} from '../lib/jobNotifications';
 import { useGraphStore } from './graphStore';
 
 const AGENT_LOG_ENABLED_KEY = 'nebula:agentLog:enabled';
@@ -140,6 +147,7 @@ interface UIState {
   agentLogEnabled: boolean;
   canvasPerfMode: boolean;
   canvasLowDetail: boolean;
+  notificationPrefs: NotificationPrefs;
   inspectorPinned: boolean;
   canvasTool: 'pan' | 'select';
 
@@ -193,6 +201,7 @@ interface UIState {
   setAgentLogEnabled: (enabled: boolean) => void;
   setCanvasPerfMode: (enabled: boolean) => void;
   setCanvasLowDetail: (enabled: boolean) => void;
+  setNotificationPrefs: (partial: Partial<NotificationPrefs>) => void;
   setCanvasTool: (tool: 'pan' | 'select') => void;
   resetPanelsForFreshCanvas: () => void;
 }
@@ -235,6 +244,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   agentLogEnabled: loadAgentLogEnabled(),
   canvasPerfMode: loadCanvasPref(CANVAS_PERF_MODE_KEY),
   canvasLowDetail: loadCanvasPref(CANVAS_LOW_DETAIL_KEY),
+  notificationPrefs: getNotificationPrefs(),
   inspectorPinned: false,
   canvasTool: 'pan',
 
@@ -535,6 +545,17 @@ export const useUIStore = create<UIState>((set, get) => ({
   setCanvasLowDetail: (enabled) => {
     persistCanvasPref(CANVAS_LOW_DETAIL_KEY, enabled);
     set({ canvasLowDetail: enabled });
+  },
+
+  setNotificationPrefs: (partial) => {
+    const next = { ...get().notificationPrefs, ...partial };
+    persistNotificationPrefs(next);
+    set({ notificationPrefs: next });
+    // Enabling is a user gesture — the moment to request permission and unlock audio.
+    if (partial.enabled) {
+      void ensureNotificationPermission();
+      primeAudio();
+    }
   },
 
   setCanvasTool: (tool) => set({ canvasTool: tool }),

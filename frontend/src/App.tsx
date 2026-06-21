@@ -20,6 +20,7 @@ import { NodeInspectorPopover } from './components/panels/NodeInspectorPopover';
 import { ChatPanel } from './components/panels/ChatPanel';
 import { AgentLog } from './components/panels/AgentLog';
 import { CommandPalette } from './components/CommandPalette';
+import { startWorkingBadge } from './lib/jobNotifications';
 import { getSettings, fetchCLIGraph } from './lib/api';
 import { useUIStore } from './store/uiStore';
 import { useGraphStore } from './store/graphStore';
@@ -148,6 +149,22 @@ export default function App() {
     sync();
     window.addEventListener('hashchange', sync);
     return () => window.removeEventListener('hashchange', sync);
+  }, []);
+
+  // Job-notification "working" tab badge: flash the title while a run is in
+  // flight and the tab is backgrounded. Completion notifications fire from the store.
+  useEffect(() => {
+    const unsub = useGraphStore.subscribe((s, p) => {
+      if (s.isExecuting && !p.isExecuting) startWorkingBadge();
+    });
+    const onVis = () => {
+      if (document.hidden && useGraphStore.getState().isExecuting) startWorkingBadge();
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => {
+      unsub();
+      document.removeEventListener('visibilitychange', onVis);
+    };
   }, []);
 
   const viewMode = useUIStore((s) => s.viewMode);

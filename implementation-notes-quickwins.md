@@ -54,3 +54,19 @@ Decisions / deviations from the scoper spec:
 - **Did NOT** extract Toolbar's handleClear/handleImportCLI/handleResetLayout (scoper's "may defer") — avoids touching working Toolbar flows for v1. So no Toolbar/NodeLibrary edits at all.
 - eslint react-hooks rules forced two refactors: precomputed `indexById` map instead of a mutated render counter; derived `safeSelected` at render + resets moved into the keydown handler instead of `setState`-in-effect.
 - v1 ordering is alphabetical-by-group (Actions/View/Agent/Nodes); MRU deferred.
+
+---
+
+## P0.4 — Job notifications
+
+**Status:** code-complete; `tsc -b --noEmit` clean; eslint clean; 8 vitest tests pass.
+
+New: `lib/jobNotifications.ts` (pure glue — prefs, permission, `shouldNotifyFor`, OS Notification, tab-title + favicon badge, WebAudio beep), `tests/jobNotifications.test.ts`. Modified: `graphStore.ts`, `uiStore.ts`, `Settings.tsx`, `App.tsx`.
+
+Decisions:
+- **Default OFF** — enabling is the user gesture that requests Notification permission (`setNotificationPrefs` calls `ensureNotificationPermission()` + `primeAudio()` on enable). Never prompts unprompted.
+- **Failure detection** (the tricky bit — no terminal "failed" event): module-level `currentRunHadError` in graphStore, reset in `resetExecution()` (the single shared entry point all execute* methods call), set true in the `error` and `validationError` cases. `graphComplete` notifies `ok: !currentRunHadError`; `validationError` notifies `ok:false` directly (it ends the run with no following graphComplete). Exactly one notification per run.
+- `shouldNotify = tab hidden || duration >= 30s` (fixed 30s constant). Whole-graph completion only (not per-node).
+- Working-badge coordinator lives in an App.tsx effect subscribing to `isExecuting` transitions (keeps the concern out of the store); badge only shows while `document.hidden`; restores on focus/visible.
+- Favicon dot drawn on a runtime canvas, fully try/catch-guarded → title-only fallback if the SVG taints the canvas. All `Notification`/`document`/`AudioContext` access feature-detected + guarded.
+- No import cycle: `jobNotifications` is a leaf (imported by both graphStore and uiStore; imports neither).
