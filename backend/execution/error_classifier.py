@@ -65,7 +65,9 @@ _QUOTA_MARKERS = (
     "insufficient credit",
     "insufficient credits",
     "out of credits",
-    "billing",
+    "billing hard limit",
+    "billing_hard_limit",
+    "check your plan and billing",
     "payment required",
     "402",
 )

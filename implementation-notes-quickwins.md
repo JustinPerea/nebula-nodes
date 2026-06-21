@@ -88,6 +88,16 @@ Decisions:
 - Sample graph is frontend-only (loadGraph path) until a backend sync — acceptable for a demo (matches addNode's documented local fallback).
 - eslint forced: removed `setRect(null)` from the effect body (stale rect never renders since the component returns null when inactive) — measurement `setRect` lives in the `measure` callback, which the rule allows.
 
+## Post-build code review fixes (adversarial reviewer pass)
+A code-reviewer subagent reviewed the full branch diff. 5 real findings, all fixed:
+1. **[critical] Inverted `silent` in `notifyJobComplete`** — `silent: prefs.sound` meant the OS dinged when the user had sound OFF, and (with the custom beep) risked double-sound when ON. Fixed to `silent: true` always (the `beep()` owns the sound-on case; sound-off = silent).
+2. **[leak] `armRestore` stacked `visibilitychange` listeners** — only the `focus` listener was `{once}`; the visibility one was never removed. Now stored in `visibilityHandler` and removed in `restoreBadges`.
+3. **[bug] `currentRunHadError` leaked into the concurrent Create path** — `executeClusterConcurrent` skips `resetExecution`, so a prior failed run could mark a clean generation "failed". Now resets the flag at the start of that path too.
+4. **[mis-classify] over-broad `"billing"` quota marker** — replaced with specific phrases (`billing hard limit`, `check your plan and billing`, …); added a regression test that `"invalid billing address"` ≠ quota.
+5. **[robustness] onboarding tooltip could overflow the bottom edge** — added a vertical clamp/flip (below → above when it wouldn't fit). (Low real risk since launchers sit top-left, but cheap correctness.)
+
+Re-verified after fixes: 23 classifier + 8 notification tests pass, tsc clean, eslint clean.
+
 ## Pre-existing issues found (NOT mine — flagged separately)
 1. `ModelNode.tsx` — 3 `react-hooks/rules-of-hooks` violations (spawn_task `task_b9b86004`).
 2. `test_node_contracts.py::test_generated_model_reference_matches_committed_file` — FAILS on `main` too (MODEL_REFERENCE.md drifted from node_definitions.json). I touched neither file. Needs `node scripts/check-node-contracts.mjs` regen.

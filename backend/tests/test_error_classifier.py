@@ -44,6 +44,12 @@ def test_classify_category(raw: str, expected_category: str, expected_retryable:
     assert retryable is expected_retryable
 
 
+def test_generic_billing_word_is_not_quota() -> None:
+    # The bare word "billing" must not over-classify unrelated errors as quota.
+    category, _, _ = classify_error("Invalid billing address: postal code required")
+    assert category != "quota"
+
+
 def test_blocked_beats_400() -> None:
     # A 400 that carries a moderation marker must classify as blocked, not invalid_input.
     category, _, _ = classify_error("400 Bad Request: content_policy violation")

@@ -1982,6 +1982,10 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     const clusterNodes = nodes.filter((n) => idSet.has(n.id));
     if (clusterNodes.length === 0) return;
     const clusterEdges = edges.filter((e) => idSet.has(e.source) && idSet.has(e.target));
+    // This path intentionally skips resetExecution, so clear the job-notification
+    // error flag here too — otherwise a prior failed run would leak its error
+    // state into this generation's completion notification.
+    currentRunHadError = false;
     // Mark ONLY the cluster nodes queued — no global resetExecution, no isExecuting touch.
     set((state) => ({
       nodes: state.nodes.map((n) =>

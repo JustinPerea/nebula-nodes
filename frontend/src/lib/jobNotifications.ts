@@ -70,12 +70,15 @@ function faviconLink(): HTMLLinkElement | null {
   return document.querySelector<HTMLLinkElement>('link[rel="icon"]');
 }
 
+let visibilityHandler: (() => void) | null = null;
+
 function armRestore(): void {
   if (restoreArmed || typeof document === 'undefined') return;
   restoreArmed = true;
   const onVisible = () => {
     if (!document.hidden) restoreBadges();
   };
+  visibilityHandler = onVisible;
   document.addEventListener('visibilitychange', onVisible);
   window.addEventListener('focus', restoreBadges, { once: true });
 }
@@ -90,6 +93,11 @@ function restoreBadges(): void {
   if (link && originalFavicon !== null) {
     link.href = originalFavicon;
     originalFavicon = null;
+  }
+  // Remove the visibility listener we armed so repeated runs don't stack handlers.
+  if (visibilityHandler) {
+    document.removeEventListener('visibilitychange', visibilityHandler);
+    visibilityHandler = null;
   }
   restoreArmed = false;
 }
@@ -224,7 +232,9 @@ export function notifyJobComplete(opts: {
         body,
         icon: '/favicon.svg',
         tag: 'nebula-job',
-        silent: prefs.sound, // we play our own tone when sound is on
+        // Always suppress the OS sound: when sound is on we play our own tone via
+        // beep(); when it's off the user wants silence. Either way the OS must not ding.
+        silent: true,
       });
       n.onclick = () => {
         window.focus();

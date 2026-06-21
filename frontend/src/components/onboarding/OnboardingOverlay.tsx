@@ -106,8 +106,16 @@ export function OnboardingOverlay() {
   }
 
   // --- Spotlight tour (steps 1..N) ---
+  // Position below the target, but flip above (and clamp) when it would overflow
+  // the bottom of the viewport, so the tooltip is always on-screen.
+  const TOOLTIP_H = 170;
+  const left = rect
+    ? Math.max(12, Math.min(rect.left + rect.width / 2 - 150, window.innerWidth - 312))
+    : 0;
+  const fitsBelow = rect ? rect.bottom + 12 + TOOLTIP_H < window.innerHeight : false;
+  const top = rect ? (fitsBelow ? rect.bottom + 12 : Math.max(12, rect.top - TOOLTIP_H - 12)) : 0;
   const tooltipStyle: React.CSSProperties = rect
-    ? { top: rect.bottom + 12, left: Math.max(12, Math.min(rect.left + rect.width / 2 - 150, window.innerWidth - 312)) }
+    ? { top, left }
     : { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' };
 
   return (
