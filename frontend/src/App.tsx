@@ -19,6 +19,7 @@ import { PanelLaunchers } from './components/panels/PanelLaunchers';
 import { NodeInspectorPopover } from './components/panels/NodeInspectorPopover';
 import { ChatPanel } from './components/panels/ChatPanel';
 import { AgentLog } from './components/panels/AgentLog';
+import { CommandPalette } from './components/CommandPalette';
 import { getSettings, fetchCLIGraph } from './lib/api';
 import { useUIStore } from './store/uiStore';
 import { useGraphStore } from './store/graphStore';
@@ -197,6 +198,7 @@ export default function App() {
       {isCanvas && <PanelLaunchers />}
       {isCanvas && <Toolbar />}
       {isCanvas && <AgentLog />}
+      {!isBrandShowcase && <CommandPalette />}
     </ReactFlowProvider>
   );
 }

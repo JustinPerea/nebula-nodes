@@ -39,3 +39,18 @@ Decisions:
 - CSS: `--blocked` modifier + details styling in `nodes.css` (default) and `slava-restraint.css` (active skin). Skipped `hermes.css` (deprecated; base error rule still applies).
 
 Found (out of scope, flagged via spawn_task): `ModelNode.tsx` has 3 PRE-EXISTING `react-hooks/rules-of-hooks` violations (conditional `useGraphStore`/`useMemo` after an early return). Not introduced by me (confirmed on committed version); latent because `npm run lint` bails on the inline-styles check before eslint runs.
+
+---
+
+## P0.3 — Cmd+K command palette
+
+**Status:** code-complete; `tsc -b --noEmit` clean; eslint clean on changed files.
+
+New files: `lib/commandPalette.ts` (PaletteCommand type + `buildCommands(ctx)` + `filterCommands`), `components/CommandPalette.tsx` (portal overlay + global hotkey), `styles/command-palette.css` (default + Slava). Modified: `App.tsx` (mount inside ReactFlowProvider, gated `!isBrandShowcase`).
+
+Decisions / deviations from the scoper spec:
+- **DEVIATION:** scoper said "palette wins globally" over the editor's Cmd+K. I chose the opposite — the palette *yields* in `editor`/`remotion-editor` views (the editor's Cmd+K = cut-clip-at-playhead is core muscle memory). The hotkey handler checks `useUIStore.getState().viewMode` and bails in those views. Cleaner than capture-phase fighting and preserves editor UX.
+- Commands: all 138 nodes (insert at viewport center via `screenToFlowPosition`), Actions (Run/Save/Load/Fit — Save/Load reuse the existing `nebula:save`/`nebula:load` CustomEvents the Toolbar already listens for), View (Create view, panel toggles, skins), Agent ("Ask the agent…" → sub-mode → dispatches `nebula:chat-send`, which auto-sends; correct here since the user explicitly typed a query).
+- **Did NOT** extract Toolbar's handleClear/handleImportCLI/handleResetLayout (scoper's "may defer") — avoids touching working Toolbar flows for v1. So no Toolbar/NodeLibrary edits at all.
+- eslint react-hooks rules forced two refactors: precomputed `indexById` map instead of a mutated render counter; derived `safeSelected` at render + resets moved into the keydown handler instead of `setState`-in-effect.
+- v1 ordering is alphabetical-by-group (Actions/View/Agent/Nodes); MRU deferred.
