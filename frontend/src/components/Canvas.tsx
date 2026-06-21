@@ -4,7 +4,11 @@ import {
   Background,
   BackgroundVariant,
   SelectionMode,
+  MiniMap,
+  Controls,
+  Panel,
   useReactFlow,
+  useStore,
   type Connection,
   type NodeTypes,
   type EdgeTypes,
@@ -217,6 +221,35 @@ function useSlavaHandleMagnetism() {
   }, []);
 }
 
+/**
+ * Reads live zoom from the React Flow store and writes a `data-lod` attribute on
+ * the canvas wrapper when zoomed out past `threshold`. Selecting only the zoom
+ * scalar (`transform[2]`) means this re-renders on zoom change but NOT on pan,
+ * and it returns null so there is no DOM diff — node components never re-render.
+ * Must live inside the React Flow provider context (rendered as a <ReactFlow> child).
+ */
+function ZoomLodController({
+  wrapperRef,
+  threshold,
+  enabled,
+}: {
+  wrapperRef: React.RefObject<HTMLDivElement | null>;
+  threshold: number;
+  enabled: boolean;
+}) {
+  const zoom = useStore((s) => s.transform[2]);
+  useEffect(() => {
+    const el = wrapperRef.current;
+    if (!el) return;
+    if (!enabled) {
+      delete el.dataset.lod;
+      return;
+    }
+    el.dataset.lod = zoom < threshold ? 'low' : 'high';
+  }, [zoom, threshold, enabled, wrapperRef]);
+  return null;
+}
+
 export function Canvas() {
   useSlavaHandleMagnetism();
 
@@ -229,6 +262,10 @@ export function Canvas() {
   const isExecuting = useGraphStore((s) => s.isExecuting);
   const isValidConnection = useIsValidConnection();
   const skin = useUIStore((s) => s.skin);
+  const canvasPerfMode = useUIStore((s) => s.canvasPerfMode);
+  const canvasLowDetail = useUIStore((s) => s.canvasLowDetail);
+  const onboardingActive = useUIStore((s) => s.onboardingActive);
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
   const canvasTool = useUIStore((s) => s.canvasTool);
   const showContextMenu = useUIStore((s) => s.showContextMenu);
   const hideContextMenu = useUIStore((s) => s.hideContextMenu);
@@ -550,6 +587,7 @@ export function Canvas() {
 
   return (
     <div
+      ref={wrapperRef}
       className={`canvas-wrapper${isSlavaSkin ? ' canvas-wrapper--slava' : ''}${isSlavaSkin && nodes.length === 0 ? ' canvas-wrapper--slava-empty' : ''}${canvasTool === 'select' ? ' canvas--select' : ''}`}
       onKeyDown={onKeyDown}
       tabIndex={0}
@@ -581,6 +619,7 @@ export function Canvas() {
         panOnDrag={canvasTool === 'select' ? [1, 2] : true}
         panOnScroll={false}
         selectionMode={SelectionMode.Partial}
+        onlyRenderVisibleElements={canvasPerfMode}
       >
         <Background
           variant={isSlavaSkin ? BackgroundVariant.Dots : BackgroundVariant.Lines}
@@ -590,8 +629,24 @@ export function Canvas() {
           className={isSlavaSkin ? 'slava-canvas-background' : undefined}
           patternClassName={isSlavaSkin ? 'slava-canvas-background__dot' : undefined}
         />
+        <ZoomLodController wrapperRef={wrapperRef} threshold={0.4} enabled={canvasLowDetail} />
+        {canvasPerfMode && (
+          <>
+            <Controls showInteractive={false} />
+            <MiniMap
+              pannable
+              zoomable
+              nodeStrokeWidth={2}
+              nodeColor={isSlavaSkin ? 'var(--sr-minimap-node, #c9c4ba)' : '#3a3a3a'}
+              maskColor="var(--xy-minimap-mask-background-color-default, rgba(0,0,0,0.6))"
+            />
+            <Panel position="bottom-left" className="canvas-node-count">
+              {nodes.length} {nodes.length === 1 ? 'node' : 'nodes'}
+            </Panel>
+          </>
+        )}
       </ReactFlow>
-      {isSlavaSkin && nodes.length === 0 ? (
+      {isSlavaSkin && nodes.length === 0 && !onboardingActive ? (
         <div className="nn-splash" aria-hidden="true">
           <CrabMarkAnimated
             mode="breathe"

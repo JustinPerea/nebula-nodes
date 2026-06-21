@@ -9,6 +9,7 @@ import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
 import { useSlavaNodeEntranceClass } from '../../hooks/useSlavaNodeEntrance';
 import { MeshPreview } from './MeshPreview';
+import { NodeError } from './NodeError';
 import { apiFetch } from '../../lib/backend';
 import '../../styles/nodes.css';
 
@@ -615,7 +616,11 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
       )}
 
       {nodeData.state === 'error' && nodeData.error && (
-        <div className="model-node__error">{nodeData.error}</div>
+        <NodeError
+          category={nodeData.errorCategory}
+          friendly={nodeData.errorFriendly}
+          raw={nodeData.error}
+        />
       )}
 
       {definition.outputPorts.length > 0 && (

@@ -4102,6 +4102,16 @@ body.app-slava-restraint .model-node__error {
   border-radius: var(--sr-node-error-radius);
 }
 
+/* Safety/moderation block: a muted left-rail (warning, not the accent used for
+   real failures) so a declined request reads as informational, not broken. */
+body.app-slava-restraint .model-node__error--blocked {
+  border-left-color: var(--sr-warning);
+  opacity: 0.92;
+}
+body.app-slava-restraint .model-node__error-details summary {
+  color: var(--sr-mono);
+}
+
 /* ─────────────────────────────────────────────────────────────────────
  * View switcher + editor workspace
  * ───────────────────────────────────────────────────────────────────── */

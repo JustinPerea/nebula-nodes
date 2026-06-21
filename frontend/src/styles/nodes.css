@@ -233,6 +233,34 @@ body:not(.app-slava-restraint) .model-node__error {
   border-top: 1px solid #2a2a2a;
 }
 
+/* Safety/moderation blocks: calmer amber treatment — still an error state, but
+   not a red "failure" (the request was understood and declined). */
+body:not(.app-slava-restraint) .model-node__error--blocked {
+  color: #E0A030;
+  background: rgba(224, 160, 48, 0.12);
+}
+
+/* Structural bits shared across skins (color comes from the skin rules above). */
+.model-node__error-message {
+  display: block;
+}
+.model-node__error-details {
+  margin-top: 3px;
+}
+.model-node__error-details summary {
+  cursor: pointer;
+  opacity: 0.7;
+  font-size: 9px;
+  list-style: revert;
+}
+.model-node__error-raw {
+  display: block;
+  margin-top: 3px;
+  opacity: 0.75;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 body:not(.app-slava-restraint) .model-node__preview-image {
   max-width: 100%;
   height: auto;

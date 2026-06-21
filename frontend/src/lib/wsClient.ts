@@ -1,11 +1,21 @@
 import { backendWebSocketUrl } from './backend';
 
+export type ErrorCategory =
+  | 'blocked'
+  | 'auth'
+  | 'quota'
+  | 'rate_limit'
+  | 'timeout'
+  | 'network'
+  | 'invalid_input'
+  | 'unknown';
+
 export type ExecutionEvent =
   | { type: 'queued'; nodeId: string }
   | { type: 'executing'; nodeId: string }
   | { type: 'progress'; nodeId: string; value: number }
   | { type: 'executed'; nodeId: string; outputs: Record<string, { type: string; value: string | null }> }
-  | { type: 'error'; nodeId: string; error: string; retryable: boolean }
+  | { type: 'error'; nodeId: string; error: string; retryable: boolean; category?: ErrorCategory; friendly?: string }
   | { type: 'validationError'; errors: Array<{ nodeId: string; portId: string; message: string }> }
   | { type: 'graphComplete'; duration: number; nodesExecuted: number }
   | { type: 'streamDelta'; nodeId: string; delta: string; accumulated: string }

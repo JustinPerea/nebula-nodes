@@ -759,6 +759,30 @@ body:not(.app-slava-restraint) .settings__key-input {
   flex-shrink: 0;
 }
 
+.settings__onboarding-button {
+  margin-top: 10px;
+  width: 100%;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 6px;
+  font-size: 12px;
+}
+body:not(.app-slava-restraint) .settings__onboarding-button {
+  background: #252525;
+  border: 1px solid #333;
+  color: #aaa;
+}
+body:not(.app-slava-restraint) .settings__onboarding-button:hover {
+  background: #2c2c2c;
+  color: #ccc;
+}
+body.app-slava-restraint .settings__onboarding-button {
+  background: rgba(0, 0, 0, 0.05);
+  border: 1px solid var(--sr-hairline, rgba(0, 0, 0, 0.12));
+  color: var(--sr-ink, #1a1a1a);
+  font-family: var(--sr-mono, monospace);
+}
+
 body:not(.app-slava-restraint) .settings__reveal-button {
   background: #252525;
   border: 1px solid #333;

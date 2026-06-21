@@ -12,6 +12,7 @@ import { v4 as uuidv4 } from 'uuid';
 import type { NodeData, DynamicNodeData, DynamicPortDefinition, DynamicParamDefinition, PortDataType, CinemaSceneSpec, CinemaShot, ModelNodeDefinition, GenerationRequest, CreateOriginTag } from '../types';
 import { shotPortId } from '../constants/ports';
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
+import { buildSampleGraph } from '../constants/sampleGraph';
 import {
   executeGraph as apiExecuteGraph,
   executeNode as apiExecuteNode,
@@ -20,6 +21,7 @@ import {
 } from '../lib/api';
 import { apiFetch, backendAssetUrlSync, rewriteBackendAssetUrls } from '../lib/backend';
 import { wsClient, type ExecutionEvent } from '../lib/wsClient';
+import { notifyJobComplete } from '../lib/jobNotifications';
 import { useUIStore } from './uiStore';
 import { clipSpeed, type EditClip } from '../lib/editor/virtualPlayback';
 import type { KeyframeData, VideoGraphManifest, TrackItem } from '../types/video';
@@ -234,6 +236,11 @@ function pushUndo(
 let lastUndoPush = 0;
 let lastUndoNodeId = '';
 
+// Whether the current run has produced any node error / validation error. Reset
+// at run start (resetExecution) and read at graphComplete so job notifications
+// can report ok vs failed — the backend has no single terminal "failed" event.
+let currentRunHadError = false;
+
 /** Like pushUndo but debounces rapid param changes on the same node (500ms window). */
 function maybePushUndo(
   set: (partial: Partial<GraphState> | ((state: GraphState) => Partial<GraphState>)) => void,
@@ -357,6 +364,7 @@ interface GraphState {
   duplicateNode: (nodeId: string) => void;
   deleteNode: (nodeId: string) => void;
   loadGraph: (nodes: Node<NodeData>[], edges: Edge[]) => void;
+  loadSampleGraph: () => void;
   clearGraph: () => void;
   configureOpenRouterModel: (nodeId: string, modelId: string, model: OpenRouterModel) => void;
   fetchReplicateSchemaAndConfigure: (nodeId: string, owner: string, name: string) => Promise<void>;
@@ -1823,6 +1831,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   },
 
   resetExecution: () => {
+    currentRunHadError = false;
     set((state) => ({
       isExecuting: false,
       nodes: state.nodes.map((node) => ({
@@ -1973,6 +1982,10 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     const clusterNodes = nodes.filter((n) => idSet.has(n.id));
     if (clusterNodes.length === 0) return;
     const clusterEdges = edges.filter((e) => idSet.has(e.source) && idSet.has(e.target));
+    // This path intentionally skips resetExecution, so clear the job-notification
+    // error flag here too — otherwise a prior failed run would leak its error
+    // state into this generation's completion notification.
+    currentRunHadError = false;
     // Mark ONLY the cluster nodes queued — no global resetExecution, no isExecuting touch.
     set((state) => ({
       nodes: state.nodes.map((n) =>
@@ -2514,6 +2527,17 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     set({ nodes, edges, isExecuting: false, undoStack: [], redoStack: [], backendFreshStartPending: false });
   },
 
+  loadSampleGraph: () => {
+    const { nodes, edges } = buildSampleGraph();
+    get().loadGraph(nodes, edges);
+    // Let the canvas auto-fit to frame the seeded pipeline.
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('nebula:graph-nodes-added', { detail: { totalCount: nodes.length } })
+      );
+    }
+  },
+
   clearGraph: () => {
     const { nodes, edges, undoStack } = get();
     const snapshot = createSnapshot(nodes, edges);
@@ -2724,23 +2748,34 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         break;
       }
       case 'error':
+        currentRunHadError = true;
         get().updateNodeData(event.nodeId, {
           state: 'error',
           error: event.error,
+          errorCategory: event.category,
+          errorFriendly: event.friendly,
           progress: undefined,
           streamingText: undefined,
           streamingPartials: undefined,
         });
         break;
       case 'validationError':
+        currentRunHadError = true;
         for (const err of event.errors) {
           if (err.nodeId) get().updateNodeData(err.nodeId, { state: 'error', error: err.message });
         }
         set({ isExecuting: false });
+        // validationError ends the run with no following graphComplete, so notify here.
+        notifyJobComplete({ ok: false, durationSec: 0, nodesExecuted: 0 });
         break;
       case 'graphComplete':
         console.log(`[execution] complete in ${event.duration}s, ${event.nodesExecuted} nodes executed`);
         set({ isExecuting: false });
+        notifyJobComplete({
+          ok: !currentRunHadError,
+          durationSec: event.duration,
+          nodesExecuted: event.nodesExecuted,
+        });
         break;
     }
   },

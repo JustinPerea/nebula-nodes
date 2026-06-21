@@ -9,6 +9,7 @@ from typing import Any, Callable, Awaitable
 from models.graph import GraphNode, GraphEdge, PortValueDict
 from services.cache import ExecutionCache
 from services.output import resolve_output_ref
+from execution.error_classifier import classify_error
 from models.events import (
     ExecutionEvent,
     QueuedEvent,
@@ -741,7 +742,16 @@ async def execute_graph(
             return nid, True, 1
 
         except Exception as exc:
-            await emit(ErrorEvent(node_id=nid, error=str(exc), retryable=False))
+            category, friendly, retryable = classify_error(str(exc))
+            await emit(
+                ErrorEvent(
+                    node_id=nid,
+                    error=str(exc),
+                    retryable=retryable,
+                    category=category,
+                    friendly=friendly,
+                )
+            )
             return nid, False, 0
 
     await queue_initial_ready_nodes()

@@ -1,9 +1,29 @@
 import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
 import { type SkinId, loadSkin, persistSkin, applySkinBodyClass } from '../lib/skins';
+import {
+  getNotificationPrefs,
+  setNotificationPrefs as persistNotificationPrefs,
+  ensureNotificationPermission,
+  primeAudio,
+  type NotificationPrefs,
+} from '../lib/jobNotifications';
 import { useGraphStore } from './graphStore';
 
 const AGENT_LOG_ENABLED_KEY = 'nebula:agentLog:enabled';
+const CANVAS_PERF_MODE_KEY = 'nebula:canvas:perfMode';
+const CANVAS_LOW_DETAIL_KEY = 'nebula:canvas:lowDetail';
+const ONBOARDED_KEY = 'nebula:onboarded';
+
+function loadOnboarded(): boolean {
+  if (typeof window === 'undefined') return true; // SSR: treat as done (never auto-open)
+  return window.localStorage.getItem(ONBOARDED_KEY) === '1';
+}
+
+function persistOnboarded(done: boolean): void {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(ONBOARDED_KEY, done ? '1' : '0');
+}
 
 const DEFAULT_PANELS = {
   library: { visible: true, position: { x: 16, y: 16 } },
@@ -35,6 +55,19 @@ function loadAgentLogEnabled(): boolean {
 function persistAgentLogEnabled(enabled: boolean): void {
   if (typeof window === 'undefined') return;
   window.localStorage.setItem(AGENT_LOG_ENABLED_KEY, enabled ? '1' : '0');
+}
+
+// Canvas performance prefs default ON (perf win with negligible visual cost for
+// render-culling; the minimap/controls chrome and zoom LOD are the visible part).
+function loadCanvasPref(key: string): boolean {
+  if (typeof window === 'undefined') return true;
+  const raw = window.localStorage.getItem(key);
+  return raw === null ? true : raw === '1';
+}
+
+function persistCanvasPref(key: string, enabled: boolean): void {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(key, enabled ? '1' : '0');
 }
 
 interface PanelState {
@@ -123,6 +156,12 @@ interface UIState {
   };
   skin: SkinId;
   agentLogEnabled: boolean;
+  canvasPerfMode: boolean;
+  canvasLowDetail: boolean;
+  notificationPrefs: NotificationPrefs;
+  hasOnboarded: boolean;
+  onboardingActive: boolean;
+  onboardingStep: number;
   inspectorPinned: boolean;
   canvasTool: 'pan' | 'select';
 
@@ -174,6 +213,13 @@ interface UIState {
   setSettingsCache: (apiKeys: Record<string, string>) => void;
   setSkin: (skin: SkinId) => void;
   setAgentLogEnabled: (enabled: boolean) => void;
+  setCanvasPerfMode: (enabled: boolean) => void;
+  setCanvasLowDetail: (enabled: boolean) => void;
+  setNotificationPrefs: (partial: Partial<NotificationPrefs>) => void;
+  startOnboarding: () => void;
+  nextOnboardingStep: () => void;
+  prevOnboardingStep: () => void;
+  finishOnboarding: () => void;
   setCanvasTool: (tool: 'pan' | 'select') => void;
   resetPanelsForFreshCanvas: () => void;
 }
@@ -214,6 +260,12 @@ export const useUIStore = create<UIState>((set, get) => ({
   settingsCache: { apiKeys: {}, loaded: false },
   skin: loadSkin(),
   agentLogEnabled: loadAgentLogEnabled(),
+  canvasPerfMode: loadCanvasPref(CANVAS_PERF_MODE_KEY),
+  canvasLowDetail: loadCanvasPref(CANVAS_LOW_DETAIL_KEY),
+  notificationPrefs: getNotificationPrefs(),
+  hasOnboarded: loadOnboarded(),
+  onboardingActive: false,
+  onboardingStep: 0,
   inspectorPinned: false,
   canvasTool: 'pan',
 
@@ -504,6 +556,35 @@ export const useUIStore = create<UIState>((set, get) => ({
   setAgentLogEnabled: (enabled) => {
     persistAgentLogEnabled(enabled);
     set({ agentLogEnabled: enabled });
+  },
+
+  setCanvasPerfMode: (enabled) => {
+    persistCanvasPref(CANVAS_PERF_MODE_KEY, enabled);
+    set({ canvasPerfMode: enabled });
+  },
+
+  setCanvasLowDetail: (enabled) => {
+    persistCanvasPref(CANVAS_LOW_DETAIL_KEY, enabled);
+    set({ canvasLowDetail: enabled });
+  },
+
+  setNotificationPrefs: (partial) => {
+    const next = { ...get().notificationPrefs, ...partial };
+    persistNotificationPrefs(next);
+    set({ notificationPrefs: next });
+    // Enabling is a user gesture — the moment to request permission and unlock audio.
+    if (partial.enabled) {
+      void ensureNotificationPermission();
+      primeAudio();
+    }
+  },
+
+  startOnboarding: () => set({ onboardingActive: true, onboardingStep: 0 }),
+  nextOnboardingStep: () => set((s) => ({ onboardingStep: s.onboardingStep + 1 })),
+  prevOnboardingStep: () => set((s) => ({ onboardingStep: Math.max(0, s.onboardingStep - 1) })),
+  finishOnboarding: () => {
+    persistOnboarded(true);
+    set({ hasOnboarded: true, onboardingActive: false, onboardingStep: 0 });
   },
 
   setCanvasTool: (tool) => set({ canvasTool: tool }),
