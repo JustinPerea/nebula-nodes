@@ -18,6 +18,13 @@ One dockable Assets panel with Characters · Moodboards · Styles tabs; the exis
 - tsc clean · eslint clean on changed files · `check:slava-css-scope` clean · 355 frontend tests pass · production build OK.
 - **Browser-verified** (Playwright, real Chromium): exactly 4 launchers (Assets present; moodboard/character gone); panel opens with all 3 tabs; Characters tab renders saved items; Styles tab lists the 12 seeded presets; clicking **Cinematic Noir** entered Create with `pendingPreset` consumed and the composer prompt set to the preset's prompt.
 
+## Post-build code review fixes
+An adversarial reviewer pass on the diff found 2 real issues, both fixed:
+1. **[critical] `commandPalette.ts` still toggled the removed panels** — the ⌘K palette (from the prior PR) listed "Toggle Moodboard"/"Toggle Character" (now phantom panels) and had no "Toggle Assets". Updated its `PanelKey`/`PANELS`/`togglePanel` signature to use `assets`. (tsc didn't catch it — the store union is a superset, so it type-checked; behavioral-only.)
+2. **[important] `pendingPreset` could leak across visits** — it was only cleared on consume. If Create was exited before mount-consume (or a fresh canvas loaded) the stale preset would silently apply on the next Create open. Now cleared in `exitCreateView` and `resetPanelsForFreshCanvas`. (StrictMode double-invoke was already safe — consume is read-then-clear.)
+
+Re-verified: tsc clean, eslint clean, 355 tests pass.
+
 ## Notes / deferred
 - The Assets panel sits at `top:360` (same slot the old Character library used) so it can overlap the Node Library panel when both are open — pre-existing behavior, not introduced here.
 - Reused `character-palette__*` item classes across all three tabs for visual parity (semantically generic enough); a dedicated `.assets-panel__item` set could replace them later.

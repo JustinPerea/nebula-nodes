@@ -375,7 +375,8 @@ export const useUIStore = create<UIState>((set, get) => ({
     set({ viewMode: 'create', createSessionId: uuidv4() });
   },
   exitCreateView: () => {
-    set({ viewMode: 'canvas', createSessionId: null });
+    // Clear any un-consumed Styles-tab preset so it can't leak into a later visit.
+    set({ viewMode: 'canvas', createSessionId: null, pendingPreset: null });
   },
 
   enterBrandShowcase: () => {
@@ -613,6 +614,7 @@ export const useUIStore = create<UIState>((set, get) => ({
       selectedNodeId: null,
       chatResized: false,
       inspectorPinned: false,
+      pendingPreset: null,
       panels: createDefaultPanels(),
       contextMenu: { visible: false, position: { x: 0, y: 0 }, nodeId: null },
       connectionPopup: {

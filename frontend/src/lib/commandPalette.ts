@@ -26,21 +26,20 @@ export interface PaletteContext {
   load: () => void;
   fitView: () => void;
   enterCreateView: () => void;
-  togglePanel: (p: 'library' | 'inspector' | 'settings' | 'chat' | 'moodboard' | 'character') => void;
+  togglePanel: (p: 'library' | 'inspector' | 'settings' | 'chat' | 'assets') => void;
   setSkin: (s: SkinId) => void;
   startAgentQuery: () => void;
   canRun: boolean;
 }
 
-type PanelKey = 'library' | 'inspector' | 'settings' | 'chat' | 'moodboard' | 'character';
+type PanelKey = 'library' | 'inspector' | 'settings' | 'chat' | 'assets';
 
 const PANELS: Array<[PanelKey, string]> = [
   ['library', 'Node Library'],
   ['inspector', 'Inspector'],
   ['settings', 'Settings'],
   ['chat', 'Chat'],
-  ['moodboard', 'Moodboard'],
-  ['character', 'Character'],
+  ['assets', 'Assets'],
 ];
 
 export function buildCommands(ctx: PaletteContext): PaletteCommand[] {
