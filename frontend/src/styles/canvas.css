@@ -44,7 +44,7 @@ body:not(.app-slava-restraint) .react-flow__minimap {
   background: #141414 !important;
   border: 1px solid #2a2a2a;
 }
-.app-slava-restraint .react-flow__minimap {
+body.app-slava-restraint .react-flow__minimap {
   background: var(--sr-canvas, #f4f1ea);
   border: 1px solid var(--sr-hairline, rgba(0, 0, 0, 0.12));
 }
@@ -59,7 +59,7 @@ body:not(.app-slava-restraint) .react-flow__minimap {
   pointer-events: none;
   user-select: none;
 }
-.app-slava-restraint .canvas-node-count {
+body.app-slava-restraint .canvas-node-count {
   background: rgba(255, 255, 255, 0.7);
   color: var(--sr-mono, rgba(0, 0, 0, 0.55));
   font-family: var(--sr-font-mono, monospace);
