@@ -32,6 +32,10 @@ class ErrorEvent(BaseModel):
     node_id: str
     error: str
     retryable: bool = False
+    # Optional friendly classification (see execution.error_classifier). `error`
+    # always holds the raw provider string for debugging; these enrich the UI.
+    category: str | None = None
+    friendly: str | None = None
 
 
 class ValidationErrorDetail(BaseModel):

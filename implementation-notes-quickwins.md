@@ -24,3 +24,18 @@ Decisions:
 - Reused the orphaned `.react-flow__controls` CSS already in `canvas.css`; added MiniMap theming (default + Slava) and a small node-count `<Panel>`.
 
 Open/!flagged: MiniMap+Controls change default canvas chrome (taste call surfaced to user; defaulting ON per plan).
+
+---
+
+## P0.2 — Friendly moderation / safety errors
+
+**Status:** code-complete; 43 backend tests pass (22 new classifier + 21 engine); `tsc -b --noEmit` clean; my eslint clean.
+
+Decisions:
+- New `backend/execution/error_classifier.py` — pure, never-raises `classify_error(raw) -> (category, friendly, retryable)`. Categories: blocked/auth/quota/rate_limit/timeout/network/invalid_input/unknown. **blocked checked before generic 4xx** (a 400 with a moderation marker → blocked). unknown → truncated raw (140 chars). retryable=True for rate_limit/timeout/network.
+- `ErrorEvent` gains optional `category`/`friendly` (raw `error` unchanged). `main.py` camelize is generic → no edit needed (single-word keys pass through).
+- `engine.py:743` except block classifies and attaches; **one edit covers all providers**.
+- Shared `frontend/.../nodes/NodeError.tsx` replaces the raw-error `<div>` in BOTH `DynamicNode` and `ModelNode`; shows friendly message + raw in a collapsed `<details>` (nothing lost). `blocked` gets a calmer amber/muted treatment (still an error state, not a red failure).
+- CSS: `--blocked` modifier + details styling in `nodes.css` (default) and `slava-restraint.css` (active skin). Skipped `hermes.css` (deprecated; base error rule still applies).
+
+Found (out of scope, flagged via spawn_task): `ModelNode.tsx` has 3 PRE-EXISTING `react-hooks/rules-of-hooks` violations (conditional `useGraphStore`/`useMemo` after an early return). Not introduced by me (confirmed on committed version); latent because `npm run lint` bails on the inline-styles check before eslint runs.

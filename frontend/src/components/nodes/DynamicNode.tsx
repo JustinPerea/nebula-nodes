@@ -8,6 +8,7 @@ import { CATEGORY_COLORS } from '../../constants/ports';
 import { useUIStore } from '../../store/uiStore';
 import { useSlavaNodeEntranceClass } from '../../hooks/useSlavaNodeEntrance';
 import { MeshPreview } from './MeshPreview';
+import { NodeError } from './NodeError';
 import '../../styles/nodes.css';
 
 function isDynamicData(data: NodeData): data is DynamicNodeData {
@@ -202,7 +203,11 @@ function DynamicNodeComponent({ id, data, selected }: NodeProps) {
       )}
 
       {nodeData.state === 'error' && nodeData.error && (
-        <div className="model-node__error">{nodeData.error}</div>
+        <NodeError
+          category={nodeData.errorCategory}
+          friendly={nodeData.errorFriendly}
+          raw={nodeData.error}
+        />
       )}
 
       {outputPorts.length > 0 && (

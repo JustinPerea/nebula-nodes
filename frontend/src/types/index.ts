@@ -259,6 +259,10 @@ export interface NodeData {
   progress?: number;
   outputs: Record<string, PortValue>;
   error?: string;
+  /** Friendly classification of `error` (see backend error_classifier). `error`
+   *  still holds the raw provider string for the expandable debug details. */
+  errorCategory?: string;
+  errorFriendly?: string;
   keyStatus?: 'ok' | 'missing';
   streamingText?: string;
   streamingPartials?: { index: number; src: string }[];

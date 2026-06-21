@@ -2727,6 +2727,8 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         get().updateNodeData(event.nodeId, {
           state: 'error',
           error: event.error,
+          errorCategory: event.category,
+          errorFriendly: event.friendly,
           progress: undefined,
           streamingText: undefined,
           streamingPartials: undefined,
