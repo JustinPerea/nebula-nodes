@@ -29,7 +29,7 @@
 ## Queue (auto: yes) — in priority order
 1. `g-prompt-improver-builtin` — `todo` — inline "Enhance" on the Create prompt (LLM round-trip, non-destructive accept/dismiss).
 2. `g-image-compare-slider` — `todo` — before/after wipe slider (Create gallery/Lightbox first; reusable component).
-3. `g-router-node` — `todo` — one-to-many pass-through utility node (backend def + handler + body/output test).
+3. `g-router-node` — ✅ `done` (already shipped) — verified complete: `nodeDefinitions.ts:2006` + `node_definitions.json:2984` (1 input → out1/out2/out3) + `engine.py` handler (local node, copies input to all 3 outputs). No change needed; the "partial" assessment was stale.
 4. `g-variation-fanout` — `todo` — Create "Vary" mode on the quantity stepper (Seed/Style/Prompt) + gallery grouping.
 5. `g-export-node-multiformat` — `todo` — per-card download format menu + gallery "Download all (ZIP)" + Video Editor export.
 6. `g-document-node` — `blocked?` — PDF ingestion needs a PDF lib; re-check for an already-present dep before building, else flag.
@@ -50,4 +50,4 @@
 - `g-elements-asset-library` Phase 2 (`/api/elements` + Save-to-library + @-mention + agent readability) — design-y; revisit after the queue.
 
 ## Run log
-(appended per iteration)
+- **Iter 1** — `g-router-node`: verify-first found it already fully implemented (both registries + engine handler, 3-output pass-through). Marked done, no change. Next: `g-prompt-improver-builtin` (no simple LLM endpoint — may need a small `/api/enhance-prompt` route) then `g-image-compare-slider`.
