@@ -94,4 +94,10 @@ Decisions:
 3. `npm run lint` bails on a pre-existing `check:inline-styles` failure in `BrandShowcaseView.tsx` before eslint runs.
 
 ## Verification status
-All 5: `tsc -b --noEmit` clean, eslint clean on changed files, slava-scope clean, full frontend build OK, 355 frontend + 1002 backend tests pass (the 1 backend failure is pre-existing #2 above). Browser smoke pass: pending.
+All 5: `tsc -b --noEmit` clean, eslint clean on changed files, slava-scope clean, full frontend build OK, 355 frontend + 1002 backend tests pass (the 1 backend failure is pre-existing #2 above).
+
+**Browser smoke pass: DONE** (dev servers + Playwright, real Chromium):
+- P0.1 — MiniMap (bottom-right) + Controls (bottom-left) render with default ON. ✓
+- P0.3 — ⌘K/Ctrl+K opens the palette; "imagen" filters to "Imagen 4 · image-gen · google"; grouped. ✓
+- P0.5 — onboarding welcome card renders; "Take the tour" → spotlight ring on the Node Library launcher + tooltip "1 / 5". ✓ (triggered via `window.__nebulaUIStore.getState().startOnboarding()` since the test backend had a non-empty cli_graph — which also confirmed onboarding correctly does NOT auto-fire on a non-empty canvas.)
+- P0.2 / P0.4 — covered by unit tests (22 classifier + 8 notifications); both need a live provider rejection / backgrounded long-job to see in-browser.
