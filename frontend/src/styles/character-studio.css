@@ -552,6 +552,57 @@ body.app-slava-restraint .panel__body--character-library {
   min-height: 0;
 }
 
+/* ── Unified Assets panel (Characters · Moodboards · Styles) ─────────────── */
+body.app-slava-restraint .panel--assets {
+  left: var(--sr-space-4, 16px);
+  top: 360px;
+  width: 248px;
+  z-index: calc(var(--sr-layer-panel) + 1);
+}
+body.app-slava-restraint .panel__body--assets {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+}
+
+/* structural (skin-agnostic) */
+.assets-panel__tabs {
+  display: flex;
+  gap: 4px;
+}
+.assets-panel__tab {
+  flex: 1;
+  padding: 5px 6px;
+  font-size: 11px;
+  cursor: pointer;
+  border-radius: 6px;
+}
+.assets-panel__search {
+  width: 100%;
+  padding: 6px 8px;
+  font-size: 12px;
+  border-radius: 6px;
+  outline: none;
+}
+
+/* Slava visual */
+body.app-slava-restraint .assets-panel__tab {
+  border: 1px solid var(--sr-edge, rgba(0, 0, 0, 0.12));
+  background: transparent;
+  color: var(--sr-ink-meta, rgba(0, 0, 0, 0.6));
+}
+body.app-slava-restraint .assets-panel__tab--active {
+  border: 1px solid var(--sr-accent, #ff5a1f);
+  background: var(--sr-accent-soft, rgba(255, 90, 31, 0.12));
+  color: var(--sr-ink, #1a1a1a);
+}
+body.app-slava-restraint .assets-panel__search {
+  border: 1px solid var(--sr-edge, rgba(0, 0, 0, 0.12));
+  background: var(--sr-glass, rgba(255, 255, 255, 0.5));
+  color: var(--sr-ink, #1a1a1a);
+}
+
 body.app-slava-restraint .character-palette__scope {
   display: flex;
   gap: 4px;

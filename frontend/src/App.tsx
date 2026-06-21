@@ -11,8 +11,7 @@ import { MoodboardStudioView } from './components/moodboard-studio/MoodboardStud
 import { CreateView } from './components/create-studio/CreateView';
 import { BrandShowcaseView } from './components/brand/BrandShowcaseView';
 import { NodeLibrary } from './components/panels/NodeLibrary';
-import { CharacterLibrary } from './components/panels/CharacterLibrary';
-import { MoodboardLibrary } from './components/panels/MoodboardLibrary';
+import { AssetsPanel } from './components/panels/AssetsPanel';
 import { Settings } from './components/panels/Settings';
 import { Toolbar } from './components/panels/Toolbar';
 import { PanelLaunchers } from './components/panels/PanelLaunchers';
@@ -179,8 +178,7 @@ export default function App() {
   }, []);
 
   const viewMode = useUIStore((s) => s.viewMode);
-  const moodboardPanelVisible = useUIStore((s) => s.panels.moodboard.visible);
-  const characterPanelVisible = useUIStore((s) => s.panels.character.visible);
+  const assetsPanelVisible = useUIStore((s) => s.panels.assets.visible);
 
   const isCanvas = viewMode === 'canvas';
   const isRemotion = viewMode === 'remotion-editor';
@@ -218,8 +216,7 @@ export default function App() {
       {/* Canvas-only chrome: library, inspector, settings, launchers, toolbar, agent log.
           The editor view is a focused workspace — only the pill control and chat remain. */}
       {isCanvas && <NodeLibrary />}
-      {isCanvas && characterPanelVisible && <CharacterLibrary />}
-      {isCanvas && moodboardPanelVisible && <MoodboardLibrary />}
+      {isCanvas && assetsPanelVisible && <AssetsPanel />}
       {isCanvas && <NodeInspectorPopover />}
       {isCanvas && <Settings />}
       {!isBrandShowcase && <ChatPanel />}

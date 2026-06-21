@@ -1,12 +1,11 @@
-import { Blocks, Images, MessageSquare, Sparkles, Users } from 'lucide-react';
+import { Blocks, FolderHeart, MessageSquare, Sparkles } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import '../../styles/panels.css';
 
 export function PanelLaunchers() {
   const libraryVisible = useUIStore((s) => s.panels.library.visible);
   const chatVisible = useUIStore((s) => s.panels.chat.visible);
-  const moodboardVisible = useUIStore((s) => s.panels.moodboard.visible);
-  const characterVisible = useUIStore((s) => s.panels.character.visible);
+  const assetsVisible = useUIStore((s) => s.panels.assets.visible);
   const togglePanel = useUIStore((s) => s.togglePanel);
   const enterCreateView = useUIStore((s) => s.enterCreateView);
 
@@ -30,24 +29,13 @@ export function PanelLaunchers() {
 
       <button
         type="button"
-        className={`panel-launcher panel-launcher--moodboard${moodboardVisible ? ' panel-launcher--active' : ''}`}
-        onClick={() => togglePanel('moodboard')}
-        title="Toggle moodboard library"
-        aria-label="Toggle moodboard library"
-        aria-pressed={moodboardVisible}
+        className={`panel-launcher panel-launcher--assets${assetsVisible ? ' panel-launcher--active' : ''}`}
+        onClick={() => togglePanel('assets')}
+        title="Toggle assets (characters, moodboards, styles)"
+        aria-label="Toggle assets panel"
+        aria-pressed={assetsVisible}
       >
-        <Images className="panel-launcher__icon" size={18} strokeWidth={1.65} aria-hidden="true" focusable="false" />
-      </button>
-
-      <button
-        type="button"
-        className={`panel-launcher panel-launcher--character${characterVisible ? ' panel-launcher--active' : ''}`}
-        onClick={() => togglePanel('character')}
-        title="Toggle character library"
-        aria-label="Toggle character library"
-        aria-pressed={characterVisible}
-      >
-        <Users className="panel-launcher__icon" size={18} strokeWidth={1.65} aria-hidden="true" focusable="false" />
+        <FolderHeart className="panel-launcher__icon" size={18} strokeWidth={1.65} aria-hidden="true" focusable="false" />
       </button>
 
       <button
