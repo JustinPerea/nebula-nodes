@@ -107,13 +107,8 @@ body.app-hermes .toolbar::before {
   top: var(--page-gutter);
 }
 
-.panel-launcher--moodboard {
+.panel-launcher--assets {
   left: calc(var(--page-gutter) + 104px);
-  top: var(--page-gutter);
-}
-
-.panel-launcher--character {
-  left: calc(var(--page-gutter) + 156px);
   top: var(--page-gutter);
 }
 

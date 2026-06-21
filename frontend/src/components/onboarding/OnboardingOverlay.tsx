@@ -14,8 +14,7 @@ const TOUR: TourStep[] = [
   { selector: '.panel-launcher--nodes', title: 'Node Library', body: 'Drag any of 138 nodes onto the canvas and wire them up.' },
   { selector: '.panel-launcher--create', title: 'Create', body: 'Prefer prompts? Generate in a prompt-first view — no wiring needed.' },
   { selector: '.panel-launcher--chat', title: 'Agent', body: 'Or just describe what you want — the agent builds the graph for you.' },
-  { selector: '.panel-launcher--moodboard', title: 'Moodboard', body: 'Assemble style briefs and palettes that feed your generators.' },
-  { selector: '.panel-launcher--character', title: 'Character', body: 'Define reusable character identities for consistent results.' },
+  { selector: '.panel-launcher--assets', title: 'Assets', body: 'Reusable characters, moodboards, and styles — drag any onto the canvas.' },
 ];
 
 export function OnboardingOverlay() {

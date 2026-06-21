@@ -8,6 +8,7 @@ import {
   primeAudio,
   type NotificationPrefs,
 } from '../lib/jobNotifications';
+import type { Preset } from '../lib/createPresets';
 import { useGraphStore } from './graphStore';
 
 const AGENT_LOG_ENABLED_KEY = 'nebula:agentLog:enabled';
@@ -33,7 +34,10 @@ const DEFAULT_PANELS = {
   // until chatResized flips, so the CSS clamp drives the rendered width.
   chat: { visible: false, position: { x: 16, y: 16 }, width: 300 },
   moodboard: { visible: false, position: { x: 16, y: 16 } },
-  character: { visible: true, position: { x: 16, y: 360 } },
+  character: { visible: false, position: { x: 16, y: 360 } },
+  // Unified Assets panel (Characters · Moodboards · Styles) — replaces the
+  // separate character/moodboard library panels. Opened from its launcher.
+  assets: { visible: false, position: { x: 16, y: 360 } },
 };
 
 function createDefaultPanels(): UIState['panels'] {
@@ -44,6 +48,7 @@ function createDefaultPanels(): UIState['panels'] {
     chat: { ...DEFAULT_PANELS.chat, position: { ...DEFAULT_PANELS.chat.position } },
     moodboard: { ...DEFAULT_PANELS.moodboard, position: { ...DEFAULT_PANELS.moodboard.position } },
     character: { ...DEFAULT_PANELS.character, position: { ...DEFAULT_PANELS.character.position } },
+    assets: { ...DEFAULT_PANELS.assets, position: { ...DEFAULT_PANELS.assets.position } },
   };
 }
 
@@ -141,6 +146,7 @@ interface UIState {
     chat: ChatPanelState;
     moodboard: PanelState;
     character: PanelState;
+    assets: PanelState;
   };
   librarySearch: string;
   libraryCollapsed: Record<string, boolean>;
@@ -162,6 +168,9 @@ interface UIState {
   hasOnboarded: boolean;
   onboardingActive: boolean;
   onboardingStep: number;
+  /** A preset handed from the Assets panel's Styles tab to the Create view,
+   *  consumed (and cleared) by CreateView on mount. */
+  pendingPreset: Preset | null;
   inspectorPinned: boolean;
   canvasTool: 'pan' | 'select';
 
@@ -198,8 +207,8 @@ interface UIState {
   selectNode: (nodeId: string | null) => void;
   setInspectorVisible: (visible: boolean) => void;
   setInspectorPinned: (pinned: boolean) => void;
-  togglePanel: (panel: 'library' | 'inspector' | 'settings' | 'chat' | 'moodboard' | 'character') => void;
-  setPanelPosition: (panel: 'library' | 'inspector' | 'settings' | 'chat' | 'moodboard' | 'character', position: { x: number; y: number }) => void;
+  togglePanel: (panel: 'library' | 'inspector' | 'settings' | 'chat' | 'moodboard' | 'character' | 'assets') => void;
+  setPanelPosition: (panel: 'library' | 'inspector' | 'settings' | 'chat' | 'moodboard' | 'character' | 'assets', position: { x: number; y: number }) => void;
   setLibrarySearch: (search: string) => void;
   toggleLibraryCategory: (category: string) => void;
   setAllLibraryCategories: (collapsed: boolean, categories: string[]) => void;
@@ -220,6 +229,8 @@ interface UIState {
   nextOnboardingStep: () => void;
   prevOnboardingStep: () => void;
   finishOnboarding: () => void;
+  setPendingPreset: (preset: Preset | null) => void;
+  consumePendingPreset: () => Preset | null;
   setCanvasTool: (tool: 'pan' | 'select') => void;
   resetPanelsForFreshCanvas: () => void;
 }
@@ -266,6 +277,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   hasOnboarded: loadOnboarded(),
   onboardingActive: false,
   onboardingStep: 0,
+  pendingPreset: null,
   inspectorPinned: false,
   canvasTool: 'pan',
 
@@ -363,7 +375,8 @@ export const useUIStore = create<UIState>((set, get) => ({
     set({ viewMode: 'create', createSessionId: uuidv4() });
   },
   exitCreateView: () => {
-    set({ viewMode: 'canvas', createSessionId: null });
+    // Clear any un-consumed Styles-tab preset so it can't leak into a later visit.
+    set({ viewMode: 'canvas', createSessionId: null, pendingPreset: null });
   },
 
   enterBrandShowcase: () => {
@@ -587,6 +600,13 @@ export const useUIStore = create<UIState>((set, get) => ({
     set({ hasOnboarded: true, onboardingActive: false, onboardingStep: 0 });
   },
 
+  setPendingPreset: (preset) => set({ pendingPreset: preset }),
+  consumePendingPreset: () => {
+    const p = get().pendingPreset;
+    if (p) set({ pendingPreset: null });
+    return p;
+  },
+
   setCanvasTool: (tool) => set({ canvasTool: tool }),
 
   resetPanelsForFreshCanvas: () => {
@@ -594,6 +614,7 @@ export const useUIStore = create<UIState>((set, get) => ({
       selectedNodeId: null,
       chatResized: false,
       inspectorPinned: false,
+      pendingPreset: null,
       panels: createDefaultPanels(),
       contextMenu: { visible: false, position: { x: 0, y: 0 }, nodeId: null },
       connectionPopup: {

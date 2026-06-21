@@ -31,8 +31,7 @@ import { TypedEdge } from './edges/TypedEdge';
 import { ContextMenu } from './ContextMenu';
 import { ConnectionPopup } from './ConnectionPopup';
 import { CrabMarkAnimated } from './brand/CrabMarkAnimated';
-import { CHARACTER_DRAG_MIME } from './panels/CharacterLibrary';
-import { MOODBOARD_DRAG_MIME } from './panels/MoodboardLibrary';
+import { CHARACTER_DRAG_MIME, MOODBOARD_DRAG_MIME } from '../lib/dragMime';
 import { apiFetch } from '../lib/backend';
 import '../styles/canvas.css';
 

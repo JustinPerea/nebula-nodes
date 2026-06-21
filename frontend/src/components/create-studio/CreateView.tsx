@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { ArrowLeft } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
@@ -92,6 +92,14 @@ export function CreateView() {
       });
     }
   };
+
+  // If the Assets panel's Styles tab handed us a preset before switching to
+  // Create, apply it once on mount (consume clears it so it doesn't re-apply).
+  useEffect(() => {
+    const pending = useUIStore.getState().consumePendingPreset();
+    if (pending) handleApplyPreset(pending);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleSaveCurrentStyle = async () => {
     if (!modelDef) return;
