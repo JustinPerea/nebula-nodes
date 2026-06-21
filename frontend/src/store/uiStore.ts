@@ -4,6 +4,8 @@ import { type SkinId, loadSkin, persistSkin, applySkinBodyClass } from '../lib/s
 import { useGraphStore } from './graphStore';
 
 const AGENT_LOG_ENABLED_KEY = 'nebula:agentLog:enabled';
+const CANVAS_PERF_MODE_KEY = 'nebula:canvas:perfMode';
+const CANVAS_LOW_DETAIL_KEY = 'nebula:canvas:lowDetail';
 
 const DEFAULT_PANELS = {
   library: { visible: true, position: { x: 16, y: 16 } },
@@ -35,6 +37,19 @@ function loadAgentLogEnabled(): boolean {
 function persistAgentLogEnabled(enabled: boolean): void {
   if (typeof window === 'undefined') return;
   window.localStorage.setItem(AGENT_LOG_ENABLED_KEY, enabled ? '1' : '0');
+}
+
+// Canvas performance prefs default ON (perf win with negligible visual cost for
+// render-culling; the minimap/controls chrome and zoom LOD are the visible part).
+function loadCanvasPref(key: string): boolean {
+  if (typeof window === 'undefined') return true;
+  const raw = window.localStorage.getItem(key);
+  return raw === null ? true : raw === '1';
+}
+
+function persistCanvasPref(key: string, enabled: boolean): void {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(key, enabled ? '1' : '0');
 }
 
 interface PanelState {
@@ -123,6 +138,8 @@ interface UIState {
   };
   skin: SkinId;
   agentLogEnabled: boolean;
+  canvasPerfMode: boolean;
+  canvasLowDetail: boolean;
   inspectorPinned: boolean;
   canvasTool: 'pan' | 'select';
 
@@ -174,6 +191,8 @@ interface UIState {
   setSettingsCache: (apiKeys: Record<string, string>) => void;
   setSkin: (skin: SkinId) => void;
   setAgentLogEnabled: (enabled: boolean) => void;
+  setCanvasPerfMode: (enabled: boolean) => void;
+  setCanvasLowDetail: (enabled: boolean) => void;
   setCanvasTool: (tool: 'pan' | 'select') => void;
   resetPanelsForFreshCanvas: () => void;
 }
@@ -214,6 +233,8 @@ export const useUIStore = create<UIState>((set, get) => ({
   settingsCache: { apiKeys: {}, loaded: false },
   skin: loadSkin(),
   agentLogEnabled: loadAgentLogEnabled(),
+  canvasPerfMode: loadCanvasPref(CANVAS_PERF_MODE_KEY),
+  canvasLowDetail: loadCanvasPref(CANVAS_LOW_DETAIL_KEY),
   inspectorPinned: false,
   canvasTool: 'pan',
 
@@ -504,6 +525,16 @@ export const useUIStore = create<UIState>((set, get) => ({
   setAgentLogEnabled: (enabled) => {
     persistAgentLogEnabled(enabled);
     set({ agentLogEnabled: enabled });
+  },
+
+  setCanvasPerfMode: (enabled) => {
+    persistCanvasPref(CANVAS_PERF_MODE_KEY, enabled);
+    set({ canvasPerfMode: enabled });
+  },
+
+  setCanvasLowDetail: (enabled) => {
+    persistCanvasPref(CANVAS_LOW_DETAIL_KEY, enabled);
+    set({ canvasLowDetail: enabled });
   },
 
   setCanvasTool: (tool) => set({ canvasTool: tool }),
