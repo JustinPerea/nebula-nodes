@@ -70,3 +70,28 @@ Decisions:
 - Working-badge coordinator lives in an App.tsx effect subscribing to `isExecuting` transitions (keeps the concern out of the store); badge only shows while `document.hidden`; restores on focus/visible.
 - Favicon dot drawn on a runtime canvas, fully try/catch-guarded → title-only fallback if the SVG taints the canvas. All `Notification`/`document`/`AudioContext` access feature-detected + guarded.
 - No import cycle: `jobNotifications` is a leaf (imported by both graphStore and uiStore; imports neither).
+
+---
+
+## P0.5 — Onboarding / first-run experience
+
+**Status:** code-complete; `tsc -b --noEmit` clean; eslint clean; slava-scope clean; full frontend build OK; 355 frontend tests pass.
+
+New: `constants/sampleGraph.ts`, `components/onboarding/OnboardingOverlay.tsx`, `components/onboarding/onboarding.css`. Modified: `uiStore.ts` (onboarding state/actions + ONBOARDED_KEY), `graphStore.ts` (`loadSampleGraph`), `App.tsx` (mount + first-run trigger), `Canvas.tsx` (suppress splash while active), `Settings.tsx` + `panels.css` ("Show onboarding again").
+
+Verified-in-code before building the fixture (the scoper's flagged risk): `text-input` (output port `text`, param `value`) and `imagen-4-generate` (input port `prompt`) both exist and are NOT in `DYNAMIC_NODE_IDS`, so both render as `model-node`; fixture shape matches addNode's local fallback exactly. Edge type `typed-edge`.
+
+Decisions:
+- Welcome card (step 0) → Take the tour / Load a sample graph / Describe what you want / Skip. Tour = spotlight (box-shadow "hole" + outline) over the always-mounted `.panel-launcher--*` buttons (nodes/create/chat/moodboard/character); recomputes rect on resize; centered-tooltip fallback if a target is missing (no crash, no auto-advance setState).
+- "Describe what you want" opens+focuses chat but does **not** auto-send (avoids spending an API call on first run).
+- Trigger fires only in GraphHydrator's empty-canvas branch (data.empty + catch), guarded `!hasOnboarded && !onboardingActive` → idempotent under StrictMode; never on a non-empty graph.
+- Sample graph is frontend-only (loadGraph path) until a backend sync — acceptable for a demo (matches addNode's documented local fallback).
+- eslint forced: removed `setRect(null)` from the effect body (stale rect never renders since the component returns null when inactive) — measurement `setRect` lives in the `measure` callback, which the rule allows.
+
+## Pre-existing issues found (NOT mine — flagged separately)
+1. `ModelNode.tsx` — 3 `react-hooks/rules-of-hooks` violations (spawn_task `task_b9b86004`).
+2. `test_node_contracts.py::test_generated_model_reference_matches_committed_file` — FAILS on `main` too (MODEL_REFERENCE.md drifted from node_definitions.json). I touched neither file. Needs `node scripts/check-node-contracts.mjs` regen.
+3. `npm run lint` bails on a pre-existing `check:inline-styles` failure in `BrandShowcaseView.tsx` before eslint runs.
+
+## Verification status
+All 5: `tsc -b --noEmit` clean, eslint clean on changed files, slava-scope clean, full frontend build OK, 355 frontend + 1002 backend tests pass (the 1 backend failure is pre-existing #2 above). Browser smoke pass: pending.

@@ -1,0 +1,150 @@
+.onboarding {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  pointer-events: none; /* children opt back in */
+}
+
+.onboarding__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  pointer-events: auto;
+}
+
+/* --- Welcome card --- */
+.onboarding__welcome {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(460px, 90vw);
+  padding: 28px;
+  border-radius: 14px;
+  background: #181818;
+  border: 1px solid #2c2c2c;
+  box-shadow: 0 28px 72px rgba(0, 0, 0, 0.6);
+  pointer-events: auto;
+  text-align: center;
+}
+.onboarding__title {
+  margin: 0 0 8px;
+  font-size: 20px;
+  color: #f4f4f4;
+}
+.onboarding__subtitle {
+  margin: 0 0 20px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #9a9a9a;
+}
+.onboarding__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.onboarding__cta {
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid #333;
+  background: #222;
+  color: #e6e6e6;
+  font-size: 13px;
+  cursor: pointer;
+}
+.onboarding__cta:hover {
+  background: #2a2a2a;
+}
+.onboarding__cta--primary {
+  background: var(--sr-accent, #ff5a1f);
+  border-color: transparent;
+  color: #fff;
+}
+.onboarding__cta--primary:hover {
+  filter: brightness(1.08);
+}
+.onboarding__cta--small {
+  padding: 6px 12px;
+  font-size: 12px;
+}
+.onboarding__skip {
+  margin-top: 14px;
+  background: none;
+  border: none;
+  color: #777;
+  font-size: 12px;
+  cursor: pointer;
+}
+.onboarding__skip:hover {
+  color: #aaa;
+}
+.onboarding__skip--small {
+  margin-top: 8px;
+}
+
+/* --- Spotlight tour --- */
+.onboarding__spotlight {
+  position: absolute;
+  border-radius: 12px;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.55);
+  outline: 2px solid var(--sr-accent, #ff5a1f);
+  pointer-events: none;
+  transition: top 0.2s ease, left 0.2s ease, width 0.2s ease, height 0.2s ease;
+}
+
+.onboarding__tooltip {
+  position: absolute;
+  width: 300px;
+  padding: 16px;
+  border-radius: 12px;
+  background: #181818;
+  border: 1px solid #2c2c2c;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.5);
+  pointer-events: auto;
+}
+.onboarding__tooltip-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #f0f0f0;
+  margin-bottom: 4px;
+}
+.onboarding__tooltip-body {
+  font-size: 12px;
+  line-height: 1.5;
+  color: #9a9a9a;
+  margin-bottom: 12px;
+}
+.onboarding__tooltip-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.onboarding__progress {
+  font-size: 11px;
+  color: #6a6a6a;
+}
+.onboarding__tooltip-buttons {
+  display: flex;
+  gap: 6px;
+}
+
+/* --- Slava skin --- */
+body.app-slava-restraint .onboarding__welcome,
+body.app-slava-restraint .onboarding__tooltip {
+  background: var(--sr-canvas, #f4f1ea);
+  border-color: var(--sr-hairline, rgba(0, 0, 0, 0.12));
+}
+body.app-slava-restraint .onboarding__title,
+body.app-slava-restraint .onboarding__tooltip-title {
+  color: var(--sr-ink, #1a1a1a);
+}
+body.app-slava-restraint .onboarding__subtitle,
+body.app-slava-restraint .onboarding__tooltip-body {
+  color: var(--sr-mono, rgba(0, 0, 0, 0.6));
+}
+body.app-slava-restraint .onboarding__cta {
+  background: rgba(0, 0, 0, 0.05);
+  border-color: var(--sr-hairline, rgba(0, 0, 0, 0.12));
+  color: var(--sr-ink, #1a1a1a);
+  font-family: var(--sr-mono, monospace);
+}

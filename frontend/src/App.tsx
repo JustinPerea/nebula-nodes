@@ -20,6 +20,7 @@ import { NodeInspectorPopover } from './components/panels/NodeInspectorPopover';
 import { ChatPanel } from './components/panels/ChatPanel';
 import { AgentLog } from './components/panels/AgentLog';
 import { CommandPalette } from './components/CommandPalette';
+import { OnboardingOverlay } from './components/onboarding/OnboardingOverlay';
 import { startWorkingBadge } from './lib/jobNotifications';
 import { getSettings, fetchCLIGraph } from './lib/api';
 import { useUIStore } from './store/uiStore';
@@ -40,6 +41,14 @@ import './styles/slava-restraint.css';
  * edit isn't clobbered. Lives inside ReactFlowProvider so it can fit the
  * viewport after painting; in StrictMode the effect runs twice, but the
  * hasRunRef guard makes the second pass a no-op. */
+/** First-run onboarding only fires when (a) it's genuinely the first run and
+ * (b) the canvas resolved to empty. The guard keeps it idempotent under the
+ * StrictMode double-invoke of GraphHydrator's effect. */
+function maybeStartOnboarding() {
+  const ui = useUIStore.getState();
+  if (!ui.hasOnboarded && !ui.onboardingActive) ui.startOnboarding();
+}
+
 function GraphHydrator() {
   const { fitView } = useReactFlow();
 
@@ -58,6 +67,7 @@ function GraphHydrator() {
         if (cancelled || useGraphStore.getState().nodes.length > 0) return;
         if (data.empty) {
           useUIStore.getState().resetPanelsForFreshCanvas();
+          maybeStartOnboarding();
           return;
         }
         useGraphStore.getState().loadGraph(
@@ -70,6 +80,7 @@ function GraphHydrator() {
         // Backend down on first load: keep the blank canvas clean. The graph
         // store will clear stale cli_graph state before the first manual add.
         useUIStore.getState().resetPanelsForFreshCanvas();
+        maybeStartOnboarding();
       }
     })();
 
@@ -216,6 +227,7 @@ export default function App() {
       {isCanvas && <Toolbar />}
       {isCanvas && <AgentLog />}
       {!isBrandShowcase && <CommandPalette />}
+      {isCanvas && <OnboardingOverlay />}
     </ReactFlowProvider>
   );
 }

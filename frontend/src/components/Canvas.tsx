@@ -264,6 +264,7 @@ export function Canvas() {
   const skin = useUIStore((s) => s.skin);
   const canvasPerfMode = useUIStore((s) => s.canvasPerfMode);
   const canvasLowDetail = useUIStore((s) => s.canvasLowDetail);
+  const onboardingActive = useUIStore((s) => s.onboardingActive);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const canvasTool = useUIStore((s) => s.canvasTool);
   const showContextMenu = useUIStore((s) => s.showContextMenu);
@@ -645,7 +646,7 @@ export function Canvas() {
           </>
         )}
       </ReactFlow>
-      {isSlavaSkin && nodes.length === 0 ? (
+      {isSlavaSkin && nodes.length === 0 && !onboardingActive ? (
         <div className="nn-splash" aria-hidden="true">
           <CrabMarkAnimated
             mode="breathe"

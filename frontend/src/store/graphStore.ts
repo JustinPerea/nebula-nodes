@@ -12,6 +12,7 @@ import { v4 as uuidv4 } from 'uuid';
 import type { NodeData, DynamicNodeData, DynamicPortDefinition, DynamicParamDefinition, PortDataType, CinemaSceneSpec, CinemaShot, ModelNodeDefinition, GenerationRequest, CreateOriginTag } from '../types';
 import { shotPortId } from '../constants/ports';
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
+import { buildSampleGraph } from '../constants/sampleGraph';
 import {
   executeGraph as apiExecuteGraph,
   executeNode as apiExecuteNode,
@@ -363,6 +364,7 @@ interface GraphState {
   duplicateNode: (nodeId: string) => void;
   deleteNode: (nodeId: string) => void;
   loadGraph: (nodes: Node<NodeData>[], edges: Edge[]) => void;
+  loadSampleGraph: () => void;
   clearGraph: () => void;
   configureOpenRouterModel: (nodeId: string, modelId: string, model: OpenRouterModel) => void;
   fetchReplicateSchemaAndConfigure: (nodeId: string, owner: string, name: string) => Promise<void>;
@@ -2519,6 +2521,17 @@ export const useGraphStore = create<GraphState>((set, get) => ({
 
   loadGraph: (nodes, edges) => {
     set({ nodes, edges, isExecuting: false, undoStack: [], redoStack: [], backendFreshStartPending: false });
+  },
+
+  loadSampleGraph: () => {
+    const { nodes, edges } = buildSampleGraph();
+    get().loadGraph(nodes, edges);
+    // Let the canvas auto-fit to frame the seeded pipeline.
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('nebula:graph-nodes-added', { detail: { totalCount: nodes.length } })
+      );
+    }
   },
 
   clearGraph: () => {

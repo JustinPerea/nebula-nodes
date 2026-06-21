@@ -13,6 +13,17 @@ import { useGraphStore } from './graphStore';
 const AGENT_LOG_ENABLED_KEY = 'nebula:agentLog:enabled';
 const CANVAS_PERF_MODE_KEY = 'nebula:canvas:perfMode';
 const CANVAS_LOW_DETAIL_KEY = 'nebula:canvas:lowDetail';
+const ONBOARDED_KEY = 'nebula:onboarded';
+
+function loadOnboarded(): boolean {
+  if (typeof window === 'undefined') return true; // SSR: treat as done (never auto-open)
+  return window.localStorage.getItem(ONBOARDED_KEY) === '1';
+}
+
+function persistOnboarded(done: boolean): void {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(ONBOARDED_KEY, done ? '1' : '0');
+}
 
 const DEFAULT_PANELS = {
   library: { visible: true, position: { x: 16, y: 16 } },
@@ -148,6 +159,9 @@ interface UIState {
   canvasPerfMode: boolean;
   canvasLowDetail: boolean;
   notificationPrefs: NotificationPrefs;
+  hasOnboarded: boolean;
+  onboardingActive: boolean;
+  onboardingStep: number;
   inspectorPinned: boolean;
   canvasTool: 'pan' | 'select';
 
@@ -202,6 +216,10 @@ interface UIState {
   setCanvasPerfMode: (enabled: boolean) => void;
   setCanvasLowDetail: (enabled: boolean) => void;
   setNotificationPrefs: (partial: Partial<NotificationPrefs>) => void;
+  startOnboarding: () => void;
+  nextOnboardingStep: () => void;
+  prevOnboardingStep: () => void;
+  finishOnboarding: () => void;
   setCanvasTool: (tool: 'pan' | 'select') => void;
   resetPanelsForFreshCanvas: () => void;
 }
@@ -245,6 +263,9 @@ export const useUIStore = create<UIState>((set, get) => ({
   canvasPerfMode: loadCanvasPref(CANVAS_PERF_MODE_KEY),
   canvasLowDetail: loadCanvasPref(CANVAS_LOW_DETAIL_KEY),
   notificationPrefs: getNotificationPrefs(),
+  hasOnboarded: loadOnboarded(),
+  onboardingActive: false,
+  onboardingStep: 0,
   inspectorPinned: false,
   canvasTool: 'pan',
 
@@ -556,6 +577,14 @@ export const useUIStore = create<UIState>((set, get) => ({
       void ensureNotificationPermission();
       primeAudio();
     }
+  },
+
+  startOnboarding: () => set({ onboardingActive: true, onboardingStep: 0 }),
+  nextOnboardingStep: () => set((s) => ({ onboardingStep: s.onboardingStep + 1 })),
+  prevOnboardingStep: () => set((s) => ({ onboardingStep: Math.max(0, s.onboardingStep - 1) })),
+  finishOnboarding: () => {
+    persistOnboarded(true);
+    set({ hasOnboarded: true, onboardingActive: false, onboardingStep: 0 });
   },
 
   setCanvasTool: (tool) => set({ canvasTool: tool }),

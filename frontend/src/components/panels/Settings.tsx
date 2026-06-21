@@ -56,6 +56,7 @@ export function Settings() {
   const setCanvasLowDetail = useUIStore((s) => s.setCanvasLowDetail);
   const notificationPrefs = useUIStore((s) => s.notificationPrefs);
   const setNotificationPrefs = useUIStore((s) => s.setNotificationPrefs);
+  const startOnboarding = useUIStore((s) => s.startOnboarding);
   const dragRef = useRef<{ startX: number; startY: number; panelX: number; panelY: number } | null>(null);
 
   const [apiKeys, setApiKeys] = useState<Record<string, string>>({});
@@ -377,6 +378,16 @@ export function Settings() {
                 </span>
               </label>
             )}
+            <button
+              type="button"
+              className="settings__onboarding-button"
+              onClick={() => {
+                togglePanel('settings');
+                startOnboarding();
+              }}
+            >
+              Show onboarding again
+            </button>
 
             {/* Output Path Section */}
             <div className="settings__section-label settings__section-label--stacked">
