@@ -389,7 +389,7 @@ Nodes: 138 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
 | Aspect Ratio | enum | 1x1 | 1:1, 16:9, 9:16, 4:3, 3:4, 3:2, 2:3, 16:10, … |
-| Style Type | enum | AUTO | Auto, General, Realistic, Design, Fiction |
+| Style Type | enum | AUTO | Auto, Realistic, Fiction |
 | Magic Prompt | enum | AUTO | Auto, On, Off |
 | Rendering Speed | enum | DEFAULT | Turbo, Default, Quality |
 | Custom Model URI | string | — | — |
