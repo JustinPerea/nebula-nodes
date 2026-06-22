@@ -1713,6 +1713,29 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     ],
   },
 
+  'document-input': {
+    id: 'document-input',
+    displayName: 'Document Input',
+    category: 'utility',
+    apiProvider: 'utility',
+    apiEndpoint: '',
+    envKeyName: [],
+    executionPattern: 'sync',
+    inputPorts: [],
+    outputPorts: [
+      { id: 'text', label: 'Text', dataType: 'Text', required: false },
+    ],
+    params: [
+      {
+        key: 'filePath',
+        label: 'Document (PDF / text)',
+        type: 'file',
+        required: true,
+        default: '',
+      },
+    ],
+  },
+
   'style-reference': {
     id: 'style-reference',
     displayName: 'Style Reference',

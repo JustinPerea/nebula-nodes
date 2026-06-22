@@ -12,6 +12,11 @@
       "browser": "execute"
     },
     {
+      "id": "document-input",
+      "backend": "native",
+      "browser": "execute"
+    },
+    {
       "id": "preview",
       "backend": "native",
       "browser": "execute"

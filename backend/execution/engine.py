@@ -9,6 +9,7 @@ from typing import Any, Callable, Awaitable
 from models.graph import GraphNode, GraphEdge, PortValueDict
 from services.cache import ExecutionCache
 from services.output import resolve_output_ref
+from services.document_extract import extract_text
 from execution.error_classifier import classify_error
 from models.events import (
     ExecutionEvent,
@@ -105,6 +106,11 @@ NODE_DEFS: dict[str, dict[str, Any]] = {
     "image-input": {
         "inputPorts": [],
         "outputPorts": [{"id": "image"}],
+        "envKeyName": [],
+    },
+    "document-input": {
+        "inputPorts": [],
+        "outputPorts": [{"id": "text"}],
         "envKeyName": [],
     },
     "preview": {
@@ -212,6 +218,7 @@ LOCAL_EXECUTION_NODE_IDS = frozenset(
     {
         "text-input",
         "image-input",
+        "document-input",
         "video-input",
         "audio-input",
         "sticky-note",
@@ -494,6 +501,10 @@ async def execute_graph(
                     node_outputs = {"text": {"type": "Text", "value": str(text_value)}}
                 elif node.definition_id == "image-input":
                     node_outputs = _image_input_output(node.params)
+                elif node.definition_id == "document-input":
+                    fp = resolve_output_ref(str(node.params.get("filePath", "")))
+                    text_value = extract_text(fp) if fp else ""
+                    node_outputs = {"text": {"type": "Text", "value": text_value}}
                 elif node.definition_id == "video-input":
                     file_path = node.params.get("filePath", "")
                     node_outputs = {"video": {"type": "Video", "value": str(file_path)}}

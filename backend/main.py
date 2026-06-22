@@ -535,6 +535,20 @@ def _sniff_video_type(data: bytes) -> tuple[str, str] | None:
     return None
 
 
+_DOC_TEXT_EXTS = {".txt", ".md", ".markdown", ".csv", ".json", ".log", ".rst", ".tsv"}
+
+
+def _sniff_document_type(data: bytes, filename: str | None) -> tuple[str, str] | None:
+    """Return (mime, ext) for a Document Input upload: PDF by magic bytes, or a
+    plain-text format by filename extension (text has no signature). Else None."""
+    if data[:5] == b"%PDF-":
+        return ("application/pdf", ".pdf")
+    ext = Path(filename or "").suffix.lower()
+    if ext in _DOC_TEXT_EXTS:
+        return ("text/plain", ext)
+    return None
+
+
 # Run after _sniff_image_type / MAX_CHAT_UPLOAD_BYTES are defined — the
 # image-input normalizer now auto-imports external files and needs both.
 _normalize_cli_graph_output_refs()
@@ -577,7 +591,9 @@ async def upload_file_consolidated(
     # without needing valid magic bytes (preserves legacy test expectations).
     if len(content) > MAX_VIDEO_UPLOAD_BYTES:
         raise HTTPException(status_code=413, detail="File exceeds 500 MB limit")
-    if len(content) < 12:
+    # 12-byte minimum is for image/video magic-byte sniffing (WebP needs 12).
+    # Text documents have no magic bytes, so a short .txt/.csv must bypass it.
+    if len(content) < 12 and _sniff_document_type(content[:8], file.filename) is None:
         raise HTTPException(status_code=415, detail="File is too small to be a valid media file")
 
     image_sniffed = _sniff_image_type(content[:16])
@@ -592,12 +608,17 @@ async def upload_file_consolidated(
         # Size already validated against MAX_VIDEO_UPLOAD_BYTES above.
         _, ext = video_sniffed
         node_type = "video-input"
+    elif (doc_sniffed := _sniff_document_type(content[:8], file.filename)) is not None:
+        if len(content) > MAX_CHAT_UPLOAD_BYTES:
+            raise HTTPException(status_code=413, detail="Document exceeds 20 MB limit")
+        _, ext = doc_sniffed
+        node_type = "document-input"
     else:
-        # Neither image nor video magic bytes — but file was within video size
-        # budget. Check if it's oversized for images to give a better error.
+        # Neither image, video, nor document — but within the size budget. Check
+        # the image cap for a better error, else reject.
         if len(content) > MAX_CHAT_UPLOAD_BYTES:
             raise HTTPException(status_code=413, detail="Image exceeds 20 MB limit")
-        raise HTTPException(status_code=415, detail="Only image or video files are accepted")
+        raise HTTPException(status_code=415, detail="Only image, video, or document (PDF/text) files are accepted")
 
     digest = hashlib.sha256(content).hexdigest()
     saved_path = CHAT_UPLOADS_DIR / f"{digest}{ext}"
@@ -623,10 +644,10 @@ async def upload_file_consolidated(
         max_x = max((p.get("x", 0) for p in positions), default=-300)
         new_position = {"x": float(max_x) + 300.0, "y": 100.0}
 
-        if node_type == "image-input":
+        if node_type in ("image-input", "document-input"):
             # filePath is the absolute local path (handlers open() this), _previewUrl
-            # is the served URL (frontend <img> displays this). Same shape Inspector
-            # and legacy Canvas file-drop always used.
+            # is the served URL. Document Input ignores the preview (no <img>) but
+            # the shape is harmless and matches the Inspector upload.
             node_params = {"filePath": str(saved_path.resolve()), "_previewUrl": url}
         else:
             # video-input: probe at upload so the source owns its own
