@@ -4,6 +4,7 @@ import {
   BoxSelect,
   FolderOpen,
   Maximize2,
+  Network,
   Play,
   RotateCcw,
   Save,
@@ -32,6 +33,7 @@ export function Toolbar() {
   const resetExecution = useGraphStore((s) => s.resetExecution);
   const isExecuting = useGraphStore((s) => s.isExecuting);
   const nodeCount = useGraphStore((s) => s.nodes.length);
+  const autoLayout = useGraphStore((s) => s.autoLayout);
 
   const handleSave = useCallback(async () => {
     const { nodes, edges } = useGraphStore.getState();
@@ -210,6 +212,15 @@ export function Toolbar() {
         <span className="toolbar__label">Fit</span>
       </button>
       <button
+        className="toolbar__button"
+        onClick={autoLayout}
+        title="Auto-layout — arrange nodes by dependency"
+        disabled={nodeCount === 0}
+      >
+        <ToolbarIcon name="layout" />
+        <span className="toolbar__label">Layout</span>
+      </button>
+      <button
         className={`toolbar__button${canvasTool === 'select' ? ' toolbar__button--active' : ''}`}
         onClick={() => setCanvasTool(canvasTool === 'select' ? 'pan' : 'select')}
         title="Marquee select — drag to select nodes"
@@ -244,6 +255,7 @@ type IconName =
   | 'cli'
   | 'clear'
   | 'fit'
+  | 'layout'
   | 'select'
   | 'reset'
   | 'settings';
@@ -256,6 +268,7 @@ const TOOLBAR_ICONS: Record<IconName, LucideIcon> = {
   cli: Terminal,
   clear: Trash2,
   fit: Maximize2,
+  layout: Network,
   select: BoxSelect,
   reset: RotateCcw,
   settings: Settings,
