@@ -336,10 +336,12 @@ def test_upload_rejects_oversize(client):
     assert len(main_module.cli_graph.nodes) == 0
 
 
-def test_upload_rejects_non_image(client):
+def test_upload_rejects_unsupported_type(client):
+    # A non-image/video/document file (unknown extension, no magic bytes) is
+    # rejected and leaves no file or node behind. (.txt/.pdf are now valid docs.)
     resp = client.post(
         "/api/uploads",
-        files={"file": ("note.txt", b"hello world", "text/plain")},
+        files={"file": ("data.bin", b"\x00\x01\x02 not a known type", "application/octet-stream")},
     )
     assert resp.status_code == 415
     assert len(list(main_module.CHAT_UPLOADS_DIR.iterdir())) == 0
@@ -566,3 +568,77 @@ def test_video_upload_ffprobe_failure_returns_415(client):
         )
     assert resp.status_code == 415
     assert "Could not probe video metadata" in resp.json()["detail"]
+
+
+# --- Document Input uploads (PDF / text) ---
+
+def _make_pdf_bytes(text: str = "Hello PDF") -> bytes:
+    import io
+    objs = [
+        b"<</Type/Catalog/Pages 2 0 R>>",
+        b"<</Type/Pages/Kids[3 0 R]/Count 1>>",
+        b"<</Type/Page/Parent 2 0 R/MediaBox[0 0 300 144]/Contents 4 0 R/Resources<</Font<</F1 5 0 R>>>>>>",
+        b"<</Length %d>>stream\nBT /F1 24 Tf 20 100 Td (%s) Tj ET\nendstream" % (len(text) + 26, text.encode()),
+        b"<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>",
+    ]
+    out = io.BytesIO()
+    out.write(b"%PDF-1.4\n")
+    offsets = []
+    for i, body in enumerate(objs, start=1):
+        offsets.append(out.tell())
+        out.write(b"%d 0 obj" % i + body + b"endobj\n")
+    xref_pos = out.tell()
+    out.write(b"xref\n0 %d\n0000000000 65535 f \n" % (len(objs) + 1))
+    for off in offsets:
+        out.write(b"%010d 00000 n \n" % off)
+    out.write(b"trailer<</Root 1 0 R/Size %d>>\nstartxref\n%d\n%%%%EOF" % (len(objs) + 1, xref_pos))
+    return out.getvalue()
+
+
+def test_upload_pdf_routes_to_document_input(client):
+    resp = client.post(
+        "/api/uploads",
+        files={"file": ("doc.pdf", _make_pdf_bytes(), "application/pdf")},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["filePath"].endswith(".pdf")
+
+
+def test_upload_text_routes_to_document_input(client):
+    resp = client.post(
+        "/api/uploads",
+        files={"file": ("notes.md", b"# Title\n\nsome markdown body text here", "text/markdown")},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["filePath"].endswith(".md")
+
+
+def test_upload_pdf_create_node(client):
+    resp = client.post(
+        "/api/uploads",
+        files={"file": ("doc.pdf", _make_pdf_bytes(), "application/pdf")},
+        data={"create_node": "true"},
+    )
+    assert resp.status_code == 200
+    assert "nodeId" in resp.json()
+    node = main_module.cli_graph.nodes[resp.json()["nodeId"]]
+    assert node["definitionId"] == "document-input"
+
+
+def test_upload_unsupported_type_rejected(client):
+    resp = client.post(
+        "/api/uploads",
+        files={"file": ("malware.exe", b"MZ" + b"\x00" * 40, "application/octet-stream")},
+    )
+    assert resp.status_code == 415
+
+
+def test_upload_tiny_text_file_bypasses_size_guard(client):
+    # A <12-byte text file has no magic bytes but is a valid document — the
+    # media-only 12-byte minimum must not reject it.
+    resp = client.post(
+        "/api/uploads",
+        files={"file": ("a.txt", b"hi", "text/plain")},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["filePath"].endswith(".txt")

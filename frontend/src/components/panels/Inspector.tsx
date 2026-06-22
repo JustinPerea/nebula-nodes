@@ -736,7 +736,12 @@ export function Inspector({ embedded = false }: InspectorProps) {
         ? fileValue.split('/').pop() ?? fileValue
         : null;
       const isVideoNode = activeNodeData.definitionId === 'video-input' || activeNodeData.definitionId === 'audio-input';
-      const acceptAttr = isVideoNode ? 'video/*,audio/*' : 'image/*,video/*,audio/*';
+      const isDocNode = activeNodeData.definitionId === 'document-input';
+      const acceptAttr = isDocNode
+        ? '.pdf,.txt,.md,.markdown,.csv,.json,.log,.rst,.tsv,application/pdf,text/*'
+        : isVideoNode
+          ? 'video/*,audio/*'
+          : 'image/*,video/*,audio/*';
       return (
         <div className="inspector__control-stack">
           <label className="inspector__file-button">
@@ -768,7 +773,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
               }}
             />
           </label>
-          {typeof activeNodeData.params._previewUrl === 'string' && (
+          {!isDocNode && typeof activeNodeData.params._previewUrl === 'string' && (
             <img
               src={String(activeNodeData.params._previewUrl)}
               alt="Preview"
