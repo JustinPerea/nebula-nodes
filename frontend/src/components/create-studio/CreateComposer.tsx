@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react';
-import { ChevronDown, Plus, Sparkles } from 'lucide-react';
+import { ChevronDown, Plus, Sparkles, Wand2 } from 'lucide-react';
 import type { ModelNodeDefinition } from '../../types';
+import { enhancePrompt } from '../../lib/enhancePrompt';
 import { ModelPicker } from './ModelPicker';
 import { ParamPills } from './ParamPills';
 
@@ -25,9 +26,35 @@ export function CreateComposer({
   onPromptChange, onSelectModel, onParamsChange, onGenerate, onAttach, onQuantityChange, onOpenStyles,
 }: CreateComposerProps) {
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [enhancing, setEnhancing] = useState(false);
+  const [prevPrompt, setPrevPrompt] = useState<string | null>(null);
+  const [enhanceError, setEnhanceError] = useState<string | null>(null);
   const canGenerate = Boolean(modelDef) && activeCount < maxConcurrent;
+  const canEnhance = prompt.trim().length > 0 && !enhancing;
   const promptRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleEnhance = async () => {
+    if (!canEnhance) return;
+    setEnhancing(true);
+    setEnhanceError(null);
+    const original = prompt;
+    try {
+      const enhanced = await enhancePrompt(original);
+      setPrevPrompt(original);
+      onPromptChange(enhanced);
+    } catch (err) {
+      setEnhanceError(err instanceof Error ? err.message : 'Enhance failed.');
+    } finally {
+      setEnhancing(false);
+    }
+  };
+
+  const handleUndoEnhance = () => {
+    if (prevPrompt === null) return;
+    onPromptChange(prevPrompt);
+    setPrevPrompt(null);
+  };
   const autoGrow = (el: HTMLTextAreaElement) => {
     el.style.height = 'auto';
     el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
@@ -47,7 +74,12 @@ export function CreateComposer({
         placeholder="Describe what you want to create…"
         value={prompt}
         rows={1}
-        onChange={(e) => { onPromptChange(e.target.value); autoGrow(e.target); }}
+        onChange={(e) => {
+          onPromptChange(e.target.value);
+          autoGrow(e.target);
+          if (prevPrompt !== null) setPrevPrompt(null);
+          if (enhanceError) setEnhanceError(null);
+        }}
         onKeyDown={(e) => {
           if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && canGenerate) {
             e.preventDefault();
@@ -72,6 +104,24 @@ export function CreateComposer({
         <button type="button" className="create-composer__styles" onClick={onOpenStyles} title="Browse styles">
           Styles
         </button>
+        <button
+          type="button"
+          className="create-composer__enhance"
+          onClick={handleEnhance}
+          disabled={!canEnhance}
+          title="Enhance prompt with AI"
+        >
+          <Wand2 size={15} strokeWidth={1.8} aria-hidden="true" />
+          {enhancing ? 'Enhancing…' : 'Enhance'}
+        </button>
+        {prevPrompt !== null && !enhanceError && (
+          <button type="button" className="create-composer__enhance-undo" onClick={handleUndoEnhance} title="Restore the original prompt">
+            Undo
+          </button>
+        )}
+        {enhanceError && (
+          <span className="create-composer__enhance-error" role="alert">{enhanceError}</span>
+        )}
         {modelDef && <ParamPills def={modelDef} params={params} onChange={onParamsChange} />}
         <div className="create-composer__qty" role="group" aria-label="Number of variations">
           <button type="button" onClick={() => onQuantityChange(Math.max(1, quantity - 1))} aria-label="Fewer" disabled={quantity <= 1}>−</button>
