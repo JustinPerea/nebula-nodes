@@ -27,7 +27,7 @@
 - ✅ `g-elements-asset-library` (Phase 1) — unified Assets panel collapsing 3 palettes (PR #7)
 
 ## Queue (auto: yes) — in priority order
-1. `g-prompt-improver-builtin` — `todo` — inline "Enhance" on the Create prompt (LLM round-trip, non-destructive accept/dismiss).
+1. `g-prompt-improver-builtin` — ✅ `done` (PR #8) — Create "Enhance" button → `POST /api/enhance-prompt` (provider fall-through), non-destructive Undo. Independent verify PASS + browser end-to-end.
 2. `g-image-compare-slider` — `todo` — before/after wipe slider (Create gallery/Lightbox first; reusable component).
 3. `g-router-node` — ✅ `done` (already shipped) — verified complete: `nodeDefinitions.ts:2006` + `node_definitions.json:2984` (1 input → out1/out2/out3) + `engine.py` handler (local node, copies input to all 3 outputs). No change needed; the "partial" assessment was stale.
 4. `g-variation-fanout` — `todo` — Create "Vary" mode on the quantity stepper (Seed/Style/Prompt) + gallery grouping.
@@ -50,4 +50,5 @@
 - `g-elements-asset-library` Phase 2 (`/api/elements` + Save-to-library + @-mention + agent readability) — design-y; revisit after the queue.
 
 ## Run log
-- **Iter 1** — `g-router-node`: verify-first found it already fully implemented (both registries + engine handler, 3-output pass-through). Marked done, no change. Next: `g-prompt-improver-builtin` (no simple LLM endpoint — may need a small `/api/enhance-prompt` route) then `g-image-compare-slider`.
+- **Iter 1** — `g-router-node`: verify-first found it already fully implemented (both registries + engine handler, 3-output pass-through). Marked done, no change.
+- **Iter 2** — `g-prompt-improver-builtin` (PR #8, merged): new `POST /api/enhance-prompt` (`services/prompt_enhance.py`, provider fall-through) + Create "Enhance" button (Undo, loading, error). 17 backend + 355 frontend tests green; independent code-reviewer PASS; browser end-to-end verified. Verify-the-output caught a live 401 on the first key → added provider fall-through so a bad key doesn't block the feature. Next: `g-image-compare-slider`.
