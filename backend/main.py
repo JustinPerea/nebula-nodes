@@ -1145,20 +1145,38 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
     return {"status": "started", "nodeCount": len(sub_nodes)}
 
 
-def _merge_shot_result(
+# Per-node locks serialize concurrent single-shot merges on the SAME cinema node.
+# Generating two shots at once is supported (no global lock), so without this two
+# `_merge_shot_result` tasks could read-modify-write `cli_graph.nodes[id]` and the
+# last writer would drop the other's freshly-generated port. Keyed by node id so
+# unrelated nodes never block each other.
+_shot_merge_locks: dict[str, asyncio.Lock] = {}
+
+
+def _shot_merge_lock(node_id: str) -> asyncio.Lock:
+    lock = _shot_merge_locks.get(node_id)
+    if lock is None:
+        lock = asyncio.Lock()
+        _shot_merge_locks[node_id] = lock
+    return lock
+
+
+async def _merge_shot_result(
     node_id: str,
     shot_id: str,
-    fresh_scene: dict[str, Any],
     executed_node: GraphNode | None,
     captured_outputs: dict[str, Any],
 ) -> dict[str, Any] | None:
-    """Merge a single-shot regeneration back into the canonical cli_graph node
-    WITHOUT clobbering the other shots' ports/outputs.
+    """Merge a single-shot regeneration into the canonical cli_graph node WITHOUT
+    clobbering sibling shots.
 
-    `fresh_scene` is the full (all-shots) scene from the request — its target
-    shot's `output` is replaced with the just-generated result, so every other
-    shot's prompt/overrides/output is preserved. The one regenerated output PORT
-    is merged into the node's existing ports rather than replacing the dict.
+    Reads the LIVE persisted scene (kept fresh by the editor's debounced
+    param-sync) and patches ONLY the target shot's `output` + its one output PORT.
+    This is the key difference from a full snapshot write: while a slow generation
+    runs, the user may edit other shots on the canvas — patching the live scene
+    preserves those concurrent edits instead of reverting them to a request-time
+    snapshot. A per-node lock serializes overlapping single-shot merges so two
+    concurrent generates never drop each other's port.
 
     Returns the new shot output dict (for the HTTP response), or None.
     """
@@ -1169,19 +1187,25 @@ def _merge_shot_result(
         if sub_shots and isinstance(sub_shots[0], dict):
             new_output = sub_shots[0].get("output")
 
-    # Apply the regenerated output into the full fresh scene by shot id.
-    for shot in fresh_scene.get("shots") or []:
-        if isinstance(shot, dict) and str(shot.get("id")) == shot_id:
-            if new_output is not None:
-                shot["output"] = new_output
-            break
+    async with _shot_merge_lock(node_id):
+        node = cli_graph.nodes.get(node_id)
+        if node is None:
+            return new_output
 
-    node = cli_graph.nodes.get(node_id)
-    if node is not None:
+        # Patch ONLY the target shot's output on the live scene; siblings (incl.
+        # any edits made during the generation) are left exactly as they are.
         params = dict(node.get("params") or {})
-        params["scene"] = fresh_scene
-        node["params"] = params
-        # Merge the single regenerated port into the existing outputs dict.
+        scene = params.get("scene")
+        if isinstance(scene, dict):
+            for shot in scene.get("shots") or []:
+                if isinstance(shot, dict) and str(shot.get("id")) == shot_id:
+                    if new_output is not None:
+                        shot["output"] = new_output
+                    break
+            params["scene"] = scene
+            node["params"] = params
+
+        # Merge the single regenerated port into the existing ports dict.
         if isinstance(captured_outputs, dict) and captured_outputs:
             shaped = {
                 k: (v if isinstance(v, dict) else {"type": "Any", "value": v})
@@ -1190,6 +1214,7 @@ def _merge_shot_result(
             existing = dict(node.get("outputs") or {})
             existing.update(_normalize_outputs_for_storage(shaped))
             node["outputs"] = existing
+
         cli_graph._maybe_persist()
 
     return new_output
@@ -1274,8 +1299,6 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
 
     handler_registry = get_handler_registry(emit=_emit_scoped)
     executed_node = next((n for n in sub_nodes if n.id == request.node_id), None)
-    # The full (all-shots) scene from the request — the merge target.
-    fresh_scene = copy.deepcopy(scene)
 
     async def _run() -> None:
         import traceback
@@ -1293,8 +1316,8 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
         finally:
             # Merge + broadcast even on failure so the rail's optimistic
             # "running" state always reconciles to a terminal scene.
-            _merge_shot_result(
-                request.node_id, request.shot_id, fresh_scene, executed_node, captured.get("outputs") or {}
+            await _merge_shot_result(
+                request.node_id, request.shot_id, executed_node, captured.get("outputs") or {}
             )
             await _broadcast_graph_sync()
 
