@@ -1,0 +1,136 @@
+/* Run History panel — Phase 1 of g-queue-history-manager.
+ * Structural rules are skin-agnostic (unscoped); themed visuals are scoped to
+ * body.app-slava-restraint, matching the convention in character-studio.css.
+ * Status colors use semantic tokens so the dots read the same in either skin. */
+
+/* ---- layout (skin-agnostic) ---- */
+.panel--history {
+  width: 256px;
+  max-height: 60vh;
+}
+.panel__body--history {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.run-history__header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.run-history__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow-y: auto;
+  min-height: 0;
+}
+.run-history__item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 7px 8px;
+  border-radius: 7px;
+}
+.run-history__dot {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  margin-top: 4px;
+  border-radius: 999px;
+}
+.run-history__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+.run-history__row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.run-history__trigger {
+  font-size: 12px;
+  font-weight: 500;
+}
+.run-history__status {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+}
+.run-history__sub {
+  font-size: 11px;
+}
+.run-history__empty {
+  padding: 16px 8px;
+  text-align: center;
+  font-size: 12px;
+}
+
+/* ---- status dot colors (semantic, skin-agnostic) ---- */
+.run-history__dot--running {
+  background: var(--sr-warning, #f5c518);
+  animation: run-history-pulse 1.2s ease-in-out infinite;
+}
+.run-history__dot--complete {
+  background: var(--sr-success, #34d399);
+}
+.run-history__dot--failed {
+  background: var(--sr-danger, #ef4444);
+}
+.run-history__dot--cancelled {
+  background: var(--sr-ink-meta, rgba(150, 150, 150, 0.6));
+}
+@keyframes run-history-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+/* ---- Slava visual treatment ---- */
+body.app-slava-restraint .run-history__item {
+  border: 1px solid var(--sr-edge, rgba(0, 0, 0, 0.10));
+  background: var(--sr-glass, rgba(255, 255, 255, 0.45));
+}
+body.app-slava-restraint .run-history__trigger {
+  color: var(--sr-ink, #1a1a1a);
+}
+body.app-slava-restraint .run-history__sub {
+  color: var(--sr-ink-meta, rgba(0, 0, 0, 0.55));
+}
+body.app-slava-restraint .run-history__status--running { color: var(--sr-warning, #f5c518); }
+body.app-slava-restraint .run-history__status--complete { color: var(--sr-success, #34d399); }
+body.app-slava-restraint .run-history__status--failed { color: var(--sr-danger, #ef4444); }
+body.app-slava-restraint .run-history__status--cancelled { color: var(--sr-ink-meta, rgba(0, 0, 0, 0.45)); }
+body.app-slava-restraint .run-history__empty {
+  color: var(--sr-ink-meta, rgba(0, 0, 0, 0.5));
+}
+body.app-slava-restraint .run-history__action:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+/* ---- legacy (non-Slava) visual treatment ---- */
+body:not(.app-slava-restraint) .run-history__item {
+  border: 1px solid #2a2a2a;
+  background: #1a1a1a;
+}
+body:not(.app-slava-restraint) .run-history__trigger {
+  color: #e0e0e0;
+}
+body:not(.app-slava-restraint) .run-history__sub {
+  color: #888;
+}
+body:not(.app-slava-restraint) .run-history__empty {
+  color: #777;
+}
+body:not(.app-slava-restraint) .run-history__action:disabled {
+  opacity: 0.35;
+  cursor: default;
+}

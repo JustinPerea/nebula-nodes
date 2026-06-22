@@ -12,6 +12,7 @@ import { CreateView } from './components/create-studio/CreateView';
 import { BrandShowcaseView } from './components/brand/BrandShowcaseView';
 import { NodeLibrary } from './components/panels/NodeLibrary';
 import { AssetsPanel } from './components/panels/AssetsPanel';
+import { RunHistoryPanel } from './components/panels/RunHistoryPanel';
 import { Settings } from './components/panels/Settings';
 import { Toolbar } from './components/panels/Toolbar';
 import { PanelLaunchers } from './components/panels/PanelLaunchers';
@@ -217,6 +218,7 @@ export default function App() {
           The editor view is a focused workspace — only the pill control and chat remain. */}
       {isCanvas && <NodeLibrary />}
       {isCanvas && assetsPanelVisible && <AssetsPanel />}
+      {isCanvas && <RunHistoryPanel />}
       {isCanvas && <NodeInspectorPopover />}
       {isCanvas && <Settings />}
       {!isBrandShowcase && <ChatPanel />}
