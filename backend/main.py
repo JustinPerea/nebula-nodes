@@ -26,7 +26,7 @@ from models import (
     GraphNode,
     GraphEdge,
 )
-from models.events import ExecutionEvent, ExecutedEvent, ErrorEvent
+from models.events import ExecutionEvent, ExecutedEvent, ErrorEvent, GraphCompleteEvent
 from execution.engine import execute_graph, validate_graph, topological_sort, get_subgraph, CycleError
 from execution.sync_runner import get_handler_registry
 from services.settings import load_settings, save_settings, get_api_key
@@ -1278,6 +1278,11 @@ async def _execute_single_shot_pass(
         if isinstance(event, ExecutedEvent) and event.node_id == node_id:
             captured["target_executed"] = True
             captured["outputs"] = event.outputs
+            return
+        # Per-shot work runs outside the global graph lifecycle. A variation
+        # batch executes this helper repeatedly, so forwarding GraphCompleteEvent
+        # would produce one false pipeline-complete notification per pass.
+        if isinstance(event, GraphCompleteEvent):
             return
         if isinstance(event, ErrorEvent) and "error" not in captured:
             captured["error"] = event.friendly or event.error

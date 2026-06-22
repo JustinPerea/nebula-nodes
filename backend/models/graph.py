@@ -58,6 +58,8 @@ class GenerateShotRequest(BaseModel):
     seed: int | None = None
     # When > 1, regenerate the shot this many times at distinct seeds and store
     # the results as selectable variations. None / 1 → a single canonical run.
-    variations: int | None = None
+    # Bounded 1–4 server-side (matches the panel stepper) so a raw POST can't
+    # queue an unbounded run of real base-model calls.
+    variations: int | None = Field(None, ge=1, le=4)
 
     model_config = {"populate_by_name": True}

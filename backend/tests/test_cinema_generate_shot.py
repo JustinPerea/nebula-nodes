@@ -71,6 +71,17 @@ class TestGenerateShotGuards:
         assert resp.status_code == 404
         assert "zzz" in resp.json()["detail"]
 
+    def test_variations_count_is_bounded(self, client):
+        # An out-of-range variations count is rejected by the model (422) before
+        # any generation runs — a raw POST can't queue an unbounded base-model run.
+        node = _cinema_node([{"id": "a", "prompt": "x"}])
+        for bad in (0, 5, 1000):
+            resp = client.post(
+                "/api/cinema/generate-shot",
+                json={"nodes": [node], "edges": [], "nodeId": "n1", "shotId": "a", "variations": bad},
+            )
+            assert resp.status_code == 422, f"variations={bad} should be rejected"
+
 
 # ---------- merge logic (no-clobber) ----------
 
