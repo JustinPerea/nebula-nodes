@@ -332,6 +332,45 @@ body.app-slava-restraint .result-card__btn--danger:hover {
   border-color: rgba(220, 50, 50, 0.6);
 }
 
+/* Download-format menu (raster gallery results) */
+.result-card__dl {
+  position: relative;
+  display: inline-flex;
+}
+.result-card__dl-menu {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  min-width: 92px;
+  padding: 4px;
+  border-radius: 8px;
+}
+.result-card__dl-item {
+  display: block;
+  padding: 5px 9px;
+  font-size: 12px;
+  text-align: left;
+  background: none;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  text-decoration: none;
+}
+body.app-slava-restraint .result-card__dl-menu {
+  background: #1c1c1c;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+body.app-slava-restraint .result-card__dl-item {
+  color: #e6e6e6;
+}
+body.app-slava-restraint .result-card__dl-item:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
 /* ─── Styles button ──────────────────────────────────────────────────────── */
 
 body.app-slava-restraint .create-composer__styles {
