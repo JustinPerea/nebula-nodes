@@ -35,7 +35,7 @@
 6. `g-document-node` — ⛔ `blocked` — no PDF-reading lib is a present backend dependency (checked pypdf/pdfminer/fitz/PyPDF2/pdfplumber — all absent; none in requirements.txt). Adding one is barred by the 14-day rule, and the gap's value is PDF (a text-only node duplicates text-input). Flag for the user to choose/add a PDF lib if they want this.
 7. `g-auto-layout` — ✅ `done` (PR #11) — `computeLayout` (Kahn longest-path layering) + `graphStore.autoLayout()` + Toolbar "Layout" button. Independent verify PASS; browser confirmed on the live 18-node graph (all 17 edges rightward, 4 columns).
 8. `g-node-groups-color-tags` — ✅ `done` (canvas-search slice, PR #12) — ⌘K palette "Canvas" group focuses existing nodes. Multi-select bulk-edit already existed. **Deferred:** color tags + groups/frames (larger UX with product choices — flag for the user). Independent verify PASS + browser confirmed.
-9. `g-cinema-per-shot-backend` — `todo` — per-shot generate entrypoint + real variations strip in Cinema Studio.
+9. `g-cinema-per-shot-backend` — ⛔ `blocked` (autonomous) — verify-first: the cinema-scene handler ALREADY per-shot caches (re-running regenerates only *changed* shots), so "Generate shot" is already efficient. A true single-shot entrypoint needs real surgery in the multi-shot async-poll orchestrator + a new execution path (`executeNode` has no sub-target) + the stubbed variations strip needs UX design — too large/risky for an autonomous auto-merge. Flag for the user: worth a focused, human-reviewed build.
 10. `g-queue-history-manager` — `todo` — global queue/run-history panel (cancel/retry/clear) + asset search.
 
 ## Flagged for the user (auto: no — needs a decision / out of autonomous scope)
