@@ -24,6 +24,7 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
   const [sentToMotion, setSentToMotion] = useState(false);
 
   const executeNode = useGraphStore((s) => s.executeNode);
+  const executeShot = useGraphStore((s) => s.executeShot);
   const isExecuting = useGraphStore((s) => s.isExecuting);
   const addNodeAndConnect = useGraphStore((s) => s.addNodeAndConnect);
   const addNode = useGraphStore((s) => s.addNode);
@@ -82,14 +83,16 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
       .finally(() => setUploading(false));
   };
 
-  // Generate flow (spec §8): reuse the existing node-execution pipeline. The
-  // editor's edits already wrote the scene (incl. this shot) onto the node via
-  // updateScene, so running the cinema-scene node regenerates all shots and the
-  // per-shot results stream back into scene.shots[*].output through the same
-  // store-update channel that drives ModelNode previews. There is no per-shot
-  // backend entrypoint yet, so "Generate shot" runs the whole scene node too;
-  // per-shot caching (shot.hash) means unchanged shots are cheap.
-  const handleGenerate = () => {
+  // "Generate shot" regenerates ONLY this shot via the dedicated per-shot
+  // entrypoint (POST /api/cinema/generate-shot): the rail spinner scopes to this
+  // row and siblings' outputs are untouched. "Generate all" still runs the whole
+  // cinema-scene node. Both stream results back into scene.shots[*].output via
+  // the same graphSync channel that drives ModelNode previews.
+  const shotRunning = status === 'running';
+  const handleGenerateShot = () => {
+    executeShot(cinemaNodeId, shot.id);
+  };
+  const handleGenerateAll = () => {
     executeNode(cinemaNodeId);
   };
 
@@ -213,15 +216,15 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
         <button
           type="button"
           className="cinema-shot-panel__action cinema-shot-panel__action--primary"
-          onClick={handleGenerate}
-          disabled={isExecuting}
+          onClick={handleGenerateShot}
+          disabled={shotRunning || isExecuting}
         >
-          {isExecuting ? 'Generating…' : 'Generate shot'}
+          {shotRunning ? 'Generating…' : 'Generate shot'}
         </button>
         <button
           type="button"
           className="cinema-shot-panel__action"
-          onClick={handleGenerate}
+          onClick={handleGenerateAll}
           disabled={isExecuting}
         >
           Generate all
