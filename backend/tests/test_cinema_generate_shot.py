@@ -159,8 +159,13 @@ class TestMergeShotResult:
         cli_graph.nodes.pop("n1", None)
 
     def test_concurrent_merges_on_same_node_keep_both_ports(self):
-        """Two single-shot generates completing close together must not drop
-        each other's port. Regression for the verifier's CRITICAL #2 (race)."""
+        """Two single-shot generates completing close together must each keep
+        their port — i.e. the merge MERGES into the existing ports dict rather
+        than REPLACING it. (This guards the merge-not-replace property; it does
+        NOT prove the per-node lock serializes, because the merge critical
+        section has no `await` and is already atomic under asyncio's cooperative
+        scheduler. The lock is defensive — it matters only if an `await` is ever
+        added inside the critical section, e.g. async persistence.)"""
         from main import _merge_shot_result, cli_graph
         from models.graph import GraphNode
 
