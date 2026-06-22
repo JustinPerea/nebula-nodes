@@ -261,6 +261,57 @@ body:not(.app-slava-restraint) .model-node__error--blocked {
   word-break: break-word;
 }
 
+/* --- Before/after compare slider (image-compare node) --- */
+/* structural (skin-agnostic) */
+.before-after {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  border-radius: 4px;
+  cursor: ew-resize;
+  touch-action: none;
+  user-select: none;
+  line-height: 0;
+}
+.before-after__img {
+  display: block;
+  width: 100%;
+  height: auto;
+  pointer-events: none;
+}
+.before-after__before {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+.before-after__divider {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  transform: translateX(-1px);
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.before-after__handle {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+}
+/* visual (skin-scoped) */
+body:not(.app-slava-restraint) .before-after__divider { background: rgba(255, 255, 255, 0.9); }
+body:not(.app-slava-restraint) .before-after__handle {
+  background: #fff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4);
+}
+body.app-slava-restraint .before-after__divider { background: var(--sr-accent, #ff5a1f); }
+body.app-slava-restraint .before-after__handle {
+  background: var(--sr-accent, #ff5a1f);
+  box-shadow: 0 0 0 2px var(--sr-canvas, #f4f1ea);
+}
+
 body:not(.app-slava-restraint) .model-node__preview-image {
   max-width: 100%;
   height: auto;

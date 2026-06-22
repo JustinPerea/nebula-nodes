@@ -10,6 +10,7 @@ import { useGraphStore } from '../../store/graphStore';
 import { useSlavaNodeEntranceClass } from '../../hooks/useSlavaNodeEntrance';
 import { MeshPreview } from './MeshPreview';
 import { NodeError } from './NodeError';
+import { BeforeAfterSlider } from './BeforeAfterSlider';
 import { apiFetch } from '../../lib/backend';
 import '../../styles/nodes.css';
 
@@ -137,6 +138,30 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
     [id, inspectorVisible, selectNode, selectedNodeId, setInspectorVisible],
   );
 
+  // Hooks must run unconditionally — keep them above the `!definition` early
+  // return (React rules-of-hooks). These were previously declared below it.
+  const edges = useGraphStore((s) => s.edges);
+  const nodes = useGraphStore((s) => s.nodes);
+  const maskSourcePreview = useMemo(() => {
+    if (nodeData.definitionId !== 'mask-painter') return null;
+    const inEdge = edges.find(
+      (edge) => edge.target === id && (edge.targetHandle ?? 'image') === 'image',
+    );
+    if (!inEdge) return null;
+    const src = nodes.find((node) => node.id === inEdge.source);
+    if (!src) return null;
+    const sd = src.data as NodeData;
+    if (sd.definitionId === 'image-input' && sd.params._previewUrl) {
+      return String(sd.params._previewUrl);
+    }
+    const imgOut = Object.values(sd.outputs ?? {}).find(
+      (output) => output.type === 'Image' && typeof output.value === 'string' && output.value,
+    );
+    if (imgOut) return String(imgOut.value);
+    if (sd.params._previewUrl) return String(sd.params._previewUrl);
+    return null;
+  }, [nodeData.definitionId, id, edges, nodes]);
+
   if (!definition) return <div className="model-node model-node--error">Unknown node type</div>;
 
   const categoryColor = CATEGORY_COLORS[definition.category] ?? '#424242';
@@ -154,31 +179,10 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
   const isTextSurface = isInlineTextNode || Boolean(displayText && !isInlineTextNode);
   const isImageInput = nodeData.definitionId === 'image-input';
   const isMaskPainter = nodeData.definitionId === 'mask-painter';
-  const edges = useGraphStore((s) => s.edges);
-  const nodes = useGraphStore((s) => s.nodes);
   const imageInputPreview = isImageInput && nodeData.params._previewUrl ? String(nodeData.params._previewUrl) : null;
   const maskOverlayData = isMaskPainter && typeof nodeData.params._maskData === 'string'
     ? nodeData.params._maskData
     : null;
-  const maskSourcePreview = useMemo(() => {
-    if (!isMaskPainter) return null;
-    const inEdge = edges.find(
-      (edge) => edge.target === id && (edge.targetHandle ?? 'image') === 'image',
-    );
-    if (!inEdge) return null;
-    const src = nodes.find((node) => node.id === inEdge.source);
-    if (!src) return null;
-    const sd = src.data as NodeData;
-    if (sd.definitionId === 'image-input' && sd.params._previewUrl) {
-      return String(sd.params._previewUrl);
-    }
-    const imgOut = Object.values(sd.outputs ?? {}).find(
-      (output) => output.type === 'Image' && typeof output.value === 'string' && output.value,
-    );
-    if (imgOut) return String(imgOut.value);
-    if (sd.params._previewUrl) return String(sd.params._previewUrl);
-    return null;
-  }, [isMaskPainter, id, edges, nodes]);
   const showMaskComposite = Boolean(isMaskPainter && maskSourcePreview && maskOverlayData);
   const finalImageOutput = nodeData.state === 'complete' && imageOutput && typeof imageOutput.value === 'string'
     ? imageOutput.value
@@ -192,11 +196,25 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
   const finalSvgOutput = nodeData.state === 'complete' && svgOutput && typeof svgOutput.value === 'string'
     ? svgOutput.value
     : null;
+  // Image Compare node: render a before/after wipe of its two image inputs
+  // (passed through as outputs imageA/imageB) rather than just the first image.
+  const isImageCompare = nodeData.definitionId === 'image-compare';
+  const compareBefore =
+    isImageCompare && nodeData.state === 'complete' && typeof nodeData.outputs.imageA?.value === 'string'
+      ? nodeData.outputs.imageA.value
+      : null;
+  const compareAfter =
+    isImageCompare && nodeData.state === 'complete' && typeof nodeData.outputs.imageB?.value === 'string'
+      ? nodeData.outputs.imageB.value
+      : null;
+  const showCompare = Boolean(compareBefore && compareAfter);
+
   const isImageSurface = Boolean(
     imageInputPreview
     || finalImageOutput
     || streamingSvgPreview
     || finalSvgOutput
+    || showCompare
     || (isMaskPainter && maskSourcePreview),
   );
   const imageClassName = isSlavaSkin ? 'model-node__preview-image' : 'model-node__preview-image nodrag';
@@ -424,7 +442,18 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
         </div>
       )}
 
-      {finalImageOutput && !imageInputPreview && !(isMaskPainter && maskSourcePreview) && (
+      {showCompare && compareBefore && compareAfter && (
+        <div className="model-node__preview">
+          <BeforeAfterSlider
+            beforeSrc={compareBefore}
+            afterSrc={compareAfter}
+            beforeAlt="Image A"
+            afterAlt="Image B"
+          />
+        </div>
+      )}
+
+      {finalImageOutput && !imageInputPreview && !isImageCompare && !(isMaskPainter && maskSourcePreview) && (
         <div className="model-node__preview">
           <img
             src={finalImageOutput}
