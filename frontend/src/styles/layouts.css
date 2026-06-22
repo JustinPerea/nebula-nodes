@@ -112,6 +112,11 @@ body.app-hermes .toolbar::before {
   top: var(--page-gutter);
 }
 
+.panel-launcher--history {
+  left: calc(var(--page-gutter) + 156px);
+  top: var(--page-gutter);
+}
+
 .panel-launcher--chat {
   right: var(--page-gutter);
   bottom: var(--space-4);

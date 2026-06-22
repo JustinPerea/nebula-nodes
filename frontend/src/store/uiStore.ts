@@ -38,6 +38,8 @@ const DEFAULT_PANELS = {
   // Unified Assets panel (Characters · Moodboards · Styles) — replaces the
   // separate character/moodboard library panels. Opened from its launcher.
   assets: { visible: false, position: { x: 16, y: 360 } },
+  // Run History panel — session-scoped record of graph/node/cluster runs.
+  history: { visible: false, position: { x: -340, y: 60 } },
 };
 
 function createDefaultPanels(): UIState['panels'] {
@@ -49,6 +51,7 @@ function createDefaultPanels(): UIState['panels'] {
     moodboard: { ...DEFAULT_PANELS.moodboard, position: { ...DEFAULT_PANELS.moodboard.position } },
     character: { ...DEFAULT_PANELS.character, position: { ...DEFAULT_PANELS.character.position } },
     assets: { ...DEFAULT_PANELS.assets, position: { ...DEFAULT_PANELS.assets.position } },
+    history: { ...DEFAULT_PANELS.history, position: { ...DEFAULT_PANELS.history.position } },
   };
 }
 
@@ -147,6 +150,7 @@ interface UIState {
     moodboard: PanelState;
     character: PanelState;
     assets: PanelState;
+    history: PanelState;
   };
   librarySearch: string;
   libraryCollapsed: Record<string, boolean>;
@@ -207,8 +211,8 @@ interface UIState {
   selectNode: (nodeId: string | null) => void;
   setInspectorVisible: (visible: boolean) => void;
   setInspectorPinned: (pinned: boolean) => void;
-  togglePanel: (panel: 'library' | 'inspector' | 'settings' | 'chat' | 'moodboard' | 'character' | 'assets') => void;
-  setPanelPosition: (panel: 'library' | 'inspector' | 'settings' | 'chat' | 'moodboard' | 'character' | 'assets', position: { x: number; y: number }) => void;
+  togglePanel: (panel: 'library' | 'inspector' | 'settings' | 'chat' | 'moodboard' | 'character' | 'assets' | 'history') => void;
+  setPanelPosition: (panel: 'library' | 'inspector' | 'settings' | 'chat' | 'moodboard' | 'character' | 'assets' | 'history', position: { x: number; y: number }) => void;
   setLibrarySearch: (search: string) => void;
   toggleLibraryCategory: (category: string) => void;
   setAllLibraryCategories: (collapsed: boolean, categories: string[]) => void;

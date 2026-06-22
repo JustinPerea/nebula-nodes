@@ -1,4 +1,4 @@
-import { Blocks, FolderHeart, MessageSquare, Sparkles } from 'lucide-react';
+import { Blocks, FolderHeart, History, MessageSquare, Sparkles } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import '../../styles/panels.css';
 
@@ -6,6 +6,7 @@ export function PanelLaunchers() {
   const libraryVisible = useUIStore((s) => s.panels.library.visible);
   const chatVisible = useUIStore((s) => s.panels.chat.visible);
   const assetsVisible = useUIStore((s) => s.panels.assets.visible);
+  const historyVisible = useUIStore((s) => s.panels.history.visible);
   const togglePanel = useUIStore((s) => s.togglePanel);
   const enterCreateView = useUIStore((s) => s.enterCreateView);
 
@@ -47,6 +48,17 @@ export function PanelLaunchers() {
         aria-pressed={libraryVisible}
       >
         <Blocks className="panel-launcher__icon" size={18} strokeWidth={1.65} aria-hidden="true" focusable="false" />
+      </button>
+
+      <button
+        type="button"
+        className={`panel-launcher panel-launcher--history${historyVisible ? ' panel-launcher--active' : ''}`}
+        onClick={() => togglePanel('history')}
+        title="Toggle run history"
+        aria-label="Toggle run history"
+        aria-pressed={historyVisible}
+      >
+        <History className="panel-launcher__icon" size={18} strokeWidth={1.65} aria-hidden="true" focusable="false" />
       </button>
 
       <button
