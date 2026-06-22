@@ -13,7 +13,7 @@ from uuid import uuid4
 
 from fastapi import FastAPI, Form, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 
 from models import ExecuteRequest, ExecuteNodeRequest, ValidationErrorEvent, GraphNode, GraphEdge
 from models.events import ExecutionEvent, ExecutedEvent, ErrorEvent
@@ -2553,6 +2553,27 @@ async def export_file(body: dict[str, Any]) -> dict:
         raise HTTPException(status_code=500, detail=str(exc))
 
     return {"status": "ok", "savedPath": str(dest)}
+
+
+@app.post("/api/transcode-image")
+async def transcode_image_route(body: dict[str, Any]) -> Response:
+    """Transcode a local output image to PNG/JPG/WEBP for the gallery download menu."""
+    from services.image_transcode import transcode_image_file, UnsupportedFormatError
+
+    src = _output_path_from_ref(body.get("url", ""))
+    if src is None:
+        raise HTTPException(status_code=400, detail="not a local output path")
+    try:
+        data, mime, filename = transcode_image_file(src, str(body.get("format", "")))
+    except UnsupportedFormatError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:  # corrupt/unreadable image, etc.
+        raise HTTPException(status_code=500, detail=f"transcode failed: {exc}")
+    return Response(
+        content=data,
+        media_type=mime,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 # Dynamic catch-all replaces the old StaticFiles mount so the serve root can

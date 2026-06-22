@@ -3,6 +3,7 @@ import { Download, SquareArrowOutUpRight, ImagePlus, Trash2, FolderOpen, FolderD
 import type { Node } from '@xyflow/react';
 import type { NodeData, PortValue } from '../../types';
 import { OutputRenderer } from './OutputRenderer';
+import { downloadTranscoded, DOWNLOAD_FORMATS } from '../../lib/createTranscode';
 
 function firstMediaUrl(outputs: Record<string, PortValue>): string | null {
   for (const t of ['Image', 'Video', 'Audio', 'Mesh', 'SVG'] as const) {
@@ -24,6 +25,7 @@ export interface ResultCardProps {
 
 export function ResultCard({ node, onOpenInCanvas, onUseAsInput, onDelete, onReveal, onSaveToFolder, onZoom }: ResultCardProps) {
   const [saved, setSaved] = useState(false);
+  const [dlOpen, setDlOpen] = useState(false);
 
   if (!node) return null;
   const url = firstMediaUrl(node.data.outputs);
@@ -37,12 +39,19 @@ export function ResultCard({ node, onOpenInCanvas, onUseAsInput, onDelete, onRev
   const mediaKind = hasVideo ? 'video' : hasImage ? 'image' : 'other';
   const canZoom = mediaKind !== 'other' && !!onZoom;
   const imageClickable = mediaKind === 'image' && canZoom;
+  // Raster images (not SVG) can be downloaded in a chosen format via the server.
+  const isRaster = complete && Object.values(outs).some((o) => o.type === 'Image' && o.value);
 
   const handleSave = () => {
     if (!url || !onSaveToFolder) return;
     onSaveToFolder(url);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
+  };
+
+  const handleFormat = (fmt: (typeof DOWNLOAD_FORMATS)[number]) => {
+    setDlOpen(false);
+    if (url) void downloadTranscoded(url, fmt).catch((err) => console.error('[nebula] transcode download failed:', err));
   };
 
   return (
@@ -77,7 +86,34 @@ export function ResultCard({ node, onOpenInCanvas, onUseAsInput, onDelete, onRev
         )}
       </div>
       <div className="result-card__actions">
-        {url && <a className="result-card__btn" href={url} download title="Download"><Download size={15} strokeWidth={1.75} /></a>}
+        {url && isRaster ? (
+          <span className="result-card__dl">
+            <button
+              type="button"
+              className="result-card__btn"
+              onClick={() => setDlOpen((v) => !v)}
+              title="Download as…"
+              aria-haspopup="menu"
+              aria-expanded={dlOpen}
+            >
+              <Download size={15} strokeWidth={1.75} />
+            </button>
+            {dlOpen && (
+              <div className="result-card__dl-menu" role="menu">
+                <a className="result-card__dl-item" href={url} download role="menuitem" onClick={() => setDlOpen(false)}>
+                  Original
+                </a>
+                {DOWNLOAD_FORMATS.map((fmt) => (
+                  <button key={fmt} type="button" className="result-card__dl-item" role="menuitem" onClick={() => handleFormat(fmt)}>
+                    {fmt.toUpperCase()}
+                  </button>
+                ))}
+              </div>
+            )}
+          </span>
+        ) : (
+          url && <a className="result-card__btn" href={url} download title="Download"><Download size={15} strokeWidth={1.75} /></a>
+        )}
         <button className="result-card__btn" type="button" onClick={onOpenInCanvas} title="Open in canvas"><SquareArrowOutUpRight size={15} strokeWidth={1.75} /></button>
         {url && <button className="result-card__btn" type="button" onClick={() => onUseAsInput(url)} title="Use as input"><ImagePlus size={15} strokeWidth={1.75} /></button>}
         {url && onReveal && (
