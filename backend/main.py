@@ -2089,6 +2089,34 @@ async def quick_execute(body: dict[str, Any]) -> dict:
 
 from pydantic import BaseModel, Field
 
+from services.prompt_enhance import (
+    enhance_prompt,
+    NoEnhanceProviderError,
+    EnhanceProviderError,
+)
+
+
+class EnhancePromptRequest(BaseModel):
+    prompt: str
+
+
+@app.post("/api/enhance-prompt")
+async def enhance_prompt_route(body: EnhancePromptRequest) -> dict[str, str]:
+    """One-shot LLM rewrite of a Create prompt, using the first configured provider."""
+    prompt = (body.prompt or "").strip()
+    if not prompt:
+        raise HTTPException(status_code=400, detail="Prompt is empty.")
+    api_keys = load_settings().get("apiKeys", {})
+    try:
+        return await enhance_prompt(prompt, api_keys)
+    except NoEnhanceProviderError:
+        raise HTTPException(
+            status_code=400,
+            detail="No LLM API key configured (OpenAI, Anthropic, or Google). Add one in Settings.",
+        )
+    except EnhanceProviderError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
 
 class CharacterCreate(BaseModel):
     name: str

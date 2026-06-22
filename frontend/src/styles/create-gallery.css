@@ -345,6 +345,34 @@ body.app-slava-restraint .create-composer__styles {
 }
 body.app-slava-restraint .create-composer__styles:hover { border-color: var(--sr-edge-strong); }
 
+body.app-slava-restraint .create-composer__enhance {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--sr-glass-raised);
+  border: 1px solid var(--sr-edge);
+  border-radius: 10px;
+  padding: 7px 12px;
+  color: var(--sr-ink);
+  font-size: 13px;
+  cursor: pointer;
+}
+body.app-slava-restraint .create-composer__enhance:hover:not(:disabled) { border-color: var(--sr-edge-strong); }
+body.app-slava-restraint .create-composer__enhance:disabled { opacity: 0.5; cursor: default; }
+body.app-slava-restraint .create-composer__enhance-undo {
+  background: none;
+  border: none;
+  color: var(--sr-accent);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 4px 6px;
+}
+body.app-slava-restraint .create-composer__enhance-error {
+  color: var(--sr-warning);
+  font-size: 12px;
+  align-self: center;
+}
+
 /* ─── Preset library popover ─────────────────────────────────────────────── */
 
 body.app-slava-restraint .preset-library {
