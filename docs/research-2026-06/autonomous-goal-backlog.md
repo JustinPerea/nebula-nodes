@@ -28,7 +28,7 @@
 
 ## Queue (auto: yes) — in priority order
 1. `g-prompt-improver-builtin` — ✅ `done` (PR #8) — Create "Enhance" button → `POST /api/enhance-prompt` (provider fall-through), non-destructive Undo. Independent verify PASS + browser end-to-end.
-2. `g-image-compare-slider` — `todo` — before/after wipe slider (Create gallery/Lightbox first; reusable component).
+2. `g-image-compare-slider` — ✅ `done` (PR #9) — `BeforeAfterSlider` wired into the Image Compare node (draggable clip-path wipe). Also cleared the pre-existing ModelNode rules-of-hooks bug. Independent verify PASS + browser drag confirmed.
 3. `g-router-node` — ✅ `done` (already shipped) — verified complete: `nodeDefinitions.ts:2006` + `node_definitions.json:2984` (1 input → out1/out2/out3) + `engine.py` handler (local node, copies input to all 3 outputs). No change needed; the "partial" assessment was stale.
 4. `g-variation-fanout` — `todo` — Create "Vary" mode on the quantity stepper (Seed/Style/Prompt) + gallery grouping.
 5. `g-export-node-multiformat` — `todo` — per-card download format menu + gallery "Download all (ZIP)" + Video Editor export.
@@ -51,4 +51,5 @@
 
 ## Run log
 - **Iter 1** — `g-router-node`: verify-first found it already fully implemented (both registries + engine handler, 3-output pass-through). Marked done, no change.
-- **Iter 2** — `g-prompt-improver-builtin` (PR #8, merged): new `POST /api/enhance-prompt` (`services/prompt_enhance.py`, provider fall-through) + Create "Enhance" button (Undo, loading, error). 17 backend + 355 frontend tests green; independent code-reviewer PASS; browser end-to-end verified. Verify-the-output caught a live 401 on the first key → added provider fall-through so a bad key doesn't block the feature. Next: `g-image-compare-slider`.
+- **Iter 2** — `g-prompt-improver-builtin` (PR #8, merged): new `POST /api/enhance-prompt` (`services/prompt_enhance.py`, provider fall-through) + Create "Enhance" button (Undo, loading, error). 17 backend + 355 frontend tests green; independent code-reviewer PASS; browser end-to-end verified. Verify-the-output caught a live 401 on the first key → added provider fall-through so a bad key doesn't block the feature.
+- **Iter 3** — `g-image-compare-slider` (PR #9, merged): `BeforeAfterSlider` (clip-path wipe, `nodrag`) + `clampPercent` (unit-tested) wired into the Image Compare node; suppresses the single-image block. Drive-by: hoisted 3 hooks above the `!definition` return → cleared the pre-existing ModelNode rules-of-hooks bug (dismissed that task chip). 358 tests; independent verify PASS; browser drag confirmed (clip 50%→80%). Next: `g-variation-fanout`.
