@@ -247,6 +247,21 @@ let currentRunHadError = false;
 // at graphComplete/validationError). Null between runs / for Create concurrent gens.
 let currentRunId: string | null = null;
 
+/** Close the in-flight run-history record (if any) with a terminal status, then
+ *  clear `currentRunId`. No-op when no run is open, so it's safe to call on every
+ *  execution-exit path — and centralizing the null-guard keeps the cancel-vs-restart
+ *  invariant correct (a leaked open run would otherwise be mis-marked 'cancelled'
+ *  by the next run's resetExecution). */
+function closeCurrentRun(
+  set: (partial: Partial<GraphState> | ((state: GraphState) => Partial<GraphState>)) => void,
+  patch: Parameters<typeof closeRunRecord>[2],
+): void {
+  if (!currentRunId) return;
+  const rid = currentRunId;
+  currentRunId = null;
+  set((s) => ({ runHistory: closeRunRecord(s.runHistory, rid, patch) }));
+}
+
 /** Like pushUndo but debounces rapid param changes on the same node (500ms window). */
 function maybePushUndo(
   set: (partial: Partial<GraphState> | ((state: GraphState) => Partial<GraphState>)) => void,
@@ -1844,11 +1859,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     currentRunHadError = false;
     // A still-open run at this point means the user cancelled mid-flight (at the start
     // of a fresh run the prior run has already closed, so currentRunId is null → no-op).
-    if (currentRunId) {
-      const rid = currentRunId;
-      currentRunId = null;
-      set((s) => ({ runHistory: closeRunRecord(s.runHistory, rid, { status: 'cancelled' }) }));
-    }
+    closeCurrentRun(set, { status: 'cancelled' });
     set((state) => ({
       isExecuting: false,
       nodes: state.nodes.map((node) => ({
@@ -1880,6 +1891,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     try {
       const result = await apiExecuteGraph(graphNodes, graphEdges);
       if (result.status === 'validation_error') {
+        closeCurrentRun(set, { status: 'failed' });
         set((state) => ({
           nodes: markNodesErrored(
             state.nodes,
@@ -1891,6 +1903,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       }
     } catch (err) {
       console.error('Failed to start execution:', err);
+      closeCurrentRun(set, { status: 'failed' });
       set((state) => ({
         nodes: markNodesErrored(
           state.nodes,
@@ -1928,6 +1941,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     try {
       const result = await apiExecuteNode(graphNodes, graphEdges, nodeId);
       if (result.status === 'validation_error') {
+        closeCurrentRun(set, { status: 'failed' });
         set((state) => ({
           nodes: markNodesErrored(
             state.nodes,
@@ -1939,6 +1953,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       }
     } catch (err) {
       console.error('Failed to start node execution:', err);
+      closeCurrentRun(set, { status: 'failed' });
       set((state) => ({
         nodes: markNodesErrored(
           state.nodes,
@@ -1991,6 +2006,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     try {
       const result = await apiExecuteGraph(graphNodes, graphEdges);
       if (result.status === 'validation_error') {
+        closeCurrentRun(set, { status: 'failed' });
         set((state) => ({
           nodes: markNodesErrored(state.nodes, idSet, 'Validation failed before generation. Check required inputs and API keys.'),
           isExecuting: false,
@@ -1998,6 +2014,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       }
     } catch (err) {
       console.error('Failed to start generation:', err);
+      closeCurrentRun(set, { status: 'failed' });
       set((state) => ({
         nodes: markNodesErrored(state.nodes, idSet, err instanceof Error ? err.message : 'Failed to start generation.'),
         isExecuting: false,
@@ -2814,27 +2831,17 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         }
         set({ isExecuting: false });
         // validationError ends the run with no following graphComplete, so close + notify here.
-        if (currentRunId) {
-          const rid = currentRunId;
-          currentRunId = null;
-          set((s) => ({ runHistory: closeRunRecord(s.runHistory, rid, { status: 'failed' }) }));
-        }
+        closeCurrentRun(set, { status: 'failed' });
         notifyJobComplete({ ok: false, durationSec: 0, nodesExecuted: 0 });
         break;
       case 'graphComplete':
         console.log(`[execution] complete in ${event.duration}s, ${event.nodesExecuted} nodes executed`);
         set({ isExecuting: false });
-        if (currentRunId) {
-          const rid = currentRunId;
-          currentRunId = null;
-          set((s) => ({
-            runHistory: closeRunRecord(s.runHistory, rid, {
-              status: currentRunHadError ? 'failed' : 'complete',
-              durationSec: event.duration,
-              nodesExecuted: event.nodesExecuted,
-            }),
-          }));
-        }
+        closeCurrentRun(set, {
+          status: currentRunHadError ? 'failed' : 'complete',
+          durationSec: event.duration,
+          nodesExecuted: event.nodesExecuted,
+        });
         notifyJobComplete({
           ok: !currentRunHadError,
           durationSec: event.duration,
