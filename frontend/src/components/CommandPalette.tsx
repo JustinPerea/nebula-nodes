@@ -32,6 +32,8 @@ export function CommandPalette() {
   const enterCreateView = useUIStore((s) => s.enterCreateView);
   const togglePanel = useUIStore((s) => s.togglePanel);
   const setSkin = useUIStore((s) => s.setSkin);
+  const selectNode = useUIStore((s) => s.selectNode);
+  const nodes = useGraphStore((s) => s.nodes);
 
   const close = useCallback(() => {
     setOpen(false);
@@ -51,6 +53,24 @@ export function CommandPalette() {
     [screenToFlowPosition, addNode]
   );
 
+  // Existing canvas nodes, for search-and-focus (the "canvas search" affordance).
+  const canvasNodes = useMemo(
+    () =>
+      nodes.map((n) => ({
+        id: n.id,
+        label: (typeof n.data?.label === 'string' && n.data.label) || n.data?.definitionId || n.id,
+      })),
+    [nodes]
+  );
+
+  const focusNode = useCallback(
+    (id: string) => {
+      void fitView({ nodes: [{ id }], duration: 400, maxZoom: 1.5 });
+      selectNode(id);
+    },
+    [fitView, selectNode]
+  );
+
   const commands = useMemo(
     () =>
       buildCommands({
@@ -67,8 +87,10 @@ export function CommandPalette() {
           setQuery('');
         },
         canRun: nodeCount > 0 && !isExecuting,
+        canvasNodes,
+        focusNode,
       }),
-    [addNodeAtCenter, executeGraph, fitView, enterCreateView, togglePanel, setSkin, nodeCount, isExecuting]
+    [addNodeAtCenter, executeGraph, fitView, enterCreateView, togglePanel, setSkin, nodeCount, isExecuting, canvasNodes, focusNode]
   );
 
   // Mirror `open` into a ref so the global hotkey handler stays subscribed once.

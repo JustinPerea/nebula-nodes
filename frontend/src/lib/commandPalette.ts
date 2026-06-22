@@ -1,10 +1,11 @@
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 import { SKINS, type SkinId } from './skins';
 
-export type PaletteGroup = 'Actions' | 'View' | 'Agent' | 'Nodes';
+export type PaletteGroup = 'Actions' | 'View' | 'Agent' | 'Canvas' | 'Nodes';
 
-/** Group render order in the palette (Actions/View/Agent first, Nodes last). */
-export const PALETTE_GROUP_ORDER: PaletteGroup[] = ['Actions', 'View', 'Agent', 'Nodes'];
+/** Group render order in the palette (Actions/View/Agent first, then existing
+ *  Canvas nodes to focus, then the Nodes library to insert). */
+export const PALETTE_GROUP_ORDER: PaletteGroup[] = ['Actions', 'View', 'Agent', 'Canvas', 'Nodes'];
 
 export interface PaletteCommand {
   id: string;
@@ -30,6 +31,9 @@ export interface PaletteContext {
   setSkin: (s: SkinId) => void;
   startAgentQuery: () => void;
   canRun: boolean;
+  /** Existing nodes on the canvas, for search-and-focus. */
+  canvasNodes: Array<{ id: string; label: string }>;
+  focusNode: (id: string) => void;
 }
 
 type PanelKey = 'library' | 'inspector' | 'settings' | 'chat' | 'assets';
@@ -69,6 +73,17 @@ export function buildCommands(ctx: PaletteContext): PaletteCommand[] {
       group: 'View',
       keywords: `theme appearance skin ${skin.label}`,
       perform: () => ctx.setSkin(skin.id),
+    });
+  }
+
+  for (const n of ctx.canvasNodes) {
+    cmds.push({
+      id: `canvas:${n.id}`,
+      title: n.label,
+      subtitle: 'on canvas · focus',
+      group: 'Canvas',
+      keywords: `focus find node ${n.id}`,
+      perform: () => ctx.focusNode(n.id),
     });
   }
 
