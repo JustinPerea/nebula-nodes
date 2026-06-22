@@ -415,8 +415,11 @@ interface GraphState {
   handleExecutionEvent: (event: ExecutionEvent) => void;
   executeNode: (nodeId: string) => Promise<void>;
   /** Regenerate a single cinema-scene shot (does NOT touch the global
-   *  isExecuting lock — the rail spinner scopes to that one shot's status). */
-  executeShot: (nodeId: string, shotId: string, seed?: number) => Promise<void>;
+   *  isExecuting lock — the rail spinner scopes to that one shot's status).
+   *  `variations` > 1 generates that many seeded candidates into shot.variations. */
+  executeShot: (nodeId: string, shotId: string, seed?: number, variations?: number) => Promise<void>;
+  /** Promote a generated variation to canonical (selectedVariation + output). */
+  promoteShotVariation: (nodeId: string, shotId: string, index: number) => void;
   executeCluster: (nodeIds: string[]) => Promise<void>;
   executeClusterConcurrent: (nodeIds: string[]) => Promise<void>;
   authorGenerationCluster: (request: GenerationRequest) => Promise<{ modelNodeIds: string[]; allNodeIds: string[] }>;
@@ -2006,7 +2009,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     }
   },
 
-  executeShot: async (nodeId, shotId, seed) => {
+  executeShot: async (nodeId, shotId, seed, variations) => {
     const { nodes, edges } = get();
     const node = nodes.find((n) => n.id === nodeId);
     if (!node || node.data.definitionId !== 'cinema-scene') return;
@@ -2052,15 +2055,39 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     };
 
     try {
-      const result = await apiGenerateShot(graphNodes, graphEdges, nodeId, shotId, seed);
+      const result = await apiGenerateShot(graphNodes, graphEdges, nodeId, shotId, seed, variations);
       if (result.status === 'validation_error') {
         failShot('Validation failed. Check inputs and API keys.');
       }
-      // status 'started' → the generated image (or per-shot error) arrives via graphSync.
+      // status 'started' → the generated image(s) (or per-shot error) arrive via graphSync.
     } catch (err) {
       console.error('Failed to generate shot:', err);
       failShot(err instanceof Error ? err.message : 'Failed to generate shot.');
     }
+  },
+
+  promoteShotVariation: (nodeId, shotId, index) => {
+    const node = get().nodes.find((n) => n.id === nodeId);
+    if (!node || node.data.definitionId !== 'cinema-scene') return;
+    const scene = (node.data.params as { scene?: CinemaSceneSpec }).scene;
+    if (!scene || !Array.isArray(scene.shots)) return;
+    const shot = scene.shots.find((s) => s.id === shotId);
+    const variation = shot?.variations?.[index];
+    if (!shot || !variation) return;
+    // Promotion is canonical-state only: point output/selectedVariation at the
+    // chosen candidate. updateScene persists the spec (incl. variations) to
+    // cli_graph. NOTE: the dynamic output PORT still carries the batch's first
+    // variation until the shot is regenerated — downstream edges aren't rewired
+    // on promote (Send-to-motion reads output.imageUrl, so it follows the promote).
+    const nextScene: CinemaSceneSpec = {
+      ...scene,
+      shots: scene.shots.map((s) =>
+        s.id === shotId
+          ? { ...s, selectedVariation: index, output: { ...(s.output ?? {}), imageUrl: variation.url, status: 'done' as const } }
+          : s,
+      ),
+    };
+    get().updateScene(nodeId, nextScene);
   },
 
   executeCluster: async (nodeIds) => {

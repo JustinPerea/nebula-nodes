@@ -321,6 +321,17 @@ async def handle_cinema_scene(
             if expanded["seed"] is not None:
                 shot_extra_params["seed"] = expanded["seed"]
 
+            # An explicit per-shot seed override (set by the variations path in
+            # /api/cinema/generate-shot) is AUTHORITATIVE — applied last so a
+            # variation seed actually varies the image even when a Character
+            # bundle is attached (the bundle seed above would otherwise pin it).
+            seed_override = shot.get("_seedOverride")
+            if seed_override is not None:
+                try:
+                    shot_extra_params["seed"] = int(seed_override)
+                except (TypeError, ValueError):
+                    pass
+
             # Apply the effective consistency strength HONESTLY: only when this
             # base model exposes a real IP-adherence param (strength_param_for).
             # For v1 reference-edit bases (nano-banana / seedream-4-5 /

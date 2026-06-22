@@ -6,6 +6,7 @@ import difflib
 import hashlib
 import json
 import os
+import random
 import re
 from pathlib import Path
 from typing import Any
@@ -1257,6 +1258,7 @@ async def _execute_single_shot_pass(
     sub_edges: list[GraphEdge],
     api_keys: dict[str, str],
     use_cache: bool,
+    seed: int | None = None,
 ) -> tuple[GraphNode | None, dict[str, Any]]:
     """Run one scoped Cinema pass and require a target ExecutedEvent.
 
@@ -1264,6 +1266,12 @@ async def _execute_single_shot_pass(
     awaiting it is not proof that the Cinema node executed. Capturing an error
     and then seeing no target ExecutedEvent is a terminal pass failure.
     """
+    executed_node = next((node for node in sub_nodes if node.id == node_id), None)
+    if executed_node is not None and seed is not None:
+        pass_shots = (executed_node.params.get("scene") or {}).get("shots") or []
+        if pass_shots:
+            pass_shots[0]["_seedOverride"] = seed
+
     captured: dict[str, Any] = {"target_executed": False}
 
     async def _emit_scoped(event: ExecutionEvent) -> None:
@@ -1289,7 +1297,6 @@ async def _execute_single_shot_pass(
             str(captured.get("error") or "Shot generation ended before the Cinema node completed.")
         )
 
-    executed_node = next((node for node in sub_nodes if node.id == node_id), None)
     return executed_node, captured.get("outputs") or {}
 
 
@@ -1335,6 +1342,40 @@ async def _run_single_shot_task(
         await _broadcast_graph_sync()
 
 
+async def _merge_shot_variations(
+    node_id: str,
+    shot_id: str,
+    variations: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    """Store a batch of variations on the live cli_graph scene and promote the
+    first as canonical (output + the one shot port). Sibling shots are untouched;
+    lock-serialized like _merge_shot_result. Returns the canonical output, or None
+    when the batch produced no images."""
+    if not variations:
+        return None
+    canonical = {"imageUrl": variations[0]["url"], "status": "done"}
+    async with _shot_merge_lock(node_id):
+        node = cli_graph.nodes.get(node_id)
+        if node is None:
+            return canonical
+        params = dict(node.get("params") or {})
+        scene = params.get("scene")
+        if isinstance(scene, dict):
+            for shot in scene.get("shots") or []:
+                if isinstance(shot, dict) and str(shot.get("id")) == shot_id:
+                    shot["variations"] = variations
+                    shot["selectedVariation"] = 0
+                    shot["output"] = dict(canonical)
+                    break
+            params["scene"] = scene
+            node["params"] = params
+        existing = dict(node.get("outputs") or {})
+        existing[f"shot_{shot_id}"] = {"type": "Image", "value": variations[0]["url"]}
+        node["outputs"] = existing
+        cli_graph._maybe_persist()
+    return canonical
+
+
 @app.post("/api/cinema/generate-shot")
 async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
     """Regenerate ONLY the named shot of a cinema-scene node.
@@ -1365,19 +1406,10 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
         raise HTTPException(status_code=404, detail=f"Shot '{request.shot_id}' not found in scene")
 
     # Build a single-shot copy of the scene so the handler regenerates ONLY this
-    # shot. An explicit seed (Part B variations run the same shot at N seeds) is
-    # injected into the base params channel.
+    # shot. The seed is applied per-pass via the shot's `_seedOverride` (which the
+    # handler honors LAST, so a variation seed wins even over a Character bundle).
     single_scene = copy.deepcopy(scene)
     single_scene["shots"] = [copy.deepcopy(shot)]
-    if request.seed is not None:
-        base = single_scene.get("base")
-        if not isinstance(base, dict):
-            base = {}
-            single_scene["base"] = base
-        base_params = dict(base.get("params") or {})
-        base_params["seed"] = request.seed
-        base["params"] = base_params
-
     single_node = target.model_copy(update={"params": {**(target.params or {}), "scene": single_scene}})
     patched_nodes = [single_node if n.id == request.node_id else n for n in nodes]
 
@@ -1400,17 +1432,78 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
         )
         return {"status": "cycle_error"}
 
-    asyncio.create_task(
-        _run_single_shot_task(
-            node_id=request.node_id,
-            shot_id=request.shot_id,
-            sub_nodes=sub_nodes,
-            sub_edges=sub_edges,
-            api_keys=api_keys,
-        )
-    )
+    shot_port = f"shot_{request.shot_id}"
+    count = request.variations or 1
 
-    return {"status": "started", "shotId": request.shot_id}
+    async def _run() -> None:
+        import traceback
+
+        terminal_error: str | None = None
+        try:
+            if count > 1:
+                # Variation batch: N passes at distinct seeds (cache OFF so each
+                # truly regenerates), collected into the shot's variations strip.
+                variations: list[dict[str, Any]] = []
+                failures: list[str] = []
+                for i in range(count):
+                    seed_i = (request.seed + i) if request.seed is not None else random.randint(1, 2_147_483_647)
+                    try:
+                        _executed_node, outputs = await _execute_single_shot_pass(
+                            node_id=request.node_id,
+                            sub_nodes=sub_nodes,
+                            sub_edges=sub_edges,
+                            api_keys=api_keys,
+                            use_cache=False,
+                            seed=seed_i,
+                        )
+                    except _ShotPassError as exc:
+                        failures.append(_shot_task_error_message(exc))
+                        continue
+                    except Exception as exc:
+                        traceback.print_exc()
+                        failures.append(_shot_task_error_message(exc))
+                        continue
+                    url = (outputs.get(shot_port) or {}).get("value")
+                    if url:
+                        variations.append({"url": url, "seed": seed_i})
+                    else:
+                        failures.append(f"Variation seed {seed_i} returned no image.")
+                if variations:
+                    await _merge_shot_variations(request.node_id, request.shot_id, variations)
+                else:
+                    last_failure = failures[-1] if failures else "No variation returned an image."
+                    terminal_error = f"All {count} variation passes failed. {last_failure}"
+            else:
+                executed_node, outputs = await _execute_single_shot_pass(
+                    node_id=request.node_id,
+                    sub_nodes=sub_nodes,
+                    sub_edges=sub_edges,
+                    api_keys=api_keys,
+                    use_cache=True,
+                    seed=request.seed,
+                )
+                await _merge_shot_result(
+                    request.node_id, request.shot_id, executed_node, outputs
+                )
+        except _ShotPassError as exc:
+            terminal_error = _shot_task_error_message(exc)
+        except Exception as exc:
+            traceback.print_exc()
+            terminal_error = _shot_task_error_message(exc)
+        finally:
+            if terminal_error is not None:
+                await _merge_shot_result(
+                    request.node_id,
+                    request.shot_id,
+                    None,
+                    {},
+                    terminal_error=terminal_error,
+                )
+            await _broadcast_graph_sync()
+
+    asyncio.create_task(_run())
+
+    return {"status": "started", "shotId": request.shot_id, "variations": count}
 
 
 # ---------- CLI: Node discovery ----------

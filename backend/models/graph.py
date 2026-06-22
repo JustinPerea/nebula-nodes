@@ -53,7 +53,11 @@ class GenerateShotRequest(BaseModel):
     edges: list[GraphEdge]
     node_id: str = Field(alias="nodeId")
     shot_id: str = Field(alias="shotId")
-    # Optional explicit seed (Part B variations run the same shot at N seeds).
+    # Optional explicit base seed. With `variations` > 1 the batch uses
+    # seed, seed+1, … (or random seeds when omitted).
     seed: int | None = None
+    # When > 1, regenerate the shot this many times at distinct seeds and store
+    # the results as selectable variations. None / 1 → a single canonical run.
+    variations: int | None = None
 
     model_config = {"populate_by_name": True}

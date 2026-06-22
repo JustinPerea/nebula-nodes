@@ -356,3 +356,63 @@ class TestMergeShotResult:
         returned = asyncio.run(_merge_shot_result("ghost", "b", executed, {}))
         assert returned == {"imageUrl": "NEW", "status": "done"}
         assert "ghost" not in cli_graph.nodes
+
+
+class TestMergeShotVariations:
+    def _seed_cli_node(self):
+        from main import cli_graph, _shot_merge_locks
+
+        _shot_merge_locks.clear()
+        cli_graph.nodes["n1"] = {
+            "params": {
+                "scene": {
+                    "shots": [
+                        {"id": "a", "prompt": "pa", "output": {"imageUrl": "URL_A", "status": "done"}},
+                        {"id": "b", "prompt": "pb", "output": {"imageUrl": "URL_B_old", "status": "done"}},
+                    ]
+                }
+            },
+            "outputs": {
+                "shot_a": {"type": "Image", "value": "URL_A"},
+                "shot_b": {"type": "Image", "value": "URL_B_old"},
+            },
+        }
+        return cli_graph
+
+    def test_variations_stored_and_first_promoted_canonical(self):
+        from main import _merge_shot_variations, cli_graph
+
+        self._seed_cli_node()
+        variations = [
+            {"url": "URL_B_v0", "seed": 10},
+            {"url": "URL_B_v1", "seed": 11},
+            {"url": "URL_B_v2", "seed": 12},
+        ]
+        returned = asyncio.run(_merge_shot_variations("n1", "b", variations))
+
+        # Canonical = first variation.
+        assert returned == {"imageUrl": "URL_B_v0", "status": "done"}
+        node = cli_graph.nodes["n1"]
+        shots = {s["id"]: s for s in node["params"]["scene"]["shots"]}
+        assert shots["b"]["variations"] == variations
+        assert shots["b"]["selectedVariation"] == 0
+        assert shots["b"]["output"]["imageUrl"] == "URL_B_v0"
+        # Sibling shot 'a' untouched (no variations, original output/port).
+        assert "variations" not in shots["a"]
+        assert shots["a"]["output"]["imageUrl"] == "URL_A"
+        assert node["outputs"]["shot_a"]["value"] == "URL_A"
+        # Canonical port = first variation.
+        assert node["outputs"]["shot_b"]["value"] == "URL_B_v0"
+        cli_graph.nodes.pop("n1", None)
+
+    def test_empty_variations_is_noop(self):
+        from main import _merge_shot_variations, cli_graph
+
+        self._seed_cli_node()
+        returned = asyncio.run(_merge_shot_variations("n1", "b", []))
+        assert returned is None
+        # Shot b unchanged.
+        shots = {s["id"]: s for s in cli_graph.nodes["n1"]["params"]["scene"]["shots"]}
+        assert "variations" not in shots["b"]
+        assert shots["b"]["output"]["imageUrl"] == "URL_B_old"
+        cli_graph.nodes.pop("n1", None)

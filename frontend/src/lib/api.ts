@@ -59,11 +59,12 @@ export async function generateCinemaShot(
   nodeId: string,
   shotId: string,
   seed?: number,
-): Promise<{ status: string; shotId?: string; errorCount?: number }> {
+  variations?: number,
+): Promise<{ status: string; shotId?: string; variations?: number; errorCount?: number }> {
   const response = await apiFetch('/api/cinema/generate-shot', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ nodes, edges, nodeId, shotId, seed }),
+    body: JSON.stringify({ nodes, edges, nodeId, shotId, seed, variations }),
   });
   if (!response.ok) {
     let detail = '';
