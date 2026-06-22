@@ -13,6 +13,7 @@ import type { NodeData, DynamicNodeData, DynamicPortDefinition, DynamicParamDefi
 import { shotPortId } from '../constants/ports';
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 import { buildSampleGraph } from '../constants/sampleGraph';
+import { computeLayout } from '../lib/autoLayout';
 import {
   executeGraph as apiExecuteGraph,
   executeNode as apiExecuteNode,
@@ -365,6 +366,7 @@ interface GraphState {
   deleteNode: (nodeId: string) => void;
   loadGraph: (nodes: Node<NodeData>[], edges: Edge[]) => void;
   loadSampleGraph: () => void;
+  autoLayout: () => void;
   clearGraph: () => void;
   configureOpenRouterModel: (nodeId: string, modelId: string, model: OpenRouterModel) => void;
   fetchReplicateSchemaAndConfigure: (nodeId: string, owner: string, name: string) => Promise<void>;
@@ -2531,6 +2533,23 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     const { nodes, edges } = buildSampleGraph();
     get().loadGraph(nodes, edges);
     // Let the canvas auto-fit to frame the seeded pipeline.
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('nebula:graph-nodes-added', { detail: { totalCount: nodes.length } })
+      );
+    }
+  },
+
+  autoLayout: () => {
+    const { nodes, edges } = get();
+    if (nodes.length === 0) return;
+    pushUndo(set, get);
+    // Dependency-aware layered positions (frontend-only; graphSync preserves
+    // existing.position, and saves round-trip it, so this sticks like a drag).
+    const pos = computeLayout(nodes, edges);
+    set((state) => ({
+      nodes: state.nodes.map((n) => (pos[n.id] ? { ...n, position: pos[n.id] } : n)),
+    }));
     if (typeof window !== 'undefined') {
       window.dispatchEvent(
         new CustomEvent('nebula:graph-nodes-added', { detail: { totalCount: nodes.length } })
