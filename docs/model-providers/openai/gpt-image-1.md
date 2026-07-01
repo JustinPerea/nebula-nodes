@@ -5,16 +5,20 @@ project: nebula_nodes
 provider: openai
 model: gpt-image-1
 status: active
-verified: 2026-05-16
+verified: 2026-06-30
 stale_after_days: 30
 ---
 
 # GPT Image 1 in Nebula Nodes
 
 Audit note for the `gpt-image-1-generate` and `gpt-image-1-edit` nodes.
-Sources: openai-python SDK type stubs at `openai/types/image_generate_params.py` and
-`openai/types/image_edit_params.py`, fetched 2026-05-16 from
-`https://raw.githubusercontent.com/openai/openai-python/main/src/openai/types/`.
+
+Verified against `node_definitions.json`, `backend/handlers/openai_image.py`,
+`backend/handlers/openai_image_edit.py`, and `backend/tests/test_openai_handler.py`
+on 2026-06-30.
+
+> **DALL-E removed:** `dalle-3-generate` was removed 2026-06-10 after OpenAI shut down
+> dall-e-2/3 on 2026-05-12. Use these GPT Image nodes or `gpt-image-2-*` instead.
 
 ## Node Matrix
 
@@ -23,52 +27,48 @@ Sources: openai-python SDK type stubs at `openai/types/image_generate_params.py`
 | `gpt-image-1-generate` | OpenAI direct | `OPENAI_API_KEY` | Text to image |
 | `gpt-image-1-edit` | OpenAI direct | `OPENAI_API_KEY` | Image editing / inpainting |
 
+**FAL alternate:** `gpt-image-1.5` / `gpt-image-1.5-edit` use `FAL_KEY` with FAL param
+naming (`image_size`, etc.). The same `gpt-image-1.5` model is also selectable on the
+direct nodes via the `model` enum.
+
 ## Generate Params
 
 | Param | Values | Default | Notes |
 |---|---|---|---|
-| `model` | `gpt-image-1`, `gpt-image-1.5`, `gpt-image-1-mini` | `gpt-image-1` | All are valid API identifiers per SDK |
-| `size` | `auto`, `1024x1024`, `1536x1024`, `1024x1536` | `auto` | |
-| `quality` | `auto`, `low`, `medium`, `high` | `auto` | `auto` selects best quality for model |
-| `output_format` | `png`, `jpeg`, `webp` | `png` | GPT models only; handler omits when `png` (API default) |
-| `background` | `auto`, `transparent`, `opaque` | `auto` | GPT models only; handler omits when `auto` |
-| `n` | 1–10 | 1 | Handler omits when 1 (API default) |
-| `response_format` | — | — | Not sent; GPT models always return `b64_json` |
+| `model` | `gpt-image-1`, `gpt-image-1.5`, `gpt-image-1-mini` | `gpt-image-1` | |
+| `size` | `auto`, `1024x1024`, `1536x1024`, `1024x1536` | `auto` | Omitted when `auto` |
+| `quality` | `auto`, `low`, `medium`, `high` | `auto` | Omitted when `auto` |
+| `output_format` | `png`, `jpeg`, `webp` | `png` | Omitted when `png` (API default) |
+| `background` | `auto`, `transparent`, `opaque` | `auto` | Omitted when `auto` |
+
+`n` (batch count) is **not** exposed on generate — use `gpt-image-1-edit` Count or run
+the node multiple times.
 
 ## Edit Params
 
 | Param | Values | Default | Notes |
 |---|---|---|---|
-| `model` | `gpt-image-1`, `gpt-image-1.5`, `gpt-image-1-mini`, `dall-e-2` | `gpt-image-1` | |
+| `model` | `gpt-image-1`, `gpt-image-1.5`, `gpt-image-1-mini` | `gpt-image-1` | dall-e-2 removed 2026-06 |
+| `n` | 1–10 | 1 | Omitted when 1 |
 | `size` | `auto`, `1024x1024`, `1536x1024`, `1024x1536` | `auto` | |
 | `quality` | `auto`, `low`, `medium`, `high` | `auto` | |
 | `output_format` | `png`, `jpeg`, `webp` | `png` | |
-| `background` | `auto`, `transparent`, `opaque` | `auto` | |
-| `n` | 1–10 | 1 | |
-| `mask` | optional PNG | — | Applied to first image; same dimensions required |
+| `background` | `auto`, `transparent`, `opaque` | `auto` | Omitted when `auto` |
+| `mask` | optional PNG | — | Applied to first image |
 
-## Findings (2026-05-16 audit)
+## Not Supported
 
-| # | Severity | Finding | Fix |
-|---|---|---|---|
-| 1 | HIGH | `output_format` in registry but handler never sent it | Added forwarding in `openai_image.py` for non-dall-e models |
-| 2 | HIGH | `background` in registry but handler never sent it | Added forwarding in `openai_image.py` for non-dall-e models |
-| 3 | MEDIUM | `gpt-image-1-edit` quality missing `auto` option; default was `medium` | Added `auto` option, changed default to `auto` in both registries |
-| 4 | MEDIUM | `gpt-image-1-edit` size missing `auto` option; default was `1024x1024` | Added `auto` option, changed default to `auto` in both registries |
+- DALL-E 2/3 — API retired 2026-05-12; node and handler branches removed
+- `moderation`, `stream`, `partial_images` — gpt-image-2 only
+- `output_compression` — not exposed on gpt-image-1 (consider if requested)
 
-## Not Supported in Nebula (generate)
+## Check Summary (2026-06-30)
 
-- `style`: dall-e-3 only; not sent for gpt-image-1 variants
-- `response_format`: omitted — GPT models always return `b64_json`
-- `moderation`: gpt-image-2 only
-- `stream` / `partial_images`: gpt-image-2 only
-
-## Open Questions
-
-- `gpt-image-1.5` and `gpt-image-1-mini` appear in the SDK `ImageModel` type; OpenAI's
-  public docs page blocked access (HTTP 403) during this audit. The SDK types are
-  authoritative for parameter validation purposes. Re-verify if either variant is
-  deprecated.
-- `output_compression` is not exposed on generate or edit for gpt-image-1. SDK shows it
-  applies to GPT image models with jpeg/webp. Consider adding it if users request finer
-  size control.
+| Check | Result |
+|---|---|
+| Generate params match registry | PASS |
+| Edit params match registry (no dall-e-2) | PASS |
+| `output_format` / `background` forwarded on generate | PASS |
+| Edit `background` omits `auto` | PASS |
+| Generate does not forward stray `n` | PASS |
+| Missing API key error names `OPENAI_API_KEY` | PASS |

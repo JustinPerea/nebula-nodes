@@ -76,7 +76,7 @@ async def handle_openai_image_edit(
         files.append(("output_format", (None, output_format)))
 
     background = node.params.get("background")
-    if background:
+    if background and background != "auto":
         files.append(("background", (None, background)))
 
     # --- POST to OpenAI ---

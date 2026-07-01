@@ -39,7 +39,7 @@ These are the **eight OpenAI-direct nodes** (all BYOK, one key). For prompting *
 |---|---|---|---|---|
 | GPT Image 1 | `gpt-image-1-generate` | `/v1/images/generations` · `gpt-image-1` \| `gpt-image-1.5` \| `gpt-image-1-mini` | `prompt` (Text) | `model`, `size`, `quality`, `output_format`, `background` (transparent OK) |
 | GPT Image 2 | `gpt-image-2-generate` | `/v1/images/generations` · `gpt-image-2` (streams) | `prompt` (Text) | `size` (→4K), `quality`, `output_format`, `output_compression`, `moderation` |
-| GPT Image 1 Edit | `gpt-image-1-edit` | `/v1/images/edits` · `gpt-image-1*` \| `dall-e-2` | `image` (Image), `prompt` (Text), `mask` (Mask) | `model`, `n` (1–10), `size`, `quality`, `output_format`, `background` |
+| GPT Image 1 Edit | `gpt-image-1-edit` | `/v1/images/edits` · `gpt-image-1*` | `image` (Image), `prompt` (Text), `mask` (Mask) | `model`, `n` (1–10), `size`, `quality`, `output_format`, `background` |
 | GPT Image 2 Edit | `gpt-image-2-edit` | `/v1/images/edits` · `gpt-image-2` (streams) | `images` (Image, ≤10), `prompt` (Text), `mask` (Mask) | `size`, `quality`, `output_format`, `output_compression`, `moderation` |
 | OpenAI TTS | `openai-tts` | `/v1/audio/speech` · `tts-1` \| `tts-1-hd` \| `gpt-4o-mini-tts` | `text` (Text) | `model`, `voice` (13), `speed`, `response_format` (6), `instructions` (mini-tts only) |
 | OpenAI Whisper STT | `openai-stt` | `/v1/audio/transcriptions` · `whisper-1` \| `gpt-4o-transcribe` \| `gpt-4o-mini-transcribe` | `audio` (Audio) | `model`, `language`, `response_format` (text/json/verbose_json/srt/vtt), `temperature`, `prompt` |
@@ -66,7 +66,7 @@ Types/ranges/enums/defaults are from `node_definitions.json`; behavior notes are
 - Handler **always** sets `stream: true`, `partial_images: 0`, and strips `background`/`input_fidelity`/`n`. For prompting craft + cost table, see the gpt-image-2 skill.
 
 ### `gpt-image-1-edit` (sync, multipart)
-- `model` *(enum, req, default `gpt-image-1`)*: `gpt-image-1` · `gpt-image-1.5` · `gpt-image-1-mini` · `dall-e-2`.
+- `model` *(enum, req, default `gpt-image-1`)*: `gpt-image-1` · `gpt-image-1.5` · `gpt-image-1-mini`.
 - `n` *(int 1–10, default 1)*: number of variations; only sent when >1.
 - `size` / `quality` / `output_format` / `background`: same enums/defaults as `gpt-image-1-generate`.
 - Inputs: `image` (req), `prompt` (req), `mask` (optional PNG). Image + mask are read from disk and uploaded multipart.
