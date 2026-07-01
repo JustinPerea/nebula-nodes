@@ -42,10 +42,6 @@ async def handle_openai_image_generate(
     if quality and quality != "auto":
         body["quality"] = quality
 
-    n = node.params.get("n", 1)
-    if n and int(n) > 1:
-        body["n"] = int(n)
-
     # GPT image models support output_format (png/jpeg/webp).
     # Capture output_format here so we can use it for the saved file extension below.
     output_format: str | None = node.params.get("output_format")

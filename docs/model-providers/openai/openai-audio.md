@@ -5,7 +5,7 @@ project: nebula_nodes
 provider: openai
 model: openai-audio
 status: active
-verified: 2026-05-16
+verified: 2026-06-30
 stale_after_days: 30
 ---
 
