@@ -1,0 +1,323 @@
+# Nebula iPad conversion — component registry
+# Agents read/write status here. Topological order enforced by orchestrator.
+#
+# status: pending | in_progress | verified | shipped | blocked | deferred
+# tier: foundation | A | B | C | D | E | intent
+
+version: 1
+platform: ipad-native
+target_os: iPadOS 27+
+reference_impl: web  # frontend/ + backend/
+
+components:
+  # ── Stage 0: Contracts ─────────────────────────────────────────────
+  - id: contract-extractor
+    tier: foundation
+    agent: contract-extractor
+    status: pending
+    deps: []
+    outputs:
+      - ipad/contracts/routes.openapi.json
+      - ipad/contracts/nodes.schema.json
+      - ipad/contracts/graph.schema.json
+      - ipad/contracts/handlers/
+    done_when:
+      - check_node_contracts_passes
+      - contract_gen_is_deterministic
+
+  # ── Stage 1: Platform foundation ───────────────────────────────────
+  - id: platform-keychain
+    tier: foundation
+    agent: platform-scaffold
+    status: pending
+    deps: [contract-extractor]
+    source: backend/services/settings.py
+    outputs:
+      - ipad/NebulaPlatform/KeychainSettings.swift
+    done_when:
+      - keychain_roundtrip_test
+      - api_key_masking_parity
+
+  - id: platform-networking
+    tier: foundation
+    agent: platform-scaffold
+    status: pending
+    deps: [contract-extractor]
+    source: frontend/src/lib/backend.ts
+    outputs:
+      - ipad/NebulaPlatform/HTTPClient.swift
+      - ipad/NebulaPlatform/WebSocketClient.swift
+    done_when:
+      - health_probe_test
+      - ws_event_decode_test
+
+  - id: platform-files
+    tier: foundation
+    agent: platform-scaffold
+    status: pending
+    deps: [contract-extractor]
+    outputs:
+      - ipad/NebulaPlatform/GraphPersistence.swift
+      - ipad/NebulaPlatform/OutputStore.swift
+    done_when:
+      - nebula_json_roundtrip_test
+      - sandbox_paths_documented
+
+  - id: platform-design
+    tier: foundation
+    agent: platform-scaffold
+    status: pending
+    deps: []
+    source: frontend/src/styles/slava-restraint.css
+    outputs:
+      - ipad/NebulaDesign/SlavaTokens.swift
+    done_when:
+      - color_typography_snapshot_match
+
+  # ── Stage 2: Core engine ───────────────────────────────────────────
+  - id: engine-graph-model
+    tier: D
+    agent: engine-porter
+    status: pending
+    deps: [platform-files]
+    source: backend/models/
+    done_when:
+      - graph_validation_tests_pass
+
+  - id: engine-toposort
+    tier: D
+    agent: engine-porter
+    status: pending
+    deps: [engine-graph-model]
+    source: backend/execution/engine.py
+    done_when:
+      - toposort_and_cycle_tests_pass
+
+  - id: engine-cache
+    tier: D
+    agent: engine-porter
+    status: pending
+    deps: [engine-toposort]
+    source: backend/services/cache.py
+    done_when:
+      - cache_hit_miss_tests_pass
+
+  - id: engine-event-stream
+    tier: D
+    agent: engine-porter
+    status: pending
+    deps: [engine-toposort]
+    source: backend/models/events.py
+    done_when:
+      - execution_event_stream_tests_pass
+
+  # ── Stage 3: Handlers (waves) ──────────────────────────────────────
+  - id: handler-utility-nodes
+    tier: D
+    agent: handler-porter
+    status: pending
+    deps: [engine-event-stream]
+    source: backend/handlers/  # text-input, preview, reroute, etc.
+    wave: W0
+    done_when:
+      - w0_contract_tests_pass
+
+  - id: handler-openai-image
+    tier: D
+    agent: handler-porter
+    status: pending
+    deps: [handler-utility-nodes]
+    source: backend/handlers/openai_image.py
+    wave: W1
+    done_when:
+      - pytest_fixtures_ported_and_green
+
+  - id: handler-openai-text
+    tier: D
+    agent: handler-porter
+    status: pending
+    deps: [handler-utility-nodes]
+    source: backend/handlers/openai_chat.py
+    wave: W1
+    done_when:
+      - pytest_fixtures_ported_and_green
+
+  - id: handler-fal-universal
+    tier: D
+    agent: handler-porter
+    status: pending
+    deps: [handler-openai-image]
+    source: backend/handlers/fal_universal.py
+    wave: W3
+    done_when:
+      - pytest_fixtures_ported_and_green
+
+  - id: handler-openrouter-universal
+    tier: D
+    agent: handler-porter
+    status: pending
+    deps: [handler-openai-text]
+    source: backend/handlers/openrouter.py
+    wave: W3
+    done_when:
+      - pytest_fixtures_ported_and_green
+
+  - id: handler-catalog-w4-w6
+    tier: D
+    agent: handler-porter
+    status: deferred
+    deps: [handler-fal-universal, handler-openrouter-universal]
+    note: Remaining provider families after v1 ship
+
+  # ── Stage 4: UI surfaces ───────────────────────────────────────────
+  - id: ui-settings
+    tier: B
+    agent: ui-porter
+    status: pending
+    deps: [platform-keychain]
+    source: frontend/src/components/panels/Settings.tsx
+    done_when:
+      - parity_tests_pass
+      - touch_targets_44pt
+
+  - id: ui-create-view
+    tier: B
+    agent: ui-porter
+    status: pending
+    deps: [platform-networking, handler-openai-image]
+    source: frontend/src/components/create-studio/
+    done_when:
+      - create_gallery_parity_tests_pass
+      - smoke_generate_flow
+
+  - id: ui-canvas
+    tier: C
+    agent: ui-porter
+    status: blocked
+    deps: [engine-toposort, ui-create-view]
+    source:
+      - frontend/src/components/Canvas.tsx
+      - frontend/src/lib/portCompatibility.ts
+    done_when:
+      - port_compat_tests_pass
+      - gesture_pan_zoom_connect_tests_pass
+      - smoke_wire_and_run_flow
+
+  - id: ui-moodboard-studio
+    tier: B
+    agent: ui-porter
+    status: deferred
+    deps: [ui-canvas]
+    source: frontend/src/components/moodboard-studio/
+    milestone: v1.1
+
+  - id: ui-character-studio
+    tier: B
+    agent: ui-porter
+    status: deferred
+    deps: [ui-canvas]
+    source: frontend/src/components/character-studio/
+    milestone: v1.1
+
+  - id: ui-cinema-studio
+    tier: B
+    agent: ui-porter
+    status: deferred
+    deps: [ui-character-studio]
+    source: frontend/src/components/cinema-studio/
+    milestone: v1.1
+
+  - id: ui-video-editor
+    tier: D
+    agent: ui-porter
+    status: deferred
+    deps: [ui-canvas]
+    note: ffmpeg → AVFoundation; own wave
+    milestone: v1.2
+
+  - id: ui-remotion-editor
+    tier: defer
+    agent: null
+    status: deferred
+    reason: Remotion is JS-runtime-specific; no iPad target
+
+  - id: ui-brand-showcase
+    tier: defer
+    agent: null
+    status: deferred
+    reason: Demo-only surface
+
+  # ── Agent layer (Foundation Models + Siri) ─────────────────────────
+  - id: agent-graph-tools
+    tier: intent
+    agent: agent-scaffold
+    status: pending
+    deps: [engine-graph-model, ui-canvas]
+    source:
+      - backend/cli/__main__.py
+      - backend/services/chat_session.py
+    outputs:
+      - ipad/NebulaAgent/Tools/
+    done_when:
+      - tool_contract_tests_pass
+      - maps_to_graph_store_methods
+
+  - id: agent-dynamic-profiles
+    tier: intent
+    agent: agent-scaffold
+    status: pending
+    deps: [agent-graph-tools]
+    source: .hermes/skills/daedalus-core/SKILL.md
+    outputs:
+      - ipad/NebulaAgent/Profiles/
+    done_when:
+      - planner_executor_handoff_works
+      - branch_dont_overwrite_skill_loaded
+
+  - id: agent-chat-ui
+    tier: B
+    agent: ui-porter
+    status: pending
+    deps: [agent-dynamic-profiles]
+    source: frontend/src/components/panels/ChatPanel.tsx
+    done_when:
+      - streaming_response_ui_works
+      - tool_calls_reflect_on_canvas
+
+  - id: siri-app-intents
+    tier: intent
+    agent: intent-scaffold
+    status: pending
+    deps: [agent-graph-tools, ui-settings]
+    outputs:
+      - ipad/NebulaIntents/
+    done_when:
+      - app_intents_testing_passes
+      - shortcuts_smoke_passes
+
+  - id: siri-view-annotations
+    tier: intent
+    agent: intent-scaffold
+    status: pending
+    deps: [ui-canvas, siri-app-intents]
+    done_when:
+      - selected_node_resolvable_by_siri
+      - onscreen_prompt_edit_smoke
+
+  - id: agent-hermes-subprocess
+    tier: defer
+    agent: null
+    status: deferred
+    reason: iOS forbids spawning hermes-daedalus / claude CLI subprocesses
+
+  # ── Integration ────────────────────────────────────────────────────
+  - id: integration-smoke-suite
+    tier: foundation
+    agent: integration-verifier
+    status: pending
+    deps: [ui-create-view, ui-canvas, agent-chat-ui, siri-app-intents]
+    done_when:
+      - smoke_f1_settings_create_generate
+      - smoke_f2_canvas_wire_run
+      - smoke_f3_siri_run_graph
+      - smoke_f4_load_nebula_file
