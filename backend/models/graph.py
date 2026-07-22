@@ -63,3 +63,13 @@ class GenerateShotRequest(BaseModel):
     variations: int | None = Field(None, ge=1, le=4)
 
     model_config = {"populate_by_name": True}
+
+
+class PromoteShotVariationRequest(BaseModel):
+    """Promote one stored variation to the canonical shot output and port."""
+
+    node_id: str = Field(alias="nodeId")
+    shot_id: str = Field(alias="shotId")
+    index: int = Field(ge=0)
+
+    model_config = {"populate_by_name": True}

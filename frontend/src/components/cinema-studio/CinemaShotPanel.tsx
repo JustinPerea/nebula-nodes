@@ -161,7 +161,7 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
               key={`${v.seed}-${i}`}
               type="button"
               className={`cinema-shot-panel__variation${shot.selectedVariation === i ? ' cinema-shot-panel__variation--active' : ''}`}
-              onClick={() => promoteShotVariation(cinemaNodeId, shot.id, i)}
+              onClick={() => void promoteShotVariation(cinemaNodeId, shot.id, i)}
               title={`Use variation ${i + 1} (seed ${v.seed})`}
             >
               <img src={backendAssetUrlSync(v.url)} alt={`Variation ${i + 1}`} draggable={false} />

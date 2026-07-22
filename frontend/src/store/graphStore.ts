@@ -19,6 +19,7 @@ import {
   executeGraph as apiExecuteGraph,
   executeNode as apiExecuteNode,
   generateCinemaShot as apiGenerateShot,
+  promoteCinemaShotVariation as apiPromoteShotVariation,
   fetchReplicateSchema,
   type ExecutionValidationError,
   type OpenRouterModel,
@@ -418,8 +419,8 @@ interface GraphState {
    *  isExecuting lock — the rail spinner scopes to that one shot's status).
    *  `variations` > 1 generates that many seeded candidates into shot.variations. */
   executeShot: (nodeId: string, shotId: string, seed?: number, variations?: number) => Promise<void>;
-  /** Promote a generated variation to canonical (selectedVariation + output). */
-  promoteShotVariation: (nodeId: string, shotId: string, index: number) => void;
+  /** Promote a variation to the canonical scene image and dynamic output port. */
+  promoteShotVariation: (nodeId: string, shotId: string, index: number) => Promise<void>;
   executeCluster: (nodeIds: string[]) => Promise<void>;
   executeClusterConcurrent: (nodeIds: string[]) => Promise<void>;
   authorGenerationCluster: (request: GenerationRequest) => Promise<{ modelNodeIds: string[]; allNodeIds: string[] }>;
@@ -593,6 +594,37 @@ function applySceneToNode(set: GraphSet, nodeId: string, scene: CinemaSceneSpec)
       }
       return true;
     }),
+  }));
+}
+
+/** Apply a promoted Cinema variation to both the visible scene and the local
+ *  dynamic output value. The backend performs the same mutation atomically for
+ *  CLI-origin nodes; this local application keeps downstream canvas state in
+ *  sync immediately and supports frontend-only nodes. */
+function applyShotVariationPromotion(
+  set: GraphSet,
+  nodeId: string,
+  scene: CinemaSceneSpec,
+  shotId: string,
+  imageUrl: string,
+): void {
+  applySceneToNode(set, nodeId, scene);
+  const portId = shotPortId(shotId);
+  set((state) => ({
+    nodes: state.nodes.map((node) =>
+      node.id === nodeId
+        ? {
+            ...node,
+            data: {
+              ...node.data,
+              outputs: {
+                ...node.data.outputs,
+                [portId]: { type: 'Image' as const, value: imageUrl },
+              },
+            },
+          }
+        : node,
+    ),
   }));
 }
 
@@ -2066,28 +2098,43 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     }
   },
 
-  promoteShotVariation: (nodeId, shotId, index) => {
-    const node = get().nodes.find((n) => n.id === nodeId);
+  promoteShotVariation: async (nodeId, shotId, index) => {
+    const initialNode = get().nodes.find((node) => node.id === nodeId);
+    if (!initialNode || initialNode.data.definitionId !== 'cinema-scene') return;
+
+    if (CLI_ID_RE.test(nodeId)) {
+      try {
+        await apiPromoteShotVariation(nodeId, shotId, index);
+      } catch (err) {
+        console.error('Failed to promote shot variation:', err);
+        return;
+      }
+    }
+
+    // Re-read after the await because graphSync may have delivered a newer live
+    // scene while the backend promotion was in flight. Patch that scene, not the
+    // stale snapshot captured before the request.
+    const node = get().nodes.find((candidate) => candidate.id === nodeId);
     if (!node || node.data.definitionId !== 'cinema-scene') return;
     const scene = (node.data.params as { scene?: CinemaSceneSpec }).scene;
     if (!scene || !Array.isArray(scene.shots)) return;
-    const shot = scene.shots.find((s) => s.id === shotId);
+    const shot = scene.shots.find((candidate) => candidate.id === shotId);
     const variation = shot?.variations?.[index];
     if (!shot || !variation) return;
-    // Promotion is canonical-state only: point output/selectedVariation at the
-    // chosen candidate. updateScene persists the spec (incl. variations) to
-    // cli_graph. NOTE: the dynamic output PORT still carries the batch's first
-    // variation until the shot is regenerated — downstream edges aren't rewired
-    // on promote (Send-to-motion reads output.imageUrl, so it follows the promote).
+
     const nextScene: CinemaSceneSpec = {
       ...scene,
-      shots: scene.shots.map((s) =>
-        s.id === shotId
-          ? { ...s, selectedVariation: index, output: { ...(s.output ?? {}), imageUrl: variation.url, status: 'done' as const } }
-          : s,
+      shots: scene.shots.map((candidate) =>
+        candidate.id === shotId
+          ? {
+              ...candidate,
+              selectedVariation: index,
+              output: { imageUrl: variation.url, status: 'done' as const },
+            }
+          : candidate,
       ),
     };
-    get().updateScene(nodeId, nextScene);
+    applyShotVariationPromotion(set, nodeId, nextScene, shotId, variation.url);
   },
 
   executeCluster: async (nodeIds) => {

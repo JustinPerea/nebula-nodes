@@ -94,6 +94,8 @@ class TestMergeShotResult:
         # Lock created in a prior loop is never awaited from a new one.
         _shot_merge_locks.clear()
         cli_graph.nodes["n1"] = {
+            "id": "n1",
+            "definitionId": "cinema-scene",
             "params": {
                 "scene": {
                     "shots": [
@@ -375,6 +377,8 @@ class TestMergeShotVariations:
 
         _shot_merge_locks.clear()
         cli_graph.nodes["n1"] = {
+            "id": "n1",
+            "definitionId": "cinema-scene",
             "params": {
                 "scene": {
                     "shots": [
@@ -426,4 +430,111 @@ class TestMergeShotVariations:
         shots = {s["id"]: s for s in cli_graph.nodes["n1"]["params"]["scene"]["shots"]}
         assert "variations" not in shots["b"]
         assert shots["b"]["output"]["imageUrl"] == "URL_B_old"
+        cli_graph.nodes.pop("n1", None)
+
+    def test_promotion_endpoint_updates_scene_and_dynamic_port(self, client):
+        from main import cli_graph
+
+        self._seed_cli_node()
+        variations = [
+            {"url": "URL_B_v0", "seed": 10},
+            {"url": "URL_B_v1", "seed": 11},
+        ]
+        shot_b = cli_graph.nodes["n1"]["params"]["scene"]["shots"][1]
+        shot_b["variations"] = variations
+        shot_b["selectedVariation"] = 0
+        shot_b["output"] = {
+            "imageUrl": "URL_B_v0",
+            "status": "error",
+            "error": "stale error",
+            "hash": "stale hash",
+        }
+        cli_graph.nodes["n1"]["outputs"]["shot_b"] = {
+            "type": "Image",
+            "value": "URL_B_v0",
+        }
+
+        response = client.post(
+            "/api/cinema/promote-shot-variation",
+            json={"nodeId": "n1", "shotId": "b", "index": 1},
+        )
+
+        assert response.status_code == 200
+        assert response.json() == {
+            "status": "promoted",
+            "shotId": "b",
+            "selectedVariation": 1,
+            "imageUrl": "URL_B_v1",
+        }
+        node = cli_graph.nodes["n1"]
+        shots = {shot["id"]: shot for shot in node["params"]["scene"]["shots"]}
+        assert shots["b"]["selectedVariation"] == 1
+        assert shots["b"]["output"] == {
+            "imageUrl": "URL_B_v1",
+            "status": "done",
+        }
+        assert shots["a"]["output"]["imageUrl"] == "URL_A"
+        assert node["outputs"]["shot_a"]["value"] == "URL_A"
+        assert node["outputs"]["shot_b"]["value"] == "URL_B_v1"
+        cli_graph.nodes.pop("n1", None)
+
+    def test_invalid_promotion_does_not_change_dynamic_port(self, client):
+        from main import cli_graph
+
+        self._seed_cli_node()
+        shot_b = cli_graph.nodes["n1"]["params"]["scene"]["shots"][1]
+        shot_b["variations"] = [{"url": "URL_B_v0", "seed": 10}]
+
+        response = client.post(
+            "/api/cinema/promote-shot-variation",
+            json={"nodeId": "n1", "shotId": "b", "index": 4},
+        )
+
+        assert response.status_code == 400
+        assert cli_graph.nodes["n1"]["outputs"]["shot_b"]["value"] == "URL_B_old"
+        cli_graph.nodes.pop("n1", None)
+
+    def test_concurrent_promotion_and_sibling_merge_keep_both_ports(self):
+        from main import _merge_shot_result, _promote_shot_variation, cli_graph
+        from models.graph import GraphNode
+
+        self._seed_cli_node()
+        shot_b = cli_graph.nodes["n1"]["params"]["scene"]["shots"][1]
+        shot_b["variations"] = [
+            {"url": "URL_B_v0", "seed": 10},
+            {"url": "URL_B_v1", "seed": 11},
+        ]
+        shot_b["selectedVariation"] = 0
+        exec_a = GraphNode(
+            id="n1",
+            definitionId="cinema-scene",
+            params={
+                "scene": {
+                    "shots": [
+                        {"id": "a", "output": {"imageUrl": "URL_A_new", "status": "done"}}
+                    ]
+                }
+            },
+        )
+
+        async def run_both():
+            await asyncio.gather(
+                _promote_shot_variation("n1", "b", 1),
+                _merge_shot_result(
+                    "n1",
+                    "a",
+                    exec_a,
+                    {"shot_a": {"type": "Image", "value": "URL_A_new"}},
+                ),
+            )
+
+        asyncio.run(run_both())
+
+        node = cli_graph.nodes["n1"]
+        shots = {shot["id"]: shot for shot in node["params"]["scene"]["shots"]}
+        assert shots["a"]["output"]["imageUrl"] == "URL_A_new"
+        assert shots["b"]["selectedVariation"] == 1
+        assert shots["b"]["output"]["imageUrl"] == "URL_B_v1"
+        assert node["outputs"]["shot_a"]["value"] == "URL_A_new"
+        assert node["outputs"]["shot_b"]["value"] == "URL_B_v1"
         cli_graph.nodes.pop("n1", None)

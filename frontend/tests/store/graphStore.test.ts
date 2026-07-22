@@ -571,6 +571,91 @@ describe('duplicateSelected', () => {
   });
 });
 
+describe('cinema shot variation promotion', () => {
+  beforeEach(resetStore);
+
+  function seedCinemaNode(id: string) {
+    const node: Node<NodeData> = {
+      id,
+      type: 'cinemaSceneNode',
+      position: { x: 0, y: 0 },
+      data: {
+        label: 'Cinema Scene',
+        definitionId: 'cinema-scene',
+        params: {
+          scene: {
+            version: 1,
+            base: { model: 'seedream-4-5' },
+            aspectRatio: '16:9',
+            shots: [
+              { id: 'a', prompt: 'A', output: { imageUrl: 'URL_A', status: 'done' } },
+              {
+                id: 'b',
+                prompt: 'B',
+                output: { imageUrl: 'URL_B_v0', status: 'done' },
+                variations: [
+                  { url: 'URL_B_v0', seed: 10 },
+                  { url: 'URL_B_v1', seed: 11 },
+                ],
+                selectedVariation: 0,
+              },
+            ],
+          },
+        },
+        state: 'idle',
+        outputs: {
+          shot_a: { type: 'Image', value: 'URL_A' },
+          shot_b: { type: 'Image', value: 'URL_B_v0' },
+        },
+      },
+    };
+    useGraphStore.setState({ nodes: [node], edges: [] });
+  }
+
+  it('persists CLI promotion and updates the local dynamic output port', async () => {
+    seedCinemaNode('n1');
+    fetchMock.mockResolvedValueOnce(mockResponse({
+      status: 'promoted',
+      shotId: 'b',
+      selectedVariation: 1,
+      imageUrl: 'URL_B_v1',
+    }));
+
+    await useGraphStore.getState().promoteShotVariation('n1', 'b', 1);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][0]).toBe('http://localhost:8000/api/cinema/promote-shot-variation');
+    expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toEqual({
+      nodeId: 'n1',
+      shotId: 'b',
+      index: 1,
+    });
+    const node = useGraphStore.getState().nodes[0];
+    const scene = node.data.params.scene as {
+      shots: Array<{ id: string; selectedVariation?: number; output?: { imageUrl?: string } }>;
+    };
+    const shotB = scene.shots.find((shot) => shot.id === 'b');
+    expect(shotB?.selectedVariation).toBe(1);
+    expect(shotB?.output).toEqual({ imageUrl: 'URL_B_v1', status: 'done' });
+    expect(node.data.outputs.shot_a.value).toBe('URL_A');
+    expect(node.data.outputs.shot_b).toEqual({ type: 'Image', value: 'URL_B_v1' });
+  });
+
+  it('updates both fields locally for a frontend-only Cinema node', async () => {
+    seedCinemaNode('frontend-cinema');
+
+    await useGraphStore.getState().promoteShotVariation('frontend-cinema', 'b', 1);
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    const node = useGraphStore.getState().nodes[0];
+    const scene = node.data.params.scene as {
+      shots: Array<{ id: string; selectedVariation?: number; output?: { imageUrl?: string } }>;
+    };
+    expect(scene.shots.find((shot) => shot.id === 'b')?.selectedVariation).toBe(1);
+    expect(node.data.outputs.shot_b.value).toBe('URL_B_v1');
+  });
+});
+
 describe('graphStore streamPartialImage', () => {
   beforeEach(() => {
     const executingNode: Node<NodeData> = {

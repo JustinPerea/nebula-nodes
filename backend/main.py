@@ -21,6 +21,7 @@ from models import (
     ExecuteRequest,
     ExecuteNodeRequest,
     GenerateShotRequest,
+    PromoteShotVariationRequest,
     ValidationErrorEvent,
     ValidationErrorDetail,
     GraphNode,
@@ -1379,6 +1380,85 @@ async def _merge_shot_variations(
         node["outputs"] = existing
         cli_graph._maybe_persist()
     return canonical
+
+
+async def _promote_shot_variation(
+    node_id: str,
+    shot_id: str,
+    index: int,
+) -> dict[str, Any]:
+    """Atomically promote one variation in the live scene and output port."""
+    async with _shot_merge_lock(node_id):
+        node = cli_graph.nodes.get(node_id)
+        if node is None:
+            raise HTTPException(status_code=404, detail=f"Node '{node_id}' not found")
+        if node.get("definitionId") != "cinema-scene":
+            raise HTTPException(status_code=400, detail=f"Node '{node_id}' is not a cinema-scene node")
+
+        params = dict(node.get("params") or {})
+        scene = params.get("scene")
+        if not isinstance(scene, dict):
+            raise HTTPException(status_code=400, detail="cinema-scene node has no scene spec")
+
+        target_shot = next(
+            (
+                shot
+                for shot in scene.get("shots") or []
+                if isinstance(shot, dict) and str(shot.get("id")) == shot_id
+            ),
+            None,
+        )
+        if target_shot is None:
+            raise HTTPException(status_code=404, detail=f"Shot '{shot_id}' not found in scene")
+
+        variations = target_shot.get("variations")
+        if not isinstance(variations, list) or index >= len(variations):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Variation index {index} is not available for shot '{shot_id}'",
+            )
+        variation = variations[index]
+        image_url = str(variation.get("url") or "") if isinstance(variation, dict) else ""
+        if not image_url:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Variation index {index} for shot '{shot_id}' has no image URL",
+            )
+
+        # Replace the canonical output instead of retaining a hash or error from
+        # the previously selected image. Scene state and dynamic graph output are
+        # one locked, persisted mutation so downstream edges cannot disagree with
+        # the Cinema rail.
+        canonical = {"imageUrl": image_url, "status": "done"}
+        target_shot["selectedVariation"] = index
+        target_shot["output"] = canonical
+        params["scene"] = scene
+        node["params"] = params
+
+        existing = dict(node.get("outputs") or {})
+        existing[f"shot_{shot_id}"] = {"type": "Image", "value": image_url}
+        node["outputs"] = _normalize_outputs_for_storage(existing)
+        cli_graph._maybe_persist()
+
+    return {
+        "status": "promoted",
+        "shotId": shot_id,
+        "selectedVariation": index,
+        "imageUrl": image_url,
+    }
+
+
+@app.post("/api/cinema/promote-shot-variation")
+async def promote_cinema_shot_variation(
+    request: PromoteShotVariationRequest,
+) -> dict[str, Any]:
+    result = await _promote_shot_variation(
+        request.node_id,
+        request.shot_id,
+        request.index,
+    )
+    await _broadcast_graph_sync()
+    return result
 
 
 @app.post("/api/cinema/generate-shot")
