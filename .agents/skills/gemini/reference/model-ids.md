@@ -17,8 +17,8 @@ Sourced from https://ai.google.dev/gemini-api/docs/models (fetched 2026-04-16). 
 
 | ID | Friendly name | Role |
 |---|---|---|
-| `gemini-3.1-flash-image-preview` | Nano Banana 2 | High-volume, 512/1K/2K/4K, image-search grounding, thinking_level |
-| `gemini-3-pro-image-preview` | Nano Banana Pro | Studio-quality, text rendering, 1K/2K/4K, reasoning |
+| `gemini-3.1-flash-image` | Nano Banana 2 | High-volume, 512/1K/2K/4K, image-search grounding, thinking_level |
+| `gemini-3-pro-image` | Nano Banana Pro | Studio-quality, text rendering, 1K/2K/4K, reasoning |
 | `gemini-2.5-flash-image` | Nano Banana | Lowest latency, simple generation |
 | `imagen-4` | Imagen | Dedicated text-to-image, up to 2K |
 

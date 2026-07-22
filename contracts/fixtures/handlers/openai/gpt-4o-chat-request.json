@@ -1,0 +1,15 @@
+{
+  "_comment": "Oracle: backend/tests/test_openai_contract_fixtures.py::test_openai_request_body_matches_fixture[gpt-4o-chat-request.json]",
+  "model": "gpt-5.4",
+  "messages": [
+    {
+      "role": "user",
+      "content": [
+        { "type": "text", "text": "Hello" }
+      ]
+    }
+  ],
+  "stream": true,
+  "max_completion_tokens": 4096,
+  "reasoning_effort": "medium"
+}

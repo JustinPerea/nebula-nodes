@@ -1,0 +1,8 @@
+{
+  "_comment": "Oracle: backend/tests/test_fal_contract_fixtures.py::test_fal_request_body_matches_fixture[nano-banana-fal-generate-request.json]. Endpoint (not in body): fal-ai/nano-banana-2",
+  "prompt": "a red apple",
+  "aspect_ratio": "16:9",
+  "resolution": "2K",
+  "num_images": 2,
+  "output_format": "png"
+}

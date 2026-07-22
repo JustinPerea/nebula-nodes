@@ -1,0 +1,10 @@
+{
+  "_comment": "Oracle: backend/tests/test_openai_contract_fixtures.py::test_openai_request_body_matches_fixture[openai-stt-request.json]",
+  "transport": "multipart",
+  "data": {
+    "model": "whisper-1",
+    "response_format": "json",
+    "language": "en"
+  },
+  "file_fields": ["file"]
+}

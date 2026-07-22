@@ -15,8 +15,8 @@ description: Best practices for prompting Google's Gemini-family APIs — Gemini
 
 | Need | Model | Why |
 |---|---|---|
-| Fast, iterative image gen; high volume | `gemini-3.1-flash-image-preview` (Nano Banana 2) | Speed + 512/1K/2K/4K + image search grounding |
-| Studio asset, precise text in image, complex layout | `gemini-3-pro-image-preview` (Nano Banana Pro) | Reasoning + high-fidelity text rendering |
+| Fast, iterative image gen; high volume | `gemini-3.1-flash-image` (Nano Banana 2) | Speed + 512/1K/2K/4K + image search grounding |
+| Studio asset, precise text in image, complex layout | `gemini-3-pro-image` (Nano Banana Pro) | Reasoning + high-fidelity text rendering |
 | Simple, cheapest image gen | `gemini-2.5-flash-image` (Nano Banana) | Lowest latency |
 | Text-to-image where Nano Banana isn't enough | `imagen-4` | Up to 2K, dedicated T2I |
 | Cinematic video with audio | `veo-3.1-generate-preview` | Audio + 4K + refs + extension + first/last frame |
@@ -52,7 +52,7 @@ Deep content for each topic lives in its own file:
 - **`reference/model-ids.md`** — full model ID list with notes
 - **`reference/official-docs.md`** — canonical ai.google.dev URLs to fetch fresh when docs likely moved
 
-Read the relevant file(s) before writing code that uses these models. If a concrete detail is missing from the skill files, fetch the live doc listed in `reference/official-docs.md` — this skill was synthesized from content as of 2026-04-16 and the Gemini API surface moves fast.
+Read the relevant file(s) before writing code that uses these models. If a concrete detail is missing from the skill files, fetch the live doc listed in `reference/official-docs.md`. The image model lifecycle entries were refreshed on 2026-07-22, and the Gemini API surface still moves quickly.
 
 ## In the nebula_nodes context
 

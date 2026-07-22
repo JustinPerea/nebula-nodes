@@ -1,13 +1,13 @@
 # Nano Banana — Gemini Image Family
 
-Sourced from https://ai.google.dev/gemini-api/docs/image-generation (fetched 2026-04-16).
+Sourced from https://ai.google.dev/gemini-api/docs/image-generation and the Gemini API release notes (refreshed 2026-07-22).
 
 ## Model map
 
 | Model ID | Name | Best for | Resolutions |
 |---|---|---|---|
-| `gemini-3.1-flash-image-preview` | Nano Banana 2 | High-volume, iterative, image-search grounded | 512, 1K, 2K, 4K |
-| `gemini-3-pro-image-preview` | Nano Banana Pro | Studio assets, complex layouts, precise text in image | 1K, 2K, 4K |
+| `gemini-3.1-flash-image` | Nano Banana 2 | High-volume, iterative, image-search grounded | 512, 1K, 2K, 4K |
+| `gemini-3-pro-image` | Nano Banana Pro | Studio assets, complex layouts, precise text in image | 1K, 2K, 4K |
 | `gemini-2.5-flash-image` | Nano Banana (original) | Lowest-latency quick gen | 1K, 2K |
 
 Aspect ratios (all): 1:1, 2:3, 3:2, 3:4, 4:3, 4:5, 5:4, 9:16, 16:9, 21:9.
@@ -81,7 +81,7 @@ from PIL import Image
 
 client = genai.Client()
 response = client.models.generate_content(
-    model="gemini-3.1-flash-image-preview",
+    model="gemini-3.1-flash-image",
     contents=[
         "An office group photo of these people, they are making funny faces.",
         Image.open('person1.png'),
@@ -106,7 +106,7 @@ If you need to preserve a specific person across shots, stay under the character
 
 ```python
 chat = client.chats.create(
-    model="gemini-3.1-flash-image-preview",
+    model="gemini-3.1-flash-image",
     config=types.GenerateContentConfig(
         response_modalities=['TEXT', 'IMAGE'],
     )

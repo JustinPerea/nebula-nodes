@@ -66,7 +66,7 @@ Approximately **$0.0398 per image** (based on 1MP normalization). Higher resolut
 
 ## API — via Original Source (BYO-key direct)
 Google offers direct access via the **Gemini API** in Google AI Studio and **Vertex AI**.
-- **Endpoint (Vertex AI):** `https://{REGION}-aiplatform.googleapis.com/v1/projects/{PROJECT_ID}/locations/{REGION}/publishers/google/models/gemini-3-pro-image-preview:predict`
+- **Endpoint (Vertex AI):** `https://{REGION}-aiplatform.googleapis.com/v1/projects/{PROJECT_ID}/locations/{REGION}/publishers/google/models/gemini-3-pro-image:predict`
 - **Native Parameters:**
     - `candidateCount`: Up to 4.
     - `groundingConfig`: Explicitly enable `google_search_retrieval`.
@@ -106,6 +106,6 @@ Google offers direct access via the **Gemini API** in Google AI Studio and **Ver
 ## Sources
 - [FAL.ai Docs](https://fal.ai/models/fal-ai/nano-banana-pro/edit/api)
 - [Google DeepMind Official Site](https://deepmind.google/models/gemini-image/pro/)
-- [Google AI for Developers](https://ai.google.dev/gemini-api/docs/models/gemini-3-pro-image-preview)
+- [Google AI for Developers](https://ai.google.dev/gemini-api/docs/image-generation)
 - [Google Cloud Vertex AI Documentation](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/models/gemini/3-pro-image)
 - [Google Blog Announcement](https://blog.google/innovation-and-ai/products/nano-banana-pro/)

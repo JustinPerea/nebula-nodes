@@ -1,0 +1,18 @@
+{
+  "_comment": "Oracle: backend/tests/test_google_contract_fixtures.py::test_google_request_body_matches_fixture[lyria-3-generate-request.json]",
+  "contents": [
+    {
+      "parts": [
+        { "text": "upbeat jazz" }
+      ]
+    }
+  ],
+  "generationConfig": {
+    "responseModalities": ["AUDIO", "TEXT"],
+    "responseFormat": {
+      "audio": {
+        "mimeType": "AUDIO_WAV"
+      }
+    }
+  }
+}

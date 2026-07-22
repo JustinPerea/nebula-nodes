@@ -78,7 +78,7 @@ Pricing on FAL is based on resolution and features ([fal.ai pricing](https://fal
 ## API — via Original Source (BYO-key direct)
 The model is natively available as **Gemini 3.1 Flash Image** through the Google Gemini API.
 
-- **Endpoint:** `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-image-preview:generateContent`
+- **Endpoint:** `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-image:generateContent`
 - **Auth:** Header `x-goog-api-key: $YOUR_API_KEY`
 - **Native Advantages:**
     - **Multi-modal Input:** Supports up to 1,000 input images for context-aware generation or editing ([Firebase docs](https://firebase.google.com/docs/ai-logic/models)).

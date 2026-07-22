@@ -1,0 +1,20 @@
+{
+  "_comment": "Oracle: backend/tests/test_google_contract_fixtures.py::test_google_request_body_matches_fixture[gemini-tts-generate-request.json]",
+  "contents": [
+    {
+      "parts": [
+        { "text": "Hello world" }
+      ]
+    }
+  ],
+  "generationConfig": {
+    "responseModalities": ["AUDIO"],
+    "speechConfig": {
+      "voiceConfig": {
+        "prebuiltVoiceConfig": {
+          "voiceName": "Kore"
+        }
+      }
+    }
+  }
+}

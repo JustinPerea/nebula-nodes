@@ -1,0 +1,9 @@
+{
+  "_comment": "Oracle: backend/tests/test_openai_contract_fixtures.py::test_openai_request_body_matches_fixture[gpt-image-2-generate-request.json]",
+  "model": "gpt-image-2",
+  "prompt": "a cat",
+  "stream": true,
+  "partial_images": 0,
+  "size": "1024x1024",
+  "quality": "low"
+}

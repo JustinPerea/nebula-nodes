@@ -1,0 +1,10 @@
+{
+  "_comment": "Oracle: backend/tests/test_fal_contract_fixtures.py::test_fal_request_body_matches_fixture[nano-banana-fal-edit-request.json]. Endpoint (not in body): fal-ai/nano-banana-pro/edit",
+  "prompt": "change shirt to blue",
+  "image_urls": [
+    "https://example.com/ref1.png",
+    "https://example.com/ref2.png"
+  ],
+  "resolution": "2K",
+  "aspect_ratio": "9:16"
+}

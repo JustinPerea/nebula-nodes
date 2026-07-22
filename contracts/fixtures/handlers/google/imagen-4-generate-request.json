@@ -1,0 +1,12 @@
+{
+  "_comment": "Oracle: backend/tests/test_google_contract_fixtures.py::test_google_request_body_matches_fixture[imagen-4-generate-request.json]",
+  "instances": [
+    {
+      "prompt": "a red pixel"
+    }
+  ],
+  "parameters": {
+    "sampleCount": 1,
+    "aspectRatio": "1:1"
+  }
+}

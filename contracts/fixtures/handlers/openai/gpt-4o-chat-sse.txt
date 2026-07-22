@@ -1,0 +1,7 @@
+data: {"id": "chatcmpl-test", "object": "chat.completion.chunk", "choices": [{"delta": {"content": "Hello"}, "finish_reason": null, "index": 0}]}
+
+data: {"id": "chatcmpl-test", "object": "chat.completion.chunk", "choices": [{"delta": {"content": ", "}, "finish_reason": null, "index": 0}]}
+
+data: {"id": "chatcmpl-test", "object": "chat.completion.chunk", "choices": [{"delta": {"content": "world!"}, "finish_reason": null, "index": 0}]}
+
+data: [DONE]

@@ -1,0 +1,19 @@
+{
+  "_comment": "Oracle: backend/tests/test_google_contract_fixtures.py::test_google_request_body_matches_fixture[nano-banana-edit-request.json]. Same node as generate; edit via images port.",
+  "contents": [
+    {
+      "parts": [
+        { "text": "make the sky purple" },
+        { "fileData": { "fileUri": "https://example.com/ref1.png" } },
+        { "fileData": { "fileUri": "https://example.com/ref2.png" } }
+      ]
+    }
+  ],
+  "generationConfig": {
+    "responseModalities": ["IMAGE", "TEXT"],
+    "imageConfig": {
+      "aspectRatio": "9:16",
+      "imageSize": "1K"
+    }
+  }
+}

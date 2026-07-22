@@ -1,0 +1,8 @@
+{
+  "_comment": "Oracle: backend/tests/test_fal_contract_fixtures.py::test_fal_request_body_matches_fixture[gpt-image-2-fal-generate-request.json]",
+  "prompt": "test",
+  "image_size": "square_hd",
+  "quality": "high",
+  "num_images": 2,
+  "output_format": "jpeg"
+}

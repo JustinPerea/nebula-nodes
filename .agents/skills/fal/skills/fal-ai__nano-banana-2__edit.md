@@ -4,7 +4,7 @@ display_name: Nano Banana 2 [Edit]
 category: image-to-image
 creator: Google DeepMind
 fal_docs: https://fal.ai/models/fal-ai/nano-banana-2/edit
-original_source: https://ai.google.dev/gemini-api/docs/models/gemini-3.1-flash-image-preview
+original_source: https://ai.google.dev/gemini-api/docs/models/gemini-3.1-flash-image
 summary: Google's Gemini 3.1 Flash-powered image editor for high-speed, mask-free semantic transformations and multi-image compositing.
 ---
 
@@ -16,7 +16,7 @@ summary: Google's Gemini 3.1 Flash-powered image editor for high-speed, mask-fre
 - **Creator:** [Google DeepMind](https://deepmind.google/models/gemini/)
 - **Best for:** Fast, semantic image transformations and multi-image compositing without manual masking.
 - **FAL docs:** [fal.ai/models/fal-ai/nano-banana-2/edit](https://fal.ai/models/fal-ai/nano-banana-2/edit)
-- **Original source:** [Google AI Studio / Vertex AI](https://ai.google.dev/gemini-api/docs/models/gemini-3.1-flash-image-preview)
+- **Original source:** [Google AI Studio / Vertex AI](https://ai.google.dev/gemini-api/docs/models/gemini-3.1-flash-image)
 
 ## What it does
 Nano Banana 2 [Edit] is powered by Google's **Gemini 3.1 Flash Image** architecture. It allows users to modify existing images or combine multiple reference images using natural language instructions. Unlike traditional inpainting models, it uses multimodal reasoning to understand the "intent" of an edit—such as "change the man's shirt to blue"—and automatically identifies the relevant pixels to modify while preserving the rest of the scene's lighting, depth, and character consistency. It is optimized for "Flash" speeds, typically delivering results in 5–10 seconds.
@@ -79,7 +79,7 @@ The output is a JSON object containing a list of generated images and a text des
 
 ## API — via Original Source (BYO-key direct)
 The model is natively available via Google Cloud Vertex AI and Google AI Studio.
-- **Endpoint:** `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-image-preview:generateContent`
+- **Endpoint:** `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-image:generateContent`
 - **Auth:** API Key or OAuth2 via Google Cloud.
 - **Direct Features:** Native support for interleaved text/image inputs and much larger token windows (up to 1M tokens) for multi-document/multi-image context.
 - **Docs:** [Google Gemini API Reference](https://ai.google.dev/gemini-api/docs/models/gemini)
@@ -117,5 +117,5 @@ The model is natively available via Google Cloud Vertex AI and Google AI Studio.
 ## Sources
 - [FAL.ai Model Page](https://fal.ai/models/fal-ai/nano-banana-2/edit)
 - [Google DeepMind Nano Banana 2 Announcement](https://blog.google/innovation-and-ai/technology/ai/nano-banana-2/)
-- [Google AI Developer Documentation](https://ai.google.dev/gemini-api/docs/models/gemini-3.1-flash-image-preview)
+- [Google AI Developer Documentation](https://ai.google.dev/gemini-api/docs/models/gemini-3.1-flash-image)
 - [FAL.ai Pricing Table](https://fal.ai/pricing)

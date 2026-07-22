@@ -77,7 +77,7 @@ The API returns a JSON object containing a list of image objects and a generated
 
 ## API — via Original Source (BYO-key direct)
 Google offers this model via the **Gemini API** and **Vertex AI**.
-- **Endpoint:** `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent`
+- **Endpoint:** `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image:generateContent`
 - **Native-only Params:**
   - `media_resolution`: Options for `low`, `medium`, or `high` processing of input images.
   - `thought_signatures`: Used in multi-turn editing to maintain consistency.

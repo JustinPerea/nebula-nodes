@@ -1,0 +1,8 @@
+{
+  "_comment": "Oracle: backend/tests/test_google_contract_fixtures.py::test_google_request_body_matches_fixture[veo-3-fal-request.json]. Endpoint (not in body): fal-ai/veo3. Used when only FAL_KEY is set (no GOOGLE_API_KEY).",
+  "prompt": "a sunset over mountains",
+  "aspectRatio": "16:9",
+  "duration": "8",
+  "resolution": "720p",
+  "negative_prompt": "blurry"
+}

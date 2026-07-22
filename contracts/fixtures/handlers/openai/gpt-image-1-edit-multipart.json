@@ -1,0 +1,11 @@
+{
+  "_comment": "Oracle: backend/tests/test_openai_contract_fixtures.py::test_openai_request_body_matches_fixture[gpt-image-1-edit-multipart.json]. File bytes omitted; pins multipart field order and text values.",
+  "transport": "multipart",
+  "fields": [
+    { "field": "image", "filename": "image.png", "content_type": "image/png" },
+    { "field": "prompt", "value": "make it blue" },
+    { "field": "model", "value": "gpt-image-1" },
+    { "field": "size", "value": "1024x1024" },
+    { "field": "quality", "value": "high" }
+  ]
+}

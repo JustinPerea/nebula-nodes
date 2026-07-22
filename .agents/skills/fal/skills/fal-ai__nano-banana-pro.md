@@ -74,13 +74,13 @@ The API returns an object containing:
 
 ## API — via Original Source (BYO-key direct)
 Google offers a native API through Vertex AI and Google AI Studio.
-- **Endpoint:** `POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent`
+- **Endpoint:** `POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image:generateContent`
 - **Auth:** Bearer token or `x-goog-api-key`.
 - **Exclusive Features:**
     - **Thought Signatures:** Preserves "thinking" context for multi-turn conversational edits.
     - **Native Grounding:** Direct integration with `google_search` tool for real-time data.
     - **Direct Editing:** Native support for the `edit_image` task type without a separate endpoint.
-- **Documentation:** [Google AI for Developers](https://ai.google.dev/gemini-api/docs/models/gemini-3-pro-image-preview)
+- **Documentation:** [Google AI for Developers](https://ai.google.dev/gemini-api/docs/image-generation)
 
 ## Prompting best practices
 - **Be Conversational:** Instead of "man dog park high res," use "A photo of a golden retriever playing with a young man in Central Park, focused on the dog's joyful expression, cinematic lighting."
@@ -118,4 +118,4 @@ Google offers a native API through Vertex AI and Google AI Studio.
 - [FAL.ai Nano Banana Pro Docs](https://fal.ai/models/fal-ai/nano-banana-pro/api)
 - [Google Gemini 3 Pro Image Documentation](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/models/gemini/3-pro-image)
 - [FAL.ai Pricing Page](https://fal.ai/pricing)
-- [Google AI for Developers Blog](https://ai.google.dev/gemini-api/docs/models/gemini-3-pro-image-preview)
+- [Google AI for Developers](https://ai.google.dev/gemini-api/docs/image-generation)
