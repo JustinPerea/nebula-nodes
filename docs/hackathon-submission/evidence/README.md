@@ -33,8 +33,7 @@ Every Daedalus turn invokes `hermes chat -q ... --provider openrouter
 
 ## Running the demo
 
-See `docs/superpowers/plans/2026-04-23-daedalus-hermes-integration.md` Task 16
-Step 3 for the demo script. Short version:
+Use this reproducible demo sequence:
 
 1. `cd backend && python -m uvicorn main:app --port 8000 --reload`
 2. `cd frontend && npm run dev`

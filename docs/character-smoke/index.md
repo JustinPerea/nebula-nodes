@@ -2,9 +2,6 @@
 
 **Date:** 2026-05-30
 **Branch:** `feat/nebula-character` (6 feature commits on top of `bc8d586`)
-**Spec:** `docs/superpowers/specs/2026-05-30-nebula-character-design.md`
-**Plan:** `docs/superpowers/plans/2026-05-30-nebula-character.md`
-
 This document records the Task 7 verification of the Nebula Character v1 feature and the
 status of the non-human empirical test (the spec §5 decision gate).
 

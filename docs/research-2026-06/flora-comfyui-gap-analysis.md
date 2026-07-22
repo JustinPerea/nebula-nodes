@@ -1,5 +1,7 @@
 # Nebula Nodes — Competitive Gap Analysis: Flora AI + ComfyUI
 
+> **Update 2026-06-28 →** A third competitor (**Figma Weave**, verified real — the rebranded Weavy acquisition) and the **add-ComfyUI-to-Nebula decision** now live in `comfyui-flora-weave-nebula-4way-2026-06-28.md`. That doc also (a) verifies the ComfyUI reference against the live v0.26.0 install and (b) **corrects 3 stale Flora claims below**: Flora moved `florafauna.ai → flora.ai`; cost display is a percentage "flower meter" by default (dollars opt-in, not "dollar-transparent"); workspaces are isolated with one shared credit pool by default and "multiple FAUNA agents" is Coming-Soon, not live. Read line 12 + the Appendix with those corrections.
+
 > Generated 2026-06-21 via a multi-agent research workflow (12 research agents → gap synthesis → adversarial verification against the real codebase → per-view design mapping).
 > **Scope:** what Flora AI and ComfyUI offer that Nebula is missing, and how to fold the gaps into Nebula's **non-node views** (Create, Cinema, Character, Moodboard, Video Editor, Remotion) plus net-new global surfaces.
 > **Distinct from** `docs/perplexity-research/nebula-gap-analysis.md` (April 2026), which is a *parameter-level* node audit. This is a *competitive feature* analysis.
