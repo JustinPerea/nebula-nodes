@@ -15,13 +15,31 @@ describe('matchesVisibleWhen', () => {
 describe('deriveVisibleParams', () => {
   it('drops hidden params and applies visibleWhen for nano-banana imageSize', () => {
     const def = NODE_DEFINITIONS['nano-banana'];
-    // imageSize is only visible for the two flash/pro models
     const withFlash = deriveVisibleParams(def, { model: 'gemini-3.1-flash-image' });
     expect(withFlash.some((p) => p.key === 'imageSize')).toBe(true);
+
+    const withLite = deriveVisibleParams(def, { model: 'gemini-3.1-flash-lite-image' });
+    const liteImageSize = withLite.find((p) => p.key === 'imageSize');
+    expect(liteImageSize?.options?.map((option) => option.value)).toEqual(['1K']);
 
     const withLegacy = deriveVisibleParams(def, { model: 'gemini-2.5-flash-image' });
     expect(withLegacy.some((p) => p.key === 'imageSize')).toBe(false);
     // aspect_ratio is always visible
     expect(withLegacy.some((p) => p.key === 'aspect_ratio')).toBe(true);
+  });
+
+  it('keeps FAL Nano Banana controls within each endpoint contract', () => {
+    for (const id of ['nano-banana-fal', 'nano-banana-fal-edit'] as const) {
+      const def = NODE_DEFINITIONS[id];
+      const withPro = deriveVisibleParams(def, { model: 'nano-banana-pro' });
+      const aspectRatio = withPro.find((p) => p.key === 'aspect_ratio');
+
+      expect(aspectRatio?.options?.map((option) => option.value)).not.toContain('1:4');
+      expect(withPro.some((p) => p.key === 'enable_web_search')).toBe(true);
+
+      const withNb2 = deriveVisibleParams(def, { model: 'nano-banana-2' });
+      const nb2AspectRatio = withNb2.find((p) => p.key === 'aspect_ratio');
+      expect(nb2AspectRatio?.options?.map((option) => option.value)).toContain('1:4');
+    }
   });
 });

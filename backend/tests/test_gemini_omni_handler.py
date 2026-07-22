@@ -81,6 +81,43 @@ async def test_gemini_omni_text_to_video_submits_interaction():
 
 
 @pytest.mark.asyncio
+async def test_gemini_omni_connected_previous_interaction_takes_precedence():
+    completed = {
+        "id": "v1_chained",
+        "status": "completed",
+        "steps": [{
+            "type": "model_output",
+            "content": [{"type": "video", "data": "ZmFrZQ=="}],
+        }],
+    }
+
+    with patch("handlers.gemini_omni.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = _Resp(200, completed)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.gemini_omni.get_run_dir") as mock_run_dir:
+            from pathlib import Path
+            tmp = Path("/tmp/omni-chained-run")
+            tmp.mkdir(parents=True, exist_ok=True)
+            mock_run_dir.return_value = tmp
+
+            await handle_gemini_omni(
+                _make_node({"previous_interaction_id": "v1_manual"}),
+                {
+                    "prompt": PortValueDict(type="Text", value="make it dusk"),
+                    "previous_interaction_id": PortValueDict(type="Text", value="v1_connected"),
+                },
+                {"GOOGLE_API_KEY": "test-key"},
+            )
+
+    body = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert body["previous_interaction_id"] == "v1_connected"
+
+
+@pytest.mark.asyncio
 async def test_gemini_omni_polls_when_processing():
     processing = {"id": "v1_poll", "status": "processing"}
     completed = {

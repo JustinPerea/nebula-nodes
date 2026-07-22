@@ -367,6 +367,43 @@ async def test_nano_banana_aspect_ratio_uses_image_config():
     assert gen_cfg.get("imageConfig", {}).get("imageSize") == "2K"
 
 
+@pytest.mark.asyncio
+async def test_nano_banana_normalizes_hidden_stale_model_params():
+    nano_resp = {
+        "candidates": [{
+            "content": {
+                "parts": [{"inlineData": {"mimeType": "image/png", "data": RED_PIXEL_B64}}]
+            }
+        }]
+    }
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = nano_resp
+
+    with patch("handlers.google_gemini.httpx.AsyncClient") as MockClient:
+        mock_client_instance = AsyncMock()
+        mock_client_instance.post.return_value = mock_resp
+        mock_client_instance.__aenter__ = AsyncMock(return_value=mock_client_instance)
+        mock_client_instance.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client_instance
+
+        await handle_nano_banana(
+            _make_nano_node({
+                "model": "gemini-3.1-flash-lite-image",
+                "aspect_ratio": "1:8",
+                "imageSize": "4K",
+            }),
+            {"prompt": PortValueDict(type="Text", value="a blue circle")},
+            {"GOOGLE_API_KEY": "test-key"},
+        )
+
+    body = mock_client_instance.post.call_args.kwargs.get("json") or mock_client_instance.post.call_args[1].get("json")
+    assert body["generationConfig"]["imageConfig"] == {
+        "aspectRatio": "1:1",
+        "imageSize": "1K",
+    }
+
+
 # --- Lyria 3 tests (responseMimeType → responseFormat.audio fix) ---
 
 def _make_lyria_node(params=None):

@@ -89,7 +89,23 @@ def _nano_banana_fal_node(node: GraphNode, *, edit: bool) -> GraphNode:
     if edit:
         endpoint_id = f"{endpoint_id}/edit"
 
-    return _fal_wrapper_node(node, endpoint_id, internal_params=("model",))
+    params = dict(node.params)
+    aspect = str(params.get("aspect_ratio") or "")
+    if model == "nano-banana-pro":
+        if aspect in {"1:4", "4:1", "1:8", "8:1"}:
+            params["aspect_ratio"] = "auto"
+        if params.get("resolution") == "0.5K":
+            params["resolution"] = "1K"
+        params.pop("thinking_level", None)
+    elif model != "nano-banana-2":
+        if aspect in {"auto", "1:4", "4:1", "1:8", "8:1"}:
+            params["aspect_ratio"] = "1:1"
+        params.pop("resolution", None)
+        params.pop("thinking_level", None)
+        params.pop("enable_web_search", None)
+
+    routed_node = node.model_copy(update={"params": params})
+    return _fal_wrapper_node(routed_node, endpoint_id, internal_params=("model",))
 
 
 def _apply_recraft_color_params(node: GraphNode) -> None:

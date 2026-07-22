@@ -1,5 +1,24 @@
 # Implementation Notes
 
+## 2026-07-22 - PR #19 provider/runtime merge-readiness review
+
+Independently re-verified the Google Gemini image and Omni contracts plus the FAL Nano Banana 2/Pro schemas before promoting the provider-runtime branch.
+
+Decisions and corrections:
+- Keep FAL endpoint slugs independent from Google's direct model lifecycle. The legacy FAL `gemini-3-pro-image-preview` selector remains valid even though Google shut its direct preview model.
+- Scope direct Gemini image-size options by model: Flash Lite is 1K-only, Flash supports 512/1K/2K/4K, and Pro supports 1K/2K/4K.
+- Scope FAL extreme aspect ratios to Nano Banana 2. Nano Banana Pro supports the common range through 21:9, not 1:4/4:1/1:8/8:1. Web search remains available on both current FAL models.
+- Normalize hidden stale values in the execution adapters without mutating saved nodes. Direct Flash Lite falls back to 1K/common aspect ratios; FAL Pro falls back from 0.5K/extreme ratios and drops the Nano Banana 2-only thinking field. Legacy FAL selectors drop modern-only controls.
+- Preserve the manual Gemini Omni previous-interaction parameter for pasted IDs, but add a real Text input so the advertised output-to-input chain works in the graph. A connected value takes precedence over the manual fallback.
+- Add focused frontend visibility tests and a handler request-shape test to prevent contract drift.
+
+Validation:
+- Clean `npm ci`, 1084 backend tests, 390 frontend tests, lint, production build, and the 142-node contract gate passed.
+- Capped live FAL Nano Banana 2 smoke returned one 0.5K image with web search disabled.
+- Capped live Gemini Omni smoke exercised URI delivery end to end and saved a 3.008-second, 825417-byte video with an interaction ID.
+- `npm audit --omit=dev` reports zero production vulnerabilities. The full audit reports five pre-existing development-only findings; this PR does not change the affected toolchain dependencies.
+- Existing non-blocking warnings remain: two backend test coroutine warnings and Vite's large-chunk/lottie dependency warnings.
+
 ## 2026-06-10 (night) — Full Ideogram direct-API surface: 7 direct-only nodes incl. custom-model training
 
 User wanted EVERYTHING the direct API offers, not just the dual-route nodes. Pulled the full OpenAPI (developer.ideogram.ai/openapi.json), enumerated all 27 endpoints, and wired every current (non-legacy) one. Registry 131 → **138**.

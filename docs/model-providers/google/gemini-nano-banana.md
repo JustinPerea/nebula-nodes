@@ -22,6 +22,7 @@ Re-verified against the current Gemini release notes, deprecations table, image-
 
 - Google shut down `gemini-3.1-flash-image-preview` and `gemini-3-pro-image-preview` on 2026-06-25. Nebula now sends the stable `gemini-3.1-flash-image` and `gemini-3-pro-image` IDs.
 - `gemini-omni-flash` uses a synchronous creation request when `delivery=uri`, because Google only guarantees the URI on the initial creation response or SSE stream. Inline delivery retains background polling.
+- `gemini-omni-flash` exposes `previous_interaction_id` as both a Text input and a manual parameter. A connected input wins, so an Interaction ID output can drive a downstream conversational edit.
 - FAL endpoint slugs remain independent of Google direct model IDs. In particular, `fal-ai/gemini-3-pro-image-preview` remains a FAL catalog slug and must not be rewritten as a Google model migration.
 
 ## Historical re-verification 2026-06-03
@@ -134,10 +135,22 @@ Output: `text` (Text).
 |---|---|---|---|
 | `model` | `gemini-3.1-flash-image`, `gemini-3.1-flash-lite-image`, `gemini-3-pro-image`, `gemini-2.5-flash-image` | `gemini-3.1-flash-image` | Nano Banana 2, Nano Banana 2 Lite, Nano Banana Pro, and Nano Banana respectively. |
 | `aspect_ratio` | `1:1`, `16:9`, `9:16`, `4:3`, `3:4`, `3:2`, `2:3`, `5:4`, `4:5`, `21:9`, plus `1:4`, `4:1`, `1:8`, `8:1` | `1:1` | Extreme ratios are only visible on `gemini-3.1-flash-image`. |
-| `imageSize` | `512`, `1K`, `2K`, `4K` | `1K` | Visible on the Gemini 3 image models. `512` is exclusive to `gemini-3.1-flash-image`; `gemini-2.5-flash-image` is fixed-size. |
+| `imageSize` | `512`, `1K`, `2K`, `4K` | `1K` | Visible on the Gemini 3 image models. Flash Lite is limited to `1K`; `512` is exclusive to `gemini-3.1-flash-image`; `2K` and `4K` are available on Flash and Pro; `gemini-2.5-flash-image` is fixed-size. |
 
 Inputs: `prompt` (Text, required), `images` (Image, optional, multiple).
 Outputs: `image` (Image), `text` (Text).
+
+## `gemini-omni-flash` Params
+
+| Param | Values | Default | Notes |
+|---|---|---|---|
+| `task` | auto, text-to-video, image-to-video, reference-to-video, edit | auto | Sent as the Interactions video task when explicitly selected. |
+| `aspect_ratio` | `16:9`, `9:16` | `16:9` | Output video aspect ratio. |
+| `delivery` | `uri`, `inline` | `uri` | URI uses the initial synchronous response; inline uses background polling. |
+| `previous_interaction_id` | interaction ID | unset | Manual fallback. The optional Text input with the same ID takes precedence when connected. |
+
+Inputs: `prompt` (Text, required), `images` (Image, optional, multiple), `video` (Video, optional), `previous_interaction_id` (Text, optional).
+Outputs: `video` (Video), `interaction_id` (Text).
 
 ## `imagen-4-generate` Params
 

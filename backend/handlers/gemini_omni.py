@@ -207,7 +207,12 @@ async def handle_gemini_omni(
     if task:
         request_body["generation_config"] = {"video_config": {"task": str(task)}}
 
-    previous_id = node.params.get("previous_interaction_id")
+    previous_input = inputs.get("previous_interaction_id")
+    previous_id = (
+        previous_input.value
+        if previous_input and previous_input.value
+        else node.params.get("previous_interaction_id")
+    )
     if previous_id:
         request_body["previous_interaction_id"] = str(previous_id)
 

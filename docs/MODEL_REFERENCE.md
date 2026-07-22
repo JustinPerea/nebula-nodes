@@ -952,7 +952,7 @@ Nodes: 142 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **API Key** | GOOGLE_API_KEY |
 | **Endpoint** | `gemini-omni-flash-preview` |
 | **Execution** | async-poll |
-| **Inputs** | Prompt (Text)*, Reference Images (Image ×n), Video (Video) |
+| **Inputs** | Prompt (Text)*, Reference Images (Image ×n), Video (Video), Previous Interaction (Text) |
 | **Outputs** | Video (Video), Interaction ID (Text) |
 | **Audited** | 2026-07-22 |
 

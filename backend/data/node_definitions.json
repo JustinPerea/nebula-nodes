@@ -4185,11 +4185,23 @@
           },
           {
             "label": "2K",
-            "value": "2K"
+            "value": "2K",
+            "visibleWhen": {
+              "model": [
+                "gemini-3.1-flash-image",
+                "gemini-3-pro-image"
+              ]
+            }
           },
           {
             "label": "4K",
-            "value": "4K"
+            "value": "4K",
+            "visibleWhen": {
+              "model": [
+                "gemini-3.1-flash-image",
+                "gemini-3-pro-image"
+              ]
+            }
           }
         ]
       }
@@ -4311,8 +4323,7 @@
             "value": "1:4",
             "visibleWhen": {
               "model": [
-                "nano-banana-2",
-                "nano-banana-pro"
+                "nano-banana-2"
               ]
             }
           },
@@ -4321,8 +4332,7 @@
             "value": "4:1",
             "visibleWhen": {
               "model": [
-                "nano-banana-2",
-                "nano-banana-pro"
+                "nano-banana-2"
               ]
             }
           },
@@ -4331,8 +4341,7 @@
             "value": "1:8",
             "visibleWhen": {
               "model": [
-                "nano-banana-2",
-                "nano-banana-pro"
+                "nano-banana-2"
               ]
             }
           },
@@ -4341,8 +4350,7 @@
             "value": "8:1",
             "visibleWhen": {
               "model": [
-                "nano-banana-2",
-                "nano-banana-pro"
+                "nano-banana-2"
               ]
             }
           }
@@ -4448,7 +4456,8 @@
         "default": false,
         "visibleWhen": {
           "model": [
-            "nano-banana-2"
+            "nano-banana-2",
+            "nano-banana-pro"
           ]
         }
       },
@@ -4584,8 +4593,7 @@
             "value": "1:4",
             "visibleWhen": {
               "model": [
-                "nano-banana-2",
-                "nano-banana-pro"
+                "nano-banana-2"
               ]
             }
           },
@@ -4594,8 +4602,7 @@
             "value": "4:1",
             "visibleWhen": {
               "model": [
-                "nano-banana-2",
-                "nano-banana-pro"
+                "nano-banana-2"
               ]
             }
           },
@@ -4604,8 +4611,7 @@
             "value": "1:8",
             "visibleWhen": {
               "model": [
-                "nano-banana-2",
-                "nano-banana-pro"
+                "nano-banana-2"
               ]
             }
           },
@@ -4614,8 +4620,7 @@
             "value": "8:1",
             "visibleWhen": {
               "model": [
-                "nano-banana-2",
-                "nano-banana-pro"
+                "nano-banana-2"
               ]
             }
           }
@@ -4721,7 +4726,8 @@
         "default": false,
         "visibleWhen": {
           "model": [
-            "nano-banana-2"
+            "nano-banana-2",
+            "nano-banana-pro"
           ]
         }
       },
@@ -5130,6 +5136,13 @@
         "dataType": "Video",
         "required": false,
         "_note": "Upload/edit: wire a Gemini files/... URI or local path. Conversational edits can chain via previous_interaction_id instead."
+      },
+      {
+        "id": "previous_interaction_id",
+        "label": "Previous Interaction",
+        "dataType": "Text",
+        "required": false,
+        "_note": "Connect an upstream Interaction ID output for conversational video edits."
       }
     ],
     "outputPorts": [
@@ -5216,7 +5229,7 @@
         "label": "Previous Interaction",
         "type": "string",
         "required": false,
-        "placeholder": "For conversational edits — wire upstream Interaction ID output"
+        "placeholder": "Paste an ID or connect the Previous Interaction input"
       }
     ]
   },

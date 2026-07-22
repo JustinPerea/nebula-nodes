@@ -200,6 +200,7 @@ NODE_DEFS: dict[str, dict[str, Any]] = {
             {"id": "prompt", "required": True},
             {"id": "images", "required": False},
             {"id": "video", "required": False},
+            {"id": "previous_interaction_id", "required": False},
         ],
         "outputPorts": [{"id": "video"}, {"id": "interaction_id"}],
         "envKeyName": "GOOGLE_API_KEY",

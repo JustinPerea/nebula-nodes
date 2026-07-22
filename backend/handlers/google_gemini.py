@@ -146,7 +146,7 @@ async def handle_nano_banana(
     if not api_key:
         raise ValueError("GOOGLE_API_KEY is required")
 
-    model = node.params.get("model", "gemini-3.1-flash-image")
+    model = str(node.params.get("model", "gemini-3.1-flash-image"))
 
     contents = [{"parts": [{"text": str(prompt_input.value)}]}]
 
@@ -175,8 +175,22 @@ async def handle_nano_banana(
         },
     }
 
-    aspect = node.params.get("aspect_ratio")
-    image_size = node.params.get("imageSize")
+    aspect = str(node.params.get("aspect_ratio") or "")
+    image_size = str(node.params.get("imageSize") or "")
+
+    common_aspects = {"1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3", "5:4", "4:5", "21:9"}
+    allowed_aspects = common_aspects | ({"1:4", "4:1", "1:8", "8:1"} if model == "gemini-3.1-flash-image" else set())
+    if aspect and aspect not in allowed_aspects:
+        aspect = "1:1"
+
+    allowed_sizes = {
+        "gemini-3.1-flash-image": {"512", "1K", "2K", "4K"},
+        "gemini-3.1-flash-lite-image": {"1K"},
+        "gemini-3-pro-image": {"1K", "2K", "4K"},
+    }.get(model, set())
+    if image_size and image_size not in allowed_sizes:
+        image_size = "1K" if allowed_sizes else ""
+
     if aspect or image_size:
         image_config: dict[str, Any] = {}
         if aspect:

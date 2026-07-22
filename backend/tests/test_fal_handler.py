@@ -4005,6 +4005,33 @@ async def test_nano_banana_fal_model_change_recomputes_endpoint_without_mutation
     assert node.params == {"model": "nano-banana-pro"}
 
 
+def test_nano_banana_fal_normalizes_hidden_stale_model_params_without_mutation():
+    from execution.sync_runner import _nano_banana_fal_node
+
+    params = {
+        "model": "nano-banana-pro",
+        "aspect_ratio": "1:8",
+        "resolution": "0.5K",
+        "thinking_level": "high",
+        "enable_web_search": True,
+    }
+    node = GraphNode(
+        id="test-nb-fal-stale",
+        definitionId="nano-banana-fal",
+        params=params,
+    )
+
+    routed = _nano_banana_fal_node(node, edit=False)
+
+    assert routed.params == {
+        "aspect_ratio": "auto",
+        "resolution": "1K",
+        "enable_web_search": True,
+        "endpoint_id": "fal-ai/nano-banana-pro",
+    }
+    assert node.params == params
+
+
 @pytest.mark.asyncio
 async def test_nano_banana_fal_edit_requires_images():
     """nano-banana-fal-edit must reject calls with no reference images."""
