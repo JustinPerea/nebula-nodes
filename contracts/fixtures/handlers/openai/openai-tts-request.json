@@ -1,0 +1,8 @@
+{
+  "_comment": "Oracle: backend/tests/test_openai_contract_fixtures.py::test_openai_request_body_matches_fixture[openai-tts-request.json]",
+  "model": "tts-1",
+  "input": "Hello world",
+  "voice": "nova",
+  "speed": 1.5,
+  "response_format": "mp3"
+}

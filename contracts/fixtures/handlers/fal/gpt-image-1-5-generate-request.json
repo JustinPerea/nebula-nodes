@@ -1,0 +1,9 @@
+{
+  "_comment": "Oracle: backend/tests/test_fal_contract_fixtures.py::test_fal_request_body_matches_fixture[gpt-image-1-5-generate-request.json]. Endpoint (not in body): fal-ai/gpt-image-1.5",
+  "prompt": "a ceramic mug",
+  "image_size": "1024x1024",
+  "quality": "medium",
+  "background": "transparent",
+  "num_images": 3,
+  "output_format": "webp"
+}

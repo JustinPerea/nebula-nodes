@@ -1,0 +1,16 @@
+{
+  "_comment": "Oracle: backend/tests/test_google_contract_fixtures.py::test_google_request_body_matches_fixture[gemini-omni-flash-submit-request.json]",
+  "model": "gemini-omni-flash-preview",
+  "input": "a marble rolling",
+  "background": false,
+  "response_format": {
+    "type": "video",
+    "delivery": "uri",
+    "aspect_ratio": "9:16"
+  },
+  "generation_config": {
+    "video_config": {
+      "task": "text_to_video"
+    }
+  }
+}

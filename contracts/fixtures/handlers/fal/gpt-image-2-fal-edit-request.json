@@ -1,0 +1,9 @@
+{
+  "_comment": "Oracle: backend/tests/test_fal_contract_fixtures.py::test_fal_request_body_matches_fixture[gpt-image-2-fal-edit-request.json]",
+  "prompt": "make it night",
+  "image_urls": [
+    "https://example.com/img1.png",
+    "https://example.com/img2.png"
+  ],
+  "image_size": "auto"
+}

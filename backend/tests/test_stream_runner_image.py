@@ -11,7 +11,14 @@ from execution.stream_runner import StreamConfig, stream_execute_image
 from models.events import ExecutionEvent, StreamPartialImageEvent
 
 
-FIXTURE = Path(__file__).parent / "fixtures" / "openai_image_v2_sse.txt"
+FIXTURE = (
+    Path(__file__).resolve().parents[2]
+    / "contracts"
+    / "fixtures"
+    / "handlers"
+    / "openai"
+    / "gpt-image-2-generate-sse.txt"
+)
 
 
 @pytest.mark.asyncio
@@ -51,7 +58,14 @@ async def test_image_stream_emits_partials_and_returns_final(tmp_path: Path) -> 
 @pytest.mark.asyncio
 @respx.mock
 async def test_fal_image_stream_parses_partials(tmp_path: Path) -> None:
-    fixture = Path(__file__).parent / "fixtures" / "fal_image_v2_sse.txt"
+    fixture = (
+        Path(__file__).resolve().parents[2]
+        / "contracts"
+        / "fixtures"
+        / "handlers"
+        / "fal"
+        / "gpt-image-2-fal-generate-sse.txt"
+    )
     respx.post("https://queue.fal.run/openai/gpt-image-2/stream").mock(
         return_value=Response(200, content=fixture.read_bytes(), headers={"content-type": "text/event-stream"})
     )

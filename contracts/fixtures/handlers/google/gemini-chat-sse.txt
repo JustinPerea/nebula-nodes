@@ -1,0 +1,5 @@
+data: {"candidates": [{"content": {"parts": [{"text": "Gemini"}], "role": "model"}, "finishReason": null, "index": 0}]}
+
+data: {"candidates": [{"content": {"parts": [{"text": " says"}], "role": "model"}, "finishReason": null, "index": 0}]}
+
+data: {"candidates": [{"content": {"parts": [{"text": " hello!"}], "role": "model"}, "finishReason": null, "index": 0}]}

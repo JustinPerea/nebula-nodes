@@ -1,0 +1,10 @@
+{
+  "_comment": "Oracle: backend/tests/test_google_contract_fixtures.py::test_google_request_body_matches_fixture[gemini-embeddings-request.json]",
+  "model": "models/gemini-embedding-001",
+  "content": {
+    "parts": [
+      { "text": "hello" }
+    ]
+  },
+  "outputDimensionality": 768
+}

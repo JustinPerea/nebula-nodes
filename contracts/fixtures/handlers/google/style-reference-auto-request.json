@@ -1,0 +1,23 @@
+{
+  "_comment": "Oracle: backend/tests/test_google_contract_fixtures.py::test_google_request_body_matches_fixture[style-reference-auto-request.json]. inline_data.data is the canonical 1x1 PNG from test_style_reference._png_bytes().",
+  "contents": [
+    {
+      "role": "user",
+      "parts": [
+        {
+          "text": "In 15 words, describe the COLOR PALETTE of this image only. Do not describe the subject. Output a single comma-separated phrase suitable for appending to a generation prompt."
+        },
+        {
+          "inline_data": {
+            "mime_type": "image/png",
+            "data": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGMAAQAAAAUAAQ0KLbQAAAAASUVORK5CYII="
+          }
+        }
+      ]
+    }
+  ],
+  "generationConfig": {
+    "temperature": 0.4,
+    "maxOutputTokens": 200
+  }
+}

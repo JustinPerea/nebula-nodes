@@ -1,0 +1,11 @@
+{
+  "_comment": "Oracle: backend/tests/test_google_contract_fixtures.py::test_google_request_body_matches_fixture[veo-3-text-to-video-request.json]",
+  "instances": [
+    {
+      "prompt": "a sunset"
+    }
+  ],
+  "parameters": {
+    "aspectRatio": "16:9"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "_comment": "Oracle: backend/tests/test_google_contract_fixtures.py::test_google_request_body_matches_fixture[gemini-chat-generate-request.json]",
+  "contents": [
+    {
+      "role": "user",
+      "parts": [
+        { "text": "test" }
+      ]
+    }
+  ],
+  "generationConfig": {
+    "temperature": 0.7,
+    "maxOutputTokens": 2048
+  }
+}

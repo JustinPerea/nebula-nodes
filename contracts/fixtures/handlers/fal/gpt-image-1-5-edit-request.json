@@ -1,0 +1,9 @@
+{
+  "_comment": "Oracle: backend/tests/test_fal_contract_fixtures.py::test_fal_request_body_matches_fixture[gpt-image-1-5-edit-request.json]. Endpoint (not in body): fal-ai/gpt-image-1.5/edit",
+  "prompt": "make it winter",
+  "image_urls": [
+    "https://example.com/a.png",
+    "https://example.com/b.png"
+  ],
+  "input_fidelity": "high"
+}
