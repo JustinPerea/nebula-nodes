@@ -1,5 +1,28 @@
 # Implementation Notes
 
+## 2026-07-22 - Targeted frontend development-dependency remediation
+
+The clean npm audit reported five development-only findings: one low and four
+high. `npm audit --omit=dev` remained at zero. A dry-run audit auto-fix would
+have changed dozens of packages and selected Vite 8.1.5, which was only six
+days old, so the remediation is deliberately narrower.
+
+Decisions:
+- Pin direct Vite to 8.0.16, the first non-vulnerable 8.0.x release, instead of
+  allowing the caret range to select the too-new 8.1.5 release.
+- Override only the vulnerable transitive packages: `@babel/core` 7.29.7,
+  `js-yaml` 4.3.0, and `undici` 7.28.0.
+- Keep each `brace-expansion` major compatible with its parent minimatch:
+  1.1.16 under minimatch 3.1.5 and 5.0.7 under minimatch 10.2.5.
+- Pin the existing Browserslist toolchain at 4.28.2 as an explicit development
+  constraint and preserve its already-locked data packages. Re-resolving Babel
+  otherwise selected five releases between 0 and 13.6 days old even though
+  none was required for the security fixes.
+- All selected versions were at least 14 days old at installation time. No
+  production dependency or Remotion pin changed.
+- Regenerate the lockfile with the explicit package policy, then validate from
+  a clean `npm ci`; do not run `npm audit fix`.
+
 ## 2026-07-22 - GitHub Actions CI baseline
 
 The repository previously had no configured GitHub checks. The first CI
