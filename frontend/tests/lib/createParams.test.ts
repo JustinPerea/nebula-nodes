@@ -16,7 +16,7 @@ describe('deriveVisibleParams', () => {
   it('drops hidden params and applies visibleWhen for nano-banana imageSize', () => {
     const def = NODE_DEFINITIONS['nano-banana'];
     // imageSize is only visible for the two flash/pro models
-    const withFlash = deriveVisibleParams(def, { model: 'gemini-3.1-flash-image-preview' });
+    const withFlash = deriveVisibleParams(def, { model: 'gemini-3.1-flash-image' });
     expect(withFlash.some((p) => p.key === 'imageSize')).toBe(true);
 
     const withLegacy = deriveVisibleParams(def, { model: 'gemini-2.5-flash-image' });

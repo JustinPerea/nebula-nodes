@@ -48,6 +48,44 @@ async def test_missing_messages_raises():
 
 
 @pytest.mark.asyncio
+async def test_missing_image_path_raises(tmp_path):
+    """A wired image whose local path doesn't exist must surface as an error, not
+    be silently dropped — otherwise the node 'succeeds' having sent zero of the
+    references the user connected."""
+    missing = tmp_path / "gone.png"
+    with pytest.raises(ValueError, match="not found"):
+        await handle_openrouter_universal(
+            _make_node(),
+            {
+                "messages": PortValueDict(type="Text", value="describe this"),
+                "images": PortValueDict(type="Image", value=str(missing)),
+            },
+            {"OPENROUTER_API_KEY": "sk-or-test"},
+            emit=AsyncMock(),
+        )
+
+
+@pytest.mark.asyncio
+async def test_data_uri_image_preserved():
+    """data: URIs keep their existing behavior — forwarded verbatim as an image_url."""
+    with patch("handlers.openrouter.stream_execute", new_callable=AsyncMock) as mock_stream:
+        mock_stream.return_value = "ok"
+        await handle_openrouter_universal(
+            _make_node(),
+            {
+                "messages": PortValueDict(type="Text", value="describe"),
+                "images": PortValueDict(type="Image", value="data:image/png;base64,QUJD"),
+            },
+            {"OPENROUTER_API_KEY": "sk-or-test"},
+            emit=AsyncMock(),
+        )
+    body = mock_stream.call_args.kwargs.get("request_body") or mock_stream.call_args[1].get("request_body")
+    image_blocks = [b for b in body["messages"][0]["content"] if b.get("type") == "image_url"]
+    assert len(image_blocks) == 1
+    assert image_blocks[0]["image_url"]["url"] == "data:image/png;base64,QUJD"
+
+
+@pytest.mark.asyncio
 async def test_text_streaming_calls_stream_execute():
     with patch("handlers.openrouter.stream_execute", new_callable=AsyncMock) as mock_stream:
         mock_stream.return_value = "Hello from GPT-4o!"

@@ -199,7 +199,7 @@ def test_max_refs_table_known_models() -> None:
 
 def test_max_refs_nano_banana_is_14() -> None:
     # The `nano-banana` node's model enum DEFAULTS to Nano Banana 2
-    # (gemini-3.1-flash-image-preview, 14 refs) — the design spec §5 Character
+    # (gemini-3.1-flash-image, 14 refs) — the design spec §5 Character
     # default. The reachable base id is `nano-banana`, NOT `nano-banana-2`, so
     # the cap must be keyed on `nano-banana`. (Regression guard: the original
     # table keyed 14 on the unreachable `nano-banana-2` def id, so a real
@@ -207,6 +207,8 @@ def test_max_refs_nano_banana_is_14() -> None:
     # bundle the model can actually handle.)
     assert max_refs_for("nano-banana") == 14
     assert MODEL_MAX_REFS["nano-banana"] == 14
+    assert max_refs_for("nano-banana-fal-edit") == 14
+    assert MODEL_MAX_REFS["nano-banana-fal-edit"] == 14
 
 
 def test_max_refs_flux_kontext_is_conservative_default() -> None:

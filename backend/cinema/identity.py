@@ -54,18 +54,18 @@ from typing import Any, Mapping, Sequence
 # ``seedream-4-5``, ``nano-banana``, ``nano-banana-pro``, ``flux-kontext``
 # (see ``cinema_scene._guard_base_model`` / ``_COMMERCIAL_OK_DEFAULT_BASES`` and
 # ``_DEFAULT_BASE_MODEL = "seedream-4-5"``). There is NO ``nano-banana-2`` def id
-# — "Nano Banana 2" (``gemini-3.1-flash-image-preview``) is the *default
+# — "Nano Banana 2" (``gemini-3.1-flash-image``) is the *default
 # sub-model enum value* of the single ``nano-banana`` node (see
 # ``frontend/src/constants/nodeDefinitions.ts`` -> ``nano-banana`` ->
-# ``params.model.default = 'gemini-3.1-flash-image-preview'``). So this table is
+# ``params.model.default = 'gemini-3.1-flash-image'``). So this table is
 # keyed on those real, reachable base ids:
 #   - ``seedream-4-5`` -> 10  (Seedream v4 / v4.5 published hard cap, last-10 rule)
 #   - ``nano-banana``  -> 14  (its model enum DEFAULTS to Nano Banana 2 =
-#                              ``gemini-3.1-flash-image-preview``, the 14-ref
+#                              ``gemini-3.1-flash-image``, the 14-ref
 #                              model the design spec §5 names as the Character
 #                              default; research synthesis firmly publishes 14)
 #
-# ``nano-banana-pro`` (``gemini-3-pro-image-preview``): confirmed 14 reference
+# ``nano-banana-pro`` (``gemini-3-pro-image``): confirmed 14 reference
 # images per Google AI docs (verified 2026-06-03). Mapped here so a multi-view
 # Character bundle on the Pro sub-model passes the guardrail rather than hitting
 # the conservative DEFAULT_MAX_REFS (1) and raising a spurious capability error.
@@ -77,6 +77,7 @@ MODEL_MAX_REFS: dict[str, int] = {
     "seedream-4-5": 10,
     "nano-banana": 14,
     "nano-banana-pro": 14,
+    "nano-banana-fal-edit": 14,
 }
 
 DEFAULT_MAX_REFS = 1
@@ -86,7 +87,7 @@ DEFAULT_MAX_REFS = 1
 #
 # HONEST FINDING (v1, reference-edit bases): none of the reachable v1 base
 # models expose a usable IP-adherence / reference-strength knob.
-#   - ``nano-banana`` (gemini-3.1-flash-image-preview, "Nano Banana 2") drives
+#   - ``nano-banana`` (gemini-3.1-flash-image, "Nano Banana 2") drives
 #     identity purely by re-feeding reference images; the Gemini generateContent
 #     imageConfig accepts only ``aspectRatio`` + ``imageSize`` — NO strength /
 #     guidance / adherence field (verified in handlers/google_gemini.py

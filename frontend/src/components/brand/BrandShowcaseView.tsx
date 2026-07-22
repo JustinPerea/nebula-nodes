@@ -224,22 +224,10 @@ export function BrandShowcaseView() {
                   shell. Locked product mark with seven motion modes.
                 </p>
                 <div className="nn-bs__variant-palette">
-                  <span
-                    className="nn-bs__swatch"
-                    style={{ background: 'rgb(180,240,250)' }}
-                  />
-                  <span
-                    className="nn-bs__swatch"
-                    style={{ background: 'rgb(120,220,200)' }}
-                  />
-                  <span
-                    className="nn-bs__swatch"
-                    style={{ background: 'rgb(240,150,90)' }}
-                  />
-                  <span
-                    className="nn-bs__swatch"
-                    style={{ background: 'rgb(120,50,30)' }}
-                  />
+                  <span className="nn-bs__swatch nn-bs__swatch--crab-cyan" />
+                  <span className="nn-bs__swatch nn-bs__swatch--crab-teal" />
+                  <span className="nn-bs__swatch nn-bs__swatch--crab-orange" />
+                  <span className="nn-bs__swatch nn-bs__swatch--crab-brown" />
                   <span className="nn-bs__variant-palette-label">
                     crab-true
                   </span>
@@ -260,18 +248,9 @@ export function BrandShowcaseView() {
                   structure). Orange iris is phase 2.
                 </p>
                 <div className="nn-bs__variant-palette">
-                  <span
-                    className="nn-bs__swatch"
-                    style={{ background: 'rgb(242,252,255)' }}
-                  />
-                  <span
-                    className="nn-bs__swatch"
-                    style={{ background: 'rgb(48,92,168)' }}
-                  />
-                  <span
-                    className="nn-bs__swatch"
-                    style={{ background: 'rgb(32,72,148)' }}
-                  />
+                  <span className="nn-bs__swatch nn-bs__swatch--helix-ice" />
+                  <span className="nn-bs__swatch nn-bs__swatch--helix-blue" />
+                  <span className="nn-bs__swatch nn-bs__swatch--helix-cobalt" />
                   <span className="nn-bs__variant-palette-label">
                     helix-core
                   </span>

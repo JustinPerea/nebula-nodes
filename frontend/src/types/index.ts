@@ -82,7 +82,7 @@ export interface ParamDefinition {
   placeholder?: string;
   condition?: string;
   /** Show this param only when another param's value is in the given list.
-   *  e.g. { model: ['gemini-3.1-flash-image-preview', 'gemini-3-pro-image-preview'] } */
+   *  e.g. { model: ['gemini-3.1-flash-image', 'gemini-3-pro-image'] } */
   visibleWhen?: Record<string, (string | number | boolean)[]>;
   /** Internal/editor-managed param. Declared so the backend validator accepts
    *  it as a known key (see backend/main.py::_valid_param_keys), but never

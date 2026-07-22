@@ -11,6 +11,7 @@ from models.events import ExecutionEvent
 from execution.stream_runner import StreamConfig, stream_execute
 from uuid import uuid4
 
+from services.image_input import load_local_image
 from services.output import get_run_dir, save_base64_image
 
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
@@ -57,17 +58,17 @@ async def handle_gemini_chat(
                     }
                 })
             else:
-                img_path = Path(img_str)
-                if img_path.exists():
-                    b64_data = base64.b64encode(img_path.read_bytes()).decode("ascii")
-                    suffix = img_path.suffix.lstrip(".").lower()
-                    mime_map = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg", "webp": "image/webp"}
-                    parts.append({
-                        "inline_data": {
-                            "mime_type": mime_map.get(suffix, "image/png"),
-                            "data": b64_data,
-                        }
-                    })
+                # Local path. load_local_image raises (rather than silently
+                # skipping) if the file is missing/unreadable/unsupported, so a
+                # misconfigured reference fails the node instead of producing a
+                # "success" that quietly analyzed zero of the wired-up images.
+                mime_type, b64_data = load_local_image(img_str)
+                parts.append({
+                    "inline_data": {
+                        "mime_type": mime_type,
+                        "data": b64_data,
+                    }
+                })
 
     model = node.params.get("model", "gemini-3.5-flash")
 
@@ -145,7 +146,7 @@ async def handle_nano_banana(
     if not api_key:
         raise ValueError("GOOGLE_API_KEY is required")
 
-    model = node.params.get("model", "gemini-3.1-flash-image-preview")
+    model = node.params.get("model", "gemini-3.1-flash-image")
 
     contents = [{"parts": [{"text": str(prompt_input.value)}]}]
 
@@ -157,14 +158,15 @@ async def handle_nano_banana(
             img_str = str(img_val)
             if img_str.startswith(("http://", "https://")):
                 contents[0]["parts"].append({"fileData": {"fileUri": img_str}})
+            elif img_str.startswith("data:"):
+                header, b64 = img_str.split(",", 1)
+                mime = header.split(":")[1].split(";")[0]
+                contents[0]["parts"].append({"inlineData": {"mimeType": mime, "data": b64}})
             else:
-                import base64 as _base64
-                img_path = Path(img_str)
-                if img_path.exists():
-                    b64 = _base64.b64encode(img_path.read_bytes()).decode("ascii")
-                    suffix = img_path.suffix.lstrip(".").lower()
-                    mime = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg", "webp": "image/webp"}.get(suffix, "image/png")
-                    contents[0]["parts"].append({"inlineData": {"mimeType": mime, "data": b64}})
+                # Local path. load_local_image raises (rather than silently
+                # skipping) if the file is missing/unreadable/unsupported.
+                mime, b64 = load_local_image(img_str)
+                contents[0]["parts"].append({"inlineData": {"mimeType": mime, "data": b64}})
 
     body: dict[str, Any] = {
         "contents": contents,
@@ -322,12 +324,10 @@ async def handle_lyria3(
             elif img_str.startswith(("http://", "https://")):
                 parts.append({"fileData": {"fileUri": img_str}})
             else:
-                img_path = Path(img_str)
-                if img_path.exists():
-                    b64 = base64.b64encode(img_path.read_bytes()).decode("ascii")
-                    suffix = img_path.suffix.lstrip(".").lower()
-                    mime = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg", "webp": "image/webp"}.get(suffix, "image/png")
-                    parts.append({"inlineData": {"mimeType": mime, "data": b64}})
+                # Local path. load_local_image raises (rather than silently
+                # skipping) if the file is missing/unreadable/unsupported.
+                mime, b64 = load_local_image(img_str)
+                parts.append({"inlineData": {"mimeType": mime, "data": b64}})
 
     generation_config: dict[str, Any] = {
         "responseModalities": ["AUDIO", "TEXT"],

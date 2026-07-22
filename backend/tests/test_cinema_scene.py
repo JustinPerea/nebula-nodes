@@ -218,14 +218,15 @@ async def test_character_refs_passed_to_base(monkeypatch) -> None:
     async def capture(node, inputs, api_keys):
         captured["images"] = inputs.get("images")
         captured["prompt"] = inputs.get("prompt")
-        captured["aspectRatio"] = node.params.get("aspectRatio")
+        captured["aspect_ratio"] = node.params.get("aspect_ratio")
+        captured["definition_id"] = node.definition_id
         return {"image": {"type": "Image", "value": _write_base_image()}}
 
     _patch_base(monkeypatch, capture)
 
     scene = {
         "version": 1,
-        "base": {"model": "nano-banana"},
+        "base": {"model": "nano-banana-fal-edit"},
         "character": {"refImageUrls": [ref_url], "strength": 0.8},
         "prompt": "cinematic",
         "aspectRatio": "4:5",
@@ -238,9 +239,9 @@ async def test_character_refs_passed_to_base(monkeypatch) -> None:
     images_port = captured["images"]
     assert images_port is not None
     assert ref_url in images_port.value
-    # Prompt combines scene prompt + shot prompt.
     assert captured["prompt"].value == "cinematic close-up"
-    assert captured["aspectRatio"] == "4:5"
+    assert captured["aspect_ratio"] == "4:5"
+    assert captured["definition_id"] == "nano-banana-fal-edit"
 
 
 # ---------- typed Character bundle input expands verbatim ----------

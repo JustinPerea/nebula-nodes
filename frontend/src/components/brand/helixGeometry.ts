@@ -37,7 +37,7 @@ export const HELIX_TRUE = HELIX_CORE;
 /**
  * Density: small bright core + dominant thick circular band at mid-radius.
  */
-export function helixMask(x: number, y: number, _a: number): number {
+export function helixMask(x: number, y: number): number {
   const dx = x - CX;
   const dy = y - CY;
   const r = Math.sqrt(dx * dx + dy * dy);
@@ -84,7 +84,7 @@ export function buildHelixDots(
       const radius = Math.sqrt(dx * dx + dy * dy);
       if (radius > CORE_R) continue;
       const angle = Math.atan2(dy, dx);
-      const intensity = Math.max(0, Math.min(1, helixMask(x, y, angle)));
+      const intensity = Math.max(0, Math.min(1, helixMask(x, y)));
       if (intensity < 0.05) continue;
       const t = helixColorT(radius, x, y, angle);
       const dotR = helixDotRadius(step, intensity);

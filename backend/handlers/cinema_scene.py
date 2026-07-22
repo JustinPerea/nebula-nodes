@@ -52,7 +52,7 @@ _OUTPUTS_URL_PREFIX = "/api/outputs/"
 
 # Commercial-OK default bases (reference-edit capable). FLUX.1-dev is a
 # non-commercial license and must never be the default base.
-_COMMERCIAL_OK_DEFAULT_BASES = {"seedream-4-5", "nano-banana", "flux-kontext"}
+_COMMERCIAL_OK_DEFAULT_BASES = {"seedream-4-5", "nano-banana", "nano-banana-fal-edit", "flux-kontext"}
 _NONCOMMERCIAL_BASES = {"flux-1-dev", "flux.1-dev", "flux-dev"}
 _DEFAULT_BASE_MODEL = "seedream-4-5"
 
@@ -164,6 +164,10 @@ def _merge_look(scene_look: dict[str, Any] | None, override: dict[str, Any] | No
     return merged or None
 
 
+# Nodes that read aspect ratio from `aspect_ratio` (snake_case), not `aspectRatio`.
+_ASPECT_RATIO_SNAKE_BASES = frozenset({"nano-banana", "nano-banana-fal-edit", "flux-kontext"})
+
+
 def _build_base_node(
     base_model: str,
     prompt: str,
@@ -178,7 +182,8 @@ def _build_base_node(
     images through BOTH ``image`` (single, e.g. flux-kontext) and ``images``
     (multiple, e.g. nano-banana) ports so whichever port the base handler reads
     is populated — the universal/base handlers ignore ports they don't map."""
-    params: dict[str, Any] = {"aspectRatio": aspect_ratio, **extra_params}
+    aspect_key = "aspect_ratio" if base_model in _ASPECT_RATIO_SNAKE_BASES else "aspectRatio"
+    params: dict[str, Any] = {aspect_key: aspect_ratio, **extra_params}
     base_node = GraphNode(id=f"{node_id}__base", definitionId=base_model, params=params)
 
     inputs: dict[str, PortValueDict] = {

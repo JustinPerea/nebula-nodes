@@ -4,7 +4,7 @@ kind: project-model-integration
 project: nebula_nodes
 provider: google
 status: active
-verified: 2026-06-03
+verified: 2026-07-22
 stale_after_days: 14
 ---
 
@@ -16,7 +16,15 @@ Read the shared provider reference first:
 
 `~/Documents/Workspace/Reference/model-providers/google/gemini-nano-banana.md`
 
-## Re-verification 2026-06-03
+## Re-verification 2026-07-22
+
+Re-verified against the current Gemini release notes, deprecations table, image-generation guide, and Gemini Omni guide.
+
+- Google shut down `gemini-3.1-flash-image-preview` and `gemini-3-pro-image-preview` on 2026-06-25. Nebula now sends the stable `gemini-3.1-flash-image` and `gemini-3-pro-image` IDs.
+- `gemini-omni-flash` uses a synchronous creation request when `delivery=uri`, because Google only guarantees the URI on the initial creation response or SSE stream. Inline delivery retains background polling.
+- FAL endpoint slugs remain independent of Google direct model IDs. In particular, `fal-ai/gemini-3-pro-image-preview` remains a FAL catalog slug and must not be rewritten as a Google model migration.
+
+## Historical re-verification 2026-06-03
 
 Re-verified 2026-06-03 against [ai.google.dev/gemini-api/docs/image-generation](https://ai.google.dev/gemini-api/docs/image-generation) and [ai.google.dev/gemini-api/docs/models](https://ai.google.dev/gemini-api/docs/models).
 
@@ -35,23 +43,24 @@ The canonical docs now publish the following per-model reference-image caps:
 
 ---
 
-⚠️ DRIFT (2026-06-03): Model IDs — `-preview` suffix dropped in canonical docs
+### Resolved 2026-07-22: stable model IDs
 
 The canonical docs (fetched 2026-06-03) now document stable model IDs **without** the `-preview` suffix. Every code example on the image-generation docs page uses:
 
 | Docs-canonical ID | Our code/node-def ID | Display name |
 |---|---|---|
-| `gemini-3.1-flash-image` | `gemini-3.1-flash-image-preview` | Nano Banana 2 |
-| `gemini-3-pro-image` | `gemini-3-pro-image-preview` | Nano Banana Pro |
+| `gemini-3.1-flash-image` | `gemini-3.1-flash-image` | Nano Banana 2 |
+| `gemini-3-pro-image` | `gemini-3-pro-image` | Nano Banana Pro |
 | `gemini-2.5-flash-image` | `gemini-2.5-flash-image` | Nano Banana (no drift) |
 
 The REST examples on the docs page show `/v1/models/gemini-3.1-flash-image:generateContent` — no `-preview`.
 
-**Risk assessment:** Google typically keeps `-preview` aliases alive for backward compatibility, so the current handler likely still works. However, the documented stable IDs should be used in production.
+Google shut down both preview IDs on 2026-06-25. This is a required production migration, not an optional alias cleanup.
 
-**CODE CHANGE needed (do not change here — flag only):**
-- `backend/handlers/google_gemini.py`: default model in `handle_nano_banana` is `"gemini-3.1-flash-image-preview"` — should become `"gemini-3.1-flash-image"`.
-- `frontend/src/constants/nodeDefinitions.ts`: `nano-banana` node params list `gemini-3.1-flash-image-preview` and `gemini-3-pro-image-preview` — both values and labels should be updated to the stable IDs.
+**Applied 2026-07-22:**
+- `backend/handlers/google_gemini.py` now defaults to `gemini-3.1-flash-image`.
+- Backend and frontend node registries now expose `gemini-3.1-flash-image` and `gemini-3-pro-image`.
+- Direct-handler tests and contract examples pin the stable IDs.
 - `backend/cinema/identity.py`: any `"nano-banana"` references tied to model ID strings are fine (these are internal aliases, not sent to the API); only the `handle_nano_banana` default and node-def `value` fields send the model ID to the wire.
 
 Other params (aspect_ratio values, imageSize values, imageConfig path, generationConfig structure) — **no drift**. All confirmed matching the canonical docs.
@@ -93,12 +102,13 @@ The first pass of this audit (commit `6a30941`) changed two paths based on the p
 | `gemini-tts` | Google direct | `GOOGLE_API_KEY` | `/v1beta/models/{model}:generateContent` | sync | Gemini text-to-speech, named voice catalog |
 | `gemini-embeddings` | Google direct | `GOOGLE_API_KEY` | `/v1beta/models/{model}:embedContent` | sync | Text and multimodal embeddings |
 | `veo-3` | Google direct | `GOOGLE_API_KEY` | `/v1beta/models/{model}:predictLongRunning` | async-poll | Video generation, image-to-video, frame interpolation |
+| `gemini-omni-flash` | Google direct | `GOOGLE_API_KEY` | `/v1beta/interactions` | sync URI / async-poll inline | Conversational video gen/edit (Interactions API) |
+| `nano-banana-fal` | FAL | `FAL_KEY` | `fal-ai/nano-banana*` (model enum) | async-poll | FAL-hosted Nano Banana text-to-image |
+| `nano-banana-fal-edit` | FAL | `FAL_KEY` | `fal-ai/nano-banana*/edit` | async-poll | FAL-hosted multi-ref edit (up to 14 refs on NB2); cinema/character base option |
 
-Nebula does not currently expose FAL-routed Gemini/Nano Banana nodes. FAL
-endpoints exist (`fal-ai/nano-banana`, `fal-ai/nano-banana-2`,
-`fal-ai/nano-banana-pro`, plus matching `/edit` variants, and
-`fal-ai/gemini-25-flash-image` and `fal-ai/gemini-3-pro-image-preview`), but
-they are not wired as Nebula nodes today.
+**Cinema base models:** `seedream-4-5`, `nano-banana` (Google), `nano-banana-fal-edit` (FAL), `flux-kontext`.
+
+Legacy FAL slugs `fal-ai/gemini-25-flash-image` and `fal-ai/gemini-3-pro-image-preview` are selectable on the FAL nodes via the `model` enum.
 
 ## `gemini-chat` Params
 
@@ -122,9 +132,9 @@ Output: `text` (Text).
 
 | Param | Values | Default | Notes |
 |---|---|---|---|
-| `model` | `gemini-3.1-flash-image-preview`, `gemini-3-pro-image-preview`, `gemini-2.5-flash-image` | `gemini-3.1-flash-image-preview` | Nano Banana 2, Nano Banana Pro, Nano Banana respectively. |
-| `aspect_ratio` | `1:1`, `16:9`, `9:16`, `4:3`, `3:4`, `3:2`, `2:3`, `5:4`, `4:5`, `21:9`, plus `1:4`, `4:1`, `1:8`, `8:1` | `1:1` | Extreme ratios only visible/permitted on `gemini-3.1-flash-image-preview`. |
-| `imageSize` | `512`, `1K`, `2K`, `4K` | `1K` | Visible only on `gemini-3.1-flash-image-preview` and `gemini-3-pro-image-preview`. `512` is exclusive to `gemini-3.1-flash-image-preview`. `gemini-2.5-flash-image` is fixed-size. |
+| `model` | `gemini-3.1-flash-image`, `gemini-3.1-flash-lite-image`, `gemini-3-pro-image`, `gemini-2.5-flash-image` | `gemini-3.1-flash-image` | Nano Banana 2, Nano Banana 2 Lite, Nano Banana Pro, and Nano Banana respectively. |
+| `aspect_ratio` | `1:1`, `16:9`, `9:16`, `4:3`, `3:4`, `3:2`, `2:3`, `5:4`, `4:5`, `21:9`, plus `1:4`, `4:1`, `1:8`, `8:1` | `1:1` | Extreme ratios are only visible on `gemini-3.1-flash-image`. |
+| `imageSize` | `512`, `1K`, `2K`, `4K` | `1K` | Visible on the Gemini 3 image models. `512` is exclusive to `gemini-3.1-flash-image`; `gemini-2.5-flash-image` is fixed-size. |
 
 Inputs: `prompt` (Text, required), `images` (Image, optional, multiple).
 Outputs: `image` (Image), `text` (Text).
@@ -268,10 +278,10 @@ When choosing a Gemini-family node:
 | General text / vision Q&A | `gemini-chat` | `gemini-3-flash-preview` or `gemini-2.5-flash` |
 | Hardest reasoning / planning | `gemini-chat` | `gemini-3.1-pro-preview` with `thinkingLevel: high` |
 | Cheap bulk classification | `gemini-chat` | `gemini-3.1-flash-lite-preview` with `thinkingLevel: minimal` |
-| Fast image gen for iteration | `nano-banana` | `gemini-3.1-flash-image-preview` at `1K` |
-| Image with legible text or precise layout | `nano-banana` | `gemini-3-pro-image-preview` |
+| Fast image gen for iteration | `nano-banana` | `gemini-3.1-flash-image` at `1K` |
+| Image with legible text or precise layout | `nano-banana` | `gemini-3-pro-image` |
 | Cheapest single-image baseline | `nano-banana` | `gemini-2.5-flash-image` |
-| Character consistency across shots | `nano-banana` | `gemini-3.1-flash-image-preview`, stay within 4 character refs |
+| Character consistency across shots | `nano-banana` | `gemini-3.1-flash-image`, stay within 4 character refs |
 | Voice narration | `gemini-tts` | `gemini-2.5-pro-preview-tts` for fidelity, Flash TTS for cost |
 | Text or multimodal embeddings | `gemini-embeddings` | `gemini-embedding-001` for text, multimodal option once Nebula switches to stable ID |
 
