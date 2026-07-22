@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 import difflib
 import hashlib
 import json
@@ -15,7 +16,15 @@ from fastapi import FastAPI, Form, HTTPException, Request, UploadFile, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
 
-from models import ExecuteRequest, ExecuteNodeRequest, ValidationErrorEvent, ValidationErrorDetail, GraphNode, GraphEdge
+from models import (
+    ExecuteRequest,
+    ExecuteNodeRequest,
+    GenerateShotRequest,
+    ValidationErrorEvent,
+    ValidationErrorDetail,
+    GraphNode,
+    GraphEdge,
+)
 from models.events import ExecutionEvent, ExecutedEvent, ErrorEvent
 from execution.engine import execute_graph, validate_graph, topological_sort, get_subgraph, CycleError
 from execution.sync_runner import get_handler_registry
@@ -1134,6 +1143,274 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
     asyncio.create_task(_run())
 
     return {"status": "started", "nodeCount": len(sub_nodes)}
+
+
+# Per-node locks serialize concurrent single-shot merges on the SAME cinema node.
+# Generating two shots at once is supported (no global lock), so without this two
+# `_merge_shot_result` tasks could read-modify-write `cli_graph.nodes[id]` and the
+# last writer would drop the other's freshly-generated port. Keyed by node id so
+# unrelated nodes never block each other.
+_shot_merge_locks: dict[str, asyncio.Lock] = {}
+
+
+def _shot_merge_lock(node_id: str) -> asyncio.Lock:
+    lock = _shot_merge_locks.get(node_id)
+    if lock is None:
+        lock = asyncio.Lock()
+        _shot_merge_locks[node_id] = lock
+    return lock
+
+
+async def _merge_shot_result(
+    node_id: str,
+    shot_id: str,
+    executed_node: GraphNode | None,
+    captured_outputs: dict[str, Any],
+    *,
+    terminal_error: str | None = None,
+) -> dict[str, Any] | None:
+    """Merge a single-shot regeneration into the canonical cli_graph node WITHOUT
+    clobbering sibling shots.
+
+    Reads the LIVE persisted scene (kept fresh by the editor's debounced
+    param-sync) and patches ONLY the target shot's `output` + its one output PORT.
+    This is the key difference from a full snapshot write: while a slow generation
+    runs, the user may edit other shots on the canvas — patching the live scene
+    preserves those concurrent edits instead of reverting them to a request-time
+    snapshot. A per-node lock serializes overlapping single-shot merges so two
+    concurrent generates never drop each other's port.
+
+    When the target node never reaches ExecutedEvent, ``terminal_error`` marks
+    only the live target shot as failed while retaining its last good image and
+    output port. This prevents the request snapshot from restoring stale success
+    after an upstream failure. Returns the merged shot output dict, or None.
+    """
+    new_output: dict[str, Any] | None = None
+    if terminal_error is None and executed_node is not None:
+        sub_scene = (executed_node.params or {}).get("scene") or {}
+        sub_shots = sub_scene.get("shots") or []
+        if sub_shots and isinstance(sub_shots[0], dict):
+            new_output = sub_shots[0].get("output")
+
+    result_output = (
+        {"status": "error", "error": terminal_error}
+        if terminal_error is not None
+        else new_output
+    )
+
+    async with _shot_merge_lock(node_id):
+        node = cli_graph.nodes.get(node_id)
+        if node is None:
+            return result_output
+
+        # Patch ONLY the target shot's output on the live scene; siblings (incl.
+        # any edits made during the generation) are left exactly as they are.
+        params = dict(node.get("params") or {})
+        scene = params.get("scene")
+        if isinstance(scene, dict):
+            for shot in scene.get("shots") or []:
+                if isinstance(shot, dict) and str(shot.get("id")) == shot_id:
+                    if terminal_error is not None:
+                        # Keep the last successful image/hash available for
+                        # preview and downstream reuse, but make the terminal
+                        # status truthful and durable.
+                        failed_output = dict(shot.get("output") or {})
+                        failed_output.update({"status": "error", "error": terminal_error})
+                        shot["output"] = failed_output
+                        result_output = failed_output
+                    elif new_output is not None:
+                        shot["output"] = new_output
+                    break
+            params["scene"] = scene
+            node["params"] = params
+
+        # Merge the single regenerated port into the existing ports dict.
+        if terminal_error is None and isinstance(captured_outputs, dict) and captured_outputs:
+            shaped = {
+                k: (v if isinstance(v, dict) else {"type": "Any", "value": v})
+                for k, v in captured_outputs.items()
+            }
+            existing = dict(node.get("outputs") or {})
+            existing.update(_normalize_outputs_for_storage(shaped))
+            node["outputs"] = existing
+
+        cli_graph._maybe_persist()
+
+    return result_output
+
+
+class _ShotPassError(RuntimeError):
+    """Expected per-shot pass failure already expressed as user-facing text."""
+
+
+def _shot_task_error_message(exc: Exception) -> str:
+    if isinstance(exc, _ShotPassError):
+        return str(exc)
+    detail = str(exc).strip() or type(exc).__name__
+    return f"Shot generation failed: {detail}"
+
+
+async def _execute_single_shot_pass(
+    *,
+    node_id: str,
+    sub_nodes: list[GraphNode],
+    sub_edges: list[GraphEdge],
+    api_keys: dict[str, str],
+    use_cache: bool,
+) -> tuple[GraphNode | None, dict[str, Any]]:
+    """Run one scoped Cinema pass and require a target ExecutedEvent.
+
+    ``execute_graph`` reports normal node failures as ErrorEvent and returns, so
+    awaiting it is not proof that the Cinema node executed. Capturing an error
+    and then seeing no target ExecutedEvent is a terminal pass failure.
+    """
+    captured: dict[str, Any] = {"target_executed": False}
+
+    async def _emit_scoped(event: ExecutionEvent) -> None:
+        if isinstance(event, ExecutedEvent) and event.node_id == node_id:
+            captured["target_executed"] = True
+            captured["outputs"] = event.outputs
+            return
+        if isinstance(event, ErrorEvent) and "error" not in captured:
+            captured["error"] = event.friendly or event.error
+        await _emit_and_sync(event)
+
+    await execute_graph(
+        nodes=sub_nodes,
+        edges=sub_edges,
+        api_keys=api_keys,
+        handler_registry=get_handler_registry(emit=_emit_scoped),
+        emit=_emit_scoped,
+        cache=execution_cache if use_cache else None,
+    )
+
+    if not captured["target_executed"]:
+        raise _ShotPassError(
+            str(captured.get("error") or "Shot generation ended before the Cinema node completed.")
+        )
+
+    executed_node = next((node for node in sub_nodes if node.id == node_id), None)
+    return executed_node, captured.get("outputs") or {}
+
+
+async def _run_single_shot_task(
+    *,
+    node_id: str,
+    shot_id: str,
+    sub_nodes: list[GraphNode],
+    sub_edges: list[GraphEdge],
+    api_keys: dict[str, str],
+) -> None:
+    """Execute and persist one per-shot task, including terminal failures."""
+    import traceback
+
+    try:
+        executed_node, outputs = await _execute_single_shot_pass(
+            node_id=node_id,
+            sub_nodes=sub_nodes,
+            sub_edges=sub_edges,
+            api_keys=api_keys,
+            use_cache=True,
+        )
+    except _ShotPassError as exc:
+        await _merge_shot_result(
+            node_id,
+            shot_id,
+            None,
+            {},
+            terminal_error=_shot_task_error_message(exc),
+        )
+    except Exception as exc:
+        traceback.print_exc()
+        await _merge_shot_result(
+            node_id,
+            shot_id,
+            None,
+            {},
+            terminal_error=_shot_task_error_message(exc),
+        )
+    else:
+        await _merge_shot_result(node_id, shot_id, executed_node, outputs)
+    finally:
+        await _broadcast_graph_sync()
+
+
+@app.post("/api/cinema/generate-shot")
+async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
+    """Regenerate ONLY the named shot of a cinema-scene node.
+
+    Reuses the multi-shot handler by running it over a single-shot copy of the
+    scene, then merges that one result back into the canonical node so sibling
+    shots' outputs/ports are untouched. Upstream character/image inputs resolve
+    via the same subgraph mechanism as /api/execute-node."""
+    settings = load_settings()
+    api_keys = settings.get("apiKeys", {})
+    nodes = _normalize_execute_nodes(request.nodes)
+
+    target = next((n for n in nodes if n.id == request.node_id), None)
+    if target is None:
+        raise HTTPException(status_code=404, detail=f"Node '{request.node_id}' not found in graph")
+    if target.definition_id != "cinema-scene":
+        raise HTTPException(status_code=400, detail=f"Node '{request.node_id}' is not a cinema-scene node")
+
+    scene = (target.params or {}).get("scene")
+    if not isinstance(scene, dict):
+        raise HTTPException(status_code=400, detail="cinema-scene node has no scene spec")
+    shots = scene.get("shots") or []
+    shot = next(
+        (s for s in shots if isinstance(s, dict) and str(s.get("id")) == request.shot_id),
+        None,
+    )
+    if shot is None:
+        raise HTTPException(status_code=404, detail=f"Shot '{request.shot_id}' not found in scene")
+
+    # Build a single-shot copy of the scene so the handler regenerates ONLY this
+    # shot. An explicit seed (Part B variations run the same shot at N seeds) is
+    # injected into the base params channel.
+    single_scene = copy.deepcopy(scene)
+    single_scene["shots"] = [copy.deepcopy(shot)]
+    if request.seed is not None:
+        base = single_scene.get("base")
+        if not isinstance(base, dict):
+            base = {}
+            single_scene["base"] = base
+        base_params = dict(base.get("params") or {})
+        base_params["seed"] = request.seed
+        base["params"] = base_params
+
+    single_node = target.model_copy(update={"params": {**(target.params or {}), "scene": single_scene}})
+    patched_nodes = [single_node if n.id == request.node_id else n for n in nodes]
+
+    sub_nodes, sub_edges = get_subgraph(patched_nodes, request.edges, request.node_id)
+    if not sub_nodes:
+        raise HTTPException(status_code=404, detail=f"Node '{request.node_id}' not found in graph")
+
+    errors = validate_graph(sub_nodes, sub_edges, api_keys)
+    if errors:
+        await manager.broadcast(ValidationErrorEvent(errors=errors))
+        return {"status": "validation_error", "errorCount": len(errors)}
+
+    try:
+        topological_sort(sub_nodes, sub_edges)
+    except CycleError as exc:
+        await manager.broadcast(
+            ValidationErrorEvent(
+                errors=[{"node_id": "", "port_id": "", "message": f"Subgraph contains a cycle: {exc}"}]
+            )
+        )
+        return {"status": "cycle_error"}
+
+    asyncio.create_task(
+        _run_single_shot_task(
+            node_id=request.node_id,
+            shot_id=request.shot_id,
+            sub_nodes=sub_nodes,
+            sub_edges=sub_edges,
+            api_keys=api_keys,
+        )
+    )
+
+    return {"status": "started", "shotId": request.shot_id}
 
 
 # ---------- CLI: Node discovery ----------

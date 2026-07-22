@@ -53,6 +53,28 @@ export async function executeNode(
   return response.json();
 }
 
+export async function generateCinemaShot(
+  nodes: Array<{ id: string; definitionId: string; params: Record<string, unknown>; outputs: Record<string, unknown> }>,
+  edges: Array<{ id: string; source: string; sourceHandle: string | null | undefined; target: string; targetHandle: string | null | undefined }>,
+  nodeId: string,
+  shotId: string,
+  seed?: number,
+): Promise<{ status: string; shotId?: string; errorCount?: number }> {
+  const response = await apiFetch('/api/cinema/generate-shot', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ nodes, edges, nodeId, shotId, seed }),
+  });
+  if (!response.ok) {
+    let detail = '';
+    try { detail = (await response.json()).detail ?? ''; } catch {
+      /* Non-JSON error responses still fall back to status text. */
+    }
+    throw new Error(detail || `Generate shot failed: ${response.status} ${response.statusText}`);
+  }
+  return response.json();
+}
+
 export async function getSettings(): Promise<Record<string, unknown>> {
   const response = await apiFetch('/api/settings');
   if (!response.ok) throw new Error(`Get settings failed: ${response.status}`);

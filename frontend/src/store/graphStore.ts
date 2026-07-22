@@ -18,6 +18,7 @@ import { openRunRecord, closeRunRecord, type RunRecord } from '../lib/runHistory
 import {
   executeGraph as apiExecuteGraph,
   executeNode as apiExecuteNode,
+  generateCinemaShot as apiGenerateShot,
   fetchReplicateSchema,
   type ExecutionValidationError,
   type OpenRouterModel,
@@ -413,6 +414,9 @@ interface GraphState {
   resetExecution: () => void;
   handleExecutionEvent: (event: ExecutionEvent) => void;
   executeNode: (nodeId: string) => Promise<void>;
+  /** Regenerate a single cinema-scene shot (does NOT touch the global
+   *  isExecuting lock — the rail spinner scopes to that one shot's status). */
+  executeShot: (nodeId: string, shotId: string, seed?: number) => Promise<void>;
   executeCluster: (nodeIds: string[]) => Promise<void>;
   executeClusterConcurrent: (nodeIds: string[]) => Promise<void>;
   authorGenerationCluster: (request: GenerationRequest) => Promise<{ modelNodeIds: string[]; allNodeIds: string[] }>;
@@ -1999,6 +2003,63 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         ),
         isExecuting: false,
       }));
+    }
+  },
+
+  executeShot: async (nodeId, shotId, seed) => {
+    const { nodes, edges } = get();
+    const node = nodes.find((n) => n.id === nodeId);
+    if (!node || node.data.definitionId !== 'cinema-scene') return;
+    const scene = (node.data.params as { scene?: CinemaSceneSpec }).scene;
+    if (!scene || !Array.isArray(scene.shots)) return;
+    const shot = scene.shots.find((s) => s.id === shotId);
+    if (!shot) return;
+    // The shot's own 'running' status doubles as the in-flight guard — no global
+    // isExecuting lock, so other shots (and the rest of the canvas) stay usable.
+    if (shot.output?.status === 'running') return;
+
+    // Helper to patch just this one shot's output, leaving siblings untouched.
+    const patchShot = (
+      src: CinemaSceneSpec,
+      output: NonNullable<CinemaShot['output']>,
+    ): CinemaSceneSpec => ({
+      ...src,
+      shots: src.shots.map((s) => (s.id === shotId ? { ...s, output } : s)),
+    });
+
+    // Optimistically mark this shot running (local only — the backend streams the
+    // terminal scene back via graphSync).
+    applySceneToNode(set, nodeId, patchShot(scene, { ...(shot.output ?? {}), status: 'running' }));
+
+    const graphNodes = nodes.map((n) => ({
+      id: n.id,
+      definitionId: n.data.definitionId,
+      params: paramsForBackend(n.data.definitionId, n.data.params as Record<string, unknown>),
+      outputs: {},
+    }));
+    const graphEdges = edges.map((e) => ({
+      id: e.id, source: e.source, sourceHandle: e.sourceHandle, target: e.target, targetHandle: e.targetHandle,
+    }));
+
+    // Clear the optimistic spinner to an error state when no graphSync will
+    // follow (up-front validation failure or a thrown request).
+    const failShot = (message: string) => {
+      const cur = get().nodes.find((n) => n.id === nodeId);
+      const curScene = (cur?.data.params as { scene?: CinemaSceneSpec } | undefined)?.scene;
+      if (!curScene) return;
+      const curShot = curScene.shots.find((s) => s.id === shotId);
+      applySceneToNode(set, nodeId, patchShot(curScene, { ...(curShot?.output ?? {}), status: 'error', error: message }));
+    };
+
+    try {
+      const result = await apiGenerateShot(graphNodes, graphEdges, nodeId, shotId, seed);
+      if (result.status === 'validation_error') {
+        failShot('Validation failed. Check inputs and API keys.');
+      }
+      // status 'started' → the generated image (or per-shot error) arrives via graphSync.
+    } catch (err) {
+      console.error('Failed to generate shot:', err);
+      failShot(err instanceof Error ? err.message : 'Failed to generate shot.');
     }
   },
 

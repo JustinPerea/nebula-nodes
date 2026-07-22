@@ -42,3 +42,18 @@ class ExecuteNodeRequest(BaseModel):
     target_node_id: str = Field(alias="targetNodeId")
 
     model_config = {"populate_by_name": True}
+
+
+class GenerateShotRequest(BaseModel):
+    """Regenerate a SINGLE shot of a cinema-scene node. Carries the full graph
+    (nodes + edges) like ExecuteNodeRequest so upstream character/image inputs
+    resolve, plus the cinema node id and the target shot id."""
+
+    nodes: list[GraphNode]
+    edges: list[GraphEdge]
+    node_id: str = Field(alias="nodeId")
+    shot_id: str = Field(alias="shotId")
+    # Optional explicit seed (Part B variations run the same shot at N seeds).
+    seed: int | None = None
+
+    model_config = {"populate_by_name": True}
