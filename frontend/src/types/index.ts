@@ -100,6 +100,8 @@ export interface ModelNodeDefinition {
   apiEndpoint: string;
   envKeyName: string | string[];
   executionPattern: ExecutionPattern;
+  /** Short, user-facing provider limitation shown in both Canvas and Create. */
+  capabilityNote?: string;
   inputPorts: PortDefinition[];
   outputPorts: PortDefinition[];
   params: ParamDefinition[];

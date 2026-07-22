@@ -12,6 +12,7 @@ from services.cache import ExecutionCache
 from services.image_input import is_remote_or_data_uri
 from services.output import resolve_output_ref
 from services.document_extract import extract_text
+from services.provider_capabilities import gemini_omni_capability_error
 from execution.error_classifier import classify_error
 from models.events import (
     ExecutionEvent,
@@ -367,9 +368,13 @@ def validate_graph(
     errors: list[ValidationErrorDetail] = []
 
     connected_ports: set[tuple[str, str]] = set()
+    node_by_id = {node.id: node for node in nodes}
+    incoming_edges: dict[str, list[GraphEdge]] = {node.id: [] for node in nodes}
     for edge in edges:
         if edge.target_handle:
             connected_ports.add((edge.target, edge.target_handle))
+        if edge.target in incoming_edges:
+            incoming_edges[edge.target].append(edge)
 
     for node in nodes:
         node_def = _node_def_for(node.definition_id)
@@ -420,6 +425,44 @@ def validate_graph(
                     message=f"Missing API key: {key_display}",
                 )
             )
+
+        if node.definition_id == "gemini-omni-flash":
+            prompt = ""
+            has_previous_interaction = bool(
+                str(node.params.get("previous_interaction_id") or "").strip()
+            )
+            has_video_input = False
+
+            for edge in incoming_edges.get(node.id, []):
+                if edge.target_handle == "previous_interaction_id":
+                    has_previous_interaction = True
+                elif edge.target_handle == "video":
+                    has_video_input = True
+                elif edge.target_handle == "prompt" and edge.source_handle:
+                    source = node_by_id.get(edge.source)
+                    if not source:
+                        continue
+                    if source.definition_id == "text-input":
+                        prompt = str(source.params.get("value") or "")
+                    elif edge.source_handle in source.outputs:
+                        output = source.outputs[edge.source_handle]
+                        if isinstance(output.value, str):
+                            prompt = output.value
+
+            capability_error = gemini_omni_capability_error(
+                prompt,
+                has_previous_interaction=has_previous_interaction,
+                has_video_input=has_video_input,
+                task=str(node.params.get("task") or ""),
+            )
+            if capability_error:
+                errors.append(
+                    ValidationErrorDetail(
+                        node_id=node.id,
+                        port_id="prompt",
+                        message=capability_error,
+                    )
+                )
 
     return errors
 

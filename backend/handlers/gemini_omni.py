@@ -12,6 +12,7 @@ import httpx
 from models.events import ExecutionEvent, ProgressEvent
 from models.graph import GraphNode, PortValueDict
 from services.output import get_run_dir
+from services.provider_capabilities import enforce_gemini_omni_capabilities
 
 INTERACTIONS_URL = "https://generativelanguage.googleapis.com/v1beta/interactions"
 FILES_URL = "https://generativelanguage.googleapis.com/v1beta/files"
@@ -183,6 +184,20 @@ async def handle_gemini_omni(
     if video_input and video_input.value:
         video_value = str(video_input.value)
 
+    previous_input = inputs.get("previous_interaction_id")
+    previous_id = (
+        previous_input.value
+        if previous_input and previous_input.value
+        else node.params.get("previous_interaction_id")
+    )
+    task = node.params.get("task")
+    enforce_gemini_omni_capabilities(
+        prompt_text,
+        has_previous_interaction=bool(previous_id),
+        has_video_input=bool(video_value),
+        task=str(task) if task else None,
+    )
+
     input_payload = await _build_input_parts(prompt_text, image_values, video_value)
 
     delivery = str(node.params.get("delivery") or "uri")
@@ -203,16 +218,9 @@ async def handle_gemini_omni(
     if aspect_ratio:
         request_body["response_format"]["aspect_ratio"] = str(aspect_ratio)
 
-    task = node.params.get("task")
     if task:
         request_body["generation_config"] = {"video_config": {"task": str(task)}}
 
-    previous_input = inputs.get("previous_interaction_id")
-    previous_id = (
-        previous_input.value
-        if previous_input and previous_input.value
-        else node.params.get("previous_interaction_id")
-    )
     if previous_id:
         request_body["previous_interaction_id"] = str(previous_id)
 

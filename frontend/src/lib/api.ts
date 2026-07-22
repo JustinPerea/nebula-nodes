@@ -1,10 +1,23 @@
 import { apiFetch, rewriteBackendAssetUrls } from './backend';
 import type { Character, Moodboard } from '../types';
 
+export interface ExecutionValidationError {
+  nodeId: string;
+  portId: string;
+  message: string;
+}
+
+export interface ExecutionStartResult {
+  status: string;
+  nodeCount?: number;
+  errorCount?: number;
+  errors?: ExecutionValidationError[];
+}
+
 export async function executeGraph(
   nodes: Array<{ id: string; definitionId: string; params: Record<string, unknown>; outputs: Record<string, unknown> }>,
   edges: Array<{ id: string; source: string; sourceHandle: string | null | undefined; target: string; targetHandle: string | null | undefined }>,
-): Promise<{ status: string; errorCount?: number }> {
+): Promise<ExecutionStartResult> {
   const response = await apiFetch('/api/execute', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -24,7 +37,7 @@ export async function executeNode(
   nodes: Array<{ id: string; definitionId: string; params: Record<string, unknown>; outputs: Record<string, unknown> }>,
   edges: Array<{ id: string; source: string; sourceHandle: string | null | undefined; target: string; targetHandle: string | null | undefined }>,
   targetNodeId: string,
-): Promise<{ status: string; nodeCount?: number; errorCount?: number }> {
+): Promise<ExecutionStartResult> {
   const response = await apiFetch('/api/execute-node', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

@@ -3147,6 +3147,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     apiEndpoint: 'gemini-omni-flash-preview',
     envKeyName: 'GOOGLE_API_KEY',
     executionPattern: 'async-poll',
+    capabilityNote: 'Stateful prompts edit the existing clip in place. Gemini Omni cannot extend duration; use Veo 3.1 for video extension.',
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
       { id: 'images', label: 'Reference Images', dataType: 'Image', required: false, multiple: true },

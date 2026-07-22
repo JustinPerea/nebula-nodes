@@ -1,5 +1,43 @@
 # Implementation Notes
 
+## 2026-07-22 - Gemini Omni provider capability guardrail
+
+Google's current Gemini Omni documentation supports stateful video editing via
+`previous_interaction_id`, but explicitly excludes video extension. The live
+provider test confirmed that an extension-style follow-up reaches Google and
+fails with a paid-request 400, while an in-place edit succeeds.
+
+Decisions:
+- Keep one backend capability rule as the source of truth. `validate_graph`
+  catches direct Text Input plus edit-context graphs before execution starts;
+  the Gemini Omni handler repeats the check after inputs resolve so composed or
+  otherwise dynamic prompts cannot slip through to the provider.
+- Classify only explicit duration-extension language and only when an edit
+  context exists (previous interaction, video input, or explicit Edit task).
+  Ordinary edit prompts and fresh text-to-video prompts remain valid.
+- Return structured validation details from both execution endpoints. Create
+  and Canvas already share these endpoints, so both surfaces can show the exact
+  capability guidance instead of overwriting it with a generic validation
+  message.
+- Preserve connected `previous_interaction_id` precedence over the manual
+  fallback. The guardrail uses that same resolved value and does not alter the
+  request shape for valid edits.
+
+Validation:
+- 1,116 backend tests and 392 frontend tests passed. Frontend lint, production
+  build, and the 142-node contract gate also passed.
+- The Create UI was browser-checked with Gemini Omni selected; the capability
+  note is visible alongside the expected Task, Aspect Ratio, and Delivery
+  controls. Canvas exact-error behavior is covered at the store layer, and both
+  `/api/execute` and `/api/execute-node` return the identical structured error.
+- A provider client mock proves the runtime backstop raises before
+  `httpx.AsyncClient` is instantiated, so the unsupported request cannot incur a
+  paid submit.
+- The checked-in `backend/.venv` points at an old repository location and its
+  pytest launcher is not runnable. Verification used the existing Miniconda
+  Python environment. The managed session also denied Python localhost binds,
+  so a live backend restart was not available for browser QA.
+
 ## 2026-07-22 - PR #19 provider/runtime merge-readiness review
 
 Independently re-verified the Google Gemini image and Omni contracts plus the FAL Nano Banana 2/Pro schemas before promoting the provider-runtime branch.

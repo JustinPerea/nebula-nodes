@@ -5116,6 +5116,7 @@
     "apiEndpoint": "gemini-omni-flash-preview",
     "envKeyName": "GOOGLE_API_KEY",
     "executionPattern": "async-poll",
+    "capabilityNote": "Stateful prompts edit the existing clip in place. Gemini Omni cannot extend duration; use Veo 3.1 for video extension.",
     "inputPorts": [
       {
         "id": "prompt",

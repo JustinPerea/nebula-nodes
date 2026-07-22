@@ -110,6 +110,12 @@ body.app-slava-restraint .create-composer__prompt {
   line-height: 1.4;
   padding: 6px 6px 10px;
 }
+body.app-slava-restraint .create-composer__capability-note {
+  margin: 0 6px 6px;
+  color: var(--sr-ink-meta);
+  font-size: 12px;
+  line-height: 1.35;
+}
 body.app-slava-restraint .create-composer__controls {
   display: flex;
   align-items: center;

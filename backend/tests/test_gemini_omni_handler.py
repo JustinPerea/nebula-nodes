@@ -6,6 +6,7 @@ import pytest
 
 from handlers.gemini_omni import handle_gemini_omni
 from models.graph import GraphNode, PortValueDict
+from services.provider_capabilities import GEMINI_OMNI_EXTENSION_ERROR
 
 
 def _make_node(params=None):
@@ -115,6 +116,29 @@ async def test_gemini_omni_connected_previous_interaction_takes_precedence():
 
     body = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
     assert body["previous_interaction_id"] == "v1_connected"
+
+
+@pytest.mark.asyncio
+async def test_gemini_omni_extension_is_blocked_before_provider_submit():
+    with patch("handlers.gemini_omni.httpx.AsyncClient") as MockClient:
+        with pytest.raises(ValueError, match="cannot extend") as exc_info:
+            await handle_gemini_omni(
+                _make_node({"previous_interaction_id": "v1_manual"}),
+                {
+                    "prompt": PortValueDict(
+                        type="Text",
+                        value="Continue the same clip: make the circle shrink to a dot.",
+                    ),
+                    "previous_interaction_id": PortValueDict(
+                        type="Text",
+                        value="v1_connected",
+                    ),
+                },
+                {"GOOGLE_API_KEY": "test-key"},
+            )
+
+    assert str(exc_info.value) == GEMINI_OMNI_EXTENSION_ERROR
+    MockClient.assert_not_called()
 
 
 @pytest.mark.asyncio

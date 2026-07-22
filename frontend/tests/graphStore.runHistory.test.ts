@@ -41,6 +41,35 @@ describe('graphStore run-history lifecycle', () => {
     expect(runHistory[0].status).toBe('failed');
   });
 
+  it('shows the exact backend capability error on a Canvas node run', async () => {
+    const message = 'Gemini Omni capability guardrail: use Veo 3.1 for video extension.';
+    vi.spyOn(api, 'executeNode').mockResolvedValue({
+      status: 'validation_error',
+      errors: [{ nodeId: 'omni', portId: 'prompt', message }],
+    });
+    useGraphStore.setState({
+      nodes: [{
+        id: 'omni',
+        type: 'model-node',
+        position: { x: 0, y: 0 },
+        data: {
+          label: 'Gemini Omni Flash',
+          definitionId: 'gemini-omni-flash',
+          params: {},
+          state: 'idle',
+          outputs: {},
+        },
+      }],
+      edges: [],
+    });
+
+    await useGraphStore.getState().executeNode('omni');
+
+    const omni = useGraphStore.getState().nodes.find((node) => node.id === 'omni');
+    expect(omni?.data.state).toBe('error');
+    expect(omni?.data.error).toBe(message);
+  });
+
   it('a failed run does not get mis-marked cancelled by the NEXT run (invariant)', async () => {
     const spy = vi.spyOn(api, 'executeGraph').mockResolvedValue({ status: 'validation_error' } as never);
 

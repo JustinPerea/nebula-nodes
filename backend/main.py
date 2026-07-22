@@ -15,7 +15,7 @@ from fastapi import FastAPI, Form, HTTPException, Request, UploadFile, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
 
-from models import ExecuteRequest, ExecuteNodeRequest, ValidationErrorEvent, GraphNode, GraphEdge
+from models import ExecuteRequest, ExecuteNodeRequest, ValidationErrorEvent, ValidationErrorDetail, GraphNode, GraphEdge
 from models.events import ExecutionEvent, ExecutedEvent, ErrorEvent
 from execution.engine import execute_graph, validate_graph, topological_sort, get_subgraph, CycleError
 from execution.sync_runner import get_handler_registry
@@ -785,6 +785,22 @@ def _event_to_camel(event: ExecutionEvent) -> dict[str, Any]:
     return result
 
 
+def _validation_response(errors: list[ValidationErrorDetail]) -> dict[str, Any]:
+    """Keep REST validation details aligned with the WebSocket event shape."""
+    return {
+        "status": "validation_error",
+        "errorCount": len(errors),
+        "errors": [
+            {
+                "nodeId": error.node_id,
+                "portId": error.port_id,
+                "message": error.message,
+            }
+            for error in errors
+        ],
+    }
+
+
 # ---------- WebSocket endpoint ----------
 
 @app.websocket("/ws")
@@ -1019,7 +1035,7 @@ async def execute(request: ExecuteRequest) -> dict:
     errors = validate_graph(nodes, request.edges, api_keys)
     if errors:
         await manager.broadcast(ValidationErrorEvent(errors=errors))
-        return {"status": "validation_error", "errorCount": len(errors)}
+        return _validation_response(errors)
 
     try:
         topological_sort(nodes, request.edges)
@@ -1080,7 +1096,7 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
     errors = validate_graph(sub_nodes, sub_edges, api_keys)
     if errors:
         await manager.broadcast(ValidationErrorEvent(errors=errors))
-        return {"status": "validation_error", "errorCount": len(errors)}
+        return _validation_response(errors)
 
     try:
         topological_sort(sub_nodes, sub_edges)

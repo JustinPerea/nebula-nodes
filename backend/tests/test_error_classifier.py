@@ -56,6 +56,14 @@ def test_blocked_beats_400() -> None:
     assert category == "blocked"
 
 
+def test_capability_guardrail_preserves_actionable_message() -> None:
+    raw = "Gemini Omni capability guardrail: use Veo 3.1 for video extension."
+    category, friendly, retryable = classify_error(raw)
+    assert category == "invalid_input"
+    assert friendly == raw
+    assert retryable is False
+
+
 def test_unknown_preserves_truncated_raw() -> None:
     raw = "x" * 500
     _, friendly, _ = classify_error(raw)
