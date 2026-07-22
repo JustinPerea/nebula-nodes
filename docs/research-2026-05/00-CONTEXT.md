@@ -68,8 +68,8 @@ Nebula Nodes is a local-first, BYOK (bring-your-own-keys) visual node-based AI p
 - `docs/HERMES-SETUP.md` — full Daedalus install path (Nous Portal / OpenRouter / other Hermes provider)
 - `docs/MODEL_REFERENCE.md` — 44 KB model reference. **Says "77 nodes" — outdated, current count is 100.**
 - `docs/perplexity-research/` — original April 2026 spec set (`AI Node Editor — Architecture & Interaction Spec v2.md`, `AI Node Editor — Complete Model & API Parameter Spec v2.md`, `nebula-edge-cases.md`, `nebula-gap-analysis.md`)
-- `docs/superpowers/plans/` — 11 milestone plans from M1-interactive-canvas through `2026-04-23-daedalus-hermes-integration.md`
-- `docs/superpowers/specs/` — 7 design specs paired with the plans
+- `docs/contracts/`: platform-neutral provider contracts; normative for iPad/browser/Mac parity
+- ~~`docs/superpowers/`~~: removed 2026-07-22 (historical milestone plans; superseded by `docs/contracts/`)
 - `docs/model-providers/{google,hunyuan,meshy,openai}/*.md` — two-file split (canonical reference + Nebula integration notes) added 2026-05-10; **rest of providers not yet migrated**
 - `themes/slava-restraint/CASE_STUDY.md` — full case study of the UI system pass
 - `.planning/style-reference-node-PLAN.md` — unimplemented plan for the Higgsfield-gap-close first node

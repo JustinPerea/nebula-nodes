@@ -1,5 +1,43 @@
 # Implementation Notes
 
+## 2026-07-22 - Malformed Cinema refs and FileProvider object audit
+
+Four loose refs had Finder-style duplicate names ending in ` 2`: local and
+remote-tracking copies for both Cinema branches. Their alternate tips were
+preserved by the existing `archive/cinema-per-shot-pre-repair-2026-07-22` and
+`archive/cinema-variations-pre-repair-2026-07-22` tags before deleting only the
+four malformed ref files. The valid Cinema refs remain at `d4421a8` and
+`0a172c9`; `git fetch --prune`, `show-ref`, and `log --all` work afterward.
+
+The repository lives in an iCloud/FileProvider-backed folder. A default
+`git fsck --full` blocks when it reaches one of 2,210 dataless loose-object
+placeholders. A fresh GitHub mirror restored every remote-reachable object; an
+isolated all-ref audit then proved 8,700 branch/tag objects complete and passed
+`git fsck --full --no-reflogs --no-cache --no-dangling`. The remaining nine
+unavailable blobs belong only to dangling or reflog-only trees, not any current
+branch, tag, or index entry.
+
+Decisions:
+- Keep the original FileProvider object store untouched. Do not replace it or
+  discard reflogs merely to make the default scanner quiet.
+- Preserve every current ref in the verified 61 MB recovery bundle at
+  `.git/recovery/object-store-2026-07-22/pre-repair-all-refs.bundle`.
+- Treat branch/tag connectivity as green, while retaining the default-fsck
+  FileProvider limitation as an explicit local-environment risk.
+
+## 2026-07-22 - PR #21 retired-plan reference cleanup
+
+The repository documentation cleanup intentionally removes completed historical
+plans and specs. Review found that a small set of retained backlog and
+implementation notes still linked to those deleted paths.
+
+Decisions:
+- Preserve the historical context in the retained documents, but describe the
+  deleted plans as recoverable from Git history instead of leaving dead links.
+- Keep the Quiver placement alternatives as decision history while making clear
+  that the retired master plan is no longer a live integration target.
+- Do not restore any retired plan or spec solely to keep a historical link alive.
+
 ## 2026-07-22 - Gemini Omni provider capability guardrail
 
 Google's current Gemini Omni documentation supports stateful video editing via
@@ -56,6 +94,26 @@ Validation:
 - Capped live Gemini Omni smoke exercised URI delivery end to end and saved a 3.008-second, 825417-byte video with an interaction ID.
 - `npm audit --omit=dev` reports zero production vulnerabilities. The full audit reports five pre-existing development-only findings; this PR does not change the affected toolchain dependencies.
 - Existing non-blocking warnings remain: two backend test coroutine warnings and Vite's large-chunk/lottie dependency warnings.
+
+## 2026-07-22: Provider contract refresh and repository recovery
+
+- **Preserved the inherited mixed worktree before editing.** Created `codex/provider-contract-refresh` directly from `main` with all existing modified, deleted, and untracked files still present. This keeps `main` available as the clean upstream baseline without stashing or rewriting unattributed work.
+- **Repackaged the checkpoint as a three-level draft PR stack without moving it.** `codex/provider-runtime-safety` starts at the refreshed `origin/main`; `codex/provider-contracts-skills` adds only the portable contracts and repo-backed provider skills; `codex/repository-docs-cleanup` adds only historical-doc retirement, the local-engine research checkpoint, README updates, and implementation notes. The original `codex/provider-contract-refresh` branch remains fixed at `33f15cc` as the recovery checkpoint.
+- **Kept the generated model reference with the runtime level.** `docs/MODEL_REFERENCE.md` is generated from the node registry changed by the runtime PR. Moving it to the next PR would make the runtime branch fail its own drift gate, so the generated artifact travels with its source while the portable contract corpus remains isolated in the second level.
+- **Treat provider routing and provider schemas as separate responsibilities.** Node-specific model selection belongs in `backend/execution/sync_runner.py`; `backend/handlers/fal_universal.py` must continue forwarding arbitrary endpoint schemas and therefore cannot reserve the generic `model` key globally.
+- **Live vendor documentation overrides the bundled provider skills.** The checked-in Gemini and FAL skills are useful routing references but contain preview-era model IDs. Production IDs and response-delivery behavior will be pinned to the current Google and FAL primary documentation and covered by regression tests.
+- **Do not combine historical-doc deletion, provider skills, provider contracts, Gemini/FAL features, and cinema changes in one commit.** The inherited worktree mixes these independent concerns. Each scope will be validated and committed separately so it can be reviewed or reverted independently.
+- **Use `contracts/fixtures/handlers/` as the only provider-contract fixture source.** The inherited `backend/tests/fixtures/{fal,google,openai}` files were untracked duplicate copies and no test referenced them. Keeping two writable trees already produced a stale Omni fixture, so the duplicates were removed and the contract README now names the portable root as the single golden source.
+- **Pin a compatible model-viewer/Three pair instead of bypassing npm peers.** The inherited lock combined `@google/model-viewer@4.2.0` (`three ^0.182.0`) with `three@0.184.0`, so clean `npm ci` failed. Updated to `@google/model-viewer@4.3.1` with `three@0.183.2`; both versions are older than 14 days, satisfy model-viewer and every React Three/Remotion peer range, and are pinned exactly to keep future installs reproducible.
+- **Closed the pre-existing brand showcase lint gate while restoring the frontend baseline.** Seven fixed palette swatches used static inline backgrounds. They are now named CSS modifier classes with the same RGB values; no visual behavior changed. The Helix mask also dropped an unused angle parameter; callers may still pass the computed angle, and JavaScript ignores the extra argument.
+- **Reconciled provider skill conflict copies instead of committing both versions.** Eleven Finder-style `* 2.md` files were either exact duplicates or older copies. The newer skill files retained later cancellation, streaming, model, and caching guidance; corrupted Claude-to-Codex substitutions were repaired against the executable node registry and current Anthropic documentation before the duplicates were removed.
+- **Kept FAL route slugs distinct from direct Google model IDs.** FAL still publishes legacy route names containing `gemini-3-pro-image-preview`, so those slugs and skill filenames remain intact. Direct Gemini and Vertex examples now use the stable `gemini-3-pro-image` model ID.
+- **Retired historical milestone plans without breaking live references.** `docs/superpowers/` is superseded by the portable contract corpus and remains recoverable from Git history. The two remaining live references were made self-contained before deletion: the hackathon evidence guide embeds its demo sequence, and the Remotion schema names its implementation as the current runtime contract.
+- **Integrated PR #5's image-input validation as a fresh commit on the recovered baseline.** The branch was 50 commits behind `main`, but its single commit transplanted cleanly while retaining the stable Gemini IDs and newer provider routing. The shared loader now fails loudly for missing, unreadable, non-file, and unsupported local image references; remote and data URI behavior remains unchanged.
+- **Kept Cinema PRs #15 and #16 review-only.** Both branches have no submitted GitHub review and are eight `main` commits behind. PR #15 needs an explicit terminal error merge when its background task fails, otherwise the final graph sync can restore stale success after the optimistic spinner. PR #16 also lets a promoted thumbnail update `shot.output.imageUrl` without updating the dynamic `shot_<id>` port, so the UI and downstream graph can disagree. Neither branch was merged.
+- **Merged the unique local-engine research checkpoint, archived the other stale lines.** The ComfyUI/Flora/Weave comparison was documentation-only and applied cleanly. Fifteen fully merged local branches were safely deleted. Six stale non-worktree branches and both stashes were tagged under `archive/` before their local refs were removed; the stash tags retain the merge commits and their untracked-file parents.
+- **Preserved two cloud-backed worktrees instead of forcing deletion.** `feat/batch-cross-pair` had two dirty dev-routing edits; they were security-scanned and committed as `2d7634d` before its archive tag was created. The old frontend-baseline and batch worktree directories could not be removed because both Git deletion and a Trash move blocked on cloud file hydration. Their branch refs, worktree registrations, and archive tags remain intact.
+- **Final verification is green with known warnings only.** Backend: 1,111 passed with the two pre-existing AsyncMock coroutine warnings in `test_async_poll_runner.py`. Frontend: 389 tests, lint, inline-style guard, Slava CSS scope guard, and production build passed. Contract parity and generated model-reference checks passed for 142 definitions; the build retained the known large-chunk and `lottie-web` direct-eval warnings.
 
 ## 2026-06-10 (night) — Full Ideogram direct-API surface: 7 direct-only nodes incl. custom-model training
 
@@ -157,7 +215,7 @@ Three follow-on features after the user asked where generated images live (answe
 
 ## 2026-06-03 — Create view Phase 3 (presets / styles library)
 
-Branch `feat/create-view-p2-p3` (same branch as P2). A library of named "styles" — prompt fragment + params + optional model — that pre-fill the composer, plus save-current-as-style. Plan: `docs/superpowers/plans/2026-06-03-create-view-phase-3.md`.
+Branch `feat/create-view-p2-p3` (same branch as P2). A library of named "styles" — prompt fragment + params + optional model — that pre-fill the composer, plus save-current-as-style. The historical implementation plan was retired in the 2026-07-22 documentation cleanup and remains recoverable from Git history.
 
 **Decisions / non-obvious calls:**
 - **Typographic preset cards, no shipped thumbnails.** Higgsfield merchandises styles with auto-playing video tiles; we ship ALL-CAPS name + category over a deterministic per-id Slava gradient. This sidesteps two real constraints at once: (1) shipping binary PNGs through the toolchain is awkward, and (2) the backend serves **only** `OUTPUT_ROOT` (one `StaticFiles` mount) — there's no arbitrary-file route, so a repo-shipped thumbnail isn't directly servable without copying it into the outputs dir at seed time. Real thumbnails are deferred to P4. The one allowed inline style is `PresetCard`'s `--preset-hue` custom property (a dynamic data value — `check:inline-styles` only flags static visual props).
@@ -170,7 +228,7 @@ Branch `feat/create-view-p2-p3` (same branch as P2). A library of named "styles"
 
 ## 2026-06-03 — Create view Phase 2 (gallery, refs, variations, persistence)
 
-Branch `feat/create-view-p2-p3`. Five sub-features: results gallery/History, reference-image attach, quantity>1 variations, all output types in the stage, and **backend-authored persistence**. Built subagent-driven in batches (Phase A persistence → B/C refs+quantity → D/E gallery+output-alignment) with spec + code-quality reviews. Plan: `docs/superpowers/plans/2026-06-03-create-view-phase-2.md`.
+Branch `feat/create-view-p2-p3`. Five sub-features: results gallery/History, reference-image attach, quantity>1 variations, all output types in the stage, and **backend-authored persistence**. Built subagent-driven in batches (Phase A persistence → B/C refs+quantity → D/E gallery+output-alignment) with spec + code-quality reviews. The historical implementation plan was retired in the 2026-07-22 documentation cleanup and remains recoverable from Git history.
 
 **The big reversal — clusters are now persisted (P1 debt closed).** P1 authored clusters client-side (uuid ids, never persisted). P2 flips `authorGenerationCluster` to **backend-first**: it POSTs the cluster to a new additive route `POST /api/graph/cluster` (mirrors `/api/graph/import` but no `clear()`), which adds the nodes/edges to `cli_graph` (assigning `n`-ids, persisting to `state.json` via `_maybe_persist`, normalizing image-input params) and returns them in React Flow shape. The client applies the returned nodes directly + tags model nodes `_createOrigin`. Switching to canvas shows the cluster; it now survives reload.
 
@@ -185,7 +243,7 @@ Branch `feat/create-view-p2-p3`. Five sub-features: results gallery/History, ref
 
 ## 2026-06-02 — Create view (Higgsfield-style creation surface), Phase 1
 
-Branch `feat/create-view`. A new full-screen `viewMode: 'create'` surface (4th studio) with a Higgsfield-style bottom-floating composer. Each **Generate** authors a real `text-input → model` node cluster and runs only that cluster via the existing engine. Spec: `docs/superpowers/specs/2026-06-02-higgsfield-create-view-design.md`; plan: `docs/superpowers/plans/2026-06-02-create-view-phase-1.md`.
+Branch `feat/create-view`. A new full-screen `viewMode: 'create'` surface (4th studio) with a Higgsfield-style bottom-floating composer. Each **Generate** authors a real `text-input → model` node cluster and runs only that cluster via the existing engine. The historical design spec and implementation plan were retired in the 2026-07-22 documentation cleanup and remain recoverable from Git history.
 
 **Architecture — graph-builder (chosen over single-node / hybrid).** `graphStore.authorGenerationCluster(request)` builds nodes/edges and `executeCluster(nodeIds)` POSTs only the cluster to `/api/execute` (reusing `lib/api.executeGraph`). Zero changes to the execution engine, handlers, or node definitions — the surface inherits output rendering, WS streaming, error handling, undo, and canvas editability for free. This is why it's ~640 lines of source for a full creation UI.
 
@@ -290,7 +348,7 @@ Branch `feat/create-view`. A new full-screen `viewMode: 'create'` surface (4th s
 
 ## 2026-05-29 — Soul Cinema (Phase 0 + 1): cinematic pillars + Cinema Studio
 
-Built overnight via a 7-wave dependency-ordered subagent workflow. Spec: `docs/superpowers/specs/2026-05-29-soul-cinema-nebula-design.md`. The framing decision: Higgsfield Soul Cinema is a *stack* (cinematic base + Soul ID + Soul HEX + film-look + keyframe handoff), which maps 1:1 onto our node graph — so we add the two genuinely-missing pillars as deterministic local nodes and a multi-shot Studio editor, reusing existing models for everything else.
+Built overnight via a 7-wave dependency-ordered subagent workflow. The historical design spec was retired in the 2026-07-22 documentation cleanup and remains recoverable from Git history. The framing decision: Higgsfield Soul Cinema is a *stack* (cinematic base + Soul ID + Soul HEX + film-look + keyframe handoff), which maps 1:1 onto our node graph — so we add the two genuinely-missing pillars as deterministic local nodes and a multi-shot Studio editor, reusing existing models for everything else.
 
 **Decisions made beyond the spec (collated from wave reports):**
 - **`_parse_recraft_color` was extracted into `backend/cinema/color.py`** as the single source of truth and re-imported back into `execution/sync_runner.py` (the old inline def removed), so `from execution.sync_runner import _parse_recraft_color` stays valid for `test_fal_handler.py`. Honors "extract/share, don't duplicate."

@@ -1,5 +1,6 @@
 /**
- * Phase 2 RemotionNode schema — see docs/superpowers/specs/2026-05-21-remotion-editor-mode-spec.md.
+ * Phase 2 RemotionNode schema. The historical design spec remains available
+ * in Git history; this implementation is the current runtime contract.
  *
  * ISOLATED from the Phase 1 NLE editor types (EditClip in
  * lib/editor/virtualPlayback.ts). Do not import EditClip here and do not

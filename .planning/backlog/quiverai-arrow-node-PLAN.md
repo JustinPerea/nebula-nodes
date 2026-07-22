@@ -1,6 +1,6 @@
 # QuiverAI Arrow Integration — PLAN
 
-> **Status:** READY 2026-05-19. Drafted as the **Phase 4 candidate** for the catalog-hardening sprint (`docs/superpowers/plans/2026-05-16-node-input-api-contract-hardening.md`). Phase 4 was previously "UI quality pass" with unenumerated scope — this plan either replaces that scope or coexists as Phase 4a. See [Open: where this plan lives](#open-where-this-plan-actually-lives).
+> **Status:** READY 2026-05-19. Drafted as the **Phase 4 candidate** for the catalog-hardening sprint. That retired master plan remains recoverable from Git history. Phase 4 was previously "UI quality pass" with unenumerated scope — this backlog file preserves the proposed replacement scope and its placement discussion.
 >
 > Provider: **QuiverAI Arrow** — first model to break 1500 Elo on Design Arena (SVG track). Treats visuals as structured editable programs ("visual code generation"). API surface verified against canonical docs at https://docs.quiver.ai on 2026-05-19.
 >
@@ -323,12 +323,12 @@ Acceptance criteria:
 - **SVG sanitization not in v1.** Arrow returns SVG markup we write to disk and serve via `/api/outputs/`. Rendering happens in `<img>` tags only (no script execution path). If we ever inline-render SVGs as raw DOM (the unsafe React HTML-injection prop), we need DOMPurify first. Out of scope unless inline DOM rendering becomes a requirement.
 - **The two unused operations.** `svg_edit` and `svg_animate` surface in `supported_operations` but have no endpoints. Client is structured so adding them later is a single new method + new handler. Plan files for these operations are out of scope; revisit when Quiver ships.
 
-## Open: where this plan actually lives
+## Historical placement discussion
 
-Three legitimate homes — pick one:
+The three placement options below referred to a master plan retired during the 2026-07-22 documentation cleanup. They are preserved as decision history, not as live integration targets:
 
-- **(i) Insert as the active Phase 4 of the master plan.** Modify `docs/superpowers/plans/2026-05-16-node-input-api-contract-hardening.md` to replace the "UI quality pass" bullets with this plan's tasks. Master plan stays the single source of truth.
-- **(ii) Adjacent plan referenced from the master.** Keep this file in `.planning/backlog/`, link from the master plan's Phase 4 section. Master plan's Phase 4 becomes a pointer. **(Recommended — smallest blast radius.)**
-- **(iii) Promote to a new top-level plan in `docs/superpowers/plans/`.** Treats this as a self-contained sprint rather than a phase of catalog-hardening. Justified if Quiver integration is the most important thing for the next two weeks.
+- **(i) Insert as the active Phase 4 of the retired master plan.** This would have replaced its "UI quality pass" bullets and kept that plan as the source of truth.
+- **(ii) Keep this adjacent backlog plan and reference it from the retired master.** This was the recommended, smallest-blast-radius option at the time.
+- **(iii) Promote this to a new top-level implementation plan.** This would treat the work as a self-contained sprint if Quiver becomes the next active milestone.
 
 If we ship this AND want to surface it as a portfolio moment on `justinperea.com`, (iii) is the cleanest — gives the plan a stable URL and treats it as its own milestone with its own Begin/End markers.
