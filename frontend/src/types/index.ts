@@ -128,6 +128,11 @@ export interface CinemaShot {
   /** Lets one shot deviate from the shared palette/look without breaking the rest. */
   overrides?: { palette?: Partial<CinemaSceneSpec['palette']>; look?: Partial<CinemaSceneSpec['look']> };
   output?: { imageUrl?: string; status: 'idle' | 'running' | 'done' | 'error'; error?: string; hash?: string };
+  /** Candidate variations of this shot (one base-model run per distinct seed).
+   *  The canonical image (output.imageUrl, the dynamic port, Send-to-motion) is
+   *  the `selectedVariation`. Persists on the scene spec so save/load keeps them. */
+  variations?: { url: string; seed: number }[];
+  selectedVariation?: number;
 }
 
 /** The editor-managed spec stored on `cinema-scene` node's `data.params.scene`

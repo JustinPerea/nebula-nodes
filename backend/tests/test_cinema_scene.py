@@ -307,6 +307,42 @@ async def test_character_bundle_expands_verbatim(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
+async def test_shot_seed_override_wins_over_bundle_seed(monkeypatch) -> None:
+    """A per-shot `_seedOverride` (set by the variations path) is AUTHORITATIVE:
+    it must override the Character bundle's seed so seeded variations actually
+    vary even when a Character is attached. Regression for the verifier's Part A
+    seed-precedence note."""
+    v1 = _write_base_image(rgb=(10, 200, 10))
+
+    captured: dict[str, Any] = {}
+
+    async def capture(node, inputs, api_keys):
+        captured["seed"] = node.params.get("seed")
+        return {"image": {"type": "Image", "value": _write_base_image()}}
+
+    _patch_base(monkeypatch, capture)
+
+    bundle = _bundle([v1], seed=84)
+    scene = {
+        "version": 1,
+        "base": {"model": "seedream-4-5"},
+        "prompt": "a forest at dawn",
+        "aspectRatio": "16:9",
+        # The variations path sets _seedOverride on the (single) shot.
+        "shots": [{"id": "s1", "prompt": "wide shot", "_seedOverride": 777}],
+    }
+    await handle_cinema_scene(
+        _scene_node(scene),
+        inputs={"character": PortValueDict(type="Character", value=bundle)},
+        api_keys={"FAL_KEY": "x"},
+        emit=None,
+    )
+
+    # The override wins over the bundle's seed (84).
+    assert captured["seed"] == 777
+
+
+@pytest.mark.asyncio
 async def test_character_bundle_exceeding_max_refs_raises(monkeypatch) -> None:
     """A bundle whose view count exceeds the base model's reference cap fails
     fast for the whole scene with the clear anti-FLORA capability error."""

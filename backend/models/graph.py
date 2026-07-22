@@ -53,7 +53,23 @@ class GenerateShotRequest(BaseModel):
     edges: list[GraphEdge]
     node_id: str = Field(alias="nodeId")
     shot_id: str = Field(alias="shotId")
-    # Optional explicit seed (Part B variations run the same shot at N seeds).
+    # Optional explicit base seed. With `variations` > 1 the batch uses
+    # seed, seed+1, … (or random seeds when omitted).
     seed: int | None = None
+    # When > 1, regenerate the shot this many times at distinct seeds and store
+    # the results as selectable variations. None / 1 → a single canonical run.
+    # Bounded 1–4 server-side (matches the panel stepper) so a raw POST can't
+    # queue an unbounded run of real base-model calls.
+    variations: int | None = Field(None, ge=1, le=4)
+
+    model_config = {"populate_by_name": True}
+
+
+class PromoteShotVariationRequest(BaseModel):
+    """Promote one stored variation to the canonical shot output and port."""
+
+    node_id: str = Field(alias="nodeId")
+    shot_id: str = Field(alias="shotId")
+    index: int = Field(ge=0)
 
     model_config = {"populate_by_name": True}

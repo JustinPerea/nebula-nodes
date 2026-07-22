@@ -59,11 +59,12 @@ export async function generateCinemaShot(
   nodeId: string,
   shotId: string,
   seed?: number,
-): Promise<{ status: string; shotId?: string; errorCount?: number }> {
+  variations?: number,
+): Promise<{ status: string; shotId?: string; variations?: number; errorCount?: number }> {
   const response = await apiFetch('/api/cinema/generate-shot', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ nodes, edges, nodeId, shotId, seed }),
+    body: JSON.stringify({ nodes, edges, nodeId, shotId, seed, variations }),
   });
   if (!response.ok) {
     let detail = '';
@@ -71,6 +72,26 @@ export async function generateCinemaShot(
       /* Non-JSON error responses still fall back to status text. */
     }
     throw new Error(detail || `Generate shot failed: ${response.status} ${response.statusText}`);
+  }
+  return response.json();
+}
+
+export async function promoteCinemaShotVariation(
+  nodeId: string,
+  shotId: string,
+  index: number,
+): Promise<{ status: string; shotId: string; selectedVariation: number; imageUrl: string }> {
+  const response = await apiFetch('/api/cinema/promote-shot-variation', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ nodeId, shotId, index }),
+  });
+  if (!response.ok) {
+    let detail = '';
+    try { detail = (await response.json()).detail ?? ''; } catch {
+      /* Non-JSON error responses still fall back to status text. */
+    }
+    throw new Error(detail || `Promote shot variation failed: ${response.status} ${response.statusText}`);
   }
   return response.json();
 }

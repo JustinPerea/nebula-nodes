@@ -163,6 +163,7 @@ Validation:
 - **A completed `execute_graph` call does not prove the Cinema node executed.** Normal upstream failures are emitted as `ErrorEvent` and `execute_graph` returns without a target `ExecutedEvent`. The per-shot task now requires that target event, captures the first user-facing error, and persists it on the live target shot instead of reading stale success from the request snapshot.
 - **Failure reconciliation preserves useful state.** A terminal error changes only the target shot status and error text. Its last successful image, hash, and dynamic output port remain available, and sibling edits made during the slow pass remain untouched under the existing per-node merge lock.
 - **Keep the Cinema stack independent from provider work.** The original repair did not duplicate the then-unmerged provider fixes into #15. The final restack inherits those merged fixes, CI, and dependency remediation from `main` while keeping the Cinema diff reviewable on its own.
+- **Variation promotion is one scene-plus-port transaction.** PR #16 now promotes through a Cinema-specific backend endpoint guarded by the same per-node lock as generation merges. It persists `selectedVariation`, replaces the canonical shot output without retaining a stale hash/error, updates `shot_<id>`, and broadcasts one graph sync. The frontend mirrors both fields after success and uses the same local operation for frontend-only nodes.
 
 ## 2026-06-10 (night) — Full Ideogram direct-API surface: 7 direct-only nodes incl. custom-model training
 

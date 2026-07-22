@@ -22,9 +22,11 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
   const refInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [sentToMotion, setSentToMotion] = useState(false);
+  const [variationCount, setVariationCount] = useState(2);
 
   const executeNode = useGraphStore((s) => s.executeNode);
   const executeShot = useGraphStore((s) => s.executeShot);
+  const promoteShotVariation = useGraphStore((s) => s.promoteShotVariation);
   const isExecuting = useGraphStore((s) => s.isExecuting);
   const addNodeAndConnect = useGraphStore((s) => s.addNodeAndConnect);
   const addNode = useGraphStore((s) => s.addNode);
@@ -95,6 +97,10 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
   const handleGenerateAll = () => {
     executeNode(cinemaNodeId);
   };
+  // Variations: one base-model run per distinct seed, collected into the strip.
+  const handleGenerateVariations = () => {
+    executeShot(cinemaNodeId, shot.id, undefined, variationCount);
+  };
 
   // Send to motion (spec §8): create a veo-3 node on the canvas and wire THIS
   // shot's output port into its first-frame Image input. CLI-origin scene nodes
@@ -144,11 +150,24 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
         )}
       </div>
 
-      {/* Variations strip — placeholder until multi-output is wired. The scene
-          handler currently emits a single image per shot; when variations land
-          they will populate here from shot.output. */}
+      {/* Variations strip — click a candidate to promote it to canonical. While a
+          batch generates, the optimistic 'running' state shows above; the strip
+          fills when the batch completes (graphSync). Falls back to the single
+          preview when no variations exist yet. */}
       <div className="cinema-shot-panel__variations">
-        {previewUrl ? (
+        {shot.variations && shot.variations.length > 0 ? (
+          shot.variations.map((v, i) => (
+            <button
+              key={`${v.seed}-${i}`}
+              type="button"
+              className={`cinema-shot-panel__variation${shot.selectedVariation === i ? ' cinema-shot-panel__variation--active' : ''}`}
+              onClick={() => void promoteShotVariation(cinemaNodeId, shot.id, i)}
+              title={`Use variation ${i + 1} (seed ${v.seed})`}
+            >
+              <img src={backendAssetUrlSync(v.url)} alt={`Variation ${i + 1}`} draggable={false} />
+            </button>
+          ))
+        ) : previewUrl ? (
           <div className="cinema-shot-panel__variation cinema-shot-panel__variation--active">
             <img src={backendAssetUrlSync(previewUrl)} alt="" draggable={false} />
           </div>
@@ -210,6 +229,39 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
           <input type="checkbox" checked={lookOverridden} onChange={toggleLookOverride} />
           <span>Override look</span>
         </label>
+      </div>
+
+      <div className="cinema-shot-panel__variations-control">
+        <span className="cinema-shot-panel__variations-label">Variations</span>
+        <div className="cinema-shot-panel__stepper">
+          <button
+            type="button"
+            className="cinema-shot-panel__stepper-btn"
+            onClick={() => setVariationCount((c) => Math.max(1, c - 1))}
+            disabled={variationCount <= 1 || shotRunning}
+            aria-label="Fewer variations"
+          >
+            −
+          </button>
+          <span className="cinema-shot-panel__stepper-value">{variationCount}</span>
+          <button
+            type="button"
+            className="cinema-shot-panel__stepper-btn"
+            onClick={() => setVariationCount((c) => Math.min(4, c + 1))}
+            disabled={variationCount >= 4 || shotRunning}
+            aria-label="More variations"
+          >
+            +
+          </button>
+        </div>
+        <button
+          type="button"
+          className="cinema-shot-panel__action"
+          onClick={handleGenerateVariations}
+          disabled={shotRunning || isExecuting}
+        >
+          Generate {variationCount}
+        </button>
       </div>
 
       <div className="cinema-shot-panel__actions">

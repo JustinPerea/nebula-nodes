@@ -469,6 +469,7 @@ body.app-slava-restraint .cinema-shot-panel__error {
 
 body.app-slava-restraint .cinema-shot-panel__variations {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
@@ -478,10 +479,60 @@ body.app-slava-restraint .cinema-shot-panel__variation {
   border: 1px solid var(--sr-edge);
   border-radius: 3px;
   overflow: hidden;
+  padding: 0;
   background: rgba(0, 0, 0, 0.25);
 }
 
+/* The strip items are <button>s when promotable. */
+body.app-slava-restraint button.cinema-shot-panel__variation { cursor: pointer; }
+body.app-slava-restraint button.cinema-shot-panel__variation:hover { border-color: var(--sr-ink-meta); }
+
 body.app-slava-restraint .cinema-shot-panel__variation--active { border-color: var(--sr-accent); }
+
+body.app-slava-restraint .cinema-shot-panel__variations-control {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+body.app-slava-restraint .cinema-shot-panel__variations-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--sr-ink-meta);
+}
+
+body.app-slava-restraint .cinema-shot-panel__stepper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+body.app-slava-restraint .cinema-shot-panel__stepper-btn {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  background: var(--sr-surface-control, rgba(255, 255, 255, 0.04));
+  border: 1px solid var(--sr-edge);
+  color: var(--sr-ink);
+  border-radius: 3px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1;
+}
+
+body.app-slava-restraint .cinema-shot-panel__stepper-btn:hover:not(:disabled) { border-color: var(--sr-accent); }
+body.app-slava-restraint .cinema-shot-panel__stepper-btn:disabled { opacity: var(--sr-disabled-opacity, 0.5); cursor: default; }
+
+body.app-slava-restraint .cinema-shot-panel__stepper-value {
+  min-width: 14px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--sr-ink);
+}
 
 body.app-slava-restraint .cinema-shot-panel__variation img {
   width: 100%;

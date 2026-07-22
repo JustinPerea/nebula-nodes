@@ -19,6 +19,7 @@ import {
   executeGraph as apiExecuteGraph,
   executeNode as apiExecuteNode,
   generateCinemaShot as apiGenerateShot,
+  promoteCinemaShotVariation as apiPromoteShotVariation,
   fetchReplicateSchema,
   type ExecutionValidationError,
   type OpenRouterModel,
@@ -415,8 +416,11 @@ interface GraphState {
   handleExecutionEvent: (event: ExecutionEvent) => void;
   executeNode: (nodeId: string) => Promise<void>;
   /** Regenerate a single cinema-scene shot (does NOT touch the global
-   *  isExecuting lock — the rail spinner scopes to that one shot's status). */
-  executeShot: (nodeId: string, shotId: string, seed?: number) => Promise<void>;
+   *  isExecuting lock — the rail spinner scopes to that one shot's status).
+   *  `variations` > 1 generates that many seeded candidates into shot.variations. */
+  executeShot: (nodeId: string, shotId: string, seed?: number, variations?: number) => Promise<void>;
+  /** Promote a variation to the canonical scene image and dynamic output port. */
+  promoteShotVariation: (nodeId: string, shotId: string, index: number) => Promise<void>;
   executeCluster: (nodeIds: string[]) => Promise<void>;
   executeClusterConcurrent: (nodeIds: string[]) => Promise<void>;
   authorGenerationCluster: (request: GenerationRequest) => Promise<{ modelNodeIds: string[]; allNodeIds: string[] }>;
@@ -590,6 +594,37 @@ function applySceneToNode(set: GraphSet, nodeId: string, scene: CinemaSceneSpec)
       }
       return true;
     }),
+  }));
+}
+
+/** Apply a promoted Cinema variation to both the visible scene and the local
+ *  dynamic output value. The backend performs the same mutation atomically for
+ *  CLI-origin nodes; this local application keeps downstream canvas state in
+ *  sync immediately and supports frontend-only nodes. */
+function applyShotVariationPromotion(
+  set: GraphSet,
+  nodeId: string,
+  scene: CinemaSceneSpec,
+  shotId: string,
+  imageUrl: string,
+): void {
+  applySceneToNode(set, nodeId, scene);
+  const portId = shotPortId(shotId);
+  set((state) => ({
+    nodes: state.nodes.map((node) =>
+      node.id === nodeId
+        ? {
+            ...node,
+            data: {
+              ...node.data,
+              outputs: {
+                ...node.data.outputs,
+                [portId]: { type: 'Image' as const, value: imageUrl },
+              },
+            },
+          }
+        : node,
+    ),
   }));
 }
 
@@ -2006,7 +2041,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     }
   },
 
-  executeShot: async (nodeId, shotId, seed) => {
+  executeShot: async (nodeId, shotId, seed, variations) => {
     const { nodes, edges } = get();
     const node = nodes.find((n) => n.id === nodeId);
     if (!node || node.data.definitionId !== 'cinema-scene') return;
@@ -2052,15 +2087,54 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     };
 
     try {
-      const result = await apiGenerateShot(graphNodes, graphEdges, nodeId, shotId, seed);
+      const result = await apiGenerateShot(graphNodes, graphEdges, nodeId, shotId, seed, variations);
       if (result.status === 'validation_error') {
         failShot('Validation failed. Check inputs and API keys.');
       }
-      // status 'started' → the generated image (or per-shot error) arrives via graphSync.
+      // status 'started' → the generated image(s) (or per-shot error) arrive via graphSync.
     } catch (err) {
       console.error('Failed to generate shot:', err);
       failShot(err instanceof Error ? err.message : 'Failed to generate shot.');
     }
+  },
+
+  promoteShotVariation: async (nodeId, shotId, index) => {
+    const initialNode = get().nodes.find((node) => node.id === nodeId);
+    if (!initialNode || initialNode.data.definitionId !== 'cinema-scene') return;
+
+    if (CLI_ID_RE.test(nodeId)) {
+      try {
+        await apiPromoteShotVariation(nodeId, shotId, index);
+      } catch (err) {
+        console.error('Failed to promote shot variation:', err);
+        return;
+      }
+    }
+
+    // Re-read after the await because graphSync may have delivered a newer live
+    // scene while the backend promotion was in flight. Patch that scene, not the
+    // stale snapshot captured before the request.
+    const node = get().nodes.find((candidate) => candidate.id === nodeId);
+    if (!node || node.data.definitionId !== 'cinema-scene') return;
+    const scene = (node.data.params as { scene?: CinemaSceneSpec }).scene;
+    if (!scene || !Array.isArray(scene.shots)) return;
+    const shot = scene.shots.find((candidate) => candidate.id === shotId);
+    const variation = shot?.variations?.[index];
+    if (!shot || !variation) return;
+
+    const nextScene: CinemaSceneSpec = {
+      ...scene,
+      shots: scene.shots.map((candidate) =>
+        candidate.id === shotId
+          ? {
+              ...candidate,
+              selectedVariation: index,
+              output: { imageUrl: variation.url, status: 'done' as const },
+            }
+          : candidate,
+      ),
+    };
+    applyShotVariationPromotion(set, nodeId, nextScene, shotId, variation.url);
   },
 
   executeCluster: async (nodeIds) => {
