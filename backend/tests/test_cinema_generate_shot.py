@@ -158,6 +158,153 @@ class TestMergeShotResult:
         assert shots["b"]["output"]["imageUrl"] == "URL_B_new"
         cli_graph.nodes.pop("n1", None)
 
+    def test_terminal_error_preserves_live_scene_and_last_good_port(self):
+        """A failed background pass must replace the optimistic running state
+        without erasing the last good image or any concurrent sibling edit."""
+        from main import _merge_shot_result, cli_graph
+
+        self._seed_cli_node()
+        cli_graph.nodes["n1"]["params"]["scene"]["shots"][0]["prompt"] = "pa_EDITED"
+
+        returned = asyncio.run(
+            _merge_shot_result(
+                "n1",
+                "b",
+                None,
+                {},
+                terminal_error="Reference input failed",
+            )
+        )
+
+        node = cli_graph.nodes["n1"]
+        shots = {s["id"]: s for s in node["params"]["scene"]["shots"]}
+        assert returned == {
+            "imageUrl": "URL_B_old",
+            "status": "error",
+            "error": "Reference input failed",
+        }
+        assert shots["a"]["prompt"] == "pa_EDITED"
+        assert shots["b"]["output"] == returned
+        assert shots["c"]["output"]["imageUrl"] == "URL_C"
+        assert node["outputs"] == {
+            "shot_a": {"type": "Image", "value": "URL_A"},
+            "shot_b": {"type": "Image", "value": "URL_B_old"},
+            "shot_c": {"type": "Image", "value": "URL_C"},
+        }
+        cli_graph.nodes.pop("n1", None)
+
+    @pytest.mark.asyncio
+    async def test_background_error_event_persists_terminal_shot_error(
+        self, monkeypatch
+    ):
+        """execute_graph returns normally after upstream ErrorEvent. Absence of
+        the target ExecutedEvent must still reconcile the shot and broadcast."""
+        from main import _run_single_shot_task, cli_graph
+        from models.events import ErrorEvent
+        from models.graph import GraphNode
+
+        self._seed_cli_node()
+        cli_graph.nodes["n1"]["params"]["scene"]["shots"][2]["prompt"] = "pc_EDITED"
+        emitted = []
+        broadcasts = []
+
+        async def fake_execute_graph(**kwargs):
+            await kwargs["emit"](
+                ErrorEvent(
+                    node_id="upstream",
+                    error="raw upstream failure",
+                    friendly="Reference input failed",
+                )
+            )
+
+        async def fake_emit_and_sync(event):
+            emitted.append(event)
+
+        async def fake_broadcast():
+            broadcasts.append(True)
+
+        monkeypatch.setattr("main.execute_graph", fake_execute_graph)
+        monkeypatch.setattr("main._emit_and_sync", fake_emit_and_sync)
+        monkeypatch.setattr("main._broadcast_graph_sync", fake_broadcast)
+
+        target = GraphNode(
+            id="n1",
+            definitionId="cinema-scene",
+            params={
+                "scene": {
+                    "shots": [
+                        {"id": "b", "output": {"imageUrl": "STALE", "status": "done"}}
+                    ]
+                }
+            },
+        )
+        await _run_single_shot_task(
+            node_id="n1",
+            shot_id="b",
+            sub_nodes=[target],
+            sub_edges=[],
+            api_keys={},
+        )
+
+        node = cli_graph.nodes["n1"]
+        shots = {s["id"]: s for s in node["params"]["scene"]["shots"]}
+        assert shots["b"]["output"] == {
+            "imageUrl": "URL_B_old",
+            "status": "error",
+            "error": "Reference input failed",
+        }
+        assert shots["c"]["prompt"] == "pc_EDITED"
+        assert node["outputs"]["shot_b"]["value"] == "URL_B_old"
+        assert len(emitted) == 1
+        assert broadcasts == [True]
+        cli_graph.nodes.pop("n1", None)
+
+    @pytest.mark.asyncio
+    async def test_background_exception_persists_terminal_shot_error(
+        self, monkeypatch
+    ):
+        from main import _run_single_shot_task, cli_graph
+        from models.graph import GraphNode
+
+        self._seed_cli_node()
+        broadcasts = []
+
+        async def fake_execute_graph(**_kwargs):
+            raise RuntimeError("executor exploded")
+
+        async def fake_broadcast():
+            broadcasts.append(True)
+
+        monkeypatch.setattr("main.execute_graph", fake_execute_graph)
+        monkeypatch.setattr("main._broadcast_graph_sync", fake_broadcast)
+
+        target = GraphNode(
+            id="n1",
+            definitionId="cinema-scene",
+            params={"scene": {"shots": [{"id": "b"}]}},
+        )
+        await _run_single_shot_task(
+            node_id="n1",
+            shot_id="b",
+            sub_nodes=[target],
+            sub_edges=[],
+            api_keys={},
+        )
+
+        shot_b = next(
+            shot
+            for shot in cli_graph.nodes["n1"]["params"]["scene"]["shots"]
+            if shot["id"] == "b"
+        )
+        assert shot_b["output"] == {
+            "imageUrl": "URL_B_old",
+            "status": "error",
+            "error": "Shot generation failed: executor exploded",
+        }
+        assert cli_graph.nodes["n1"]["outputs"]["shot_b"]["value"] == "URL_B_old"
+        assert broadcasts == [True]
+        cli_graph.nodes.pop("n1", None)
+
     def test_concurrent_merges_on_same_node_keep_both_ports(self):
         """Two single-shot generates completing close together must each keep
         their port — i.e. the merge MERGES into the existing ports dict rather

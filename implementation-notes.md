@@ -157,6 +157,13 @@ Validation:
 - **Preserved two cloud-backed worktrees instead of forcing deletion.** `feat/batch-cross-pair` had two dirty dev-routing edits; they were security-scanned and committed as `2d7634d` before its archive tag was created. The old frontend-baseline and batch worktree directories could not be removed because both Git deletion and a Trash move blocked on cloud file hydration. Their branch refs, worktree registrations, and archive tags remain intact.
 - **Final verification is green with known warnings only.** Backend: 1,111 passed with the two pre-existing AsyncMock coroutine warnings in `test_async_poll_runner.py`. Frontend: 389 tests, lint, inline-style guard, Slava CSS scope guard, and production build passed. Contract parity and generated model-reference checks passed for 142 definitions; the build retained the known large-chunk and `lottie-web` direct-eval warnings.
 
+## 2026-07-22: Cinema PR repair
+
+- **Preserve the review stack before rewriting it.** Tagged the original PR #15 tip `66599b7` as `archive/cinema-per-shot-pre-repair-2026-07-22` and the original PR #16 tip `4468ba1` as `archive/cinema-variations-pre-repair-2026-07-22` before rebasing either branch.
+- **A completed `execute_graph` call does not prove the Cinema node executed.** Normal upstream failures are emitted as `ErrorEvent` and `execute_graph` returns without a target `ExecutedEvent`. The per-shot task now requires that target event, captures the first user-facing error, and persists it on the live target shot instead of reading stale success from the request snapshot.
+- **Failure reconciliation preserves useful state.** A terminal error changes only the target shot status and error text. Its last successful image, hash, and dynamic output port remain available, and sibling edits made during the slow pass remain untouched under the existing per-node merge lock.
+- **Keep the Cinema stack independent from provider work.** The original repair did not duplicate the then-unmerged provider fixes into #15. The final restack inherits those merged fixes, CI, and dependency remediation from `main` while keeping the Cinema diff reviewable on its own.
+
 ## 2026-06-10 (night) — Full Ideogram direct-API surface: 7 direct-only nodes incl. custom-model training
 
 User wanted EVERYTHING the direct API offers, not just the dual-route nodes. Pulled the full OpenAPI (developer.ideogram.ai/openapi.json), enumerated all 27 endpoints, and wired every current (non-legacy) one. Registry 131 → **138**.
