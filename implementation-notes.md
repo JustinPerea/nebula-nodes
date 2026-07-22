@@ -1,5 +1,30 @@
 # Implementation Notes
 
+## 2026-07-22 - Malformed Cinema refs and FileProvider object audit
+
+Four loose refs had Finder-style duplicate names ending in ` 2`: local and
+remote-tracking copies for both Cinema branches. Their alternate tips were
+preserved by the existing `archive/cinema-per-shot-pre-repair-2026-07-22` and
+`archive/cinema-variations-pre-repair-2026-07-22` tags before deleting only the
+four malformed ref files. The valid Cinema refs remain at `d4421a8` and
+`0a172c9`; `git fetch --prune`, `show-ref`, and `log --all` work afterward.
+
+The repository lives in an iCloud/FileProvider-backed folder. A default
+`git fsck --full` blocks when it reaches one of 2,210 dataless loose-object
+placeholders. A fresh GitHub mirror restored every remote-reachable object; an
+isolated all-ref audit then proved 8,700 branch/tag objects complete and passed
+`git fsck --full --no-reflogs --no-cache --no-dangling`. The remaining nine
+unavailable blobs belong only to dangling or reflog-only trees, not any current
+branch, tag, or index entry.
+
+Decisions:
+- Keep the original FileProvider object store untouched. Do not replace it or
+  discard reflogs merely to make the default scanner quiet.
+- Preserve every current ref in the verified 61 MB recovery bundle at
+  `.git/recovery/object-store-2026-07-22/pre-repair-all-refs.bundle`.
+- Treat branch/tag connectivity as green, while retaining the default-fsck
+  FileProvider limitation as an explicit local-environment risk.
+
 ## 2026-07-22 - PR #21 retired-plan reference cleanup
 
 The repository documentation cleanup intentionally removes completed historical
