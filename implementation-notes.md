@@ -1,5 +1,18 @@
 # Implementation Notes
 
+## 2026-07-22 - PR #21 retired-plan reference cleanup
+
+The repository documentation cleanup intentionally removes completed historical
+plans and specs. Review found that a small set of retained backlog and
+implementation notes still linked to those deleted paths.
+
+Decisions:
+- Preserve the historical context in the retained documents, but describe the
+  deleted plans as recoverable from Git history instead of leaving dead links.
+- Keep the Quiver placement alternatives as decision history while making clear
+  that the retired master plan is no longer a live integration target.
+- Do not restore any retired plan or spec solely to keep a historical link alive.
+
 ## 2026-07-22 - Gemini Omni provider capability guardrail
 
 Google's current Gemini Omni documentation supports stateful video editing via
@@ -177,7 +190,7 @@ Three follow-on features after the user asked where generated images live (answe
 
 ## 2026-06-03 — Create view Phase 3 (presets / styles library)
 
-Branch `feat/create-view-p2-p3` (same branch as P2). A library of named "styles" — prompt fragment + params + optional model — that pre-fill the composer, plus save-current-as-style. Plan: `docs/superpowers/plans/2026-06-03-create-view-phase-3.md`.
+Branch `feat/create-view-p2-p3` (same branch as P2). A library of named "styles" — prompt fragment + params + optional model — that pre-fill the composer, plus save-current-as-style. The historical implementation plan was retired in the 2026-07-22 documentation cleanup and remains recoverable from Git history.
 
 **Decisions / non-obvious calls:**
 - **Typographic preset cards, no shipped thumbnails.** Higgsfield merchandises styles with auto-playing video tiles; we ship ALL-CAPS name + category over a deterministic per-id Slava gradient. This sidesteps two real constraints at once: (1) shipping binary PNGs through the toolchain is awkward, and (2) the backend serves **only** `OUTPUT_ROOT` (one `StaticFiles` mount) — there's no arbitrary-file route, so a repo-shipped thumbnail isn't directly servable without copying it into the outputs dir at seed time. Real thumbnails are deferred to P4. The one allowed inline style is `PresetCard`'s `--preset-hue` custom property (a dynamic data value — `check:inline-styles` only flags static visual props).
@@ -190,7 +203,7 @@ Branch `feat/create-view-p2-p3` (same branch as P2). A library of named "styles"
 
 ## 2026-06-03 — Create view Phase 2 (gallery, refs, variations, persistence)
 
-Branch `feat/create-view-p2-p3`. Five sub-features: results gallery/History, reference-image attach, quantity>1 variations, all output types in the stage, and **backend-authored persistence**. Built subagent-driven in batches (Phase A persistence → B/C refs+quantity → D/E gallery+output-alignment) with spec + code-quality reviews. Plan: `docs/superpowers/plans/2026-06-03-create-view-phase-2.md`.
+Branch `feat/create-view-p2-p3`. Five sub-features: results gallery/History, reference-image attach, quantity>1 variations, all output types in the stage, and **backend-authored persistence**. Built subagent-driven in batches (Phase A persistence → B/C refs+quantity → D/E gallery+output-alignment) with spec + code-quality reviews. The historical implementation plan was retired in the 2026-07-22 documentation cleanup and remains recoverable from Git history.
 
 **The big reversal — clusters are now persisted (P1 debt closed).** P1 authored clusters client-side (uuid ids, never persisted). P2 flips `authorGenerationCluster` to **backend-first**: it POSTs the cluster to a new additive route `POST /api/graph/cluster` (mirrors `/api/graph/import` but no `clear()`), which adds the nodes/edges to `cli_graph` (assigning `n`-ids, persisting to `state.json` via `_maybe_persist`, normalizing image-input params) and returns them in React Flow shape. The client applies the returned nodes directly + tags model nodes `_createOrigin`. Switching to canvas shows the cluster; it now survives reload.
 
@@ -205,7 +218,7 @@ Branch `feat/create-view-p2-p3`. Five sub-features: results gallery/History, ref
 
 ## 2026-06-02 — Create view (Higgsfield-style creation surface), Phase 1
 
-Branch `feat/create-view`. A new full-screen `viewMode: 'create'` surface (4th studio) with a Higgsfield-style bottom-floating composer. Each **Generate** authors a real `text-input → model` node cluster and runs only that cluster via the existing engine. Spec: `docs/superpowers/specs/2026-06-02-higgsfield-create-view-design.md`; plan: `docs/superpowers/plans/2026-06-02-create-view-phase-1.md`.
+Branch `feat/create-view`. A new full-screen `viewMode: 'create'` surface (4th studio) with a Higgsfield-style bottom-floating composer. Each **Generate** authors a real `text-input → model` node cluster and runs only that cluster via the existing engine. The historical design spec and implementation plan were retired in the 2026-07-22 documentation cleanup and remain recoverable from Git history.
 
 **Architecture — graph-builder (chosen over single-node / hybrid).** `graphStore.authorGenerationCluster(request)` builds nodes/edges and `executeCluster(nodeIds)` POSTs only the cluster to `/api/execute` (reusing `lib/api.executeGraph`). Zero changes to the execution engine, handlers, or node definitions — the surface inherits output rendering, WS streaming, error handling, undo, and canvas editability for free. This is why it's ~640 lines of source for a full creation UI.
 
@@ -310,7 +323,7 @@ Branch `feat/create-view`. A new full-screen `viewMode: 'create'` surface (4th s
 
 ## 2026-05-29 — Soul Cinema (Phase 0 + 1): cinematic pillars + Cinema Studio
 
-Built overnight via a 7-wave dependency-ordered subagent workflow. Spec: `docs/superpowers/specs/2026-05-29-soul-cinema-nebula-design.md`. The framing decision: Higgsfield Soul Cinema is a *stack* (cinematic base + Soul ID + Soul HEX + film-look + keyframe handoff), which maps 1:1 onto our node graph — so we add the two genuinely-missing pillars as deterministic local nodes and a multi-shot Studio editor, reusing existing models for everything else.
+Built overnight via a 7-wave dependency-ordered subagent workflow. The historical design spec was retired in the 2026-07-22 documentation cleanup and remains recoverable from Git history. The framing decision: Higgsfield Soul Cinema is a *stack* (cinematic base + Soul ID + Soul HEX + film-look + keyframe handoff), which maps 1:1 onto our node graph — so we add the two genuinely-missing pillars as deterministic local nodes and a multi-shot Studio editor, reusing existing models for everything else.
 
 **Decisions made beyond the spec (collated from wave reports):**
 - **`_parse_recraft_color` was extracted into `backend/cinema/color.py`** as the single source of truth and re-imported back into `execution/sync_runner.py` (the old inline def removed), so `from execution.sync_runner import _parse_recraft_color` stays valid for `test_fal_handler.py`. Honors "extract/share, don't duplicate."

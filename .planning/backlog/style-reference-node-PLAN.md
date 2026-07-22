@@ -1,6 +1,6 @@
 # Style Reference Node — PLAN
 
-> **READY 2026-05-18.** Phase 2 of `docs/superpowers/plans/2026-05-16-node-input-api-contract-hardening.md` landed in commit `799adb3`; the brief's "no new model nodes until catalog is audited" gate is cleared. This plan is unblocked and ready to execute when picked up.
+> **READY 2026-05-18.** Phase 2 of the retired catalog-hardening plan landed in commit `799adb3`; the brief's "no new model nodes until catalog is audited" gate is cleared. The retired master plan remains recoverable from Git history. This backlog plan is unblocked and ready to execute when picked up.
 
 Phase: Step 1 of the "Higgsfield Canvas → Nebula" gap-close (see thread research, 2026-05-10).
 Goal: ship one new utility node — `style-reference` — that lets a user drop a reference image, optionally auto-derives a style description from it, and emits both as connectable ports so any downstream image/video/chat model can be styled from it without rewiring.
