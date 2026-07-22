@@ -1,5 +1,24 @@
 # Implementation Notes
 
+## 2026-07-22 - GitHub Actions CI baseline
+
+The repository previously had no configured GitHub checks. The first CI
+workflow mirrors the local merge gates in three independent jobs.
+
+Decisions:
+- Run on pull requests and pushes to `main`; do not change branch protection.
+- Keep backend, frontend, and contract jobs independent so a failure names the
+  affected surface and does not serialize unrelated work.
+- Use Python 3.12 and Node.js 22, with dependency caches keyed by the existing
+  requirements and lockfiles.
+- Pin official GitHub Actions to immutable commits while documenting their
+  release-major tags in comments.
+- Do not upgrade pip or run an audit auto-fix in CI. The workflow installs only
+  repository-pinned Python requirements and the checked-in npm lockfile.
+- Treat the contract inventory as an executable inventory gate. Its 48 known
+  exemplar gaps remain visible in logs rather than being reclassified as CI
+  failures by this infrastructure-only change.
+
 ## 2026-07-22 - Malformed Cinema refs and FileProvider object audit
 
 Four loose refs had Finder-style duplicate names ending in ` 2`: local and
