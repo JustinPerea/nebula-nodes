@@ -284,6 +284,11 @@ let currentRunHadError = false;
 // at graphComplete/validationError). Null between runs / for Create concurrent gens.
 let currentRunId: string | null = null;
 
+// Error state for locally-started scoped runs. This includes the global Canvas
+// run and concurrent Create generations; Cinema-shot passes suppress their
+// graphComplete event, so they are intentionally not registered here.
+const runErrors = new Map<string, boolean>();
+
 /** Close the in-flight run-history record (if any) with a terminal status, then
  *  clear `currentRunId`. No-op when no run is open, so it's safe to call on every
  *  execution-exit path — and centralizing the null-guard keeps the cancel-vs-restart
@@ -296,7 +301,14 @@ function closeCurrentRun(
   if (!currentRunId) return;
   const rid = currentRunId;
   currentRunId = null;
+  runErrors.delete(rid);
   set((s) => ({ runHistory: closeRunRecord(s.runHistory, rid, patch) }));
+}
+
+/** Scoped events may only own the global Canvas lifecycle when they match its
+ * run id. Missing ids retain the pre-correlation behavior for older backends. */
+function eventOwnsCurrentRun(runId?: string): boolean {
+  return currentRunId !== null && (runId === undefined || runId === currentRunId);
 }
 
 /** Like pushUndo but debounces rapid param changes on the same node (500ms window). */
@@ -1954,17 +1966,19 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     const { nodes, edges, isExecuting, resetExecution } = get();
     if (isExecuting) return;
     resetExecution();
-    currentRunId = uuidv4();
+    const runId = uuidv4();
+    currentRunId = runId;
+    runErrors.set(runId, false);
     set((state) => ({
       nodes: markExecutionScopeQueued(state.nodes, state.edges),
       isExecuting: true,
-      runHistory: openRunRecord(state.runHistory, { id: currentRunId!, trigger: 'graph', startedAt: Date.now() }),
+      runHistory: openRunRecord(state.runHistory, { id: runId, trigger: 'graph', startedAt: Date.now() }),
     }));
     const graphNodes = nodes.map((n) => ({ id: n.id, definitionId: n.data.definitionId, params: paramsForBackend(n.data.definitionId, n.data.params as Record<string, unknown>), outputs: {} }));
     const graphEdges = edges.map((e) => ({ id: e.id, source: e.source, sourceHandle: e.sourceHandle, target: e.target, targetHandle: e.targetHandle }));
     try {
-      const result = await apiExecuteGraph(graphNodes, graphEdges);
-      if (result.status === 'validation_error') {
+      const result = await apiExecuteGraph(graphNodes, graphEdges, runId);
+      if (result.status === 'validation_error' && currentRunId === runId) {
         closeCurrentRun(set, { status: 'failed' });
         set((state) => ({
           nodes: markNodesWithValidationErrors(
@@ -1978,6 +1992,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       }
     } catch (err) {
       console.error('Failed to start execution:', err);
+      if (currentRunId !== runId) return;
       closeCurrentRun(set, { status: 'failed' });
       set((state) => ({
         nodes: markNodesErrored(
@@ -1994,11 +2009,13 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     const { nodes, edges, isExecuting, resetExecution } = get();
     if (isExecuting) return;
     resetExecution();
-    currentRunId = uuidv4();
+    const runId = uuidv4();
+    currentRunId = runId;
+    runErrors.set(runId, false);
     set((state) => ({
       nodes: markExecutionScopeQueued(state.nodes, state.edges, nodeId),
       isExecuting: true,
-      runHistory: openRunRecord(state.runHistory, { id: currentRunId!, trigger: 'node', startedAt: Date.now() }),
+      runHistory: openRunRecord(state.runHistory, { id: runId, trigger: 'node', startedAt: Date.now() }),
     }));
     const graphNodes = nodes.map((n) => ({
       id: n.id,
@@ -2014,8 +2031,8 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       targetHandle: e.targetHandle,
     }));
     try {
-      const result = await apiExecuteNode(graphNodes, graphEdges, nodeId);
-      if (result.status === 'validation_error') {
+      const result = await apiExecuteNode(graphNodes, graphEdges, nodeId, runId);
+      if (result.status === 'validation_error' && currentRunId === runId) {
         closeCurrentRun(set, { status: 'failed' });
         set((state) => ({
           nodes: markNodesWithValidationErrors(
@@ -2029,6 +2046,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       }
     } catch (err) {
       console.error('Failed to start node execution:', err);
+      if (currentRunId !== runId) return;
       closeCurrentRun(set, { status: 'failed' });
       set((state) => ({
         nodes: markNodesErrored(
@@ -2086,8 +2104,9 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       applySceneToNode(set, nodeId, patchShot(curScene, { ...(curShot?.output ?? {}), status: 'error', error: message }));
     };
 
+    const runId = uuidv4();
     try {
-      const result = await apiGenerateShot(graphNodes, graphEdges, nodeId, shotId, seed, variations);
+      const result = await apiGenerateShot(graphNodes, graphEdges, nodeId, shotId, seed, variations, runId);
       if (result.status === 'validation_error') {
         failShot('Validation failed. Check inputs and API keys.');
       }
@@ -2145,7 +2164,9 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     if (clusterNodes.length === 0) return;
     const clusterEdges = edges.filter((e) => idSet.has(e.source) && idSet.has(e.target));
     resetExecution();
-    currentRunId = uuidv4();
+    const runId = uuidv4();
+    currentRunId = runId;
+    runErrors.set(runId, false);
     set((state) => ({
       nodes: state.nodes.map((n) =>
         idSet.has(n.id)
@@ -2164,7 +2185,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
           : n,
       ),
       isExecuting: true,
-      runHistory: openRunRecord(state.runHistory, { id: currentRunId!, trigger: 'cluster', startedAt: Date.now() }),
+      runHistory: openRunRecord(state.runHistory, { id: runId, trigger: 'cluster', startedAt: Date.now() }),
     }));
     const graphNodes = clusterNodes.map((n) => ({
       id: n.id,
@@ -2176,8 +2197,8 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       id: e.id, source: e.source, sourceHandle: e.sourceHandle, target: e.target, targetHandle: e.targetHandle,
     }));
     try {
-      const result = await apiExecuteGraph(graphNodes, graphEdges);
-      if (result.status === 'validation_error') {
+      const result = await apiExecuteGraph(graphNodes, graphEdges, runId);
+      if (result.status === 'validation_error' && currentRunId === runId) {
         closeCurrentRun(set, { status: 'failed' });
         set((state) => ({
           nodes: markNodesWithValidationErrors(
@@ -2191,6 +2212,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       }
     } catch (err) {
       console.error('Failed to start generation:', err);
+      if (currentRunId !== runId) return;
       closeCurrentRun(set, { status: 'failed' });
       set((state) => ({
         nodes: markNodesErrored(state.nodes, idSet, err instanceof Error ? err.message : 'Failed to start generation.'),
@@ -2205,10 +2227,8 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     const clusterNodes = nodes.filter((n) => idSet.has(n.id));
     if (clusterNodes.length === 0) return;
     const clusterEdges = edges.filter((e) => idSet.has(e.source) && idSet.has(e.target));
-    // This path intentionally skips resetExecution, so clear the job-notification
-    // error flag here too — otherwise a prior failed run would leak its error
-    // state into this generation's completion notification.
-    currentRunHadError = false;
+    const runId = uuidv4();
+    runErrors.set(runId, false);
     // Mark ONLY the cluster nodes queued — no global resetExecution, no isExecuting touch.
     set((state) => ({
       nodes: state.nodes.map((n) =>
@@ -2238,8 +2258,9 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       id: e.id, source: e.source, sourceHandle: e.sourceHandle, target: e.target, targetHandle: e.targetHandle,
     }));
     try {
-      const result = await apiExecuteGraph(graphNodes, graphEdges);
+      const result = await apiExecuteGraph(graphNodes, graphEdges, runId);
       if (result.status === 'validation_error') {
+        runErrors.delete(runId);
         set((state) => ({
           nodes: markNodesWithValidationErrors(
             state.nodes,
@@ -2251,6 +2272,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       }
     } catch (err) {
       console.error('Failed to start concurrent generation:', err);
+      runErrors.delete(runId);
       set((state) => ({
         nodes: markNodesErrored(state.nodes, idSet, err instanceof Error ? err.message : 'Failed to start generation.'),
       }));
@@ -2995,7 +3017,12 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         break;
       }
       case 'error':
-        currentRunHadError = true;
+        if (event.runId && runErrors.has(event.runId)) {
+          runErrors.set(event.runId, true);
+        }
+        if (!event.runId || event.runId === currentRunId) {
+          currentRunHadError = true;
+        }
         get().updateNodeData(event.nodeId, {
           state: 'error',
           error: event.error,
@@ -3006,8 +3033,14 @@ export const useGraphStore = create<GraphState>((set, get) => ({
           streamingPartials: undefined,
         });
         break;
-      case 'validationError':
-        currentRunHadError = true;
+      case 'validationError': {
+        const trackedScopedRun = event.runId ? runErrors.has(event.runId) : false;
+        if (event.runId && trackedScopedRun) {
+          runErrors.set(event.runId, true);
+        }
+        if (!event.runId || event.runId === currentRunId) {
+          currentRunHadError = true;
+        }
         for (const err of event.errors) {
           if (err.nodeId) {
             get().updateNodeData(err.nodeId, {
@@ -3018,25 +3051,47 @@ export const useGraphStore = create<GraphState>((set, get) => ({
             });
           }
         }
-        set({ isExecuting: false });
-        // validationError ends the run with no following graphComplete, so close + notify here.
-        closeCurrentRun(set, { status: 'failed' });
-        notifyJobComplete({ ok: false, durationSec: 0, nodesExecuted: 0 });
+        if (!event.runId || eventOwnsCurrentRun(event.runId)) {
+          set({ isExecuting: false });
+          // validationError ends the run with no following graphComplete, so close + notify here.
+          closeCurrentRun(set, { status: 'failed' });
+          notifyJobComplete({ ok: false, durationSec: 0, nodesExecuted: 0 });
+        } else if (trackedScopedRun) {
+          // A locally-started concurrent Create run owns its notification and
+          // bookkeeping, but never the global Canvas execution lock/history.
+          runErrors.delete(event.runId);
+          notifyJobComplete({ ok: false, durationSec: 0, nodesExecuted: 0 });
+        }
         break;
-      case 'graphComplete':
+      }
+      case 'graphComplete': {
         console.log(`[execution] complete in ${event.duration}s, ${event.nodesExecuted} nodes executed`);
-        set({ isExecuting: false });
-        closeCurrentRun(set, {
-          status: currentRunHadError ? 'failed' : 'complete',
-          durationSec: event.duration,
-          nodesExecuted: event.nodesExecuted,
-        });
-        notifyJobComplete({
-          ok: !currentRunHadError,
-          durationSec: event.duration,
-          nodesExecuted: event.nodesExecuted,
-        });
+        const trackedScopedRun = event.runId ? runErrors.has(event.runId) : false;
+        const runFailed = event.runId
+          ? (runErrors.get(event.runId) ?? currentRunHadError)
+          : currentRunHadError;
+        if (!event.runId || eventOwnsCurrentRun(event.runId)) {
+          set({ isExecuting: false });
+          closeCurrentRun(set, {
+            status: runFailed ? 'failed' : 'complete',
+            durationSec: event.duration,
+            nodesExecuted: event.nodesExecuted,
+          });
+          notifyJobComplete({
+            ok: !runFailed,
+            durationSec: event.duration,
+            nodesExecuted: event.nodesExecuted,
+          });
+        } else if (trackedScopedRun) {
+          runErrors.delete(event.runId);
+          notifyJobComplete({
+            ok: !runFailed,
+            durationSec: event.duration,
+            nodesExecuted: event.nodesExecuted,
+          });
+        }
         break;
+      }
     }
   },
 }));

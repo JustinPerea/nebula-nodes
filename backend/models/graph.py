@@ -32,6 +32,7 @@ class GraphEdge(BaseModel):
 class ExecuteRequest(BaseModel):
     nodes: list[GraphNode]
     edges: list[GraphEdge]
+    run_id: str | None = Field(None, alias="runId")
 
     model_config = {"populate_by_name": True}
 
@@ -40,6 +41,7 @@ class ExecuteNodeRequest(BaseModel):
     nodes: list[GraphNode]
     edges: list[GraphEdge]
     target_node_id: str = Field(alias="targetNodeId")
+    run_id: str | None = Field(None, alias="runId")
 
     model_config = {"populate_by_name": True}
 
@@ -53,6 +55,7 @@ class GenerateShotRequest(BaseModel):
     edges: list[GraphEdge]
     node_id: str = Field(alias="nodeId")
     shot_id: str = Field(alias="shotId")
+    run_id: str | None = Field(None, alias="runId")
     # Optional explicit base seed. With `variations` > 1 the batch uses
     # seed, seed+1, … (or random seeds when omitted).
     seed: int | None = None
