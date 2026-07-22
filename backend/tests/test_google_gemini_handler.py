@@ -65,6 +65,44 @@ async def test_gemini_chat_text_omits_response_mime_type() -> None:
     assert "responseMimeType" not in body.get("generationConfig", {})
 
 
+@pytest.mark.asyncio
+async def test_gemini_chat_missing_image_path_raises(tmp_path) -> None:
+    """A wired image whose local path doesn't exist must surface as an error, not
+    be silently dropped — otherwise the node 'succeeds' having sent zero of the
+    references the user connected."""
+    missing = tmp_path / "gone.png"
+    with pytest.raises(ValueError, match="not found"):
+        await handle_gemini_chat(
+            _make_gemini_node(),
+            {
+                "messages": PortValueDict(type="Text", value="describe this"),
+                "images": PortValueDict(type="Image", value=str(missing)),
+            },
+            {"GOOGLE_API_KEY": "g-test"},
+            emit=AsyncMock(),
+        )
+
+
+@pytest.mark.asyncio
+async def test_gemini_chat_data_uri_image_preserved() -> None:
+    """data: URIs keep their existing behavior — parsed into an inline_data part, no file I/O."""
+    with patch("handlers.google_gemini.stream_execute", new_callable=AsyncMock) as mock_stream:
+        mock_stream.return_value = "ok"
+        await handle_gemini_chat(
+            _make_gemini_node(),
+            {
+                "messages": PortValueDict(type="Text", value="describe"),
+                "images": PortValueDict(type="Image", value="data:image/png;base64,QUJD"),
+            },
+            {"GOOGLE_API_KEY": "g-test"},
+            emit=AsyncMock(),
+        )
+    body = mock_stream.call_args.kwargs["request_body"]
+    inline = [p for p in body["contents"][0]["parts"] if "inline_data" in p]
+    assert len(inline) == 1
+    assert inline[0]["inline_data"] == {"mime_type": "image/png", "data": "QUJD"}
+
+
 def _make_imagen_node(params=None):
     return GraphNode(
         id="test-imagen-1",
@@ -283,7 +321,7 @@ def _make_nano_node(params=None):
     return GraphNode(
         id="test-nano-1",
         definitionId="nano-banana",
-        params=params or {"model": "gemini-3.1-flash-image-preview"},
+        params=params or {"model": "gemini-3.1-flash-image"},
     )
 
 
@@ -315,7 +353,7 @@ async def test_nano_banana_aspect_ratio_uses_image_config():
         MockClient.return_value = mock_client_instance
 
         result = await handle_nano_banana(
-            _make_nano_node({"model": "gemini-3.1-flash-image-preview", "aspect_ratio": "16:9", "imageSize": "2K"}),
+            _make_nano_node({"model": "gemini-3.1-flash-image", "aspect_ratio": "16:9", "imageSize": "2K"}),
             {"prompt": PortValueDict(type="Text", value="a sunset")},
             {"GOOGLE_API_KEY": "test-key"},
         )
@@ -327,6 +365,43 @@ async def test_nano_banana_aspect_ratio_uses_image_config():
     assert "responseFormat" not in gen_cfg, "responseFormat.image rejects '1:1'/'16:9'; use imageConfig"
     assert gen_cfg.get("imageConfig", {}).get("aspectRatio") == "16:9"
     assert gen_cfg.get("imageConfig", {}).get("imageSize") == "2K"
+
+
+@pytest.mark.asyncio
+async def test_nano_banana_normalizes_hidden_stale_model_params():
+    nano_resp = {
+        "candidates": [{
+            "content": {
+                "parts": [{"inlineData": {"mimeType": "image/png", "data": RED_PIXEL_B64}}]
+            }
+        }]
+    }
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = nano_resp
+
+    with patch("handlers.google_gemini.httpx.AsyncClient") as MockClient:
+        mock_client_instance = AsyncMock()
+        mock_client_instance.post.return_value = mock_resp
+        mock_client_instance.__aenter__ = AsyncMock(return_value=mock_client_instance)
+        mock_client_instance.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client_instance
+
+        await handle_nano_banana(
+            _make_nano_node({
+                "model": "gemini-3.1-flash-lite-image",
+                "aspect_ratio": "1:8",
+                "imageSize": "4K",
+            }),
+            {"prompt": PortValueDict(type="Text", value="a blue circle")},
+            {"GOOGLE_API_KEY": "test-key"},
+        )
+
+    body = mock_client_instance.post.call_args.kwargs.get("json") or mock_client_instance.post.call_args[1].get("json")
+    assert body["generationConfig"]["imageConfig"] == {
+        "aspectRatio": "1:1",
+        "imageSize": "1K",
+    }
 
 
 # --- Lyria 3 tests (responseMimeType → responseFormat.audio fix) ---

@@ -111,10 +111,16 @@ async def test_text_combine_router_reroute_and_preview() -> None:
 
 
 @pytest.mark.asyncio
-async def test_media_inputs_sticky_note_and_image_compare() -> None:
+async def test_media_inputs_sticky_note_and_image_compare(tmp_path) -> None:
+    # image-input validates its filePath on execute, so the image files must exist.
+    # (video/audio-input are not validated, so their paths can stay fictitious.)
+    img_a = tmp_path / "image-a.png"
+    img_b = tmp_path / "image-b.png"
+    img_a.write_bytes(b"\x89PNG\r\n\x1a\n")
+    img_b.write_bytes(b"\x89PNG\r\n\x1a\n")
     nodes = [
-        _node("image-a", "image-input", {"filePath": "/tmp/image-a.png"}),
-        _node("image-b", "image-input", {"filePath": "/tmp/image-b.png"}),
+        _node("image-a", "image-input", {"filePath": str(img_a)}),
+        _node("image-b", "image-input", {"filePath": str(img_b)}),
         _node("video", "video-input", {"filePath": "/tmp/source.mp4"}),
         _node("audio", "audio-input", {"filePath": "/tmp/source.wav"}),
         _node("note", "sticky-note", {"content": "manual note", "color": "grey"}),
@@ -127,24 +133,29 @@ async def test_media_inputs_sticky_note_and_image_compare() -> None:
 
     executed = await _execute(nodes, edges)
 
-    assert _latest(executed, "image-a")["image"]["value"] == "/tmp/image-a.png"
-    assert _latest(executed, "image-b")["image"]["value"] == "/tmp/image-b.png"
+    assert _latest(executed, "image-a")["image"]["value"] == str(img_a)
+    assert _latest(executed, "image-b")["image"]["value"] == str(img_b)
     assert _latest(executed, "video")["video"]["value"] == "/tmp/source.mp4"
     assert _latest(executed, "audio")["audio"]["value"] == "/tmp/source.wav"
     assert _latest(executed, "note") == {}
     assert _latest(executed, "compare") == {
-        "imageA": {"type": "Image", "value": "/tmp/image-a.png"},
-        "imageB": {"type": "Image", "value": "/tmp/image-b.png"},
+        "imageA": {"type": "Image", "value": str(img_a)},
+        "imageB": {"type": "Image", "value": str(img_b)},
     }
 
 
 @pytest.mark.asyncio
-async def test_array_builder_selector_and_iterators() -> None:
+async def test_array_builder_selector_and_iterators(tmp_path) -> None:
+    # image-input validates its filePath on execute, so the image files must exist.
+    img_a = tmp_path / "image-a.png"
+    img_b = tmp_path / "image-b.png"
+    img_a.write_bytes(b"\x89PNG\r\n\x1a\n")
+    img_b.write_bytes(b"\x89PNG\r\n\x1a\n")
     nodes = [
         _node("text-a", "text-input", {"value": "first"}),
         _node("text-b", "text-input", {"value": "second"}),
-        _node("image-a", "image-input", {"filePath": "/tmp/image-a.png"}),
-        _node("image-b", "image-input", {"filePath": "/tmp/image-b.png"}),
+        _node("image-a", "image-input", {"filePath": str(img_a)}),
+        _node("image-b", "image-input", {"filePath": str(img_b)}),
         _node("text-array", "array-builder"),
         _node("image-array", "array-builder"),
         _node("selector", "array-selector", {"mode": "index", "index": 1}),
@@ -164,12 +175,12 @@ async def test_array_builder_selector_and_iterators() -> None:
     executed = await _execute(nodes, edges)
 
     assert _latest(executed, "text-array")["array"]["value"] == ["first", "second"]
-    assert _latest(executed, "image-array")["array"]["value"] == ["/tmp/image-a.png", "/tmp/image-b.png"]
+    assert _latest(executed, "image-array")["array"]["value"] == [str(img_a), str(img_b)]
     assert _latest(executed, "selector")["item"]["value"] == "second"
     assert [output["text"]["value"] for output in executed["text-iterator"]] == ["first", "second"]
     assert [output["image"]["value"] for output in executed["image-iterator"]] == [
-        "/tmp/image-a.png",
-        "/tmp/image-b.png",
+        str(img_a),
+        str(img_b),
     ]
 
 
@@ -247,9 +258,12 @@ async def test_mask_painter_exports_resized_mask_and_polarity(tmp_path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_mask_painter_without_painting_raises() -> None:
+async def test_mask_painter_without_painting_raises(tmp_path) -> None:
+    # A real source image so the image-input node executes and the run reaches the
+    # mask-painter — which is the node whose "no paint" error this test asserts.
+    src = _source_image_file(tmp_path)
     src_nodes = [
-        _node("img1", "image-input", {"filePath": "/nonexistent.png"}),
+        _node("img1", "image-input", {"filePath": src}),
         _node("mp1", "mask-painter", {}),
     ]
     edges = [_edge("img1", "mp1", "image", "image")]

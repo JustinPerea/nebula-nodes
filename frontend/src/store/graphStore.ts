@@ -19,6 +19,7 @@ import {
   executeGraph as apiExecuteGraph,
   executeNode as apiExecuteNode,
   fetchReplicateSchema,
+  type ExecutionValidationError,
   type OpenRouterModel,
 } from '../lib/api';
 import { apiFetch, backendAssetUrlSync, rewriteBackendAssetUrls } from '../lib/backend';
@@ -136,6 +137,40 @@ function markNodesErrored(
         ...node.data,
         state: 'error' as const,
         error: message,
+        progress: undefined,
+        streamingText: undefined,
+        streamingPartials: undefined,
+        streamingSvg: undefined,
+      },
+    };
+  });
+}
+
+function markNodesWithValidationErrors(
+  nodes: Node<NodeData>[],
+  nodeIds: Set<string>,
+  errors: ExecutionValidationError[] | undefined,
+  fallback: string,
+): Node<NodeData>[] {
+  const messageByNode = new Map<string, string>();
+  let globalMessage: string | undefined;
+  for (const error of errors ?? []) {
+    if (error.nodeId) {
+      if (!messageByNode.has(error.nodeId)) messageByNode.set(error.nodeId, error.message);
+    } else if (!globalMessage) {
+      globalMessage = error.message;
+    }
+  }
+  return nodes.map((node) => {
+    if (!nodeIds.has(node.id)) return node;
+    return {
+      ...node,
+      data: {
+        ...node.data,
+        state: 'error' as const,
+        error: messageByNode.get(node.id) ?? globalMessage ?? fallback,
+        errorCategory: undefined,
+        errorFriendly: undefined,
         progress: undefined,
         streamingText: undefined,
         streamingPartials: undefined,
@@ -1893,9 +1928,10 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       if (result.status === 'validation_error') {
         closeCurrentRun(set, { status: 'failed' });
         set((state) => ({
-          nodes: markNodesErrored(
+          nodes: markNodesWithValidationErrors(
             state.nodes,
             new Set(nodesInExecutionScope(state.nodes, state.edges).map((node) => node.id)),
+            result.errors,
             'Validation failed before execution. Check required inputs and API keys.',
           ),
           isExecuting: false,
@@ -1943,9 +1979,10 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       if (result.status === 'validation_error') {
         closeCurrentRun(set, { status: 'failed' });
         set((state) => ({
-          nodes: markNodesErrored(
+          nodes: markNodesWithValidationErrors(
             state.nodes,
             new Set(nodesInExecutionScope(state.nodes, state.edges, nodeId).map((node) => node.id)),
+            result.errors,
             'Validation failed before execution. Check required inputs and API keys.',
           ),
           isExecuting: false,
@@ -2008,7 +2045,12 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       if (result.status === 'validation_error') {
         closeCurrentRun(set, { status: 'failed' });
         set((state) => ({
-          nodes: markNodesErrored(state.nodes, idSet, 'Validation failed before generation. Check required inputs and API keys.'),
+          nodes: markNodesWithValidationErrors(
+            state.nodes,
+            idSet,
+            result.errors,
+            'Validation failed before generation. Check required inputs and API keys.',
+          ),
           isExecuting: false,
         }));
       }
@@ -2064,7 +2106,12 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       const result = await apiExecuteGraph(graphNodes, graphEdges);
       if (result.status === 'validation_error') {
         set((state) => ({
-          nodes: markNodesErrored(state.nodes, idSet, 'Validation failed before generation. Check required inputs and API keys.'),
+          nodes: markNodesWithValidationErrors(
+            state.nodes,
+            idSet,
+            result.errors,
+            'Validation failed before generation. Check required inputs and API keys.',
+          ),
         }));
       }
     } catch (err) {
@@ -2827,7 +2874,14 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       case 'validationError':
         currentRunHadError = true;
         for (const err of event.errors) {
-          if (err.nodeId) get().updateNodeData(err.nodeId, { state: 'error', error: err.message });
+          if (err.nodeId) {
+            get().updateNodeData(err.nodeId, {
+              state: 'error',
+              error: err.message,
+              errorCategory: undefined,
+              errorFriendly: undefined,
+            });
+          }
         }
         set({ isExecuting: false });
         // validationError ends the run with no following graphComplete, so close + notify here.

@@ -20,7 +20,7 @@ import httpx
 
 SETTINGS_PATH = Path("/Users/justinperea/Documents/Workspace/Projects/nebula_nodes/settings.json")
 OUT_DIR = Path("/Users/justinperea/Documents/Workspace/Projects/nebula_nodes/docs/character-smoke")
-MODEL = "gemini-3.1-flash-image-preview"
+MODEL = "gemini-3.1-flash-image"
 API_URL = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL}:generateContent"
 
 # Pheme's real reference images (from her character build directory)

@@ -897,6 +897,12 @@ export function Inspector({ embedded = false }: InspectorProps) {
         </div>
       )}
 
+      {definition?.capabilityNote && (
+        <div className="inspector__notice" role="note">
+          {definition.capabilityNote}
+        </div>
+      )}
+
         {showInfo && definition && (
           <div className="inspector__info-panel">
             <div className="inspector__info-section">

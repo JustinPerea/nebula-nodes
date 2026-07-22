@@ -68,6 +68,11 @@ export function CreateComposer({
           <ModelPicker value={modelDef?.id ?? null} onSelect={onSelectModel} onClose={() => setPickerOpen(false)} />
         </>
       )}
+      {modelDef?.capabilityNote && (
+        <div className="create-composer__capability-note" role="note">
+          {modelDef.capabilityNote}
+        </div>
+      )}
       <textarea
         ref={promptRef}
         className="create-composer__prompt"

@@ -123,7 +123,7 @@ class TestDynamicNodeValidation:
 
 class TestExecuteGraphInputResolution:
     @pytest.mark.asyncio
-    async def test_multiple_input_port_accumulates_wires_in_edge_order(self) -> None:
+    async def test_multiple_input_port_accumulates_wires_in_edge_order(self, tmp_path) -> None:
         captured: dict[str, PortValueDict] = {}
 
         async def capture_handler(
@@ -137,9 +137,16 @@ class TestExecuteGraphInputResolution:
         async def emit(_event) -> None:
             pass
 
+        # Real files: image-input now validates its filePath on execute, so the
+        # paths must exist for this accumulation-order assertion to be reached.
+        one = tmp_path / "one.png"
+        two = tmp_path / "two.png"
+        one.write_bytes(b"\x89PNG\r\n\x1a\n")
+        two.write_bytes(b"\x89PNG\r\n\x1a\n")
+
         nodes = [
-            GraphNode(id="a", definitionId="image-input", params={"filePath": "/tmp/one.png"}, outputs={}),
-            GraphNode(id="b", definitionId="image-input", params={"filePath": "/tmp/two.png"}, outputs={}),
+            GraphNode(id="a", definitionId="image-input", params={"filePath": str(one)}, outputs={}),
+            GraphNode(id="b", definitionId="image-input", params={"filePath": str(two)}, outputs={}),
             GraphNode(id="c", definitionId="claude-chat", params={}, outputs={}),
         ]
         edges = [
@@ -156,7 +163,7 @@ class TestExecuteGraphInputResolution:
         )
 
         assert captured["images"].type == "Image"
-        assert captured["images"].value == ["/tmp/one.png", "/tmp/two.png"]
+        assert captured["images"].value == [str(one), str(two)]
 
     @pytest.mark.asyncio
     async def test_single_input_port_keeps_existing_last_writer_behavior(self) -> None:
@@ -327,3 +334,68 @@ class TestVideoOutputProbe:
             await _maybe_probe_video_output(node, outputs)  # must not raise
 
         assert "sourceDuration" not in node.params
+
+
+class TestImageInputValidation:
+    """image-input validates its filePath on execute, so a dead reference fails at
+    the source instead of flowing downstream where a vision node would silently
+    analyze nothing."""
+
+    def test_missing_file_raises(self, tmp_path) -> None:
+        from execution.engine import _image_input_output
+
+        missing = tmp_path / "gone.png"
+        with pytest.raises(ValueError, match="not found"):
+            _image_input_output({"filePath": str(missing)})
+
+    def test_existing_file_passes_through(self, tmp_path) -> None:
+        from execution.engine import _image_input_output
+
+        png = tmp_path / "ref.png"
+        png.write_bytes(b"\x89PNG\r\n\x1a\n")
+        out = _image_input_output({"filePath": str(png)})
+        assert out["image"]["value"] == str(png)
+
+    def test_empty_path_passes_through(self) -> None:
+        """An unconfigured node (empty filePath) must not raise — it just yields an empty ref."""
+        from execution.engine import _image_input_output
+
+        out = _image_input_output({"filePath": ""})
+        assert out["image"]["value"] == ""
+
+    def test_remote_url_passes_through(self) -> None:
+        from execution.engine import _image_input_output
+
+        out = _image_input_output({"filePath": "https://cdn.example.com/x.png"})
+        assert out["image"]["value"] == "https://cdn.example.com/x.png"
+
+    @pytest.mark.asyncio
+    async def test_missing_image_input_emits_error_and_blocks_downstream(self, tmp_path) -> None:
+        from models.events import ErrorEvent, ExecutedEvent
+
+        events = []
+
+        async def emit(event) -> None:
+            events.append(event)
+
+        ran = []
+
+        async def downstream_handler(_node, _inputs, _api_keys) -> dict:
+            ran.append(True)
+            return {"text": {"type": "Text", "value": "ok"}}
+
+        missing = tmp_path / "gone.png"
+        nodes = [
+            GraphNode(id="img", definitionId="image-input", params={"filePath": str(missing)}, outputs={}),
+            GraphNode(id="chat", definitionId="claude-chat", params={}, outputs={}),
+        ]
+        edges = [_edge("img", "chat", "image", "images")]
+
+        await execute_graph(nodes, edges, {}, {"claude-chat": downstream_handler}, emit)
+
+        error_events = [e for e in events if isinstance(e, ErrorEvent)]
+        assert any(e.node_id == "img" and "not found" in e.error for e in error_events)
+        # The downstream vision node must NOT run with a dead reference...
+        assert ran == []
+        # ...and must not report a successful execution.
+        assert not any(isinstance(e, ExecutedEvent) and e.node_id == "chat" for e in events)

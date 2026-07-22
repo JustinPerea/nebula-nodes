@@ -9,6 +9,7 @@ import httpx
 
 from models.graph import GraphNode, PortValueDict
 from models.events import ExecutionEvent, ProgressEvent
+from services.image_input import load_local_image
 from services.output import get_run_dir
 
 
@@ -54,18 +55,16 @@ async def handle_grok_video(
     # Image input for I2V — pass as base64 data URI or URL in "image" field
     image_input = inputs.get("image")
     if image_input and image_input.value:
-        import base64
-        from pathlib import Path
         img_str = str(image_input.value)
-        if img_str.startswith(("http://", "https://")):
+        if img_str.startswith(("http://", "https://", "data:")):
             body["image"] = img_str
         else:
-            img_path = Path(img_str)
-            if img_path.exists():
-                b64 = base64.b64encode(img_path.read_bytes()).decode("ascii")
-                suffix = img_path.suffix.lstrip(".").lower()
-                mime = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg"}.get(suffix, "image/png")
-                body["image"] = f"data:{mime};base64,{b64}"
+            # Local path. load_local_image raises (rather than silently
+            # skipping) if the file is missing/unreadable/unsupported, so a
+            # misconfigured reference fails the node instead of generating a
+            # video that quietly ignored the wired-up start frame.
+            mime, b64 = load_local_image(img_str)
+            body["image"] = f"data:{mime};base64,{b64}"
 
     async def noop_emit(event: ExecutionEvent) -> None:
         pass

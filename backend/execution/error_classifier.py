@@ -134,6 +134,8 @@ def classify_error(raw: str | None) -> tuple[str, str, bool]:
         def has(markers: tuple[str, ...]) -> bool:
             return any(m in text for m in markers)
 
+        if "capability guardrail:" in text:
+            return ("invalid_input", str(raw).strip(), False)
         if has(_BLOCKED_MARKERS):
             category = "blocked"
         elif has(_RATE_MARKERS):

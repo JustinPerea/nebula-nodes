@@ -4,12 +4,15 @@ import asyncio
 import time
 from collections import deque
 from graphlib import TopologicalSorter, CycleError as _GraphlibCycleError
+from pathlib import Path
 from typing import Any, Callable, Awaitable
 
 from models.graph import GraphNode, GraphEdge, PortValueDict
 from services.cache import ExecutionCache
+from services.image_input import is_remote_or_data_uri
 from services.output import resolve_output_ref
 from services.document_extract import extract_text
+from services.provider_capabilities import gemini_omni_capability_error
 from execution.error_classifier import classify_error
 from models.events import (
     ExecutionEvent,
@@ -26,6 +29,15 @@ CycleError = _GraphlibCycleError
 
 def _image_input_output(params: dict) -> dict:
     file_path = resolve_output_ref(str(params.get("filePath", "")))
+    # Fail at the source when the configured file is gone, rather than passing a
+    # dead path downstream where a vision node would otherwise silently analyze
+    # zero references. An empty path (unconfigured node) and remote/data values
+    # pass through untouched.
+    if file_path and not is_remote_or_data_uri(file_path) and not Path(file_path).exists():
+        raise ValueError(
+            f"Image Input file not found: {file_path!r}. Set a valid path — "
+            "downstream nodes would otherwise receive a reference no model can load."
+        )
     return {"image": {"type": "Image", "value": file_path}}
 
 
@@ -183,6 +195,16 @@ NODE_DEFS: dict[str, dict[str, Any]] = {
         "inputPorts": [{"id": "prompt", "required": True}],
         "outputPorts": [{"id": "video"}],
         "envKeyName": "FAL_KEY",
+    },
+    "gemini-omni-flash": {
+        "inputPorts": [
+            {"id": "prompt", "required": True},
+            {"id": "images", "required": False},
+            {"id": "video", "required": False},
+            {"id": "previous_interaction_id", "required": False},
+        ],
+        "outputPorts": [{"id": "video"}, {"id": "interaction_id"}],
+        "envKeyName": "GOOGLE_API_KEY",
     },
     "flux-schnell": {
         "inputPorts": [{"id": "prompt", "required": True}],
@@ -346,9 +368,13 @@ def validate_graph(
     errors: list[ValidationErrorDetail] = []
 
     connected_ports: set[tuple[str, str]] = set()
+    node_by_id = {node.id: node for node in nodes}
+    incoming_edges: dict[str, list[GraphEdge]] = {node.id: [] for node in nodes}
     for edge in edges:
         if edge.target_handle:
             connected_ports.add((edge.target, edge.target_handle))
+        if edge.target in incoming_edges:
+            incoming_edges[edge.target].append(edge)
 
     for node in nodes:
         node_def = _node_def_for(node.definition_id)
@@ -399,6 +425,44 @@ def validate_graph(
                     message=f"Missing API key: {key_display}",
                 )
             )
+
+        if node.definition_id == "gemini-omni-flash":
+            prompt = ""
+            has_previous_interaction = bool(
+                str(node.params.get("previous_interaction_id") or "").strip()
+            )
+            has_video_input = False
+
+            for edge in incoming_edges.get(node.id, []):
+                if edge.target_handle == "previous_interaction_id":
+                    has_previous_interaction = True
+                elif edge.target_handle == "video":
+                    has_video_input = True
+                elif edge.target_handle == "prompt" and edge.source_handle:
+                    source = node_by_id.get(edge.source)
+                    if not source:
+                        continue
+                    if source.definition_id == "text-input":
+                        prompt = str(source.params.get("value") or "")
+                    elif edge.source_handle in source.outputs:
+                        output = source.outputs[edge.source_handle]
+                        if isinstance(output.value, str):
+                            prompt = output.value
+
+            capability_error = gemini_omni_capability_error(
+                prompt,
+                has_previous_interaction=has_previous_interaction,
+                has_video_input=has_video_input,
+                task=str(node.params.get("task") or ""),
+            )
+            if capability_error:
+                errors.append(
+                    ValidationErrorDetail(
+                        node_id=node.id,
+                        port_id="prompt",
+                        message=capability_error,
+                    )
+                )
 
     return errors
 

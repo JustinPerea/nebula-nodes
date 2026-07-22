@@ -33,6 +33,9 @@ function resetStore() {
 
 beforeEach(() => {
   executeGraphMock.mockClear();
+  executeGraphMock.mockResolvedValue({ status: 'started' });
+  executeNodeMock.mockClear();
+  executeNodeMock.mockResolvedValue({ status: 'started' });
   fetchMock.mockReset();
   resetStore();
 });
@@ -89,6 +92,28 @@ describe('executeClusterConcurrent', () => {
     expect(executeGraphMock).toHaveBeenCalledTimes(2);
     // isExecuting was never touched by the concurrent path
     expect(useGraphStore.getState().isExecuting).toBe(true);
+  });
+
+  it('shows the exact backend capability error on the Create model node', async () => {
+    const message = 'Gemini Omni capability guardrail: use Veo 3.1 for video extension.';
+    executeGraphMock.mockResolvedValueOnce({
+      status: 'validation_error',
+      errors: [{ nodeId: 'm1', portId: 'prompt', message }],
+    });
+    const promptNode = node('t1', 'text-input');
+    const modelNode = node('m1', 'gemini-omni-flash');
+    useGraphStore.setState({
+      nodes: [promptNode, modelNode],
+      edges: [{
+        id: 'e1', source: 't1', sourceHandle: 'text', target: 'm1', targetHandle: 'prompt', type: 'typed-edge',
+      }],
+    });
+
+    await useGraphStore.getState().executeClusterConcurrent(['t1', 'm1']);
+
+    const updated = useGraphStore.getState().nodes.find((n) => n.id === 'm1');
+    expect(updated?.data.state).toBe('error');
+    expect(updated?.data.error).toBe(message);
   });
 });
 

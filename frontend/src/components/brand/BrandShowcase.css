@@ -438,6 +438,14 @@
   flex-shrink: 0;
 }
 
+.nn-bs__swatch--crab-cyan { background: rgb(180, 240, 250); }
+.nn-bs__swatch--crab-teal { background: rgb(120, 220, 200); }
+.nn-bs__swatch--crab-orange { background: rgb(240, 150, 90); }
+.nn-bs__swatch--crab-brown { background: rgb(120, 50, 30); }
+.nn-bs__swatch--helix-ice { background: rgb(242, 252, 255); }
+.nn-bs__swatch--helix-blue { background: rgb(48, 92, 168); }
+.nn-bs__swatch--helix-cobalt { background: rgb(32, 72, 148); }
+
 .nn-bs__variant-palette-label {
   margin-left: 4px;
   font-family: var(--sr-mono, 'JetBrains Mono', monospace);

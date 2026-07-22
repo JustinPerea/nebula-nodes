@@ -17,7 +17,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@google/model-viewer": "^4.2.0",
+    "@google/model-viewer": "4.3.1",
     "@react-three/drei": "^10.7.7",
     "@react-three/fiber": "^9.6.1",
     "@remotion/lottie": "4.0.458",
@@ -31,7 +31,7 @@
     "lucide-react": "^1.14.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
-    "three": "^0.184.0",
+    "three": "0.183.2",
     "uuid": "^13.0.2",
     "wavesurfer.js": "^7.12.7",
     "zustand": "^5.0.12"

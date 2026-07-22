@@ -111,6 +111,30 @@ async def test_mask_input_maps_to_mask_url() -> None:
 
 
 @pytest.mark.asyncio
+async def test_universal_fal_forwards_schema_model_param() -> None:
+    """`model` may be a real input on arbitrary fal-universal endpoints."""
+    submit = MagicMock()
+    submit.status_code = 200
+    submit.json.return_value = {"images": [{"url": "https://fal.ai/out.png"}]}
+    node = GraphNode(
+        id="universal-model",
+        definitionId="fal-universal",
+        params={"endpoint_id": "owner/schema-with-model", "model": "provider-model-v2"},
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = submit
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        await handle_fal_universal(node, {}, {"FAL_KEY": "k"})
+
+    assert mock_client.post.call_args.kwargs["json"]["model"] == "provider-model-v2"
+
+
+@pytest.mark.asyncio
 async def test_ideogram_edit_body_shape() -> None:
     """ideogram-edit (fal-ai/ideogram/v3/edit): prompt + image_url + mask_url required;
     style-ref images map to image_urls; params pass through."""
@@ -3917,6 +3941,165 @@ async def test_seedream_4_5_null_seed_omitted():
     payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
     assert "seed" not in payload, "null seed must be omitted from request"
     assert payload.get("num_images") == 1
+
+
+# ── nano-banana-fal ───────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_nano_banana_fal_endpoint_injection():
+    """nano-banana-fal model enum maps to fal-ai/nano-banana-2 by default."""
+    from execution.sync_runner import get_handler_registry
+
+    emit = AsyncMock()
+    registry = get_handler_registry(emit=emit)
+    handler = registry["nano-banana-fal"]
+
+    mock_submit, mock_status, mock_result = _make_poll_mocks(_image_result())
+
+    node = GraphNode(
+        id="test-nb-fal",
+        definitionId="nano-banana-fal",
+        params={"model": "nano-banana-2"},
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            result = await handler(
+                node,
+                {"prompt": PortValueDict(type="Text", value="a red apple")},
+                {"FAL_KEY": "fal_test"},
+            )
+
+    assert result["image"]["type"] == "Image"
+    posted_url = mock_client.post.call_args.args[0] if mock_client.post.call_args.args \
+        else mock_client.post.call_args.kwargs.get("url", "")
+    assert "fal-ai/nano-banana-2" in posted_url
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert "model" not in payload
+
+
+@pytest.mark.asyncio
+async def test_nano_banana_fal_model_change_recomputes_endpoint_without_mutation():
+    """A persisted node can change tiers between runs without retaining an old endpoint."""
+    from execution.sync_runner import _nano_banana_fal_node
+
+    node = GraphNode(
+        id="test-nb-fal-change",
+        definitionId="nano-banana-fal",
+        params={"model": "nano-banana-2"},
+    )
+
+    first = _nano_banana_fal_node(node, edit=False)
+    node.params["model"] = "nano-banana-pro"
+    second = _nano_banana_fal_node(node, edit=False)
+
+    assert first.params == {"endpoint_id": "fal-ai/nano-banana-2"}
+    assert second.params == {"endpoint_id": "fal-ai/nano-banana-pro"}
+    assert node.params == {"model": "nano-banana-pro"}
+
+
+def test_nano_banana_fal_normalizes_hidden_stale_model_params_without_mutation():
+    from execution.sync_runner import _nano_banana_fal_node
+
+    params = {
+        "model": "nano-banana-pro",
+        "aspect_ratio": "1:8",
+        "resolution": "0.5K",
+        "thinking_level": "high",
+        "enable_web_search": True,
+    }
+    node = GraphNode(
+        id="test-nb-fal-stale",
+        definitionId="nano-banana-fal",
+        params=params,
+    )
+
+    routed = _nano_banana_fal_node(node, edit=False)
+
+    assert routed.params == {
+        "aspect_ratio": "auto",
+        "resolution": "1K",
+        "enable_web_search": True,
+        "endpoint_id": "fal-ai/nano-banana-pro",
+    }
+    assert node.params == params
+
+
+@pytest.mark.asyncio
+async def test_nano_banana_fal_edit_requires_images():
+    """nano-banana-fal-edit must reject calls with no reference images."""
+    from execution.sync_runner import get_handler_registry
+
+    emit = AsyncMock()
+    registry = get_handler_registry(emit=emit)
+    handler = registry["nano-banana-fal-edit"]
+
+    node = GraphNode(
+        id="test-nb-fal-edit",
+        definitionId="nano-banana-fal-edit",
+        params={"model": "nano-banana-pro"},
+    )
+
+    with pytest.raises(ValueError, match="at least one reference image"):
+        await handler(
+            node,
+            {"prompt": PortValueDict(type="Text", value="make it blue")},
+            {"FAL_KEY": "fal_test"},
+        )
+
+
+@pytest.mark.asyncio
+async def test_nano_banana_fal_edit_endpoint_and_image_urls():
+    """nano-banana-fal-edit maps model to /edit endpoint and forwards image_urls."""
+    from execution.sync_runner import get_handler_registry
+
+    emit = AsyncMock()
+    registry = get_handler_registry(emit=emit)
+    handler = registry["nano-banana-fal-edit"]
+
+    mock_submit, mock_status, mock_result = _make_poll_mocks(_image_result())
+
+    node = GraphNode(
+        id="test-nb-fal-edit-ok",
+        definitionId="nano-banana-fal-edit",
+        params={"model": "nano-banana-pro", "resolution": "2K"},
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            await handler(
+                node,
+                {
+                    "prompt": PortValueDict(type="Text", value="change shirt to blue"),
+                    "images": PortValueDict(
+                        type="Image",
+                        value=["https://example.com/ref1.png", "https://example.com/ref2.png"],
+                    ),
+                },
+                {"FAL_KEY": "fal_test"},
+            )
+
+    posted_url = mock_client.post.call_args.args[0] if mock_client.post.call_args.args \
+        else mock_client.post.call_args.kwargs.get("url", "")
+    assert "fal-ai/nano-banana-pro/edit" in posted_url
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert len(payload["image_urls"]) == 2
+    assert payload["resolution"] == "2K"
+    assert "model" not in payload
 
 
 # ── sora-2 ────────────────────────────────────────────────────────────────────

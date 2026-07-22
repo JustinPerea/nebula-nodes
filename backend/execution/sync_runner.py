@@ -54,6 +54,60 @@ SYNC_HANDLERS: dict[
 }
 
 
+# Wrapper-only selector values for the fixed Nano Banana FAL nodes. Keep this
+# routing out of fal_universal so arbitrary FAL schemas can still use a real
+# input parameter named `model`.
+NANO_BANANA_FAL_MODEL_ENDPOINTS: dict[str, str] = {
+    "nano-banana": "fal-ai/nano-banana",
+    "nano-banana-2": "fal-ai/nano-banana-2",
+    "nano-banana-pro": "fal-ai/nano-banana-pro",
+    "gemini-25-flash-image": "fal-ai/gemini-25-flash-image",
+    "gemini-3-pro-image": "fal-ai/gemini-3-pro-image-preview",
+}
+
+
+def _fal_wrapper_node(
+    node: GraphNode,
+    endpoint_id: str,
+    *,
+    internal_params: tuple[str, ...] = (),
+) -> GraphNode:
+    """Return a routed FAL node without mutating the persisted graph node."""
+    params = dict(node.params)
+    for key in internal_params:
+        params.pop(key, None)
+    params["endpoint_id"] = endpoint_id
+    return node.model_copy(update={"params": params})
+
+
+def _nano_banana_fal_node(node: GraphNode, *, edit: bool) -> GraphNode:
+    """Resolve a Nano Banana selector into an isolated per-run FAL node."""
+    model = str(node.params.get("model", "nano-banana-2"))
+    endpoint_id = NANO_BANANA_FAL_MODEL_ENDPOINTS.get(model, model)
+    if not endpoint_id.startswith("fal-ai/"):
+        endpoint_id = f"fal-ai/{endpoint_id}"
+    if edit:
+        endpoint_id = f"{endpoint_id}/edit"
+
+    params = dict(node.params)
+    aspect = str(params.get("aspect_ratio") or "")
+    if model == "nano-banana-pro":
+        if aspect in {"1:4", "4:1", "1:8", "8:1"}:
+            params["aspect_ratio"] = "auto"
+        if params.get("resolution") == "0.5K":
+            params["resolution"] = "1K"
+        params.pop("thinking_level", None)
+    elif model != "nano-banana-2":
+        if aspect in {"auto", "1:4", "4:1", "1:8", "8:1"}:
+            params["aspect_ratio"] = "1:1"
+        params.pop("resolution", None)
+        params.pop("thinking_level", None)
+        params.pop("enable_web_search", None)
+
+    routed_node = node.model_copy(update={"params": params})
+    return _fal_wrapper_node(routed_node, endpoint_id, internal_params=("model",))
+
+
 def _apply_recraft_color_params(node: GraphNode) -> None:
     """Convert Recraft color params from string representation to FAL's expected format.
 
@@ -279,12 +333,13 @@ def get_handler_registry(
         ) -> dict[str, Any]:
             # Route to Standard or Pro endpoint based on `model` param.
             # Pop `model` so FAL doesn't receive an unknown value (FAL's inner model key uses different values).
-            tier = node.params.pop("model", "standard")
+            tier = node.params.get("model", "standard")
             if str(tier).lower() == "pro":
-                node.params.setdefault("endpoint_id", "fal-ai/sora-2/text-to-video/pro")
+                endpoint_id = "fal-ai/sora-2/text-to-video/pro"
             else:
-                node.params.setdefault("endpoint_id", "fal-ai/sora-2/text-to-video")
-            return await handle_fal_universal(node, inputs, api_keys, emit=emit)
+                endpoint_id = "fal-ai/sora-2/text-to-video"
+            routed_node = _fal_wrapper_node(node, endpoint_id, internal_params=("model",))
+            return await handle_fal_universal(routed_node, inputs, api_keys, emit=emit)
 
         async def _veo3_handler(
             node: GraphNode,
@@ -295,8 +350,16 @@ def get_handler_registry(
             if api_keys.get("GOOGLE_API_KEY"):
                 from handlers.veo import handle_veo
                 return await handle_veo(node, inputs, api_keys, emit=emit)
-            node.params.setdefault("endpoint_id", "fal-ai/veo3")
-            return await handle_fal_universal(node, inputs, api_keys, emit=emit)
+            routed_node = _fal_wrapper_node(node, "fal-ai/veo3", internal_params=("model",))
+            return await handle_fal_universal(routed_node, inputs, api_keys, emit=emit)
+
+        async def _gemini_omni_flash_handler(
+            node: GraphNode,
+            inputs: dict[str, PortValueDict],
+            api_keys: dict[str, str],
+        ) -> dict[str, Any]:
+            from handlers.gemini_omni import handle_gemini_omni
+            return await handle_gemini_omni(node, inputs, api_keys, emit=emit)
 
         async def _flux_schnell_handler(
             node: GraphNode,
@@ -627,6 +690,7 @@ def get_handler_registry(
         registry["kling-v2-1"] = _kling_handler
         registry["sora-2"] = _sora2_handler
         registry["veo-3"] = _veo3_handler
+        registry["gemini-omni-flash"] = _gemini_omni_flash_handler
         registry["flux-schnell"] = _flux_schnell_handler
         registry["fast-sdxl"] = _fast_sdxl_handler
         registry["flux-fill-inpaint"] = _flux_fill_inpaint_handler
@@ -804,6 +868,14 @@ def get_handler_registry(
             node.params.setdefault("endpoint_id", "fal-ai/bytedance/seedream/v4.5/text-to-image")
             return await handle_fal_universal(node, inputs, api_keys, emit=emit)
 
+        async def _nano_banana_fal_handler(node, inputs, api_keys):
+            routed_node = _nano_banana_fal_node(node, edit=False)
+            return await handle_fal_universal(routed_node, inputs, api_keys, emit=emit)
+
+        async def _nano_banana_fal_edit_handler(node, inputs, api_keys):
+            routed_node = _nano_banana_fal_node(node, edit=True)
+            return await handle_fal_universal(routed_node, inputs, api_keys, emit=emit)
+
         # Ideogram dual-route nodes: direct api.ideogram.ai when IDEOGRAM_API_KEY is
         # set, else FAL. Editing suite rides v3 on FAL (no v4 edit surfaces hosted
         # yet); the direct remix rides v4. Direct reframe needs `resolution` (the
@@ -902,6 +974,8 @@ def get_handler_registry(
         registry["clarity-upscaler"] = _clarity_upscaler_handler
         registry["seedvr-video-upscale"] = _seedvr_video_upscale_handler
         registry["seedream-4-5"] = _seedream45_handler
+        registry["nano-banana-fal"] = _nano_banana_fal_handler
+        registry["nano-banana-fal-edit"] = _nano_banana_fal_edit_handler
         registry["ideogram-v4"] = _ideogram_v4_handler
         registry["ideogram-edit"] = _ideogram_edit_handler
         registry["ideogram-remix"] = _ideogram_remix_handler

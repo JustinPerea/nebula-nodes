@@ -706,6 +706,74 @@ class TestOpenAIApiBillingDoesNotBlock:
         assert resp.json()["status"] == "validation_error"
 
 
+class TestProviderCapabilityValidationResponse:
+    @staticmethod
+    def _omni_extension_graph():
+        return {
+            "nodes": [
+                {
+                    "id": "prompt",
+                    "definitionId": "text-input",
+                    "params": {"value": "Continue the same clip with a second scene."},
+                    "outputs": {},
+                },
+                {
+                    "id": "previous",
+                    "definitionId": "text-input",
+                    "params": {"value": "v1_previous"},
+                    "outputs": {},
+                },
+                {
+                    "id": "omni",
+                    "definitionId": "gemini-omni-flash",
+                    "params": {},
+                    "outputs": {},
+                },
+            ],
+            "edges": [
+                {
+                    "id": "prompt-edge",
+                    "source": "prompt",
+                    "sourceHandle": "text",
+                    "target": "omni",
+                    "targetHandle": "prompt",
+                },
+                {
+                    "id": "previous-edge",
+                    "source": "previous",
+                    "sourceHandle": "text",
+                    "target": "omni",
+                    "targetHandle": "previous_interaction_id",
+                },
+            ],
+        }
+
+    @staticmethod
+    def _capability_message(body):
+        return next(
+            error["message"]
+            for error in body["errors"]
+            if error["nodeId"] == "omni" and error["portId"] == "prompt"
+        )
+
+    def test_create_and_canvas_execution_routes_return_same_capability_error(self, client):
+        from services.provider_capabilities import GEMINI_OMNI_EXTENSION_ERROR
+
+        graph = self._omni_extension_graph()
+        create_response = client.post("/api/execute", json=graph)
+        canvas_response = client.post(
+            "/api/execute-node",
+            json={**graph, "targetNodeId": "omni"},
+        )
+
+        assert create_response.status_code == 200
+        assert canvas_response.status_code == 200
+        assert create_response.json()["status"] == "validation_error"
+        assert canvas_response.json()["status"] == "validation_error"
+        assert self._capability_message(create_response.json()) == GEMINI_OMNI_EXTENSION_ERROR
+        assert self._capability_message(canvas_response.json()) == GEMINI_OMNI_EXTENSION_ERROR
+
+
 class TestChatAgentDispatch:
     """WebSocket /ws/chat accepts an 'agent' field and routes to the right runner."""
 

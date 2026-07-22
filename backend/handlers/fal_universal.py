@@ -174,6 +174,9 @@ async def handle_fal_universal(
     if endpoint_id.startswith("fal-ai/gpt-image-1.5/edit") and not fal_input.get("image_urls"):
         raise ValueError("gpt-image-1.5 edit requires at least one reference image")
 
+    if endpoint_id.endswith("/edit") and "nano-banana" in endpoint_id and not fal_input.get("image_urls"):
+        raise ValueError("Nano Banana edit requires at least one reference image")
+
     # Video input (luma-ray2-flash-modify) → video_url
     video_input = inputs.get("video")
     if video_input and video_input.value:
