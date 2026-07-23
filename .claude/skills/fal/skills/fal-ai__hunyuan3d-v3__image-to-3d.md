@@ -4,6 +4,7 @@ display_name: Hunyuan3D-v3 Image-to-3D
 category: image-to-3d
 creator: Tencent
 fal_docs: https://fal.ai/models/fal-ai/hunyuan3d-v3/image-to-3d
+source: FAL API schema (verified 2026-07-22)
 original_source: https://github.com/Tencent-Hunyuan/Hunyuan3D-2, https://www.tencentcloud.com/document/product/1281/74125
 summary: Transform single or multi-view images into ultra-high-resolution 3D models with optional PBR textures and custom polygon counts.
 ---
@@ -48,14 +49,13 @@ Hunyuan3D-v3 Image-to-3D is a state-of-the-art model designed to transform photo
 | `face_count` | integer | `500000` | `40000` - `1500000` | Target polygon count for the output mesh. |
 | `generate_type` | string | `Normal` | `Normal`, `LowPoly`, `Geometry` | `Normal`: Textured; `LowPoly`: Optimized; `Geometry`: White mesh. |
 | `polygon_type` | string | `triangle` | `triangle`, `quadrilateral` | Mesh topology (LowPoly only). |
-| `seed` | integer | null | (any) | Seed for reproducible generation. |
 
 ### Output
 The output is a JSON object containing URLs to the generated 3D files and metadata:
 - `model_glb`: (File) Main 3D model in GLB format.
 - `thumbnail`: (File) Preview image of the model.
 - `model_urls`: (Object) Contains links to `glb`, `fbx`, `obj`, and `usdz` formats.
-- `seed`: (integer) The seed used during inference.
+- `seed`: (integer) The seed used during inference. This is response metadata only; the current endpoint schema does not accept a seed input.
 
 ### Example request
 ```json

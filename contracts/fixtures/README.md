@@ -23,6 +23,8 @@ Golden request/response bytes for cross-platform parity. **Web pytest is the ora
 | `handlers/fal/gpt-image-1-5-edit-request.json` | `test_fal_request_body_matches_fixture` |
 | `handlers/fal/nano-banana-fal-generate-request.json` | `test_fal_request_body_matches_fixture` |
 | `handlers/fal/nano-banana-fal-edit-request.json` | `test_fal_request_body_matches_fixture` |
+| `handlers/fal/hunyuan3d-text-to-3d-request.json` | `test_fal_request_body_matches_fixture` |
+| `handlers/fal/hunyuan3d-image-to-3d-request.json` | `test_fal_request_body_matches_fixture` |
 | `handlers/google/gemini-chat-generate-request.json` | `test_google_request_body_matches_fixture` |
 | `handlers/google/gemini-chat-sse.txt` | `test_gemini_chat_sse_fixture_accumulates_text` |
 | `handlers/google/gemini-embeddings-request.json` | `test_google_request_body_matches_fixture` |

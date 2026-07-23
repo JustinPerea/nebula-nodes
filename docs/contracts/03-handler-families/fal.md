@@ -49,6 +49,8 @@ Same underlying model as OpenAI direct, **different param names and URLs**.
 | `nano-banana-fal-edit` | `fal-ai/nano-banana-2/edit` (model enum) | same |
 | `gpt-image-1-5` | `fal-ai/gpt-image-1.5` | [../examples/gpt-image-1-5.md](../examples/gpt-image-1-5.md) |
 | `gpt-image-1-5-edit` | `fal-ai/gpt-image-1.5/edit` | same |
+| `hunyuan3d-text-to-3d` | `fal-ai/hunyuan3d-v3/text-to-3d` | [../examples/hunyuan3d.md](../examples/hunyuan3d.md) |
+| `hunyuan3d-image-to-3d` | `fal-ai/hunyuan3d-v3/image-to-3d` | same |
 
 Also on FAL (async-poll, **no exemplar yet**): `seedream-4-5`.
 
@@ -64,6 +66,8 @@ Also on FAL (async-poll, **no exemplar yet**): `seedream-4-5`.
 | `mask` | `mask_url` |
 | `video` | `video_url` |
 | `audio` | `audio_url` |
+| `front_image` (Hunyuan3D) | `input_image_url` |
+| `back_image` / `left_image` / `right_image` | matching `*_image_url` |
 
 Local paths → data URI via `_to_fal_url()`.
 
@@ -109,3 +113,4 @@ Never copy param names across routes.
 | Date | Change |
 |------|--------|
 | 2026-07-01 | Initial family doc; gpt-image-2-fal exemplar complete |
+| 2026-07-22 | Added Hunyuan3D fixed-wrapper mapping and gold exemplar |

@@ -2126,7 +2126,7 @@ Nodes: 142 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **Execution** | async-poll |
 | **Inputs** | Front Image (Image)*, Back Image (Image), Left Image (Image), Right Image (Image) |
 | **Outputs** | Mesh (Mesh) |
-| **Audited** | 2026-06-03 |
+| **Audited** | 2026-07-22 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -2148,7 +2148,7 @@ Nodes: 142 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text)* |
 | **Outputs** | Mesh (Mesh) |
-| **Audited** | 2026-06-03 |
+| **Audited** | 2026-07-22 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|

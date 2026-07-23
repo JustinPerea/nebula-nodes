@@ -4,7 +4,7 @@ kind: project-model-integration
 project: nebula_nodes
 provider: hunyuan
 status: active
-verified: 2026-06-03
+verified: 2026-07-22
 stale_after_days: 14
 ---
 
@@ -90,8 +90,10 @@ inputs.
 
 ### Missing Native Knobs
 
-- `seed` is not exposed on either node, so reproducibility across runs is
-  not available from Nebula. FAL endpoints accept and return `seed`.
+- `seed` is not exposed on either node because the current FAL v3 request
+  schemas do not accept it. Both endpoints return the inference seed as
+  response metadata, so Nebula cannot request a reproducible rerun on these
+  endpoint slugs.
 - `sync_mode` is not exposed (always queue). This is intentional for long
   Hunyuan3D jobs; do not change.
 
@@ -105,9 +107,9 @@ inputs.
 
 ### Text Prompt Length
 
-- Native API enforces a 1024 UTF-8 character cap on `prompt`. The Nebula
-  node does not currently validate this; long prompts will be rejected at
-  the FAL boundary with a 400.
+- Native API enforces a 1024-character cap on `prompt`. The Nebula wrapper
+  now rejects longer prompts before queue submission and reports both the
+  limit and received character count.
 
 ## Daedalus Workflow
 
@@ -130,13 +132,29 @@ nano-banana (gemini-3-pro-image-preview, request "white background")
 ```
 
 When the asset is a humanoid that needs rigging or animation in the same API,
-switch to Meshy from the start rather than chaining out of Hunyuan3D — Meshy
+switch to Meshy from the start rather than chaining out of Hunyuan3D. Meshy
 provides native auto-rigging and animation, which Hunyuan3D does not.
 
 When the agent has only a prompt and no reference image, prefer the
 Hephaestus chain that generates a Nano Banana Pro reference first, then
 feeds it into `hunyuan3d-image-to-3d`. This typically beats
 `hunyuan3d-text-to-3d` for fidelity at similar cost.
+
+## Re-verification 2026-07-22
+
+Re-verified both live FAL API schemas and model pricing pages:
+
+- `https://fal.ai/models/fal-ai/hunyuan3d-v3/text-to-3d/api`
+- `https://fal.ai/models/fal-ai/hunyuan3d-v3/image-to-3d/api`
+- `https://fal.ai/models/fal-ai/hunyuan3d-v3/text-to-3d`
+- `https://fal.ai/models/fal-ai/hunyuan3d-v3/image-to-3d`
+
+The node ports, endpoint slugs, parameter enums, defaults, ranges, and output
+parsing still match the canonical schemas. This pass corrected one stale
+statement: `seed` is output metadata, not an accepted request input. It also
+added a local prompt-length guard, isolated wrapper routing so `endpoint_id`
+does not mutate persisted graph state, a gold contract exemplar, and two
+request-body fixtures. No paid provider request was made.
 
 ## Re-verification 2026-06-03
 
