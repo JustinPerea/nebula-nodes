@@ -16,7 +16,7 @@ export interface ExecutionStartResult {
 
 export async function executeGraph(
   nodes: Array<{ id: string; definitionId: string; params: Record<string, unknown>; outputs: Record<string, unknown> }>,
-  edges: Array<{ id: string; source: string; sourceHandle: string | null | undefined; target: string; targetHandle: string | null | undefined }>,
+  edges: Array<{ id: string; source: string; sourceHandle?: string | null; target: string; targetHandle?: string | null }>,
   runId?: string,
 ): Promise<ExecutionStartResult> {
   const response = await apiFetch('/api/execute', {
@@ -36,7 +36,7 @@ export async function executeGraph(
 
 export async function executeNode(
   nodes: Array<{ id: string; definitionId: string; params: Record<string, unknown>; outputs: Record<string, unknown> }>,
-  edges: Array<{ id: string; source: string; sourceHandle: string | null | undefined; target: string; targetHandle: string | null | undefined }>,
+  edges: Array<{ id: string; source: string; sourceHandle?: string | null; target: string; targetHandle?: string | null }>,
   targetNodeId: string,
   runId?: string,
 ): Promise<ExecutionStartResult> {

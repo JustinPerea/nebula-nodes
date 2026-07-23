@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { useGraphStore } from '../src/store/graphStore';
 import * as api from '../src/lib/api';
+import { RUN_HISTORY_STORAGE_KEY } from '../src/lib/runHistory';
 
 /**
  * Store-level lifecycle tests for run-history. The pure transforms are covered in
@@ -13,6 +14,7 @@ describe('graphStore run-history lifecycle', () => {
   beforeEach(() => {
     // Close any leaked run, then start clean.
     useGraphStore.getState().resetExecution();
+    window.localStorage.removeItem(RUN_HISTORY_STORAGE_KEY);
     useGraphStore.setState({ nodes: [], edges: [], runHistory: [], isExecuting: false });
   });
 
@@ -120,5 +122,151 @@ describe('graphStore run-history lifecycle', () => {
     expect(useGraphStore.getState().isExecuting).toBe(true);
     expect(useGraphStore.getState().runHistory[0]?.id).toBe(secondRunId);
     expect(useGraphStore.getState().runHistory[0]?.status).toBe('running');
+  });
+
+  it('reruns a single-node record with its frozen graph and exact original target', async () => {
+    const spy = vi.spyOn(api, 'executeNode').mockResolvedValue({ status: 'started' } as never);
+    useGraphStore.setState({
+      nodes: [
+        {
+          id: 'source',
+          type: 'model-node',
+          position: { x: 0, y: 0 },
+          data: {
+            label: 'Source',
+            definitionId: 'text-input',
+            params: { value: 'original' },
+            state: 'idle',
+            outputs: {},
+          },
+        },
+        {
+          id: 'target',
+          type: 'model-node',
+          position: { x: 100, y: 0 },
+          data: {
+            label: 'Target',
+            definitionId: 'preview',
+            params: { mode: 'saved' },
+            state: 'idle',
+            outputs: {},
+          },
+        },
+      ],
+      edges: [{
+        id: 'source-to-target',
+        source: 'source',
+        sourceHandle: 'text',
+        target: 'target',
+        targetHandle: 'input',
+      }],
+    });
+
+    await useGraphStore.getState().executeNode('target');
+    const sourceRunId = spy.mock.calls[0][3] as string;
+    useGraphStore.getState().handleExecutionEvent({
+      type: 'graphComplete',
+      runId: sourceRunId,
+      duration: 1,
+      nodesExecuted: 2,
+    });
+
+    useGraphStore.setState({
+      nodes: useGraphStore.getState().nodes.map((node) => ({
+        ...node,
+        data: { ...node.data, params: { changedAfterRun: true } },
+      })),
+      edges: [],
+    });
+
+    await useGraphStore.getState().rerunHistoryRecord(sourceRunId);
+
+    expect(spy).toHaveBeenCalledTimes(2);
+    expect(spy.mock.calls[1][0]).toEqual([
+      expect.objectContaining({ id: 'source', params: { value: 'original' } }),
+      expect.objectContaining({ id: 'target', params: { mode: 'saved' } }),
+    ]);
+    expect(spy.mock.calls[1][1]).toEqual([
+      expect.objectContaining({ id: 'source-to-target', source: 'source', target: 'target' }),
+    ]);
+    expect(spy.mock.calls[1][2]).toBe('target');
+    const rerunId = spy.mock.calls[1][3] as string;
+    expect(rerunId).not.toBe(sourceRunId);
+
+    const rerun = useGraphStore.getState().runHistory[0];
+    expect(rerun).toMatchObject({
+      id: rerunId,
+      sourceRunId,
+      replayAction: 'rerun',
+      targetNodeId: 'target',
+      status: 'running',
+    });
+
+    // A repeated completion for the source run cannot close the new rerun.
+    useGraphStore.getState().handleExecutionEvent({
+      type: 'graphComplete',
+      runId: sourceRunId,
+      duration: 2,
+      nodesExecuted: 2,
+    });
+    expect(useGraphStore.getState().isExecuting).toBe(true);
+    expect(useGraphStore.getState().runHistory[0].status).toBe('running');
+
+    useGraphStore.getState().handleExecutionEvent({
+      type: 'graphComplete',
+      runId: rerunId,
+      duration: 2,
+      nodesExecuted: 2,
+    });
+  });
+
+  it('retries failed runs with a new isolated run id', async () => {
+    const spy = vi.spyOn(api, 'executeGraph')
+      .mockResolvedValueOnce({ status: 'validation_error' } as never)
+      .mockResolvedValueOnce({ status: 'started' } as never);
+
+    await useGraphStore.getState().executeGraph();
+    const failedRunId = spy.mock.calls[0][2] as string;
+    expect(useGraphStore.getState().runHistory[0].status).toBe('failed');
+
+    await useGraphStore.getState().retryFailedRun(failedRunId);
+
+    expect(spy).toHaveBeenCalledTimes(2);
+    const retryRunId = spy.mock.calls[1][2] as string;
+    expect(retryRunId).not.toBe(failedRunId);
+    expect(useGraphStore.getState().runHistory[0]).toMatchObject({
+      id: retryRunId,
+      sourceRunId: failedRunId,
+      replayAction: 'retry-failed',
+      status: 'running',
+    });
+  });
+
+  it('does not use the retry-failed action for a successful record', async () => {
+    const spy = vi.spyOn(api, 'executeGraph').mockResolvedValue({ status: 'started' } as never);
+
+    await useGraphStore.getState().executeGraph();
+    const runId = spy.mock.calls[0][2] as string;
+    useGraphStore.getState().handleExecutionEvent({
+      type: 'graphComplete',
+      runId,
+      duration: 0.1,
+      nodesExecuted: 0,
+    });
+
+    await useGraphStore.getState().retryFailedRun(runId);
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(useGraphStore.getState().runHistory).toHaveLength(1);
+  });
+
+  it('clearRunHistory removes both store and persisted history', async () => {
+    vi.spyOn(api, 'executeGraph').mockResolvedValue({ status: 'validation_error' } as never);
+    await useGraphStore.getState().executeGraph();
+    expect(window.localStorage.getItem(RUN_HISTORY_STORAGE_KEY)).not.toBeNull();
+
+    useGraphStore.getState().clearRunHistory();
+
+    expect(useGraphStore.getState().runHistory).toEqual([]);
+    expect(window.localStorage.getItem(RUN_HISTORY_STORAGE_KEY)).toBeNull();
   });
 });

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { X, Square, Trash2 } from 'lucide-react';
+import { X, RotateCcw, Square, Trash2 } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
 import { useDelayedUnmount } from '../../hooks/useDelayedUnmount';
@@ -20,10 +20,10 @@ const STATUS_LABEL: Record<RunRecord['status'], string> = {
 };
 
 /**
- * Run History panel — a session-scoped, newest-first record of every graph /
- * single-node / selection run (status · duration · nodes · age). Cancel stops
- * the active run (reuses `resetExecution`, the existing cancel path); Clear
- * empties the list. Frontend-only (Phase 1 of g-queue-history-manager).
+ * Run History panel — a persistent, newest-first record of graph / single-node /
+ * selection runs. Terminal records replay their frozen request snapshot, while
+ * failed records use the more explicit Retry failed action. Cancel reuses the
+ * existing reset path; Clear removes both UI and persisted history.
  */
 export function RunHistoryPanel() {
   const visible = useUIStore((s) => s.panels.history.visible);
@@ -33,6 +33,8 @@ export function RunHistoryPanel() {
 
   const runHistory = useGraphStore((s) => s.runHistory);
   const clearRunHistory = useGraphStore((s) => s.clearRunHistory);
+  const rerunHistoryRecord = useGraphStore((s) => s.rerunHistoryRecord);
+  const retryFailedRun = useGraphStore((s) => s.retryFailedRun);
   const isExecuting = useGraphStore((s) => s.isExecuting);
   const resetExecution = useGraphStore((s) => s.resetExecution);
 
@@ -116,7 +118,7 @@ export function RunHistoryPanel() {
 
       <div className="panel__body panel__body--history">
         {runHistory.length === 0 ? (
-          <div className="run-history__empty">No runs yet this session.</div>
+          <div className="run-history__empty">No saved runs yet.</div>
         ) : (
           <ul className="run-history__list">
             {runHistory.map((r) => (
@@ -140,7 +142,34 @@ export function RunHistoryPanel() {
                     {r.nodesExecuted != null && (
                       <> · {r.nodesExecuted} node{r.nodesExecuted === 1 ? '' : 's'}</>
                     )}
+                    {r.targetNodeId && (
+                      <span className="run-history__target" title={r.targetNodeId}>
+                        {' '}· target {r.targetNodeId}
+                      </span>
+                    )}
                   </span>
+                  {r.status !== 'running' && (
+                    <span className="run-history__item-actions">
+                      <button
+                        type="button"
+                        className="run-history__replay"
+                        onClick={() => {
+                          if (r.status === 'failed') void retryFailedRun(r.id);
+                          else void rerunHistoryRecord(r.id);
+                        }}
+                        disabled={isExecuting}
+                        aria-label={r.status === 'failed'
+                          ? `Retry failed ${runTriggerLabel(r.trigger)} run`
+                          : `Rerun ${runTriggerLabel(r.trigger)}`}
+                        title={isExecuting
+                          ? 'Wait for the active run to finish'
+                          : 'Run the exact saved graph snapshot'}
+                      >
+                        <RotateCcw size={11} strokeWidth={2} aria-hidden="true" focusable="false" />
+                        {r.status === 'failed' ? 'Retry failed' : 'Rerun'}
+                      </button>
+                    </span>
+                  )}
                 </span>
               </li>
             ))}
