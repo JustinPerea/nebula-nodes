@@ -22,6 +22,7 @@ from models.events import (
     ErrorEvent,
     ValidationErrorDetail,
     GraphCompleteEvent,
+    execution_run_id,
 )
 
 CycleError = _GraphlibCycleError
@@ -474,6 +475,38 @@ NodeHandler = Callable[
 
 
 async def execute_graph(
+    nodes: list[GraphNode],
+    edges: list[GraphEdge],
+    api_keys: dict[str, str],
+    handler_registry: dict[str, NodeHandler],
+    emit: Callable[[ExecutionEvent], Awaitable[None]],
+    cache: ExecutionCache | None = None,
+    max_parallel_nodes: int = 4,
+    run_id: str | None = None,
+) -> None:
+    """Execute a graph with task-local lifecycle correlation.
+
+    Handler callbacks can emit directly through their registry closure rather
+    than the engine's ``emit`` argument. A ContextVar therefore scopes every
+    event serialized from this async task, including child node tasks.
+    """
+
+    token = execution_run_id.set(run_id)
+    try:
+        await _execute_graph(
+            nodes=nodes,
+            edges=edges,
+            api_keys=api_keys,
+            handler_registry=handler_registry,
+            emit=emit,
+            cache=cache,
+            max_parallel_nodes=max_parallel_nodes,
+        )
+    finally:
+        execution_run_id.reset(token)
+
+
+async def _execute_graph(
     nodes: list[GraphNode],
     edges: list[GraphEdge],
     api_keys: dict[str, str],

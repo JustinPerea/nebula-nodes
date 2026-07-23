@@ -27,7 +27,13 @@ from models import (
     GraphNode,
     GraphEdge,
 )
-from models.events import ExecutionEvent, ExecutedEvent, ErrorEvent, GraphCompleteEvent
+from models.events import (
+    ExecutionEvent,
+    ExecutedEvent,
+    ErrorEvent,
+    GraphCompleteEvent,
+    execution_run_id,
+)
 from execution.engine import execute_graph, validate_graph, topological_sort, get_subgraph, CycleError
 from execution.sync_runner import get_handler_registry
 from services.settings import load_settings, save_settings, get_api_key
@@ -772,6 +778,11 @@ def _snake_to_camel(s: str) -> str:
 
 def _event_to_camel(event: ExecutionEvent) -> dict[str, Any]:
     raw = event.model_dump()
+    run_id = raw.get("run_id") or execution_run_id.get()
+    if run_id is None:
+        raw.pop("run_id", None)
+    else:
+        raw["run_id"] = run_id
     result: dict[str, Any] = {}
     for key, value in raw.items():
         camel = _snake_to_camel(key)
@@ -1045,7 +1056,7 @@ async def execute(request: ExecuteRequest) -> dict:
 
     errors = validate_graph(nodes, request.edges, api_keys)
     if errors:
-        await manager.broadcast(ValidationErrorEvent(errors=errors))
+        await manager.broadcast(ValidationErrorEvent(errors=errors, run_id=request.run_id))
         return _validation_response(errors)
 
     try:
@@ -1053,6 +1064,7 @@ async def execute(request: ExecuteRequest) -> dict:
     except CycleError as exc:
         await manager.broadcast(
             ValidationErrorEvent(
+                run_id=request.run_id,
                 errors=[
                     {
                         "node_id": "",
@@ -1077,6 +1089,7 @@ async def execute(request: ExecuteRequest) -> dict:
                 handler_registry=handler_registry,
                 emit=_emit_and_sync,
                 cache=execution_cache,
+                run_id=request.run_id,
             )
             _sync_params_to_cli_graph(nodes)
             print("[exec] _run completed successfully", file=sys.stderr, flush=True)
@@ -1106,7 +1119,7 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
 
     errors = validate_graph(sub_nodes, sub_edges, api_keys)
     if errors:
-        await manager.broadcast(ValidationErrorEvent(errors=errors))
+        await manager.broadcast(ValidationErrorEvent(errors=errors, run_id=request.run_id))
         return _validation_response(errors)
 
     try:
@@ -1114,6 +1127,7 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
     except CycleError as exc:
         await manager.broadcast(
             ValidationErrorEvent(
+                run_id=request.run_id,
                 errors=[
                     {
                         "node_id": "",
@@ -1137,6 +1151,7 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
                 handler_registry=handler_registry,
                 emit=_emit_and_sync,
                 cache=execution_cache,
+                run_id=request.run_id,
             )
             _sync_params_to_cli_graph(sub_nodes)
         except Exception:
@@ -1260,6 +1275,7 @@ async def _execute_single_shot_pass(
     api_keys: dict[str, str],
     use_cache: bool,
     seed: int | None = None,
+    run_id: str | None = None,
 ) -> tuple[GraphNode | None, dict[str, Any]]:
     """Run one scoped Cinema pass and require a target ExecutedEvent.
 
@@ -1296,6 +1312,7 @@ async def _execute_single_shot_pass(
         handler_registry=get_handler_registry(emit=_emit_scoped),
         emit=_emit_scoped,
         cache=execution_cache if use_cache else None,
+        run_id=run_id,
     )
 
     if not captured["target_executed"]:
@@ -1504,7 +1521,7 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
 
     errors = validate_graph(sub_nodes, sub_edges, api_keys)
     if errors:
-        await manager.broadcast(ValidationErrorEvent(errors=errors))
+        await manager.broadcast(ValidationErrorEvent(errors=errors, run_id=request.run_id))
         return {"status": "validation_error", "errorCount": len(errors)}
 
     try:
@@ -1512,6 +1529,7 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
     except CycleError as exc:
         await manager.broadcast(
             ValidationErrorEvent(
+                run_id=request.run_id,
                 errors=[{"node_id": "", "port_id": "", "message": f"Subgraph contains a cycle: {exc}"}]
             )
         )
@@ -1540,6 +1558,7 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
                             api_keys=api_keys,
                             use_cache=False,
                             seed=seed_i,
+                            run_id=request.run_id,
                         )
                     except _ShotPassError as exc:
                         failures.append(_shot_task_error_message(exc))
@@ -1566,6 +1585,7 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
                     api_keys=api_keys,
                     use_cache=True,
                     seed=request.seed,
+                    run_id=request.run_id,
                 )
                 await _merge_shot_result(
                     request.node_id, request.shot_id, executed_node, outputs

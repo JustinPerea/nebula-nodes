@@ -100,4 +100,25 @@ describe('graphStore run-history lifecycle', () => {
     resolve({ status: 'ok' });
     await p;
   });
+
+  it('ignores a stale scoped completion after reset and a newer run starts', async () => {
+    const spy = vi.spyOn(api, 'executeGraph').mockResolvedValue({ status: 'started' } as never);
+
+    await useGraphStore.getState().executeGraph();
+    const firstRunId = spy.mock.calls[0][2] as string;
+    useGraphStore.getState().resetExecution();
+    await useGraphStore.getState().executeGraph();
+    const secondRunId = spy.mock.calls[1][2] as string;
+
+    useGraphStore.getState().handleExecutionEvent({
+      type: 'graphComplete',
+      runId: firstRunId,
+      duration: 1,
+      nodesExecuted: 0,
+    });
+
+    expect(useGraphStore.getState().isExecuting).toBe(true);
+    expect(useGraphStore.getState().runHistory[0]?.id).toBe(secondRunId);
+    expect(useGraphStore.getState().runHistory[0]?.status).toBe('running');
+  });
 });

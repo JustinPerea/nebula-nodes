@@ -17,11 +17,12 @@ export interface ExecutionStartResult {
 export async function executeGraph(
   nodes: Array<{ id: string; definitionId: string; params: Record<string, unknown>; outputs: Record<string, unknown> }>,
   edges: Array<{ id: string; source: string; sourceHandle: string | null | undefined; target: string; targetHandle: string | null | undefined }>,
+  runId?: string,
 ): Promise<ExecutionStartResult> {
   const response = await apiFetch('/api/execute', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ nodes, edges }),
+    body: JSON.stringify({ nodes, edges, runId }),
   });
   if (!response.ok) {
     let detail = '';
@@ -37,11 +38,12 @@ export async function executeNode(
   nodes: Array<{ id: string; definitionId: string; params: Record<string, unknown>; outputs: Record<string, unknown> }>,
   edges: Array<{ id: string; source: string; sourceHandle: string | null | undefined; target: string; targetHandle: string | null | undefined }>,
   targetNodeId: string,
+  runId?: string,
 ): Promise<ExecutionStartResult> {
   const response = await apiFetch('/api/execute-node', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ nodes, edges, targetNodeId }),
+    body: JSON.stringify({ nodes, edges, targetNodeId, runId }),
   });
   if (!response.ok) {
     let detail = '';
@@ -60,11 +62,12 @@ export async function generateCinemaShot(
   shotId: string,
   seed?: number,
   variations?: number,
+  runId?: string,
 ): Promise<{ status: string; shotId?: string; variations?: number; errorCount?: number }> {
   const response = await apiFetch('/api/cinema/generate-shot', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ nodes, edges, nodeId, shotId, seed, variations }),
+    body: JSON.stringify({ nodes, edges, nodeId, shotId, seed, variations, runId }),
   });
   if (!response.ok) {
     let detail = '';
