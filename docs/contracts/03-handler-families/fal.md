@@ -51,6 +51,13 @@ Same underlying model as OpenAI direct, **different param names and URLs**.
 | `gpt-image-1-5-edit` | `fal-ai/gpt-image-1.5/edit` | same |
 | `hunyuan3d-text-to-3d` | `fal-ai/hunyuan3d-v3/text-to-3d` | [../examples/hunyuan3d.md](../examples/hunyuan3d.md) |
 | `hunyuan3d-image-to-3d` | `fal-ai/hunyuan3d-v3/image-to-3d` | same |
+| `ideogram-v4` | `ideogram/v4` | [../examples/ideogram-fal.md](../examples/ideogram-fal.md) |
+| `ideogram-edit` | `fal-ai/ideogram/v3/edit` | same |
+| `ideogram-remix` | `fal-ai/ideogram/v3/remix` | same |
+| `ideogram-reframe` | `fal-ai/ideogram/v3/reframe` | same |
+| `ideogram-replace-background` | `fal-ai/ideogram/v3/replace-background` | same |
+| `ideogram-character` | `fal-ai/ideogram/character` | same |
+| `ideogram-upscale` | `fal-ai/ideogram/upscale` | same |
 
 Also on FAL (async-poll, **no exemplar yet**): `seedream-4-5`.
 
@@ -68,10 +75,13 @@ Also on FAL (async-poll, **no exemplar yet**): `seedream-4-5`.
 | `audio` | `audio_url` |
 | `front_image` (Hunyuan3D) | `input_image_url` |
 | `back_image` / `left_image` / `right_image` | matching `*_image_url` |
+| `reference_images` (Ideogram Character) | `reference_image_urls` |
 
 Local paths → data URI via `_to_fal_url()`.
 
-Node `params` (except `endpoint_id`) copied into body when non-empty.
+The universal node copies non-empty `params` except `endpoint_id`. Fixed
+dual-route wrappers must instead allowlist their route's fields on a per-run
+copy so defaults from the other provider cannot leak upstream.
 
 ---
 
@@ -114,3 +124,4 @@ Never copy param names across routes.
 |------|--------|
 | 2026-07-01 | Initial family doc; gpt-image-2-fal exemplar complete |
 | 2026-07-22 | Added Hunyuan3D fixed-wrapper mapping and gold exemplar |
+| 2026-07-23 | Added the seven-node Ideogram FAL contract, route filtering, and fixtures |

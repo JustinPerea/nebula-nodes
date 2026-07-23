@@ -76,6 +76,146 @@ async def _capture_registry_poll_body(
 
 
 async def _capture_fal_body(fixture_name: str) -> dict[str, Any]:
+    ideogram_scenarios: dict[str, tuple[str, dict[str, Any], dict[str, PortValueDict]]] = {
+        "ideogram-v4-request.json": (
+            "ideogram-v4",
+            {
+                "rendering_speed": "QUALITY",
+                "image_size": "landscape_16_9",
+                "expansion_model": "None",
+                "acceleration": "regular",
+                "num_images": 2,
+                "output_format": "png",
+                "seed": 42,
+                "enable_safety_checker": True,
+                # Direct-only defaults must never leak into this FAL body.
+                "resolution": "2048x2048",
+                "enable_copyright_detection": False,
+            },
+            {"prompt": PortValueDict(type="Text", value="a poster that says NEBULA")},
+        ),
+        "ideogram-edit-request.json": (
+            "ideogram-edit",
+            {
+                "rendering_speed": "QUALITY",
+                "expand_prompt": True,
+                "num_images": 2,
+                "seed": 43,
+                "magic_prompt": "AUTO",
+            },
+            {
+                "prompt": PortValueDict(type="Text", value="replace the sign with OPEN"),
+                "image": PortValueDict(type="Image", value="https://example.com/base.png"),
+                "mask": PortValueDict(type="Image", value="https://example.com/mask.png"),
+                "images": PortValueDict(
+                    type="Image", value=["https://example.com/style.png"]
+                ),
+            },
+        ),
+        "ideogram-remix-request.json": (
+            "ideogram-remix",
+            {
+                "strength": 0.65,
+                "image_size": "portrait_4_3",
+                "style": "DESIGN",
+                "negative_prompt": "blurred lettering",
+                "rendering_speed": "BALANCED",
+                "expand_prompt": False,
+                "num_images": 3,
+                "seed": 44,
+                "image_weight": 70,
+                "resolution": "2048x2048",
+            },
+            {
+                "prompt": PortValueDict(type="Text", value="the same scene at night"),
+                "image": PortValueDict(type="Image", value="https://example.com/source.png"),
+                "images": PortValueDict(
+                    type="Image", value=["https://example.com/style-a.png"]
+                ),
+            },
+        ),
+        "ideogram-reframe-request.json": (
+            "ideogram-reframe",
+            {
+                "image_size": "landscape_16_9",
+                "style": "REALISTIC",
+                "rendering_speed": "TURBO",
+                "num_images": 2,
+                "seed": 45,
+                "resolution": "1280x800",
+            },
+            {
+                "image": PortValueDict(type="Image", value="https://example.com/source.png"),
+                "images": PortValueDict(
+                    type="Image", value=["https://example.com/style.png"]
+                ),
+            },
+        ),
+        "ideogram-replace-background-request.json": (
+            "ideogram-replace-background",
+            {
+                "style": "GENERAL",
+                "rendering_speed": "QUALITY",
+                "expand_prompt": True,
+                "num_images": 2,
+                "seed": 46,
+                "magic_prompt": "OFF",
+            },
+            {
+                "prompt": PortValueDict(type="Text", value="a beach at golden hour"),
+                "image": PortValueDict(type="Image", value="https://example.com/subject.png"),
+                "images": PortValueDict(
+                    type="Image", value=["https://example.com/style.png"]
+                ),
+            },
+        ),
+        "ideogram-character-request.json": (
+            "ideogram-character",
+            {
+                "negative_prompt": "duplicate person",
+                "num_images": 2,
+                "seed": 47,
+                "style": "FICTION",
+                "image_size": "portrait_16_9",
+                "rendering_speed": "BALANCED",
+                "expand_prompt": True,
+                "aspect_ratio": "9x16",
+                "style_type": "FICTION",
+                "custom_model_uri": "ideogram://models/direct-only",
+            },
+            {
+                "prompt": PortValueDict(type="Text", value="the explorer at a campfire"),
+                "reference_images": PortValueDict(
+                    type="Image", value=["https://example.com/character.png"]
+                ),
+                "images": PortValueDict(
+                    type="Image", value=["https://example.com/style.png"]
+                ),
+            },
+        ),
+        "ideogram-upscale-request.json": (
+            "ideogram-upscale",
+            {
+                "resemblance": 70,
+                "detail": 30,
+                "seed": 48,
+                "expand_prompt": False,
+                "magic_prompt": "AUTO",
+            },
+            {
+                "image": PortValueDict(type="Image", value="https://example.com/source.png"),
+                "prompt": PortValueDict(type="Text", value="sharper lettering"),
+            },
+        ),
+    }
+    if fixture_name in ideogram_scenarios:
+        definition_id, params, inputs = ideogram_scenarios[fixture_name]
+        return await _capture_registry_poll_body(
+            definition_id=definition_id,
+            params=params,
+            inputs=inputs,
+        )
+
     if fixture_name == "hunyuan3d-text-to-3d-request.json":
         return await _capture_registry_poll_body(
             definition_id="hunyuan3d-text-to-3d",

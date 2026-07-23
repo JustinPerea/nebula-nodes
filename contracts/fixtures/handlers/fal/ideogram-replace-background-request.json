@@ -1,0 +1,13 @@
+{
+  "_comment": "Oracle: backend/tests/test_fal_contract_fixtures.py::test_fal_request_body_matches_fixture",
+  "prompt": "a beach at golden hour",
+  "image_url": "https://example.com/subject.png",
+  "image_urls": [
+    "https://example.com/style.png"
+  ],
+  "style": "GENERAL",
+  "rendering_speed": "QUALITY",
+  "expand_prompt": true,
+  "num_images": 2,
+  "seed": 46
+}

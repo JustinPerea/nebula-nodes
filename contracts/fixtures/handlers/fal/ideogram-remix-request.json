@@ -1,0 +1,16 @@
+{
+  "_comment": "Oracle: backend/tests/test_fal_contract_fixtures.py::test_fal_request_body_matches_fixture",
+  "prompt": "the same scene at night",
+  "image_url": "https://example.com/source.png",
+  "image_urls": [
+    "https://example.com/style-a.png"
+  ],
+  "strength": 0.65,
+  "image_size": "portrait_4_3",
+  "style": "DESIGN",
+  "negative_prompt": "blurred lettering",
+  "rendering_speed": "BALANCED",
+  "expand_prompt": false,
+  "num_images": 3,
+  "seed": 44
+}
