@@ -14,7 +14,17 @@ import { shotPortId } from '../constants/ports';
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 import { buildSampleGraph } from '../constants/sampleGraph';
 import { computeLayout } from '../lib/autoLayout';
-import { openRunRecord, closeRunRecord, type RunRecord } from '../lib/runHistory';
+import {
+  clearPersistedRunHistory,
+  closeRunRecord,
+  freezeRunSnapshot,
+  loadRunHistory,
+  openRunRecord,
+  persistRunHistory,
+  type RunGraphSnapshot,
+  type RunRecord,
+  type RunReplayAction,
+} from '../lib/runHistory';
 import {
   executeGraph as apiExecuteGraph,
   executeNode as apiExecuteNode,
@@ -46,6 +56,35 @@ function paramsForBackend(definitionId: string, params: Record<string, unknown>)
   const clips = Array.isArray(params.clips) ? (params.clips as EditClip[]) : null;
   if (!clips) return params;
   return { ...params, clips: clips.map((c) => ({ ...c, speed: clipSpeed(c) })) };
+}
+
+/** Capture the exact JSON graph sent to execution. Keeping this at the network
+ * boundary means history replays include derived video-edit speed values and
+ * never read mutable canvas params later. */
+function captureRunSnapshot(nodes: Node<NodeData>[], edges: Edge[]): RunGraphSnapshot {
+  return freezeRunSnapshot({
+    nodes: nodes.map((node) => ({
+      id: node.id,
+      definitionId: node.data.definitionId,
+      params: paramsForBackend(
+        node.data.definitionId,
+        node.data.params as Record<string, unknown>,
+      ),
+      outputs: {},
+    })),
+    edges: edges.map((edge) => ({
+      id: edge.id,
+      source: edge.source,
+      sourceHandle: edge.sourceHandle,
+      target: edge.target,
+      targetHandle: edge.targetHandle,
+    })),
+  });
+}
+
+function persistedRunHistory(history: RunRecord[]): RunRecord[] {
+  persistRunHistory(history);
+  return history;
 }
 
 function buildDefaultParams(def: ModelNodeDefinition): Record<string, unknown> {
@@ -302,7 +341,9 @@ function closeCurrentRun(
   const rid = currentRunId;
   currentRunId = null;
   runErrors.delete(rid);
-  set((s) => ({ runHistory: closeRunRecord(s.runHistory, rid, patch) }));
+  set((s) => ({
+    runHistory: persistedRunHistory(closeRunRecord(s.runHistory, rid, patch)),
+  }));
 }
 
 /** Scoped events may only own the global Canvas lifecycle when they match its
@@ -443,6 +484,8 @@ interface GraphState {
   loadSampleGraph: () => void;
   autoLayout: () => void;
   runHistory: RunRecord[];
+  rerunHistoryRecord: (runId: string) => Promise<void>;
+  retryFailedRun: (runId: string) => Promise<void>;
   clearRunHistory: () => void;
   clearGraph: () => void;
   configureOpenRouterModel: (nodeId: string, modelId: string, model: OpenRouterModel) => void;
@@ -664,6 +707,112 @@ type GraphSet = (
 ) => void;
 type GraphGet = () => GraphState;
 
+function snapshotExecutionScopeIds(
+  snapshot: RunGraphSnapshot,
+  targetNodeId?: string,
+): Set<string> {
+  if (!targetNodeId) return new Set(snapshot.nodes.map((node) => node.id));
+  const ids = new Set<string>([targetNodeId]);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const edge of snapshot.edges) {
+      if (ids.has(edge.target) && !ids.has(edge.source)) {
+        ids.add(edge.source);
+        changed = true;
+      }
+    }
+  }
+  return ids;
+}
+
+function markSnapshotScopeQueued(
+  nodes: Node<NodeData>[],
+  scopeIds: Set<string>,
+): Node<NodeData>[] {
+  return nodes.map((node) => {
+    if (!scopeIds.has(node.id)) return node;
+    return {
+      ...node,
+      data: {
+        ...node.data,
+        state: 'queued' as const,
+        error: undefined,
+        progress: undefined,
+        streamingText: undefined,
+        streamingPartials: undefined,
+        streamingSvg: undefined,
+      },
+    };
+  });
+}
+
+/** Replay from persisted request data, never from the live canvas. Matching live
+ * nodes still receive execution state updates, but graph topology/params are not
+ * replaced as a side effect of rerunning history. */
+async function executeHistoricalRun(
+  source: RunRecord,
+  replayAction: RunReplayAction,
+  set: GraphSet,
+  get: GraphGet,
+): Promise<void> {
+  const { isExecuting, resetExecution } = get();
+  if (isExecuting || source.status === 'running') return;
+
+  const snapshot = freezeRunSnapshot(source.snapshot);
+  const targetNodeId = source.targetNodeId;
+  if (targetNodeId && !snapshot.nodes.some((node) => node.id === targetNodeId)) return;
+
+  resetExecution();
+  const runId = uuidv4();
+  const scopeIds = snapshotExecutionScopeIds(snapshot, targetNodeId);
+  currentRunId = runId;
+  runErrors.set(runId, false);
+  set((state) => ({
+    nodes: markSnapshotScopeQueued(state.nodes, scopeIds),
+    isExecuting: true,
+    runHistory: persistedRunHistory(openRunRecord(state.runHistory, {
+      id: runId,
+      trigger: source.trigger,
+      startedAt: Date.now(),
+      snapshot,
+      targetNodeId,
+      sourceRunId: source.id,
+      replayAction,
+    })),
+  }));
+
+  try {
+    const result = targetNodeId
+      ? await apiExecuteNode(snapshot.nodes, snapshot.edges, targetNodeId, runId)
+      : await apiExecuteGraph(snapshot.nodes, snapshot.edges, runId);
+    if (result.status === 'validation_error' && currentRunId === runId) {
+      closeCurrentRun(set, { status: 'failed' });
+      set((state) => ({
+        nodes: markNodesWithValidationErrors(
+          state.nodes,
+          scopeIds,
+          result.errors,
+          'Validation failed before execution. Check the saved inputs and API keys.',
+        ),
+        isExecuting: false,
+      }));
+    }
+  } catch (err) {
+    console.error('Failed to replay historical run:', err);
+    if (currentRunId !== runId) return;
+    closeCurrentRun(set, { status: 'failed' });
+    set((state) => ({
+      nodes: markNodesErrored(
+        state.nodes,
+        scopeIds,
+        err instanceof Error ? err.message : 'Failed to replay historical run.',
+      ),
+      isExecuting: false,
+    }));
+  }
+}
+
 async function ensureBackendFreshForLocalCanvas(
   localCanvasWasEmpty: boolean,
   set: GraphSet,
@@ -842,7 +991,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   edges: [],
   isExecuting: false,
   backendFreshStartPending: false,
-  runHistory: [],
+  runHistory: loadRunHistory(),
 
   // ---------------------------------------------------------------------------
   // Undo/Redo initial state
@@ -1966,18 +2115,22 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     const { nodes, edges, isExecuting, resetExecution } = get();
     if (isExecuting) return;
     resetExecution();
+    const snapshot = captureRunSnapshot(nodes, edges);
     const runId = uuidv4();
     currentRunId = runId;
     runErrors.set(runId, false);
     set((state) => ({
       nodes: markExecutionScopeQueued(state.nodes, state.edges),
       isExecuting: true,
-      runHistory: openRunRecord(state.runHistory, { id: runId, trigger: 'graph', startedAt: Date.now() }),
+      runHistory: persistedRunHistory(openRunRecord(state.runHistory, {
+        id: runId,
+        trigger: 'graph',
+        startedAt: Date.now(),
+        snapshot,
+      })),
     }));
-    const graphNodes = nodes.map((n) => ({ id: n.id, definitionId: n.data.definitionId, params: paramsForBackend(n.data.definitionId, n.data.params as Record<string, unknown>), outputs: {} }));
-    const graphEdges = edges.map((e) => ({ id: e.id, source: e.source, sourceHandle: e.sourceHandle, target: e.target, targetHandle: e.targetHandle }));
     try {
-      const result = await apiExecuteGraph(graphNodes, graphEdges, runId);
+      const result = await apiExecuteGraph(snapshot.nodes, snapshot.edges, runId);
       if (result.status === 'validation_error' && currentRunId === runId) {
         closeCurrentRun(set, { status: 'failed' });
         set((state) => ({
@@ -2009,29 +2162,23 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     const { nodes, edges, isExecuting, resetExecution } = get();
     if (isExecuting) return;
     resetExecution();
+    const snapshot = captureRunSnapshot(nodes, edges);
     const runId = uuidv4();
     currentRunId = runId;
     runErrors.set(runId, false);
     set((state) => ({
       nodes: markExecutionScopeQueued(state.nodes, state.edges, nodeId),
       isExecuting: true,
-      runHistory: openRunRecord(state.runHistory, { id: runId, trigger: 'node', startedAt: Date.now() }),
-    }));
-    const graphNodes = nodes.map((n) => ({
-      id: n.id,
-      definitionId: n.data.definitionId,
-      params: paramsForBackend(n.data.definitionId, n.data.params as Record<string, unknown>),
-      outputs: {},
-    }));
-    const graphEdges = edges.map((e) => ({
-      id: e.id,
-      source: e.source,
-      sourceHandle: e.sourceHandle,
-      target: e.target,
-      targetHandle: e.targetHandle,
+      runHistory: persistedRunHistory(openRunRecord(state.runHistory, {
+        id: runId,
+        trigger: 'node',
+        startedAt: Date.now(),
+        snapshot,
+        targetNodeId: nodeId,
+      })),
     }));
     try {
-      const result = await apiExecuteNode(graphNodes, graphEdges, nodeId, runId);
+      const result = await apiExecuteNode(snapshot.nodes, snapshot.edges, nodeId, runId);
       if (result.status === 'validation_error' && currentRunId === runId) {
         closeCurrentRun(set, { status: 'failed' });
         set((state) => ({
@@ -2164,6 +2311,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     if (clusterNodes.length === 0) return;
     const clusterEdges = edges.filter((e) => idSet.has(e.source) && idSet.has(e.target));
     resetExecution();
+    const snapshot = captureRunSnapshot(clusterNodes, clusterEdges);
     const runId = uuidv4();
     currentRunId = runId;
     runErrors.set(runId, false);
@@ -2185,19 +2333,15 @@ export const useGraphStore = create<GraphState>((set, get) => ({
           : n,
       ),
       isExecuting: true,
-      runHistory: openRunRecord(state.runHistory, { id: runId, trigger: 'cluster', startedAt: Date.now() }),
-    }));
-    const graphNodes = clusterNodes.map((n) => ({
-      id: n.id,
-      definitionId: n.data.definitionId,
-      params: paramsForBackend(n.data.definitionId, n.data.params as Record<string, unknown>),
-      outputs: {},
-    }));
-    const graphEdges = clusterEdges.map((e) => ({
-      id: e.id, source: e.source, sourceHandle: e.sourceHandle, target: e.target, targetHandle: e.targetHandle,
+      runHistory: persistedRunHistory(openRunRecord(state.runHistory, {
+        id: runId,
+        trigger: 'cluster',
+        startedAt: Date.now(),
+        snapshot,
+      })),
     }));
     try {
-      const result = await apiExecuteGraph(graphNodes, graphEdges, runId);
+      const result = await apiExecuteGraph(snapshot.nodes, snapshot.edges, runId);
       if (result.status === 'validation_error' && currentRunId === runId) {
         closeCurrentRun(set, { status: 'failed' });
         set((state) => ({
@@ -2805,7 +2949,22 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     }
   },
 
-  clearRunHistory: () => set({ runHistory: [] }),
+  rerunHistoryRecord: async (runId) => {
+    const source = get().runHistory.find((record) => record.id === runId);
+    if (!source) return;
+    await executeHistoricalRun(source, 'rerun', set, get);
+  },
+
+  retryFailedRun: async (runId) => {
+    const source = get().runHistory.find((record) => record.id === runId);
+    if (!source || source.status !== 'failed') return;
+    await executeHistoricalRun(source, 'retry-failed', set, get);
+  },
+
+  clearRunHistory: () => {
+    clearPersistedRunHistory();
+    set({ runHistory: [] });
+  },
 
   clearGraph: () => {
     const { nodes, edges, undoStack } = get();

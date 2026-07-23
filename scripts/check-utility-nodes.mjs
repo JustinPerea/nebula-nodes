@@ -8,6 +8,9 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(__dirname, '..');
 const MANIFEST_PATH = join(REPO_ROOT, 'docs', 'utility-node-test-manifest.json');
 const NODE_DEFS_PATH = join(REPO_ROOT, 'backend', 'data', 'node_definitions.json');
+const UTILITY_IMAGE_A = join(REPO_ROOT, 'docs', 'assets', 'helix-mark-paper.png');
+const UTILITY_IMAGE_B = join(REPO_ROOT, 'docs', 'assets', 'helix-phase1-core.png');
+const UTILITY_VIDEO = join(REPO_ROOT, 'docs', 'demo', 'nebula-nodes-demo-720p.mp4');
 const URL = process.env.UTILITY_CHECK_URL ?? 'http://127.0.0.1:5173/';
 const BACKEND_URL = process.env.UTILITY_CHECK_BACKEND_URL ?? 'http://127.0.0.1:8000/api/graph/export';
 const CHROME = process.env.CHROME_PATH ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
@@ -54,6 +57,7 @@ try {
   await waitForRuntime(cdp, 'window.__nebulaUIStore && window.__nebulaGraphStore');
 
   await runPureUtilityExecutionCheck(cdp);
+  await runHistoryRerunAndReloadCheck(cdp);
   await runMockedGeminiEmbeddingCheck(cdp);
 
   console.log('Utility node browser smoke check passed.');
@@ -96,7 +100,7 @@ async function assertReachable(url, label) {
 }
 
 async function runPureUtilityExecutionCheck(cdp) {
-  await evaluate(cdp, async () => {
+  await evaluate(cdp, async (imageAPath, imageBPath, videoPath) => {
     const graph = window.__nebulaGraphStore;
     const ui = window.__nebulaUIStore;
     ui.getState().setSkin('slava-restraint');
@@ -152,10 +156,10 @@ async function runPureUtilityExecutionCheck(cdp) {
     const nodes = [
       makeNode('util-text-a', 'text-input', { value: 'Alpha' }, 0),
       makeNode('util-text-b', 'text-input', { value: 'Beta' }, 1),
-      makeNode('util-image-a', 'image-input', { filePath: '/tmp/image-a.png' }, 2),
-      makeNode('util-image-b', 'image-input', { filePath: '/tmp/image-b.png' }, 3),
-      makeNode('util-video', 'video-input', { filePath: '/tmp/source.mp4' }, 4),
-      makeNode('util-audio', 'audio-input', { filePath: '/tmp/source.wav' }, 5),
+      makeNode('util-image-a', 'image-input', { filePath: imageAPath }, 2),
+      makeNode('util-image-b', 'image-input', { filePath: imageBPath }, 3),
+      makeNode('util-video', 'video-input', { filePath: videoPath }, 4),
+      makeNode('util-audio', 'audio-input', { filePath: videoPath }, 5),
       makeNode('util-note', 'sticky-note', { content: 'Note', color: 'grey' }, 6),
       makeNode('util-combine', 'combine-text', { separator: ' | ', template: '' }, 7),
       makeNode('util-router', 'router', {}, 8),
@@ -188,35 +192,21 @@ async function runPureUtilityExecutionCheck(cdp) {
     graph.setState({
       nodes,
       edges,
-      isExecuting: true,
+      isExecuting: false,
       undoStack: [],
       redoStack: [],
       backendFreshStartPending: false,
     });
 
-    const response = await fetch('/api/execute', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        nodes: nodes.map((node) => ({
-          id: node.id,
-          definitionId: node.data.definitionId,
-          params: node.data.params,
-          outputs: {},
-        })),
-        edges: edges.map((item) => ({
-          id: item.id,
-          source: item.source,
-          sourceHandle: item.sourceHandle,
-          target: item.target,
-          targetHandle: item.targetHandle,
-        })),
-      }),
-    });
-    if (!response.ok) throw new Error(`execute failed: ${response.status}`);
-    const result = await response.json();
-    if (result.status !== 'started') throw new Error(`execute returned ${result.status}`);
-  });
+    window.dispatchEvent(new CustomEvent('nebula:graph-nodes-added', {
+      detail: { addedCount: nodes.length, totalCount: nodes.length },
+    }));
+    await new Promise((resolve) => window.setTimeout(resolve, 600));
+
+    // Exercise the real frontend execution path so this smoke check covers
+    // UUID correlation, run-history opening/closing, and request serialization.
+    await graph.getState().executeGraph();
+  }, UTILITY_IMAGE_A, UTILITY_IMAGE_B, UTILITY_VIDEO);
 
   await waitForRuntime(cdp, `
     (() => {
@@ -228,7 +218,20 @@ async function runPureUtilityExecutionCheck(cdp) {
         && byId['util-image-iterator']?.data.state === 'complete'
         && byId['util-compare']?.data.state === 'complete';
     })()
-  `, 10000);
+  `, 10000, `
+    (() => {
+      const state = window.__nebulaGraphStore.getState();
+      return {
+        isExecuting: state.isExecuting,
+        nodes: state.nodes.map((node) => ({
+          id: node.id,
+          state: node.data.state,
+          error: node.data.error,
+          outputKeys: Object.keys(node.data.outputs ?? {}),
+        })),
+      };
+    })()
+  `);
 
   const assertions = await evaluate(cdp, () => {
     const nodes = window.__nebulaGraphStore.getState().nodes;
@@ -238,6 +241,7 @@ async function runPureUtilityExecutionCheck(cdp) {
       renderedNodes: document.querySelectorAll('.react-flow__node').length,
       textInput: output('util-text-a', 'text'),
       imageInput: output('util-image-a', 'image'),
+      imageInputB: output('util-image-b', 'image'),
       videoInput: output('util-video', 'video'),
       audioInput: output('util-audio', 'audio'),
       stickyState: byId['util-note']?.data.state,
@@ -252,30 +256,103 @@ async function runPureUtilityExecutionCheck(cdp) {
       imageIterator: output('util-image-iterator', 'image'),
       compareA: output('util-compare', 'imageA'),
       compareB: output('util-compare', 'imageB'),
+      runHistory: window.__nebulaGraphStore.getState().runHistory,
       errors: nodes.filter((node) => node.data.state === 'error').map((node) => [node.id, node.data.error]),
     };
   });
 
   assertEqual(assertions.renderedNodes, 17, 'renders seeded utility nodes');
   assertEqual(assertions.textInput, 'Alpha', 'text input output');
-  assertEqual(assertions.imageInput, '/tmp/image-a.png', 'image input output');
-  assertEqual(assertions.videoInput, '/tmp/source.mp4', 'video input output');
-  assertEqual(assertions.audioInput, '/tmp/source.wav', 'audio input output');
+  assertStartsWith(assertions.imageInput, '/api/outputs/chat-uploads/', 'image input A output');
+  assertStartsWith(assertions.imageInputB, '/api/outputs/chat-uploads/', 'image input B output');
+  assertEqual(assertions.videoInput, UTILITY_VIDEO, 'video input output');
+  assertEqual(assertions.audioInput, UTILITY_VIDEO, 'audio input output');
   assertEqual(assertions.stickyState, 'complete', 'sticky note completes');
   assertEqual(assertions.combine, 'Alpha | Beta', 'combine text output');
   assertEqual(assertions.routerOut2, 'Alpha', 'router output');
   assertEqual(assertions.reroute, 'Alpha', 'reroute output');
   assertEqual(assertions.preview, 'Alpha', 'preview output');
   assertArrayEqual(assertions.textArray, ['Alpha', 'Beta'], 'text array output');
-  assertArrayEqual(assertions.imageArray, ['/tmp/image-a.png', '/tmp/image-b.png'], 'image array output');
+  assertOutputRefArray(assertions.imageArray, [assertions.imageInput, assertions.imageInputB], 'image array output');
   assertEqual(assertions.selector, 'Beta', 'array selector output');
   assertEqual(assertions.textIterator, 'Beta', 'text iterator latest output');
-  assertEqual(assertions.imageIterator, '/tmp/image-b.png', 'image iterator latest output');
-  assertEqual(assertions.compareA, '/tmp/image-a.png', 'image compare A output');
-  assertEqual(assertions.compareB, '/tmp/image-b.png', 'image compare B output');
+  assertEqual(assertions.imageIterator, assertions.imageInputB, 'image iterator latest output');
+  assertEqual(assertions.compareA, assertions.imageInput, 'image compare A output');
+  assertEqual(assertions.compareB, assertions.imageInputB, 'image compare B output');
+  assertEqual(assertions.runHistory.length, 1, 'records utility run history');
+  assertEqual(assertions.runHistory[0]?.status, 'complete', 'closes utility run history');
+  assertEqual(assertions.runHistory[0]?.snapshot?.nodes?.length, 17, 'stores utility run snapshot');
   if (assertions.errors.length) {
     throw new Error(`Utility graph had errored nodes: ${JSON.stringify(assertions.errors)}`);
   }
+}
+
+async function runHistoryRerunAndReloadCheck(cdp) {
+  const sourceRunId = await evaluate(cdp, () => {
+    const graph = window.__nebulaGraphStore;
+    const source = graph.getState().runHistory[0];
+    graph.setState((state) => ({
+      nodes: state.nodes.map((node) => node.id === 'util-text-a'
+        ? { ...node, data: { ...node.data, params: { value: 'MUTATED AFTER RUN' } } }
+        : node),
+      edges: [],
+    }));
+    return source.id;
+  });
+
+  await evaluate(cdp, async (id) => {
+    await window.__nebulaGraphStore.getState().rerunHistoryRecord(id);
+  }, sourceRunId);
+
+  const quotedSourceRunId = JSON.stringify(sourceRunId);
+  await waitForRuntime(cdp, `
+    (() => {
+      const history = window.__nebulaGraphStore.getState().runHistory;
+      return history.length === 2
+        && history[0].sourceRunId === ${quotedSourceRunId}
+        && history[0].status === 'complete';
+    })()
+  `, 10000, `window.__nebulaGraphStore.getState().runHistory`);
+
+  const replay = await evaluate(cdp, () => {
+    const [latest, source] = window.__nebulaGraphStore.getState().runHistory;
+    return {
+      latestId: latest.id,
+      latestStatus: latest.status,
+      sourceRunId: latest.sourceRunId,
+      replayAction: latest.replayAction,
+      nodesExecuted: latest.nodesExecuted,
+      savedText: latest.snapshot.nodes.find((node) => node.id === 'util-text-a')?.params?.value,
+      savedEdgeCount: latest.snapshot.edges.length,
+      sourceId: source.id,
+    };
+  });
+  if (replay.latestId === replay.sourceId) throw new Error('history rerun reused its source run id');
+  assertEqual(replay.latestStatus, 'complete', 'history rerun completes');
+  assertEqual(replay.sourceRunId, sourceRunId, 'history rerun links its source');
+  assertEqual(replay.replayAction, 'rerun', 'history rerun records action');
+  assertEqual(replay.nodesExecuted, 17, 'history rerun executes saved graph');
+  assertEqual(replay.savedText, 'Alpha', 'history rerun preserves pre-mutation params');
+  assertEqual(replay.savedEdgeCount, 14, 'history rerun preserves pre-mutation edges');
+
+  const loadEvent = cdp.waitForEvent('Page.loadEventFired', 10000);
+  await cdp.send('Page.reload', { ignoreCache: true });
+  await loadEvent;
+  await waitForRuntime(cdp, `
+    window.__nebulaGraphStore
+      && window.__nebulaGraphStore.getState().runHistory.length === 2
+      && window.__nebulaGraphStore.getState().runHistory.every((run) => run.status === 'complete')
+  `, 10000);
+
+  const persisted = await evaluate(cdp, () => window.__nebulaGraphStore.getState().runHistory.map((run) => ({
+    id: run.id,
+    status: run.status,
+    sourceRunId: run.sourceRunId,
+    savedText: run.snapshot.nodes.find((node) => node.id === 'util-text-a')?.params?.value,
+  })));
+  assertEqual(persisted[0].id, replay.latestId, 'reload retains newest run id');
+  assertEqual(persisted[0].sourceRunId, sourceRunId, 'reload retains replay lineage');
+  assertEqual(persisted[0].savedText, 'Alpha', 'reload retains frozen snapshot');
 }
 
 async function runMockedGeminiEmbeddingCheck(cdp) {
@@ -342,6 +419,21 @@ function assertArrayEqual(actual, expected, label) {
   }
 }
 
+function assertStartsWith(actual, expectedPrefix, label) {
+  if (typeof actual !== 'string' || !actual.startsWith(expectedPrefix)) {
+    throw new Error(`${label}: expected prefix ${JSON.stringify(expectedPrefix)}, got ${JSON.stringify(actual)}`);
+  }
+}
+
+function assertOutputRefArray(actual, expected, label) {
+  const filename = (value) => typeof value === 'string' ? value.split('/').pop() : value;
+  if (!Array.isArray(actual)
+    || actual.length !== expected.length
+    || actual.some((value, index) => filename(value) !== filename(expected[index]))) {
+    throw new Error(`${label}: expected refs ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
+  }
+}
+
 async function evaluate(cdp, fn, ...args) {
   const source = typeof fn === 'function' ? `(${fn.toString()})(...${JSON.stringify(args)})` : String(fn);
   const result = await cdp.send('Runtime.evaluate', {
@@ -355,14 +447,17 @@ async function evaluate(cdp, fn, ...args) {
   return result.result?.value;
 }
 
-async function waitForRuntime(cdp, expression, timeout = 10000) {
+async function waitForRuntime(cdp, expression, timeout = 10000, diagnosticsExpression) {
   const started = Date.now();
   while (Date.now() - started < timeout) {
     const ok = await evaluate(cdp, `Boolean(${expression})`).catch(() => false);
     if (ok) return;
     await sleep(100);
   }
-  throw new Error(`Timed out waiting for ${expression}`);
+  const diagnostics = diagnosticsExpression
+    ? await evaluate(cdp, diagnosticsExpression).catch((err) => ({ diagnosticError: err.message }))
+    : undefined;
+  throw new Error(`Timed out waiting for ${expression}${diagnostics ? `\nRuntime state: ${JSON.stringify(diagnostics)}` : ''}`);
 }
 
 async function waitForPageWebSocket(remotePort, timeout = 30000) {

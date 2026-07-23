@@ -1,11 +1,11 @@
-/* Run History panel — Phase 1 of g-queue-history-manager.
+/* Persistent Run History panel.
  * Structural rules are skin-agnostic (unscoped); themed visuals are scoped to
  * body.app-slava-restraint, matching the convention in character-studio.css.
  * Status colors use semantic tokens so the dots read the same in either skin. */
 
 /* ---- layout (skin-agnostic) ---- */
 .panel--history {
-  width: 256px;
+  width: 276px;
   max-height: 60vh;
 }
 .panel__body--history {
@@ -68,6 +68,34 @@
 .run-history__sub {
   font-size: 11px;
 }
+.run-history__target {
+  display: inline-block;
+  max-width: 126px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+  white-space: nowrap;
+}
+.run-history__item-actions {
+  display: flex;
+  margin-top: 4px;
+}
+.run-history__replay {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 24px;
+  padding: 3px 7px;
+  border-radius: 5px;
+  font: inherit;
+  font-size: 10px;
+  line-height: 1;
+  cursor: pointer;
+}
+.run-history__replay:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
 .run-history__empty {
   padding: 16px 8px;
   text-align: center;
@@ -111,6 +139,14 @@ body.app-slava-restraint .run-history__status--cancelled { color: var(--sr-ink-m
 body.app-slava-restraint .run-history__empty {
   color: var(--sr-ink-meta, rgba(0, 0, 0, 0.5));
 }
+body.app-slava-restraint .run-history__replay {
+  border: 1px solid var(--sr-edge, rgba(0, 0, 0, 0.14));
+  color: var(--sr-ink, #1a1a1a);
+  background: var(--sr-paper, rgba(255, 255, 255, 0.62));
+}
+body.app-slava-restraint .run-history__replay:not(:disabled):hover {
+  background: var(--sr-glass-raised, rgba(255, 255, 255, 0.9));
+}
 body.app-slava-restraint .run-history__action:disabled {
   opacity: 0.35;
   cursor: default;
@@ -129,6 +165,14 @@ body:not(.app-slava-restraint) .run-history__sub {
 }
 body:not(.app-slava-restraint) .run-history__empty {
   color: #777;
+}
+body:not(.app-slava-restraint) .run-history__replay {
+  border: 1px solid #383838;
+  color: #d6d6d6;
+  background: #242424;
+}
+body:not(.app-slava-restraint) .run-history__replay:not(:disabled):hover {
+  background: #303030;
 }
 body:not(.app-slava-restraint) .run-history__action:disabled {
   opacity: 0.35;
