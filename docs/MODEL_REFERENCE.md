@@ -3145,6 +3145,10 @@ Nodes: 142 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **Outputs** | Rendered Video (Video) |
 | **Audited** | — |
 
+| Parameter | Type | Default | Options/Range |
+|-----------|------|---------|---------------|
+| Manifest | string | — | — |
+
 ---
 
 ### Reroute
@@ -3246,6 +3250,13 @@ Nodes: 142 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **Inputs** | Source Video (Video)* |
 | **Outputs** | Edited Video (Video) |
 | **Audited** | — |
+
+| Parameter | Type | Default | Options/Range |
+|-----------|------|---------|---------------|
+| Clips | string | — | — |
+| Source Duration | float | — | — |
+| Source FPS | float | — | — |
+| Source Is VFR | bool | — | — |
 
 ---
 

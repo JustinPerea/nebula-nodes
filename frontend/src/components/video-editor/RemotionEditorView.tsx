@@ -5,7 +5,12 @@ import { RemotionTimeline } from './RemotionTimeline';
 import type { TimelineState } from './RemotionTimeline';
 import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
-import { createEmptyManifest, DEFAULT_FPS, type VideoGraphManifest } from '../../types/video';
+import {
+  compositionDurationInFrames,
+  createEmptyManifest,
+  DEFAULT_FPS,
+  type VideoGraphManifest,
+} from '../../types/video';
 import { RemotionComposition } from './RemotionComposition';
 import { RemotionEditorToolbar } from './RemotionEditorToolbar';
 import { RemotionPropertiesPanel } from './RemotionPropertiesPanel';
@@ -108,13 +113,7 @@ export function RemotionEditorView() {
             ref={playerRef}
             component={RemotionComposition}
             inputProps={{ manifest }}
-            durationInFrames={Math.max(
-              DEFAULT_FPS * 5,
-              ...manifest.timeline.map(
-                (i) => i.time.startFrame + i.time.durationInFrames,
-              ),
-              DEFAULT_FPS,
-            )}
+            durationInFrames={compositionDurationInFrames(manifest)}
             compositionWidth={1280}
             compositionHeight={720}
             fps={DEFAULT_FPS}

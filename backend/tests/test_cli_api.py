@@ -213,6 +213,74 @@ class TestGraphEndpoints:
         assert node["type"] == "remotionNode"
         assert node["data"]["definitionId"] == "remotion-node"
 
+    def test_video_edit_runtime_params_persist(self, client):
+        """The dedicated editor's hidden clip state must survive graph reloads."""
+        params = {
+            "clips": [{
+                "id": "c1",
+                "start": 0,
+                "duration": 3.0,
+                "sourceIn": 0,
+                "sourceOut": 3.0,
+                "volume": 1,
+                "mute": False,
+            }],
+            "sourceDuration": 3.0,
+            "sourceFps": 24.0,
+            "sourceIsVfr": False,
+        }
+        create = client.post(
+            "/api/graph/node",
+            json={"definitionId": "video-edit", "params": params},
+        )
+        assert create.status_code == 200, create.text
+
+        update = client.put(
+            "/api/graph/node/n1",
+            json={"params": {**params, "sourceDuration": 4.0}},
+        )
+        assert update.status_code == 200, update.text
+
+        exported = client.get("/api/graph/export").json()["nodes"][0]
+        assert exported["data"]["params"]["clips"] == params["clips"]
+        assert exported["data"]["params"]["sourceDuration"] == 4.0
+
+    def test_remotion_manifest_persists(self, client):
+        """The exact structured manifest must be accepted by create and update."""
+        manifest = {
+            "graph": {"nodes": [], "edges": []},
+            "timeline": [{
+                "id": "title",
+                "sourceNodeId": "text-source",
+                "componentType": "Text",
+                "time": {"startFrame": 0, "durationInFrames": 60},
+                "spatial": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0,
+                    "scale": [1, 1, 1],
+                    "rotation": [0, 0, 0],
+                },
+                "keyframes": {},
+                "props": {"text": "Nebula export"},
+            }],
+        }
+        create = client.post(
+            "/api/graph/node",
+            json={"definitionId": "remotion-node", "params": {"manifest": manifest}},
+        )
+        assert create.status_code == 200, create.text
+
+        updated_manifest = {**manifest, "timeline": []}
+        update = client.put(
+            "/api/graph/node/n1",
+            json={"params": {"manifest": updated_manifest}},
+        )
+        assert update.status_code == 200, update.text
+
+        exported = client.get("/api/graph/export").json()["nodes"][0]
+        assert exported["data"]["params"]["manifest"] == updated_manifest
+
     def test_connect_nodes(self, client):
         client.post("/api/graph/node", json={"definitionId": "node-a", "params": {}})
         client.post("/api/graph/node", json={"definitionId": "node-b", "params": {}})

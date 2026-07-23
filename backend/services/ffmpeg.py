@@ -119,8 +119,21 @@ async def run_ffmpeg(
         async for raw in proc.stderr:
             stderr_buf.append(raw)
 
-    await asyncio.gather(_read_stdout(), _read_stderr())
-    rc = await proc.wait()
+    try:
+        await asyncio.gather(_read_stdout(), _read_stderr())
+        rc = await proc.wait()
+    except asyncio.CancelledError:
+        # A render job can be cancelled from the editor while ffmpeg is still
+        # encoding. Terminate the child process before propagating cancellation
+        # so CPU use and partial renders do not continue in the background.
+        if proc.returncode is None:
+            proc.terminate()
+            try:
+                await asyncio.wait_for(proc.wait(), timeout=3.0)
+            except asyncio.TimeoutError:
+                proc.kill()
+                await proc.wait()
+        raise
     if rc != 0:
         tail = b"".join(stderr_buf)[-1024:].decode(errors="replace")
         raise RuntimeError(f"ffmpeg failed (exit {rc}): {tail}")

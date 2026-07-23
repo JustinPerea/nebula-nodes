@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from handlers.video_edit import handle_video_edit
+from handlers.video_edit import handle_video_edit, render_video_edit_file
 from models.graph import GraphNode, PortValueDict
 
 
@@ -150,6 +150,76 @@ async def _run_with_clips(tmp_path, monkeypatch, clips):
 
 def _filter_str(args: list[str]) -> str:
     return next(args[i + 1] for i, a in enumerate(args) if a == "-filter_complex")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("output_format", "expected_codec", "expected_suffix"),
+    [
+        ("mp4", "libx264", ".mp4"),
+        ("mov", "prores_ks", ".mov"),
+        ("webm", "libvpx-vp9", ".webm"),
+    ],
+)
+async def test_final_export_container_codecs(
+    tmp_path, output_format, expected_codec, expected_suffix
+) -> None:
+    src = tmp_path / "src.mp4"
+    src.write_bytes(b"fake")
+    clips = [
+        {"id": "c1", "sourceIn": 0.0, "sourceOut": 2.0, "speed": 1.0, "volume": 1.0, "mute": False}
+    ]
+    captured: list[list[str]] = []
+
+    async def fake_ffmpeg(args, on_progress=None):
+        captured.append(args)
+        if on_progress is not None:
+            on_progress({"out_time_us": "1000000"})
+        Path(args[-1]).touch()
+
+    with patch("handlers.video_edit.run_ffmpeg", side_effect=fake_ffmpeg):
+        output = await render_video_edit_file(
+            src,
+            clips,
+            output_format=output_format,
+            resolution="720p",
+            quality="high",
+            output_dir=tmp_path,
+        )
+
+    assert output.suffix == expected_suffix
+    assert expected_codec in captured[0]
+    assert "scale=1280:720" in _filter_str(captured[0])
+
+
+@pytest.mark.asyncio
+async def test_final_gif_export_uses_palette_and_omits_audio(tmp_path) -> None:
+    src = tmp_path / "src.mp4"
+    src.write_bytes(b"fake")
+    clips = [
+        {"id": "c1", "sourceIn": 0.0, "sourceOut": 2.0, "speed": 1.0, "volume": 1.0, "mute": False}
+    ]
+    captured: list[list[str]] = []
+
+    async def fake_ffmpeg(args, on_progress=None):
+        captured.append(args)
+        Path(args[-1]).touch()
+
+    with patch("handlers.video_edit.run_ffmpeg", side_effect=fake_ffmpeg):
+        output = await render_video_edit_file(
+            src,
+            clips,
+            output_format="gif",
+            output_dir=tmp_path,
+        )
+
+    args = captured[0]
+    filters = _filter_str(args)
+    assert output.suffix == ".gif"
+    assert "palettegen" in filters
+    assert "paletteuse" in filters
+    assert "atrim" not in filters
+    assert "[outas]" not in args
 
 
 @pytest.mark.asyncio

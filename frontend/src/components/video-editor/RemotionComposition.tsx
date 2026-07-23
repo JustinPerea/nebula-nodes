@@ -7,7 +7,7 @@ import { VideoRenderer } from './components/VideoRenderer';
 import { IsometricBlockRenderer } from './components/IsometricBlockRenderer';
 import { LottieRenderer } from './components/LottieRenderer';
 
-interface RemotionCompositionProps {
+export interface RemotionCompositionProps {
   manifest: VideoGraphManifest;
 }
 

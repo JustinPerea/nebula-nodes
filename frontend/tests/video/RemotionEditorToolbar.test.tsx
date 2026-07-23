@@ -2,6 +2,25 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { RemotionEditorToolbar } from '../../src/components/video-editor/RemotionEditorToolbar';
 
+const renderJobMock = vi.hoisted(() => ({
+  job: null as null | {
+    id: string;
+    kind: 'remotion';
+    status: 'running' | 'complete' | 'failed' | 'cancelled';
+    progress: number;
+    outputUrl: string | null;
+    error: string | null;
+  },
+  error: null as string | null,
+  begin: vi.fn(),
+  cancel: vi.fn(),
+  reset: vi.fn(),
+}));
+
+vi.mock('../../src/hooks/useRenderJob', () => ({
+  useRenderJob: () => renderJobMock,
+}));
+
 const addMock = vi.fn();
 const deleteMock = vi.fn();
 const reorderMock = vi.fn();
@@ -65,6 +84,11 @@ describe('RemotionEditorToolbar', () => {
     mockSelectedId = null;
     mockIsRecording = false;
     mockTimelineIds = [];
+    renderJobMock.job = null;
+    renderJobMock.error = null;
+    renderJobMock.begin.mockReset();
+    renderJobMock.cancel.mockReset();
+    renderJobMock.reset.mockReset();
   });
 
   it('renders six add buttons', () => {
@@ -165,5 +189,45 @@ describe('RemotionEditorToolbar', () => {
     const rec = screen.getByRole('button', { name: /rec/i });
     expect(rec).toHaveClass('remotion-editor-toolbar__record--active');
     expect(rec).toHaveAttribute('title', 'Recording keyframes - click to stop');
+  });
+
+  it('closing a running export popover does not orphan the job state', () => {
+    renderJobMock.job = {
+      id: 'job-1',
+      kind: 'remotion',
+      status: 'running',
+      progress: 0.4,
+      outputUrl: null,
+      error: null,
+    };
+    render(<RemotionEditorToolbar remotionNodeId="r1" />);
+
+    const exportButton = screen.getByRole('button', { name: /^export$/i });
+    fireEvent.click(exportButton);
+    expect(screen.getByRole('button', { name: /cancel/i })).toBeInTheDocument();
+
+    fireEvent.click(exportButton);
+    expect(screen.queryByRole('dialog', { name: /remotion h\.264 export/i })).not.toBeInTheDocument();
+    expect(renderJobMock.reset).not.toHaveBeenCalled();
+  });
+
+  it('offers an explicit reset after a completed render', () => {
+    renderJobMock.job = {
+      id: 'job-2',
+      kind: 'remotion',
+      status: 'complete',
+      progress: 1,
+      outputUrl: '/api/outputs/run/final.mp4',
+      error: null,
+    };
+    render(<RemotionEditorToolbar remotionNodeId="r1" />);
+    fireEvent.click(screen.getByRole('button', { name: /^export$/i }));
+
+    expect(screen.getByRole('link', { name: /download mp4/i })).toHaveAttribute(
+      'href',
+      '/api/outputs/run/final.mp4',
+    );
+    fireEvent.click(screen.getByRole('button', { name: /new render/i }));
+    expect(renderJobMock.reset).toHaveBeenCalledTimes(1);
   });
 });
