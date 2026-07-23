@@ -65,6 +65,8 @@ NANO_BANANA_FAL_MODEL_ENDPOINTS: dict[str, str] = {
     "gemini-3-pro-image": "fal-ai/gemini-3-pro-image-preview",
 }
 
+HUNYUAN3D_PROMPT_MAX_CHARS = 1024
+
 
 def _fal_wrapper_node(
     node: GraphNode,
@@ -522,16 +524,30 @@ def get_handler_registry(
             inputs: dict[str, PortValueDict],
             api_keys: dict[str, str],
         ) -> dict[str, Any]:
-            node.params.setdefault("endpoint_id", "fal-ai/hunyuan3d-v3/text-to-3d")
-            return await handle_fal_universal(node, inputs, api_keys, emit=emit)
+            prompt = inputs.get("prompt")
+            if isinstance(prompt, PortValueDict) and isinstance(prompt.value, str):
+                prompt_length = len(prompt.value)
+                if prompt_length > HUNYUAN3D_PROMPT_MAX_CHARS:
+                    raise ValueError(
+                        "Hunyuan3D prompt exceeds FAL's 1024-character limit "
+                        f"(received {prompt_length})."
+                    )
+            routed_node = _fal_wrapper_node(
+                node,
+                "fal-ai/hunyuan3d-v3/text-to-3d",
+            )
+            return await handle_fal_universal(routed_node, inputs, api_keys, emit=emit)
 
         async def _hunyuan3d_image_to_3d_handler(
             node: GraphNode,
             inputs: dict[str, PortValueDict],
             api_keys: dict[str, str],
         ) -> dict[str, Any]:
-            node.params.setdefault("endpoint_id", "fal-ai/hunyuan3d-v3/image-to-3d")
-            return await handle_fal_universal(node, inputs, api_keys, emit=emit)
+            routed_node = _fal_wrapper_node(
+                node,
+                "fal-ai/hunyuan3d-v3/image-to-3d",
+            )
+            return await handle_fal_universal(routed_node, inputs, api_keys, emit=emit)
 
         async def _remove_bg_handler(
             node: GraphNode,

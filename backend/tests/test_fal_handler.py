@@ -4565,6 +4565,42 @@ async def test_hunyuan3d_text_to_3d_prompt_sent_and_mesh_returned():
 
 
 @pytest.mark.asyncio
+async def test_hunyuan3d_text_to_3d_rejects_prompt_over_1024_chars_before_submit():
+    from execution.sync_runner import get_handler_registry
+
+    universal = AsyncMock()
+    with patch("handlers.fal_universal.handle_fal_universal", new=universal):
+        handler = get_handler_registry(emit=AsyncMock())["hunyuan3d-text-to-3d"]
+        with pytest.raises(ValueError, match=r"1024-character limit.*received 1025"):
+            await handler(
+                GraphNode(id="h3d-long", definitionId="hunyuan3d-text-to-3d", params={}),
+                {"prompt": PortValueDict(type="Text", value="x" * 1025)},
+                {"FAL_KEY": "fal_test"},
+            )
+
+    universal.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_hunyuan3d_text_to_3d_accepts_1024_char_boundary_without_mutating_node():
+    from execution.sync_runner import get_handler_registry
+
+    universal = AsyncMock(return_value={"mesh": {"type": "Mesh", "value": "out.glb"}})
+    node = GraphNode(id="h3d-limit", definitionId="hunyuan3d-text-to-3d", params={})
+    with patch("handlers.fal_universal.handle_fal_universal", new=universal):
+        handler = get_handler_registry(emit=AsyncMock())["hunyuan3d-text-to-3d"]
+        await handler(
+            node,
+            {"prompt": PortValueDict(type="Text", value="x" * 1024)},
+            {"FAL_KEY": "fal_test"},
+        )
+
+    routed_node = universal.await_args.args[0]
+    assert routed_node.params["endpoint_id"] == "fal-ai/hunyuan3d-v3/text-to-3d"
+    assert "endpoint_id" not in node.params
+
+
+@pytest.mark.asyncio
 async def test_hunyuan3d_image_to_3d_maps_input_image_url_and_returns_mesh():
     """hunyuan3d-image-to-3d maps front_image → input_image_url (not image_url).
     Multi-view optional ports map to back/left/right_image_url.

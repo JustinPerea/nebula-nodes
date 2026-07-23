@@ -1,0 +1,8 @@
+{
+  "_comment": "Oracle: backend/tests/test_fal_contract_fixtures.py::test_fal_request_body_matches_fixture[hunyuan3d-text-to-3d-request.json]. Endpoint (not in body): fal-ai/hunyuan3d-v3/text-to-3d",
+  "generate_type": "Normal",
+  "face_count": 500000,
+  "enable_pbr": false,
+  "polygon_type": "triangle",
+  "prompt": "a ceramic teapot"
+}

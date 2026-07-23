@@ -4,7 +4,7 @@ display_name: Hunyuan3D V3 Text-to-3D
 category: text-to-3d
 creator: Tencent
 fal_docs: https://fal.ai/models/fal-ai/hunyuan3d-v3/text-to-3d
-source: llms.txt (fetched 2026-04-17)
+source: FAL API schema (verified 2026-07-22)
 summary: Generate textured, fully-rigged 3D models from text prompts.
 ---
 
@@ -25,6 +25,8 @@ summary: Generate textured, fully-rigged 3D models from text prompts.
 | `polygon_type` | enum | `triangle` | `triangle`, `quadrilateral` | Only when `generate_type=LowPoly`. |
 
 ## Output
+`seed` is response metadata only. The current endpoint schema does not accept a seed input.
+
 ```json
 {
   "model_glb": { "url": "...", "content_type": "model/gltf-binary" },

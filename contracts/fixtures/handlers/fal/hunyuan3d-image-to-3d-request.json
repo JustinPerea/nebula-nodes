@@ -1,0 +1,11 @@
+{
+  "_comment": "Oracle: backend/tests/test_fal_contract_fixtures.py::test_fal_request_body_matches_fixture[hunyuan3d-image-to-3d-request.json]. Endpoint (not in body): fal-ai/hunyuan3d-v3/image-to-3d",
+  "generate_type": "LowPoly",
+  "face_count": 120000,
+  "enable_pbr": true,
+  "polygon_type": "quadrilateral",
+  "input_image_url": "https://example.com/front.png",
+  "back_image_url": "https://example.com/back.png",
+  "left_image_url": "https://example.com/left.png",
+  "right_image_url": "https://example.com/right.png"
+}

@@ -43,7 +43,70 @@ def _make_poll_mocks(result_payload: dict) -> tuple[MagicMock, MagicMock, MagicM
     return mock_submit, mock_status, mock_result
 
 
+async def _capture_registry_poll_body(
+    *,
+    definition_id: str,
+    params: dict[str, Any],
+    inputs: dict[str, PortValueDict],
+) -> dict[str, Any]:
+    """Capture one fixed FAL wrapper through the real registry and body builder."""
+    registry = get_handler_registry(emit=AsyncMock())
+    handler = registry[definition_id]
+    mock_submit, mock_status, mock_result = _make_poll_mocks(
+        {"model_glb": {"url": "https://fal.ai/out.glb"}}
+    )
+    node = GraphNode(
+        id=f"fixture-{definition_id}",
+        definitionId=definition_id,
+        params=params,
+    )
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            await handler(node, inputs, {"FAL_KEY": "fal_test"})
+
+    # Fixed wrappers must not persist their internal routing field on the source node.
+    assert "endpoint_id" not in node.params
+    return mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+
+
 async def _capture_fal_body(fixture_name: str) -> dict[str, Any]:
+    if fixture_name == "hunyuan3d-text-to-3d-request.json":
+        return await _capture_registry_poll_body(
+            definition_id="hunyuan3d-text-to-3d",
+            params={
+                "generate_type": "Normal",
+                "face_count": 500000,
+                "enable_pbr": False,
+                "polygon_type": "triangle",
+            },
+            inputs={
+                "prompt": PortValueDict(type="Text", value="a ceramic teapot"),
+            },
+        )
+
+    if fixture_name == "hunyuan3d-image-to-3d-request.json":
+        return await _capture_registry_poll_body(
+            definition_id="hunyuan3d-image-to-3d",
+            params={
+                "generate_type": "LowPoly",
+                "face_count": 120000,
+                "enable_pbr": True,
+                "polygon_type": "quadrilateral",
+            },
+            inputs={
+                "front_image": PortValueDict(type="Image", value="https://example.com/front.png"),
+                "back_image": PortValueDict(type="Image", value="https://example.com/back.png"),
+                "left_image": PortValueDict(type="Image", value="https://example.com/left.png"),
+                "right_image": PortValueDict(type="Image", value="https://example.com/right.png"),
+            },
+        )
+
     if fixture_name == "nano-banana-fal-generate-request.json":
         registry = get_handler_registry(emit=AsyncMock())
         handler = registry["nano-banana-fal"]
