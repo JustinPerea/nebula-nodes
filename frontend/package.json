@@ -20,10 +20,12 @@
     "@google/model-viewer": "4.3.1",
     "@react-three/drei": "^10.7.7",
     "@react-three/fiber": "^9.6.1",
-    "@remotion/lottie": "4.0.458",
-    "@remotion/media": "4.0.458",
-    "@remotion/player": "4.0.458",
-    "@remotion/three": "4.0.458",
+    "@remotion/bundler": "4.0.479",
+    "@remotion/lottie": "4.0.479",
+    "@remotion/media": "4.0.479",
+    "@remotion/player": "4.0.479",
+    "@remotion/renderer": "4.0.479",
+    "@remotion/three": "4.0.479",
     "@xyflow/react": "^12.10.2",
     "@xzdarcy/react-timeline-editor": "^1.0.0",
     "jszip": "^3.10.1",
@@ -37,7 +39,7 @@
     "zustand": "^5.0.12"
   },
   "overrides": {
-    "remotion": "4.0.458",
+    "remotion": "4.0.479",
     "@babel/core": "7.29.7",
     "minimatch@3.1.5": {
       "brace-expansion": "1.1.16"

@@ -10,7 +10,7 @@ Anything else triggers an ffmpeg render.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Awaitable, Callable
+from typing import Any, Awaitable, Callable, Literal
 from uuid import uuid4
 
 from models.events import ExecutionEvent, ProgressEvent
@@ -82,7 +82,20 @@ def _atempo_chain(speed: float) -> str:
     return ",".join(f"atempo={f}" for f in factors)
 
 
-def _build_filter_complex(clips: list[dict[str, Any]]) -> tuple[str, bool]:
+VideoExportFormat = Literal["mp4", "mov", "webm", "gif"]
+VideoExportResolution = Literal["source", "1080p", "720p", "480p"]
+VideoExportQuality = Literal["high", "balanced", "small"]
+
+VIDEO_EXPORT_FORMATS: tuple[str, ...] = ("mp4", "mov", "webm", "gif")
+VIDEO_EXPORT_RESOLUTIONS: tuple[str, ...] = ("source", "1080p", "720p", "480p")
+VIDEO_EXPORT_QUALITIES: tuple[str, ...] = ("high", "balanced", "small")
+
+
+def _build_filter_complex(
+    clips: list[dict[str, Any]],
+    *,
+    include_audio: bool | None = None,
+) -> tuple[str, bool]:
     """Build the ffmpeg -filter_complex graph for the given sub-clip list.
 
     Returns (filter_str, has_audio). Each sub-clip emits labeled video + audio
@@ -96,7 +109,11 @@ def _build_filter_complex(clips: list[dict[str, Any]]) -> tuple[str, bool]:
     """
     parts: list[str] = []
     n = len(clips)
-    has_audio = any(not c.get("mute", False) for c in clips)
+    has_audio = (
+        any(not c.get("mute", False) for c in clips)
+        if include_audio is None
+        else include_audio
+    )
 
     for i, c in enumerate(clips):
         s_in = float(c["sourceIn"])
@@ -138,6 +155,135 @@ def _build_filter_complex(clips: list[dict[str, Any]]) -> tuple[str, bool]:
         parts.append(f"{v_streams}concat=n={n}:v=1:a=0[outv]")
 
     return ";".join(parts), has_audio
+
+
+def _video_scale_filter(resolution: VideoExportResolution) -> str:
+    """Return an even-dimension scale expression for a final export."""
+    if resolution == "source":
+        return "scale=trunc(iw/2)*2:trunc(ih/2)*2"
+    width, height = {
+        "1080p": (1920, 1080),
+        "720p": (1280, 720),
+        "480p": (854, 480),
+    }[resolution]
+    return (
+        f"scale={width}:{height}:force_original_aspect_ratio=decrease,"
+        f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:black"
+    )
+
+
+async def render_video_edit_file(
+    source_path: Path,
+    clips: list[dict[str, Any]],
+    *,
+    output_format: VideoExportFormat = "mp4",
+    resolution: VideoExportResolution = "source",
+    quality: VideoExportQuality = "balanced",
+    output_dir: Path | None = None,
+    on_progress: Callable[[float], None] | None = None,
+) -> Path:
+    """Render the final edit in a selected delivery format.
+
+    The graph handler and the in-editor export route both use this function so
+    clip timing, speed, volume, color tags, and progress semantics cannot drift.
+    """
+    if output_format not in VIDEO_EXPORT_FORMATS:
+        raise ValueError(f"unsupported video export format: {output_format}")
+    if resolution not in VIDEO_EXPORT_RESOLUTIONS:
+        raise ValueError(f"unsupported video export resolution: {resolution}")
+    if quality not in VIDEO_EXPORT_QUALITIES:
+        raise ValueError(f"unsupported video export quality: {quality}")
+    if not clips:
+        raise ValueError("clips required")
+
+    # GIF never carries audio. Other containers retain the edit's natural
+    # audio state, including the all-muted fast path.
+    include_audio = False if output_format == "gif" else None
+    filter_complex, has_audio = _build_filter_complex(
+        clips,
+        include_audio=include_audio,
+    )
+    video_label = "[outv]"
+    scale_filter = _video_scale_filter(resolution)
+
+    if output_format == "gif":
+        filter_complex += (
+            f";{video_label}{scale_filter},fps=15,split[gifframes][gifpalette]"
+            ";[gifpalette]palettegen=stats_mode=diff[palette]"
+            ";[gifframes][palette]paletteuse=dither=sierra2_4a[outgif]"
+        )
+        video_label = "[outgif]"
+    else:
+        filter_complex += f";{video_label}{scale_filter}[outvs]"
+        video_label = "[outvs]"
+        if has_audio:
+            filter_complex += ";[outa]aresample=async=1[outas]"
+
+    destination_dir = output_dir or get_run_dir()
+    destination_dir.mkdir(parents=True, exist_ok=True)
+    output_path = destination_dir / f"{uuid4().hex[:12]}.{output_format}"
+
+    args = [
+        "-i", str(source_path),
+        "-filter_complex", filter_complex,
+        "-map", video_label,
+    ]
+    if has_audio:
+        args += ["-map", "[outas]"]
+
+    crf = {"high": "18", "balanced": "23", "small": "28"}[quality]
+    if output_format == "mp4":
+        args += [
+            "-c:v", "libx264", "-preset", "medium", "-crf", crf,
+            "-pix_fmt", "yuv420p", "-movflags", "+faststart",
+            "-color_primaries", "bt709", "-color_trc", "bt709",
+            "-colorspace", "bt709", "-color_range", "tv",
+        ]
+        if has_audio:
+            args += ["-c:a", "aac", "-b:a", "192k"]
+    elif output_format == "mov":
+        args += [
+            "-c:v", "prores_ks", "-profile:v", "3", "-vendor", "apl0",
+            "-pix_fmt", "yuv422p10le",
+        ]
+        if has_audio:
+            args += ["-c:a", "pcm_s16le"]
+    elif output_format == "webm":
+        args += [
+            "-c:v", "libvpx-vp9", "-crf", crf, "-b:v", "0", "-row-mt", "1",
+        ]
+        if has_audio:
+            args += ["-c:a", "libopus", "-b:a", "160k"]
+    else:
+        args += ["-loop", "0"]
+
+    args += ["-progress", "pipe:1", "-stats_period", "0.25", str(output_path)]
+    expected = sum(
+        (float(c["sourceOut"]) - float(c["sourceIn"]))
+        / float(c.get("speed", 1.0))
+        for c in clips
+    )
+
+    def _on_ffmpeg_progress(block: dict[str, str]) -> None:
+        if on_progress is None:
+            return
+        out_us = block.get("out_time_us")
+        if out_us is None:
+            return
+        try:
+            elapsed = float(out_us) / 1_000_000.0
+            on_progress(min(elapsed / expected, 0.99) if expected > 0 else 0.0)
+        except ValueError:
+            return
+
+    try:
+        await run_ffmpeg(args, on_progress=_on_ffmpeg_progress)
+    except BaseException:
+        output_path.unlink(missing_ok=True)
+        raise
+    if on_progress is not None:
+        on_progress(1.0)
+    return output_path
 
 
 async def handle_video_edit(
@@ -231,55 +377,15 @@ async def handle_video_edit(
     if _is_no_op(clips, probe.duration):
         return {"video": {"type": "Video", "value": str(src_input.value)}}
 
-    # Render path
-    filter_complex, has_audio = _build_filter_complex(clips)
-    # ffmpeg rejects mixing simple filters (-af) with -filter_complex on the
-    # same output stream. Chain the audio resync into the complex graph so
-    # the concat's [outa] is already drift-corrected before encoding.
-    audio_label = "[outa]"
-    if has_audio:
-        filter_complex = f"{filter_complex};[outa]aresample=async=1[outas]"
-        audio_label = "[outas]"
-    run_dir = get_run_dir()
-    output_path = run_dir / f"{uuid4().hex[:12]}.mp4"
-
-    args = [
-        "-i", str(src_path),
-        "-filter_complex", filter_complex,
-        "-map", "[outv]",
-    ]
-    if has_audio:
-        args += ["-map", audio_label]
-    args += [
-        "-c:v", "libx264",
-        "-preset", "fast",
-        "-crf", "23",
-        "-color_primaries", "bt709",
-        "-color_trc", "bt709",
-        "-colorspace", "bt709",
-        "-color_range", "tv",
-    ]
-    if has_audio:
-        args += ["-c:a", "aac", "-b:a", "192k"]
-    args += ["-progress", "pipe:1", "-stats_period", "0.25", str(output_path)]
-
-    def _on_progress(block: dict[str, str]) -> None:
+    def _on_progress(value: float) -> None:
         if emit is None:
             return
-        out_us = block.get("out_time_us")
-        if out_us is None:
-            return
-        try:
-            elapsed = float(out_us) / 1_000_000.0
-            expected = sum(
-                (c["sourceOut"] - c["sourceIn"]) / c.get("speed", 1.0)
-                for c in clips
-            )
-            value = min(elapsed / expected, 0.99) if expected > 0 else 0.0
-            import asyncio as _asyncio
-            _asyncio.create_task(emit(ProgressEvent(node_id=node.id, value=value)))
-        except (ValueError, KeyError):
-            pass
+        import asyncio as _asyncio
+        _asyncio.create_task(emit(ProgressEvent(node_id=node.id, value=value)))
 
-    await run_ffmpeg(args, on_progress=_on_progress)
+    output_path = await render_video_edit_file(
+        src_path,
+        clips,
+        on_progress=_on_progress,
+    )
     return {"video": {"type": "Video", "value": str(output_path)}}

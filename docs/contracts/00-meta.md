@@ -101,7 +101,7 @@ Nebula is not only a canvas of API nodes. Several **workspaces** manage persiste
 | **Character studio** | character JSON | `character` → `Character` port | `/api/characters/*` |
 | **Cinema studio** | scene spec on node | `cinema-scene`, `cinema-color`, `cinema-look` | `/api/cinema/*` |
 | **Video editor** | clip manifest on node | `video-edit` | `/api/video-edit/*` |
-| **Remotion editor** | `VideoGraphManifest` on node | `remotion-node` | client-side Remotion |
+| **Remotion editor** | `VideoGraphManifest` on node | `remotion-node` | client Player + local H.264 renderer; `/api/remotion-render`, `/api/render-jobs/*` |
 
 | Contract kind | Volume | What it covers |
 |---------------|--------|----------------|

@@ -3,6 +3,19 @@ from handlers.remotion_node import handle_remotion_node
 from models.graph import GraphNode
 
 
+@pytest.fixture(autouse=True)
+def _mock_renderer(monkeypatch, tmp_path):
+    output = tmp_path / "render.mp4"
+    output.write_bytes(b"rendered")
+
+    async def fake_render(manifest, *, on_progress=None):
+        if on_progress is not None:
+            on_progress(1.0)
+        return output
+
+    monkeypatch.setattr("handlers.remotion_node.render_remotion_manifest", fake_render)
+
+
 def _node(params: dict | None = None) -> GraphNode:
     return GraphNode(id="remotion-test", definitionId="remotion-node", params=params or {})
 
@@ -14,7 +27,8 @@ async def test_handler_returns_manifest_on_valid_input():
     result = await handle_remotion_node(node, inputs={}, api_keys={})
     assert "video" in result
     assert "manifest" in result
-    assert result["video"] == {"type": "Video", "value": None}
+    assert result["video"]["type"] == "Video"
+    assert result["video"]["value"].endswith("render.mp4")
     assert result["manifest"]["value"] == manifest
 
 

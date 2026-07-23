@@ -50,6 +50,7 @@ from routes.fal_proxy import router as fal_router
 from routes.nous_proxy import router as nous_router
 from routes.quiver_proxy import router as quiver_router
 from routes.video_edit_preview import router as video_edit_preview_router
+from routes.render_exports import router as render_exports_router
 from services.ffmpeg import ffprobe_video
 from services.preset_store import preset_store
 
@@ -577,6 +578,7 @@ app.include_router(fal_router)
 app.include_router(nous_router)
 app.include_router(quiver_router)
 app.include_router(video_edit_preview_router)
+app.include_router(render_exports_router)
 
 
 @app.post("/api/uploads")

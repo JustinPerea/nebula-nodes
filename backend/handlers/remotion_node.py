@@ -1,15 +1,15 @@
 """Handler for the remotion-node node type.
 
-No-op for Phase 2.1 — Remotion preview happens client-side via @remotion/player.
-The handler validates the manifest shape and echoes it through as the node's
-output so downstream consumers receive a typed value.
+Preview happens client-side via @remotion/player. Running the node renders the
+same manifest to a real H.264 MP4 via @remotion/renderer.
 """
 from __future__ import annotations
 
 from typing import Any, Awaitable, Callable
 
-from models.events import ExecutionEvent
+from models.events import ExecutionEvent, ProgressEvent
 from models.graph import GraphNode, PortValueDict
+from services.remotion_render import render_remotion_manifest
 
 REQUIRED_TOP_LEVEL_KEYS = {"graph", "timeline"}
 REQUIRED_GRAPH_KEYS = {"nodes", "edges"}
@@ -46,7 +46,14 @@ async def handle_remotion_node(
     if manifest is None:
         manifest = _empty_manifest()
     _validate_manifest(manifest)
+    def _on_progress(value: float) -> None:
+        if emit is None:
+            return
+        import asyncio as _asyncio
+        _asyncio.create_task(emit(ProgressEvent(node_id=node.id, value=value)))
+
+    output_path = await render_remotion_manifest(manifest, on_progress=_on_progress)
     return {
-        "video": {"type": "Video", "value": None},
+        "video": {"type": "Video", "value": str(output_path)},
         "manifest": {"type": "Any", "value": manifest},
     }

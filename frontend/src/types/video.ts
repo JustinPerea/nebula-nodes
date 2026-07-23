@@ -116,3 +116,12 @@ export function createTrackItem(partial: Partial<TrackItem> & Pick<TrackItem, 'i
 export function createEmptyManifest(): VideoGraphManifest {
   return { graph: { nodes: [], edges: [] }, timeline: [] };
 }
+
+/** Canonical composition duration shared by Player preview and server render. */
+export function compositionDurationInFrames(manifest: VideoGraphManifest): number {
+  return Math.max(
+    DEFAULT_DURATION_FRAMES,
+    ...manifest.timeline.map((item) => item.time.startFrame + item.time.durationInFrames),
+    DEFAULT_FPS,
+  );
+}

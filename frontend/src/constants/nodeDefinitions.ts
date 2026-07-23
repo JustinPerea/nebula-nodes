@@ -1804,7 +1804,14 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     outputPorts: [
       { id: 'video', label: 'Edited Video', dataType: 'Video', required: false },
     ],
-    params: [],
+    params: [
+      // Runtime editor state. These stay hidden from the generic inspector,
+      // but must be declared so POST/PUT /api/graph/node can persist edits.
+      { key: 'clips', label: 'Clips', type: 'string', required: false, hidden: true },
+      { key: 'sourceDuration', label: 'Source Duration', type: 'float', required: false, hidden: true },
+      { key: 'sourceFps', label: 'Source FPS', type: 'float', required: false, hidden: true },
+      { key: 'sourceIsVfr', label: 'Source Is VFR', type: 'boolean', required: false, hidden: true },
+    ],
   },
 
   'remotion-node': {
@@ -1821,7 +1828,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     outputPorts: [
       { id: 'video', label: 'Rendered Video', dataType: 'Video', required: false },
     ],
-    params: [],
+    params: [
+      // Structured composition state is edited by the dedicated Remotion UI.
+      { key: 'manifest', label: 'Manifest', type: 'string', required: false, hidden: true },
+    ],
   },
 
   'cinema-color': {

@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import type { Node } from '@xyflow/react';
 import {
   Gauge,
+  Download,
   Pause,
   Play,
   RotateCw,
@@ -11,10 +12,19 @@ import {
   Split,
   Volume2,
   VolumeX,
+  X,
 } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
 import { renderPreview } from '../../lib/editor/api';
+import { backendAssetUrlSync } from '../../lib/backend';
+import {
+  startVideoExport,
+  type VideoExportFormat,
+  type VideoExportQuality,
+  type VideoExportResolution,
+} from '../../lib/renderJobs';
+import { useRenderJob } from '../../hooks/useRenderJob';
 import { type EditClip, totalOutputDuration, clipSpeed, clampSpeedToFloor } from '../../lib/editor/virtualPlayback';
 import { formatSmpte } from '../../lib/editor/timecode';
 import type { NodeData } from '../../types';
@@ -29,6 +39,11 @@ interface Props {
 export function EditorTransport({ editNode, sourceUrl }: Props) {
   const [isRendering, setIsRendering] = useState(false);
   const [hasRendered, setHasRendered] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
+  const [exportFormat, setExportFormat] = useState<VideoExportFormat>('mp4');
+  const [exportResolution, setExportResolution] = useState<VideoExportResolution>('source');
+  const [exportQuality, setExportQuality] = useState<VideoExportQuality>('balanced');
+  const renderJob = useRenderJob();
   const selectedClipId = useUIStore((s) => s.selectedClipId);
   const timelineZoom = useUIStore((s) => s.timelineZoom);
   const isPlaying = useUIStore((s) => s.isPlaying);
@@ -106,6 +121,16 @@ export function EditorTransport({ editNode, sourceUrl }: Props) {
     } finally {
       setIsRendering(false);
     }
+  }
+
+  function handleFinalExport() {
+    void renderJob.begin(() => startVideoExport({
+      sourceUrl,
+      clips,
+      format: exportFormat,
+      resolution: exportResolution,
+      quality: exportQuality,
+    }));
   }
 
   return (
@@ -259,6 +284,77 @@ export function EditorTransport({ editNode, sourceUrl }: Props) {
         <RotateCw className="editor-transport__icon" aria-hidden="true" focusable="false" />
         <span>{isRendering ? 'Rendering...' : hasRendered ? 'Re-render' : 'Render Preview'}</span>
       </button>
+      <div className="final-export">
+        <button
+          type="button"
+          className="editor-transport__btn editor-transport__btn--export"
+          onClick={() => setExportOpen((open) => !open)}
+          disabled={clips.length === 0}
+        >
+          <Download className="editor-transport__icon" aria-hidden="true" focusable="false" />
+          <span>Export…</span>
+        </button>
+        {exportOpen && (
+          <div className="final-export__popover" role="dialog" aria-label="Final video export">
+            <div className="final-export__header">
+              <strong>Final export</strong>
+              <button type="button" onClick={() => setExportOpen(false)} aria-label="Close export">
+                <X size={14} aria-hidden="true" />
+              </button>
+            </div>
+            <label>
+              Format
+              <select value={exportFormat} onChange={(event) => setExportFormat(event.target.value as VideoExportFormat)} disabled={renderJob.job?.status === 'running'}>
+                <option value="mp4">MP4 · H.264</option>
+                <option value="mov">MOV · ProRes 422 HQ</option>
+                <option value="webm">WebM · VP9</option>
+                <option value="gif">Animated GIF</option>
+              </select>
+            </label>
+            <label>
+              Resolution
+              <select value={exportResolution} onChange={(event) => setExportResolution(event.target.value as VideoExportResolution)} disabled={renderJob.job?.status === 'running'}>
+                <option value="source">Source</option>
+                <option value="1080p">1080p</option>
+                <option value="720p">720p</option>
+                <option value="480p">480p</option>
+              </select>
+            </label>
+            <label>
+              Quality
+              <select value={exportQuality} onChange={(event) => setExportQuality(event.target.value as VideoExportQuality)} disabled={renderJob.job?.status === 'running' || exportFormat === 'mov' || exportFormat === 'gif'}>
+                <option value="high">High</option>
+                <option value="balanced">Balanced</option>
+                <option value="small">Smaller file</option>
+              </select>
+            </label>
+            {renderJob.job?.status === 'running' ? (
+              <div className="final-export__progress">
+                <progress max={1} value={renderJob.job.progress} />
+                <span>{Math.round(renderJob.job.progress * 100)}%</span>
+                <button type="button" onClick={() => void renderJob.cancel()}>Cancel</button>
+              </div>
+            ) : renderJob.job?.status === 'complete' && renderJob.job.outputUrl ? (
+              <div className="final-export__actions">
+                <a className="final-export__download" href={backendAssetUrlSync(renderJob.job.outputUrl)} download>
+                  <Download size={14} aria-hidden="true" /> Download {exportFormat.toUpperCase()}
+                </a>
+                <button type="button" onClick={renderJob.reset}>New export</button>
+              </div>
+            ) : (
+              <button type="button" className="final-export__start" onClick={handleFinalExport}>
+                Export {exportFormat.toUpperCase()}
+              </button>
+            )}
+            {(renderJob.error || renderJob.job?.error) && (
+              <div className="final-export__error" role="alert">{renderJob.error || renderJob.job?.error}</div>
+            )}
+            {renderJob.job?.status === 'cancelled' && (
+              <div className="final-export__status">Export cancelled.</div>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

@@ -2547,7 +2547,36 @@
         "required": false
       }
     ],
-    "params": []
+    "params": [
+      {
+        "key": "clips",
+        "label": "Clips",
+        "type": "string",
+        "required": false,
+        "hidden": true
+      },
+      {
+        "key": "sourceDuration",
+        "label": "Source Duration",
+        "type": "float",
+        "required": false,
+        "hidden": true
+      },
+      {
+        "key": "sourceFps",
+        "label": "Source FPS",
+        "type": "float",
+        "required": false,
+        "hidden": true
+      },
+      {
+        "key": "sourceIsVfr",
+        "label": "Source Is VFR",
+        "type": "boolean",
+        "required": false,
+        "hidden": true
+      }
+    ]
   },
   "remotion-node": {
     "id": "remotion-node",
@@ -2573,7 +2602,15 @@
         "required": false
       }
     ],
-    "params": []
+    "params": [
+      {
+        "key": "manifest",
+        "label": "Manifest",
+        "type": "string",
+        "required": false,
+        "hidden": true
+      }
+    ]
   },
   "cinema-color": {
     "id": "cinema-color",

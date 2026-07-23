@@ -4440,6 +4440,127 @@ body.app-slava-restraint .editor-transport__btn--render:hover:not(:disabled) {
   background: var(--sr-accent-hover-soft);
 }
 
+body.app-slava-restraint .editor-transport__btn--export,
+body.app-slava-restraint .remotion-editor-toolbar__export {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--sr-control-h-sm);
+  padding: 5px 9px;
+  border: 1px solid var(--sr-accent-border);
+  border-radius: var(--sr-radius-control);
+  background: var(--sr-accent-soft);
+  color: var(--sr-ink);
+  font: inherit;
+  cursor: pointer;
+}
+
+body.app-slava-restraint .final-export {
+  position: relative;
+}
+
+body.app-slava-restraint .final-export__popover {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  z-index: 100;
+  display: grid;
+  gap: 10px;
+  width: 300px;
+  padding: 14px;
+  border: 1px solid var(--sr-edge-strong);
+  border-radius: var(--sr-radius-panel);
+  background: var(--sr-glass-strong);
+  box-shadow: var(--sr-shadow-panel);
+  color: var(--sr-ink);
+  backdrop-filter: var(--sr-blur-panel);
+  -webkit-backdrop-filter: var(--sr-blur-panel);
+}
+
+body.app-slava-restraint .final-export--remotion .final-export__popover {
+  top: calc(100% + 8px);
+  bottom: auto;
+}
+
+body.app-slava-restraint .final-export__header,
+body.app-slava-restraint .final-export__progress,
+body.app-slava-restraint .final-export__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+body.app-slava-restraint .final-export__header {
+  justify-content: space-between;
+}
+
+body.app-slava-restraint .final-export__header button,
+body.app-slava-restraint .final-export__progress button,
+body.app-slava-restraint .final-export__actions button,
+body.app-slava-restraint .final-export__start,
+body.app-slava-restraint .final-export__download {
+  min-height: var(--sr-control-h-sm);
+  padding: 5px 9px;
+  border: 1px solid var(--sr-edge);
+  border-radius: var(--sr-radius-control);
+  background: var(--sr-surface-control);
+  color: var(--sr-ink);
+  font: inherit;
+  cursor: pointer;
+}
+
+body.app-slava-restraint .final-export__header button {
+  display: grid;
+  width: var(--sr-control-h-sm);
+  padding: 0;
+  place-items: center;
+}
+
+body.app-slava-restraint .final-export__popover label {
+  display: grid;
+  grid-template-columns: 90px 1fr;
+  align-items: center;
+  gap: 8px;
+  color: var(--sr-ink-light);
+  font-size: var(--sr-type-label);
+}
+
+body.app-slava-restraint .final-export__popover select {
+  min-height: var(--sr-control-h-sm);
+  border: 1px solid var(--sr-edge);
+  border-radius: var(--sr-radius-control);
+  background: var(--sr-canvas-elevated);
+  color: var(--sr-ink);
+}
+
+body.app-slava-restraint .final-export__progress progress {
+  flex: 1;
+  accent-color: var(--sr-accent);
+}
+
+body.app-slava-restraint .final-export__download,
+body.app-slava-restraint .final-export__start {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-color: var(--sr-accent-border);
+  background: var(--sr-accent-soft);
+  text-decoration: none;
+}
+
+body.app-slava-restraint .final-export__error {
+  color: #ff7a68;
+  overflow-wrap: anywhere;
+}
+
+body.app-slava-restraint .final-export__summary,
+body.app-slava-restraint .final-export__status {
+  color: var(--sr-ink-meta);
+  font-family: var(--sr-mono);
+  font-size: var(--sr-type-meta);
+}
+
 body.app-slava-restraint .editor-transport__btn:focus-visible,
 body.app-slava-restraint .editor-transport__tool:focus-visible,
 body.app-slava-restraint .editor-transport__preset:focus-visible,
