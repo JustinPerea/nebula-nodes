@@ -5,6 +5,7 @@ import asyncio
 import pytest
 
 from execution.engine import topological_sort, validate_graph, execute_graph, CycleError
+from models.events import execution_run_id
 from models.graph import GraphNode, GraphEdge, PortValueDict
 
 
@@ -57,6 +58,27 @@ class TestTopologicalSort:
         edges = [_edge("a", "b"), _edge("b", "a")]
         with pytest.raises(CycleError):
             topological_sort(nodes, edges)
+
+
+@pytest.mark.asyncio
+async def test_execute_graph_scopes_run_id_across_child_tasks_and_resets() -> None:
+    observed: list[str | None] = []
+
+    async def emit(_event) -> None:
+        observed.append(execution_run_id.get())
+
+    await execute_graph(
+        nodes=[_node("a", "text-input")],
+        edges=[],
+        api_keys={},
+        handler_registry={},
+        emit=emit,
+        run_id="run-engine-123",
+    )
+
+    assert observed
+    assert set(observed) == {"run-engine-123"}
+    assert execution_run_id.get() is None
 
 
 class TestValidateGraph:

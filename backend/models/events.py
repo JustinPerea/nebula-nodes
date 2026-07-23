@@ -1,33 +1,50 @@
 from __future__ import annotations
 
+from contextvars import ContextVar
 from typing import Any, Literal, Union
 
 from pydantic import BaseModel
 
 
-class QueuedEvent(BaseModel):
+execution_run_id: ContextVar[str | None] = ContextVar(
+    "execution_run_id",
+    default=None,
+)
+
+
+class RunScopedEvent(BaseModel):
+    """Execution event correlated to the request that produced it.
+
+    ``None`` keeps CLI and older callers backwards compatible. The serializer
+    fills it from ``execution_run_id`` for events emitted inside execute_graph.
+    """
+
+    run_id: str | None = None
+
+
+class QueuedEvent(RunScopedEvent):
     type: Literal["queued"] = "queued"
     node_id: str
 
 
-class ExecutingEvent(BaseModel):
+class ExecutingEvent(RunScopedEvent):
     type: Literal["executing"] = "executing"
     node_id: str
 
 
-class ProgressEvent(BaseModel):
+class ProgressEvent(RunScopedEvent):
     type: Literal["progress"] = "progress"
     node_id: str
     value: float
 
 
-class ExecutedEvent(BaseModel):
+class ExecutedEvent(RunScopedEvent):
     type: Literal["executed"] = "executed"
     node_id: str
     outputs: dict[str, Any]
 
 
-class ErrorEvent(BaseModel):
+class ErrorEvent(RunScopedEvent):
     type: Literal["error"] = "error"
     node_id: str
     error: str
@@ -44,25 +61,25 @@ class ValidationErrorDetail(BaseModel):
     message: str
 
 
-class ValidationErrorEvent(BaseModel):
+class ValidationErrorEvent(RunScopedEvent):
     type: Literal["validation_error"] = "validation_error"
     errors: list[ValidationErrorDetail]
 
 
-class GraphCompleteEvent(BaseModel):
+class GraphCompleteEvent(RunScopedEvent):
     type: Literal["graph_complete"] = "graph_complete"
     duration: float
     nodes_executed: int
 
 
-class StreamDeltaEvent(BaseModel):
+class StreamDeltaEvent(RunScopedEvent):
     type: Literal["stream_delta"] = "stream_delta"
     node_id: str
     delta: str
     accumulated: str
 
 
-class StreamPartialImageEvent(BaseModel):
+class StreamPartialImageEvent(RunScopedEvent):
     type: Literal["stream_partial_image"] = "stream_partial_image"
     node_id: str
     partial_index: int
@@ -70,7 +87,7 @@ class StreamPartialImageEvent(BaseModel):
     is_final: bool = False
 
 
-class StreamPartialSvgEvent(BaseModel):
+class StreamPartialSvgEvent(RunScopedEvent):
     type: Literal["stream_partial_svg"] = "stream_partial_svg"
     node_id: str
     partial_index: int

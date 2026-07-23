@@ -773,6 +773,34 @@ class TestProviderCapabilityValidationResponse:
         assert self._capability_message(create_response.json()) == GEMINI_OMNI_EXTENSION_ERROR
         assert self._capability_message(canvas_response.json()) == GEMINI_OMNI_EXTENSION_ERROR
 
+    def test_validation_websocket_event_echoes_request_run_id(self, client):
+        graph = {**self._omni_extension_graph(), "runId": "run-validation-123"}
+
+        with client.websocket_connect("/ws") as websocket:
+            response = client.post("/api/execute", json=graph)
+            event = websocket.receive_json()
+
+        assert response.status_code == 200
+        assert response.json()["status"] == "validation_error"
+        assert event["type"] == "validationError"
+        assert event["runId"] == "run-validation-123"
+
+    def test_event_serializer_inherits_task_local_run_id(self):
+        from main import _event_to_camel
+        from models.events import QueuedEvent, execution_run_id
+
+        token = execution_run_id.set("run-context-123")
+        try:
+            event = _event_to_camel(QueuedEvent(node_id="n1"))
+        finally:
+            execution_run_id.reset(token)
+
+        assert event == {
+            "runId": "run-context-123",
+            "type": "queued",
+            "nodeId": "n1",
+        }
+
 
 class TestChatAgentDispatch:
     """WebSocket /ws/chat accepts an 'agent' field and routes to the right runner."""

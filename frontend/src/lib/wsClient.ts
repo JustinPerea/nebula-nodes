@@ -10,7 +10,7 @@ export type ErrorCategory =
   | 'invalid_input'
   | 'unknown';
 
-export type ExecutionEvent =
+export type ExecutionEvent = (
   | { type: 'queued'; nodeId: string }
   | { type: 'executing'; nodeId: string }
   | { type: 'progress'; nodeId: string; value: number }
@@ -21,7 +21,8 @@ export type ExecutionEvent =
   | { type: 'streamDelta'; nodeId: string; delta: string; accumulated: string }
   | { type: 'streamPartialImage'; nodeId: string; partialIndex: number; src: string; isFinal: boolean }
   | { type: 'streamPartialSvg'; nodeId: string; partialIndex: number; svg: string; isFinal: boolean }
-  | { type: 'graphSync'; nodes: unknown[]; edges: unknown[]; empty: boolean };
+  | { type: 'graphSync'; nodes: unknown[]; edges: unknown[]; empty: boolean }
+) & { runId?: string };
 
 type EventHandler = (event: ExecutionEvent) => void;
 

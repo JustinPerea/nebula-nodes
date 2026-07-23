@@ -94,6 +94,46 @@ describe('executeClusterConcurrent', () => {
     expect(useGraphStore.getState().isExecuting).toBe(true);
   });
 
+  it('cannot unlock or close an overlapping Canvas run when it completes', async () => {
+    useGraphStore.setState({
+      nodes: [node('canvas', 'text-input'), node('create', 'nano-banana')],
+      edges: [],
+      isExecuting: false,
+      runHistory: [],
+    });
+
+    await useGraphStore.getState().executeGraph();
+    const canvasRunId = executeGraphMock.mock.calls[0][2] as string;
+    expect(canvasRunId).toEqual(expect.any(String));
+    expect(useGraphStore.getState().isExecuting).toBe(true);
+    expect(useGraphStore.getState().runHistory[0].status).toBe('running');
+
+    await useGraphStore.getState().executeClusterConcurrent(['create']);
+    const createRunId = executeGraphMock.mock.calls[1][2] as string;
+    expect(createRunId).toEqual(expect.any(String));
+    expect(createRunId).not.toBe(canvasRunId);
+
+    useGraphStore.getState().handleExecutionEvent({
+      type: 'graphComplete',
+      runId: createRunId,
+      duration: 1,
+      nodesExecuted: 1,
+    });
+
+    expect(useGraphStore.getState().isExecuting).toBe(true);
+    expect(useGraphStore.getState().runHistory[0].status).toBe('running');
+
+    useGraphStore.getState().handleExecutionEvent({
+      type: 'graphComplete',
+      runId: canvasRunId,
+      duration: 2,
+      nodesExecuted: 2,
+    });
+
+    expect(useGraphStore.getState().isExecuting).toBe(false);
+    expect(useGraphStore.getState().runHistory[0].status).toBe('complete');
+  });
+
   it('shows the exact backend capability error on the Create model node', async () => {
     const message = 'Gemini Omni capability guardrail: use Veo 3.1 for video extension.';
     executeGraphMock.mockResolvedValueOnce({
