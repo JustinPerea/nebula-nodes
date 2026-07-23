@@ -1,5 +1,36 @@
 # Implementation Notes
 
+## 2026-07-23 - Ideogram seven-node contract and route-safety audit
+
+The seven existing Ideogram nodes remain dual-route. The direct path keeps V4
+generate/remix plus the provider's V3 edit surfaces; the FAL path keeps V4
+generate and the V3 editing endpoints. FAL now publishes a V4 image-to-image
+endpoint, but it is not a drop-in replacement for the fixed remix node because
+it omits the node's V3 style-reference, style, and negative-prompt controls.
+
+Decisions:
+- Filter FAL requests through a per-node allowlist on a copied `GraphNode`.
+  Dual-route nodes persist defaults for both providers, so forwarding the whole
+  param map could send direct `rendering_speed=DEFAULT` and `resolution` to FAL.
+- Preserve the source node for both endpoint injection and Character-bundle
+  seed expansion. The previous wrappers wrote `endpoint_id` and sometimes a
+  seed into persisted params during execution.
+- Reject invalid route enums, counts, strengths, upscale controls, resolutions,
+  and character-reference counts before creating a provider client. Both
+  current Character routes consume exactly one identity image; FAL otherwise
+  ignores extras and the direct route rejects them.
+- Surface the current FAL V4 `acceleration` control and no-fee
+  `expansion_model=None`, the full current V4 resolution enum, and direct V4
+  copyright detection. Keep structured palette/style-code/json-prompt fields
+  out of the fixed nodes; `fal-universal` remains the escape hatch for complex
+  FAL objects.
+- Freeze one FAL JSON body per node and maintain separate FAL and direct gold
+  exemplars because their auth, request shapes, execution patterns, and result
+  persistence differ.
+- Do not run a paid provider smoke in this milestone. The prior 2026-06-10 live
+  results remain empirical evidence; this pass is schema, handler, fixture, and
+  regression validation.
+
 ## 2026-07-22 - Targeted frontend development-dependency remediation
 
 The clean npm audit reported five development-only findings: one low and four

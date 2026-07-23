@@ -67,6 +67,59 @@ NANO_BANANA_FAL_MODEL_ENDPOINTS: dict[str, str] = {
 
 HUNYUAN3D_PROMPT_MAX_CHARS = 1024
 
+# The graph stores defaults for both sides of a dual-route node. FAL must only
+# receive fields from its own schema; otherwise direct-only defaults such as
+# rendering_speed=DEFAULT or resolution leak into FAL and cause a paid 422.
+IDEOGRAM_FAL_PARAMS: dict[str, frozenset[str]] = {
+    "ideogram-v4": frozenset(
+        {
+            "expansion_model",
+            "image_size",
+            "rendering_speed",
+            "acceleration",
+            "num_images",
+            "seed",
+            "enable_safety_checker",
+            "output_format",
+        }
+    ),
+    "ideogram-edit": frozenset(
+        {"rendering_speed", "expand_prompt", "num_images", "seed"}
+    ),
+    "ideogram-remix": frozenset(
+        {
+            "strength",
+            "image_size",
+            "style",
+            "negative_prompt",
+            "rendering_speed",
+            "expand_prompt",
+            "num_images",
+            "seed",
+        }
+    ),
+    "ideogram-reframe": frozenset(
+        {"image_size", "style", "rendering_speed", "num_images", "seed"}
+    ),
+    "ideogram-replace-background": frozenset(
+        {"style", "rendering_speed", "expand_prompt", "num_images", "seed"}
+    ),
+    "ideogram-character": frozenset(
+        {
+            "negative_prompt",
+            "num_images",
+            "seed",
+            "style",
+            "image_size",
+            "rendering_speed",
+            "expand_prompt",
+        }
+    ),
+    "ideogram-upscale": frozenset(
+        {"resemblance", "detail", "seed", "expand_prompt"}
+    ),
+}
+
 
 def _fal_wrapper_node(
     node: GraphNode,
@@ -80,6 +133,77 @@ def _fal_wrapper_node(
         params.pop(key, None)
     params["endpoint_id"] = endpoint_id
     return node.model_copy(update={"params": params})
+
+
+def _ideogram_fal_node(node: GraphNode, endpoint_id: str) -> GraphNode:
+    """Build an immutable, route-filtered node for one fixed Ideogram FAL endpoint."""
+    allowed = IDEOGRAM_FAL_PARAMS[node.definition_id]
+    params = {key: value for key, value in node.params.items() if key in allowed}
+    params["endpoint_id"] = endpoint_id
+    return node.model_copy(update={"params": params})
+
+
+def _validate_ideogram_fal_params(node: GraphNode) -> None:
+    """Reject values that the current fixed FAL endpoint would bill then reject."""
+    params = node.params
+    speed = params.get("rendering_speed")
+    if speed not in (None, "") and speed not in {"TURBO", "BALANCED", "QUALITY"}:
+        raise ValueError(
+            "Ideogram FAL rendering_speed must be TURBO, BALANCED, or QUALITY "
+            f"(received {speed!r})"
+        )
+
+    num_images = params.get("num_images")
+    max_images = 4 if node.definition_id == "ideogram-v4" else 8
+    if num_images not in (None, "") and (
+        isinstance(num_images, bool)
+        or not isinstance(num_images, int)
+        or not 1 <= num_images <= max_images
+    ):
+        raise ValueError(
+            f"{node.definition_id} num_images must be an integer from 1 to {max_images} "
+            f"(received {num_images!r})"
+        )
+
+    if node.definition_id == "ideogram-v4":
+        expansion = params.get("expansion_model")
+        if expansion not in (None, "") and expansion not in {"None", "Medium", "Large"}:
+            raise ValueError(
+                "Ideogram V4 FAL expansion_model must be None, Medium, or Large "
+                f"(received {expansion!r})"
+            )
+        acceleration = params.get("acceleration")
+        if acceleration not in (None, "") and acceleration not in {
+            "none", "low", "regular", "high"
+        }:
+            raise ValueError(
+                "Ideogram V4 FAL acceleration must be none, low, regular, or high "
+                f"(received {acceleration!r})"
+            )
+
+    if node.definition_id == "ideogram-remix":
+        strength = params.get("strength")
+        if strength not in (None, "") and (
+            isinstance(strength, bool)
+            or not isinstance(strength, (int, float))
+            or not 0 <= strength <= 1
+        ):
+            raise ValueError(
+                f"Ideogram Remix FAL strength must be from 0 to 1 (received {strength!r})"
+            )
+
+    if node.definition_id == "ideogram-upscale":
+        for key in ("resemblance", "detail"):
+            value = params.get(key)
+            if value not in (None, "") and (
+                isinstance(value, bool)
+                or not isinstance(value, int)
+                or not 1 <= value <= 100
+            ):
+                raise ValueError(
+                    f"Ideogram Upscale FAL {key} must be an integer from 1 to 100 "
+                    f"(received {value!r})"
+                )
 
 
 def _nano_banana_fal_node(node: GraphNode, *, edit: bool) -> GraphNode:
@@ -902,9 +1026,11 @@ def get_handler_registry(
                 if use_direct and require_param and not node.params.get(require_param):
                     use_direct = False
                 if use_direct:
-                    return await direct_handler(node, inputs, api_keys, emit=emit)
-                node.params.setdefault("endpoint_id", fal_endpoint)
-                return await handle_fal_universal(node, inputs, api_keys, emit=emit)
+                    routed_node = node.model_copy(update={"params": dict(node.params)})
+                    return await direct_handler(routed_node, inputs, api_keys, emit=emit)
+                routed_node = _ideogram_fal_node(node, fal_endpoint)
+                _validate_ideogram_fal_params(routed_node)
+                return await handle_fal_universal(routed_node, inputs, api_keys, emit=emit)
             return _route
 
         from handlers.ideogram import (
@@ -941,14 +1067,22 @@ def get_handler_registry(
         async def _ideogram_character_handler(node, inputs, api_keys):
             # Fold an attached Character bundle into prompt + reference_images for
             # BOTH routes (trait string verbatim, stored views first — identity.py).
-            expanded = expand_character_inputs(node, inputs)
+            routed_node = node.model_copy(update={"params": dict(node.params)})
+            expanded = expand_character_inputs(routed_node, inputs)
             refs = expanded.get("reference_images")
             if not refs or not refs.value:
                 raise ValueError(
                     "Ideogram Character needs reference images — connect Character Refs "
                     "or attach a Character node"
                 )
-            return await _ideogram_character_route(node, expanded, api_keys)
+            raw_refs = refs.value if isinstance(refs.value, list) else [refs.value]
+            reference_count = sum(1 for value in raw_refs if value)
+            if reference_count != 1:
+                raise ValueError(
+                    "Ideogram Character supports exactly one character reference image per request "
+                    f"(received {reference_count})"
+                )
+            return await _ideogram_character_route(routed_node, expanded, api_keys)
 
         # Direct-only Ideogram capabilities (no FAL equivalents) — these require
         # IDEOGRAM_API_KEY and bind the engine's emit for progress events.

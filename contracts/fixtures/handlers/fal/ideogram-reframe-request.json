@@ -1,0 +1,12 @@
+{
+  "_comment": "Oracle: backend/tests/test_fal_contract_fixtures.py::test_fal_request_body_matches_fixture",
+  "image_url": "https://example.com/source.png",
+  "image_urls": [
+    "https://example.com/style.png"
+  ],
+  "image_size": "landscape_16_9",
+  "style": "REALISTIC",
+  "rendering_speed": "TURBO",
+  "num_images": 2,
+  "seed": 45
+}

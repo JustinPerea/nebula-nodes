@@ -106,7 +106,18 @@ async def test_v4_generate_body_shape(tmp_path):
         patcher, client = _patch_client(_ideogram_response())
         with patcher:
             result = await handle_ideogram_v4_generate(
-                _make_node("ideogram-v4", {"resolution": "2048x2048", "rendering_speed": "QUALITY"}),
+                _make_node(
+                    "ideogram-v4",
+                    {
+                        "resolution": "2048x2048",
+                        "rendering_speed": "QUALITY",
+                        "enable_copyright_detection": True,
+                        # FAL-only fields must not leak into direct multipart.
+                        "num_images": 4,
+                        "seed": 123,
+                        "expansion_model": "Large",
+                    },
+                ),
                 {"prompt": PortValueDict(type="Text", value="a poster that says OPEN")},
                 _KEYS,
             )
@@ -119,6 +130,10 @@ async def test_v4_generate_body_shape(tmp_path):
     assert fields["text_prompt"] == "a poster that says OPEN"
     assert fields["resolution"] == "2048x2048"
     assert fields["rendering_speed"] == "QUALITY"
+    assert fields["enable_copyright_detection"] == "true"
+    assert "num_images" not in fields
+    assert "seed" not in fields
+    assert "expansion_model" not in fields
     assert not _multipart_file_names(kwargs)
     assert result["image"]["type"] == "Image"
     assert Path(result["image"]["value"]).exists()
@@ -131,6 +146,26 @@ async def test_v4_generate_requires_key():
             _make_node("ideogram-v4"),
             {"prompt": PortValueDict(type="Text", value="x")},
             {},
+        )
+
+
+@pytest.mark.asyncio
+async def test_v4_generate_rejects_fal_speed_before_request():
+    with pytest.raises(ValueError, match="rendering_speed.*BALANCED"):
+        await handle_ideogram_v4_generate(
+            _make_node("ideogram-v4", {"rendering_speed": "BALANCED"}),
+            {"prompt": PortValueDict(type="Text", value="x")},
+            _KEYS,
+        )
+
+
+@pytest.mark.asyncio
+async def test_v4_generate_rejects_unknown_resolution_before_request():
+    with pytest.raises(ValueError, match="V4 resolution.*1280x720"):
+        await handle_ideogram_v4_generate(
+            _make_node("ideogram-v4", {"resolution": "1280x720"}),
+            {"prompt": PortValueDict(type="Text", value="x")},
+            _KEYS,
         )
 
 
@@ -245,7 +280,7 @@ async def test_character_posts_v3_generate_with_character_refs(tmp_path):
                 _make_node("ideogram-character", {"style_type": "FICTION", "aspect_ratio": "16x9"}),
                 {
                     "prompt": PortValueDict(type="Text", value="the explorer at a campfire"),
-                    "reference_images": PortValueDict(type="Image", value=[RED_PIXEL_URI, RED_PIXEL_URI]),
+                    "reference_images": PortValueDict(type="Image", value=[RED_PIXEL_URI]),
                 },
                 _KEYS,
             )
@@ -256,10 +291,35 @@ async def test_character_posts_v3_generate_with_character_refs(tmp_path):
     fields = _multipart_text_fields(kwargs)
     assert fields["style_type"] == "FICTION"
     assert fields["aspect_ratio"] == "16x9"
-    assert _multipart_file_names(kwargs) == [
-        "character_reference_images",
-        "character_reference_images",
-    ]
+    assert _multipart_file_names(kwargs) == ["character_reference_images"]
+
+
+@pytest.mark.asyncio
+async def test_character_rejects_multiple_refs_before_request():
+    with pytest.raises(ValueError, match="exactly one.*received 2"):
+        await handle_ideogram_character(
+            _make_node("ideogram-character"),
+            {
+                "prompt": PortValueDict(type="Text", value="x"),
+                "reference_images": PortValueDict(
+                    type="Image", value=[RED_PIXEL_URI, RED_PIXEL_URI]
+                ),
+            },
+            _KEYS,
+        )
+
+
+@pytest.mark.asyncio
+async def test_character_rejects_unsupported_style_before_request():
+    with pytest.raises(ValueError, match="style_type.*GENERAL"):
+        await handle_ideogram_character(
+            _make_node("ideogram-character", {"style_type": "GENERAL"}),
+            {
+                "prompt": PortValueDict(type="Text", value="x"),
+                "reference_images": PortValueDict(type="Image", value=[RED_PIXEL_URI]),
+            },
+            _KEYS,
+        )
 
 
 @pytest.mark.asyncio
@@ -321,7 +381,7 @@ def _bundle() -> dict:
     return {
         "characterId": "ch-1",
         "name": "Stepling",
-        "referenceViews": ["/refs/front.png", "/refs/side.png"],
+        "referenceViews": ["/refs/front.png"],
         "frozenTraitString": "a small moss-green creature with copper goggles",
         "seed": 1234,
         "consistencyStrength": 0.7,
@@ -342,7 +402,7 @@ def test_expand_character_prefixes_trait_and_merges_refs():
     )
     # Stored views first, then the port refs.
     assert expanded["reference_images"].value == [
-        "/refs/front.png", "/refs/side.png", "/extra/ref.png",
+        "/refs/front.png", "/extra/ref.png",
     ]
     # Bundle seed lands in params when the user left seed unset.
     assert node.params["seed"] == 1234
@@ -406,12 +466,24 @@ async def test_router_falls_back_to_fal_without_ideogram_key():
 
         handler = _registry()["ideogram-v4"]
         node = _make_node("ideogram-v4")
+        original_params = dict(node.params)
         await handler(
             node,
             {"prompt": PortValueDict(type="Text", value="x")},
             {"FAL_KEY": "fal"},
         )
-    assert node.params["endpoint_id"] == "ideogram/v4"
+    assert node.params == original_params
+
+
+@pytest.mark.asyncio
+async def test_fal_router_rejects_direct_speed_before_submit():
+    handler = _registry()["ideogram-v4"]
+    with pytest.raises(ValueError, match="FAL rendering_speed.*DEFAULT"):
+        await handler(
+            _make_node("ideogram-v4", {"rendering_speed": "DEFAULT"}),
+            {"prompt": PortValueDict(type="Text", value="x")},
+            {"FAL_KEY": "fal"},
+        )
 
 
 @pytest.mark.asyncio
@@ -430,12 +502,13 @@ async def test_reframe_router_falls_back_to_fal_when_resolution_unset():
 
         handler = _registry()["ideogram-reframe"]
         node = _make_node("ideogram-reframe", {"image_size": "landscape_16_9"})
+        original_params = dict(node.params)
         await handler(
             node,
             {"image": PortValueDict(type="Image", value=RED_PIXEL_URI)},
             {"IDEOGRAM_API_KEY": "ideo", "FAL_KEY": "fal"},
         )
-    assert node.params["endpoint_id"] == "fal-ai/ideogram/v3/reframe"
+    assert node.params == original_params
 
 
 @pytest.mark.asyncio
@@ -454,6 +527,7 @@ async def test_character_router_expands_bundle_for_fal_route():
 
         handler = _registry()["ideogram-character"]
         node = _make_node("ideogram-character")
+        original_params = dict(node.params)
         await handler(
             node,
             {
@@ -465,8 +539,25 @@ async def test_character_router_expands_bundle_for_fal_route():
 
     payload = mock_client.post.call_args.kwargs["json"]
     assert payload["prompt"].startswith("a small moss-green creature with copper goggles. ")
-    assert payload["reference_image_urls"] == ["/refs/front.png", "/refs/side.png"]
+    assert payload["reference_image_urls"] == ["/refs/front.png"]
     assert payload["seed"] == 1234
+    assert node.params == original_params
+
+
+@pytest.mark.asyncio
+async def test_character_router_rejects_multiple_refs_on_fal_route():
+    handler = _registry()["ideogram-character"]
+    with pytest.raises(ValueError, match="exactly one.*received 2"):
+        await handler(
+            _make_node("ideogram-character"),
+            {
+                "prompt": PortValueDict(type="Text", value="x"),
+                "reference_images": PortValueDict(
+                    type="Image", value=["https://x/a.png", "https://x/b.png"]
+                ),
+            },
+            {"FAL_KEY": "fal"},
+        )
 
 
 @pytest.mark.asyncio

@@ -488,6 +488,7 @@ Nodes: 142 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | Image Weight | int | — | 1–100 |
 | Resolution (2K) | enum | — | Auto, 2048x2048, 1440x2880, 2880x1440, 1664x2496, 2496x1664, 1792x2240, 2240x1792, … |
 | Rendering Speed | enum | DEFAULT | Turbo, Default, Quality |
+| Copyright Detection | bool | false | — |
 
 ---
 
@@ -591,7 +592,8 @@ Nodes: 142 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |-----------|------|---------|---------------|
 | Rendering Speed | enum | BALANCED | Turbo, Balanced, Quality |
 | Size | enum | square_hd | Square HD, Square, Portrait 4:3, Portrait 16:9, Landscape 4:3, Landscape 16:9 |
-| Prompt Expansion | enum | Medium | Medium, Large |
+| Prompt Expansion | enum | Medium | None (no expansion fee), Medium, Large |
+| Acceleration | enum | none | None, Low, Regular, High |
 | Images | int | 1 | 1–4 |
 | Format | enum | png | PNG, JPEG |
 | Seed | int | — | — |
@@ -603,6 +605,7 @@ Nodes: 142 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |-----------|------|---------|---------------|
 | Resolution (2K) | enum | 2048x2048 | 2048x2048, 1440x2880, 2880x1440, 1664x2496, 2496x1664, 1792x2240, 2240x1792, 1440x2560, … |
 | Rendering Speed | enum | DEFAULT | Turbo, Default, Quality |
+| Copyright Detection | bool | false | — |
 
 ---
 

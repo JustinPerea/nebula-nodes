@@ -1,0 +1,17 @@
+{
+  "_comment": "Oracle: backend/tests/test_fal_contract_fixtures.py::test_fal_request_body_matches_fixture",
+  "prompt": "the explorer at a campfire",
+  "image_urls": [
+    "https://example.com/style.png"
+  ],
+  "reference_image_urls": [
+    "https://example.com/character.png"
+  ],
+  "negative_prompt": "duplicate person",
+  "num_images": 2,
+  "seed": 47,
+  "style": "FICTION",
+  "image_size": "portrait_16_9",
+  "rendering_speed": "BALANCED",
+  "expand_prompt": true
+}

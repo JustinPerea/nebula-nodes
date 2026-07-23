@@ -38,6 +38,9 @@ Platform-neutral contract documentation for Nebula Nodes. Used so **iPad**, **br
   - [examples/nano-banana-fal.md](./examples/nano-banana-fal.md) — Nano Banana FAL generate + edit (async-poll)
   - [examples/gpt-image-1-5.md](./examples/gpt-image-1-5.md) — GPT Image 1.5 FAL generate + edit (async-poll)
   - [examples/hunyuan3d.md](./examples/hunyuan3d.md) — Hunyuan3D V3 text + image to mesh (async-poll)
+  - [examples/ideogram-fal.md](./examples/ideogram-fal.md) — seven-node Ideogram FAL route (async-poll)
+- **Ideogram direct (`IDEOGRAM_API_KEY`):**
+  - [examples/ideogram-direct.md](./examples/ideogram-direct.md) — seven-node direct multipart route (sync)
 - **Google direct (`GOOGLE_API_KEY`):**
   - [examples/nano-banana.md](./examples/nano-banana.md) — Gemini image sync
 - **Google family (all direct nodes):**

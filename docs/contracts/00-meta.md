@@ -203,7 +203,7 @@ Every node (or node pair) in Vol 3 must have a **gold** exemplar under `docs/con
 | §11 Porting checklist | Actionable checkboxes |
 | Changelog | Date + change |
 
-**Coverage (2026-07-22):** All Google direct (9), Google FAL Nano Banana (2), OpenAI direct (8), OpenAI FAL GPT Image 2 (2), FAL GPT Image 1.5 (2), and FAL Hunyuan3D V3 (2), for 25 exemplar-backed nodes total. See [README.md](./README.md). Pipeline: [08-model-contract-pipeline.md](./08-model-contract-pipeline.md).
+**Coverage (2026-07-23):** All Google direct (9), Google FAL Nano Banana (2), OpenAI direct (8), OpenAI FAL GPT Image 2 (2), FAL GPT Image 1.5 (2), FAL Hunyuan3D V3 (2), and the seven dual-route Ideogram nodes, for 32 exemplar-backed nodes total. See [README.md](./README.md). Pipeline: [08-model-contract-pipeline.md](./08-model-contract-pipeline.md).
 
 ### Edge cases every family should name
 

@@ -39,6 +39,36 @@ from services.output import get_run_dir, save_base64_image
 
 IDEOGRAM_API_BASE = "https://api.ideogram.ai"
 
+IDEOGRAM_V4_RESOLUTIONS = frozenset(
+    {
+        "2048x2048", "1440x2880", "2880x1440", "1664x2496", "2496x1664",
+        "1792x2240", "2240x1792", "1440x2560", "2560x1440", "1600x2560",
+        "2560x1600", "1728x2304", "2304x1728", "1296x3168", "3168x1296",
+        "1152x2944", "2944x1152", "1248x3328", "3328x1248", "1280x3072",
+        "3072x1280", "1024x3072", "3072x1024",
+    }
+)
+IDEOGRAM_V3_RESOLUTIONS = frozenset(
+    {
+        "512x1536", "576x1408", "576x1472", "576x1536", "640x1344",
+        "640x1408", "640x1472", "640x1536", "704x1152", "704x1216",
+        "704x1280", "704x1344", "704x1408", "704x1472", "736x1312",
+        "768x1088", "768x1216", "768x1280", "768x1344", "800x1280",
+        "832x960", "832x1024", "832x1088", "832x1152", "832x1216",
+        "832x1248", "864x1152", "896x960", "896x1024", "896x1088",
+        "896x1120", "896x1152", "960x832", "960x896", "960x1024",
+        "960x1088", "1024x832", "1024x896", "1024x960", "1024x1024",
+        "1088x768", "1088x832", "1088x896", "1088x960", "1120x896",
+        "1152x704", "1152x832", "1152x864", "1152x896", "1216x704",
+        "1216x768", "1216x832", "1248x832", "1280x704", "1280x768",
+        "1280x800", "1312x736", "1344x640", "1344x704", "1344x768",
+        "1408x576", "1408x640", "1408x704", "1472x576", "1472x640",
+        "1472x704", "1536x512", "1536x576", "1536x640",
+    }
+)
+IDEOGRAM_DIRECT_RENDERING_SPEEDS = frozenset({"TURBO", "DEFAULT", "QUALITY"})
+IDEOGRAM_CHARACTER_STYLES = frozenset({"AUTO", "REALISTIC", "FICTION"})
+
 _MIME_BY_SUFFIX = {
     "png": "image/png",
     "jpg": "image/jpeg",
@@ -161,6 +191,41 @@ def _field(node: GraphNode, fields: dict[str, Any], *keys: str) -> None:
             fields[key] = value
 
 
+def _boolean_field(node: GraphNode, fields: dict[str, Any], key: str, label: str) -> None:
+    value = node.params.get(key)
+    if value is None or value == "":
+        return
+    if not isinstance(value, bool):
+        raise ValueError(f"{label} must be true or false (received {value!r})")
+    fields[key] = "true" if value else "false"
+
+
+def _validate_enum(node: GraphNode, key: str, allowed: frozenset[str], label: str) -> None:
+    value = node.params.get(key)
+    if value is not None and value != "" and str(value) not in allowed:
+        choices = ", ".join(sorted(allowed))
+        raise ValueError(f"{label} must be one of: {choices} (received {value!r})")
+
+
+def _validate_int_range(node: GraphNode, key: str, minimum: int, maximum: int, label: str) -> None:
+    value = node.params.get(key)
+    if value is None or value == "":
+        return
+    if isinstance(value, bool) or not isinstance(value, int) or not minimum <= value <= maximum:
+        raise ValueError(f"{label} must be an integer from {minimum} to {maximum} (received {value!r})")
+
+
+def _validate_direct_common(node: GraphNode, *, num_images: bool = False) -> None:
+    _validate_enum(
+        node,
+        "rendering_speed",
+        IDEOGRAM_DIRECT_RENDERING_SPEEDS,
+        "Ideogram direct rendering_speed",
+    )
+    if num_images:
+        _validate_int_range(node, "num_images", 1, 8, "Ideogram num_images")
+
+
 async def handle_ideogram_v4_generate(
     node: GraphNode,
     inputs: dict[str, PortValueDict],
@@ -168,8 +233,16 @@ async def handle_ideogram_v4_generate(
     emit: Callable[[ExecutionEvent], Awaitable[None]] | None = None,
 ) -> dict[str, Any]:
     api_key = _require_key(api_keys)
+    _validate_direct_common(node)
+    _validate_enum(node, "resolution", IDEOGRAM_V4_RESOLUTIONS, "Ideogram V4 resolution")
     fields: dict[str, Any] = {"text_prompt": _required_text(inputs, "prompt", "Prompt")}
-    _field(node, fields, "resolution", "rendering_speed", "magic_prompt", "num_images", "seed")
+    _field(node, fields, "resolution", "rendering_speed")
+    _boolean_field(
+        node,
+        fields,
+        "enable_copyright_detection",
+        "Ideogram copyright detection",
+    )
     result = await _post_multipart("/v1/ideogram-v4/generate", api_key, fields, [])
     return await _save_first_image(result)
 
@@ -182,6 +255,7 @@ async def handle_ideogram_edit(
 ) -> dict[str, Any]:
     """v3 inpaint. Mask convention: BLACK regions are edited (inverse of FLUX Fill)."""
     api_key = _require_key(api_keys)
+    _validate_direct_common(node, num_images=True)
     fields: dict[str, Any] = {"prompt": _required_text(inputs, "prompt", "Prompt")}
     _field(node, fields, "rendering_speed", "magic_prompt", "num_images", "seed")
     files = [
@@ -201,8 +275,23 @@ async def handle_ideogram_remix(
 ) -> dict[str, Any]:
     """Direct remix rides the V4 model (mirrors v3 semantics; image_weight = resemblance)."""
     api_key = _require_key(api_keys)
+    _validate_direct_common(node)
+    _validate_int_range(node, "image_weight", 1, 100, "Ideogram image_weight")
+    _validate_enum(node, "resolution", IDEOGRAM_V4_RESOLUTIONS, "Ideogram V4 resolution")
     fields: dict[str, Any] = {"text_prompt": _required_text(inputs, "prompt", "Prompt")}
-    _field(node, fields, "image_weight", "resolution", "rendering_speed")
+    _field(
+        node,
+        fields,
+        "image_weight",
+        "resolution",
+        "rendering_speed",
+    )
+    _boolean_field(
+        node,
+        fields,
+        "enable_copyright_detection",
+        "Ideogram copyright detection",
+    )
     files = [await _file_part("image", _required_image_ref(inputs, "image", "Source Image"))]
     result = await _post_multipart("/v1/ideogram-v4/remix", api_key, fields, files)
     return await _save_first_image(result)
@@ -215,9 +304,11 @@ async def handle_ideogram_reframe(
     emit: Callable[[ExecutionEvent], Awaitable[None]] | None = None,
 ) -> dict[str, Any]:
     api_key = _require_key(api_keys)
+    _validate_direct_common(node, num_images=True)
     resolution = node.params.get("resolution")
     if not resolution:
         raise ValueError("resolution is required for Ideogram Reframe (direct route)")
+    _validate_enum(node, "resolution", IDEOGRAM_V3_RESOLUTIONS, "Ideogram V3 resolution")
     fields: dict[str, Any] = {"resolution": resolution}
     _field(node, fields, "rendering_speed", "num_images", "seed")
     files = [await _file_part("image", _required_image_ref(inputs, "image", "Source Image"))]
@@ -233,6 +324,7 @@ async def handle_ideogram_replace_background(
     emit: Callable[[ExecutionEvent], Awaitable[None]] | None = None,
 ) -> dict[str, Any]:
     api_key = _require_key(api_keys)
+    _validate_direct_common(node, num_images=True)
     fields: dict[str, Any] = {"prompt": _required_text(inputs, "prompt", "New Background")}
     _field(node, fields, "magic_prompt", "rendering_speed", "num_images", "seed")
     files = [await _file_part("image", _required_image_ref(inputs, "image", "Subject Image"))]
@@ -254,6 +346,8 @@ async def handle_ideogram_character(
     reference_images port as the final character-reference list.
     """
     api_key = _require_key(api_keys)
+    _validate_direct_common(node, num_images=True)
+    _validate_enum(node, "style_type", IDEOGRAM_CHARACTER_STYLES, "Ideogram character style_type")
     fields: dict[str, Any] = {"prompt": _required_text(inputs, "prompt", "Prompt")}
     _field(
         node, fields,
@@ -263,6 +357,11 @@ async def handle_ideogram_character(
     files = await _multi_file_parts("character_reference_images", inputs.get("reference_images"))
     if not files:
         raise ValueError("Character Refs input is required (connect images or a Character node)")
+    if len(files) > 1:
+        raise ValueError(
+            "Ideogram Character supports exactly one character reference image per request "
+            f"(received {len(files)})"
+        )
     files += await _multi_file_parts("style_reference_images", inputs.get("images"))
     result = await _post_multipart("/v1/ideogram-v3/generate", api_key, fields, files)
     return await _save_first_image(result)
@@ -276,6 +375,8 @@ async def handle_ideogram_upscale(
 ) -> dict[str, Any]:
     """Legacy /upscale endpoint: an image_request JSON blob + the image binary."""
     api_key = _require_key(api_keys)
+    _validate_int_range(node, "resemblance", 1, 100, "Ideogram upscale resemblance")
+    _validate_int_range(node, "detail", 1, 100, "Ideogram upscale detail")
     request_blob: dict[str, Any] = {}
     for key, blob_key in (
         ("resemblance", "resemblance"),
@@ -301,8 +402,8 @@ async def handle_ideogram_upscale(
 # Character-bundle expansion (shared by BOTH routes via the sync_runner router)
 # ---------------------------------------------------------------------------
 
-# Ideogram caps character references by total size (10MB), not a published
-# count; 10 is a generous guardrail that still catches runaway wiring.
+# Expansion still uses the shared identity guardrail. The fixed Ideogram wrapper
+# then enforces the provider's stricter one-character-reference request limit.
 IDEOGRAM_CHARACTER_MAX_REFS = 10
 
 

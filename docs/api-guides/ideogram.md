@@ -1,5 +1,13 @@
 # Ideogram in Nebula — direct API guide
 
+> **Contract refresh 2026-07-23:** Re-verified all seven dual-route nodes
+> against Ideogram's live OpenAPI and FAL's live `llms.txt` schemas. Added
+> route-filtered immutable wrappers, seven FAL request fixtures, V4 acceleration
+> and no-expansion controls, all current V4 resolution enums, direct copyright
+> detection, and pre-submit guards for invalid route values. This refresh made
+> no paid provider calls. The 2026-06-10 live-smoke evidence below remains the
+> latest empirical provider run.
+
 > Audited 2026-06-10 against developer.ideogram.ai (OpenAPI specs fetched per
 > endpoint). **Live-smoked 2026-06-10 (direct route, `IDEOGRAM_API_KEY`):**
 > `ideogram-v4`, `ideogram-edit`, `ideogram-transparent`, `ideogram-remove-background`,
@@ -63,8 +71,8 @@ into the run dir immediately.
 | Concept | Direct | FAL |
 |---|---|---|
 | Speed | `rendering_speed`: TURBO / DEFAULT / QUALITY (FLASH "coming soon" — 400s today) | `rendering_speed`: TURBO / BALANCED / QUALITY |
-| Prompt expansion | `magic_prompt`: AUTO / ON / OFF | `expand_prompt`: boolean |
-| Sizing (v4 gen/remix) | `resolution` 2K pixel enum (2048x2048 … 2560x1600) | `image_size` preset names |
+| Prompt expansion | V4 text prompt is automatic; V3 uses `magic_prompt`: AUTO / ON / OFF | V4 uses `expansion_model`: None / Medium / Large; V3 uses `expand_prompt`: boolean |
+| Sizing (v4 gen/remix) | current 23-value V4 pixel `resolution` enum | `image_size` preset names |
 | Sizing (reframe) | `resolution` v3 pixel enum (**required**) | `image_size` preset (required) |
 | Sizing (character) | `aspect_ratio` (1x1, 16x9, …) | `image_size` preset |
 | Remix faithfulness | `image_weight` int 1-100 (omit = auto from the edit instruction) | `strength` float 0-1 |
@@ -86,11 +94,16 @@ route the configured key selects).
   rather than failing.
 - **v4 generate/remix take no `seed`/`num_images`** on the direct route (v3
   endpoints keep both).
+- **FAL V4 image-to-image now exists**, but the fixed `ideogram-remix` fallback
+  intentionally remains V3 because the V4 endpoint does not preserve the
+  node's style references, style enum, or negative-prompt contract.
 - **Character node integration**: connect a Character node to
   `ideogram-character`'s Character port — its stored reference views become
   `character_reference_images`, the frozen trait string is prefixed VERBATIM
   to your prompt, and the stored seed applies unless you set one (same
-  identity contract as cinema-scene; see `backend/cinema/identity.py`).
+  identity contract as cinema-scene; see `backend/cinema/identity.py`). Both
+  routes accept exactly one character reference per request; Nebula rejects
+  zero or multiple references before provider submission.
 
 ## Direct-only nodes (IDEOGRAM_API_KEY required, no FAL fallback)
 
@@ -119,6 +132,7 @@ structured-input param), dataset management beyond the training node
 
 ## Sources
 
-- https://developer.ideogram.ai/api-reference/api-reference/generate-v4 (+ remix-v4, inpaint-v3, reframe-v3, replace-background-v3, generate-v3, upscale) — OpenAPI specs, fetched 2026-06-10
+- https://developer.ideogram.ai/api-reference/api-reference/generate-v4 (+ remix-v4, inpaint-v3, reframe-v3, replace-background-v3, generate-v3, upscale) — OpenAPI specs, re-fetched 2026-07-23
+- https://fal.ai/models/ideogram/v4/api (+ current V3 edit/remix/reframe/replace-background/character/upscale schemas) — re-fetched 2026-07-23
 - https://ideogram.ai/news/ideogram-4.0 — 4.0 release announcement (2026-06-03)
 - backend/handlers/ideogram.py — the direct-route implementation these docs describe
