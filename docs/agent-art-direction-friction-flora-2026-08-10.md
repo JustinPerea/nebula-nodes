@@ -6,6 +6,22 @@
 > - **Purpose:** Convert concrete production failures into requirements for agent-driven creative canvases, especially Nebula Nodes.
 > **Scope:** Image reference handling, pose/camera control, scene integration, generation execution, polling, asset lifecycle, canvas visibility, video QC, and loop finishing. This is not a full Flora product review.
 
+## Flora MCP capability map from this production
+
+| Surface | Current production status | Evidence / boundary |
+|---|---|---|
+| `models.list` | **Dependable discovery** | Returns model IDs, provider, estimated credits/time, capabilities, and parameter schemas. It does not prove the corresponding media inputs are bindable through public generation calls. |
+| `generations.create` for text-to-image | **Dependable submit** | Returned a durable run ID, cost, estimate, model, poll URL, and project ID; three Nano Banana Pro runs completed. Raw generation attached an output to the project, but the receipt omitted its canvas node ID. |
+| `generations.retrieve` | **Dependable as a short direct read** | Immediate retrieval recovered completed jobs after long MCP calls failed. Holding a Code Tool call open for delayed polling repeatedly returned `502 Bad Gateway` while the underlying generation completed successfully. |
+| `techniques.list` / `techniques.retrieve` | **Useful but rough** | Live schemas and costs are inspectable. The SDK/docs expose cursor iteration while direct responses also include a `techniques` wrapper; assuming the wrong shape produced an empty discovery result. Technique descriptions are insufficient to predict output behavior. |
+| Technique runs | **Runnable but task-locked** | Reference-conditioned Techniques execute, but their live inputs hardcode a task. The tested camera/character/editorial/campaign Techniques exposed image inputs without a free-text shot-direction input. |
+| Assets API | **Capable, multi-stage** | Local ingest requires reserve → external multipart upload → complete → attach → node verification. HTTP `204` proves storage upload only. |
+| `projects.listNodes` | **Dependable delivery verification** | Provides sanitized visible media nodes and caught the difference between output URL, asset state, attachment, and actual canvas presence. |
+| Generic promptable multi-reference edit | **Unavailable through tested public contracts** | Flora lists i2i/is2i models, but their public generation schemas expose no source-image binding. Saved Techniques accept references but not the custom shot instruction needed here. |
+| Typed camera, pose, gaze, and body-performance control | **Unavailable** | No tested public surface independently controlled height, pitch, projection, body orientation, chin, eyeline, shoulders, or arms while preserving identity/wardrobe. |
+| Media metadata contract | **Insufficient** | Output URLs typed as `.png` repeatedly downloaded as JPEG bytes; dimensions, MIME, checksum, and landed node ID required separate reads/probes. |
+| MCP authentication lifecycle | **Operationally rough** | OAuth expired between successful production calls and returned `401 unauthorized`; no preflight warned of expiry. Reconnecting the Hermes MCP bridge restored authenticated reads before the next submit. |
+
 ## Executive summary
 
 The primary friction was not a shortage of image or video models. Flora exposed many relevant models and saved Techniques. The problem was that the agent could not reliably express or execute the art direction as a typed, inspectable operation.
@@ -236,7 +252,7 @@ For Nebula, the highest-value improvements are therefore:
 ### F-16 — Polling was unreliable and expensive in agent turns
 
 - **Priority:** P0
-- **Observed behavior:** Technique retrieval repeatedly encountered intermittent `502 Bad Gateway`, gateway/tool failures, and duplicate-output placeholders. Long waits inside one execute call were less reliable than short immediate polls.
+- **Observed behavior:** Technique retrieval repeatedly encountered intermittent `502 Bad Gateway`, gateway/tool failures, and duplicate-output placeholders. Long waits inside one execute call were less reliable than short immediate polls. On 2026-08-10, both a bounded 15-second loop and a single 45-second delayed retrieval returned `502`, while direct follow-up retrieval showed that the underlying image generations had completed normally.
 - **Consequence:** Many calls were consumed without new state; tool limits were reached before delivery.
 - **Nebula requirement:** Internal job manager with WebSocket/SSE events, durable run state, exponential backoff, and exactly-once completion notification. The agent should subscribe once, not manually poll dozens of times.
 
@@ -390,7 +406,7 @@ For Nebula, the highest-value improvements are therefore:
 ### F-31 — Hosted file extensions may not match actual bytes
 
 - **Priority:** P2
-- **Observed behavior:** Some `media.flora.ai/...png` URLs downloaded as JPEG bytes.
+- **Observed behavior:** Some `media.flora.ai/...png` URLs downloaded as JPEG bytes. The three Flora-only rear-sky T2I outputs (`v10`–`v12`) all repeated this mismatch at `2752×1536`.
 - **Consequence:** Downstream tools can mis-handle files unless content is probed and renamed.
 - **Nebula requirement:** Content-addressed local storage with MIME sniffing, canonical extension, checksum, and provenance.
 
@@ -426,6 +442,34 @@ For Nebula, the highest-value improvements are therefore:
   - limb-vector and lens-contact QA
   - eyeline target plus pitch controls
   - blocking-intent review that asks why every foreground limb is there
+
+### F-34 — Reference conditioning and free-form shot direction are split across surfaces
+
+- **Priority:** P0
+- **Observed behavior:** `t2i-gemini-3-pro` accepted the full custom shot brief but no identity/wardrobe images. `i2i-gemini-3-pro` and `is2i-gemini-3-pro` appeared in the model catalog, but their public generation parameter schemas exposed no source-image field. The live schemas for Multi Angle Shoot, Character Lock, Editorial Fashion Shoot Replicator, Outfit to Campaign, and Cinematic Movie Stills accepted reference images but exposed no text input for camera pitch, no-ground composition, or emotional performance.
+- **Consequence:** The agent had to choose between prompt authority and canonical-reference authority instead of combining them in one executable contract.
+- **Nebula requirement:** One promptable image-edit surface with ordered typed reference inputs, explicit role/weight/preserve policy, masks, complete provider binding, and a preflight contract test.
+
+### F-35 — Body performance is prompt prose, not a controllable object
+
+- **Priority:** P0
+- **Observed behavior:** The same rear-sky brief needed private awe carried by head release, expanded upper back, dropped shoulders, and arms unrelated to the lens. `v10` became a conventional full-body walk, `v11` pushed both sleeves into the near field, and `v12` finally removed the arms through a tighter crop. No public surface exposed shoulder openness/asymmetry, spine extension, head release, arm vector, hand state, weight shift, or performance intensity.
+- **Consequence:** Camera ownership and emotion changed accidentally as the model solved framing constraints. A visually integrated image could still communicate the wrong action.
+- **Nebula requirement:** A typed `Body Performance` / blocking object with pose landmarks, head and torso rotations, weight-bearing foot, shoulder state, elbow/hand vectors, gesture intent, emotional intensity, and camera-ownership validation.
+
+### F-36 — OAuth expiry can interrupt an otherwise healthy production session
+
+- **Priority:** P1
+- **Observed behavior:** After successful catalog reads and two charged generations, the next generation returned `401 unauthorized` because the Flora MCP OAuth session was missing or expired. The failure happened before submission and did not charge. `hermes mcp test flora` reconnected the bridge; an authenticated `models.list` preflight then succeeded before retrying.
+- **Consequence:** A long agent production can stop between adjacent calls with no advance warning or machine-actionable continuation receipt.
+- **Nebula requirement:** Authentication readiness and expiry should be visible per provider, refreshed before paid submission, and returned as a structured reconnect action rather than a generic run failure.
+
+### F-37 — Successful generation receipts omit the landed canvas node
+
+- **Priority:** P1
+- **Observed behavior:** Flora T2I submission returned `run_id`, model, estimate, cost, poll URL, and project ID. Completion returned an output URL. Verifying delivery still required a separate `projects.listNodes` scan by URL. Rear-sky `v12` was ultimately verified as image node `b960ba82-77c1-47f2-836c-f4f3759b392e`.
+- **Consequence:** A completed generation can be real and attached, yet the agent cannot prove or address the landed graph object from the completion receipt alone.
+- **Nebula requirement:** The terminal success object must include output artifact ID, durable URL/path, media metadata, graph/project ID, and node ID transactionally.
 
 ---
 
@@ -562,6 +606,9 @@ Filter by typed inputs, outputs, roles, model, provider, price, expected duratio
 | Durable local loop | `~/Documents/Workspace/Agents/system/nari/build/director/hero-loops/nari-skyward/nari-skyward-hero-loop.mp4` | Local post-processing was required for duration, drift, and seam. |
 | Integrated low-angle still candidate | `asset_jd70hn92vgppthabn1y9a0s6n58c716e` / node `api_asset_jd70hn92vgppthabn1y9a0s6n58c716e` | A typed multi-reference generation outside Flora's Technique surface solved the cutout and camera-geometry failure; separate attachment/readback still remained necessary. |
 | Independent ground-camera v6 | `asset_jd74wdq68enf5p6vba964xz1018c75jy` / node `api_asset_jd74wdq68enf5p6vba964xz1018c75jy` | Nano Banana 2 Edit preserved low-camera integration while removing the camera-holding read, raising gaze nearly overhead, thinning stars, and reopening the left copy field. |
+| Flora rear-sky v10 | `run_m17f0f750h9njmetsyhmjtezr18c7c06` | Prompt landed rear orientation and emotional head release, but retreated to a conventional full-body landscape with visible grass. |
+| Flora rear-sky v11 | `run_m1764tgb6z01b9tyfn584zf4cd8c7xkb` | Stronger near-field scale still retained a grass band and pushed sleeves toward the lens. A long polling call returned 502 although the run completed. |
+| Flora rear-sky v12 | `run_m1780mvb3y88tms4wgqmn2y50x8c79kh` / node `b960ba82-77c1-47f2-836c-f4f3759b392e` | Edge-to-edge sky, no terrestrial horizon, rear/upward orientation, no camera-owning limb, and verified visible canvas delivery. |
 
 ## 9. Nebula live-proof findings
 
@@ -614,6 +661,24 @@ After stopping the failing Flora generation branch, the same shot was attempted 
 - **Consequence:** A generic `image edit` capability label is insufficient. Agents need evidence about which editor preserves composition, which re-synthesizes geometry, and which supports surgical changes.
 - **Fix:** Add a capability matrix and landed-eval scores per model for identity retention, composition retention, camera transformation, local object removal, relighting, typography, and multi-reference role adherence. The router should choose by edit intent, not provider or price alone.
 - **Remaining gap:** No numeric Qwen Image Edit 2511 Angles node exists in Nebula's live registry. Nano Banana solved this shot, but it does not replace deterministic pitch/orbit/zoom controls.
+
+### N-09 — Local reference payloads are eagerly inlined before submission
+
+- **Observed:** The universal FAL image path converted each local reference into a full base64 data URI inside one JSON request. A 2K master plus two canonical references could spend minutes serializing/uploading before a provider request ID existed. Compressing the two authority refs to 768px JPEG reduced them to roughly 84KB and 40KB before retry.
+- **Consequence:** Large local references create avoidable request-size, timeout, memory, and orphan-state risk before provider work begins.
+- **Fix:** Ingest references once into durable object storage, pass URLs or provider file handles, enforce payload-size preflight, auto-compress advisory refs without touching canonical originals, and display the exact serialized request size before dispatch.
+
+### N-10 — Request lineage begins too late for recovery
+
+- **Observed:** A timed-out FAL-backed `v9` call preserved no provider request ID or status/result URL. Request-history recovery found prior successful requests but no recoverable `v9` record. The handler exposed only final outputs, not a durable submit receipt before polling.
+- **Consequence:** The agent cannot distinguish “never submitted,” “submitted and still running,” and “completed but response lost,” so retry decisions can duplicate cost or abandon work.
+- **Fix:** Persist the provider request ID, endpoint, status URL, result URL, idempotency key, submitted-at timestamp, and input hashes immediately after submit and before any poll. Recovery must read that receipt first.
+
+### N-11 — Key presence is not provider account readiness
+
+- **Observed:** After reference compression removed the pre-submit payload issue, the retry reached FAL and returned `403 User is locked — exhausted balance`. The node had still appeared configured because an API key existed.
+- **Consequence:** Discovery advertises a runnable route that cannot accept paid work.
+- **Fix:** Extend readiness beyond key presence to `authenticated`, `account_active`, `model_authorized`, `billing_ready`, and `last_verified_at`; fail preflight before serializing media or constructing a graph run.
 
 ## 10. Acceptance rule going forward
 

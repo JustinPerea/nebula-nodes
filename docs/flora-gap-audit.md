@@ -7,6 +7,7 @@ Audit of what Flora (app.flora.ai, 369 models via MCP `client.models.list`) offe
 - **Maintenance:** When working in Flora and you use or notice a model/capability Nebula lacks, add it to the Running Log at the bottom. Re-run the full comparison occasionally; both catalogs move fast.
 - **Closing gaps:** Separate chat — paste prompt in `docs/NEBULA-GAP-HANDOFF.md`. Standing rule also in root `AGENTS.md`.
 - **Agent-workflow deep dive:** `docs/agent-art-direction-friction-flora-2026-08-10.md` records production friction that is broader than model parity: reference roles, pose/camera control, execution, attachment, provenance, polling, and visual QC.
+- **Surface boundary:** Flora MCP is the production generation surface for the current Nari work. Historical Nebula/FAL tests are kept in the deep-dive's `Nebula live-proof findings` section and are not reported as Flora runs or Flora defects.
 
 > **2026-08-10 correction:** The July first/last-frame claim became stale. The current registry has an optional `End Frame` on `seedance-2-i2v` and a `Last Frame` input on `veo-3`. The remaining gap is provider breadth and first-class loop/QC tooling, not total absence.
 
@@ -89,3 +90,8 @@ Add entries as gaps are hit in real Flora work. Format: date — model/capabilit
 | 2026-08-10 | Integrated-scene / cutout QC | A technically stable Nari loop still read as a pasted cutout because perspective, light field, atmosphere, and lens response were not scored | High |
 | 2026-08-10 | Video identity-drift and loop-seam QC | The 15.06s Seedance output accumulated face/hair/knit drift and did not return to frame one; required local sampling and a forward/reverse edit | High |
 | 2026-08-10 | Camera ownership, gesture intent, and foreground-limb QC | A Fixa-derived near-field sleeve preserved lens geometry but lost the action that justified it, making Nari appear to hold the camera; identity/integration checks missed the contradiction | High |
+| 2026-08-10 | Promptable multi-reference edit contract | Flora's T2I surface accepts custom shot direction without canonical refs; tested reference-conditioned Techniques accept fixed image inputs without a free-text camera/performance instruction | High |
+| 2026-08-10 | Typed body-performance blocking | Rear-sky passes changed from walking figure to near-field sleeves to crop-based arm exclusion; no public control independently expresses head release, shoulders, spine, weight, arms, and camera ownership | High |
+| 2026-08-10 | Durable async run receipt and node lineage | Long Code Tool waits returned 502 while runs completed; completion receipts exposed output URLs but required separate canvas enumeration to recover the landed node ID | High |
+| 2026-08-10 | MCP auth preflight and refresh | Flora OAuth expired between successful production calls and returned 401 before submission; reconnection plus an authenticated catalog read was required before retry | Medium |
+| 2026-08-10 | Media MIME and metadata normalization | Three `.png` output URLs downloaded as 2752×1536 JPEG bytes; consumers must sniff MIME and recover dimensions/checksums separately | Medium |
