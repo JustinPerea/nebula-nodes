@@ -453,7 +453,7 @@ For Nebula, the highest-value improvements are therefore:
 ### F-35 — Body performance is prompt prose, not a controllable object
 
 - **Priority:** P0
-- **Observed behavior:** The same rear-sky brief needed private awe carried by head release, expanded upper back, dropped shoulders, and arms unrelated to the lens. `v10` became a conventional full-body walk, `v11` pushed both sleeves into the near field, and `v12` finally removed the arms through a tighter crop. No public surface exposed shoulder openness/asymmetry, spine extension, head release, arm vector, hand state, weight shift, or performance intensity.
+- **Observed behavior:** The same rear-sky brief needed private awe carried by head release, expanded upper back, shoulder tension, and arms unrelated to the lens. `v10` became a conventional full-body walk, `v11` pushed both sleeves into the near field, and `v12` finally removed the arms through a tighter crop. Later GPT Image 2 T2I passes front-loaded explicit posture constraints: `v15` bowed the head and upper body forward; `v16` restored an upright rear view but kept the head level instead of lifting the chin. No public surface exposed shoulder openness/asymmetry, spine extension, head release, arm vector, hand state, weight shift, or performance intensity.
 - **Consequence:** Camera ownership and emotion changed accidentally as the model solved framing constraints. A visually integrated image could still communicate the wrong action.
 - **Nebula requirement:** A typed `Body Performance` / blocking object with pose landmarks, head and torso rotations, weight-bearing foot, shoulder state, elbow/hand vectors, gesture intent, emotional intensity, and camera-ownership validation.
 
@@ -477,6 +477,13 @@ For Nebula, the highest-value improvements are therefore:
 - **Observed behavior:** `v12`, `v13`, and `v14` used `t2i-gemini-3-pro` with the same seed (`880091`). The user requested only a richer sky and darker exposure on Nari. `v13` landed those two changes but changed the rear hair silhouette/parting, revealed more profile, reduced the near-field foreshortening, and made Nari read like a conventional portrait over an astrophotography plate. `v14` tightened the hair/rear-view prose but retreated further from the worm's-eye camera, flattened the emotional head release, and shifted the dusty-rose sweater nearly black.
 - **Consequence:** A narrow revision becomes a full resynthesis. The agent cannot preserve an approved camera, body performance, identity silhouette, and wardrobe while changing only environment richness and subject exposure.
 - **Nebula requirement:** First-class selective edit scopes (`environment`, `subject exposure`, `identity`, `wardrobe`, `camera`, `pose`) with masks/region binding, change-only vs preserve locks, input/output diff preview, and automatic rejection when a preserved axis drifts beyond tolerance. Seed continuity may be recorded as provenance but never treated as a lock.
+
+### F-39 — Submission cost is provisional and can differ from the completed receipt
+
+- **Priority:** P1
+- **Observed behavior:** Flora GPT Image 2 T2I runs `v15` and `v16` each returned `charged_cost: 0.253` on successful submission. Their completed retrieval receipts each returned `charged_cost: 0.506`. Both runs completed normally with one image output, so the delta was not a retry or second agent submission.
+- **Consequence:** Recording only the submit receipt undercounts production cost by 50 percent in these observed runs. The same field name represents two different lifecycle values without a provisional/final distinction.
+- **Nebula requirement:** Store `estimated_cost`, `authorized_cost`, and `final_billed_cost` separately; reconcile them on terminal completion; show the delta and source receipt; never overwrite one lifecycle value with another under the same field name.
 
 ---
 
@@ -618,6 +625,8 @@ Filter by typed inputs, outputs, roles, model, provider, price, expected duratio
 | Flora rear-sky v12 | `run_m1780mvb3y88tms4wgqmn2y50x8c79kh` / node `b960ba82-77c1-47f2-836c-f4f3759b392e` | Edge-to-edge sky, no terrestrial horizon, rear/upward orientation, no camera-owning limb, and verified visible canvas delivery. |
 | Flora rich-sky v13 | `run_m17989eaft07e3dgd39wkr7bfd8c605n` / node `607ab71c-acbc-4114-9223-ae7b5d753959` | Landed the user's richer-sky and darker-Nari revision, but full T2I resynthesis changed the hair/profile, weakened the near-field camera scale, and produced a two-exposure sky-plate read. |
 | Flora continuity retry v14 | `run_m172h7kr8zemq6wpdws40snjj58c6tbp` / node `60a7a457-3130-4558-a849-fad144421561` | Shorter hair returned, but camera, head performance, sweater color, and profile constraint regressed despite the same seed. |
+| Flora integrated-exposure v15 | `run_m1736s2bq5jrecmmpahtw34z758c6dc9` / node `c377d4af-49ed-4d6e-9687-e1f394fa025d` | GPT Image 2 organized the sky and rear silhouette, but changed the requested skyward release into a bowed-forward posture, retained a portrait-over-sky exposure split, and doubled the submit receipt's provisional cost at completion. |
+| Flora performance retry v16 | `run_m175yfkj2a94dgv896tqtm794x8c603v` / node `ae166b0a-584b-42ae-b0ea-68a28564672a` | Restored upright rear posture and stronger near-field convergence, but kept the head level, placed Milky Way structure behind the silhouette, retained separate subject exposure, and repeated the provisional/final cost delta. |
 
 ## 9. Nebula live-proof findings
 
