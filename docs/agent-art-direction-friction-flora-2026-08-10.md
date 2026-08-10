@@ -353,7 +353,7 @@ For Nebula, the highest-value improvements are therefore:
 ### F-27 — Technical QC did not test scene integration
 
 - **Priority:** P0
-- **Observed behavior:** The final short loop passed checks for stable identity, fixed background, opaque silhouette, and a matching loop boundary. The user still correctly rejected it because Nari looked composited into the environment.
+- **Observed behavior:** The final short loop passed checks for stable identity, fixed background, opaque silhouette, and a matching loop boundary. The user still correctly rejected it because Nari looked composited into the environment. A later joint T2I frame (`v13`) avoided literal alpha compositing but still read as two captures: a long-exposure astrophotography sky and a separately exposed portrait, with conventional subject scale, incompatible edge/sharpness response, and no spatial anchor proving the camera was directly below Nari.
 - **Root cause:** The acceptance rubric tested local defects but not the photograph as a unified optical event.
 - **Nebula requirement:** An `Integrated Scene QC` node/rubric checking:
   - shared perspective and horizon
@@ -474,7 +474,7 @@ For Nebula, the highest-value improvements are therefore:
 ### F-38 — Reusing a seed is not a selective edit or preservation contract
 
 - **Priority:** P0
-- **Observed behavior:** `v12`, `v13`, and `v14` used `t2i-gemini-3-pro` with the same seed (`880091`). The user requested only a richer sky and darker exposure on Nari. `v13` landed those two changes but lengthened Nari's locked shoulder-length lob to the upper back and revealed more profile. `v14` tightened the hair/rear-view prose but retreated from the worm's-eye camera, flattened the emotional head release, and shifted the dusty-rose sweater nearly black.
+- **Observed behavior:** `v12`, `v13`, and `v14` used `t2i-gemini-3-pro` with the same seed (`880091`). The user requested only a richer sky and darker exposure on Nari. `v13` landed those two changes but changed the rear hair silhouette/parting, revealed more profile, reduced the near-field foreshortening, and made Nari read like a conventional portrait over an astrophotography plate. `v14` tightened the hair/rear-view prose but retreated further from the worm's-eye camera, flattened the emotional head release, and shifted the dusty-rose sweater nearly black.
 - **Consequence:** A narrow revision becomes a full resynthesis. The agent cannot preserve an approved camera, body performance, identity silhouette, and wardrobe while changing only environment richness and subject exposure.
 - **Nebula requirement:** First-class selective edit scopes (`environment`, `subject exposure`, `identity`, `wardrobe`, `camera`, `pose`) with masks/region binding, change-only vs preserve locks, input/output diff preview, and automatic rejection when a preserved axis drifts beyond tolerance. Seed continuity may be recorded as provenance but never treated as a lock.
 
@@ -616,7 +616,7 @@ Filter by typed inputs, outputs, roles, model, provider, price, expected duratio
 | Flora rear-sky v10 | `run_m17f0f750h9njmetsyhmjtezr18c7c06` | Prompt landed rear orientation and emotional head release, but retreated to a conventional full-body landscape with visible grass. |
 | Flora rear-sky v11 | `run_m1764tgb6z01b9tyfn584zf4cd8c7xkb` | Stronger near-field scale still retained a grass band and pushed sleeves toward the lens. A long polling call returned 502 although the run completed. |
 | Flora rear-sky v12 | `run_m1780mvb3y88tms4wgqmn2y50x8c79kh` / node `b960ba82-77c1-47f2-836c-f4f3759b392e` | Edge-to-edge sky, no terrestrial horizon, rear/upward orientation, no camera-owning limb, and verified visible canvas delivery. |
-| Flora rich-sky v13 | `run_m17989eaft07e3dgd39wkr7bfd8c605n` / node `607ab71c-acbc-4114-9223-ae7b5d753959` | Landed the user's richer-sky and darker-Nari revision, but full T2I resynthesis lengthened the locked lob and revealed more profile. |
+| Flora rich-sky v13 | `run_m17989eaft07e3dgd39wkr7bfd8c605n` / node `607ab71c-acbc-4114-9223-ae7b5d753959` | Landed the user's richer-sky and darker-Nari revision, but full T2I resynthesis changed the hair/profile, weakened the near-field camera scale, and produced a two-exposure sky-plate read. |
 | Flora continuity retry v14 | `run_m172h7kr8zemq6wpdws40snjj58c6tbp` / node `60a7a457-3130-4558-a849-fad144421561` | Shorter hair returned, but camera, head performance, sweater color, and profile constraint regressed despite the same seed. |
 
 ## 9. Nebula live-proof findings
