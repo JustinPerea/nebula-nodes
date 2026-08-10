@@ -406,7 +406,7 @@ For Nebula, the highest-value improvements are therefore:
 ### F-31 — Hosted file extensions may not match actual bytes
 
 - **Priority:** P2
-- **Observed behavior:** Some `media.flora.ai/...png` URLs downloaded as JPEG bytes. The three Flora-only rear-sky T2I outputs (`v10`–`v12`) all repeated this mismatch at `2752×1536`.
+- **Observed behavior:** Some `media.flora.ai/...png` URLs downloaded as JPEG bytes. All five Flora-only rear-sky T2I outputs (`v10`–`v14`) repeated this mismatch at `2752×1536`.
 - **Consequence:** Downstream tools can mis-handle files unless content is probed and renamed.
 - **Nebula requirement:** Content-addressed local storage with MIME sniffing, canonical extension, checksum, and provenance.
 
@@ -470,6 +470,13 @@ For Nebula, the highest-value improvements are therefore:
 - **Observed behavior:** Flora T2I submission returned `run_id`, model, estimate, cost, poll URL, and project ID. Completion returned an output URL. Verifying delivery still required a separate `projects.listNodes` scan by URL. Rear-sky `v12` was ultimately verified as image node `b960ba82-77c1-47f2-836c-f4f3759b392e`.
 - **Consequence:** A completed generation can be real and attached, yet the agent cannot prove or address the landed graph object from the completion receipt alone.
 - **Nebula requirement:** The terminal success object must include output artifact ID, durable URL/path, media metadata, graph/project ID, and node ID transactionally.
+
+### F-38 — Reusing a seed is not a selective edit or preservation contract
+
+- **Priority:** P0
+- **Observed behavior:** `v12`, `v13`, and `v14` used `t2i-gemini-3-pro` with the same seed (`880091`). The user requested only a richer sky and darker exposure on Nari. `v13` landed those two changes but lengthened Nari's locked shoulder-length lob to the upper back and revealed more profile. `v14` tightened the hair/rear-view prose but retreated from the worm's-eye camera, flattened the emotional head release, and shifted the dusty-rose sweater nearly black.
+- **Consequence:** A narrow revision becomes a full resynthesis. The agent cannot preserve an approved camera, body performance, identity silhouette, and wardrobe while changing only environment richness and subject exposure.
+- **Nebula requirement:** First-class selective edit scopes (`environment`, `subject exposure`, `identity`, `wardrobe`, `camera`, `pose`) with masks/region binding, change-only vs preserve locks, input/output diff preview, and automatic rejection when a preserved axis drifts beyond tolerance. Seed continuity may be recorded as provenance but never treated as a lock.
 
 ---
 
@@ -609,6 +616,8 @@ Filter by typed inputs, outputs, roles, model, provider, price, expected duratio
 | Flora rear-sky v10 | `run_m17f0f750h9njmetsyhmjtezr18c7c06` | Prompt landed rear orientation and emotional head release, but retreated to a conventional full-body landscape with visible grass. |
 | Flora rear-sky v11 | `run_m1764tgb6z01b9tyfn584zf4cd8c7xkb` | Stronger near-field scale still retained a grass band and pushed sleeves toward the lens. A long polling call returned 502 although the run completed. |
 | Flora rear-sky v12 | `run_m1780mvb3y88tms4wgqmn2y50x8c79kh` / node `b960ba82-77c1-47f2-836c-f4f3759b392e` | Edge-to-edge sky, no terrestrial horizon, rear/upward orientation, no camera-owning limb, and verified visible canvas delivery. |
+| Flora rich-sky v13 | `run_m17989eaft07e3dgd39wkr7bfd8c605n` / node `607ab71c-acbc-4114-9223-ae7b5d753959` | Landed the user's richer-sky and darker-Nari revision, but full T2I resynthesis lengthened the locked lob and revealed more profile. |
+| Flora continuity retry v14 | `run_m172h7kr8zemq6wpdws40snjj58c6tbp` / node `60a7a457-3130-4558-a849-fad144421561` | Shorter hair returned, but camera, head performance, sweater color, and profile constraint regressed despite the same seed. |
 
 ## 9. Nebula live-proof findings
 
