@@ -6059,3 +6059,351 @@ async def test_grok_imagine_image_edit_output_parsing():
 
     assert result["image"]["type"] == "Image"
     assert result["image"]["value"] == "https://fal.ai/grok_edited.png"
+
+
+# ---------------------------------------------------------------------------
+# Wave 3 FAL nodes: seedream-4-5 model enum, sora-2-i2v, esrgan-upscale,
+# flux-2-pro flash model
+# ---------------------------------------------------------------------------
+
+
+# ── seedream-4-5 model enum ─────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_seedream_4_5_lite_routes_to_v5():
+    """seedream-4-5 with model=5.0-lite routes to bytedance/seedream/v5/lite and
+    strips model from the payload."""
+    from execution.sync_runner import get_handler_registry
+
+    emit = AsyncMock()
+    registry = get_handler_registry(emit=emit)
+    handler = registry["seedream-4-5"]
+
+    mock_submit, mock_status, mock_result = _make_poll_mocks(
+        {"images": [{"url": "https://fal.ai/seedream5.png", "content_type": "image/png"}]}
+    )
+
+    node = GraphNode(
+        id="test-seedream5-lite",
+        definitionId="seedream-4-5",
+        params={"model": "5.0-lite", "image_size": "square_hd"},
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            result = await handler(
+                node,
+                {"prompt": PortValueDict(type="Text", value="a beautiful landscape")},
+                {"FAL_KEY": "fal_test"},
+            )
+
+    assert result["image"]["type"] == "Image"
+    url = mock_client.post.call_args.args[0] if mock_client.post.call_args.args else mock_client.post.call_args[0][0]
+    assert "bytedance/seedream/v5/lite/text-to-image" in url
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert "model" not in payload
+
+
+@pytest.mark.asyncio
+async def test_seedream_4_5_default_routes_to_v4_5():
+    """seedream-4-5 with default model (no model param) still routes to v4.5."""
+    from execution.sync_runner import get_handler_registry
+
+    emit = AsyncMock()
+    registry = get_handler_registry(emit=emit)
+    handler = registry["seedream-4-5"]
+
+    mock_submit, mock_status, mock_result = _make_poll_mocks(
+        {"images": [{"url": "https://fal.ai/seedream4.png", "content_type": "image/png"}]}
+    )
+
+    node = GraphNode(
+        id="test-seedream4-default",
+        definitionId="seedream-4-5",
+        params={"image_size": "square_hd"},
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            result = await handler(
+                node,
+                {"prompt": PortValueDict(type="Text", value="a serene mountain")},
+                {"FAL_KEY": "fal_test"},
+            )
+
+    assert result["image"]["type"] == "Image"
+    url = mock_client.post.call_args.args[0] if mock_client.post.call_args.args else mock_client.post.call_args[0][0]
+    assert "bytedance/seedream/v4.5/text-to-image" in url
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert "model" not in payload
+
+
+# ── sora-2-i2v ──────────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_sora2_i2v_image_prompt_mapping_and_endpoint():
+    """sora-2-i2v maps image → image_url, prompt → prompt, routes to sora-2/image-to-video."""
+    from execution.sync_runner import get_handler_registry
+
+    emit = AsyncMock()
+    registry = get_handler_registry(emit=emit)
+    handler = registry["sora-2-i2v"]
+
+    mock_submit, mock_status, mock_result = _make_poll_mocks(
+        {"video": {"url": "https://fal.ai/sora2_i2v.mp4"}}
+    )
+
+    node = GraphNode(
+        id="test-sora2-i2v",
+        definitionId="sora-2-i2v",
+        params={"duration": 8, "resolution": "720p", "aspect_ratio": "16:9"},
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            result = await handler(
+                node,
+                {
+                    "prompt": PortValueDict(type="Text", value="a cat playing"),
+                    "image": PortValueDict(type="Image", value="https://example.com/start.png"),
+                },
+                {"FAL_KEY": "fal_test"},
+            )
+
+    assert result["video"]["type"] == "Video"
+    url = mock_client.post.call_args.args[0] if mock_client.post.call_args.args else mock_client.post.call_args[0][0]
+    assert "sora-2/image-to-video" in url
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert payload["image_url"] == "https://example.com/start.png"
+    assert payload["prompt"] == "a cat playing"
+
+
+@pytest.mark.asyncio
+async def test_sora2_i2v_duration_and_resolution_passthrough():
+    """sora-2-i2v forwards duration and resolution params correctly."""
+    from execution.sync_runner import get_handler_registry
+
+    emit = AsyncMock()
+    registry = get_handler_registry(emit=emit)
+    handler = registry["sora-2-i2v"]
+
+    mock_submit, mock_status, mock_result = _make_poll_mocks(
+        {"video": {"url": "https://fal.ai/sora2_i2v_2.mp4"}}
+    )
+
+    node = GraphNode(
+        id="test-sora2-i2v-params",
+        definitionId="sora-2-i2v",
+        params={"duration": 12, "resolution": "720p"},
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            await handler(
+                node,
+                {
+                    "prompt": PortValueDict(type="Text", value="ocean waves"),
+                    "image": PortValueDict(type="Image", value="https://example.com/sea.png"),
+                },
+                {"FAL_KEY": "fal_test"},
+            )
+
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert payload["duration"] == 12
+    assert payload["resolution"] == "720p"
+
+
+# ── esrgan-upscale ──────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_esrgan_upscale_endpoint_image_mapping_and_params():
+    """esrgan-upscale maps image → image_url, routes to fal-ai/esrgan, forwards params."""
+    from execution.sync_runner import get_handler_registry
+
+    emit = AsyncMock()
+    registry = get_handler_registry(emit=emit)
+    handler = registry["esrgan-upscale"]
+
+    mock_submit, mock_status, mock_result = _make_poll_mocks(
+        {"image": {"url": "https://fal.ai/esrgan_out.png", "content_type": "image/png"}}
+    )
+
+    node = GraphNode(
+        id="test-esrgan",
+        definitionId="esrgan-upscale",
+        params={"model": "RealESRGAN_x4plus", "scale": 4.0, "face": True, "output_format": "png"},
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            result = await handler(
+                node,
+                {"image": PortValueDict(type="Image", value="https://example.com/low_res.jpg")},
+                {"FAL_KEY": "fal_test"},
+            )
+
+    assert result["image"]["type"] == "Image"
+    url = mock_client.post.call_args.args[0] if mock_client.post.call_args.args else mock_client.post.call_args[0][0]
+    assert "fal-ai/esrgan" in url
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert payload["image_url"] == "https://example.com/low_res.jpg"
+    assert payload["model"] == "RealESRGAN_x4plus"
+    assert payload["scale"] == 4.0
+    assert payload["face"] is True
+
+
+@pytest.mark.asyncio
+async def test_esrgan_upscale_output_parsing():
+    """esrgan-upscale must parse {"image": {"url": "..."}} to image output."""
+    from execution.sync_runner import get_handler_registry
+
+    emit = AsyncMock()
+    registry = get_handler_registry(emit=emit)
+    handler = registry["esrgan-upscale"]
+
+    mock_submit, mock_status, mock_result = _make_poll_mocks(
+        {"image": {"url": "https://fal.ai/esrgan_upscaled.png"}}
+    )
+
+    node = GraphNode(
+        id="test-esrgan-out",
+        definitionId="esrgan-upscale",
+        params={},
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            result = await handler(
+                node,
+                {"image": PortValueDict(type="Image", value="https://example.com/photo.png")},
+                {"FAL_KEY": "fal_test"},
+            )
+
+    assert result["image"]["type"] == "Image"
+    assert result["image"]["value"] == "https://fal.ai/esrgan_upscaled.png"
+
+
+# ── flux-2-pro flash model ───────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_flux2_flash_endpoint():
+    """flux-2-pro with model=flash routes to flux-2/flash and strips model from payload."""
+    from execution.sync_runner import get_handler_registry
+
+    emit = AsyncMock()
+    registry = get_handler_registry(emit=emit)
+    handler = registry["flux-2-pro"]
+
+    mock_submit, mock_status, mock_result = _make_poll_mocks(
+        {"images": [{"url": "https://fal.ai/flux2_flash.png", "content_type": "image/png"}]}
+    )
+
+    node = GraphNode(
+        id="test-flux2-flash",
+        definitionId="flux-2-pro",
+        params={"model": "flash", "image_size": "landscape_16_9"},
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            result = await handler(
+                node,
+                {"prompt": PortValueDict(type="Text", value="fast generation")},
+                {"FAL_KEY": "fal_test"},
+            )
+
+    assert result["image"]["type"] == "Image"
+    url = mock_client.post.call_args.args[0] if mock_client.post.call_args.args else mock_client.post.call_args[0][0]
+    assert "flux-2/flash" in url
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert "model" not in payload
+
+
+@pytest.mark.asyncio
+async def test_flux2_max_still_routes_to_max():
+    """flux-2-pro with model=max still routes to flux-2-max (regression test)."""
+    from execution.sync_runner import get_handler_registry
+
+    emit = AsyncMock()
+    registry = get_handler_registry(emit=emit)
+    handler = registry["flux-2-pro"]
+
+    mock_submit, mock_status, mock_result = _make_poll_mocks(
+        {"images": [{"url": "https://fal.ai/flux2_max2.png", "content_type": "image/png"}]}
+    )
+
+    node = GraphNode(
+        id="test-flux2-max-regression",
+        definitionId="flux-2-pro",
+        params={"model": "max"},
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            result = await handler(
+                node,
+                {"prompt": PortValueDict(type="Text", value="max quality")},
+                {"FAL_KEY": "fal_test"},
+            )
+
+    assert result["image"]["type"] == "Image"
+    url = mock_client.post.call_args.args[0] if mock_client.post.call_args.args else mock_client.post.call_args[0][0]
+    assert "flux-2-max" in url
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert "model" not in payload

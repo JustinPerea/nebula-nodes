@@ -1135,6 +1135,8 @@ def get_handler_registry(
             model = node.params.get("model", "pro")
             if str(model).lower() == "max":
                 endpoint_id = "fal-ai/flux-2-max"
+            elif str(model).lower() == "flash":
+                endpoint_id = "fal-ai/flux-2/flash"
             else:
                 endpoint_id = "fal-ai/flux-2-pro"
             routed_node = _fal_wrapper_node(node, endpoint_id, internal_params=("model",))
@@ -1174,7 +1176,28 @@ def get_handler_registry(
             return await handle_fal_universal(node, inputs, api_keys, emit=emit)
 
         async def _seedream45_handler(node, inputs, api_keys):
-            node.params.setdefault("endpoint_id", "fal-ai/bytedance/seedream/v4.5/text-to-image")
+            model = node.params.get("model", "4.5")
+            if str(model) == "5.0-lite":
+                endpoint_id = "fal-ai/bytedance/seedream/v5/lite/text-to-image"
+            else:
+                endpoint_id = "fal-ai/bytedance/seedream/v4.5/text-to-image"
+            routed_node = _fal_wrapper_node(node, endpoint_id, internal_params=("model",))
+            return await handle_fal_universal(routed_node, inputs, api_keys, emit=emit)
+
+        async def _sora2_i2v_handler(
+            node: GraphNode,
+            inputs: dict[str, PortValueDict],
+            api_keys: dict[str, str],
+        ) -> dict[str, Any]:
+            node.params.setdefault("endpoint_id", "fal-ai/sora-2/image-to-video")
+            return await handle_fal_universal(node, inputs, api_keys, emit=emit)
+
+        async def _esrgan_upscale_handler(
+            node: GraphNode,
+            inputs: dict[str, PortValueDict],
+            api_keys: dict[str, str],
+        ) -> dict[str, Any]:
+            node.params.setdefault("endpoint_id", "fal-ai/esrgan")
             return await handle_fal_universal(node, inputs, api_keys, emit=emit)
 
         async def _nano_banana_fal_handler(node, inputs, api_keys):
@@ -1293,6 +1316,8 @@ def get_handler_registry(
         registry["clarity-upscaler"] = _clarity_upscaler_handler
         registry["seedvr-video-upscale"] = _seedvr_video_upscale_handler
         registry["seedream-4-5"] = _seedream45_handler
+        registry["sora-2-i2v"] = _sora2_i2v_handler
+        registry["esrgan-upscale"] = _esrgan_upscale_handler
         registry["nano-banana-fal"] = _nano_banana_fal_handler
         registry["nano-banana-fal-edit"] = _nano_banana_fal_edit_handler
         registry["ideogram-v4"] = _ideogram_v4_handler

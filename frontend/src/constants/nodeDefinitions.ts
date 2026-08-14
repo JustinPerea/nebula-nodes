@@ -6728,6 +6728,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         options: [
           { label: 'FLUX 2 Pro', value: 'pro' },
           { label: 'FLUX 2 Max', value: 'max' },
+          { label: 'FLUX 2 Flash', value: 'flash' },
         ],
       },
       {
@@ -7923,6 +7924,17 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     ],
     params: [
       {
+        key: 'model',
+        label: 'Model',
+        type: 'enum',
+        required: false,
+        default: '4.5',
+        options: [
+          { label: 'Seedream 4.5', value: '4.5' },
+          { label: 'Seedream 5.0 Lite', value: '5.0-lite' },
+        ],
+      },
+      {
         key: 'image_size',
         label: 'Size',
         type: 'enum',
@@ -7937,6 +7949,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
           { label: 'Landscape 16:9', value: 'landscape_16_9' },
           { label: 'Auto 2K', value: 'auto_2K' },
           { label: 'Auto 4K', value: 'auto_4K' },
+          { label: 'Auto 3K', value: 'auto_3K' },
         ],
       },
       {
@@ -9908,6 +9921,129 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
           { label: 'JPEG', value: 'jpeg' },
           { label: 'PNG', value: 'png' },
           { label: 'WebP', value: 'webp' },
+        ],
+      },
+    ],
+  },
+  'sora-2-i2v': {
+    id: 'sora-2-i2v',
+    displayName: 'Sora 2 Image-to-Video',
+    category: 'video-gen',
+    apiProvider: 'fal',
+    apiEndpoint: 'fal-ai/sora-2/image-to-video',
+    envKeyName: 'FAL_KEY',
+    executionPattern: 'async-poll',
+    inputPorts: [
+      { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
+      { id: 'image', label: 'Image', dataType: 'Image', required: true },
+    ],
+    outputPorts: [
+      { id: 'video', label: 'Video', dataType: 'Video', required: false },
+    ],
+    params: [
+      {
+        key: 'resolution',
+        label: 'Resolution',
+        type: 'enum',
+        required: false,
+        default: 'auto',
+        options: [
+          { label: 'Auto', value: 'auto' },
+          { label: '720p', value: '720p' },
+        ],
+      },
+      {
+        key: 'aspect_ratio',
+        label: 'Aspect Ratio',
+        type: 'enum',
+        required: false,
+        default: 'auto',
+        options: [
+          { label: 'Auto', value: 'auto' },
+          { label: '9:16', value: '9:16' },
+          { label: '16:9', value: '16:9' },
+        ],
+      },
+      {
+        key: 'duration',
+        label: 'Duration',
+        type: 'enum',
+        required: false,
+        default: 4,
+        options: [
+          { label: '4s', value: 4 },
+          { label: '8s', value: 8 },
+          { label: '12s', value: 12 },
+          { label: '16s', value: 16 },
+          { label: '20s', value: 20 },
+        ],
+      },
+    ],
+  },
+  'esrgan-upscale': {
+    id: 'esrgan-upscale',
+    displayName: 'Real-ESRGAN Upscale',
+    category: 'transform',
+    apiProvider: 'fal',
+    apiEndpoint: 'fal-ai/esrgan',
+    envKeyName: 'FAL_KEY',
+    executionPattern: 'async-poll',
+    inputPorts: [
+      { id: 'image', label: 'Image', dataType: 'Image', required: true },
+    ],
+    outputPorts: [
+      { id: 'image', label: 'Image', dataType: 'Image', required: false },
+    ],
+    params: [
+      {
+        key: 'model',
+        label: 'Model',
+        type: 'enum',
+        required: false,
+        default: 'RealESRGAN_x4plus',
+        options: [
+          { label: 'x4plus (General)', value: 'RealESRGAN_x4plus' },
+          { label: 'x2plus (General)', value: 'RealESRGAN_x2plus' },
+          { label: 'x4plus Anime 6B', value: 'RealESRGAN_x4plus_anime_6B' },
+          { label: 'x4 v3 (General)', value: 'RealESRGAN_x4_v3' },
+          { label: 'x4 WDN v3 (Denoise)', value: 'RealESRGAN_x4_wdn_v3' },
+          { label: 'x4 Anime v3', value: 'RealESRGAN_x4_anime_v3' },
+        ],
+      },
+      {
+        key: 'scale',
+        label: 'Scale',
+        type: 'float',
+        required: false,
+        default: 2,
+        min: 1,
+        max: 8,
+      },
+      {
+        key: 'face',
+        label: 'Face Enhancement',
+        type: 'boolean',
+        required: false,
+        default: false,
+      },
+      {
+        key: 'tile',
+        label: 'Tile Size (0=none)',
+        type: 'integer',
+        required: false,
+        default: 0,
+        min: 0,
+        max: 1000,
+      },
+      {
+        key: 'output_format',
+        label: 'Output Format',
+        type: 'enum',
+        required: false,
+        default: 'png',
+        options: [
+          { label: 'PNG', value: 'png' },
+          { label: 'JPEG', value: 'jpeg' },
         ],
       },
     ],
