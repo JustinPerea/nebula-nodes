@@ -726,16 +726,21 @@ def get_handler_registry(
             inputs: dict[str, PortValueDict],
             api_keys: dict[str, str],
         ) -> dict[str, Any]:
-            node.params.setdefault("endpoint_id", "fal-ai/kling-video/v3/standard/text-to-video")
-            mp = node.params.get("multi_prompt")
+            model = node.params.get("model", "standard")
+            if str(model).lower() == "pro":
+                endpoint_id = "fal-ai/kling-video/v3/pro/text-to-video"
+            else:
+                endpoint_id = "fal-ai/kling-video/v3/standard/text-to-video"
+            routed_node = _fal_wrapper_node(node, endpoint_id, internal_params=("model",))
+            mp = routed_node.params.get("multi_prompt")
             if isinstance(mp, str) and mp.strip():
                 try:
-                    node.params["multi_prompt"] = json.loads(mp)
+                    routed_node.params["multi_prompt"] = json.loads(mp)
                 except json.JSONDecodeError:
-                    node.params.pop("multi_prompt", None)
+                    routed_node.params.pop("multi_prompt", None)
             elif mp == "":
-                node.params.pop("multi_prompt", None)
-            return await handle_fal_universal(node, inputs, api_keys, emit=emit)
+                routed_node.params.pop("multi_prompt", None)
+            return await handle_fal_universal(routed_node, inputs, api_keys, emit=emit)
 
         async def _luma_ray2_i2v_handler(
             node: GraphNode,
@@ -820,6 +825,30 @@ def get_handler_registry(
                 endpoint_id = "fal-ai/kling-video/o3/standard/image-to-video"
             routed_node = _fal_wrapper_node(node, endpoint_id, internal_params=("model",))
             return await handle_fal_universal(routed_node, inputs, api_keys, emit=emit)
+
+        async def _kling_pro_handler(
+            node: GraphNode,
+            inputs: dict[str, PortValueDict],
+            api_keys: dict[str, str],
+        ) -> dict[str, Any]:
+            from handlers.fal_universal import _to_fal_url
+            model = node.params.get("model", "v2.6-pro")
+            if str(model) == "v3-pro":
+                endpoint_id = "fal-ai/kling-video/v3/pro/image-to-video"
+            else:
+                endpoint_id = "fal-ai/kling-video/v2.6/pro/image-to-video"
+            params = dict(node.params)
+            params.pop("model", None)
+            params["endpoint_id"] = endpoint_id
+            image_input = inputs.get("image")
+            if image_input and image_input.value:
+                params["start_image_url"] = _to_fal_url(str(image_input.value))
+            end_image_input = inputs.get("end_image")
+            if end_image_input and end_image_input.value:
+                params["end_image_url"] = _to_fal_url(str(end_image_input.value))
+            modified_inputs = {k: v for k, v in inputs.items() if k not in ("image", "end_image")}
+            routed_node = node.model_copy(update={"params": params})
+            return await handle_fal_universal(routed_node, modified_inputs, api_keys, emit=emit)
 
         async def _veo3_flf_handler(
             node: GraphNode,
@@ -1014,6 +1043,7 @@ def get_handler_registry(
         registry["seedance-v1-5"] = _seedance_handler
         registry["topaz-image-upscale"] = _topaz_image_upscale_handler
         registry["kling-o3"] = _kling_o3_handler
+        registry["kling-pro"] = _kling_pro_handler
         registry["veo-3-flf"] = _veo3_flf_handler
         registry["ltx-2-3"] = _ltx_23_handler
         registry["grok-imagine-video"] = _grok_video_handler
@@ -1041,12 +1071,22 @@ def get_handler_registry(
             return await handle_fal_universal(node, inputs, api_keys, emit=emit)
 
         async def _flux_kontext_handler(node, inputs, api_keys):
-            node.params.setdefault("endpoint_id", "fal-ai/flux-pro/kontext")
-            return await handle_fal_universal(node, inputs, api_keys, emit=emit)
+            model = node.params.get("model", "base")
+            if str(model).lower() == "max":
+                endpoint_id = "fal-ai/flux-pro/kontext/max"
+            else:
+                endpoint_id = "fal-ai/flux-pro/kontext"
+            routed_node = _fal_wrapper_node(node, endpoint_id, internal_params=("model",))
+            return await handle_fal_universal(routed_node, inputs, api_keys, emit=emit)
 
         async def _flux2_pro_handler(node, inputs, api_keys):
-            node.params.setdefault("endpoint_id", "fal-ai/flux-2-pro")
-            return await handle_fal_universal(node, inputs, api_keys, emit=emit)
+            model = node.params.get("model", "pro")
+            if str(model).lower() == "max":
+                endpoint_id = "fal-ai/flux-2-max"
+            else:
+                endpoint_id = "fal-ai/flux-2-pro"
+            routed_node = _fal_wrapper_node(node, endpoint_id, internal_params=("model",))
+            return await handle_fal_universal(routed_node, inputs, api_keys, emit=emit)
 
         async def _gpt_image_15_handler(node, inputs, api_keys):
             node.params.setdefault("endpoint_id", "fal-ai/gpt-image-1.5")

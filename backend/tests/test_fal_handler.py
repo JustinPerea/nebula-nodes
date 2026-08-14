@@ -4711,6 +4711,390 @@ async def test_kling_o3_default_model_is_standard():
     assert "pro" not in url
 
 
+# ---------------------------------------------------------------------------
+# Wave 1 Kling Flux: kling-pro, kling-v3 tier routing, flux-kontext, flux-2-pro
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_kling_pro_v26_endpoint_and_port_mapping():
+    """kling-pro v2.6 uses start_image_url + end_image_url, not image_url."""
+    from execution.sync_runner import get_handler_registry
+
+    emit = AsyncMock()
+    registry = get_handler_registry(emit=emit)
+    handler = registry["kling-pro"]
+
+    mock_submit, mock_status, mock_result = _make_poll_mocks(
+        {"video": {"url": "https://fal.ai/kling-pro.mp4"}}
+    )
+
+    node = GraphNode(
+        id="test-kling-pro-v26",
+        definitionId="kling-pro",
+        params={"model": "v2.6-pro", "duration": "5"},
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            result = await handler(
+                node,
+                {
+                    "image": PortValueDict(type="Image", value="https://example.com/start.png"),
+                    "end_image": PortValueDict(type="Image", value="https://example.com/end.png"),
+                    "prompt": PortValueDict(type="Text", value="cinematic motion"),
+                },
+                {"FAL_KEY": "fal_test"},
+            )
+
+    assert result["video"]["type"] == "Video"
+    url = mock_client.post.call_args.args[0] if mock_client.post.call_args.args else mock_client.post.call_args[0][0]
+    assert "kling-video/v2.6/pro/image-to-video" in url
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert payload["start_image_url"] == "https://example.com/start.png"
+    assert payload["end_image_url"] == "https://example.com/end.png"
+    assert "image_url" not in payload
+    assert "model" not in payload
+
+
+@pytest.mark.asyncio
+async def test_kling_pro_v3_endpoint_injection():
+    """kling-pro with model=v3-pro must route to v3/pro/image-to-video."""
+    from execution.sync_runner import get_handler_registry
+
+    emit = AsyncMock()
+    registry = get_handler_registry(emit=emit)
+    handler = registry["kling-pro"]
+
+    mock_submit, mock_status, mock_result = _make_poll_mocks(
+        {"video": {"url": "https://fal.ai/kling-pro-v3.mp4"}}
+    )
+
+    node = GraphNode(
+        id="test-kling-pro-v3",
+        definitionId="kling-pro",
+        params={"model": "v3-pro", "duration": "10"},
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            await handler(
+                node,
+                {
+                    "image": PortValueDict(type="Image", value="https://example.com/start.png"),
+                    "prompt": PortValueDict(type="Text", value="dramatic zoom"),
+                },
+                {"FAL_KEY": "fal_test"},
+            )
+
+    url = mock_client.post.call_args.args[0] if mock_client.post.call_args.args else mock_client.post.call_args[0][0]
+    assert "kling-video/v3/pro/image-to-video" in url
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert "model" not in payload
+
+
+@pytest.mark.asyncio
+async def test_kling_pro_default_model_is_v26():
+    """kling-pro without explicit model defaults to v2.6."""
+    from execution.sync_runner import get_handler_registry
+
+    emit = AsyncMock()
+    registry = get_handler_registry(emit=emit)
+    handler = registry["kling-pro"]
+
+    mock_submit, mock_status, mock_result = _make_poll_mocks(
+        {"video": {"url": "https://fal.ai/kling-pro-default.mp4"}}
+    )
+
+    node = GraphNode(
+        id="test-kling-pro-default",
+        definitionId="kling-pro",
+        params={},
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            await handler(
+                node,
+                {
+                    "image": PortValueDict(type="Image", value="https://example.com/start.png"),
+                },
+                {"FAL_KEY": "fal_test"},
+            )
+
+    url = mock_client.post.call_args.args[0] if mock_client.post.call_args.args else mock_client.post.call_args[0][0]
+    assert "kling-video/v2.6/pro/image-to-video" in url
+
+
+@pytest.mark.asyncio
+async def test_kling_v3_standard_t2v_endpoint():
+    """kling-v3 with model=standard routes to v3/standard/text-to-video."""
+    from execution.sync_runner import get_handler_registry
+
+    emit = AsyncMock()
+    registry = get_handler_registry(emit=emit)
+    handler = registry["kling-v3"]
+
+    mock_submit, mock_status, mock_result = _make_poll_mocks(
+        {"video": {"url": "https://fal.ai/kling-v3-std.mp4"}}
+    )
+
+    node = GraphNode(
+        id="test-kling-v3-std",
+        definitionId="kling-v3",
+        params={"model": "standard", "duration": "5"},
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            await handler(
+                node,
+                {"prompt": PortValueDict(type="Text", value="a calm ocean")},
+                {"FAL_KEY": "fal_test"},
+            )
+
+    url = mock_client.post.call_args.args[0] if mock_client.post.call_args.args else mock_client.post.call_args[0][0]
+    assert "kling-video/v3/standard/text-to-video" in url
+    assert "pro" not in url
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert "model" not in payload
+
+
+@pytest.mark.asyncio
+async def test_kling_v3_pro_t2v_endpoint():
+    """kling-v3 with model=pro routes to v3/pro/text-to-video."""
+    from execution.sync_runner import get_handler_registry
+
+    emit = AsyncMock()
+    registry = get_handler_registry(emit=emit)
+    handler = registry["kling-v3"]
+
+    mock_submit, mock_status, mock_result = _make_poll_mocks(
+        {"video": {"url": "https://fal.ai/kling-v3-pro.mp4"}}
+    )
+
+    node = GraphNode(
+        id="test-kling-v3-pro",
+        definitionId="kling-v3",
+        params={"model": "pro", "duration": "10"},
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            await handler(
+                node,
+                {"prompt": PortValueDict(type="Text", value="a rocket launch")},
+                {"FAL_KEY": "fal_test"},
+            )
+
+    url = mock_client.post.call_args.args[0] if mock_client.post.call_args.args else mock_client.post.call_args[0][0]
+    assert "kling-video/v3/pro/text-to-video" in url
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert "model" not in payload
+
+
+@pytest.mark.asyncio
+async def test_flux_kontext_base_endpoint():
+    """flux-kontext with model=base routes to flux-pro/kontext (no /max)."""
+    from execution.sync_runner import get_handler_registry
+
+    emit = AsyncMock()
+    registry = get_handler_registry(emit=emit)
+    handler = registry["flux-kontext"]
+
+    mock_submit, mock_status, mock_result = _make_poll_mocks(
+        {"images": [{"url": "https://fal.ai/flux-kontext.png", "content_type": "image/png"}]}
+    )
+
+    node = GraphNode(
+        id="test-flux-kontext-base",
+        definitionId="flux-kontext",
+        params={"model": "base", "aspect_ratio": "16:9"},
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            await handler(
+                node,
+                {
+                    "prompt": PortValueDict(type="Text", value="kontext edit"),
+                    "image": PortValueDict(type="Image", value="https://example.com/ref.png"),
+                },
+                {"FAL_KEY": "fal_test"},
+            )
+
+    url = mock_client.post.call_args.args[0] if mock_client.post.call_args.args else mock_client.post.call_args[0][0]
+    assert "flux-pro/kontext" in url
+    assert "/max" not in url
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert "model" not in payload
+
+
+@pytest.mark.asyncio
+async def test_flux_kontext_max_endpoint():
+    """flux-kontext with model=max routes to flux-pro/kontext/max."""
+    from execution.sync_runner import get_handler_registry
+
+    emit = AsyncMock()
+    registry = get_handler_registry(emit=emit)
+    handler = registry["flux-kontext"]
+
+    mock_submit, mock_status, mock_result = _make_poll_mocks(
+        {"images": [{"url": "https://fal.ai/flux-kontext-max.png", "content_type": "image/png"}]}
+    )
+
+    node = GraphNode(
+        id="test-flux-kontext-max",
+        definitionId="flux-kontext",
+        params={"model": "max"},
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            await handler(
+                node,
+                {
+                    "prompt": PortValueDict(type="Text", value="kontext max edit"),
+                    "image": PortValueDict(type="Image", value="https://example.com/ref.png"),
+                },
+                {"FAL_KEY": "fal_test"},
+            )
+
+    url = mock_client.post.call_args.args[0] if mock_client.post.call_args.args else mock_client.post.call_args[0][0]
+    assert "flux-pro/kontext/max" in url
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert "model" not in payload
+
+
+@pytest.mark.asyncio
+async def test_flux2_pro_endpoint():
+    """flux-2-pro with model=pro routes to flux-2-pro (no /max)."""
+    from execution.sync_runner import get_handler_registry
+
+    emit = AsyncMock()
+    registry = get_handler_registry(emit=emit)
+    handler = registry["flux-2-pro"]
+
+    mock_submit, mock_status, mock_result = _make_poll_mocks(
+        {"images": [{"url": "https://fal.ai/flux2-pro.png", "content_type": "image/png"}]}
+    )
+
+    node = GraphNode(
+        id="test-flux2-pro",
+        definitionId="flux-2-pro",
+        params={"model": "pro", "image_size": "landscape_16_9"},
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            await handler(
+                node,
+                {"prompt": PortValueDict(type="Text", value="flux pro prompt")},
+                {"FAL_KEY": "fal_test"},
+            )
+
+    url = mock_client.post.call_args.args[0] if mock_client.post.call_args.args else mock_client.post.call_args[0][0]
+    assert "flux-2-pro" in url
+    assert "max" not in url
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert "model" not in payload
+
+
+@pytest.mark.asyncio
+async def test_flux2_max_endpoint():
+    """flux-2-pro with model=max routes to flux-2-max."""
+    from execution.sync_runner import get_handler_registry
+
+    emit = AsyncMock()
+    registry = get_handler_registry(emit=emit)
+    handler = registry["flux-2-pro"]
+
+    mock_submit, mock_status, mock_result = _make_poll_mocks(
+        {"images": [{"url": "https://fal.ai/flux2-max.png", "content_type": "image/png"}]}
+    )
+
+    node = GraphNode(
+        id="test-flux2-max",
+        definitionId="flux-2-pro",
+        params={"model": "max"},
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            await handler(
+                node,
+                {"prompt": PortValueDict(type="Text", value="flux max prompt")},
+                {"FAL_KEY": "fal_test"},
+            )
+
+    url = mock_client.post.call_args.args[0] if mock_client.post.call_args.args else mock_client.post.call_args[0][0]
+    assert "flux-2-max" in url
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert "model" not in payload
+
+
 # ── pixverse-v4-5 ─────────────────────────────────────────────────────────────
 
 @pytest.mark.asyncio

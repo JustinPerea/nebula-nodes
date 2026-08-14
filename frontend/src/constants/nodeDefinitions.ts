@@ -5196,6 +5196,17 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     ],
     params: [
       {
+        key: 'model',
+        label: 'Model',
+        type: 'enum',
+        required: false,
+        default: 'standard',
+        options: [
+          { label: 'Standard', value: 'standard' },
+          { label: 'Pro', value: 'pro' },
+        ],
+      },
+      {
         key: 'duration',
         label: 'Duration',
         type: 'enum',
@@ -6603,6 +6614,17 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     ],
     params: [
       {
+        key: 'model',
+        label: 'Model',
+        type: 'enum',
+        required: false,
+        default: 'base',
+        options: [
+          { label: 'Kontext', value: 'base' },
+          { label: 'Kontext Max', value: 'max' },
+        ],
+      },
+      {
         key: 'aspect_ratio',
         label: 'Aspect Ratio',
         type: 'enum',
@@ -6697,6 +6719,17 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       { id: 'image', label: 'Image', dataType: 'Image', required: false },
     ],
     params: [
+      {
+        key: 'model',
+        label: 'Model',
+        type: 'enum',
+        required: false,
+        default: 'pro',
+        options: [
+          { label: 'FLUX 2 Pro', value: 'pro' },
+          { label: 'FLUX 2 Max', value: 'max' },
+        ],
+      },
       {
         key: 'image_size',
         label: 'Size',
@@ -9477,6 +9510,82 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
           { label: '5', value: '5' },
           { label: '6 (Permissive)', value: '6' },
         ],
+      },
+    ],
+  },
+
+  'kling-pro': {
+    id: 'kling-pro',
+    displayName: 'Kling Pro I2V',
+    category: 'video-gen',
+    apiProvider: 'fal',
+    apiEndpoint: 'fal-ai/kling-video/v2.6/pro/image-to-video',
+    envKeyName: 'FAL_KEY',
+    executionPattern: 'async-poll',
+    inputPorts: [
+      { id: 'image', label: 'Start Image', dataType: 'Image', required: true },
+      { id: 'prompt', label: 'Prompt', dataType: 'Text', required: false },
+      { id: 'end_image', label: 'End Image', dataType: 'Image', required: false },
+    ],
+    outputPorts: [
+      { id: 'video', label: 'Video', dataType: 'Video', required: false },
+    ],
+    params: [
+      {
+        key: 'model',
+        label: 'Model',
+        type: 'enum',
+        required: true,
+        default: 'v2.6-pro',
+        options: [
+          { label: 'Kling 2.6 Pro', value: 'v2.6-pro' },
+          { label: 'Kling v3 Pro', value: 'v3-pro' },
+        ],
+      },
+      {
+        key: 'duration',
+        label: 'Duration',
+        type: 'enum',
+        required: false,
+        default: '5',
+        options: [
+          { label: '3s', value: '3' },
+          { label: '4s', value: '4' },
+          { label: '5s', value: '5' },
+          { label: '6s', value: '6' },
+          { label: '7s', value: '7' },
+          { label: '8s', value: '8' },
+          { label: '9s', value: '9' },
+          { label: '10s', value: '10' },
+          { label: '11s', value: '11' },
+          { label: '12s', value: '12' },
+          { label: '13s', value: '13' },
+          { label: '14s', value: '14' },
+          { label: '15s', value: '15' },
+        ],
+      },
+      {
+        key: 'negative_prompt',
+        label: 'Negative Prompt',
+        type: 'string',
+        required: false,
+        default: 'blur, distort, and low quality',
+      },
+      {
+        key: 'generate_audio',
+        label: 'Generate Audio',
+        type: 'boolean',
+        required: false,
+        default: false,
+      },
+      {
+        key: 'cfg_scale',
+        label: 'CFG Scale',
+        type: 'float',
+        required: false,
+        default: 0.5,
+        min: 0.0,
+        max: 1.0,
       },
     ],
   },
