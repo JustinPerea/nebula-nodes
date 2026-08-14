@@ -9235,6 +9235,51 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
     ],
   },
+
+  'sync-lipsync': {
+    id: 'sync-lipsync',
+    displayName: 'Lipsync',
+    category: 'video-gen',
+    apiProvider: 'fal',
+    apiEndpoint: 'fal-ai/sync-lipsync/v3',
+    envKeyName: 'FAL_KEY',
+    executionPattern: 'async-poll',
+    inputPorts: [
+      { id: 'video', label: 'Video', dataType: 'Video', required: true },
+      { id: 'audio', label: 'Audio', dataType: 'Audio', required: true },
+    ],
+    outputPorts: [
+      { id: 'video', label: 'Video', dataType: 'Video', required: false },
+    ],
+    params: [
+      {
+        key: 'model',
+        label: 'Model',
+        type: 'enum',
+        required: true,
+        default: 'sync-3',
+        options: [
+          { label: 'Sync 3', value: 'sync-3' },
+          { label: 'Sync Lipsync v2 Pro', value: 'sync-lipsync-v2-pro' },
+          { label: 'VEED Lipsync', value: 'veed-lipsync' },
+        ],
+      },
+      {
+        key: 'sync_mode',
+        label: 'Sync Mode',
+        type: 'enum',
+        required: false,
+        default: 'cut_off',
+        options: [
+          { label: 'Cut Off', value: 'cut_off' },
+          { label: 'Loop', value: 'loop' },
+          { label: 'Bounce', value: 'bounce' },
+          { label: 'Silence', value: 'silence' },
+          { label: 'Remap', value: 'remap' },
+        ],
+      },
+    ],
+  },
 };
 
 export function getNodeDefinition(definitionId: string): ModelNodeDefinition | undefined {

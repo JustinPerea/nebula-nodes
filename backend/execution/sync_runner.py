@@ -587,6 +587,28 @@ def get_handler_registry(
             # not the single-output universal handler.
             return await handle_demucs(node, inputs, api_keys, emit=emit)
 
+        async def _sync_lipsync_handler(
+            node: GraphNode,
+            inputs: dict[str, PortValueDict],
+            api_keys: dict[str, str],
+        ) -> dict[str, Any]:
+            # Audio-driven lipsync via FAL: Sync Labs (sync-3, v2-pro) + VEED.
+            # All three take video_url + audio_url (mapped by the universal
+            # handler from the `video` and `audio` input ports); only Sync
+            # models accept sync_mode, so strip it for VEED to avoid a 422.
+            model = node.params.get("model", "sync-3")
+            if str(model) == "sync-lipsync-v2-pro":
+                endpoint_id = "fal-ai/sync-lipsync/v2/pro"
+                internal_params: tuple[str, ...] = ("model",)
+            elif str(model) == "veed-lipsync":
+                endpoint_id = "veed/lipsync"
+                internal_params = ("model", "sync_mode")
+            else:
+                endpoint_id = "fal-ai/sync-lipsync/v3"
+                internal_params = ("model",)
+            routed_node = _fal_wrapper_node(node, endpoint_id, internal_params=internal_params)
+            return await handle_fal_universal(routed_node, inputs, api_keys, emit=emit)
+
         async def _meshy_text_to_3d_handler(
             node: GraphNode,
             inputs: dict[str, PortValueDict],
@@ -841,6 +863,7 @@ def get_handler_registry(
         registry["ace-step"] = _ace_step_handler
         registry["mmaudio-v2"] = _mmaudio_handler
         registry["demucs"] = _demucs_handler
+        registry["sync-lipsync"] = _sync_lipsync_handler
         registry["meshy-text-to-3d"] = _meshy_text_to_3d_handler
         registry["meshy-image-to-3d"] = _meshy_image_to_3d_handler
         registry["meshy-multi-image-to-3d"] = _meshy_multi_image_to_3d_handler

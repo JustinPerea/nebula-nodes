@@ -4191,6 +4191,194 @@ async def test_sora2_pro_endpoint_injection():
     assert "model" not in payload
 
 
+# ── sync-lipsync ──────────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_sync_lipsync_v3_endpoint_injection():
+    """sync-lipsync with model=sync-3 must inject fal-ai/sync-lipsync/v3 and
+    forward sync_mode while popping model."""
+    from execution.sync_runner import get_handler_registry
+
+    emit = AsyncMock()
+    registry = get_handler_registry(emit=emit)
+    handler = registry["sync-lipsync"]
+
+    mock_submit, mock_status, mock_result = _make_poll_mocks(
+        {"video": {"url": "https://fal.ai/lipsync_v3.mp4"}}
+    )
+
+    node = GraphNode(
+        id="test-lipsync-v3",
+        definitionId="sync-lipsync",
+        params={"model": "sync-3", "sync_mode": "loop"},
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            result = await handler(
+                node,
+                {
+                    "video": PortValueDict(type="Video", value="https://x/face.mp4"),
+                    "audio": PortValueDict(type="Audio", value="https://x/voice.mp3"),
+                },
+                {"FAL_KEY": "fal_test"},
+            )
+
+    assert result["video"]["type"] == "Video"
+    assert result["video"]["value"] == "https://fal.ai/lipsync_v3.mp4"
+    url = mock_client.post.call_args.args[0] if mock_client.post.call_args.args else mock_client.post.call_args[0][0]
+    assert "fal-ai/sync-lipsync/v3" in url
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert "model" not in payload
+    assert payload["sync_mode"] == "loop"
+    assert payload["video_url"] == "https://x/face.mp4"
+    assert payload["audio_url"] == "https://x/voice.mp3"
+
+
+@pytest.mark.asyncio
+async def test_sync_lipsync_v2_pro_endpoint_injection():
+    """sync-lipsync with model=sync-lipsync-v2-pro must inject fal-ai/sync-lipsync/v2/pro
+    and forward sync_mode while popping model."""
+    from execution.sync_runner import get_handler_registry
+
+    emit = AsyncMock()
+    registry = get_handler_registry(emit=emit)
+    handler = registry["sync-lipsync"]
+
+    mock_submit, mock_status, mock_result = _make_poll_mocks(
+        {"video": {"url": "https://fal.ai/lipsync_v2pro.mp4"}}
+    )
+
+    node = GraphNode(
+        id="test-lipsync-v2pro",
+        definitionId="sync-lipsync",
+        params={"model": "sync-lipsync-v2-pro", "sync_mode": "bounce"},
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            await handler(
+                node,
+                {
+                    "video": PortValueDict(type="Video", value="https://x/face.mp4"),
+                    "audio": PortValueDict(type="Audio", value="https://x/voice.mp3"),
+                },
+                {"FAL_KEY": "fal_test"},
+            )
+
+    url = mock_client.post.call_args.args[0] if mock_client.post.call_args.args else mock_client.post.call_args[0][0]
+    assert "fal-ai/sync-lipsync/v2/pro" in url
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert "model" not in payload
+    assert payload["sync_mode"] == "bounce"
+
+
+@pytest.mark.asyncio
+async def test_veed_lipsync_strips_sync_mode():
+    """sync-lipsync with model=veed-lipsync must inject veed/lipsync and strip
+    sync_mode (VEED does not accept it) while popping model."""
+    from execution.sync_runner import get_handler_registry
+
+    emit = AsyncMock()
+    registry = get_handler_registry(emit=emit)
+    handler = registry["sync-lipsync"]
+
+    mock_submit, mock_status, mock_result = _make_poll_mocks(
+        {"video": {"url": "https://fal.ai/veed_lipsync.mp4"}}
+    )
+
+    node = GraphNode(
+        id="test-lipsync-veed",
+        definitionId="sync-lipsync",
+        params={"model": "veed-lipsync", "sync_mode": "cut_off"},
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            result = await handler(
+                node,
+                {
+                    "video": PortValueDict(type="Video", value="https://x/face.mp4"),
+                    "audio": PortValueDict(type="Audio", value="https://x/voice.mp3"),
+                },
+                {"FAL_KEY": "fal_test"},
+            )
+
+    assert result["video"]["type"] == "Video"
+    url = mock_client.post.call_args.args[0] if mock_client.post.call_args.args else mock_client.post.call_args[0][0]
+    assert "veed/lipsync" in url
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert "model" not in payload
+    assert "sync_mode" not in payload
+    assert payload["video_url"] == "https://x/face.mp4"
+    assert payload["audio_url"] == "https://x/voice.mp3"
+
+
+@pytest.mark.asyncio
+async def test_sync_lipsync_default_model_is_v3():
+    """sync-lipsync with no model param defaults to sync-3 (fal-ai/sync-lipsync/v3)."""
+    from execution.sync_runner import get_handler_registry
+
+    emit = AsyncMock()
+    registry = get_handler_registry(emit=emit)
+    handler = registry["sync-lipsync"]
+
+    mock_submit, mock_status, mock_result = _make_poll_mocks(
+        {"video": {"url": "https://fal.ai/lipsync_default.mp4"}}
+    )
+
+    node = GraphNode(
+        id="test-lipsync-default",
+        definitionId="sync-lipsync",
+        params={"sync_mode": "remap"},
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            await handler(
+                node,
+                {
+                    "video": PortValueDict(type="Video", value="https://x/face.mp4"),
+                    "audio": PortValueDict(type="Audio", value="https://x/voice.mp3"),
+                },
+                {"FAL_KEY": "fal_test"},
+            )
+
+    url = mock_client.post.call_args.args[0] if mock_client.post.call_args.args else mock_client.post.call_args[0][0]
+    assert "fal-ai/sync-lipsync/v3" in url
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert "model" not in payload
+    assert payload["sync_mode"] == "remap"
+
+
 # ── pixverse-v4-5 ─────────────────────────────────────────────────────────────
 
 @pytest.mark.asyncio
