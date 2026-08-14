@@ -1,5 +1,13 @@
 from __future__ import annotations
 
+# Must run before ANY third-party import (fastapi/pydantic): an inherited
+# PYTHONPATH pointing at another Python version's site-packages (e.g. Hermes
+# exporting 3.11 paths while Nebula runs on 3.12) breaks pydantic_core at
+# import time. env_check is stdlib-only so it is safe to import this early.
+import env_check as _env_check
+
+_env_check.run_startup_checks()
+
 import asyncio
 import copy
 import difflib
@@ -36,7 +44,7 @@ from models.events import (
 )
 from execution.engine import execute_graph, validate_graph, topological_sort, get_subgraph, CycleError
 from execution.sync_runner import get_handler_registry
-from services.settings import load_settings, save_settings, get_api_key
+from services.settings import load_settings, save_settings, get_api_key, validate_provider_keys
 from services.node_registry import NodeRegistry
 from services.cli_graph import CLIGraph
 from services.output import OUTPUT_ROOT, DEFAULT_OUTPUT_ROOT
@@ -967,6 +975,18 @@ async def chat_websocket(websocket: WebSocket) -> None:
 @app.get("/api/health")
 async def health() -> dict:
     return {"status": "ok", "app": "nebula", "version": "0.1.0"}
+
+
+@app.get("/api/health/providers")
+async def health_providers(refresh: bool = False) -> dict:
+    """Per-provider API key validation.
+
+    For each known provider (FAL, OpenAI, Google, Ideogram, Runway, xAI,
+    Replicate, ElevenLabs, Nous) reports whether a key is configured and, if
+    so, verifies it with one minimal authenticated API call. Results are
+    cached for 5 minutes; pass ?refresh=true to bypass the cache.
+    """
+    return {"providers": await validate_provider_keys(force_refresh=refresh)}
 
 
 @app.get("/api/agents/claude/status")
