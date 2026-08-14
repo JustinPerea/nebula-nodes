@@ -810,8 +810,48 @@ def get_handler_registry(
             inputs: dict[str, PortValueDict],
             api_keys: dict[str, str],
         ) -> dict[str, Any]:
-            node.params.setdefault("endpoint_id", "fal-ai/kling-video/o3/standard/image-to-video")
-            return await handle_fal_universal(node, inputs, api_keys, emit=emit)
+            # Route to Standard or Pro endpoint based on `model` param.
+            # Both use the same param names (image_url + end_image_url), so the
+            # universal handler's input mapping works for both tiers.
+            model = node.params.get("model", "standard")
+            if str(model).lower() == "pro":
+                endpoint_id = "fal-ai/kling-video/o3/pro/image-to-video"
+            else:
+                endpoint_id = "fal-ai/kling-video/o3/standard/image-to-video"
+            routed_node = _fal_wrapper_node(node, endpoint_id, internal_params=("model",))
+            return await handle_fal_universal(routed_node, inputs, api_keys, emit=emit)
+
+        async def _veo3_flf_handler(
+            node: GraphNode,
+            inputs: dict[str, PortValueDict],
+            api_keys: dict[str, str],
+        ) -> dict[str, Any]:
+            # Veo 3.1 First-Last Frame to Video via FAL. The endpoint expects
+            # first_frame_url + last_frame_url (not image_url/end_image_url),
+            # so we map the `image` and `end_image` input ports manually and
+            # strip them from inputs to prevent the universal handler from
+            # double-mapping to image_url/end_image_url.
+            from handlers.fal_universal import _to_fal_url
+
+            params = dict(node.params)
+            params["endpoint_id"] = "fal-ai/veo3.1/first-last-frame-to-video"
+
+            first_frame = inputs.get("image")
+            if first_frame and first_frame.value:
+                params["first_frame_url"] = _to_fal_url(str(first_frame.value))
+
+            last_frame = inputs.get("end_image")
+            if last_frame and last_frame.value:
+                params["last_frame_url"] = _to_fal_url(str(last_frame.value))
+
+            # Strip image/end_image from inputs so universal handler doesn't
+            # also send image_url/end_image_url (would cause a FAL 422).
+            modified_inputs = {
+                k: v for k, v in inputs.items() if k not in ("image", "end_image")
+            }
+
+            routed_node = node.model_copy(update={"params": params})
+            return await handle_fal_universal(routed_node, modified_inputs, api_keys, emit=emit)
 
         async def _ltx_23_handler(
             node: GraphNode,
@@ -974,6 +1014,7 @@ def get_handler_registry(
         registry["seedance-v1-5"] = _seedance_handler
         registry["topaz-image-upscale"] = _topaz_image_upscale_handler
         registry["kling-o3"] = _kling_o3_handler
+        registry["veo-3-flf"] = _veo3_flf_handler
         registry["ltx-2-3"] = _ltx_23_handler
         registry["grok-imagine-video"] = _grok_video_handler
         registry["higgsfield"] = _higgsfield_handler

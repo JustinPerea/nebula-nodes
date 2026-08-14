@@ -4514,6 +4514,203 @@ async def test_topaz_image_upscale_prompt_forwarded():
     assert payload["creativity"] == 3
 
 
+# ── veo-3-flf ─────────────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_veo3_flf_endpoint_and_port_mapping():
+    """veo-3-flf must inject fal-ai/veo3.1/first-last-frame-to-video and map
+    image→first_frame_url, end_image→last_frame_url (NOT image_url/end_image_url)."""
+    from execution.sync_runner import get_handler_registry
+
+    emit = AsyncMock()
+    registry = get_handler_registry(emit=emit)
+    handler = registry["veo-3-flf"]
+
+    mock_submit, mock_status, mock_result = _make_poll_mocks(
+        {"video": {"url": "https://fal.ai/veo_flf.mp4"}}
+    )
+
+    node = GraphNode(
+        id="test-veo-flf",
+        definitionId="veo-3-flf",
+        params={"aspect_ratio": "16:9", "duration": "8s", "resolution": "1080p"},
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            result = await handler(
+                node,
+                {
+                    "prompt": PortValueDict(type="Text", value="A cinematic transition from day to night"),
+                    "image": PortValueDict(type="Image", value="https://x/start.jpg"),
+                    "end_image": PortValueDict(type="Image", value="https://x/end.jpg"),
+                },
+                {"FAL_KEY": "fal_test"},
+            )
+
+    assert result["video"]["type"] == "Video"
+    assert result["video"]["value"] == "https://fal.ai/veo_flf.mp4"
+    url = mock_client.post.call_args.args[0] if mock_client.post.call_args.args else mock_client.post.call_args[0][0]
+    assert "fal-ai/veo3.1/first-last-frame-to-video" in url
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    # Must use first_frame_url / last_frame_url (not image_url / end_image_url)
+    assert payload["first_frame_url"] == "https://x/start.jpg"
+    assert payload["last_frame_url"] == "https://x/end.jpg"
+    assert "image_url" not in payload
+    assert "end_image_url" not in payload
+    assert payload["prompt"] == "A cinematic transition from day to night"
+    assert payload["aspect_ratio"] == "16:9"
+    assert payload["duration"] == "8s"
+    assert payload["resolution"] == "1080p"
+    # endpoint_id must not be forwarded to FAL
+    assert "endpoint_id" not in payload
+
+
+# ── kling-o3 Pro enum ─────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_kling_o3_standard_endpoint_injection():
+    """kling-o3 with model=standard must inject fal-ai/kling-video/o3/standard/image-to-video
+    and pop model from the FAL payload."""
+    from execution.sync_runner import get_handler_registry
+
+    emit = AsyncMock()
+    registry = get_handler_registry(emit=emit)
+    handler = registry["kling-o3"]
+
+    mock_submit, mock_status, mock_result = _make_poll_mocks(
+        {"video": {"url": "https://fal.ai/kling_o3_std.mp4"}}
+    )
+
+    node = GraphNode(
+        id="test-kling-o3-std",
+        definitionId="kling-o3",
+        params={"model": "standard", "duration": "5", "generate_audio": False},
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            result = await handler(
+                node,
+                {
+                    "image": PortValueDict(type="Image", value="https://x/face.jpg"),
+                    "prompt": PortValueDict(type="Text", value="Slow zoom in"),
+                },
+                {"FAL_KEY": "fal_test"},
+            )
+
+    assert result["video"]["type"] == "Video"
+    url = mock_client.post.call_args.args[0] if mock_client.post.call_args.args else mock_client.post.call_args[0][0]
+    assert "kling-video/o3/standard/image-to-video" in url
+    assert "pro" not in url
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert "model" not in payload
+    assert payload["image_url"] == "https://x/face.jpg"
+    assert payload["prompt"] == "Slow zoom in"
+
+
+@pytest.mark.asyncio
+async def test_kling_o3_pro_endpoint_injection():
+    """kling-o3 with model=pro must inject fal-ai/kling-video/o3/pro/image-to-video
+    and pop model from the FAL payload."""
+    from execution.sync_runner import get_handler_registry
+
+    emit = AsyncMock()
+    registry = get_handler_registry(emit=emit)
+    handler = registry["kling-o3"]
+
+    mock_submit, mock_status, mock_result = _make_poll_mocks(
+        {"video": {"url": "https://fal.ai/kling_o3_pro.mp4"}}
+    )
+
+    node = GraphNode(
+        id="test-kling-o3-pro",
+        definitionId="kling-o3",
+        params={"model": "pro", "duration": "10", "generate_audio": True, "negative_prompt": "blur", "cfg_scale": 0.5},
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            await handler(
+                node,
+                {
+                    "image": PortValueDict(type="Image", value="https://x/face.jpg"),
+                    "end_image": PortValueDict(type="Image", value="https://x/end.jpg"),
+                    "prompt": PortValueDict(type="Text", value="Cinematic dolly"),
+                },
+                {"FAL_KEY": "fal_test"},
+            )
+
+    url = mock_client.post.call_args.args[0] if mock_client.post.call_args.args else mock_client.post.call_args[0][0]
+    assert "kling-video/o3/pro/image-to-video" in url
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert "model" not in payload
+    assert payload["image_url"] == "https://x/face.jpg"
+    assert payload["end_image_url"] == "https://x/end.jpg"
+    assert payload["negative_prompt"] == "blur"
+    assert payload["cfg_scale"] == 0.5
+
+
+@pytest.mark.asyncio
+async def test_kling_o3_default_model_is_standard():
+    """kling-o3 with no model param defaults to standard endpoint."""
+    from execution.sync_runner import get_handler_registry
+
+    emit = AsyncMock()
+    registry = get_handler_registry(emit=emit)
+    handler = registry["kling-o3"]
+
+    mock_submit, mock_status, mock_result = _make_poll_mocks(
+        {"video": {"url": "https://fal.ai/kling_o3_default.mp4"}}
+    )
+
+    node = GraphNode(
+        id="test-kling-o3-default",
+        definitionId="kling-o3",
+        params={"duration": "5"},
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            await handler(
+                node,
+                {"image": PortValueDict(type="Image", value="https://x/face.jpg")},
+                {"FAL_KEY": "fal_test"},
+            )
+
+    url = mock_client.post.call_args.args[0] if mock_client.post.call_args.args else mock_client.post.call_args[0][0]
+    assert "kling-video/o3/standard/image-to-video" in url
+    assert "pro" not in url
+
+
 # ── pixverse-v4-5 ─────────────────────────────────────────────────────────────
 
 @pytest.mark.asyncio

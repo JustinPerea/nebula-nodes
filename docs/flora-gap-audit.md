@@ -44,9 +44,9 @@ Audit of what Flora (app.flora.ai, 369 models via MCP `client.models.list`) offe
 
 | Flora has | Notes |
 |---|---|
-| Kling depth: 2.5/2.6 Pro, 3.0 **Pro** (+Turbo), O1 family, O3 **Pro**, O1/O3 **Edit** + **Reference** | Nebula: Kling 2.1, 3.0 Standard t2v, O3 Standard i2v only. |
+| Kling depth: 2.5/2.6 Pro, 3.0 **Pro** (+Turbo), O1 family, O3 **Pro**, O1/O3 **Edit** + **Reference** | **Partially closed 2026-08-14:** `kling-o3` now has Pro model enum (O3 Pro i2v). Kling 2.5/2.6 Pro, v3 Pro, O1, Edit, Reference, and Motion Control remain. |
 | Kling **Motion Control** (2.6 / 3.0) and Kling Avatar v2 Pro | Motion-driven and avatar generation. |
-| **First/last-frame (f2v) breadth**: Kling, Luma Ray 2, Seedance, Veo 3.1 Frames, Hailuo 02 | Partially covered: current Nebula has `seedance-2-i2v` with optional End Frame and `veo-3` with Last Frame. Dedicated Kling/Luma/Hailuo FLF coverage and loop QC remain gaps. |
+| **First/last-frame (f2v) breadth**: Kling, Luma Ray 2, Seedance, Veo 3.1 Frames, Hailuo 02 | **Further closed 2026-08-14:** Added `veo-3-flf` (dedicated Veo 3.1 first-last-frame endpoint) and extended `kling-o3` with Pro model enum (O3 Pro supports end_image_url). Combined with existing `seedance-2-i2v` end frame, `kling-v2-1` tail image, `kling-o3` end image, and `veo-3` last frame. Hailuo FLF and loop QC remain. |
 | Veo 3.1 **Ingredients** (r2v), Frames, Fast, Lite | Nebula has base Veo 3.1 t2v/i2v only. |
 | Sora 2 **Pro** | Nebula's Sora 2 node sunsets Sep '26. |
 | WAN 2.5 / 2.7, WAN 2.2 Animate **Move/Replace**, WAN 2.6 audio-to-video | Nebula has WAN 2.6 t2v/i2v/r2v. |
@@ -86,6 +86,8 @@ Add entries as gaps are hit in real Flora work. Format: date — model/capabilit
 | 2026-07-25 | Lipsync 2 Pro / Kling Avatar v2 Pro | Needed for talking-head UGC beats (Pheme/Nari) | High |
 | 2026-08-14 | Lipsync stack partially closed | `sync-lipsync` node added (FAL): Sync 3, Sync Lipsync v2 Pro, VEED Lipsync via model enum. Fabric 1.0, Aurora, Kling Avatar v2 Pro still open | High → Medium |
 | 2026-07-25 | First/last-frame video nodes | **Partially closed 2026-08-10:** Seedance 2 I2V and Veo 3.1 now expose end/last frames; provider breadth and loop QC remain | Medium |
+| 2026-08-14 | f2v video further closed | Added veo-3-flf (dedicated Veo 3.1 FLF endpoint) + extended kling-o3 with Pro enum (O3 Pro supports end_image_url). Hailuo FLF and loop QC remain | Medium → Low |
+| 2026-08-14 | Kling O3 Pro tier added | kling-o3 model enum now routes to o3/pro/image-to-video (1080p, 3-15s, negative_prompt, cfg_scale). v2.5/2.6 Pro, v3 Pro, Edit, Reference, Motion Control still open | Medium |
 | 2026-08-10 | Qwen Image Edit 2511 Angles as a first-class typed node | Flora exposes numeric camera-angle controls but its public one-off generation contract omits the required source-image binding; needed for agent-runnable single-view camera edits | High |
 | 2026-08-10 | Semantic multi-reference roles and precedence | Nari hero needed separate identity, geometry, wardrobe, composition, environment, and lighting authorities; generic image arrays do not express those roles safely | High |
 | 2026-08-10 | Integrated-scene / cutout QC | A technically stable Nari loop still read as a pasted cutout because perspective, light field, atmosphere, and lens response were not scored | High |
