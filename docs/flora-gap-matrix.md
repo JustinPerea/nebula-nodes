@@ -18,9 +18,10 @@ in `.claude/skills/fal/skills/`. "Blocked" means no BYOK-reachable API endpoint 
 | Already closed (previous sessions) | 12 |
 | Closed in Wave 1 | 6 |
 | Closed in Wave 2 | 5 |
-| BYOK-reachable (remaining) | 9 |
+| Closed in Wave 3 | 4 |
+| BYOK-reachable (remaining) | 13 |
 | Blocked (no BYOK path) | 13 |
-| Current Nebula node count | 151 |
+| Current Nebula node count | 153 |
 
 ## Already Closed (previous sessions)
 
@@ -49,22 +50,17 @@ in `.claude/skills/fal/skills/`. "Blocked" means no BYOK-reachable API endpoint 
 | Topaz Video Upscale | `topaz-video-upscale` node | New node (transform), 11 model options, full enhancement params. |
 | Grok Imagine Image (t2i) | `grok-imagine-image` node | New node (image-gen), FAL `xai/grok-imagine-image`, up to 2K resolution. |
 | Grok Imagine Image Edit | `grok-imagine-image-edit` node | New node (image-gen), FAL `xai/grok-imagine-image/edit`, `images`→`image_urls` mapping. |
+| Seedream 5.0 Lite | `seedream-4-5` node | Enum expansion (4.5/5.0 Lite), routes to v5/lite endpoint |
+| Sora 2 Image-to-Video | `sora-2-i2v` node | New node (video-gen), FAL `fal-ai/sora-2/image-to-video` |
+| Flux 2 Flash | `flux-2-pro` node | Enum expansion (Pro/Max/Flash), routes to `fal-ai/flux-2/flash` |
+| Real-ESRGAN upscale | `esrgan-upscale` node | New node (transform), 6 model variants, face enhancement |
 
 ## BYOK-Reachable Gaps (implementable)
-
-### MEDIUM Priority
-
-| # | Flora model | FAL slug (verified) | Implementation shape | Priority |
-|---|---|---|---|---|
-| 12 | Seedream 5.0 Lite | `fal-ai/bytedance/seedream/v5/lite/text-to-image` | Enum expansion on `seedream-4-5` (add model enum: 4.5/5.0 Lite). | MEDIUM |
-| 13 | Sora 2 Image-to-Video | `fal-ai/sora-2/image-to-video` | New node `sora-2-i2v` or enum expansion on `sora-2` to support i2v mode. | MEDIUM |
 
 ### LOW Priority
 
 | # | Flora model | FAL slug (verified) | Implementation shape | Priority |
 |---|---|---|---|---|
-| 14 | Flux 2 Flash | `fal-ai/flux-2/flash` | Enum expansion on `flux-2-pro` (add Flash option) | LOW |
-| 15 | Real-ESRGAN upscale | `fal-ai/esrgan` | New node `esrgan-upscale` (transform) | LOW |
 | 16 | Recraft Crisp Upscale | `fal-ai/recraft/upscale/crisp` | New node `recraft-crisp-upscale` (transform) | LOW |
 | 17 | Pika 2.2 I2V | `fal-ai/pika/v2.2/image-to-video` | New node `pika-i2v` (video-gen) | LOW |
 | 18 | HunyuanVideo T2V | `fal-ai/hunyuan-video` | New node `hunyuan-video` (video-gen) | LOW |
@@ -171,11 +167,11 @@ These are architectural/platform-level gaps from the agent art-direction-frictio
 8. ✅ New node `grok-imagine-image` — Grok Imagine Image t2i via FAL (up to 2K resolution).
 9. ✅ New node `grok-imagine-image-edit` — Grok Imagine Image Edit i2i via FAL.
 
-### Wave 3 (MEDIUM + LOW, max 4 features)
-9. Enum expansion on `seedream-4-5` — add Seedream 5.0 Lite.
-10. New node `sora-2-i2v` — Sora 2 Image-to-Video.
-11. Enum expansion on `flux-2-pro` — add Flash option (combined with #4 or separate).
-12. New node `esrgan-upscale` — Real-ESRGAN.
+### Wave 3 ✅ COMPLETE (committed 2692bf7)
+10. ✅ Enum expansion on `seedream-4-5` — add Seedream 5.0 Lite model enum.
+11. ✅ New node `sora-2-i2v` — Sora 2 Image-to-Video.
+12. ✅ Enum expansion on `flux-2-pro` — add FLUX 2 Flash model enum.
+13. ✅ New node `esrgan-upscale` — Real-ESRGAN (6 model variants, face enhancement).
 
 ### Wave 4+ (LOW priority, remaining)
 13-28. Remaining LOW priority items from the table above.
