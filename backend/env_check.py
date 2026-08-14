@@ -10,9 +10,13 @@ Two jobs:
 1. ``sanitize_pythonpath()`` — strip PYTHONPATH entries that positively
    target a different CPython: either a ``pythonX.Y`` path segment that
    doesn't match the running interpreter, or compiled extensions
-   (``*.cpython-XY-*``) tagged for a different ABI. Stripped entries are
-   also evicted from ``sys.path`` (the interpreter already copied PYTHONPATH
-   there at startup) and a warning lists what was removed.
+   (``*.cpython-XY-*``) tagged for a different ABI. The extension scan
+   walks each entry's directory tree down to a bounded depth (4 levels),
+   so nested package layouts such as
+   ``site-packages/numpy/core/_multiarray_umath.cpython-311-*.so`` are
+   detected. Stripped entries are also evicted from ``sys.path`` (the
+   interpreter already copied PYTHONPATH there at startup) and a warning
+   lists what was removed.
 2. ``verify_runtime()`` — fail fast with a clear message when
    ``sys.version_info`` is below the minimum or ``sys.executable`` is
    missing/invalid.
@@ -26,12 +30,19 @@ import logging
 import os
 import re
 import sys
+from collections.abc import Iterator
 from pathlib import Path
 from typing import MutableMapping
 
 logger = logging.getLogger("nebula.env_check")
 
 MIN_PYTHON = (3, 12)
+
+# How far below a PYTHONPATH entry the compiled-extension scan descends.
+# Depth 1 = files directly inside the entry; depth 4 covers common nested
+# package layouts (e.g. site-packages/numpy/core/_multiarray_umath.*.so is
+# depth 3) without walking huge site-packages trees unboundedly.
+_MAX_EXTENSION_SCAN_DEPTH = 4
 
 # Versioned interpreter segments: POSIX "python3.11" and Windows "Python311".
 _VERSION_DOT_RE = re.compile(r"python(\d+)\.(\d+)", re.IGNORECASE)
@@ -45,6 +56,37 @@ __all__ = [
     "verify_runtime",
     "run_startup_checks",
 ]
+
+
+def _iter_compiled_artifacts(
+    root: Path, max_depth: int = _MAX_EXTENSION_SCAN_DEPTH
+) -> Iterator[Path]:
+    """Yield files under ``root`` whose names carry a CPython ABI tag
+    (``*.cpython-*``), walking at most ``max_depth`` levels below ``root``.
+
+    Depth 1 is files directly inside ``root``. The walk is bounded — it
+    never descends into directories at ``max_depth`` or deeper — and does
+    not follow symlinked directories, so a huge or cyclic tree cannot turn
+    startup sanitization into an unbounded scan. Unreadable directories
+    yield nothing (no evidence of incompatibility).
+    """
+    stack: list[tuple[Path, int]] = [(root, 0)]
+    while stack:
+        directory, depth = stack.pop()
+        try:
+            with os.scandir(directory) as it:
+                entries = list(it)
+        except OSError:
+            continue  # unreadable → no evidence from this subtree
+        for item in entries:
+            try:
+                if item.is_dir(follow_symlinks=False):
+                    if depth + 1 < max_depth:
+                        stack.append((Path(item.path), depth + 1))
+                elif ".cpython-" in item.name:
+                    yield Path(item.path)
+            except OSError:
+                continue
 
 
 def _incompatibility_reason(entry: str, version: tuple[int, int]) -> str | None:
@@ -70,10 +112,9 @@ def _incompatibility_reason(entry: str, version: tuple[int, int]) -> str | None:
     try:
         if not path.is_dir():
             return None
-        candidates = list(path.glob("*.cpython-*")) + list(path.glob("*/*.cpython-*"))
     except OSError:
         return None  # unreadable → no evidence, leave it alone
-    for candidate in candidates:
+    for candidate in _iter_compiled_artifacts(path):
         tag = _ABI_TAG_RE.search(candidate.name)
         if tag is None:
             continue

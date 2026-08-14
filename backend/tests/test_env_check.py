@@ -45,6 +45,18 @@ def _compatible_dir(tmp_path: Path) -> Path:
     return d
 
 
+def _nested_foreign_site_packages(tmp_path: Path) -> Path:
+    """Fake site-packages with a foreign compiled extension three levels
+    down — the numpy layout from the field:
+    ``site-packages/numpy/core/_multiarray_umath.cpython-311-*.so``.
+    The old root-plus-one-level scan could not see this deep."""
+    site = tmp_path / "deep-site-packages"
+    core = site / "numpy" / "core"
+    core.mkdir(parents=True)
+    (core / f"_multiarray_umath.{OTHER_TAG}-x86_64-linux-gnu.so").write_bytes(b"")
+    return site
+
+
 # ---------------------------------------------------------------------------
 # Stripping behavior
 # ---------------------------------------------------------------------------
@@ -114,6 +126,32 @@ def test_removes_stripped_entries_from_sys_path(tmp_path, monkeypatch):
     assert os.environ.get("PYTHONPATH") is None
 
 
+def test_strips_entry_with_deeply_nested_foreign_extension(tmp_path, caplog):
+    """A foreign compiled extension nested more than two levels below the
+    PYTHONPATH entry (e.g. site-packages/numpy/core/_multiarray_umath.
+    cpython-311-*.so) must still be detected and the entry stripped."""
+    site = _nested_foreign_site_packages(tmp_path)
+    env = {"PYTHONPATH": str(site)}
+    with caplog.at_level(logging.WARNING, logger="nebula.env_check"):
+        stripped = env_check.sanitize_pythonpath(environ=env, version=CURRENT)
+
+    assert stripped == [str(site)]
+    assert "PYTHONPATH" not in env  # last entry stripped → variable removed
+    assert str(site) in caplog.text
+
+
+def test_strips_entry_with_foreign_extension_at_max_depth(tmp_path):
+    """Detection reaches the bounded maximum of four levels below the entry."""
+    site = tmp_path / "depth-four"
+    target = site / "a" / "b" / "c"
+    target.mkdir(parents=True)
+    (target / f"_ext.{OTHER_TAG}-darwin.so").write_bytes(b"")
+
+    env = {"PYTHONPATH": str(site)}
+    stripped = env_check.sanitize_pythonpath(environ=env, version=CURRENT)
+    assert stripped == [str(site)]
+
+
 # ---------------------------------------------------------------------------
 # Preservation behavior
 # ---------------------------------------------------------------------------
@@ -154,6 +192,41 @@ def test_unreadable_path_is_not_stripped(tmp_path):
     env = {"PYTHONPATH": str(missing)}
     assert env_check.sanitize_pythonpath(environ=env, version=CURRENT) == []
     assert env["PYTHONPATH"] == str(missing)
+
+
+def test_preserves_entry_with_only_compatible_nested_extensions(tmp_path, caplog):
+    """Nested compiled extensions built for the *running* interpreter must
+    not cause a strip, even several levels deep."""
+    site = tmp_path / "compatible-deep"
+    target = site / "numpy" / "core"
+    target.mkdir(parents=True)
+    (target / f"_multiarray_umath.{CURRENT_TAG}-x86_64-linux-gnu.so").write_bytes(b"")
+
+    env = {"PYTHONPATH": str(site)}
+    with caplog.at_level(logging.WARNING, logger="nebula.env_check"):
+        stripped = env_check.sanitize_pythonpath(environ=env, version=CURRENT)
+
+    assert stripped == []
+    assert env["PYTHONPATH"] == str(site)
+    assert caplog.text == ""
+
+
+def test_preserves_entry_beyond_max_scan_depth(tmp_path, caplog):
+    """The scan is bounded at four levels: a foreign extension five levels
+    down is intentionally out of scope (no unbounded walks of huge trees),
+    so the entry is preserved."""
+    site = tmp_path / "too-deep"
+    target = site / "a" / "b" / "c" / "d"
+    target.mkdir(parents=True)
+    (target / f"_ext.{OTHER_TAG}-darwin.so").write_bytes(b"")
+
+    env = {"PYTHONPATH": str(site)}
+    with caplog.at_level(logging.WARNING, logger="nebula.env_check"):
+        stripped = env_check.sanitize_pythonpath(environ=env, version=CURRENT)
+
+    assert stripped == []
+    assert env["PYTHONPATH"] == str(site)
+    assert caplog.text == ""
 
 
 # ---------------------------------------------------------------------------
