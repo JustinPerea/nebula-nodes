@@ -4379,6 +4379,141 @@ async def test_sync_lipsync_default_model_is_v3():
     assert payload["sync_mode"] == "remap"
 
 
+# ── topaz-image-upscale ──────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_topaz_image_upscale_endpoint_injection():
+    """topaz-image-upscale must inject fal-ai/topaz/upscale/image and forward
+    face_enhancement + model params while mapping image input to image_url."""
+    from execution.sync_runner import get_handler_registry
+
+    emit = AsyncMock()
+    registry = get_handler_registry(emit=emit)
+    handler = registry["topaz-image-upscale"]
+
+    mock_submit, mock_status, mock_result = _make_poll_mocks(
+        {"image": {"url": "https://fal.ai/topaz_out.jpg"}}
+    )
+
+    node = GraphNode(
+        id="test-topaz",
+        definitionId="topaz-image-upscale",
+        params={"model": "High Fidelity V2", "face_enhancement": True, "face_enhancement_strength": 0.9, "upscale_factor": 4.0},
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            result = await handler(
+                node,
+                {"image": PortValueDict(type="Image", value="https://x/photo.jpg")},
+                {"FAL_KEY": "fal_test"},
+            )
+
+    assert result["image"]["type"] == "Image"
+    assert result["image"]["value"] == "https://fal.ai/topaz_out.jpg"
+    url = mock_client.post.call_args.args[0] if mock_client.post.call_args.args else mock_client.post.call_args[0][0]
+    assert "fal-ai/topaz/upscale/image" in url
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert payload["image_url"] == "https://x/photo.jpg"
+    assert payload["model"] == "High Fidelity V2"
+    assert payload["face_enhancement"] is True
+    assert payload["face_enhancement_strength"] == 0.9
+    assert payload["upscale_factor"] == 4.0
+
+
+@pytest.mark.asyncio
+async def test_topaz_image_upscale_default_model():
+    """topaz-image-upscale with no model param must still inject the endpoint and
+    use the default model from node_definitions (Standard V2)."""
+    from execution.sync_runner import get_handler_registry
+
+    emit = AsyncMock()
+    registry = get_handler_registry(emit=emit)
+    handler = registry["topaz-image-upscale"]
+
+    mock_submit, mock_status, mock_result = _make_poll_mocks(
+        {"image": {"url": "https://fal.ai/topaz_default.jpg"}}
+    )
+
+    node = GraphNode(
+        id="test-topaz-default",
+        definitionId="topaz-image-upscale",
+        params={},
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            await handler(
+                node,
+                {"image": PortValueDict(type="Image", value="https://x/photo.jpg")},
+                {"FAL_KEY": "fal_test"},
+            )
+
+    url = mock_client.post.call_args.args[0] if mock_client.post.call_args.args else mock_client.post.call_args[0][0]
+    assert "fal-ai/topaz/upscale/image" in url
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert payload["image_url"] == "https://x/photo.jpg"
+    # endpoint_id should not be forwarded to FAL
+    assert "endpoint_id" not in payload
+
+
+@pytest.mark.asyncio
+async def test_topaz_image_upscale_prompt_forwarded():
+    """topaz-image-upscale must forward the optional prompt input (used by Redefine model)."""
+    from execution.sync_runner import get_handler_registry
+
+    emit = AsyncMock()
+    registry = get_handler_registry(emit=emit)
+    handler = registry["topaz-image-upscale"]
+
+    mock_submit, mock_status, mock_result = _make_poll_mocks(
+        {"image": {"url": "https://fal.ai/topaz_redefine.jpg"}}
+    )
+
+    node = GraphNode(
+        id="test-topaz-prompt",
+        definitionId="topaz-image-upscale",
+        params={"model": "Redefine", "creativity": 3},
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            await handler(
+                node,
+                {
+                    "image": PortValueDict(type="Image", value="https://x/photo.jpg"),
+                    "prompt": PortValueDict(type="Text", value="fine skin texture, realistic pores"),
+                },
+                {"FAL_KEY": "fal_test"},
+            )
+
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert payload["prompt"] == "fine skin texture, realistic pores"
+    assert payload["model"] == "Redefine"
+    assert payload["creativity"] == 3
+
+
 # ── pixverse-v4-5 ─────────────────────────────────────────────────────────────
 
 @pytest.mark.asyncio

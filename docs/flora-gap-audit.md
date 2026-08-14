@@ -26,7 +26,7 @@ Audit of what Flora (app.flora.ai, 369 models via MCP `client.models.list`) offe
 
 | Flora has | Notes / why it matters |
 |---|---|
-| **Enhancor V1/V3/V4** (i2i skin realism) | Flora's Seedance pipeline uses these for de-AI-ing skin; big for UGC realism. No Nebula equivalent. |
+| **Enhancor V1/V3/V4** (i2i skin realism) | **Blocked 2026-08-14:** No BYOK-reachable API (not on FAL, no direct API documented). Closest FAL substitute `topaz-image-upscale` added — has face_enhancement + face_enhancement_strength for skin-realism use case. |
 | Qwen Image 2.0 / Edit / Edit Plus / Edit 2511 Angles | Strong open-weights editing family, incl. camera-angle re-pose. |
 | Riverflow 2.0 Fast/Pro, 2.5 Pro (+ Pro Inpainting) | |
 | Seedream 5 Pro / 5.0 Lite | Nebula tops out at Seedream 4.5. |
@@ -82,6 +82,7 @@ Add entries as gaps are hit in real Flora work. Format: date — model/capabilit
 | Date | Gap | Context | Priority |
 |---|---|---|---|
 | 2026-07-25 | Enhancor V3/V4 skin realism | Nari character-lock pipeline uses Seedance-Enhancor variants in Flora | High |
+| 2026-08-14 | Enhancor blocked, Topaz substitute added | No BYOK API for Enhancor (not on FAL, no direct API); added `topaz-image-upscale` (FAL) as closest substitute with face_enhancement | High → Blocked |
 | 2026-07-25 | Lipsync 2 Pro / Kling Avatar v2 Pro | Needed for talking-head UGC beats (Pheme/Nari) | High |
 | 2026-08-14 | Lipsync stack partially closed | `sync-lipsync` node added (FAL): Sync 3, Sync Lipsync v2 Pro, VEED Lipsync via model enum. Fabric 1.0, Aurora, Kling Avatar v2 Pro still open | High → Medium |
 | 2026-07-25 | First/last-frame video nodes | **Partially closed 2026-08-10:** Seedance 2 I2V and Veo 3.1 now expose end/last frames; provider breadth and loop QC remain | Medium |
