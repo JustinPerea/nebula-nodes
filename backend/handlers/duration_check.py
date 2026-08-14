@@ -94,11 +94,14 @@ async def handle_duration_check(
 
     probe = await ffprobe_video(source)
 
-    # Round to milliseconds before comparing so the report and the match flag
-    # can never disagree at the tolerance boundary.
+    # The match decision uses the raw, unrounded delta: rounding the landed
+    # duration first could pull a value just past the tolerance boundary back
+    # inside it (e.g. 5.5004s rounds to 5.5s and would falsely match a 5.0s
+    # request). Rounding is for the human-readable report only.
+    match = abs(probe.duration - requested) <= MATCH_TOLERANCE_SECONDS
+
     landed = round(probe.duration, 3)
-    delta = round(landed - requested, 3)
-    match = abs(delta) <= MATCH_TOLERANCE_SECONDS
+    delta = round(probe.duration - requested, 3)
 
     report = json.dumps(
         {

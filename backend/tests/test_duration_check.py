@@ -118,6 +118,63 @@ async def test_tolerance_boundary_is_inclusive(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_unrounded_boundary_value_matches(tmp_path: Path) -> None:
+    """Boundary case from the scrutiny fix: requested 5.0s, landed 5.49s.
+
+    The unrounded delta is 0.49s < 0.5s → match 'true'. Display rounding of
+    the landed value (e.g. to 5.5) must not leak into the match decision.
+    """
+    from handlers.duration_check import handle_duration_check
+
+    src = _make_video(tmp_path)
+    inputs = {"video": PortValueDict(type="Video", value=str(src))}
+
+    with patch(
+        "handlers.duration_check.ffprobe_video",
+        AsyncMock(return_value=_probe(5.49)),
+    ):
+        result = await handle_duration_check(
+            _node({"requested_duration": 5.0}), inputs, {}, emit=None
+        )
+
+    assert result["match"] == {"type": "Text", "value": "true"}
+    report = json.loads(result["text"]["value"])
+    assert report["match"] is True
+    assert report["landed_duration"] == pytest.approx(5.49)
+    assert report["delta_seconds"] == pytest.approx(0.49)
+
+
+@pytest.mark.asyncio
+async def test_match_decision_uses_unrounded_duration(tmp_path: Path) -> None:
+    """Regression test: rounding the landed duration must not flip the match.
+
+    Landed 5.5004s vs requested 5.0s — the raw delta (0.5004s) exceeds the
+    0.5s tolerance, so match must be 'false'. Rounding the landed duration to
+    milliseconds first (5.5) would shrink the delta to 0.5 and falsely match.
+    The text report still shows the rounded values for readability.
+    """
+    from handlers.duration_check import handle_duration_check
+
+    src = _make_video(tmp_path)
+    inputs = {"video": PortValueDict(type="Video", value=str(src))}
+
+    with patch(
+        "handlers.duration_check.ffprobe_video",
+        AsyncMock(return_value=_probe(5.5004)),
+    ):
+        result = await handle_duration_check(
+            _node({"requested_duration": 5.0}), inputs, {}, emit=None
+        )
+
+    assert result["match"] == {"type": "Text", "value": "false"}
+    report = json.loads(result["text"]["value"])
+    assert report["match"] is False
+    # Report values are still rounded to milliseconds for readability.
+    assert report["landed_duration"] == pytest.approx(5.5)
+    assert report["delta_seconds"] == pytest.approx(0.5)
+
+
+@pytest.mark.asyncio
 async def test_requested_duration_input_port_overrides_param(tmp_path: Path) -> None:
     """A connected requested_duration port wins over the node param."""
     from handlers.duration_check import handle_duration_check
