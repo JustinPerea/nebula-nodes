@@ -1200,9 +1200,11 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       const nodeType =
         definitionId === 'reroute'
           ? 'reroute-node'
-          : definitionId === 'nebula-moodboard'
-            ? 'moodboardNode'
-            : 'model-node';
+          : definitionId === 'camera-rig'
+            ? 'cameraRigNode'
+            : definitionId === 'nebula-moodboard'
+              ? 'moodboardNode'
+              : 'model-node';
       let keyStatus: 'missing' | undefined;
       const { settingsCache } = useUIStore.getState();
       if (settingsCache.loaded && definition.envKeyName) {

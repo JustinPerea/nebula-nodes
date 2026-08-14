@@ -2000,6 +2000,33 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     params: [],
   },
 
+  'camera-rig': {
+    id: 'camera-rig',
+    displayName: 'Camera Rig',
+    category: 'utility',
+    apiProvider: 'utility',
+    apiEndpoint: '',
+    envKeyName: [],
+    executionPattern: 'sync',
+    // No inputs — every value is a numeric slider param, packed into the
+    // CameraRigBundle emitted on the camera_rig output port.
+    inputPorts: [],
+    outputPorts: [
+      { id: 'camera_rig', label: 'Camera Rig', dataType: 'CameraRig', required: false },
+    ],
+    params: [
+      { key: 'height', label: 'Height (m)', type: 'float', required: false, default: 1.7, min: 0.1, max: 10, step: 0.1 },
+      { key: 'pitch', label: 'Pitch (°)', type: 'float', required: false, default: 0, min: -90, max: 90, step: 1 },
+      { key: 'yaw', label: 'Yaw (°)', type: 'float', required: false, default: 0, min: 0, max: 360, step: 1 },
+      { key: 'roll', label: 'Roll (°)', type: 'float', required: false, default: 0, min: -45, max: 45, step: 1 },
+      { key: 'focalLength', label: 'Focal Length (mm)', type: 'float', required: false, default: 35, min: 10, max: 200, step: 1 },
+      { key: 'subjectDistance', label: 'Subject Distance (m)', type: 'float', required: false, default: 3, min: 0.5, max: 50, step: 0.1 },
+      { key: 'focusDistance', label: 'Focus Distance (m)', type: 'float', required: false, default: 3, min: 0.5, max: 100, step: 0.1 },
+      { key: 'subjectScreenX', label: 'Subject Screen X', type: 'float', required: false, default: 0.5, min: 0, max: 1, step: 0.01 },
+      { key: 'subjectScreenY', label: 'Subject Screen Y', type: 'float', required: false, default: 0.5, min: 0, max: 1, step: 0.01 },
+    ],
+  },
+
   'combine-text': {
     id: 'combine-text',
     displayName: 'Combine Text',

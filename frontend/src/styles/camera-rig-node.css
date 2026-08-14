@@ -1,0 +1,146 @@
+/* CameraRigNode canvas card. Imported eagerly by CameraRigNode.tsx so the node
+ * is styled the moment it renders. Mirrors the CharacterNode card in
+ * character-node.css. Scoped to the Slava skin (Default + Hermes are deprecated). */
+
+body.app-slava-restraint .camera-rig-node {
+  width: 232px;
+  padding: 10px 14px 12px;
+  background: var(--sr-glass);
+  border: 1px solid var(--sr-edge);
+  border-radius: var(--sr-radius-node, 6px);
+  color: var(--sr-ink);
+  font-size: 13px;
+  cursor: default;
+  position: relative;
+}
+
+body.app-slava-restraint .camera-rig-node--selected {
+  border-color: var(--sr-accent);
+}
+
+body.app-slava-restraint .camera-rig-node__title {
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  margin-bottom: 8px;
+}
+
+body.app-slava-restraint .camera-rig-node__diagram {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  border: 1px solid var(--sr-edge);
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.18);
+  padding: 4px;
+}
+
+body.app-slava-restraint .camera-rig-node__diagram .camera-rig-node__svg:first-child {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+body.app-slava-restraint .camera-rig-node__diagram .camera-rig-node__svg:last-child {
+  flex: 0 0 64px;
+}
+
+body.app-slava-restraint .camera-rig-node__svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+body.app-slava-restraint .camera-rig-node__ground {
+  stroke: var(--sr-ink-meta);
+  stroke-width: 1;
+}
+
+body.app-slava-restraint .camera-rig-node__frustum {
+  fill: rgba(100, 181, 246, 0.12);
+  stroke: rgba(100, 181, 246, 0.45);
+  stroke-width: 1;
+}
+
+body.app-slava-restraint .camera-rig-node__axis {
+  stroke: var(--sr-ink-meta);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+}
+
+body.app-slava-restraint .camera-rig-node__view {
+  stroke: #64b5f6;
+  stroke-width: 1.5;
+}
+
+body.app-slava-restraint .camera-rig-node__subject {
+  stroke: var(--sr-ink);
+  stroke-width: 1.5;
+  fill: none;
+}
+
+body.app-slava-restraint .camera-rig-node__camera {
+  fill: var(--sr-glass);
+  stroke: var(--sr-ink);
+  stroke-width: 1;
+}
+
+body.app-slava-restraint .camera-rig-node__tripod {
+  stroke: var(--sr-ink-meta);
+  stroke-width: 1;
+}
+
+body.app-slava-restraint .camera-rig-node__frame {
+  fill: rgba(0, 0, 0, 0.25);
+  stroke: var(--sr-edge);
+  stroke-width: 1;
+}
+
+body.app-slava-restraint .camera-rig-node__guide {
+  stroke: var(--sr-ink-meta);
+  stroke-width: 0.5;
+  opacity: 0.5;
+}
+
+body.app-slava-restraint .camera-rig-node__reticle {
+  stroke: #64b5f6;
+  stroke-width: 1;
+  fill: none;
+}
+
+body.app-slava-restraint .camera-rig-node__sliders {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  column-gap: 10px;
+  row-gap: 4px;
+}
+
+body.app-slava-restraint .camera-rig-node__slider {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+body.app-slava-restraint .camera-rig-node__slider-label {
+  display: flex;
+  justify-content: space-between;
+  gap: 4px;
+  color: var(--sr-ink-meta);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+body.app-slava-restraint .camera-rig-node__slider-value {
+  color: var(--sr-ink);
+  font-variant-numeric: tabular-nums;
+  text-transform: none;
+}
+
+body.app-slava-restraint .camera-rig-node__slider input[type='range'] {
+  width: 100%;
+  margin: 2px 0 0;
+  accent-color: var(--sr-accent);
+  cursor: pointer;
+}

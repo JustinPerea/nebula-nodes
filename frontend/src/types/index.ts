@@ -9,6 +9,7 @@ export type PortDataType =
   | 'Mesh'
   | 'Character'
   | 'Moodboard'
+  | 'CameraRig'
   | 'Any';
 
 export type NodeCategory =
@@ -202,6 +203,21 @@ export interface CharacterBundle {
   /** Per-use consistency strength; overrides consistencyStrength when set.
    *  null/absent = inherit consistencyStrength. */
   strengthOverride?: number | null;
+}
+
+/** Typed bundle emitted by the camera-rig utility node on its CameraRig port.
+ *  Camera geometry as inspectable numeric values, so downstream generation/edit
+ *  nodes can ground camera direction in data instead of prompt prose. */
+export interface CameraRigBundle {
+  height: number;          // camera height in meters
+  pitch: number;           // degrees, -90 (straight down) to 90 (straight up)
+  yaw: number;             // degrees, 0 to 360 around the subject
+  roll: number;            // degrees, -45 to 45 (Dutch angle)
+  focalLength: number;     // mm, 10 to 200
+  subjectDistance: number; // meters, 0.5 to 50
+  focusDistance: number;   // meters, 0.5 to 100
+  subjectScreenX: number;  // 0 to 1 (normalized subject position in frame)
+  subjectScreenY: number;  // 0 to 1 (normalized subject position in frame)
 }
 
 export interface MoodboardImage {

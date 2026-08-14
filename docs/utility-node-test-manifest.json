@@ -115,6 +115,11 @@
       "id": "mask-painter",
       "backend": "native",
       "browser": "execute"
+    },
+    {
+      "id": "camera-rig",
+      "backend": "mocked-handler",
+      "browser": "mocked-event"
     }
   ]
 }

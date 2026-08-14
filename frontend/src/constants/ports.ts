@@ -16,7 +16,7 @@ export const CATEGORY_COLORS: Record<string, string> = {
 };
 
 export const PORT_DATA_TYPES: PortDataType[] = [
-  'Text', 'Image', 'Video', 'Audio', 'Mask', 'Array', 'SVG', 'Mesh', 'Character', 'Moodboard', 'Any',
+  'Text', 'Image', 'Video', 'Audio', 'Mask', 'Array', 'SVG', 'Mesh', 'Character', 'Moodboard', 'CameraRig', 'Any',
 ];
 
 /** Stable output-port id for a cinema-scene shot. Used by CinemaSceneNode's
