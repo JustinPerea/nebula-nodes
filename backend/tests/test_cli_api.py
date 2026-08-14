@@ -1038,3 +1038,282 @@ class TestQuickImageInputParams:
         ]
         assert len(text_nodes) == 1
         assert text_nodes[0].params == {"value": "a red balloon"}
+
+
+class TestQuickMultiImageInput:
+    """/api/quick array inputs: a JSON array targeting an Image-typed port
+    (a single ``image`` port or an ``images`` port with ``multiple: true``)
+    must become ONE typed multi-image input node whose output is
+    ``PortValueDict(type="Image", value=[url1, url2, ...])``.
+
+    Previously arrays fell through to text-input handling, so the downstream
+    node received a text dump of the JSON array instead of an image list.
+    """
+
+    def test_array_creates_one_typed_multi_image_node(self, client, monkeypatch):
+        import asyncio
+
+        import main
+
+        captured = {}
+
+        async def _fake_execute_graph(*, nodes, edges, handler_registry, **kwargs):
+            captured["nodes"] = nodes
+            captured["edges"] = edges
+            captured["registry"] = handler_registry
+
+        monkeypatch.setattr(main, "execute_graph", _fake_execute_graph)
+
+        urls = ["https://example.com/a.png", "https://example.com/b.png"]
+        resp = client.post(
+            "/api/quick",
+            json={
+                "definitionId": "nano-banana-fal-edit",
+                "inputs": {"prompt": "combine these", "images": urls},
+                "params": {},
+            },
+        )
+        assert resp.status_code == 200, resp.text
+
+        multi = [
+            n for n in captured["nodes"] if n.definition_id == "multi-image-input"
+        ]
+        assert len(multi) == 1, "array input should build exactly one multi-image node"
+        assert multi[0].params["filePaths"] == urls
+
+        # No text-input node may be created for the images port (the old bug);
+        # the only text-input here is the scalar prompt.
+        text_nodes = [
+            n for n in captured["nodes"] if n.definition_id == "text-input"
+        ]
+        assert len(text_nodes) == 1
+        assert text_nodes[0].params == {"value": "combine these"}
+
+        edge = next(e for e in captured["edges"] if e.source == multi[0].id)
+        assert edge.source_handle == "image"
+        assert edge.target == "_quick_main"
+        assert edge.target_handle == "images"
+
+        # The request-scoped handler registry carries the temp node's handler,
+        # which emits the typed Image list output.
+        handler = captured["registry"].get("multi-image-input")
+        assert handler is not None, "multi-image-input handler not registered"
+        outputs = asyncio.run(handler(multi[0], {}, {}))
+        assert outputs == {"image": {"type": "Image", "value": urls}}
+
+    def test_downstream_receives_image_list_not_text(self, client, monkeypatch):
+        """End-to-end (in-process): the real engine resolves the temp node's
+        output into the target's ``images`` port as a typed Image list."""
+        import main
+
+        seen = {}
+
+        async def _spy_main_handler(node, inputs, api_keys):
+            seen["inputs"] = inputs
+            return {"image": {"type": "Image", "value": "out.png"}}
+
+        monkeypatch.setattr(
+            main,
+            "get_handler_registry",
+            lambda emit=None: {"nano-banana-fal-edit": _spy_main_handler},
+        )
+        monkeypatch.setattr(main, "execution_cache", None)
+
+        urls = ["https://example.com/one.png", "https://example.com/two.png"]
+        resp = client.post(
+            "/api/quick",
+            json={
+                "definitionId": "nano-banana-fal-edit",
+                "inputs": {"images": urls},
+                "params": {"prompt": "combine these"},
+            },
+        )
+        assert resp.status_code == 200, resp.text
+
+        images_input = seen["inputs"]["images"]
+        assert images_input.type == "Image"
+        assert isinstance(images_input.value, list)
+        assert images_input.value == urls
+
+    def test_array_for_single_image_port_also_delivers_list(self, client, monkeypatch):
+        """A non-``multiple`` Image port (gpt-image-1-edit ``image``) still
+        receives the array as an image list, not text."""
+        import main
+
+        seen = {}
+
+        async def _spy_main_handler(node, inputs, api_keys):
+            seen["inputs"] = inputs
+            return {"image": {"type": "Image", "value": "out.png"}}
+
+        monkeypatch.setattr(
+            main,
+            "get_handler_registry",
+            lambda emit=None: {"gpt-image-1-edit": _spy_main_handler},
+        )
+        monkeypatch.setattr(main, "execution_cache", None)
+
+        urls = ["https://example.com/x.png", "https://example.com/y.png"]
+        resp = client.post(
+            "/api/quick",
+            json={
+                "definitionId": "gpt-image-1-edit",
+                "inputs": {"image": urls, "prompt": "combine these"},
+                "params": {},
+            },
+        )
+        assert resp.status_code == 200, resp.text
+
+        image_input = seen["inputs"]["image"]
+        assert image_input.type == "Image"
+        assert image_input.value == urls
+
+    def test_single_url_still_creates_scalar_image_input(self, client, monkeypatch):
+        """Backward compat: a single (non-array) string must keep building a
+        scalar image-input node — never a multi-image node."""
+        import main
+
+        captured = {}
+
+        async def _fake_execute_graph(*, nodes, edges, **kwargs):
+            captured["nodes"] = nodes
+
+        monkeypatch.setattr(main, "execute_graph", _fake_execute_graph)
+
+        resp = client.post(
+            "/api/quick",
+            json={
+                "definitionId": "gpt-image-1-edit",
+                "inputs": {"image": "https://example.com/ref.png"},
+                "params": {"prompt": "make it blue"},
+            },
+        )
+        assert resp.status_code == 200, resp.text
+
+        assert not [
+            n for n in captured["nodes"] if n.definition_id == "multi-image-input"
+        ]
+        image_nodes = [
+            n for n in captured["nodes"] if n.definition_id == "image-input"
+        ]
+        assert len(image_nodes) == 1
+        assert isinstance(image_nodes[0].params.get("filePath"), str)
+
+    def test_array_with_invalid_items_rejected(self, client, monkeypatch):
+        import main
+
+        async def _fake_execute_graph(**kwargs):
+            pytest.fail("execute_graph must not run when item validation fails")
+
+        monkeypatch.setattr(main, "execute_graph", _fake_execute_graph)
+
+        resp = client.post(
+            "/api/quick",
+            json={
+                "definitionId": "nano-banana-fal-edit",
+                "inputs": {
+                    "images": ["https://ok.example/a.png", "not a url or path", 42],
+                },
+            },
+        )
+        assert resp.status_code == 400
+        detail = resp.json()["detail"]
+        assert "not a url or path" in detail
+        assert "42" in detail
+
+    def test_empty_array_rejected(self, client, monkeypatch):
+        import main
+
+        async def _fake_execute_graph(**kwargs):
+            pytest.fail("execute_graph must not run for an empty image array")
+
+        monkeypatch.setattr(main, "execute_graph", _fake_execute_graph)
+
+        resp = client.post(
+            "/api/quick",
+            json={
+                "definitionId": "nano-banana-fal-edit",
+                "inputs": {"images": []},
+            },
+        )
+        assert resp.status_code == 400
+
+    def test_array_local_paths_normalized_data_uri_preserved(
+        self, client, tmp_path, monkeypatch
+    ):
+        import main
+
+        img = tmp_path / "ref.png"
+        img.write_bytes(b"\x89PNG\r\n\x1a\n")
+        data_uri = "data:image/png;base64,iVBORw0KGgo="
+
+        captured = {}
+
+        async def _fake_execute_graph(*, nodes, edges, **kwargs):
+            captured["nodes"] = nodes
+
+        monkeypatch.setattr(main, "execute_graph", _fake_execute_graph)
+
+        resp = client.post(
+            "/api/quick",
+            json={
+                "definitionId": "nano-banana-fal-edit",
+                "inputs": {"images": [str(img), data_uri]},
+            },
+        )
+        assert resp.status_code == 200, resp.text
+
+        multi = [
+            n for n in captured["nodes"] if n.definition_id == "multi-image-input"
+        ]
+        assert len(multi) == 1
+        refs = multi[0].params["filePaths"]
+        assert Path(refs[0]).is_absolute() and Path(refs[0]).is_file()
+        assert refs[1] == data_uri  # data URIs pass through untouched
+
+    def test_handler_raises_for_missing_local_file(self, client):
+        """Mirrors engine._image_input_output: a missing local file fails at
+        the source instead of silently sending zero references downstream."""
+        import asyncio
+
+        import main
+
+        node = main.GraphNode(
+            id="_quick_input_1",
+            definition_id="multi-image-input",
+            params={"filePaths": ["/definitely/missing/nope.png"]},
+            outputs={},
+        )
+        with pytest.raises(ValueError, match="not found"):
+            asyncio.run(main._quick_multi_image_input_handler(node, {}, {}))
+
+    def test_array_for_text_port_keeps_legacy_behavior(self, client, monkeypatch):
+        """Arrays targeting non-Image ports are out of scope: they keep the
+        pre-existing text-input fall-through."""
+        import main
+
+        captured = {}
+
+        async def _fake_execute_graph(*, nodes, edges, **kwargs):
+            captured["nodes"] = nodes
+
+        monkeypatch.setattr(main, "execute_graph", _fake_execute_graph)
+
+        resp = client.post(
+            "/api/quick",
+            json={
+                "definitionId": "gpt-image-1-generate",
+                "inputs": {"prompt": ["a", "b"]},
+                "params": {},
+            },
+        )
+        assert resp.status_code == 200, resp.text
+
+        assert not [
+            n for n in captured["nodes"] if n.definition_id == "multi-image-input"
+        ]
+        text_nodes = [
+            n for n in captured["nodes"] if n.definition_id == "text-input"
+        ]
+        assert len(text_nodes) == 1
+        assert text_nodes[0].params == {"value": ["a", "b"]}

@@ -34,6 +34,7 @@ from models import (
     ValidationErrorDetail,
     GraphNode,
     GraphEdge,
+    PortValueDict,
 )
 from models.events import (
     ExecutionEvent,
@@ -47,7 +48,8 @@ from execution.sync_runner import get_handler_registry
 from services.settings import load_settings, save_settings, get_api_key, validate_provider_keys
 from services.node_registry import NodeRegistry
 from services.cli_graph import CLIGraph
-from services.output import OUTPUT_ROOT, DEFAULT_OUTPUT_ROOT
+from services.output import OUTPUT_ROOT, DEFAULT_OUTPUT_ROOT, resolve_output_ref
+from services.image_input import is_remote_or_data_uri
 from services.cache import ExecutionCache
 from services.chat_session import run_claude
 from services.chat_actions import publish_action
@@ -2527,6 +2529,91 @@ async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dic
     }
 
 
+# Image reference suffixes recognized by /api/quick (matches the scalar
+# extension-based detection below).
+_QUICK_IMAGE_SUFFIXES = (".png", ".jpg", ".jpeg", ".webp")
+
+
+def _quick_input_port_def(definition_id: str, port_id: str) -> dict[str, Any] | None:
+    """Return the target node's input port definition for *port_id*, if any."""
+    defn = node_registry.get(definition_id)
+    if not defn:
+        return None
+    for port in defn.get("inputPorts", []):
+        if isinstance(port, dict) and port.get("id") == port_id:
+            return port
+    return None
+
+
+def _is_quick_image_ref(value: Any) -> bool:
+    """True when *value* is usable as an image reference: an http(s) URL, a
+    data: URI, or a local path with a recognized image extension."""
+    if not isinstance(value, str) or not value:
+        return False
+    if is_remote_or_data_uri(value):
+        return True
+    return value.lower().endswith(_QUICK_IMAGE_SUFFIXES)
+
+
+def _validated_quick_image_refs(port_id: str, value: list[Any]) -> list[str]:
+    """Validate a /api/quick array input destined for an Image port.
+
+    Every item must be an http(s) URL, a data: URI, or a local image path.
+    Local paths are normalized to absolute (same as the scalar branch); URLs
+    and data URIs pass through untouched. Raises HTTP 400 on an empty array
+    or any invalid item.
+    """
+    if not value:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Input '{port_id}' got an empty array — provide at least one "
+                "image reference (URL, data: URI, or local image path)."
+            ),
+        )
+    invalid = [item for item in value if not _is_quick_image_ref(item)]
+    if invalid:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Input '{port_id}' has {len(invalid)} invalid image reference(s): "
+                f"{invalid!r}. Each item must be an http(s) URL, a data: URI, or a "
+                f"local image path ({'/'.join(_QUICK_IMAGE_SUFFIXES)})."
+            ),
+        )
+    return [
+        item if is_remote_or_data_uri(item) else str(Path(item).expanduser().resolve())
+        for item in value
+    ]
+
+
+async def _quick_multi_image_input_handler(
+    node: GraphNode,
+    inputs: dict[str, PortValueDict],
+    api_keys: dict[str, str],
+) -> dict[str, Any]:
+    """Temp /api/quick input node: emit a typed multi-image list output.
+
+    The engine's built-in ``image-input`` branch only emits a scalar from
+    ``params["filePath"]``, so /api/quick registers this request-scoped
+    handler for its ``multi-image-input`` temp nodes. Mirrors
+    ``engine._image_input_output``'s fail-at-the-source check for missing
+    local files, but emits every reference as one Image-typed list so the
+    downstream port receives ``PortValueDict(type="Image", value=[...])``.
+    """
+    refs = node.params.get("filePaths") or []
+    values: list[str] = []
+    for ref in refs:
+        resolved = resolve_output_ref(str(ref))
+        if resolved and not is_remote_or_data_uri(resolved) and not Path(resolved).exists():
+            raise ValueError(
+                f"Image Input file not found: {resolved!r}. Set a valid path — "
+                "downstream nodes would otherwise receive a reference no model can load."
+            )
+        values.append(resolved)
+    return {"image": {"type": "Image", "value": values}}
+
+
 @app.post("/api/quick")
 async def quick_execute(body: dict[str, Any]) -> dict:
     """One-shot: create a temp node, execute, return output."""
@@ -2544,6 +2631,32 @@ async def quick_execute(body: dict[str, Any]) -> dict:
     for port_id, value in inputs.items():
         node_counter += 1
         input_node_id = f"_quick_input_{node_counter}"
+
+        # Array input for an Image-typed port (a single ``image`` port or an
+        # ``images`` port with ``multiple: true``): build ONE typed multi-image
+        # input node whose output is PortValueDict(type="Image", value=[...]),
+        # so the downstream node receives an image list — not a text dump of
+        # the JSON array (the previous fall-through behavior). Arrays for
+        # non-Image ports keep the legacy text handling below.
+        if isinstance(value, list):
+            port_def = _quick_input_port_def(definition_id, port_id)
+            if port_def is not None and port_def.get("dataType") == "Image":
+                refs = _validated_quick_image_refs(port_id, value)
+                temp_nodes.append(GraphNode(
+                    id=input_node_id,
+                    definition_id="multi-image-input",
+                    params={"filePaths": refs},
+                    outputs={},
+                ))
+                temp_edges.append(GraphEdge(
+                    id=f"_quick_edge_{node_counter}",
+                    source=input_node_id,
+                    source_handle="image",
+                    target="_quick_main",
+                    target_handle=port_id,
+                ))
+                continue
+
         if isinstance(value, str) and value.endswith(('.png', '.jpg', '.jpeg', '.webp')):
             input_type = "image-input"
             port_type = "Image"
@@ -2599,6 +2712,9 @@ async def quick_execute(body: dict[str, Any]) -> dict:
             errors[event.node_id] = event.error
 
     handler_registry = get_handler_registry(emit=collect_events)
+    # Temp multi-image input nodes are executed by this request-scoped handler —
+    # the engine's built-in image-input branch only emits a scalar value.
+    handler_registry["multi-image-input"] = _quick_multi_image_input_handler
 
     import time
     start = time.time()

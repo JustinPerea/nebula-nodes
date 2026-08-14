@@ -1073,6 +1073,14 @@ def get_handler_registry(
             from handlers.remotion_node import handle_remotion_node
             return await handle_remotion_node(node, inputs, api_keys, emit=emit)
 
+        async def _duration_check_handler(
+            node: GraphNode,
+            inputs: dict[str, PortValueDict],
+            api_keys: dict[str, str],
+        ) -> dict[str, Any]:
+            from handlers.duration_check import handle_duration_check
+            return await handle_duration_check(node, inputs, api_keys, emit=emit)
+
         registry["quiver-arrow-generate"] = _quiver_generate_handler
         registry["quiver-arrow-vectorize"] = _quiver_vectorize_handler
         registry["style-reference"] = _style_reference_handler
@@ -1082,6 +1090,7 @@ def get_handler_registry(
         registry["character"] = _character_handler
         registry["video-edit"] = _video_edit_handler
         registry["remotion-node"] = _remotion_node_handler
+        registry["video-duration-check"] = _duration_check_handler
 
         registry["meshy-remesh"] = _meshy_remesh_handler
         registry["meshy-text-to-image"] = _meshy_text_to_image_handler

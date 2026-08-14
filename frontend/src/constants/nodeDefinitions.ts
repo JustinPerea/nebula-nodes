@@ -10648,6 +10648,39 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
     ],
   },
+  'video-duration-check': {
+    id: 'video-duration-check',
+    displayName: 'Video Duration Check',
+    category: 'analyzer',
+    apiProvider: 'utility',
+    apiEndpoint: '',
+    envKeyName: [],
+    executionPattern: 'sync',
+    inputPorts: [
+      { id: 'video', label: 'Video', dataType: 'Video', required: true },
+      {
+        id: 'requested_duration',
+        label: 'Requested Duration',
+        dataType: 'Text',
+        required: false,
+      },
+    ],
+    outputPorts: [
+      { id: 'text', label: 'Report', dataType: 'Text', required: false },
+      { id: 'match', label: 'Match', dataType: 'Text', required: false },
+    ],
+    params: [
+      {
+        key: 'requested_duration',
+        label: 'Requested Duration (s)',
+        type: 'float',
+        required: false,
+        default: '',
+        min: 0,
+        step: 0.1,
+      },
+    ],
+  },
 };
 
 export function getNodeDefinition(definitionId: string): ModelNodeDefinition | undefined {
