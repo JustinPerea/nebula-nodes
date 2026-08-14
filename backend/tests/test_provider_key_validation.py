@@ -370,3 +370,46 @@ def test_endpoint_caches_results_between_calls(monkeypatch):
 
     assert first["providers"]["FAL"]["status"] == "valid"
     assert first["providers"]["OpenAI"]["status"] == "invalid"
+
+
+# ---------------------------------------------------------------------------
+# Cache invalidation on settings save (fix-n-03)
+# ---------------------------------------------------------------------------
+
+
+def test_settings_save_clears_provider_validation_cache(monkeypatch):
+    """PUT /api/settings must drop the provider-validation cache so the next
+    GET /api/health/providers revalidates instead of serving stale status
+    for up to the 5-minute TTL after an API key change."""
+    from fastapi.testclient import TestClient
+    import main as main_module
+
+    _set_keys(monkeypatch, {"FAL_KEY": "test-key"})
+    log = _install_client(monkeypatch, lambda url, headers: _FakeResponse(200))
+
+    # Keep the endpoint off the real settings.json.
+    monkeypatch.setattr(main_module, "load_settings", lambda: {"apiKeys": {}})
+    saved: list[dict] = []
+    monkeypatch.setattr(main_module, "save_settings", lambda s: saved.append(s))
+
+    client = TestClient(main_module.app)
+
+    # Populate the cache via the health endpoint (one FAL HTTP call).
+    first = client.get("/api/health/providers").json()
+    assert first["providers"]["FAL"]["status"] == "valid"
+    assert settings_service._provider_check_cache, "cache should be populated"
+    assert len(log) == 1
+
+    resp = client.put("/api/settings", json={"apiKeys": {"FAL_KEY": "rotated-key"}})
+    assert resp.status_code == 200
+    assert resp.json() == {"status": "saved"}
+    assert saved, "endpoint should still persist the merged settings"
+
+    # The save dropped the cache...
+    assert settings_service._provider_check_cache == {}
+
+    # ...so the next health poll revalidates against the provider API
+    # (new HTTP traffic instead of a cached payload).
+    second = client.get("/api/health/providers").json()
+    assert len(log) == 2
+    assert second["providers"]["FAL"]["status"] == "valid"

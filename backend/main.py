@@ -45,7 +45,7 @@ from models.events import (
 )
 from execution.engine import execute_graph, validate_graph, topological_sort, get_subgraph, CycleError
 from execution.sync_runner import get_handler_registry
-from services.settings import load_settings, save_settings, get_api_key, validate_provider_keys
+from services.settings import load_settings, save_settings, get_api_key, validate_provider_keys, clear_provider_validation_cache
 from services.node_registry import NodeRegistry
 from services.cli_graph import CLIGraph
 from services.output import OUTPUT_ROOT, DEFAULT_OUTPUT_ROOT, resolve_output_ref
@@ -1069,6 +1069,10 @@ async def update_settings(body: dict[str, Any]) -> dict:
         if key in body:
             current[key] = body[key]
     save_settings(current)
+    # API keys may have changed — drop cached validation results so the next
+    # GET /api/health/providers re-checks providers instead of serving stale
+    # status for up to PROVIDER_CHECK_TTL_SECONDS.
+    clear_provider_validation_cache()
     return {"status": "saved"}
 
 
