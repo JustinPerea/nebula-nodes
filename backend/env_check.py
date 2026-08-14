@@ -9,14 +9,16 @@ Two jobs:
 
 1. ``sanitize_pythonpath()`` — strip PYTHONPATH entries that positively
    target a different CPython: either a ``pythonX.Y`` path segment that
-   doesn't match the running interpreter, or compiled extensions
-   (``*.cpython-XY-*``) tagged for a different ABI. The extension scan
-   walks each entry's directory tree down to a bounded depth (4 levels),
-   so nested package layouts such as
-   ``site-packages/numpy/core/_multiarray_umath.cpython-311-*.so`` are
-   detected. Stripped entries are also evicted from ``sys.path`` (the
-   interpreter already copied PYTHONPATH there at startup) and a warning
-   lists what was removed.
+   doesn't match the running interpreter, or native compiled extensions
+   (``*.cpython-XY-*`` with a ``.so``/``.pyd``/``.dylib`` suffix) tagged
+   for a different ABI. The extension scan walks each entry's directory
+   tree down to a bounded depth (4 levels), so nested package layouts such
+   as ``site-packages/numpy/core/_multiarray_umath.cpython-311-*.so`` are
+   detected. Bytecode caches (``*.cpython-XY.pyc``) carry the same tag but
+   are not native code — a mismatched interpreter just ignores them — so
+   they never mark an entry incompatible. Stripped entries are also
+   evicted from ``sys.path`` (the interpreter already copied PYTHONPATH
+   there at startup) and a warning lists what was removed.
 2. ``verify_runtime()`` — fail fast with a clear message when
    ``sys.version_info`` is below the minimum or ``sys.executable`` is
    missing/invalid.
@@ -49,6 +51,11 @@ _VERSION_DOT_RE = re.compile(r"python(\d+)\.(\d+)", re.IGNORECASE)
 _VERSION_NODOT_RE = re.compile(r"python(\d)(\d{1,2})(?![\d.])", re.IGNORECASE)
 # Compiled-extension ABI tag, e.g. _pydantic_core.cpython-311-darwin.so
 _ABI_TAG_RE = re.compile(r"cpython-(\d)(\d{1,2})", re.IGNORECASE)
+# Only native-library suffixes can break extension-module imports across
+# CPython versions. Bytecode (*.cpython-XY.pyc) carries the same ABI tag
+# but is safely ignored by a mismatched interpreter, so it must not mark a
+# PYTHONPATH entry incompatible.
+_NATIVE_EXTENSION_SUFFIXES = (".so", ".pyd", ".dylib")
 
 __all__ = [
     "MIN_PYTHON",
@@ -61,8 +68,13 @@ __all__ = [
 def _iter_compiled_artifacts(
     root: Path, max_depth: int = _MAX_EXTENSION_SCAN_DEPTH
 ) -> Iterator[Path]:
-    """Yield files under ``root`` whose names carry a CPython ABI tag
-    (``*.cpython-*``), walking at most ``max_depth`` levels below ``root``.
+    """Yield native libraries under ``root`` whose names carry a CPython ABI
+    tag (``*.cpython-*`` with a ``.so``/``.pyd``/``.dylib`` suffix),
+    walking at most ``max_depth`` levels below ``root``.
+
+    Bytecode files (``*.cpython-XY.pyc``) are deliberately excluded: they
+    are not native code and a mismatched interpreter ignores them, so they
+    are no evidence of incompatibility.
 
     Depth 1 is files directly inside ``root``. The walk is bounded — it
     never descends into directories at ``max_depth`` or deeper — and does
@@ -83,7 +95,9 @@ def _iter_compiled_artifacts(
                 if item.is_dir(follow_symlinks=False):
                     if depth + 1 < max_depth:
                         stack.append((Path(item.path), depth + 1))
-                elif ".cpython-" in item.name:
+                elif ".cpython-" in item.name and item.name.endswith(
+                    _NATIVE_EXTENSION_SUFFIXES
+                ):
                     yield Path(item.path)
             except OSError:
                 continue

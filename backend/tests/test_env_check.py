@@ -152,6 +152,20 @@ def test_strips_entry_with_foreign_extension_at_max_depth(tmp_path):
     assert stripped == [str(site)]
 
 
+@pytest.mark.parametrize("suffix", [".so", ".pyd", ".dylib"])
+def test_strips_entry_with_foreign_native_extension_suffix(tmp_path, suffix):
+    """Every native-library suffix (.so, .pyd, .dylib) tagged for a foreign
+    CPython marks the entry incompatible — not just .so."""
+    d = tmp_path / "native-libs"
+    pkg = d / "pkg"
+    pkg.mkdir(parents=True)
+    (pkg / f"_ext.{OTHER_TAG}-x86_64{suffix}").write_bytes(b"")
+
+    env = {"PYTHONPATH": str(d)}
+    stripped = env_check.sanitize_pythonpath(environ=env, version=CURRENT)
+    assert stripped == [str(d)]
+
+
 # ---------------------------------------------------------------------------
 # Preservation behavior
 # ---------------------------------------------------------------------------
@@ -227,6 +241,41 @@ def test_preserves_entry_beyond_max_scan_depth(tmp_path, caplog):
     assert stripped == []
     assert env["PYTHONPATH"] == str(site)
     assert caplog.text == ""
+
+
+def test_preserves_entry_with_only_foreign_tagged_pyc(tmp_path, caplog):
+    """Regression: stale bytecode files (e.g. __pycache__/module.cpython-311.
+    pyc) carry a CPython tag but are NOT native extensions — a mismatched
+    interpreter simply ignores them. A PYTHONPATH entry containing only
+    foreign-tagged .pyc files must be preserved, not stripped."""
+    d = tmp_path / "bytecode-only"
+    cache = d / "pkg" / "__pycache__"
+    cache.mkdir(parents=True)
+    (cache / f"module.{OTHER_TAG}.pyc").write_bytes(b"")
+
+    env = {"PYTHONPATH": str(d)}
+    with caplog.at_level(logging.WARNING, logger="nebula.env_check"):
+        stripped = env_check.sanitize_pythonpath(environ=env, version=CURRENT)
+
+    assert stripped == []
+    assert env["PYTHONPATH"] == str(d)
+    assert caplog.text == ""
+
+
+def test_iter_compiled_artifacts_yields_only_native_suffixes(tmp_path):
+    """Direct check on the scanner: .pyc bytecode and plain source files are
+    never yielded, even when their names carry a CPython tag; only native
+    library suffixes (.so/.pyd/.dylib) are."""
+    root = tmp_path / "tree"
+    root.mkdir()
+    native = root / f"_real.{OTHER_TAG}-darwin.so"
+    native.write_bytes(b"")
+    (root / f"module.{OTHER_TAG}.pyc").write_bytes(b"")
+    (root / f"other.{CURRENT_TAG}.pyc").write_bytes(b"")
+    (root / "plain.py").write_text("")
+
+    yielded = {p.name for p in env_check._iter_compiled_artifacts(root)}
+    assert yielded == {native.name}
 
 
 # ---------------------------------------------------------------------------
