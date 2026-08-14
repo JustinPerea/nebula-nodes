@@ -524,8 +524,13 @@ def get_handler_registry(
             inputs: dict[str, PortValueDict],
             api_keys: dict[str, str],
         ) -> dict[str, Any]:
-            node.params.setdefault("endpoint_id", "wan/v2.6/text-to-video")
-            return await handle_fal_universal(node, inputs, api_keys, emit=emit)
+            model = node.params.get("model", "2.6")
+            if str(model) == "2.7":
+                endpoint_id = "fal-ai/wan/v2.7/text-to-video"
+            else:
+                endpoint_id = "wan/v2.6/text-to-video"
+            routed_node = _fal_wrapper_node(node, endpoint_id, internal_params=("model",))
+            return await handle_fal_universal(routed_node, inputs, api_keys, emit=emit)
 
         async def _luma_ray2_handler(
             node: GraphNode,
@@ -794,9 +799,18 @@ def get_handler_registry(
             node.params.setdefault("endpoint_id", "fal-ai/pixverse/v4.5/text-to-video")
             return await handle_fal_universal(node, inputs, api_keys, emit=emit)
 
-        async def _seedance_handler(node, inputs, api_keys):
-            node.params.setdefault("endpoint_id", "fal-ai/bytedance/seedance/v1.5/pro/image-to-video")
-            return await handle_fal_universal(node, inputs, api_keys, emit=emit)
+        async def _seedance_handler(
+            node: GraphNode,
+            inputs: dict[str, PortValueDict],
+            api_keys: dict[str, str],
+        ) -> dict[str, Any]:
+            model = node.params.get("model", "1.5")
+            if str(model) == "1.0":
+                endpoint_id = "fal-ai/bytedance/seedance/v1/pro/image-to-video"
+            else:
+                endpoint_id = "fal-ai/bytedance/seedance/v1.5/pro/image-to-video"
+            routed_node = _fal_wrapper_node(node, endpoint_id, internal_params=("model",))
+            return await handle_fal_universal(routed_node, inputs, api_keys, emit=emit)
 
         async def _topaz_image_upscale_handler(
             node: GraphNode,
@@ -1228,6 +1242,22 @@ def get_handler_registry(
             node.params.setdefault("endpoint_id", "fal-ai/kling-video/video-to-audio")
             return await handle_fal_universal(node, inputs, api_keys, emit=emit)
 
+        async def _seedance_1_0_t2v_handler(node, inputs, api_keys):
+            node.params.setdefault("endpoint_id", "fal-ai/bytedance/seedance/v1/pro/text-to-video")
+            return await handle_fal_universal(node, inputs, api_keys, emit=emit)
+
+        async def _ltx_audio_to_video_handler(node, inputs, api_keys):
+            node.params.setdefault("endpoint_id", "fal-ai/ltx-2.3/audio-to-video")
+            return await handle_fal_universal(node, inputs, api_keys, emit=emit)
+
+        async def _video_understanding_handler(node, inputs, api_keys):
+            node.params.setdefault("endpoint_id", "fal-ai/video-understanding")
+            return await handle_fal_universal(node, inputs, api_keys, emit=emit)
+
+        async def _ltx_2_3_fast_t2v_handler(node, inputs, api_keys):
+            node.params.setdefault("endpoint_id", "fal-ai/ltx-2.3/text-to-video/fast")
+            return await handle_fal_universal(node, inputs, api_keys, emit=emit)
+
         async def _nano_banana_fal_handler(node, inputs, api_keys):
             routed_node = _nano_banana_fal_node(node, edit=False)
             return await handle_fal_universal(routed_node, inputs, api_keys, emit=emit)
@@ -1353,6 +1383,10 @@ def get_handler_registry(
         registry["wan-animate-move"] = _wan_animate_move_handler
         registry["wan-animate-replace"] = _wan_animate_replace_handler
         registry["kling-video-to-audio"] = _kling_video_to_audio_handler
+        registry["seedance-1-0-t2v"] = _seedance_1_0_t2v_handler
+        registry["ltx-audio-to-video"] = _ltx_audio_to_video_handler
+        registry["video-understanding"] = _video_understanding_handler
+        registry["ltx-2-3-fast-t2v"] = _ltx_2_3_fast_t2v_handler
         registry["nano-banana-fal"] = _nano_banana_fal_handler
         registry["nano-banana-fal-edit"] = _nano_banana_fal_edit_handler
         registry["ideogram-v4"] = _ideogram_v4_handler

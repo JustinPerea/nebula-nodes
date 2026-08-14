@@ -6740,3 +6740,388 @@ async def test_kling_video_to_audio_video_mapping_and_params():
     # The output contains both audio and video; _parse_fal_output checks audio
     # before video, so the primary result key is "audio".
     assert result.get("audio", {}).get("type") == "Audio"
+
+
+# ---------------------------------------------------------------------------
+# Wave 5 tests — seedance-1-0-t2v, ltx-audio-to-video, video-understanding,
+# ltx-2-3-fast-t2v (new nodes), wan-2-6-t2v model enum, seedance-v1-5 model enum
+# ---------------------------------------------------------------------------
+
+
+# ── seedance-1-0-t2v ──────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_seedance_1_0_t2v_endpoint_and_params():
+    """seedance-1-0-t2v routes to seedance/v1/pro/text-to-video, forwards params."""
+    from execution.sync_runner import get_handler_registry
+
+    emit = AsyncMock()
+    registry = get_handler_registry(emit=emit)
+    handler = registry["seedance-1-0-t2v"]
+
+    mock_submit, mock_status, mock_result = _make_poll_mocks(
+        {"video": {"url": "https://fal.ai/seedance10_t2v.mp4"}}
+    )
+
+    node = GraphNode(
+        id="test-seedance10-t2v",
+        definitionId="seedance-1-0-t2v",
+        params={"aspect_ratio": "9:16", "resolution": "720p", "duration": "5",
+                "camera_fixed": True, "enable_safety_checker": True},
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            result = await handler(
+                node,
+                {"prompt": PortValueDict(type="Text", value="a cinematic drone shot")},
+                {"FAL_KEY": "fal_test"},
+            )
+
+    assert result["video"]["type"] == "Video"
+    assert result["video"]["value"] == "https://fal.ai/seedance10_t2v.mp4"
+    url = mock_client.post.call_args.args[0] if mock_client.post.call_args.args else mock_client.post.call_args[0][0]
+    assert "seedance/v1/pro/text-to-video" in url
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert payload["prompt"] == "a cinematic drone shot"
+    assert payload["aspect_ratio"] == "9:16"
+    assert payload["resolution"] == "720p"
+    assert payload["duration"] == "5"
+    assert payload["camera_fixed"] is True
+    assert payload["enable_safety_checker"] is True
+
+
+# ── ltx-audio-to-video ─────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_ltx_audio_to_video_endpoint_and_audio_mapping():
+    """ltx-audio-to-video maps audio → audio_url, routes to ltx-2.3/audio-to-video."""
+    from execution.sync_runner import get_handler_registry
+
+    emit = AsyncMock()
+    registry = get_handler_registry(emit=emit)
+    handler = registry["ltx-audio-to-video"]
+
+    mock_submit, mock_status, mock_result = _make_poll_mocks(
+        {"video": {"url": "https://fal.ai/ltx_a2v.mp4"}}
+    )
+
+    node = GraphNode(
+        id="test-ltx-a2v",
+        definitionId="ltx-audio-to-video",
+        params={"guidance_scale": 7.5, "aspect_ratio": "16:9"},
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            result = await handler(
+                node,
+                {
+                    "audio": PortValueDict(type="Audio", value="https://example.com/beat.mp3"),
+                    "image": PortValueDict(type="Image", value="https://example.com/face.png"),
+                    "prompt": PortValueDict(type="Text", value="dancing figure"),
+                },
+                {"FAL_KEY": "fal_test"},
+            )
+
+    assert result["video"]["type"] == "Video"
+    url = mock_client.post.call_args.args[0] if mock_client.post.call_args.args else mock_client.post.call_args[0][0]
+    assert "ltx-2.3/audio-to-video" in url
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert payload["audio_url"] == "https://example.com/beat.mp3"
+    assert payload["image_url"] == "https://example.com/face.png"
+    assert payload["prompt"] == "dancing figure"
+    assert payload["guidance_scale"] == 7.5
+    assert payload["aspect_ratio"] == "16:9"
+
+
+# ── video-understanding ───────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_video_understanding_endpoint_and_output_parsing():
+    """video-understanding maps video → video_url, prompt → prompt, parses output."""
+    from execution.sync_runner import get_handler_registry
+
+    emit = AsyncMock()
+    registry = get_handler_registry(emit=emit)
+    handler = registry["video-understanding"]
+
+    mock_submit, mock_status, mock_result = _make_poll_mocks(
+        {"output": "The video shows a person walking on a beach at sunset."}
+    )
+
+    node = GraphNode(
+        id="test-vu",
+        definitionId="video-understanding",
+        params={"detailed_analysis": True},
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            result = await handler(
+                node,
+                {
+                    "video": PortValueDict(type="Video", value="https://example.com/clip.mp4"),
+                    "prompt": PortValueDict(type="Text", value="Describe the scene in detail"),
+                },
+                {"FAL_KEY": "fal_test"},
+            )
+
+    assert result["text"]["type"] == "Text"
+    assert "walking on a beach" in result["text"]["value"]
+    url = mock_client.post.call_args.args[0] if mock_client.post.call_args.args else mock_client.post.call_args[0][0]
+    assert "video-understanding" in url
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert payload["video_url"] == "https://example.com/clip.mp4"
+    assert payload["prompt"] == "Describe the scene in detail"
+    assert payload["detailed_analysis"] is True
+
+
+# ── ltx-2-3-fast-t2v ──────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_ltx_2_3_fast_t2v_endpoint_and_params():
+    """ltx-2-3-fast-t2v routes to ltx-2.3/text-to-video/fast, forwards params."""
+    from execution.sync_runner import get_handler_registry
+
+    emit = AsyncMock()
+    registry = get_handler_registry(emit=emit)
+    handler = registry["ltx-2-3-fast-t2v"]
+
+    mock_submit, mock_status, mock_result = _make_poll_mocks(
+        {"video": {"url": "https://fal.ai/ltx_fast.mp4"}}
+    )
+
+    node = GraphNode(
+        id="test-ltx-fast",
+        definitionId="ltx-2-3-fast-t2v",
+        params={"duration": "10", "resolution": "1440p", "aspect_ratio": "9:16",
+                "fps": 24, "generate_audio": False},
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            result = await handler(
+                node,
+                {"prompt": PortValueDict(type="Text", value="a rocket launching")},
+                {"FAL_KEY": "fal_test"},
+            )
+
+    assert result["video"]["type"] == "Video"
+    url = mock_client.post.call_args.args[0] if mock_client.post.call_args.args else mock_client.post.call_args[0][0]
+    assert "ltx-2.3/text-to-video/fast" in url
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert payload["prompt"] == "a rocket launching"
+    assert payload["duration"] == "10"
+    assert payload["resolution"] == "1440p"
+    assert payload["aspect_ratio"] == "9:16"
+    assert payload["fps"] == 24
+    assert payload["generate_audio"] is False
+
+
+# ── wan-2-6-t2v model enum ─────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_wan26_t2v_model_2_7_routes_to_v2_7():
+    """wan-2-6-t2v with model=2.7 routes to wan/v2.7/text-to-video and strips model param."""
+    from execution.sync_runner import get_handler_registry
+
+    emit = AsyncMock()
+    registry = get_handler_registry(emit=emit)
+    handler = registry["wan-2-6-t2v"]
+
+    mock_submit, mock_status, mock_result = _make_poll_mocks(
+        {"video": {"url": "https://fal.ai/wan27.mp4"}}
+    )
+
+    node = GraphNode(
+        id="test-wan27",
+        definitionId="wan-2-6-t2v",
+        params={"model": "2.7", "duration": 10, "resolution": "1080p"},
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            result = await handler(
+                node,
+                {"prompt": PortValueDict(type="Text", value="futuristic cityscape")},
+                {"FAL_KEY": "fal_test"},
+            )
+
+    assert result["video"]["type"] == "Video"
+    url = mock_client.post.call_args.args[0] if mock_client.post.call_args.args else mock_client.post.call_args[0][0]
+    assert "wan/v2.7/text-to-video" in url
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert "model" not in payload, "model must be stripped as an internal param"
+    assert payload["prompt"] == "futuristic cityscape"
+    assert payload["duration"] == 10
+
+
+@pytest.mark.asyncio
+async def test_wan26_t2v_default_model_routes_to_v2_6():
+    """wan-2-6-t2v default model routes to wan/v2.6/text-to-video (regression)."""
+    from execution.sync_runner import get_handler_registry
+
+    emit = AsyncMock()
+    registry = get_handler_registry(emit=emit)
+    handler = registry["wan-2-6-t2v"]
+
+    mock_submit, mock_status, mock_result = _make_poll_mocks(
+        {"video": {"url": "https://fal.ai/wan26.mp4"}}
+    )
+
+    node = GraphNode(
+        id="test-wan26-default",
+        definitionId="wan-2-6-t2v",
+        params={"duration": 5, "resolution": "720p"},
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            result = await handler(
+                node,
+                {"prompt": PortValueDict(type="Text", value="ocean waves")},
+                {"FAL_KEY": "fal_test"},
+            )
+
+    assert result["video"]["type"] == "Video"
+    url = mock_client.post.call_args.args[0] if mock_client.post.call_args.args else mock_client.post.call_args[0][0]
+    assert "wan/v2.6/text-to-video" in url
+    assert "v2.7" not in url
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert "model" not in payload
+
+
+# ── seedance-v1-5 model enum ───────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_seedance_v1_5_model_1_0_routes_to_v1_pro():
+    """seedance-v1-5 with model=1.0 routes to seedance/v1/pro/image-to-video and strips model."""
+    from execution.sync_runner import get_handler_registry
+
+    emit = AsyncMock()
+    registry = get_handler_registry(emit=emit)
+    handler = registry["seedance-v1-5"]
+
+    mock_submit, mock_status, mock_result = _make_poll_mocks(
+        {"video": {"url": "https://fal.ai/seedance10.mp4"}}
+    )
+
+    node = GraphNode(
+        id="test-seedance10",
+        definitionId="seedance-v1-5",
+        params={"model": "1.0", "duration": "5", "resolution": "1080p"},
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            result = await handler(
+                node,
+                {
+                    "prompt": PortValueDict(type="Text", value="camera pan"),
+                    "image": PortValueDict(type="Image", value="https://example.com/frame.png"),
+                },
+                {"FAL_KEY": "fal_test"},
+            )
+
+    assert result["video"]["type"] == "Video"
+    url = mock_client.post.call_args.args[0] if mock_client.post.call_args.args else mock_client.post.call_args[0][0]
+    assert "seedance/v1/pro/image-to-video" in url
+    assert "v1.5" not in url
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert "model" not in payload, "model must be stripped as an internal param"
+    assert payload["prompt"] == "camera pan"
+    assert payload["image_url"] == "https://example.com/frame.png"
+
+
+@pytest.mark.asyncio
+async def test_seedance_v1_5_default_model_routes_to_v1_5():
+    """seedance-v1-5 default model routes to seedance/v1.5/pro/image-to-video (regression)."""
+    from execution.sync_runner import get_handler_registry
+
+    emit = AsyncMock()
+    registry = get_handler_registry(emit=emit)
+    handler = registry["seedance-v1-5"]
+
+    mock_submit, mock_status, mock_result = _make_poll_mocks(
+        {"video": {"url": "https://fal.ai/seedance15.mp4"}}
+    )
+
+    node = GraphNode(
+        id="test-seedance15-default",
+        definitionId="seedance-v1-5",
+        params={"duration": "5", "resolution": "720p"},
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            result = await handler(
+                node,
+                {
+                    "prompt": PortValueDict(type="Text", value="zoom in"),
+                    "image": PortValueDict(type="Image", value="https://example.com/face.png"),
+                },
+                {"FAL_KEY": "fal_test"},
+            )
+
+    assert result["video"]["type"] == "Video"
+    url = mock_client.post.call_args.args[0] if mock_client.post.call_args.args else mock_client.post.call_args[0][0]
+    assert "seedance/v1.5/pro/image-to-video" in url
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert "model" not in payload
