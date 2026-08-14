@@ -850,6 +850,53 @@ def get_handler_registry(
             routed_node = node.model_copy(update={"params": params})
             return await handle_fal_universal(routed_node, modified_inputs, api_keys, emit=emit)
 
+        async def _kling_o3_ref_handler(
+            node: GraphNode,
+            inputs: dict[str, PortValueDict],
+            api_keys: dict[str, str],
+        ) -> dict[str, Any]:
+            from handlers.fal_universal import _to_fal_url
+            params = dict(node.params)
+            params["endpoint_id"] = "fal-ai/kling-video/o3/pro/reference-to-video"
+            image_input = inputs.get("image")
+            if image_input and image_input.value:
+                params["start_image_url"] = _to_fal_url(str(image_input.value))
+            modified_inputs = {k: v for k, v in inputs.items() if k not in ("image",)}
+            routed_node = node.model_copy(update={"params": params})
+            return await handle_fal_universal(routed_node, modified_inputs, api_keys, emit=emit)
+
+        async def _kling_motion_handler(
+            node: GraphNode,
+            inputs: dict[str, PortValueDict],
+            api_keys: dict[str, str],
+        ) -> dict[str, Any]:
+            node.params.setdefault("endpoint_id", "fal-ai/kling-video/v2.6/pro/motion-control")
+            return await handle_fal_universal(node, inputs, api_keys, emit=emit)
+
+        async def _topaz_video_upscale_handler(
+            node: GraphNode,
+            inputs: dict[str, PortValueDict],
+            api_keys: dict[str, str],
+        ) -> dict[str, Any]:
+            node.params.setdefault("endpoint_id", "fal-ai/topaz/upscale/video")
+            return await handle_fal_universal(node, inputs, api_keys, emit=emit)
+
+        async def _grok_imagine_image_handler(
+            node: GraphNode,
+            inputs: dict[str, PortValueDict],
+            api_keys: dict[str, str],
+        ) -> dict[str, Any]:
+            node.params.setdefault("endpoint_id", "xai/grok-imagine-image")
+            return await handle_fal_universal(node, inputs, api_keys, emit=emit)
+
+        async def _grok_imagine_image_edit_handler(
+            node: GraphNode,
+            inputs: dict[str, PortValueDict],
+            api_keys: dict[str, str],
+        ) -> dict[str, Any]:
+            node.params.setdefault("endpoint_id", "xai/grok-imagine-image/edit")
+            return await handle_fal_universal(node, inputs, api_keys, emit=emit)
+
         async def _veo3_flf_handler(
             node: GraphNode,
             inputs: dict[str, PortValueDict],
@@ -1044,6 +1091,11 @@ def get_handler_registry(
         registry["topaz-image-upscale"] = _topaz_image_upscale_handler
         registry["kling-o3"] = _kling_o3_handler
         registry["kling-pro"] = _kling_pro_handler
+        registry["kling-o3-ref"] = _kling_o3_ref_handler
+        registry["kling-motion"] = _kling_motion_handler
+        registry["topaz-video-upscale"] = _topaz_video_upscale_handler
+        registry["grok-imagine-image"] = _grok_imagine_image_handler
+        registry["grok-imagine-image-edit"] = _grok_imagine_image_edit_handler
         registry["veo-3-flf"] = _veo3_flf_handler
         registry["ltx-2-3"] = _ltx_23_handler
         registry["grok-imagine-video"] = _grok_video_handler

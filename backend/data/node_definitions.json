@@ -16249,5 +16249,533 @@
         "max": 1.0
       }
     ]
+  },
+  "kling-o3-ref": {
+    "id": "kling-o3-ref",
+    "displayName": "Kling O3 Pro Reference-to-Video",
+    "category": "video-gen",
+    "apiProvider": "fal",
+    "apiEndpoint": "fal-ai/kling-video/o3/pro/reference-to-video",
+    "envKeyName": "FAL_KEY",
+    "executionPattern": "async-poll",
+    "inputPorts": [
+      {
+        "id": "prompt",
+        "label": "Prompt",
+        "dataType": "Text",
+        "required": true
+      },
+      {
+        "id": "image",
+        "label": "Start Image",
+        "dataType": "Image",
+        "required": false
+      },
+      {
+        "id": "end_image",
+        "label": "End Image",
+        "dataType": "Image",
+        "required": false
+      },
+      {
+        "id": "images",
+        "label": "Reference Images",
+        "dataType": "Image",
+        "required": false,
+        "multiple": true
+      }
+    ],
+    "outputPorts": [
+      {
+        "id": "video",
+        "label": "Video",
+        "dataType": "Video",
+        "required": false
+      }
+    ],
+    "params": [
+      {
+        "key": "duration",
+        "label": "Duration",
+        "type": "enum",
+        "required": false,
+        "default": "5",
+        "options": [
+          {
+            "label": "3 seconds",
+            "value": "3"
+          },
+          {
+            "label": "5 seconds",
+            "value": "5"
+          },
+          {
+            "label": "10 seconds",
+            "value": "10"
+          },
+          {
+            "label": "15 seconds",
+            "value": "15"
+          }
+        ]
+      },
+      {
+        "key": "aspect_ratio",
+        "label": "Aspect Ratio",
+        "type": "enum",
+        "required": false,
+        "default": "16:9",
+        "options": [
+          {
+            "label": "16:9",
+            "value": "16:9"
+          },
+          {
+            "label": "9:16",
+            "value": "9:16"
+          },
+          {
+            "label": "1:1",
+            "value": "1:1"
+          }
+        ]
+      },
+      {
+        "key": "generate_audio",
+        "label": "Generate Audio",
+        "type": "boolean",
+        "required": false,
+        "default": false
+      },
+      {
+        "key": "shot_type",
+        "label": "Shot Type",
+        "type": "enum",
+        "required": false,
+        "default": "customize",
+        "options": [
+          {
+            "label": "Customize",
+            "value": "customize"
+          },
+          {
+            "label": "Intelligent",
+            "value": "intelligent"
+          }
+        ]
+      }
+    ]
+  },
+  "kling-motion": {
+    "id": "kling-motion",
+    "displayName": "Kling v2.6 Pro Motion Control",
+    "category": "video-gen",
+    "apiProvider": "fal",
+    "apiEndpoint": "fal-ai/kling-video/v2.6/pro/motion-control",
+    "envKeyName": "FAL_KEY",
+    "executionPattern": "async-poll",
+    "inputPorts": [
+      {
+        "id": "image",
+        "label": "Character Image",
+        "dataType": "Image",
+        "required": true
+      },
+      {
+        "id": "video",
+        "label": "Motion Reference Video",
+        "dataType": "Video",
+        "required": true
+      },
+      {
+        "id": "prompt",
+        "label": "Prompt",
+        "dataType": "Text",
+        "required": false
+      }
+    ],
+    "outputPorts": [
+      {
+        "id": "video",
+        "label": "Video",
+        "dataType": "Video",
+        "required": false
+      }
+    ],
+    "params": [
+      {
+        "key": "character_orientation",
+        "label": "Character Orientation",
+        "type": "enum",
+        "required": true,
+        "default": "video",
+        "options": [
+          {
+            "label": "Image",
+            "value": "image"
+          },
+          {
+            "label": "Video",
+            "value": "video"
+          }
+        ]
+      },
+      {
+        "key": "keep_original_sound",
+        "label": "Keep Original Sound",
+        "type": "boolean",
+        "required": false,
+        "default": true
+      }
+    ]
+  },
+  "topaz-video-upscale": {
+    "id": "topaz-video-upscale",
+    "displayName": "Topaz Video Upscale",
+    "category": "transform",
+    "apiProvider": "fal",
+    "apiEndpoint": "fal-ai/topaz/upscale/video",
+    "envKeyName": "FAL_KEY",
+    "executionPattern": "async-poll",
+    "inputPorts": [
+      {
+        "id": "video",
+        "label": "Video",
+        "dataType": "Video",
+        "required": true
+      }
+    ],
+    "outputPorts": [
+      {
+        "id": "video",
+        "label": "Video",
+        "dataType": "Video",
+        "required": false
+      }
+    ],
+    "params": [
+      {
+        "key": "model",
+        "label": "Model",
+        "type": "enum",
+        "required": false,
+        "default": "Proteus",
+        "options": [
+          {
+            "label": "Proteus",
+            "value": "Proteus"
+          },
+          {
+            "label": "Artemis HQ",
+            "value": "Artemis HQ"
+          },
+          {
+            "label": "Artemis MQ",
+            "value": "Artemis MQ"
+          },
+          {
+            "label": "Artemis LQ",
+            "value": "Artemis LQ"
+          },
+          {
+            "label": "Nyx",
+            "value": "Nyx"
+          },
+          {
+            "label": "Nyx Fast",
+            "value": "Nyx Fast"
+          },
+          {
+            "label": "Nyx XL",
+            "value": "Nyx XL"
+          },
+          {
+            "label": "Nyx HF",
+            "value": "Nyx HF"
+          },
+          {
+            "label": "Gaia HQ",
+            "value": "Gaia HQ"
+          },
+          {
+            "label": "Gaia CG",
+            "value": "Gaia CG"
+          },
+          {
+            "label": "Iris",
+            "value": "Iris"
+          }
+        ]
+      },
+      {
+        "key": "upscale_factor",
+        "label": "Upscale Factor",
+        "type": "float",
+        "required": false,
+        "default": 2.0,
+        "min": 1.0,
+        "max": 4.0
+      },
+      {
+        "key": "target_fps",
+        "label": "Target FPS",
+        "type": "integer",
+        "required": false,
+        "min": 16,
+        "max": 120
+      },
+      {
+        "key": "compression",
+        "label": "Compression",
+        "type": "float",
+        "required": false,
+        "default": 0.0,
+        "min": 0.0,
+        "max": 1.0
+      },
+      {
+        "key": "noise",
+        "label": "Noise",
+        "type": "float",
+        "required": false,
+        "default": 0.0,
+        "min": 0.0,
+        "max": 1.0
+      },
+      {
+        "key": "halo",
+        "label": "Halo",
+        "type": "float",
+        "required": false,
+        "default": 0.0,
+        "min": 0.0,
+        "max": 1.0
+      },
+      {
+        "key": "grain",
+        "label": "Grain",
+        "type": "float",
+        "required": false,
+        "default": 0.0,
+        "min": 0.0,
+        "max": 1.0
+      },
+      {
+        "key": "recover_detail",
+        "label": "Recover Detail",
+        "type": "float",
+        "required": false,
+        "default": 0.0,
+        "min": 0.0,
+        "max": 1.0
+      },
+      {
+        "key": "H264_output",
+        "label": "H264 Output",
+        "type": "boolean",
+        "required": false,
+        "default": false
+      }
+    ]
+  },
+  "grok-imagine-image": {
+    "id": "grok-imagine-image",
+    "displayName": "Grok Imagine Image",
+    "category": "image-gen",
+    "apiProvider": "fal",
+    "apiEndpoint": "xai/grok-imagine-image",
+    "envKeyName": "FAL_KEY",
+    "executionPattern": "async-poll",
+    "inputPorts": [
+      {
+        "id": "prompt",
+        "label": "Prompt",
+        "dataType": "Text",
+        "required": true
+      }
+    ],
+    "outputPorts": [
+      {
+        "id": "image",
+        "label": "Image",
+        "dataType": "Image",
+        "required": false
+      }
+    ],
+    "params": [
+      {
+        "key": "num_images",
+        "label": "Number of Images",
+        "type": "integer",
+        "required": false,
+        "default": 1,
+        "min": 1,
+        "max": 4
+      },
+      {
+        "key": "aspect_ratio",
+        "label": "Aspect Ratio",
+        "type": "enum",
+        "required": false,
+        "default": "1:1",
+        "options": [
+          {
+            "label": "1:1",
+            "value": "1:1"
+          },
+          {
+            "label": "16:9",
+            "value": "16:9"
+          },
+          {
+            "label": "9:16",
+            "value": "9:16"
+          },
+          {
+            "label": "4:3",
+            "value": "4:3"
+          },
+          {
+            "label": "3:4",
+            "value": "3:4"
+          },
+          {
+            "label": "3:2",
+            "value": "3:2"
+          },
+          {
+            "label": "2:3",
+            "value": "2:3"
+          },
+          {
+            "label": "2:1",
+            "value": "2:1"
+          },
+          {
+            "label": "1:2",
+            "value": "1:2"
+          }
+        ]
+      },
+      {
+        "key": "resolution",
+        "label": "Resolution",
+        "type": "enum",
+        "required": false,
+        "default": "1k",
+        "options": [
+          {
+            "label": "1K",
+            "value": "1k"
+          },
+          {
+            "label": "2K",
+            "value": "2k"
+          }
+        ]
+      },
+      {
+        "key": "output_format",
+        "label": "Output Format",
+        "type": "enum",
+        "required": false,
+        "default": "jpeg",
+        "options": [
+          {
+            "label": "JPEG",
+            "value": "jpeg"
+          },
+          {
+            "label": "PNG",
+            "value": "png"
+          },
+          {
+            "label": "WebP",
+            "value": "webp"
+          }
+        ]
+      }
+    ]
+  },
+  "grok-imagine-image-edit": {
+    "id": "grok-imagine-image-edit",
+    "displayName": "Grok Imagine Image Edit",
+    "category": "image-gen",
+    "apiProvider": "fal",
+    "apiEndpoint": "xai/grok-imagine-image/edit",
+    "envKeyName": "FAL_KEY",
+    "executionPattern": "async-poll",
+    "inputPorts": [
+      {
+        "id": "prompt",
+        "label": "Prompt",
+        "dataType": "Text",
+        "required": true
+      },
+      {
+        "id": "images",
+        "label": "Source Images",
+        "dataType": "Image",
+        "required": true,
+        "multiple": true
+      }
+    ],
+    "outputPorts": [
+      {
+        "id": "image",
+        "label": "Image",
+        "dataType": "Image",
+        "required": false
+      }
+    ],
+    "params": [
+      {
+        "key": "num_images",
+        "label": "Number of Images",
+        "type": "integer",
+        "required": false,
+        "default": 1,
+        "min": 1,
+        "max": 10
+      },
+      {
+        "key": "resolution",
+        "label": "Resolution",
+        "type": "enum",
+        "required": false,
+        "default": "1k",
+        "options": [
+          {
+            "label": "1K",
+            "value": "1k"
+          },
+          {
+            "label": "2K",
+            "value": "2k"
+          }
+        ]
+      },
+      {
+        "key": "output_format",
+        "label": "Output Format",
+        "type": "enum",
+        "required": false,
+        "default": "jpeg",
+        "options": [
+          {
+            "label": "JPEG",
+            "value": "jpeg"
+          },
+          {
+            "label": "PNG",
+            "value": "png"
+          },
+          {
+            "label": "WebP",
+            "value": "webp"
+          }
+        ]
+      }
+    ]
   }
 }
