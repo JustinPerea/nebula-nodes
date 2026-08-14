@@ -2581,10 +2581,28 @@ def _validated_quick_image_refs(port_id: str, value: list[Any]) -> list[str]:
                 f"local image path ({'/'.join(_QUICK_IMAGE_SUFFIXES)})."
             ),
         )
-    return [
+    normalized = [
         item if is_remote_or_data_uri(item) else str(Path(item).expanduser().resolve())
         for item in value
     ]
+    # Fail fast (HTTP 400) on local files that don't exist — otherwise the
+    # temp input node raises at execution time, the main node is never
+    # scheduled, and the endpoint would return 200 with empty outputs.
+    missing = [
+        item
+        for item in normalized
+        if not is_remote_or_data_uri(item) and not Path(item).exists()
+    ]
+    if missing:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Input '{port_id}' references {len(missing)} local image file(s) "
+                f"that do not exist: {missing!r}. Check the paths — downstream "
+                "nodes would otherwise receive a reference no model can load."
+            ),
+        )
+    return normalized
 
 
 async def _quick_multi_image_input_handler(
@@ -2676,6 +2694,10 @@ async def quick_execute(body: dict[str, Any]) -> dict:
         # shape (absolute filePath) so a local file reference is actually readable.
         if input_type == "text-input":
             input_params: dict[str, Any] = {"value": value}
+        elif is_remote_or_data_uri(value):
+            # URLs and data URIs are used as-is — Path.resolve() would turn
+            # "https://host/ref.png" into a bogus local path ("/cwd/https:/...").
+            input_params = _normalize_image_input_params({"filePath": value})
         else:
             input_params = _normalize_image_input_params(
                 {"filePath": str(Path(value).expanduser().resolve())}
@@ -2730,6 +2752,16 @@ async def quick_execute(body: dict[str, Any]) -> dict:
 
     if "_quick_main" in errors:
         raise HTTPException(status_code=500, detail=errors["_quick_main"])
+
+    # A failed temp input node means the main node was never scheduled —
+    # surface that as an HTTP error instead of returning 200 with empty
+    # outputs (the engine records the failure under the temp node's id).
+    input_errors = {nid: err for nid, err in errors.items() if nid != "_quick_main"}
+    if input_errors:
+        detail = "; ".join(
+            f"{nid}: {err}" for nid, err in sorted(input_errors.items())
+        )
+        raise HTTPException(status_code=400, detail=f"Quick input error: {detail}")
 
     main_outputs = results.get("_quick_main", {})
     return {"outputs": main_outputs, "duration": round(duration, 2)}

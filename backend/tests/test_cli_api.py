@@ -1317,3 +1317,190 @@ class TestQuickMultiImageInput:
         ]
         assert len(text_nodes) == 1
         assert text_nodes[0].params == {"value": ["a", "b"]}
+
+
+class TestQuickScalarUrlAndErrorPropagation:
+    """Scrutiny fixes for /api/quick:
+
+    1. Scalar http(s) URLs and data: URIs must reach the temp input node
+       as-is — ``Path.resolve()`` would turn ``https://host/ref.png`` into a
+       bogus local path like ``/cwd/https:/host/ref.png``.
+    2. A failed temporary input node (e.g. a missing local file) must
+       surface as an HTTP error — not HTTP 200 with empty outputs, which is
+       what happens when only the ``_quick_main`` error key is checked.
+    """
+
+    def test_scalar_http_url_not_path_resolved(self, client, monkeypatch):
+        import main
+
+        captured = {}
+
+        async def _fake_execute_graph(*, nodes, edges, **kwargs):
+            captured["nodes"] = nodes
+
+        monkeypatch.setattr(main, "execute_graph", _fake_execute_graph)
+
+        url = "https://example.com/ref.png"
+        resp = client.post(
+            "/api/quick",
+            json={
+                "definitionId": "gpt-image-1-edit",
+                "inputs": {"image": url},
+                "params": {"prompt": "make it blue"},
+            },
+        )
+        assert resp.status_code == 200, resp.text
+
+        image_nodes = [
+            n for n in captured["nodes"] if n.definition_id == "image-input"
+        ]
+        assert len(image_nodes) == 1
+        # The URL must reach the node untouched — the old code resolved it
+        # into a bogus local path like "/cwd/https:/example.com/ref.png".
+        assert image_nodes[0].params["filePath"] == url
+
+    def test_scalar_data_uri_not_path_resolved(self, client, monkeypatch):
+        import main
+
+        captured = {}
+
+        async def _fake_execute_graph(*, nodes, edges, **kwargs):
+            captured["nodes"] = nodes
+
+        monkeypatch.setattr(main, "execute_graph", _fake_execute_graph)
+
+        data_uri = "data:image/png;base64,iVBORw0KGgo="
+        resp = client.post(
+            "/api/quick",
+            json={
+                "definitionId": "gpt-image-1-edit",
+                "inputs": {"image": data_uri},
+                "params": {"prompt": "make it blue"},
+            },
+        )
+        assert resp.status_code == 200, resp.text
+
+        # However the data URI is classified, it must pass through verbatim —
+        # never mangled into a resolved filesystem path.
+        temp_nodes = [n for n in captured["nodes"] if n.id != "_quick_main"]
+        assert len(temp_nodes) == 1
+        assert data_uri in temp_nodes[0].params.values()
+
+    def test_scalar_local_path_still_resolved(self, client, tmp_path, monkeypatch):
+        import main
+
+        img = tmp_path / "ref.png"
+        # Non-image bytes so _normalize_image_input_params skips the
+        # chat-uploads import rewrite and keeps the path the route produced.
+        img.write_bytes(b"not-a-real-image")
+        subdir = tmp_path / "sub"
+        subdir.mkdir()
+        unnormalized = str(subdir / ".." / "ref.png")
+
+        captured = {}
+
+        async def _fake_execute_graph(*, nodes, edges, **kwargs):
+            captured["nodes"] = nodes
+
+        monkeypatch.setattr(main, "execute_graph", _fake_execute_graph)
+
+        resp = client.post(
+            "/api/quick",
+            json={
+                "definitionId": "gpt-image-1-edit",
+                "inputs": {"image": unnormalized},
+                "params": {"prompt": "make it blue"},
+            },
+        )
+        assert resp.status_code == 200, resp.text
+
+        image_nodes = [
+            n for n in captured["nodes"] if n.definition_id == "image-input"
+        ]
+        assert len(image_nodes) == 1
+        file_path = image_nodes[0].params["filePath"]
+        # Local paths keep the Path.resolve() treatment: the ".." segment is
+        # normalized away and the result is an absolute path to a real file.
+        assert file_path == str(img.resolve())
+        assert Path(file_path).is_file()
+
+    def test_array_with_missing_local_path_returns_400(self, client, monkeypatch):
+        import main
+
+        async def _fake_execute_graph(**kwargs):
+            pytest.fail("execute_graph must not run when a local file is missing")
+
+        monkeypatch.setattr(main, "execute_graph", _fake_execute_graph)
+
+        missing = "/definitely/missing/nope.png"
+        resp = client.post(
+            "/api/quick",
+            json={
+                "definitionId": "nano-banana-fal-edit",
+                "inputs": {"images": ["https://ok.example/a.png", missing]},
+            },
+        )
+        assert resp.status_code == 400
+        detail = resp.json()["detail"]
+        assert "nope.png" in detail
+
+    def test_failed_temp_input_node_returns_error_not_empty_200(
+        self, client, monkeypatch
+    ):
+        """Real-graph run: a missing scalar local file fails the temp
+        image-input node, so the main node is never scheduled. The endpoint
+        must propagate that failure as an HTTP error instead of returning
+        200 with empty outputs."""
+        import main
+
+        monkeypatch.setattr(main, "execution_cache", None)
+
+        resp = client.post(
+            "/api/quick",
+            json={
+                "definitionId": "gpt-image-1-edit",
+                "inputs": {"image": "/definitely/missing/nope.png"},
+                "params": {"prompt": "make it blue"},
+            },
+        )
+        assert resp.status_code in (400, 500), resp.text
+        detail = resp.json()["detail"]
+        assert "nope.png" in detail
+
+    def test_array_of_urls_succeeds_with_nonempty_outputs(
+        self, client, monkeypatch
+    ):
+        """An all-URL array runs the real graph end-to-end and returns the
+        main node's outputs (regression guard for the error-propagation
+        change: valid runs must not be mistaken for failures)."""
+        import main
+
+        seen = {}
+
+        async def _spy_main_handler(node, inputs, api_keys):
+            seen["inputs"] = inputs
+            return {"image": {"type": "Image", "value": "out.png"}}
+
+        monkeypatch.setattr(
+            main,
+            "get_handler_registry",
+            lambda emit=None: {"nano-banana-fal-edit": _spy_main_handler},
+        )
+        monkeypatch.setattr(main, "execution_cache", None)
+
+        urls = ["https://example.com/one.png", "https://example.com/two.png"]
+        resp = client.post(
+            "/api/quick",
+            json={
+                "definitionId": "nano-banana-fal-edit",
+                "inputs": {"images": urls},
+                "params": {},
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["outputs"] == {"image": {"type": "Image", "value": "out.png"}}
+
+        images_input = seen["inputs"]["images"]
+        assert images_input.type == "Image"
+        assert images_input.value == urls
