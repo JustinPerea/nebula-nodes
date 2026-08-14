@@ -1200,6 +1200,34 @@ def get_handler_registry(
             node.params.setdefault("endpoint_id", "fal-ai/esrgan")
             return await handle_fal_universal(node, inputs, api_keys, emit=emit)
 
+        async def _recraft_crisp_upscale_handler(node, inputs, api_keys):
+            node.params.setdefault("endpoint_id", "fal-ai/recraft/upscale/crisp")
+            return await handle_fal_universal(node, inputs, api_keys, emit=emit)
+
+        async def _pika_i2v_handler(node, inputs, api_keys):
+            node.params.setdefault("endpoint_id", "fal-ai/pika/v2.2/image-to-video")
+            return await handle_fal_universal(node, inputs, api_keys, emit=emit)
+
+        async def _hunyuan_video_handler(node, inputs, api_keys):
+            node.params.setdefault("endpoint_id", "fal-ai/hunyuan-video")
+            return await handle_fal_universal(node, inputs, api_keys, emit=emit)
+
+        async def _elevenlabs_music_handler(node, inputs, api_keys):
+            node.params.setdefault("endpoint_id", "fal-ai/elevenlabs/music")
+            return await handle_fal_universal(node, inputs, api_keys, emit=emit)
+
+        async def _wan_animate_move_handler(node, inputs, api_keys):
+            node.params.setdefault("endpoint_id", "fal-ai/wan/v2.2-14b/animate/move")
+            return await handle_fal_universal(node, inputs, api_keys, emit=emit)
+
+        async def _wan_animate_replace_handler(node, inputs, api_keys):
+            node.params.setdefault("endpoint_id", "fal-ai/wan/v2.2-14b/animate/replace")
+            return await handle_fal_universal(node, inputs, api_keys, emit=emit)
+
+        async def _kling_video_to_audio_handler(node, inputs, api_keys):
+            node.params.setdefault("endpoint_id", "fal-ai/kling-video/video-to-audio")
+            return await handle_fal_universal(node, inputs, api_keys, emit=emit)
+
         async def _nano_banana_fal_handler(node, inputs, api_keys):
             routed_node = _nano_banana_fal_node(node, edit=False)
             return await handle_fal_universal(routed_node, inputs, api_keys, emit=emit)
@@ -1318,6 +1346,13 @@ def get_handler_registry(
         registry["seedream-4-5"] = _seedream45_handler
         registry["sora-2-i2v"] = _sora2_i2v_handler
         registry["esrgan-upscale"] = _esrgan_upscale_handler
+        registry["recraft-crisp-upscale"] = _recraft_crisp_upscale_handler
+        registry["pika-i2v"] = _pika_i2v_handler
+        registry["hunyuan-video"] = _hunyuan_video_handler
+        registry["elevenlabs-music"] = _elevenlabs_music_handler
+        registry["wan-animate-move"] = _wan_animate_move_handler
+        registry["wan-animate-replace"] = _wan_animate_replace_handler
+        registry["kling-video-to-audio"] = _kling_video_to_audio_handler
         registry["nano-banana-fal"] = _nano_banana_fal_handler
         registry["nano-banana-fal-edit"] = _nano_banana_fal_edit_handler
         registry["ideogram-v4"] = _ideogram_v4_handler

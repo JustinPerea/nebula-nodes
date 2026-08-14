@@ -6407,3 +6407,336 @@ async def test_flux2_max_still_routes_to_max():
     assert "flux-2-max" in url
     payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
     assert "model" not in payload
+
+
+# ── recraft-crisp-upscale ────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_recraft_crisp_upscale_endpoint_image_mapping_and_output():
+    """recraft-crisp-upscale maps image → image_url, routes to recraft/upscale/crisp."""
+    from execution.sync_runner import get_handler_registry
+
+    emit = AsyncMock()
+    registry = get_handler_registry(emit=emit)
+    handler = registry["recraft-crisp-upscale"]
+
+    mock_submit, mock_status, mock_result = _make_poll_mocks(
+        {"image": {"url": "https://fal.ai/recraft_crisp.png"}}
+    )
+
+    node = GraphNode(
+        id="test-recraft-crisp",
+        definitionId="recraft-crisp-upscale",
+        params={"enable_safety_checker": True},
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            result = await handler(
+                node,
+                {"image": PortValueDict(type="Image", value="https://example.com/input.png")},
+                {"FAL_KEY": "fal_test"},
+            )
+
+    assert result["image"]["type"] == "Image"
+    assert result["image"]["value"] == "https://fal.ai/recraft_crisp.png"
+    url = mock_client.post.call_args.args[0] if mock_client.post.call_args.args else mock_client.post.call_args[0][0]
+    assert "recraft/upscale/crisp" in url
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert payload["image_url"] == "https://example.com/input.png"
+
+
+# ── pika-i2v ─────────────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_pika_i2v_image_prompt_mapping_and_endpoint():
+    """pika-i2v maps image → image_url, prompt → prompt, routes to pika/v2.2/image-to-video."""
+    from execution.sync_runner import get_handler_registry
+
+    emit = AsyncMock()
+    registry = get_handler_registry(emit=emit)
+    handler = registry["pika-i2v"]
+
+    mock_submit, mock_status, mock_result = _make_poll_mocks(
+        {"video": {"url": "https://fal.ai/pika_i2v.mp4"}}
+    )
+
+    node = GraphNode(
+        id="test-pika-i2v",
+        definitionId="pika-i2v",
+        params={"resolution": "1080p", "duration": 10, "negative_prompt": "blurry"},
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            result = await handler(
+                node,
+                {
+                    "prompt": PortValueDict(type="Text", value="a dog running"),
+                    "image": PortValueDict(type="Image", value="https://example.com/dog.png"),
+                },
+                {"FAL_KEY": "fal_test"},
+            )
+
+    assert result["video"]["type"] == "Video"
+    assert result["video"]["value"] == "https://fal.ai/pika_i2v.mp4"
+    url = mock_client.post.call_args.args[0] if mock_client.post.call_args.args else mock_client.post.call_args[0][0]
+    assert "pika/v2.2/image-to-video" in url
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert payload["image_url"] == "https://example.com/dog.png"
+    assert payload["prompt"] == "a dog running"
+    assert payload["resolution"] == "1080p"
+
+
+# ── hunyuan-video ────────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_hunyuan_video_endpoint_and_params():
+    """hunyuan-video routes to fal-ai/hunyuan-video, forwards params, parses video output."""
+    from execution.sync_runner import get_handler_registry
+
+    emit = AsyncMock()
+    registry = get_handler_registry(emit=emit)
+    handler = registry["hunyuan-video"]
+
+    mock_submit, mock_status, mock_result = _make_poll_mocks(
+        {"video": {"url": "https://fal.ai/hunyuan.mp4"}}
+    )
+
+    node = GraphNode(
+        id="test-hunyuan",
+        definitionId="hunyuan-video",
+        params={"resolution": "720p", "aspect_ratio": "16:9", "num_frames": "129", "pro_mode": True},
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            result = await handler(
+                node,
+                {"prompt": PortValueDict(type="Text", value="a beautiful sunset")},
+                {"FAL_KEY": "fal_test"},
+            )
+
+    assert result["video"]["type"] == "Video"
+    assert result["video"]["value"] == "https://fal.ai/hunyuan.mp4"
+    url = mock_client.post.call_args.args[0] if mock_client.post.call_args.args else mock_client.post.call_args[0][0]
+    assert "fal-ai/hunyuan-video" in url
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert payload["prompt"] == "a beautiful sunset"
+    assert payload["resolution"] == "720p"
+    assert payload["aspect_ratio"] == "16:9"
+    assert payload["num_frames"] == "129"
+    assert payload["pro_mode"] is True
+
+
+# ── elevenlabs-music ─────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_elevenlabs_music_endpoint_and_audio_output():
+    """elevenlabs-music routes to fal-ai/elevenlabs/music, maps prompt, parses audio output."""
+    from execution.sync_runner import get_handler_registry
+
+    emit = AsyncMock()
+    registry = get_handler_registry(emit=emit)
+    handler = registry["elevenlabs-music"]
+
+    mock_submit, mock_status, mock_result = _make_poll_mocks(
+        {"audio": {"url": "https://fal.ai/eleven_music.mp3"}}
+    )
+
+    node = GraphNode(
+        id="test-eleven-music",
+        definitionId="elevenlabs-music",
+        params={"music_length_ms": 60000, "force_instrumental": True},
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            result = await handler(
+                node,
+                {"prompt": PortValueDict(type="Text", value="epic orchestral battle music")},
+                {"FAL_KEY": "fal_test"},
+            )
+
+    assert result["audio"]["type"] == "Audio"
+    assert result["audio"]["value"] == "https://fal.ai/eleven_music.mp3"
+    url = mock_client.post.call_args.args[0] if mock_client.post.call_args.args else mock_client.post.call_args[0][0]
+    assert "elevenlabs/music" in url
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert payload["prompt"] == "epic orchestral battle music"
+    assert payload["music_length_ms"] == 60000
+    assert payload["force_instrumental"] is True
+
+
+# ── wan-animate-move ─────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_wan_animate_move_image_video_mapping_and_endpoint():
+    """wan-animate-move maps image → image_url, video → video_url, routes to animate/move."""
+    from execution.sync_runner import get_handler_registry
+
+    emit = AsyncMock()
+    registry = get_handler_registry(emit=emit)
+    handler = registry["wan-animate-move"]
+
+    mock_submit, mock_status, mock_result = _make_poll_mocks(
+        {"video": {"url": "https://fal.ai/wan_move.mp4"}}
+    )
+
+    node = GraphNode(
+        id="test-wan-move",
+        definitionId="wan-animate-move",
+        params={"resolution": "720p", "guidance_scale": 3.0, "num_inference_steps": 30},
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            result = await handler(
+                node,
+                {
+                    "image": PortValueDict(type="Image", value="https://example.com/subject.png"),
+                    "video": PortValueDict(type="Video", value="https://example.com/motion.mp4"),
+                },
+                {"FAL_KEY": "fal_test"},
+            )
+
+    assert result["video"]["type"] == "Video"
+    assert result["video"]["value"] == "https://fal.ai/wan_move.mp4"
+    url = mock_client.post.call_args.args[0] if mock_client.post.call_args.args else mock_client.post.call_args[0][0]
+    assert "wan/v2.2-14b/animate/move" in url
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert payload["image_url"] == "https://example.com/subject.png"
+    assert payload["video_url"] == "https://example.com/motion.mp4"
+    assert payload["resolution"] == "720p"
+
+
+# ── wan-animate-replace ──────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_wan_animate_replace_image_video_mapping_and_endpoint():
+    """wan-animate-replace maps image → image_url, video → video_url, routes to animate/replace."""
+    from execution.sync_runner import get_handler_registry
+
+    emit = AsyncMock()
+    registry = get_handler_registry(emit=emit)
+    handler = registry["wan-animate-replace"]
+
+    mock_submit, mock_status, mock_result = _make_poll_mocks(
+        {"video": {"url": "https://fal.ai/wan_replace.mp4"}}
+    )
+
+    node = GraphNode(
+        id="test-wan-replace",
+        definitionId="wan-animate-replace",
+        params={"resolution": "580p", "guidance_scale": 2.0},
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            result = await handler(
+                node,
+                {
+                    "image": PortValueDict(type="Image", value="https://example.com/new_subject.png"),
+                    "video": PortValueDict(type="Video", value="https://example.com/original.mp4"),
+                },
+                {"FAL_KEY": "fal_test"},
+            )
+
+    assert result["video"]["type"] == "Video"
+    assert result["video"]["value"] == "https://fal.ai/wan_replace.mp4"
+    url = mock_client.post.call_args.args[0] if mock_client.post.call_args.args else mock_client.post.call_args[0][0]
+    assert "wan/v2.2-14b/animate/replace" in url
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert payload["image_url"] == "https://example.com/new_subject.png"
+    assert payload["video_url"] == "https://example.com/original.mp4"
+    assert payload["resolution"] == "580p"
+
+
+# ── kling-video-to-audio ─────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_kling_video_to_audio_video_mapping_and_params():
+    """kling-video-to-audio maps video → video_url, routes to kling-video/video-to-audio."""
+    from execution.sync_runner import get_handler_registry
+
+    emit = AsyncMock()
+    registry = get_handler_registry(emit=emit)
+    handler = registry["kling-video-to-audio"]
+
+    mock_submit, mock_status, mock_result = _make_poll_mocks(
+        {"audio": {"url": "https://fal.ai/kling_audio.mp3"}, "video": {"url": "https://fal.ai/kling_v2a.mp4"}}
+    )
+
+    node = GraphNode(
+        id="test-kling-v2a",
+        definitionId="kling-video-to-audio",
+        params={"sound_effect_prompt": "explosion", "background_music_prompt": "tense", "asmr_mode": True},
+    )
+
+    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_submit
+        mock_client.get.side_effect = [mock_status, mock_result]
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
+            result = await handler(
+                node,
+                {"video": PortValueDict(type="Video", value="https://example.com/scene.mp4")},
+                {"FAL_KEY": "fal_test"},
+            )
+
+    url = mock_client.post.call_args.args[0] if mock_client.post.call_args.args else mock_client.post.call_args[0][0]
+    assert "kling-video/video-to-audio" in url
+    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
+    assert payload["video_url"] == "https://example.com/scene.mp4"
+    assert payload["sound_effect_prompt"] == "explosion"
+    assert payload["background_music_prompt"] == "tense"
+    assert payload["asmr_mode"] is True
+    # The output contains both audio and video; _parse_fal_output checks audio
+    # before video, so the primary result key is "audio".
+    assert result.get("audio", {}).get("type") == "Audio"
