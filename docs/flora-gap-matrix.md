@@ -19,9 +19,11 @@ in `.claude/skills/fal/skills/`. "Blocked" means no BYOK-reachable API endpoint 
 | Closed in Wave 1 | 6 |
 | Closed in Wave 2 | 5 |
 | Closed in Wave 3 | 4 |
-| BYOK-reachable (remaining) | 13 |
+| Closed in Wave 4 | 7 |
+| Closed in Wave 5 | 6 |
+| BYOK-reachable (remaining) | 0 |
 | Blocked (no BYOK path) | 13 |
-| Current Nebula node count | 153 |
+| Current Nebula node count | 164 |
 
 ## Already Closed (previous sessions)
 
@@ -54,26 +56,19 @@ in `.claude/skills/fal/skills/`. "Blocked" means no BYOK-reachable API endpoint 
 | Sora 2 Image-to-Video | `sora-2-i2v` node | New node (video-gen), FAL `fal-ai/sora-2/image-to-video` |
 | Flux 2 Flash | `flux-2-pro` node | Enum expansion (Pro/Max/Flash), routes to `fal-ai/flux-2/flash` |
 | Real-ESRGAN upscale | `esrgan-upscale` node | New node (transform), 6 model variants, face enhancement |
-
-## BYOK-Reachable Gaps (implementable)
-
-### LOW Priority
-
-| # | Flora model | FAL slug (verified) | Implementation shape | Priority |
-|---|---|---|---|---|
-| 16 | Recraft Crisp Upscale | `fal-ai/recraft/upscale/crisp` | New node `recraft-crisp-upscale` (transform) | LOW |
-| 17 | Pika 2.2 I2V | `fal-ai/pika/v2.2/image-to-video` | New node `pika-i2v` (video-gen) | LOW |
-| 18 | HunyuanVideo T2V | `fal-ai/hunyuan-video` | New node `hunyuan-video` (video-gen) | LOW |
-| 19 | WAN 2.7 T2V | `fal-ai/wan/v2.7/text-to-video` | Enum expansion on `wan-2-6-t2v` (add 2.7 option) | LOW |
-| 20 | ElevenLabs Music | `fal-ai/elevenlabs/music` | New node `elevenlabs-music` (audio-gen) | LOW |
-| 21 | WAN 2.2 Animate Move | `fal-ai/wan/v2.2-14b/animate/move` | New node `wan-animate-move` (video-gen) | LOW |
-| 22 | WAN 2.2 Animate Replace | `fal-ai/wan/v2.2-14b/animate/replace` | New node `wan-animate-replace` (video-gen) | LOW |
-| 23 | Kling Video-to-Audio | `fal-ai/kling-video/video-to-audio` | New node `kling-video-to-audio` (audio-gen) | LOW |
-| 24 | Seedance 1.0 Pro I2V | `fal-ai/bytedance/seedance/v1/pro/image-to-video` | Enum expansion on `seedance-1-5` (add v1.0 option) | LOW |
-| 25 | Seedance 1.0 Pro T2V | `fal-ai/bytedance/seedance/v1/pro/text-to-video` | New node or enum expansion | LOW |
-| 26 | LTX-2.3 Audio-to-Video | `fal-ai/ltx-2.3/audio-to-video` | New node `ltx-audio-to-video` (video-gen) | LOW |
-| 27 | LTX-2.3 Fast T2V | `fal-ai/ltx-2.3/text-to-video/fast` | Enum expansion on `ltx-2-3` (add Fast option) | LOW |
-| 28 | Video Understanding (vision) | `fal-ai/video-understanding` | New node `video-understanding` (analyzer) | LOW |
+| Recraft Crisp Upscale | `recraft-crisp-upscale` node | New node (transform), precision image upscaler |
+| Pika 2.2 I2V | `pika-i2v` node | New node (video-gen), 720p/1080p, 5s/10s |
+| HunyuanVideo T2V | `hunyuan-video` node | New node (video-gen), Tencent open-source, 720p |
+| WAN 2.7 T2V | `wan-2-6-t2v` node | Enum expansion (2.6/2.7), added audio input port |
+| ElevenLabs Music | `elevenlabs-music` node | New node (audio-gen), full tracks with vocals/lyrics |
+| WAN 2.2 Animate Move | `wan-animate-move` node | New node (video-gen), character animation from reference video |
+| WAN 2.2 Animate Replace | `wan-animate-replace` node | New node (video-gen), character replacement in video |
+| Kling Video-to-Audio | `kling-video-to-audio` node | New node (audio-gen), context-aware SFX + BGM |
+| Seedance 1.0 Pro I2V | `seedance-v1-5` node | Enum expansion (1.5/1.0 Pro I2V) |
+| Seedance 1.0 Pro T2V | `seedance-1-0-t2v` node | New node (video-gen), 1080p, up to 12s |
+| LTX-2.3 Audio-to-Video | `ltx-audio-to-video` node | New node (video-gen), audio-driven video generation |
+| LTX-2.3 Fast T2V | `ltx-2-3-fast-t2v` node | New node (video-gen), 8-step distillation, up to 4K |
+| Video Understanding (vision) | `video-understanding` node | New node (analyzer), Qwen2-VL video analysis |
 
 ## Blocked Gaps (no BYOK-reachable API)
 
@@ -173,5 +168,21 @@ These are architectural/platform-level gaps from the agent art-direction-frictio
 12. ✅ Enum expansion on `flux-2-pro` — add FLUX 2 Flash model enum.
 13. ✅ New node `esrgan-upscale` — Real-ESRGAN (6 model variants, face enhancement).
 
-### Wave 4+ (LOW priority, remaining)
-13-28. Remaining LOW priority items from the table above.
+### Wave 4 ✅ COMPLETE (committed 9899a25)
+14. ✅ New node `recraft-crisp-upscale` — Recraft Crisp image upscaler (transform).
+15. ✅ New node `pika-i2v` — Pika 2.2 Image-to-Video (720p/1080p, 5s/10s).
+16. ✅ New node `hunyuan-video` — Tencent HunyuanVideo T2V (720p, up to 5s).
+17. ✅ New node `elevenlabs-music` — ElevenLabs Music (vocals, lyrics, up to 10min).
+18. ✅ New node `wan-animate-move` — WAN 2.2 Animate Move (character animation from reference video).
+19. ✅ New node `wan-animate-replace` — WAN 2.2 Animate Replace (character replacement in video).
+20. ✅ New node `kling-video-to-audio` — Kling Video-to-Audio (context-aware SFX + BGM).
+
+### Wave 5 ✅ COMPLETE (committed cabcf2e) — ALL BYOK-REACHABLE GAPS CLOSED
+21. ✅ New node `seedance-1-0-t2v` — Seedance 1.0 Pro T2V (1080p, up to 12s).
+22. ✅ New node `ltx-audio-to-video` — LTX 2.3 Audio-to-Video (audio-driven video generation).
+23. ✅ New node `video-understanding` — Qwen2-VL video analysis (analyzer category).
+24. ✅ New node `ltx-2-3-fast-t2v` — LTX 2.3 Fast T2V (8-step distillation, up to 4K).
+25. ✅ Enum expansion on `wan-2-6-t2v` — add WAN 2.7 model enum + audio input port.
+26. ✅ Enum expansion on `seedance-v1-5` — add Seedance 1.0 Pro I2V model enum.
+
+**All 28 BYOK-reachable gaps are now closed.** 13 gaps remain blocked (no FAL endpoint or direct API available).
