@@ -17,9 +17,10 @@ in `.claude/skills/fal/skills/`. "Blocked" means no BYOK-reachable API endpoint 
 | Total gaps found (web, post-baseline) | 3 |
 | Already closed (previous sessions) | 12 |
 | Closed in Wave 1 | 6 |
-| BYOK-reachable (remaining) | 14 |
+| Closed in Wave 2 | 5 |
+| BYOK-reachable (remaining) | 9 |
 | Blocked (no BYOK path) | 13 |
-| Current Nebula node count | 146 |
+| Current Nebula node count | 151 |
 
 ## Already Closed (previous sessions)
 
@@ -43,6 +44,11 @@ in `.claude/skills/fal/skills/`. "Blocked" means no BYOK-reachable API endpoint 
 | Kling v3 Pro T2V | `kling-v3` node | Enum expansion (Standard/Pro T2V), preserves multi_prompt JSON parsing |
 | Flux Kontext Max | `flux-kontext` node | Enum expansion (base/Max) |
 | Flux 2 Max | `flux-2-pro` node | Enum expansion (Pro/Max) |
+| Kling O3 Pro Reference-to-Video | `kling-o3-ref` node | New node, custom handler maps `image`→`start_image_url`. Supports reference images via `images`→`image_urls`. |
+| Kling v2.6 Pro Motion Control | `kling-motion` node | New node, `image`→`image_url` + `video`→`video_url` standard mapping. character_orientation enum. |
+| Topaz Video Upscale | `topaz-video-upscale` node | New node (transform), 11 model options, full enhancement params. |
+| Grok Imagine Image (t2i) | `grok-imagine-image` node | New node (image-gen), FAL `xai/grok-imagine-image`, up to 2K resolution. |
+| Grok Imagine Image Edit | `grok-imagine-image-edit` node | New node (image-gen), FAL `xai/grok-imagine-image/edit`, `images`→`image_urls` mapping. |
 
 ## BYOK-Reachable Gaps (implementable)
 
@@ -50,11 +56,6 @@ in `.claude/skills/fal/skills/`. "Blocked" means no BYOK-reachable API endpoint 
 
 | # | Flora model | FAL slug (verified) | Implementation shape | Priority |
 |---|---|---|---|---|
-| 5 | Kling O3 Pro Reference-to-Video | `fal-ai/kling-video/o3/pro/reference-to-video` | New node `kling-o3-ref`. Takes `image` (start), `end_image` (end), `images` (reference images), `prompt` with @Element/@Image tags. Uses `start_image_url`+`end_image_url`+`image_urls`. | MEDIUM |
-| 6 | Kling v2.6 Pro Motion Control | `fal-ai/kling-video/v2.6/pro/motion-control` | New node `kling-motion`. Takes `image` (character) + `video` (motion reference) + `character_orientation` enum. Uses `image_url`+`video_url`. | MEDIUM |
-| 9 | Topaz Video Upscale | `fal-ai/topaz/upscale/video` | New node `topaz-video-upscale` (transform). Takes `video` input. | MEDIUM |
-| 10 | Grok Imagine Image (t2i) | `xai/grok-imagine-image` | New node `grok-imagine-image` (image-gen). | MEDIUM |
-| 11 | Grok Imagine Image Edit | `xai/grok-imagine-image/edit` | New node `grok-imagine-image-edit` or combined with #10 via model/toggle. | MEDIUM |
 | 12 | Seedream 5.0 Lite | `fal-ai/bytedance/seedream/v5/lite/text-to-image` | Enum expansion on `seedream-4-5` (add model enum: 4.5/5.0 Lite). | MEDIUM |
 | 13 | Sora 2 Image-to-Video | `fal-ai/sora-2/image-to-video` | New node `sora-2-i2v` or enum expansion on `sora-2` to support i2v mode. | MEDIUM |
 
@@ -163,11 +164,12 @@ These are architectural/platform-level gaps from the agent art-direction-frictio
 3. ✅ Enum expansion on `flux-kontext` — add model enum base/Max.
 4. ✅ Enum expansion on `flux-2-pro` — add model enum Pro/Max.
 
-### Wave 2 (MEDIUM priority, max 4 features)
-5. New node `kling-o3-ref` — O3 Pro Reference-to-Video.
-6. New node `kling-motion` — v2.6 Pro Motion Control.
-7. New node `topaz-video-upscale` — Topaz Video Upscale.
-8. New node `grok-imagine-image` — Grok Imagine Image t2i/i2i.
+### Wave 2 ✅ COMPLETE (committed d967ab0)
+5. ✅ New node `kling-o3-ref` — O3 Pro Reference-to-Video with custom start_image_url mapping.
+6. ✅ New node `kling-motion` — v2.6 Pro Motion Control (image+video → motion transfer).
+7. ✅ New node `topaz-video-upscale` — Topaz Video Upscale (11 model options, full enhancement params).
+8. ✅ New node `grok-imagine-image` — Grok Imagine Image t2i via FAL (up to 2K resolution).
+9. ✅ New node `grok-imagine-image-edit` — Grok Imagine Image Edit i2i via FAL.
 
 ### Wave 3 (MEDIUM + LOW, max 4 features)
 9. Enum expansion on `seedream-4-5` — add Seedream 5.0 Lite.
