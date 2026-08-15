@@ -139,13 +139,23 @@ PROVIDER_CHECKS: dict[str, ProviderCheck] = {
 # provider name -> (monotonic expiry, result dict)
 _provider_check_cache: dict[str, tuple[float, dict[str, Any]]] = {}
 
+# Cache generation counter, bumped by clear_provider_validation_cache().
+# validate_provider_keys() snapshots the generation when it starts; if a clear
+# lands while its provider HTTP calls are in flight, the snapshot no longer
+# matches and the now-stale results are discarded instead of being cached —
+# otherwise a settings save could be followed by pre-save results repopulating
+# the cache and being served for up to the TTL.
+_provider_cache_generation = 0
+
 # Indirection so tests can drive cache expiry with a fake clock.
 _monotonic = time.monotonic
 
 
 def clear_provider_validation_cache() -> None:
     """Drop all cached validation results (used by tests and key updates)."""
+    global _provider_cache_generation
     _provider_check_cache.clear()
+    _provider_cache_generation += 1
 
 
 def _utc_now_iso() -> str:
@@ -241,8 +251,15 @@ async def validate_provider_keys(
     where status is one of not_configured / valid / invalid / error. Within the
     TTL the cached dict is returned unchanged (identical last_checked); expired
     or forced entries are re-checked with one minimal API call per provider.
+
+    If clear_provider_validation_cache() runs while this call's provider
+    requests are in flight (e.g. a concurrent settings save), the freshly
+    computed results are still returned to the caller but are NOT written to
+    the cache — they predate the clear and would otherwise repopulate it with
+    stale status.
     """
     now = _monotonic()
+    generation = _provider_cache_generation
     results: dict[str, dict[str, Any]] = {}
     pending: list[str] = []
 
@@ -259,8 +276,10 @@ async def validate_provider_keys(
             checked = await asyncio.gather(
                 *(_check_one(client, name, PROVIDER_CHECKS[name]) for name in pending)
             )
+        cache_current = _provider_cache_generation == generation
         for name, result in zip(pending, checked):
-            _provider_check_cache[name] = (now + ttl_seconds, result)
+            if cache_current:
+                _provider_check_cache[name] = (now + ttl_seconds, result)
             results[name] = result
 
     return results

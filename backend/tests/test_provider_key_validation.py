@@ -11,6 +11,7 @@ All HTTP is mocked — no live API calls.
 """
 from __future__ import annotations
 
+import asyncio
 import sys
 from pathlib import Path
 
@@ -413,3 +414,73 @@ def test_settings_save_clears_provider_validation_cache(monkeypatch):
     second = client.get("/api/health/providers").json()
     assert len(log) == 2
     assert second["providers"]["FAL"]["status"] == "valid"
+
+
+# ---------------------------------------------------------------------------
+# Cache generation / mid-flight clear race (misc-provider-cache-race)
+# ---------------------------------------------------------------------------
+
+
+def test_clear_provider_validation_cache_increments_generation():
+    """Each clear bumps the cache generation counter so in-flight validation
+    calls can detect that their results became stale mid-flight."""
+    before = settings_service._provider_cache_generation
+    settings_service.clear_provider_validation_cache()
+    assert settings_service._provider_cache_generation == before + 1
+
+
+@pytest.mark.asyncio
+async def test_in_flight_result_not_cached_when_cache_cleared_mid_flight(monkeypatch):
+    """Race: a provider validation HTTP call is in flight when a settings save
+    clears the cache. The in-flight (pre-save) result must NOT repopulate the
+    cache — the next health poll must revalidate against the provider."""
+    _set_keys(monkeypatch, {"FAL_KEY": "old-key"})
+
+    request_in_flight = asyncio.Event()
+    release_response = asyncio.Event()
+    request_count = {"n": 0}
+
+    class _BlockingClient:
+        """Fake client whose GET blocks until the test releases it."""
+
+        def __init__(self, **_kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            return False
+
+        async def get(self, url, headers=None, **_kwargs):
+            request_count["n"] += 1
+            request_in_flight.set()
+            await release_response.wait()
+            return _FakeResponse(200)
+
+    monkeypatch.setattr(
+        settings_service.httpx,
+        "AsyncClient",
+        lambda **kwargs: _BlockingClient(**kwargs),
+    )
+
+    task = asyncio.create_task(settings_service.validate_provider_keys())
+    await request_in_flight.wait()  # provider HTTP call is now in flight
+
+    # Mid-flight: a settings save clears the validation cache.
+    settings_service.clear_provider_validation_cache()
+
+    release_response.set()
+    result = await task
+
+    # The caller still receives the result it computed...
+    assert result["FAL"]["status"] == "valid"
+    # ...but the stale in-flight result was NOT stored in the cache.
+    assert settings_service._provider_check_cache == {}
+
+    # The next health poll revalidates (new HTTP traffic) instead of serving
+    # the discarded pre-save result, and repopulates the cache.
+    second = await settings_service.validate_provider_keys()
+    assert request_count["n"] == 2
+    assert second["FAL"]["status"] == "valid"
+    assert "FAL" in settings_service._provider_check_cache
