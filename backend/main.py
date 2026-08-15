@@ -608,7 +608,11 @@ async def upload_file_consolidated(
     the upload metadata so callers can handle node creation themselves (or
     use the URL for an existing node).
 
-    Probe failure on a video that passed the magic-byte sniff returns 415.
+    Probe failure on a video that passed the magic-byte sniff deletes the
+    just-written file (unless it pre-existed via content-hash dedup) and
+    returns 415. A graphSync broadcast failure after node creation rolls the
+    node back out of cli_graph and returns 500. Pre-write rejections (oversize,
+    unsupported bytes, too small) never touch disk, graph, or the broadcast.
 
     Supersedes the deprecated /api/upload and /api/chat/uploads endpoints;
     both shapes of caller can migrate to this one.
@@ -651,7 +655,11 @@ async def upload_file_consolidated(
 
     digest = hashlib.sha256(content).hexdigest()
     saved_path = CHAT_UPLOADS_DIR / f"{digest}{ext}"
-    if not saved_path.exists():
+    # Track whether THIS request created the file: content-hash dedup means the
+    # file may already exist from an earlier upload, in which case a later
+    # failure must NOT delete it (other nodes/requests may reference it).
+    file_created = not saved_path.exists()
+    if file_created:
         # Dedup by content hash: identical bytes collapse to one file on disk.
         # Concurrent write-after-write writes the same bytes and is benign.
         saved_path.write_bytes(content)
@@ -687,6 +695,16 @@ async def upload_file_consolidated(
             try:
                 probe = await ffprobe_video(saved_path)
             except Exception as exc:
+                # Transactional cleanup: an unprobeable video is useless, so
+                # remove the file this request just wrote — but ONLY if this
+                # request created it. A deduplicated pre-existing file may be
+                # referenced by other nodes and must survive. Catch any probe
+                # exception, not just the nominal ffprobe error type.
+                if file_created:
+                    try:
+                        saved_path.unlink(missing_ok=True)
+                    except OSError:
+                        pass  # best-effort cleanup; the 415 still stands
                 raise HTTPException(
                     status_code=415,
                     detail=f"Could not probe video metadata: {exc}",
@@ -702,7 +720,23 @@ async def upload_file_consolidated(
             response["sourceIsVfr"] = probe.is_vfr
 
         node_id = cli_graph.add_node(node_type, node_params, position=new_position)
-        await _broadcast_graph_sync()
+        try:
+            await _broadcast_graph_sync()
+        except Exception as exc:
+            # Roll back the graph mutation so a failed broadcast doesn't leave
+            # a node the frontend never heard about. Removal is best-effort —
+            # even if it errors, the caller still gets an error response with
+            # no success fields. The uploaded file stays on disk (it is a
+            # valid, content-addressed artifact, same as a create_node=false
+            # upload); only the graph mutation is rolled back.
+            try:
+                cli_graph.remove_node(node_id)
+            except Exception:
+                pass
+            raise HTTPException(
+                status_code=500,
+                detail=f"Upload succeeded but graph sync failed: {exc}",
+            ) from exc
         response["nodeId"] = node_id
         if node_type == "image-input":
             response["thumbUrl"] = url

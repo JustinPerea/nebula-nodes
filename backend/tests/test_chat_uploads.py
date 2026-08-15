@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -642,3 +643,186 @@ def test_upload_tiny_text_file_bypasses_size_guard(client):
     )
     assert resp.status_code == 200
     assert resp.json()["filePath"].endswith(".txt")
+
+
+# --- F-14: Upload failure cleanup (transactional rollback) ---
+
+
+def test_video_probe_failure_deletes_orphaned_file(client):
+    """ffprobe failure after the file write must delete the orphaned file,
+    return 415, create no node, and send no broadcast."""
+    mp4 = _make_mp4_bytes()
+    digest = hashlib.sha256(mp4).hexdigest()
+    orphan = main_module.CHAT_UPLOADS_DIR / f"{digest}.mp4"
+    with (
+        patch("main.ffprobe_video", side_effect=RuntimeError("bad codec")),
+        patch("main._broadcast_graph_sync", new=AsyncMock()) as mock_broadcast,
+    ):
+        resp = client.post(
+            "/api/uploads",
+            files={"file": ("test.mp4", mp4, "video/mp4")},
+            data={"create_node": "true"},
+        )
+    assert resp.status_code == 415
+    assert "Could not probe video metadata" in resp.json()["detail"]
+    # Orphaned file removed; no node; no broadcast.
+    assert not orphan.exists()
+    assert len(list(main_module.CHAT_UPLOADS_DIR.iterdir())) == 0
+    assert len(main_module.cli_graph.nodes) == 0
+    mock_broadcast.assert_not_called()
+
+
+def test_video_probe_failure_handles_any_exception_type(client):
+    """Cleanup must trigger on ANY probe exception, not just a nominal type."""
+    mp4 = _make_mp4_bytes()
+    digest = hashlib.sha256(mp4).hexdigest()
+    orphan = main_module.CHAT_UPLOADS_DIR / f"{digest}.mp4"
+    with patch("main.ffprobe_video", side_effect=KeyError("streams")):
+        resp = client.post(
+            "/api/uploads",
+            files={"file": ("test.mp4", mp4, "video/mp4")},
+            data={"create_node": "true"},
+        )
+    assert resp.status_code == 415
+    assert not orphan.exists()
+    assert len(main_module.cli_graph.nodes) == 0
+
+
+def test_video_probe_failure_preserves_preexisting_dedup_file(client):
+    """If the uploaded bytes dedup to a file that ALREADY existed (written by
+    an earlier upload), a probe failure must NOT delete it — other nodes may
+    reference it."""
+    mp4 = _make_mp4_bytes()
+    digest = hashlib.sha256(mp4).hexdigest()
+    preexisting = main_module.CHAT_UPLOADS_DIR / f"{digest}.mp4"
+    preexisting.write_bytes(mp4)  # simulate an earlier successful upload
+    with patch("main.ffprobe_video", side_effect=RuntimeError("bad codec")):
+        resp = client.post(
+            "/api/uploads",
+            files={"file": ("test.mp4", mp4, "video/mp4")},
+            data={"create_node": "true"},
+        )
+    assert resp.status_code == 415
+    # Pre-existing deduplicated file survives untouched.
+    assert preexisting.exists()
+    assert preexisting.read_bytes() == mp4
+    assert len(main_module.cli_graph.nodes) == 0
+
+
+def test_broadcast_failure_removes_created_node(client):
+    """If the graphSync broadcast fails after node creation, the created node
+    is rolled back and the response is an error with no success fields."""
+    with patch(
+        "main._broadcast_graph_sync",
+        new=AsyncMock(side_effect=RuntimeError("ws down")),
+    ):
+        resp = client.post(
+            "/api/uploads",
+            files={"file": ("example.png", _make_png_bytes(), "image/png")},
+            data={"create_node": "true"},
+        )
+    assert resp.status_code == 500
+    body = resp.json()
+    assert "detail" in body
+    assert "nodeId" not in body
+    assert "thumbUrl" not in body
+    assert len(main_module.cli_graph.nodes) == 0
+
+
+def test_broadcast_failure_preserves_unrelated_nodes(client):
+    """Rollback removes ONLY the node this request created; unrelated nodes
+    already in the graph are preserved."""
+    main_module.cli_graph.add_node("text-input", {"value": "keep me"})  # n1
+    with patch(
+        "main._broadcast_graph_sync",
+        new=AsyncMock(side_effect=RuntimeError("ws down")),
+    ):
+        resp = client.post(
+            "/api/uploads",
+            files={"file": ("example.png", _make_png_bytes(), "image/png")},
+            data={"create_node": "true"},
+        )
+    assert resp.status_code == 500
+    assert list(main_module.cli_graph.nodes.keys()) == ["n1"]
+    assert main_module.cli_graph.nodes["n1"]["definitionId"] == "text-input"
+    # The uploaded file itself is a valid artifact and stays on disk (same as
+    # a create_node=false upload); only the graph mutation is rolled back.
+    assert len(list(main_module.CHAT_UPLOADS_DIR.iterdir())) == 1
+
+
+def test_broadcast_failure_still_errors_if_node_removal_fails(client):
+    """If the rollback remove_node itself raises, the caller still gets an
+    error response (no success fields)."""
+    with (
+        patch(
+            "main._broadcast_graph_sync",
+            new=AsyncMock(side_effect=RuntimeError("ws down")),
+        ),
+        patch.object(
+            main_module.cli_graph, "remove_node", side_effect=RuntimeError("stuck")
+        ),
+    ):
+        resp = client.post(
+            "/api/uploads",
+            files={"file": ("example.png", _make_png_bytes(), "image/png")},
+            data={"create_node": "true"},
+        )
+    assert resp.status_code == 500
+    assert "nodeId" not in resp.json()
+
+
+def test_pre_write_failures_do_not_broadcast(client):
+    """Oversize / unsupported / too-small rejections happen before any file
+    write — they must not broadcast, create nodes, or leave files behind."""
+    with patch("main._broadcast_graph_sync", new=AsyncMock()) as mock_broadcast:
+        big = b"\x00" * (21 * 1024 * 1024)
+        resp = client.post(
+            "/api/uploads",
+            files={"file": ("big.png", big, "image/png")},
+        )
+        assert resp.status_code == 413
+
+        resp = client.post(
+            "/api/uploads",
+            files={
+                "file": (
+                    "data.bin",
+                    b"\x00\x01\x02 not a known type",
+                    "application/octet-stream",
+                )
+            },
+        )
+        assert resp.status_code == 415
+
+        resp = client.post(
+            "/api/uploads",
+            files={"file": ("tiny.jpg", b"\xff\xd8\xff", "image/jpeg")},
+        )
+        assert resp.status_code == 415
+
+    mock_broadcast.assert_not_called()
+    assert len(main_module.cli_graph.nodes) == 0
+    assert len(list(main_module.CHAT_UPLOADS_DIR.iterdir())) == 0
+
+
+def test_no_create_node_video_upload_skips_probe_and_broadcast(client):
+    """create_node=false uploads must not probe, create nodes, or broadcast —
+    they only persist the file and return its metadata."""
+    with (
+        patch("main.ffprobe_video", new=AsyncMock()) as mock_probe,
+        patch("main._broadcast_graph_sync", new=AsyncMock()) as mock_broadcast,
+    ):
+        resp = client.post(
+            "/api/uploads",
+            files={"file": ("test.mp4", _make_mp4_bytes(), "video/mp4")},
+            data={"create_node": "false"},
+        )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert "nodeId" not in body
+    assert "sourceDuration" not in body
+    mock_probe.assert_not_called()
+    mock_broadcast.assert_not_called()
+    assert len(main_module.cli_graph.nodes) == 0
+    # File still lands on disk (upload-only mode).
+    assert len(list(main_module.CHAT_UPLOADS_DIR.iterdir())) == 1
