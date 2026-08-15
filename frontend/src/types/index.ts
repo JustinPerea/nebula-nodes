@@ -10,6 +10,7 @@ export type PortDataType =
   | 'Character'
   | 'Moodboard'
   | 'CameraRig'
+  | 'ReferenceSet'
   | 'Any';
 
 export type NodeCategory =
@@ -61,6 +62,14 @@ export interface PortDefinition {
   required: boolean;
   multiple?: boolean;
   maxConnections?: number;
+  /** Semantic reference role (one of REFERENCE_ROLES: style, identity,
+   *  composition, pose, lighting, subject, background). Advisory metadata only
+   *  — never affects port compatibility. Drives UI role badges and handler
+   *  intelligence for image reference ports. */
+  role?: string;
+  /** Advisory reference weight, 0.0-1.0. Absent behaves as 1.0. Displayed as a
+   *  filled bar indicator; consumed by reference-bundle packing. */
+  weight?: number;
 }
 
 export interface ParamOption {
@@ -220,6 +229,18 @@ export interface CameraRigBundle {
   subjectScreenY: number;  // 0 to 1 (normalized subject position in frame)
 }
 
+/** Typed bundle emitted by the reference-set utility node on its ReferenceSet
+ *  port. Each item pairs an image URL with the semantic role of the port it
+ *  was connected to and that port's weight. Items are sorted by weight
+ *  (descending) so downstream handlers can read precedence directly. */
+export interface ReferenceSetBundle {
+  items: Array<{
+    url: string;    // image URL or local path
+    role: string;   // one of the 7 standard roles (see referenceRoles.ts)
+    weight: number; // 0.0-1.0
+  }>;
+}
+
 export interface MoodboardImage {
   id: string;
   url: string;
@@ -326,6 +347,11 @@ export interface DynamicPortDefinition {
   required: boolean;
   multiple?: boolean;
   maxConnections?: number;
+  /** Semantic reference role — advisory metadata, same contract as
+   *  PortDefinition.role. */
+  role?: string;
+  /** Advisory reference weight, 0.0-1.0. Absent behaves as 1.0. */
+  weight?: number;
 }
 
 export interface DynamicParamDefinition {

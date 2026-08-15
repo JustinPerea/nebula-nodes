@@ -1,8 +1,10 @@
 import '@testing-library/jest-dom';
 
 // JSDOM does not implement document.elementsFromPoint. Define a no-op stub so
-// vi.spyOn can intercept it in tests that mock the return value.
-if (typeof document.elementsFromPoint !== 'function') {
+// vi.spyOn can intercept it in tests that mock the return value. Guarded so
+// pure-logic tests running under `@vitest-environment node` (no DOM) can still
+// load this setup file.
+if (typeof document !== 'undefined' && typeof document.elementsFromPoint !== 'function') {
   document.elementsFromPoint = (_x: number, _y: number): Element[] => []; // eslint-disable-line @typescript-eslint/no-unused-vars
 }
 
