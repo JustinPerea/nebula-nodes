@@ -25,6 +25,11 @@ _spawn_subprocess = getattr(asyncio, "create_subprocess_exec")
 # differ from the final ffmpeg render.
 _VFR_THRESHOLD = 0.005
 
+# Hard cap on how long ffprobe may run. A tarpit URL or pathological file can
+# otherwise hang the execution worker indefinitely (DoS). On timeout the
+# subprocess is killed and a RuntimeError is raised.
+FFPROBE_TIMEOUT_SECONDS = 30
+
 
 @dataclass(frozen=True)
 class ProbeResult:
@@ -63,7 +68,18 @@ async def ffprobe_video(source: Path | str) -> ProbeResult:
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )
-    stdout, stderr = await proc.communicate()
+    try:
+        stdout, stderr = await asyncio.wait_for(
+            proc.communicate(), timeout=FFPROBE_TIMEOUT_SECONDS
+        )
+    except asyncio.TimeoutError:
+        # Kill the hung subprocess to free resources, then surface a clear
+        # error so the execution worker is not blocked indefinitely (DoS).
+        proc.kill()
+        await proc.wait()
+        raise RuntimeError(
+            f"ffprobe timed out after {FFPROBE_TIMEOUT_SECONDS} seconds"
+        )
     if proc.returncode != 0:
         raise RuntimeError(f"ffprobe failed: {stderr.decode(errors='replace')[-1024:]}")
 

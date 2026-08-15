@@ -35,12 +35,17 @@ def _resolve_video_source(value: str) -> str:
 
     - ``/api/outputs/<rel>`` served URLs map back to their on-disk path under
       OUTPUT_ROOT (via the shared resolve_output_ref helper).
-    - http(s) URLs pass through — ffprobe reads remote sources directly.
+    - Raw http(s) URLs are **rejected** — passing them to ffprobe would make
+      the server fetch arbitrary URLs, an SSRF vector (e.g. a user pointing at
+      ``http://169.254.169.254/latest/meta-data/``).
     - Anything else is treated as a filesystem path and must exist.
     """
     resolved = resolve_output_ref(value)
     if resolved.startswith(("http://", "https://")):
-        return resolved
+        raise ValueError(
+            "Remote URLs are not supported for video probing. "
+            "Use a local file or /api/outputs/ reference."
+        )
     path = Path(resolved).expanduser()
     if not path.exists():
         raise FileNotFoundError(f"Source video not found: {value}")

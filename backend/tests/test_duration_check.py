@@ -12,9 +12,10 @@ Outputs:
 
 from __future__ import annotations
 
+import asyncio
 import json
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -296,22 +297,65 @@ async def test_api_outputs_url_resolved_under_output_root(tmp_path: Path) -> Non
 
 
 @pytest.mark.asyncio
-async def test_remote_url_passed_through_to_ffprobe() -> None:
-    """Remote http(s) video URLs are probed directly (ffprobe reads remote sources)."""
+async def test_plain_http_url_rejected_as_ssrf() -> None:
+    """A plain http:// URL must NOT be passed to ffprobe (SSRF vector)."""
     from handlers.duration_check import handle_duration_check
 
-    url = "https://example.com/generated/clip.mp4"
-    inputs = {"video": PortValueDict(type="Video", value=url)}
+    inputs = {"video": PortValueDict(type="Video", value="http://example.com/video.mp4")}
+
+    with pytest.raises(ValueError, match="Remote URLs are not supported"):
+        await handle_duration_check(
+            _node({"requested_duration": 7.0}), inputs, {}, emit=None
+        )
+
+
+@pytest.mark.asyncio
+async def test_https_url_rejected_as_ssrf() -> None:
+    """A plain https:// URL must NOT be passed to ffprobe (SSRF vector)."""
+    from handlers.duration_check import handle_duration_check
+
+    inputs = {"video": PortValueDict(type="Video", value="https://example.com/video.mp4")}
+
+    with pytest.raises(ValueError, match="Remote URLs are not supported"):
+        await handle_duration_check(
+            _node({"requested_duration": 7.0}), inputs, {}, emit=None
+        )
+
+
+@pytest.mark.asyncio
+async def test_metadata_endpoint_url_rejected_as_ssrf() -> None:
+    """The canonical SSRF attack: pointing at the cloud metadata endpoint."""
+    from handlers.duration_check import handle_duration_check
+
+    inputs = {
+        "video": PortValueDict(
+            type="Video", value="http://169.254.169.254/latest/meta-data/"
+        )
+    }
+
+    with pytest.raises(ValueError, match="Remote URLs are not supported"):
+        await handle_duration_check(
+            _node({"requested_duration": 7.0}), inputs, {}, emit=None
+        )
+
+
+@pytest.mark.asyncio
+async def test_local_path_still_works(tmp_path: Path) -> None:
+    """Local filesystem paths are unaffected by the SSRF fix."""
+    from handlers.duration_check import handle_duration_check
+
+    src = _make_video(tmp_path)
+    inputs = {"video": PortValueDict(type="Video", value=str(src))}
 
     with patch(
         "handlers.duration_check.ffprobe_video",
-        AsyncMock(return_value=_probe(12.0)),
+        AsyncMock(return_value=_probe(7.0)),
     ) as mock_probe:
         result = await handle_duration_check(
-            _node({"requested_duration": 12.0}), inputs, {}, emit=None
+            _node({"requested_duration": 7.0}), inputs, {}, emit=None
         )
 
-    assert mock_probe.call_args.args[0] == url
+    assert mock_probe.call_args.args[0] == str(src)
     assert result["match"]["value"] == "true"
 
 
@@ -368,3 +412,75 @@ def test_node_definition_shape() -> None:
     params = {p["key"]: p for p in ndef["params"]}
     assert params["requested_duration"]["type"] == "float"
     assert params["requested_duration"]["required"] is False
+
+
+# ── ffprobe DoS: subprocess timeout ───────────────────────────────────────────
+
+
+def _make_hanging_proc():
+    """A fake asyncio subprocess whose communicate() never completes."""
+    proc = AsyncMock()
+    proc.returncode = None
+
+    async def _communicate():
+        # Simulate a tarpit: never produce output, never exit.
+        await asyncio.sleep(3600)
+        return b"", b""
+
+    proc.communicate = _communicate
+    proc.kill = MagicMock()
+    proc.terminate = MagicMock()
+    proc.wait = AsyncMock(return_value=None)
+    return proc
+
+
+@pytest.mark.asyncio
+async def test_ffprobe_timeout_raises_runtime_error() -> None:
+    """A ffprobe subprocess that never completes must time out and raise."""
+    from services.ffmpeg import ffprobe_video
+
+    async def _spawn(*args, **kwargs):
+        return _make_hanging_proc()
+
+    with patch("services.ffmpeg._spawn_subprocess", side_effect=_spawn), \
+         patch("services.ffmpeg.FFPROBE_TIMEOUT_SECONDS", 0.05):
+        with pytest.raises(RuntimeError, match="timed out"):
+            await ffprobe_video("/tmp/whatever.mp4")
+
+
+@pytest.mark.asyncio
+async def test_ffprobe_timeout_kills_process() -> None:
+    """On timeout, the hung subprocess must be killed to free resources."""
+    from services.ffmpeg import ffprobe_video
+
+    proc = _make_hanging_proc()
+
+    async def _spawn(*args, **kwargs):
+        return proc
+
+    with patch("services.ffmpeg._spawn_subprocess", side_effect=_spawn), \
+         patch("services.ffmpeg.FFPROBE_TIMEOUT_SECONDS", 0.05):
+        with pytest.raises(RuntimeError):
+            await ffprobe_video("/tmp/whatever.mp4")
+
+    proc.kill.assert_called_once(), "proc.kill() must be called on timeout"
+
+
+@pytest.mark.asyncio
+async def test_ffprobe_timeout_message_mentions_duration() -> None:
+    """The timeout error message must mention the timeout duration (30s)."""
+    from services.ffmpeg import ffprobe_video
+
+    # Patch asyncio.wait_for to fire immediately while keeping the real 30s
+    # constant so the message references the production timeout value.
+    async def _instant_timeout(coro, timeout):
+        coro.close()  # avoid un-awaited-coroutine warnings
+        raise asyncio.TimeoutError
+
+    async def _spawn(*args, **kwargs):
+        return _make_hanging_proc()
+
+    with patch("services.ffmpeg._spawn_subprocess", side_effect=_spawn), \
+         patch("asyncio.wait_for", side_effect=_instant_timeout):
+        with pytest.raises(RuntimeError, match="30"):
+            await ffprobe_video("/tmp/whatever.mp4")
