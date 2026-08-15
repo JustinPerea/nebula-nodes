@@ -17,6 +17,18 @@ RED_PIXEL_B64 = (
     "2mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg=="
 )
 
+# Format-accurate fixtures for output_format tests: the real API honours
+# output_format, so a jpeg/webp request returns jpeg/webp bytes. F-31 output
+# validation corrects extensions that disagree with the actual bytes, so these
+# fixtures must carry the right magic bytes for the asserted extension.
+JPEG_PIXEL_B64 = base64.b64encode(
+    b"\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x00\x00\x01\x00\x01\x00\x00"
+    b"\xff\xd9"
+).decode()
+WEBP_PIXEL_B64 = base64.b64encode(
+    b"RIFF" + (20).to_bytes(4, "little") + b"WEBPVP8 " + b"\x00" * 8
+).decode()
+
 _API_KEYS = {"OPENAI_API_KEY": "sk-test-key"}
 
 
@@ -279,7 +291,7 @@ async def test_output_returns_image_type() -> None:
 @pytest.mark.asyncio
 async def test_gpt_image_1_saves_jpeg_extension() -> None:
     """When output_format=jpeg the saved file must have a .jpeg extension."""
-    mock_resp = _mock_response(RED_PIXEL_B64)
+    mock_resp = _mock_response(JPEG_PIXEL_B64)
     patcher, mock_client = _patch_client(mock_resp)
 
     with patcher:
@@ -293,7 +305,7 @@ async def test_gpt_image_1_saves_jpeg_extension() -> None:
 @pytest.mark.asyncio
 async def test_gpt_image_1_saves_webp_extension() -> None:
     """When output_format=webp the saved file must have a .webp extension."""
-    mock_resp = _mock_response(RED_PIXEL_B64)
+    mock_resp = _mock_response(WEBP_PIXEL_B64)
     patcher, mock_client = _patch_client(mock_resp)
 
     with patcher:

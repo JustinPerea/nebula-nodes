@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 import base64
+import logging
 import mimetypes
 import os
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
+from services.ffmpeg import ffprobe_video
 from services.settings import load_settings
+
+logger = logging.getLogger(__name__)
 
 # Ensure video/3D mime types are registered (mimetypes may lack these on some
 # platforms; FileResponse and inline <video> need the right content-type).
@@ -76,12 +80,129 @@ def get_run_dir() -> Path:
     return run_dir
 
 
+# ---------------------------------------------------------------------------
+# F-31: media byte validation
+# ---------------------------------------------------------------------------
+#
+# Every file-writing helper below validates the bytes it just wrote before
+# returning, so a served ".png" is never actually a JPEG (or worse). Images
+# and GLB meshes are identified by magic bytes; video containers are confirmed
+# with ffprobe. Mismatches are corrected by renaming within the same
+# directory; unknown content is left untouched (never misclassified); invalid
+# video is rejected by raising.
+
+_HEADER_READ_BYTES = 12  # enough for RIFF....WEBP and every other signature
+
+# Extensions treated as interchangeable with each detected content type.
+_EXTENSION_EQUIVALENTS: dict[str, set[str]] = {
+    "jpg": {"jpg", "jpeg"},
+    "png": {"png"},
+    "webp": {"webp"},
+    "gif": {"gif"},
+    "glb": {"glb"},
+}
+
+# Extensions whose content is verified with ffprobe_video() instead of magic
+# bytes (video containers carry their signature at a variable offset).
+_VIDEO_EXTENSIONS = {"mp4", "webm", "mov", "m4v", "mkv", "avi"}
+
+
+def _detect_media_extension(header: bytes) -> str | None:
+    """Map magic bytes to a canonical extension, or None if unrecognized.
+
+    Covers JPEG (FF D8), PNG (89 50 4E 47), WebP (RIFF....WEBP),
+    GIF (47 49 46 38), and GLB meshes (67 6C 54 46 / "glTF").
+    """
+    if header[:2] == b"\xff\xd8":
+        return "jpg"
+    if header[:4] == b"\x89PNG":
+        return "png"
+    if len(header) >= 12 and header[:4] == b"RIFF" and header[8:12] == b"WEBP":
+        return "webp"
+    if header[:4] == b"GIF8":
+        return "gif"
+    if header[:4] == b"glTF":
+        return "glb"
+    return None
+
+
+def _validate_magic_bytes(path: Path) -> Path:
+    """Validate *path* against known magic-byte signatures; rename on mismatch.
+
+    Synchronous core shared by every write path. Returns the final path —
+    renamed (same directory, warning logged) when the extension disagrees with
+    the detected content, unchanged when content matches, is unknown, or has a
+    video extension (those are adjudicated by ffprobe, not magic bytes).
+    Never renames unrecognized content.
+    """
+    try:
+        with path.open("rb") as fh:
+            header = fh.read(_HEADER_READ_BYTES)
+    except OSError as exc:
+        logger.warning("[output] could not read %s for validation: %s", path, exc)
+        return path
+
+    detected = _detect_media_extension(header)
+    suffix = path.suffix.lstrip(".").lower()
+
+    if detected is None:
+        if suffix not in _VIDEO_EXTENSIONS:
+            logger.warning(
+                "[output] %s: bytes match no known media signature; "
+                "leaving extension unchanged",
+                path.name,
+            )
+        return path
+
+    if suffix in _EXTENSION_EQUIVALENTS[detected]:
+        return path
+
+    # with_suffix keeps the file in the same directory; the replacement
+    # extension comes from our fixed detected set, never from caller input.
+    new_path = path.with_suffix(f".{detected}")
+    logger.warning(
+        "[output] extension mismatch: %s contains %s bytes; renamed to %s",
+        path.name,
+        detected,
+        new_path.name,
+    )
+    path.rename(new_path)
+    return new_path
+
+
+async def _validate_and_correct_extension(path: Path) -> Path:
+    """Validate a freshly written media file; correct or reject as needed.
+
+    - Images (JPEG/PNG/WebP/GIF) and GLB meshes: magic-byte check; a
+      mismatched extension is corrected by renaming within the same directory
+      and a warning is logged.
+    - Video extensions: ffprobe_video() must confirm a video stream exists.
+      Probe failure or a missing video stream raises RuntimeError — the
+      output is rejected rather than served as valid (no false success).
+    - Bytes matching no known signature are left untouched (never
+      misclassified, nothing fabricated).
+
+    Returns the final path (renamed when a correction was applied).
+    """
+    path = _validate_magic_bytes(path)
+    if path.suffix.lstrip(".").lower() in _VIDEO_EXTENSIONS:
+        try:
+            await ffprobe_video(path)
+        except Exception as exc:
+            raise RuntimeError(
+                f"output video failed validation ({path.name}): {exc}"
+            ) from exc
+    return path
+
+
 def save_base64_image(b64_data: str, run_dir: Path, extension: str = "png") -> Path:
     image_bytes = base64.b64decode(b64_data)
     filename = f"{uuid4().hex[:12]}.{extension}"
     file_path = run_dir / filename
     file_path.write_bytes(image_bytes)
-    return file_path
+    # Sync write path: magic-byte validation only (ffprobe is async and image
+    # bytes never need it).
+    return _validate_magic_bytes(file_path)
 
 
 def save_base64_image_named(
@@ -90,7 +211,7 @@ def save_base64_image_named(
     image_bytes = base64.b64decode(b64_data)
     file_path = run_dir / f"{name}.{extension}"
     file_path.write_bytes(image_bytes)
-    return file_path
+    return _validate_magic_bytes(file_path)
 
 
 async def save_video_from_url(url: str, run_dir: Path, extension: str = "mp4") -> Path:
@@ -101,7 +222,7 @@ async def save_video_from_url(url: str, run_dir: Path, extension: str = "mp4") -
         response = await client.get(url)
         response.raise_for_status()
         file_path.write_bytes(response.content)
-    return file_path
+    return await _validate_and_correct_extension(file_path)
 
 
 async def save_mesh_from_url(url: str, run_dir: Path, extension: str = "glb") -> Path:
@@ -112,7 +233,7 @@ async def save_mesh_from_url(url: str, run_dir: Path, extension: str = "glb") ->
         response = await client.get(url)
         response.raise_for_status()
         file_path.write_bytes(response.content)
-    return file_path
+    return await _validate_and_correct_extension(file_path)
 
 
 def resolve_output_ref(value: str) -> str:
