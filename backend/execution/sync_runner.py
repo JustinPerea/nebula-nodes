@@ -65,6 +65,17 @@ NANO_BANANA_FAL_MODEL_ENDPOINTS: dict[str, str] = {
     "gemini-3-pro-image": "fal-ai/gemini-3-pro-image-preview",
 }
 
+# identity-edit exposes UI-friendly enums; fal-ai/nano-banana-2/edit speaks its
+# own dialect (resolution 1K/2K/4K, thinking_level minimal/high — verified
+# against fal.ai/models/fal-ai/nano-banana-2/edit). medium has no endpoint
+# equivalent and rounds up to high (some reasoning, not none).
+IDENTITY_EDIT_RESOLUTION_MAP: dict[str, str] = {"1024": "1K", "2048": "2K"}
+IDENTITY_EDIT_THINKING_MAP: dict[str, str] = {"low": "minimal", "medium": "high", "high": "high"}
+
+# identity_strength (0..1) maps onto input_fidelity, the FAL edit family's
+# source-preservation knob (high = strict). Threshold at the midpoint.
+IDENTITY_EDIT_FIDELITY_THRESHOLD = 0.5
+
 HUNYUAN3D_PROMPT_MAX_CHARS = 1024
 
 # The graph stores defaults for both sides of a dual-route node. FAL must only
@@ -1284,6 +1295,77 @@ def get_handler_registry(
             routed_node = _nano_banana_fal_node(node, edit=True)
             return await handle_fal_universal(routed_node, inputs, api_keys, emit=emit)
 
+        async def _identity_edit_handler(node, inputs, api_keys):
+            # identity-edit = nano-banana-2/edit + optional Character-bundle
+            # identity preservation. With a Character wired in, the verbatim
+            # trait string leads the prompt and the bundle's reference views are
+            # injected as additional images behind the base (edit-target) image.
+            # Without one, this is a standard nano-banana edit.
+            from cinema.identity import expand_character, max_refs_for
+
+            image_input = inputs.get("image")
+            base_image = str(image_input.value).strip() if image_input and image_input.value else ""
+            if not base_image:
+                raise ValueError("identity-edit requires a base image on the 'image' port")
+
+            prompt_input = inputs.get("prompt")
+            base_prompt = str(prompt_input.value) if prompt_input and prompt_input.value else ""
+
+            character_input = inputs.get("character")
+            bundle = character_input.value if character_input and character_input.value else None
+
+            params = dict(node.params)
+            strength_raw = params.pop("identity_strength", None)
+
+            # handle_fal_universal maps the multi-image `images` port to the
+            # endpoint's required `image_urls`; the singular `image` port would
+            # emit `image_url`, which nano-banana-2/edit does not accept. The
+            # `character` port is consumed here, never forwarded.
+            routed_inputs = dict(inputs)
+            routed_inputs.pop("image", None)
+            routed_inputs.pop("character", None)
+
+            if bundle:
+                expanded = expand_character(
+                    bundle,
+                    base_prompt,
+                    [base_image],
+                    model_max_refs=max_refs_for("nano-banana-fal-edit"),
+                )
+                # expand_character appends override_refs last — move the edit
+                # target back to the front, identity refs (stored order) after.
+                image_urls = [base_image] + list(expanded["image_urls"])[:-1]
+                routed_inputs["prompt"] = PortValueDict(type="Text", value=expanded["prompt"])
+
+                # Node param wins; else the bundle's effective strength
+                # (strengthOverride, else consistencyStrength); else 0.8.
+                strength = expanded.get("strength") if strength_raw in (None, "") else strength_raw
+                try:
+                    strength_value = float(strength) if strength is not None else 0.8
+                except (TypeError, ValueError):
+                    strength_value = 0.8
+                params["input_fidelity"] = (
+                    "high" if strength_value >= IDENTITY_EDIT_FIDELITY_THRESHOLD else "low"
+                )
+
+                if expanded.get("seed") is not None and not params.get("seed"):
+                    params["seed"] = expanded["seed"]
+            else:
+                image_urls = [base_image]
+
+            routed_inputs["images"] = PortValueDict(type="Image", value=image_urls)
+
+            resolution = str(params.get("resolution") or "")
+            if resolution in IDENTITY_EDIT_RESOLUTION_MAP:
+                params["resolution"] = IDENTITY_EDIT_RESOLUTION_MAP[resolution]
+            thinking = str(params.get("thinking_level") or "")
+            if thinking in IDENTITY_EDIT_THINKING_MAP:
+                params["thinking_level"] = IDENTITY_EDIT_THINKING_MAP[thinking]
+
+            params["endpoint_id"] = "fal-ai/nano-banana-2/edit"
+            routed_node = node.model_copy(update={"params": params})
+            return await handle_fal_universal(routed_node, routed_inputs, api_keys, emit=emit)
+
         # Ideogram dual-route nodes: direct api.ideogram.ai when IDEOGRAM_API_KEY is
         # set, else FAL. Editing suite rides v3 on FAL (no v4 edit surfaces hosted
         # yet); the direct remix rides v4. Direct reframe needs `resolution` (the
@@ -1407,6 +1489,7 @@ def get_handler_registry(
         registry["ltx-2-3-fast-t2v"] = _ltx_2_3_fast_t2v_handler
         registry["nano-banana-fal"] = _nano_banana_fal_handler
         registry["nano-banana-fal-edit"] = _nano_banana_fal_edit_handler
+        registry["identity-edit"] = _identity_edit_handler
         registry["ideogram-v4"] = _ideogram_v4_handler
         registry["ideogram-edit"] = _ideogram_edit_handler
         registry["ideogram-remix"] = _ideogram_remix_handler

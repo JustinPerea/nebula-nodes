@@ -10708,6 +10708,63 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
     ],
   },
+
+  'identity-edit': {
+    id: 'identity-edit',
+    displayName: 'Identity Edit',
+    category: 'image-gen',
+    apiProvider: 'fal',
+    apiEndpoint: 'fal-ai/nano-banana-2/edit',
+    envKeyName: 'FAL_KEY',
+    executionPattern: 'async-poll',
+    // nano-banana-2/edit with optional Character-bundle identity preservation:
+    // when a Character is wired in, its trait string leads the prompt and its
+    // reference views ride as additional images behind the base edit target.
+    inputPorts: [
+      { id: 'image', label: 'Image', dataType: 'Image', required: true },
+      { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
+      { id: 'character', label: 'Character', dataType: 'Character', required: false },
+      { id: 'mask', label: 'Mask', dataType: 'Mask', required: false },
+    ],
+    outputPorts: [
+      { id: 'image', label: 'Image', dataType: 'Image', required: false },
+    ],
+    params: [
+      {
+        key: 'resolution',
+        label: 'Resolution',
+        type: 'enum',
+        required: false,
+        default: '1024',
+        options: [
+          { label: '1024', value: '1024' },
+          { label: '2048', value: '2048' },
+        ],
+      },
+      {
+        key: 'thinking_level',
+        label: 'Thinking Level',
+        type: 'enum',
+        required: false,
+        default: 'low',
+        options: [
+          { label: 'Low', value: 'low' },
+          { label: 'Medium', value: 'medium' },
+          { label: 'High', value: 'high' },
+        ],
+      },
+      {
+        key: 'identity_strength',
+        label: 'Identity Strength',
+        type: 'float',
+        required: false,
+        default: 0.8,
+        min: 0.0,
+        max: 1.0,
+        step: 0.05,
+      },
+    ],
+  },
 };
 
 export function getNodeDefinition(definitionId: string): ModelNodeDefinition | undefined {
