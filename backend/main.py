@@ -48,7 +48,7 @@ from execution.sync_runner import get_handler_registry
 from services.settings import load_settings, save_settings, get_api_key, validate_provider_keys, clear_provider_validation_cache
 from services.node_registry import NodeRegistry
 from services.cli_graph import CLIGraph
-from services.output import OUTPUT_ROOT, DEFAULT_OUTPUT_ROOT, resolve_output_ref
+from services.output import OUTPUT_ROOT, DEFAULT_OUTPUT_ROOT, resolve_output_ref, ManifestError, find_output_record, read_manifest
 from services.image_input import is_remote_or_data_uri
 from services.cache import ExecutionCache
 from services.chat_session import run_claude
@@ -3296,6 +3296,51 @@ async def transcode_image_route(body: dict[str, Any]) -> Response:
         media_type=mime,
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+# F-21: manifest metadata for a single generated output. Registered BEFORE
+# the catch-all serve_output below so "/api/outputs/<rel>/meta" reaches this
+# handler instead of being treated as a file request.
+@app.get("/api/outputs/{rel:path}/meta")
+async def output_meta(rel: str):
+    roots = [OUTPUT_ROOT] + ([DEFAULT_OUTPUT_ROOT] if DEFAULT_OUTPUT_ROOT != OUTPUT_ROOT else [])
+    candidate: Path | None = None
+    for root in roots:
+        try:
+            resolved = (root / rel).resolve()
+            resolved.relative_to(root.resolve())  # containment — block ../ traversal
+        except (ValueError, OSError):
+            continue
+        candidate = resolved
+        break
+    if candidate is None or not candidate.is_file():
+        raise HTTPException(status_code=404, detail="output not found")
+    try:
+        manifest = read_manifest(candidate.parent)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="no manifest for this output")
+    except ManifestError:
+        raise HTTPException(status_code=500, detail="malformed manifest")
+    record = find_output_record(manifest, candidate, candidate.parent)
+    if record is None:
+        raise HTTPException(status_code=404, detail="output not listed in manifest")
+    # Whitelisted keys only, output_path forced relative — the response never
+    # exposes absolute host paths, even from a hand-edited manifest.
+    output_path = record.get("output_path")
+    if isinstance(output_path, str) and Path(output_path).is_absolute():
+        output_path = Path(output_path).name
+    params = record.get("params")
+    return {
+        "run_id": manifest.get("run_id"),
+        "node_id": record.get("node_id"),
+        "node_type": record.get("node_type"),
+        "model": record.get("model"),
+        "endpoint": record.get("endpoint"),
+        "prompt": record.get("prompt"),
+        "params": params if isinstance(params, dict) else {},
+        "output_path": output_path,
+        "timestamp": record.get("timestamp"),
+    }
 
 
 # Dynamic catch-all replaces the old StaticFiles mount so the serve root can

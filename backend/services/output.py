@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import base64
+import json
 import logging
 import mimetypes
 import os
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 from uuid import uuid4
 
 from services.ffmpeg import ffprobe_video
@@ -260,3 +262,125 @@ def image_to_data_uri(file_path: Path) -> str:
     mime_map = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg", "webp": "image/webp"}
     mime = mime_map.get(suffix, "image/png")
     return f"data:{mime};base64,{b64}"
+
+
+# ---------------------------------------------------------------------------
+# F-21: per-execution metadata manifest
+# ---------------------------------------------------------------------------
+#
+# Every completed graph run writes one manifest.json into its run directory:
+# run-level metadata (run_id, started_at, completed_at) plus one record per
+# generated file (node_id, node_type, model, endpoint, prompt, params,
+# output_path, timestamp). output_path values are ALWAYS relative to the
+# manifest's directory — manifests (and the /meta endpoint built on them)
+# never expose absolute host paths.
+
+MANIFEST_FILENAME = "manifest.json"
+
+
+class ManifestError(Exception):
+    """A manifest.json exists but is malformed (bad JSON or wrong shape)."""
+
+
+def _iso8601(value: datetime | str) -> str:
+    if isinstance(value, datetime):
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc)
+        return value.isoformat()
+    return str(value)
+
+
+def _relative_output_path(value: Any, output_dir: Path) -> str:
+    """Coerce a stored output_path to a relative POSIX path.
+
+    Absolute paths inside *output_dir* are relativized; absolute paths outside
+    it collapse to the bare file name. Whatever the caller hands us, the
+    manifest never embeds an absolute host path.
+    """
+    raw = str(value)
+    candidate = Path(raw)
+    if candidate.is_absolute():
+        try:
+            return candidate.resolve().relative_to(output_dir.resolve()).as_posix()
+        except (ValueError, OSError):
+            return candidate.name
+    return raw.replace(os.sep, "/")
+
+
+def write_manifest(
+    run_id: str,
+    started_at: datetime | str,
+    completed_at: datetime | str,
+    outputs: list[dict[str, Any]],
+    output_dir: Path,
+) -> Path:
+    """Write manifest.json for one execution run into *output_dir*.
+
+    *started_at*/*completed_at* accept datetimes or ISO-8601 strings. Each
+    record in *outputs* should carry node_id, node_type, model, endpoint,
+    prompt, params, output_path, and timestamp; output_path is normalized to
+    a relative path as a safety net. Returns the manifest path. Raises on
+    write failure — callers (the engine) catch so a failed manifest never
+    affects generated outputs.
+    """
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    records: list[dict[str, Any]] = []
+    for record in outputs:
+        if not isinstance(record, dict):
+            continue
+        rec = dict(record)
+        rec["output_path"] = _relative_output_path(rec.get("output_path", ""), output_dir)
+        records.append(rec)
+
+    manifest = {
+        "run_id": str(run_id),
+        "started_at": _iso8601(started_at),
+        "completed_at": _iso8601(completed_at),
+        "outputs": records,
+    }
+    manifest_path = output_dir / MANIFEST_FILENAME
+    # ensure_ascii=False keeps prompts/params readable UTF-8; default=str
+    # keeps exotic param values (datetime, Path, bytes) from breaking the write.
+    manifest_path.write_text(
+        json.dumps(manifest, ensure_ascii=False, indent=2, default=str) + "\n",
+        encoding="utf-8",
+    )
+    return manifest_path
+
+
+def read_manifest(run_dir: Path) -> dict[str, Any]:
+    """Load manifest.json from *run_dir*.
+
+    Raises FileNotFoundError when no manifest exists, ManifestError when it
+    exists but is malformed (unparseable JSON or wrong top-level shape).
+    """
+    manifest_path = Path(run_dir) / MANIFEST_FILENAME
+    if not manifest_path.is_file():
+        raise FileNotFoundError(f"no manifest in {run_dir}")
+    try:
+        data = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ManifestError(f"malformed manifest: {exc}") from exc
+    if not isinstance(data, dict) or not isinstance(data.get("outputs"), list):
+        raise ManifestError("malformed manifest: missing run fields or outputs list")
+    return data
+
+
+def find_output_record(
+    manifest: dict[str, Any], file_path: Path, run_dir: Path
+) -> dict[str, Any] | None:
+    """Return the manifest record for *file_path*, or None when unlisted.
+
+    Matches on output_path relative to *run_dir* (the manifest's directory),
+    so a record can never claim a file outside its own run.
+    """
+    try:
+        rel = Path(file_path).resolve().relative_to(Path(run_dir).resolve()).as_posix()
+    except (ValueError, OSError):
+        return None
+    for record in manifest.get("outputs", []):
+        if isinstance(record, dict) and record.get("output_path") == rel:
+            return record
+    return None
