@@ -120,6 +120,11 @@
       "id": "camera-rig",
       "backend": "mocked-handler",
       "browser": "mocked-event"
+    },
+    {
+      "id": "reference-set",
+      "backend": "mocked-handler",
+      "browser": "mocked-event"
     }
   ]
 }

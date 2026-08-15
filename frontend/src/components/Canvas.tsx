@@ -27,6 +27,7 @@ import { RemotionNode } from './nodes/RemotionNode';
 import { CinemaSceneNode } from './nodes/CinemaSceneNode';
 import { CharacterNode } from './nodes/CharacterNode';
 import { CameraRigNode } from './nodes/CameraRigNode';
+import { ReferenceSetNode } from './nodes/ReferenceSetNode';
 import { MoodboardNode } from './nodes/MoodboardNode';
 import { TypedEdge } from './edges/TypedEdge';
 import { ContextMenu } from './ContextMenu';
@@ -45,6 +46,7 @@ const nodeTypes: NodeTypes = {
   cinemaSceneNode: CinemaSceneNode,
   characterNode: CharacterNode,
   cameraRigNode: CameraRigNode,
+  referenceSetNode: ReferenceSetNode,
   moodboardNode: MoodboardNode,
 };
 

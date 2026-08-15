@@ -1,0 +1,107 @@
+/* ReferenceSetNode canvas card. Imported eagerly by ReferenceSetNode.tsx so the
+ * node is styled the moment it renders. Mirrors the CameraRigNode card in
+ * camera-rig-node.css. Scoped to the Slava skin (Default + Hermes are deprecated). */
+
+body.app-slava-restraint .reference-set-node {
+  width: 248px;
+  padding: 10px 14px 12px;
+  background: var(--sr-glass);
+  border: 1px solid var(--sr-edge);
+  border-radius: var(--sr-radius-node, 6px);
+  color: var(--sr-ink);
+  font-size: 13px;
+  cursor: default;
+  position: relative;
+}
+
+body.app-slava-restraint .reference-set-node--selected {
+  border-color: var(--sr-accent);
+}
+
+body.app-slava-restraint .reference-set-node__title {
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  margin-bottom: 8px;
+}
+
+body.app-slava-restraint .reference-set-node__slots {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+body.app-slava-restraint .reference-set-node__slot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  /* Leave room for the target handle, which is absolutely positioned on the
+   * card's left edge by React Flow. */
+  margin-left: -14px;
+  padding-left: 14px;
+}
+
+body.app-slava-restraint .reference-set-node__role-badge {
+  flex: 0 0 auto;
+  min-width: 74px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  color: rgba(0, 0, 0, 0.72);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  text-align: center;
+  white-space: nowrap;
+}
+
+body.app-slava-restraint .reference-set-node__weight {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  accent-color: var(--sr-accent);
+  cursor: pointer;
+}
+
+body.app-slava-restraint .reference-set-node__weight-value {
+  flex: 0 0 auto;
+  width: 30px;
+  text-align: right;
+  color: var(--sr-ink);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+body.app-slava-restraint .reference-set-node__preview {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--sr-edge);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+body.app-slava-restraint .reference-set-node__preview-empty {
+  color: var(--sr-ink-meta);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+body.app-slava-restraint .reference-set-node__preview-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+body.app-slava-restraint .reference-set-node__preview-weight {
+  color: var(--sr-ink-meta);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+body.app-slava-restraint .reference-set-node__handle {
+  width: 8px;
+  height: 8px;
+}

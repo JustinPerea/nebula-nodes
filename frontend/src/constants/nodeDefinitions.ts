@@ -2027,6 +2027,40 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     ],
   },
 
+  'reference-set': {
+    id: 'reference-set',
+    displayName: 'Reference Set',
+    category: 'utility',
+    apiProvider: 'utility',
+    apiEndpoint: '',
+    envKeyName: [],
+    executionPattern: 'sync',
+    // Seven role-labeled Image inputs (one per semantic reference role). The
+    // handler packs connected images into a ReferenceSetBundle tagged with
+    // each port's role and weight, sorted by weight descending.
+    inputPorts: [
+      { id: 'style', label: 'Style', dataType: 'Image', required: false },
+      { id: 'identity', label: 'Identity', dataType: 'Image', required: false },
+      { id: 'composition', label: 'Composition', dataType: 'Image', required: false },
+      { id: 'pose', label: 'Pose', dataType: 'Image', required: false },
+      { id: 'lighting', label: 'Lighting', dataType: 'Image', required: false },
+      { id: 'subject', label: 'Subject', dataType: 'Image', required: false },
+      { id: 'background', label: 'Background', dataType: 'Image', required: false },
+    ],
+    outputPorts: [
+      { id: 'reference_set', label: 'Reference Set', dataType: 'ReferenceSet', required: false },
+    ],
+    params: [
+      { key: 'style_weight', label: 'Style Weight', type: 'float', required: false, default: 1.0, min: 0.0, max: 1.0, step: 0.05 },
+      { key: 'identity_weight', label: 'Identity Weight', type: 'float', required: false, default: 1.0, min: 0.0, max: 1.0, step: 0.05 },
+      { key: 'composition_weight', label: 'Composition Weight', type: 'float', required: false, default: 1.0, min: 0.0, max: 1.0, step: 0.05 },
+      { key: 'pose_weight', label: 'Pose Weight', type: 'float', required: false, default: 1.0, min: 0.0, max: 1.0, step: 0.05 },
+      { key: 'lighting_weight', label: 'Lighting Weight', type: 'float', required: false, default: 1.0, min: 0.0, max: 1.0, step: 0.05 },
+      { key: 'subject_weight', label: 'Subject Weight', type: 'float', required: false, default: 1.0, min: 0.0, max: 1.0, step: 0.05 },
+      { key: 'background_weight', label: 'Background Weight', type: 'float', required: false, default: 1.0, min: 0.0, max: 1.0, step: 0.05 },
+    ],
+  },
+
   'combine-text': {
     id: 'combine-text',
     displayName: 'Combine Text',

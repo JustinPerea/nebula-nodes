@@ -2360,6 +2360,8 @@ def _cli_node_to_rf(n: dict[str, Any], position: dict[str, float], all_defs: dic
         if definition_id == "character"
         else "cameraRigNode"
         if definition_id == "camera-rig"
+        else "referenceSetNode"
+        if definition_id == "reference-set"
         else "moodboardNode"
         if definition_id == "nebula-moodboard"
         else "dynamic-node"
