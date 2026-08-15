@@ -106,6 +106,17 @@ body:not(.app-slava-restraint) .model-node__id-chip:hover {
 .model-node__port-label { font-size: 11px; }
 body:not(.app-slava-restraint) .model-node__port-label { color: #888; }
 
+/* Semantic reference role badge — small colored dot rendered next to an input
+ * port's label when the port carries `role` metadata (see referenceRoles.ts).
+ * The color is set inline from the role definition; this rule only shapes the
+ * dot. Ports without a role render no badge at all. */
+.model-node__role-badge {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+
 body:not(.app-slava-restraint) .model-node__handle {
   width: 10px !important;
   height: 10px !important;

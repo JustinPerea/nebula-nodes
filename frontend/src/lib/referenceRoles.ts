@@ -67,6 +67,13 @@ export const REFERENCE_ROLES: Record<ReferenceRoleId, ReferenceRoleDefinition> =
 /** Ordered list of the 7 standard role ids (declaration order). */
 export const REFERENCE_ROLE_IDS = Object.keys(REFERENCE_ROLES) as ReferenceRoleId[];
 
+/** Look up a role definition by id. Returns undefined for unknown/ad-hoc role
+ *  strings so callers can render role-less (or unrecognized-role) ports
+ *  unchanged. */
+export function getReferenceRole(role: string): ReferenceRoleDefinition | undefined {
+  return (REFERENCE_ROLES as Record<string, ReferenceRoleDefinition | undefined>)[role];
+}
+
 /** Weight contract: ports without an explicit weight behave as 1.0, and the
  *  weight slider clamps to [0, 1] with step 0.05. */
 export const REFERENCE_WEIGHT_DEFAULT = 1.0;

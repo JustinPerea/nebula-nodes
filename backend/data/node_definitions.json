@@ -312,7 +312,8 @@
         "id": "image",
         "label": "Image",
         "dataType": "Image",
-        "required": false
+        "required": false,
+        "role": "style"
       }
     ],
     "outputPorts": [
@@ -507,7 +508,8 @@
         "label": "Reference Images",
         "dataType": "Image",
         "required": false,
-        "multiple": true
+        "multiple": true,
+        "role": "subject"
       }
     ],
     "outputPorts": [
@@ -625,7 +627,8 @@
         "id": "character_image",
         "label": "Character Image",
         "dataType": "Image",
-        "required": false
+        "required": false,
+        "role": "identity"
       },
       {
         "id": "character_video",
@@ -2855,7 +2858,8 @@
         "label": "Character Refs",
         "dataType": "Image",
         "required": false,
-        "multiple": true
+        "multiple": true,
+        "role": "identity"
       },
       {
         "id": "character",
@@ -4138,7 +4142,8 @@
         "id": "image",
         "label": "Image",
         "dataType": "Image",
-        "required": true
+        "required": true,
+        "role": "subject"
       },
       {
         "id": "prompt",
@@ -4308,7 +4313,8 @@
         "label": "Images",
         "dataType": "Image",
         "required": false,
-        "multiple": true
+        "multiple": true,
+        "role": "identity"
       }
     ],
     "outputPorts": [
@@ -4770,7 +4776,8 @@
         "label": "Reference Images",
         "dataType": "Image",
         "required": true,
-        "multiple": true
+        "multiple": true,
+        "role": "identity"
       }
     ],
     "outputPorts": [
@@ -5537,7 +5544,8 @@
         "id": "image",
         "label": "First Frame",
         "dataType": "Image",
-        "required": false
+        "required": false,
+        "role": "subject"
       },
       {
         "id": "last_frame",
@@ -8853,7 +8861,8 @@
         "id": "first_frame_image",
         "label": "First Frame",
         "dataType": "Image",
-        "required": true
+        "required": true,
+        "role": "subject"
       },
       {
         "id": "prompt",
@@ -8941,7 +8950,8 @@
         "id": "subject_reference",
         "label": "Character Image",
         "dataType": "Image",
-        "required": true
+        "required": true,
+        "role": "identity"
       },
       {
         "id": "prompt",
@@ -8993,7 +9003,8 @@
         "id": "image",
         "label": "Start Image",
         "dataType": "Image",
-        "required": false
+        "required": false,
+        "role": "subject"
       },
       {
         "id": "end_image",
@@ -9513,7 +9524,8 @@
         "id": "image",
         "label": "Reference Image",
         "dataType": "Image",
-        "required": false
+        "required": false,
+        "role": "style"
       }
     ],
     "outputPorts": [
@@ -9884,7 +9896,8 @@
         "id": "image",
         "label": "Image",
         "dataType": "Image",
-        "required": true
+        "required": true,
+        "role": "subject"
       },
       {
         "id": "end_image",
@@ -10058,7 +10071,8 @@
         "id": "image",
         "label": "Image",
         "dataType": "Image",
-        "required": true
+        "required": true,
+        "role": "subject"
       },
       {
         "id": "prompt",
@@ -10880,7 +10894,8 @@
         "id": "image",
         "label": "Image",
         "dataType": "Image",
-        "required": true
+        "required": true,
+        "role": "subject"
       },
       {
         "id": "prompt",
@@ -11039,7 +11054,8 @@
         "label": "Reference Images",
         "dataType": "Image",
         "required": true,
-        "multiple": true
+        "multiple": true,
+        "role": "identity"
       }
     ],
     "outputPorts": [
@@ -11461,7 +11477,8 @@
         "id": "image",
         "label": "Image",
         "dataType": "Image",
-        "required": true
+        "required": true,
+        "role": "subject"
       }
     ],
     "outputPorts": [
@@ -12602,7 +12619,8 @@
         "dataType": "Image",
         "required": false,
         "multiple": true,
-        "maxConnections": 10
+        "maxConnections": 10,
+        "role": "style"
       },
       {
         "id": "image_style_references",
@@ -12807,7 +12825,8 @@
         "id": "image",
         "label": "Image",
         "dataType": "Image",
-        "required": true
+        "required": true,
+        "role": "style"
       }
     ],
     "outputPorts": [
@@ -14209,7 +14228,8 @@
         "id": "image",
         "label": "Base Image",
         "dataType": "Image",
-        "required": true
+        "required": true,
+        "role": "subject"
       },
       {
         "id": "mask",
@@ -14222,7 +14242,8 @@
         "label": "Style Refs",
         "dataType": "Image",
         "required": false,
-        "multiple": true
+        "multiple": true,
+        "role": "style"
       }
     ],
     "params": [],
@@ -14350,14 +14371,16 @@
         "id": "image",
         "label": "Source Image",
         "dataType": "Image",
-        "required": true
+        "required": true,
+        "role": "subject"
       },
       {
         "id": "images",
         "label": "Style Refs",
         "dataType": "Image",
         "required": false,
-        "multiple": true
+        "multiple": true,
+        "role": "style"
       }
     ],
     "params": [],
@@ -14653,14 +14676,16 @@
         "id": "image",
         "label": "Source Image",
         "dataType": "Image",
-        "required": true
+        "required": true,
+        "role": "subject"
       },
       {
         "id": "images",
         "label": "Style Refs",
         "dataType": "Image",
         "required": false,
-        "multiple": true
+        "multiple": true,
+        "role": "style"
       }
     ],
     "params": [],
@@ -14867,14 +14892,16 @@
         "id": "image",
         "label": "Subject Image",
         "dataType": "Image",
-        "required": true
+        "required": true,
+        "role": "subject"
       },
       {
         "id": "images",
         "label": "Style Refs",
         "dataType": "Image",
         "required": false,
-        "multiple": true
+        "multiple": true,
+        "role": "style"
       }
     ],
     "params": [],
@@ -15034,14 +15061,16 @@
         "label": "Character Refs",
         "dataType": "Image",
         "required": false,
-        "multiple": true
+        "multiple": true,
+        "role": "identity"
       },
       {
         "id": "images",
         "label": "Style Refs",
         "dataType": "Image",
         "required": false,
-        "multiple": true
+        "multiple": true,
+        "role": "style"
       }
     ],
     "params": [],
@@ -16281,7 +16310,8 @@
         "id": "image",
         "label": "First Frame",
         "dataType": "Image",
-        "required": true
+        "required": true,
+        "role": "subject"
       },
       {
         "id": "end_image",
@@ -16431,7 +16461,8 @@
         "id": "image",
         "label": "Start Image",
         "dataType": "Image",
-        "required": true
+        "required": true,
+        "role": "subject"
       },
       {
         "id": "prompt",
@@ -16577,7 +16608,8 @@
         "id": "image",
         "label": "Start Image",
         "dataType": "Image",
-        "required": false
+        "required": false,
+        "role": "subject"
       },
       {
         "id": "end_image",
@@ -16590,7 +16622,8 @@
         "label": "Reference Images",
         "dataType": "Image",
         "required": false,
-        "multiple": true
+        "multiple": true,
+        "role": "identity"
       }
     ],
     "outputPorts": [
@@ -16687,7 +16720,8 @@
         "id": "image",
         "label": "Character Image",
         "dataType": "Image",
-        "required": true
+        "required": true,
+        "role": "identity"
       },
       {
         "id": "video",
@@ -17105,7 +17139,8 @@
         "id": "image",
         "label": "Image",
         "dataType": "Image",
-        "required": true
+        "required": true,
+        "role": "subject"
       }
     ],
     "outputPorts": [
@@ -17564,7 +17599,8 @@
         "id": "image",
         "label": "Image",
         "dataType": "Image",
-        "required": true
+        "required": true,
+        "role": "identity"
       },
       {
         "id": "video",
@@ -17651,7 +17687,8 @@
         "id": "image",
         "label": "Image",
         "dataType": "Image",
-        "required": true
+        "required": true,
+        "role": "identity"
       },
       {
         "id": "video",
@@ -18242,7 +18279,8 @@
         "id": "image",
         "label": "Image",
         "dataType": "Image",
-        "required": true
+        "required": true,
+        "role": "identity"
       },
       {
         "id": "prompt",

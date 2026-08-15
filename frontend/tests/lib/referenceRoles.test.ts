@@ -7,6 +7,7 @@ import {
   REFERENCE_WEIGHT_MIN,
   REFERENCE_WEIGHT_MAX,
   clampReferenceWeight,
+  getReferenceRole,
 } from '../../src/lib/referenceRoles';
 import type {
   PortDefinition,
@@ -58,6 +59,21 @@ describe('REFERENCE_ROLES', () => {
     expect(REFERENCE_ROLES.lighting.label).toBe('Lighting');
     expect(REFERENCE_ROLES.subject.label).toBe('Subject');
     expect(REFERENCE_ROLES.background.label).toBe('Background');
+  });
+});
+
+describe('getReferenceRole', () => {
+  it('returns the definition for every standard role id', () => {
+    for (const id of REFERENCE_ROLE_IDS) {
+      expect(getReferenceRole(id)).toBe(REFERENCE_ROLES[id]);
+    }
+  });
+
+  it('returns undefined for unknown or ad-hoc role strings', () => {
+    expect(getReferenceRole('character')).toBeUndefined();
+    expect(getReferenceRole('STYLE')).toBeUndefined();
+    expect(getReferenceRole('')).toBeUndefined();
+    expect(getReferenceRole('style ')).toBeUndefined();
   });
 });
 

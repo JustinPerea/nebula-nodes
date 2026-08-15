@@ -197,7 +197,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     executionPattern: 'async-poll',
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: false },
-      { id: 'image', label: 'Image', dataType: 'Image', required: false },
+      { id: 'image', label: 'Image', dataType: 'Image', required: false, role: 'style' },
     ],
     outputPorts: [
       { id: 'video', label: 'Video', dataType: 'Video', required: false },
@@ -307,7 +307,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     executionPattern: 'async-poll',
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
-      { id: 'images', label: 'Reference Images', dataType: 'Image', required: false, multiple: true },
+      { id: 'images', label: 'Reference Images', dataType: 'Image', required: false, multiple: true, role: 'subject' },
     ],
     outputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: false },
@@ -438,7 +438,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     envKeyName: 'RUNWAY_API_KEY',
     executionPattern: 'async-poll',
     inputPorts: [
-      { id: 'character_image', label: 'Character Image', dataType: 'Image', required: false },
+      { id: 'character_image', label: 'Character Image', dataType: 'Image', required: false, role: 'identity' },
       { id: 'character_video', label: 'Character Video', dataType: 'Video', required: false },
       { id: 'reference', label: 'Performance Video', dataType: 'Video', required: true },
     ],
@@ -1916,7 +1916,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     envKeyName: [],
     executionPattern: 'async-poll',
     inputPorts: [
-      { id: 'character_refs', label: 'Character Refs', dataType: 'Image', required: false, multiple: true },
+      { id: 'character_refs', label: 'Character Refs', dataType: 'Image', required: false, multiple: true, role: 'identity' },
       { id: 'character', label: 'Character', dataType: 'Character', required: false },
     ],
     // Output ports are dynamic — one Image port per shot, written at runtime from
@@ -2637,7 +2637,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     envKeyName: 'FAL_KEY',
     executionPattern: 'async-poll',
     inputPorts: [
-      { id: 'image', label: 'Image', dataType: 'Image', required: true },
+      { id: 'image', label: 'Image', dataType: 'Image', required: true, role: 'subject' },
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: false },
       { id: 'tail_image', label: 'End Frame', dataType: 'Image', required: false },
     ],
@@ -2740,7 +2740,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     executionPattern: 'sync',
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
-      { id: 'images', label: 'Images', dataType: 'Image', required: false, multiple: true },
+      { id: 'images', label: 'Images', dataType: 'Image', required: false, multiple: true, role: 'identity' },
     ],
     outputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: false },
@@ -2929,7 +2929,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     executionPattern: 'async-poll',
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
-      { id: 'images', label: 'Reference Images', dataType: 'Image', required: true, multiple: true },
+      { id: 'images', label: 'Reference Images', dataType: 'Image', required: true, multiple: true, role: 'identity' },
     ],
     outputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: false },
@@ -3287,7 +3287,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     directKeyName: 'GOOGLE_API_KEY',
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
-      { id: 'image', label: 'First Frame', dataType: 'Image', required: false },
+      { id: 'image', label: 'First Frame', dataType: 'Image', required: false, role: 'subject' },
       { id: 'last_frame', label: 'Last Frame', dataType: 'Image', required: false },
       { id: 'video', label: 'Extend Video', dataType: 'Video', required: false },
     ],
@@ -5178,7 +5178,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     envKeyName: 'MINIMAX_API_KEY',
     executionPattern: 'async-poll',
     inputPorts: [
-      { id: 'first_frame_image', label: 'First Frame', dataType: 'Image', required: true },
+      { id: 'first_frame_image', label: 'First Frame', dataType: 'Image', required: true, role: 'subject' },
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
     ],
     outputPorts: [
@@ -5231,7 +5231,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     envKeyName: 'MINIMAX_API_KEY',
     executionPattern: 'async-poll',
     inputPorts: [
-      { id: 'subject_reference', label: 'Character Image', dataType: 'Image', required: true },
+      { id: 'subject_reference', label: 'Character Image', dataType: 'Image', required: true, role: 'identity' },
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
     ],
     outputPorts: [
@@ -5261,7 +5261,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     executionPattern: 'async-poll',
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
-      { id: 'image', label: 'Start Image', dataType: 'Image', required: false },
+      { id: 'image', label: 'Start Image', dataType: 'Image', required: false, role: 'subject' },
       { id: 'end_image', label: 'End Image', dataType: 'Image', required: false },
     ],
     outputPorts: [
@@ -5602,7 +5602,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     inputPorts: [
       { id: 'video', label: 'Video', dataType: 'Video', required: true },
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: false },
-      { id: 'image', label: 'Reference Image', dataType: 'Image', required: false },
+      { id: 'image', label: 'Reference Image', dataType: 'Image', required: false, role: 'style' },
     ],
     outputPorts: [
       { id: 'video', label: 'Video', dataType: 'Video', required: false },
@@ -5813,7 +5813,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     executionPattern: 'async-poll',
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
-      { id: 'image', label: 'Image', dataType: 'Image', required: true },
+      { id: 'image', label: 'Image', dataType: 'Image', required: true, role: 'subject' },
       { id: 'end_image', label: 'End Image', dataType: 'Image', required: false },
     ],
     outputPorts: [
@@ -5909,7 +5909,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     envKeyName: 'FAL_KEY',
     executionPattern: 'async-poll',
     inputPorts: [
-      { id: 'image', label: 'Image', dataType: 'Image', required: true },
+      { id: 'image', label: 'Image', dataType: 'Image', required: true, role: 'subject' },
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: false },
       { id: 'end_image', label: 'End Frame', dataType: 'Image', required: false },
     ],
@@ -6381,7 +6381,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     envKeyName: 'FAL_KEY',
     executionPattern: 'async-poll',
     inputPorts: [
-      { id: 'image', label: 'Image', dataType: 'Image', required: true },
+      { id: 'image', label: 'Image', dataType: 'Image', required: true, role: 'subject' },
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
       { id: 'end_image', label: 'End Frame', dataType: 'Image', required: false },
     ],
@@ -6461,7 +6461,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     executionPattern: 'async-poll',
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
-      { id: 'images', label: 'Reference Images', dataType: 'Image', required: true, multiple: true },
+      { id: 'images', label: 'Reference Images', dataType: 'Image', required: true, multiple: true, role: 'identity' },
     ],
     outputPorts: [
       { id: 'video', label: 'Video', dataType: 'Video', required: false },
@@ -6691,7 +6691,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     executionPattern: 'async-poll',
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
-      { id: 'image', label: 'Image', dataType: 'Image', required: true },
+      { id: 'image', label: 'Image', dataType: 'Image', required: true, role: 'subject' },
     ],
     outputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: false },
@@ -7361,7 +7361,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     executionPattern: 'async-poll',
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
-      { id: 'style_images', label: 'Style Images', dataType: 'Image', required: false, multiple: true, maxConnections: 10 },
+      { id: 'style_images', label: 'Style Images', dataType: 'Image', required: false, multiple: true, maxConnections: 10, role: 'style' },
       { id: 'image_style_references', label: 'Image Style Refs', dataType: 'Any', required: false, multiple: true, maxConnections: 10 },
       { id: 'styles', label: 'Styles', dataType: 'Any', required: false, multiple: true },
       { id: 'moodboard', label: 'Moodboard', dataType: 'Any', required: false, maxConnections: 1 },
@@ -7488,7 +7488,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     envKeyName: [],
     executionPattern: 'sync',
     inputPorts: [
-      { id: 'image', label: 'Image', dataType: 'Image', required: true },
+      { id: 'image', label: 'Image', dataType: 'Image', required: true, role: 'style' },
     ],
     outputPorts: [
       { id: 'image_style_reference', label: 'Image Style Ref', dataType: 'Any', required: false },
@@ -8242,9 +8242,9 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     directKeyName: 'IDEOGRAM_API_KEY',
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
-      { id: 'image', label: 'Base Image', dataType: 'Image', required: true },
+      { id: 'image', label: 'Base Image', dataType: 'Image', required: true, role: 'subject' },
       { id: 'mask', label: 'Mask (black = edit)', dataType: 'Image', required: true },
-      { id: 'images', label: 'Style Refs', dataType: 'Image', required: false, multiple: true },
+      { id: 'images', label: 'Style Refs', dataType: 'Image', required: false, multiple: true, role: 'style' },
     ],
     outputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: false },
@@ -8328,8 +8328,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     directKeyName: 'IDEOGRAM_API_KEY',
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
-      { id: 'image', label: 'Source Image', dataType: 'Image', required: true },
-      { id: 'images', label: 'Style Refs', dataType: 'Image', required: false, multiple: true },
+      { id: 'image', label: 'Source Image', dataType: 'Image', required: true, role: 'subject' },
+      { id: 'images', label: 'Style Refs', dataType: 'Image', required: false, multiple: true, role: 'style' },
     ],
     outputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: false },
@@ -8493,8 +8493,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     executionPattern: 'async-poll',
     directKeyName: 'IDEOGRAM_API_KEY',
     inputPorts: [
-      { id: 'image', label: 'Source Image', dataType: 'Image', required: true },
-      { id: 'images', label: 'Style Refs', dataType: 'Image', required: false, multiple: true },
+      { id: 'image', label: 'Source Image', dataType: 'Image', required: true, role: 'subject' },
+      { id: 'images', label: 'Style Refs', dataType: 'Image', required: false, multiple: true, role: 'style' },
     ],
     outputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: false },
@@ -8606,8 +8606,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     directKeyName: 'IDEOGRAM_API_KEY',
     inputPorts: [
       { id: 'prompt', label: 'New Background', dataType: 'Text', required: true },
-      { id: 'image', label: 'Subject Image', dataType: 'Image', required: true },
-      { id: 'images', label: 'Style Refs', dataType: 'Image', required: false, multiple: true },
+      { id: 'image', label: 'Subject Image', dataType: 'Image', required: true, role: 'subject' },
+      { id: 'images', label: 'Style Refs', dataType: 'Image', required: false, multiple: true, role: 'style' },
     ],
     outputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: false },
@@ -8705,8 +8705,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
       { id: 'character', label: 'Character', dataType: 'Character', required: false },
-      { id: 'reference_images', label: 'Character Refs', dataType: 'Image', required: false, multiple: true },
-      { id: 'images', label: 'Style Refs', dataType: 'Image', required: false, multiple: true },
+      { id: 'reference_images', label: 'Character Refs', dataType: 'Image', required: false, multiple: true, role: 'identity' },
+      { id: 'images', label: 'Style Refs', dataType: 'Image', required: false, multiple: true, role: 'style' },
     ],
     outputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: false },
@@ -9529,7 +9529,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     executionPattern: 'async-poll',
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
-      { id: 'image', label: 'First Frame', dataType: 'Image', required: true },
+      { id: 'image', label: 'First Frame', dataType: 'Image', required: true, role: 'subject' },
       { id: 'end_image', label: 'Last Frame', dataType: 'Image', required: true },
     ],
     outputPorts: [
@@ -9620,7 +9620,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     envKeyName: 'FAL_KEY',
     executionPattern: 'async-poll',
     inputPorts: [
-      { id: 'image', label: 'Start Image', dataType: 'Image', required: true },
+      { id: 'image', label: 'Start Image', dataType: 'Image', required: true, role: 'subject' },
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: false },
       { id: 'end_image', label: 'End Image', dataType: 'Image', required: false },
     ],
@@ -9696,9 +9696,9 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     executionPattern: 'async-poll',
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
-      { id: 'image', label: 'Start Image', dataType: 'Image', required: false },
+      { id: 'image', label: 'Start Image', dataType: 'Image', required: false, role: 'subject' },
       { id: 'end_image', label: 'End Image', dataType: 'Image', required: false },
-      { id: 'images', label: 'Reference Images', dataType: 'Image', required: false, multiple: true },
+      { id: 'images', label: 'Reference Images', dataType: 'Image', required: false, multiple: true, role: 'identity' },
     ],
     outputPorts: [
       { id: 'video', label: 'Video', dataType: 'Video', required: false },
@@ -9758,7 +9758,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     envKeyName: 'FAL_KEY',
     executionPattern: 'async-poll',
     inputPorts: [
-      { id: 'image', label: 'Character Image', dataType: 'Image', required: true },
+      { id: 'image', label: 'Character Image', dataType: 'Image', required: true, role: 'identity' },
       { id: 'video', label: 'Motion Reference Video', dataType: 'Video', required: true },
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: false },
     ],
@@ -10019,7 +10019,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     executionPattern: 'async-poll',
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
-      { id: 'image', label: 'Image', dataType: 'Image', required: true },
+      { id: 'image', label: 'Image', dataType: 'Image', required: true, role: 'subject' },
     ],
     outputPorts: [
       { id: 'video', label: 'Video', dataType: 'Video', required: false },
@@ -10326,7 +10326,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     envKeyName: 'FAL_KEY',
     executionPattern: 'async-poll',
     inputPorts: [
-      { id: 'image', label: 'Image', dataType: 'Image', required: true },
+      { id: 'image', label: 'Image', dataType: 'Image', required: true, role: 'identity' },
       { id: 'video', label: 'Video', dataType: 'Video', required: true },
     ],
     outputPorts: [
@@ -10389,7 +10389,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     envKeyName: 'FAL_KEY',
     executionPattern: 'async-poll',
     inputPorts: [
-      { id: 'image', label: 'Image', dataType: 'Image', required: true },
+      { id: 'image', label: 'Image', dataType: 'Image', required: true, role: 'identity' },
       { id: 'video', label: 'Video', dataType: 'Video', required: true },
     ],
     outputPorts: [
@@ -10755,7 +10755,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     // when a Character is wired in, its trait string leads the prompt and its
     // reference views ride as additional images behind the base edit target.
     inputPorts: [
-      { id: 'image', label: 'Image', dataType: 'Image', required: true },
+      { id: 'image', label: 'Image', dataType: 'Image', required: true, role: 'identity' },
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
       { id: 'character', label: 'Character', dataType: 'Character', required: false },
       { id: 'mask', label: 'Mask', dataType: 'Mask', required: false },

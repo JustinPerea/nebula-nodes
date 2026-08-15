@@ -4,6 +4,7 @@ import { Download, Repeat2, Sparkles } from 'lucide-react';
 import type { NodeData } from '../../types';
 import { NODE_DEFINITIONS } from '../../constants/nodeDefinitions';
 import { PORT_COLORS } from '../../lib/portCompatibility';
+import { getReferenceRole } from '../../lib/referenceRoles';
 import { CATEGORY_COLORS } from '../../constants/ports';
 import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
@@ -340,14 +341,28 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
 
       {definition.inputPorts.length > 0 && (
         <div className="model-node__ports model-node__ports--input">
-          {definition.inputPorts.map((port) => (
-            <div key={port.id} className="model-node__port-row">
-              <Handle type="target" position={Position.Left} id={port.id} className="model-node__handle" style={{ backgroundColor: PORT_COLORS[port.dataType] }} />
-              <span className="model-node__port-label">
-                {port.label}{port.multiple ? ' +' : ''}
-              </span>
-            </div>
-          ))}
+          {definition.inputPorts.map((port) => {
+            // Semantic reference role badge (see referenceRoles.ts). Role is
+            // advisory metadata — ports without a role render exactly as
+            // before: no badge, no extra DOM.
+            const roleDef = port.role ? getReferenceRole(port.role) : undefined;
+            return (
+              <div key={port.id} className="model-node__port-row">
+                <Handle type="target" position={Position.Left} id={port.id} className="model-node__handle" style={{ backgroundColor: PORT_COLORS[port.dataType] }} />
+                <span className="model-node__port-label">
+                  {port.label}{port.multiple ? ' +' : ''}
+                </span>
+                {roleDef && (
+                  <span
+                    className="model-node__role-badge"
+                    style={{ backgroundColor: roleDef.color }}
+                    aria-label={`Reference role: ${roleDef.label}`}
+                    title={`${roleDef.label} reference — ${roleDef.description}`}
+                  />
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
 
