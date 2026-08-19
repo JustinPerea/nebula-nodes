@@ -791,4 +791,13 @@ A 16-agent adversarial review (3 dimensions → per-finding verify) surfaced 13 
   live workspace's larger 1,544 collection includes 18 duplicate tests from four
   ignored Finder `* 2.py` files; those are not part of the release candidate.
 - **Managed blocker resolved:** a later unrestricted session applied the eight canonical `.agents` Settings corrections and the OpenRouter/Replicate YAML-description fixes. The OpenAI canonical skill intentionally retains `.agents/skills/gpt-image-2` links rather than copying `.claude`-specific paths. All 22 provider skill folders across both trees validate with `quick_validate.py`, strict provider-guide parity passes, and the live backend suite is fully green.
+- **Linux CI shallow-clone repair:** the first pushed release run exposed that
+  `test_reference_roles.py` loaded its pre-role baseline with `git show
+  c708400`, while `actions/checkout` intentionally provides only the pushed
+  commit by default. Replace the history lookup with a checked-in map of
+  canonical SHA-256 fingerprints for every baseline node after removing only
+  the permitted port `role`/`weight` keys. This keeps the additive-only
+  guarantee, permits later new nodes, stays compact, and makes the test
+  deterministic in shallow clones and source archives without expanding every
+  CI checkout to full repository history.
 - **Browser ceiling:** `vite preview` was attempted for a real lazy-chunk browser smoke and failed before launch with `listen EPERM` on `127.0.0.1:4173`; no UI state was used and no screenshot was claimed. Frontend proof is lint + production build + 447 tests; built-chunk runtime remains environment-gated.

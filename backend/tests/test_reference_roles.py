@@ -18,9 +18,9 @@ VAL-ROLE-005 applied to this feature's edits):
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
-import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -32,6 +32,9 @@ FRONTEND_DEFS_PATH = REPO_ROOT / "frontend" / "src" / "constants" / "nodeDefinit
 MODEL_NODE_PATH = REPO_ROOT / "frontend" / "src" / "components" / "nodes" / "ModelNode.tsx"
 NODES_CSS_PATH = REPO_ROOT / "frontend" / "src" / "styles" / "nodes.css"
 REFERENCE_ROLES_PATH = REPO_ROOT / "frontend" / "src" / "lib" / "referenceRoles.ts"
+BASELINE_FINGERPRINTS_PATH = (
+    Path(__file__).resolve().parent / "fixtures" / "reference_roles_baseline_sha256.json"
+)
 
 # The 7 standard roles — mirrors REFERENCE_ROLE_IDS in referenceRoles.ts.
 STANDARD_ROLES = {
@@ -43,11 +46,6 @@ STANDARD_ROLES = {
     "subject",
     "background",
 }
-
-# Pre-roles baseline (the reference-set node commit). Role additions are
-# diffed against this so the additive-only contract stays meaningful even
-# after the role commit lands on HEAD.
-BASELINE_COMMIT = "c708400"
 
 # Complete role assignment map for this feature. Conventions:
 # - character/face-consistency reference ports -> "identity"
@@ -106,15 +104,31 @@ def definitions() -> dict[str, dict[str, Any]]:
     return json.loads(BACKEND_DEFS_PATH.read_text())
 
 
-def _baseline_definitions() -> dict[str, dict[str, Any]]:
-    result = subprocess.run(
-        ["git", "show", f"{BASELINE_COMMIT}:backend/data/node_definitions.json"],
-        cwd=REPO_ROOT,
-        capture_output=True,
-        text=True,
-        check=True,
+def _without_role_additions(node: dict[str, Any]) -> dict[str, Any]:
+    """Return a node with only the feature's permitted port keys removed."""
+    normalized = dict(node)
+    for section in ("inputPorts", "outputPorts"):
+        normalized[section] = [
+            {key: value for key, value in port.items() if key not in {"role", "weight"}}
+            for port in node.get(section, [])
+        ]
+    return normalized
+
+
+def _node_fingerprint(node: dict[str, Any]) -> str:
+    canonical = json.dumps(
+        _without_role_additions(node),
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
     )
-    return json.loads(result.stdout)
+    return hashlib.sha256(canonical.encode()).hexdigest()
+
+
+def _baseline_fingerprints() -> dict[str, str]:
+    payload = json.loads(BASELINE_FINGERPRINTS_PATH.read_text())
+    assert payload["baselineCommit"] == "c708400"
+    return payload["nodes"]
 
 
 def _role_map(defs: dict[str, dict[str, Any]]) -> dict[str, dict[str, str]]:
@@ -227,8 +241,7 @@ def test_mask_ports_have_no_role(definitions: dict[str, dict[str, Any]]) -> None
 def test_role_additions_are_additive_only(
     definitions: dict[str, dict[str, Any]],
 ) -> None:
-    baseline = _baseline_definitions()
-    added_keys = {"role", "weight"}
+    baseline = _baseline_fingerprints()
 
     # This feature contract protects every node that existed at its baseline;
     # later first-class nodes are allowed as long as none of the baseline nodes
@@ -237,33 +250,15 @@ def test_role_additions_are_additive_only(
         f"baseline nodes removed: {sorted(set(baseline) - set(definitions))}"
     )
 
-    for node_id in baseline:
-        before = baseline[node_id]
-        after = definitions[node_id]
-        for key in set(before) | set(after):
-            if key in ("inputPorts", "outputPorts"):
-                continue
-            assert before.get(key) == after.get(key), (
-                f"{node_id}.{key} changed — only port role/weight additions are allowed"
-            )
-        for section in ("inputPorts", "outputPorts"):
-            before_ports = {p["id"]: p for p in before.get(section, [])}
-            after_ports = {p["id"]: p for p in after.get(section, [])}
-            assert set(before_ports) == set(after_ports), (
-                f"{node_id}.{section} port set changed"
-            )
-            for port_id in before_ports:
-                b = before_ports[port_id]
-                a = after_ports[port_id]
-                assert set(a) - set(b) <= added_keys, (
-                    f"{node_id}.{section}.{port_id}: unexpected new keys "
-                    f"{sorted(set(a) - set(b))}"
-                )
-                for field in b:
-                    assert a.get(field) == b[field], (
-                        f"{node_id}.{section}.{port_id}.{field} changed "
-                        f"({b[field]!r} -> {a.get(field)!r})"
-                    )
+    mismatches = sorted(
+        node_id
+        for node_id, expected_fingerprint in baseline.items()
+        if _node_fingerprint(definitions[node_id]) != expected_fingerprint
+    )
+    assert mismatches == [], (
+        "baseline nodes changed outside additive port role/weight metadata: "
+        f"{mismatches}"
+    )
 
 
 # ---------------------------------------------------------------------------
