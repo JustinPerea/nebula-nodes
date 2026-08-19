@@ -56,13 +56,16 @@ def _image_input_output(params: dict) -> dict:
 
 async def _maybe_probe_video_output(node: GraphNode, node_outputs: dict[str, Any]) -> None:
     """If a node produced a Video output and we haven't yet probed it,
-    run ffprobe and stash sourceDuration / sourceFps / sourceIsVfr on
-    node.params. Mirrors the upload-time probe so every video source —
+    run ffprobe and stash private source metadata on node.params. Mirrors the
+    upload-time probe so every video source —
     Veo, Kling, Sora, Seedance, Wan, etc. — opens its downstream editor
     with a pre-populated clip instead of forcing the user to Run the
     edit node first. Best-effort: failures are silent (the editor's
     Run-to-populate fallback still works as graceful degradation)."""
-    if node.params.get("sourceDuration") is not None:
+    if (
+        node.params.get("_sourceDuration") is not None
+        or node.params.get("sourceDuration") is not None
+    ):
         return
     from pathlib import Path
     for v in node_outputs.values():
@@ -81,9 +84,12 @@ async def _maybe_probe_video_output(node: GraphNode, node_outputs: dict[str, Any
         try:
             from services.ffmpeg import ffprobe_video
             probe = await ffprobe_video(path)
-            node.params["sourceDuration"] = probe.duration
-            node.params["sourceFps"] = probe.fps
-            node.params["sourceIsVfr"] = probe.is_vfr
+            # These are runtime facts, not provider inputs. The private
+            # namespace survives graph persistence while remaining outside
+            # strict provider parameter schemas.
+            node.params["_sourceDuration"] = probe.duration
+            node.params["_sourceFps"] = probe.fps
+            node.params["_sourceIsVfr"] = probe.is_vfr
         except Exception:
             pass
         return

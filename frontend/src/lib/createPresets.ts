@@ -1,4 +1,5 @@
 import { apiFetch } from './backend';
+import { resolveProjectId } from './currentProject';
 
 export interface Preset {
   id: string;
@@ -30,17 +31,20 @@ export type PresetCreateInput = {
 
 export async function fetchPresets(scope: 'global' | 'project', projectId?: string): Promise<Preset[]> {
   const params = new URLSearchParams({ scope });
-  if (scope === 'project' && projectId) params.append('projectId', projectId);
+  if (scope === 'project') params.append('projectId', await resolveProjectId(projectId));
   const res = await apiFetch(`/api/presets?${params.toString()}`);
   if (!res.ok) throw new Error(`Fetch presets failed: ${res.status}`);
   return res.json();
 }
 
 export async function createPreset(body: PresetCreateInput): Promise<Preset> {
+  const resolvedBody = body.scope === 'project'
+    ? { ...body, projectId: await resolveProjectId(body.projectId) }
+    : body;
   const res = await apiFetch('/api/presets', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
+    body: JSON.stringify(resolvedBody),
   });
   if (!res.ok) throw new Error(`Create preset failed: ${res.status}`);
   return res.json();

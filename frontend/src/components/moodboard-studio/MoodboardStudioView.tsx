@@ -9,10 +9,11 @@ import {
 } from '../../lib/api';
 import { apiFetch, backendAssetUrlSync } from '../../lib/backend';
 import { NEW_MOODBOARD_SENTINEL } from '../../lib/studioSentinels';
+import { getCurrentProject } from '../../lib/currentProject';
+import type { AssetScope } from '../../store/uiStore';
 import type { Moodboard, MoodboardAnalysis, MoodboardImage } from '../../types';
 import '../../styles/moodboard-studio.css';
 
-type Scope = 'global' | 'project';
 type SaveState = 'draft' | 'idle' | 'saving' | 'saved' | 'error';
 
 interface MoodboardDraft {
@@ -64,6 +65,7 @@ function normalizeAnalysisText(value: unknown): string {
 
 export function MoodboardStudioView() {
   const moodboardEditorId = useUIStore((s) => s.moodboardEditorId);
+  const moodboardEditorScope = useUIStore((s) => s.moodboardEditorScope);
   const enterMoodboardEditor = useUIStore((s) => s.enterMoodboardEditor);
   const exitMoodboardEditor = useUIStore((s) => s.exitMoodboardEditor);
 
@@ -76,6 +78,7 @@ export function MoodboardStudioView() {
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
+  const [railScope, setRailScope] = useState<AssetScope>(moodboardEditorScope);
 
   const skipNextAutosave = useRef(false);
   const createInFlight = useRef(false);
@@ -97,12 +100,30 @@ export function MoodboardStudioView() {
     setSaveState('idle');
 
     if (isDraftId) {
+      setRailScope(moodboardEditorScope);
       skipNextAutosave.current = true;
-      setDraft(emptyDraft());
       setSavedId(null);
       setThumbnail('');
       setSaveState('draft');
-      return;
+      if (moodboardEditorScope === 'global') {
+        setDraft(emptyDraft());
+        setLoading(false);
+        return;
+      }
+      setLoading(true);
+      void getCurrentProject()
+        .then((project) => {
+          if (!cancelled) setDraft({ ...emptyDraft(), projectId: project.id });
+        })
+        .catch((err) => {
+          if (!cancelled) setLoadError(err instanceof Error ? err.message : 'Failed to resolve project.');
+        })
+        .finally(() => {
+          if (!cancelled) setLoading(false);
+        });
+      return () => {
+        cancelled = true;
+      };
     }
 
     const targetId = moodboardEditorId as string;
@@ -128,6 +149,7 @@ export function MoodboardStudioView() {
           return;
         }
         skipNextAutosave.current = true;
+        setRailScope(found.projectId ? 'project' : 'global');
         setDraft(moodboardToDraft(found));
         setSavedId(found.id);
         setThumbnail(found.thumbnail);
@@ -147,7 +169,7 @@ export function MoodboardStudioView() {
     // draft/saved/thumbnail imperatively from the fetch result; the helpers
     // (fetchMoodboards, *Draft, setters) are stable. Mirrors CharacterStudioView.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [moodboardEditorId]);
+  }, [moodboardEditorId, moodboardEditorScope]);
 
   const persist = useCallback(async () => {
     if (!canSave) {
@@ -180,9 +202,11 @@ export function MoodboardStudioView() {
       setSavedId(created.id);
       setThumbnail(created.thumbnail);
       setSaveState('saved');
+      const createdScope: AssetScope = created.projectId ? 'project' : 'global';
+      setRailScope(createdScope);
       if (moodboardEditorId !== created.id) {
         justCreatedId.current = created.id;
-        enterMoodboardEditor(created.id);
+        enterMoodboardEditor(created.id, createdScope);
       }
       return created.id;
     } catch (err) {
@@ -316,9 +340,17 @@ export function MoodboardStudioView() {
 
       <aside className="moodboard-studio-view__rail">
         <MoodboardRail
+          key={railScope}
           activeId={savedId ?? (isDraftId ? NEW_MOODBOARD_SENTINEL : moodboardEditorId)}
-          onSelect={enterMoodboardEditor}
-          onNew={() => enterMoodboardEditor(NEW_MOODBOARD_SENTINEL)}
+          initialScope={railScope}
+          onSelect={(id, scope) => {
+            setRailScope(scope);
+            enterMoodboardEditor(id, scope);
+          }}
+          onNew={(scope) => {
+            setRailScope(scope);
+            enterMoodboardEditor(NEW_MOODBOARD_SENTINEL, scope);
+          }}
         />
       </aside>
 
@@ -506,14 +538,16 @@ export function MoodboardStudioView() {
 
 function MoodboardRail({
   activeId,
+  initialScope,
   onSelect,
   onNew,
 }: {
   activeId: string | null;
-  onSelect: (id: string) => void;
-  onNew: () => void;
+  initialScope: AssetScope;
+  onSelect: (id: string, scope: AssetScope) => void;
+  onNew: (scope: AssetScope) => void;
 }) {
-  const [scope, setScope] = useState<Scope>('global');
+  const [scope, setScope] = useState<AssetScope>(initialScope);
   const [moodboards, setMoodboards] = useState<Moodboard[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -563,7 +597,7 @@ function MoodboardRail({
           Global
         </button>
       </div>
-      <button type="button" className="moodboard-rail__new" onClick={onNew}>+ New Moodboard</button>
+      <button type="button" className="moodboard-rail__new" onClick={() => onNew(scope)}>+ New Moodboard</button>
       <div className="moodboard-rail__list">
         {loading && <div className="moodboard-rail__empty">Loading...</div>}
         {error && !loading && <div className="moodboard-rail__empty moodboard-rail__empty--error">{error}</div>}
@@ -573,7 +607,7 @@ function MoodboardRail({
             key={m.id}
             type="button"
             className={m.id === activeId ? 'moodboard-rail__item moodboard-rail__item--active' : 'moodboard-rail__item'}
-            onClick={() => onSelect(m.id)}
+            onClick={() => onSelect(m.id, scope)}
           >
             <span className="moodboard-rail__thumb">
               {m.thumbnail ? <img src={backendAssetUrlSync(m.thumbnail)} alt="" draggable={false} /> : <span>MB</span>}

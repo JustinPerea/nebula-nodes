@@ -801,3 +801,47 @@ A 16-agent adversarial review (3 dimensions → per-finding verify) surfaced 13 
   deterministic in shallow clones and source archives without expanding every
   CI checkout to full repository history.
 - **Browser ceiling:** `vite preview` was attempted for a real lazy-chunk browser smoke and failed before launch with `listen EPERM` on `127.0.0.1:4173`; no UI state was used and no screenshot was claimed. Frontend proof is lint + production build + 447 tests; built-chunk runtime remains environment-gated.
+
+### 2026-08-19 — Full UI acceptance: layout persistence and accessible insertion
+
+### 2026-08-19 — Saved-bundle runtime metadata compatibility
+
+- A bundle saved through the native Chrome Save dialog could not be loaded back: completed `gemini-omni-flash` nodes contained `sourceDuration`, `sourceFps`, and `sourceIsVfr` in `params`, but those are runtime ffprobe facts rather than declared provider inputs. Strict import validation correctly rejected them and atomically preserved the empty post-Clear graph.
+- Kept strict unknown-parameter validation intact. Runtime probe metadata now uses the existing private-param namespace (`_sourceDuration`, `_sourceFps`, `_sourceIsVfr`) on source/provider nodes. `video-edit` keeps its unprefixed fields because those are declared, durable editor state.
+- Both graph serialization and deserialization migrate the three legacy fields only when the node definition does not declare them. This cleans future saves and allows existing v1-v3 bundles—including the UI-audit backup—to reopen.
+- The editor reads private metadata first and retains a legacy fallback for already-hydrated nodes. Upload responses keep their existing public response field names; only persisted node params changed.
+
+### 2026-08-19 — Live handler-param synchronization after Canvas runs
+
+- A real Video Input → Video Edit run completed and persisted the edit handler's seeded 60-second clip, but the open frontend still showed `0 clips`. The frontend execution routes only received output events; their post-run handler-param sync updated `cli_graph` without broadcasting the new graph.
+- `_sync_params_to_cli_graph` now reports whether values actually changed and deep-copies changed params. Full-graph and single-node Canvas execution send one final `graphSync` only when a handler mutated params, avoiding an unconditional extra graph refresh for ordinary runs.
+- Added async regression coverage for both `/api/execute` and `/api/execute-node`; each proves the live broadcast contains the mutated value.
+
+### 2026-08-19 — Silent-source Video Edit rendering
+
+- The first deliberately long local Video Edit failed in 0.2 seconds: the source was a valid silent MP4, but filter construction inferred an audio stream from the clip's unmuted state and referenced nonexistent `[0:a]` input.
+- Extended `ProbeResult` with `has_audio`, derived from ffprobe's existing stream list. Video Edit now emits audio filters/maps only when the source actually has audio and at least one clip is unmuted; GIF and all-muted exports continue to omit audio.
+- Kept the render helper authoritative for both graph execution and final export. Added regression coverage for audio-bearing, silent, all-muted, and GIF paths.
+
+- **Live reproduction:** a normal FastAPI + Vite pair in Chrome restored the user's 8-node graph, but two nodes were roughly 2,000 flow pixels away and multiple nodes shared exact coordinates. Auto-layout visibly repaired the graph, then a browser reload reverted every arranged position because React Flow changes never reached the persisted CLI graph. Three rapid click/keyboard additions also landed at the same viewport-center coordinate.
+- **Persistence boundary:** Canvas drag completion and auto-layout now send positions through one atomic `PUT /api/graph/layout` contract. The backend validates every referenced node and finite coordinate before one `CLIGraph.update_positions()` mutation/persist/broadcast, so a stale or malformed layout cannot partially overwrite the saved graph.
+- **Placement tradeoff:** accessible click/tap/keyboard insertion keeps the viewport-center behavior for the first open slot, then searches nearby 320x220 slots. Pending positions are reserved locally until graph-sync materializes them; this closes the real rapid-activation race without waiting for a backend round trip or changing HTML drag/drop placement.
+
+### 2026-08-19 — Command Palette insertion parity
+
+- The live workspace pass found that Command Palette node insertion still used the raw viewport center. Adding Cinema Scene and then Remotion Composition placed them at the same coordinates even though Node Library additions had already adopted collision-aware placement.
+- Command Palette now uses the shared `findAvailableNodePosition()` policy and keeps its own pending reservations until graph sync materializes each node. This preserves the intended center-first behavior while making every click/keyboard insertion surface collision-safe.
+- A component regression opens the palette twice without allowing either mocked backend addition to resolve into live graph state, then proves both requested nodes receive distinct non-overlapping positions.
+
+### 2026-08-19 — Backend-owned project scope
+
+- The live Assets/Character/Moodboard pass showed real `400` responses for every Project tab: the stores require `projectId`, but no frontend surface had a current-project concept. Presets were worse because `scope=project` without an id silently fell back to global storage.
+- Nebula remains a one-local-project-per-backend application, so the backend now owns and exposes that identity at `/api/project`. The default is the stable repository-directory name; `NEBULA_PROJECT_ID` and `NEBULA_PROJECT_NAME` are explicit deployment overrides. Only the safe id and display name are exposed—not the local path.
+- All project-scoped list and Preset-create helpers resolve the same identity automatically. Character and Moodboard Studio entry state also retains whether “New” was launched from Global or Project, so new drafts persist into the selected scope instead of silently becoming global.
+- Preset storage now rejects a missing project id exactly like Character and Moodboard storage. This converts silent scope corruption into a truthful API error if a future caller bypasses the frontend resolver.
+
+### 2026-08-19 — Backend disconnect truth and recovery
+
+- Stopping the normal FastAPI process left the live Canvas looking fully operational; all 8 nodes remained safely present, but there was no visible indication that runs and backend persistence were unavailable.
+- A lightweight health probe now renders a non-blocking offline pill and continues retrying. A successful recovery clears the warning and the cached current-project identity in case the restarted backend belongs to a different checkout.
+- Canvas edits remain available while offline; the status copy states that limitation rather than disabling the workspace or implying that local-only edits were persisted.

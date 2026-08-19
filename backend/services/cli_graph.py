@@ -98,6 +98,23 @@ class CLIGraph:
         self.nodes[node_id]["params"].update(params)
         self._maybe_persist()
 
+    def update_positions(self, positions: dict[str, dict[str, float]]) -> None:
+        """Atomically replace stored positions for existing nodes.
+
+        Callers validate numeric coordinates before this boundary. Unknown
+        nodes fail before any mutation so a stale frontend cannot partially
+        apply a layout.
+        """
+        unknown = [node_id for node_id in positions if node_id not in self.nodes]
+        if unknown:
+            raise ValueError(f"Node '{unknown[0]}' not found")
+        for node_id, position in positions.items():
+            self.nodes[node_id]["position"] = {
+                "x": float(position["x"]),
+                "y": float(position["y"]),
+            }
+        self._maybe_persist()
+
     def remove_node(self, node_id: str) -> None:
         """Remove a node and any edges touching it. Raises if node_id is unknown."""
         if node_id not in self.nodes:

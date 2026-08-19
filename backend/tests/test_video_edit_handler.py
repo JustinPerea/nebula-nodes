@@ -185,6 +185,7 @@ async def test_final_export_container_codecs(
             resolution="720p",
             quality="high",
             output_dir=tmp_path,
+            source_has_audio=True,
         )
 
     assert output.suffix == expected_suffix
@@ -220,6 +221,39 @@ async def test_final_gif_export_uses_palette_and_omits_audio(tmp_path) -> None:
     assert "paletteuse" in filters
     assert "atrim" not in filters
     assert "[outas]" not in args
+
+
+@pytest.mark.asyncio
+async def test_silent_source_omits_audio_filter_and_map(tmp_path: Path) -> None:
+    src = tmp_path / "silent.mp4"
+    src.write_bytes(b"fake")
+    clips = [{
+        "id": "c1",
+        "sourceIn": 0.0,
+        "sourceOut": 2.0,
+        "speed": 0.5,
+        "volume": 1.0,
+        "mute": False,
+    }]
+    captured: list[list[str]] = []
+
+    async def fake_ffmpeg(args, on_progress=None):
+        captured.append(args)
+        Path(args[-1]).touch()
+
+    with patch("handlers.video_edit.run_ffmpeg", side_effect=fake_ffmpeg):
+        await render_video_edit_file(
+            src,
+            clips,
+            output_dir=tmp_path,
+            source_has_audio=False,
+        )
+
+    filters = _filter_str(captured[0])
+    assert "[0:a]" not in filters
+    assert "atempo" not in filters
+    assert "concat=n=1:v=1:a=0" in filters
+    assert "[outas]" not in captured[0]
 
 
 @pytest.mark.asyncio

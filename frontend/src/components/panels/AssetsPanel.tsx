@@ -97,8 +97,8 @@ export function AssetsPanel() {
   };
 
   const handleNew = () => {
-    if (tab === 'characters') enterCharacterEditor(NEW_CHARACTER_SENTINEL);
-    else if (tab === 'moodboards') enterMoodboardEditor(NEW_MOODBOARD_SENTINEL);
+    if (tab === 'characters') enterCharacterEditor(NEW_CHARACTER_SENTINEL, scope);
+    else if (tab === 'moodboards') enterMoodboardEditor(NEW_MOODBOARD_SENTINEL, scope);
   };
 
   const applyStyle = (p: Preset) => {
@@ -190,7 +190,7 @@ export function AssetsPanel() {
                   draggable
                   onDragStart={(e) => onDragCharacter(e, c)}
                   onClick={() => addCharacterNode(c.id, { x: 400, y: 300 }, { name: c.name, thumbnail: c.thumbnail })}
-                  onDoubleClick={() => enterCharacterEditor(c.id)}
+                  onDoubleClick={() => enterCharacterEditor(c.id, scope)}
                   title="Click to add to canvas · double-click to edit"
                 >
                   <span className="character-palette__thumb">
@@ -221,7 +221,7 @@ export function AssetsPanel() {
                   draggable
                   onDragStart={(e) => onDragMoodboard(e, m)}
                   onClick={() => addMoodboardNode(m.id, { x: 460, y: 360 }, { name: m.name, thumbnail: m.thumbnail, imageCount: m.images.length, mode: m.mode })}
-                  onDoubleClick={() => enterMoodboardEditor(m.id)}
+                  onDoubleClick={() => enterMoodboardEditor(m.id, scope)}
                   title="Click to add to canvas · double-click to edit"
                 >
                   <span className="character-palette__thumb">

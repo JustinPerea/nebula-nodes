@@ -32,3 +32,22 @@ a {
   font-size: 13px;
   letter-spacing: 0.02em;
 }
+
+.backend-connection {
+  position: fixed;
+  z-index: 10000;
+  top: 12px;
+  left: 50%;
+  max-width: min(92vw, 560px);
+  transform: translateX(-50%);
+  padding: 8px 14px;
+  border: 1px solid rgb(255 255 255 / 14%);
+  border-radius: 999px;
+  box-shadow: 0 8px 30px rgb(0 0 0 / 45%);
+  background: rgb(32 16 13 / 96%);
+  color: #ffb49f;
+  font-size: 12px;
+  line-height: 1.25;
+  letter-spacing: 0.01em;
+  pointer-events: none;
+}

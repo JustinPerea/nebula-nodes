@@ -2,6 +2,7 @@ import { vi, describe, it, expect, beforeEach } from 'vitest';
 
 const fetchMock = vi.fn();
 vi.mock('../../src/lib/backend', () => ({ apiFetch: (...a: unknown[]) => fetchMock(...a) }));
+vi.mock('../../src/lib/currentProject', () => ({ resolveProjectId: async (id?: string) => id ?? 'nebula_nodes' }));
 import { fetchPresets, createPreset, deletePreset } from '../../src/lib/createPresets';
 
 beforeEach(() => fetchMock.mockReset());
@@ -21,6 +22,13 @@ describe('createPresets client', () => {
     const [path, init] = fetchMock.mock.calls[0];
     expect(path).toBe('/api/presets');
     expect((init as { method: string }).method).toBe('POST');
+    expect(JSON.parse((init as { body: string }).body).projectId).toBe('nebula_nodes');
+  });
+
+  it('fetchPresets supplies the current id for project scope', async () => {
+    fetchMock.mockResolvedValue({ ok: true, json: async () => [] });
+    await fetchPresets('project');
+    expect(fetchMock.mock.calls[0][0]).toContain('scope=project&projectId=nebula_nodes');
   });
 
   it('deletePreset DELETEs by id and throws on failure', async () => {

@@ -50,6 +50,25 @@ def test_update_unknown_node_raises(graph):
         graph.update_params("n99", {"x": 1})
 
 
+def test_update_positions_is_atomic(graph):
+    graph.add_node("node-a", {}, position={"x": 1, "y": 2})
+    graph.add_node("node-b", {}, position={"x": 3, "y": 4})
+
+    with pytest.raises(ValueError, match="n99"):
+        graph.update_positions({
+            "n1": {"x": 10, "y": 20},
+            "n99": {"x": 30, "y": 40},
+        })
+
+    assert graph.nodes["n1"]["position"] == {"x": 1.0, "y": 2.0}
+    graph.update_positions({
+        "n1": {"x": 10, "y": 20},
+        "n2": {"x": 30, "y": 40},
+    })
+    assert graph.nodes["n1"]["position"] == {"x": 10.0, "y": 20.0}
+    assert graph.nodes["n2"]["position"] == {"x": 30.0, "y": 40.0}
+
+
 def test_clear(graph):
     graph.add_node("node-a", {})
     graph.add_node("node-b", {})

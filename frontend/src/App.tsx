@@ -14,6 +14,7 @@ import { ChatPanel } from './components/panels/ChatPanel';
 import { AgentLog } from './components/panels/AgentLog';
 import { CommandPalette } from './components/CommandPalette';
 import { OnboardingOverlay } from './components/onboarding/OnboardingOverlay';
+import { BackendConnectionStatus } from './components/BackendConnectionStatus';
 import { startWorkingBadge } from './lib/jobNotifications';
 import { getSettings, fetchCLIGraph } from './lib/api';
 import { useUIStore } from './store/uiStore';
@@ -238,6 +239,7 @@ export default function App() {
 
   return (
     <ReactFlowProvider>
+      <BackendConnectionStatus />
       <GraphHydrator />
       <ZoomManifestRecorder />
       {!isBrandShowcase && <CanvasTabs />}

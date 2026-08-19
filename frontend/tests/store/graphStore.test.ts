@@ -66,6 +66,43 @@ describe('graphStore', () => {
     expect(state.edges).toEqual([]);
   });
 
+  it('persists settled drag positions through the atomic layout endpoint', async () => {
+    useGraphStore.setState({
+      nodes: [{
+        id: 'n1',
+        type: 'model-node',
+        position: { x: 10, y: 20 },
+        data: {
+          label: 'Text Input',
+          definitionId: 'text-input',
+          params: {},
+          state: 'idle',
+          outputs: {},
+        },
+      }],
+      edges: [],
+    });
+    fetchMock.mockResolvedValueOnce(mockResponse({ status: 'updated', count: 1 }));
+
+    useGraphStore.getState().onNodesChange([{
+      type: 'position',
+      id: 'n1',
+      position: { x: 125, y: 240 },
+      dragging: false,
+    }]);
+
+    expect(useGraphStore.getState().nodes[0].position).toEqual({ x: 125, y: 240 });
+    await vi.waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        'http://localhost:8000/api/graph/layout',
+        expect.objectContaining({
+          method: 'PUT',
+          body: JSON.stringify({ positions: { n1: { x: 125, y: 240 } } }),
+        }),
+      );
+    });
+  });
+
   it('adds a node', async () => {
     await addNode('gpt-image-1-generate', { x: 100, y: 200 });
 

@@ -34,7 +34,9 @@ def _write_json(path: Path, data: dict[str, Any]) -> None:
 
 
 def _scope_dir(scope: str, projectId: str | None) -> Path:
-    if scope == "project" and projectId:
+    if scope == "project":
+        if not projectId:
+            raise ValueError("projectId is required for scope='project'")
         if not _ID_RE.fullmatch(projectId):
             raise ValueError("invalid projectId")
         candidate = _root() / projectId

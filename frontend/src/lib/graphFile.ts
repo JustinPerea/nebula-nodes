@@ -51,6 +51,41 @@ interface NebulaEdge {
   data?: Record<string, unknown>;
 }
 
+const RUNTIME_MEDIA_PARAM_KEYS = [
+  'sourceDuration',
+  'sourceFps',
+  'sourceIsVfr',
+] as const;
+
+/**
+ * Media probing used to write runtime metadata into every video-producing
+ * node as if it were a provider parameter. Those keys are valid editor state
+ * on video-edit, but are not part of provider schemas and therefore made a
+ * freshly saved bundle fail strict import validation.
+ *
+ * Keep declared keys untouched and migrate only undeclared runtime metadata
+ * to the private namespace already accepted by the graph API. Running this on
+ * both save and load makes future bundles clean and keeps legacy v1-v3 files
+ * loadable without weakening backend validation for arbitrary unknown params.
+ */
+export function normalizeRuntimeMediaParams(
+  definitionId: string,
+  params: Record<string, unknown>,
+): Record<string, unknown> {
+  const definition = NODE_DEFINITIONS[definitionId];
+  const declared = new Set(definition?.params.map((param) => param.key) ?? []);
+  const normalized = { ...params };
+
+  for (const key of RUNTIME_MEDIA_PARAM_KEYS) {
+    if (declared.has(key) || !(key in normalized)) continue;
+    const privateKey = `_${key}`;
+    if (!(privateKey in normalized)) normalized[privateKey] = normalized[key];
+    delete normalized[key];
+  }
+
+  return normalized;
+}
+
 /**
  * Serialize current graph state to .nebula format.
  * Strips outputs, errors, progress, streaming state — only persists structure + params.
@@ -74,7 +109,7 @@ export function serializeGraph(
         data: {
           label: n.data.label,
           definitionId: n.data.definitionId,
-          params: { ...n.data.params },
+          params: normalizeRuntimeMediaParams(n.data.definitionId, n.data.params),
           outputs: hasOutputs ? { ...n.data.outputs } : undefined,
           state: hasOutputs ? 'complete' : 'idle',
         },
@@ -121,7 +156,7 @@ export function deserializeGraph(
       data: {
         label: n.data.label,
         definitionId: n.data.definitionId,
-        params: n.data.params,
+        params: normalizeRuntimeMediaParams(n.data.definitionId, n.data.params),
         state,
         outputs,
       },

@@ -2,30 +2,29 @@ import { useEffect, useState } from 'react';
 import { fetchCharacters } from '../../lib/api';
 import { backendAssetUrlSync } from '../../lib/backend';
 import type { Character } from '../../types';
-
-type Scope = 'global' | 'project';
+import type { AssetScope } from '../../store/uiStore';
 
 interface CharacterLibraryRailProps {
   /** Currently-open Character id (or the 'new' sentinel for a fresh draft). */
   activeId: string | null;
-  onSelect: (id: string) => void;
-  onNew: () => void;
+  initialScope: AssetScope;
+  onSelect: (id: string, scope: AssetScope) => void;
+  onNew: (scope: AssetScope) => void;
 }
 
 /** Left rail inside the Studio: a list of saved Characters with a project ⇄
  *  global toggle and a "+ New" button. Mirrors CinemaShotsRail's role (a
  *  vertical pick-list) but loads from /api/characters rather than node state.
  *
- *  projectId note: the frontend has no current-project concept yet (only the
- *  Character type's optional projectId field + the api scope param). The toggle
- *  therefore defaults to 'global'; 'project' is best-effort and will usually be
- *  empty in v1 until a project system lands. */
+ *  Project scope resolves through the backend-owned current-project identity;
+ *  initialScope keeps the rail truthful when a project asset or draft opens. */
 export function CharacterLibraryRail({
   activeId,
+  initialScope,
   onSelect,
   onNew,
 }: CharacterLibraryRailProps) {
-  const [scope, setScope] = useState<Scope>('global');
+  const [scope, setScope] = useState<AssetScope>(initialScope);
   const [characters, setCharacters] = useState<Character[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -79,7 +78,7 @@ export function CharacterLibraryRail({
         </button>
       </div>
 
-      <button type="button" className="character-rail__new" onClick={onNew}>
+      <button type="button" className="character-rail__new" onClick={() => onNew(scope)}>
         + New Character
       </button>
 
@@ -100,7 +99,7 @@ export function CharacterLibraryRail({
             key={c.id}
             type="button"
             className={`character-rail__item ${c.id === activeId ? 'character-rail__item--active' : ''}`}
-            onClick={() => onSelect(c.id)}
+            onClick={() => onSelect(c.id, scope)}
           >
             <span className="character-rail__thumb">
               {c.thumbnail ? (

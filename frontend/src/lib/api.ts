@@ -1,4 +1,5 @@
 import { apiFetch, rewriteBackendAssetUrls } from './backend';
+import { resolveProjectId } from './currentProject';
 import type { Character, Moodboard } from '../types';
 
 export interface ExecutionValidationError {
@@ -275,7 +276,7 @@ type CharacterUpdateInput = Partial<CharacterCreateInput>;
 
 export async function fetchCharacters(scope: 'project' | 'global', projectId?: string): Promise<Character[]> {
   const params = new URLSearchParams({ scope });
-  if (scope === 'project' && projectId) params.append('projectId', projectId);
+  if (scope === 'project') params.append('projectId', await resolveProjectId(projectId));
   const response = await apiFetch(`/api/characters?${params.toString()}`);
   if (!response.ok) throw new Error(`Fetch characters failed: ${response.status}`);
   return response.json();
@@ -315,7 +316,7 @@ type MoodboardUpdateInput = Partial<MoodboardCreateInput>;
 
 export async function fetchMoodboards(scope: 'project' | 'global', projectId?: string): Promise<Moodboard[]> {
   const params = new URLSearchParams({ scope });
-  if (scope === 'project' && projectId) params.append('projectId', projectId);
+  if (scope === 'project') params.append('projectId', await resolveProjectId(projectId));
   const response = await apiFetch(`/api/moodboards?${params.toString()}`);
   if (!response.ok) throw new Error(`Fetch moodboards failed: ${response.status}`);
   return response.json();

@@ -713,6 +713,21 @@ function persistSceneParam(nodeId: string, scene: CinemaSceneSpec): void {
 const paramPushTimers: Record<string, number> = {};
 const PARAM_PUSH_DEBOUNCE_MS = 250;
 
+function persistNodePositions(positions: Record<string, { x: number; y: number }>): void {
+  const persisted = Object.fromEntries(
+    Object.entries(positions).filter(([nodeId]) => CLI_ID_RE.test(nodeId)),
+  );
+  if (Object.keys(persisted).length === 0) return;
+
+  apiFetch('/api/graph/layout', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ positions: persisted }),
+  }).catch((err) => {
+    console.warn('[nebula] Layout sync failed:', err);
+  });
+}
+
 type GraphSet = (
   partial: Partial<GraphState> | ((state: GraphState) => Partial<GraphState>),
 ) => void;
@@ -1356,6 +1371,16 @@ export const useGraphStore = create<GraphState>((set, get) => ({
 
   onNodesChange: (changes) => {
     const removedIds = changes.filter((c): c is NodeChange & { type: 'remove' } => c.type === 'remove').map((c) => c.id);
+    const settledPositions: Record<string, { x: number; y: number }> = {};
+    for (const change of changes) {
+      if (
+        change.type === 'position'
+        && change.position
+        && change.dragging === false
+      ) {
+        settledPositions[change.id] = change.position;
+      }
+    }
 
     if (removedIds.length > 0) {
       pushUndo(set, get);
@@ -1400,6 +1425,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     } else {
       set((state) => ({ nodes: applyNodeChanges(changes, state.nodes) as Node<NodeData>[] }));
     }
+    persistNodePositions(settledPositions);
   },
 
   onEdgesChange: (changes) => {
@@ -2647,10 +2673,12 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     // If absent (legacy node from before upload-time probing), seed empty so
     // the existing "run the edit node to populate" fallback still works.
     const sourceParams = ((sourceNode.data as { params?: Record<string, unknown> }).params ?? {});
-    const sourceDuration = typeof sourceParams.sourceDuration === 'number' ? sourceParams.sourceDuration : 0;
-    const sourceFps = typeof sourceParams.sourceFps === 'number' && sourceParams.sourceFps > 0
-      ? sourceParams.sourceFps : 30;
-    const sourceIsVfr = Boolean(sourceParams.sourceIsVfr);
+    const runtimeDuration = sourceParams._sourceDuration ?? sourceParams.sourceDuration;
+    const runtimeFps = sourceParams._sourceFps ?? sourceParams.sourceFps;
+    const runtimeIsVfr = sourceParams._sourceIsVfr ?? sourceParams.sourceIsVfr;
+    const sourceDuration = typeof runtimeDuration === 'number' ? runtimeDuration : 0;
+    const sourceFps = typeof runtimeFps === 'number' && runtimeFps > 0 ? runtimeFps : 30;
+    const sourceIsVfr = Boolean(runtimeIsVfr);
 
     const initialClips: EditClipLike[] = sourceDuration > 0
       ? [{ id: 'c1', start: 0, duration: sourceDuration, sourceIn: 0, sourceOut: sourceDuration, volume: 1, mute: false }]
@@ -2979,6 +3007,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     set((state) => ({
       nodes: state.nodes.map((n) => (pos[n.id] ? { ...n, position: pos[n.id] } : n)),
     }));
+    persistNodePositions(pos);
     if (typeof window !== 'undefined') {
       window.dispatchEvent(
         new CustomEvent('nebula:graph-nodes-added', { detail: { totalCount: nodes.length } })

@@ -9,6 +9,7 @@ import {
   PALETTE_GROUP_ORDER,
   type PaletteCommand,
 } from '../lib/commandPalette';
+import { findAvailableNodePosition, type NodePosition } from '../lib/nodePlacement';
 import '../styles/command-palette.css';
 
 /**
@@ -22,6 +23,7 @@ export function CommandPalette() {
   const [mode, setMode] = useState<'commands' | 'agent'>('commands');
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState(0);
+  const [reservedInsertPositions, setReservedInsertPositions] = useState<NodePosition[]>([]);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   const { screenToFlowPosition, fitView } = useReactFlow();
@@ -44,13 +46,30 @@ export function CommandPalette() {
 
   const addNodeAtCenter = useCallback(
     (definitionId: string) => {
-      const center = screenToFlowPosition({
+      const currentNodes = useGraphStore.getState().nodes;
+      // Prune reservations that have materialized into graph state, then keep
+      // the remaining in-flight slots for consecutive palette additions.
+      const pendingReservations = reservedInsertPositions.filter(
+        (reserved) => !currentNodes.some((node) => (
+          Math.abs(node.position.x - reserved.x) < 1
+          && Math.abs(node.position.y - reserved.y) < 1
+        )),
+      );
+      const preferred = screenToFlowPosition({
         x: window.innerWidth / 2,
         y: window.innerHeight / 2,
       });
-      void addNode(definitionId, center);
+      const position = findAvailableNodePosition(
+        preferred,
+        [
+          ...currentNodes.map((node) => node.position),
+          ...pendingReservations,
+        ],
+      );
+      setReservedInsertPositions([...pendingReservations, position]);
+      void addNode(definitionId, position);
     },
-    [screenToFlowPosition, addNode]
+    [screenToFlowPosition, addNode, reservedInsertPositions]
   );
 
   // Existing canvas nodes, for search-and-focus (the "canvas search" affordance).

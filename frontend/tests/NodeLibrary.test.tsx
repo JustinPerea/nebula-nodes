@@ -46,4 +46,32 @@ describe('NodeLibrary accessible authoring', () => {
       expect.objectContaining({ x: expect.any(Number), y: expect.any(Number) }),
     );
   });
+
+  it('reserves distinct open slots for rapid accessible additions', () => {
+    const addNode = vi.fn(async () => 'n1');
+    useGraphStore.setState({ addNode, nodes: [] });
+
+    render(
+      <ReactFlowProvider>
+        <NodeLibrary />
+      </ReactFlowProvider>,
+    );
+
+    const textInput = screen.getByRole('button', { name: 'Text Input' });
+    fireEvent.click(textInput);
+    fireEvent.click(textInput);
+    fireEvent.click(textInput);
+
+    const positions = addNode.mock.calls.map((call) => call[1]);
+    expect(positions).toHaveLength(3);
+    expect(new Set(positions.map((position) => `${position.x}:${position.y}`))).toHaveProperty('size', 3);
+    for (let i = 0; i < positions.length; i += 1) {
+      for (let j = i + 1; j < positions.length; j += 1) {
+        expect(
+          Math.abs(positions[i].x - positions[j].x) >= 320
+          || Math.abs(positions[i].y - positions[j].y) >= 220,
+        ).toBe(true);
+      }
+    }
+  });
 });

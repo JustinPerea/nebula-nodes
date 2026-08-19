@@ -532,7 +532,7 @@ def test_upload_create_node_filepath_is_openable(client):
     assert Path(node_file_path).read_bytes() == png_bytes
 
 
-def test_video_upload_probes_and_stores_source_metadata(client):
+def test_video_upload_probes_and_stores_private_source_metadata(client):
     """Uploading a video should run ffprobe and store duration/fps/isVfr
     on the created node's params AND return them in the response."""
     fake_probe = ProbeResult(duration=12.5, fps=29.97, is_vfr=False)
@@ -549,12 +549,12 @@ def test_video_upload_probes_and_stores_source_metadata(client):
     assert body["sourceIsVfr"] is False
     assert "nodeId" in body
 
-    # Node params should have the same metadata so the frontend can read it
-    # from sourceNode.data.params when spawning the edit node downstream.
+    # Node params use the private namespace: this is runtime metadata, not a
+    # provider input, and must round-trip through strict graph imports.
     node = main_module.cli_graph.nodes[body["nodeId"]]
-    assert node["params"]["sourceDuration"] == 12.5
-    assert node["params"]["sourceFps"] == 29.97
-    assert node["params"]["sourceIsVfr"] is False
+    assert node["params"]["_sourceDuration"] == 12.5
+    assert node["params"]["_sourceFps"] == 29.97
+    assert node["params"]["_sourceIsVfr"] is False
     assert node["params"]["filePath"].endswith(".mp4")
 
 

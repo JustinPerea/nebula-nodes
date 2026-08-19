@@ -136,4 +136,12 @@ describe('uiStore', () => {
     expect(state.viewMode).toBe('canvas');
     expect(state.createSessionId).toBeNull();
   });
+
+  it('retains the selected scope when opening asset studios', () => {
+    useUIStore.getState().enterCharacterEditor('new', 'project');
+    expect(useUIStore.getState().characterEditorScope).toBe('project');
+
+    useUIStore.getState().enterMoodboardEditor('new', 'project');
+    expect(useUIStore.getState().moodboardEditorScope).toBe('project');
+  });
 });

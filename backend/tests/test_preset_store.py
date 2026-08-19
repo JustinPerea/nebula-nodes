@@ -34,6 +34,17 @@ def test_list_is_scope_isolated(store):
     assert [p["name"] for p in proj] == ["P"]
 
 
+def test_project_scope_requires_project_id(store):
+    with pytest.raises(ValueError, match="projectId is required"):
+        store.list("project")
+
+    with pytest.raises(ValueError, match="projectId is required"):
+        store.create(
+            name="P", category="X", prompt="", params={}, modelId=None,
+            refImages=[], scope="project", projectId=None,
+        )
+
+
 def test_update_bumps_version_and_keeps_id(store):
     p = store.create(name="A", category="X", prompt="", params={}, modelId=None, refImages=[], scope="global", projectId=None)
     updated = store.update(p["id"], name="A2", prompt="new")

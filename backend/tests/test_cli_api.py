@@ -383,6 +383,42 @@ class TestGraphEndpoints:
         resp = client.put("/api/graph/node/n99", json={"params": {"x": 1}})
         assert resp.status_code == 404
 
+    def test_update_layout_persists_all_positions_atomically(self, client):
+        client.post("/api/graph/node", json={"definitionId": "node-a", "params": {}})
+        client.post("/api/graph/node", json={"definitionId": "node-b", "params": {}})
+
+        failed = client.put("/api/graph/layout", json={"positions": {
+            "n1": {"x": 100, "y": 200},
+            "n99": {"x": 300, "y": 400},
+        }})
+        assert failed.status_code == 404
+        graph = client.get("/api/graph").json()
+        n1 = next(node for node in graph["nodes"] if node["id"] == "n1")
+        assert "position" not in n1
+
+        updated = client.put("/api/graph/layout", json={"positions": {
+            "n1": {"x": 100, "y": 200},
+            "n2": {"x": 300, "y": 400},
+        }})
+        assert updated.status_code == 200
+        assert updated.json() == {"status": "updated", "count": 2}
+        graph = client.get("/api/graph").json()
+        positions = {node["id"]: node["position"] for node in graph["nodes"]}
+        assert positions == {
+            "n1": {"x": 100.0, "y": 200.0},
+            "n2": {"x": 300.0, "y": 400.0},
+        }
+
+    @pytest.mark.parametrize("position", [
+        {"x": "nan", "y": 1},
+        {"x": 1},
+        "not-an-object",
+    ])
+    def test_update_layout_rejects_malformed_positions(self, client, position):
+        client.post("/api/graph/node", json={"definitionId": "node-a", "params": {}})
+        resp = client.put("/api/graph/layout", json={"positions": {"n1": position}})
+        assert resp.status_code == 400
+
     def test_get_graph(self, client):
         client.post("/api/graph/node", json={"definitionId": "node-a", "params": {}})
         client.post("/api/graph/node", json={"definitionId": "node-b", "params": {}})

@@ -13,7 +13,7 @@ from services.ffmpeg import ProbeResult, ffprobe_video, run_ffmpeg
 
 @pytest.mark.asyncio
 async def test_ffprobe_video_returns_duration_fps_vfr_flag(tmp_path: Path) -> None:
-    fake_json = b'{"format":{"duration":"8.5"},"streams":[{"codec_type":"video","r_frame_rate":"30/1","avg_frame_rate":"30/1"}]}'
+    fake_json = b'{"format":{"duration":"8.5"},"streams":[{"codec_type":"video","r_frame_rate":"30/1","avg_frame_rate":"30/1"},{"codec_type":"audio"}]}'
     src = tmp_path / "src.mp4"
     src.write_bytes(b"fake")
 
@@ -28,6 +28,7 @@ async def test_ffprobe_video_returns_duration_fps_vfr_flag(tmp_path: Path) -> No
     assert result.duration == 8.5
     assert result.fps == 30.0
     assert result.is_vfr is False
+    assert result.has_audio is True
 
 
 @pytest.mark.asyncio
@@ -43,6 +44,7 @@ async def test_ffprobe_video_detects_vfr(tmp_path: Path) -> None:
         )
         result = await ffprobe_video(src)
     assert result.is_vfr is True
+    assert result.has_audio is False
 
 
 @pytest.mark.asyncio

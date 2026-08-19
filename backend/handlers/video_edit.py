@@ -181,6 +181,7 @@ async def render_video_edit_file(
     quality: VideoExportQuality = "balanced",
     output_dir: Path | None = None,
     on_progress: Callable[[float], None] | None = None,
+    source_has_audio: bool | None = None,
 ) -> Path:
     """Render the final edit in a selected delivery format.
 
@@ -196,9 +197,19 @@ async def render_video_edit_file(
     if not clips:
         raise ValueError("clips required")
 
-    # GIF never carries audio. Other containers retain the edit's natural
-    # audio state, including the all-muted fast path.
-    include_audio = False if output_format == "gif" else None
+    # GIF never carries audio. For other containers, build an audio graph only
+    # when the source actually has an audio stream. Clip mute/volume state
+    # alone cannot prove [0:a] exists (silent generated videos are common).
+    if output_format == "gif":
+        include_audio = False
+    else:
+        if source_has_audio is None:
+            source_probe = await ffprobe_video(source_path)
+            source_has_audio = getattr(source_probe, "has_audio", False)
+        include_audio = bool(
+            source_has_audio
+            and any(not clip.get("mute", False) for clip in clips)
+        )
     filter_complex, has_audio = _build_filter_complex(
         clips,
         include_audio=include_audio,
@@ -387,5 +398,9 @@ async def handle_video_edit(
         src_path,
         clips,
         on_progress=_on_progress,
+        # Older test/provider probe doubles may not expose has_audio. Preserve
+        # their historical audio-bearing behavior while real ProbeResult is
+        # authoritative for actual files.
+        source_has_audio=getattr(probe, "has_audio", True),
     )
     return {"video": {"type": "Video", "value": str(output_path)}}

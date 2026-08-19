@@ -8,6 +8,7 @@ import { useGraphStore } from '../../store/graphStore';
 import { useDelayedUnmount } from '../../hooks/useDelayedUnmount';
 import { getNodesByCategory } from '../../constants/nodeDefinitions';
 import { CATEGORY_COLORS } from '../../constants/ports';
+import { findAvailableNodePosition, type NodePosition } from '../../lib/nodePlacement';
 import '../../styles/panels.css';
 
 // Initial collapsed state — all categories start collapsed on first render so
@@ -37,12 +38,14 @@ export function NodeLibrary() {
   const togglePanel = useUIStore((s) => s.togglePanel);
   const skin = useUIStore((s) => s.skin);
   const addNode = useGraphStore((s) => s.addNode);
+  const canvasNodes = useGraphStore((s) => s.nodes);
   const { screenToFlowPosition } = useReactFlow();
   const collapsed = useUIStore((s) => s.libraryCollapsed);
   const toggleCategory = useUIStore((s) => s.toggleLibraryCategory);
   const setAllLibraryCategories = useUIStore((s) => s.setAllLibraryCategories);
   const dragRef = useRef<{ startX: number; startY: number; panelX: number; panelY: number } | null>(null);
   const emptyDragImageRef = useRef<HTMLCanvasElement | null>(null);
+  const reservedClickPositionsRef = useRef<NodePosition[]>([]);
   const setPanelPosition = useUIStore((s) => s.setPanelPosition);
   const [dragPreview, setDragPreview] = useState<{
     label: string;
@@ -52,6 +55,18 @@ export function NodeLibrary() {
   } | null>(null);
 
   const grouped = useMemo(() => getNodesByCategory(), []);
+
+  // Once graph-sync materializes a rapidly-added node, its real position
+  // replaces the temporary reservation. Until then the reservation prevents
+  // the next click/keyboard activation from stacking in the same slot.
+  useEffect(() => {
+    reservedClickPositionsRef.current = reservedClickPositionsRef.current.filter(
+      (reserved) => !canvasNodes.some((node) => (
+        Math.abs(node.position.x - reserved.x) < 1
+        && Math.abs(node.position.y - reserved.y) < 1
+      )),
+    );
+  }, [canvasNodes]);
 
   // Collapse all categories on first mount if we haven't initialized yet.
   useEffect(() => {
@@ -159,10 +174,18 @@ export function NodeLibrary() {
   }
 
   function addNodeAtViewportCenter(definitionId: string) {
-    const position = screenToFlowPosition({
+    const preferred = screenToFlowPosition({
       x: typeof window !== 'undefined' ? window.innerWidth / 2 : 640,
       y: typeof window !== 'undefined' ? window.innerHeight / 2 : 360,
     });
+    const position = findAvailableNodePosition(
+      preferred,
+      [
+        ...useGraphStore.getState().nodes.map((node) => node.position),
+        ...reservedClickPositionsRef.current,
+      ],
+    );
+    reservedClickPositionsRef.current.push(position);
     void addNode(definitionId, position);
   }
 

@@ -167,6 +167,36 @@ It talks to the same FastAPI graph, so CLI and Canvas edits converge. The option
 | Chat/agents | Claude/Codex status endpoints work; Codex reports ChatGPT auth, Claude reports logged out, and Nous credentials are discoverable without exposing tokens. Shared chat normalization/cancellation is test-covered. | No account-consuming agent turn or graph mutation was submitted. |
 | Save/load toolbar | Backend ZIP restore preserved bytes and blocked traversal; restart persistence and atomic graph import behavior were exercised. Invalid ingress preserves the live graph. | The browser used the native File System Access picker, which this automation surface could not populate; download packaging remains browser-gated. |
 
+## 2026-08-19 native-Chrome acceptance closure
+
+The prior browser ceilings above were closed in a normal Vite + FastAPI stack
+through native Chrome. The complete screenshot ledger is
+[`docs/evidence/ui-acceptance-2026-08-19/`](evidence/ui-acceptance-2026-08-19/README.md).
+
+- Pointer connection, click/keyboard node insertion, Inspector editing,
+  auto-layout, reload persistence, native Save/Load, and malformed-load graph
+  preservation were exercised against the real Canvas.
+- A deliberately long local FFmpeg render was cancelled through Canvas Stop.
+  The backend accepted the execution `DELETE`, Run History became Cancelled,
+  and the cancelled run directory contained no partial output or manifest.
+- Create provenance/grid/list/lightbox flows, all Asset tabs, Character and
+  Moodboard studios, Cinema Studio, Remotion Editor, every skin, all chat
+  shells, Command Palette, and the complete onboarding sequence rendered and
+  accepted real interaction without submitting paid generation or agent turns.
+- Project-scoped assets now use one backend-owned current-project identity;
+  Project lists return 200 and new Character/Moodboard drafts retain Project
+  scope. Missing project IDs can no longer silently save Presets globally.
+- Backend loss now displays a non-blocking offline warning while preserving the
+  Canvas. The warning clears automatically after FastAPI restarts, with the
+  original 8-node / 5-edge graph intact.
+
+The acceptance pass also closed layout persistence, saved-bundle runtime-media
+metadata compatibility, live synchronization of handler-mutated params,
+silent-video audio filtering, and collision-free Command Palette insertion.
+The remaining external ceiling is intentionally separate: paid provider output
+quality and account-consuming agent responses require a budgeted provider
+certification matrix, not this local product acceptance pass.
+
 ### Confirmed working
 
 | Area | Evidence |

@@ -18,6 +18,8 @@ const ONBOARDED_KEY = 'nebula:onboarded';
 const PANEL_EDGE_MARGIN = 16;
 const RUN_HISTORY_WIDTH = 276;
 
+export type AssetScope = 'global' | 'project';
+
 export function defaultRunHistoryPosition(viewportWidth?: number): { x: number; y: number } {
   const width = viewportWidth
     ?? (typeof window !== 'undefined' ? window.innerWidth : 1280);
@@ -127,9 +129,11 @@ interface UIState {
   // Mirrors cinemaEditorNodeId. App.tsx mounts CharacterStudioView when this is
   // set (viewMode 'character-editor'). The 'new' sentinel opens a fresh draft.
   characterEditorId: string | null;
+  characterEditorScope: AssetScope;
   // Nebula Moodboard editor — provider-neutral creative-direction assets.
   // App.tsx mounts MoodboardStudioView when this is set.
   moodboardEditorId: string | null;
+  moodboardEditorScope: AssetScope;
   // Create view — Higgsfield-style graph-builder surface. App.tsx mounts CreateView
   // when viewMode === 'create'. createSessionId tags nodes authored this session.
   createSessionId: string | null;
@@ -195,9 +199,9 @@ interface UIState {
   exitRemotionEditor: () => void;
   enterCinemaEditor: (cinemaSceneNodeId: string) => void;
   exitCinemaEditor: () => void;
-  enterCharacterEditor: (characterId: string) => void;
+  enterCharacterEditor: (characterId: string, scope?: AssetScope) => void;
   exitCharacterEditor: () => void;
-  enterMoodboardEditor: (moodboardId: string) => void;
+  enterMoodboardEditor: (moodboardId: string, scope?: AssetScope) => void;
   exitMoodboardEditor: () => void;
   enterCreateView: () => void;
   exitCreateView: () => void;
@@ -258,7 +262,9 @@ export const useUIStore = create<UIState>((set, get) => ({
   remotionEditorTargetNodeId: null,
   cinemaEditorNodeId: null,
   characterEditorId: null,
+  characterEditorScope: 'global',
   moodboardEditorId: null,
+  moodboardEditorScope: 'global',
   createSessionId: null,
   selectedTrackItemId: null,
   selectedTrackItemIds: [],
@@ -359,10 +365,11 @@ export const useUIStore = create<UIState>((set, get) => ({
   // viewMode 'character-editor') and tracks which Character is open. The
   // sentinel id 'new' opens a fresh local draft (the Studio treats any id that
   // doesn't resolve to a stored Character as a draft).
-  enterCharacterEditor: (characterId) => {
+  enterCharacterEditor: (characterId, scope = 'global') => {
     set({
       viewMode: 'character-editor',
       characterEditorId: characterId,
+      characterEditorScope: scope,
     });
   },
 
@@ -373,10 +380,11 @@ export const useUIStore = create<UIState>((set, get) => ({
     });
   },
 
-  enterMoodboardEditor: (moodboardId) => {
+  enterMoodboardEditor: (moodboardId, scope = 'global') => {
     set({
       viewMode: 'moodboard-editor',
       moodboardEditorId: moodboardId,
+      moodboardEditorScope: scope,
     });
   },
 

@@ -13,6 +13,7 @@ import copy
 import difflib
 import hashlib
 import json
+import math
 import os
 import random
 import re
@@ -62,6 +63,7 @@ from services.execution_runs import ExecutionRunRegistry
 from services.chat_session import run_claude
 from services.chat_actions import publish_action
 from services.zoom_manifest import init_manifest, append_entry
+from services.project_context import get_current_project
 from routes.openrouter_proxy import router as openrouter_router
 from routes.replicate_proxy import router as replicate_router
 from routes.fal_proxy import router as fal_router
@@ -611,8 +613,8 @@ async def upload_file_consolidated(
     """Accept an image or video upload with strict validation and content-hash dedup.
 
     Routes by magic bytes: PNG/JPEG/GIF/WebP → image-input node; MP4/MOV/WebM
-    → video-input node (with ffprobe-derived sourceDuration/sourceFps/sourceIsVfr
-    stored on the node's params so the editor surface can read source metadata
+    → video-input node (with ffprobe-derived private source metadata stored on
+    the node's params so the editor surface can read source metadata
     without waiting for the edit handler to run).
 
     When `create_node` is truthy, atomically creates the routed node in
@@ -701,8 +703,8 @@ async def upload_file_consolidated(
         else:
             # video-input: probe at upload so the source owns its own
             # metadata. Downstream consumers (editor surface, edit handler,
-            # inspector) can read sourceDuration/sourceFps/sourceIsVfr from
-            # params without re-probing. Editor initial-clip seeding depends
+            # inspector) can read the private source metadata from params
+            # without re-probing. Editor initial-clip seeding depends
             # on this — without it the editor opens degraded with 0 clips.
             try:
                 probe = await ffprobe_video(saved_path)
@@ -723,9 +725,9 @@ async def upload_file_consolidated(
                 ) from exc
             node_params = {
                 "filePath": str(saved_path.resolve()),
-                "sourceDuration": probe.duration,
-                "sourceFps": probe.fps,
-                "sourceIsVfr": probe.is_vfr,
+                "_sourceDuration": probe.duration,
+                "_sourceFps": probe.fps,
+                "_sourceIsVfr": probe.is_vfr,
             }
             response["sourceDuration"] = probe.duration
             response["sourceFps"] = probe.fps
@@ -1025,6 +1027,12 @@ async def health() -> dict:
     return {"status": "ok", "app": "nebula", "version": "0.1.0"}
 
 
+@app.get("/api/project")
+async def current_project() -> dict[str, str]:
+    """Identity for the single local project served by this backend."""
+    return get_current_project()
+
+
 @app.get("/api/health/providers")
 async def health_providers(refresh: bool = False) -> dict:
     """Per-provider API key validation.
@@ -1186,7 +1194,12 @@ async def execute(request: ExecuteRequest) -> dict:
                 cache=execution_cache,
                 run_id=run_id,
             )
-            _sync_params_to_cli_graph(nodes)
+            if _sync_params_to_cli_graph(nodes):
+                # ExecutedEvent carries outputs, but handlers such as
+                # video-edit also enrich params. Without a final graphSync the
+                # backend persisted those edits while the live Canvas stayed
+                # stale until reload.
+                await _broadcast_graph_sync()
             print("[exec] _run completed successfully", file=sys.stderr, flush=True)
         except asyncio.CancelledError:
             await manager.broadcast(GraphCancelledEvent(run_id=run_id))
@@ -1260,7 +1273,8 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
                 cache=execution_cache,
                 run_id=run_id,
             )
-            _sync_params_to_cli_graph(sub_nodes)
+            if _sync_params_to_cli_graph(sub_nodes):
+                await _broadcast_graph_sync()
         except asyncio.CancelledError:
             await manager.broadcast(GraphCancelledEvent(run_id=run_id))
             raise
@@ -1833,7 +1847,7 @@ async def _emit_and_sync(event: ExecutionEvent) -> None:
     await manager.broadcast(event)
 
 
-def _sync_params_to_cli_graph(nodes: list[GraphNode]) -> None:
+def _sync_params_to_cli_graph(nodes: list[GraphNode]) -> bool:
     """Mirror handler-mutated params from in-memory GraphNode instances back
     to cli_graph. Pydantic deep-copies params at model_validate time, so any
     handler that enriches node.params (e.g. video-edit seeding clips +
@@ -1842,11 +1856,15 @@ def _sync_params_to_cli_graph(nodes: list[GraphNode]) -> None:
     reverts to whatever the user last set manually."""
     persisted = False
     for node in nodes:
-        if node.id in cli_graph.nodes:
-            cli_graph.nodes[node.id]["params"] = node.params
+        if (
+            node.id in cli_graph.nodes
+            and cli_graph.nodes[node.id].get("params") != node.params
+        ):
+            cli_graph.nodes[node.id]["params"] = copy.deepcopy(node.params)
             persisted = True
     if persisted:
         cli_graph._maybe_persist()
+    return persisted
 
 
 def _validate_connect_handles(
@@ -2168,6 +2186,43 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
     await _broadcast_graph_sync()
     publish_action(f"Updated {node_id} params")
     return cli_graph.nodes[node_id]
+
+
+@app.put("/api/graph/layout")
+async def update_graph_layout(body: dict[str, Any]) -> dict:
+    """Persist a complete or partial Canvas layout in one atomic mutation."""
+    raw_positions = body.get("positions")
+    if not isinstance(raw_positions, dict) or not raw_positions:
+        raise HTTPException(status_code=400, detail="positions must be a non-empty object")
+
+    normalized: dict[str, dict[str, float]] = {}
+    for node_id, raw_position in raw_positions.items():
+        if node_id not in cli_graph.nodes:
+            raise HTTPException(status_code=404, detail=f"Node '{node_id}' not found")
+        if not isinstance(raw_position, dict):
+            raise HTTPException(status_code=400, detail=f"Position for '{node_id}' must be an object")
+        try:
+            x = float(raw_position["x"])
+            y = float(raw_position["y"])
+        except (KeyError, TypeError, ValueError):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Position for '{node_id}' requires numeric x and y",
+            )
+        if not math.isfinite(x) or not math.isfinite(y):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Position for '{node_id}' requires finite x and y",
+            )
+        normalized[node_id] = {"x": x, "y": y}
+
+    try:
+        cli_graph.update_positions(normalized)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    await _broadcast_graph_sync()
+    publish_action(f"Updated layout for {len(normalized)} node(s)")
+    return {"status": "updated", "count": len(normalized)}
 
 
 @app.delete("/api/graph")
@@ -3305,17 +3360,23 @@ async def delete_moodboard(moodboard_id: str) -> dict:
 @app.get("/api/presets")
 async def list_presets(scope: str = "global", projectId: str | None = None) -> list[dict]:
     _validate_project_id_param(projectId)
-    return preset_store.list(scope, projectId)
+    try:
+        return preset_store.list(scope, projectId)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
 
 @app.post("/api/presets")
 async def create_preset(body: PresetCreate) -> dict:
     _validate_project_id_param(body.projectId)
-    return preset_store.create(
-        name=body.name, category=body.category, prompt=body.prompt, params=body.params,
-        modelId=body.modelId, refImages=body.refImages, scope=body.scope, projectId=body.projectId,
-        thumbnail=body.thumbnail,
-    )
+    try:
+        return preset_store.create(
+            name=body.name, category=body.category, prompt=body.prompt, params=body.params,
+            modelId=body.modelId, refImages=body.refImages, scope=body.scope, projectId=body.projectId,
+            thumbnail=body.thumbnail,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
 
 
 @app.get("/api/presets/thumbnails/{slug}")

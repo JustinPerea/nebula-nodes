@@ -7,6 +7,8 @@ import {
 } from '../../lib/api';
 import type { Character } from '../../types';
 import { NEW_CHARACTER_SENTINEL } from '../../lib/studioSentinels';
+import { getCurrentProject } from '../../lib/currentProject';
+import type { AssetScope } from '../../store/uiStore';
 import { CharacterStudioToolbar } from './CharacterStudioToolbar';
 import { CharacterLibraryRail } from './CharacterLibraryRail';
 import { CharacterDefinitionPanel } from './CharacterDefinitionPanel';
@@ -70,6 +72,7 @@ const AUTOSAVE_DEBOUNCE_MS = 600;
  *  create/update — we surface an inline message and stay in 'draft' state. */
 export function CharacterStudioView() {
   const characterEditorId = useUIStore((s) => s.characterEditorId);
+  const characterEditorScope = useUIStore((s) => s.characterEditorScope);
   const enterCharacterEditor = useUIStore((s) => s.enterCharacterEditor);
 
   const [draft, setDraft] = useState<CharacterDraft>(emptyDraft);
@@ -79,6 +82,7 @@ export function CharacterStudioView() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
+  const [railScope, setRailScope] = useState<AssetScope>(characterEditorScope);
 
   // Guards against persisting the just-loaded snapshot (load sets state, which
   // would otherwise immediately re-trigger the autosave effect) and against
@@ -119,12 +123,30 @@ export function CharacterStudioView() {
     setSaveState('idle');
 
     if (isDraftId) {
+      setRailScope(characterEditorScope);
       skipNextAutosave.current = true;
-      setDraft(emptyDraft());
       setSavedId(null);
       setThumbnail('');
       setSaveState('draft');
-      return;
+      if (characterEditorScope === 'global') {
+        setDraft(emptyDraft());
+        setLoading(false);
+        return;
+      }
+      setLoading(true);
+      void getCurrentProject()
+        .then((project) => {
+          if (!cancelled) setDraft({ ...emptyDraft(), projectId: project.id });
+        })
+        .catch((err) => {
+          if (!cancelled) setLoadError(err instanceof Error ? err.message : 'Failed to resolve project.');
+        })
+        .finally(() => {
+          if (!cancelled) setLoading(false);
+        });
+      return () => {
+        cancelled = true;
+      };
     }
 
     const targetId = characterEditorId as string;
@@ -154,6 +176,7 @@ export function CharacterStudioView() {
           return;
         }
         skipNextAutosave.current = true;
+        setRailScope(found.projectId ? 'project' : 'global');
         setDraft(characterToDraft(found));
         setSavedId(found.id);
         setThumbnail(found.thumbnail);
@@ -174,7 +197,7 @@ export function CharacterStudioView() {
     // isDraftId is derived purely from characterEditorId, so keying on the
     // latter alone covers it; listing both would just be noise.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [characterEditorId]);
+  }, [characterEditorId, characterEditorScope]);
 
   const isValid =
     draft.name.trim().length > 0 &&
@@ -241,13 +264,15 @@ export function CharacterStudioView() {
         setSavedId(created.id);
         setThumbnail(created.thumbnail);
         setSaveState('saved');
+        const createdScope: AssetScope = created.projectId ? 'project' : 'global';
+        setRailScope(createdScope);
         // Switch the editor to the real id so future edits PUT, not POST.
         // Record justCreatedId so the load effect skips the redundant re-fetch
         // (which would clobber edits typed since this POST and remount the
         // panel). Local state is already current — no server snapshot needed.
         if (characterEditorId !== created.id) {
           justCreatedId.current = created.id;
-          enterCharacterEditor(created.id);
+          enterCharacterEditor(created.id, createdScope);
         }
       }
     } catch (err) {
@@ -264,13 +289,15 @@ export function CharacterStudioView() {
   // toolbar/rail preview stays live before the server round-trip lands.
   const previewThumbnail = thumbnail || draft.referenceViews[0] || '';
 
-  const handleSelectCharacter = (id: string) => {
+  const handleSelectCharacter = (id: string, scope: AssetScope) => {
     if (id === characterEditorId) return;
-    enterCharacterEditor(id);
+    setRailScope(scope);
+    enterCharacterEditor(id, scope);
   };
 
-  const handleNewCharacter = () => {
-    enterCharacterEditor(NEW_CHARACTER_SENTINEL);
+  const handleNewCharacter = (scope: AssetScope) => {
+    setRailScope(scope);
+    enterCharacterEditor(NEW_CHARACTER_SENTINEL, scope);
   };
 
   const belowMinViews = draft.referenceViews.length < MIN_REFERENCE_VIEWS;
@@ -287,7 +314,9 @@ export function CharacterStudioView() {
 
       <aside className="character-studio-view__rail">
         <CharacterLibraryRail
+          key={railScope}
           activeId={savedId ?? (isDraftId ? NEW_CHARACTER_SENTINEL : characterEditorId)}
+          initialScope={railScope}
           onSelect={handleSelectCharacter}
           onNew={handleNewCharacter}
         />
