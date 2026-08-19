@@ -30,10 +30,11 @@ export function Toolbar() {
   const canvasTool = useUIStore((s) => s.canvasTool);
   const setCanvasTool = useUIStore((s) => s.setCanvasTool);
   const executeGraph = useGraphStore((s) => s.executeGraph);
-  const resetExecution = useGraphStore((s) => s.resetExecution);
+  const cancelExecution = useGraphStore((s) => s.cancelExecution);
   const isExecuting = useGraphStore((s) => s.isExecuting);
   const nodeCount = useGraphStore((s) => s.nodes.length);
   const autoLayout = useGraphStore((s) => s.autoLayout);
+  const resetPanelLayout = useUIStore((s) => s.resetPanelLayout);
 
   const handleSave = useCallback(async () => {
     const { nodes, edges } = useGraphStore.getState();
@@ -49,11 +50,8 @@ export function Toolbar() {
       console.warn('[nebula] Load warnings:', result.warnings);
     }
 
-    // Push the loaded graph into cli_graph on the backend so Claude's
-    // `nebula graph` can see it. The incoming graphSync will repopulate the
-    // canvas with fresh short IDs at the positions we send. Clear local state
-    // first so the merge starts from a blank slate.
-    useGraphStore.getState().loadGraph([], []);
+    // Validate and replace the backend graph first. The local canvas remains
+    // untouched until the backend confirms the whole import succeeded.
     try {
       const res = await apiFetch('/api/graph/import', {
         method: 'POST',
@@ -74,17 +72,18 @@ export function Toolbar() {
           })),
         }),
       });
-      if (!res.ok) throw new Error(`Import failed: ${res.status}`);
+      if (!res.ok) {
+        let detail = '';
+        try { detail = (await res.json()).detail ?? ''; } catch { /* status fallback */ }
+        throw new Error(detail || `Import failed: ${res.status}`);
+      }
+      const imported = (await res.json()) as { nodes: Node<NodeData>[]; edges: Edge[] };
+      useGraphStore.getState().loadGraph(imported.nodes, imported.edges);
+      setTimeout(() => fitView({ padding: 0.2, duration: 300 }), 120);
     } catch (err) {
-      console.error('Graph import failed, falling back to frontend-only load:', err);
-      useGraphStore.getState().loadGraph(
-        result.nodes as Node<NodeData>[],
-        result.edges,
-      );
+      console.error('Graph import failed; existing graph preserved:', err);
+      alert(err instanceof Error ? err.message : 'Graph import failed. Existing graph was preserved.');
     }
-
-    // Fit to loaded graph after a tick
-    setTimeout(() => fitView({ padding: 0.2, duration: 300 }), 120);
   }, [fitView]);
 
   const handleClear = useCallback(() => {
@@ -101,20 +100,9 @@ export function Toolbar() {
   }, []);
 
   const handleResetLayout = useCallback(() => {
-    // 1. Reset chat: clear resize flag + persisted drag/height anchors so
-    //    CSS clamp width takes over and the panel re-anchors to right-edge.
-    useUIStore.setState((state) => ({
-      chatResized: false,
-      panels: {
-        ...state.panels,
-        chat: {
-          ...state.panels.chat,
-          height: undefined,
-          left: null,
-          top: null,
-        },
-      },
-    }));
+    // 1. Restore every draggable panel to a viewport-safe default. Visibility
+    //    is preserved; only geometry and chat resize anchors are reset.
+    resetPanelLayout();
     // 2. Clear agent log persisted drag position. AgentLog listens to the
     //    custom event below to clear its in-memory state too.
     try {
@@ -126,13 +114,13 @@ export function Toolbar() {
     // 3. Clear browser-set inline width/height (from native CSS resize) so
     //    side panels + agent log fall back to their CSS defaults.
     document
-      .querySelectorAll('.panel--library, .panel--inspector, .agent-log')
+      .querySelectorAll('.panel--library, .panel--inspector, .panel--assets, .panel--history, .agent-log')
       .forEach((el) => {
         const node = el as HTMLElement;
         node.style.width = '';
         node.style.height = '';
       });
-  }, []);
+  }, [resetPanelLayout]);
 
   const handleImportCLI = useCallback(async () => {
     try {
@@ -172,7 +160,7 @@ export function Toolbar() {
       {isExecuting ? (
         <button
           className="toolbar__button toolbar__button--executing"
-          onClick={() => resetExecution()}
+          onClick={() => void cancelExecution()}
           title="Cancel execution"
         >
           <ToolbarIcon name="stop" />

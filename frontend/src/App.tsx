@@ -1,15 +1,8 @@
-import { useEffect } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { ReactFlowProvider, useReactFlow } from '@xyflow/react';
 import type { Node, Edge } from '@xyflow/react';
 import { Canvas } from './components/Canvas';
 import { CanvasTabs } from './components/CanvasTabs';
-import { EditorView } from './components/editor/EditorView';
-import { RemotionEditorView } from './components/video-editor/RemotionEditorView';
-import { CinemaStudioView } from './components/cinema-studio/CinemaStudioView';
-import { CharacterStudioView } from './components/character-studio/CharacterStudioView';
-import { MoodboardStudioView } from './components/moodboard-studio/MoodboardStudioView';
-import { CreateView } from './components/create-studio/CreateView';
-import { BrandShowcaseView } from './components/brand/BrandShowcaseView';
 import { NodeLibrary } from './components/panels/NodeLibrary';
 import { AssetsPanel } from './components/panels/AssetsPanel';
 import { RunHistoryPanel } from './components/panels/RunHistoryPanel';
@@ -34,6 +27,41 @@ import './styles/layouts.css';
 // coexist without leakage. Loaded once at the app root so the active skin's
 // CSS is always available the moment uiStore.setSkin flips the body class.
 import './styles/slava-restraint.css';
+
+// Alternate studios carry large, view-specific dependencies (Remotion,
+// timeline editors, brand demos). Keep the canvas startup path lean and load
+// each studio only when the user opens it.
+const EditorView = lazy(() =>
+  import('./components/editor/EditorView').then((module) => ({ default: module.EditorView })),
+);
+const RemotionEditorView = lazy(() =>
+  import('./components/video-editor/RemotionEditorView').then((module) => ({
+    default: module.RemotionEditorView,
+  })),
+);
+const CinemaStudioView = lazy(() =>
+  import('./components/cinema-studio/CinemaStudioView').then((module) => ({
+    default: module.CinemaStudioView,
+  })),
+);
+const CharacterStudioView = lazy(() =>
+  import('./components/character-studio/CharacterStudioView').then((module) => ({
+    default: module.CharacterStudioView,
+  })),
+);
+const MoodboardStudioView = lazy(() =>
+  import('./components/moodboard-studio/MoodboardStudioView').then((module) => ({
+    default: module.MoodboardStudioView,
+  })),
+);
+const CreateView = lazy(() =>
+  import('./components/create-studio/CreateView').then((module) => ({ default: module.CreateView })),
+);
+const BrandShowcaseView = lazy(() =>
+  import('./components/brand/BrandShowcaseView').then((module) => ({
+    default: module.BrandShowcaseView,
+  })),
+);
 
 /** Pull the backend's in-memory cli_graph onto the canvas on first mount —
  * saves a CLI-button click every time the user refreshes during a Daedalus
@@ -213,7 +241,15 @@ export default function App() {
       <GraphHydrator />
       <ZoomManifestRecorder />
       {!isBrandShowcase && <CanvasTabs />}
-      {mainView}
+      <Suspense
+        fallback={(
+          <div className="workspace-loading" role="status" aria-live="polite">
+            Loading workspace…
+          </div>
+        )}
+      >
+        {mainView}
+      </Suspense>
       {/* Canvas-only chrome: library, inspector, settings, launchers, toolbar, agent log.
           The editor view is a focused workspace — only the pill control and chat remain. */}
       {isCanvas && <NodeLibrary />}

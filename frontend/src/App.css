@@ -21,3 +21,14 @@ a {
   color: inherit;
   text-decoration: none;
 }
+
+.workspace-loading {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  color: #8d8d8d;
+  background: #111;
+  font-size: 13px;
+  letter-spacing: 0.02em;
+}

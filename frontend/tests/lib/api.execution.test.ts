@@ -7,7 +7,7 @@ vi.mock('../../src/lib/backend', () => ({
   rewriteBackendAssetUrls: vi.fn((value: unknown) => value),
 }));
 
-import { executeGraph, executeNode, generateCinemaShot } from '../../src/lib/api';
+import { cancelExecution, executeGraph, executeNode, generateCinemaShot } from '../../src/lib/api';
 
 const nodes = [{ id: 'n1', definitionId: 'text-input', params: {}, outputs: {} }];
 const edges: Array<{
@@ -41,6 +41,21 @@ describe('execution API run correlation', () => {
       nodeId: 'n1',
       shotId: 'shot-a',
       runId: 'run-shot',
+    });
+  });
+
+  it('cancels the exact encoded backend run', async () => {
+    apiFetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ runId: 'run / one', status: 'cancelled' }),
+    });
+
+    await expect(cancelExecution('run / one')).resolves.toEqual({
+      runId: 'run / one',
+      status: 'cancelled',
+    });
+    expect(apiFetchMock).toHaveBeenCalledWith('/api/executions/run%20%2F%20one', {
+      method: 'DELETE',
     });
   });
 });

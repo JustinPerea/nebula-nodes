@@ -1,6 +1,7 @@
 import { useMemo, useRef, useEffect, useState } from 'react';
 import type { CSSProperties, DragEvent as ReactDragEvent } from 'react';
 import { createPortal } from 'react-dom';
+import { useReactFlow } from '@xyflow/react';
 import { ChevronDown, ChevronRight, X } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
@@ -36,6 +37,7 @@ export function NodeLibrary() {
   const togglePanel = useUIStore((s) => s.togglePanel);
   const skin = useUIStore((s) => s.skin);
   const addNode = useGraphStore((s) => s.addNode);
+  const { screenToFlowPosition } = useReactFlow();
   const collapsed = useUIStore((s) => s.libraryCollapsed);
   const toggleCategory = useUIStore((s) => s.toggleLibraryCategory);
   const setAllLibraryCategories = useUIStore((s) => s.setAllLibraryCategories);
@@ -132,7 +134,7 @@ export function NodeLibrary() {
   }
 
   function onDragStart(
-    e: ReactDragEvent<HTMLDivElement>,
+    e: ReactDragEvent<HTMLButtonElement>,
     definitionId: string,
     label: string,
     category: string,
@@ -145,7 +147,7 @@ export function NodeLibrary() {
     setDragPreview({ label, category, x: e.clientX, y: e.clientY });
   }
 
-  function onDrag(e: ReactDragEvent<HTMLDivElement>) {
+  function onDrag(e: ReactDragEvent<HTMLButtonElement>) {
     if (skin !== 'slava-restraint' || (e.clientX === 0 && e.clientY === 0)) return;
     setDragPreview((current) => (
       current ? { ...current, x: e.clientX, y: e.clientY } : current
@@ -156,8 +158,12 @@ export function NodeLibrary() {
     setDragPreview(null);
   }
 
-  function onDoubleClick(definitionId: string) {
-    addNode(definitionId, { x: 400, y: 300 });
+  function addNodeAtViewportCenter(definitionId: string) {
+    const position = screenToFlowPosition({
+      x: typeof window !== 'undefined' ? window.innerWidth / 2 : 640,
+      y: typeof window !== 'undefined' ? window.innerHeight / 2 : 360,
+    });
+    void addNode(definitionId, position);
   }
 
   const dragPreviewStyle = dragPreview ? ({
@@ -215,17 +221,26 @@ export function NodeLibrary() {
             const isSearching = search.trim().length > 0;
             const isCollapsed = !isSearching && (collapsed[category] ?? true);
             const items = defs.map((def) => (
-              <div
+              <button
                 key={def.id}
+                type="button"
                 className="panel__item"
                 draggable
+                tabIndex={isCollapsed ? -1 : 0}
                 onDragStart={(e) => onDragStart(e, def.id, def.displayName, category)}
                 onDrag={onDrag}
                 onDragEnd={onDragEnd}
-                onDoubleClick={() => onDoubleClick(def.id)}
+                onClick={(event) => {
+                  // A double-click dispatches two click events. The first one adds the
+                  // node; ignore the follow-up so a legacy double-click gesture does
+                  // not create an accidental duplicate.
+                  if (event.detail > 1) return;
+                  addNodeAtViewportCenter(def.id);
+                }}
+                title={`Add ${def.displayName} to the center of the canvas`}
               >
                 {def.displayName}
-              </div>
+              </button>
             ));
             return (
               <div

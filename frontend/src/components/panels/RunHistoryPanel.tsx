@@ -9,6 +9,7 @@ import {
   runTriggerLabel,
   type RunRecord,
 } from '../../lib/runHistory';
+import { clampRunHistoryPosition } from '../../lib/panelPosition';
 import '../../styles/panels.css';
 import '../../styles/run-history.css';
 
@@ -22,8 +23,8 @@ const STATUS_LABEL: Record<RunRecord['status'], string> = {
 /**
  * Run History panel — a persistent, newest-first record of graph / single-node /
  * selection runs. Terminal records replay their frozen request snapshot, while
- * failed records use the more explicit Retry failed action. Cancel reuses the
- * existing reset path; Clear removes both UI and persisted history.
+ * failed records use the more explicit Retry failed action. Cancel propagates
+ * to the backend execution task; Clear removes both UI and persisted history.
  */
 export function RunHistoryPanel() {
   const visible = useUIStore((s) => s.panels.history.visible);
@@ -36,7 +37,7 @@ export function RunHistoryPanel() {
   const rerunHistoryRecord = useGraphStore((s) => s.rerunHistoryRecord);
   const retryFailedRun = useGraphStore((s) => s.retryFailedRun);
   const isExecuting = useGraphStore((s) => s.isExecuting);
-  const resetExecution = useGraphStore((s) => s.resetExecution);
+  const cancelExecution = useGraphStore((s) => s.cancelExecution);
 
   const dragRef = useRef<{ startX: number; startY: number; panelX: number; panelY: number } | null>(null);
   const [now, setNow] = useState(() => Date.now());
@@ -47,7 +48,10 @@ export function RunHistoryPanel() {
       if (!dragRef.current) return;
       const dx = e.clientX - dragRef.current.startX;
       const dy = e.clientY - dragRef.current.startY;
-      setPanelPosition('history', { x: dragRef.current.panelX + dx, y: dragRef.current.panelY + dy });
+      setPanelPosition('history', clampRunHistoryPosition({
+        x: dragRef.current.panelX + dx,
+        y: dragRef.current.panelY + dy,
+      }));
     }
     function onMouseUp() {
       dragRef.current = null;
@@ -59,6 +63,23 @@ export function RunHistoryPanel() {
       window.removeEventListener('mouseup', onMouseUp);
     };
   }, [setPanelPosition]);
+
+  // Repair stale/off-screen positions on open and keep the header reachable
+  // after viewport changes. This also migrates sessions created before the
+  // history panel received a visible default.
+  useEffect(() => {
+    if (!visible) return;
+    const keepOnScreen = () => {
+      const next = clampRunHistoryPosition(useUIStore.getState().panels.history.position);
+      const current = useUIStore.getState().panels.history.position;
+      if (next.x !== current.x || next.y !== current.y) {
+        setPanelPosition('history', next);
+      }
+    };
+    keepOnScreen();
+    window.addEventListener('resize', keepOnScreen);
+    return () => window.removeEventListener('resize', keepOnScreen);
+  }, [visible, setPanelPosition]);
 
   // Keep relative ages fresh while the panel is open (1s tick). Cheap; only the
   // age labels re-derive. Skips entirely while hidden.
@@ -87,7 +108,7 @@ export function RunHistoryPanel() {
           <button
             type="button"
             className="panel__header-action run-history__action"
-            onClick={resetExecution}
+            onClick={() => void cancelExecution()}
             disabled={!isExecuting}
             aria-label="Cancel running execution"
             title={isExecuting ? 'Cancel running execution' : 'Nothing running'}

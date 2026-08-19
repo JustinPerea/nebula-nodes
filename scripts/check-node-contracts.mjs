@@ -8,6 +8,7 @@ const REPO_ROOT = join(__dirname, '..');
 const NODE_DEFS_PATH = join(REPO_ROOT, 'backend', 'data', 'node_definitions.json');
 const FRONTEND_DEFS_PATH = join(REPO_ROOT, 'frontend', 'src', 'constants', 'nodeDefinitions.ts');
 const ENV_EXAMPLE_PATH = join(REPO_ROOT, '.env.example');
+const SETTINGS_EXAMPLE_PATH = join(REPO_ROOT, 'settings.example.json');
 
 const VALID_CATEGORIES = new Set([
   'image-gen',
@@ -48,7 +49,10 @@ const VALID_PROVIDERS = new Set([
   'utility',
 ]);
 const VALID_EXECUTION_PATTERNS = new Set(['sync', 'async-poll', 'stream']);
-const VALID_PORT_TYPES = new Set(['Text', 'Image', 'Video', 'Audio', 'Mask', 'Array', 'SVG', 'Mesh', 'Character', 'Moodboard', 'Any']);
+const VALID_PORT_TYPES = new Set([
+  'Text', 'Image', 'Video', 'Audio', 'Mask', 'Array', 'SVG', 'Mesh',
+  'Character', 'Moodboard', 'CameraRig', 'ReferenceSet', 'Any',
+]);
 const VALID_PARAM_TYPES = new Set(['string', 'integer', 'float', 'boolean', 'enum', 'textarea', 'file', 'palette']);
 const PARAM_GROUPS = ['params', 'sharedParams', 'falParams', 'directParams'];
 const LOCAL_EXECUTION_NODE_IDS = new Set([
@@ -73,11 +77,12 @@ const LOCAL_EXECUTION_NODE_IDS = new Set([
 const definitions = JSON.parse(await readFile(NODE_DEFS_PATH, 'utf8'));
 const frontendSource = await readFile(FRONTEND_DEFS_PATH, 'utf8');
 const envExample = await readFile(ENV_EXAMPLE_PATH, 'utf8');
+const settingsExample = JSON.parse(await readFile(SETTINGS_EXAMPLE_PATH, 'utf8'));
 const errors = [];
 
 validateRegistryShape();
 validateFrontendBackendIdParity();
-validateEnvExampleCoverage();
+validateCredentialExampleCoverage();
 validateGeneratedReference();
 validatePinnedCorrections();
 validateLocalExecutionCoverage();
@@ -194,7 +199,7 @@ function validateFrontendBackendIdParity() {
   }
 }
 
-function validateEnvExampleCoverage() {
+function validateCredentialExampleCoverage() {
   const keys = new Set();
   for (const definition of Object.values(definitions)) {
     const env = definition.envKeyName;
@@ -203,8 +208,15 @@ function validateEnvExampleCoverage() {
       for (const key of env) if (key) keys.add(key);
     }
   }
+  const settingsKeys = new Set(Object.keys(settingsExample.apiKeys ?? {}));
   for (const key of [...keys].sort()) {
-    if (!envExample.includes(`${key}=`)) errors.push(`.env.example missing ${key}`);
+    if (!settingsKeys.has(key)) errors.push(`settings.example.json apiKeys missing ${key}`);
+    if (envExample.includes(`${key}=`)) {
+      errors.push(`.env.example must not advertise provider credential ${key}`);
+    }
+  }
+  for (const key of [...settingsKeys].sort()) {
+    if (!keys.has(key)) errors.push(`settings.example.json apiKeys has unused key ${key}`);
   }
 }
 

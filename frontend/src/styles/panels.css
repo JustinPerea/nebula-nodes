@@ -257,8 +257,15 @@ body:not(.app-slava-restraint) .panel__group-count {
 }
 
 .panel__item {
+  display: block;
+  width: 100%;
   padding: 5px 8px;
+  border: 0;
+  background: transparent;
+  color: inherit;
   cursor: grab;
+  font: inherit;
+  text-align: left;
 }
 
 body:not(.app-slava-restraint) .panel__item {
@@ -273,6 +280,11 @@ body:not(.app-slava-restraint) .panel__item:hover {
 }
 
 .panel__item:active { cursor: grabbing; }
+
+body:not(.app-slava-restraint) .panel__item:focus-visible {
+  outline: 2px solid var(--sr-accent, #ff6b3d);
+  outline-offset: -2px;
+}
 
 .inspector__node-header {
   display: flex;

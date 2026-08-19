@@ -21,9 +21,15 @@ from typing import Any
 
 from uuid import uuid4
 
+from dotenv import load_dotenv
 from fastapi import FastAPI, Form, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
+
+# Load only process-level path/runtime overrides from the optional project
+# file. Provider handlers deliberately read credentials from settings.json,
+# so .env is not a second credential store.
+load_dotenv(Path(__file__).resolve().parent.parent / ".env", override=False)
 
 from models import (
     ExecuteRequest,
@@ -40,6 +46,7 @@ from models.events import (
     ExecutionEvent,
     ExecutedEvent,
     ErrorEvent,
+    GraphCancelledEvent,
     GraphCompleteEvent,
     execution_run_id,
 )
@@ -51,6 +58,7 @@ from services.cli_graph import CLIGraph
 from services.output import OUTPUT_ROOT, DEFAULT_OUTPUT_ROOT, resolve_output_ref, ManifestError, find_output_record, read_manifest
 from services.image_input import is_remote_or_data_uri
 from services.cache import ExecutionCache
+from services.execution_runs import ExecutionRunRegistry
 from services.chat_session import run_claude
 from services.chat_actions import publish_action
 from services.zoom_manifest import init_manifest, append_entry
@@ -65,6 +73,7 @@ from services.ffmpeg import ffprobe_video
 from services.preset_store import preset_store
 
 execution_cache = ExecutionCache(ttl=3600)
+execution_runs = ExecutionRunRegistry()
 node_registry = NodeRegistry()
 
 # Persist the CLI graph to ~/.nebula/state.json on every mutation and reload
@@ -164,7 +173,10 @@ def _restore_zip_bundle(zip_bytes: bytes) -> dict[str, str]:
     return url_mapping
 
 
-_OUTPUT_DIR_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}$")
+_OUTPUT_DIR_PATTERN = re.compile(
+    r"^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}"
+    r"(?:_\d{6}-[A-Za-z0-9_-]+-[0-9a-f]{8})?$"
+)
 _OUTPUTS_URL_PREFIX = "/api/outputs/"
 
 
@@ -1017,10 +1029,11 @@ async def health() -> dict:
 async def health_providers(refresh: bool = False) -> dict:
     """Per-provider API key validation.
 
-    For each known provider (FAL, OpenAI, Google, Ideogram, Runway, xAI,
-    Replicate, ElevenLabs, Nous) reports whether a key is configured and, if
-    so, verifies it with one minimal authenticated API call. Results are
-    cached for 5 minutes; pass ?refresh=true to bypass the cache.
+    Reports every credential family used by the node catalog plus Nous OAuth.
+    Configured credentials are checked with a non-billable authenticated read
+    when the provider documents one. Providers without a safe probe are marked
+    configured_unverified instead of triggering generation. Results are cached
+    for 5 minutes; pass ?refresh=true to bypass the cache.
     """
     return {"providers": await validate_provider_keys(force_refresh=refresh)}
 
@@ -1069,11 +1082,15 @@ async def get_codex_chatgpt_login_state() -> dict[str, Any]:
 
 @app.post("/api/zoom-manifest/init")
 async def zoom_manifest_init() -> dict:
+    if load_settings().get("zoomTelemetryEnabled") is not True:
+        raise HTTPException(status_code=403, detail="zoom telemetry is disabled")
     return init_manifest()
 
 
 @app.post("/api/zoom-manifest/entry")
 async def zoom_manifest_entry(body: dict[str, Any]) -> dict:
+    if load_settings().get("zoomTelemetryEnabled") is not True:
+        raise HTTPException(status_code=403, detail="zoom telemetry is disabled")
     appended = append_entry(body)
     return {"ok": appended}
 
@@ -1099,8 +1116,21 @@ async def update_settings(body: dict[str, Any]) -> dict:
             if v and not v.startswith("***"):
                 current_keys[k] = v
         current["apiKeys"] = current_keys
-    for key in ("routing", "outputPath", "executionMode", "batchSizeCap", "favorites", "exportFolder"):
+    for key in (
+        "routing",
+        "outputPath",
+        "executionMode",
+        "batchSizeCap",
+        "favorites",
+        "exportFolder",
+        "zoomTelemetryEnabled",
+    ):
         if key in body:
+            if key == "zoomTelemetryEnabled" and not isinstance(body[key], bool):
+                raise HTTPException(
+                    status_code=400,
+                    detail="zoomTelemetryEnabled must be a boolean",
+                )
             current[key] = body[key]
     save_settings(current)
     # API keys may have changed — drop cached validation results so the next
@@ -1112,21 +1142,24 @@ async def update_settings(body: dict[str, Any]) -> dict:
 
 @app.post("/api/execute")
 async def execute(request: ExecuteRequest) -> dict:
+    run_id = request.run_id or str(uuid4())
+    if execution_runs.get(run_id) is not None:
+        raise HTTPException(status_code=409, detail=f"run '{run_id}' already exists")
     settings = load_settings()
     api_keys = settings.get("apiKeys", {})
     nodes = _normalize_execute_nodes(request.nodes)
 
     errors = validate_graph(nodes, request.edges, api_keys)
     if errors:
-        await manager.broadcast(ValidationErrorEvent(errors=errors, run_id=request.run_id))
-        return _validation_response(errors)
+        await manager.broadcast(ValidationErrorEvent(errors=errors, run_id=run_id))
+        return {**_validation_response(errors), "runId": run_id}
 
     try:
         topological_sort(nodes, request.edges)
     except CycleError as exc:
         await manager.broadcast(
             ValidationErrorEvent(
-                run_id=request.run_id,
+                run_id=run_id,
                 errors=[
                     {
                         "node_id": "",
@@ -1151,22 +1184,34 @@ async def execute(request: ExecuteRequest) -> dict:
                 handler_registry=handler_registry,
                 emit=_emit_and_sync,
                 cache=execution_cache,
-                run_id=request.run_id,
+                run_id=run_id,
             )
             _sync_params_to_cli_graph(nodes)
             print("[exec] _run completed successfully", file=sys.stderr, flush=True)
+        except asyncio.CancelledError:
+            await manager.broadcast(GraphCancelledEvent(run_id=run_id))
+            raise
         except Exception as e:
             print(f"[exec] _run FAILED: {e}", file=sys.stderr, flush=True)
             traceback.print_exc(file=sys.stderr)
+            raise
 
-    asyncio.create_task(_run())
+    task = asyncio.create_task(_run())
+    try:
+        execution_runs.register(run_id, task)
+    except ValueError as exc:
+        task.cancel()
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
-    return {"status": "started"}
+    return {"status": "started", "runId": run_id}
 
 
 @app.post("/api/execute-node")
 async def execute_node(request: ExecuteNodeRequest) -> dict:
     """Execute only the subgraph feeding into a specific target node."""
+    run_id = request.run_id or str(uuid4())
+    if execution_runs.get(run_id) is not None:
+        raise HTTPException(status_code=409, detail=f"run '{run_id}' already exists")
     settings = load_settings()
     api_keys = settings.get("apiKeys", {})
     nodes = _normalize_execute_nodes(request.nodes)
@@ -1181,15 +1226,15 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
 
     errors = validate_graph(sub_nodes, sub_edges, api_keys)
     if errors:
-        await manager.broadcast(ValidationErrorEvent(errors=errors, run_id=request.run_id))
-        return _validation_response(errors)
+        await manager.broadcast(ValidationErrorEvent(errors=errors, run_id=run_id))
+        return {**_validation_response(errors), "runId": run_id}
 
     try:
         topological_sort(sub_nodes, sub_edges)
     except CycleError as exc:
         await manager.broadcast(
             ValidationErrorEvent(
-                run_id=request.run_id,
+                run_id=run_id,
                 errors=[
                     {
                         "node_id": "",
@@ -1213,15 +1258,45 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
                 handler_registry=handler_registry,
                 emit=_emit_and_sync,
                 cache=execution_cache,
-                run_id=request.run_id,
+                run_id=run_id,
             )
             _sync_params_to_cli_graph(sub_nodes)
+        except asyncio.CancelledError:
+            await manager.broadcast(GraphCancelledEvent(run_id=run_id))
+            raise
         except Exception:
             traceback.print_exc()
+            raise
 
-    asyncio.create_task(_run())
+    task = asyncio.create_task(_run())
+    try:
+        execution_runs.register(run_id, task)
+    except ValueError as exc:
+        task.cancel()
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
-    return {"status": "started", "nodeCount": len(sub_nodes)}
+    return {"status": "started", "nodeCount": len(sub_nodes), "runId": run_id}
+
+
+@app.get("/api/executions/{run_id}")
+async def get_execution_status(run_id: str) -> dict:
+    record = execution_runs.get(run_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail=f"run '{run_id}' not found")
+    return {"runId": run_id, "status": record.status}
+
+
+@app.delete("/api/executions/{run_id}")
+async def cancel_execution(run_id: str) -> dict:
+    """Idempotently request cancellation of a tracked graph execution."""
+    record = execution_runs.cancel(run_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail=f"run '{run_id}' not found")
+    # Yield once so a cooperative task can process CancelledError and the
+    # registry can report the terminal state in this acknowledgement.
+    await asyncio.sleep(0)
+    current = execution_runs.get(run_id) or record
+    return {"runId": run_id, "status": current.status}
 
 
 # Per-node locks serialize concurrent single-shot merges on the SAME cinema node.
@@ -1719,10 +1794,11 @@ async def get_node(node_id: str) -> dict:
 
 # ---------- CLI: Graph management ----------
 
-async def _broadcast_graph_sync() -> None:
+async def _broadcast_graph_sync() -> dict[str, Any]:
     """Push the current CLI graph to all connected frontends via WebSocket."""
     export = await export_graph_for_frontend()
     await manager.broadcast_raw({"type": "graphSync", **export})
+    return export
 
 
 def _sync_outputs_to_cli_graph(node_id: str, outputs: dict[str, Any]) -> None:
@@ -1748,6 +1824,10 @@ async def _emit_and_sync(event: ExecutionEvent) -> None:
     into cli_graph. Used by /api/execute and /api/execute-node so the
     frontend-driven execution paths keep cli_graph in sync with what the
     user sees in the canvas."""
+    run_id = event.run_id or execution_run_id.get()
+    record = execution_runs.get(run_id) if run_id else None
+    if record is not None and record.status in {"cancelling", "cancelled"}:
+        return
     if isinstance(event, ExecutedEvent):
         _sync_outputs_to_cli_graph(event.node_id, event.outputs)
     await manager.broadcast(event)
@@ -1770,7 +1850,12 @@ def _sync_params_to_cli_graph(nodes: list[GraphNode]) -> None:
 
 
 def _validate_connect_handles(
-    src_node_id: str, src_port: str, dst_node_id: str, dst_port: str
+    src_node_id: str,
+    src_port: str,
+    dst_node_id: str,
+    dst_port: str,
+    *,
+    graph: CLIGraph | None = None,
 ) -> None:
     """Reject a connect() when either handle doesn't exist on its node.
 
@@ -1781,9 +1866,11 @@ def _validate_connect_handles(
     entries that choke the main thread and freeze the chat panel.
 
     We check against the node's registered `outputPorts[].id` for the source
-    and `inputPorts[].id` for the target. Universal/dynamic nodes are skipped
-    (their ports are provider-driven and not known up front).
+    and `inputPorts[].id` for the target. A universal direction is skipped
+    only when its registered port list is empty (Replicate schemas are
+    provider-driven); fixed universal ports are still validated.
     """
+    target_graph = graph or cli_graph
     universal_defs = {
         "openrouter-universal",
         "replicate-universal",
@@ -1794,15 +1881,15 @@ def _validate_connect_handles(
         (src_node_id, src_port, "source", "outputPorts"),
         (dst_node_id, dst_port, "target", "inputPorts"),
     ]:
-        node = cli_graph.nodes.get(node_id)
+        node = target_graph.nodes.get(node_id)
         if not node:
             # Missing-node error is surfaced by cli_graph.connect itself.
             continue
         definition_id = node.get("definitionId", "")
-        if definition_id in universal_defs:
-            continue
         defn = node_registry.get(definition_id)
         if not defn:
+            continue
+        if definition_id in universal_defs and not defn.get(port_key):
             continue
         valid = [p["id"] for p in defn.get(port_key, []) if isinstance(p, dict) and "id" in p]
         if port not in valid:
@@ -2192,6 +2279,148 @@ async def delete_graph_edge(body: dict[str, Any]) -> dict:
     return {"status": "deleted" if removed else "not_found"}
 
 
+def _graph_ingress_items(body: dict[str, Any], key: str) -> list[dict[str, Any]]:
+    value = body.get(key, [])
+    if not isinstance(value, list):
+        raise HTTPException(status_code=400, detail=f"'{key}' must be an array")
+    if not all(isinstance(item, dict) for item in value):
+        raise HTTPException(status_code=400, detail=f"every '{key}' item must be an object")
+    return value
+
+
+def _stage_graph_nodes(
+    candidate: CLIGraph,
+    raw_nodes: list[dict[str, Any]],
+    *,
+    reference_key: str,
+    include_outputs: bool,
+) -> dict[str, str]:
+    """Validate and add ingress nodes to a persistence-free candidate graph."""
+    id_map: dict[str, str] = {}
+    for index, raw in enumerate(raw_nodes):
+        reference = raw.get(reference_key)
+        if not isinstance(reference, str) or not reference:
+            raise HTTPException(
+                status_code=400,
+                detail=f"nodes[{index}].{reference_key} must be a non-empty string",
+            )
+        if reference in id_map:
+            raise HTTPException(
+                status_code=400,
+                detail=f"duplicate node reference '{reference}'",
+            )
+        definition_id = raw.get("definitionId")
+        if not isinstance(definition_id, str) or not definition_id:
+            raise HTTPException(
+                status_code=400,
+                detail=f"nodes[{index}].definitionId must be a non-empty string",
+            )
+        if node_registry.get(definition_id) is None:
+            raise HTTPException(
+                status_code=400,
+                detail=f"unknown node definition '{definition_id}'",
+            )
+        params = raw.get("params", {}) or {}
+        if not isinstance(params, dict):
+            raise HTTPException(
+                status_code=400,
+                detail=f"nodes[{index}].params must be an object",
+            )
+        _validate_params(definition_id, params)
+        params = _coerce_params(definition_id, params)
+        if definition_id == "image-input":
+            params = _normalize_image_input_params(params)
+
+        position = raw.get("position")
+        if position is not None and not isinstance(position, dict):
+            raise HTTPException(
+                status_code=400,
+                detail=f"nodes[{index}].position must be an object",
+            )
+        outputs: dict[str, Any] | None = None
+        if include_outputs:
+            raw_outputs = raw.get("outputs", {}) or {}
+            if not isinstance(raw_outputs, dict):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"nodes[{index}].outputs must be an object",
+                )
+            outputs = _normalize_outputs_for_storage(raw_outputs)
+        try:
+            new_id = candidate.add_node(
+                definition_id,
+                params,
+                position=position,
+                outputs=outputs,
+            )
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(
+                status_code=400,
+                detail=f"invalid node '{reference}': {exc}",
+            ) from exc
+        id_map[reference] = new_id
+    return id_map
+
+
+def _stage_graph_edges(
+    candidate: CLIGraph,
+    raw_edges: list[dict[str, Any]],
+    id_map: dict[str, str],
+) -> list[str]:
+    """Validate every endpoint/handle before adding any edge to live state."""
+    edge_ids: list[str] = []
+    seen: set[tuple[str, str, str, str]] = set()
+    for index, raw in enumerate(raw_edges):
+        source_ref = raw.get("source")
+        target_ref = raw.get("target")
+        if not isinstance(source_ref, str) or not isinstance(target_ref, str):
+            raise HTTPException(
+                status_code=400,
+                detail=f"edges[{index}] source and target must be strings",
+            )
+        if source_ref not in id_map or target_ref not in id_map:
+            raise HTTPException(
+                status_code=400,
+                detail=f"edges[{index}] references an unknown source or target node",
+            )
+        source_handle = raw.get("sourceHandle")
+        target_handle = raw.get("targetHandle")
+        if not isinstance(source_handle, str) or not isinstance(target_handle, str):
+            raise HTTPException(
+                status_code=400,
+                detail=f"edges[{index}] handles must be strings",
+            )
+        source = id_map[source_ref]
+        target = id_map[target_ref]
+        signature = (source, source_handle, target, target_handle)
+        if signature in seen:
+            raise HTTPException(status_code=400, detail=f"duplicate edge at edges[{index}]")
+        seen.add(signature)
+        _validate_connect_handles(
+            source,
+            source_handle,
+            target,
+            target_handle,
+            graph=candidate,
+        )
+        try:
+            edge_ids.append(
+                candidate.connect(source, source_handle, target, target_handle)["id"]
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    try:
+        graph_nodes, graph_edges = candidate.to_execute_format()
+        topological_sort(
+            [GraphNode.model_validate(node) for node in graph_nodes],
+            [GraphEdge.model_validate(edge) for edge in graph_edges],
+        )
+    except CycleError as exc:
+        raise HTTPException(status_code=400, detail=f"graph contains a cycle: {exc}") from exc
+    return edge_ids
+
+
 @app.post("/api/graph/import")
 async def import_graph(body: dict[str, Any]) -> dict:
     """Atomically replace cli_graph from a file-loaded graph.
@@ -2201,34 +2430,18 @@ async def import_graph(body: dict[str, Any]) -> dict:
     short IDs so the rest of the system treats the loaded graph like any other
     CLI-created graph — including Claude's `nebula graph` view.
     """
-    cli_graph.clear()
-    id_map: dict[str, str] = {}
-    for n in body.get("nodes", []):
-        if "definitionId" not in n:
-            continue
-        params = n.get("params", {}) or {}
-        if n["definitionId"] == "image-input":
-            params = _normalize_image_input_params(params)
-        new_id = cli_graph.add_node(
-            n["definitionId"],
-            params,
-            position=n.get("position"),
-            outputs=_normalize_outputs_for_storage(n.get("outputs", {}) or {}),
-        )
-        old_id = n.get("id")
-        if old_id:
-            id_map[old_id] = new_id
-    for e in body.get("edges", []):
-        src = id_map.get(e.get("source"))
-        dst = id_map.get(e.get("target"))
-        if not src or not dst:
-            continue
-        try:
-            cli_graph.connect(src, e.get("sourceHandle", ""), dst, e.get("targetHandle", ""))
-        except ValueError:
-            # Skip malformed edges rather than failing the whole import
-            continue
-    await _broadcast_graph_sync()
+    candidate = CLIGraph()
+    raw_nodes = _graph_ingress_items(body, "nodes")
+    raw_edges = _graph_ingress_items(body, "edges")
+    id_map = _stage_graph_nodes(
+        candidate,
+        raw_nodes,
+        reference_key="id",
+        include_outputs=True,
+    )
+    _stage_graph_edges(candidate, raw_edges, id_map)
+    cli_graph.replace_with(candidate)
+    exported = await _broadcast_graph_sync()
     publish_action(
         f"Loaded graph ({len(cli_graph.nodes)} nodes, {len(cli_graph.edges)} edges)"
     )
@@ -2237,6 +2450,8 @@ async def import_graph(body: dict[str, Any]) -> dict:
         "idMap": id_map,
         "nodeCount": len(cli_graph.nodes),
         "edgeCount": len(cli_graph.edges),
+        "nodes": exported["nodes"],
+        "edges": exported["edges"],
     }
 
 
@@ -2251,31 +2466,17 @@ async def add_graph_cluster(body: dict[str, Any]) -> dict:
     Body: {nodes: [{tempId, definitionId, params, position?}], edges: [{source, sourceHandle, target, targetHandle}]}
     where edge source/target reference tempIds.
     """
-    id_map: dict[str, str] = {}
-    for n in body.get("nodes", []):
-        definition_id = n.get("definitionId")
-        if not definition_id:
-            continue
-        params = n.get("params", {}) or {}
-        _validate_params(definition_id, params)
-        params = _coerce_params(definition_id, params)
-        if definition_id == "image-input":
-            params = _normalize_image_input_params(params)
-        new_id = cli_graph.add_node(definition_id, params, position=n.get("position"))
-        temp_id = n.get("tempId")
-        if temp_id:
-            id_map[temp_id] = new_id
-    created_edge_ids: list[str] = []
-    for e in body.get("edges", []):
-        src = id_map.get(e.get("source"))
-        dst = id_map.get(e.get("target"))
-        if not src or not dst:
-            continue
-        try:
-            edge = cli_graph.connect(src, e.get("sourceHandle", ""), dst, e.get("targetHandle", ""))
-            created_edge_ids.append(edge["id"])
-        except ValueError:
-            continue
+    candidate = cli_graph.clone()
+    raw_nodes = _graph_ingress_items(body, "nodes")
+    raw_edges = _graph_ingress_items(body, "edges")
+    id_map = _stage_graph_nodes(
+        candidate,
+        raw_nodes,
+        reference_key="tempId",
+        include_outputs=False,
+    )
+    created_edge_ids = _stage_graph_edges(candidate, raw_edges, id_map)
+    cli_graph.replace_with(candidate)
     await _broadcast_graph_sync()
     publish_action(f"Created cluster ({len(id_map)} nodes)")
 
@@ -2362,6 +2563,13 @@ def _cli_node_to_rf(n: dict[str, Any], position: dict[str, float], all_defs: dic
         if definition_id == "camera-rig"
         else "referenceSetNode"
         if definition_id == "reference-set"
+        else "videoQcNode"
+        if definition_id in {
+            "qc-loop-safety",
+            "qc-frame-review",
+            "qc-composited-look",
+            "qc-camera-geometry",
+        }
         else "moodboardNode"
         if definition_id == "nebula-moodboard"
         else "dynamic-node"

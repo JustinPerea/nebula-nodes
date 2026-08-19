@@ -88,11 +88,8 @@ Names, node IDs, and parameter keys below are taken directly from `backend/data/
 **API-key setup (one time).** All FAL nodes authenticate with a single key:
 
 1. Create an API key at <https://fal.ai/dashboard/keys>.
-2. In the repo root, add it to your `.env` file:
-   ```
-   FAL_KEY=your-fal-key-here
-   ```
-3. Restart the backend so it picks up the variable. Every FAL node now works — no per-node configuration. (If the key is missing you'll get a `FAL_KEY is required` error when you run the graph.)
+2. Open Nebula **Settings**, paste it into the **FAL** field (`FAL_KEY`), and choose **Save Settings**.
+3. Nebula stores it under `apiKeys.FAL_KEY` in the project-root `settings.json`; no restart is required. Every FAL node now works — no per-node configuration. (If the key is missing you'll get a `FAL_KEY is required` error when you run the graph.)
 
 You can paste a local file path or a public URL into any image/video/audio input — Nebula auto-converts local files to data URIs before sending them to FAL, so you don't have to upload anything yourself.
 

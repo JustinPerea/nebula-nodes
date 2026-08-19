@@ -3,6 +3,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { RunHistoryPanel } from '../src/components/panels/RunHistoryPanel';
 import { useGraphStore } from '../src/store/graphStore';
 import { useUIStore } from '../src/store/uiStore';
+import { clampRunHistoryPosition } from '../src/lib/panelPosition';
 import type { RunRecord } from '../src/lib/runHistory';
 
 const INITIAL_GRAPH_STATE = { ...useGraphStore.getState() };
@@ -76,5 +77,16 @@ describe('RunHistoryPanel replay actions', () => {
     render(<RunHistoryPanel />);
     fireEvent.click(screen.getByRole('button', { name: 'Clear run history' }));
     expect(clearRunHistory).toHaveBeenCalledOnce();
+  });
+});
+
+describe('RunHistoryPanel positioning', () => {
+  it('clamps stale positions so the full panel and its header remain reachable', () => {
+    expect(clampRunHistoryPosition({ x: -340, y: -20 }, { width: 1280, height: 720 }))
+      .toEqual({ x: 8, y: 8 });
+    expect(clampRunHistoryPosition({ x: 2000, y: 2000 }, { width: 1280, height: 720 }))
+      .toEqual({ x: 996, y: 664 });
+    expect(clampRunHistoryPosition({ x: 100, y: 60 }, { width: 250, height: 500 }))
+      .toEqual({ x: 8, y: 60 });
   });
 });

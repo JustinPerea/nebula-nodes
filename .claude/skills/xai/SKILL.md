@@ -17,7 +17,7 @@ xAI's Grok Imagine API turns a text prompt (or a starting image) into a short ge
 
 ## Universal rules
 
-1. **Auth.** `Authorization: Bearer <XAI_API_KEY>` header + `Content-Type: application/json`. The backend reads the `XAI_API_KEY` env var (set in the backend `.env`, then restart the backend). The same xAI key works for video, image, voice, and chat. Missing key → the node fails immediately with `XAI_API_KEY is required`.
+1. **Auth.** `Authorization: Bearer <XAI_API_KEY>` header + `Content-Type: application/json`. Enter the key in Nebula **Settings → xAI** and save; it is persisted under `apiKeys.XAI_API_KEY` in project-root `settings.json` and takes effect without a restart. The same xAI key works for video, image, voice, and chat. Missing key → the node fails immediately with `XAI_API_KEY is required`.
 2. **Base URL.** `https://api.x.ai/v1`. Submit endpoint: `POST /v1/videos/generations`. Poll endpoint: `GET /v1/videos/{request_id}`.
 3. **Execution pattern: async submit-then-poll** (`executionPattern: "async-poll"` in the node def). Submit returns `{"request_id": "..."}`; the handler then polls `GET /v1/videos/{request_id}` every 3 s. A `ProgressEvent` advances the node's progress bar each poll. Terminal state `done` returns `{"status": "done", "video": {"url": "..."}}`, the MP4 is downloaded to the run dir, and the `video` port emits the local path. **Set expectations in minutes, not seconds.** The poll cap is 300 attempts × 3 s ≈ **15 minutes** before the handler raises `Grok timed out` (the guide's "up to a few minutes" is the typical case, not the ceiling).
 4. **Model is fixed.** The handler always sends `"model": "grok-imagine-video"`. The user does **not** pick a model — there is no model param on the node.

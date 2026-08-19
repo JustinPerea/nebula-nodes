@@ -1,9 +1,13 @@
 """Tests for per-provider API key validation — services.settings.validate_provider_keys
 and the GET /api/health/providers endpoint.
 
+Coverage includes every catalog credential plus Nous OAuth. Statuses distinguish
+missing, configured-but-unverifiable, valid, invalid, authorization, billing,
+rate-limit, and provider/network outcomes.
+
 Covers validation contract assertions:
-- VAL-INFRA-003: endpoint returns per-provider status objects with
-  configured (bool), status (not_configured|valid|invalid|error), last_checked.
+- VAL-INFRA-003: endpoint returns per-provider status objects with configured
+  (bool), an allowed actionable status, and last_checked.
 - VAL-INFRA-004: results are cached with a 5-minute TTL; a second call within
   the TTL makes no new provider API calls and returns identical timestamps.
 
@@ -33,13 +37,29 @@ PROVIDER_KEYS = {
     "xAI": "XAI_API_KEY",
     "Replicate": "REPLICATE_API_TOKEN",
     "ElevenLabs": "ELEVENLABS_API_KEY",
+    "Anthropic": "ANTHROPIC_API_KEY",
+    "OpenRouter": "OPENROUTER_API_KEY",
+    "Meshy": "MESHY_API_KEY",
+    "MiniMax": "MINIMAX_API_KEY",
+    "QuiverAI": "QUIVER_API_KEY",
+    "Krea": "KREA_API_TOKEN",
+    "Higgsfield": "HIGGSFIELD_API_KEY",
     # Nous has no settings.json key — it resolves an OAuth credential from
     # Hermes auth files via services.nous_auth.load_nous_credential().
 }
 
 ALL_PROVIDERS = list(PROVIDER_KEYS) + ["Nous"]
 
-ALLOWED_STATUSES = {"not_configured", "valid", "invalid", "error"}
+ALLOWED_STATUSES = {
+    "not_configured",
+    "configured_unverified",
+    "valid",
+    "invalid",
+    "unauthorized",
+    "insufficient_credits",
+    "rate_limited",
+    "error",
+}
 
 
 # ---------------------------------------------------------------------------
@@ -125,6 +145,15 @@ def _isolate(monkeypatch):
 # ---------------------------------------------------------------------------
 
 
+def test_provider_credentials_do_not_fallback_to_process_environment(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setattr(settings_service, "SETTINGS_PATH", tmp_path / "missing-settings.json")
+    monkeypatch.setenv("OPENAI_API_KEY", "environment-only-key")
+
+    assert settings_service.get_api_key("OPENAI_API_KEY") is None
+
+
 @pytest.mark.asyncio
 async def test_all_providers_not_configured_without_keys(monkeypatch):
     log = _install_client(monkeypatch, lambda url, headers: _FakeResponse(200))
@@ -146,7 +175,7 @@ async def test_all_providers_not_configured_without_keys(monkeypatch):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("provider", list(PROVIDER_KEYS))
+@pytest.mark.parametrize("provider", [name for name in PROVIDER_KEYS if name != "Higgsfield"])
 async def test_valid_key_reports_valid(monkeypatch, provider):
     _set_keys(monkeypatch, {PROVIDER_KEYS[provider]: "test-key"})
     _install_client(monkeypatch, lambda url, headers: _FakeResponse(200))
@@ -156,6 +185,19 @@ async def test_valid_key_reports_valid(monkeypatch, provider):
     assert result[provider]["configured"] is True
     assert result[provider]["status"] == "valid"
     assert result[provider]["last_checked"]
+
+
+@pytest.mark.asyncio
+async def test_configured_provider_without_safe_probe_is_truthfully_unverified(monkeypatch):
+    _set_keys(monkeypatch, {"HIGGSFIELD_API_KEY": "test-key"})
+    log = _install_client(monkeypatch, lambda url, headers: _FakeResponse(200))
+
+    result = await settings_service.validate_provider_keys()
+
+    assert result["Higgsfield"]["configured"] is True
+    assert result["Higgsfield"]["status"] == "configured_unverified"
+    assert "no safe validation probe" in result["Higgsfield"]["detail"]
+    assert log == []
 
 
 @pytest.mark.asyncio
@@ -170,16 +212,32 @@ async def test_nous_valid_with_credential(monkeypatch):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("provider", list(PROVIDER_KEYS))
-@pytest.mark.parametrize("status_code", [401, 403])
-async def test_rejected_key_reports_invalid(monkeypatch, provider, status_code):
+@pytest.mark.parametrize("provider", [name for name in PROVIDER_KEYS if name != "Higgsfield"])
+async def test_rejected_key_reports_invalid(monkeypatch, provider):
     _set_keys(monkeypatch, {PROVIDER_KEYS[provider]: "bad-key"})
-    _install_client(monkeypatch, lambda url, headers: _FakeResponse(status_code))
+    _install_client(monkeypatch, lambda url, headers: _FakeResponse(401))
 
     result = await settings_service.validate_provider_keys()
 
     assert result[provider]["configured"] is True
     assert result[provider]["status"] == "invalid"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("status_code", "expected"),
+    [(403, "unauthorized"), (402, "insufficient_credits"), (429, "rate_limited")],
+)
+async def test_actionable_provider_statuses_are_not_mislabeled_invalid(
+    monkeypatch, status_code, expected
+):
+    _set_keys(monkeypatch, {"FAL_KEY": "test-key"})
+    _install_client(monkeypatch, lambda url, headers: _FakeResponse(status_code))
+
+    result = await settings_service.validate_provider_keys()
+
+    assert result["FAL"]["configured"] is True
+    assert result["FAL"]["status"] == expected
 
 
 @pytest.mark.asyncio
@@ -227,7 +285,8 @@ async def test_each_provider_uses_its_own_endpoint_and_auth(monkeypatch):
 
     await settings_service.validate_provider_keys()
 
-    assert len(log) == len(ALL_PROVIDERS)
+    # Higgsfield is presence-only because it has no safe, non-billable probe.
+    assert len(log) == len(ALL_PROVIDERS) - 1
     by_url = {req["url"]: req["headers"] for req in log}
 
     fal = by_url["https://api.fal.ai/v1/models?limit=1"]
@@ -255,8 +314,48 @@ async def test_each_provider_uses_its_own_endpoint_and_auth(monkeypatch):
     elevenlabs = by_url["https://api.elevenlabs.io/v1/user"]
     assert elevenlabs["xi-api-key"] == "key-for-ELEVENLABS_API_KEY"
 
+    anthropic = by_url["https://api.anthropic.com/v1/models?limit=1"]
+    assert anthropic["x-api-key"] == "key-for-ANTHROPIC_API_KEY"
+    assert anthropic["anthropic-version"] == "2023-06-01"
+
+    openrouter = by_url["https://openrouter.ai/api/v1/key"]
+    assert openrouter["Authorization"] == "Bearer key-for-OPENROUTER_API_KEY"
+
+    meshy = by_url["https://api.meshy.ai/openapi/v1/balance"]
+    assert meshy["Authorization"] == "Bearer key-for-MESHY_API_KEY"
+
+    minimax = by_url["https://api.minimaxi.com/v1/models/MiniMax-M2.7"]
+    assert minimax["Authorization"] == "Bearer key-for-MINIMAX_API_KEY"
+
+    quiver = by_url["https://api.quiver.ai/v1/models"]
+    assert quiver["Authorization"] == "Bearer key-for-QUIVER_API_KEY"
+
+    krea = by_url["https://api.krea.ai/styles"]
+    assert krea["Authorization"] == "Bearer key-for-KREA_API_TOKEN"
+
     nous = by_url["https://inference-api.nousresearch.com/v1/models"]
     assert nous["Authorization"] == "Bearer nous-test-token"
+
+
+def test_provider_checks_cover_every_catalog_credential():
+    import json
+
+    definitions = json.loads(
+        (Path(__file__).resolve().parents[1] / "data" / "node_definitions.json").read_text()
+    )
+    catalog_keys: set[str] = set()
+    for definition in definitions.values():
+        names = definition.get("envKeyName", [])
+        if isinstance(names, str):
+            names = [names]
+        catalog_keys.update(name for name in names if name)
+
+    health_keys = {
+        key
+        for check in settings_service.PROVIDER_CHECKS.values()
+        for key in check.key_names
+    }
+    assert health_keys == catalog_keys
 
 
 # ---------------------------------------------------------------------------

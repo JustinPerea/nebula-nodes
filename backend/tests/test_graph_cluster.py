@@ -74,3 +74,106 @@ def test_cluster_route_normalizes_image_input():
     new_id = resp.json()["idMap"]["t-img"]
     # _normalize_image_input_params ran (filePath rewritten away from the URL form)
     assert main_module.cli_graph.nodes[new_id]["params"]["filePath"] != "/api/outputs/run1/x.png"
+
+
+def test_cluster_invalid_handle_is_rejected_without_partial_mutation():
+    main_module.cli_graph.add_node("text-input", {"value": "keep me"})
+    before = main_module.cli_graph.get_state()
+    client = TestClient(app)
+
+    resp = client.post("/api/graph/cluster", json={
+        "nodes": [
+            {"tempId": "source", "definitionId": "text-input", "params": {"value": "new"}},
+            {"tempId": "target", "definitionId": "nano-banana", "params": {}},
+        ],
+        "edges": [{
+            "source": "source",
+            "sourceHandle": "not-a-real-output",
+            "target": "target",
+            "targetHandle": "prompt",
+        }],
+    })
+
+    assert resp.status_code == 400
+    assert "Invalid source handle" in resp.json()["detail"]
+    assert main_module.cli_graph.get_state() == before
+
+
+def test_cluster_malformed_later_node_does_not_persist_earlier_node():
+    main_module.cli_graph.add_node("text-input", {"value": "keep me"})
+    before = main_module.cli_graph.get_state()
+    client = TestClient(app)
+
+    resp = client.post("/api/graph/cluster", json={
+        "nodes": [
+            {"tempId": "valid", "definitionId": "text-input", "params": {"value": "staged"}},
+            {"tempId": "broken", "definitionId": "text-input", "params": "not-an-object"},
+        ],
+        "edges": [],
+    })
+
+    assert resp.status_code == 400
+    assert main_module.cli_graph.get_state() == before
+
+
+def test_import_malformed_params_preserves_existing_graph():
+    main_module.cli_graph.add_node("text-input", {"value": "irreplaceable"})
+    before = main_module.cli_graph.get_state()
+    client = TestClient(app)
+
+    resp = client.post("/api/graph/import", json={
+        "nodes": [
+            {"id": "valid", "definitionId": "text-input", "params": {"value": "candidate"}},
+            {"id": "broken", "definitionId": "text-input", "params": "malformed"},
+        ],
+        "edges": [],
+    })
+
+    assert resp.status_code == 400
+    assert main_module.cli_graph.get_state() == before
+
+
+def test_import_invalid_handle_preserves_existing_graph():
+    main_module.cli_graph.add_node("text-input", {"value": "irreplaceable"})
+    before = main_module.cli_graph.get_state()
+    client = TestClient(app)
+
+    resp = client.post("/api/graph/import", json={
+        "nodes": [
+            {"id": "source", "definitionId": "text-input", "params": {"value": "candidate"}},
+            {"id": "target", "definitionId": "nano-banana", "params": {}},
+        ],
+        "edges": [{
+            "source": "source",
+            "sourceHandle": "text",
+            "target": "target",
+            "targetHandle": "missing-handle",
+        }],
+    })
+
+    assert resp.status_code == 400
+    assert "Invalid target handle" in resp.json()["detail"]
+    assert main_module.cli_graph.get_state() == before
+
+
+def test_valid_import_replaces_graph_after_full_validation():
+    main_module.cli_graph.add_node("text-input", {"value": "old"})
+    client = TestClient(app)
+
+    resp = client.post("/api/graph/import", json={
+        "nodes": [
+            {"id": "source", "definitionId": "text-input", "params": {"value": "new"}},
+            {"id": "target", "definitionId": "nano-banana", "params": {}},
+        ],
+        "edges": [{
+            "source": "source",
+            "sourceHandle": "text",
+            "target": "target",
+            "targetHandle": "prompt",
+        }],
+    })
+
+    assert resp.status_code == 200
+    assert resp.json()["nodeCount"] == 2
+    assert resp.json()["edgeCount"] == 1
+    assert {node["params"].get("value") for node in main_module.cli_graph.nodes.values()} == {"new", None}

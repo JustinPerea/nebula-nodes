@@ -15,6 +15,17 @@ const AGENT_LOG_ENABLED_KEY = 'nebula:agentLog:enabled';
 const CANVAS_PERF_MODE_KEY = 'nebula:canvas:perfMode';
 const CANVAS_LOW_DETAIL_KEY = 'nebula:canvas:lowDetail';
 const ONBOARDED_KEY = 'nebula:onboarded';
+const PANEL_EDGE_MARGIN = 16;
+const RUN_HISTORY_WIDTH = 276;
+
+export function defaultRunHistoryPosition(viewportWidth?: number): { x: number; y: number } {
+  const width = viewportWidth
+    ?? (typeof window !== 'undefined' ? window.innerWidth : 1280);
+  return {
+    x: Math.max(PANEL_EDGE_MARGIN, width - RUN_HISTORY_WIDTH - PANEL_EDGE_MARGIN),
+    y: 60,
+  };
+}
 
 function loadOnboarded(): boolean {
   if (typeof window === 'undefined') return true; // SSR: treat as done (never auto-open)
@@ -39,7 +50,7 @@ const DEFAULT_PANELS = {
   // separate character/moodboard library panels. Opened from its launcher.
   assets: { visible: false, position: { x: 16, y: 360 } },
   // Run History panel — persistent record of graph/node/cluster runs.
-  history: { visible: false, position: { x: -340, y: 60 } },
+  history: { visible: false, position: { x: 16, y: 60 } },
 };
 
 function createDefaultPanels(): UIState['panels'] {
@@ -51,7 +62,7 @@ function createDefaultPanels(): UIState['panels'] {
     moodboard: { ...DEFAULT_PANELS.moodboard, position: { ...DEFAULT_PANELS.moodboard.position } },
     character: { ...DEFAULT_PANELS.character, position: { ...DEFAULT_PANELS.character.position } },
     assets: { ...DEFAULT_PANELS.assets, position: { ...DEFAULT_PANELS.assets.position } },
-    history: { ...DEFAULT_PANELS.history, position: { ...DEFAULT_PANELS.history.position } },
+    history: { ...DEFAULT_PANELS.history, position: defaultRunHistoryPosition() },
   };
 }
 
@@ -236,6 +247,7 @@ interface UIState {
   setPendingPreset: (preset: Preset | null) => void;
   consumePendingPreset: () => Preset | null;
   setCanvasTool: (tool: 'pan' | 'select') => void;
+  resetPanelLayout: () => void;
   resetPanelsForFreshCanvas: () => void;
 }
 
@@ -479,12 +491,23 @@ export const useUIStore = create<UIState>((set, get) => ({
     })),
 
   togglePanel: (panel) =>
-    set((state) => ({
-      panels: {
+    set((state) => {
+      const opening = !state.panels[panel].visible;
+      const panels = {
         ...state.panels,
-        [panel]: { ...state.panels[panel], visible: !state.panels[panel].visible },
-      },
-    })),
+        [panel]: { ...state.panels[panel], visible: opening },
+      };
+
+      // Nodes and Assets own the same left rail. Opening one closes the other
+      // so neither can obscure the other while both launchers claim active.
+      if (opening && panel === 'library') {
+        panels.assets = { ...panels.assets, visible: false };
+      } else if (opening && panel === 'assets') {
+        panels.library = { ...panels.library, visible: false };
+      }
+
+      return { panels };
+    }),
 
   setPanelPosition: (panel, position) =>
     set((state) => ({
@@ -612,6 +635,30 @@ export const useUIStore = create<UIState>((set, get) => ({
   },
 
   setCanvasTool: (tool) => set({ canvasTool: tool }),
+
+  resetPanelLayout: () => {
+    const defaults = createDefaultPanels();
+    set((state) => ({
+      chatResized: false,
+      panels: {
+        library: { ...state.panels.library, position: defaults.library.position },
+        inspector: { ...state.panels.inspector, position: defaults.inspector.position },
+        settings: { ...state.panels.settings, position: defaults.settings.position },
+        chat: {
+          ...state.panels.chat,
+          position: defaults.chat.position,
+          width: defaults.chat.width,
+          height: undefined,
+          left: undefined,
+          top: undefined,
+        },
+        moodboard: { ...state.panels.moodboard, position: defaults.moodboard.position },
+        character: { ...state.panels.character, position: defaults.character.position },
+        assets: { ...state.panels.assets, position: defaults.assets.position },
+        history: { ...state.panels.history, position: defaults.history.position },
+      },
+    }));
+  },
 
   resetPanelsForFreshCanvas: () => {
     set({

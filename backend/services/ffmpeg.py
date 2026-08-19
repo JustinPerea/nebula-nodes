@@ -72,6 +72,13 @@ async def ffprobe_video(source: Path | str) -> ProbeResult:
         stdout, stderr = await asyncio.wait_for(
             proc.communicate(), timeout=FFPROBE_TIMEOUT_SECONDS
         )
+    except asyncio.CancelledError:
+        # QC and editor executions are user-cancellable. Do not leave ffprobe
+        # running after the owning graph task has been stopped.
+        if proc.returncode is None:
+            proc.kill()
+            await proc.wait()
+        raise
     except asyncio.TimeoutError:
         # Kill the hung subprocess to free resources, then surface a clear
         # error so the execution worker is not blocked indefinitely (DoS).

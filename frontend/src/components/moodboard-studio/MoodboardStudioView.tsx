@@ -8,10 +8,9 @@ import {
   updateMoodboard,
 } from '../../lib/api';
 import { apiFetch, backendAssetUrlSync } from '../../lib/backend';
+import { NEW_MOODBOARD_SENTINEL } from '../../lib/studioSentinels';
 import type { Moodboard, MoodboardAnalysis, MoodboardImage } from '../../types';
 import '../../styles/moodboard-studio.css';
-
-export const NEW_MOODBOARD_SENTINEL = 'new';
 
 type Scope = 'global' | 'project';
 type SaveState = 'draft' | 'idle' | 'saving' | 'saved' | 'error';

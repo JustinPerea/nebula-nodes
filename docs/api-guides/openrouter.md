@@ -31,10 +31,7 @@ Notes that matter for using the node:
 **API-key setup.** OpenRouter needs one key:
 
 1. Create a key at <https://openrouter.ai/keys> (it looks like `sk-or-...`).
-2. Add it in Nebula's **Settings** panel under the **OpenRouter** field, or set it in your `.env`:
-   ```
-   OPENROUTER_API_KEY=sk-or-...
-   ```
+2. Open Nebula **Settings**, paste it into the **OpenRouter** field (`OPENROUTER_API_KEY`), and choose **Save Settings**. Nebula stores it under `apiKeys.OPENROUTER_API_KEY` in the project-root `settings.json`; no restart is required.
 3. The key is required both to **run** the node and to **load the model dropdown** — until it's set, the model picker can't populate.
 
 **Pick a model.** Select the node, open the **Inspector**, and choose a model from the searchable list. The node reconfigures its ports based on what that model can do. Then wire a Text source into `messages` and run.
@@ -94,7 +91,7 @@ What it covers:
 - **Node identity & wiring** — the single node `openrouter-universal`, its `messages` input, the dynamic `images` input / `image` output ports, and the `text` output.
 - **The model-picker contract** — `model` is required, comes from the live model list, and the chosen model's modalities drive the ports and the auto-set image flag (so an agent picks a model whose modalities match text vs. vision-in vs. image-out).
 - **Params** — `temperature` (0–2) and `max_tokens` (1–200000) apply to text only; image generation ignores them.
-- **Auth** — `OPENROUTER_API_KEY` must be set (Settings or `.env`) both to run *and* to load the model list; plus the real `X-OpenRouter-Title` header (not the legacy `X-Title`).
+- **Auth** — `OPENROUTER_API_KEY` must be set in Settings both to run *and* to load the model list; plus the real `X-OpenRouter-Title` header (not the legacy `X-Title`).
 - **Recipes** — the three canonical flows (text chat, vision Q&A, image generation) with real port names.
 - **Capability boundaries** — JSON mode (`response_format`) is now wired for text models, but no tool calling, no strict `json_schema`/grammar, no audio/PDF/video, no provider routing, no `image_config` controls, no web search.
 

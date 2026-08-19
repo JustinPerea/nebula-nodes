@@ -43,7 +43,7 @@ async def _cancel_call_args(config: AsyncPollConfig):
         make_coro()  # invoke the lambda -> calls the (patched) _cancel_async_poll
 
     with patch("execution.async_poll_runner.httpx.AsyncClient") as MockClient, \
-         patch("execution.async_poll_runner._cancel_async_poll") as mock_cancel, \
+         patch("execution.async_poll_runner._cancel_async_poll", new_callable=MagicMock) as mock_cancel, \
          patch("execution.async_poll_runner.schedule_detached_cancel", side_effect=fake_sched), \
          patch("execution.async_poll_runner.asyncio.sleep", new=AsyncMock(side_effect=asyncio.CancelledError())):
         mc = AsyncMock()

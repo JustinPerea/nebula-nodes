@@ -42,13 +42,7 @@ Notes for the curious:
 
 **Where the nodes live.** Open the node palette on the canvas and look under **3D Generation** (the `3d-gen` nodes: Multi-Image-to-3D, Retexture, Auto-Rig, Animate, Remesh, 3D Print) and **Image Generation** (the `image-gen` nodes: Text-to-Image, Image-to-Image). Drag a node onto the canvas, connect its inputs, and run.
 
-**API key setup.** Meshy needs one credential. Add it to your `.env` at the repo root:
-
-```
-MESHY_API_KEY=msy-your-key-here
-```
-
-Get the key from the Meshy dashboard (Settings → API). Keys look like `msy-…`. Meshy is credit-metered, so each run draws from your account balance. (There is also a test-mode key documented by Meshy for dry runs.)
+**API key setup.** Meshy needs one credential. Get the key from the Meshy dashboard (Settings → API). Open Nebula **Settings**, paste it into the **Meshy** field (`MESHY_API_KEY`), and choose **Save Settings**. Nebula stores it under `apiKeys.MESHY_API_KEY` in the project-root `settings.json`; no restart is required. Keys look like `msy-…`. Meshy is credit-metered, so each run draws from your account balance. (There is also a test-mode key documented by Meshy for dry runs.)
 
 **Recipe 1 — Photos to a printable trinket.**
 1. Drop **Meshy Multi-Image-to-3D** (`meshy-multi-image-to-3d`) and feed it 1–4 photos of the same object from different angles. Leave `should_texture` on; set `ai_model` to `latest`.

@@ -12,11 +12,12 @@ focused single-shot call, no tool-calling pressure.
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 from typing import AsyncIterator
 
 import httpx
+
+from services.settings import get_api_key
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 NARRATOR_MODEL = "moonshotai/kimi-k2.6"
@@ -25,14 +26,13 @@ HERMES_AUTH_PATH = Path.home() / ".hermes" / "auth.json"
 
 
 def _resolve_openrouter_key() -> str | None:
-    """Find an OpenRouter API key: env var first, then Hermes auth.json
-    `credential_pool.openrouter[*].access_token` as a fallback.
+    """Find an OpenRouter API key in Nebula Settings, then Hermes auth.json.
 
     The fallback exists so users who configured the key via Hermes don't need
-    to also export it into the uvicorn shell. Hermes caches the key in
-    auth.json on first run.
+    to duplicate it in Nebula Settings. Hermes caches the key in auth.json on
+    first run.
     """
-    key = os.environ.get("OPENROUTER_API_KEY")
+    key = get_api_key("OPENROUTER_API_KEY")
     if key:
         return key
     try:
@@ -59,7 +59,7 @@ _NARRATION_DIRECTIVE = (
 async def narrate_actions(actions: list[str]) -> AsyncIterator[str]:
     """Yield text deltas of Daedalus' narration of the given actions.
 
-    Fail-silent: if `OPENROUTER_API_KEY` is missing, SOUL.md is unreadable,
+    Fail-silent: if an OpenRouter credential is missing, SOUL.md is unreadable,
     or the HTTP call errors, this yields nothing. The caller (hermes_session)
     treats absence as 'leave the chat bubble empty' — same as pre-fix.
     """
@@ -67,7 +67,7 @@ async def narrate_actions(actions: list[str]) -> AsyncIterator[str]:
     api_key = _resolve_openrouter_key()
     if not api_key:
         print(
-            "[narrator] no OpenRouter key (env OPENROUTER_API_KEY or "
+            "[narrator] no OpenRouter key (Nebula Settings or "
             "~/.hermes/auth.json credential_pool.openrouter); skipping narration",
             flush=True,
         )

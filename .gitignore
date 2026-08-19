@@ -66,6 +66,10 @@ audit-*.png
 polish-*.png
 fix-verify.png
 
+# Local browser "Save Page As" audit artifacts
+/test.html
+/test_files/
+
 # HyperFrames demo compositions + local saved graphs (heavy, local render only)
 /hyperframes/
 /.hyperframes/

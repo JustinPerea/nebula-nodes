@@ -19,6 +19,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "executionMode": "manual",
     "batchSizeCap": 25,
     "exportFolder": None,
+    "zoomTelemetryEnabled": False,
 }
 
 
@@ -63,8 +64,12 @@ def get_api_key(provider_key_name: str | list[str]) -> str | None:
 # memory with a 5-minute TTL so repeated health polls don't hammer providers.
 
 PROVIDER_STATUS_NOT_CONFIGURED = "not_configured"
+PROVIDER_STATUS_CONFIGURED_UNVERIFIED = "configured_unverified"
 PROVIDER_STATUS_VALID = "valid"
 PROVIDER_STATUS_INVALID = "invalid"
+PROVIDER_STATUS_UNAUTHORIZED = "unauthorized"
+PROVIDER_STATUS_INSUFFICIENT_CREDITS = "insufficient_credits"
+PROVIDER_STATUS_RATE_LIMITED = "rate_limited"
 PROVIDER_STATUS_ERROR = "error"
 
 PROVIDER_CHECK_TTL_SECONDS = 300.0  # 5-minute cache TTL
@@ -97,7 +102,7 @@ PROVIDER_CHECKS: dict[str, ProviderCheck] = {
         lambda key: {"Authorization": f"Bearer {key}"},
     ),
     "Google": ProviderCheck(
-        ("GOOGLE_API_KEY", "GEMINI_API_KEY"),
+        ("GOOGLE_API_KEY",),
         "https://generativelanguage.googleapis.com/v1beta/models?pageSize=1",
         lambda key: {"x-goog-api-key": key},
     ),
@@ -128,6 +133,44 @@ PROVIDER_CHECKS: dict[str, ProviderCheck] = {
         ("ELEVENLABS_API_KEY",),
         "https://api.elevenlabs.io/v1/user",
         lambda key: {"xi-api-key": key},
+    ),
+    "Anthropic": ProviderCheck(
+        ("ANTHROPIC_API_KEY",),
+        "https://api.anthropic.com/v1/models?limit=1",
+        lambda key: {
+            "x-api-key": key,
+            "anthropic-version": "2023-06-01",
+        },
+    ),
+    "OpenRouter": ProviderCheck(
+        ("OPENROUTER_API_KEY",),
+        "https://openrouter.ai/api/v1/key",
+        lambda key: {"Authorization": f"Bearer {key}"},
+    ),
+    "Meshy": ProviderCheck(
+        ("MESHY_API_KEY",),
+        "https://api.meshy.ai/openapi/v1/balance",
+        lambda key: {"Authorization": f"Bearer {key}"},
+    ),
+    "MiniMax": ProviderCheck(
+        ("MINIMAX_API_KEY",),
+        "https://api.minimaxi.com/v1/models/MiniMax-M2.7",
+        lambda key: {"Authorization": f"Bearer {key}"},
+    ),
+    "QuiverAI": ProviderCheck(
+        ("QUIVER_API_KEY",),
+        "https://api.quiver.ai/v1/models",
+        lambda key: {"Authorization": f"Bearer {key}"},
+    ),
+    "Krea": ProviderCheck(
+        ("KREA_API_TOKEN",),
+        "https://api.krea.ai/styles",
+        lambda key: {"Authorization": f"Bearer {key}"},
+    ),
+    "Higgsfield": ProviderCheck(
+        ("HIGGSFIELD_API_KEY",),
+        "",
+        lambda key: {"Authorization": f"Key {key}"},
     ),
     "Nous": ProviderCheck(
         (),
@@ -215,6 +258,17 @@ async def _check_one(
             "last_checked": _utc_now_iso(),
         }
 
+    # Higgsfield documents authenticated generation and per-request polling,
+    # but no non-billable account/model probe. Presence is still useful health
+    # information; do not submit a generation merely to label the key valid.
+    if not resolved.url:
+        return {
+            "configured": True,
+            "status": PROVIDER_STATUS_CONFIGURED_UNVERIFIED,
+            "last_checked": _utc_now_iso(),
+            "detail": "configured; provider exposes no safe validation probe",
+        }
+
     try:
         resp = await client.get(resolved.url, headers=resolved.headers)
     except Exception as exc:  # timeout, DNS, connection refused, ...
@@ -231,9 +285,18 @@ async def _check_one(
     }
     if 200 <= resp.status_code < 300:
         result["status"] = PROVIDER_STATUS_VALID
-    elif resp.status_code in (401, 403):
+    elif resp.status_code == 401:
         result["status"] = PROVIDER_STATUS_INVALID
         result["detail"] = f"authentication rejected (HTTP {resp.status_code})"
+    elif resp.status_code == 403:
+        result["status"] = PROVIDER_STATUS_UNAUTHORIZED
+        result["detail"] = "credential is not authorized for the validation endpoint (HTTP 403)"
+    elif resp.status_code == 402:
+        result["status"] = PROVIDER_STATUS_INSUFFICIENT_CREDITS
+        result["detail"] = "credential accepted but the account has insufficient credits (HTTP 402)"
+    elif resp.status_code == 429:
+        result["status"] = PROVIDER_STATUS_RATE_LIMITED
+        result["detail"] = "validation request was rate limited (HTTP 429)"
     else:
         result["status"] = PROVIDER_STATUS_ERROR
         result["detail"] = f"unexpected response (HTTP {resp.status_code})"
@@ -248,7 +311,9 @@ async def validate_provider_keys(
     """Validate every known provider's API key, cached with a TTL.
 
     Returns {provider: {"configured": bool, "status": str, "last_checked": str}}
-    where status is one of not_configured / valid / invalid / error. Within the
+    where status distinguishes not configured, configured but safely
+    unverified, valid, invalid, unauthorized, insufficient-credit,
+    rate-limited, and provider/network errors. Within the
     TTL the cached dict is returned unchanged (identical last_checked); expired
     or forced entries are re-checked with one minimal API call per provider.
 

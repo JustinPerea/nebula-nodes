@@ -29,13 +29,7 @@
 
 **Where the nodes appear.** Open the node palette and look under the category each node belongs to: **Krea 2** and **Krea Style Train** sit under image-generation nodes; **Krea Style Search** sits under analyzer nodes. Drag one onto the canvas, then wire its input ports.
 
-**API-key setup.** All three nodes authenticate with a single token. In your `.env` (or wherever Nebula loads keys), set:
-
-```
-KREA_API_TOKEN=your_krea_api_key
-```
-
-Get the key from the Krea dashboard (Developers → API Keys & Billing). Nebula sends it as `Authorization: Bearer <token>` to `https://api.krea.ai`. If the key is missing you'll get a "KREA_API_TOKEN is required" error; if your Krea balance is depleted you'll see a `402` error surfaced from the API. (For backward-compat the handler also accepts `KREA_API_KEY`, but `KREA_API_TOKEN` is the documented name.)
+**API-key setup.** All three nodes authenticate with a single token. Get the key from the Krea dashboard (Developers → API Keys & Billing). Open Nebula **Settings**, paste it into the **Krea** field (`KREA_API_TOKEN`), and choose **Save Settings**. Nebula stores it under `apiKeys.KREA_API_TOKEN` in the project-root `settings.json`; no restart is required. Nebula sends it as `Authorization: Bearer <token>` to `https://api.krea.ai`. If the key is missing you'll get a "KREA_API_TOKEN is required" error; if your Krea balance is depleted you'll see a `402` error surfaced from the API. (For backward-compat the handler also accepts `KREA_API_KEY`, but `KREA_API_TOKEN` is the documented name.)
 
 **Recipe 1 — Straight Krea 2 text-to-image.**
 1. Drop a **Krea 2** (`krea-2-generate`) node.

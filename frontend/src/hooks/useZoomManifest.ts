@@ -1,6 +1,7 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useReactFlow } from '@xyflow/react';
 import { apiFetch } from '../lib/backend';
+import { getSettings } from '../lib/api';
 
 /**
  * Captures canvas-mutation events with each node's screen-space bounding
@@ -26,12 +27,34 @@ type AgentLogDetail = { source: string; message: string };
 
 export function useZoomManifest(): void {
   const { getNode } = useReactFlow();
+  const [enabled, setEnabled] = useState(false);
 
   useEffect(() => {
+    let active = true;
+    const refresh = () => {
+      getSettings()
+        .then((settings) => {
+          if (active) setEnabled(settings.zoomTelemetryEnabled === true);
+        })
+        .catch((error) => console.warn('[zoom-manifest] settings check failed:', error));
+    };
+    refresh();
+    window.addEventListener('nebula:settings-saved', refresh);
+    return () => {
+      active = false;
+      window.removeEventListener('nebula:settings-saved', refresh);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!enabled) return;
+    let ready = false;
     apiFetch('/api/zoom-manifest/init', { method: 'POST' })
+      .then(() => { ready = true; })
       .catch((e) => console.warn('[zoom-manifest] init failed:', e));
 
     function handler(e: Event) {
+      if (!ready) return;
       const detail = (e as CustomEvent<AgentLogDetail>).detail;
       if (!detail || !detail.message) return;
       const message = detail.message;
@@ -77,5 +100,5 @@ export function useZoomManifest(): void {
     return () => {
       window.removeEventListener('nebula:agent-log-entry', handler);
     };
-  }, [getNode]);
+  }, [enabled, getNode]);
 }

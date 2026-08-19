@@ -18,6 +18,7 @@ export type ExecutionEvent = (
   | { type: 'error'; nodeId: string; error: string; retryable: boolean; category?: ErrorCategory; friendly?: string }
   | { type: 'validationError'; errors: Array<{ nodeId: string; portId: string; message: string }> }
   | { type: 'graphComplete'; duration: number; nodesExecuted: number }
+  | { type: 'graphCancelled' }
   | { type: 'streamDelta'; nodeId: string; delta: string; accumulated: string }
   | { type: 'streamPartialImage'; nodeId: string; partialIndex: number; src: string; isFinal: boolean }
   | { type: 'streamPartialSvg'; nodeId: string; partialIndex: number; svg: string; isFinal: boolean }

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import copy
 from pathlib import Path
 from typing import Any
 
@@ -129,6 +130,25 @@ class CLIGraph:
         self.edges.clear()
         self._counter = 0
         self._maybe_persist()
+
+    def replace_with(self, candidate: "CLIGraph") -> None:
+        """Atomically adopt a fully validated candidate and persist once.
+
+        Building imports/clusters against a persistence-free candidate keeps a
+        malformed request from partially mutating either memory or disk.
+        """
+        self.nodes = copy.deepcopy(candidate.nodes)
+        self.edges = copy.deepcopy(candidate.edges)
+        self._counter = candidate._counter
+        self._maybe_persist()
+
+    def clone(self) -> "CLIGraph":
+        """Return a persistence-free deep copy suitable for staged mutation."""
+        candidate = CLIGraph()
+        candidate.nodes = copy.deepcopy(self.nodes)
+        candidate.edges = copy.deepcopy(self.edges)
+        candidate._counter = self._counter
+        return candidate
 
     # ------------------------------------------------------------------
     # Read / export

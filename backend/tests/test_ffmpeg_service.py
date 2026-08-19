@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -43,6 +43,32 @@ async def test_ffprobe_video_detects_vfr(tmp_path: Path) -> None:
         )
         result = await ffprobe_video(src)
     assert result.is_vfr is True
+
+
+@pytest.mark.asyncio
+async def test_ffprobe_video_kills_child_when_execution_is_cancelled() -> None:
+    started = asyncio.Event()
+    never = asyncio.Event()
+    fake_proc = AsyncMock()
+    fake_proc.returncode = None
+    fake_proc.kill = MagicMock()
+    fake_proc.wait = AsyncMock(return_value=None)
+
+    async def communicate():
+        started.set()
+        await never.wait()
+        return b"", b""
+
+    fake_proc.communicate = communicate
+    with patch("services.ffmpeg._spawn_subprocess", AsyncMock(return_value=fake_proc)):
+        task = asyncio.create_task(ffprobe_video("/tmp/input.mp4"))
+        await started.wait()
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+    fake_proc.kill.assert_called_once()
+    fake_proc.wait.assert_awaited_once()
 
 
 @pytest.mark.asyncio

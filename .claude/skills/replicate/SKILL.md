@@ -1,6 +1,6 @@
 ---
 name: replicate
-description: Replicate universal gateway — run any Replicate-hosted model (image, video, audio, 3D, or text) by typing its owner/name slug into one node, with one API token. Capabilities: text-to-image, image editing/upscaling, text/image-to-video, music/TTS/transcription, image/text-to-3D, and open LLM text — all via a single passthrough node that resolves the model version, creates an async prediction, and polls to completion. Activate when the user configures the `replicate-universal` node (display name "Replicate") or asks about Replicate in Nebula. Sourced from the official Replicate HTTP API reference (replicate.com/docs/reference/http) and the Nebula audit guide docs/api-guides/replicate.md on 2026-06-04 — node id, the single model_id param, async-poll execution, and output-type inference are cross-checked against backend/data/node_definitions.json and backend/handlers/replicate_universal.py.
+description: "Replicate universal gateway in Nebula for running image, video, audio, 3D, or text models by owner/name slug through replicate-universal. Use when configuring the node, mapping a model's dynamic inputs and outputs, or debugging Replicate authentication, version resolution, streaming, async prediction polling, and cancellation."
 ---
 
 # Replicate Skill
@@ -17,7 +17,7 @@ This is the ONLY Replicate node. There is no per-model node, no image/video/audi
 
 ## Universal rules
 
-1. **Auth — bearer token from one env var.** The handler reads `REPLICATE_API_TOKEN` and refuses to run without it (`raise ValueError("REPLICATE_API_TOKEN is required")`). Every HTTP call sends `Authorization: Bearer <REPLICATE_API_TOKEN>`. Get a token at <https://replicate.com/account/api-tokens> (format `r8_...`), set `REPLICATE_API_TOKEN=r8_...` in the backend's `.env` / shell env, then restart the backend so it loads the variable.
+1. **Auth — bearer token from Settings.** The handler reads `REPLICATE_API_TOKEN` and refuses to run without it (`raise ValueError("REPLICATE_API_TOKEN is required")`). Every HTTP call sends `Authorization: Bearer <REPLICATE_API_TOKEN>`. Get a token at <https://replicate.com/account/api-tokens> (format `r8_...`), enter it in Nebula **Settings → Replicate**, and save. It is persisted under `apiKeys.REPLICATE_API_TOKEN` in project-root `settings.json` and takes effect without a restart.
 2. **Base URL.** `https://api.replicate.com/v1`. Three routes are used: `GET /v1/models/{owner}/{name}` (resolve the version), `POST /v1/predictions` (create), `GET /v1/predictions/{id}` (poll).
 3. **Execution pattern — async-poll for media, SSE for text (confirmed from the handler).** No sync `Prefer: wait`, no webhooks. Text/LLM models that return `urls.stream` now stream token deltas live (auto-detected — see gotcha 6); everything else async-polls. The poll flow is:
    1. Split `model_id` on `/` into `owner` and `name`.

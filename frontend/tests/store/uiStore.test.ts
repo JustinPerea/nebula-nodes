@@ -1,7 +1,59 @@
 import { describe, expect, it } from 'vitest';
-import { useUIStore } from '../../src/store/uiStore';
+import { defaultRunHistoryPosition, useUIStore } from '../../src/store/uiStore';
 
 describe('uiStore', () => {
+  it('keeps the Run History default fully visible on narrow viewports', () => {
+    expect(defaultRunHistoryPosition(390)).toEqual({ x: 98, y: 60 });
+    expect(defaultRunHistoryPosition(250)).toEqual({ x: 16, y: 60 });
+  });
+
+  it('treats Nodes and Assets as one exclusive left rail', () => {
+    useUIStore.setState((state) => ({
+      panels: {
+        ...state.panels,
+        library: { ...state.panels.library, visible: true },
+        assets: { ...state.panels.assets, visible: false },
+      },
+    }));
+
+    useUIStore.getState().togglePanel('assets');
+    expect(useUIStore.getState().panels.assets.visible).toBe(true);
+    expect(useUIStore.getState().panels.library.visible).toBe(false);
+
+    useUIStore.getState().togglePanel('library');
+    expect(useUIStore.getState().panels.library.visible).toBe(true);
+    expect(useUIStore.getState().panels.assets.visible).toBe(false);
+  });
+
+  it('resets panel geometry without changing which panels are open', () => {
+    useUIStore.setState((state) => ({
+      chatResized: true,
+      panels: {
+        ...state.panels,
+        history: { visible: true, position: { x: -340, y: -100 } },
+        chat: {
+          ...state.panels.chat,
+          visible: true,
+          position: { x: 500, y: 500 },
+          width: 700,
+          height: 600,
+          left: 400,
+          top: 20,
+        },
+      },
+    }));
+
+    useUIStore.getState().resetPanelLayout();
+    const state = useUIStore.getState();
+    expect(state.panels.history.visible).toBe(true);
+    expect(state.panels.history.position.x).toBeGreaterThanOrEqual(16);
+    expect(state.panels.chat.visible).toBe(true);
+    expect(state.panels.chat.left).toBeUndefined();
+    expect(state.panels.chat.top).toBeUndefined();
+    expect(state.panels.chat.height).toBeUndefined();
+    expect(state.chatResized).toBe(false);
+  });
+
   it('resets transient panels for a fresh empty canvas', () => {
     useUIStore.setState((state) => ({
       selectedNodeId: 'n1',

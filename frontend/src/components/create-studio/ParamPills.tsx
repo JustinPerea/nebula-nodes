@@ -1,5 +1,6 @@
 import type { ModelNodeDefinition } from '../../types';
 import { deriveVisibleParams } from '../../lib/createParams';
+import { useUIStore } from '../../store/uiStore';
 
 interface ParamPillsProps {
   def: ModelNodeDefinition;
@@ -8,7 +9,8 @@ interface ParamPillsProps {
 }
 
 export function ParamPills({ def, params, onChange }: ParamPillsProps) {
-  const visible = deriveVisibleParams(def, params).filter(
+  const apiKeys = useUIStore((s) => s.settingsCache.apiKeys);
+  const visible = deriveVisibleParams(def, params, apiKeys).filter(
     (p) => p.type === 'enum' || p.type === 'integer' || p.type === 'float' || p.type === 'boolean',
   );
 

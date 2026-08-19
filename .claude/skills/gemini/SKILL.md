@@ -16,7 +16,7 @@ Nebula exposes Google's generative stack as **8 nodes**, all keyed on one `GOOGL
 
 ## Universal rules
 
-1. **Auth.** Every node sends the header `x-goog-api-key: <GOOGLE_API_KEY>` (not `Authorization: Bearer`). The env var is `GOOGLE_API_KEY`, read from `.env` at the repo root; restart the backend after adding it. One key covers all 8 nodes. `veo-3` *also* declares `FAL_KEY` because it can route through FAL — but the direct Google path documented here needs only `GOOGLE_API_KEY`.
+1. **Auth.** Every node sends the header `x-goog-api-key: <GOOGLE_API_KEY>` (not `Authorization: Bearer`). Enter the key in Nebula **Settings → Google** and save; it is persisted under `apiKeys.GOOGLE_API_KEY` in project-root `settings.json` and takes effect without a restart. One key covers all 8 nodes. `veo-3` *also* declares `FAL_KEY` because it can route through FAL — but the direct Google path documented here needs only `GOOGLE_API_KEY`.
 2. **Base URL.** `https://generativelanguage.googleapis.com/v1beta/models`. The endpoint verb is per-node: `:generateContent` (Nano Banana, Lyria, TTS, Style Reference), `:streamGenerateContent?alt=sse` (Gemini chat), `:predict` (Imagen), `:embedContent` (Embeddings), `:predictLongRunning` + operation polling (Veo).
 3. **Execution patterns (confirmed from handlers):**
    - **stream (SSE)** — `gemini-chat` only. Hits `:streamGenerateContent?alt=sse`; deltas read from `candidates.0.content.parts.0.text`; 60 s timeout.

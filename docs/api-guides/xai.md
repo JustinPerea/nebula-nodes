@@ -32,11 +32,8 @@ Output port: `video` (Video). Handler: `backend/handlers/grok_video.py`. Model s
 
 **API-key setup (one time).**
 1. Get an xAI API key from the xAI console (the same key works for video, image, voice, and chat).
-2. In the Nebula backend, add it to your `.env` file:
-   ```
-   XAI_API_KEY=xai-...
-   ```
-3. Restart the backend so it picks up the key. If the key is missing, the node fails with `XAI_API_KEY is required`.
+2. Open Nebula **Settings**, paste it into the **xAI** field (`XAI_API_KEY`), and choose **Save Settings**.
+3. Nebula stores it under `apiKeys.XAI_API_KEY` in the project-root `settings.json`; no restart is required. If the key is missing, the node fails with `XAI_API_KEY is required`.
 
 **Note on timing.** Video generation is asynchronous — Nebula submits the job and polls until it's `done` (this typically takes up to a few minutes). A progress bar advances on the node while it waits.
 

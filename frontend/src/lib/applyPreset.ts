@@ -9,7 +9,11 @@ export interface ComposerState {
 }
 
 /** Merge a preset into the current composer state. Pure. */
-export function applyPresetToComposer(preset: Preset, current: ComposerState): ComposerState {
+export function applyPresetToComposer(
+  preset: Preset,
+  current: ComposerState,
+  apiKeys: Record<string, string> = {},
+): ComposerState {
   // Prompt: append the fragment to whatever the user already typed.
   const fragment = preset.prompt.trim();
   const base = current.prompt.trim();
@@ -21,7 +25,7 @@ export function applyPresetToComposer(preset: Preset, current: ComposerState): C
   let baseParams = current.params;
   if (preset.modelId && NODE_DEFINITIONS[preset.modelId]) {
     modelId = preset.modelId;
-    baseParams = buildDefaultParamsForUi(NODE_DEFINITIONS[preset.modelId]);
+    baseParams = buildDefaultParamsForUi(NODE_DEFINITIONS[preset.modelId], apiKeys);
   }
 
   return { modelId, prompt, params: { ...baseParams, ...preset.params } };

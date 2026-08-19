@@ -191,19 +191,52 @@ def test_frontend_and_backend_registry_ids_match(definitions: dict[str, dict[str
     assert sorted(frontend_ids - set(definitions)) == []
 
 
-def test_env_example_covers_all_registry_api_keys(definitions: dict[str, dict[str, Any]]) -> None:
-    env_example = (REPO_ROOT / ".env.example").read_text()
+def _registry_api_keys(definitions: dict[str, dict[str, Any]]) -> set[str]:
     required_keys: set[str] = set()
-
     for definition in definitions.values():
         env_key = definition.get("envKeyName")
         if isinstance(env_key, str) and env_key:
             required_keys.add(env_key)
         elif isinstance(env_key, list):
             required_keys.update(key for key in env_key if key)
+    return required_keys
 
-    missing = sorted(key for key in required_keys if f"{key}=" not in env_example)
-    assert missing == []
+
+def test_settings_example_covers_all_registry_api_keys(definitions: dict[str, dict[str, Any]]) -> None:
+    settings_example = json.loads((REPO_ROOT / "settings.example.json").read_text())
+    example_keys = set(settings_example.get("apiKeys", {}))
+    assert example_keys == _registry_api_keys(definitions)
+
+
+def test_settings_ui_covers_all_registry_api_keys(definitions: dict[str, dict[str, Any]]) -> None:
+    settings_source = (REPO_ROOT / "frontend" / "src" / "components" / "panels" / "Settings.tsx").read_text()
+    ui_keys = set(re.findall(r"\{ key: '([A-Z0-9_]+)'", settings_source))
+    assert ui_keys == _registry_api_keys(definitions)
+
+
+def test_env_example_does_not_advertise_inert_provider_credentials(
+    definitions: dict[str, dict[str, Any]],
+) -> None:
+    env_example = (REPO_ROOT / ".env.example").read_text()
+    leaked = sorted(key for key in _registry_api_keys(definitions) if f"{key}=" in env_example)
+    assert leaked == []
+
+
+def test_provider_guides_use_nebula_settings_not_dotenv() -> None:
+    provider_docs = list((REPO_ROOT / "docs" / "api-guides").glob("*.md"))
+    for skill_root in (REPO_ROOT / ".agents" / "skills", REPO_ROOT / ".claude" / "skills"):
+        provider_docs.extend(skill_root.glob("*/SKILL.md"))
+    provider_docs = [
+        path for path in provider_docs
+        if path.name != "README.md" and path.parent.name != "nous" and path.stem != "nous"
+    ]
+
+    offenders = sorted(
+        str(path.relative_to(REPO_ROOT))
+        for path in provider_docs
+        if ".env" in path.read_text()
+    )
+    assert offenders == []
 
 
 def test_generated_model_reference_matches_committed_file() -> None:

@@ -3,7 +3,7 @@ name: Nebula Nodes
 slug: nebula-nodes
 status: active
 tagline: A multi-surface AI creation studio — node graph, Create view, Cinema, Character, and Moodboard — running locally on your own keys.
-description: AI creation studio built around a visual node graph. 168 built-in nodes across 15 provider families, four universal nodes that reach 300+ more (OpenRouter, Nous Portal, Replicate, FAL), seven specialized workspaces (Canvas, Create, Cinema Studio, Character Studio, Moodboard Studio, Video Editor, Remotion Editor), smart subgraph caching, real-time streaming, and an optional chat agent that builds graphs from natural language.
+description: AI creation studio built around a visual node graph. 172 built-in nodes across 15 provider families, four universal nodes that reach 300+ more (OpenRouter, Nous Portal, Replicate, FAL), seven specialized workspaces (Canvas, Create, Cinema Studio, Character Studio, Moodboard Studio, Video Editor, Remotion Editor), smart subgraph caching, real-time streaming, and an optional chat agent that builds graphs from natural language.
 stack:
   - Python 3.12+
   - FastAPI
@@ -15,7 +15,7 @@ stack:
   - WebSockets
   - Hermes Agent (optional)
 features:
-  - 168-node BYOK catalog across 15 provider families
+  - 172-node BYOK catalog across 15 provider families
   - Universal nodes for OpenRouter / Nous Portal / Replicate / FAL
   - Seven workspaces: Canvas, Create, Cinema Studio, Character Studio, Moodboard Studio, Video Editor, Remotion Editor
   - Smart subgraph caching with topological execution
@@ -23,7 +23,7 @@ features:
   - Create view with model picker, presets/styles library, results gallery, and per-result actions
   - Save / load graphs as JSON; configurable output directory; Reveal in Finder
   - Daedalus / Claude / Codex agent chat (builds and edits the graph from natural language)
-  - 1,900+ tests (1,475 backend + 389 frontend)
+  - 1,900+ tests (1,498 backend + 434 frontend)
 hero: docs/assets/banner.svg
 links:
   github: https://github.com/JustinPerea/nebula-nodes
@@ -62,7 +62,7 @@ https://github.com/user-attachments/assets/3a83187d-e186-4378-8a36-822b0a4055cb
 <div align="center">
 
   <a href="LICENSE"><img alt="LICENSE — AGPL-3.0" src="https://img.shields.io/badge/LICENSE-AGPL--3.0-6ba8d6?style=flat-square&labelColor=0a1612"></a>
-  <img alt="NODES — 168" src="https://img.shields.io/badge/NODES-168-f3e6c4?style=flat-square&labelColor=0a1612">
+  <img alt="NODES — 172" src="https://img.shields.io/badge/NODES-172-f3e6c4?style=flat-square&labelColor=0a1612">
   <img alt="PROVIDERS — 14 DIRECT · 300%2B VIA UNIVERSAL" src="https://img.shields.io/badge/PROVIDERS-14%20DIRECT%20%C2%B7%20300%2B%20VIA%20UNIVERSAL-f3e6c4?style=flat-square&labelColor=0a1612">
   <img alt="BYOK — BRING YOUR OWN KEYS" src="https://img.shields.io/badge/BYOK-BRING%20YOUR%20OWN%20KEYS-6ba8d6?style=flat-square&labelColor=0a1612">
   <br>
@@ -82,7 +82,7 @@ There's a cambrian explosion of image, video, 3D, audio, and text models happeni
 
 **Nebula Nodes is the multi-surface studio for that stitching.** At its core is a visual node graph — drop nodes, wire them up, hit Run. Wrapped around the graph are seven specialized workspaces: a Higgsfield-style **Create** view for prompt-driven generation with a presets library and results gallery; **Soul Cinema** for shot-based storyboard editing; **Nebula Character** for reusable character identities across shots; **Moodboard Studio** for style briefs that feed generators; plus a **Video Editor**, a **Remotion Editor**, and the node **Canvas** itself. An agent chat (Claude, Codex, or Daedalus) can build and edit the graph from natural language.
 
-168 built-in nodes across 15 provider families, plus four **universal nodes** that proxy 300+ more models on OpenRouter, Nous Portal, Replicate, and FAL. Smart caching skips unchanged subgraphs. Streaming nodes show text / video / audio / SVG previews live as they generate.
+172 built-in nodes across 15 provider families, plus four **universal nodes** that proxy 300+ more models on OpenRouter, Nous Portal, Replicate, and FAL. Smart caching skips unchanged subgraphs. Streaming nodes show text / video / audio / SVG previews live as they generate.
 
 Everything runs locally against your own API keys. No platform markup. No data leaving your machine to a middleman. No rate-limited hosted tier. You see the graph, you see the outputs, you own the keys.
 
@@ -97,7 +97,7 @@ SPEC // MULTI-SURFACE STUDIO
 
 | | |
 |---|---|
-| **168-NODE CATALOG** | Every major provider as a first-class node. Image, video, 3D, audio, and text generation across 15 provider families — see [CATALOG](#-catalog) for the breakdown. |
+| **172-NODE CATALOG** | Every major provider as a first-class node. Image, video, 3D, audio, and text generation across 15 provider families — see [CATALOG](#-catalog) for the breakdown. |
 | **7 WORKSPACES** | Canvas (node graph), Create, Cinema Studio, Character Studio, Moodboard Studio, Video Editor, Remotion Editor. See [WORKSPACES](#-workspaces). |
 | **CREATE VIEW** | Prompt → generate with a model picker, parameter pills, reference image slots, quantity/variations control, a results gallery (Session + Canvas tabs), a Presets/Styles library, and per-result actions: download, open-in-canvas, use-as-input, Reveal in Finder, Save to folder, delete. Generations author real nodes onto the canvas and persist. |
 | **UNIVERSAL NODES** | One node each for OpenRouter, Nous Portal, Replicate, and FAL. The universal node pattern means a single node reaches every model on that platform — 300+ models total, no per-model wrapper needed. |
@@ -113,12 +113,12 @@ SPEC // MULTI-SURFACE STUDIO
 | **OUTPUT METADATA** | Each graph execution writes a manifest.json recording model, prompt, params, and timestamp per output. Queryable via GET /api/outputs/{path}/meta. |
 | **UPLOAD SAFETY** | Failed uploads now clean up orphaned files and roll back graph mutations. Video probe failures delete the file; broadcast failures remove the created node. |
 | **VIDEO DURATION CHECK** | New analyzer node that probes generated video with ffprobe and reports requested vs landed duration with match/delta. |
-| **PROVIDER KEY VALIDATION** | GET /api/health/providers endpoint validates API keys for all 9 providers with 5-minute TTL cache. |
+| **PROVIDER KEY VALIDATION** | `GET /api/health/providers` reports all 16 auth families (15 Settings credentials plus Nous OAuth), using non-billable authenticated reads where providers expose them and a 5-minute TTL cache. |
 | **PYTHONPATH SANITIZATION** | Automatic stripping of incompatible Python paths at startup to prevent pydantic_core ABI mismatches. |
 | **UNDO THAT STICKS** | 50-step history. Outputs survive undo, so experiment freely. |
 | **SAVE / LOAD** | Graphs serialize to JSON. Outputs written to disk and served via `/api/outputs`. Configurable output directory. Reveal in Finder. |
 | **AGENT CHAT** | Daedalus (Hermes Agent), Claude, or Codex can build and edit graphs from natural language. Sees the live canvas; iterates with you. See [AGENT](#-agent--daedalus). |
-| **AUDIT DISCIPLINE** | Every API-backed node is verified against canonical provider docs. 1,900+ tests (1,475 backend + 389 frontend). Live-smoke gate for high-risk handler paths. See [QUALITY](#-quality--audit-discipline). |
+| **AUDIT DISCIPLINE** | Every API-backed node is verified against canonical provider docs. 1,900+ tests (1,498 backend + 434 frontend). Live-smoke gate for high-risk handler paths. See [QUALITY](#-quality--audit-discipline). |
 
 ## ◆ WORKSPACES
 
@@ -139,7 +139,7 @@ SPEC // 7 SURFACES · ONE STUDIO
 ## ◆ CATALOG
 
 ```
-SPEC // 168 NODES · 15 PROVIDER FAMILIES · 12 CATEGORIES
+SPEC // 172 NODES · 15 PROVIDER FAMILIES · 12 CATEGORIES
 ```
 
 Full per-node reference (params, endpoints, exec patterns, audit status) lives in [`docs/MODEL_REFERENCE.md`](docs/MODEL_REFERENCE.md), generated from the registry.
@@ -148,17 +148,18 @@ Prefer a guided tour? [`docs/api-guides/`](docs/api-guides/) has a **user-facing
 
 | Category | Count | Highlights |
 |---|---:|---|
-| **Video generation** | 28 | Veo 3.1 (direct + FAL), Runway Gen-4.5 / Seedance 2 / HappyHorse / Aleph 2 / Act-Two, Sora 2 (API sunsets 2026-09-24), Kling v2.1 / v3 / Omni 3, Wan 2.6 (T2V / I2V / R2V), Luma Ray 2 (T2V / I2V / Modify), LTX 2 / 2.3, Seedance 1.5 / 2 (T2V / I2V / R2V / Fast), MiniMax Hailuo / S2V, Higgsfield, Grok Imagine, PixVerse V4.5 |
-| **Image generation** | 34 | GPT Image 1 / 1.5 / 2 (direct + FAL, gen + edit), Ideogram 4 (gen + inpaint / prompt-edit / remix / replace-background / transparent / character + custom-model training; direct API + FAL dual-route), Imagen 4, FLUX 1.1 Ultra / Schnell / 2 Pro / Kontext / Fill (Inpaint), Nano Banana (Gemini), Recraft V4 (raster + SVG), Seedream 4.5, Krea 2 / Style Train, Meshy T2I / I2I, Quiver Arrow, Fast SDXL, Runway Image |
-| **Utility** | 22 | Text / Image / Audio / Video inputs, Mask Painter (paint inpaint masks in-app), Combine Text, Gemini Embeddings, Image Iterator / Text Iterator, Array Builder / Selector, Image Compare, Preview, Reroute, Router, Sticky Note, Style Reference, Krea Style / Image Style Ref / Moodboard, Remotion Composition, Video Edit |
-| **Audio generation** | 18 | ElevenLabs TTS / STT / SFX / STS / Isolation / Dubbing, Lyria 3, Gemini TTS, Stable Audio 2.5, ACE-Step, MMAudio V2, Demucs, OpenAI TTS / Whisper STT / Translate, Runway TTS / STS / Dubbing |
+| **Video generation** | 42 | Veo 3.1 (direct + FAL), Runway Gen-4.5 / Seedance 2 / HappyHorse / Aleph 2 / Act-Two, Sora 2 (API sunsets 2026-09-24), Kling v2.1 / v3 / Omni 3, Wan 2.6 (T2V / I2V / R2V), Luma Ray 2 (T2V / I2V / Modify), LTX 2 / 2.3, Seedance 1.5 / 2 (T2V / I2V / R2V / Fast), MiniMax Hailuo / S2V, Higgsfield, Grok Imagine, PixVerse V4.5 |
+| **Image generation** | 39 | GPT Image 1 / 1.5 / 2 (direct + FAL, gen + edit), Ideogram 4 (gen + inpaint / prompt-edit / remix / replace-background / transparent / character + custom-model training; direct API + FAL dual-route), Imagen 4, FLUX 1.1 Ultra / Schnell / 2 Pro / Kontext / Fill (Inpaint), Nano Banana (Gemini), Recraft V4 (raster + SVG), Seedream 4.5, Krea 2 / Style Train, Meshy T2I / I2I, Quiver Arrow, Fast SDXL, Runway Image |
+| **Utility** | 25 | Text / Image / Audio / Video inputs, Mask Painter (paint inpaint masks in-app), Combine Text, Gemini Embeddings, Image Iterator / Text Iterator, Array Builder / Selector, Image Compare, Preview, Reroute, Router, Sticky Note, Style Reference, Krea Style / Image Style Ref / Moodboard, Remotion Composition, Video Edit |
+| **Audio generation** | 20 | ElevenLabs TTS / STT / SFX / STS / Isolation / Dubbing, Lyria 3, Gemini TTS, Stable Audio 2.5, ACE-Step, MMAudio V2, Demucs, OpenAI TTS / Whisper STT / Translate, Runway TTS / STS / Dubbing |
 | **3D generation** | 10 | Meshy 6 Text/Image to 3D (direct + FAL), Meshy Multi-Image / Retexture / Rigging / Animate / Remesh / 3D Print, Hunyuan3D V3 Text/Image to 3D |
 | **Universal** | 4 | OpenRouter, **Nous Portal**, Replicate, FAL — each reaches its full catalog. See [UNIVERSAL NODES](#-universal-nodes). |
-| **Transform** | 11 | Quiver Arrow Vectorize (raster → SVG), Remove Background, Ideogram Reframe (outpaint) / Upscale / Remove BG / Layerize Text, SeedVR2 Upscale, Clarity Upscaler, Runway Upscale (Magnific), SeedVR2 Video Upscale, SVG Rasterize |
+| **Transform** | 15 | Quiver Arrow Vectorize (raster → SVG), Remove Background, Ideogram Reframe (outpaint) / Upscale / Remove BG / Layerize Text, SeedVR2 Upscale, Clarity Upscaler, Runway Upscale (Magnific), SeedVR2 Video Upscale, SVG Rasterize |
 | **Text generation** | 4 | Claude (Fable 5 / Opus 4.8), OpenAI Chat (GPT-5.5 / 5.4), Gemini (3.5 Flash), Ideogram Magic Prompt |
 | **Cinematic** | 3 | Cinema Color, Cinema Look, Cinema Scene |
 | **Character** | 1 | Character (reusable identity node for consistent references) |
-| **Analyzer** | 2 | Krea Style Search, Ideogram Describe (image → caption / v4 JSON prompt) |
+| **Analyzer** | 8 | Krea Style Search, Ideogram Describe, Video Duration Check, and four Video QC analyzers for loop safety, frame drift, compositing, and camera geometry |
+| **Moodboard** | 1 | Moodboard (reusable visual direction bundle) |
 
 ### A few worth calling out
 
@@ -183,7 +184,7 @@ Most nodes wrap one specific model. Universal nodes wrap a *platform's entire ca
 | **REPLICATE** | Replicate | Any versioned model on Replicate; ports built dynamically from the model's JSON schema | `REPLICATE_API_TOKEN` |
 | **FAL** | FAL | Any FAL endpoint via the submit/poll async pattern; covers anything not already in the static catalog | `FAL_KEY` |
 
-The universal node pattern is the multiplier — the static catalog is 102 nodes, but the *reachable model count* is several hundred more. Every time OpenRouter / Nous Portal / Replicate / FAL adds a model, it's already supported.
+The universal node pattern is the multiplier — the static catalog is 172 nodes, but the *reachable model count* is several hundred more. Every time OpenRouter / Nous Portal / Replicate / FAL adds a model, it's already supported.
 
 ## ◆ AGENT &nbsp;&nbsp;//&nbsp;&nbsp; DAEDALUS
 
@@ -243,7 +244,7 @@ SPEC // CONTRACT-VERIFIED HANDLERS
 Every API-backed node has a contract that gets enforced at multiple layers:
 
 - **Structural audit per provider family.** Each handler is verified against the canonical provider docs (or the official SDK source) and recorded under [`docs/model-providers/<provider>/`](docs/model-providers/). Notes carry `verified:` and `stale_after_days:` frontmatter — a 14-day refresh cycle for fast-moving providers, 30 for stable.
-- **1,900+ tests (1,475 backend + 389 frontend).** Run with `cd backend && python -m pytest` (backend) and `cd frontend && npm run lint && npm run build` (frontend). Body-shape tests pin every direct-provider handler's request envelope against the documented spec.
+- **1,900+ tests (1,498 backend + 434 frontend).** Run with `cd backend && python -m pytest` (backend) and `cd frontend && npm run lint && npm run build` (frontend). Body-shape tests pin every direct-provider handler's request envelope against the documented spec.
 - **Generated MODEL_REFERENCE.md.** [`docs/MODEL_REFERENCE.md`](docs/MODEL_REFERENCE.md) is generated from `backend/data/node_definitions.json`. `scripts/check-node-contracts.mjs --check` fails CI on drift.
 - **Live-smoke gate.** Structural tests can pin *wrong* behavior. A separate live-smoke gate verifies request/response shapes against the real API. Live-smoke has already caught: PCM-as-WAV header bug, Google `responseFormat` enum mismatch, FAL `duration` integer-vs-string, Runway ratio enum reverted from SDK schema to live API value.
 - **One-shot smoke scripts.** Reusable per-family smoke scripts under [`backend/scripts/`](backend/scripts/) — e.g. `smoke_elevenlabs_sts.py` exercises the multipart `voice_settings` JSON path end-to-end.
@@ -300,27 +301,12 @@ SPEC // BYOK — KEYS LIVE ON YOUR DISK
 <details>
 <summary><strong>Via settings.json</strong> — manual alternative, edit at the project root</summary>
 
-```json
-{
-  "apiKeys": {
-    "OPENAI_API_KEY": "your-key-here",
-    "ANTHROPIC_API_KEY": "your-key-here",
-    "GOOGLE_API_KEY": "your-key-here",
-    "RUNWAY_API_KEY": "your-key-here",
-    "FAL_KEY": "your-key-here",
-    "OPENROUTER_API_KEY": "your-key-here",
-    "REPLICATE_API_TOKEN": "your-key-here",
-    "ELEVENLABS_API_KEY": "your-key-here",
-    "MESHY_API_KEY": "your-key-here",
-    "QUIVER_API_KEY": "your-key-here",
-    "MINIMAX_API_KEY": "your-key-here",
-    "HIGGSFIELD_API_KEY": "your-key-here",
-    "XAI_API_KEY": "your-key-here"
-  }
-}
+```bash
+cp settings.example.json settings.json
 ```
 
-`settings.json` is in `.gitignore` by default — it will not be committed.
+Fill only the keys you use. `settings.example.json` is the checked-in complete
+schema; `settings.json` is in `.gitignore` by default and will not be committed.
 
 </details>
 

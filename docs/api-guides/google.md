@@ -48,13 +48,7 @@ Notes that matter when wiring these up:
 
 **Where the nodes appear.** Open the node palette on the canvas and look under the category that matches the media type: **text-gen** (Gemini), **image-gen** (Imagen 4, Nano Banana), **video-gen** (Veo 3.1), **audio-gen** (Lyria 3, Gemini TTS), and **utility** (Gemini Embeddings, Style Reference). Drag a node onto the canvas, type into its prompt/text field (or wire an input into its port), set the params in the node's panel, and run.
 
-**API-key setup.** Every Google node reads one environment variable, `GOOGLE_API_KEY`. Create a key in [Google AI Studio](https://aistudio.google.com/apikey), then add it to your `.env` file at the repo root:
-
-```
-GOOGLE_API_KEY=your_key_here
-```
-
-Restart the backend so it picks up the new value. One key covers all eight nodes — Gemini, Imagen, Nano Banana, Veo, Lyria, TTS, and Embeddings.
+**API-key setup.** Create a key in [Google AI Studio](https://aistudio.google.com/apikey). Open Nebula **Settings**, paste it into the **Google** field (`GOOGLE_API_KEY`), and choose **Save Settings**. Nebula stores it under `apiKeys.GOOGLE_API_KEY` in the project-root `settings.json`; no restart is required. One key covers all eight nodes — Gemini, Imagen, Nano Banana, Veo, Lyria, TTS, and Embeddings.
 
 **Example pipelines:**
 

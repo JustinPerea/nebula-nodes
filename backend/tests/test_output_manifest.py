@@ -35,6 +35,7 @@ from services.output import (
     OUTPUT_ROOT,
     ManifestError,
     find_output_record,
+    get_run_dir,
     read_manifest,
     write_manifest,
 )
@@ -79,10 +80,12 @@ def _fresh_run_dir(label: str = "run") -> Path:
     return run_dir
 
 
-def _file_handler(run_dir: Path, payload: bytes = PNG_BYTES):
-    """Fake node handler that writes one file per node into *run_dir*."""
+def _file_handler(observed_dirs: list[Path], payload: bytes = PNG_BYTES):
+    """Fake handler that records the execution-bound directory it receives."""
 
     async def handler(node, inputs, api_keys):
+        run_dir = get_run_dir()
+        observed_dirs.append(run_dir)
         path = run_dir / f"{node.id}.png"
         path.write_bytes(payload)
         return {"image": {"type": "Image", "value": str(path)}}
@@ -215,6 +218,41 @@ class TestWriteManifest:
         data = json.loads(raw)
         assert data["outputs"][0]["params"] == params
 
+    def test_redacts_private_secrets_and_embedded_data(self, tmp_path: Path) -> None:
+        mask = "data:image/png;base64," + ("A" * 2048)
+        write_manifest(
+            run_id="run-redacted",
+            started_at=datetime.now(timezone.utc),
+            completed_at=datetime.now(timezone.utc),
+            outputs=[{
+                "node_id": "n1",
+                "node_type": "mask-painter",
+                "model": None,
+                "endpoint": None,
+                "prompt": "safe prompt",
+                "params": {
+                    "_maskData": mask,
+                    "api_key": "sk-do-not-store",
+                    "max_tokens": 4096,
+                    "nested": {"token": "secret", "image": mask, "seed": 42},
+                },
+                "output_path": "mask.png",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }],
+            output_dir=tmp_path,
+        )
+
+        raw = (tmp_path / "manifest.json").read_text(encoding="utf-8")
+        record = json.loads(raw)["outputs"][0]
+        assert "_maskData" not in record["params"]
+        assert record["params"]["api_key"] == "[redacted: secret]"
+        assert record["params"]["max_tokens"] == 4096
+        assert record["params"]["nested"]["token"] == "[redacted: secret]"
+        assert record["params"]["nested"]["image"] == "[redacted: embedded data]"
+        assert record["params"]["nested"]["seed"] == 42
+        assert "sk-do-not-store" not in raw
+        assert mask not in raw
+
     def test_absolute_output_path_is_relativized(self, tmp_path: Path) -> None:
         """A record handed an absolute path inside output_dir is stored
         relative — manifests never embed absolute host paths."""
@@ -339,7 +377,7 @@ class TestReadManifest:
 class TestEngineManifest:
     @pytest.mark.asyncio
     async def test_single_node_run_writes_manifest(self) -> None:
-        run_dir = _fresh_run_dir("engine-single")
+        observed_dirs: list[Path] = []
         emit = _EventCollector()
         node = _node(
             "gen1",
@@ -349,11 +387,12 @@ class TestEngineManifest:
             nodes=[node],
             edges=[],
             api_keys={},
-            handler_registry={"fake-image-gen": _file_handler(run_dir)},
+            handler_registry={"fake-image-gen": _file_handler(observed_dirs)},
             emit=emit,
             run_id="run-single-1",
         )
 
+        run_dir = observed_dirs[0]
         data = _read_manifest(run_dir)
         assert data["run_id"] == "run-single-1"
         started = datetime.fromisoformat(data["started_at"])
@@ -379,7 +418,7 @@ class TestEngineManifest:
 
     @pytest.mark.asyncio
     async def test_multi_node_run_has_one_record_per_output_node(self) -> None:
-        run_dir = _fresh_run_dir("engine-multi")
+        observed_dirs: list[Path] = []
         emit = _EventCollector()
         nodes = [
             _node("first", params={"prompt": "one"}),
@@ -390,11 +429,13 @@ class TestEngineManifest:
             nodes=nodes,
             edges=edges,
             api_keys={},
-            handler_registry={"fake-image-gen": _file_handler(run_dir)},
+            handler_registry={"fake-image-gen": _file_handler(observed_dirs)},
             emit=emit,
             run_id="run-multi-1",
         )
 
+        assert len(set(observed_dirs)) == 1
+        run_dir = observed_dirs[0]
         data = _read_manifest(run_dir)
         by_node = {r["node_id"]: r for r in data["outputs"]}
         assert set(by_node) == {"first", "second"}
@@ -427,10 +468,12 @@ class TestEngineManifest:
     async def test_manifest_written_after_core_loop_not_during(self) -> None:
         """The handler (i.e. the core execution loop) must never observe a
         manifest on disk — writing happens strictly after completion."""
-        run_dir = _fresh_run_dir("engine-after")
+        observed_dirs: list[Path] = []
         observed_during: list[bool] = []
 
         async def handler(node, inputs, api_keys):
+            run_dir = get_run_dir()
+            observed_dirs.append(run_dir)
             observed_during.append((run_dir / "manifest.json").exists())
             path = run_dir / f"{node.id}.png"
             path.write_bytes(PNG_BYTES)
@@ -446,11 +489,13 @@ class TestEngineManifest:
             run_id="run-after-1",
         )
         assert observed_during == [False, False]
+        assert len(set(observed_dirs)) == 1
+        run_dir = observed_dirs[0]
         assert (run_dir / "manifest.json").is_file()
 
     @pytest.mark.asyncio
     async def test_manifest_write_failure_does_not_corrupt_outputs(self) -> None:
-        run_dir = _fresh_run_dir("engine-fail")
+        observed_dirs: list[Path] = []
         emit = _EventCollector()
         with patch(
             "execution.engine.write_manifest",
@@ -460,12 +505,13 @@ class TestEngineManifest:
                 nodes=[_node("gen1")],
                 edges=[],
                 api_keys={},
-                handler_registry={"fake-image-gen": _file_handler(run_dir)},
+                handler_registry={"fake-image-gen": _file_handler(observed_dirs)},
                 emit=emit,
                 run_id="run-fail-1",
             )
         # Execution completed normally and the generated output is intact.
         assert emit.of_type(GraphCompleteEvent), "run must still complete"
+        run_dir = observed_dirs[0]
         out = run_dir / "gen1.png"
         assert out.is_file()
         assert out.read_bytes() == PNG_BYTES
@@ -475,9 +521,11 @@ class TestEngineManifest:
     async def test_manifest_written_when_some_nodes_fail(self) -> None:
         """Defined behavior for partial failure: the manifest records only
         outputs that actually exist — no false success claims."""
-        run_dir = _fresh_run_dir("engine-partial")
+        observed_dirs: list[Path] = []
 
         async def ok_handler(node, inputs, api_keys):
+            run_dir = get_run_dir()
+            observed_dirs.append(run_dir)
             path = run_dir / f"{node.id}.png"
             path.write_bytes(PNG_BYTES)
             return {"image": {"type": "Image", "value": str(path)}}
@@ -494,23 +542,49 @@ class TestEngineManifest:
             emit=emit,
             run_id="run-partial-1",
         )
+        run_dir = observed_dirs[0]
         data = _read_manifest(run_dir)
         assert [r["node_id"] for r in data["outputs"]] == ["ok"]
         assert (run_dir / "ok.png").is_file()
 
     @pytest.mark.asyncio
     async def test_run_id_generated_when_not_provided(self) -> None:
-        run_dir = _fresh_run_dir("engine-norunid")
+        observed_dirs: list[Path] = []
         emit = _EventCollector()
         await execute_graph(
             nodes=[_node("gen1")],
             edges=[],
             api_keys={},
-            handler_registry={"fake-image-gen": _file_handler(run_dir)},
+            handler_registry={"fake-image-gen": _file_handler(observed_dirs)},
             emit=emit,
         )
-        data = _read_manifest(run_dir)
+        data = _read_manifest(observed_dirs[0])
         assert data["run_id"], "run_id must be non-empty even when not provided"
+
+    @pytest.mark.asyncio
+    async def test_same_run_reuses_directory_and_same_second_runs_do_not_collide(self) -> None:
+        import asyncio
+
+        observed_a: list[Path] = []
+        observed_b: list[Path] = []
+
+        async def run(run_id: str, observed: list[Path]) -> None:
+            await execute_graph(
+                nodes=[_node("one"), _node("two")],
+                edges=[_edge("one", "two")],
+                api_keys={},
+                handler_registry={"fake-image-gen": _file_handler(observed)},
+                emit=_EventCollector(),
+                run_id=run_id,
+            )
+
+        await asyncio.gather(run("same-second-a", observed_a), run("same-second-b", observed_b))
+
+        assert len(set(observed_a)) == 1
+        assert len(set(observed_b)) == 1
+        assert observed_a[0] != observed_b[0]
+        assert (observed_a[0] / "manifest.json").is_file()
+        assert (observed_b[0] / "manifest.json").is_file()
 
 
 # ---------------------------------------------------------------------------
@@ -573,6 +647,24 @@ class TestOutputMetaEndpoint:
         # no absolute host paths anywhere in the response
         assert str(OUTPUT_ROOT) not in json.dumps(body)
         assert not Path(body["output_path"]).is_absolute()
+
+    def test_meta_cannot_reexpose_redacted_manifest_params(self, client: TestClient) -> None:
+        run_dir = _fresh_run_dir("meta-redacted")
+        embedded = "data:image/png;base64," + ("A" * 1024)
+        _seed_listed_output(run_dir, {
+            "params": {
+                "_maskData": embedded,
+                "apiToken": "never-return-this",
+                "seed": 7,
+            },
+        })
+
+        resp = client.get(f"/api/outputs/{run_dir.name}/img.png/meta")
+        assert resp.status_code == 200
+        params = resp.json()["params"]
+        assert params == {"apiToken": "[redacted: secret]", "seed": 7}
+        assert embedded not in resp.text
+        assert "never-return-this" not in resp.text
 
     def test_meta_missing_output_file_is_404(self, client: TestClient) -> None:
         run_dir = _fresh_run_dir("meta-nofile")

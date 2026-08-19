@@ -14,7 +14,7 @@ description: Runway API in Nebula — image-to-video & text-to-video (Gen-4.5, S
 
 ## Universal rules
 
-1. **Auth & env var.** Single key for all eight nodes: `RUNWAY_API_KEY` (env key name is exactly `RUNWAY_API_KEY`, read from the repo-root `.env`). Sent as header `Authorization: Bearer <RUNWAY_API_KEY>`. Get the key from the Runway developer dashboard at dev.runwayml.com.
+1. **Auth & Settings.** Single key for all eight nodes: `RUNWAY_API_KEY`. Enter it in Nebula **Settings → Runway** and save; it is persisted under `apiKeys.RUNWAY_API_KEY` in project-root `settings.json` and takes effect without a restart. Sent as header `Authorization: Bearer <RUNWAY_API_KEY>`. Get the key from the Runway developer dashboard at dev.runwayml.com.
 2. **Base URL.** `https://api.dev.runwayml.com/v1` (note: `api.dev.runwayml.com` is the production API gateway — not a staging host). Constant `RUNWAY_API_BASE` in the handler.
 3. **Required headers** (set by the handler — do not re-add): `Authorization: Bearer …`, `Content-Type: application/json`, `X-Runway-Version: 2024-11-06`.
 4. **Execution pattern = async-poll** for all eight nodes. The handler POSTs the submit body, gets back `{"id": "<task_id>"}`, then polls `GET /v1/tasks/{id}` every **2 s**, up to **300 polls** (~10 min cap), until `status` is `SUCCEEDED` (success) or `FAILED` (failure). There is no sync or streaming path. Expect a video/character node to take a minute or more before its output port lights up.

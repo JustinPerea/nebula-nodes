@@ -37,11 +37,8 @@ The credit cost is shown right in the model dropdown so you can see the price be
 **API-key setup (one-time).**
 
 1. Create an API key in the QuiverAI dashboard (app.quiver.ai → API keys).
-2. In the repo root, open (or create) your `.env` file and add:
-   ```
-   QUIVER_API_KEY=your_key_here
-   ```
-3. Restart the backend so it picks up the key. Every Quiver node reads `QUIVER_API_KEY`; without it the node fails fast with "QUIVER_API_KEY is required."
+2. Open Nebula **Settings**, paste it into the **Quiver** field (`QUIVER_API_KEY`), and choose **Save Settings**.
+3. Nebula stores it under `apiKeys.QUIVER_API_KEY` in the project-root `settings.json`; no restart is required. Every Quiver node uses this key; without it the node fails fast with "QUIVER_API_KEY is required."
 
 Billing is QuiverAI's prepaid **credit pool** (Free tier ≈ 200 credits/week, paid tiers more). Each call's exact cost comes back from QuiverAI and is what the dropdown labels quote. If you run out, the node surfaces "Insufficient QuiverAI credits — top up or upgrade plan."
 

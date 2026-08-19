@@ -12,6 +12,26 @@ export interface ExecutionStartResult {
   nodeCount?: number;
   errorCount?: number;
   errors?: ExecutionValidationError[];
+  runId?: string;
+}
+
+export interface ExecutionCancellationResult {
+  runId: string;
+  status: 'cancelling' | 'cancelled' | 'completed' | 'failed';
+}
+
+export async function cancelExecution(runId: string): Promise<ExecutionCancellationResult> {
+  const response = await apiFetch(`/api/executions/${encodeURIComponent(runId)}`, {
+    method: 'DELETE',
+  });
+  if (!response.ok) {
+    let detail = '';
+    try { detail = (await response.json()).detail ?? ''; } catch {
+      /* Non-JSON responses use the status fallback. */
+    }
+    throw new Error(detail || `Cancel failed: ${response.status} ${response.statusText}`);
+  }
+  return response.json();
 }
 
 export async function executeGraph(

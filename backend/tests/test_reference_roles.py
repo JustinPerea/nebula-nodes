@@ -230,10 +230,11 @@ def test_role_additions_are_additive_only(
     baseline = _baseline_definitions()
     added_keys = {"role", "weight"}
 
-    assert set(baseline) == set(definitions), (
-        f"node set changed vs baseline: "
-        f"added={sorted(set(definitions) - set(baseline))}, "
-        f"removed={sorted(set(baseline) - set(definitions))}"
+    # This feature contract protects every node that existed at its baseline;
+    # later first-class nodes are allowed as long as none of the baseline nodes
+    # disappear or mutate outside role/weight additions.
+    assert set(baseline) <= set(definitions), (
+        f"baseline nodes removed: {sorted(set(baseline) - set(definitions))}"
     )
 
     for node_id in baseline:

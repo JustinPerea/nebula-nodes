@@ -1,5 +1,104 @@
 # Implementation Notes
 
+## 2026-08-17 - Video QC Suite continuation
+
+Factory completed the preceding reference-role mission, then the user approved a
+separate Video QC Suite mission. Factory persisted an architecture and a
+63-assertion draft contract, but hit its weekly limit before creating features
+or implementation code. The live baseline is therefore 168 nodes with no
+`qc-*` entries; the new work starts from the accepted design, not from a partial
+implementation.
+
+Decisions:
+- Continuation QC found that the original metrics module imported and used
+  OpenCV even in `heuristic` mode. Keep OpenCV/skimage pinned for the full
+  analyzer suite, but make heuristic metrics independently runnable with
+  NumPy/Pillow fallbacks and return an actionable dependency error only when
+  the caller explicitly selects `opencv` mode.
+- Apply the 45-second vision deadline around the actual request coroutine, not
+  only to the internally-created `httpx` client. Reused or test-injected clients
+  can otherwise disable timeouts and violate the bounded-provider-work contract.
+- Current Google first-party documentation caps inline multimodal requests at
+  20 MB. Twelve noisy 960px PNG samples could cross that boundary after base64
+  expansion, so advisory inputs are normalized in memory to 768px JPEGs and
+  bounded to 13 images/16 MiB of encoded image data before request construction.
+- Add a real `video-input` -> QC graph execution test for every analyzer. Direct
+  handler tests prove the algorithms, while the engine test proves registry
+  lookup, input propagation, run-directory binding, outputs, and terminal event.
+- QC cancellation can arrive during metadata probing as well as frame
+  extraction or a provider request. Extend the shared ffprobe wrapper's existing
+  timeout cleanup to kill and await its child on `CancelledError`, matching the
+  ffmpeg cleanup path and preventing an orphaned probe after Canvas Stop.
+- Keep one custom `VideoQcNode` frontend component for all four analyzers. They
+  have the same annotated-Image plus JSON-Text result surface; four near-copy
+  components would add drift without adding capability.
+- Treat the checked-in `docs/video-qc-validation-contract.md` as the finalized
+  contract. It preserves the accepted modes and outputs while replacing the
+  Factory draft's implementation-detail assertions with observable behavior.
+- Resolve videos and optional reference images locally. Raw remote URLs are
+  rejected before ffmpeg, OpenCV, Pillow, or provider request construction so
+  the QC surface cannot reintroduce the SSRF fixed in `23f8333`.
+- Heuristic and OpenCV modes are deterministic, keyless local analysis.
+  Vision-LLM mode chooses the first configured provider in the accepted order
+  Anthropic, OpenAI, Google and uses a bounded non-streaming request. Tests mock
+  every provider; no paid live call is part of this milestone.
+- Vision responses are advisory data. Each handler validates/coerces returned
+  JSON into its own bounded report schema and falls back to an explicit
+  unparsed assessment instead of trusting arbitrary provider fields.
+- Camera `lens_distortion_estimate` is a measured straight-line deviation proxy,
+  not a calibrated physical lens coefficient. A single generated clip without
+  calibration imagery cannot truthfully recover optical distortion parameters.
+- Preserve the four pre-existing untracked handoff/report/browser-save items
+  byte-for-byte. The tracked friction source is `docs/flora-gap-audit.md`; add a
+  closure entry there without editing the untracked audit report.
+- Boundary extraction must seek one nominal frame before the container duration,
+  not one millisecond before it. Low-FPS clips often report duration one frame
+  beyond their final decodable PTS; focused synthetic-video tests caught the
+  missing final sample before the suite was integrated.
+- The existing backend virtualenv lacks the newly declared OpenCV/skimage
+  packages. Validation uses the already-provisioned project Conda interpreter;
+  requirements remain pinned so a fresh backend install receives them.
+- The node-contract checker predated the existing CameraRig and ReferenceSet
+  typed ports and failed before evaluating the QC definitions. Its valid-type
+  set now mirrors the frontend `PortDataType` union; no node behavior changed.
+- The reference-role additive-only regression test compared the entire live
+  node set to its historical baseline, which made any future node addition fail.
+  It now protects the historical nodes as a subset and still performs the same
+  field-by-field additive-role check on every baseline node.
+- Security review tightened the 60-second extraction ceiling to cover the whole
+  sample batch. A per-frame timeout would have permitted a pathological 12-frame
+  input to occupy a worker for up to 12 minutes despite the sample-count cap.
+- Factory's proposed OpenCV 4.12 pin requires NumPy below 2.3 on Python 3.9+,
+  which conflicts with this repo's NumPy 2.4.4 pin. Use headless OpenCV 4.13.0.92
+  instead: its official wheel metadata accepts NumPy 2.x without that upper
+  bound, it is over six months old, and it preserves the server-safe headless
+  package choice.
+- Frontend gates initially appeared to hang because 26,634 files in the ignored
+  `frontend/node_modules` tree were macOS dataless placeholders. Restoring the
+  exact lockfile tree with offline `npm ci` made lint, build, and all 434 tests
+  complete normally; no dependency version or lockfile changed.
+
+Validation (2026-08-18 continuation):
+- The expanded focused QC/cancellation group passed 54 tests. The four QC nodes
+  each ran through the real `video-input` -> registry -> execution-engine path,
+  and the dependency-light project venv passed all four heuristic engine cases.
+- The complete backend suite passed 1,528 tests with QC included under the
+  available Python 3.12 environment (OpenCV 4.12.0, skimage 0.26.0, NumPy
+  2.4.4). The two existing async-poll `AsyncMock` resource warnings remain.
+- Frontend passed 440 tests across 55 files, TypeScript/production build, and
+  lint with zero errors. The existing ReferenceSet hook warning, Lottie `eval`
+  warning, and large-chunk warning remain unchanged.
+- All 172 definitions passed the node-contract gate; generated model reference,
+  changed-Python compilation, diff whitespace, startup import, registry wiring,
+  and credential-prefix scans passed. Current first-party Anthropic, OpenAI,
+  and Google references confirm the three vision model IDs/request surfaces.
+- A final `pip install -r backend/requirements.txt` attempt in the stale local
+  `.venv` was blocked by managed DNS before pip could resolve even an existing
+  dependency. No package was partially installed. The exact pinned OpenCV
+  4.13 wheel therefore remains an external install proof ceiling; PyPI confirms
+  a Python 3.12-compatible macOS ARM64 wheel, while runtime behavior is covered
+  locally by OpenCV 4.12 and heuristic mode no longer depends on it.
+
 ## 2026-07-23 - Ideogram seven-node contract and route-safety audit
 
 The seven existing Ideogram nodes remain dual-route. The direct path keeps V4
@@ -625,3 +724,71 @@ A 16-agent adversarial review (3 dimensions → per-finding verify) surfaced 13 
 - **Run isolation:** replay always receives a new UUID and records `sourceRunId` plus `replayAction`. Scoped stale completion events from the source run cannot close the new replay. Matching node IDs on the current canvas still show execution state, but the request payload comes exclusively from saved data.
 - **Actions:** complete/cancelled rows show `Rerun`, failed rows show `Retry failed`, and the existing header clear action now removes both in-memory and persisted history. Replay actions are disabled while another global Canvas run owns the execution lock.
 - **Carried utility harness timeout resolved:** the browser smoke graph still used nonexistent `/tmp/image-a.png` and `/tmp/image-b.png` placeholders. The newer image-input source guard correctly failed those nodes, leaving downstream image utilities idle while the harness only reported a generic timeout. The harness now uses tracked image/video fixtures, prints node state on timeout, fits all seeded nodes into view, and executes through `graphStore.executeGraph()` instead of bypassing the store with a raw fetch. That live-checks run-ID correlation plus history snapshot open/close, mutates the canvas and reruns the saved 17-node/14-edge snapshot, then reloads the page and confirms both completed records, replay lineage, and original `Alpha` params persist. Nested array outputs retain backend filesystem refs while top-level image outputs are rewritten to `/api/outputs/...`, so assertions compare output identities by filename across that intentional representation boundary.
+
+### 2026-08-18 — Seven-defect adversarial reliability pass
+
+- **Ownership boundary:** `backend/main.py` and `frontend/src/store/graphStore.ts` already contained user-owned QC node mappings. All edits were applied around those mappings and the original diff was preserved.
+- **Run-scoped output decision:** handlers keep the stable `get_run_dir()` API, but the engine now binds one collision-proof directory through a `ContextVar`. Async child tasks inherit it, avoiding a risky rewrite across every provider handler. Standalone callers still receive a unique directory per call.
+- **Manifest boundary:** manifests are provenance, not request archives. Private keys are omitted, credential-like keys are redacted, embedded data/binary values are replaced, and collections/strings/depth are bounded at `write_manifest()` so direct callers and `/meta` share the same safety boundary.
+- **Cache policy:** only Nebula-owned local artifacts are existence-gated. Remote/data/blob values and external absolute paths are not treated as cache-owned files; `/api/outputs/...` and absolute paths beneath `OUTPUT_ROOT` must still exist or the entry is evicted.
+- **Graph ingress decision:** imports and additive clusters mutate a persistence-free `CLIGraph` candidate. Node definitions, param shapes/coercion, references, handles, duplicates, and cycles are validated before one `replace_with()` call persists. Invalid requests neither broadcast nor alter the live graph. The file-import UI also keeps its current canvas until the backend returns the validated replacement.
+- **Cancellation contract:** frontend-started graph tasks are retained by run ID. `DELETE /api/executions/{runId}` is idempotent, parent cancellation cancels and awaits engine node tasks (allowing existing provider `CancelledError` hooks to fire), `graphCancelled` closes the matching UI history, and both backend and frontend suppress late post-cancel events.
+- **Telemetry decision:** demo zoom telemetry is a persisted, explicit opt-in (`zoomTelemetryEnabled`, default false). Both backend endpoints enforce the gate. Enabled sessions use unique archive-eligible directories under configured `OUTPUT_ROOT`; the old top-level hard-coded files are no longer created.
+- **Adversarial findings fixed during the pass:** macOS `/var` vs `/private/var` resolution initially excluded valid run files from manifests; the new output directory suffix initially fell outside the archive regex; and the frontend import flow initially cleared local state before backend validation. Each now has a regression or direct contract check.
+- **Final verification:** focused combined backend regressions passed, then the available full backend suite passed `1510` tests with the two pre-existing `test_async_poll_runner` AsyncMock warnings. Full collection still stops at the user-owned Video QC suite because this checkout's `backend/.venv` lacks `cv2`; no dependency installation was attempted. Frontend passed `440` tests across `55` files, TypeScript/production build, lint with zero errors, and the `172`-definition node contract. `git diff --check`, changed-Python compilation, a credential-pattern scan, and explicit QC-mapping preservation checks passed. Existing non-gating warnings remain: one `ReferenceSetNode` hook warning, Lottie's direct `eval`, and large Vite chunks.
+
+### 2026-08-18 — Complete audit refresh and live UI pass
+
+- **Live-browser boundary:** the sandbox denied a standalone Python/uvicorn listener, so a temporary Vite-owned ASGI bridge was used only to render the real frontend against the real FastAPI app. It used isolated graph/output roots, was removed after capture, and the original Vite proxy configuration was restored before the final build.
+- **Interaction classification:** the browser automation layer could move the pointer but could not carry Nebula's custom `application/nebula-node` HTML drag payload. That automated drop failure is not classified as a product defect; pointer graph authoring remains a manual-browser ceiling.
+- **New UI defects:** Run History defaults to `x=-340px` and Reset does not recover it; Nodes and Assets can be simultaneously active with overlapping left-column geometry; Create concatenates FAL and direct params, giving Veo 3.1 duplicate `seed` controls and a React duplicate-key error; node-library definitions are unfocusable drag-only `<div>` elements, so keyboard-only users cannot author a graph.
+- **QC environment:** `backend/.venv` still lacks declared OpenCV/scikit-image packages, but the existing Miniconda Python 3.12 environment has them. The actual full backend suite therefore ran successfully there: `1528 passed` with the same two pre-existing AsyncMock warnings. The focused reliability/QC/cancellation slice passed `88` tests.
+- **Final verification:** frontend `440` tests, lint (zero errors, one existing hook warning), production build, the `172`-definition node contract, backend `1528` tests, focused backend `88` tests, and `git diff --check` passed. No provider generation or account-consuming agent turn was submitted.
+
+### 2026-08-18 — Live UI defect closure and adversarial follow-up
+
+- **Run History geometry:** the fixed `-340px` default was replaced with a viewport-derived right-edge position. Opening the panel or resizing the viewport repairs stale coordinates, drag movement is clamped with a reachable header, and Reset now restores every panel's geometry while preserving which panels are open.
+- **Left-rail ownership:** Nodes and Assets share the same coordinates by design, so opening either now closes the other. This keeps launcher state truthful and avoids introducing a second layout system for only two panels.
+- **Create provider route:** Create now follows the Inspector contract: use `directParams` only when `directKeyName` has a configured value, otherwise use `falParams`, always combined with shared params. A final key-based de-duplication boundary prevents malformed catalog data from generating ambiguous controls. Model changes and preset-driven model changes rebuild defaults from the same selected route.
+- **Node authoring accessibility:** node definitions are native buttons without removing HTML drag support. Click, tap, or native keyboard activation adds at the current viewport center; the follow-up click event from a double-click is ignored to preserve the old gesture without adding two nodes. Collapsed Slava categories are `aria-hidden` and their items leave the tab order.
+- **Live proof:** Run History rendered at `x=988`, width `276`, right `1264` in a 1280px viewport and stayed there after Reset. Opening Assets removed Nodes from the rendered/accessibility tree. Clicking the focusable Text Input button created one Canvas node. Veo 3.1 rendered exactly one Seed input and emitted no duplicate-key console error. The browser-control harness focused the node button with Enter but did not synthesize the browser's native button click; the native keyboard activation contract is therefore pinned by the component test rather than overstated as live harness proof.
+- **Environment boundary:** Vite served the real frontend, but this managed sandbox denied the FastAPI TCP listener. The UI checks above are local frontend behaviors and ran in the actual application; backend-dependent asset contents displayed the expected discovery error. No provider request, paid generation, settings write, or user graph persistence mutation was made.
+- **Verification:** focused UI tests passed `19/19`; full frontend passed `447` tests across `56` files; full backend passed `1528` tests with the two existing AsyncMock warnings; the 172-definition node contract and TypeScript build passed. Lint first rejected an unscoped focus-ring rule, then Fast Refresh rejected an exported helper in the component module. The skin rule was scoped, the geometry helper moved to `lib/panelPosition.ts`, and lint/build/diff checks passed on rerun.
+
+### 2026-08-18 — Audit follow-up: credential truth, diagnostics, and build budgets
+
+- **One credential source:** provider keys remain exclusive to project-root `settings.json`. All user-facing provider guides, README setup, `settings.example.json`, and the writable `.claude/skills` mirror now point to Settings and explicitly say no restart is required. The optional project `.env` is loaded only for process/path overrides; the Daedalus narrator was changed from `os.environ[OPENROUTER_API_KEY]` to Nebula Settings with Hermes auth as its existing fallback. Contract tests pin exact equality among the 15 catalog keys, Settings fields, settings example, and provider health keys, and prove process environment is not a provider-key fallback.
+- **Provider-health policy:** expanded the roster from nine to all 15 Settings credentials plus Nous OAuth. Use documented, non-billable authenticated reads. Never submit generation as a health probe: Higgsfield has no identified safe read and therefore reports `configured_unverified`. Preserve diagnostic truth by separating 401 rejection, 403 authorization, 402 credit exhaustion, 429 rate limiting, and transport/provider errors.
+- **Startup payload:** alternate workspaces are route-lazy. Character and Moodboard draft sentinels moved into a small shared module so Assets no longer statically imports both full studios and defeats the split. Remotion, timeline, Lottie, and React Three packages use explicit deferred chunks. Three.js remains one indivisible ~717 kB lazy module, so Vite's generic threshold is calibrated to 750 kB while a stricter post-build gate caps the actual initial entry at 512 kB raw / 160 kB gzip. Current entry: 472,049 raw / 138,242 gzip, down from ~3.53 MB / 912 KB gzip.
+- **Lottie tradeoff:** both Vite preview and Remotion export alias `lottie-web` to `lottie_light.js`. That removes runtime code generation and the direct-eval build warning, but expression-authored Lottie animations are intentionally unsupported. The build gate scans every emitted JS asset for `eval(` and `new Function(`; 21/21 are clean.
+- **Hook and test hygiene:** `ReferenceSetNode` now computes its fallback params within the memo and depends on stable node data. The async-poll cancellation tests patch the async cancel function with `MagicMock`, eliminating the two unawaited-coroutine warnings without changing runtime cancellation.
+- **Venv repair without network:** outbound package resolution stayed unavailable, but complete Python 3.12 distributions existed locally. Repacked their installed files from `RECORD`/`WHEEL` metadata into temporary wheels and installed them into `backend/.venv`, keeping the venv self-contained instead of adding a global `site-packages` path. The first OpenCV 4.12 candidate imported but `pip check` correctly rejected it against NumPy 2.4.4 (`numpy<2.3`); it was replaced with the exact declared OpenCV 4.13.0.92 distribution from the local ComfyUI environment. scikit-image 0.26.0 and its missing SciPy/imageio/tifffile/lazy-loader/networkx dependencies came from the local base Python 3.12 environment. Final unrestricted proof: both key imports resolve inside `backend/.venv`, `pip check` is clean, all 25 QC tests pass, and the live-workspace full suite is 1,544/1,544.
+
+### 2026-08-18 — Release sequencing audit
+
+- Validate the 32 committed-but-unpushed commits from an isolated `git archive`
+  before publishing them. That snapshot passed all 1,463 backend tests (the
+  baseline comparison test needed read-only access to the original Git object
+  database), all 434 frontend tests, lint, and the production build.
+- Withhold the fast-forward push because the committed node-contract checker
+  predates the committed `CameraRig` and `ReferenceSet` port types. The checker
+  fails on those two definitions; its required type-set correction currently
+  lives in the uncommitted follow-up batch.
+- Preserve the local browser-save evidence while preventing accidental staging.
+  Root-only `/test.html` and `/test_files/` ignore rules cover the 9.3 MB saved
+  page and generated images without deleting or moving user artifacts.
+- The first full follow-up gate caught a second cross-layer mismatch: provider
+  credentials intentionally moved from `.env.example` to
+  `settings.example.json`, but `scripts/check-node-contracts.mjs` still required
+  all 15 keys in `.env.example`. The checker now enforces exact Settings-example
+  coverage and rejects provider credentials advertised in `.env.example`,
+  matching the existing Python contract tests.
+- A clean prospective candidate overlaid every intended tracked/untracked change
+  plus the eight corrected `.agents` mirrors on `HEAD`. It passed 1,526 backend
+  tests, 447 frontend tests, lint, production build, the initial-bundle/eval
+  budget, the 172-definition contract, generated-reference parity, Python/Node
+  syntax checks, and validation of all 19 affected provider skill folders. The
+  live workspace's larger 1,544 collection includes 18 duplicate tests from four
+  ignored Finder `* 2.py` files; those are not part of the release candidate.
+- **Managed blocker resolved:** a later unrestricted session applied the eight canonical `.agents` Settings corrections and the OpenRouter/Replicate YAML-description fixes. The OpenAI canonical skill intentionally retains `.agents/skills/gpt-image-2` links rather than copying `.claude`-specific paths. All 22 provider skill folders across both trees validate with `quick_validate.py`, strict provider-guide parity passes, and the live backend suite is fully green.
+- **Browser ceiling:** `vite preview` was attempted for a real lazy-chunk browser smoke and failed before launch with `listen EPERM` on `127.0.0.1:4173`; no UI state was used and no screenshot was claimed. Frontend proof is lint + production build + 447 tests; built-chunk runtime remains environment-gated.

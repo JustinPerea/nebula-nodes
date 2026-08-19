@@ -1092,6 +1092,22 @@ def get_handler_registry(
             from handlers.duration_check import handle_duration_check
             return await handle_duration_check(node, inputs, api_keys, emit=emit)
 
+        async def _qc_loop_safety_handler(node, inputs, api_keys):
+            from handlers.qc_loop_safety import handle_qc_loop_safety
+            return await handle_qc_loop_safety(node, inputs, api_keys, emit=emit)
+
+        async def _qc_frame_review_handler(node, inputs, api_keys):
+            from handlers.qc_frame_review import handle_qc_frame_review
+            return await handle_qc_frame_review(node, inputs, api_keys, emit=emit)
+
+        async def _qc_composited_look_handler(node, inputs, api_keys):
+            from handlers.qc_composited_look import handle_qc_composited_look
+            return await handle_qc_composited_look(node, inputs, api_keys, emit=emit)
+
+        async def _qc_camera_geometry_handler(node, inputs, api_keys):
+            from handlers.qc_camera_geometry import handle_qc_camera_geometry
+            return await handle_qc_camera_geometry(node, inputs, api_keys, emit=emit)
+
         async def _camera_rig_handler(
             node: GraphNode,
             inputs: dict[str, PortValueDict],
@@ -1118,6 +1134,10 @@ def get_handler_registry(
         registry["video-edit"] = _video_edit_handler
         registry["remotion-node"] = _remotion_node_handler
         registry["video-duration-check"] = _duration_check_handler
+        registry["qc-loop-safety"] = _qc_loop_safety_handler
+        registry["qc-frame-review"] = _qc_frame_review_handler
+        registry["qc-composited-look"] = _qc_composited_look_handler
+        registry["qc-camera-geometry"] = _qc_camera_geometry_handler
         registry["camera-rig"] = _camera_rig_handler
         registry["reference-set"] = _reference_set_handler
 

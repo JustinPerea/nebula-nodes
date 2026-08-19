@@ -103,6 +103,69 @@ describe('graphStore run-history lifecycle', () => {
     await p;
   });
 
+  it('cancelExecution asks the backend before closing the run', async () => {
+    vi.spyOn(api, 'executeGraph').mockResolvedValue({ status: 'started' } as never);
+    const cancel = vi.spyOn(api, 'cancelExecution').mockResolvedValue({
+      runId: 'placeholder',
+      status: 'cancelled',
+    });
+
+    await useGraphStore.getState().executeGraph();
+    const runId = useGraphStore.getState().runHistory[0].id;
+    await useGraphStore.getState().cancelExecution();
+
+    expect(cancel).toHaveBeenCalledWith(runId);
+    expect(useGraphStore.getState().isExecuting).toBe(false);
+    expect(useGraphStore.getState().runHistory[0].status).toBe('cancelled');
+  });
+
+  it('keeps the run active when backend cancellation fails', async () => {
+    vi.spyOn(api, 'executeGraph').mockResolvedValue({ status: 'started' } as never);
+    vi.spyOn(api, 'cancelExecution').mockRejectedValue(new Error('backend unavailable'));
+
+    await useGraphStore.getState().executeGraph();
+    await useGraphStore.getState().cancelExecution();
+
+    expect(useGraphStore.getState().isExecuting).toBe(true);
+    expect(useGraphStore.getState().runHistory[0].status).toBe('running');
+  });
+
+  it('graphCancelled closes the matching run and ignores its late events', async () => {
+    const execute = vi.spyOn(api, 'executeGraph').mockResolvedValue({ status: 'started' } as never);
+    useGraphStore.setState({
+      nodes: [{
+        id: 'n1',
+        type: 'model-node',
+        position: { x: 0, y: 0 },
+        data: { label: 'Node', definitionId: 'text-input', params: {}, state: 'idle', outputs: {} },
+      }],
+      edges: [],
+    });
+    await useGraphStore.getState().executeGraph();
+    const runId = execute.mock.calls[0][2] as string;
+
+    useGraphStore.getState().handleExecutionEvent({ type: 'graphCancelled', runId });
+    expect(useGraphStore.getState().runHistory[0].status).toBe('cancelled');
+    expect(useGraphStore.getState().isExecuting).toBe(false);
+
+    useGraphStore.getState().handleExecutionEvent({
+      type: 'executed',
+      runId,
+      nodeId: 'n1',
+      outputs: { text: { type: 'Text', value: 'too late' } },
+    });
+    useGraphStore.getState().handleExecutionEvent({
+      type: 'graphComplete',
+      runId,
+      duration: 1,
+      nodesExecuted: 1,
+    });
+    const node = useGraphStore.getState().nodes[0];
+    expect(node.data.state).toBe('idle');
+    expect(node.data.outputs).toEqual({});
+    expect(useGraphStore.getState().runHistory[0].status).toBe('cancelled');
+  });
+
   it('ignores a stale scoped completion after reset and a newer run starts', async () => {
     const spy = vi.spyOn(api, 'executeGraph').mockResolvedValue({ status: 'started' } as never);
 

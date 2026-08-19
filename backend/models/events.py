@@ -72,6 +72,10 @@ class GraphCompleteEvent(RunScopedEvent):
     nodes_executed: int
 
 
+class GraphCancelledEvent(RunScopedEvent):
+    type: Literal["graph_cancelled"] = "graph_cancelled"
+
+
 class StreamDeltaEvent(RunScopedEvent):
     type: Literal["stream_delta"] = "stream_delta"
     node_id: str
@@ -103,6 +107,7 @@ ExecutionEvent = Union[
     ErrorEvent,
     ValidationErrorEvent,
     GraphCompleteEvent,
+    GraphCancelledEvent,
     StreamDeltaEvent,
     StreamPartialImageEvent,
     StreamPartialSvgEvent,

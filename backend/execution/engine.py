@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from collections import Counter, deque
+from collections import deque
 from datetime import datetime, timezone
 from graphlib import TopologicalSorter, CycleError as _GraphlibCycleError
 from pathlib import Path
@@ -13,7 +13,14 @@ from uuid import uuid4
 from models.graph import GraphNode, GraphEdge, PortValueDict
 from services.cache import ExecutionCache
 from services.image_input import is_remote_or_data_uri
-from services.output import OUTPUT_ROOT, get_run_dir, resolve_output_ref, write_manifest
+from services.output import (
+    OUTPUT_ROOT,
+    create_run_dir,
+    execution_run_dir,
+    get_run_dir,
+    resolve_output_ref,
+    write_manifest,
+)
 from services.document_extract import extract_text
 from services.provider_capabilities import gemini_omni_capability_error
 from execution.error_classifier import classify_error
@@ -496,7 +503,10 @@ async def execute_graph(
     event serialized from this async task, including child node tasks.
     """
 
+    manifest_run_id = run_id or str(uuid4())
     token = execution_run_id.set(run_id)
+    run_dir = create_run_dir(manifest_run_id)
+    run_dir_token = execution_run_dir.set(run_dir)
     try:
         await _execute_graph(
             nodes=nodes,
@@ -506,9 +516,11 @@ async def execute_graph(
             emit=emit,
             cache=cache,
             max_parallel_nodes=max_parallel_nodes,
-            run_id=run_id,
+            run_id=manifest_run_id,
+            run_dir=run_dir,
         )
     finally:
+        execution_run_dir.reset(run_dir_token)
         execution_run_id.reset(token)
 
 
@@ -521,7 +533,9 @@ async def _execute_graph(
     cache: ExecutionCache | None = None,
     max_parallel_nodes: int = 4,
     run_id: str | None = None,
+    run_dir: Path | None = None,
 ) -> None:
+    run_dir = run_dir or get_run_dir()
     start_time = time.monotonic()
     started_at = datetime.now(timezone.utc)  # wall clock, for the run manifest
     nodes_executed = 0
@@ -870,48 +884,57 @@ async def _execute_graph(
             )
             return nid, False, 0
 
-    await queue_initial_ready_nodes()
     running: dict[asyncio.Task[tuple[str, bool, int]], str] = {}
+    try:
+        await queue_initial_ready_nodes()
 
-    while ready or running:
-        while ready and len(running) < concurrency:
-            nid = ready.popleft()
-            if nid in failed_nodes:
-                continue
-            task = asyncio.create_task(run_node(nid))
-            running[task] = nid
-
-        if not running:
-            break
-
-        done, _pending = await asyncio.wait(
-            running.keys(),
-            return_when=asyncio.FIRST_COMPLETED,
-        )
-
-        for task in done:
-            running.pop(task, None)
-            nid, succeeded, executed_count = task.result()
-            nodes_executed += executed_count
-
-            if not succeeded:
-                failed_nodes.add(nid)
-                continue
-
-            newly_ready: list[str] = []
-            for edge in outgoing_edges[nid]:
-                if edge.target in failed_nodes:
+        while ready or running:
+            while ready and len(running) < concurrency:
+                nid = ready.popleft()
+                if nid in failed_nodes:
                     continue
-                remaining_dependencies[edge.target] -= 1
-                if remaining_dependencies[edge.target] == 0:
-                    newly_ready.append(edge.target)
+                task = asyncio.create_task(run_node(nid))
+                running[task] = nid
 
-            for target in sorted(newly_ready, key=lambda node_id: order_index[node_id]):
-                await queue_ready_node(target)
-                ready.append(target)
+            if not running:
+                break
+
+            done, _pending = await asyncio.wait(
+                running.keys(),
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+
+            for task in done:
+                running.pop(task, None)
+                nid, succeeded, executed_count = task.result()
+                nodes_executed += executed_count
+
+                if not succeeded:
+                    failed_nodes.add(nid)
+                    continue
+
+                newly_ready: list[str] = []
+                for edge in outgoing_edges[nid]:
+                    if edge.target in failed_nodes:
+                        continue
+                    remaining_dependencies[edge.target] -= 1
+                    if remaining_dependencies[edge.target] == 0:
+                        newly_ready.append(edge.target)
+
+                for target in sorted(newly_ready, key=lambda node_id: order_index[node_id]):
+                    await queue_ready_node(target)
+                    ready.append(target)
+    finally:
+        # Cancelling the parent execution must cancel and await every in-flight
+        # node task. Handlers can then run their CancelledError provider cleanup
+        # without becoming orphaned billable work.
+        pending = [task for task in running if not task.done()]
+        for task in pending:
+            task.cancel()
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
 
     duration = time.monotonic() - start_time
-    await emit(GraphCompleteEvent(duration=round(duration, 3), nodes_executed=nodes_executed))
 
     # F-21: per-execution metadata manifest. Written exactly once, here, after
     # every node has finished — never inside the scheduling loop above. A
@@ -919,18 +942,22 @@ async def _execute_graph(
     # whole block is best-effort.
     completed_at = datetime.now(timezone.utc)
     try:
-        manifest_records, manifest_dir = _collect_manifest_records(
-            node_map, outputs_cache, order
+        manifest_records = _collect_manifest_records(
+            node_map, outputs_cache, order, run_dir
         )
         write_manifest(
             run_id=run_id or str(uuid4()),
             started_at=started_at,
             completed_at=completed_at,
             outputs=manifest_records,
-            output_dir=manifest_dir,
+            output_dir=run_dir,
         )
     except Exception as exc:
         logger.warning("[engine] manifest write failed for run %s: %s", run_id, exc)
+
+    # Terminal success is emitted last: once the frontend sees this event the
+    # run directory and best-effort manifest lifecycle are already settled.
+    await emit(GraphCompleteEvent(duration=round(duration, 3), nodes_executed=nodes_executed))
 
 
 def _local_output_file(value: Any) -> Path | None:
@@ -965,15 +992,12 @@ def _collect_manifest_records(
     node_map: dict[str, GraphNode],
     outputs_cache: dict[str, dict[str, PortValueDict]],
     order: list[str],
-) -> tuple[list[dict[str, Any]], Path]:
-    """Build manifest records from the run's file outputs and pick the
-    manifest directory.
+    run_dir: Path,
+) -> list[dict[str, Any]]:
+    """Build manifest records for files contained by the bound run directory.
 
-    One record per generated file, in topological node order. The manifest
-    lives in the run directory that holds the most outputs (in practice all
-    outputs share one run dir); for runs with no file outputs at all, a fresh
-    run dir is created so the run still leaves a manifest with outputs: [].
-    output_path is stored relative to the manifest directory.
+    Files outside this run are never silently adopted or used to select a
+    different manifest directory.
     """
     files: list[tuple[str, Path]] = []  # (node_id, path), topological order
     for nid in order:
@@ -988,19 +1012,17 @@ def _collect_manifest_records(
                 if path is not None:
                     files.append((nid, path))
 
-    if files:
-        manifest_dir = Counter(p.parent for _, p in files).most_common(1)[0][0]
-    else:
-        manifest_dir = get_run_dir()
-
     records: list[dict[str, Any]] = []
+    resolved_run_dir = run_dir.resolve()
     for nid, path in files:
         try:
-            rel = path.relative_to(manifest_dir).as_posix()
+            rel = path.relative_to(resolved_run_dir).as_posix()
         except ValueError:
-            # Output landed outside the chosen run dir (a handler crossed a
-            # second boundary in get_run_dir's timestamp). The file is still
-            # served; it just isn't claimed by this run's manifest.
+            logger.warning(
+                "[engine] output %s escaped run directory %s; excluding from manifest",
+                path,
+                run_dir,
+            )
             continue
         node = node_map[nid]
         node_def = _node_def_for(node.definition_id) or {}
@@ -1020,4 +1042,4 @@ def _collect_manifest_records(
                 "timestamp": timestamp,
             }
         )
-    return records, manifest_dir
+    return records

@@ -1,6 +1,6 @@
 ---
 name: openrouter
-description: OpenRouter universal gateway in Nebula — one node (openrouter-universal) that reaches hundreds of models (GPT, Claude, Gemini, Llama, DeepSeek, FLUX, Recraft, and more) through OpenRouter's chat-completions API. Capabilities exposed in Nebula: streaming text/chat/reasoning/coding, vision (image-in → text-out), and image generation (text → image) — the model you pick decides which. Activate when the user configures the `openrouter-universal` node (display name "OpenRouter"), picks/searches an OpenRouter model in the Inspector, or asks about OpenRouter in Nebula. Sourced from the official OpenRouter docs (openrouter.ai/docs) and the Nebula audit guide docs/api-guides/openrouter.md on 2026-06-04 — every node id, port, param, header, and capability boundary here is cross-checked against backend/handlers/openrouter.py, backend/routes/openrouter_proxy.py, and backend/data/node_definitions.json.
+description: "OpenRouter universal gateway in Nebula for streaming text, reasoning, coding, vision, and model-dependent image generation through openrouter-universal. Use when configuring the node, choosing or searching an OpenRouter model, wiring its dynamic media ports, or debugging its authentication and chat-completions behavior."
 ---
 
 # OpenRouter Skill
@@ -18,7 +18,7 @@ It's one node that *reconfigures itself* based on the chosen model. There is no 
 
 ## Universal rules
 
-1. **Auth — `OPENROUTER_API_KEY`.** Sent as `Authorization: Bearer <OPENROUTER_API_KEY>`. The key (from <https://openrouter.ai/keys>, format `sk-or-...`) goes in Nebula **Settings → OpenRouter** or `.env` as `OPENROUTER_API_KEY=sk-or-...`. It is required **both to run the node and to load the model dropdown** — until it's set, the model picker can't populate (the `/api/openrouter/models` proxy returns `400 OPENROUTER_API_KEY not configured`).
+1. **Auth — `OPENROUTER_API_KEY`.** Sent as `Authorization: Bearer <OPENROUTER_API_KEY>`. Get the key from <https://openrouter.ai/keys> (format `sk-or-...`), enter it in Nebula **Settings → OpenRouter**, and save. It is persisted under `apiKeys.OPENROUTER_API_KEY` in project-root `settings.json` and takes effect without a restart. It is required **both to run the node and to load the model dropdown** — until it is set, the model picker cannot populate (the `/api/openrouter/models` proxy returns `400 OPENROUTER_API_KEY not configured`).
 2. **Attribution headers (sent by the handler, do not re-add).** Every request also carries `HTTP-Referer: http://localhost:5173` and `X-OpenRouter-Title: Nebula Nodes`. ⚠️ Nebula uses `X-OpenRouter-Title`, **not** the legacy `X-Title` header that some OpenRouter docs show — the handler tests explicitly assert `X-Title` is *not* present. Don't tell the user to set `X-Title`.
 3. **Base URL:** `https://openrouter.ai/api/v1/chat/completions` (chat-completions endpoint for *everything* — text, vision, and image generation all go through this one URL). Model list proxy: `GET /api/openrouter/models` (Nebula backend → OpenRouter `/api/v1/models`, cached 5 min).
 4. **Execution pattern depends on output type (no async polling either way):**
@@ -49,7 +49,7 @@ The model list is **live and per-account** (backend proxies OpenRouter's `/api/v
 
 | Param | Key | Type | Range / default | Applies to | Notes |
 |---|---|---|---|---|---|
-| Model | `model` | string | **required**, default `""` (placeholder "Loading models…") | all modes | The OpenRouter model id (e.g. `openai/gpt-4o`, `anthropic/Claude-3.5-sonnet`, `google/gemini-2.5-flash-image`). Chosen from the live list; selecting it reconfigures ports and sets `_output_image` automatically. |
+| Model | `model` | string | **required**, default `""` (placeholder "Loading models…") | all modes | The OpenRouter model id (e.g. `openai/gpt-4o`, `anthropic/claude-3.5-sonnet`, `google/gemini-2.5-flash-image`). Chosen from the live list; selecting it reconfigures ports and sets `_output_image` automatically. |
 | Temperature | `temperature` | float | 0 – 2, step 0.1, default **1** | **text/vision only** | Higher = more random. Lower (e.g. 0.2–0.4) = more focused/deterministic. Ignored by image generation. |
 | Max Tokens | `max_tokens` | integer | 1 – 200000, default **4096** | **text/vision only** | Upper bound on generated tokens. Ignored by image generation. |
 | Response Format | `response_format` | enum | Text / JSON, default **Text** | **text only** | **JSON mode** (added 2026-06-05). When set to JSON the handler forwards `response_format: {"type":"json_object"}`, so the reply is valid JSON. **Model-dependent** — the chosen model must support JSON output. Live-verified against the API. |

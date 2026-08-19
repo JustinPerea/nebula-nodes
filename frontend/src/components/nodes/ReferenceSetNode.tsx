@@ -43,13 +43,13 @@ function formatWeight(weight: number): string {
 export function ReferenceSetNode({ id, data, selected }: NodeProps) {
   const updateNodeData = useGraphStore((s) => s.updateNodeData);
   const edges = useGraphStore((s) => s.edges);
-  const params = (data as ReferenceSetNodeData).params ?? {};
 
   const weights = useMemo(() => {
+    const params = (data as ReferenceSetNodeData).params ?? {};
     const map = {} as Record<ReferenceRoleId, number>;
     for (const role of REFERENCE_ROLE_IDS) map[role] = readWeight(params, role);
     return map;
-  }, [params]);
+  }, [data]);
 
   // Which role ports currently have an incoming connection — the preview
   // mirrors what the backend handler packs (connected ports only).

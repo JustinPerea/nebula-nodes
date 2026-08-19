@@ -6,16 +6,12 @@ import {
   updateCharacter,
 } from '../../lib/api';
 import type { Character } from '../../types';
+import { NEW_CHARACTER_SENTINEL } from '../../lib/studioSentinels';
 import { CharacterStudioToolbar } from './CharacterStudioToolbar';
 import { CharacterLibraryRail } from './CharacterLibraryRail';
 import { CharacterDefinitionPanel } from './CharacterDefinitionPanel';
 import { CharacterTestPanel } from './CharacterTestPanel';
 import '../../styles/character-studio.css';
-
-/** Sentinel id used when the rail/palette opens a brand-new, unsaved draft.
- *  enterCharacterEditor('new') routes here; the Studio treats any id that does
- *  not resolve to a stored Character as a fresh local draft. */
-export const NEW_CHARACTER_SENTINEL = 'new';
 
 /** Local editable shape — a Character minus the server-owned fields. The draft
  *  lives in local state until it first becomes valid (≥3 views + name), at which

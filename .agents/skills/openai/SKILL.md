@@ -16,7 +16,7 @@ These are the **eight OpenAI-direct nodes** (all BYOK, one key). For prompting *
 
 ## Universal rules
 
-1. **Auth + env var.** Every node sends `Authorization: Bearer <OPENAI_API_KEY>`. One key (`OPENAI_API_KEY`) covers all eight. Set it in `.env` at repo root or `backend/`, then **restart the backend** (`.env` is read at boot). Missing key → handler raises `OPENAI_API_KEY is required` before any network call.
+1. **Auth + Settings.** Every node sends `Authorization: Bearer <OPENAI_API_KEY>`. One key (`OPENAI_API_KEY`) covers all eight. Enter it in Nebula **Settings → OpenAI** and save; it is persisted under `apiKeys.OPENAI_API_KEY` in project-root `settings.json` and takes effect without a restart. Missing key → handler raises `OPENAI_API_KEY is required` before any network call.
 2. **Base URL.** `https://api.openai.com/v1`. Endpoints used: `/images/generations`, `/images/edits`, `/audio/speech`, `/audio/transcriptions`, `/audio/translations`, `/chat/completions`. No base-URL override in the handlers.
 3. **Execution pattern (confirmed per handler):**
    - **Sync (single POST, parse JSON):** `gpt-image-1-generate`, `gpt-image-1-edit`, `openai-tts`, `openai-stt`, `openai-translate`. Images come back base64 (`data[0].b64_json`) and are written to the run dir; audio (TTS) comes back as raw bytes; STT/Translate return text.

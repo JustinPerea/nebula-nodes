@@ -14,7 +14,7 @@ description: MiniMax (Hailuo) video generation in Nebula — text-to-video, imag
 
 ## Universal rules (all MiniMax nodes)
 
-1. **Auth + env var.** Header `Authorization: Bearer <MINIMAX_API_KEY>` plus `Content-Type: application/json`. The backend reads `MINIMAX_API_KEY` from `.env` at the repo root. Missing key → the node errors with `MINIMAX_API_KEY is required`. Restart the backend after adding the key.
+1. **Auth + Settings.** Header `Authorization: Bearer <MINIMAX_API_KEY>` plus `Content-Type: application/json`. Enter the key in Nebula **Settings → MiniMax** and save; it is persisted under `apiKeys.MINIMAX_API_KEY` in project-root `settings.json` and takes effect without a restart. Missing key → the node errors with `MINIMAX_API_KEY is required`.
 2. **Base URL.** `https://api.minimaxi.com` (the handler's `MINIMAX_API_BASE`). All three nodes POST to `https://api.minimaxi.com/v1/video_generation`. Note: the MiniMax *dashboard / docs* Global host is `api.minimax.io`, but Nebula's handler talks to the `api.minimaxi.com` host — do not "correct" it.
 3. **Execution pattern: async-poll (3 steps).** All three nodes are `executionPattern: "async-poll"`:
    - **Submit** `POST /v1/video_generation` → returns `task_id`. Accepts HTTP `200/201/202`; anything else raises `MiniMax submit failed`.

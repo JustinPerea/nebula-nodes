@@ -8,19 +8,19 @@ reads the resulting JSON to apply auto-zoom on the right pixel region at
 the right timestamp — no transcript heuristics needed, just structured
 agent telemetry.
 
-Single active manifest at a time. `init` rotates the file (timestamped name
-in `output/`) and resets the in-memory pointer. `append_entry` is a no-op
+Single active manifest at a time. `init` creates a collision-proof session
+directory under the configured output root and resets the in-memory pointer.
+`append_entry` is a no-op
 when no manifest is active, so frontend retries on race-conditions are safe.
 """
 from __future__ import annotations
 
 import json
 import time
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-OUTPUT_DIR = Path(__file__).resolve().parent.parent.parent / "output"
+from services.output import create_run_dir
 
 _active_manifest_path: Path | None = None
 _started_at: float = 0.0
@@ -29,9 +29,11 @@ _started_at: float = 0.0
 def init_manifest() -> dict[str, Any]:
     """Start a new manifest file. Returns {session_id, started_at, path}."""
     global _active_manifest_path, _started_at
-    session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    _active_manifest_path = OUTPUT_DIR / f"zoom-manifest-{session_id}.json"
+    from uuid import uuid4
+
+    session_id = uuid4().hex
+    session_dir = create_run_dir(f"zoom-{session_id}")
+    _active_manifest_path = session_dir / "zoom-manifest.json"
     _started_at = time.time()
     data = {
         "session_id": session_id,

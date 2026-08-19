@@ -22,6 +22,10 @@ if (!requestPath || !outputLocation) {
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const entryPoint = path.resolve(scriptDir, '../src/remotion/render-entry.tsx');
+const lottieLightPath = path.resolve(
+  scriptDir,
+  '../node_modules/lottie-web/build/player/lottie_light.js',
+);
 const request = JSON.parse(await readFile(requestPath, 'utf8'));
 const inputProps = { manifest: request.manifest };
 const { cancelSignal, cancel } = makeCancelSignal();
@@ -41,6 +45,16 @@ try {
   emit({ type: 'progress', value: 0.01, stage: 'bundling' });
   serveUrl = await bundle({
     entryPoint,
+    webpackOverride: (config) => ({
+      ...config,
+      resolve: {
+        ...config.resolve,
+        alias: {
+          ...config.resolve?.alias,
+          'lottie-web': lottieLightPath,
+        },
+      },
+    }),
     onProgress: (value) => emit({
       type: 'progress',
       value: Math.min(0.1, 0.01 + (value / 100) * 0.09),

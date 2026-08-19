@@ -5,6 +5,8 @@ import json
 import logging
 import mimetypes
 import os
+import re
+from contextvars import ContextVar
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -75,11 +77,34 @@ def _resolve_output_root() -> Path:
 OUTPUT_ROOT = _resolve_output_root()
 
 
+# The execution engine binds this once for the lifetime of a graph run. Async
+# child tasks inherit ContextVars, so every existing handler can continue to
+# call get_run_dir() without allocating a second directory after a clock tick.
+execution_run_dir: ContextVar[Path | None] = ContextVar(
+    "execution_run_dir",
+    default=None,
+)
+
+
+def create_run_dir(run_id: str | None = None) -> Path:
+    """Create a collision-proof output directory for one execution run."""
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H-%M-%S_%f")
+    safe_run_id = re.sub(r"[^A-Za-z0-9_-]+", "-", str(run_id or "run")).strip("-")
+    safe_run_id = (safe_run_id or "run")[:32]
+    for _attempt in range(10):
+        run_dir = OUTPUT_ROOT / f"{timestamp}-{safe_run_id}-{uuid4().hex[:8]}"
+        try:
+            run_dir.mkdir(parents=True, exist_ok=False)
+            return run_dir
+        except FileExistsError:
+            continue
+    raise RuntimeError("could not allocate a unique output directory")
+
+
 def get_run_dir() -> Path:
-    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H-%M-%S")
-    run_dir = OUTPUT_ROOT / timestamp
-    run_dir.mkdir(parents=True, exist_ok=True)
-    return run_dir
+    """Return the bound graph-run directory or allocate a standalone one."""
+    bound = execution_run_dir.get()
+    return bound if bound is not None else create_run_dir()
 
 
 # ---------------------------------------------------------------------------
@@ -277,6 +302,83 @@ def image_to_data_uri(file_path: Path) -> str:
 
 MANIFEST_FILENAME = "manifest.json"
 
+_MANIFEST_SECRET_KEY_PARTS = (
+    "api_key",
+    "apikey",
+    "authorization",
+    "credential",
+    "password",
+    "secret",
+)
+_MANIFEST_MAX_DEPTH = 8
+_MANIFEST_MAX_ITEMS = 100
+_MANIFEST_MAX_STRING = 8192
+
+
+def _looks_like_embedded_data(value: str) -> bool:
+    lowered = value.lstrip().lower()
+    if lowered.startswith(("data:", "blob:")):
+        return True
+    # Long compact base64 values sometimes arrive without a data: prefix.
+    if len(value) < 512 or any(ch.isspace() for ch in value):
+        return False
+    return re.fullmatch(r"[A-Za-z0-9+/=_-]+", value) is not None
+
+
+def _is_manifest_secret_key(key: str) -> bool:
+    lowered = key.lower()
+    if any(part in lowered for part in _MANIFEST_SECRET_KEY_PARTS):
+        return True
+    compact = re.sub(r"[^a-z0-9]", "", lowered)
+    return compact in {
+        "token",
+        "apitoken",
+        "accesstoken",
+        "authtoken",
+        "bearertoken",
+        "refreshtoken",
+    }
+
+
+def sanitize_manifest_params(params: Any, *, _depth: int = 0) -> Any:
+    """Return bounded, JSON-safe provenance without secrets or binary data."""
+    if _depth >= _MANIFEST_MAX_DEPTH:
+        return "[truncated: depth]"
+    if params is None or isinstance(params, (bool, int, float)):
+        return params
+    if isinstance(params, str):
+        if _looks_like_embedded_data(params):
+            return "[redacted: embedded data]"
+        if len(params) > _MANIFEST_MAX_STRING:
+            return params[:_MANIFEST_MAX_STRING] + "...[truncated]"
+        return params
+    if isinstance(params, bytes):
+        return "[redacted: binary data]"
+    if isinstance(params, dict):
+        sanitized: dict[str, Any] = {}
+        for index, (raw_key, value) in enumerate(params.items()):
+            if index >= _MANIFEST_MAX_ITEMS:
+                sanitized["__truncated__"] = f"{len(params) - _MANIFEST_MAX_ITEMS} fields omitted"
+                break
+            key = str(raw_key)
+            if key.startswith("_"):
+                continue
+            if _is_manifest_secret_key(key):
+                sanitized[key] = "[redacted: secret]"
+                continue
+            sanitized[key] = sanitize_manifest_params(value, _depth=_depth + 1)
+        return sanitized
+    if isinstance(params, (list, tuple, set)):
+        values = list(params)
+        sanitized = [
+            sanitize_manifest_params(value, _depth=_depth + 1)
+            for value in values[:_MANIFEST_MAX_ITEMS]
+        ]
+        if len(values) > _MANIFEST_MAX_ITEMS:
+            sanitized.append(f"[truncated: {len(values) - _MANIFEST_MAX_ITEMS} items]")
+        return sanitized
+    return sanitize_manifest_params(str(params), _depth=_depth + 1)
+
 
 class ManifestError(Exception):
     """A manifest.json exists but is malformed (bad JSON or wrong shape)."""
@@ -331,6 +433,8 @@ def write_manifest(
         if not isinstance(record, dict):
             continue
         rec = dict(record)
+        rec["params"] = sanitize_manifest_params(rec.get("params", {}))
+        rec["prompt"] = sanitize_manifest_params(rec.get("prompt"))
         rec["output_path"] = _relative_output_path(rec.get("output_path", ""), output_dir)
         records.append(rec)
 

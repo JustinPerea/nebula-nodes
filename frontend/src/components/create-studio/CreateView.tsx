@@ -24,6 +24,7 @@ const MAX_CONCURRENT = 2;
 export function CreateView() {
   const exitCreateView = useUIStore((s) => s.exitCreateView);
   const sessionId = useUIStore((s) => s.createSessionId);
+  const apiKeys = useUIStore((s) => s.settingsCache.apiKeys);
   const allNodes = useGraphStore((s) => s.nodes);
 
   // Snapshot selection once on mount — used to prefill composer + default tab.
@@ -45,7 +46,7 @@ export function CreateView() {
   const [prompt, setPrompt] = useState(() => initial.prefill?.prompt ?? '');
   const [params, setParams] = useState<Record<string, unknown>>(() => {
     if (initial.prefill) return initial.prefill.params;
-    return buildDefaultParamsForUi(NODE_DEFINITIONS['nano-banana']);
+    return buildDefaultParamsForUi(NODE_DEFINITIONS['nano-banana'], apiKeys);
   });
   const [generations, setGenerations] = useState<GenerationRecord[]>([]);
   const genIndexRef = useRef(0);
@@ -75,11 +76,11 @@ export function CreateView() {
 
   const handleSelectModel = (id: string) => {
     setModelId(id);
-    setParams(buildDefaultParamsForUi(NODE_DEFINITIONS[id]));
+    setParams(buildDefaultParamsForUi(NODE_DEFINITIONS[id], apiKeys));
   };
 
   const handleApplyPreset = (preset: Preset) => {
-    const next = applyPresetToComposer(preset, { modelId, prompt, params });
+    const next = applyPresetToComposer(preset, { modelId, prompt, params }, apiKeys);
     if (next.modelId && next.modelId !== modelId) setModelId(next.modelId);
     setPrompt(next.prompt);
     setParams(next.params);

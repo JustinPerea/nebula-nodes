@@ -63,6 +63,7 @@ export function Settings() {
   const [routing, setRouting] = useState<Record<string, string>>({});
   const [outputPath, setOutputPath] = useState('');
   const [exportFolder, setExportFolder] = useState('');
+  const [zoomTelemetryEnabled, setZoomTelemetryEnabled] = useState(false);
   const [revealedKeys, setRevealedKeys] = useState<Set<string>>(new Set());
   const [apiKeysOpen, setApiKeysOpen] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
@@ -86,11 +87,13 @@ export function Settings() {
           routing?: Record<string, string>;
           outputPath?: string;
           exportFolder?: string;
+          zoomTelemetryEnabled?: boolean;
         };
         setApiKeys(settings.apiKeys ?? {});
         setRouting(settings.routing ?? {});
         setOutputPath(settings.outputPath ?? '');
         setExportFolder(settings.exportFolder ?? '');
+        setZoomTelemetryEnabled(settings.zoomTelemetryEnabled === true);
         setSaveStatus('idle');
       })
       .catch((err) => {
@@ -130,7 +133,13 @@ export function Settings() {
   const handleSave = useCallback(async () => {
     setSaveStatus('saving');
     try {
-      await updateSettings({ apiKeys, routing, outputPath: outputPath || null, exportFolder: exportFolder || null });
+      await updateSettings({
+        apiKeys,
+        routing,
+        outputPath: outputPath || null,
+        exportFolder: exportFolder || null,
+        zoomTelemetryEnabled,
+      });
       setSaveStatus('saved');
       window.dispatchEvent(new CustomEvent('nebula:settings-saved'));
       setTimeout(() => setSaveStatus('idle'), 2000);
@@ -139,7 +148,7 @@ export function Settings() {
       setSaveStatus('error');
       setTimeout(() => setSaveStatus('idle'), 3000);
     }
-  }, [apiKeys, routing, outputPath, exportFolder]);
+  }, [apiKeys, routing, outputPath, exportFolder, zoomTelemetryEnabled]);
 
   const toggleReveal = useCallback((key: string) => {
     setRevealedKeys((prev) => {
@@ -413,6 +422,20 @@ export function Settings() {
                 placeholder="Default: ~/Downloads"
               />
             </div>
+            <label className="settings__toggle-row">
+              <input
+                className="settings__toggle-input"
+                type="checkbox"
+                checked={zoomTelemetryEnabled}
+                onChange={(event) => setZoomTelemetryEnabled(event.target.checked)}
+              />
+              <span className="settings__toggle-copy">
+                <span className="settings__toggle-title">Demo zoom telemetry</span>
+                <span className="settings__toggle-description">
+                  Record canvas bounds for demo-video editing. Off by default; saved beneath the configured output path.
+                </span>
+              </span>
+            </label>
 
           </>
         )}

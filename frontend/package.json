@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && vite build && node scripts/check-build-budget.mjs",
     "lint": "npm run check:inline-styles && npm run check:slava-css-scope && eslint .",
     "test": "vitest run",
     "test:watch": "vitest",

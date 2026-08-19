@@ -1,0 +1,25 @@
+{
+  "apiKeys": {
+    "ANTHROPIC_API_KEY": "",
+    "ELEVENLABS_API_KEY": "",
+    "FAL_KEY": "",
+    "GOOGLE_API_KEY": "",
+    "HIGGSFIELD_API_KEY": "",
+    "IDEOGRAM_API_KEY": "",
+    "KREA_API_TOKEN": "",
+    "MESHY_API_KEY": "",
+    "MINIMAX_API_KEY": "",
+    "OPENAI_API_KEY": "",
+    "OPENROUTER_API_KEY": "",
+    "QUIVER_API_KEY": "",
+    "REPLICATE_API_TOKEN": "",
+    "RUNWAY_API_KEY": "",
+    "XAI_API_KEY": ""
+  },
+  "routing": {},
+  "outputPath": null,
+  "executionMode": "manual",
+  "batchSizeCap": 25,
+  "exportFolder": null,
+  "zoomTelemetryEnabled": false
+}

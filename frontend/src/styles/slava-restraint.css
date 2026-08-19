@@ -610,6 +610,7 @@ body.app-slava-restraint :is(
   .inspector__info-button,
   .settings__section-toggle,
   .settings__save-button,
+  .panel__item,
   .panel-launcher,
   .toolbar__button
 ):focus-visible {

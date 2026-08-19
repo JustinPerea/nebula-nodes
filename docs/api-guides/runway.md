@@ -36,13 +36,7 @@
 
 **Where the nodes appear.** Runway nodes live in the node palette under their media categories — the three video nodes (`runway-video`, `runway-aleph`, `runway-act-two`) under **video-gen**, `runway-image` under **image-gen**, `runway-upscale` under **transform**, and the three voice nodes (`runway-tts`, `runway-sts`, `runway-dubbing`) under **audio-gen**. Drag a node onto the canvas, wire inputs into its ports, set its params in the inspector, and run.
 
-**API-key setup.** Runway calls authenticate with a single key. Add it to your `.env` at the repo root:
-
-```
-RUNWAY_API_KEY=your_key_here
-```
-
-Get the key from the Runway developer dashboard at dev.runwayml.com. All eight nodes share this one key. Every Runway job is asynchronous — Nebula submits the task and polls until it finishes, so a video node may take a minute or two before the output port lights up. Inputs that aren't already public HTTPS URLs are sent inline (local images/clips are encoded automatically), so very large source videos can take longer to upload.
+**API-key setup.** Runway calls authenticate with a single key. Get it from the Runway developer dashboard at dev.runwayml.com. Open Nebula **Settings**, paste it into the **Runway** field (`RUNWAY_API_KEY`), and choose **Save Settings**. Nebula stores it under `apiKeys.RUNWAY_API_KEY` in the project-root `settings.json`; no restart is required. All eight nodes share this one key. Every Runway job is asynchronous — Nebula submits the task and polls until it finishes, so a video node may take a minute or two before the output port lights up. Inputs that aren't already public HTTPS URLs are sent inline (local images/clips are encoded automatically), so very large source videos can take longer to upload.
 
 **Recipe 1 — Still photo → talking, moving clip.**
 1. Drop a `runway-image` node (or bring in any image) → produces an `image`.

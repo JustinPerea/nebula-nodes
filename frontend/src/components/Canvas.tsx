@@ -29,6 +29,7 @@ import { CharacterNode } from './nodes/CharacterNode';
 import { CameraRigNode } from './nodes/CameraRigNode';
 import { ReferenceSetNode } from './nodes/ReferenceSetNode';
 import { MoodboardNode } from './nodes/MoodboardNode';
+import { VideoQcNode } from './nodes/VideoQcNode';
 import { TypedEdge } from './edges/TypedEdge';
 import { ContextMenu } from './ContextMenu';
 import { ConnectionPopup } from './ConnectionPopup';
@@ -48,6 +49,7 @@ const nodeTypes: NodeTypes = {
   cameraRigNode: CameraRigNode,
   referenceSetNode: ReferenceSetNode,
   moodboardNode: MoodboardNode,
+  videoQcNode: VideoQcNode,
 };
 
 // fitView padding that reserves space for every floating panel that overlaps

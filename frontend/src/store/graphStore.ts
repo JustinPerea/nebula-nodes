@@ -28,6 +28,7 @@ import {
 import {
   executeGraph as apiExecuteGraph,
   executeNode as apiExecuteNode,
+  cancelExecution as apiCancelExecution,
   generateCinemaShot as apiGenerateShot,
   promoteCinemaShotVariation as apiPromoteShotVariation,
   fetchReplicateSchema,
@@ -327,6 +328,15 @@ let currentRunId: string | null = null;
 // run and concurrent Create generations; Cinema-shot passes suppress their
 // graphComplete event, so they are intentionally not registered here.
 const runErrors = new Map<string, boolean>();
+const cancelledRunIds = new Set<string>();
+
+function rememberCancelledRun(runId: string): void {
+  cancelledRunIds.add(runId);
+  if (cancelledRunIds.size > 100) {
+    const oldest = cancelledRunIds.values().next().value as string | undefined;
+    if (oldest) cancelledRunIds.delete(oldest);
+  }
+}
 
 /** Close the in-flight run-history record (if any) with a terminal status, then
  *  clear `currentRunId`. No-op when no run is open, so it's safe to call on every
@@ -465,6 +475,7 @@ interface GraphState {
     frame: number,
   ) => void;
   executeGraph: () => Promise<void>;
+  cancelExecution: () => Promise<void>;
   resetExecution: () => void;
   handleExecutionEvent: (event: ExecutionEvent) => void;
   executeNode: (nodeId: string) => Promise<void>;
@@ -1204,6 +1215,8 @@ export const useGraphStore = create<GraphState>((set, get) => ({
             ? 'cameraRigNode'
             : definitionId === 'reference-set'
               ? 'referenceSetNode'
+              : definitionId.startsWith('qc-')
+                ? 'videoQcNode'
               : definitionId === 'nebula-moodboard'
                 ? 'moodboardNode'
                 : 'model-node';
@@ -2113,6 +2126,26 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         },
       })),
     }));
+  },
+
+  cancelExecution: async () => {
+    const runId = currentRunId;
+    if (!runId) {
+      get().resetExecution();
+      return;
+    }
+    try {
+      const result = await apiCancelExecution(runId);
+      if (currentRunId !== runId) return;
+      if (result.status === 'cancelling' || result.status === 'cancelled') {
+        rememberCancelledRun(runId);
+        get().resetExecution();
+      }
+      // completed/failed raced with Stop; its scoped terminal event remains
+      // authoritative and will close the run with the correct status.
+    } catch (error) {
+      console.error('Failed to cancel execution:', error);
+    }
   },
 
   executeGraph: async () => {
@@ -3122,6 +3155,9 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   },
 
   handleExecutionEvent: (event) => {
+    if (event.runId && cancelledRunIds.has(event.runId) && event.type !== 'graphCancelled') {
+      return;
+    }
     switch (event.type) {
       case 'queued':
         get().updateNodeData(event.nodeId, {
@@ -3252,6 +3288,16 @@ export const useGraphStore = create<GraphState>((set, get) => ({
             durationSec: event.duration,
             nodesExecuted: event.nodesExecuted,
           });
+        }
+        break;
+      }
+      case 'graphCancelled': {
+        if (event.runId) {
+          rememberCancelledRun(event.runId);
+          runErrors.delete(event.runId);
+        }
+        if (!event.runId || eventOwnsCurrentRun(event.runId)) {
+          get().resetExecution();
         }
         break;
       }

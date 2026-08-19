@@ -30,12 +30,8 @@ Notes on the params, grounded in the node definition and handler:
 **API-key setup:** Higgsfield runs on your own key.
 
 1. Get a key from the Higgsfield dashboard (`cloud.higgsfield.ai`).
-2. Add it to your backend `.env` file:
-   ```
-   HIGGSFIELD_API_KEY=your_key_here
-   ```
-   Higgsfield issues credentials as a **key + secret pair**. The API authenticates with the header `Authorization: Key {key}:{secret}`. If you were issued both, set the combined value (`HIGGSFIELD_API_KEY=key:secret`) — the handler passes whatever you store straight through after `Key `. If you only have a single token, store it alone.
-3. Restart the backend so the new env var is picked up.
+2. Open Nebula **Settings**, paste it into the **Higgsfield** field (`HIGGSFIELD_API_KEY`), and choose **Save Settings**. Higgsfield issues credentials as a **key + secret pair**. The API authenticates with the header `Authorization: Key {key}:{secret}`. If you were issued both, paste the combined value (`key:secret`) — the handler passes whatever you store straight through after `Key `. If you only have a single token, store it alone.
+3. Nebula stores the value under `apiKeys.HIGGSFIELD_API_KEY` in the project-root `settings.json`; no restart is required.
 
 The node submits the job, then polls until the clip is ready (it can take a minute or more for longer/higher-fidelity models) and saves the finished `.mp4` as the node's `video` output.
 
@@ -81,7 +77,7 @@ What it covers:
 - **Model selection guidance** — DoP Standard vs. Preview (quality vs. speed), and that Kling/Seedance are image-to-video only so they need a real image URL.
 - **The image-URL gotcha** — the handler silently drops non-URL image inputs, so route a *hosted* image into the `image` port (chain an upstream node that emits a URL), not a local path.
 - **Pipeline recipes** — text-to-video single-node, image→motion two-node chains, and templated-prompt chains, all with real node IDs.
-- **Auth setup** — `HIGGSFIELD_API_KEY` in `.env`, the `Authorization: Key {key}:{secret}` pairing on `platform.higgsfield.ai`, and the restart step.
+- **Auth setup** — `HIGGSFIELD_API_KEY` in Nebula Settings, persisted in `settings.json`, and the `Authorization: Key {key}:{secret}` pairing on `platform.higgsfield.ai`.
 - **Expectations & boundaries** — async-poll latency (a minute+) and the failure/`nsfw`/`cancelled` states; the node is **video only**, so Soul images, Speak audio, and motion presets are not reachable.
 
 ## Sources

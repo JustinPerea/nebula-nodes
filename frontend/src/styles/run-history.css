@@ -5,7 +5,7 @@
 
 /* ---- layout (skin-agnostic) ---- */
 .panel--history {
-  width: 276px;
+  width: min(276px, calc(100vw - 16px));
   max-height: 60vh;
 }
 .panel__body--history {

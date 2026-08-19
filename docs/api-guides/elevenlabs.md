@@ -39,13 +39,7 @@ Notes that match the handler (`backend/handlers/elevenlabs.py`):
 
 **Where the nodes appear.** Open the node palette (the add-node menu on the canvas) and look under the **audio-gen** category. The six ElevenLabs nodes are listed by their display names ("ElevenLabs TTS", "ElevenLabs Sound Effects", etc.). Drag one onto the canvas, wire an input into its input port, and set params in the node's panel.
 
-**API-key setup.** ElevenLabs calls are authenticated with your own key. In the repo's `.env` file (or however you configure backend secrets), set:
-
-```
-ELEVENLABS_API_KEY=your_key_here
-```
-
-Get the key from your ElevenLabs account dashboard (Profile → API Keys). Every ElevenLabs node reads this same variable; if it is missing, the node fails with "ELEVENLABS_API_KEY is required."
+**API-key setup.** Get a key from your ElevenLabs account dashboard (Profile → API Keys). Open Nebula **Settings**, paste it into the **ElevenLabs** field (`ELEVENLABS_API_KEY`), and choose **Save Settings**. Nebula stores it under `apiKeys.ELEVENLABS_API_KEY` in the project-root `settings.json`; no restart is required. Every ElevenLabs node uses this same key; if it is missing, the node fails with "ELEVENLABS_API_KEY is required."
 
 **Picking a voice.** The `voice_id` param defaults to Rachel (`21m00Tcm4TlvDq8ikWAM`). To use a different voice, paste its voice ID into the `voice_id` field. You find voice IDs in the ElevenLabs Voice Library / your Voices page on the ElevenLabs site — Nebula does not browse or list voices for you, so keep the IDs you want handy.
 
