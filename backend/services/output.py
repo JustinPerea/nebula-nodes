@@ -10,6 +10,7 @@ from contextvars import ContextVar
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import unquote_to_bytes, urlsplit
 from uuid import uuid4
 
 from services.ffmpeg import ffprobe_video
@@ -261,6 +262,100 @@ async def save_mesh_from_url(url: str, run_dir: Path, extension: str = "glb") ->
         response.raise_for_status()
         file_path.write_bytes(response.content)
     return await _validate_and_correct_extension(file_path)
+
+
+_MEDIA_EXTENSIONS: dict[str, set[str]] = {
+    "Image": {"png", "jpg", "jpeg", "webp", "gif"},
+    "Video": {"mp4", "webm", "mov", "m4v", "mkv", "avi"},
+    "Audio": {"mp3", "wav", "flac", "ogg", "m4a", "aac", "pcm"},
+    "Mesh": {"glb", "gltf", "obj", "fbx", "stl", "usdz", "3mf"},
+    "SVG": {"svg"},
+}
+
+_CONTENT_TYPE_EXTENSIONS: dict[str, str] = {
+    "image/png": "png",
+    "image/jpeg": "jpg",
+    "image/webp": "webp",
+    "image/gif": "gif",
+    "image/svg+xml": "svg",
+    "video/mp4": "mp4",
+    "video/webm": "webm",
+    "video/quicktime": "mov",
+    "audio/mpeg": "mp3",
+    "audio/mp3": "mp3",
+    "audio/wav": "wav",
+    "audio/x-wav": "wav",
+    "audio/flac": "flac",
+    "audio/ogg": "ogg",
+    "audio/mp4": "m4a",
+    "audio/aac": "aac",
+    "model/gltf-binary": "glb",
+    "model/gltf+json": "gltf",
+}
+
+_DEFAULT_MEDIA_EXTENSION: dict[str, str] = {
+    "Image": "png",
+    "Video": "mp4",
+    "Audio": "mp3",
+    "Mesh": "glb",
+    "SVG": "svg",
+}
+
+
+def _media_extension(media_type: str, content_type: str, source: str) -> str:
+    """Choose an allowlisted extension from response metadata or URL path."""
+    allowed = _MEDIA_EXTENSIONS[media_type]
+    mime = content_type.split(";", 1)[0].strip().lower()
+    from_mime = _CONTENT_TYPE_EXTENSIONS.get(mime)
+    if from_mime in allowed:
+        return from_mime
+    suffix = Path(urlsplit(source).path).suffix.lstrip(".").lower()
+    if suffix in allowed:
+        return suffix
+    return _DEFAULT_MEDIA_EXTENSION[media_type]
+
+
+async def materialize_media_value(value: str, media_type: str, run_dir: Path) -> Path:
+    """Persist one remote/data media value inside the current execution directory.
+
+    Provider CDN URLs are often signed and expire. A successful Nebula output must
+    therefore point at bytes owned by the run, not at the provider's temporary URL.
+    Only the fixed media-type extension allowlists above can influence filenames.
+    """
+    if media_type not in _MEDIA_EXTENSIONS:
+        raise ValueError(f"unsupported media output type: {media_type}")
+
+    content_type = ""
+    if value.startswith(("http://", "https://")):
+        import httpx
+
+        async with httpx.AsyncClient(timeout=180.0) as client:
+            response = await client.get(value, follow_redirects=True)
+            response.raise_for_status()
+        payload = response.content
+        content_type = response.headers.get("content-type", "")
+    elif value.startswith("data:"):
+        header, separator, body = value.partition(",")
+        if not separator:
+            raise ValueError("malformed media data URI")
+        content_type = header[5:].split(";", 1)[0]
+        if ";base64" in header.lower():
+            payload = base64.b64decode(body, validate=True)
+        else:
+            payload = unquote_to_bytes(body)
+    else:
+        return Path(value)
+
+    if not payload:
+        raise RuntimeError("provider returned an empty media artifact")
+
+    extension = _media_extension(media_type, content_type, value)
+    path = Path(run_dir) / f"{uuid4().hex[:12]}.{extension}"
+    path.write_bytes(payload)
+
+    if media_type in {"Image", "Video", "Mesh"}:
+        return await _validate_and_correct_extension(path)
+    return path
 
 
 def resolve_output_ref(value: str) -> str:

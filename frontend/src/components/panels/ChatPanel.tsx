@@ -19,6 +19,14 @@ import {
 } from '../../lib/api';
 import { apiFetch, backendAssetUrlSync, backendWebSocketUrl } from '../../lib/backend';
 import type { SkinId } from '../../lib/skins';
+import { normalizeAgentEventSource } from '../../lib/agentEvents';
+import {
+  chatCancellationDisconnectNotice,
+  chatCancellationNotice,
+  transitionChatCancellation,
+  type ChatCancellationEvent,
+  type ChatCancellationState,
+} from '../../lib/chatCancellation';
 
 // Daedalus mode palette. Persisted so the user's choice survives reloads.
 type ChatAgent = 'claude' | 'codex' | 'daedalus';
@@ -476,6 +484,7 @@ export function ChatPanel() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [cancelState, setCancelState] = useState<ChatCancellationState>('idle');
   const [pendingImages, setPendingImages] = useState<PendingImage[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -830,6 +839,14 @@ export function ChatPanel() {
   useEffect(() => {
     busyRef.current = busy;
   }, [busy]);
+  const cancelStateRef = useRef<ChatCancellationState>('idle');
+  const applyCancellationEvent = useCallback((event: ChatCancellationEvent) => {
+    const transition = transitionChatCancellation(cancelStateRef.current, event);
+    cancelStateRef.current = transition.state;
+    setCancelState(transition.state);
+    setBusy(transition.busy);
+    return transition;
+  }, []);
 
   // Holds the text-input node id for the next outgoing message, set by the
   // Enhance button just before send. Cleared when the message leaves so it
@@ -984,9 +1001,18 @@ export function ChatPanel() {
 
           socket.onopen = () => setConnected(true);
           socket.onclose = () => {
+            if (cancelled) return;
             if (wsRef.current === socket) wsRef.current = null;
             setConnected(false);
-            setBusy(false);
+            const disconnectNotice = chatCancellationDisconnectNotice(cancelStateRef.current);
+            applyCancellationEvent({ type: 'disconnect' });
+            if (disconnectNotice) {
+              upsertAssistant((msg) => ({
+                ...msg,
+                parts: [...msg.parts, { kind: 'system', ...disconnectNotice }],
+                streaming: false,
+              }));
+            }
             scheduleReconnect();
           };
           socket.onerror = () => {
@@ -1014,7 +1040,10 @@ export function ChatPanel() {
             if (line) {
               window.dispatchEvent(
                 new CustomEvent('nebula:agent-log-entry', {
-                  detail: { source: 'hermes', message: line },
+                  detail: {
+                    source: normalizeAgentEventSource(event.source),
+                    message: line,
+                  },
                 }),
               );
             }
@@ -1104,9 +1133,59 @@ export function ChatPanel() {
             }));
             return;
           }
+          if (type === 'cancellation') {
+            const cancellationStatus = String(event.status ?? 'failed');
+            if (cancellationStatus === 'requested') {
+              const notice = chatCancellationNotice('requested');
+              applyCancellationEvent({ type: 'request' });
+              upsertAssistant((msg) => ({
+                ...msg,
+                parts: [...msg.parts, {
+                  kind: 'system',
+                  ...notice,
+                }],
+              }));
+              return;
+            }
+            if (cancellationStatus === 'confirmed') {
+              const notice = chatCancellationNotice('confirmed');
+              applyCancellationEvent({ type: 'confirmed' });
+              setMessages((prev) => collapseAllThinking(prev));
+              upsertAssistant((msg) => ({
+                ...msg,
+                parts: [
+                  ...msg.parts.map((p) =>
+                    p.kind === 'tool' && p.result === undefined
+                      ? { ...p, result: '(cancelled before this tool returned)', isError: true }
+                      : p,
+                  ),
+                  { kind: 'system', ...notice },
+                ],
+                streaming: false,
+              }));
+              return;
+            }
+            const active = Boolean(event.active);
+            const notice = chatCancellationNotice(
+              'failed',
+              String(event.message ?? 'unknown error'),
+            );
+            applyCancellationEvent({ type: 'failed', active });
+            upsertAssistant((msg) => ({
+              ...msg,
+              parts: [...msg.parts, {
+                kind: 'system',
+                ...notice,
+              }],
+              streaming: active,
+            }));
+            return;
+          }
           if (type === 'done') {
-            setBusy(false);
-            setMessages((prev) => collapseAllThinking(prev));
+            const transition = applyCancellationEvent({ type: 'done' });
+            if (!transition.busy) {
+              setMessages((prev) => collapseAllThinking(prev));
+            }
             upsertAssistant((msg) => ({
               ...msg,
               streaming: false,
@@ -1125,7 +1204,7 @@ export function ChatPanel() {
         .catch(() => {
           if (cancelled) return;
           setConnected(false);
-          setBusy(false);
+          applyCancellationEvent({ type: 'disconnect' });
           scheduleReconnect();
         });
     };
@@ -1138,7 +1217,7 @@ export function ChatPanel() {
       ws?.close();
       wsRef.current = null;
     };
-  }, [visible, upsertAssistant]);
+  }, [visible, upsertAssistant, applyCancellationEvent]);
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -1358,7 +1437,7 @@ export function ChatPanel() {
       },
       { role: 'assistant', id: newId(), streaming: true, parts: [], enhanceTargetId },
     ]);
-    setBusy(true);
+    applyCancellationEvent({ type: 'send' });
     setInput('');
 
     ws.send(
@@ -1385,6 +1464,7 @@ export function ChatPanel() {
     agent,
     autonomy,
     changeDaedalusModel,
+    applyCancellationEvent,
   ]);
 
   // Keep sendRef pointing at the latest `send` so the chat-send event listener
@@ -1422,7 +1502,7 @@ export function ChatPanel() {
           { role: 'assistant', id: newId(), streaming: true, parts: [] },
         ];
       });
-      setBusy(true);
+      applyCancellationEvent({ type: 'send' });
       ws.send(
         JSON.stringify({
           type: 'send',
@@ -1435,27 +1515,52 @@ export function ChatPanel() {
         }),
       );
     },
-    [sessionId, model, daedalusModel, daedalusProvider, agent, autonomy],
+    [sessionId, model, daedalusModel, daedalusProvider, agent, autonomy, applyCancellationEvent],
   );
 
   const cancel = useCallback(() => {
     const ws = wsRef.current;
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: 'cancel' }));
+    if (cancelStateRef.current === 'requested') return;
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      const notice = chatCancellationNotice('failed', 'backend is disconnected.');
+      applyCancellationEvent({ type: 'failed', active: false });
+      upsertAssistant((msg) => ({
+        ...msg,
+        parts: [...msg.parts, {
+          kind: 'system',
+          ...notice,
+        }],
+        streaming: false,
+      }));
+      return;
     }
-    setBusy(false);
-    upsertAssistant((msg) => ({
-      ...msg,
-      parts: [...msg.parts, { kind: 'system', text: 'Cancelled.' }],
-      streaming: false,
-    }));
-  }, [upsertAssistant]);
+    try {
+      ws.send(JSON.stringify({ type: 'cancel' }));
+      applyCancellationEvent({ type: 'request' });
+    } catch (error) {
+      const notice = chatCancellationNotice(
+        'failed',
+        error instanceof Error ? error.message : String(error),
+      );
+      applyCancellationEvent({ type: 'failed', active: false });
+      upsertAssistant((msg) => ({
+        ...msg,
+        parts: [...msg.parts, {
+          kind: 'system',
+          ...notice,
+        }],
+        streaming: false,
+      }));
+    }
+  }, [upsertAssistant, applyCancellationEvent]);
 
   const status = useMemo(() => {
     if (!connected) return 'disconnected';
+    if (cancelState === 'requested') return 'cancelling…';
+    if (cancelState === 'failed') return 'cancel failed';
     if (busy) return 'thinking…';
     return 'ready';
-  }, [connected, busy]);
+  }, [connected, busy, cancelState]);
 
   // Generic drag-to-resize helper. The `edges` string encodes which panel
   // edges the user is dragging: any combination of 'l', 'r', 't', 'b'. We
@@ -1644,6 +1749,7 @@ export function ChatPanel() {
       onMouseDown={startPanelDrag}
       data-chat-agent={agent}
       data-chat-busy={busy ? 'true' : 'false'}
+      data-chat-cancel-state={cancelState}
       data-chat-connected={connected ? 'true' : 'false'}
       data-chat-message-count={messages.length}
       data-chat-pending-image-count={pendingImages.length}
@@ -2233,8 +2339,9 @@ export function ChatPanel() {
               type="button"
               className="chat-panel__send chat-panel__send--stop"
               onClick={cancel}
-              aria-label="Stop response"
-              title="Stop response"
+              disabled={cancelState === 'requested'}
+              aria-label={cancelState === 'requested' ? 'Cancellation requested' : 'Stop response'}
+              title={cancelState === 'requested' ? 'Waiting for backend cancellation' : 'Stop response'}
             >
               <Square
                 className="chat-panel__send-icon"

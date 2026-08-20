@@ -97,51 +97,23 @@ async def handle_meshy_image_to_3d(
             raise RuntimeError(f"Meshy did not return task ID: {task_data}")
 
         _log(f"polling task {task_id}")
-        # Poll for completion
         poll_url = f"{MESHY_API_BASE}/v1/image-to-3d/{task_id}"
-        max_polls = 300
-        poll_interval = 3.0
-
-        for poll_num in range(1, max_polls + 1):
-            await asyncio.sleep(poll_interval)
-
-            poll_resp = await client.get(poll_url, headers={"Authorization": f"Bearer {api_key}"})
-            if poll_resp.status_code != 200:
-                _log(f"poll FAILED: {poll_resp.status_code} {poll_resp.text}")
-                raise RuntimeError(f"Meshy poll failed ({poll_resp.status_code}): {poll_resp.text}")
-
-            poll_data = poll_resp.json()
-            status = poll_data.get("status", "")
-            if poll_num % 10 == 1:
-                _log(f"poll #{poll_num}: status={status}")
-
-            progress = min(poll_num / max_polls, 0.99)
-            await _emit(ProgressEvent(node_id=node.id, value=progress))
-
-            if status == "SUCCEEDED":
-                model_urls = poll_data.get("model_urls", {})
-                glb_url = model_urls.get("glb", "")
-                _log(f"SUCCEEDED! glb_url={glb_url[:100] if glb_url else 'NONE'}")
-                if glb_url:
-                    # Download GLB locally to avoid CORS issues
-                    from services.output import save_mesh_from_url, get_run_dir
-                    run_dir = get_run_dir()
-                    local_path = await save_mesh_from_url(glb_url, run_dir)
-                    _log(f"downloaded to {local_path}")
-                    return {
-                        "mesh": {"type": "Mesh", "value": str(local_path)},
-                        "model_url": {"type": "Text", "value": glb_url},
-                    }
-                _log(f"no glb_url found, full data keys: {list(poll_data.keys())}")
-                return {"mesh": {"type": "Mesh", "value": str(poll_data)}}
-
-            elif status == "FAILED":
-                error = poll_data.get("task_error", {}).get("message", "Unknown error")
-                _log(f"FAILED: {error}")
-                raise RuntimeError(f"Meshy task failed: {error}")
-
-        _log("TIMED OUT")
-        raise RuntimeError(f"Meshy task timed out after {max_polls} polls")
+        poll_data = await _poll_meshy_task(client, api_key, poll_url, _emit, node.id)
+        model_urls = poll_data.get("model_urls", {})
+        glb_url = model_urls.get("glb", "")
+        _log(f"SUCCEEDED! glb_url={glb_url[:100] if glb_url else 'NONE'}")
+        if glb_url:
+            # Download GLB locally to avoid CORS issues
+            from services.output import save_mesh_from_url, get_run_dir
+            run_dir = get_run_dir()
+            local_path = await save_mesh_from_url(glb_url, run_dir)
+            _log(f"downloaded to {local_path}")
+            return {
+                "mesh": {"type": "Mesh", "value": str(local_path)},
+                "model_url": {"type": "Text", "value": glb_url},
+            }
+        _log(f"no glb_url found, full data keys: {list(poll_data.keys())}")
+        return {"mesh": {"type": "Mesh", "value": str(poll_data)}}
 
 
 async def handle_meshy_text_to_3d(
@@ -286,9 +258,9 @@ async def _poll_meshy_task(
 
         if status == "SUCCEEDED":
             return data
-        elif status == "FAILED":
+        elif status in {"FAILED", "CANCELED"}:
             error = data.get("task_error", {}).get("message", "Unknown error")
-            raise RuntimeError(f"Meshy task failed: {error}")
+            raise RuntimeError(f"Meshy task {status.lower()}: {error}")
 
     raise RuntimeError(f"Meshy task timed out after {max_polls} polls")
 

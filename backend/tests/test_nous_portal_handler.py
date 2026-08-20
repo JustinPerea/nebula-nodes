@@ -171,10 +171,10 @@ async def test_stream_delta_path_is_openai_compatible():
 
 @pytest.mark.asyncio
 async def test_endpoint_url_uses_credential_base_url():
-    """StreamConfig URL must be built from the credential's base_url, not hardcoded.
+    """StreamConfig URL must use the loader-validated credential base URL.
 
-    This ensures that if Hermes records a different inference URL (e.g. a staging
-    or enterprise endpoint), the handler honours it.
+    A custom value here represents the explicit NOUS_INFERENCE_BASE_URL staging
+    override. Persisted Hermes URLs are allowlisted inside nous_auth.
     """
     custom_cred = NousCredential(
         access_token="sk-custom",

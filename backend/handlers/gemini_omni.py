@@ -11,6 +11,7 @@ import httpx
 
 from models.events import ExecutionEvent, ProgressEvent
 from models.graph import GraphNode, PortValueDict
+from services.cancellation import schedule_detached_cancel
 from services.output import get_run_dir
 from services.provider_capabilities import enforce_gemini_omni_capabilities
 
@@ -21,6 +22,23 @@ MODEL_ID = "gemini-omni-flash-preview"
 
 def _log(msg: str) -> None:
     print(f"[gemini-omni] {msg}", file=sys.stderr, flush=True)
+
+
+async def _cancel_interaction(interaction_id: str, api_key: str) -> None:
+    """Best-effort provider cancellation for a background Interaction.
+
+    Google exposes POST /interactions/{id}/cancel for interactions that are
+    still running. Use a fresh client because the handler's client is exiting
+    while the cancelled execution task unwinds.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            await client.post(
+                f"{INTERACTIONS_URL}/{interaction_id}/cancel",
+                headers={"x-goog-api-key": api_key},
+            )
+    except Exception:
+        pass
 
 
 def _mime_for_path(path: Path) -> str:
@@ -242,7 +260,15 @@ async def handle_gemini_omni(
         if status not in {"completed", "succeeded"}:
             if not interaction_id:
                 raise RuntimeError(f"Gemini Omni did not return interaction id: {data}")
-            data = await _poll_interaction(client, interaction_id, api_key, node.id, _emit)
+            try:
+                data = await _poll_interaction(
+                    client, interaction_id, api_key, node.id, _emit
+                )
+            except asyncio.CancelledError:
+                schedule_detached_cancel(
+                    lambda: _cancel_interaction(interaction_id, api_key)
+                )
+                raise
             interaction_id = str(data.get("id") or interaction_id)
 
         video_bytes, video_uri = _video_from_interaction(data)

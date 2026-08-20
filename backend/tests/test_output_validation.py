@@ -18,11 +18,14 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+import respx
+from httpx import Response
 
 import services.output as output_mod
 from services.ffmpeg import ProbeResult
 from services.output import (
     _validate_and_correct_extension,
+    materialize_media_value,
     save_base64_image,
     save_base64_image_named,
     save_mesh_from_url,
@@ -164,6 +167,68 @@ async def test_video_extension_accepted_when_probe_finds_stream(
         result = await _validate_and_correct_extension(target)
     assert result == target
     mock_probe.assert_awaited_once_with(target)
+
+
+@pytest.mark.asyncio
+@respx.mock
+@pytest.mark.parametrize(
+    "media_type,url,content_type,payload,expected_suffix",
+    [
+        ("Image", "https://cdn.test/result.bin", "image/png", PNG_BYTES, ".png"),
+        ("SVG", "https://cdn.test/vector", "image/svg+xml", b"<svg/>", ".svg"),
+        ("Audio", "https://cdn.test/sound", "audio/mpeg", b"ID3audio", ".mp3"),
+        ("Mesh", "https://cdn.test/model", "model/gltf-binary", GLB_BYTES, ".glb"),
+    ],
+)
+async def test_materialize_media_value_owns_remote_provider_bytes(
+    tmp_path: Path,
+    media_type: str,
+    url: str,
+    content_type: str,
+    payload: bytes,
+    expected_suffix: str,
+) -> None:
+    respx.get(url).mock(
+        return_value=Response(200, content=payload, headers={"content-type": content_type})
+    )
+
+    result = await materialize_media_value(url, media_type, tmp_path)
+
+    assert result.parent == tmp_path
+    assert result.suffix == expected_suffix
+    assert result.read_bytes() == payload
+
+
+@pytest.mark.asyncio
+async def test_materialize_media_value_decodes_data_uri(tmp_path: Path) -> None:
+    value = "data:image/png;base64," + base64.b64encode(PNG_BYTES).decode("ascii")
+
+    result = await materialize_media_value(value, "Image", tmp_path)
+
+    assert result.suffix == ".png"
+    assert result.read_bytes() == PNG_BYTES
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_materialize_video_validates_downloaded_bytes(tmp_path: Path) -> None:
+    url = "https://cdn.test/clip"
+    respx.get(url).mock(
+        return_value=Response(
+            200,
+            content=GARBAGE_BYTES,
+            headers={"content-type": "video/mp4"},
+        )
+    )
+    probe_ok = ProbeResult(duration=1.0, fps=24.0, is_vfr=False)
+
+    with patch.object(
+        output_mod, "ffprobe_video", new=AsyncMock(return_value=probe_ok)
+    ) as mock_probe:
+        result = await materialize_media_value(url, "Video", tmp_path)
+
+    assert result.suffix == ".mp4"
+    mock_probe.assert_awaited_once_with(result)
 
 
 # ---------------------------------------------------------------------------

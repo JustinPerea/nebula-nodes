@@ -62,6 +62,27 @@ def definitions() -> dict[str, dict[str, Any]]:
     return NodeRegistry().get_all()
 
 
+def test_fal_execution_patterns_match_queue_and_stream_handlers(
+    definitions: dict[str, dict[str, Any]],
+) -> None:
+    fal_nodes = {
+        node_id: definition
+        for node_id, definition in definitions.items()
+        if definition.get("apiProvider") == "fal"
+    }
+
+    streaming = {
+        node_id
+        for node_id, definition in fal_nodes.items()
+        if definition.get("executionPattern") == "stream"
+    }
+    assert streaming == {"gpt-image-2-fal-generate", "gpt-image-2-fal-edit"}
+
+    queued = set(fal_nodes) - streaming
+    assert queued
+    assert all(fal_nodes[node_id]["executionPattern"] == "async-poll" for node_id in queued)
+
+
 def _port_errors(node_id: str, field: str, ports: Any) -> list[str]:
     errors: list[str] = []
     if not isinstance(ports, list):

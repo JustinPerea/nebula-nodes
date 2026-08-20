@@ -1,10 +1,19 @@
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 
 import pytest
+import respx
+from httpx import Response
 
-from execution.engine import topological_sort, validate_graph, execute_graph, CycleError
+from execution.engine import (
+    CycleError,
+    _materialize_media_outputs,
+    execute_graph,
+    topological_sort,
+    validate_graph,
+)
 from models.events import execution_run_id
 from models.graph import GraphNode, GraphEdge, PortValueDict
 
@@ -79,6 +88,60 @@ async def test_execute_graph_scopes_run_id_across_child_tasks_and_resets() -> No
     assert observed
     assert set(observed) == {"run-engine-123"}
     assert execution_run_id.get() is None
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_execute_graph_materializes_remote_media_before_emit_and_manifest() -> None:
+    png = b"\x89PNG\r\n\x1a\n" + b"\x00\x00\x00\rIHDR" + b"\x00" * 32
+    respx.get("https://cdn.fal.test/temporary.png?Expires=1").mock(
+        return_value=Response(200, content=png, headers={"content-type": "image/png"})
+    )
+    emitted = []
+
+    async def remote_handler(_node, _inputs, _keys):
+        return {
+            "image": {
+                "type": "Image",
+                "value": "https://cdn.fal.test/temporary.png?Expires=1",
+            }
+        }
+
+    async def emit(event) -> None:
+        emitted.append(event)
+
+    await execute_graph(
+        nodes=[_node("remote")],
+        edges=[],
+        api_keys={},
+        handler_registry={"gpt-image-1-generate": remote_handler},
+        emit=emit,
+        run_id="remote-materialize",
+    )
+
+    executed = next(event for event in emitted if event.type == "executed")
+    local_value = executed.outputs["image"]["value"]
+    local_path = Path(local_value)
+    assert local_path.is_file()
+    assert local_path.read_bytes() == png
+    assert local_path.parent.joinpath("manifest.json").is_file()
+
+
+@pytest.mark.asyncio
+async def test_materialization_preserves_provider_capability_handles(tmp_path: Path) -> None:
+    source_uri = "https://generativelanguage.googleapis.com/v1beta/files/clip-1"
+    model_url = "https://cdn.meshy.test/model.glb"
+
+    outputs = await _materialize_media_outputs(
+        {
+            "source_uri": {"type": "Video", "value": source_uri},
+            "model_url": {"type": "Text", "value": model_url},
+        },
+        tmp_path,
+    )
+
+    assert outputs["source_uri"]["value"] == source_uri
+    assert outputs["model_url"]["value"] == model_url
 
 
 class TestValidateGraph:

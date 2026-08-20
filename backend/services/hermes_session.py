@@ -18,6 +18,10 @@ import os
 from pathlib import Path
 from typing import Any, AsyncIterator
 
+from services.agent_process import (
+    agent_process_group_options,
+    terminate_agent_process_tree,
+)
 from services.chat_actions import (
     consume_actions,
     mark_activity,
@@ -244,6 +248,7 @@ async def run_hermes(
             cwd=str(PROJECT_ROOT),
             env=env,
             limit=64 * 1024 * 1024,
+            **agent_process_group_options(),
         )
     except FileNotFoundError:
         yield {
@@ -404,11 +409,7 @@ async def run_hermes(
         # If the task was cancelled mid-read, the subprocess is still alive.
         # Kill it to prevent orphaned hermes processes.
         if proc.returncode is None:
-            try:
-                proc.kill()
-                await proc.wait()
-            except Exception:
-                pass
+            await terminate_agent_process_tree(proc)
 
     # Event accumulators.
     # Session ID in verbose mode comes from the footer's `Session: <id>` line,

@@ -5802,7 +5802,7 @@
     "apiProvider": "fal",
     "apiEndpoint": "fal-ai/flux/schnell",
     "envKeyName": "FAL_KEY",
-    "executionPattern": "sync",
+    "executionPattern": "async-poll",
     "inputPorts": [
       {
         "id": "prompt",
@@ -6349,7 +6349,7 @@
     "apiProvider": "fal",
     "apiEndpoint": "fal-ai/fast-sdxl",
     "envKeyName": "FAL_KEY",
-    "executionPattern": "sync",
+    "executionPattern": "async-poll",
     "inputPorts": [
       {
         "id": "prompt",
@@ -15626,7 +15626,7 @@
     "apiProvider": "ideogram",
     "apiEndpoint": "/v1/ideogram-v3/generate-transparent",
     "envKeyName": "IDEOGRAM_API_KEY",
-    "executionPattern": "async-poll",
+    "executionPattern": "sync",
     "inputPorts": [
       {
         "id": "prompt",
@@ -15874,7 +15874,7 @@
     "apiProvider": "ideogram",
     "apiEndpoint": "/v1/edit",
     "envKeyName": "IDEOGRAM_API_KEY",
-    "executionPattern": "async-poll",
+    "executionPattern": "sync",
     "inputPorts": [
       {
         "id": "prompt",

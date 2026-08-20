@@ -1,9 +1,9 @@
 """Nous Portal handler.
 
 Mirrors the OpenRouter handler but pulls auth from `~/.hermes/auth.json`
-instead of an env-supplied API key, and points at whatever `base_url`
-Hermes recorded for the user (defaults to the production Nous inference
-URL if missing).
+instead of an env-supplied API key. The credential loader pins persisted
+destinations to the production Nous inference origin; an explicit secure
+`NOUS_INFERENCE_BASE_URL` process override supports staging/tests.
 
 The Nous Portal API is OpenAI-compatible: `/v1/chat/completions`, SSE
 streaming with `choices[0].delta.content`, and standard multimodal

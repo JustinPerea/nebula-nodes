@@ -2,11 +2,15 @@ import { useEffect, useRef, useState } from 'react';
 import { Activity, ChevronUp } from 'lucide-react';
 import { useGraphStore } from '../../store/graphStore';
 import { useUIStore } from '../../store/uiStore';
+import {
+  normalizeAgentEventSource,
+  type AgentEventSource,
+} from '../../lib/agentEvents';
 
 interface LogEntry {
   id: string;
   ts: number;
-  source: 'graph' | 'hermes' | 'system';
+  source: AgentEventSource;
   message: string;
 }
 
@@ -222,7 +226,7 @@ export function AgentLog() {
   useEffect(() => {
     function handleEntry(e: Event) {
       const detail = (e as CustomEvent).detail as
-        | { source?: 'graph' | 'hermes' | 'system'; message?: string }
+        | { source?: unknown; message?: string }
         | undefined;
       if (!detail) return;
       const msg = String(detail.message ?? '').trim();
@@ -232,7 +236,7 @@ export function AgentLog() {
         {
           id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
           ts: Date.now(),
-          source: detail.source ?? 'system',
+          source: normalizeAgentEventSource(detail.source),
           message: msg,
         },
       ]);

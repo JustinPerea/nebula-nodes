@@ -8,10 +8,69 @@ import httpx
 from models.graph import GraphNode, PortValueDict
 from models.events import ExecutionEvent
 from execution.async_poll_runner import AsyncPollConfig, poll_until_terminal, _cancel_async_poll
-from execution.stream_runner import stream_execute_replicate
+from execution.stream_runner import ReplicateStreamOutputMode, stream_execute_replicate
 from services.cancellation import schedule_detached_cancel
 
 REPLICATE_API_BASE = "https://api.replicate.com/v1"
+
+
+def _infer_data_uri_output(value: str) -> dict[str, Any] | None:
+    """Return a typed media port for a well-formed media data URI.
+
+    Some Replicate models return inline artifacts instead of CDN URLs.  These
+    must be typed as media here so the execution engine can persist the bytes
+    into the run directory before caching, emitting events, and writing the
+    manifest.  Unknown/text data URIs stay on the existing Text fallback.
+    """
+    if not value.startswith("data:"):
+        return None
+
+    header, separator, _payload = value.partition(",")
+    if not separator:
+        return None
+    media_type = header[5:].split(";", 1)[0].strip().lower()
+
+    if media_type == "image/svg+xml":
+        port_id, port_type = "svg", "SVG"
+    elif media_type.startswith("image/"):
+        port_id, port_type = "image", "Image"
+    elif media_type.startswith("video/"):
+        port_id, port_type = "video", "Video"
+    elif media_type.startswith("audio/"):
+        port_id, port_type = "audio", "Audio"
+    elif media_type in {"model/gltf-binary", "model/gltf+json"}:
+        port_id, port_type = "mesh", "Mesh"
+    else:
+        return None
+
+    return {port_id: {"type": port_type, "value": value}}
+
+
+def _classify_stream_output_prefix(value: str) -> ReplicateStreamOutputMode:
+    """Keep possible media data URIs private until their header is conclusive.
+
+    Replicate may split ``data:image/...;base64,`` across multiple ``output`` SSE
+    events. Returning ``pending`` for every viable prefix prevents those early
+    fragments from being emitted as text. Once the comma completes a recognized
+    media data-URI header, ``buffer`` keeps the entire artifact out of stream
+    telemetry. Everything else is ordinary text and can stream immediately.
+    """
+    if not value:
+        return "pending"
+
+    if "data:".startswith(value):
+        return "pending"
+    if not value.startswith("data:"):
+        return "text"
+
+    comma_index = value.find(",")
+    if comma_index < 0:
+        return "pending"
+
+    # The media type lives entirely before the comma. Avoid passing a potentially
+    # large base64 payload through the type probe.
+    header = value[: comma_index + 1]
+    return "buffer" if _infer_data_uri_output(header) is not None else "text"
 
 
 async def _resolve_version(owner: str, name: str, api_key: str) -> str:
@@ -40,6 +99,9 @@ def _infer_output_type(output: Any) -> dict[str, Any]:
     - Dict: structured output
     """
     if isinstance(output, str):
+        data_uri_output = _infer_data_uri_output(output)
+        if data_uri_output is not None:
+            return data_uri_output
         if output.startswith(("http://", "https://")):
             # URL — likely an image or file
             lower = output.lower()
@@ -54,6 +116,10 @@ def _infer_output_type(output: Any) -> dict[str, Any]:
         return {"text": {"type": "Text", "value": output}}
 
     if isinstance(output, list):
+        if output and isinstance(output[0], str):
+            data_uri_output = _infer_data_uri_output(output[0])
+            if data_uri_output is not None:
+                return data_uri_output
         if output and isinstance(output[0], str) and output[0].startswith(("http://", "https://")):
             # List of URLs — return first as primary output
             return {"image": {"type": "Image", "value": output[0]}}
@@ -126,9 +192,8 @@ async def handle_replicate_universal(
     emit_fn = emit or noop_emit
 
     # Submit the prediction ourselves so we can detect streaming support before
-    # committing to a poll loop. Replicate returns `urls.stream` (an SSE endpoint)
-    # only for models that stream token deltas (language models); image/video/audio/
-    # mesh models omit it and we poll as before.
+    # committing to a poll loop. Replicate may return `urls.stream` for either text
+    # token streams or complete inline media artifacts.
     async with httpx.AsyncClient(timeout=config.timeout) as client:
         submit_resp = await client.post(config.submit_url, headers=config.headers, json=submit_body)
         if submit_resp.status_code not in (200, 201):
@@ -142,15 +207,16 @@ async def handle_replicate_universal(
         stream_url = (submit_data.get("urls") or {}).get("stream")
 
         if stream_url and emit is not None:
-            # Streaming-capable text model: consume the SSE token stream live. The
-            # frontend already renders StreamDeltaEvent -> node.data.streamingText, so
-            # no frontend change is needed. On cancel, stop the prediction upstream.
+            # Consume text deltas live, but classify a possible media data URI before
+            # emitting anything. This keeps base64 artifacts out of text telemetry while
+            # preserving normal text streaming. On cancel, stop the prediction upstream.
             try:
                 text = await stream_execute_replicate(
                     stream_url=stream_url,
                     headers={"Authorization": config.headers["Authorization"]},
                     node_id=node.id,
                     emit=emit_fn,
+                    classify_output_prefix=_classify_stream_output_prefix,
                 )
             except asyncio.CancelledError:
                 cancel_url = config.cancel_url_template.format(task_id=task_id)
@@ -158,7 +224,12 @@ async def handle_replicate_universal(
                     lambda: _cancel_async_poll(cancel_url, config.cancel_method, config.headers)
                 )
                 raise
-            return {"text": {"type": "Text", "value": text}}
+            # Replicate can expose ``urls.stream`` for non-text models too.
+            # Flux Schnell, for example, may stream a complete image data URI.
+            # Preserve text-model behavior while routing streamed media through
+            # the same type inference used by polled predictions so the engine
+            # can materialize it into the run directory.
+            return _infer_output_type(text)
 
         # Non-streaming output (images/video/audio/mesh/structured) — poll to terminal.
         result = await poll_until_terminal(client, config, task_id, node.id, emit_fn)

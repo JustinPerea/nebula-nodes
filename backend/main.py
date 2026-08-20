@@ -273,12 +273,26 @@ def _output_url_from_ref(value: str) -> str | None:
 
 def _normalize_output_value_for_storage(port_val: Any) -> Any:
     """Store portable /api/outputs URLs instead of absolute output paths."""
-    if not isinstance(port_val, dict) or not isinstance(port_val.get("value"), str):
+    if not isinstance(port_val, dict):
         return port_val
-    url = _output_url_from_ref(port_val["value"])
-    if url is None:
+
+    value = port_val.get("value")
+    if isinstance(value, str):
+        url = _output_url_from_ref(value)
+        if url is None:
+            return port_val
+        return {**port_val, "value": url}
+
+    if not isinstance(value, list):
         return port_val
-    return {**port_val, "value": url}
+
+    normalized = [
+        _output_url_from_ref(item) or item if isinstance(item, str) else item
+        for item in value
+    ]
+    if normalized == value:
+        return port_val
+    return {**port_val, "value": normalized}
 
 
 def _normalize_outputs_for_storage(outputs: dict[str, Any]) -> dict[str, Any]:
@@ -916,6 +930,16 @@ async def chat_websocket(websocket: WebSocket) -> None:
 
     await websocket.accept()
     current_task: asyncio.Task[None] | None = None
+    current_agent: str | None = None
+    send_lock = asyncio.Lock()
+
+    async def send_event(event: dict[str, Any]) -> None:
+        """Serialize every chat WebSocket write, including cancellation acks."""
+        async with send_lock:
+            await websocket.send_text(json.dumps(event))
+
+    def _event_source(agent: str) -> str:
+        return agent if agent in {"claude", "codex", "daedalus"} else "system"
 
     async def stream_response(
         message: str,
@@ -930,9 +954,14 @@ async def chat_websocket(websocket: WebSocket) -> None:
         # task — WebSocket.send_text is not safe to call from two tasks at
         # once.
         outbound: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
+        source = _event_source(agent)
 
         def enqueue(event: dict[str, Any]) -> None:
-            outbound.put_nowait(event)
+            sourced_event = dict(event)
+            # The selected backend runner is authoritative. Never trust a
+            # stale or hostile source field supplied by runner output.
+            sourced_event["source"] = source
+            outbound.put_nowait(sourced_event)
 
         async def drain() -> None:
             while True:
@@ -940,7 +969,7 @@ async def chat_websocket(websocket: WebSocket) -> None:
                 if event is None:
                     return
                 try:
-                    await websocket.send_text(json.dumps(event))
+                    await send_event(event)
                 except Exception:
                     return
 
@@ -963,8 +992,17 @@ async def chat_websocket(websocket: WebSocket) -> None:
             try:
                 agen = runner(message, session_id, model, autonomy, provider=provider)
                 async for event in agen:
+                    task = asyncio.current_task()
+                    if task is not None and task.cancelling():
+                        # Some async generators yield a final `done` while
+                        # unwinding. A cancellation is not confirmed until
+                        # the runner and its process tree have fully stopped.
+                        raise asyncio.CancelledError
                     enqueue(event)
             except Exception as exc:
+                task = asyncio.current_task()
+                if task is not None and task.cancelling():
+                    raise
                 enqueue({"type": "error", "message": str(exc)})
                 enqueue({"type": "done"})
         finally:
@@ -982,13 +1020,72 @@ async def chat_websocket(websocket: WebSocket) -> None:
             try:
                 payload = json.loads(raw)
             except json.JSONDecodeError:
-                await websocket.send_text(json.dumps({"type": "error", "message": "invalid JSON"}))
+                await send_event({"type": "error", "message": "invalid JSON", "source": "system"})
                 continue
 
             msg_type = payload.get("type")
             if msg_type == "cancel":
-                if current_task and not current_task.done():
-                    current_task.cancel()
+                task = current_task
+                if task is None or task.done():
+                    await send_event({
+                        "type": "cancellation",
+                        "status": "failed",
+                        "active": False,
+                        "message": "No active response to cancel.",
+                        "source": "system",
+                    })
+                    continue
+
+                source = _event_source(current_agent or "system")
+                await send_event({
+                    "type": "cancellation",
+                    "status": "requested",
+                    "active": True,
+                    "source": source,
+                })
+                accepted = task.cancel()
+                if not accepted:
+                    await send_event({
+                        "type": "cancellation",
+                        "status": "failed",
+                        "active": False,
+                        "message": "The response finished before cancellation was accepted.",
+                        "source": source,
+                    })
+                    continue
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    if current_task is task:
+                        current_task = None
+                        current_agent = None
+                    await send_event({
+                        "type": "cancellation",
+                        "status": "confirmed",
+                        "active": False,
+                        "source": source,
+                    })
+                except Exception as exc:
+                    if current_task is task:
+                        current_task = None
+                        current_agent = None
+                    await send_event({
+                        "type": "cancellation",
+                        "status": "failed",
+                        "active": False,
+                        "message": f"Agent cleanup failed: {exc}",
+                        "source": source,
+                    })
+                else:
+                    if current_task is task:
+                        current_task = None
+                        current_agent = None
+                    await send_event({
+                        "type": "cancellation",
+                        "status": "confirmed",
+                        "active": False,
+                        "source": source,
+                    })
                 continue
             if msg_type != "send":
                 continue
@@ -1011,13 +1108,31 @@ async def chat_websocket(websocket: WebSocket) -> None:
                 continue
 
             if current_task and not current_task.done():
-                current_task.cancel()
+                # A second raw WebSocket send must not become an unacknowledged
+                # cancellation path. In particular, swallowing a cleanup error
+                # here could start another agent while descendants from the
+                # previous turn were still alive. The UI normally disables Send
+                # while busy, but the backend contract is authoritative.
+                await send_event({
+                    "type": "error",
+                    "message": (
+                        "Another response is active. Stop it and wait for "
+                        "cancellation confirmation before sending again."
+                    ),
+                    "source": _event_source(current_agent or "system"),
+                })
+                continue
             current_task = asyncio.create_task(
                 stream_response(user_message, session_id, model, agent, autonomy, provider)
             )
+            current_agent = agent
     except WebSocketDisconnect:
         if current_task and not current_task.done():
             current_task.cancel()
+            try:
+                await current_task
+            except (asyncio.CancelledError, Exception):
+                pass
 
 
 # ---------- REST endpoints ----------
@@ -1815,22 +1930,33 @@ async def _broadcast_graph_sync() -> dict[str, Any]:
     return export
 
 
-def _sync_outputs_to_cli_graph(node_id: str, outputs: dict[str, Any]) -> None:
+def _sync_outputs_to_cli_graph(
+    node_id: str,
+    outputs: dict[str, Any],
+) -> dict[str, Any]:
     """Mirror an ExecutedEvent's outputs into cli_graph so endpoints like
     /api/graph/node/{id}/path can resolve to real values. Shape-matches the
     pattern used by /api/graph/run so every execution path converges on the
-    same stored shape."""
-    if node_id not in cli_graph.nodes:
-        return
+    same stored shape.
+
+    Return that canonical shape so callers can broadcast the exact value that
+    was persisted without running path normalization a second time.
+    """
     if not isinstance(outputs, dict):
-        cli_graph.nodes[node_id]["outputs"] = {}
-        return
-    shaped_outputs = {
-        k: v if isinstance(v, dict) else {"type": "Any", "value": v}
-        for k, v in outputs.items()
-    }
-    cli_graph.nodes[node_id]["outputs"] = _normalize_outputs_for_storage(shaped_outputs)
+        normalized_outputs: dict[str, Any] = {}
+    else:
+        shaped_outputs = {
+            k: v if isinstance(v, dict) else {"type": "Any", "value": v}
+            for k, v in outputs.items()
+        }
+        normalized_outputs = _normalize_outputs_for_storage(shaped_outputs)
+
+    if node_id not in cli_graph.nodes:
+        return normalized_outputs
+
+    cli_graph.nodes[node_id]["outputs"] = normalized_outputs
     cli_graph._maybe_persist()
+    return normalized_outputs
 
 
 async def _emit_and_sync(event: ExecutionEvent) -> None:
@@ -1843,7 +1969,12 @@ async def _emit_and_sync(event: ExecutionEvent) -> None:
     if record is not None and record.status in {"cancelling", "cancelled"}:
         return
     if isinstance(event, ExecutedEvent):
-        _sync_outputs_to_cli_graph(event.node_id, event.outputs)
+        # Hand browsers the same portable asset URLs that we persist. Engine
+        # handlers intentionally use absolute paths while composing a run, but
+        # those paths are not browser-loadable and may live under a relocated
+        # output root whose directory name is not literally ``output``.
+        normalized_outputs = _sync_outputs_to_cli_graph(event.node_id, event.outputs)
+        event = event.model_copy(update={"outputs": normalized_outputs})
     await manager.broadcast(event)
 
 

@@ -1,12 +1,20 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
+import mimetypes
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from handlers.replicate_universal import handle_replicate_universal, _infer_output_type
+from execution.engine import execute_graph
+from handlers.replicate_universal import (
+    _classify_stream_output_prefix,
+    _infer_output_type,
+    handle_replicate_universal,
+)
 from models.graph import GraphNode, PortValueDict
 
 
@@ -84,6 +92,72 @@ class TestOutputTypeInference:
     def test_generic_url_defaults_to_image(self) -> None:
         assert _infer_output_type("https://example.com/some-output")["image"]["type"] == "Image"
 
+    def test_image_data_uri(self) -> None:
+        data_uri = "data:image/webp;base64,UklGRgAAAABXRUJQ"
+        assert _infer_output_type(data_uri) == {
+            "image": {"type": "Image", "value": data_uri}
+        }
+
+    def test_image_data_uri_list_uses_first_artifact(self) -> None:
+        first = "data:image/png;base64,iVBORw0KGgo="
+        second = "data:image/png;base64,iVBORw0KGgo="
+        assert _infer_output_type([first, second]) == {
+            "image": {"type": "Image", "value": first}
+        }
+
+    @pytest.mark.parametrize(
+        ("data_uri", "port_id", "port_type"),
+        [
+            ("data:video/mp4;base64,AAAA", "video", "Video"),
+            ("data:audio/mpeg;base64,AAAA", "audio", "Audio"),
+            ("data:image/svg+xml,%3Csvg/%3E", "svg", "SVG"),
+            ("data:model/gltf-binary;base64,AAAA", "mesh", "Mesh"),
+        ],
+    )
+    def test_other_media_data_uri_types(
+        self, data_uri: str, port_id: str, port_type: str
+    ) -> None:
+        assert _infer_output_type(data_uri) == {
+            port_id: {"type": port_type, "value": data_uri}
+        }
+
+    def test_text_data_uri_keeps_text_fallback(self) -> None:
+        data_uri = "data:text/plain;base64,SGVsbG8="
+        assert _infer_output_type(data_uri) == {
+            "text": {"type": "Text", "value": data_uri}
+        }
+
+
+class TestStreamOutputClassification:
+    @pytest.mark.parametrize("prefix", ["d", "data:", "data:image/", "data:image/webp;base64"])
+    def test_possible_media_prefix_stays_pending(self, prefix: str) -> None:
+        assert _classify_stream_output_prefix(prefix) == "pending"
+
+    @pytest.mark.parametrize(
+        "value",
+        [
+            "plain text",
+            "data:text/plain;base64,SGVsbG8=",
+            "database query",
+        ],
+    )
+    def test_non_media_content_is_text(self, value: str) -> None:
+        assert _classify_stream_output_prefix(value) == "text"
+
+    @pytest.mark.parametrize(
+        "header",
+        [
+            "data:image/webp;base64,",
+            "data:IMAGE/WEBP;BASE64,",
+            "data: image/webp;base64,",
+            "data:video/mp4;base64,",
+            "data:audio/mpeg;base64,",
+            "data:model/gltf-binary;base64,",
+        ],
+    )
+    def test_complete_media_header_switches_to_buffer(self, header: str) -> None:
+        assert _classify_stream_output_prefix(header) == "buffer"
+
 
 # ----------------------------- validation -----------------------------
 
@@ -121,6 +195,44 @@ async def test_submit_and_poll_returns_image():
     assert result["image"]["type"] == "Image"
     assert "output.png" in result["image"]["value"]
     assert client.getted, "non-streaming path must poll"
+
+
+@pytest.mark.asyncio
+async def test_data_uri_image_is_materialized_and_listed_in_manifest():
+    """Inline media must become a durable run-owned file, not a Text blob."""
+    webp_bytes = b"RIFF" + (20).to_bytes(4, "little") + b"WEBPVP8 " + b"\x00" * 8
+    data_uri = "data:image/webp;base64," + base64.b64encode(webp_bytes).decode("ascii")
+    submit = _Resp(201, {"id": "pred-data-uri", "status": "starting", "urls": {}})
+    poll = _Resp(200, {"status": "succeeded", "output": data_uri})
+    client = _FakeClient(submit, [poll])
+    emitted = []
+
+    async def emit(event):
+        emitted.append(event)
+
+    with _patch_httpx(client), _patch_sleep():
+        await execute_graph(
+            nodes=[_make_node()],
+            edges=[],
+            api_keys={"REPLICATE_API_TOKEN": "r8_test"},
+            handler_registry={"replicate-universal": handle_replicate_universal},
+            emit=emit,
+            run_id="replicate-data-uri-materialization",
+        )
+
+    executed = next(event for event in emitted if event.type == "executed")
+    assert set(executed.outputs) == {"image"}
+    local_path = Path(executed.outputs["image"]["value"])
+    assert local_path.is_file()
+    assert local_path.suffix == ".webp"
+    assert local_path.read_bytes() == webp_bytes
+    assert mimetypes.guess_type(local_path.name)[0] == "image/webp"
+
+    manifest = json.loads((local_path.parent / "manifest.json").read_text(encoding="utf-8"))
+    assert len(manifest["outputs"]) == 1
+    assert manifest["outputs"][0]["node_id"] == "test-rep-1"
+    assert manifest["outputs"][0]["output_path"] == local_path.name
+    assert data_uri not in json.dumps(manifest)
 
 
 @pytest.mark.asyncio
@@ -207,6 +319,41 @@ async def test_streams_when_urls_stream_present():
     assert result == {"text": {"type": "Text", "value": "streamed words"}}
     mock_stream.assert_called_once()
     assert mock_stream.call_args.kwargs["stream_url"] == "https://stream.replicate.com/v1/files/xyz"
+    assert mock_stream.call_args.kwargs["classify_output_prefix"] is _classify_stream_output_prefix
+    assert not client.getted, "streaming path must NOT poll"
+
+
+@pytest.mark.asyncio
+async def test_streamed_image_data_uri_is_inferred_as_media():
+    """A media model may expose urls.stream and return one complete data URI."""
+    data_uri = "data:image/webp;base64,UklGRgAAAABXRUJQ"
+    submit = _Resp(
+        201,
+        {
+            "id": "pred-streamed-image",
+            "status": "starting",
+            "urls": {"stream": "https://stream.replicate.com/v1/files/image"},
+        },
+    )
+    client = _FakeClient(submit, [])
+    with _patch_httpx(client), patch(
+        "handlers.replicate_universal.stream_execute_replicate",
+        new_callable=AsyncMock,
+    ) as mock_stream:
+        mock_stream.return_value = data_uri
+        result = await handle_replicate_universal(
+            _make_node(
+                {
+                    "model_id": "black-forest-labs/flux-schnell",
+                    "_version_id": "v1",
+                }
+            ),
+            {"prompt": PortValueDict(type="Text", value="a blue circle")},
+            {"REPLICATE_API_TOKEN": "r8_test"},
+            emit=AsyncMock(),
+        )
+
+    assert result == {"image": {"type": "Image", "value": data_uri}}
     assert not client.getted, "streaming path must NOT poll"
 
 

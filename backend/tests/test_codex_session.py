@@ -1,7 +1,8 @@
 """Tests for run_codex — mirrors the chat-agent event contract."""
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, patch
+import asyncio
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -198,6 +199,83 @@ async def test_run_codex_strips_openai_api_credentials_from_exec_env(monkeypatch
     assert "OPENAI_API_KEY" not in exec_env
     assert "OPENAI_ACCESS_TOKEN" not in exec_env
     assert "CODEX_ACCESS_TOKEN" not in exec_env
+
+
+@pytest.mark.asyncio
+async def test_codex_cancel_kills_and_awaits_agent_process_tree():
+    entered_read = asyncio.Event()
+
+    async def blocked_readline() -> bytes:
+        entered_read.set()
+        await asyncio.Future()
+        return b""
+
+    proc = _proc(b"")
+    proc.stdout.readline = AsyncMock(side_effect=blocked_readline)
+
+    async def blocked_stderr() -> bytes:
+        await asyncio.Future()
+        return b""
+
+    proc.stderr.read = AsyncMock(side_effect=blocked_stderr)
+    proc.kill = MagicMock(side_effect=lambda: setattr(proc, "returncode", -9))
+    proc.returncode = None
+
+    async def fake_create(*args, **kwargs):
+        if args[:3] == ("codex", "login", "status"):
+            return _chatgpt_status_proc()
+        if sys.platform != "win32":
+            assert kwargs["start_new_session"] is True
+        return proc
+
+    with patch("services.codex_session._build_prompt", return_value="prompt"), \
+         patch("services.codex_session.asyncio.create_subprocess_exec", side_effect=fake_create):
+        agen = run_codex("hi", None)
+        pending = asyncio.create_task(anext(agen))
+        await entered_read.wait()
+        pending.cancel()
+
+        assert await pending == {"type": "done"}
+        with pytest.raises(asyncio.CancelledError):
+            await anext(agen)
+
+    proc.kill.assert_called_once_with()
+    proc.wait.assert_awaited()
+
+
+@pytest.mark.asyncio
+async def test_codex_cancel_during_login_preflight_kills_status_process_tree():
+    entered_status = asyncio.Event()
+
+    async def blocked_communicate():
+        entered_status.set()
+        await asyncio.Future()
+        return b"", b""
+
+    status_proc = AsyncMock()
+    status_proc.communicate = AsyncMock(side_effect=blocked_communicate)
+    status_proc.kill = MagicMock(side_effect=lambda: setattr(status_proc, "returncode", -9))
+    status_proc.wait = AsyncMock(return_value=-9)
+    status_proc.returncode = None
+
+    async def fake_create(*args, **kwargs):
+        assert args[:3] == ("codex", "login", "status")
+        if sys.platform != "win32":
+            assert kwargs["start_new_session"] is True
+        return status_proc
+
+    with patch(
+        "services.codex_session.asyncio.create_subprocess_exec",
+        side_effect=fake_create,
+    ):
+        task = asyncio.create_task(_collect(run_codex("hi", None)))
+        await entered_status.wait()
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+    status_proc.kill.assert_called_once_with()
+    status_proc.wait.assert_awaited_once_with()
 
 
 @pytest.mark.asyncio

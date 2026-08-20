@@ -25,7 +25,12 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import services.settings as settings_service  # noqa: E402
-from services.nous_auth import NousCredential, NousNotAuthenticatedError  # noqa: E402
+from services.nous_auth import (  # noqa: E402
+    NousCredential,
+    NousCredentialExpiredError,
+    NousCredentialInvalidError,
+    NousNotAuthenticatedError,
+)
 
 # Provider display name -> primary settings.json apiKeys entry.
 PROVIDER_KEYS = {
@@ -209,6 +214,108 @@ async def test_nous_valid_with_credential(monkeypatch):
 
     assert result["Nous"]["configured"] is True
     assert result["Nous"]["status"] == "valid"
+
+
+@pytest.mark.asyncio
+async def test_nous_health_cache_is_bound_to_external_credential_rotation(
+    monkeypatch,
+):
+    current = {
+        "credential": NousCredential(
+            access_token="nous-token-before-rotation",
+            base_url="https://inference-api.nousresearch.com/v1",
+        )
+    }
+    monkeypatch.setattr(
+        "services.nous_auth.load_nous_credential",
+        lambda: current["credential"],
+    )
+    log = _install_client(monkeypatch, lambda url, headers: _FakeResponse(200))
+
+    first = await settings_service.validate_provider_keys()
+    current["credential"] = NousCredential(
+        access_token="nous-token-after-rotation",
+        base_url="https://inference-api.nousresearch.com/v1",
+    )
+    second = await settings_service.validate_provider_keys()
+
+    assert first["Nous"]["status"] == "valid"
+    assert second["Nous"]["status"] == "valid"
+    nous_requests = [item for item in log if item["url"].endswith("/models")]
+    assert [item["headers"]["Authorization"] for item in nous_requests] == [
+        "Bearer nous-token-before-rotation",
+        "Bearer nous-token-after-rotation",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_nous_expiry_invalidates_cached_valid_health_without_network(
+    monkeypatch,
+):
+    state = {"expired": False}
+
+    def load() -> NousCredential:
+        if state["expired"]:
+            raise NousCredentialExpiredError("Nous Portal credential expired")
+        return NousCredential(
+            access_token="soon-expired-nous-token",
+            base_url="https://inference-api.nousresearch.com/v1",
+        )
+
+    monkeypatch.setattr("services.nous_auth.load_nous_credential", load)
+    log = _install_client(monkeypatch, lambda url, headers: _FakeResponse(200))
+
+    first = await settings_service.validate_provider_keys()
+    state["expired"] = True
+    second = await settings_service.validate_provider_keys()
+
+    assert first["Nous"]["status"] == "valid"
+    assert second["Nous"]["configured"] is True
+    assert second["Nous"]["status"] == "invalid"
+    assert "expired" in second["Nous"]["detail"]
+    assert len([item for item in log if item["url"].endswith("/models")]) == 1
+
+
+@pytest.mark.asyncio
+async def test_nous_invalid_local_credential_is_controlled_without_network(
+    monkeypatch,
+):
+    def reject() -> NousCredential:
+        raise NousCredentialInvalidError(
+            "No usable Nous Portal inference credential passed local validation"
+        )
+
+    monkeypatch.setattr("services.nous_auth.load_nous_credential", reject)
+    log = _install_client(monkeypatch, lambda url, headers: _FakeResponse(200))
+
+    result = await settings_service.validate_provider_keys(force_refresh=True)
+
+    assert result["Nous"]["configured"] is True
+    assert result["Nous"]["status"] == "invalid"
+    assert "local validation" in result["Nous"]["detail"]
+    assert not [item for item in log if item["url"].endswith("/models")]
+
+
+@pytest.mark.asyncio
+async def test_unchanged_nous_credential_reuses_health_cache(monkeypatch):
+    loads = {"count": 0}
+
+    def load() -> NousCredential:
+        loads["count"] += 1
+        return NousCredential(
+            access_token="stable-nous-token",
+            base_url="https://inference-api.nousresearch.com/v1",
+        )
+
+    monkeypatch.setattr("services.nous_auth.load_nous_credential", load)
+    log = _install_client(monkeypatch, lambda url, headers: _FakeResponse(200))
+
+    first = await settings_service.validate_provider_keys()
+    second = await settings_service.validate_provider_keys()
+
+    assert second["Nous"] == first["Nous"]
+    assert loads["count"] == 2
+    assert len([item for item in log if item["url"].endswith("/models")]) == 1
 
 
 @pytest.mark.asyncio

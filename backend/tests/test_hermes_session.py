@@ -101,8 +101,13 @@ async def test_happy_path_yields_text_and_done():
     proc.wait = AsyncMock(return_value=0)
     proc.returncode = 0
 
+    async def fake_create(*_args, **kwargs):
+        if sys.platform != "win32":
+            assert kwargs["start_new_session"] is True
+        return proc
+
     with patch("services.hermes_session.asyncio.create_subprocess_exec",
-               return_value=proc):
+               side_effect=fake_create):
         events = await _collect(run_hermes("hi", None, autonomy="auto"))
 
     types = [e["type"] for e in events]

@@ -16,6 +16,10 @@ from services.output import save_base64_image_named
 logger = logging.getLogger(__name__)
 
 
+ReplicateStreamOutputMode = Literal["pending", "text", "buffer"]
+ReplicateStreamOutputClassifier = Callable[[str], ReplicateStreamOutputMode]
+
+
 @dataclass
 class StreamConfig:
     url: str
@@ -100,6 +104,8 @@ async def stream_execute_replicate(
     node_id: str,
     emit: Callable[[ExecutionEvent], Awaitable[None]],
     timeout: float = 600.0,
+    *,
+    classify_output_prefix: ReplicateStreamOutputClassifier | None = None,
 ) -> str:
     """Consume Replicate's per-prediction SSE token stream (``prediction.urls.stream``).
 
@@ -111,28 +117,68 @@ async def stream_execute_replicate(
     - ``done`` ends the stream (``{}`` on success).
 
     Docs: https://replicate.com/docs/topics/predictions/streaming
-    Returns the full concatenated text. Emits one StreamDeltaEvent per ``output`` event.
+    Returns the full concatenated output. By default, emits one StreamDeltaEvent per
+    ``output`` event. Callers that can receive a non-text stream may provide a tri-state
+    ``classify_output_prefix`` hook:
+
+    - ``pending`` keeps the initial events private until their type is known.
+    - ``text`` flushes those events with their original delta boundaries and streams the rest.
+    - ``buffer`` suppresses every StreamDeltaEvent while retaining the full returned output.
+
+    This lets a caller recognize an inline media artifact before its base64 payload reaches
+    text telemetry, without teaching generic UI code about provider-specific output shapes.
 
     A buffered event is flushed at every boundary — a blank line, the next ``event:`` line,
     OR end-of-stream — so a missing blank-line separator can't drop the final token. If the
     stream closes before a ``done`` event (idle timeout / dropped connection), this fails loud
     rather than returning truncated text as a success.
     """
-    accumulated = ""
+    output_chunks: list[str] = []
+    text_accumulated = ""
+    emitted_chunk_count = 0
+    output_mode: ReplicateStreamOutputMode = (
+        "pending" if classify_output_prefix is not None else "text"
+    )
+    classification_prefix = ""
     saw_done = False
     current_event_type: str | None = None
     data_lines: list[str] = []
 
     req_headers = {**headers, "Accept": "text/event-stream"}
 
+    async def _emit_unreported_text_chunks() -> None:
+        """Emit buffered text events in their original event-sized chunks."""
+        nonlocal emitted_chunk_count, text_accumulated
+        while emitted_chunk_count < len(output_chunks):
+            delta = output_chunks[emitted_chunk_count]
+            emitted_chunk_count += 1
+            text_accumulated += delta
+            await emit(
+                StreamDeltaEvent(
+                    node_id=node_id,
+                    delta=delta,
+                    accumulated=text_accumulated,
+                )
+            )
+
     async def _dispatch() -> None:
         """Flush the buffered SSE event: output -> emit a delta; error -> raise; done -> mark."""
-        nonlocal accumulated, saw_done
+        nonlocal classification_prefix, output_mode, saw_done
         if current_event_type == "output":
             delta = "\n".join(data_lines)
             if delta:
-                accumulated += delta
-                await emit(StreamDeltaEvent(node_id=node_id, delta=delta, accumulated=accumulated))
+                output_chunks.append(delta)
+                if output_mode == "text":
+                    await _emit_unreported_text_chunks()
+                elif output_mode == "pending":
+                    # Only the undecided prefix is copied. A media classifier should decide
+                    # as soon as the data-URI header reaches its comma; subsequent base64
+                    # chunks then remain solely in ``output_chunks`` for the final result.
+                    classification_prefix += delta
+                    assert classify_output_prefix is not None
+                    output_mode = classify_output_prefix(classification_prefix)
+                    if output_mode == "text":
+                        await _emit_unreported_text_chunks()
         elif current_event_type == "error":
             # An `error` event terminates the stream as a failure, with or without a detail.
             raw = "\n".join(data_lines)
@@ -186,13 +232,19 @@ async def stream_execute_replicate(
             # fail loud on a premature close so truncated text isn't reported as success.
             if not saw_done:
                 await _dispatch()
+            # A still-pending prefix never became a recognized buffered artifact. Preserve
+            # ordinary text behavior by releasing its original deltas before returning or
+            # reporting a premature-close failure.
+            if output_mode == "pending":
+                output_mode = "text"
+                await _emit_unreported_text_chunks()
             if not saw_done:
                 raise RuntimeError(
                     "Replicate stream closed without a 'done' event "
                     "(connection dropped or timed out before completion)"
                 )
 
-    return accumulated
+    return "".join(output_chunks)
 
 
 async def stream_execute_image(

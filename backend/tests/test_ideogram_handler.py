@@ -577,6 +577,28 @@ async def test_character_router_requires_refs_or_character():
 # ---------------------------------------------------------------------------
 
 
+def test_direct_execution_patterns_match_handler_lifecycle():
+    definitions = json.loads(
+        (Path(__file__).resolve().parents[1] / "data" / "node_definitions.json").read_text()
+    )
+
+    # These handlers wait for the final 200 response and download any
+    # ephemeral result URL directly. They do not submit a job id or poll.
+    for node_id in (
+        "ideogram-describe",
+        "ideogram-magic-prompt",
+        "ideogram-transparent",
+        "ideogram-remove-background",
+        "ideogram-layerize",
+        "ideogram-edit-prompt",
+    ):
+        assert definitions[node_id]["executionPattern"] == "sync"
+
+    # Training is the one direct Ideogram handler that really submits and
+    # polls a long-running provider task.
+    assert definitions["ideogram-train-model"]["executionPattern"] == "async-poll"
+
+
 def _json_prompt_response() -> MagicMock:
     resp = MagicMock()
     resp.status_code = 200

@@ -18,6 +18,7 @@ from services.output import (
     create_run_dir,
     execution_run_dir,
     get_run_dir,
+    materialize_media_value,
     resolve_output_ref,
     write_manifest,
 )
@@ -38,6 +39,43 @@ from models.events import (
 CycleError = _GraphlibCycleError
 
 logger = logging.getLogger(__name__)
+
+_DURABLE_MEDIA_TYPES = {"Image", "Video", "Audio", "Mesh", "SVG"}
+_REMOTE_HANDLE_PORTS = {"source_uri", "model_url"}
+
+
+async def _materialize_media_outputs(
+    node_outputs: dict[str, Any], run_dir: Path
+) -> dict[str, Any]:
+    """Replace provider-hosted media with run-owned local files.
+
+    Capability handles such as Veo's expiring ``source_uri`` and Meshy's
+    informational ``model_url`` remain untouched because downstream APIs need
+    the original provider reference. User-facing media ports are materialized
+    before caching, manifests, and execution events see them.
+    """
+    durable: dict[str, Any] = {}
+    for port_id, raw_port in node_outputs.items():
+        if not isinstance(raw_port, dict):
+            durable[port_id] = raw_port
+            continue
+        port = dict(raw_port)
+        media_type = str(port.get("type") or "")
+        value = port.get("value")
+        if media_type not in _DURABLE_MEDIA_TYPES or port_id in _REMOTE_HANDLE_PORTS:
+            durable[port_id] = port
+            continue
+
+        values = value if isinstance(value, list) else [value]
+        converted: list[Any] = []
+        for item in values:
+            if isinstance(item, str) and item.startswith(("http://", "https://", "data:")):
+                converted.append(str(await materialize_media_value(item, media_type, run_dir)))
+            else:
+                converted.append(item)
+        port["value"] = converted if isinstance(value, list) else converted[0]
+        durable[port_id] = port
+    return durable
 
 
 def _image_input_output(params: dict) -> dict:
@@ -542,6 +580,7 @@ async def _execute_graph(
     run_dir: Path | None = None,
 ) -> None:
     run_dir = run_dir or get_run_dir()
+    bound_run_dir = run_dir
     start_time = time.monotonic()
     started_at = datetime.now(timezone.utc)  # wall clock, for the run manifest
     nodes_executed = 0
@@ -597,6 +636,10 @@ async def _execute_graph(
 
     async def run_node(nid: str) -> tuple[str, bool, int]:
         node = node_map[nid]
+        registered_node_def = _node_def_for(node.definition_id) or {}
+        materialize_provider_outputs = (
+            registered_node_def.get("apiProvider") not in {None, "utility"}
+        )
         await emit(ExecutingEvent(node_id=nid))
         resolved_inputs = resolve_inputs(nid)
 
@@ -612,6 +655,14 @@ async def _execute_graph(
                 )
                 cached_outputs = cache.get(cache_key)
                 if cached_outputs is not None:
+                    durable_cached_outputs = (
+                        await _materialize_media_outputs(cached_outputs, bound_run_dir)
+                        if materialize_provider_outputs
+                        else cached_outputs
+                    )
+                    if durable_cached_outputs != cached_outputs:
+                        cache.set(cache_key, durable_cached_outputs)
+                    cached_outputs = durable_cached_outputs
                     outputs_cache[nid] = {
                         k: PortValueDict(type=v.get("type", "Any"), value=v.get("value"))
                         for k, v in cached_outputs.items()
@@ -863,6 +914,11 @@ async def _execute_graph(
                     raise RuntimeError(f"No handler registered for '{node.definition_id}'")
             else:
                 node_outputs = await handler(node, resolved_inputs, api_keys)
+
+            if handler is not None and materialize_provider_outputs:
+                node_outputs = await _materialize_media_outputs(
+                    node_outputs, bound_run_dir
+                )
 
             outputs_cache[nid] = {
                 k: PortValueDict(type=v.get("type", "Any"), value=v.get("value"))

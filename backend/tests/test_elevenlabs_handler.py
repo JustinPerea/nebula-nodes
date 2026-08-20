@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+import respx
+from httpx import Response
 
 from handlers.elevenlabs import (
+    _cancel_dubbing,
     handle_elevenlabs_dubbing,
     handle_elevenlabs_isolation,
     handle_elevenlabs_sfx,
@@ -692,6 +696,51 @@ async def test_dubbing_optional_flags_forwarded(tmp_path: Path) -> None:
     assert data["disable_voice_cloning"] == "true"
 
 
+@pytest.mark.asyncio
+async def test_dubbing_cancel_schedules_provider_delete(tmp_path: Path) -> None:
+    _, audio_port = _mock_audio_input(tmp_path)
+
+    submit_resp = MagicMock()
+    submit_resp.status_code = 200
+    submit_resp.json.return_value = {"dubbing_id": "dub-cancel"}
+
+    with patch("handlers.elevenlabs.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = submit_resp
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with (
+            patch(
+                "handlers.elevenlabs.asyncio.sleep",
+                new=AsyncMock(side_effect=asyncio.CancelledError()),
+            ),
+            patch("handlers.elevenlabs.schedule_detached_cancel") as mock_sched,
+        ):
+            with pytest.raises(asyncio.CancelledError):
+                await handle_elevenlabs_dubbing(
+                    _make_dubbing_node(),
+                    {"audio": audio_port},
+                    {"ELEVENLABS_API_KEY": "el-test"},
+                )
+
+    mock_sched.assert_called_once()
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_cancel_dubbing_deletes_provider_project() -> None:
+    route = respx.delete(
+        "https://api.elevenlabs.io/v1/dubbing/dub-cancel"
+    ).mock(return_value=Response(200, json={"status": "ok"}))
+
+    await _cancel_dubbing("dub-cancel", "el-test")
+
+    assert route.called
+    assert route.calls[0].request.headers["xi-api-key"] == "el-test"
+
+
 # ---------------------------------------------------------------------------
 # STT (Speech-to-Text / Scribe) tests
 # ---------------------------------------------------------------------------
@@ -896,4 +945,3 @@ async def test_stt_raises_on_api_error(tmp_path: Path) -> None:
                 {"audio": audio_port},
                 {"ELEVENLABS_API_KEY": "el-test"},
             )
-

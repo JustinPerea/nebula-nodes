@@ -938,6 +938,159 @@ class TestChatAgentDispatch:
             second = ws.receive_json()
             assert second["type"] == "done"
 
+    @pytest.mark.parametrize("agent", ["claude", "codex", "daedalus"])
+    def test_agent_and_graph_events_have_truthful_source(self, client, agent):
+        """The Agent Log must never relabel Claude/Codex activity as Hermes."""
+        import asyncio
+        from services.chat_actions import publish_action
+        from services.chat_session import AGENT_RUNNERS
+
+        original = AGENT_RUNNERS[agent]
+
+        async def attributed_runner(*_args, **_kwargs):
+            publish_action("Added text-input as n1")
+            yield {
+                "type": "tool_use",
+                "toolUseId": "tool-1",
+                "tool": "shell",
+                "input": {"command": "nebula graph"},
+                # A runner cannot relabel itself as a different agent.
+                "source": "hermes",
+            }
+            await asyncio.Future()
+
+        AGENT_RUNNERS[agent] = attributed_runner
+        try:
+            with client.websocket_connect("/ws/chat") as ws:
+                ws.send_json({
+                    "type": "send",
+                    "message": "inspect",
+                    "agent": agent,
+                    "autonomy": "auto",
+                })
+                graph_event = ws.receive_json()
+                tool_event = ws.receive_json()
+
+                assert graph_event["type"] == "thinking"
+                assert graph_event["source"] == agent
+                assert tool_event["type"] == "tool_use"
+                assert tool_event["source"] == agent
+        finally:
+            AGENT_RUNNERS[agent] = original
+
+    def test_chat_cancel_waits_for_backend_cleanup_before_confirmation(self, client):
+        """Requested and confirmed are distinct WS states; no premature done."""
+        import asyncio
+        import threading
+        from services.chat_session import AGENT_RUNNERS
+
+        cleaned_up = threading.Event()
+        original = AGENT_RUNNERS["claude"]
+
+        async def cancellable_runner(*_args, **_kwargs):
+            try:
+                yield {"type": "thinking", "text": "working"}
+                await asyncio.Future()
+            finally:
+                cleaned_up.set()
+
+        AGENT_RUNNERS["claude"] = cancellable_runner
+        try:
+            with client.websocket_connect("/ws/chat") as ws:
+                ws.send_json({
+                    "type": "send",
+                    "message": "work",
+                    "agent": "claude",
+                    "autonomy": "auto",
+                })
+                assert ws.receive_json() == {
+                    "type": "thinking",
+                    "text": "working",
+                    "source": "claude",
+                }
+
+                ws.send_json({"type": "cancel"})
+                requested = ws.receive_json()
+                confirmed = ws.receive_json()
+
+                assert requested == {
+                    "type": "cancellation",
+                    "status": "requested",
+                    "active": True,
+                    "source": "claude",
+                }
+                assert cleaned_up.is_set()
+                assert confirmed == {
+                    "type": "cancellation",
+                    "status": "confirmed",
+                    "active": False,
+                    "source": "claude",
+                }
+        finally:
+            AGENT_RUNNERS["claude"] = original
+
+    def test_chat_cancel_without_active_turn_is_explicit_failure(self, client):
+        with client.websocket_connect("/ws/chat") as ws:
+            ws.send_json({"type": "cancel"})
+            assert ws.receive_json() == {
+                "type": "cancellation",
+                "status": "failed",
+                "active": False,
+                "message": "No active response to cancel.",
+                "source": "system",
+            }
+
+    def test_second_send_cannot_bypass_acknowledged_cancellation(self, client):
+        """Concurrent sends are rejected; they never silently cancel a turn."""
+        import asyncio
+        import threading
+        from services.chat_session import AGENT_RUNNERS
+
+        cleaned_up = threading.Event()
+        original = AGENT_RUNNERS["claude"]
+
+        async def cancellable_runner(*_args, **_kwargs):
+            try:
+                yield {"type": "thinking", "text": "working"}
+                await asyncio.Future()
+            finally:
+                cleaned_up.set()
+
+        AGENT_RUNNERS["claude"] = cancellable_runner
+        try:
+            with client.websocket_connect("/ws/chat") as ws:
+                ws.send_json({
+                    "type": "send",
+                    "message": "first",
+                    "agent": "claude",
+                    "autonomy": "auto",
+                })
+                assert ws.receive_json()["text"] == "working"
+
+                ws.send_json({
+                    "type": "send",
+                    "message": "second",
+                    "agent": "claude",
+                    "autonomy": "auto",
+                })
+                rejected = ws.receive_json()
+                assert rejected == {
+                    "type": "error",
+                    "message": (
+                        "Another response is active. Stop it and wait for "
+                        "cancellation confirmation before sending again."
+                    ),
+                    "source": "claude",
+                }
+                assert not cleaned_up.is_set()
+
+                ws.send_json({"type": "cancel"})
+                assert ws.receive_json()["status"] == "requested"
+                assert ws.receive_json()["status"] == "confirmed"
+                assert cleaned_up.is_set()
+        finally:
+            AGENT_RUNNERS["claude"] = original
+
 
 class TestCinemaScenePersistsScene:
     """Regression for the scene-parity gap: agents and the Cinema Studio must be

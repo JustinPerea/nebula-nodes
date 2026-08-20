@@ -1,5 +1,84 @@
 # Implementation Notes
 
+## 2026-08-19 - Provider and agent live-acceptance preflight
+
+The paid-provider phase is intentionally split at an explicit budget gate. The
+preflight may use authenticated health and model-catalog reads because they do
+not create media or consume agent turns; any generation, text completion, or
+agent prompt waits for user approval.
+
+Decisions:
+- Treat `/api/health/providers?refresh=true` as credential truth. The Settings
+  `11/15` header counts configured values and includes the OpenAI key that the
+  live health probe rejects, so it is not a validity count.
+- Track Nous separately from the 15 Settings credentials because it is backed
+  by Hermes OAuth. Daedalus readiness requires both the local executable and
+  valid Nous OAuth; neither fact alone proves an agent turn works.
+- Use the cheapest node that still exercises each family's real execution and
+  output path. Prefer short streaming text, FAL/Replicate Flux Schnell, Runway
+  TTS, Meshy text-to-image, and Quiver Arrow 1.1. For direct Ideogram, use the
+  transparent async node so the smoke covers image download and persistence,
+  not only a metadata helper.
+- Separate dollar-denominated usage from Meshy and Quiver account credits. A
+  `$1` configured-valid hard cap is deliberately much larger than the roughly
+  `$0.058` known success floor so cancellation races and one rerun cannot turn
+  a nominal estimate into unapproved spend.
+- Do not induce a real provider 429 merely to prove retry behavior. Quiver's
+  one-retry `Retry-After` contract is covered deterministically; the live phase
+  will prove run-history retry through a controlled failed request and record
+  any naturally occurring transient provider retry.
+- Missing or rejected credentials are acceptance findings, not permission to
+  create keys, change billing, or paste credentials through automation.
+- The deterministic audit found complete provider handler coverage, including
+  xAI under `test_grok_video_handler.py`, but no equivalent lifecycle contract
+  for the Claude CLI bridge. Add the same normalized-event, resume, quick-mode
+  gate, failure, and subprocess-cancellation coverage already expected of the
+  Codex and Daedalus bridges. This does not replace the approved live turn.
+- xAI's current video API documents submit and poll but no cancel endpoint, and
+  the handler therefore cancels locally only. Record that explicitly in the
+  matrix instead of implying a provider-side cancellation can be proved.
+- Claude cancellation emits one terminal `done` event while the async generator
+  unwinds, after killing and awaiting the child process; the suspended
+  `CancelledError` propagates on the next stream advance. Pin this sequence
+  rather than treating the cleanup marker as a swallowed cancellation.
+- The live registry mislabeled `ideogram-transparent` and
+  `ideogram-edit-prompt` as async-poll even though both direct handlers use the
+  synchronous final-response endpoints and immediately download the ephemeral
+  image URL. Ideogram's current reference explicitly calls transparent
+  generation synchronous; align backend/frontend contracts and generated model
+  docs, while leaving actual custom-model training as async-poll.
+- `flux-schnell` and `fast-sdxl` had the inverse metadata drift: both were
+  labeled sync even though their wrappers call the universal FAL queue
+  submit/poll handler. Normalize every non-stream FAL node to async-poll and pin
+  the only two streaming exceptions (`gpt-image-2-fal-generate` and `-edit`).
+- Meshy's direct `meshy-image-to-3d` handler had drifted away from the shared
+  `_poll_meshy_task` loop. Canvas Stop therefore cancelled Nebula's task but did
+  not issue Meshy's documented irreversible DELETE for that one path. Route it
+  through the shared cancel-aware poller and treat Meshy's `CANCELED` status as
+  terminal instead of polling until timeout.
+- Gemini Omni background video uses Google's Interactions API, whose current
+  first-party contract exposes `POST /interactions/{id}/cancel`. The handler
+  previously stopped local polling without calling it; schedule that provider
+  cancellation on a detached task once the interaction id is known. Keep Veo's
+  older long-running-operation `:cancel` call classified as best-effort because
+  Google's current video SDK warns that client abort alone does not stop or
+  unbill the service operation.
+- ElevenLabs dubbing is the provider's one long-running Nebula audio path. Its
+  handler previously cancelled only the local ten-minute poll loop even though
+  ElevenLabs documents `DELETE /v1/dubbing/{dubbing_id}` and recommends
+  cancelling stuck dubs. On Canvas Stop, schedule that delete on the same
+  detached cancellation mechanism as the other async providers.
+- FAL queue results (and Replicate non-stream results) exposed provider CDN
+  URLs as successful media outputs even though FAL explicitly documents that
+  signed URLs expire. Materialize remote/data Image, Video, Audio, Mesh, and SVG
+  handler outputs into the bound run directory before caching, manifesting, or
+  emitting success. Preserve intentional provider handles such as Veo
+  `source_uri` and Meshy `model_url` for downstream API chaining.
+- An early shared activity-log append was rejected by the workspace sandbox;
+  the later post-repair helper invocation succeeded, so the cancellation and
+  durable-output work is now present in the shared 2026-08-19 timeline as well
+  as this in-repo record.
+
 ## 2026-08-17 - Video QC Suite continuation
 
 Factory completed the preceding reference-role mission, then the user approved a
@@ -845,3 +924,147 @@ A 16-agent adversarial review (3 dimensions → per-finding verify) surfaced 13 
 - Stopping the normal FastAPI process left the live Canvas looking fully operational; all 8 nodes remained safely present, but there was no visible indication that runs and backend persistence were unavailable.
 - A lightweight health probe now renders a non-blocking offline pill and continues retrying. A successful recovery clears the warning and the cached current-project identity in case the restarted backend belongs to a different checkout.
 - Canvas edits remain available while offline; the status copy states that limitation rather than disabling the workspace or implying that local-only edits were persisted.
+## 2026-08-19 — first-wave live isolation
+
+- The original 8-node / 5-edge graph is not being imported into the test
+  backend after the live wave. Normal graph import remaps node IDs and fits the
+  viewport, which would weaken history-linkage and exact-restoration proof.
+- Before spend, the normal state file was restored from a byte-identical raw
+  snapshot. Live calls use temporary `NEBULA_STATE_DIR` and
+  `NEBULA_OUTPUT_ROOT` roots on the normal agent port plus a separate Vite
+  origin (`5174`) for isolated localStorage and Run History.
+- A UI `.nebula.zip` save is retained as an independent product-level recovery
+  path. The initial clear dialog was cancelled until that bundle had been
+  written and inspected.
+
+## 2026-08-19 — Nous live credential fallback
+
+- The live Nous node failed with HTTP 401 even though the non-billable model
+  check returned valid. The preferred Daedalus profile contained an expired
+  agent key, while a later fallback profile was still unexpired; the loader
+  ignored Hermes's expiry metadata and always returned the first token.
+- Credential selection now scans every pool entry in profile order, rejects
+  blank/non-string tokens, and applies token-specific or generic expiry before
+  continuing to a fallback. JWT-shaped tokens additionally need an
+  `inference:invoke` scope and an `exp` beyond a 60-second safety window;
+  legacy opaque Hermes `sk-*` tokens retain metadata-based compatibility.
+- Treat persisted profile URLs as untrusted. A credential file may use only
+  the canonical Nous HTTPS `/v1` host, so a modified profile cannot redirect
+  its bearer. An operator-controlled `NOUS_INFERENCE_BASE_URL` may use another
+  HTTPS, non-loopback, no-userinfo host for staging/tests.
+- Model and provider-health caches re-read Hermes state before reuse and bind
+  entries to a non-secret SHA-256 credential identity. An expired credential
+  therefore cannot inherit a five-minute cached-valid result or a cached model
+  catalog from another credential/base URL.
+- No auth file is refreshed or modified by Nebula. All locally rejected
+  credentials remain configured-but-invalid in health; the model proxy returns
+  a controlled 401 without sending the rejected bearer upstream.
+
+## 2026-08-19 — Executed output canonicalization
+
+- Live ElevenLabs TTS produced a valid MP3, but its executed event contained an
+  absolute path under the disposable `isolated-output` root. The browser-side
+  fallback recognized only paths containing a literal `/output/`, so the first
+  media load failed; reload worked because persisted graph export independently
+  canonicalized the same value.
+- Make the backend event boundary authoritative: normalize handler outputs once
+  into `/api/outputs/...`, persist that exact scalar/list shape, and broadcast
+  the same value. Bare outputs are wrapped as `Any`; shaped types and non-media
+  values are preserved. This avoids frontend path-name heuristics and prevents
+  broadcast/persist divergence.
+
+## 2026-08-19 — Replicate streamed media data URIs
+
+- Flux Schnell returned through Replicate's `urls.stream` route in about 1.4
+  seconds. That branch hardcoded Text, so its `data:image/webp;base64,...` value
+  bypassed the engine's existing media materializer and produced an empty
+  manifest. Extending only the polling inference path was insufficient.
+- Route the complete streamed value through the same output inference as a
+  polled result. Well-formed Image, Video, Audio, SVG, and GLTF data URIs now
+  receive a media port type; centralized engine materialization remains the
+  sole decoder/persistence boundary. Unknown/text data URIs retain Text
+  fallback.
+- The live retest rendered a persisted 1,024x1,024 WebP and wrote one manifest
+  entry without base64. The provider returned a near-white image despite the
+  prompt; record that as provider output quality rather than weakening the
+  application persistence verdict.
+- A later adversarial review found a separate transient leak: before final
+  typing, the stream runner broadcast each accumulated SSE `output` value as a
+  text delta. A media data URI could therefore cross the WebSocket and appear
+  in `streamingText` even though final persistence was redacted, with repeated
+  accumulated chunks also creating quadratic traffic. Replicate now supplies a
+  tri-state prefix classifier. Plausible `data:` prefixes remain private until
+  the header is decisive; recognized media is buffered with zero text-delta
+  events, while ordinary and ambiguous text retains its original delta
+  boundaries. Final inference and centralized materialization are unchanged.
+
+## 2026-08-19 — Truthful agent attribution and acknowledged cancellation
+
+- Chat action events were globally labeled `hermes` in the frontend even when
+  the selected runner was Claude or Codex. `/ws/chat` now stamps every agent,
+  tool, and graph-action event with the selected runner (`claude`, `codex`, or
+  `daedalus`); the Agent Log validates and displays that source instead of
+  inventing one client-side.
+- Stop is now a three-state protocol: the backend emits cancellation
+  `requested`, waits for the runner cleanup to finish, then emits `confirmed`
+  or `failed`. The frontend remains busy and says only “Cancellation
+  requested…” until confirmation; “Cancelled.” is reserved for the confirmed
+  event, and disconnect/cleanup failures remain visibly failed.
+- The first cleanup attempt started each agent in its own OS process group and
+  killed that group. Its delayed-grandchild regression inherited the parent's
+  group and passed, but the live Claude retest falsified the design: the Bash
+  tool created PGID 90706 beneath agent PGID 89999. Stop killed the agent group
+  and confirmed while the shell and Python sleep remained orphaned under PID 1
+  until natural completion.
+- Keep the acknowledged WebSocket/UI protocol, but reject process-group-only
+  cleanup as complete. POSIX cleanup must snapshot and kill descendants even
+  when they create a new group/session, then verify the discovered processes
+  are gone before confirmation. Add a `setsid`/separate-PGID sentinel
+  regression; treat any interrupted live follow-up honestly rather than
+  repeating an agent turn beyond the approved allowance.
+- The initial focused contract passed 42 backend tests and 11 frontend tests,
+  but that validation ceiling did not cover re-grouped descendants. It is not
+  a release result.
+- The replacement POSIX cleanup freezes the root, repeatedly snapshots PPID
+  descendants, freezes each newly discovered generation, kills every captured
+  PID individually, then refuses to return until `ps` verifies they are gone.
+  A deterministic root → child → `setsid()` grandchild test now covers the
+  exact separate-session escape that the original inherited-group sentinel
+  missed. Verification failure propagates, so the WebSocket reports failed
+  instead of confirmed.
+- Codex's `login status` preflight is now isolated and uses the same cleanup in
+  `finally`; Stop before the main Codex spawn therefore cannot leak the status
+  process. Windows continues to use `taskkill /T /F`, the native tree-kill
+  primitive, but that branch cannot be runtime-proved from this POSIX lane.
+  The revised focused agent group passed 116 backend tests and 11 frontend
+  tests across cancellation, source attribution, and WebSocket/UI state.
+- Agent attribution is enforced at the WebSocket boundary: the selected runner
+  overwrites any runner-supplied `source`, so stale or hostile output cannot
+  masquerade as another agent. If the socket disconnects after Stop but before
+  confirmation, chat now adds a visible cancellation-failed warning stating
+  that backend cleanup was not confirmed; the hidden state transition alone
+  was not sufficient user-facing truth.
+- The final Daedalus cancellation turn reached the UI and proved corrected
+  `daedalus` attribution in the Agent Log, but the isolated backend and Vite
+  sessions ended during the interrupted review before Stop/process inspection
+  could finish. That one approved cancellation turn was not repeated. The live
+  full-descendant result is therefore **inconclusive**, with the deterministic
+  separate-session sentinel and verification-failure regressions as the exact
+  cleanup proof ceiling.
+- A release security pass found a second, implicit cancellation path: a raw
+  WebSocket client could send another turn while one was active; the backend
+  cancelled the first task, swallowed any cleanup exception, and started the
+  replacement without the requested/confirmed protocol. Concurrent sends are
+  now rejected until the client explicitly Stops and receives confirmation.
+  This keeps process cleanup and user-visible cancellation truth on one path,
+  even if a client bypasses the frontend's disabled-Send state.
+
+## 2026-08-20 — Public evidence privacy
+
+- The provider/agent acceptance captures included Chrome's tabs and bookmarks
+  bar. Because this repository is public, publishing those raw desktop details
+  would expose unrelated personal browsing context without adding audit value.
+- Only the clean publish-clone copies were cropped by the fixed 104-pixel
+  browser-chrome height and stripped of image metadata. The Nebula application
+  viewport, error details, agent log, node outputs, and restoration evidence
+  remain visible; the original local captures were left untouched.

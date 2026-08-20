@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import asyncio
 from unittest.mock import AsyncMock, patch
 
 import pytest
+import respx
+from httpx import Response
 
-from handlers.gemini_omni import handle_gemini_omni
+from handlers.gemini_omni import _cancel_interaction, handle_gemini_omni
 from models.graph import GraphNode, PortValueDict
 from services.provider_capabilities import GEMINI_OMNI_EXTENSION_ERROR
 
@@ -177,6 +180,47 @@ async def test_gemini_omni_polls_when_processing():
     body = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
     assert body["background"] is True
     assert mock_client.get.call_args.args[0].endswith("/v1_poll")
+
+
+@pytest.mark.asyncio
+async def test_gemini_omni_cancel_schedules_provider_interaction_cancel():
+    processing = {"id": "v1_cancel", "status": "processing"}
+
+    with patch("handlers.gemini_omni.httpx.AsyncClient") as MockClient:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = _Resp(200, processing)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+
+        with (
+            patch(
+                "handlers.gemini_omni.asyncio.sleep",
+                new=AsyncMock(side_effect=asyncio.CancelledError()),
+            ),
+            patch("handlers.gemini_omni.schedule_detached_cancel") as mock_sched,
+        ):
+            with pytest.raises(asyncio.CancelledError):
+                await handle_gemini_omni(
+                    _make_node({"delivery": "inline"}),
+                    {"prompt": PortValueDict(type="Text", value="sunset")},
+                    {"GOOGLE_API_KEY": "test-key"},
+                )
+
+    mock_sched.assert_called_once()
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_cancel_interaction_posts_google_cancel_endpoint():
+    route = respx.post(
+        "https://generativelanguage.googleapis.com/v1beta/interactions/v1_cancel/cancel"
+    ).mock(return_value=Response(200, json={"status": "cancelled"}))
+
+    await _cancel_interaction("v1_cancel", "test-key")
+
+    assert route.called
+    assert route.calls[0].request.headers["x-goog-api-key"] == "test-key"
 
 
 @pytest.mark.asyncio

@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from execution.stream_runner import stream_execute_replicate
+from handlers.replicate_universal import _classify_stream_output_prefix
 from models.events import StreamDeltaEvent
 
 
@@ -79,6 +80,101 @@ async def test_output_events_accumulate_as_text_and_emit_deltas():
     assert deltas == ["Hello", " world"]
     assert all(isinstance(c.args[0], StreamDeltaEvent) for c in emit.call_args_list)
     assert emit.call_args_list[-1].args[0].accumulated == "Hello world"
+
+
+@pytest.mark.asyncio
+async def test_classified_text_retains_original_delta_events():
+    """The media guard must not coalesce, delay beyond classification, or drop text deltas."""
+    lines = [
+        "event: output",
+        "data: Hello",
+        "",
+        "event: output",
+        "data:  world",
+        "",
+        "event: done",
+        "data: {}",
+        "",
+    ]
+    cm, _client = _patch_client(lines)
+    emit = AsyncMock()
+    with cm:
+        result = await stream_execute_replicate(
+            stream_url="https://stream.replicate.com/v1/files/text",
+            headers={"Authorization": "Bearer r8_test"},
+            node_id="node-text",
+            emit=emit,
+            classify_output_prefix=_classify_stream_output_prefix,
+        )
+
+    assert result == "Hello world"
+    events = [call.args[0] for call in emit.call_args_list]
+    assert [(event.delta, event.accumulated) for event in events] == [
+        ("Hello", "Hello"),
+        (" world", "Hello world"),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_split_media_data_uri_is_buffered_without_stream_events():
+    """No header fragment or base64 chunk may escape through text telemetry."""
+    chunks = ["da", "ta:image/webp;", "base64,UklGRgAA", "AABXRUJQ"]
+    lines: list[str] = []
+    for chunk in chunks:
+        lines.extend(["event: output", f"data: {chunk}", ""])
+    lines.extend(["event: done", "data: {}", ""])
+
+    cm, _client = _patch_client(lines)
+    emit = AsyncMock()
+    with cm:
+        result = await stream_execute_replicate(
+            stream_url="https://stream.replicate.com/v1/files/image",
+            headers={"Authorization": "Bearer r8_test"},
+            node_id="node-image",
+            emit=emit,
+            classify_output_prefix=_classify_stream_output_prefix,
+        )
+
+    assert result == "".join(chunks)
+    assert "base64," in result
+    assert emit.await_count == 0
+
+
+@pytest.mark.asyncio
+async def test_ambiguous_data_prefix_flushes_as_text_with_original_boundaries():
+    """Text beginning like a data URI stays lossless once it is no longer ambiguous."""
+    lines = [
+        "event: output",
+        "data: da",
+        "",
+        "event: output",
+        "data: ylight",
+        "",
+        "event: output",
+        "data:  remains",
+        "",
+        "event: done",
+        "data: {}",
+        "",
+    ]
+    cm, _client = _patch_client(lines)
+    emit = AsyncMock()
+    with cm:
+        result = await stream_execute_replicate(
+            stream_url="https://stream.replicate.com/v1/files/ambiguous-text",
+            headers={"Authorization": "Bearer r8_test"},
+            node_id="node-ambiguous",
+            emit=emit,
+            classify_output_prefix=_classify_stream_output_prefix,
+        )
+
+    assert result == "daylight remains"
+    events = [call.args[0] for call in emit.call_args_list]
+    assert [(event.delta, event.accumulated) for event in events] == [
+        ("da", "da"),
+        ("ylight", "daylight"),
+        (" remains", "daylight remains"),
+    ]
 
 
 @pytest.mark.asyncio

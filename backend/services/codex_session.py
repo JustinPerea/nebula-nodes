@@ -18,6 +18,11 @@ import re
 from pathlib import Path
 from typing import Any, AsyncIterator
 
+from services.agent_process import (
+    agent_process_group_options,
+    terminate_agent_process_tree,
+)
+
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 CODEX_BIN = os.environ.get("NEBULA_CODEX_BIN", "codex")
@@ -499,6 +504,7 @@ async def run_codex(
             cwd=str(PROJECT_ROOT),
             env=env,
             limit=64 * 1024 * 1024,
+            **agent_process_group_options(),
         )
     except FileNotFoundError:
         yield {"type": "error", "message": "`codex` binary not found in PATH"}
@@ -539,13 +545,13 @@ async def run_codex(
             }
     finally:
         if proc.returncode is None:
-            try:
-                proc.kill()
-                await proc.wait()
-            except ProcessLookupError:
-                pass
+            await terminate_agent_process_tree(proc)
         if not stderr_task.done():
             stderr_task.cancel()
+            try:
+                await stderr_task
+            except (asyncio.CancelledError, Exception):
+                pass
         yield {"type": "done"}
 
 
@@ -559,6 +565,7 @@ async def codex_login_status() -> dict[str, Any]:
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             cwd=str(PROJECT_ROOT),
+            **agent_process_group_options(),
         )
     except FileNotFoundError:
         return {
@@ -568,7 +575,13 @@ async def codex_login_status() -> dict[str, Any]:
             "message": "`codex` binary not found in PATH",
         }
 
-    stdout, stderr = await proc.communicate()
+    try:
+        stdout, stderr = await proc.communicate()
+    finally:
+        # Stop can arrive during this preflight, before the main Codex process
+        # exists. It has the same no-orphans contract as the actual turn.
+        if proc.returncode is None:
+            await terminate_agent_process_tree(proc)
     text = stdout.decode("utf-8", errors="replace").strip()
     err = stderr.decode("utf-8", errors="replace").strip()
     logged_in = proc.returncode == 0

@@ -181,6 +181,11 @@ PROVIDER_CHECKS: dict[str, ProviderCheck] = {
 
 # provider name -> (monotonic expiry, result dict)
 _provider_check_cache: dict[str, tuple[float, dict[str, Any]]] = {}
+# Nous is refreshed outside settings.json, so its cached health result is also
+# bound to the non-secret credential identity returned by nous_auth. This map
+# remains separate to preserve the existing cache tuple contract for every
+# other provider.
+_provider_check_credential_identity: dict[str, str] = {}
 
 # Cache generation counter, bumped by clear_provider_validation_cache().
 # validate_provider_keys() snapshots the generation when it starts; if a clear
@@ -198,6 +203,7 @@ def clear_provider_validation_cache() -> None:
     """Drop all cached validation results (used by tests and key updates)."""
     global _provider_cache_generation
     _provider_check_cache.clear()
+    _provider_check_credential_identity.clear()
     _provider_cache_generation += 1
 
 
@@ -209,6 +215,10 @@ def _utc_now_iso() -> str:
 class _ResolvedCheck:
     url: str
     headers: dict[str, str]
+    credential_identity: str | None = None
+    preflight_status: str | None = None
+    preflight_configured: bool = False
+    preflight_detail: str | None = None
 
 
 def _resolve_check(name: str, check: ProviderCheck) -> _ResolvedCheck | None:
@@ -222,34 +232,84 @@ def _resolve_check(name: str, check: ProviderCheck) -> _ResolvedCheck | None:
     if name == "Nous":
         # Imported lazily so the patched module attribute is picked up at call
         # time and settings.py stays importable without Hermes present.
-        from services.nous_auth import NousNotAuthenticatedError, load_nous_credential
+        from services.nous_auth import (
+            NousCredentialExpiredError,
+            NousCredentialInvalidError,
+            NousNotAuthenticatedError,
+            load_nous_credential,
+        )
 
         try:
             cred = load_nous_credential()
+        except NousCredentialExpiredError as exc:
+            return _ResolvedCheck(
+                url="",
+                headers={},
+                credential_identity="nous:expired",
+                preflight_status=PROVIDER_STATUS_INVALID,
+                preflight_configured=True,
+                preflight_detail=str(exc),
+            )
+        except NousCredentialInvalidError as exc:
+            return _ResolvedCheck(
+                url="",
+                headers={},
+                credential_identity="nous:invalid",
+                preflight_status=PROVIDER_STATUS_INVALID,
+                preflight_configured=True,
+                preflight_detail=str(exc),
+            )
         except NousNotAuthenticatedError:
-            return None
+            return _ResolvedCheck(
+                url="",
+                headers={},
+                credential_identity="nous:not-configured",
+                preflight_status=PROVIDER_STATUS_NOT_CONFIGURED,
+            )
+        except Exception as exc:
+            return _ResolvedCheck(
+                url="",
+                headers={},
+                credential_identity="nous:credential-error",
+                preflight_status=PROVIDER_STATUS_ERROR,
+                preflight_detail=(
+                    f"credential lookup failed: {type(exc).__name__}: {exc}"
+                )[:200],
+            )
         base = cred.base_url.rstrip("/")
         return _ResolvedCheck(
             url=f"{base}/models",
             headers=check.auth_headers(cred.access_token),
+            credential_identity=f"nous:{cred.cache_identity}",
         )
 
     return None
 
 
+_USE_NORMAL_RESOLUTION = object()
+
+
 async def _check_one(
-    client: httpx.AsyncClient, name: str, check: ProviderCheck
+    client: httpx.AsyncClient,
+    name: str,
+    check: ProviderCheck,
+    resolved_override: object = _USE_NORMAL_RESOLUTION,
 ) -> dict[str, Any]:
     """Validate a single provider; never raises."""
-    try:
-        resolved = _resolve_check(name, check)
-    except Exception as exc:  # unexpected credential-store failure
-        return {
-            "configured": False,
-            "status": PROVIDER_STATUS_ERROR,
-            "last_checked": _utc_now_iso(),
-            "detail": f"credential lookup failed: {type(exc).__name__}: {exc}"[:200],
-        }
+    if resolved_override is _USE_NORMAL_RESOLUTION:
+        try:
+            resolved = _resolve_check(name, check)
+        except Exception as exc:  # unexpected credential-store failure
+            return {
+                "configured": False,
+                "status": PROVIDER_STATUS_ERROR,
+                "last_checked": _utc_now_iso(),
+                "detail": (
+                    f"credential lookup failed: {type(exc).__name__}: {exc}"
+                )[:200],
+            }
+    else:
+        resolved = resolved_override
 
     if resolved is None:
         return {
@@ -257,6 +317,19 @@ async def _check_one(
             "status": PROVIDER_STATUS_NOT_CONFIGURED,
             "last_checked": _utc_now_iso(),
         }
+
+    if not isinstance(resolved, _ResolvedCheck):
+        raise TypeError("resolved provider check has an unexpected type")
+
+    if resolved.preflight_status is not None:
+        result: dict[str, Any] = {
+            "configured": resolved.preflight_configured,
+            "status": resolved.preflight_status,
+            "last_checked": _utc_now_iso(),
+        }
+        if resolved.preflight_detail:
+            result["detail"] = resolved.preflight_detail
+        return result
 
     # Higgsfield documents authenticated generation and per-request polling,
     # but no non-billable account/model probe. Presence is still useful health
@@ -327,24 +400,60 @@ async def validate_provider_keys(
     generation = _provider_cache_generation
     results: dict[str, dict[str, Any]] = {}
     pending: list[str] = []
+    resolved_overrides: dict[str, _ResolvedCheck | None] = {}
 
     for name in PROVIDER_CHECKS:
+        credential_identity: str | None = None
+        if name == "Nous":
+            # Hermes refreshes these files outside Nebula. Resolve the cheap
+            # local credential state on every health poll before considering a
+            # cached provider response, then bind any cache hit to that state.
+            # No provider request is made unless the identity changed or the
+            # ordinary TTL expired.
+            resolved = _resolve_check(name, PROVIDER_CHECKS[name])
+            resolved_overrides[name] = resolved
+            credential_identity = (
+                resolved.credential_identity if resolved is not None else None
+            )
+
         if not force_refresh:
             cached = _provider_check_cache.get(name)
             if cached is not None and cached[0] > now:
-                results[name] = cached[1]
-                continue
+                if (
+                    name == "Nous"
+                    and _provider_check_credential_identity.get(name)
+                    != credential_identity
+                ):
+                    _provider_check_cache.pop(name, None)
+                    _provider_check_credential_identity.pop(name, None)
+                else:
+                    results[name] = cached[1]
+                    continue
         pending.append(name)
 
     if pending:
         async with httpx.AsyncClient(timeout=PROVIDER_CHECK_TIMEOUT_SECONDS) as client:
             checked = await asyncio.gather(
-                *(_check_one(client, name, PROVIDER_CHECKS[name]) for name in pending)
+                *(
+                    _check_one(
+                        client,
+                        name,
+                        PROVIDER_CHECKS[name],
+                        resolved_overrides.get(name, _USE_NORMAL_RESOLUTION),
+                    )
+                    for name in pending
+                )
             )
         cache_current = _provider_cache_generation == generation
         for name, result in zip(pending, checked):
             if cache_current:
                 _provider_check_cache[name] = (now + ttl_seconds, result)
+                if name == "Nous":
+                    resolved = resolved_overrides.get(name)
+                    if resolved is not None and resolved.credential_identity is not None:
+                        _provider_check_credential_identity[name] = (
+                            resolved.credential_identity
+                        )
             results[name] = result
 
     return results

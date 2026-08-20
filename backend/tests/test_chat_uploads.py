@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 
 import main as main_module
 from main import app
+from models.events import ExecutedEvent
 from services.cli_graph import CLIGraph
 from services.ffmpeg import ProbeResult
 from services.output import OUTPUT_ROOT
@@ -458,6 +459,143 @@ def test_sync_outputs_to_cli_graph_populates_image_output(client):
     resp = client.get("/api/graph/node/n1/path")
     assert resp.status_code == 200
     assert resp.json()["path"].endswith("generated/run-output.png")
+
+
+@pytest.mark.asyncio
+async def test_emit_and_sync_broadcasts_custom_root_media_as_served_url(
+    tmp_path, monkeypatch
+):
+    """Live execution events must be browser-loadable before a page reload.
+
+    A custom output root is deliberately named something other than ``output``
+    so the contract cannot depend on frontend substring guessing.
+    """
+    output_root = tmp_path / "isolated-media-root"
+    media_path = output_root / "run-1" / "voice.mp3"
+    media_path.parent.mkdir(parents=True)
+    media_path.write_bytes(b"ID3-test")
+    monkeypatch.setattr(main_module, "OUTPUT_ROOT", output_root)
+
+    main_module.cli_graph.add_node("elevenlabs-tts", {})
+    broadcast = AsyncMock()
+    monkeypatch.setattr(main_module.manager, "broadcast", broadcast)
+
+    await main_module._emit_and_sync(
+        ExecutedEvent(
+            node_id="n1",
+            outputs={"audio": {"type": "Audio", "value": str(media_path)}},
+        )
+    )
+
+    sent = broadcast.await_args.args[0]
+    expected = "/api/outputs/run-1/voice.mp3"
+    assert sent.outputs["audio"]["value"] == expected
+    assert main_module.cli_graph.nodes["n1"]["outputs"]["audio"]["value"] == expected
+
+
+@pytest.mark.asyncio
+async def test_emit_and_sync_shaped_list_matches_persisted_outputs(
+    tmp_path, monkeypatch
+):
+    output_root = tmp_path / "custom-shaped-root"
+    first_path = output_root / "run-2" / "first.webp"
+    second_path = output_root / "run-2" / "second.webp"
+    first_path.parent.mkdir(parents=True)
+    first_path.write_bytes(b"first")
+    second_path.write_bytes(b"second")
+    monkeypatch.setattr(main_module, "OUTPUT_ROOT", output_root)
+
+    main_module.cli_graph.add_node("replicate-universal", {})
+    broadcast = AsyncMock()
+    monkeypatch.setattr(main_module.manager, "broadcast", broadcast)
+
+    normalize = main_module._normalize_outputs_for_storage
+    with patch.object(
+        main_module, "_normalize_outputs_for_storage", wraps=normalize
+    ) as normalize_mock:
+        await main_module._emit_and_sync(
+            ExecutedEvent(
+                node_id="n1",
+                outputs={
+                    "images": {
+                        "type": "Image",
+                        "value": [
+                            str(first_path),
+                            str(second_path),
+                            "not a media path",
+                        ],
+                    },
+                    "caption": {
+                        "type": "Text",
+                        "value": "keep this text unchanged",
+                    },
+                },
+            )
+        )
+    normalize_mock.assert_called_once()
+
+    sent = broadcast.await_args.args[0]
+    expected = {
+        "images": {
+            "type": "Image",
+            "value": [
+                "/api/outputs/run-2/first.webp",
+                "/api/outputs/run-2/second.webp",
+                "not a media path",
+            ],
+        },
+        "caption": {"type": "Text", "value": "keep this text unchanged"},
+    }
+    assert sent.outputs == expected
+    assert main_module.cli_graph.nodes["n1"]["outputs"] == sent.outputs
+
+
+@pytest.mark.asyncio
+async def test_emit_and_sync_bare_values_match_persisted_outputs(
+    tmp_path, monkeypatch
+):
+    output_root = tmp_path / "custom-bare-root"
+    primary_path = output_root / "run-3" / "primary.png"
+    alternate_path = output_root / "run-3" / "alternate.png"
+    primary_path.parent.mkdir(parents=True)
+    primary_path.write_bytes(b"primary")
+    alternate_path.write_bytes(b"alternate")
+    monkeypatch.setattr(main_module, "OUTPUT_ROOT", output_root)
+
+    main_module.cli_graph.add_node("some-model", {})
+    broadcast = AsyncMock()
+    monkeypatch.setattr(main_module.manager, "broadcast", broadcast)
+
+    normalize = main_module._normalize_outputs_for_storage
+    with patch.object(
+        main_module, "_normalize_outputs_for_storage", wraps=normalize
+    ) as normalize_mock:
+        await main_module._emit_and_sync(
+            ExecutedEvent(
+                node_id="n1",
+                outputs={
+                    "primary": str(primary_path),
+                    "alternates": [str(alternate_path), "keep this text", 7],
+                    "caption": "plain text stays plain text",
+                },
+            )
+        )
+    normalize_mock.assert_called_once()
+
+    sent = broadcast.await_args.args[0]
+    expected = {
+        "primary": {
+            "type": "Any",
+            "value": "/api/outputs/run-3/primary.png",
+        },
+        "alternates": {
+            "type": "Any",
+            "value": ["/api/outputs/run-3/alternate.png", "keep this text", 7],
+        },
+        "caption": {"type": "Any", "value": "plain text stays plain text"},
+    }
+    assert sent.outputs == expected
+    assert main_module.cli_graph.nodes["n1"]["outputs"] == sent.outputs
 
 
 def test_sync_outputs_to_cli_graph_wraps_bare_values(client):

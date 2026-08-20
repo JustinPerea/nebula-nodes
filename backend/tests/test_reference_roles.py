@@ -36,6 +36,16 @@ BASELINE_FINGERPRINTS_PATH = (
     Path(__file__).resolve().parent / "fixtures" / "reference_roles_baseline_sha256.json"
 )
 
+# Intentional post-baseline contract repairs. Fingerprinting rewrites only these
+# exact current values back to their historical values before comparing against
+# c708400, so the role feature still rejects every unapproved mutation.
+APPROVED_EXECUTION_PATTERN_CHANGES = {
+    "flux-schnell": ("sync", "async-poll"),
+    "fast-sdxl": ("sync", "async-poll"),
+    "ideogram-transparent": ("async-poll", "sync"),
+    "ideogram-edit-prompt": ("async-poll", "sync"),
+}
+
 # The 7 standard roles — mirrors REFERENCE_ROLE_IDS in referenceRoles.ts.
 STANDARD_ROLES = {
     "style",
@@ -104,20 +114,28 @@ def definitions() -> dict[str, dict[str, Any]]:
     return json.loads(BACKEND_DEFS_PATH.read_text())
 
 
-def _without_role_additions(node: dict[str, Any]) -> dict[str, Any]:
-    """Return a node with only the feature's permitted port keys removed."""
+def _without_role_additions(node_id: str, node: dict[str, Any]) -> dict[str, Any]:
+    """Return a node normalized only for explicitly approved additive changes."""
     normalized = dict(node)
     for section in ("inputPorts", "outputPorts"):
         normalized[section] = [
             {key: value for key, value in port.items() if key not in {"role", "weight"}}
             for port in node.get(section, [])
         ]
+    approved = APPROVED_EXECUTION_PATTERN_CHANGES.get(node_id)
+    if approved is not None:
+        baseline_value, current_value = approved
+        assert normalized.get("executionPattern") == current_value, (
+            f"{node_id}.executionPattern must remain {current_value!r} after its "
+            "approved lifecycle repair"
+        )
+        normalized["executionPattern"] = baseline_value
     return normalized
 
 
-def _node_fingerprint(node: dict[str, Any]) -> str:
+def _node_fingerprint(node_id: str, node: dict[str, Any]) -> str:
     canonical = json.dumps(
-        _without_role_additions(node),
+        _without_role_additions(node_id, node),
         ensure_ascii=False,
         separators=(",", ":"),
         sort_keys=True,
@@ -253,7 +271,7 @@ def test_role_additions_are_additive_only(
     mismatches = sorted(
         node_id
         for node_id, expected_fingerprint in baseline.items()
-        if _node_fingerprint(definitions[node_id]) != expected_fingerprint
+        if _node_fingerprint(node_id, definitions[node_id]) != expected_fingerprint
     )
     assert mismatches == [], (
         "baseline nodes changed outside additive port role/weight metadata: "

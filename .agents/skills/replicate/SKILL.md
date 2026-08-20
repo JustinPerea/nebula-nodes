@@ -19,7 +19,7 @@ This is the ONLY Replicate node. There is no per-model node, no image/video/audi
 
 1. **Auth — bearer token from Settings.** The handler reads `REPLICATE_API_TOKEN` and refuses to run without it (`raise ValueError("REPLICATE_API_TOKEN is required")`). Every HTTP call sends `Authorization: Bearer <REPLICATE_API_TOKEN>`. Get a token at <https://replicate.com/account/api-tokens> (format `r8_...`), enter it in Nebula **Settings → Replicate**, and save. It is persisted under `apiKeys.REPLICATE_API_TOKEN` in project-root `settings.json` and takes effect without a restart.
 2. **Base URL.** `https://api.replicate.com/v1`. Three routes are used: `GET /v1/models/{owner}/{name}` (resolve the version), `POST /v1/predictions` (create), `GET /v1/predictions/{id}` (poll).
-3. **Execution pattern — async-poll for media, SSE for text (confirmed from the handler).** No sync `Prefer: wait`, no webhooks. Text/LLM models that return `urls.stream` now stream token deltas live (auto-detected — see gotcha 6); everything else async-polls. The poll flow is:
+3. **Execution pattern — SSE when advertised, otherwise async-poll.** No sync `Prefer: wait`, no webhooks. Any prediction that returns `urls.stream` is consumed as SSE; Replicate can advertise that URL for media models as well as text models. Streamed text remains Text, while a complete streamed media data URI is inferred and materialized like a polled result. Predictions without `urls.stream` async-poll. The poll flow is:
    1. Split `model_id` on `/` into `owner` and `name`.
    2. `GET /v1/models/{owner}/{name}` → read `latest_version.id`. This becomes the `version` hash the create call requires. (If a private `_version_id` param is already set on the node, that is used instead and the lookup is skipped.)
    3. `POST /v1/predictions` with body `{"version": <id>, "input": <merged inputs>}`.
@@ -33,7 +33,7 @@ This is the ONLY Replicate node. There is no per-model node, no image/video/audi
    - **Latest version only.** The handler always resolves `latest_version`; there's no version picker. If you need a pinned older version, that's not exposed (the private `_version_id` is an implementation detail, not a user control).
    - **Empty params are dropped.** Params that are `None` or `""` are not sent. To pass a value you must give it a non-empty value.
    - **Progress is fake.** The progress bar is just `poll_number / 300`, not real model progress — Replicate's prediction progress/logs are not surfaced. Don't promise a live percentage.
-   - **Token streaming (text/LLM), auto-detected (2026-06-08).** When the created prediction returns `urls.stream`, the handler consumes the SSE stream and emits live token deltas (rendered as `streamingText`) — no param, no node change. Replicate's `output` SSE data is RAW TEXT (not JSON, unlike the chat providers). Non-text models (image/video/audio/mesh) have no token stream and poll as before. The 30 s idle-reconnect (`Last-Event-ID`) is not implemented, so a very long idle gap could truncate.
+   - **SSE is output-shape driven, not text-only.** When a prediction returns `urls.stream`, the handler consumes its RAW TEXT `output` events. Ordinary text emits live deltas. A possible media data-URI prefix is held privately until the header is classified; recognized `data:image/*`, `data:video/*`, `data:audio/*`, SVG, or GLTF output is buffered without text-delta telemetry, then retyped so the engine persists it to the run directory. Models without a stream URL poll as before. The 30 s idle-reconnect (`Last-Event-ID`) is not implemented, so a very long idle gap could truncate.
 
 ## Pick the right node
 
@@ -85,7 +85,9 @@ Internal-only keys (not user-facing controls): `_version_id` (a pinned version h
 | String URL ending `.mp3` / `.wav` / `.flac` | **Audio** (`audio`) |
 | Any other string URL (unknown extension) | **Image** (`image`) — fallback |
 | Plain non-URL string | **Text** (`text`) |
+| Media data URI (`data:image/*`, `data:video/*`, `data:audio/*`, SVG, or GLTF) | Matching **Image / Video / Audio / SVG / Mesh** port; bytes are materialized into the run directory |
 | List whose first item is a URL string | **Image** (`image`), using `output[0]` (first item only) |
+| List whose first item is a media data URI | Matching media port, using `output[0]` |
 | List of non-URLs, dict, or anything else | **Text** (`text`), stringified |
 
 Implications to tell the user:
@@ -117,7 +119,7 @@ All recipes use the real node id `replicate-universal`.
 Never promise these through the `replicate-universal` node — they're in the API but unwired (per the audit gap table in `docs/api-guides/replicate.md`):
 
 - **No Files API upload** (`POST /v1/files`). File inputs must be public URLs or data URLs the user supplies; Nebula won't host a local file for them.
-- **No streaming** (SSE via `urls.stream`). Token-by-token LLM/text output is not surfaced — results arrive whole at completion.
+- **Streaming is wired when Replicate advertises `urls.stream`.** There is no user control to force it, media data URIs are intentionally buffered rather than exposed as text telemetry, and idle reconnect via `Last-Event-ID` is not implemented.
 - **No synchronous mode** (`Prefer: wait` header). Always polls at 2 s; fast models can't return faster via a held request.
 - **No webhooks** (`webhook_events_filter`). Completion is detected by polling only; no callbacks.
 - **Cancellation IS wired** (2026-06-05, best-effort): on node cancellation the shared async-poll runner POSTs `/v1/predictions/{id}/cancel` so the run stops upstream instead of running to the 10-min ceiling. (No **`Cancel-After`** runtime cap, though.)
@@ -126,7 +128,7 @@ Never promise these through the `replicate-universal` node — they're in the AP
 - **No trainings / fine-tuning** (`/v1/…/trainings`, `GET /v1/trainings/{id}`).
 - **No in-app model search / collections** (`QUERY /v1/models`, `GET /v1/models`, `/v1/collections`, `GET /v1/search`). The user must already know the `owner/name` slug.
 - **No version picker / examples / readme** — only the model's **latest** version is used; no pinning to an older version, and no examples/readme surfaced.
-- **No official-model convenience route** (`POST /v1/models/{owner}/{name}/predictions`), **no hardware list** (`GET /v1/hardware`), **no account info** (`GET /v1/account`). Roughly ~20% of the Replicate API surface (create + poll + version-resolve) is wired — the full run-a-model happy path, none of the management/streaming/async-callback surface.
+- **No official-model convenience route** (`POST /v1/models/{owner}/{name}/predictions`), **no hardware list** (`GET /v1/hardware`), **no account info** (`GET /v1/account`). Roughly ~30% of the Replicate API surface (create + poll + version-resolve + advertised streaming + cancellation) is wired — the run-a-model happy path and live text streaming are covered, but the management and async-callback surfaces are not.
 
 ## Sources
 

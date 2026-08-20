@@ -18,7 +18,7 @@ Nodes: 172 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **Provider** | FAL |
 | **API Key** | FAL_KEY |
 | **Endpoint** | `fal-ai/fast-sdxl` |
-| **Execution** | sync |
+| **Execution** | async-poll |
 | **Inputs** | Prompt (Text)* |
 | **Outputs** | Image (Image) |
 | **Audited** | 2026-05-17 |
@@ -152,7 +152,7 @@ Nodes: 172 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **Provider** | FAL |
 | **API Key** | FAL_KEY |
 | **Endpoint** | `fal-ai/flux/schnell` |
-| **Execution** | sync |
+| **Execution** | async-poll |
 | **Inputs** | Prompt (Text)* |
 | **Outputs** | Image (Image) |
 | **Audited** | 2026-05-17 |
@@ -506,7 +506,7 @@ Nodes: 172 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **Provider** | Ideogram |
 | **API Key** | IDEOGRAM_API_KEY |
 | **Endpoint** | `/v1/edit` |
-| **Execution** | async-poll |
+| **Execution** | sync |
 | **Inputs** | Edit Instruction (Text)*, Image (Image), Images (Image ×n) |
 | **Outputs** | Image (Image) |
 | **Audited** | — |
@@ -622,7 +622,7 @@ Nodes: 172 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **Provider** | Ideogram |
 | **API Key** | IDEOGRAM_API_KEY |
 | **Endpoint** | `/v1/ideogram-v3/generate-transparent` |
-| **Execution** | async-poll |
+| **Execution** | sync |
 | **Inputs** | Prompt (Text)* |
 | **Outputs** | Image (alpha) (Image) |
 | **Audited** | — |

@@ -14,6 +14,11 @@ import os
 from pathlib import Path
 from typing import Any, AsyncIterator
 
+from services.agent_process import (
+    agent_process_group_options,
+    terminate_agent_process_tree,
+)
+
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
@@ -270,6 +275,7 @@ async def run_claude(
             cwd=str(PROJECT_ROOT),
             env=env,
             limit=64 * 1024 * 1024,
+            **agent_process_group_options(),
         )
     except FileNotFoundError:
         yield {"type": "error", "message": "`claude` binary not found in PATH"}
@@ -387,11 +393,7 @@ async def run_claude(
             }
     finally:
         if proc.returncode is None:
-            try:
-                proc.kill()
-                await proc.wait()
-            except ProcessLookupError:
-                pass
+            await terminate_agent_process_tree(proc)
         yield {"type": "done"}
 
 

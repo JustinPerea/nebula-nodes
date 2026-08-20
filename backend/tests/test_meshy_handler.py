@@ -26,6 +26,7 @@ from httpx import Response
 
 from handlers.meshy import (
     _poll_meshy_task,
+    handle_meshy_image_to_3d,
     handle_meshy_image_to_image,
     handle_meshy_multi_image_to_3d,
     handle_meshy_text_to_3d,
@@ -380,3 +381,50 @@ async def test_poll_meshy_task_propagates_cancel_to_provider() -> None:
             await _poll_meshy_task(mock_client, "meshy-key", poll_url, AsyncMock(), "node-1")
 
     mock_sched.assert_called_once()
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_image_to_3d_uses_cancel_aware_poll_path() -> None:
+    """The single-image handler must share the same provider-cancel contract as
+    every other Meshy task instead of polling in an unprotected duplicate loop."""
+    respx.post("https://api.meshy.ai/openapi/v1/image-to-3d").mock(
+        return_value=Response(202, json=_SUBMIT_RESP)
+    )
+
+    with (
+        patch("handlers.meshy.schedule_detached_cancel") as mock_sched,
+        patch(
+            "handlers.meshy.asyncio.sleep",
+            new=AsyncMock(side_effect=asyncio.CancelledError()),
+        ),
+    ):
+        with pytest.raises(asyncio.CancelledError):
+            await handle_meshy_image_to_3d(
+                node=_node("meshy-image-to-3d"),
+                inputs={"image": _port(_TINY_PNG_DATA_URI)},
+                api_keys=FAKE_API_KEY,
+            )
+
+    mock_sched.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_poll_meshy_task_treats_canceled_as_terminal_failure() -> None:
+    mock_client = AsyncMock()
+    mock_client.get.return_value = Response(
+        200,
+        json={"status": "CANCELED", "task_error": {"message": "stopped"}},
+    )
+
+    with patch("handlers.meshy.asyncio.sleep", new=AsyncMock()):
+        with pytest.raises(RuntimeError, match="Meshy task canceled: stopped"):
+            await _poll_meshy_task(
+                mock_client,
+                "meshy-key",
+                "https://api.meshy.ai/openapi/v1/image-to-3d/task-abc",
+                AsyncMock(),
+                "node-1",
+            )
+
+    mock_client.get.assert_awaited_once()

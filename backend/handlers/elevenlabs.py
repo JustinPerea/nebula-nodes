@@ -9,6 +9,7 @@ from uuid import uuid4
 import httpx
 
 from models.graph import GraphNode, PortValueDict
+from services.cancellation import schedule_detached_cancel
 from services.output import get_run_dir
 
 ELEVENLABS_API_BASE = "https://api.elevenlabs.io/v1/text-to-speech"
@@ -116,6 +117,63 @@ def _save_audio(content: bytes, output_format: str = "mp3_44100_128") -> str:
     file_path = run_dir / filename
     file_path.write_bytes(content)
     return str(file_path)
+
+
+async def _cancel_dubbing(dubbing_id: str, api_key: str) -> None:
+    """Best-effort cancellation/deletion of an in-progress dubbing project."""
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            await client.delete(
+                f"https://api.elevenlabs.io/v1/dubbing/{dubbing_id}",
+                headers={"xi-api-key": api_key},
+            )
+    except Exception:
+        pass
+
+
+async def _poll_dubbing(
+    client: httpx.AsyncClient,
+    dubbing_id: str,
+    target_lang: str,
+    api_key: str,
+) -> dict[str, Any]:
+    """Poll and download one submitted dubbing job."""
+    poll_errors = 0
+    for _ in range(120):
+        await asyncio.sleep(5)
+        status_resp = await client.get(
+            f"https://api.elevenlabs.io/v1/dubbing/{dubbing_id}",
+            headers={"xi-api-key": api_key},
+        )
+        if status_resp.status_code != 200:
+            poll_errors += 1
+            if poll_errors >= 5:
+                raise RuntimeError(
+                    f"ElevenLabs Dubbing poll failed {poll_errors} times: "
+                    f"{status_resp.status_code} {status_resp.text}"
+                )
+            continue
+        # Reset on successful response; threshold of 5 requires CONSECUTIVE failures.
+        poll_errors = 0
+        status_data = status_resp.json()
+        if status_data.get("status") == "dubbed":
+            dl_resp = await client.get(
+                f"https://api.elevenlabs.io/v1/dubbing/{dubbing_id}/audio/{target_lang}",
+                headers={"xi-api-key": api_key},
+                follow_redirects=True,
+            )
+            if dl_resp.status_code == 200:
+                file_path = _save_audio(dl_resp.content, "mp3_44100_128")
+                return {"audio": {"type": "Audio", "value": file_path}}
+            raise RuntimeError(
+                f"ElevenLabs Dubbing download failed: {dl_resp.status_code}"
+            )
+        if status_data.get("status") == "failed":
+            raise RuntimeError(
+                f"ElevenLabs Dubbing failed: {status_data.get('error', 'Unknown')}"
+            )
+
+    raise RuntimeError("ElevenLabs Dubbing timed out")
 
 
 async def handle_elevenlabs_sfx(
@@ -329,40 +387,11 @@ async def handle_elevenlabs_dubbing(
         if not dubbing_id:
             raise RuntimeError(f"ElevenLabs Dubbing returned no ID: {dub_data}")
 
-        # Step 2: Poll for completion
-        poll_errors = 0
-        for _ in range(120):
-            await asyncio.sleep(5)
-            status_resp = await client.get(
-                f"https://api.elevenlabs.io/v1/dubbing/{dubbing_id}",
-                headers={"xi-api-key": api_key},
-            )
-            if status_resp.status_code != 200:
-                poll_errors += 1
-                if poll_errors >= 5:
-                    raise RuntimeError(
-                        f"ElevenLabs Dubbing poll failed {poll_errors} times: "
-                        f"{status_resp.status_code} {status_resp.text}"
-                    )
-                continue
-            # Reset on successful response; threshold of 5 requires CONSECUTIVE failures.
-            poll_errors = 0
-            status_data = status_resp.json()
-            if status_data.get("status") == "dubbed":
-                # Step 3: Download dubbed audio
-                dl_resp = await client.get(
-                    f"https://api.elevenlabs.io/v1/dubbing/{dubbing_id}/audio/{target_lang}",
-                    headers={"xi-api-key": api_key},
-                    follow_redirects=True,
-                )
-                if dl_resp.status_code == 200:
-                    file_path = _save_audio(dl_resp.content, "mp3_44100_128")
-                    return {"audio": {"type": "Audio", "value": file_path}}
-                raise RuntimeError(f"ElevenLabs Dubbing download failed: {dl_resp.status_code}")
-            elif status_data.get("status") == "failed":
-                raise RuntimeError(f"ElevenLabs Dubbing failed: {status_data.get('error', 'Unknown')}")
-
-        raise RuntimeError("ElevenLabs Dubbing timed out")
+        try:
+            return await _poll_dubbing(client, dubbing_id, target_lang, api_key)
+        except asyncio.CancelledError:
+            schedule_detached_cancel(lambda: _cancel_dubbing(dubbing_id, api_key))
+            raise
 
 
 async def handle_elevenlabs_stt(
