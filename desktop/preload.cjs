@@ -1,4 +1,5 @@
-const { contextBridge } = require('electron');
+const electron = require('electron');
+const contextBridge = electron.contextBridge;
 
 // The main process injects immutable endpoint metadata through
 // additionalArguments (one-way, read-only). This keeps the surface narrow:
@@ -24,4 +25,6 @@ const metadata = Object.freeze({
   wsBaseUrl,
 });
 
-contextBridge.exposeInMainWorld('nebulaDesktop', metadata);
+if (contextBridge && typeof contextBridge.exposeInMainWorld === 'function') {
+  contextBridge.exposeInMainWorld('nebulaDesktop', metadata);
+}
