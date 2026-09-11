@@ -4,14 +4,47 @@ const DISCOVERY_TIMEOUT_MS = 650;
 const STORAGE_KEY = 'nebula:backendBaseUrl';
 const TRANSIENT_PROXY_STATUSES = new Set([500, 502, 503, 504]);
 
-type BackendSource = 'explicit' | 'test' | 'discovered';
+type BackendSource = 'explicit' | 'test' | 'discovered' | 'injected';
 
 let cachedBaseUrl: string | null = null;
 let cachedSource: BackendSource | null = null;
 let discoveryPromise: Promise<string> | null = null;
 
+// Synchronously initialize from the Electron-injected sidecar endpoint if the
+// bridge is present. This makes getCachedBackendBaseUrl() non-null before the
+// first async request, so synchronous helpers (backendUrlSync,
+// backendAssetUrlSync) resolve against the injected origin immediately —
+// before any renderer fetch or WebSocket opens.
+{
+  const injected = getInjectedApiBaseUrl();
+  if (injected) {
+    cachedBaseUrl = injected;
+    cachedSource = 'injected';
+  }
+}
+
 function isTestMode(): boolean {
   return import.meta.env.MODE === 'test';
+}
+
+// Electron injects immutable HTTP/WS base URLs through the sandboxed preload
+// bridge (window.nebulaDesktop). When present, the injected endpoint is the
+// single authoritative source for the entire renderer lifetime — no Vite env,
+// localStorage, same-origin proxy, port discovery, or health probing may
+// override it. The bridge is absent in browser/Vite mode, preserving the
+// existing discovery chain.
+function getInjectedApiBaseUrl(): string | null {
+  if (typeof window === 'undefined') return null;
+  const bridge = window.nebulaDesktop;
+  const url = bridge?.apiBaseUrl;
+  return typeof url === 'string' && url ? normalizeBaseUrl(url) : null;
+}
+
+function getInjectedWsBaseUrl(): string | null {
+  if (typeof window === 'undefined') return null;
+  const bridge = window.nebulaDesktop;
+  const url = bridge?.wsBaseUrl;
+  return typeof url === 'string' && url ? normalizeBaseUrl(url) : null;
 }
 
 function configuredBackendBaseUrl(): string | null {
@@ -117,6 +150,14 @@ async function probeBackendBaseUrl(baseUrl: string): Promise<string | null> {
 }
 
 async function discoverBackendBaseUrl(): Promise<string> {
+  // Injected sidecar endpoint is authoritative — no discovery probes or
+  // localStorage writes when the Electron bridge is present.
+  const injected = getInjectedApiBaseUrl();
+  if (injected) {
+    cachedSource = 'injected';
+    return injected;
+  }
+
   if (isTestMode()) {
     cachedSource = 'test';
     return `http://localhost:${DEFAULT_BACKEND_PORT}`;
@@ -141,6 +182,15 @@ async function discoverBackendBaseUrl(): Promise<string> {
 }
 
 export async function getBackendBaseUrl(options: { force?: boolean } = {}): Promise<string> {
+  // Injected sidecar endpoint is authoritative for the process lifetime.
+  // Forced resolution must not rediscover — the injected endpoint always wins.
+  const injected = getInjectedApiBaseUrl();
+  if (injected) {
+    cachedBaseUrl = injected;
+    cachedSource = 'injected';
+    return injected;
+  }
+
   if (!options.force && cachedBaseUrl != null) return cachedBaseUrl;
   if (!options.force && discoveryPromise) return discoveryPromise;
 
@@ -169,6 +219,9 @@ export function backendUrlSync(path: string): string {
 }
 
 function shouldRetryWithDiscovery(baseUrl: string, response?: Response): boolean {
+  // No rediscovery when the Electron bridge is present — the injected
+  // endpoint is authoritative and failed reads must not probe other backends.
+  if (getInjectedApiBaseUrl() || cachedSource === 'injected') return false;
   if (cachedSource === 'explicit' || cachedSource === 'test') return false;
   if (!response) return true;
   return baseUrl === '' && TRANSIENT_PROXY_STATUSES.has(response.status);
@@ -206,6 +259,14 @@ export async function backendWebSocketUrl(
   path: string,
   options: { forceDiscovery?: boolean } = {},
 ): Promise<string> {
+  // Injected WS base is authoritative — no discovery, no probing.
+  // forceDiscovery is deliberately ignored when the bridge is present so
+  // that reconnect constructs the byte-identical injected URL.
+  const injectedWs = getInjectedWsBaseUrl();
+  if (injectedWs) {
+    return joinBackendPath(injectedWs, path);
+  }
+
   const baseUrl = await getBackendBaseUrl({ force: options.forceDiscovery });
   const origin = baseUrl || window.location.origin;
   const url = new URL(joinBackendPath(origin, path));
