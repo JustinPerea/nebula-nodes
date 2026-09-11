@@ -32,6 +32,9 @@ function sparkWithoutRuntimeCodegen() {
 }
 
 export default defineConfig({
+  // Electron loads the packaged renderer through file://. Relative asset URLs
+  // keep chunks, styles, and static files resolvable from that origin.
+  base: process.env.NEBULA_DESKTOP_BUILD === '1' ? './' : '/',
   plugins: [sparkWithoutRuntimeCodegen(), react()],
   resolve: {
     // The full player bundles its expression interpreter with runtime code

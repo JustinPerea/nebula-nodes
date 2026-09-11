@@ -1,0 +1,15 @@
+{
+  "name": "nebula-desktop",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "main": "main.mjs",
+  "scripts": {
+    "start": "electron .",
+    "start:dev": "VITE_DEV_SERVER_URL=http://localhost:5173 electron .",
+    "test:smoke": "NEBULA_DESKTOP_SMOKE=1 electron ."
+  },
+  "devDependencies": {
+    "electron": "44.3.0"
+  }
+}

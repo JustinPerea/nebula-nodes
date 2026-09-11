@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const distDir = path.resolve(scriptDir, '../dist');
 const indexHtml = await readFile(path.join(distDir, 'index.html'), 'utf8');
-const entryMatch = indexHtml.match(/<script[^>]+src="\/assets\/(index-[^"]+\.js)"/);
+const entryMatch = indexHtml.match(/<script[^>]+src="(?:\/|\.\/)assets\/(index-[^"]+\.js)"/);
 
 if (!entryMatch) {
   throw new Error('Could not identify the production entry script in dist/index.html');
