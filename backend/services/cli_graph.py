@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import json
 import copy
+import math
+import os
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 
 class CLIGraph:
@@ -63,9 +66,13 @@ class CLIGraph:
             "outputs": dict(outputs) if outputs else {},
         }
         if position is not None:
+            x = float(position.get("x", 0))
+            y = float(position.get("y", 0))
+            if not math.isfinite(x) or not math.isfinite(y):
+                raise ValueError("node position requires finite x and y")
             node["position"] = {
-                "x": float(position.get("x", 0)),
-                "y": float(position.get("y", 0)),
+                "x": x,
+                "y": y,
             }
         self.nodes[short_id] = node
         self._maybe_persist()
@@ -109,9 +116,13 @@ class CLIGraph:
         if unknown:
             raise ValueError(f"Node '{unknown[0]}' not found")
         for node_id, position in positions.items():
+            x = float(position["x"])
+            y = float(position["y"])
+            if not math.isfinite(x) or not math.isfinite(y):
+                raise ValueError("node position requires finite x and y")
             self.nodes[node_id]["position"] = {
-                "x": float(position["x"]),
-                "y": float(position["y"]),
+                "x": x,
+                "y": y,
             }
         self._maybe_persist()
 
@@ -149,15 +160,26 @@ class CLIGraph:
         self._maybe_persist()
 
     def replace_with(self, candidate: "CLIGraph") -> None:
-        """Atomically adopt a fully validated candidate and persist once.
+        """Durably persist, then adopt, a fully validated candidate.
 
         Building imports/clusters against a persistence-free candidate keeps a
-        malformed request from partially mutating either memory or disk.
+        malformed request from partially mutating either memory or disk. When
+        persistence is configured, a failed write propagates before live memory
+        changes so an API cannot report a graph that restart would discard.
         """
-        self.nodes = copy.deepcopy(candidate.nodes)
-        self.edges = copy.deepcopy(candidate.edges)
-        self._counter = candidate._counter
-        self._maybe_persist()
+        replacement_nodes = copy.deepcopy(candidate.nodes)
+        replacement_edges = copy.deepcopy(candidate.edges)
+        replacement_counter = candidate._counter
+        if self._persist_path is not None:
+            self._save_state(
+                self._persist_path,
+                replacement_nodes,
+                replacement_edges,
+                replacement_counter,
+            )
+        self.nodes = replacement_nodes
+        self.edges = replacement_edges
+        self._counter = replacement_counter
 
     def clone(self) -> "CLIGraph":
         """Return a persistence-free deep copy suitable for staged mutation."""
@@ -206,13 +228,52 @@ class CLIGraph:
     # Persistence
 
     def save(self, path: Path) -> None:
-        """Persist the graph (including counter) to a JSON file."""
+        """Atomically persist the graph (including counter) to a JSON file."""
+        self._save_state(path, self.nodes, self.edges, self._counter)
+
+    @staticmethod
+    def _save_state(
+        path: Path,
+        nodes: dict[str, dict[str, Any]],
+        edges: list[dict[str, str]],
+        counter: int,
+    ) -> None:
+        target = Path(path)
         data = {
-            "nodes": list(self.nodes.values()),
-            "edges": list(self.edges),
-            "counter": self._counter,
+            "nodes": list(nodes.values()),
+            "edges": list(edges),
+            "counter": counter,
         }
-        Path(path).write_text(json.dumps(data, indent=2))
+        temporary = target.with_name(f".{target.name}.{uuid4().hex}.tmp")
+        try:
+            with temporary.open("x", encoding="utf-8") as handle:
+                json.dump(data, handle, indent=2, allow_nan=False)
+                handle.flush()
+                os.fsync(handle.fileno())
+            temporary.replace(target)
+            try:
+                directory_fd = os.open(target.parent, os.O_RDONLY | os.O_DIRECTORY)
+            except (AttributeError, OSError):
+                directory_fd = None
+            if directory_fd is not None:
+                try:
+                    try:
+                        os.fsync(directory_fd)
+                    except OSError as exc:
+                        # The atomic rename already committed the exact state
+                        # now adopted in memory. A directory-sync failure lowers
+                        # crash-durability, but raising here would falsely leave
+                        # memory on the old graph while disk contains the new
+                        # one. Surface the durability warning without creating
+                        # that split-brain state.
+                        print(
+                            f"[cli_graph] directory fsync failed after commit: {exc}",
+                            flush=True,
+                        )
+                finally:
+                    os.close(directory_fd)
+        finally:
+            temporary.unlink(missing_ok=True)
 
     def load(self, path: Path) -> None:
         """Replace current graph state with contents of a JSON file."""

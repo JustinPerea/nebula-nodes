@@ -172,6 +172,14 @@ PROVIDER_CHECKS: dict[str, ProviderCheck] = {
         "",
         lambda key: {"Authorization": f"Key {key}"},
     ),
+    # Authenticated, non-billable balance lookup. A successful response is a
+    # CreditsResponse containing remaining_credits; provider health only needs
+    # the status code to validate the credential and never starts generation.
+    "World Labs": ProviderCheck(
+        ("WORLDLABS_API_KEY",),
+        "https://api.worldlabs.ai/marble/v1/credits",
+        lambda key: {"WLT-Api-Key": key},
+    ),
     "Nous": ProviderCheck(
         (),
         "",  # resolved from the Hermes credential's inference base URL
@@ -364,6 +372,12 @@ async def _check_one(
     elif resp.status_code == 403:
         result["status"] = PROVIDER_STATUS_UNAUTHORIZED
         result["detail"] = "credential is not authorized for the validation endpoint (HTTP 403)"
+    elif name == "World Labs" and resp.status_code == 404:
+        # The credits endpoint documents 404 when the authenticated caller is
+        # not an API-enabled user. The credential was not necessarily malformed,
+        # so report the actionable authorization state rather than "invalid".
+        result["status"] = PROVIDER_STATUS_UNAUTHORIZED
+        result["detail"] = "credential belongs to an account that is not API-enabled (HTTP 404)"
     elif resp.status_code == 402:
         result["status"] = PROVIDER_STATUS_INSUFFICIENT_CREDITS
         result["detail"] = "credential accepted but the account has insufficient credits (HTTP 402)"

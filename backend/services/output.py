@@ -10,7 +10,7 @@ from contextvars import ContextVar
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-from urllib.parse import unquote_to_bytes, urlsplit
+from urllib.parse import quote, unquote, unquote_to_bytes, urlsplit
 from uuid import uuid4
 
 from services.ffmpeg import ffprobe_video
@@ -22,6 +22,10 @@ logger = logging.getLogger(__name__)
 # platforms; FileResponse and inline <video> need the right content-type).
 mimetypes.add_type("video/webm", ".webm")
 mimetypes.add_type("model/gltf-binary", ".glb")
+# SPZ does not yet have an IANA-registered media type.  macOS otherwise maps
+# the extension to text/plain, which invites proxies and download clients to
+# reinterpret a binary Gaussian-splat payload.  Keep it explicitly opaque.
+mimetypes.add_type("application/octet-stream", ".spz")
 
 # Project-local output dir by default; override via NEBULA_OUTPUT_ROOT so the
 # test suite can sandbox to a tmp dir (pytest conftest sets this) and ops can
@@ -373,6 +377,65 @@ def resolve_output_ref(value: str) -> str:
     except ValueError:
         return value  # traversal attempt — refuse
     return str(candidate)
+
+
+def portable_output_ref(value: str, *, require_file: bool = False) -> str:
+    """Canonicalize a contained output path to a strict portable asset URI.
+
+    In-flight graph edges carry absolute paths, while persisted graphs carry
+    ``/api/outputs/...`` URLs. Spatial contracts need one representation that
+    works in either phase. This helper accepts only those two local forms and
+    rejects provider/data URLs, signed query strings, traversal, and paths
+    outside the configured output root.
+    """
+
+    if not isinstance(value, str) or not value or value != value.strip():
+        raise ValueError("output reference must be a trimmed non-empty string")
+    if any(ord(character) < 32 or ord(character) == 127 for character in value):
+        raise ValueError("output reference contains control characters")
+    if "\\" in value:
+        raise ValueError("output reference cannot contain backslashes")
+
+    if value.startswith("/api/outputs/"):
+        parsed = urlsplit(value)
+        if parsed.scheme or parsed.netloc or parsed.query or parsed.fragment:
+            raise ValueError("output reference cannot contain a scheme, authority, query, or fragment")
+        if re.search(r"%(?![0-9a-fA-F]{2})", parsed.path):
+            raise ValueError("output reference contains malformed URL encoding")
+        try:
+            decoded_path = unquote(parsed.path, errors="strict")
+        except (UnicodeDecodeError, ValueError) as exc:
+            raise ValueError("output reference contains malformed URL encoding") from exc
+        rel_text = decoded_path.removeprefix("/api/outputs/")
+        if not rel_text:
+            raise ValueError("output reference must identify a file under /api/outputs")
+        raw_segments = parsed.path.removeprefix("/api/outputs/").split("/")
+        decoded_segments = [unquote(segment) for segment in raw_segments]
+        if any(
+            not segment
+            or segment in {".", ".."}
+            or any(character in segment for character in ("/", "\\", "?", "#"))
+            or any(ord(character) < 32 or ord(character) == 127 for character in segment)
+            for segment in decoded_segments
+        ):
+            raise ValueError("output reference contains an unsafe encoded path segment")
+        candidate = (OUTPUT_ROOT / rel_text).resolve()
+    else:
+        candidate_path = Path(value).expanduser()
+        if not candidate_path.is_absolute():
+            raise ValueError("output reference must be an absolute path or /api/outputs URL")
+        candidate = candidate_path.resolve()
+
+    output_root = OUTPUT_ROOT.resolve()
+    try:
+        relative = candidate.relative_to(output_root)
+    except ValueError as exc:
+        raise ValueError("output reference must stay inside the configured output root") from exc
+    if not relative.parts or any(part in {"", ".", ".."} for part in relative.parts):
+        raise ValueError("output reference contains an empty or traversing path segment")
+    if require_file and not candidate.is_file():
+        raise ValueError("output reference does not identify an available local file")
+    return "/api/outputs/" + quote(relative.as_posix(), safe="/-._~")
 
 
 def image_to_data_uri(file_path: Path) -> str:

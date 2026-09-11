@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { Map, Minimize2 } from 'lucide-react';
 import {
   ReactFlow,
   Background,
   BackgroundVariant,
-  SelectionMode,
   MiniMap,
   Controls,
   Panel,
@@ -33,9 +33,13 @@ import { VideoQcNode } from './nodes/VideoQcNode';
 import { TypedEdge } from './edges/TypedEdge';
 import { ContextMenu } from './ContextMenu';
 import { ConnectionPopup } from './ConnectionPopup';
+import { SelectionToolbar } from './SelectionToolbar';
 import { CrabMarkAnimated } from './brand/CrabMarkAnimated';
 import { CHARACTER_DRAG_MIME, MOODBOARD_DRAG_MIME } from '../lib/dragMime';
 import { apiFetch } from '../lib/backend';
+import { CANVAS_INTERACTION_PROPS } from '../lib/canvasNavigation';
+import { computeCanvasFitPadding } from '../lib/canvasFit';
+import { publishCanvasSelection, selectedNodeIds } from '../lib/canvasSelection';
 import '../styles/canvas.css';
 
 const nodeTypes: NodeTypes = {
@@ -51,59 +55,6 @@ const nodeTypes: NodeTypes = {
   moodboardNode: MoodboardNode,
   videoQcNode: VideoQcNode,
 };
-
-// fitView padding that reserves space for every floating panel that overlaps
-// the canvas. Returns explicit px values (React Flow's `Padding` accepts
-// `${number}px` strings per side). Numeric padding takes a different formula
-// in React Flow that does NOT correspond to "fraction of viewport", so px is
-// the only way to guarantee content lands clear of the panels.
-type PixelPadding = { top: `${number}px`; right: `${number}px`; bottom: `${number}px`; left: `${number}px` };
-
-function px(value: number): `${number}px` {
-  return `${value}px`;
-}
-
-function computeChatAwarePadding(): PixelPadding {
-  const base: PixelPadding = { top: '40px', right: '40px', bottom: '40px', left: '40px' };
-  if (typeof window === 'undefined') return base;
-  const vw = window.innerWidth;
-  const vh = window.innerHeight;
-
-  // Track furthest panel intrusion on each side, in pixels.
-  const intrusion = { top: 0, right: 0, bottom: 0, left: 0 };
-  const SAFETY = 24; // breathing room beyond the panel edge
-
-  const PANEL_SELECTORS = [
-    '.chat-panel',
-    '.panel--library',
-    '.node-inspector-popover',
-    '.panel--inspector',
-    '.panel--settings',
-  ];
-  for (const sel of PANEL_SELECTORS) {
-    const el = document.querySelector(sel);
-    if (!el) continue;
-    const rect = (el as HTMLElement).getBoundingClientRect();
-    if (rect.width === 0 || rect.height === 0) continue;
-    // Decide which viewport edge this panel hugs by min-distance.
-    const dLeft = rect.left;
-    const dRight = vw - rect.right;
-    const dTop = rect.top;
-    const dBottom = vh - rect.bottom;
-    const minD = Math.min(dLeft, dRight, dTop, dBottom);
-    if (minD === dLeft) intrusion.left = Math.max(intrusion.left, rect.right);
-    else if (minD === dRight) intrusion.right = Math.max(intrusion.right, vw - rect.left);
-    else if (minD === dTop) intrusion.top = Math.max(intrusion.top, rect.bottom);
-    else intrusion.bottom = Math.max(intrusion.bottom, vh - rect.top);
-  }
-
-  return {
-    top: px(Math.max(40, intrusion.top + SAFETY)),
-    right: px(Math.max(40, intrusion.right + SAFETY)),
-    bottom: px(Math.max(40, intrusion.bottom + SAFETY)),
-    left: px(Math.max(40, intrusion.left + SAFETY)),
-  };
-}
 
 const edgeTypes: EdgeTypes = {
   'typed-edge': TypedEdge,
@@ -269,9 +220,10 @@ export function Canvas() {
   const skin = useUIStore((s) => s.skin);
   const canvasPerfMode = useUIStore((s) => s.canvasPerfMode);
   const canvasLowDetail = useUIStore((s) => s.canvasLowDetail);
+  const minimapCollapsed = useUIStore((s) => s.minimapCollapsed);
+  const setMinimapCollapsed = useUIStore((s) => s.setMinimapCollapsed);
   const onboardingActive = useUIStore((s) => s.onboardingActive);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
-  const canvasTool = useUIStore((s) => s.canvasTool);
   const showContextMenu = useUIStore((s) => s.showContextMenu);
   const hideContextMenu = useUIStore((s) => s.hideContextMenu);
   const showConnectionPopup = useUIStore((s) => s.showConnectionPopup);
@@ -286,6 +238,25 @@ export function Canvas() {
         : [edge.className, 'typed-edge--running'].filter(Boolean).join(' '),
     }));
   }, [edges, isExecuting, isSlavaSkin]);
+  const liveSelectedNodeIds = useMemo(() => selectedNodeIds(nodes), [nodes]);
+  const liveSelectionKey = liveSelectedNodeIds.join('\u0000');
+
+  // Publish only IDs. The backend resolves authoritative node data on read,
+  // keeping transient selection out of saved graph files and stale handles out
+  // of CLI/MCP context. Debounce marquee churn while preserving the final set.
+  useEffect(() => {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => {
+      publishCanvasSelection(liveSelectedNodeIds, controller.signal).catch((error) => {
+        if (controller.signal.aborted) return;
+        console.warn('[nebula] selection context sync failed:', error);
+      });
+    }, 80);
+    return () => {
+      window.clearTimeout(timeout);
+      controller.abort();
+    };
+  }, [liveSelectionKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const reactFlow = useReactFlow();
   const { fitView, screenToFlowPosition } = reactFlow;
@@ -349,7 +320,7 @@ export function Canvas() {
         (window as unknown as { __nebulaSuppressFitView?: boolean }).__nebulaSuppressFitView;
       if (suppressed) return;
       setTimeout(() => {
-        const padding = computeChatAwarePadding();
+        const padding = computeCanvasFitPadding();
         const totalCount =
           event instanceof CustomEvent && typeof event.detail?.totalCount === 'number'
             ? event.detail.totalCount
@@ -593,7 +564,7 @@ export function Canvas() {
   return (
     <div
       ref={wrapperRef}
-      className={`canvas-wrapper${isSlavaSkin ? ' canvas-wrapper--slava' : ''}${isSlavaSkin && nodes.length === 0 ? ' canvas-wrapper--slava-empty' : ''}${canvasTool === 'select' ? ' canvas--select' : ''}`}
+      className={`canvas-wrapper${isSlavaSkin ? ' canvas-wrapper--slava' : ''}${isSlavaSkin && nodes.length === 0 ? ' canvas-wrapper--slava-empty' : ''}`}
       onKeyDown={onKeyDown}
       tabIndex={0}
       onDrop={onDrop}
@@ -613,17 +584,13 @@ export function Canvas() {
         onNodeContextMenu={onNodeContextMenu}
         onPaneClick={onPaneClick}
         fitView
+        fitViewOptions={{ padding: computeCanvasFitPadding() }}
         minZoom={0.1}
         maxZoom={4}
         defaultEdgeOptions={{ type: 'typed-edge' }}
         proOptions={{ hideAttribution: true }}
-        deleteKeyCode={['Backspace', 'Delete']}
-        multiSelectionKeyCode="Shift"
-        selectionKeyCode={null}
-        selectionOnDrag
-        panOnDrag={canvasTool === 'select' ? [1, 2] : true}
-        panOnScroll={false}
-        selectionMode={SelectionMode.Partial}
+        deleteKeyCode={isExecuting ? null : ['Backspace', 'Delete']}
+        {...CANVAS_INTERACTION_PROPS}
         onlyRenderVisibleElements={canvasPerfMode}
       >
         <Background
@@ -635,16 +602,48 @@ export function Canvas() {
           patternClassName={isSlavaSkin ? 'slava-canvas-background__dot' : undefined}
         />
         <ZoomLodController wrapperRef={wrapperRef} threshold={0.4} enabled={canvasLowDetail} />
+        <Panel position="top-center" className="selection-toolbar-panel">
+          <SelectionToolbar />
+        </Panel>
         {canvasPerfMode && (
           <>
-            <Controls showInteractive={false} />
-            <MiniMap
-              pannable
-              zoomable
-              nodeStrokeWidth={2}
-              nodeColor={isSlavaSkin ? 'var(--sr-minimap-node, #c9c4ba)' : '#3a3a3a'}
-              maskColor="var(--xy-minimap-mask-background-color-default, rgba(0,0,0,0.6))"
-            />
+            <Controls showInteractive={false} fitViewOptions={{ padding: computeCanvasFitPadding() }} />
+            <Panel
+              position="bottom-right"
+              className={`canvas-minimap-panel${minimapCollapsed ? ' canvas-minimap-panel--collapsed' : ''}`}
+            >
+              {minimapCollapsed ? (
+                <button
+                  type="button"
+                  className="canvas-minimap-toggle canvas-minimap-toggle--restore"
+                  aria-label="Show canvas minimap"
+                  title="Show canvas minimap"
+                  onClick={() => setMinimapCollapsed(false)}
+                >
+                  <Map size={18} aria-hidden="true" />
+                </button>
+              ) : (
+                <>
+                  <MiniMap
+                    className="canvas-minimap"
+                    pannable
+                    zoomable
+                    nodeStrokeWidth={2}
+                    nodeColor={isSlavaSkin ? 'var(--sr-minimap-node, #c9c4ba)' : '#3a3a3a'}
+                    maskColor="var(--xy-minimap-mask-background-color-default, rgba(0,0,0,0.6))"
+                  />
+                  <button
+                    type="button"
+                    className="canvas-minimap-toggle canvas-minimap-toggle--collapse"
+                    aria-label="Minimize canvas minimap"
+                    title="Minimize canvas minimap"
+                    onClick={() => setMinimapCollapsed(true)}
+                  >
+                    <Minimize2 size={16} aria-hidden="true" />
+                  </button>
+                </>
+              )}
+            </Panel>
             <Panel position="bottom-left" className="canvas-node-count">
               {nodes.length} {nodes.length === 1 ? 'node' : 'nodes'}
             </Panel>

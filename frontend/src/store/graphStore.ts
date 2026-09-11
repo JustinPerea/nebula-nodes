@@ -9,7 +9,7 @@ import {
   type Connection,
 } from '@xyflow/react';
 import { v4 as uuidv4 } from 'uuid';
-import type { NodeData, DynamicNodeData, DynamicPortDefinition, DynamicParamDefinition, PortDataType, CinemaSceneSpec, CinemaShot, ModelNodeDefinition, GenerationRequest, CreateOriginTag } from '../types';
+import type { NodeData, DynamicNodeData, DynamicPortDefinition, DynamicParamDefinition, PortDataType, PortValue, CinemaSceneSpec, CinemaShot, ModelNodeDefinition, GenerationRequest, CreateOriginTag } from '../types';
 import { shotPortId } from '../constants/ports';
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 import { buildSampleGraph } from '../constants/sampleGraph';
@@ -18,9 +18,19 @@ import {
   clearPersistedRunHistory,
   closeRunRecord,
   freezeRunSnapshot,
+  applyProviderRecoveriesToHistory,
+  applyProviderRecoveryToLiveParams,
+  isProviderStartAmbiguity,
   loadRunHistory,
   openRunRecord,
   persistRunHistory,
+  providerRecoveryWarningText,
+  isWorldLabsRecoveryReplayBlocked,
+  runIncludesFreshPaidWorldLabsStart,
+  runIncludesWorldLabs,
+  type ProviderRecoveryCheckpoint,
+  type ProviderStartAmbiguity,
+  type ProviderStartKind,
   type RunGraphSnapshot,
   type RunRecord,
   type RunReplayAction,
@@ -29,13 +39,23 @@ import {
   executeGraph as apiExecuteGraph,
   executeNode as apiExecuteNode,
   cancelExecution as apiCancelExecution,
+  acknowledgeProviderStartAmbiguity as apiAcknowledgeProviderStartAmbiguity,
+  deleteProviderRecovery as apiDeleteProviderRecovery,
   generateCinemaShot as apiGenerateShot,
   promoteCinemaShotVariation as apiPromoteShotVariation,
   fetchReplicateSchema,
+  getExecutionStatus as apiGetExecutionStatus,
+  ExecutionStartRejectedError,
   type ExecutionValidationError,
+  type ExecutionStatusResult,
   type OpenRouterModel,
 } from '../lib/api';
-import { apiFetch, backendAssetUrlSync, rewriteBackendAssetUrls } from '../lib/backend';
+import {
+  apiFetch,
+  getCachedBackendBaseUrl,
+  rewriteBackendAssetUrls,
+  rewriteExecutionAssetUrls,
+} from '../lib/backend';
 import { wsClient, type ExecutionEvent } from '../lib/wsClient';
 import { notifyJobComplete } from '../lib/jobNotifications';
 import { useUIStore } from './uiStore';
@@ -329,6 +349,9 @@ let currentRunId: string | null = null;
 // graphComplete event, so they are intentionally not registered here.
 const runErrors = new Map<string, boolean>();
 const cancelledRunIds = new Set<string>();
+const pendingStartRunIds = new Set<string>();
+const cancellationRequestedRunIds = new Set<string>();
+const statusReconciliationTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 function rememberCancelledRun(runId: string): void {
   cancelledRunIds.add(runId);
@@ -350,6 +373,11 @@ function closeCurrentRun(
   if (!currentRunId) return;
   const rid = currentRunId;
   currentRunId = null;
+  pendingStartRunIds.delete(rid);
+  cancellationRequestedRunIds.delete(rid);
+  const timer = statusReconciliationTimers.get(rid);
+  if (timer !== undefined) clearTimeout(timer);
+  statusReconciliationTimers.delete(rid);
   runErrors.delete(rid);
   set((s) => ({
     runHistory: persistedRunHistory(closeRunRecord(s.runHistory, rid, patch)),
@@ -385,6 +413,11 @@ interface GraphState {
   nodes: Node<NodeData>[];
   edges: Edge[];
   isExecuting: boolean;
+  isCancelling: boolean;
+  providerRecoveryWarning: string | null;
+  providerRecoveries: ProviderRecoveryCheckpoint[];
+  uncertainWorldLabsRunId: string | null;
+  providerStartAmbiguities: ProviderStartAmbiguity[];
   backendFreshStartPending: boolean;
 
   // Undo/Redo
@@ -401,11 +434,14 @@ interface GraphState {
   // Selection & batch ops
   selectAll: () => void;
   duplicateSelected: () => void;
+  deleteSelected: () => void;
+  autoLayoutSelected: () => void;
 
   // Existing methods. addNode/addDynamicNode are async because static nodes
   // round-trip through cli_graph on the backend so Claude's `nebula graph` sees
-  // them; they resolve to the short id (n1, n2, ...) on success, or a UUID on
-  // backend failure (local-only fallback).
+  // them; they resolve to the short id (n1, n2, ...) on success, or a UUID only
+  // when the backend is unreachable (local-only fallback). A backend rejection
+  // resolves to null and leaves the canvas unchanged.
   addNode: (definitionId: string, position: { x: number; y: number }) => Promise<string | null>;
   addDynamicNode: (definitionId: string, position: { x: number; y: number }) => string | null;
   addNodeAndConnect: (
@@ -478,6 +514,17 @@ interface GraphState {
   cancelExecution: () => Promise<void>;
   resetExecution: () => void;
   handleExecutionEvent: (event: ExecutionEvent) => void;
+  hydrateProviderRecoveries: (checkpoints: ProviderRecoveryCheckpoint[]) => void;
+  deleteProviderRecovery: (runId: string, nodeId: string) => Promise<void>;
+  hydrateProviderStartAmbiguities: (ambiguities: ProviderStartAmbiguity[]) => void;
+  hydrateExecutionStatuses: (statuses: ExecutionStatusResult[]) => void;
+  acknowledgeProviderStartAmbiguity: (
+    kind: ProviderStartKind,
+    nodeId: string,
+  ) => Promise<void>;
+  acknowledgeUncertainWorldLabsRun: () => void;
+  reconcilePersistedWorldLabsRun: () => Promise<void>;
+  dismissProviderRecoveryWarning: () => void;
   executeNode: (nodeId: string) => Promise<void>;
   /** Regenerate a single cinema-scene shot (does NOT touch the global
    *  isExecuting lock — the rail spinner scopes to that one shot's status).
@@ -491,7 +538,11 @@ interface GraphState {
   deleteGeneration: (modelNodeIds: string[]) => void;
   duplicateNode: (nodeId: string) => void;
   deleteNode: (nodeId: string) => void;
-  loadGraph: (nodes: Node<NodeData>[], edges: Edge[]) => void;
+  loadGraph: (
+    nodes: Node<NodeData>[],
+    edges: Edge[],
+    options?: { allowDuringExecution?: boolean },
+  ) => void;
   loadSampleGraph: () => void;
   autoLayout: () => void;
   runHistory: RunRecord[];
@@ -733,6 +784,448 @@ type GraphSet = (
 ) => void;
 type GraphGet = () => GraphState;
 
+function applyCanvasNodeChanges(
+  changes: NodeChange[],
+  set: GraphSet,
+  get: GraphGet,
+): void {
+  const removedIds = changes
+    .filter((change): change is NodeChange & { type: 'remove' } => change.type === 'remove')
+    .map((change) => change.id);
+  const settledPositions: Record<string, { x: number; y: number }> = {};
+  for (const change of changes) {
+    if (change.type === 'position' && change.position && change.dragging === false) {
+      settledPositions[change.id] = change.position;
+    }
+  }
+
+  if (removedIds.length === 0) {
+    set((state) => ({
+      nodes: applyNodeChanges(changes, state.nodes) as Node<NodeData>[],
+    }));
+    persistNodePositions(settledPositions);
+    return;
+  }
+
+  pushUndo(set, get);
+  set((state) => {
+    const nextNodes = applyNodeChanges(changes, state.nodes) as Node<NodeData>[];
+    const nextEdges = state.edges.filter(
+      (edge) => !removedIds.includes(edge.source) && !removedIds.includes(edge.target),
+    );
+
+    // Rule B-1: prune TrackItems whose sourceNodeId matches a removed node.
+    const updatedNodes = nextNodes.map((node) => {
+      if (node.data?.definitionId !== 'remotion-node') return node;
+      const currentParams = (node.data.params ?? {}) as Record<string, unknown>;
+      const manifest = currentParams.manifest as VideoGraphManifest | undefined;
+      if (!manifest) return node;
+
+      let nextManifest = manifest;
+      let anyChange = false;
+      for (const removedId of removedIds) {
+        const result = pruneTrackItemsForDeletedNode(nextManifest, removedId);
+        if (result.changed) {
+          nextManifest = result.manifest;
+          anyChange = true;
+        }
+      }
+      if (!anyChange) return node;
+      return {
+        ...node,
+        data: { ...node.data, params: { ...currentParams, manifest: nextManifest } },
+      };
+    });
+
+    return { nodes: updatedNodes, edges: nextEdges };
+  });
+  persistNodePositions(settledPositions);
+}
+
+async function deleteCLIOriginNode(nodeId: string): Promise<void> {
+  const response = await apiFetch(`/api/graph/node/${nodeId}`, { method: 'DELETE' });
+  if (response.ok) return;
+  let detail = '';
+  try {
+    detail = String(((await response.json()) as { detail?: unknown }).detail ?? '');
+  } catch {
+    // Fall through to the status-based message.
+  }
+  throw new Error(detail || `Backend rejected deletion of ${nodeId} (HTTP ${response.status}).`);
+}
+
+function reportNodeDeletionFailure(messages: string[]): void {
+  const message = `Nebula kept the node because its backend deletion was not confirmed. ${messages.join(' ')}`;
+  console.warn(`[nebula] ${message}`);
+  if (typeof window !== 'undefined' && typeof window.alert === 'function') {
+    window.alert(message);
+  }
+}
+
+const WORLD_LABS_STATUS_UNCERTAIN_WARNING =
+  'Nebula could not confirm whether this World Labs start was accepted. Run remains locked to prevent duplicate paid work. Check Marble before clearing or retrying.';
+
+function trackedRunHasFreshPaidWorldLabs(runId: string, get: GraphGet): boolean {
+  const record = get().runHistory.find((candidate) => candidate.id === runId);
+  return Boolean(record && (record.startedFreshPaidWorldLabs === true
+    || (record.startedFreshPaidWorldLabs === undefined
+      && runIncludesFreshPaidWorldLabsStart(record.snapshot, record.targetNodeId))));
+}
+
+function settleTrackedExecutionStatus(
+  status: 'cancelled' | 'completed' | 'failed',
+  runId: string,
+  set: GraphSet,
+  get: GraphGet,
+  extra: Partial<Pick<RunRecord, 'statusNote'>> = {},
+): void {
+  if (currentRunId !== runId) return;
+  if (status === 'cancelled') rememberCancelledRun(runId);
+  closeCurrentRun(set, {
+    status: status === 'completed' ? 'complete' : status,
+    ...extra,
+  });
+  set((state) => ({
+    isExecuting: false,
+    isCancelling: false,
+    uncertainWorldLabsRunId: null,
+    nodes: state.nodes.map((node) => ({
+      ...node,
+      data: {
+        ...node.data,
+        state: node.data.state === 'queued' || node.data.state === 'executing'
+          ? 'idle' as const
+          : node.data.state,
+        progress: undefined,
+      },
+    })),
+  }));
+  if (get().providerRecoveryWarning === WORLD_LABS_STATUS_UNCERTAIN_WARNING) {
+    set({ providerRecoveryWarning: null });
+  }
+}
+
+async function requestTrackedCancellation(
+  runId: string,
+  set: GraphSet,
+  get: GraphGet,
+): Promise<void> {
+  if (currentRunId !== runId) return;
+  cancellationRequestedRunIds.add(runId);
+  set({ isExecuting: true, isCancelling: true });
+  try {
+    const result = await apiCancelExecution(runId);
+    if (currentRunId !== runId) return;
+    if (result.status === 'cancelling') {
+      // A paid provider POST may still be settling so its recovery ID can be
+      // captured. Keep retrying authoritative status until a terminal event.
+      set({ isExecuting: true, isCancelling: true });
+      scheduleWorldLabsStatusReconciliation(runId, set, get);
+      return;
+    }
+    settleTrackedExecutionStatus(result.status, runId, set, get);
+  } catch (error) {
+    console.error('Failed to cancel execution:', error);
+    if (currentRunId !== runId) return;
+    // The client-owned run ID may not be registered yet when Stop races the
+    // start request. Preserve the cancellation intent and retry via status
+    // reconciliation instead of silently allowing that later start to run.
+    set({ isExecuting: true, isCancelling: true });
+    scheduleWorldLabsStatusReconciliation(runId, set, get);
+  }
+}
+
+async function honorCancellationAfterStart(
+  runId: string,
+  startStatus: string,
+  set: GraphSet,
+  get: GraphGet,
+): Promise<boolean> {
+  if (!cancellationRequestedRunIds.has(runId) || currentRunId !== runId) return false;
+  if (startStatus === 'validation_error') {
+    // The request was definitively rejected before execution, but Stop remains
+    // the user's terminal intent for the locally opened history record.
+    settleTrackedExecutionStatus('cancelled', runId, set, get);
+    return true;
+  }
+  if (startStatus === 'started') {
+    await requestTrackedCancellation(runId, set, get);
+    return true;
+  }
+  return false;
+}
+
+async function reconcileWorldLabsExecutionStatus(
+  runId: string,
+  set: GraphSet,
+  get: GraphGet,
+): Promise<'active' | 'terminal' | 'unknown' | 'stale'> {
+  let result;
+  try {
+    result = await apiGetExecutionStatus(runId);
+  } catch {
+    if (currentRunId !== runId) return 'stale';
+    const paidStart = trackedRunHasFreshPaidWorldLabs(runId, get);
+    set((state) => ({
+      isExecuting: true,
+      isCancelling: cancellationRequestedRunIds.has(runId),
+      uncertainWorldLabsRunId: paidStart ? runId : null,
+      providerRecoveryWarning: paidStart
+        ? WORLD_LABS_STATUS_UNCERTAIN_WARNING
+        : state.providerRecoveryWarning,
+    }));
+    if (cancellationRequestedRunIds.has(runId)) {
+      scheduleWorldLabsStatusReconciliation(runId, set, get);
+    }
+    return 'unknown';
+  }
+  if (currentRunId !== runId) return 'stale';
+  if (result.status === 'running' || result.status === 'cancelling') {
+    if (cancellationRequestedRunIds.has(runId)) {
+      set({
+        isExecuting: true,
+        isCancelling: true,
+        uncertainWorldLabsRunId: null,
+      });
+      void requestTrackedCancellation(runId, set, get);
+      return 'active';
+    }
+    set({
+      isExecuting: true,
+      isCancelling: result.status === 'cancelling',
+      uncertainWorldLabsRunId: null,
+    });
+    scheduleWorldLabsStatusReconciliation(runId, set, get);
+    return 'active';
+  }
+  settleTrackedExecutionStatus(result.status, runId, set, get);
+  return 'terminal';
+}
+
+function scheduleWorldLabsStatusReconciliation(
+  runId: string,
+  set: GraphSet,
+  get: GraphGet,
+): void {
+  if (currentRunId !== runId || statusReconciliationTimers.has(runId)) return;
+  const timer = setTimeout(() => {
+    statusReconciliationTimers.delete(runId);
+    void reconcileWorldLabsExecutionStatus(runId, set, get);
+  }, 2_000);
+  statusReconciliationTimers.set(runId, timer);
+}
+
+function normalizedProviderStartAmbiguities(
+  values: readonly ProviderStartAmbiguity[],
+): ProviderStartAmbiguity[] {
+  const byNode = new Map<string, ProviderStartAmbiguity>();
+  for (const value of values) {
+    if (!isProviderStartAmbiguity(value)) continue;
+    byNode.set(`${value.kind}\u0000${value.nodeId}`, { ...value });
+  }
+  // Safety records are never capacity-evicted in the browser. A stale
+  // over-lock is recoverable; silently dropping an authoritative hold is not.
+  return [...byNode.values()];
+}
+
+function normalizedProviderRecoveries(
+  values: readonly ProviderRecoveryCheckpoint[],
+): ProviderRecoveryCheckpoint[] {
+  const byRunNode = new Map<string, ProviderRecoveryCheckpoint>();
+  for (const value of values) {
+    const resume = typeof value?.resumeOperationId === 'string'
+      && value.resumeOperationId.trim().length > 0;
+    const world = typeof value?.existingWorldId === 'string'
+      && value.existingWorldId.trim().length > 0;
+    if (!value || typeof value.runId !== 'string' || !value.runId
+      || typeof value.nodeId !== 'string' || !value.nodeId
+      || resume === world) continue;
+    byRunNode.set(`${value.runId}\u0000${value.nodeId}`, { ...value });
+  }
+  return [...byRunNode.values()];
+}
+
+function mergeProviderRecoverySnapshot(
+  current: readonly ProviderRecoveryCheckpoint[],
+  snapshot: readonly ProviderRecoveryCheckpoint[],
+): ProviderRecoveryCheckpoint[] {
+  const merged = normalizedProviderRecoveries(current);
+  for (const incoming of normalizedProviderRecoveries(snapshot)) {
+    const index = merged.findIndex((checkpoint) => (
+      checkpoint.runId === incoming.runId && checkpoint.nodeId === incoming.nodeId
+    ));
+    if (index < 0) {
+      merged.push(incoming);
+      continue;
+    }
+    const existing = merged[index];
+    // A snapshot may advance operation -> world or confirm that a volatile
+    // in-tab record became durable. It may never rewind/replace a newer live ID.
+    if ((!existing.existingWorldId && incoming.existingWorldId)
+      || (existing.durable === false && incoming.durable !== false
+        && existing.resumeOperationId === incoming.resumeOperationId
+        && existing.existingWorldId === incoming.existingWorldId)) {
+      merged[index] = incoming;
+    }
+  }
+  return merged;
+}
+
+function mergeProviderStartAmbiguitySnapshot(
+  current: readonly ProviderStartAmbiguity[],
+  snapshot: readonly ProviderStartAmbiguity[],
+): ProviderStartAmbiguity[] {
+  const merged = normalizedProviderStartAmbiguities(current);
+  const keys = new Set(merged.map((value) => `${value.kind}\u0000${value.nodeId}`));
+  for (const incoming of normalizedProviderStartAmbiguities(snapshot)) {
+    const key = `${incoming.kind}\u0000${incoming.nodeId}`;
+    if (keys.has(key)) continue;
+    keys.add(key);
+    merged.push(incoming);
+  }
+  return merged;
+}
+
+function historyWithoutProviderRecovery(
+  history: RunRecord[],
+  runId: string,
+  nodeId: string,
+  expected: ProviderRecoveryCheckpoint,
+): RunRecord[] {
+  const expectedKey = expected.resumeOperationId
+    ? 'resume_operation_id'
+    : 'existing_world_id';
+  const expectedId = expected.resumeOperationId ?? expected.existingWorldId;
+  return history.map((record) => {
+    if (record.id !== runId) return record;
+    let changed = false;
+    const snapshot = freezeRunSnapshot({
+      ...record.snapshot,
+      nodes: record.snapshot.nodes.map((node) => {
+        if (node.id !== nodeId) return node;
+        const params = { ...node.params };
+        if (!expectedId || params[expectedKey] !== expectedId) return node;
+        changed = true;
+        delete params.resume_operation_id;
+        delete params.existing_world_id;
+        return { ...node, params };
+      }),
+    });
+    return changed
+      ? {
+          ...record,
+          snapshot,
+          statusNote: 'Recovery safeguard cleared after an explicit Marble check.',
+        }
+      : record;
+  });
+}
+
+function blockedProviderStart(
+  snapshot: RunGraphSnapshot,
+  ambiguities: readonly ProviderStartAmbiguity[],
+  targetNodeId?: string,
+): ProviderStartAmbiguity | null {
+  const scopeIds = snapshotExecutionScopeIds(snapshot, targetNodeId);
+  const paidKinds = new Set(snapshot.nodes
+    .filter((node) => scopeIds.has(node.id))
+    .filter((node) => runIncludesFreshPaidWorldLabsStart({ nodes: [node], edges: [] }))
+    .map((node) => node.definitionId));
+  // A replacement/duplicated canvas node can represent the same request with
+  // a new ID. Until Marble is checked, fail closed for the entire paid kind.
+  return ambiguities.find((ambiguity) => paidKinds.has(ambiguity.kind)) ?? null;
+}
+
+function warnBlockedProviderStart(ambiguity: ProviderStartAmbiguity): void {
+  console.warn(
+    `[nebula] Paid World Labs start blocked for ${ambiguity.nodeId}: ${ambiguity.message}`,
+  );
+}
+
+function nodeHasProviderSafety(state: GraphState, nodeId: string): boolean {
+  return state.providerRecoveries.some((checkpoint) => checkpoint.nodeId === nodeId)
+    || state.providerStartAmbiguities.some((ambiguity) => ambiguity.nodeId === nodeId);
+}
+
+/** Clone the provider state attached to the source node, not a stale object
+ * captured before the paid-start recovery event arrived. Returning null is a
+ * fail-closed signal for an ambiguous source that has no safe ID to copy. */
+function providerSafeCloneParams(
+  state: GraphState,
+  node: Node<NodeData>,
+): Record<string, unknown> | null {
+  if (state.providerStartAmbiguities.some((ambiguity) => ambiguity.nodeId === node.id)) {
+    return null;
+  }
+  const checkpoint = [...state.providerRecoveries]
+    .reverse()
+    .find((candidate) => candidate.nodeId === node.id);
+  if (!checkpoint) {
+    const snapshot = {
+      nodes: [{
+        id: node.id,
+        definitionId: node.data.definitionId,
+        params: node.data.params,
+        outputs: {},
+      }],
+      edges: [],
+    };
+    // A disconnected/stale tab can still hold blank pre-run params after a
+    // different tab persisted the accepted provider ID. Never turn that stale
+    // object into a new paid node ID. Users can add a new Environment/Export
+    // node explicitly when they really intend a separate paid start.
+    if (runIncludesFreshPaidWorldLabsStart(snapshot)) return null;
+    return { ...node.data.params };
+  }
+  return applyProviderRecoveryToLiveParams(
+    node.data.definitionId,
+    node.data.params,
+    checkpoint,
+  );
+}
+
+const WORLD_LABS_UNSAFE_CLONE_MESSAGE =
+  'Nebula did not duplicate this fresh paid World Labs node. Add a new node from the Nodes rail when you intentionally want a separate paid operation.';
+
+function warnUnsafeProviderClone(): void {
+  console.warn(`[nebula] ${WORLD_LABS_UNSAFE_CLONE_MESSAGE}`);
+  if (typeof window !== 'undefined' && typeof window.alert === 'function') {
+    window.alert(WORLD_LABS_UNSAFE_CLONE_MESSAGE);
+  }
+}
+
+function sameProviderRecoveryIdentity(
+  left: ProviderRecoveryCheckpoint,
+  right: ProviderRecoveryCheckpoint,
+): boolean {
+  return left.runId === right.runId
+    && left.nodeId === right.nodeId
+    && left.resumeOperationId === right.resumeOperationId
+    && left.existingWorldId === right.existingWorldId;
+}
+
+function nodesWithProviderRecoveries(
+  nodes: Node<NodeData>[],
+  checkpoints: readonly ProviderRecoveryCheckpoint[],
+): Node<NodeData>[] {
+  const latestByNode = new Map<string, ProviderRecoveryCheckpoint>();
+  for (const checkpoint of checkpoints) latestByNode.set(checkpoint.nodeId, checkpoint);
+  let changed = false;
+  const next = nodes.map((node) => {
+    const checkpoint = latestByNode.get(node.id);
+    if (!checkpoint) return node;
+    const params = applyProviderRecoveryToLiveParams(
+      node.data.definitionId,
+      node.data.params,
+      checkpoint,
+    );
+    if (!params || params === node.data.params) return node;
+    changed = true;
+    return { ...node, data: { ...node.data, params } };
+  });
+  return changed ? next : nodes;
+}
+
 function snapshotExecutionScopeIds(
   snapshot: RunGraphSnapshot,
   targetNodeId?: string,
@@ -784,10 +1277,25 @@ async function executeHistoricalRun(
 ): Promise<void> {
   const { isExecuting, resetExecution } = get();
   if (isExecuting || source.status === 'running') return;
+  if (isWorldLabsRecoveryReplayBlocked(source)) {
+    console.warn(
+      '[nebula] Saved replay blocked: a failed/cancelled World Labs snapshot may omit a paid operation recovery ID. Use the live node after checking Marble.',
+    );
+    return;
+  }
 
   const snapshot = freezeRunSnapshot(source.snapshot);
   const targetNodeId = source.targetNodeId;
   if (targetNodeId && !snapshot.nodes.some((node) => node.id === targetNodeId)) return;
+  const heldStart = blockedProviderStart(
+    snapshot,
+    get().providerStartAmbiguities,
+    targetNodeId,
+  );
+  if (heldStart) {
+    warnBlockedProviderStart(heldStart);
+    return;
+  }
 
   resetExecution();
   const runId = uuidv4();
@@ -797,6 +1305,7 @@ async function executeHistoricalRun(
   set((state) => ({
     nodes: markSnapshotScopeQueued(state.nodes, scopeIds),
     isExecuting: true,
+    isCancelling: false,
     runHistory: persistedRunHistory(openRunRecord(state.runHistory, {
       id: runId,
       trigger: source.trigger,
@@ -805,13 +1314,23 @@ async function executeHistoricalRun(
       targetNodeId,
       sourceRunId: source.id,
       replayAction,
+      startedFreshPaidWorldLabs: runIncludesFreshPaidWorldLabsStart(snapshot, targetNodeId),
     })),
   }));
 
+  pendingStartRunIds.add(runId);
   try {
     const result = targetNodeId
       ? await apiExecuteNode(snapshot.nodes, snapshot.edges, targetNodeId, runId)
       : await apiExecuteGraph(snapshot.nodes, snapshot.edges, runId);
+    pendingStartRunIds.delete(runId);
+    if (await honorCancellationAfterStart(runId, result.status, set, get)) return;
+    if (result.status !== 'started' && result.status !== 'validation_error') {
+      throw new ExecutionStartRejectedError(
+        `Execution did not start (${result.status || 'unknown status'}).`,
+        400,
+      );
+    }
     if (result.status === 'validation_error' && currentRunId === runId) {
       closeCurrentRun(set, { status: 'failed' });
       set((state) => ({
@@ -822,11 +1341,18 @@ async function executeHistoricalRun(
           'Validation failed before execution. Check the saved inputs and API keys.',
         ),
         isExecuting: false,
+        isCancelling: false,
       }));
     }
   } catch (err) {
+    pendingStartRunIds.delete(runId);
     console.error('Failed to replay historical run:', err);
     if (currentRunId !== runId) return;
+    if (runIncludesFreshPaidWorldLabsStart(snapshot, targetNodeId)
+      && !(err instanceof ExecutionStartRejectedError)) {
+      await reconcileWorldLabsExecutionStatus(runId, set, get);
+      return;
+    }
     closeCurrentRun(set, { status: 'failed' });
     set((state) => ({
       nodes: markNodesErrored(
@@ -835,6 +1361,7 @@ async function executeHistoricalRun(
         err instanceof Error ? err.message : 'Failed to replay historical run.',
       ),
       isExecuting: false,
+      isCancelling: false,
     }));
   }
 }
@@ -846,22 +1373,168 @@ async function ensureBackendFreshForLocalCanvas(
 ): Promise<boolean> {
   if (!localCanvasWasEmpty && !get().backendFreshStartPending) return true;
 
+  const backendWasDiscovered = getCachedBackendBaseUrl() !== null;
+  let exportRes: Response;
   try {
-    const exportRes = await apiFetch('/api/graph/export');
-    if (!exportRes.ok) throw new Error(`Export failed: ${exportRes.status}`);
-    const exported = (await exportRes.json()) as { empty?: boolean };
-
-    if (exported.empty === false) {
-      const clearRes = await apiFetch('/api/graph', { method: 'DELETE' });
-      if (!clearRes.ok) throw new Error(`Clear failed: ${clearRes.status}`);
-    }
-
-    set({ backendFreshStartPending: false });
-    return true;
+    exportRes = await apiFetch('/api/graph/export');
   } catch {
     set({ backendFreshStartPending: true });
-    return false;
+    if (!backendWasDiscovered && getCachedBackendBaseUrl() === null) return false;
+    throw new Error(
+      'Nebula lost contact with the known backend before node creation. No local copy was added; reconnect and try again.',
+    );
   }
+
+  if (!exportRes.ok) {
+    throw new Error(`Backend rejected graph export (HTTP ${exportRes.status}).`);
+  }
+
+  let exported: { empty?: boolean };
+  try {
+    exported = (await exportRes.json()) as { empty?: boolean };
+  } catch {
+    throw new Error('Backend returned an invalid graph export response.');
+  }
+
+  if (exported.empty === false) {
+    let clearRes: Response;
+    try {
+      clearRes = await apiFetch('/api/graph', { method: 'DELETE' });
+    } catch {
+      set({ backendFreshStartPending: true });
+      throw new Error(
+        'Nebula lost the response after sending the graph-clear request. No local node was added because the clear may have completed; reload before trying again.',
+      );
+    }
+    if (!clearRes.ok) {
+      throw new Error(`Backend rejected graph clear (HTTP ${clearRes.status}).`);
+    }
+  }
+
+  set({ backendFreshStartPending: false });
+  return true;
+}
+
+async function backendRejectionReason(response: Response, fallback: string): Promise<string> {
+  try {
+    const detail = ((await response.json()) as { detail?: unknown }).detail;
+    if (typeof detail === 'string' && detail.trim()) return detail.trim();
+  } catch {
+    // Fall through to the status-based message.
+  }
+  return `${fallback} (HTTP ${response.status}).`;
+}
+
+type NodeCreationAttempt = {
+  definitionId: string;
+  displayName: string;
+  position: { x: number; y: number };
+  knownCliNodeIds: Set<string>;
+  phase: 'sending' | 'uncertain';
+  observedNodeId?: string;
+};
+
+let pendingNodeCreationAttempt: NodeCreationAttempt | null = null;
+
+function nodeMatchesCreationAttempt(
+  node: Node<NodeData>,
+  attempt: NodeCreationAttempt,
+): boolean {
+  return CLI_ID_RE.test(node.id)
+    && !attempt.knownCliNodeIds.has(node.id)
+    && node.data?.definitionId === attempt.definitionId
+    && Math.abs((node.position?.x ?? Number.NaN) - attempt.position.x) < 0.001
+    && Math.abs((node.position?.y ?? Number.NaN) - attempt.position.y) < 0.001;
+}
+
+function observePendingNodeCreation(nodes: Node<NodeData>[]): string | null {
+  const attempt = pendingNodeCreationAttempt;
+  if (!attempt) return null;
+  const matches = nodes.filter((node) => nodeMatchesCreationAttempt(node, attempt));
+  if (matches.length !== 1) return null;
+  attempt.observedNodeId = matches[0].id;
+  return matches[0].id;
+}
+
+function reportNodeCreationFailure(displayName: string, reason: string): null {
+  const message = `Nebula did not add ${displayName}. ${reason}`;
+  console.warn(`[nebula] ${message}`);
+  if (typeof window !== 'undefined' && typeof window.alert === 'function') {
+    window.alert(message);
+  }
+  return null;
+}
+
+async function reconcilePendingNodeCreation(
+  set: GraphSet,
+  get: GraphGet,
+): Promise<string | null> {
+  const attempt = pendingNodeCreationAttempt;
+  if (!attempt) return null;
+
+  let response: Response;
+  try {
+    response = await apiFetch('/api/graph/export');
+  } catch {
+    return null;
+  }
+  if (!response.ok) return null;
+
+  let snapshot: { nodes?: unknown };
+  try {
+    snapshot = (await response.json()) as { nodes?: unknown };
+  } catch {
+    return null;
+  }
+  if (!Array.isArray(snapshot.nodes)) return null;
+
+  const cliNodes = rewriteBackendAssetUrls(snapshot.nodes as Node<NodeData>[]);
+  const matchedId = observePendingNodeCreation(cliNodes);
+  if (!matchedId) return null;
+  const matchedNode = cliNodes.find((node) => node.id === matchedId);
+  if (!matchedNode) return null;
+
+  const { settingsCache } = useUIStore.getState();
+  const definition = NODE_DEFINITIONS[matchedNode.data.definitionId];
+  const keyNames = definition?.envKeyName
+    ? (Array.isArray(definition.envKeyName) ? definition.envKeyName : [definition.envKeyName])
+    : [];
+  const keyStatus = settingsCache.loaded
+    && keyNames.length > 0
+    && !keyNames.some((key) => Boolean(settingsCache.apiKeys[key]))
+    ? 'missing' as const
+    : undefined;
+  const reconciledNode: Node<NodeData> = {
+    ...matchedNode,
+    position: {
+      x: matchedNode.position?.x ?? attempt.position.x,
+      y: matchedNode.position?.y ?? attempt.position.y,
+    },
+    data: { ...matchedNode.data, keyStatus },
+  };
+
+  let added = false;
+  set((state) => {
+    if (state.nodes.some((node) => node.id === matchedId)) {
+      return { backendFreshStartPending: false };
+    }
+    added = true;
+    return {
+      nodes: nodesWithProviderRecoveries(
+        [...state.nodes, reconciledNode],
+        state.providerRecoveries,
+      ),
+      backendFreshStartPending: false,
+    };
+  });
+  if (pendingNodeCreationAttempt === attempt) pendingNodeCreationAttempt = null;
+
+  if (added && typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('nebula:graph-nodes-added', {
+      detail: { addedCount: 1, totalCount: get().nodes.length },
+    }));
+  }
+  return matchedId;
 }
 
 wsClient.connect();
@@ -870,10 +1543,29 @@ wsClient.subscribe((event) => {
     // Real-time sync: MERGE cli_graph into the canvas. Key invariant: frontend-only
     // nodes (library drags, undo'd results, etc.) must survive graphSync — only
     // cli-origin nodes are authoritative from the server. Same for edges.
-    const { nodes: rawCliNodes, edges: cliEdges, empty } = event as {
-      type: 'graphSync'; nodes: Node<NodeData>[]; edges: Edge[]; empty: boolean;
+    const {
+      nodes: rawCliNodes,
+      edges: cliEdges,
+      empty,
+      providerRecoveries = [],
+      providerStartAmbiguities = [],
+      executionStatuses,
+    } = event as {
+      type: 'graphSync';
+      nodes: Node<NodeData>[];
+      edges: Edge[];
+      empty: boolean;
+      providerRecoveries?: ProviderRecoveryCheckpoint[];
+      providerStartAmbiguities?: ProviderStartAmbiguity[];
+      executionStatuses?: ExecutionStatusResult[];
     };
+    useGraphStore.getState().hydrateProviderRecoveries(providerRecoveries);
+    useGraphStore.getState().hydrateProviderStartAmbiguities(providerStartAmbiguities);
+    if (executionStatuses !== undefined) {
+      useGraphStore.getState().hydrateExecutionStatuses(executionStatuses);
+    }
     const cliNodes = rewriteBackendAssetUrls(rawCliNodes);
+    const observedPendingNodeId = observePendingNodeCreation(cliNodes as Node<NodeData>[]);
 
     const state = useGraphStore.getState();
 
@@ -887,7 +1579,6 @@ wsClient.subscribe((event) => {
       useGraphStore.setState({
         nodes: remainingNodes,
         edges: remainingEdges,
-        isExecuting: false,
         backendFreshStartPending: false,
       });
       return;
@@ -947,7 +1638,10 @@ wsClient.subscribe((event) => {
       };
     });
 
-    const merged = [...frontendOnlyNodes, ...cliMerged];
+    const merged = nodesWithProviderRecoveries(
+      [...frontendOnlyNodes, ...cliMerged],
+      useGraphStore.getState().providerRecoveries,
+    );
     const mergedIds = new Set(merged.map((n) => n.id));
 
     // Preserve frontend-only edges whose endpoints are still present. We dedupe
@@ -966,9 +1660,15 @@ wsClient.subscribe((event) => {
     useGraphStore.setState({
       nodes: merged,
       edges: mergedEdges,
-      isExecuting: false,
       backendFreshStartPending: false,
     });
+    if (
+      observedPendingNodeId
+      && pendingNodeCreationAttempt?.phase === 'uncertain'
+      && pendingNodeCreationAttempt.observedNodeId === observedPendingNodeId
+    ) {
+      pendingNodeCreationAttempt = null;
+    }
 
     // Only fire the auto-fit event when cli_graph actually added nodes we didn't
     // already have — otherwise every graphSync (including output updates) would
@@ -1012,12 +1712,26 @@ function reflowClips(clips: EditClipLike[]): EditClipLike[] {
   });
 }
 
+const initialRunHistory = loadRunHistory();
+const initialWorldLabsRun = initialRunHistory.find((record) => (
+  record.status === 'running'
+  && (record.startedFreshPaidWorldLabs === true
+    || (record.startedFreshPaidWorldLabs === undefined
+      && runIncludesWorldLabs(record.snapshot, record.targetNodeId)))
+));
+if (initialWorldLabsRun) currentRunId = initialWorldLabsRun.id;
+
 export const useGraphStore = create<GraphState>((set, get) => ({
   nodes: [],
   edges: [],
-  isExecuting: false,
+  isExecuting: Boolean(initialWorldLabsRun),
+  isCancelling: false,
+  providerRecoveryWarning: null,
+  providerRecoveries: [],
+  uncertainWorldLabsRunId: null,
+  providerStartAmbiguities: [],
   backendFreshStartPending: false,
-  runHistory: loadRunHistory(),
+  runHistory: initialRunHistory,
 
   // ---------------------------------------------------------------------------
   // Undo/Redo initial state
@@ -1031,7 +1745,15 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   // ---------------------------------------------------------------------------
 
   undo: () => {
-    const { undoStack, nodes, edges } = get();
+    const {
+      undoStack,
+      nodes,
+      edges,
+      isExecuting,
+      providerRecoveries,
+      providerStartAmbiguities,
+    } = get();
+    if (isExecuting || providerRecoveries.length > 0 || providerStartAmbiguities.length > 0) return;
     if (undoStack.length === 0) return;
 
     const previousSnapshot = undoStack[undoStack.length - 1];
@@ -1047,7 +1769,14 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   },
 
   redo: () => {
-    const { redoStack, nodes } = get();
+    const {
+      redoStack,
+      nodes,
+      isExecuting,
+      providerRecoveries,
+      providerStartAmbiguities,
+    } = get();
+    if (isExecuting || providerRecoveries.length > 0 || providerStartAmbiguities.length > 0) return;
     if (redoStack.length === 0) return;
 
     const nextSnapshot = redoStack[redoStack.length - 1];
@@ -1080,8 +1809,20 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   },
 
   pasteClipboard: () => {
-    const { clipboard } = get();
+    const state = get();
+    const { clipboard, isExecuting } = state;
+    if (isExecuting) return;
     if (!clipboard || clipboard.nodes.length === 0) return;
+
+    const safeParams = new Map<string, Record<string, unknown>>();
+    for (const node of clipboard.nodes) {
+      const params = providerSafeCloneParams(state, node);
+      if (!params) {
+        warnUnsafeProviderClone();
+        return;
+      }
+      safeParams.set(node.id, params);
+    }
 
     pushUndo(set, get);
 
@@ -1096,6 +1837,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         selected: true,
         data: {
           ...node.data,
+          params: safeParams.get(node.id)!,
           state: 'idle' as const,
           outputs: {},
           error: undefined,
@@ -1135,9 +1877,21 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   },
 
   duplicateSelected: () => {
-    const { nodes, edges } = get();
+    const state = get();
+    const { nodes, edges, isExecuting } = state;
+    if (isExecuting) return;
     const selected = nodes.filter((n) => n.selected);
     if (selected.length === 0) return;
+
+    const safeParams = new Map<string, Record<string, unknown>>();
+    for (const node of selected) {
+      const params = providerSafeCloneParams(state, node);
+      if (!params) {
+        warnUnsafeProviderClone();
+        return;
+      }
+      safeParams.set(node.id, params);
+    }
 
     pushUndo(set, get);
 
@@ -1152,6 +1906,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         selected: true,
         data: {
           ...node.data,
+          params: safeParams.get(node.id)!,
           state: 'idle' as const,
           outputs: {},
           error: undefined,
@@ -1182,6 +1937,49 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     }));
   },
 
+  deleteSelected: () => {
+    const state = get();
+    if (state.isExecuting) return;
+    const selectedIds = state.nodes.filter((node) => node.selected).map((node) => node.id);
+    if (selectedIds.length === 0) return;
+    if (selectedIds.some((nodeId) => nodeHasProviderSafety(state, nodeId))) return;
+    // Route through the normal React Flow removal path so one undo snapshot,
+    // backend mirroring, edge cleanup, and Remotion source pruning stay atomic.
+    get().onNodesChange(selectedIds.map((id) => ({ id, type: 'remove' as const })));
+  },
+
+  autoLayoutSelected: () => {
+    const { nodes, edges } = get();
+    const selected = nodes.filter((node) => node.selected);
+    if (selected.length < 2) return;
+    const selectedIds = new Set(selected.map((node) => node.id));
+    const internalEdges = edges.filter(
+      (edge) => selectedIds.has(edge.source) && selectedIds.has(edge.target),
+    );
+    const positions = computeLayout(selected, internalEdges);
+    const currentMinX = Math.min(...selected.map((node) => node.position.x));
+    const currentMinY = Math.min(...selected.map((node) => node.position.y));
+    const layoutValues = Object.values(positions);
+    const layoutMinX = Math.min(...layoutValues.map((position) => position.x));
+    const layoutMinY = Math.min(...layoutValues.map((position) => position.y));
+    const translated = Object.fromEntries(
+      Object.entries(positions).map(([nodeId, position]) => [
+        nodeId,
+        {
+          x: position.x - layoutMinX + currentMinX,
+          y: position.y - layoutMinY + currentMinY,
+        },
+      ]),
+    );
+    pushUndo(set, get);
+    set((state) => ({
+      nodes: state.nodes.map((node) =>
+        translated[node.id] ? { ...node, position: translated[node.id] } : node,
+      ),
+    }));
+    persistNodePositions(translated);
+  },
+
   // ---------------------------------------------------------------------------
   // Node management
   // ---------------------------------------------------------------------------
@@ -1192,6 +1990,27 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     }
     const definition = NODE_DEFINITIONS[definitionId];
     if (!definition) return null;
+
+    if (pendingNodeCreationAttempt) {
+      const previousAttempt = pendingNodeCreationAttempt;
+      if (previousAttempt.phase === 'sending') {
+        return reportNodeCreationFailure(
+          definition.displayName,
+          'Another backend node-create request is still in progress. Wait for it to finish before adding another node.',
+        );
+      }
+      const reconciledId = await reconcilePendingNodeCreation(set, get);
+      if (reconciledId) {
+        return reportNodeCreationFailure(
+          definition.displayName,
+          `The previous ${previousAttempt.displayName} request was restored as ${reconciledId}. Review that node before adding another.`,
+        );
+      }
+      return reportNodeCreationFailure(
+        definition.displayName,
+        'A previous backend node-create request still has an unknown result. Nebula will not send another create until the canvas syncs; reconnect or reload first.',
+      );
+    }
 
     // Build defaults from all param sources (shared + route-specific + legacy params)
     const defaults: Record<string, unknown> = {};
@@ -1204,22 +2023,8 @@ export const useGraphStore = create<GraphState>((set, get) => ({
 
     const localCanvasWasEmpty = get().nodes.length === 0 && get().edges.length === 0;
 
-    // Push into cli_graph on the backend so `nebula graph` shows the node to
-    // Claude. graphSync will bring it into the canvas with its cli short id.
-    try {
-      const backendFresh = await ensureBackendFreshForLocalCanvas(localCanvasWasEmpty, set, get);
-      if (!backendFresh) throw new Error('Backend fresh-start guard failed');
-
-      const res = await apiFetch('/api/graph/node', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ definitionId, params: defaults, position }),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const node = (await res.json()) as { id?: string };
-      return node.id ?? null;
-    } catch (err) {
-      console.warn('[nebula] addNode backend push failed — adding locally only:', err);
+    const addLocally = (err: unknown): string => {
+      console.warn('[nebula] addNode backend unavailable — adding locally only:', err);
       // Fallback: frontend-only UUID node. Claude won't see it until the
       // backend comes back and /api/graph/import or equivalent is called.
       pushUndo(set, get);
@@ -1253,7 +2058,77 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       };
       set((state) => ({ nodes: [...state.nodes, newNode] }));
       return newNode.id;
+    };
+
+    // Push into cli_graph on the backend so `nebula graph` shows the node to
+    // Claude. graphSync will bring it into the canvas with its cli short id.
+    let backendFresh: boolean;
+    try {
+      backendFresh = await ensureBackendFreshForLocalCanvas(localCanvasWasEmpty, set, get);
+    } catch (err) {
+      return reportNodeCreationFailure(
+        definition.displayName,
+        err instanceof Error ? err.message : 'Backend rejected the request.',
+      );
     }
+    if (!backendFresh) return addLocally(new Error('Backend is unavailable.'));
+
+    const attempt: NodeCreationAttempt = {
+      definitionId,
+      displayName: definition.displayName,
+      position,
+      knownCliNodeIds: new Set(get().nodes.filter((node) => CLI_ID_RE.test(node.id)).map((node) => node.id)),
+      phase: 'sending',
+    };
+    pendingNodeCreationAttempt = attempt;
+
+    const reconcileDispatchedCreate = async (reason: string): Promise<string | null> => {
+      attempt.phase = 'uncertain';
+      if (attempt.observedNodeId) {
+        if (pendingNodeCreationAttempt === attempt) pendingNodeCreationAttempt = null;
+        return attempt.observedNodeId;
+      }
+      const reconciledId = await reconcilePendingNodeCreation(set, get);
+      if (reconciledId) return reconciledId;
+      return reportNodeCreationFailure(definition.displayName, reason);
+    };
+
+    let res: Response;
+    try {
+      res = await apiFetch('/api/graph/node', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ definitionId, params: defaults, position }),
+      });
+    } catch {
+      return reconcileDispatchedCreate(
+        'The backend response was lost after the node-create request was sent. Nebula did not add a local copy because the backend may already have committed it. Wait for canvas sync or reload before trying again.',
+      );
+    }
+
+    if (!res.ok) {
+      if (pendingNodeCreationAttempt === attempt) pendingNodeCreationAttempt = null;
+      return reportNodeCreationFailure(
+        definition.displayName,
+        await backendRejectionReason(res, 'Backend rejected node creation'),
+      );
+    }
+
+    let node: { id?: unknown };
+    try {
+      node = (await res.json()) as { id?: unknown };
+    } catch {
+      return reconcileDispatchedCreate(
+        'Backend returned an invalid response after node creation. Nebula did not add a local copy because the backend may already have committed it. Wait for canvas sync or reload before trying again.',
+      );
+    }
+    if (typeof node.id !== 'string' || !node.id) {
+      return reconcileDispatchedCreate(
+        'Backend returned no node id after node creation. Nebula did not add a local copy because the backend may already have committed it. Wait for canvas sync or reload before trying again.',
+      );
+    }
+    if (pendingNodeCreationAttempt === attempt) pendingNodeCreationAttempt = null;
+    return node.id;
   },
 
   addNodeAndConnect: async (definitionId, position, connect) => {
@@ -1370,65 +2245,38 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   },
 
   onNodesChange: (changes) => {
+    if (get().isExecuting && changes.some((change) => change.type === 'remove')) return;
     const removedIds = changes.filter((c): c is NodeChange & { type: 'remove' } => c.type === 'remove').map((c) => c.id);
-    const settledPositions: Record<string, { x: number; y: number }> = {};
-    for (const change of changes) {
-      if (
-        change.type === 'position'
-        && change.position
-        && change.dragging === false
-      ) {
-        settledPositions[change.id] = change.position;
-      }
+    if (removedIds.some((nodeId) => nodeHasProviderSafety(get(), nodeId))) return;
+    const cliRemovedIds = removedIds.filter((nodeId) => CLI_ID_RE.test(nodeId));
+    if (cliRemovedIds.length === 0) {
+      applyCanvasNodeChanges(changes, set, get);
+      return;
     }
 
-    if (removedIds.length > 0) {
-      pushUndo(set, get);
-      // Push cli-origin deletions to the backend so cli_graph doesn't resurrect
-      // them on the next graphSync. Frontend-only UUIDs have no backend twin.
-      for (const id of removedIds) {
-        if (CLI_ID_RE.test(id)) {
-          apiFetch(`/api/graph/node/${id}`, { method: 'DELETE' }).catch((err) =>
-            console.warn(`[nebula] DELETE node ${id} failed:`, err),
-          );
-        }
-      }
-      set((state) => {
-        const nextNodes = applyNodeChanges(changes, state.nodes) as Node<NodeData>[];
-        const nextEdges = state.edges.filter((e) => !removedIds.includes(e.source) && !removedIds.includes(e.target));
-
-        // Rule B-1: prune TrackItems whose sourceNodeId matches a removed node.
-        const updatedNodes = nextNodes.map((n) => {
-          if (n.data?.definitionId !== 'remotion-node') return n;
-          const currentParams = (n.data.params ?? {}) as Record<string, unknown>;
-          const manifest = currentParams.manifest as VideoGraphManifest | undefined;
-          if (!manifest) return n;
-
-          let nextManifest = manifest;
-          let anyChange = false;
-          for (const removedId of removedIds) {
-            const result = pruneTrackItemsForDeletedNode(nextManifest, removedId);
-            if (result.changed) {
-              nextManifest = result.manifest;
-              anyChange = true;
-            }
-          }
-          if (!anyChange) return n;
-          return {
-            ...n,
-            data: { ...n.data, params: { ...currentParams, manifest: nextManifest } },
-          };
-        });
-
-        return { nodes: updatedNodes, edges: nextEdges };
+    // A backend paid-safety rejection must leave the node visibly present.
+    // Wait for each authoritative delete rather than optimistically hiding it.
+    void Promise.allSettled(cliRemovedIds.map(deleteCLIOriginNode)).then((results) => {
+      const confirmed = new Set<string>();
+      const failures: string[] = [];
+      results.forEach((result, index) => {
+        if (result.status === 'fulfilled') confirmed.add(cliRemovedIds[index]);
+        else failures.push(result.reason instanceof Error
+          ? result.reason.message
+          : `Deletion of ${cliRemovedIds[index]} failed.`);
       });
-    } else {
-      set((state) => ({ nodes: applyNodeChanges(changes, state.nodes) as Node<NodeData>[] }));
-    }
-    persistNodePositions(settledPositions);
+      const safeChanges = changes.filter((change) => (
+        change.type !== 'remove'
+        || !CLI_ID_RE.test(change.id)
+        || confirmed.has(change.id)
+      ));
+      if (safeChanges.length > 0) applyCanvasNodeChanges(safeChanges, set, get);
+      if (failures.length > 0) reportNodeDeletionFailure(failures);
+    });
   },
 
   onEdgesChange: (changes) => {
+    if (get().isExecuting && changes.some((change) => change.type === 'remove')) return;
     const hasRemove = changes.some((c) => c.type === 'remove');
     if (hasRemove) {
       pushUndo(set, get);
@@ -2140,6 +2988,8 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     closeCurrentRun(set, { status: 'cancelled' });
     set((state) => ({
       isExecuting: false,
+      isCancelling: false,
+      uncertainWorldLabsRunId: null,
       nodes: state.nodes.map((node) => ({
         ...node,
         data: {
@@ -2160,18 +3010,12 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       get().resetExecution();
       return;
     }
-    try {
-      const result = await apiCancelExecution(runId);
-      if (currentRunId !== runId) return;
-      if (result.status === 'cancelling' || result.status === 'cancelled') {
-        rememberCancelledRun(runId);
-        get().resetExecution();
-      }
-      // completed/failed raced with Stop; its scoped terminal event remains
-      // authoritative and will close the run with the correct status.
-    } catch (error) {
-      console.error('Failed to cancel execution:', error);
-    }
+    cancellationRequestedRunIds.add(runId);
+    set({ isExecuting: true, isCancelling: true });
+    // DELETE is sent even while the POST is pending. Current backends install
+    // a cancellation tombstone before admission; older ones may return 404,
+    // in which case requestTrackedCancellation preserves intent and polls.
+    await requestTrackedCancellation(runId, set, get);
   },
 
   executeGraph: async () => {
@@ -2179,21 +3023,37 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     if (isExecuting) return;
     resetExecution();
     const snapshot = captureRunSnapshot(nodes, edges);
+    const heldStart = blockedProviderStart(snapshot, get().providerStartAmbiguities);
+    if (heldStart) {
+      warnBlockedProviderStart(heldStart);
+      return;
+    }
     const runId = uuidv4();
     currentRunId = runId;
     runErrors.set(runId, false);
     set((state) => ({
       nodes: markExecutionScopeQueued(state.nodes, state.edges),
       isExecuting: true,
+      isCancelling: false,
       runHistory: persistedRunHistory(openRunRecord(state.runHistory, {
         id: runId,
         trigger: 'graph',
         startedAt: Date.now(),
         snapshot,
+        startedFreshPaidWorldLabs: runIncludesFreshPaidWorldLabsStart(snapshot),
       })),
     }));
+    pendingStartRunIds.add(runId);
     try {
       const result = await apiExecuteGraph(snapshot.nodes, snapshot.edges, runId);
+      pendingStartRunIds.delete(runId);
+      if (await honorCancellationAfterStart(runId, result.status, set, get)) return;
+      if (result.status !== 'started' && result.status !== 'validation_error') {
+        throw new ExecutionStartRejectedError(
+          `Execution did not start (${result.status || 'unknown status'}).`,
+          400,
+        );
+      }
       if (result.status === 'validation_error' && currentRunId === runId) {
         closeCurrentRun(set, { status: 'failed' });
         set((state) => ({
@@ -2204,11 +3064,18 @@ export const useGraphStore = create<GraphState>((set, get) => ({
             'Validation failed before execution. Check required inputs and API keys.',
           ),
           isExecuting: false,
+          isCancelling: false,
         }));
       }
     } catch (err) {
+      pendingStartRunIds.delete(runId);
       console.error('Failed to start execution:', err);
       if (currentRunId !== runId) return;
+      if (runIncludesFreshPaidWorldLabsStart(snapshot)
+        && !(err instanceof ExecutionStartRejectedError)) {
+        await reconcileWorldLabsExecutionStatus(runId, set, get);
+        return;
+      }
       closeCurrentRun(set, { status: 'failed' });
       set((state) => ({
         nodes: markNodesErrored(
@@ -2217,6 +3084,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
           err instanceof Error ? err.message : 'Failed to start execution.',
         ),
         isExecuting: false,
+        isCancelling: false,
       }));
     }
   },
@@ -2226,22 +3094,42 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     if (isExecuting) return;
     resetExecution();
     const snapshot = captureRunSnapshot(nodes, edges);
+    const heldStart = blockedProviderStart(
+      snapshot,
+      get().providerStartAmbiguities,
+      nodeId,
+    );
+    if (heldStart) {
+      warnBlockedProviderStart(heldStart);
+      return;
+    }
     const runId = uuidv4();
     currentRunId = runId;
     runErrors.set(runId, false);
     set((state) => ({
       nodes: markExecutionScopeQueued(state.nodes, state.edges, nodeId),
       isExecuting: true,
+      isCancelling: false,
       runHistory: persistedRunHistory(openRunRecord(state.runHistory, {
         id: runId,
         trigger: 'node',
         startedAt: Date.now(),
         snapshot,
         targetNodeId: nodeId,
+        startedFreshPaidWorldLabs: runIncludesFreshPaidWorldLabsStart(snapshot, nodeId),
       })),
     }));
+    pendingStartRunIds.add(runId);
     try {
       const result = await apiExecuteNode(snapshot.nodes, snapshot.edges, nodeId, runId);
+      pendingStartRunIds.delete(runId);
+      if (await honorCancellationAfterStart(runId, result.status, set, get)) return;
+      if (result.status !== 'started' && result.status !== 'validation_error') {
+        throw new ExecutionStartRejectedError(
+          `Execution did not start (${result.status || 'unknown status'}).`,
+          400,
+        );
+      }
       if (result.status === 'validation_error' && currentRunId === runId) {
         closeCurrentRun(set, { status: 'failed' });
         set((state) => ({
@@ -2252,11 +3140,18 @@ export const useGraphStore = create<GraphState>((set, get) => ({
             'Validation failed before execution. Check required inputs and API keys.',
           ),
           isExecuting: false,
+          isCancelling: false,
         }));
       }
     } catch (err) {
+      pendingStartRunIds.delete(runId);
       console.error('Failed to start node execution:', err);
       if (currentRunId !== runId) return;
+      if (runIncludesFreshPaidWorldLabsStart(snapshot, nodeId)
+        && !(err instanceof ExecutionStartRejectedError)) {
+        await reconcileWorldLabsExecutionStatus(runId, set, get);
+        return;
+      }
       closeCurrentRun(set, { status: 'failed' });
       set((state) => ({
         nodes: markNodesErrored(
@@ -2265,6 +3160,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
           err instanceof Error ? err.message : 'Failed to start node execution.',
         ),
         isExecuting: false,
+        isCancelling: false,
       }));
     }
   },
@@ -2290,18 +3186,25 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       shots: src.shots.map((s) => (s.id === shotId ? { ...s, output } : s)),
     });
 
+    const shotSnapshot = captureRunSnapshot(nodes, edges);
+    if (runIncludesFreshPaidWorldLabsStart(shotSnapshot, nodeId)) {
+      applySceneToNode(set, nodeId, patchShot(scene, {
+        ...(shot.output ?? {}),
+        status: 'error',
+        error: 'Run the World Labs Environment on Canvas first, then generate this shot from its recovered output.',
+      }));
+      return;
+    }
+
     // Optimistically mark this shot running (local only — the backend streams the
     // terminal scene back via graphSync).
     applySceneToNode(set, nodeId, patchShot(scene, { ...(shot.output ?? {}), status: 'running' }));
 
-    const graphNodes = nodes.map((n) => ({
-      id: n.id,
-      definitionId: n.data.definitionId,
-      params: paramsForBackend(n.data.definitionId, n.data.params as Record<string, unknown>),
-      outputs: {},
-    }));
-    const graphEdges = edges.map((e) => ({
-      id: e.id, source: e.source, sourceHandle: e.sourceHandle, target: e.target, targetHandle: e.targetHandle,
+    const graphNodes = shotSnapshot.nodes;
+    const graphEdges = shotSnapshot.edges.map((edge) => ({
+      ...edge,
+      sourceHandle: edge.sourceHandle,
+      targetHandle: edge.targetHandle,
     }));
 
     // Clear the optimistic spinner to an error state when no graphSync will
@@ -2375,6 +3278,11 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     const clusterEdges = edges.filter((e) => idSet.has(e.source) && idSet.has(e.target));
     resetExecution();
     const snapshot = captureRunSnapshot(clusterNodes, clusterEdges);
+    const heldStart = blockedProviderStart(snapshot, get().providerStartAmbiguities);
+    if (heldStart) {
+      warnBlockedProviderStart(heldStart);
+      return;
+    }
     const runId = uuidv4();
     currentRunId = runId;
     runErrors.set(runId, false);
@@ -2396,15 +3304,26 @@ export const useGraphStore = create<GraphState>((set, get) => ({
           : n,
       ),
       isExecuting: true,
+      isCancelling: false,
       runHistory: persistedRunHistory(openRunRecord(state.runHistory, {
         id: runId,
         trigger: 'cluster',
         startedAt: Date.now(),
         snapshot,
+        startedFreshPaidWorldLabs: runIncludesFreshPaidWorldLabsStart(snapshot),
       })),
     }));
+    pendingStartRunIds.add(runId);
     try {
       const result = await apiExecuteGraph(snapshot.nodes, snapshot.edges, runId);
+      pendingStartRunIds.delete(runId);
+      if (await honorCancellationAfterStart(runId, result.status, set, get)) return;
+      if (result.status !== 'started' && result.status !== 'validation_error') {
+        throw new ExecutionStartRejectedError(
+          `Execution did not start (${result.status || 'unknown status'}).`,
+          400,
+        );
+      }
       if (result.status === 'validation_error' && currentRunId === runId) {
         closeCurrentRun(set, { status: 'failed' });
         set((state) => ({
@@ -2415,15 +3334,23 @@ export const useGraphStore = create<GraphState>((set, get) => ({
             'Validation failed before generation. Check required inputs and API keys.',
           ),
           isExecuting: false,
+          isCancelling: false,
         }));
       }
     } catch (err) {
+      pendingStartRunIds.delete(runId);
       console.error('Failed to start generation:', err);
       if (currentRunId !== runId) return;
+      if (runIncludesFreshPaidWorldLabsStart(snapshot)
+        && !(err instanceof ExecutionStartRejectedError)) {
+        await reconcileWorldLabsExecutionStatus(runId, set, get);
+        return;
+      }
       closeCurrentRun(set, { status: 'failed' });
       set((state) => ({
         nodes: markNodesErrored(state.nodes, idSet, err instanceof Error ? err.message : 'Failed to start generation.'),
         isExecuting: false,
+        isCancelling: false,
       }));
     }
   },
@@ -2434,6 +3361,14 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     const clusterNodes = nodes.filter((n) => idSet.has(n.id));
     if (clusterNodes.length === 0) return;
     const clusterEdges = edges.filter((e) => idSet.has(e.source) && idSet.has(e.target));
+    const snapshot = captureRunSnapshot(clusterNodes, clusterEdges);
+    if (runIncludesWorldLabs(snapshot)) {
+      // Concurrent Create runs have no global Stop/history owner. World Labs is
+      // normally excluded from Create; this guard routes any programmatic call
+      // through the tracked Canvas lifecycle as defense in depth.
+      await get().executeCluster(nodeIds);
+      return;
+    }
     const runId = uuidv4();
     runErrors.set(runId, false);
     // Mark ONLY the cluster nodes queued — no global resetExecution, no isExecuting touch.
@@ -2455,15 +3390,8 @@ export const useGraphStore = create<GraphState>((set, get) => ({
           : n,
       ),
     }));
-    const graphNodes = clusterNodes.map((n) => ({
-      id: n.id,
-      definitionId: n.data.definitionId,
-      params: paramsForBackend(n.data.definitionId, n.data.params as Record<string, unknown>),
-      outputs: {},
-    }));
-    const graphEdges = clusterEdges.map((e) => ({
-      id: e.id, source: e.source, sourceHandle: e.sourceHandle, target: e.target, targetHandle: e.targetHandle,
-    }));
+    const graphNodes = snapshot.nodes;
+    const graphEdges = snapshot.edges;
     try {
       const result = await apiExecuteGraph(graphNodes, graphEdges, runId);
       if (result.status === 'validation_error') {
@@ -2474,6 +3402,15 @@ export const useGraphStore = create<GraphState>((set, get) => ({
             idSet,
             result.errors,
             'Validation failed before generation. Check required inputs and API keys.',
+          ),
+        }));
+      } else if (result.status !== 'started') {
+        runErrors.delete(runId);
+        set((state) => ({
+          nodes: markNodesErrored(
+            state.nodes,
+            idSet,
+            `Execution did not start (${result.status || 'unknown status'}).`,
           ),
         }));
       }
@@ -2584,7 +3521,8 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   },
 
   deleteGeneration: (modelNodeIds) => {
-    const { nodes, edges } = get();
+    const { nodes, edges, isExecuting } = get();
+    if (isExecuting) return;
     const toRemove = new Set(modelNodeIds);
     // Input nodes feeding ONLY removed model nodes become orphans → also remove.
     const inputIds = new Set(
@@ -2596,20 +3534,20 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       const isCreateInput = inputNode?.data.definitionId === 'text-input' || inputNode?.data.definitionId === 'image-input';
       if (!stillUsed && isCreateInput) toRemove.add(inputId);
     }
-    pushUndo(set, get);
-    set((state) => ({
-      nodes: state.nodes.filter((n) => !toRemove.has(n.id)),
-      edges: state.edges.filter((e) => !toRemove.has(e.source) && !toRemove.has(e.target)),
-    }));
-    // Best-effort backend removal so persistence reflects the deletion.
-    for (const id of toRemove) {
-      void apiFetch(`/api/graph/node/${id}`, { method: 'DELETE' }).catch(() => {});
-    }
+    if ([...toRemove].some((nodeId) => nodeHasProviderSafety(get(), nodeId))) return;
+    get().onNodesChange([...toRemove].map((id) => ({ id, type: 'remove' as const })));
   },
 
   duplicateNode: (nodeId) => {
-    const node = get().nodes.find((n) => n.id === nodeId);
+    const state = get();
+    if (state.isExecuting) return;
+    const node = state.nodes.find((n) => n.id === nodeId);
     if (!node) return;
+    const params = providerSafeCloneParams(state, node);
+    if (!params) {
+      warnUnsafeProviderClone();
+      return;
+    }
 
     pushUndo(set, get);
 
@@ -2619,6 +3557,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       position: { x: node.position.x + 20, y: node.position.y + 20 },
       data: {
         ...node.data,
+        params,
         state: 'idle' as const,
         outputs: {},
         error: undefined,
@@ -2631,16 +3570,8 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   },
 
   deleteNode: (nodeId) => {
-    pushUndo(set, get);
-    set((state) => ({
-      nodes: state.nodes.filter((n) => n.id !== nodeId),
-      edges: state.edges.filter((e) => e.source !== nodeId && e.target !== nodeId),
-    }));
-    if (CLI_ID_RE.test(nodeId)) {
-      apiFetch(`/api/graph/node/${nodeId}`, { method: 'DELETE' }).catch((err) =>
-        console.warn(`[nebula] DELETE node ${nodeId} failed:`, err),
-      );
-    }
+    if (get().isExecuting || nodeHasProviderSafety(get(), nodeId)) return;
+    get().onNodesChange([{ id: nodeId, type: 'remove' }]);
   },
 
   // ---------------------------------------------------------------------------
@@ -2982,11 +3913,21 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     }
   },
 
-  loadGraph: (nodes, edges) => {
-    set({ nodes, edges, isExecuting: false, undoStack: [], redoStack: [], backendFreshStartPending: false });
+  loadGraph: (nodes, edges, options) => {
+    if (get().isExecuting && !options?.allowDuringExecution) return;
+    // Hydration/import must never release a paid-run owner. Only terminal
+    // execution events or status reconciliation may unlock the Run control.
+    set({
+      nodes: nodesWithProviderRecoveries(nodes, get().providerRecoveries),
+      edges,
+      undoStack: [],
+      redoStack: [],
+      backendFreshStartPending: false,
+    });
   },
 
   loadSampleGraph: () => {
+    if (get().isExecuting) return;
     const { nodes, edges } = buildSampleGraph();
     get().loadGraph(nodes, edges);
     // Let the canvas auto-fit to frame the seeded pipeline.
@@ -3028,16 +3969,26 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   },
 
   clearRunHistory: () => {
+    const { isExecuting, providerRecoveries, providerStartAmbiguities } = get();
+    if (isExecuting || providerRecoveries.length > 0 || providerStartAmbiguities.length > 0) return;
     clearPersistedRunHistory();
     set({ runHistory: [] });
   },
 
   clearGraph: () => {
-    const { nodes, edges, undoStack } = get();
+    const {
+      nodes,
+      edges,
+      undoStack,
+      isExecuting,
+      providerRecoveries,
+      providerStartAmbiguities,
+    } = get();
+    if (isExecuting || providerRecoveries.length > 0 || providerStartAmbiguities.length > 0) return;
     const snapshot = createSnapshot(nodes, edges);
     const newStack = [...undoStack, snapshot];
     if (newStack.length > UNDO_CAP) newStack.shift();
-    set({ nodes: [], edges: [], isExecuting: false, undoStack: newStack, redoStack: [], backendFreshStartPending: false });
+    set({ nodes: [], edges: [], undoStack: newStack, redoStack: [], backendFreshStartPending: false });
   },
 
   configureOpenRouterModel: (nodeId, modelId, model) => {
@@ -3184,10 +4135,77 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   },
 
   handleExecutionEvent: (event) => {
-    if (event.runId && cancelledRunIds.has(event.runId) && event.type !== 'graphCancelled') {
+    // Recovery IDs can arrive while cancellation is settling. They must be
+    // applied before graphCancelled so a paid provider job is never stranded.
+    if (
+      event.runId
+      && cancelledRunIds.has(event.runId)
+      && event.type !== 'graphCancelled'
+      && event.type !== 'providerRecovery'
+      && event.type !== 'providerStartAmbiguous'
+    ) {
       return;
     }
     switch (event.type) {
+      case 'executionStatus':
+        if (event.runId) get().hydrateExecutionStatuses([{
+          runId: event.runId,
+          status: event.status,
+        }]);
+        break;
+      case 'providerStartAmbiguous':
+        set((state) => ({
+          providerStartAmbiguities: normalizedProviderStartAmbiguities([
+            ...state.providerStartAmbiguities,
+            {
+              runId: event.runId ?? '',
+              nodeId: event.nodeId,
+              kind: event.kind,
+              message: event.message,
+              durable: event.durable,
+            },
+          ]),
+        }));
+        break;
+      case 'providerRecovery':
+        set((state) => {
+          const checkpoint: ProviderRecoveryCheckpoint = {
+            runId: event.runId ?? '',
+            nodeId: event.nodeId,
+            resumeOperationId: event.resumeOperationId,
+            existingWorldId: event.existingWorldId,
+            durable: event.durable,
+            warning: event.warning,
+          };
+          const nodes = state.nodes.map((node) => {
+            if (node.id !== event.nodeId) return node;
+            const params = applyProviderRecoveryToLiveParams(
+              node.data.definitionId,
+              node.data.params,
+              checkpoint,
+            );
+            if (!params) return node;
+            return {
+              ...node,
+              data: {
+                ...node.data,
+                params,
+              },
+            };
+          });
+          const runHistory = event.runId
+            ? applyProviderRecoveriesToHistory(state.runHistory, [checkpoint])
+            : state.runHistory;
+          if (runHistory !== state.runHistory) persistRunHistory(runHistory);
+          const providerRecoveryWarning = providerRecoveryWarningText(checkpoint)
+            ?? state.providerRecoveryWarning;
+          const providerRecoveries = normalizedProviderRecoveries([
+            ...state.providerRecoveries,
+            checkpoint,
+          ]);
+          return { nodes, runHistory, providerRecoveryWarning, providerRecoveries };
+        });
+        break;
       case 'queued':
         get().updateNodeData(event.nodeId, {
           state: 'queued',
@@ -3202,22 +4220,23 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         get().updateNodeData(event.nodeId, { progress: event.value });
         break;
       case 'executed': {
-        const outputs: Record<string, { type: string; value: string | null }> = {};
+        const outputs: Record<string, PortValue> = {};
         for (const [key, val] of Object.entries(event.outputs)) {
-          const outputVal = val as { type: string; value: string | null };
-          if ((outputVal.type === 'Image' || outputVal.type === 'Video' || outputVal.type === 'Mesh' || outputVal.type === 'Audio') && outputVal.value && typeof outputVal.value === 'string') {
-            // Skip rewriting for external URLs — only rewrite local filesystem paths
-            if (outputVal.value.startsWith('http://') || outputVal.value.startsWith('https://')) {
-              outputs[key] = outputVal;
-            } else {
-              const outputIdx = outputVal.value.indexOf('/output/');
-              if (outputIdx !== -1) {
-                const relativePath = outputVal.value.substring(outputIdx + '/output/'.length);
-                outputs[key] = { type: outputVal.type, value: backendAssetUrlSync(`/api/outputs/${relativePath}`) };
-              } else {
-                outputs[key] = outputVal;
-              }
-            }
+          const outputVal = val as PortValue;
+          if (outputVal.type === 'World') {
+            outputs[key] = rewriteExecutionAssetUrls(outputVal);
+          } else if (
+            (outputVal.type === 'Image'
+              || outputVal.type === 'Video'
+              || outputVal.type === 'Mesh'
+              || outputVal.type === 'Audio'
+              || outputVal.type === 'SVG')
+            && outputVal.value
+          ) {
+            outputs[key] = {
+              ...outputVal,
+              value: rewriteExecutionAssetUrls(outputVal.value),
+            };
           } else {
             outputs[key] = outputVal;
           }
@@ -3280,7 +4299,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
           }
         }
         if (!event.runId || eventOwnsCurrentRun(event.runId)) {
-          set({ isExecuting: false });
+          set({ isExecuting: false, isCancelling: false });
           // validationError ends the run with no following graphComplete, so close + notify here.
           closeCurrentRun(set, { status: 'failed' });
           notifyJobComplete({ ok: false, durationSec: 0, nodesExecuted: 0 });
@@ -3299,7 +4318,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
           ? (runErrors.get(event.runId) ?? currentRunHadError)
           : currentRunHadError;
         if (!event.runId || eventOwnsCurrentRun(event.runId)) {
-          set({ isExecuting: false });
+          set({ isExecuting: false, isCancelling: false });
           closeCurrentRun(set, {
             status: runFailed ? 'failed' : 'complete',
             durationSec: event.duration,
@@ -3332,6 +4351,179 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       }
     }
   },
+
+  hydrateProviderRecoveries: (checkpoints) => {
+    set((state) => {
+      // Snapshots can race live events (initial REST load versus websocket).
+      // Merge-only is deliberately fail-closed; confirmed exact DELETE is the
+      // sole path that removes a safeguard from this client.
+      const providerRecoveries = mergeProviderRecoverySnapshot(
+        state.providerRecoveries,
+        checkpoints,
+      );
+      const runHistory = applyProviderRecoveriesToHistory(
+        state.runHistory,
+        providerRecoveries,
+      );
+      if (runHistory !== state.runHistory) persistRunHistory(runHistory);
+      return {
+        runHistory,
+        providerRecoveries,
+        nodes: nodesWithProviderRecoveries(state.nodes, providerRecoveries),
+      };
+    });
+  },
+
+  deleteProviderRecovery: async (runId, nodeId) => {
+    if (get().isExecuting) {
+      throw new Error('Wait for the active run to finish before clearing recovery safety.');
+    }
+    const expected = get().providerRecoveries.find(
+      (checkpoint) => checkpoint.runId === runId && checkpoint.nodeId === nodeId,
+    );
+    if (!expected || expected.durable === false) {
+      throw new Error('That durable provider recovery checkpoint is no longer current.');
+    }
+    await apiDeleteProviderRecovery(runId, nodeId, expected);
+    set((state) => {
+      const stillCurrent = state.providerRecoveries.some(
+        (checkpoint) => sameProviderRecoveryIdentity(checkpoint, expected),
+      );
+      // The provider checkpoint may have advanced operation -> world while the
+      // DELETE response was in flight. Never let an old response clear it.
+      if (!stillCurrent) return {};
+      const runHistory = historyWithoutProviderRecovery(
+        state.runHistory,
+        runId,
+        nodeId,
+        expected,
+      );
+      if (runHistory !== state.runHistory) persistRunHistory(runHistory);
+      const expectedKey = expected.resumeOperationId
+        ? 'resume_operation_id'
+        : 'existing_world_id';
+      const expectedId = expected.resumeOperationId ?? expected.existingWorldId;
+      return {
+        providerRecoveries: state.providerRecoveries.filter(
+          (checkpoint) => !sameProviderRecoveryIdentity(checkpoint, expected),
+        ),
+        runHistory,
+        nodes: state.nodes.map((node) => {
+          if (node.id !== nodeId) return node;
+          const params = { ...node.data.params };
+          if (!expectedId || params[expectedKey] !== expectedId) return node;
+          delete params.resume_operation_id;
+          delete params.existing_world_id;
+          return { ...node, data: { ...node.data, params } };
+        }),
+      };
+    });
+  },
+
+  hydrateProviderStartAmbiguities: (ambiguities) => {
+    // See recovery hydration above: stale snapshots may add an over-lock, but
+    // must never erase a newer live ambiguity and permit a duplicate charge.
+    set((state) => ({
+      providerStartAmbiguities: mergeProviderStartAmbiguitySnapshot(
+        state.providerStartAmbiguities,
+        ambiguities,
+      ),
+    }));
+  },
+
+  hydrateExecutionStatuses: (statuses) => {
+    if (!currentRunId) return;
+    const status = statuses.find((candidate) => candidate.runId === currentRunId);
+    if (!status) {
+      if (pendingStartRunIds.has(currentRunId)) return;
+      const record = get().runHistory.find((candidate) => candidate.id === currentRunId);
+      if (record && (record.startedFreshPaidWorldLabs === true
+        || (record.startedFreshPaidWorldLabs === undefined
+          && runIncludesWorldLabs(record.snapshot, record.targetNodeId)))) {
+        set({
+          isExecuting: true,
+          isCancelling: false,
+          uncertainWorldLabsRunId: currentRunId,
+          providerRecoveryWarning: WORLD_LABS_STATUS_UNCERTAIN_WARNING,
+        });
+      }
+      return;
+    }
+    if (status.status === 'running' || status.status === 'cancelling') {
+      set({
+        isExecuting: true,
+        isCancelling: status.status === 'cancelling',
+        uncertainWorldLabsRunId: null,
+      });
+      if (get().providerRecoveryWarning === WORLD_LABS_STATUS_UNCERTAIN_WARNING) {
+        set({ providerRecoveryWarning: null });
+      }
+      scheduleWorldLabsStatusReconciliation(status.runId, set, get);
+      return;
+    }
+    settleTrackedExecutionStatus(status.status, status.runId, set, get);
+  },
+
+  acknowledgeProviderStartAmbiguity: async (kind, nodeId) => {
+    const ambiguity = get().providerStartAmbiguities.find(
+      (candidate) => candidate.kind === kind && candidate.nodeId === nodeId,
+    );
+    if (!ambiguity) return;
+    await apiAcknowledgeProviderStartAmbiguity(kind, nodeId, ambiguity.runId);
+    set((state) => {
+      return {
+        providerStartAmbiguities: state.providerStartAmbiguities.filter(
+          (candidate) => candidate.kind !== kind
+            || candidate.nodeId !== nodeId
+            || candidate.runId !== ambiguity.runId,
+        ),
+      };
+    });
+    if (currentRunId !== ambiguity.runId || !get().isExecuting) return;
+    try {
+      const status = await apiGetExecutionStatus(ambiguity.runId);
+      if (status.status === 'running' || status.status === 'cancelling') {
+        set({
+          isExecuting: true,
+          isCancelling: status.status === 'cancelling',
+          uncertainWorldLabsRunId: null,
+        });
+        scheduleWorldLabsStatusReconciliation(ambiguity.runId, set, get);
+        return;
+      }
+      settleTrackedExecutionStatus(status.status, ambiguity.runId, set, get);
+    } catch {
+      // The user explicitly confirmed Marble before acknowledging the hold.
+      // If the local registry can no longer identify this run, close the stale
+      // frontend owner rather than relocking it forever across reloads.
+      settleTrackedExecutionStatus('failed', ambiguity.runId, set, get, {
+        statusNote: 'Marble checked; ambiguous provider-start hold was manually cleared.',
+      });
+    }
+  },
+
+  acknowledgeUncertainWorldLabsRun: () => {
+    const runId = get().uncertainWorldLabsRunId;
+    if (!runId || currentRunId !== runId) return;
+    settleTrackedExecutionStatus('failed', runId, set, get, {
+      statusNote: 'Marble checked; the unconfirmed local run lock was manually cleared.',
+    });
+  },
+
+  reconcilePersistedWorldLabsRun: async () => {
+    const pending = get().runHistory.find((record) => (
+      record.status === 'running'
+      && (record.startedFreshPaidWorldLabs === true
+        || (record.startedFreshPaidWorldLabs === undefined
+          && runIncludesWorldLabs(record.snapshot, record.targetNodeId)))
+    ));
+    if (!pending) return;
+    currentRunId = pending.id;
+    set({ isExecuting: true });
+    await reconcileWorldLabsExecutionStatus(pending.id, set, get);
+  },
+
+  dismissProviderRecoveryWarning: () => set({ providerRecoveryWarning: null }),
 }));
 
 // Dev-only window bridge so the Puppeteer driver in scripts/puppeteer-driver/

@@ -1,7 +1,9 @@
 fastapi==0.115.12
+starlette==0.46.2
 uvicorn[standard]==0.34.2
 httpx==0.28.1
 pydantic==2.11.3
+pydantic-settings==2.14.0
 python-dotenv==1.1.0
 python-multipart==0.0.20
 trimesh==4.6.8
@@ -13,3 +15,5 @@ numpy==2.4.4
 opencv-python-headless==4.13.0.92
 scikit-image==0.26.0
 pypdf==6.13.0
+mcp==1.27.0
+sse-starlette==2.4.1

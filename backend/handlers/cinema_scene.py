@@ -114,12 +114,23 @@ def _save_output_image(img: Image.Image) -> str:
 
 
 def _guard_base_model(base: dict[str, Any]) -> str:
-    """Return a commercial-OK base model id, substituting the default if the
-    requested one is non-commercial (FLUX.1-dev) or missing."""
+    """Return one of the four explicitly supported image-edit base models.
+
+    This is a security and billing boundary, not just a license preference:
+    cinema dispatches its base through the global handler registry, which also
+    contains paid World Labs handlers. An arbitrary registry key here would
+    bypass top-level graph admission and invoke a nested provider POST.
+    """
     model = str(base.get("model") or "").strip()
     if not model or model.lower() in _NONCOMMERCIAL_BASES:
         return _DEFAULT_BASE_MODEL
-    return model
+    normalized = model.lower()
+    if normalized not in _COMMERCIAL_OK_DEFAULT_BASES:
+        raise ValueError(
+            f"Unsupported cinema base model '{model}'. Choose one of: "
+            + ", ".join(sorted(_COMMERCIAL_OK_DEFAULT_BASES))
+        )
+    return normalized
 
 
 def _shot_hash(

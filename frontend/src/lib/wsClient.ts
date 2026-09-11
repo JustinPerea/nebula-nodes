@@ -1,4 +1,11 @@
 import { backendWebSocketUrl } from './backend';
+import type { PortValue } from '../types';
+import type { ExecutionStatusResult } from './api';
+import type {
+  ProviderRecoveryCheckpoint,
+  ProviderStartAmbiguity,
+  ProviderStartKind,
+} from './runHistory';
 
 export type ErrorCategory =
   | 'blocked'
@@ -14,15 +21,42 @@ export type ExecutionEvent = (
   | { type: 'queued'; nodeId: string }
   | { type: 'executing'; nodeId: string }
   | { type: 'progress'; nodeId: string; value: number }
-  | { type: 'executed'; nodeId: string; outputs: Record<string, { type: string; value: string | null }> }
+  | { type: 'executed'; nodeId: string; outputs: Record<string, PortValue> }
   | { type: 'error'; nodeId: string; error: string; retryable: boolean; category?: ErrorCategory; friendly?: string }
   | { type: 'validationError'; errors: Array<{ nodeId: string; portId: string; message: string }> }
   | { type: 'graphComplete'; duration: number; nodesExecuted: number }
   | { type: 'graphCancelled' }
+  | {
+      type: 'executionStatus';
+      status: 'cancelled' | 'completed' | 'failed';
+    }
+  | {
+      type: 'providerRecovery';
+      nodeId: string;
+      resumeOperationId: string | null;
+      existingWorldId: string | null;
+      durable: boolean;
+      warning: string | null;
+    }
+  | {
+      type: 'providerStartAmbiguous';
+      nodeId: string;
+      kind: ProviderStartKind;
+      message: string;
+      durable: boolean;
+    }
   | { type: 'streamDelta'; nodeId: string; delta: string; accumulated: string }
   | { type: 'streamPartialImage'; nodeId: string; partialIndex: number; src: string; isFinal: boolean }
   | { type: 'streamPartialSvg'; nodeId: string; partialIndex: number; svg: string; isFinal: boolean }
-  | { type: 'graphSync'; nodes: unknown[]; edges: unknown[]; empty: boolean }
+  | {
+      type: 'graphSync';
+      nodes: unknown[];
+      edges: unknown[];
+      empty: boolean;
+      providerRecoveries?: ProviderRecoveryCheckpoint[];
+      providerStartAmbiguities?: ProviderStartAmbiguity[];
+      executionStatuses?: ExecutionStatusResult[];
+    }
 ) & { runId?: string };
 
 type EventHandler = (event: ExecutionEvent) => void;
@@ -34,6 +68,7 @@ class WebSocketClient {
   private path: string;
   private connecting = false;
   private connectRun = 0;
+  private forceDiscoveryOnReconnect = false;
 
   constructor(path: string) {
     this.path = path;
@@ -45,13 +80,15 @@ class WebSocketClient {
     this.connecting = true;
     const run = ++this.connectRun;
 
-    backendWebSocketUrl(this.path)
+    const forceDiscovery = this.forceDiscoveryOnReconnect;
+    backendWebSocketUrl(this.path, { forceDiscovery })
       .then((url) => {
         if (run !== this.connectRun) return;
         this.connecting = false;
         this.ws = new WebSocket(url);
 
         this.ws.onopen = () => {
+          this.forceDiscoveryOnReconnect = false;
           console.log('[ws] connected');
         };
 
@@ -67,6 +104,7 @@ class WebSocketClient {
         };
 
         this.ws.onclose = () => {
+          this.forceDiscoveryOnReconnect = true;
           console.log('[ws] disconnected, reconnecting in 3s...');
           this.scheduleReconnect();
         };
@@ -79,6 +117,7 @@ class WebSocketClient {
       .catch((err) => {
         if (run !== this.connectRun) return;
         this.connecting = false;
+        this.forceDiscoveryOnReconnect = true;
         console.error('[ws] backend discovery failed:', err);
         this.scheduleReconnect();
       });

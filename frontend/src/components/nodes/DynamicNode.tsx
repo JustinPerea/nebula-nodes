@@ -5,9 +5,11 @@ import type { NodeData, DynamicNodeData, PortDataType } from '../../types';
 import { NODE_DEFINITIONS } from '../../constants/nodeDefinitions';
 import { PORT_COLORS } from '../../lib/portCompatibility';
 import { CATEGORY_COLORS } from '../../constants/ports';
+import { findStructuredRepresentation } from '../../lib/representationViewerRegistry';
 import { useUIStore } from '../../store/uiStore';
 import { useSlavaNodeEntranceClass } from '../../hooks/useSlavaNodeEntrance';
 import { MeshPreview } from './MeshPreview';
+import { RepresentationViewer } from './RepresentationViewer';
 import { NodeError } from './NodeError';
 import '../../styles/nodes.css';
 
@@ -36,7 +38,9 @@ function DynamicNodeComponent({ id, data, selected }: NodeProps) {
   const imageOutput = Object.values(nodeData.outputs).find((o) => o.type === 'Image' && o.value);
   const textOutput = Object.values(nodeData.outputs).find((o) => o.type === 'Text' && o.value);
   const meshOutput = Object.values(nodeData.outputs).find((o) => o.type === 'Mesh' && o.value);
+  const worldOutput = Object.values(nodeData.outputs).find((o) => o.type === 'World' && o.value);
   const videoOutput = Object.values(nodeData.outputs).find((o) => o.type === 'Video' && o.value);
+  const spatialOutput = findStructuredRepresentation(nodeData.outputs, { includeWorld: false });
   const displayText = nodeData.streamingText ?? (textOutput && typeof textOutput.value === 'string' ? textOutput.value : null);
   const isStreaming = nodeData.state === 'executing' && nodeData.streamingText != null;
 
@@ -46,8 +50,15 @@ function DynamicNodeComponent({ id, data, selected }: NodeProps) {
   const finalImageSrc = imageOutput && typeof imageOutput.value === 'string' ? imageOutput.value : null;
   const previewImageSrc = finalImageSrc ?? latestPartial?.src ?? null;
   const isStreamingImage = nodeData.state === 'executing' && partials != null && partials.length > 0 && finalImageSrc == null;
-  const isImageSurface = Boolean(previewImageSrc);
-  const isTextSurface = Boolean(displayText);
+  const shouldRenderSpatial = nodeData.state === 'complete'
+    && !worldOutput
+    && Boolean(spatialOutput)
+    && !imageOutput
+    && !videoOutput
+    && !meshOutput;
+  const isImageSurface = !worldOutput && Boolean(previewImageSrc);
+  const isTextSurface = !worldOutput && !shouldRenderSpatial && Boolean(displayText);
+  const isWorldSurface = nodeData.state === 'complete' && Boolean(worldOutput);
 
   // Model badge: show selected model compactly
   const modelBadge = dynData?.modelId || (nodeData.params.model as string) || (nodeData.params.model_id as string) || (nodeData.params.endpoint_id as string) || null;
@@ -65,7 +76,7 @@ function DynamicNodeComponent({ id, data, selected }: NodeProps) {
 
   return (
     <div
-      className={`model-node ${stateClass}${isImageSurface ? ' model-node--image-surface' : ''}${isTextSurface ? ' model-node--text-surface' : ''} ${isNodeSelected ? 'model-node--selected' : ''}${entranceClass}`}
+      className={`model-node ${stateClass}${isImageSurface ? ' model-node--image-surface' : ''}${isWorldSurface ? ' model-node--world-surface' : ''}${shouldRenderSpatial ? ' model-node--spatial-surface' : ''}${isTextSurface ? ' model-node--text-surface' : ''} ${isNodeSelected ? 'model-node--selected' : ''}${entranceClass}`}
       onClick={() => selectNode(id)}
       style={{ ['--node-category-color' as string]: categoryColor }}
     >
@@ -145,7 +156,19 @@ function DynamicNodeComponent({ id, data, selected }: NodeProps) {
         </div>
       )}
 
-      {previewImageSrc && (
+      {nodeData.state === 'complete' && worldOutput && (
+        <div className="model-node__preview model-node__preview--world">
+          <RepresentationViewer type={worldOutput.type} value={worldOutput.value} />
+        </div>
+      )}
+
+      {shouldRenderSpatial && spatialOutput && (
+        <div className="model-node__preview model-node__preview--spatial">
+          <RepresentationViewer type={spatialOutput.type} value={spatialOutput.value} />
+        </div>
+      )}
+
+      {previewImageSrc && !worldOutput && (
         <div className="model-node__preview">
           <img
             src={previewImageSrc}
@@ -156,7 +179,7 @@ function DynamicNodeComponent({ id, data, selected }: NodeProps) {
         </div>
       )}
 
-      {displayText && (
+      {displayText && !worldOutput && !shouldRenderSpatial && (
         <div className="model-node__preview">
           <div className={`model-node__preview-text ${isStreaming ? 'model-node__preview-text--streaming' : ''}`}>
             {displayText.length > 300 ? `${displayText.slice(0, 300)}...` : displayText}
@@ -164,7 +187,7 @@ function DynamicNodeComponent({ id, data, selected }: NodeProps) {
         </div>
       )}
 
-      {nodeData.state === 'complete' && meshOutput && typeof meshOutput.value === 'string' && (
+      {nodeData.state === 'complete' && !worldOutput && meshOutput && typeof meshOutput.value === 'string' && (
         <div className="model-node__preview">
           <MeshPreview src={meshOutput.value} />
         </div>

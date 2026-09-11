@@ -41,7 +41,10 @@ NEBULA_SYSTEM_PRIMER = (
     "every request including single-node ones — one-node graphs are fine; "
     "quick mode is not.\n\n"
     "Workflow for every media request, no exceptions:\n"
-    "  0. Run `nebula graph` FIRST to see what's already on the canvas. If the "
+    "  0. The current canvas selection is supplied as system context for every "
+    "turn. Treat vague references like 'these' or 'the selected nodes' as that "
+    "snapshot. Run `nebula selection` when you need its bounded parameter/output "
+    "summary. Then run `nebula graph` to see the whole canvas. If the "
     "user dropped an image, uploaded a file, or previously generated something "
     "relevant, it's already a node with a short ID (n1, n2, …) and you should "
     "REUSE it — do not re-upload, re-create, or search the filesystem for a "
@@ -232,6 +235,7 @@ async def run_claude(
     model: str,
     autonomy: str = "auto",
     provider: str | None = None,
+    selection_context: str | None = None,
 ) -> AsyncIterator[dict[str, Any]]:
     """Run `claude -p` once and yield normalized events.
 
@@ -249,10 +253,13 @@ async def run_claude(
     # routes through Anthropic, not Hermes's provider gateway.
     del autonomy
     del provider
+    system_prompt = NEBULA_SYSTEM_PRIMER
+    if selection_context:
+        system_prompt = f"{system_prompt}\n\n{selection_context}"
     args = ["claude", "-p", "--dangerously-skip-permissions",
             "--output-format", "stream-json", "--verbose",
             "--model", model,
-            "--append-system-prompt", NEBULA_SYSTEM_PRIMER]
+            "--append-system-prompt", system_prompt]
     if session_id:
         args.extend(["--resume", session_id])
     args.append(message)

@@ -1444,6 +1444,9 @@ export function ChatPanel() {
       JSON.stringify({
         type: 'send',
         message: raw,
+        selectedNodeIds: useGraphStore.getState().nodes
+          .filter((node) => node.selected)
+          .map((node) => node.id),
         sessionId,
         model: agent === 'daedalus' ? daedalusModel : agent === 'codex' ? null : model,
         agent,
@@ -1507,6 +1510,9 @@ export function ChatPanel() {
         JSON.stringify({
           type: 'send',
           message: response,
+          selectedNodeIds: useGraphStore.getState().nodes
+            .filter((node) => node.selected)
+            .map((node) => node.id),
           sessionId,
           model: agent === 'daedalus' ? daedalusModel : agent === 'codex' ? null : model,
           agent,

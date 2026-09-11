@@ -188,6 +188,7 @@ async def run_hermes(
     model: str = DEFAULT_MODEL,
     autonomy: str = "auto",
     provider: str | None = None,
+    selection_context: str | None = None,
 ) -> AsyncIterator[dict[str, Any]]:
     """Run a single Daedalus turn via `hermes-daedalus chat -q` and yield events.
 
@@ -210,8 +211,13 @@ async def run_hermes(
     # "openrouter" for users without Nous auth). Falling back to
     # DEFAULT_PROVIDER preserves the current default when no field is sent.
     effective_provider = provider or DEFAULT_PROVIDER
+    turn_message = (
+        f"{selection_context}\n\nUSER MESSAGE:\n{message}"
+        if selection_context
+        else message
+    )
     args = [
-        HERMES_BIN, "chat", "-q", message,
+        HERMES_BIN, "chat", "-q", turn_message,
         "--provider", effective_provider,
         "--model", model,
         "--skills", DEFAULT_SKILLS,

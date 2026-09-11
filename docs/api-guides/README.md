@@ -1,16 +1,17 @@
 # Nebula Nodes - API Guides
 
-Nebula integrates **15 external AI/media APIs** (image, video, audio, 3D, text/LLM, and SVG). This directory holds the **user-facing guide** for each provider plus a **coverage + agent-skill audit** measuring how much of each provider's API surface Nebula actually wires up, and whether an agent skill exists to drive those nodes.
+Nebula integrates **17 external AI/media API families** (image, video, audio, 3D/world, text/LLM, and SVG). This directory holds the **user-facing guide** for each provider plus a **coverage + agent-skill audit** measuring how much of each provider's API surface Nebula actually wires up, and whether an agent skill exists to drive those nodes.
 
 Per-provider guides live alongside this file at `./<provider>.md` (e.g. [`./fal.md`](./fal.md)).
 
 ## Coverage matrix
 
-Sorted by node count (desc). **API coverage** = share of the provider's published API surface reachable through Nebula nodes. **Agent skill** = whether a `.claude/skills/` skill exists to drive the nodes (`complete` / `partial` / `none`). **Top unused capability** = the single most notable gap.
+Sorted by node count (desc). **API coverage** = share of the provider's published API surface reachable through Nebula nodes. **Agent skill** = whether a repo-local agent skill exists to drive the nodes (`complete` / `partial` / `none`). **Top unused capability** = the single most notable gap.
 
 | Provider | Nodes | API coverage | Agent skill | Top unused capability |
 |---|---:|---|---|---|
 | [FAL (fal.ai)](./fal.md) | 46 | ~53% | complete | Stem separation now wired (Demucs); remaining FAL audio gaps: TTS, voice cloning |
+| [Ideogram](./ideogram.md) | 14 | ~80% | complete | Raw structured `json_prompt` generation input and general dataset/model management |
 | [OpenAI](./openai.md) | 8 | ~60% | complete | Image variations endpoint (dall-e-2) — no node; moot since OpenAI retired dall-e-2/3 on 2026-05-12 |
 | [Meshy](./meshy.md) | 8 | ~35% | complete | Creative Lab product line (Keychain, Fridge Magnet, Figure, Lamp) — entirely unused |
 | [Google (Gemini / Imagen / Veo / Lyria)](./google.md) | 8 | ~50% | complete | Veo extension now wired (`source_uri`→`Extend Video`, 2026-06-08); Veo reference images unavailable (live API: "use case not supported"); Imagen edit/upscale still unused |
@@ -19,6 +20,7 @@ Sorted by node count (desc). **API coverage** = share of the provider's publishe
 | [MiniMax (Hailuo)](./minimax.md) | 3 | ~12% | complete | Entire audio stack: TTS (40+ languages), voice cloning, voice design |
 | [Krea](./krea.md) | 3 | ~10% | complete | Video generation entirely unused (Veo, Kling, Runway, Hailuo, Seedance, Wan, Ray 2, LTX, Grok — 30+ models) |
 | [QuiverAI (Arrow)](./quiver.md) | 2 | ~85% | complete | No user-facing model browser (GET /v1/models data only fills the dropdown) |
+| [World Labs (Marble)](./worldlabs.md) | 2 | ~42% | complete | World/media lifecycle, listing, sharing, and depth-panorama conversion are not exposed as nodes |
 | [xAI (Grok Imagine)](./xai.md) | 1 | ~20% | complete | Image generation (grok-imagine-image / -quality) — entire text-to-image modality absent |
 | [Replicate](./replicate.md) | 1 | ~20% | complete | Real-time streaming of model output (SSE via urls.stream) — the big one for chat/LLM models |
 | [OpenRouter](./openrouter.md) | 1 | ~30% | complete | Tool / function calling (tools, tool_choice) |
@@ -27,6 +29,14 @@ Sorted by node count (desc). **API coverage** = share of the provider's publishe
 | [Anthropic (Claude)](./anthropic.md) | 1 | ~20% | complete | Tool use / function calling — both custom client tools and Anthropic server tools entirely unexposed |
 
 ## Agent skill gaps
+
+**2026-09-03 update:** World Labs joined the catalog with a complete repo-local
+skill at `.agents/skills/worldlabs/SKILL.md`. It covers the two public-Marble
+nodes, all four generation input modes, structured `World` handoff, SPZ viewer,
+PLY/HQ-GLB export, billing and cancellation truth, and the explicit boundary
+that Atlas is early access rather than a public API option. With the existing
+Ideogram guide restored to the matrix, all **17** provider families in this
+matrix have a complete skill.
 
 **2026-06-04 update:** A full skill-authoring pass landed — 14 provider skills were created or refreshed. **All 15 providers now have a `complete` agent skill** (0 partial, 0 missing). The "Missing entirely" and "Partial" backlogs below are cleared; every entry now resolves to a shipped skill with its path. Skills are kept self-sufficient (one `SKILL.md` per provider, with a few topic/reference files where the param surface warranted depth) and each includes a Capability boundaries section so an agent never over-promises beyond what the nodes wire.
 
@@ -56,7 +66,7 @@ Sorted by node count (desc). **API coverage** = share of the provider's publishe
 
 ## Capability gaps worth closing
 
-Across all 15 providers, the most valuable **unused** API capabilities, ranked. (Several are reachable through *another* Nebula provider today — noted where relevant — but remain gaps for that specific provider.)
+Across all 17 providers, the most valuable **unused** API capabilities, ranked. (Several are reachable through *another* Nebula provider today — noted where relevant — but remain gaps for that specific provider.)
 
 1. **Speech-to-Text / transcription** — now wired on two direct providers: OpenAI (Whisper STT, pre-existing) and **ElevenLabs STT** (`elevenlabs-stt`, shipped 2026-06-05 — diarization, plain text or SRT/VTT subtitles, feeds Nebula's text-driven nodes directly). The remaining transcription gap is in **FAL's audio catalog**, whose STT models are still unwired.
 2. **Real-time output streaming (SSE)** — **Replicate's `urls.stream` now wired** (2026-06-08, live-verified): text/LLM `replicate-universal` nodes auto-detect the stream and surface token-by-token deltas in the canvas (`streamingText`) — non-text models poll as before. FAL's broader `/stream` remains unused.
@@ -71,7 +81,9 @@ Across all 15 providers, the most valuable **unused** API capabilities, ranked. 
 
 ## Verification notes
 
-All 15 provider audits report `sourcesVerified: true` — capabilities were checked against official documentation. **No provider requires re-verification.**
+All 17 provider guides in this matrix cite canonical documentation. World Labs
+was structurally verified on 2026-09-03 with mocked provider tests; its paid live
+generation/export smoke remains intentionally unrun.
 
 Two narrower caveats a human may still want to confirm:
 

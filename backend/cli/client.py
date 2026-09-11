@@ -68,6 +68,9 @@ class NebulaClient:
     def get_graph(self) -> dict[str, Any]:
         return self._request("GET", "/api/graph")
 
+    def get_selection(self) -> dict[str, Any]:
+        return self._request("GET", "/api/canvas/selection")
+
     def update_node(self, node_id: str, params: dict[str, Any]) -> dict[str, Any]:
         return self._request("PUT", f"/api/graph/node/{node_id}", json={"params": params})
 

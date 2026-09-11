@@ -16,7 +16,10 @@ export const CATEGORY_COLORS: Record<string, string> = {
 };
 
 export const PORT_DATA_TYPES: PortDataType[] = [
-  'Text', 'Image', 'Video', 'Audio', 'Mask', 'Array', 'SVG', 'Mesh', 'Character', 'Moodboard', 'CameraRig', 'ReferenceSet', 'Any',
+  'Text', 'Image', 'Video', 'Audio', 'Mask', 'Array', 'SVG', 'Mesh', 'World',
+  'CameraPose', 'CameraPath', 'SpatialContext', 'DepthMap', 'DepthSequence', 'PointCloud',
+  'SensorRig', 'SensorStream', 'SpatialSession', 'Character', 'Moodboard', 'CameraRig',
+  'ReferenceSet', 'Any',
 ];
 
 /** Stable output-port id for a cinema-scene shot. Used by CinemaSceneNode's

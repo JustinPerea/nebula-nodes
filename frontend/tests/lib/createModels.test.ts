@@ -21,6 +21,12 @@ describe('createModels', () => {
     expect(featured.every((m) => allIds.has(m.id))).toBe(true);
   });
 
+  it('keeps World Labs out of untracked concurrent Create runs', () => {
+    expect(getCreateModels().some((model) => model.id === 'worldlabs-environment')).toBe(false);
+    expect(getFeaturedModels().some((model) => model.id === 'worldlabs-environment')).toBe(false);
+    expect(searchModels('world labs')).toEqual([]);
+  });
+
   it('search matches display name, provider, and category (case-insensitive)', () => {
     expect(searchModels('nano').some((m) => m.id === 'nano-banana')).toBe(true);
     // Category substring match: a 'VIDEO' search surfaces every video-gen model.

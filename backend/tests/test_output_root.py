@@ -88,6 +88,23 @@ def test_serve_existing_file_returns_200(monkeypatch):
     run_dir.rmdir()
 
 
+def test_serve_spz_uses_binary_media_type():
+    """World splats must never inherit macOS's text/plain .spz mapping."""
+    root = output_mod.OUTPUT_ROOT
+    run_dir = root / "world-media-type"
+    run_dir.mkdir(parents=True, exist_ok=True)
+    asset = run_dir / "preview.spz"
+    asset.write_bytes(b"\x1f\x8b" + b"\x00" * 30)
+
+    try:
+        response = TestClient(app).get("/api/outputs/world-media-type/preview.spz")
+        assert response.status_code == 200
+        assert response.headers["content-type"] == "application/octet-stream"
+    finally:
+        asset.unlink(missing_ok=True)
+        run_dir.rmdir()
+
+
 def test_serve_path_traversal_returns_404(client):
     """A ../ traversal attempt must be rejected with 404."""
     resp = client.get("/api/outputs/../../../etc/passwd")

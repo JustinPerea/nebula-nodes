@@ -49,6 +49,7 @@ PROVIDER_KEYS = {
     "QuiverAI": "QUIVER_API_KEY",
     "Krea": "KREA_API_TOKEN",
     "Higgsfield": "HIGGSFIELD_API_KEY",
+    "World Labs": "WORLDLABS_API_KEY",
     # Nous has no settings.json key — it resolves an OAuth credential from
     # Hermes auth files via services.nous_auth.load_nous_credential().
 }
@@ -180,7 +181,9 @@ async def test_all_providers_not_configured_without_keys(monkeypatch):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("provider", [name for name in PROVIDER_KEYS if name != "Higgsfield"])
+@pytest.mark.parametrize(
+    "provider", [name for name in PROVIDER_KEYS if name not in {"Higgsfield", "World Labs"}]
+)
 async def test_valid_key_reports_valid(monkeypatch, provider):
     _set_keys(monkeypatch, {PROVIDER_KEYS[provider]: "test-key"})
     _install_client(monkeypatch, lambda url, headers: _FakeResponse(200))
@@ -193,7 +196,9 @@ async def test_valid_key_reports_valid(monkeypatch, provider):
 
 
 @pytest.mark.asyncio
-async def test_configured_provider_without_safe_probe_is_truthfully_unverified(monkeypatch):
+async def test_configured_provider_without_safe_probe_is_truthfully_unverified(
+    monkeypatch,
+):
     _set_keys(monkeypatch, {"HIGGSFIELD_API_KEY": "test-key"})
     log = _install_client(monkeypatch, lambda url, headers: _FakeResponse(200))
 
@@ -203,6 +208,41 @@ async def test_configured_provider_without_safe_probe_is_truthfully_unverified(m
     assert result["Higgsfield"]["status"] == "configured_unverified"
     assert "no safe validation probe" in result["Higgsfield"]["detail"]
     assert log == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("status_code", "expected_status", "detail_fragment"),
+    [
+        (200, "valid", None),
+        (401, "invalid", "authentication rejected"),
+        (404, "unauthorized", "not API-enabled"),
+        (503, "error", "HTTP 503"),
+    ],
+)
+async def test_world_labs_credits_probe_classifies_credentials_and_availability(
+    monkeypatch, status_code, expected_status, detail_fragment
+):
+    _set_keys(monkeypatch, {"WORLDLABS_API_KEY": "world-labs-test-key"})
+    log = _install_client(
+        monkeypatch,
+        lambda url, headers: _FakeResponse(status_code),
+    )
+
+    result = await settings_service.validate_provider_keys()
+
+    assert result["World Labs"]["configured"] is True
+    assert result["World Labs"]["status"] == expected_status
+    if detail_fragment is None:
+        assert "detail" not in result["World Labs"]
+    else:
+        assert detail_fragment in result["World Labs"]["detail"]
+    assert log == [
+        {
+            "url": "https://api.worldlabs.ai/marble/v1/credits",
+            "headers": {"WLT-Api-Key": "world-labs-test-key"},
+        }
+    ]
 
 
 @pytest.mark.asyncio
@@ -319,7 +359,9 @@ async def test_unchanged_nous_credential_reuses_health_cache(monkeypatch):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("provider", [name for name in PROVIDER_KEYS if name != "Higgsfield"])
+@pytest.mark.parametrize(
+    "provider", [name for name in PROVIDER_KEYS if name not in {"Higgsfield", "World Labs"}]
+)
 async def test_rejected_key_reports_invalid(monkeypatch, provider):
     _set_keys(monkeypatch, {PROVIDER_KEYS[provider]: "bad-key"})
     _install_client(monkeypatch, lambda url, headers: _FakeResponse(401))
@@ -392,7 +434,8 @@ async def test_each_provider_uses_its_own_endpoint_and_auth(monkeypatch):
 
     await settings_service.validate_provider_keys()
 
-    # Higgsfield is presence-only because it has no safe, non-billable probe.
+    # Higgsfield remains presence-only because it has no safe, non-billable
+    # probe. World Labs uses its authenticated credit-balance read.
     assert len(log) == len(ALL_PROVIDERS) - 1
     by_url = {req["url"]: req["headers"] for req in log}
 
@@ -439,6 +482,9 @@ async def test_each_provider_uses_its_own_endpoint_and_auth(monkeypatch):
 
     krea = by_url["https://api.krea.ai/styles"]
     assert krea["Authorization"] == "Bearer key-for-KREA_API_TOKEN"
+
+    world_labs = by_url["https://api.worldlabs.ai/marble/v1/credits"]
+    assert world_labs["WLT-Api-Key"] == "key-for-WORLDLABS_API_KEY"
 
     nous = by_url["https://inference-api.nousresearch.com/v1/models"]
     assert nous["Authorization"] == "Bearer nous-test-token"

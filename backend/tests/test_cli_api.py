@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import pytest
@@ -282,14 +283,14 @@ class TestGraphEndpoints:
         assert exported["data"]["params"]["manifest"] == updated_manifest
 
     def test_connect_nodes(self, client):
-        client.post("/api/graph/node", json={"definitionId": "node-a", "params": {}})
-        client.post("/api/graph/node", json={"definitionId": "node-b", "params": {}})
+        client.post("/api/graph/node", json={"definitionId": "text-input", "params": {}})
+        client.post("/api/graph/node", json={"definitionId": "nano-banana", "params": {}})
         resp = client.post("/api/graph/connect", json={
-            "source": "n1", "sourceHandle": "image",
-            "target": "n2", "targetHandle": "image",
+            "source": "n1", "sourceHandle": "text",
+            "target": "n2", "targetHandle": "prompt",
         })
         assert resp.status_code == 200
-        assert "n1:image" in resp.json()["connection"]
+        assert "n1:text" in resp.json()["connection"]
 
     def test_connect_unknown_node_400(self, client):
         client.post("/api/graph/node", json={"definitionId": "node-a", "params": {}})
@@ -420,11 +421,11 @@ class TestGraphEndpoints:
         assert resp.status_code == 400
 
     def test_get_graph(self, client):
-        client.post("/api/graph/node", json={"definitionId": "node-a", "params": {}})
-        client.post("/api/graph/node", json={"definitionId": "node-b", "params": {}})
+        client.post("/api/graph/node", json={"definitionId": "text-input", "params": {}})
+        client.post("/api/graph/node", json={"definitionId": "nano-banana", "params": {}})
         client.post("/api/graph/connect", json={
-            "source": "n1", "sourceHandle": "out",
-            "target": "n2", "targetHandle": "in",
+            "source": "n1", "sourceHandle": "text",
+            "target": "n2", "targetHandle": "prompt",
         })
         resp = client.get("/api/graph")
         assert resp.status_code == 200
@@ -438,6 +439,72 @@ class TestGraphEndpoints:
         assert resp.status_code == 200
         graph = client.get("/api/graph").json()
         assert len(graph["nodes"]) == 0
+
+    def test_clear_graph_requires_exact_provider_recovery_resolution(self, client):
+        import main as main_module
+
+        main_module.provider_recovery_store.set(
+            run_id="run-clear",
+            node_id="node-clear",
+            resume_operation_id="operation-clear",
+            existing_world_id=None,
+        )
+        assert main_module.provider_recovery_store.list()
+
+        resp = client.delete("/api/graph")
+
+        assert resp.status_code == 409
+        assert main_module.provider_recovery_store.list()
+        assert client.delete(
+            "/api/provider-recoveries/run-clear/node-clear"
+            "?resume_operation_id=operation-clear"
+        ).status_code == 200
+        assert client.delete("/api/graph").status_code == 200
+        assert client.get("/api/graph/export").json()["providerRecoveries"] == []
+
+    def test_delete_provider_recovery_removes_only_exact_record(self, client):
+        import main as main_module
+
+        for run_id, node_id in (("run-one", "node-a"), ("run-one", "node-b")):
+            main_module.provider_recovery_store.set(
+                run_id=run_id,
+                node_id=node_id,
+                resume_operation_id=f"operation-{node_id}",
+                existing_world_id=None,
+            )
+
+        resp = client.delete(
+            "/api/provider-recoveries/run-one/node-a"
+            "?resume_operation_id=operation-node-a"
+        )
+
+        assert resp.status_code == 200
+        assert resp.json() == {
+            "status": "deleted",
+            "runId": "run-one",
+            "nodeId": "node-a",
+            "removed": True,
+        }
+        assert main_module.provider_recovery_store.list() == [
+            {
+                "runId": "run-one",
+                "nodeId": "node-b",
+                "resumeOperationId": "operation-node-b",
+                "existingWorldId": None,
+            }
+        ]
+        # An exact retry is idempotent, but a caller still has to prove which
+        # provider identity it intended to forget.
+        retry = client.delete(
+            "/api/provider-recoveries/run-one/node-a"
+            "?resume_operation_id=operation-node-a"
+        )
+        assert retry.status_code == 200
+        assert retry.json()["removed"] is False
+        assert client.delete(
+            "/api/provider-recoveries/run-one/node-b"
+            "?resume_operation_id=operation-node-b"
+        ).status_code == 200
 
 
 class TestParamCoercion:
@@ -466,6 +533,42 @@ class TestParamCoercion:
         assert resp.status_code == 200
         assert resp.json()["params"]["target_polycount"] == 30000
         assert isinstance(resp.json()["params"]["target_polycount"], int)
+
+    def test_worldlabs_ui_defaults_preserve_optional_blank_seed(self, client):
+        definition = client.get("/api/nodes/worldlabs-environment").json()
+        ui_defaults = {
+            param["key"]: param["default"]
+            for param in definition["params"]
+            if "default" in param
+        }
+
+        # This is the exact payload shape built by graphStore.addNode. The
+        # blank integer seed means "Random"; it is not malformed numeric input.
+        assert ui_defaults["seed"] == ""
+        resp = client.post(
+            "/api/graph/node",
+            json={
+                "definitionId": "worldlabs-environment",
+                "params": ui_defaults,
+                "position": {"x": 120, "y": 80},
+            },
+        )
+
+        assert resp.status_code == 200
+        assert resp.json()["definitionId"] == "worldlabs-environment"
+        assert resp.json()["params"]["seed"] == ""
+
+    def test_required_numeric_param_still_rejects_blank_string(self, client):
+        resp = client.post(
+            "/api/graph/node",
+            json={
+                "definitionId": "claude-chat",
+                "params": {"max_tokens": ""},
+            },
+        )
+
+        assert resp.status_code == 400
+        assert "max_tokens" in resp.json()["detail"]
 
     def test_enum_and_string_pass_through(self, client):
         resp = client.post("/api/graph/node", json={
@@ -648,13 +751,46 @@ class TestOutputsRestore:
     graph JSON. The whole point: a .nebula.zip is portable — open it on any
     machine and the images come back."""
 
+    def _valid_graph(self) -> dict:
+        return {
+            "version": 3,
+            "name": "Restored graph",
+            "createdAt": "2026-09-03T00:00:00.000Z",
+            "nodes": [],
+            "edges": [],
+        }
+
     def _make_zip(self, files: dict[str, bytes]) -> bytes:
+        return self._make_zip_entries(list(files.items()))
+
+    def _make_zip_entries(
+        self,
+        entries: list[tuple[str, bytes]],
+        *,
+        compression: int | None = None,
+        include_graph: bool = True,
+    ) -> bytes:
         import io, zipfile
+        if include_graph and not any(name == "graph.json" for name, _data in entries):
+            entries = [
+                ("graph.json", json.dumps(self._valid_graph()).encode("utf-8")),
+                *entries,
+            ]
         buf = io.BytesIO()
-        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-            for name, data in files.items():
+        with zipfile.ZipFile(
+            buf,
+            "w",
+            zipfile.ZIP_DEFLATED if compression is None else compression,
+        ) as zf:
+            for name, data in entries:
                 zf.writestr(name, data)
         return buf.getvalue()
+
+    def _use_isolated_output_root(self, monkeypatch, tmp_path):
+        import main as main_module
+
+        monkeypatch.setattr(main_module, "OUTPUT_ROOT", tmp_path)
+        return main_module
 
     def test_restore_writes_files_and_returns_mapping(self, client):
         """Upload a zip with two asset files, confirm both are extracted and
@@ -671,6 +807,7 @@ class TestOutputsRestore:
         assert resp.status_code == 200
         data = resp.json()
         assert "urlMapping" in data
+        assert data["graph"] == self._valid_graph()
         mapping = data["urlMapping"]
         # Each original asset path maps to a new served URL
         assert "2026-04-24_22-10-51/n20_final.png" in mapping
@@ -705,6 +842,77 @@ class TestOutputsRestore:
         )
         assert resp.status_code == 400
 
+    @pytest.mark.parametrize(
+        "content_type",
+        ["text/plain", "application/x-zip-compressed", "application/zip; charset=binary"],
+    )
+    def test_restore_rejects_unapproved_media_type_before_reading_or_writing(
+        self, client, tmp_path, monkeypatch, content_type
+    ):
+        from unittest.mock import AsyncMock
+
+        import main as main_module
+
+        self._use_isolated_output_root(monkeypatch, tmp_path)
+        spool = AsyncMock(side_effect=AssertionError("request body was read"))
+        monkeypatch.setattr(main_module, "_spool_restore_request", spool)
+
+        response = client.post(
+            "/api/outputs/restore",
+            content=self._make_zip({"assets/demo.spz": b"asset"}),
+            headers={"content-type": content_type},
+        )
+
+        assert response.status_code == 415
+        spool.assert_not_awaited()
+        assert list(tmp_path.rglob("*")) == []
+
+    @pytest.mark.parametrize(
+        "origin",
+        [
+            "https://attacker.example",
+            "http://localhost.attacker.example:5173",
+            "null",
+            "http://127.0.0.1:5173/",
+        ],
+    )
+    def test_restore_rejects_hostile_origin_before_reading_or_writing(
+        self, client, tmp_path, monkeypatch, origin
+    ):
+        from unittest.mock import AsyncMock
+
+        import main as main_module
+
+        self._use_isolated_output_root(monkeypatch, tmp_path)
+        spool = AsyncMock(side_effect=AssertionError("request body was read"))
+        monkeypatch.setattr(main_module, "_spool_restore_request", spool)
+
+        response = client.post(
+            "/api/outputs/restore",
+            content=self._make_zip({"assets/demo.spz": b"asset"}),
+            headers={
+                "content-type": "application/zip",
+                "origin": origin,
+            },
+        )
+
+        assert response.status_code == 403
+        spool.assert_not_awaited()
+        assert list(tmp_path.rglob("*")) == []
+
+    def test_restore_accepts_local_browser_origin(self, client):
+        response = client.post(
+            "/api/outputs/restore",
+            content=self._make_zip({"assets/local.spz": b"asset"}),
+            headers={
+                "content-type": "application/zip",
+                "origin": "http://127.0.0.1:5173",
+            },
+        )
+
+        assert response.status_code == 200
+        assert "local.spz" in response.json()["urlMapping"]
+
     def test_restore_rejects_path_traversal(self, client):
         """A zip with ../ in its paths must not escape OUTPUT_ROOT."""
         zip_bytes = self._make_zip({
@@ -716,13 +924,364 @@ class TestOutputsRestore:
             content=zip_bytes,
             headers={"content-type": "application/zip"},
         )
-        # Either reject outright (400) or quietly skip the traversal entries;
-        # must not create files outside OUTPUT_ROOT. Accept either; the mapping
-        # should be empty (or not include escape paths).
-        assert resp.status_code in (200, 400)
-        if resp.status_code == 200:
-            for key in resp.json().get("urlMapping", {}).keys():
-                assert ".." not in key
+        assert resp.status_code == 400
+
+    @pytest.mark.parametrize(
+        "entries",
+        [
+            [("assets/%41.spz", b"one"), ("assets/A.spz", b"two")],
+            [("assets/caf%C3%A9.spz", b"one"), ("assets/café.spz", b"two")],
+            [("assets/É.spz", b"one"), ("assets/é.spz", b"two")],
+            [("assets/%C3%89.spz", b"one"), ("assets/%C3%A9.spz", b"two")],
+            [("assets/Ａ.spz", b"one"), ("assets/A.spz", b"two")],
+            [("assets/straße.spz", b"one"), ("assets/STRASSE.spz", b"two")],
+        ],
+    )
+    def test_restore_rejects_percent_and_unicode_alias_collisions_before_extract(
+        self, client, tmp_path, monkeypatch, entries
+    ):
+        import zipfile
+
+        self._use_isolated_output_root(monkeypatch, tmp_path)
+        response = client.post(
+            "/api/outputs/restore",
+            content=self._make_zip_entries(entries, compression=zipfile.ZIP_STORED),
+            headers={"content-type": "application/zip"},
+        )
+
+        assert response.status_code == 400
+        assert "collid" in response.json()["detail"]
+        assert list(tmp_path.rglob("*")) == []
+
+    @pytest.mark.parametrize(
+        "unsafe_name",
+        [
+            "assets/%2e%2e/escape.spz",
+            "assets/%252e%252e/escape.spz",
+            "assets/%25252e%25252e/escape.spz",
+            "assets/bad%2fname.spz",
+            "assets/bad%255cname.spz",
+            "assets/bad?.spz",
+            "assets/bad#.spz",
+            "assets/bad%23.spz",
+            "assets/control%0A.spz",
+            "assets/NUL.spz",
+            "assets/__proto__/asset.spz",
+            "assets/constructor/asset.spz",
+            # More nested encoding than the shared browser/backend policy
+            # permits must fail closed while a '%' alias remains.
+            "assets/%25252525252e%25252525252e/escape.spz",
+        ],
+    )
+    def test_restore_rejects_nested_encoded_and_nonportable_components(
+        self, client, tmp_path, monkeypatch, unsafe_name
+    ):
+        import zipfile
+
+        self._use_isolated_output_root(monkeypatch, tmp_path)
+        response = client.post(
+            "/api/outputs/restore",
+            content=self._make_zip_entries(
+                [(unsafe_name, b"unsafe")], compression=zipfile.ZIP_STORED
+            ),
+            headers={"content-type": "application/zip"},
+        )
+
+        assert response.status_code == 400
+        assert list(tmp_path.rglob("*")) == []
+
+    @pytest.mark.parametrize(
+        "archive_name",
+        ["assets/caf%C3%A9%20world.spz", "assets/café world.spz"],
+    )
+    def test_restore_unicode_path_round_trips_to_canonical_mapping(
+        self, client, tmp_path, monkeypatch, archive_name
+    ):
+        import zipfile
+
+        self._use_isolated_output_root(monkeypatch, tmp_path)
+        response = client.post(
+            "/api/outputs/restore",
+            content=self._make_zip_entries(
+                [(archive_name, b"unicode-world")],
+                compression=zipfile.ZIP_STORED,
+            ),
+            headers={"content-type": "application/zip"},
+        )
+
+        assert response.status_code == 200
+        mapping = response.json()["urlMapping"]
+        assert list(mapping) == ["caf%C3%A9%20world.spz"]
+        restored = client.get(mapping["caf%C3%A9%20world.spz"])
+        assert restored.status_code == 200
+        assert restored.content == b"unicode-world"
+
+    def test_restore_world_bundle_is_chunked_and_preserves_nested_assets(
+        self, client, tmp_path, monkeypatch
+    ):
+        main_module = self._use_isolated_output_root(monkeypatch, tmp_path)
+        monkeypatch.setattr(main_module, "RESTORE_COPY_CHUNK_BYTES", 7)
+        files = {
+            "assets/run/world/preview-100k.spz": b"spz-preview-" * 11,
+            "assets/run/world/full-res.spz": b"spz-full-" * 13,
+            "assets/run/world/panorama.png": b"\x89PNG\r\n\x1a\nworld-panorama",
+            "assets/run/world/collider.glb": b"glTF" + b"\0" * 32,
+        }
+
+        resp = client.post(
+            "/api/outputs/restore",
+            content=self._make_zip(files),
+            headers={"content-type": "application/zip"},
+        )
+
+        assert resp.status_code == 200
+        mapping = resp.json()["urlMapping"]
+        assert set(mapping) == {name[len("assets/") :] for name in files}
+        for name, expected in files.items():
+            restored = client.get(mapping[name[len("assets/") :]])
+            assert restored.status_code == 200
+            assert restored.content == expected
+
+    def test_restore_rejects_compressed_request_over_cap_without_artifacts(
+        self, client, tmp_path, monkeypatch
+    ):
+        main_module = self._use_isolated_output_root(monkeypatch, tmp_path)
+        zip_bytes = self._make_zip({"assets/a.spz": b"safe-data"})
+        monkeypatch.setattr(
+            main_module, "RESTORE_MAX_COMPRESSED_BYTES", len(zip_bytes) - 1
+        )
+
+        resp = client.post(
+            "/api/outputs/restore",
+            content=zip_bytes,
+            headers={"content-type": "application/zip"},
+        )
+
+        assert resp.status_code == 413
+        assert list(tmp_path.rglob("*")) == []
+
+    def test_restore_rejects_oversized_uncompressed_member_without_artifacts(
+        self, client, tmp_path, monkeypatch
+    ):
+        import zipfile
+
+        main_module = self._use_isolated_output_root(monkeypatch, tmp_path)
+        monkeypatch.setattr(main_module, "RESTORE_MAX_MEMBER_BYTES", 256)
+        zip_bytes = self._make_zip_entries(
+            [("assets/world.spz", b"x" * 257)], compression=zipfile.ZIP_STORED
+        )
+
+        resp = client.post(
+            "/api/outputs/restore",
+            content=zip_bytes,
+            headers={"content-type": "application/zip"},
+        )
+
+        assert resp.status_code == 413
+        assert list(tmp_path.rglob("*")) == []
+
+    def test_restore_rejects_compression_bomb_without_artifacts(
+        self, client, tmp_path, monkeypatch
+    ):
+        self._use_isolated_output_root(monkeypatch, tmp_path)
+        zip_bytes = self._make_zip({"assets/bomb.bin": b"\0" * (2 * 1024 * 1024)})
+
+        resp = client.post(
+            "/api/outputs/restore",
+            content=zip_bytes,
+            headers={"content-type": "application/zip"},
+        )
+
+        assert resp.status_code == 413
+        assert "compression ratio" in resp.json()["detail"]
+        assert list(tmp_path.rglob("*")) == []
+
+    def test_restore_rejects_too_many_members_without_artifacts(
+        self, client, tmp_path, monkeypatch
+    ):
+        main_module = self._use_isolated_output_root(monkeypatch, tmp_path)
+        monkeypatch.setattr(main_module, "RESTORE_MAX_MEMBERS", 2)
+        zip_bytes = self._make_zip(
+            {
+                "graph.json": b"{}",
+                "assets/one.spz": b"one",
+                "assets/two.spz": b"two",
+            }
+        )
+
+        resp = client.post(
+            "/api/outputs/restore",
+            content=zip_bytes,
+            headers={"content-type": "application/zip"},
+        )
+
+        assert resp.status_code == 413
+        assert "too many" in resp.json()["detail"]
+        assert list(tmp_path.rglob("*")) == []
+
+    def test_restore_corrupt_late_member_removes_partial_tree(
+        self, client, tmp_path, monkeypatch
+    ):
+        import zipfile
+
+        self._use_isolated_output_root(monkeypatch, tmp_path)
+        second_payload = b"SECOND_PAYLOAD_UNIQUE"
+        zip_bytes = bytearray(
+            self._make_zip_entries(
+                [
+                    ("assets/first.spz", b"FIRST_PAYLOAD"),
+                    ("assets/second.spz", second_payload),
+                ],
+                compression=zipfile.ZIP_STORED,
+            )
+        )
+        payload_offset = zip_bytes.find(second_payload)
+        assert payload_offset >= 0
+        zip_bytes[payload_offset] ^= 0xFF
+
+        resp = client.post(
+            "/api/outputs/restore",
+            content=bytes(zip_bytes),
+            headers={"content-type": "application/zip"},
+        )
+
+        assert resp.status_code == 400
+        assert list(tmp_path.rglob("*")) == []
+
+    @pytest.mark.parametrize(
+        "entries",
+        [
+            [("assets/World.spz", b"one"), ("assets/world.spz", b"two")],
+            [("assets/tree", b"file"), ("assets/tree/child.spz", b"child")],
+        ],
+    )
+    def test_restore_rejects_duplicate_and_file_directory_collisions(
+        self, client, tmp_path, monkeypatch, entries
+    ):
+        import zipfile
+
+        self._use_isolated_output_root(monkeypatch, tmp_path)
+        zip_bytes = self._make_zip_entries(entries, compression=zipfile.ZIP_STORED)
+
+        resp = client.post(
+            "/api/outputs/restore",
+            content=zip_bytes,
+            headers={"content-type": "application/zip"},
+        )
+
+        assert resp.status_code == 400
+        assert "collision" in resp.json()["detail"] or "colliding" in resp.json()["detail"]
+        assert list(tmp_path.rglob("*")) == []
+
+    def test_restore_rejects_zip_symlink_without_artifacts(
+        self, client, tmp_path, monkeypatch
+    ):
+        import io
+        import stat
+        import zipfile
+
+        self._use_isolated_output_root(monkeypatch, tmp_path)
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w", zipfile.ZIP_STORED) as archive:
+            member = zipfile.ZipInfo("assets/link.spz")
+            member.create_system = 3
+            member.external_attr = (stat.S_IFLNK | 0o777) << 16
+            archive.writestr(member, "../../outside")
+
+        resp = client.post(
+            "/api/outputs/restore",
+            content=buffer.getvalue(),
+            headers={"content-type": "application/zip"},
+        )
+
+        assert resp.status_code == 400
+        assert "symlink" in resp.json()["detail"]
+        assert list(tmp_path.rglob("*")) == []
+
+    def test_restore_requires_graph_json_before_extracting_assets(
+        self, client, tmp_path, monkeypatch
+    ):
+        import zipfile
+
+        self._use_isolated_output_root(monkeypatch, tmp_path)
+        zip_bytes = self._make_zip_entries(
+            [("assets/world.spz", b"provider-asset")],
+            compression=zipfile.ZIP_STORED,
+            include_graph=False,
+        )
+
+        resp = client.post(
+            "/api/outputs/restore",
+            content=zip_bytes,
+            headers={"content-type": "application/zip"},
+        )
+
+        assert resp.status_code == 400
+        assert "missing graph.json" in resp.json()["detail"]
+        assert list(tmp_path.rglob("*")) == []
+
+    def test_restore_rejects_oversized_graph_before_extracting_assets(
+        self, client, tmp_path, monkeypatch
+    ):
+        import zipfile
+
+        main_module = self._use_isolated_output_root(monkeypatch, tmp_path)
+        monkeypatch.setattr(main_module, "RESTORE_MAX_GRAPH_BYTES", 64)
+        graph_bytes = json.dumps(self._valid_graph()).encode("utf-8")
+        assert len(graph_bytes) > 64
+        zip_bytes = self._make_zip_entries(
+            [
+                ("graph.json", graph_bytes),
+                ("assets/world.spz", b"provider-asset"),
+            ],
+            compression=zipfile.ZIP_STORED,
+        )
+
+        resp = client.post(
+            "/api/outputs/restore",
+            content=zip_bytes,
+            headers={"content-type": "application/zip"},
+        )
+
+        assert resp.status_code == 413
+        assert "graph.json is too large" in resp.json()["detail"]
+        assert list(tmp_path.rglob("*")) == []
+
+    def test_restore_rejects_malformed_node_shape_before_extracting_assets(
+        self, client, tmp_path, monkeypatch
+    ):
+        import zipfile
+
+        self._use_isolated_output_root(monkeypatch, tmp_path)
+        malformed_graph = {
+            **self._valid_graph(),
+            "nodes": [
+                {
+                    "id": "broken-node",
+                    "type": "model-node",
+                    "position": {"x": 0, "y": 0},
+                    # data is deliberately absent: the old browser-only
+                    # envelope check accepted this, then threw after restore.
+                }
+            ],
+        }
+        zip_bytes = self._make_zip_entries(
+            [
+                ("graph.json", json.dumps(malformed_graph).encode("utf-8")),
+                ("assets/would-be-orphan.spz", b"provider-asset"),
+            ],
+            compression=zipfile.ZIP_STORED,
+        )
+
+        resp = client.post(
+            "/api/outputs/restore",
+            content=zip_bytes,
+            headers={"content-type": "application/zip"},
+        )
+
+        assert resp.status_code == 400
+        assert "data must be an object" in resp.json()["detail"]
+        assert list(tmp_path.rglob("*")) == []
 
 
 class TestOutputsArchive:
@@ -881,9 +1440,12 @@ class TestProviderCapabilityValidationResponse:
         graph = {**self._omni_extension_graph(), "runId": "run-validation-123"}
 
         with client.websocket_connect("/ws") as websocket:
+            initial = websocket.receive_json()
             response = client.post("/api/execute", json=graph)
             event = websocket.receive_json()
 
+        assert initial["type"] == "graphSync"
+        assert "executionStatuses" in initial
         assert response.status_code == 200
         assert response.json()["status"] == "validation_error"
         assert event["type"] == "validationError"

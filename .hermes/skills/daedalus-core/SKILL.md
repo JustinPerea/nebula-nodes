@@ -48,6 +48,17 @@ This rule is reinforced in §8 (Narration) below; if §8 and this section ever d
 7. If the cut is off: trace to the first bad joint, re-cut THERE, not later.
 8. Max 3 iterations per turn. Past that, state the limit and ask.
 
+## Live canvas selection
+
+Each in-canvas turn includes an authoritative selection snapshot before the
+user message. Treat vague references such as "these", "them", and "the
+selected nodes" as those IDs. Run `nebula selection` for the bounded current
+selection and `nebula graph` for the complete graph before mutating anything.
+
+Selection is ephemeral and can change between turns. Never cache selected IDs
+from an earlier turn, and never execute a stale ID that `nebula selection`
+reports as missing.
+
 ## Opinions (grounded in research — state them in planning)
 
 Image generation:

@@ -40,6 +40,92 @@ body:not(.app-slava-restraint) .react-flow__controls button:hover {
 .react-flow__minimap {
   border-radius: 8px;
 }
+
+.canvas-minimap-panel.react-flow__panel {
+  bottom: 84px;
+  right: 16px;
+  width: 200px;
+  height: 150px;
+  margin: 0;
+}
+
+.canvas-minimap-panel--collapsed.react-flow__panel {
+  width: 44px;
+  height: 44px;
+}
+
+.canvas-minimap-panel .react-flow__minimap {
+  position: static;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+}
+
+.canvas-minimap-toggle {
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 8px;
+  background: rgba(20, 20, 20, 0.92);
+  color: rgba(255, 255, 255, 0.72);
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+
+.canvas-minimap-toggle:hover {
+  background: rgba(38, 38, 38, 0.96);
+  border-color: rgba(255, 255, 255, 0.28);
+  color: #fff;
+}
+
+.canvas-minimap-toggle:focus-visible {
+  outline: 2px solid var(--sr-accent, #ff5a1f);
+  outline-offset: 2px;
+}
+
+.canvas-minimap-toggle--collapse {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
+  width: 30px;
+  height: 30px;
+}
+
+.canvas-minimap-toggle--restore {
+  width: 44px;
+  height: 44px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+}
+
+body.app-slava-restraint .canvas-minimap-toggle {
+  border-color: var(--sr-hairline, rgba(0, 0, 0, 0.16));
+  background: var(--sr-canvas, #f4f1ea);
+  color: var(--sr-mono, rgba(0, 0, 0, 0.66));
+}
+
+body.app-slava-restraint .canvas-minimap-toggle:hover {
+  border-color: rgba(0, 0, 0, 0.3);
+  background: #fff;
+  color: #111;
+}
+
+body.app-slava-restraint .canvas-minimap-toggle--restore {
+  border-color: var(--sr-edge, rgba(255, 255, 255, 0.1));
+  border-radius: var(--sr-radius-pill, 999px);
+  background: var(--sr-glass-raised, rgba(20, 20, 20, 0.88));
+  color: var(--sr-ink-light, rgba(255, 255, 255, 0.62));
+  box-shadow: var(--sr-shadow-panel-sm, 0 8px 24px rgba(0, 0, 0, 0.42));
+  backdrop-filter: var(--sr-blur-pill, blur(20px));
+  -webkit-backdrop-filter: var(--sr-blur-pill, blur(20px));
+}
+
+body.app-slava-restraint .canvas-minimap-toggle--restore:hover {
+  border-color: var(--sr-edge-strong, rgba(255, 255, 255, 0.18));
+  background: var(--sr-surface-control-hover, rgba(255, 255, 255, 0.05));
+  color: var(--sr-ink-bold, #fff);
+}
+
 body:not(.app-slava-restraint) .react-flow__minimap {
   background: #141414 !important;
   border: 1px solid #2a2a2a;
@@ -58,6 +144,137 @@ body.app-slava-restraint .react-flow__minimap {
   color: rgba(255, 255, 255, 0.6);
   pointer-events: none;
   user-select: none;
+}
+
+/* Contextual actions for the current canvas selection. This intentionally
+   floats above the graph instead of becoming another persistent mode bar. */
+.selection-toolbar-panel.react-flow__panel {
+  margin-top: 92px;
+  pointer-events: none;
+}
+
+.selection-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  max-width: calc(100vw - 32px);
+  min-height: 48px;
+  padding: 5px 7px 5px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 16px;
+  background: rgba(20, 20, 22, 0.94);
+  color: rgba(255, 255, 255, 0.82);
+  box-shadow: 0 16px 42px rgba(0, 0, 0, 0.38);
+  backdrop-filter: blur(22px);
+  -webkit-backdrop-filter: blur(22px);
+  pointer-events: auto;
+  animation: selection-toolbar-in 140ms ease-out both;
+}
+
+.selection-toolbar__count {
+  flex: 0 0 auto;
+  font-family: var(--sr-font-mono, 'SFMono-Regular', Consolas, monospace);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: rgba(255, 255, 255, 0.62);
+  white-space: nowrap;
+}
+
+.selection-toolbar__divider {
+  width: 1px;
+  height: 24px;
+  margin: 0 3px;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.selection-toolbar__button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 40px;
+  height: 38px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 11px;
+  background: transparent;
+  color: inherit;
+  font: 500 12px/1 var(--sr-ui, Inter, sans-serif);
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease, opacity 120ms ease;
+}
+
+.selection-toolbar__button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.09);
+  color: #fff;
+}
+
+.selection-toolbar__button:focus-visible {
+  outline: 2px solid var(--sr-accent, #ff5a1f);
+  outline-offset: 1px;
+}
+
+.selection-toolbar__button:disabled {
+  opacity: 0.34;
+  cursor: default;
+}
+
+.selection-toolbar__button--primary {
+  background: var(--sr-accent, #ff5a1f);
+  color: #fff;
+}
+
+.selection-toolbar__button--primary:hover:not(:disabled) {
+  background: var(--sr-accent-hover, #ff7040);
+}
+
+.selection-toolbar__button--danger {
+  color: rgba(255, 132, 118, 0.88);
+}
+
+.selection-toolbar__button--danger:hover:not(:disabled) {
+  background: rgba(255, 70, 60, 0.14);
+  color: #ff8f82;
+}
+
+@keyframes selection-toolbar-in {
+  from { opacity: 0; transform: translateY(-6px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@media (max-width: 1400px) {
+  .selection-toolbar {
+    padding-left: 10px;
+  }
+
+  .selection-toolbar__label--compact {
+    display: none;
+  }
+
+  .selection-toolbar__button {
+    padding-inline: 8px;
+  }
+}
+
+@media (max-width: 640px) {
+  .selection-toolbar-panel.react-flow__panel {
+    margin-top: 58px;
+  }
+
+  .selection-toolbar {
+    gap: 1px;
+    padding-left: 8px;
+  }
+
+  .selection-toolbar__button span,
+  .selection-toolbar__divider:nth-of-type(2) {
+    display: none;
+  }
+
+  .selection-toolbar__button {
+    min-width: 36px;
+    padding-inline: 7px;
+  }
 }
 body.app-slava-restraint .canvas-node-count {
   background: rgba(255, 255, 255, 0.7);
@@ -148,7 +365,3 @@ body:not(.app-slava-restraint) .react-flow__edge.animated path {
 .canvas-wrapper:not(.canvas-wrapper--slava-empty) .nn-splash {
   display: none;
 }
-
-/* Marquee select tool — crosshair cursor on the pane in select mode.
- * Scoped to app-slava-restraint (the only active skin). */
-body.app-slava-restraint .canvas--select .react-flow__pane { cursor: crosshair; }

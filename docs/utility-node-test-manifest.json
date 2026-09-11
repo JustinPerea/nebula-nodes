@@ -125,6 +125,31 @@
       "id": "reference-set",
       "backend": "mocked-handler",
       "browser": "mocked-event"
+    },
+    {
+      "id": "camera-pose",
+      "backend": "native",
+      "browser": "mocked-event"
+    },
+    {
+      "id": "camera-path",
+      "backend": "native",
+      "browser": "mocked-event"
+    },
+    {
+      "id": "spatial-context",
+      "backend": "native",
+      "browser": "mocked-event"
+    },
+    {
+      "id": "sensor-rig",
+      "backend": "native",
+      "browser": "mocked-event"
+    },
+    {
+      "id": "spatial-value-validate",
+      "backend": "native",
+      "browser": "mocked-event"
     }
   ]
 }

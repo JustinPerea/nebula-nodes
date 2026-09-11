@@ -49,10 +49,35 @@ VALID_PROVIDERS = {
     "quiver",
     "krea",
     "nous",
+    "worldlabs",
     "utility",
 }
 VALID_EXECUTION_PATTERNS = {"sync", "async-poll", "stream"}
-VALID_PORT_TYPES = {"Text", "Image", "Video", "Audio", "Mask", "Array", "SVG", "Mesh", "Character", "Moodboard", "CameraRig", "ReferenceSet", "Any"}
+VALID_PORT_TYPES = {
+    "Text",
+    "Image",
+    "Video",
+    "Audio",
+    "Mask",
+    "Array",
+    "SVG",
+    "Mesh",
+    "Character",
+    "Moodboard",
+    "CameraRig",
+    "ReferenceSet",
+    "CameraPose",
+    "CameraPath",
+    "SpatialContext",
+    "DepthMap",
+    "DepthSequence",
+    "PointCloud",
+    "SensorRig",
+    "SensorStream",
+    "SpatialSession",
+    "World",
+    "Any",
+}
 VALID_PARAM_TYPES = {"string", "integer", "float", "boolean", "enum", "textarea", "file", "palette"}
 PARAM_GROUPS = ("params", "sharedParams", "falParams", "directParams")
 
@@ -711,3 +736,49 @@ def test_video_edit_node_present_with_required_shape() -> None:
     assert node["inputPorts"][0]["dataType"] == "Video"
     assert node["outputPorts"][0]["dataType"] == "Video"
     assert node["inputPorts"][0]["required"] is True
+
+
+def test_worldlabs_nodes_pin_public_marble_contract(
+    definitions: dict[str, dict[str, Any]],
+) -> None:
+    environment = definitions["worldlabs-environment"]
+    export = definitions["worldlabs-world-export"]
+
+    assert environment["displayName"] == "World Labs Environment"
+    assert environment["apiProvider"] == "worldlabs"
+    assert environment["envKeyName"] == "WORLDLABS_API_KEY"
+    assert environment["executionPattern"] == "async-poll"
+    assert {port["id"] for port in environment["inputPorts"]} == {
+        "prompt",
+        "images",
+        "video",
+    }
+    assert next(
+        port for port in environment["inputPorts"] if port["id"] == "images"
+    )["multiple"] is True
+    assert next(
+        port for port in environment["outputPorts"] if port["id"] == "world"
+    )["dataType"] == "World"
+    assert {
+        option["value"] for option in _param_by_key(environment, "model")["options"]
+    } == {
+        "marble-1.0-draft",
+        "marble-1.0",
+        "marble-1.1",
+        "marble-1.1-plus",
+    }
+    assert _param_by_key(environment, "model")["default"] == "marble-1.1"
+    assert _param_by_key(environment, "resume_operation_id")["default"] == ""
+    assert _param_by_key(environment, "existing_world_id")["default"] == ""
+
+    assert export["apiProvider"] == "worldlabs"
+    assert export["envKeyName"] == "WORLDLABS_API_KEY"
+    assert export["executionPattern"] == "async-poll"
+    assert export["inputPorts"] == [
+        {"id": "world", "label": "World", "dataType": "World", "required": True}
+    ]
+    assert {option["value"] for option in _param_by_key(export, "format")["options"]} == {
+        "ply",
+        "glb",
+    }
+    assert _param_by_key(export, "resume_operation_id")["default"] == ""

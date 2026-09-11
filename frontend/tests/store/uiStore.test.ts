@@ -7,22 +7,35 @@ describe('uiStore', () => {
     expect(defaultRunHistoryPosition(250)).toEqual({ x: 16, y: 60 });
   });
 
-  it('treats Nodes and Assets as one exclusive left rail', () => {
-    useUIStore.setState((state) => ({
-      panels: {
-        ...state.panels,
-        library: { ...state.panels.library, visible: true },
-        assets: { ...state.panels.assets, visible: false },
-      },
-    }));
+  it('persists the minimap collapsed state', () => {
+    useUIStore.getState().setMinimapCollapsed(true);
+    expect(useUIStore.getState().minimapCollapsed).toBe(true);
+    expect(window.localStorage.getItem('nebula:canvas:minimapCollapsed')).toBe('1');
 
-    useUIStore.getState().togglePanel('assets');
-    expect(useUIStore.getState().panels.assets.visible).toBe(true);
-    expect(useUIStore.getState().panels.library.visible).toBe(false);
+    useUIStore.getState().setMinimapCollapsed(false);
+    expect(useUIStore.getState().minimapCollapsed).toBe(false);
+    expect(window.localStorage.getItem('nebula:canvas:minimapCollapsed')).toBe('0');
+  });
+
+  it('gives the workspace rail one authoritative left dock', () => {
+    useUIStore.getState().setLeftDock('library');
+
+    for (const dock of ['assets', 'history', 'settings', 'library'] as const) {
+      useUIStore.getState().togglePanel(dock);
+      const state = useUIStore.getState();
+      expect(state.leftDock).toBe(dock);
+      for (const candidate of ['library', 'assets', 'history', 'settings'] as const) {
+        expect(state.panels[candidate].visible).toBe(candidate === dock);
+      }
+    }
 
     useUIStore.getState().togglePanel('library');
-    expect(useUIStore.getState().panels.library.visible).toBe(true);
-    expect(useUIStore.getState().panels.assets.visible).toBe(false);
+    const closed = useUIStore.getState();
+    expect(closed.leftDock).toBeNull();
+    expect(closed.panels.library.visible).toBe(false);
+    expect(closed.panels.assets.visible).toBe(false);
+    expect(closed.panels.history.visible).toBe(false);
+    expect(closed.panels.settings.visible).toBe(false);
   });
 
   it('resets panel geometry without changing which panels are open', () => {
@@ -80,6 +93,7 @@ describe('uiStore', () => {
     const state = useUIStore.getState();
     expect(state.selectedNodeId).toBeNull();
     expect(state.chatResized).toBe(false);
+    expect(state.leftDock).toBe('library');
     expect(state.panels.library.visible).toBe(true);
     expect(state.panels.inspector.visible).toBe(false);
     expect(state.panels.settings.visible).toBe(false);

@@ -9,6 +9,7 @@ describe('isPortCompatible', () => {
     expect(isPortCompatible('Image', 'Image')).toBe(true);
     expect(isPortCompatible('Video', 'Video')).toBe(true);
     expect(isPortCompatible('Audio', 'Audio')).toBe(true);
+    expect(isPortCompatible('World', 'World')).toBe(true);
   });
 
   it('allows any type to connect to Any port', () => {
@@ -53,6 +54,13 @@ describe('isPortCompatible', () => {
   it('blocks Video to Audio', () => {
     expect(isPortCompatible('Video', 'Audio')).toBe(false);
   });
+
+  it('keeps World structured and only connects it to World or Any', () => {
+    expect(COMPATIBILITY.World).toEqual(['World', 'Any']);
+    expect(isPortCompatible('World', 'Mesh')).toBe(false);
+    expect(isPortCompatible('Mesh', 'World')).toBe(false);
+    expect(isPortCompatible('Any', 'World')).toBe(true);
+  });
 });
 
 describe('ReferenceSet compatibility', () => {
@@ -77,7 +85,7 @@ describe('ReferenceSet compatibility', () => {
   });
 
   it('blocks ReferenceSet to every non-ReferenceSet, non-Any type', () => {
-    const blocked = ['Text', 'Image', 'Video', 'Audio', 'Mask', 'Array', 'SVG', 'Mesh', 'Character', 'Moodboard', 'CameraRig'] as const;
+    const blocked = ['Text', 'Image', 'Video', 'Audio', 'Mask', 'Array', 'SVG', 'Mesh', 'World', 'Character', 'Moodboard', 'CameraRig'] as const;
     for (const type of blocked) {
       expect(isPortCompatible('ReferenceSet', type)).toBe(false);
     }

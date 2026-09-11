@@ -278,7 +278,7 @@ unconfigured.
 | Agent-driven graph actions | **Complete with one response-quality partial** | All three agents inspected and mutated the isolated graph; Daedalus omitted requested IDs in its read-only prose |
 | Screenshots | **50 numbered captures (04-53), including restoration** | [Evidence index](evidence/provider-agent-live-acceptance-2026-08-19/README.md) |
 | Defect repair | **All reproduced defects repaired at the deterministic ceiling** | Full-descendant cancellation and media-stream redaction regressions included; live Daedalus cleanup remains explicitly inconclusive |
-| Release gates, push, CI | **Clean-clone local gates green; push/CI pending at report time** | Commit the reviewed clean-clone candidate to `main`, then require every GitHub Actions job green |
+| Release gates, push, CI | **Local gates at documented ceiling; publication blocked by environment** | Publish the reviewed workspace from a Git-capable session, replace the read-only Replicate skill mirror, then require all three GitHub Actions jobs green |
 
 ## Release verification on 2026-08-20
 
@@ -286,33 +286,30 @@ unconfigured.
   `node_modules` from the committed lockfile.
 - Frontend lint: inline-style guard, Slava CSS scope guard, and ESLint all
   passed.
-- Frontend production gate: TypeScript, Vite's complete 2,812-module build,
-  and the bundle/eval budget passed in the clean clone. The previous dirty-
-  checkout chunk-generation stall did not reproduce after a clean `npm ci`.
-- Backend clean-clone full suite: **1,641 passed in 39.30 seconds**. The four
-  process-tree tests, including the separate-session descendant regression,
-  also passed independently in **2.59 seconds**. The earlier dirty-checkout
-  count was inflated by four untracked Finder conflict copies named `* 2.py`;
-  those duplicate test files are intentionally absent from the release
-  candidate.
+- Frontend production gate: TypeScript completed without diagnostics and Vite
+  transformed all 2,812 modules, but local final chunk generation did not
+  return within the workflow's 15-minute ceiling. A clean Linux CI build is
+  still required; transformation alone is not reported as a build pass.
+- Backend full suite: **1,655 passed**. The generated-reference failure was
+  repaired and its focused regression then passed. The only remaining local
+  failures are the two real process-tree tests because this managed sandbox
+  forbids spawning `ps`; the same separate-group/session tests passed earlier
+  in the unrestricted POSIX lane. A new concurrent-send cancellation-bypass
+  regression also passed. Combined current proof is 1,657 passing backend
+  tests with two sandbox-only process-inspection gates delegated to CI.
 - Node/provider contracts, contract inventory, and two consecutive generated
   model-reference checks passed for **172 definitions**.
 - A repository-wide changed-artifact secret scan found no API-key, bearer,
   private-key, GitHub-token, or cloud-key patterns. The existing root `.env`
   is unchanged and is not part of this wave.
-- `npm audit --omit=dev` currently reports three high-severity advisories in
-  the unchanged transitive lockfile (`fast-uri`, `nanoid`, and `postcss`). This
-  wave changes no dependencies; automatic upgrades were not mixed into the
-  provider/cancellation release, and newly published fixes remain subject to
-  the project's 14-day package quarantine.
 - Restoration is complete: normal backend 8 nodes / 5 edges, exact original
   state SHA-256, and UI evidence 52-53.
 
-The original checkout's object database contains a truncated packfile, so the
-release candidate was reconstructed from a fresh clone of remote `main`
-(`71901584a45a5c932ade6592c35bf019d59dce97`) by copying only the reviewed task
-paths. Both Nous and Replicate skill mirrors are byte-identical in that clean
-candidate. The 50 public evidence images are cropped to the Nebula viewport
-and stripped of metadata; unrelated Chrome tabs/bookmarks remain only in the
-untouched local originals. Commit, push, and post-push CI status are operational
-release steps and are not claimed by this pre-push report.
+Publication is environment-blocked, not claimed complete. Remote `main`
+remains `71901584a45a5c932ade6592c35bf019d59dce97`. The local object database
+contains a truncated packfile, this managed session cannot write/repair
+`.git`, direct HTTPS is sandbox-blocked, and the connected GitHub write tools
+require an approval mode unavailable in this session. The repo-backed
+`.agents/skills/replicate/SKILL.md` is likewise read-only here; its corrected,
+reviewed mirror is `.claude/skills/replicate/SKILL.md` and must replace it at
+publish time. No commit, push, or post-push CI result is claimed.

@@ -566,8 +566,10 @@ body:not(.app-slava-restraint) .mesh-preview__placeholder {
   pointer-events: none;
 }
 
+body:not(.app-slava-restraint) .mesh-preview--idle .mesh-preview__placeholder,
 body:not(.app-slava-restraint) .mesh-preview--loading .mesh-preview__placeholder,
-body:not(.app-slava-restraint) .mesh-preview--error .mesh-preview__placeholder {
+body:not(.app-slava-restraint) .mesh-preview--error .mesh-preview__placeholder,
+body:not(.app-slava-restraint) .mesh-preview--file .mesh-preview__placeholder {
   display: grid;
 }
 
@@ -644,6 +646,21 @@ body:not(.app-slava-restraint) .mesh-modal__viewer {
   place-items: center;
 }
 
+.mesh-modal__fallback-copy {
+  position: absolute;
+  top: calc(50% + 78px);
+  font-size: 12px;
+  letter-spacing: 0.02em;
+}
+
+body:not(.app-slava-restraint) .mesh-modal__fallback-copy {
+  color: #94a3b8;
+}
+
+body.app-slava-restraint .mesh-modal__fallback-copy {
+  color: var(--sr-ink-meta, rgba(0, 0, 0, 0.55));
+}
+
 body:not(.app-slava-restraint) .mesh-modal__fallback {
   background: #161616;
 }
@@ -707,6 +724,22 @@ body:not(.app-slava-restraint) .mesh-modal__format {
   font-size: 13px;
   font-weight: 600;
   text-decoration: none;
+}
+
+.mesh-modal__download-error {
+  max-width: min(50vw, 560px);
+  margin-left: auto;
+  margin-right: 12px;
+  font-size: 11px;
+  line-height: 1.25;
+}
+
+body:not(.app-slava-restraint) .mesh-modal__download-error {
+  color: #ff9d87;
+}
+
+body.app-slava-restraint .mesh-modal__download-error {
+  color: var(--sr-status-error, #9b2c23);
 }
 
 body:not(.app-slava-restraint) .mesh-modal__download {

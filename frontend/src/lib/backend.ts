@@ -178,10 +178,16 @@ export async function apiFetch(path: string, init?: RequestInit): Promise<Respon
   const baseUrl = await getBackendBaseUrl();
   const requestUrl = joinBackendPath(baseUrl, path);
   const send = (url: string) => (init === undefined ? fetch(url) : fetch(url, init));
+  const method = String(init?.method ?? 'GET').toUpperCase();
+  // Replaying a mutation against another discovered backend is not a retry: it
+  // is a second side effect in a different process. This is especially
+  // dangerous for paid provider starts, whose public APIs have no idempotency
+  // key. Only read-only requests may transparently rediscover and replay.
+  const mayReplayAfterDiscovery = method === 'GET' || method === 'HEAD';
 
   try {
     const response = await send(requestUrl);
-    if (shouldRetryWithDiscovery(baseUrl, response)) {
+    if (mayReplayAfterDiscovery && shouldRetryWithDiscovery(baseUrl, response)) {
       const retryBaseUrl = await getBackendBaseUrl({ force: true });
       if (retryBaseUrl !== baseUrl) {
         return send(joinBackendPath(retryBaseUrl, path));
@@ -189,15 +195,18 @@ export async function apiFetch(path: string, init?: RequestInit): Promise<Respon
     }
     return response;
   } catch (err) {
-    if (!shouldRetryWithDiscovery(baseUrl)) throw err;
+    if (!mayReplayAfterDiscovery || !shouldRetryWithDiscovery(baseUrl)) throw err;
     const retryBaseUrl = await getBackendBaseUrl({ force: true });
     if (retryBaseUrl === baseUrl) throw err;
     return send(joinBackendPath(retryBaseUrl, path));
   }
 }
 
-export async function backendWebSocketUrl(path: string): Promise<string> {
-  const baseUrl = await getBackendBaseUrl();
+export async function backendWebSocketUrl(
+  path: string,
+  options: { forceDiscovery?: boolean } = {},
+): Promise<string> {
+  const baseUrl = await getBackendBaseUrl({ force: options.forceDiscovery });
   const origin = baseUrl || window.location.origin;
   const url = new URL(joinBackendPath(origin, path));
   url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -247,6 +256,35 @@ export function rewriteBackendAssetUrls<T>(value: T): T {
   if (value && typeof value === 'object') {
     return Object.fromEntries(
       Object.entries(value).map(([key, entry]) => [key, rewriteBackendAssetUrls(entry)]),
+    ) as T;
+  }
+  return value;
+}
+
+/** Normalize an asset-bearing execution value, including structured World
+ * outputs. The backend normally emits /api/outputs URLs; the filesystem-path
+ * branch keeps older providers and replayed websocket fixtures usable without
+ * ever rewriting arbitrary Text ports. */
+export function rewriteExecutionAssetUrls<T>(value: T): T {
+  if (typeof value === 'string') {
+    if (value.startsWith('http://') || value.startsWith('https://') || value.startsWith('/api/')) {
+      return backendAssetUrlSync(value) as T;
+    }
+
+    const normalized = value.replaceAll('\\', '/');
+    const outputMarker = normalized.lastIndexOf('/output/');
+    if (outputMarker >= 0) {
+      return backendAssetUrlSync(`/api/outputs/${normalized.slice(outputMarker + '/output/'.length)}`) as T;
+    }
+    if (normalized.startsWith('output/')) {
+      return backendAssetUrlSync(`/api/outputs/${normalized.slice('output/'.length)}`) as T;
+    }
+    return value;
+  }
+  if (Array.isArray(value)) return value.map((entry) => rewriteExecutionAssetUrls(entry)) as T;
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, entry]) => [key, rewriteExecutionAssetUrls(entry)]),
     ) as T;
   }
   return value;

@@ -1,9 +1,5 @@
 # Provider and agent live-acceptance screenshots
 
-The committed copies are cropped to the Nebula application viewport and have
-image metadata removed. This keeps unrelated browser tabs and bookmarks out of
-the public repository without altering the runtime evidence.
-
 Captured in Chrome against the disposable Nebula state/output roots on
 2026-08-19. The user's normal 8-node / 5-edge graph was not used for these
 runs.

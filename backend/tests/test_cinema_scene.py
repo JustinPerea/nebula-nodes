@@ -92,6 +92,15 @@ def test_license_guard_substitutes_flux_dev() -> None:
     assert _guard_base_model({"model": "nano-banana"}) == "nano-banana"
 
 
+@pytest.mark.parametrize(
+    "model",
+    ["worldlabs-environment", "worldlabs-world-export", "replicate-universal"],
+)
+def test_base_model_guard_rejects_arbitrary_handler_registry_keys(model: str) -> None:
+    with pytest.raises(ValueError, match="Unsupported cinema base model"):
+        _guard_base_model({"model": model})
+
+
 # ---------- per-shot port mapping ----------
 
 

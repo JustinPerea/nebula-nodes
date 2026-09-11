@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
+import os
+import shutil
 import time
 from collections import deque
 from datetime import datetime, timezone
@@ -11,6 +14,13 @@ from typing import Any, Callable, Awaitable
 from uuid import uuid4
 
 from models.graph import GraphNode, GraphEdge, PortValueDict
+from models.spatial import (
+    SPATIAL_VALUE_MODELS,
+    canonicalize_world_value_v1,
+    dump_spatial_value,
+    iter_local_asset_references,
+    parse_spatial_value,
+)
 from services.cache import ExecutionCache
 from services.image_input import is_remote_or_data_uri
 from services.output import (
@@ -19,11 +29,19 @@ from services.output import (
     execution_run_dir,
     get_run_dir,
     materialize_media_value,
+    portable_output_ref,
     resolve_output_ref,
     write_manifest,
 )
 from services.document_extract import extract_text
+from services.port_contracts import (
+    ContractEdge,
+    ContractNode,
+    validate_edge_contracts,
+)
 from services.provider_capabilities import gemini_omni_capability_error
+from services.provider_operation_policy import bypasses_output_cache, operation_policy
+from services.worldlabs_capabilities import worldlabs_capability_gate
 from execution.error_classifier import classify_error
 from models.events import (
     ExecutionEvent,
@@ -42,6 +60,48 @@ logger = logging.getLogger(__name__)
 
 _DURABLE_MEDIA_TYPES = {"Image", "Video", "Audio", "Mesh", "SVG"}
 _REMOTE_HANDLE_PORTS = {"source_uri", "model_url"}
+class _CachedArtifactMissingError(FileNotFoundError):
+    """A cache entry became stale between validation and run rebinding."""
+
+
+class _CachedArtifactInvalidError(ValueError):
+    """A cached structured value no longer satisfies its port contract."""
+
+
+def _canonicalize_spatial_outputs(node_outputs: dict[str, Any]) -> dict[str, Any]:
+    """Validate structured ports before cache, downstream use, or emission."""
+
+    canonical: dict[str, Any] = {}
+    for port_id, raw_port in node_outputs.items():
+        if not isinstance(raw_port, dict):
+            canonical[port_id] = raw_port
+            continue
+        port_type = raw_port.get("type")
+        value = raw_port.get("value")
+        if port_type not in SPATIAL_VALUE_MODELS:
+            canonical[port_id] = raw_port
+            continue
+        if value is None:
+            raise ValueError(f"{port_type} output cannot be null")
+        if (
+            port_type == "World"
+            and isinstance(value, dict)
+            and value.get("schemaVersion", value.get("schema_version")) == 1
+        ):
+            legacy = canonicalize_world_value_v1(
+                value,
+                asset_uri_normalizer=lambda uri: portable_output_ref(uri, require_file=True),
+            )
+            canonical[port_id] = {**raw_port, "value": legacy}
+            continue
+        parsed = parse_spatial_value(str(port_type), value)
+        for asset in iter_local_asset_references(parsed):
+            portable_output_ref(asset.uri, require_file=True)
+        canonical[port_id] = {
+            **raw_port,
+            "value": dump_spatial_value(parsed),
+        }
+    return canonical
 
 
 async def _materialize_media_outputs(
@@ -76,6 +136,114 @@ async def _materialize_media_outputs(
         port["value"] = converted if isinstance(value, list) else converted[0]
         durable[port_id] = port
     return durable
+
+
+def _link_or_copy_cached_artifact(source: Path, destination: Path) -> None:
+    """Atomically clone an immutable cached artifact into the current run."""
+    if destination.is_file():
+        return
+    partial = destination.with_name(f".{destination.name}.{uuid4().hex[:8]}.part")
+    try:
+        try:
+            os.link(source, partial)
+        except FileNotFoundError as exc:
+            if not source.is_file():
+                raise _CachedArtifactMissingError(str(source)) from exc
+            raise
+        except OSError:
+            try:
+                shutil.copy2(source, partial)
+            except FileNotFoundError as exc:
+                if not source.is_file():
+                    raise _CachedArtifactMissingError(str(source)) from exc
+                raise
+        partial.replace(destination)
+    finally:
+        partial.unlink(missing_ok=True)
+
+
+async def _rebind_cached_output_artifacts(
+    node_outputs: dict[str, Any], run_dir: Path
+) -> dict[str, Any]:
+    """Recursively make a cache hit own every local artifact it returns.
+
+    A cache entry points at the run that first produced it. Re-emitting those
+    paths would make the new manifest omit them and allow archiving the old run
+    to break the current result. Hard-link (or cross-filesystem copy) each
+    nested artifact into the bound run, preserving duplicate references such
+    as ``World.assets.panorama`` and the separate panorama output.
+    """
+    run_root = run_dir.resolve()
+    rebound_paths: dict[Path, Path] = {}
+
+    async def rewrite(value: Any, *, portable_assets: bool) -> Any:
+        if isinstance(value, str):
+            source = _owned_output_path(value)
+            if source is None:
+                return value
+            if not source.is_file():
+                raise _CachedArtifactMissingError(str(source))
+            try:
+                source.relative_to(run_root)
+                return portable_output_ref(str(source)) if portable_assets else str(source)
+            except ValueError:
+                pass
+
+            destination = rebound_paths.get(source)
+            if destination is None:
+                digest = hashlib.sha256(str(source).encode("utf-8")).hexdigest()[:16]
+                suffix = source.suffix.lower()
+                if len(suffix) > 17 or (suffix and not suffix[1:].isalnum()):
+                    suffix = ""
+                destination = run_root / f"cache-{digest}{suffix}"
+                await asyncio.to_thread(
+                    _link_or_copy_cached_artifact,
+                    source,
+                    destination,
+                )
+                rebound_paths[source] = destination
+            return (
+                portable_output_ref(str(destination))
+                if portable_assets
+                else str(destination)
+            )
+        if isinstance(value, dict):
+            return {
+                key: await rewrite(item, portable_assets=portable_assets)
+                for key, item in value.items()
+            }
+        if isinstance(value, list):
+            return [
+                await rewrite(item, portable_assets=portable_assets)
+                for item in value
+            ]
+        if isinstance(value, tuple):
+            return tuple(
+                [
+                    await rewrite(item, portable_assets=portable_assets)
+                    for item in value
+                ]
+            )
+        return value
+
+    rebound: dict[str, Any] = {}
+    for port_id, raw_port in node_outputs.items():
+        port_type = raw_port.get("type") if isinstance(raw_port, dict) else None
+        raw_value = raw_port.get("value") if isinstance(raw_port, dict) else None
+        legacy_world = bool(
+            port_type == "World"
+            and isinstance(raw_value, dict)
+            and raw_value.get("schemaVersion", raw_value.get("schema_version")) == 1
+        )
+        portable_spatial = port_type in SPATIAL_VALUE_MODELS and not legacy_world
+        rewritten = await rewrite(raw_port, portable_assets=portable_spatial)
+        rebound[port_id] = rewritten
+    try:
+        return _canonicalize_spatial_outputs(rebound)
+    except (TypeError, ValueError) as exc:
+        raise _CachedArtifactInvalidError(
+            "cached spatial output no longer satisfies its contract"
+        ) from exc
 
 
 def _image_input_output(params: dict) -> dict:
@@ -424,12 +592,40 @@ def validate_graph(
 ) -> list[ValidationErrorDetail]:
     errors: list[ValidationErrorDetail] = []
 
-    connected_ports: set[tuple[str, str]] = set()
+    definitions = dict(NODE_DEFS)
+    definitions.update(_registry_node_defs())
+    edge_contracts = validate_edge_contracts(
+        [
+            ContractNode(node_id=node.id, definition_id=node.definition_id)
+            for node in nodes
+        ],
+        [
+            ContractEdge(
+                edge_id=edge.id,
+                source=edge.source,
+                source_handle=edge.source_handle,
+                target=edge.target,
+                target_handle=edge.target_handle,
+            )
+            for edge in edges
+        ],
+        definitions,
+    )
+    errors.extend(
+        ValidationErrorDetail(
+            node_id=issue.node_id,
+            port_id=issue.port_id,
+            message=issue.message,
+        )
+        for issue in edge_contracts.issues
+    )
+
+    connected_ports = set(edge_contracts.valid_connected_inputs)
     node_by_id = {node.id: node for node in nodes}
     incoming_edges: dict[str, list[GraphEdge]] = {node.id: [] for node in nodes}
-    for edge in edges:
-        if edge.target_handle:
-            connected_ports.add((edge.target, edge.target_handle))
+    for index, edge in enumerate(edges):
+        if index not in edge_contracts.valid_edge_indexes:
+            continue
         if edge.target in incoming_edges:
             incoming_edges[edge.target].append(edge)
 
@@ -636,41 +832,69 @@ async def _execute_graph(
 
     async def run_node(nid: str) -> tuple[str, bool, int]:
         node = node_map[nid]
-        registered_node_def = _node_def_for(node.definition_id) or {}
+        registered_node_def = _node_def_for(node.definition_id)
+        definition_metadata = registered_node_def or {}
+        provider_policy = operation_policy(node.definition_id)
+        handler = handler_registry.get(node.definition_id)
         materialize_provider_outputs = (
-            registered_node_def.get("apiProvider") not in {None, "utility"}
+            definition_metadata.get("apiProvider") not in {None, "utility"}
         )
         await emit(ExecutingEvent(node_id=nid))
         resolved_inputs = resolve_inputs(nid)
 
         try:
+            if (
+                definition_metadata.get("apiProvider") == "worldlabs"
+                or (
+                    provider_policy is not None
+                    and provider_policy.provider == "worldlabs"
+                )
+            ):
+                worldlabs_capability_gate.require_worldlabs_execution(
+                    node.definition_id,
+                    handler,
+                    node_definition=registered_node_def,
+                )
             cache_key: str | None = None
-            if cache is not None:
+            cache_enabled = (
+                cache is not None
+                and not bypasses_output_cache(node.definition_id)
+            )
+            if cache_enabled:
                 inputs_for_key = {
                     k: {"type": v.type, "value": v.value}
                     for k, v in resolved_inputs.items()
                 }
                 cache_key = ExecutionCache.get_key(
-                    node.definition_id, dict(node.params), inputs_for_key
+                    node.definition_id, dict(node.params), inputs_for_key, node_id=node.id
                 )
                 cached_outputs = cache.get(cache_key)
                 if cached_outputs is not None:
-                    durable_cached_outputs = (
-                        await _materialize_media_outputs(cached_outputs, bound_run_dir)
-                        if materialize_provider_outputs
-                        else cached_outputs
-                    )
-                    if durable_cached_outputs != cached_outputs:
-                        cache.set(cache_key, durable_cached_outputs)
-                    cached_outputs = durable_cached_outputs
-                    outputs_cache[nid] = {
-                        k: PortValueDict(type=v.get("type", "Any"), value=v.get("value"))
-                        for k, v in cached_outputs.items()
-                    }
-                    await emit(ExecutedEvent(node_id=nid, outputs=cached_outputs))
-                    return nid, True, 1
+                    try:
+                        durable_cached_outputs = (
+                            await _materialize_media_outputs(cached_outputs, bound_run_dir)
+                            if materialize_provider_outputs
+                            else cached_outputs
+                        )
+                        rebound_cached_outputs = await _rebind_cached_output_artifacts(
+                            durable_cached_outputs,
+                            bound_run_dir,
+                        )
+                    except (_CachedArtifactMissingError, _CachedArtifactInvalidError):
+                        # The source disappeared after cache.get() verified it.
+                        # Treat this narrow race exactly like a normal stale miss.
+                        cache.delete(cache_key)
+                    else:
+                        if rebound_cached_outputs != cached_outputs:
+                            cache.set(cache_key, rebound_cached_outputs)
+                        cached_outputs = rebound_cached_outputs
+                        outputs_cache[nid] = {
+                            k: PortValueDict(type=v.get("type", "Any"), value=v.get("value"))
+                            for k, v in cached_outputs.items()
+                        }
+                        await emit(ExecutedEvent(node_id=nid, outputs=cached_outputs))
+                        return nid, True, 1
 
-            handler = handler_registry.get(node.definition_id)
             if handler is None:
                 if node.definition_id == "text-input":
                     text_value = node.params.get("value", "")
@@ -920,12 +1144,14 @@ async def _execute_graph(
                     node_outputs, bound_run_dir
                 )
 
+            node_outputs = _canonicalize_spatial_outputs(node_outputs)
+
             outputs_cache[nid] = {
                 k: PortValueDict(type=v.get("type", "Any"), value=v.get("value"))
                 for k, v in node_outputs.items()
             }
 
-            if cache is not None and cache_key is not None and handler is not None:
+            if cache_enabled and cache is not None and cache_key is not None and handler is not None:
                 cache.set(cache_key, node_outputs)
 
             await _maybe_probe_video_output(node, node_outputs)
@@ -1022,12 +1248,12 @@ async def _execute_graph(
     await emit(GraphCompleteEvent(duration=round(duration, 3), nodes_executed=nodes_executed))
 
 
-def _local_output_file(value: Any) -> Path | None:
-    """Resolve an output value to an existing file under OUTPUT_ROOT, else None.
+def _owned_output_path(value: Any) -> Path | None:
+    """Resolve an output value to a contained path under OUTPUT_ROOT.
 
     Remote URLs, data URIs, non-string values, paths outside OUTPUT_ROOT, and
-    missing files are all skipped — only files the run actually wrote to the
-    output tree belong in the manifest.
+    relative strings are skipped. The path need not currently exist so cache
+    rebinding can distinguish a raced deletion from ordinary text.
     """
     if not isinstance(value, str) or not value:
         return None
@@ -1047,7 +1273,36 @@ def _local_output_file(value: Any) -> Path | None:
         path.relative_to(OUTPUT_ROOT.resolve())
     except (ValueError, OSError):
         return None
-    return path if path.is_file() else None
+    return path
+
+
+def _local_output_file(value: Any) -> Path | None:
+    """Resolve an output value to an existing file under OUTPUT_ROOT, else None."""
+    path = _owned_output_path(value)
+    return path if path is not None and path.is_file() else None
+
+
+def _nested_output_values(value: Any):
+    """Yield leaf values from a structured port without looping on cycles."""
+    stack = [value]
+    seen_containers: set[int] = set()
+    while stack:
+        current = stack.pop()
+        if isinstance(current, dict):
+            identity = id(current)
+            if identity in seen_containers:
+                continue
+            seen_containers.add(identity)
+            stack.extend(reversed(tuple(current.values())))
+            continue
+        if isinstance(current, (list, tuple, set)):
+            identity = id(current)
+            if identity in seen_containers:
+                continue
+            seen_containers.add(identity)
+            stack.extend(reversed(tuple(current)))
+            continue
+        yield current
 
 
 def _collect_manifest_records(
@@ -1062,17 +1317,21 @@ def _collect_manifest_records(
     different manifest directory.
     """
     files: list[tuple[str, Path]] = []  # (node_id, path), topological order
+    seen_files: set[tuple[str, Path]] = set()
     for nid in order:
         node_outputs = outputs_cache.get(nid)
         if not node_outputs:
             continue
         for port_value in node_outputs.values():
-            raw = port_value.value
-            values = raw if isinstance(raw, list) else [raw]
-            for value in values:
+            for value in _nested_output_values(port_value.value):
                 path = _local_output_file(value)
-                if path is not None:
-                    files.append((nid, path))
+                if path is None:
+                    continue
+                identity = (nid, path.resolve())
+                if identity in seen_files:
+                    continue
+                seen_files.add(identity)
+                files.append((nid, identity[1]))
 
     records: list[dict[str, Any]] = []
     resolved_run_dir = run_dir.resolve()

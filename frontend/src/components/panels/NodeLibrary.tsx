@@ -32,7 +32,6 @@ const CATEGORY_LABELS: Record<string, string> = {
 
 export function NodeLibrary() {
   const visible = useUIStore((s) => s.panels.library.visible);
-  const position = useUIStore((s) => s.panels.library.position);
   const search = useUIStore((s) => s.librarySearch);
   const setSearch = useUIStore((s) => s.setLibrarySearch);
   const togglePanel = useUIStore((s) => s.togglePanel);
@@ -43,10 +42,8 @@ export function NodeLibrary() {
   const collapsed = useUIStore((s) => s.libraryCollapsed);
   const toggleCategory = useUIStore((s) => s.toggleLibraryCategory);
   const setAllLibraryCategories = useUIStore((s) => s.setAllLibraryCategories);
-  const dragRef = useRef<{ startX: number; startY: number; panelX: number; panelY: number } | null>(null);
   const emptyDragImageRef = useRef<HTMLCanvasElement | null>(null);
   const reservedClickPositionsRef = useRef<NodePosition[]>([]);
-  const setPanelPosition = useUIStore((s) => s.setPanelPosition);
   const [dragPreview, setDragPreview] = useState<{
     label: string;
     category: string;
@@ -86,27 +83,6 @@ export function NodeLibrary() {
     }
     return result;
   }, [grouped, search]);
-
-  useEffect(() => {
-    function onMouseMove(e: MouseEvent) {
-      if (!dragRef.current) return;
-      const dx = e.clientX - dragRef.current.startX;
-      const dy = e.clientY - dragRef.current.startY;
-      setPanelPosition('library', {
-        x: dragRef.current.panelX + dx,
-        y: dragRef.current.panelY + dy,
-      });
-    }
-    function onMouseUp() {
-      dragRef.current = null;
-    }
-    window.addEventListener('mousemove', onMouseMove);
-    window.addEventListener('mouseup', onMouseUp);
-    return () => {
-      window.removeEventListener('mousemove', onMouseMove);
-      window.removeEventListener('mouseup', onMouseUp);
-    };
-  }, [setPanelPosition]);
 
   useEffect(() => {
     if (skin !== 'slava-restraint') {
@@ -197,20 +173,9 @@ export function NodeLibrary() {
 
   return (
     <div
-      className={`panel panel--library${exiting ? ' panel--exiting' : ''}`}
-      style={{ left: position.x, top: position.y }}
+      className={`panel panel--library workspace-dock-panel${exiting ? ' panel--exiting' : ''}`}
     >
-      <div
-        className="panel__header"
-        onMouseDown={(e) => {
-          dragRef.current = {
-            startX: e.clientX,
-            startY: e.clientY,
-            panelX: position.x,
-            panelY: position.y,
-          };
-        }}
-      >
+      <div className="panel__header">
         <span className="panel__title">Nodes</span>
         <button
           type="button"

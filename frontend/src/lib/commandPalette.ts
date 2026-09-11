@@ -27,7 +27,7 @@ export interface PaletteContext {
   load: () => void;
   fitView: () => void;
   enterCreateView: () => void;
-  togglePanel: (p: 'library' | 'inspector' | 'settings' | 'chat' | 'assets') => void;
+  togglePanel: (p: 'library' | 'inspector' | 'settings' | 'chat' | 'assets' | 'history') => void;
   setSkin: (s: SkinId) => void;
   startAgentQuery: () => void;
   canRun: boolean;
@@ -36,7 +36,7 @@ export interface PaletteContext {
   focusNode: (id: string) => void;
 }
 
-type PanelKey = 'library' | 'inspector' | 'settings' | 'chat' | 'assets';
+type PanelKey = 'library' | 'inspector' | 'settings' | 'chat' | 'assets' | 'history';
 
 const PANELS: Array<[PanelKey, string]> = [
   ['library', 'Node Library'],
@@ -44,6 +44,7 @@ const PANELS: Array<[PanelKey, string]> = [
   ['settings', 'Settings'],
   ['chat', 'Chat'],
   ['assets', 'Assets'],
+  ['history', 'Run History'],
 ];
 
 export function buildCommands(ctx: PaletteContext): PaletteCommand[] {

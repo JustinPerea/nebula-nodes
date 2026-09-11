@@ -8,19 +8,22 @@ import { AssetsPanel } from './components/panels/AssetsPanel';
 import { RunHistoryPanel } from './components/panels/RunHistoryPanel';
 import { Settings } from './components/panels/Settings';
 import { Toolbar } from './components/panels/Toolbar';
-import { PanelLaunchers } from './components/panels/PanelLaunchers';
+import { WorkspaceRail } from './components/WorkspaceRail';
+import { ChatLauncher } from './components/ChatLauncher';
 import { NodeInspectorPopover } from './components/panels/NodeInspectorPopover';
 import { ChatPanel } from './components/panels/ChatPanel';
 import { AgentLog } from './components/panels/AgentLog';
 import { CommandPalette } from './components/CommandPalette';
 import { OnboardingOverlay } from './components/onboarding/OnboardingOverlay';
 import { BackendConnectionStatus } from './components/BackendConnectionStatus';
+import { ProviderRecoveryStatus } from './components/ProviderRecoveryStatus';
 import { startWorkingBadge } from './lib/jobNotifications';
 import { getSettings, fetchCLIGraph } from './lib/api';
 import { useUIStore } from './store/uiStore';
 import { useGraphStore } from './store/graphStore';
 import { useZoomManifest } from './hooks/useZoomManifest';
 import { NODE_DEFINITIONS } from './constants/nodeDefinitions';
+import { computeCanvasFitPadding } from './lib/canvasFit';
 import type { NodeData } from './types';
 import './App.css';
 import './styles/layouts.css';
@@ -82,9 +85,11 @@ function GraphHydrator() {
   const { fitView } = useReactFlow();
 
   useEffect(() => {
-    if (useGraphStore.getState().nodes.length > 0) return;
-
     let cancelled = false;
+    // A persisted running World Labs record owns the global paid-start lock
+    // before the Canvas becomes interactive. Reconcile its client-owned run ID
+    // independently of whether cli_graph is empty or reachable.
+    void useGraphStore.getState().reconcilePersistedWorldLabsRun();
     (async () => {
       try {
         const data = await fetchCLIGraph();
@@ -93,7 +98,18 @@ function GraphHydrator() {
         // always set before its fetch resolves. The store-state check lets a
         // mount-2 fetch successfully load, while mount-1's stale fetch sees
         // the populated store and bails.
-        if (cancelled || useGraphStore.getState().nodes.length > 0) return;
+        if (cancelled) return;
+        // Paid-provider recovery is independent of cli_graph. Hydrate the
+        // exact persisted run snapshot even when the backend graph is empty
+        // or this browser has no live copy of a frontend-only UUID node.
+        useGraphStore.getState().hydrateProviderRecoveries(data.providerRecoveries ?? []);
+        useGraphStore.getState().hydrateProviderStartAmbiguities(
+          data.providerStartAmbiguities ?? [],
+        );
+        if (data.executionStatuses !== undefined) {
+          useGraphStore.getState().hydrateExecutionStatuses(data.executionStatuses);
+        }
+        if (useGraphStore.getState().nodes.length > 0) return;
         if (data.empty) {
           useUIStore.getState().resetPanelsForFreshCanvas();
           maybeStartOnboarding();
@@ -102,8 +118,9 @@ function GraphHydrator() {
         useGraphStore.getState().loadGraph(
           data.nodes as Node<NodeData>[],
           data.edges as Edge[],
+          { allowDuringExecution: true },
         );
-        setTimeout(() => fitView({ padding: 0.2, duration: 300 }), 50);
+        setTimeout(() => fitView({ padding: computeCanvasFitPadding(), duration: 300 }), 50);
       } catch {
         if (cancelled) return;
         // Backend down on first load: keep the blank canvas clean. The graph
@@ -240,6 +257,7 @@ export default function App() {
   return (
     <ReactFlowProvider>
       <BackendConnectionStatus />
+      <ProviderRecoveryStatus />
       <GraphHydrator />
       <ZoomManifestRecorder />
       {!isBrandShowcase && <CanvasTabs />}
@@ -260,7 +278,8 @@ export default function App() {
       {isCanvas && <NodeInspectorPopover />}
       {isCanvas && <Settings />}
       {!isBrandShowcase && <ChatPanel />}
-      {isCanvas && <PanelLaunchers />}
+      {isCanvas && <WorkspaceRail />}
+      {isCanvas && <ChatLauncher />}
       {isCanvas && <Toolbar />}
       {isCanvas && <AgentLog />}
       {!isBrandShowcase && <CommandPalette />}

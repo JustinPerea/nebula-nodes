@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from typing import Any
 
 
@@ -172,6 +173,43 @@ def format_graph(state: dict[str, Any], node_defs: dict[str, dict[str, Any]] | N
             lines.append(f"  {e['source']}:{e['sourceHandle']} -> {e['target']}:{e['targetHandle']}")
 
     lines.append("")
+    return "\n".join(lines)
+
+
+def format_selection(selection: dict[str, Any]) -> str:
+    """Format the bounded live canvas selection for human and agent callers."""
+    nodes = selection.get("nodes", [])
+    if not nodes:
+        return "No live canvas nodes selected."
+
+    lines = [f"SELECTED NODES ({len(nodes)}):"]
+    for node in nodes:
+        node_id = node.get("id", "?")
+        name = node.get("displayName") or node.get("definitionId") or "unknown"
+        definition_id = node.get("definitionId", "unknown")
+        lines.append(f"  {node_id:<8}{name} ({definition_id})")
+        params = node.get("params")
+        if params:
+            lines.append(f"    params: {json.dumps(params, ensure_ascii=False, sort_keys=True)}")
+        output_ports = node.get("outputPorts") or []
+        if output_ports:
+            lines.append(f"    outputs: {', '.join(str(port) for port in output_ports)}")
+
+    connections = selection.get("connections", [])
+    if connections:
+        lines.append("")
+        lines.append("RELATED CONNECTIONS:")
+        for edge in connections:
+            lines.append(
+                f"  [{edge.get('relation', 'related')}] "
+                f"{edge.get('source')}:{edge.get('sourceHandle')} -> "
+                f"{edge.get('target')}:{edge.get('targetHandle')}"
+            )
+
+    missing = selection.get("missingNodeIds") or []
+    if missing:
+        lines.append("")
+        lines.append("Ignored stale IDs: " + ", ".join(str(node_id) for node_id in missing))
     return "\n".join(lines)
 
 

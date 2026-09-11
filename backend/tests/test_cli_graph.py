@@ -1,3 +1,6 @@
+import os
+from unittest.mock import patch
+
 import pytest
 from services.cli_graph import CLIGraph
 
@@ -178,3 +181,47 @@ class TestAutoPersist:
         g = CLIGraph()
         g.add_node("node-a", {})
         assert list(tmp_path.iterdir()) == []
+
+    def test_replace_persists_candidate_before_mutating_live_memory(self, tmp_path):
+        path = tmp_path / "state.json"
+        live = CLIGraph(persist_path=path)
+        live.add_node("node-old", {"value": "keep"})
+        before = live.get_state()
+
+        candidate = live.clone()
+        candidate.add_node("node-new", {})
+        with patch.object(CLIGraph, "_save_state", side_effect=OSError("disk full")):
+            with pytest.raises(OSError, match="disk full"):
+                live.replace_with(candidate)
+
+        assert live.get_state() == before
+        restored = CLIGraph()
+        restored.load(path)
+        assert restored.get_state() == before
+
+    def test_directory_fsync_failure_after_rename_keeps_disk_and_memory_aligned(
+        self, tmp_path, monkeypatch
+    ):
+        path = tmp_path / "state.json"
+        live = CLIGraph(persist_path=path)
+        live.add_node("node-old", {})
+        candidate = live.clone()
+        candidate.add_node("node-new", {})
+
+        real_fsync = os.fsync
+        calls = 0
+
+        def fail_directory_sync(fd):
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                raise OSError("directory sync unavailable")
+            return real_fsync(fd)
+
+        monkeypatch.setattr("services.cli_graph.os.fsync", fail_directory_sync)
+        live.replace_with(candidate)
+
+        restored = CLIGraph()
+        restored.load(path)
+        assert live.get_state() == candidate.get_state()
+        assert restored.get_state() == candidate.get_state()

@@ -339,14 +339,15 @@ def _build_skill_bootstrap(message: str) -> str:
     return "\n".join(lines)
 
 
-def _build_prompt(message: str) -> str:
+def _build_prompt(message: str, selection_context: str | None = None) -> str:
     # Import lazily to avoid a module-load cycle: chat_session imports this
     # module when it builds AGENT_RUNNERS.
     from services.chat_session import NEBULA_SYSTEM_PRIMER
 
     skill_bootstrap = _build_skill_bootstrap(message)
+    live_context = f"\n\n{selection_context}" if selection_context else ""
     return (
-        f"{NEBULA_SYSTEM_PRIMER}\n\n"
+        f"{NEBULA_SYSTEM_PRIMER}{live_context}\n\n"
         f"{skill_bootstrap}\n\n"
         "You are the Codex agent selected in Nebula's chat panel. Follow the "
         "Nebula workflow above and keep chat responses concise; the canvas is "
@@ -473,6 +474,7 @@ async def run_codex(
     model: str = "",
     autonomy: str = "auto",
     provider: str | None = None,
+    selection_context: str | None = None,
 ) -> AsyncIterator[dict[str, Any]]:
     """Run one Codex turn and yield normalized chat events."""
     # Accepted for runner signature parity. Codex auth/provider selection lives
@@ -493,7 +495,7 @@ async def run_codex(
         args.append("-")
 
     env = _codex_exec_env()
-    prompt = _build_prompt(message)
+    prompt = _build_prompt(message, selection_context)
 
     try:
         proc = await asyncio.create_subprocess_exec(

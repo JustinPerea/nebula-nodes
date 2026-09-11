@@ -1,14 +1,12 @@
 import { useEffect, useCallback } from 'react';
 import { useReactFlow } from '@xyflow/react';
 import {
-  BoxSelect,
   FolderOpen,
   Maximize2,
   Network,
   Play,
   RotateCcw,
   Save,
-  Settings,
   Square,
   Terminal,
   Trash2,
@@ -19,32 +17,38 @@ import { useGraphStore } from '../../store/graphStore';
 import { saveToFile, loadFromFile } from '../../lib/graphFile';
 import { fetchCLIGraph } from '../../lib/api';
 import { apiFetch } from '../../lib/backend';
+import { computeCanvasFitPadding } from '../../lib/canvasFit';
 import type { NodeData } from '../../types';
 import type { Edge, Node } from '@xyflow/react';
 import '../../styles/panels.css';
 
 export function Toolbar() {
   const { fitView, getViewport } = useReactFlow();
-  const togglePanel = useUIStore((s) => s.togglePanel);
-  const panels = useUIStore((s) => s.panels);
-  const canvasTool = useUIStore((s) => s.canvasTool);
-  const setCanvasTool = useUIStore((s) => s.setCanvasTool);
   const executeGraph = useGraphStore((s) => s.executeGraph);
   const cancelExecution = useGraphStore((s) => s.cancelExecution);
   const isExecuting = useGraphStore((s) => s.isExecuting);
+  const isCancelling = useGraphStore((s) => s.isCancelling);
+  const providerStartAmbiguities = useGraphStore((s) => s.providerStartAmbiguities);
   const nodeCount = useGraphStore((s) => s.nodes.length);
   const autoLayout = useGraphStore((s) => s.autoLayout);
   const resetPanelLayout = useUIStore((s) => s.resetPanelLayout);
 
   const handleSave = useCallback(async () => {
-    const { nodes, edges } = useGraphStore.getState();
+    const { nodes, edges, isExecuting: executing, providerStartAmbiguities: ambiguities } = useGraphStore.getState();
+    // Never serialize a pre-checkpoint paid node while its start is unsettled.
+    // Recovery hydration overlays durable IDs onto live params; an ambiguity
+    // has no safe ID and remains unsaveable until Marble is checked.
+    if (executing || ambiguities.length > 0) return;
     const viewport = getViewport();
     await saveToFile(nodes as Node<NodeData>[], edges, viewport);
   }, [getViewport]);
 
   const handleLoad = useCallback(async () => {
+    if (useGraphStore.getState().isExecuting) return;
     const result = await loadFromFile();
     if (!result) return; // User cancelled
+    // The file picker may have stayed open while a run started elsewhere.
+    if (useGraphStore.getState().isExecuting) return;
 
     if (result.warnings.length > 0) {
       console.warn('[nebula] Load warnings:', result.warnings);
@@ -79,24 +83,40 @@ export function Toolbar() {
       }
       const imported = (await res.json()) as { nodes: Node<NodeData>[]; edges: Edge[] };
       useGraphStore.getState().loadGraph(imported.nodes, imported.edges);
-      setTimeout(() => fitView({ padding: 0.2, duration: 300 }), 120);
+      setTimeout(() => fitView({ padding: computeCanvasFitPadding(), duration: 300 }), 120);
     } catch (err) {
       console.error('Graph import failed; existing graph preserved:', err);
       alert(err instanceof Error ? err.message : 'Graph import failed. Existing graph was preserved.');
     }
   }, [fitView]);
 
-  const handleClear = useCallback(() => {
+  const handleClear = useCallback(async () => {
+    if (useGraphStore.getState().isExecuting) return;
     const { nodes } = useGraphStore.getState();
     const msg =
       nodes.length > 0
         ? `Clear the canvas and wipe cli_graph? ${nodes.length} node${nodes.length === 1 ? '' : 's'} will be removed. This can't be undone from here (save first if you want a copy).`
         : `Wipe cli_graph? This removes any phantom nodes from prior sessions.`;
     if (!window.confirm(msg)) return;
-    useGraphStore.getState().clearGraph();
-    // Also wipe the backend's in-memory cli_graph so Claude starts fresh and
-    // nothing from prior sessions comes back on the next graphSync.
-    apiFetch('/api/graph', { method: 'DELETE' }).catch(() => {});
+    if (useGraphStore.getState().isExecuting) return;
+    // Confirm the backend clear before replacing the local graph. The backend
+    // rejects this while any tracked execution owns provider lifecycle state.
+    try {
+      const response = await apiFetch('/api/graph', { method: 'DELETE' });
+      if (!response.ok) {
+        let detail = '';
+        try { detail = (await response.json()).detail ?? ''; } catch {
+          /* Status fallback below. */
+        }
+        throw new Error(detail || `Clear failed: HTTP ${response.status}.`);
+      }
+      // A successful backend clear proves no provider safety record remains;
+      // unlike ordinary snapshot hydration, this is authoritative removal.
+      useGraphStore.setState({ providerRecoveries: [], providerStartAmbiguities: [] });
+      useGraphStore.getState().clearGraph();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Could not clear the graph.');
+    }
   }, []);
 
   const handleResetLayout = useCallback(() => {
@@ -123,8 +143,10 @@ export function Toolbar() {
   }, [resetPanelLayout]);
 
   const handleImportCLI = useCallback(async () => {
+    if (useGraphStore.getState().isExecuting) return;
     try {
       const data = await fetchCLIGraph();
+      if (useGraphStore.getState().isExecuting) return;
       if (data.empty) {
         alert('CLI graph is empty — build one with the nebula CLI first.');
         return;
@@ -133,7 +155,7 @@ export function Toolbar() {
         data.nodes as Node<NodeData>[],
         data.edges as Edge[],
       );
-      setTimeout(() => fitView({ padding: 0.2, duration: 300 }), 50);
+      setTimeout(() => fitView({ padding: computeCanvasFitPadding(), duration: 300 }), 50);
     } catch {
       alert('Could not fetch CLI graph — is the backend running?');
     }
@@ -161,10 +183,12 @@ export function Toolbar() {
         <button
           className="toolbar__button toolbar__button--executing"
           onClick={() => void cancelExecution()}
-          title="Cancel execution"
+          disabled={isCancelling}
+          aria-busy={isCancelling}
+          title={isCancelling ? 'Waiting for execution to stop safely' : 'Cancel execution'}
         >
           <ToolbarIcon name="stop" />
-          <span className="toolbar__label">Stop</span>
+          <span className="toolbar__label">{isCancelling ? 'Stopping…' : 'Stop'}</span>
         </button>
       ) : (
         <button
@@ -178,24 +202,48 @@ export function Toolbar() {
         </button>
       )}
       <div className="toolbar__divider" />
-      <button className="toolbar__button" onClick={handleSave} title="Save graph (Ctrl+S)">
+      <button
+        className="toolbar__button"
+        onClick={handleSave}
+        disabled={isExecuting || providerStartAmbiguities.length > 0}
+        title={isExecuting
+          ? 'Wait for the active run to finish before saving'
+          : providerStartAmbiguities.length > 0
+            ? 'Resolve the World Labs paid-start review before saving'
+            : 'Save graph (Ctrl+S)'}
+      >
         <ToolbarIcon name="save" />
         <span className="toolbar__label">Save</span>
       </button>
-      <button className="toolbar__button" onClick={handleLoad} title="Load graph (Ctrl+O)">
+      <button
+        className="toolbar__button"
+        onClick={handleLoad}
+        disabled={isExecuting}
+        title={isExecuting ? 'Wait for the active run to finish' : 'Load graph (Ctrl+O)'}
+      >
         <ToolbarIcon name="load" />
         <span className="toolbar__label">Load</span>
       </button>
-      <button className="toolbar__button" onClick={handleImportCLI} title="Import graph built by nebula CLI">
+      <button
+        className="toolbar__button"
+        onClick={handleImportCLI}
+        disabled={isExecuting}
+        title={isExecuting ? 'Wait for the active run to finish' : 'Import graph built by nebula CLI'}
+      >
         <ToolbarIcon name="cli" />
         <span className="toolbar__label">CLI</span>
       </button>
-      <button className="toolbar__button" onClick={handleClear} title="Clear canvas and backend cli_graph">
+      <button
+        className="toolbar__button"
+        onClick={() => void handleClear()}
+        disabled={isExecuting}
+        title={isExecuting ? 'Wait for the active run to finish' : 'Clear canvas and backend cli_graph'}
+      >
         <ToolbarIcon name="clear" />
         <span className="toolbar__label">Clear</span>
       </button>
       <div className="toolbar__divider" />
-      <button className="toolbar__button" onClick={() => fitView({ padding: 0.2, duration: 300 })} title="Fit to screen">
+      <button className="toolbar__button" onClick={() => fitView({ padding: computeCanvasFitPadding(), duration: 300 })} title="Fit to screen">
         <ToolbarIcon name="fit" />
         <span className="toolbar__label">Fit</span>
       </button>
@@ -208,28 +256,9 @@ export function Toolbar() {
         <ToolbarIcon name="layout" />
         <span className="toolbar__label">Layout</span>
       </button>
-      <button
-        className={`toolbar__button${canvasTool === 'select' ? ' toolbar__button--active' : ''}`}
-        onClick={() => setCanvasTool(canvasTool === 'select' ? 'pan' : 'select')}
-        title="Marquee select — drag to select nodes"
-        aria-pressed={canvasTool === 'select'}
-      >
-        <ToolbarIcon name="select" />
-        <span className="toolbar__label">Select</span>
-      </button>
       <button className="toolbar__button" onClick={handleResetLayout} title="Reset panel positions and sizes">
         <ToolbarIcon name="reset" />
         <span className="toolbar__label">Reset</span>
-      </button>
-      <div className="toolbar__divider" />
-      <button
-        className={`toolbar__button${panels.settings.visible ? ' toolbar__button--active' : ''}`}
-        onClick={() => togglePanel('settings')}
-        title="Settings"
-        aria-pressed={panels.settings.visible}
-      >
-        <ToolbarIcon name="settings" />
-        <span className="toolbar__label">{'\u2699'}</span>
       </button>
     </div>
   );
@@ -244,9 +273,7 @@ type IconName =
   | 'clear'
   | 'fit'
   | 'layout'
-  | 'select'
-  | 'reset'
-  | 'settings';
+  | 'reset';
 
 const TOOLBAR_ICONS: Record<IconName, LucideIcon> = {
   run: Play,
@@ -257,9 +284,7 @@ const TOOLBAR_ICONS: Record<IconName, LucideIcon> = {
   clear: Trash2,
   fit: Maximize2,
   layout: Network,
-  select: BoxSelect,
   reset: RotateCcw,
-  settings: Settings,
 };
 
 function ToolbarIcon({ name }: { name: IconName }) {

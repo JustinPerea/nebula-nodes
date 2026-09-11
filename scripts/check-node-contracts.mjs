@@ -46,12 +46,16 @@ const VALID_PROVIDERS = new Set([
   'quiver',
   'krea',
   'nous',
+  'worldlabs',
   'utility',
 ]);
 const VALID_EXECUTION_PATTERNS = new Set(['sync', 'async-poll', 'stream']);
 const VALID_PORT_TYPES = new Set([
   'Text', 'Image', 'Video', 'Audio', 'Mask', 'Array', 'SVG', 'Mesh',
-  'Character', 'Moodboard', 'CameraRig', 'ReferenceSet', 'Any',
+  'Character', 'Moodboard', 'CameraRig', 'ReferenceSet',
+  'CameraPose', 'CameraPath', 'SpatialContext', 'DepthMap', 'DepthSequence',
+  'PointCloud', 'SensorRig', 'SensorStream', 'SpatialSession',
+  'World', 'Any',
 ]);
 const VALID_PARAM_TYPES = new Set(['string', 'integer', 'float', 'boolean', 'enum', 'textarea', 'file', 'palette']);
 const PARAM_GROUPS = ['params', 'sharedParams', 'falParams', 'directParams'];

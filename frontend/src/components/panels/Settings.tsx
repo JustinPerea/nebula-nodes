@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { ChevronDown, ChevronRight, X } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import { getSettings, updateSettings } from '../../lib/api';
@@ -30,6 +30,7 @@ const API_KEY_FIELDS: ApiKeyField[] = [
   { key: 'QUIVER_API_KEY', label: 'QuiverAI (Arrow)', placeholder: 'qvr-...', url: 'https://app.quiver.ai/settings/api-keys' },
   { key: 'KREA_API_TOKEN', label: 'Krea', placeholder: 'krea_...', url: 'https://www.krea.ai/api-keys' },
   { key: 'IDEOGRAM_API_KEY', label: 'Ideogram', placeholder: 'ideogram_...', url: 'https://developer.ideogram.ai' },
+  { key: 'WORLDLABS_API_KEY', label: 'World Labs', placeholder: 'wlt_...', url: 'https://platform.worldlabs.ai' },
 ];
 
 interface RoutingOption {
@@ -45,9 +46,7 @@ const ROUTING_OPTIONS: RoutingOption[] = [];
 
 export function Settings() {
   const visible = useUIStore((s) => s.panels.settings.visible);
-  const position = useUIStore((s) => s.panels.settings.position);
   const togglePanel = useUIStore((s) => s.togglePanel);
-  const setPanelPosition = useUIStore((s) => s.setPanelPosition);
   const agentLogEnabled = useUIStore((s) => s.agentLogEnabled);
   const setAgentLogEnabled = useUIStore((s) => s.setAgentLogEnabled);
   const canvasPerfMode = useUIStore((s) => s.canvasPerfMode);
@@ -57,7 +56,6 @@ export function Settings() {
   const notificationPrefs = useUIStore((s) => s.notificationPrefs);
   const setNotificationPrefs = useUIStore((s) => s.setNotificationPrefs);
   const startOnboarding = useUIStore((s) => s.startOnboarding);
-  const dragRef = useRef<{ startX: number; startY: number; panelX: number; panelY: number } | null>(null);
 
   const [apiKeys, setApiKeys] = useState<Record<string, string>>({});
   const [routing, setRouting] = useState<Record<string, string>>({});
@@ -108,28 +106,6 @@ export function Settings() {
     };
   }, [visible]);
 
-  // Dragging logic (same pattern as Inspector)
-  useEffect(() => {
-    function onMouseMove(e: MouseEvent) {
-      if (!dragRef.current) return;
-      const dx = e.clientX - dragRef.current.startX;
-      const dy = e.clientY - dragRef.current.startY;
-      setPanelPosition('settings', {
-        x: dragRef.current.panelX + dx,
-        y: dragRef.current.panelY + dy,
-      });
-    }
-    function onMouseUp() {
-      dragRef.current = null;
-    }
-    window.addEventListener('mousemove', onMouseMove);
-    window.addEventListener('mouseup', onMouseUp);
-    return () => {
-      window.removeEventListener('mousemove', onMouseMove);
-      window.removeEventListener('mouseup', onMouseUp);
-    };
-  }, [setPanelPosition]);
-
   const handleSave = useCallback(async () => {
     setSaveStatus('saving');
     try {
@@ -165,9 +141,6 @@ export function Settings() {
   const { shouldRender, exiting } = useDelayedUnmount(visible, 500);
   if (!shouldRender) return null;
 
-  const resolvedX = position.x < 0 ? window.innerWidth + position.x : position.x;
-  const resolvedTop = position.y;
-  const settingsMaxHeight = `calc(100vh - ${Math.max(16, resolvedTop) + 16}px)`;
   const configuredApiKeyCount = API_KEY_FIELDS.reduce(
     (count, field) => count + (apiKeys[field.key]?.trim() ? 1 : 0),
     0,
@@ -175,20 +148,9 @@ export function Settings() {
 
   return (
     <div
-      className={`panel panel--settings${exiting ? ' panel--exiting' : ''}`}
-      style={{ left: resolvedX, top: resolvedTop, maxHeight: settingsMaxHeight }}
+      className={`panel panel--settings workspace-dock-panel${exiting ? ' panel--exiting' : ''}`}
     >
-      <div
-        className="panel__header"
-        onMouseDown={(e) => {
-          dragRef.current = {
-            startX: e.clientX,
-            startY: e.clientY,
-            panelX: resolvedX,
-            panelY: position.y,
-          };
-        }}
-      >
+      <div className="panel__header">
         <span className="panel__title">Settings</span>
         <button
           type="button"

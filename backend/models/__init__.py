@@ -18,6 +18,8 @@ from .events import (
     ValidationErrorDetail,
     GraphCompleteEvent,
     GraphCancelledEvent,
+    ProviderRecoveryEvent,
+    ProviderStartAmbiguousEvent,
     StreamDeltaEvent,
 )
 
@@ -39,5 +41,7 @@ __all__ = [
     "ValidationErrorDetail",
     "GraphCompleteEvent",
     "GraphCancelledEvent",
+    "ProviderRecoveryEvent",
+    "ProviderStartAmbiguousEvent",
     "StreamDeltaEvent",
 ]

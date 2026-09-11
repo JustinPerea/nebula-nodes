@@ -10,6 +10,7 @@ import {
   type PaletteCommand,
 } from '../lib/commandPalette';
 import { findAvailableNodePosition, type NodePosition } from '../lib/nodePlacement';
+import { computeCanvasFitPadding } from '../lib/canvasFit';
 import '../styles/command-palette.css';
 
 /**
@@ -84,7 +85,7 @@ export function CommandPalette() {
 
   const focusNode = useCallback(
     (id: string) => {
-      void fitView({ nodes: [{ id }], duration: 400, maxZoom: 1.5 });
+      void fitView({ nodes: [{ id }], padding: computeCanvasFitPadding(), duration: 400, maxZoom: 1.5 });
       selectNode(id);
     },
     [fitView, selectNode]
@@ -97,7 +98,7 @@ export function CommandPalette() {
         runGraph: () => executeGraph(),
         save: () => window.dispatchEvent(new CustomEvent('nebula:save')),
         load: () => window.dispatchEvent(new CustomEvent('nebula:load')),
-        fitView: () => fitView(),
+        fitView: () => fitView({ padding: computeCanvasFitPadding(), duration: 300 }),
         enterCreateView,
         togglePanel,
         setSkin,
@@ -139,6 +140,18 @@ export function CommandPalette() {
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [close]);
+
+  useEffect(() => {
+    function onOpenRequest() {
+      if (useUIStore.getState().viewMode !== 'canvas') return;
+      setMode('commands');
+      setQuery('');
+      setSelected(0);
+      setOpen(true);
+    }
+    window.addEventListener('nebula:command-palette-open', onOpenRequest);
+    return () => window.removeEventListener('nebula:command-palette-open', onOpenRequest);
+  }, []);
 
   // Focus the input when the palette opens (DOM side effect only).
   useEffect(() => {

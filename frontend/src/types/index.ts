@@ -1,3 +1,9 @@
+export * from './spatial';
+import type {
+  CameraPose, CameraPath, SpatialContext, DepthMap, DepthSequence,
+  PointCloud, SensorRig, SensorStream, SpatialSessionMetadata, WorldValueV2,
+} from './spatial';
+
 export type PortDataType =
   | 'Text'
   | 'Image'
@@ -7,6 +13,16 @@ export type PortDataType =
   | 'Array'
   | 'SVG'
   | 'Mesh'
+  | 'World'
+  | 'CameraPose'
+  | 'CameraPath'
+  | 'SpatialContext'
+  | 'DepthMap'
+  | 'DepthSequence'
+  | 'PointCloud'
+  | 'SensorRig'
+  | 'SensorStream'
+  | 'SpatialSession'
   | 'Character'
   | 'Moodboard'
   | 'CameraRig'
@@ -52,6 +68,7 @@ export type APIProvider =
   | 'meshy'
   | 'quiver'
   | 'krea'
+  | 'worldlabs'
   | 'nous'
   | 'utility';
 
@@ -241,6 +258,40 @@ export interface ReferenceSetBundle {
   }>;
 }
 
+/** A locally materialized World Labs environment.
+ *
+ * The World port deliberately stays structured: the splat, navigation link,
+ * panorama, collider, scale, and coordinate convention describe one spatial
+ * result and must not drift apart as separate graph values. Provider URLs are
+ * materialized by the backend before this value reaches the canvas. */
+export interface WorldValue {
+  schemaVersion: 1;
+  provider: 'worldlabs';
+  worldId: string;
+  model: string;
+  displayName: string;
+  marbleUrl?: string;
+  promptType: 'text' | 'image' | 'multi-image' | 'video' | string;
+  assets: {
+    splats: Record<string, string | undefined> & {
+      '100k'?: string;
+      '150k'?: string;
+      '500k'?: string;
+      full_res?: string;
+    };
+    panorama?: string;
+    colliderMesh?: string;
+    thumbnail?: string;
+  };
+  semantics: {
+    metricScaleFactor?: number;
+    groundPlaneOffset?: number;
+    coordinateFrame: 'marble_raw_opencv' | string;
+  };
+  caption?: string;
+  cost?: Record<string, unknown> | number;
+}
+
 export interface MoodboardImage {
   id: string;
   url: string;
@@ -291,7 +342,10 @@ export interface Moodboard {
 
 export interface PortValue {
   type: PortDataType;
-  value: string | string[] | { url: string; mimeType: string } | Record<string, unknown> | ArrayBuffer | null;
+  value: string | string[] | { url: string; mimeType: string } | WorldValue
+    | CameraPose | CameraPath | SpatialContext | DepthMap | DepthSequence
+    | PointCloud | SensorRig | SensorStream | SpatialSessionMetadata | WorldValueV2
+    | Record<string, unknown> | ArrayBuffer | null;
 }
 
 export interface NodeData {

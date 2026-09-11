@@ -4,15 +4,17 @@ import { Download, Repeat2, Sparkles } from 'lucide-react';
 import type { NodeData } from '../../types';
 import { NODE_DEFINITIONS } from '../../constants/nodeDefinitions';
 import { PORT_COLORS } from '../../lib/portCompatibility';
+import { findStructuredRepresentation } from '../../lib/representationViewerRegistry';
 import { getReferenceRole } from '../../lib/referenceRoles';
 import { CATEGORY_COLORS } from '../../constants/ports';
 import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
 import { useSlavaNodeEntranceClass } from '../../hooks/useSlavaNodeEntrance';
 import { MeshPreview } from './MeshPreview';
+import { RepresentationViewer } from './RepresentationViewer';
 import { NodeError } from './NodeError';
 import { BeforeAfterSlider } from './BeforeAfterSlider';
-import { apiFetch } from '../../lib/backend';
+import { downloadWorldAsset } from '../../lib/worldDownload';
 import '../../styles/nodes.css';
 
 // Trigger a browser download for a URL produced by the backend. We fetch the
@@ -20,19 +22,15 @@ import '../../styles/nodes.css';
 // port boundaries, which would otherwise open the asset inline.
 async function downloadOutput(url: string, filename: string): Promise<void> {
   try {
-    const res = url.startsWith('http') ? await fetch(url) : await apiFetch(url);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const blob = await res.blob();
-    const blobUrl = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = blobUrl;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+    await downloadWorldAsset(url, filename, {
+      tooLargeMessage:
+        'This output is too large for a safe in-browser download. Use the local Nebula output folder instead.',
+    });
   } catch (err) {
     console.error('Download failed:', err);
+    window.alert(
+      `Download failed: ${err instanceof Error ? err.message : 'The output could not be downloaded.'}`,
+    );
   }
 }
 
@@ -171,13 +169,14 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
   const textOutput = Object.values(nodeData.outputs).find((o) => o.type === 'Text' && o.value);
   const videoOutput = Object.values(nodeData.outputs).find((o) => o.type === 'Video' && o.value);
   const meshOutput = Object.values(nodeData.outputs).find((o) => o.type === 'Mesh' && o.value);
+  const worldOutput = Object.values(nodeData.outputs).find((o) => o.type === 'World' && o.value);
   const audioOutput = Object.values(nodeData.outputs).find((o) => o.type === 'Audio' && o.value);
   const svgOutput = Object.values(nodeData.outputs).find((o) => o.type === 'SVG' && o.value);
+  const spatialOutput = findStructuredRepresentation(nodeData.outputs, { includeWorld: false });
 
   const displayText = nodeData.streamingText ?? (textOutput && typeof textOutput.value === 'string' ? textOutput.value : null);
   const previewText = displayText ? displayText.replace(/\\n/g, '\n') : null;
   const isStreaming = nodeData.state === 'executing' && nodeData.streamingText != null;
-  const isTextSurface = isInlineTextNode || Boolean(displayText && !isInlineTextNode);
   const isImageInput = nodeData.definitionId === 'image-input';
   const isMaskPainter = nodeData.definitionId === 'mask-painter';
   const imageInputPreview = isImageInput && nodeData.params._previewUrl ? String(nodeData.params._previewUrl) : null;
@@ -210,7 +209,7 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
       : null;
   const showCompare = Boolean(compareBefore && compareAfter);
 
-  const isImageSurface = Boolean(
+  const isImageSurface = !worldOutput && Boolean(
     imageInputPreview
     || finalImageOutput
     || streamingSvgPreview
@@ -218,6 +217,17 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
     || showCompare
     || (isMaskPainter && maskSourcePreview),
   );
+  const shouldRenderSpatial = nodeData.state === 'complete'
+    && !worldOutput
+    && Boolean(spatialOutput)
+    && !isImageSurface
+    && !videoOutput
+    && !meshOutput
+    && !audioOutput;
+  const isTextSurface = !worldOutput
+    && !shouldRenderSpatial
+    && (isInlineTextNode || Boolean(displayText && !isInlineTextNode));
+  const isWorldSurface = nodeData.state === 'complete' && Boolean(worldOutput);
   const imageClassName = isSlavaSkin ? 'model-node__preview-image' : 'model-node__preview-image nodrag';
   const downloadableOutput =
     finalImageOutput
@@ -240,7 +250,7 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
 
   return (
     <div
-      className={`model-node ${stateClass}${isImageSurface ? ' model-node--image-surface' : ''}${isTextSurface ? ' model-node--text-surface' : ''}${isInlineTextNode ? ' model-node--inline-text' : ''}${isTextInput ? ' model-node--text-input' : ''}${isImageInput ? ' model-node--image-input' : ''}${isStickyNote ? ' model-node--sticky-note' : ''} ${isNodeSelected ? 'model-node--selected' : ''}${entranceClass}`}
+      className={`model-node ${stateClass}${isImageSurface ? ' model-node--image-surface' : ''}${isWorldSurface ? ' model-node--world-surface' : ''}${shouldRenderSpatial ? ' model-node--spatial-surface' : ''}${isTextSurface ? ' model-node--text-surface' : ''}${isInlineTextNode ? ' model-node--inline-text' : ''}${isTextInput ? ' model-node--text-input' : ''}${isImageInput ? ' model-node--image-input' : ''}${isStickyNote ? ' model-node--sticky-note' : ''} ${isNodeSelected ? 'model-node--selected' : ''}${entranceClass}`}
       onClick={() => selectNode(id)}
       style={{ ['--node-category-color' as string]: categoryColor }}
     >
@@ -468,7 +478,19 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
         </div>
       )}
 
-      {finalImageOutput && !imageInputPreview && !isImageCompare && !(isMaskPainter && maskSourcePreview) && (
+      {nodeData.state === 'complete' && worldOutput && (
+        <div className="model-node__preview model-node__preview--world">
+          <RepresentationViewer type={worldOutput.type} value={worldOutput.value} />
+        </div>
+      )}
+
+      {shouldRenderSpatial && spatialOutput && (
+        <div className="model-node__preview model-node__preview--spatial">
+          <RepresentationViewer type={spatialOutput.type} value={spatialOutput.value} />
+        </div>
+      )}
+
+      {finalImageOutput && !worldOutput && !imageInputPreview && !isImageCompare && !(isMaskPainter && maskSourcePreview) && (
         <div className="model-node__preview">
           <img
             src={finalImageOutput}
@@ -542,7 +564,7 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
         </div>
       )}
 
-      {previewText && !isInlineTextNode && (
+      {previewText && !worldOutput && !shouldRenderSpatial && !isInlineTextNode && (
         <div className="model-node__preview">
           <div className={`model-node__preview-text ${isStreaming ? 'model-node__preview-text--streaming' : ''}`}>
             {previewText.length > 300 ? `${previewText.slice(0, 300)}...` : previewText}
@@ -600,7 +622,7 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
         </div>
       )}
 
-      {nodeData.state === 'complete' && meshOutput && typeof meshOutput.value === 'string' && (
+      {nodeData.state === 'complete' && !worldOutput && meshOutput && typeof meshOutput.value === 'string' && (
         <div className="model-node__preview">
           <MeshPreview src={meshOutput.value} />
           <button
@@ -653,7 +675,7 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
         </div>
       )}
 
-      {nodeData.state === 'complete' && !imageOutput && !textOutput && !videoOutput && !meshOutput && !audioOutput && !svgOutput && Object.keys(nodeData.outputs).length > 0 && (
+      {nodeData.state === 'complete' && !imageOutput && !textOutput && !videoOutput && !meshOutput && !worldOutput && !audioOutput && !svgOutput && !spatialOutput && Object.keys(nodeData.outputs).length > 0 && (
         <div className="model-node__preview">
           <div className="model-node__preview-placeholder">Output ready</div>
         </div>

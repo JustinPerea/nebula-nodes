@@ -1,6 +1,11 @@
 import { apiFetch, rewriteBackendAssetUrls } from './backend';
 import { resolveProjectId } from './currentProject';
 import type { Character, Moodboard } from '../types';
+import type {
+  ProviderRecoveryCheckpoint,
+  ProviderStartAmbiguity,
+  ProviderStartKind,
+} from './runHistory';
 
 export interface ExecutionValidationError {
   nodeId: string;
@@ -19,6 +24,46 @@ export interface ExecutionStartResult {
 export interface ExecutionCancellationResult {
   runId: string;
   status: 'cancelling' | 'cancelled' | 'completed' | 'failed';
+  pendingAdmission?: boolean;
+}
+
+export interface ExecutionStatusResult {
+  runId: string;
+  status: 'running' | 'cancelling' | 'cancelled' | 'completed' | 'failed';
+}
+
+/** A received non-2xx response proves the start request reached a backend and
+ * was rejected. Network exceptions remain ambiguous and must be reconciled by
+ * the caller with the client-owned run ID. */
+export class ExecutionStartRejectedError extends Error {
+  readonly status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = 'ExecutionStartRejectedError';
+    this.status = status;
+  }
+}
+
+function executionStartResponseError(
+  message: string,
+  status: number,
+): Error {
+  // A gateway/server failure can be returned after the request body was
+  // forwarded and the backend scheduled work, so it is not proof of rejection.
+  // 507 is Nebula's explicit pre-provider durable-safety rejection.
+  if ((status >= 500 && status !== 507) || status === 408) {
+    return new Error(message);
+  }
+  return new ExecutionStartRejectedError(message, status);
+}
+
+export async function getExecutionStatus(runId: string): Promise<ExecutionStatusResult> {
+  const response = await apiFetch(`/api/executions/${encodeURIComponent(runId)}`, {
+    cache: 'no-store',
+  });
+  if (!response.ok) throw new Error(`Execution status unavailable: HTTP ${response.status}.`);
+  return response.json();
 }
 
 export async function cancelExecution(runId: string): Promise<ExecutionCancellationResult> {
@@ -33,6 +78,52 @@ export async function cancelExecution(runId: string): Promise<ExecutionCancellat
     throw new Error(detail || `Cancel failed: ${response.status} ${response.statusText}`);
   }
   return response.json();
+}
+
+export async function acknowledgeProviderStartAmbiguity(
+  kind: ProviderStartKind,
+  nodeId: string,
+  runId: string,
+): Promise<void> {
+  const response = await apiFetch(
+    `/api/provider-start-ambiguities/${encodeURIComponent(kind)}/${encodeURIComponent(nodeId)}/${encodeURIComponent(runId)}`,
+    { method: 'DELETE' },
+  );
+  if (!response.ok) {
+    let detail = '';
+    try { detail = (await response.json()).detail ?? ''; } catch {
+      /* Non-JSON responses use the status fallback. */
+    }
+    throw new Error(detail || `Could not unlock provider start: HTTP ${response.status}.`);
+  }
+}
+
+export async function deleteProviderRecovery(
+  runId: string,
+  nodeId: string,
+  checkpoint: Pick<ProviderRecoveryCheckpoint, 'resumeOperationId' | 'existingWorldId'>,
+): Promise<void> {
+  const query = new URLSearchParams();
+  if (checkpoint.resumeOperationId) {
+    query.set('resume_operation_id', checkpoint.resumeOperationId);
+  }
+  if (checkpoint.existingWorldId) {
+    query.set('existing_world_id', checkpoint.existingWorldId);
+  }
+  if ([...query.keys()].length !== 1) {
+    throw new Error('Provider recovery deletion requires exactly one recovery ID.');
+  }
+  const response = await apiFetch(
+    `/api/provider-recoveries/${encodeURIComponent(runId)}/${encodeURIComponent(nodeId)}?${query.toString()}`,
+    { method: 'DELETE' },
+  );
+  if (!response.ok) {
+    let detail = '';
+    try { detail = (await response.json()).detail ?? ''; } catch {
+      /* Non-JSON responses use the status fallback. */
+    }
+    throw new Error(detail || `Could not clear provider recovery: HTTP ${response.status}.`);
+  }
 }
 
 export async function executeGraph(
@@ -50,7 +141,10 @@ export async function executeGraph(
     try { detail = (await response.json()).detail ?? ''; } catch {
       /* Non-JSON error responses still fall back to status text. */
     }
-    throw new Error(detail || `Execute failed: ${response.status} ${response.statusText}`);
+    throw executionStartResponseError(
+      detail || `Execute failed: ${response.status} ${response.statusText}`,
+      response.status,
+    );
   }
   return response.json();
 }
@@ -71,7 +165,10 @@ export async function executeNode(
     try { detail = (await response.json()).detail ?? ''; } catch {
       /* Non-JSON error responses still fall back to status text. */
     }
-    throw new Error(detail || `Execute node failed: ${response.status} ${response.statusText}`);
+    throw executionStartResponseError(
+      detail || `Execute node failed: ${response.status} ${response.statusText}`,
+      response.status,
+    );
   }
   return response.json();
 }
@@ -255,7 +352,14 @@ export interface ReplicateSchema {
   description: string;
 }
 
-export async function fetchCLIGraph(): Promise<{ nodes: unknown[]; edges: unknown[]; empty: boolean }> {
+export async function fetchCLIGraph(): Promise<{
+  nodes: unknown[];
+  edges: unknown[];
+  empty: boolean;
+  providerRecoveries?: ProviderRecoveryCheckpoint[];
+  providerStartAmbiguities?: ProviderStartAmbiguity[];
+  executionStatuses?: ExecutionStatusResult[];
+}> {
   const response = await apiFetch('/api/graph/export');
   if (!response.ok) throw new Error(`Fetch CLI graph failed: ${response.status}`);
   return rewriteBackendAssetUrls(await response.json());

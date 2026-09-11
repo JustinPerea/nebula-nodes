@@ -17,8 +17,16 @@ import math
 import os
 import random
 import re
+import shutil
+import stat
+import tempfile
+import unicodedata
+import zipfile
+from contextlib import contextmanager, nullcontext
 from pathlib import Path
-from typing import Any
+from pathlib import PurePosixPath
+from typing import Any, BinaryIO
+from urllib.parse import quote, unquote_to_bytes, urlsplit
 
 from uuid import uuid4
 
@@ -49,6 +57,8 @@ from models.events import (
     ErrorEvent,
     GraphCancelledEvent,
     GraphCompleteEvent,
+    ProviderRecoveryEvent,
+    ProviderStartAmbiguousEvent,
     execution_run_id,
 )
 from execution.engine import execute_graph, validate_graph, topological_sort, get_subgraph, CycleError
@@ -56,10 +66,19 @@ from execution.sync_runner import get_handler_registry
 from services.settings import load_settings, save_settings, get_api_key, validate_provider_keys, clear_provider_validation_cache
 from services.node_registry import NodeRegistry
 from services.cli_graph import CLIGraph
+from services.port_contracts import (
+    ContractEdge,
+    ContractNode,
+    validate_edge_contracts,
+)
 from services.output import OUTPUT_ROOT, DEFAULT_OUTPUT_ROOT, resolve_output_ref, ManifestError, find_output_record, read_manifest
 from services.image_input import is_remote_or_data_uri
 from services.cache import ExecutionCache
-from services.execution_runs import ExecutionRunRegistry
+from services.execution_runs import (
+    ExecutionCancellationCapacityError,
+    ExecutionCancelledBeforeStartError,
+    ExecutionRunRegistry,
+)
 from services.chat_session import run_claude
 from services.chat_actions import publish_action
 from services.zoom_manifest import init_manifest, append_entry
@@ -73,10 +92,41 @@ from routes.video_edit_preview import router as video_edit_preview_router
 from routes.render_exports import router as render_exports_router
 from services.ffmpeg import ffprobe_video
 from services.preset_store import preset_store
+from services.selection_context import SelectionContextStore, selection_prompt_context
+from services.provider_recovery import (
+    ProviderRecoveryCapacityError,
+    ProviderRecoveryConflictError,
+    ProviderRecoveryPersistenceError,
+    ProviderRecoveryStore,
+)
+from services.provider_start_guard import (
+    ProviderStartCancellationCapacityError,
+    ProviderStartCancelledError,
+    ProviderStartConflictError,
+    ProviderStartGuard,
+    ProviderStartPersistenceError,
+)
+from services.provider_operation_policy import (
+    has_recovery_identity,
+    operation_policy,
+    quick_execution_allowed,
+    recovery_identifiers,
+    recovery_param_names,
+    requires_fresh_paid_start,
+    uses_durable_recovery,
+)
+from services.worldlabs_capabilities import worldlabs_capability_gate
+from models.spatial import (
+    SPATIAL_VALUE_MODELS,
+    canonicalize_world_value_v1,
+    dump_spatial_value,
+    parse_spatial_value,
+)
 
 execution_cache = ExecutionCache(ttl=3600)
 execution_runs = ExecutionRunRegistry()
 node_registry = NodeRegistry()
+selection_context = SelectionContextStore()
 
 # Persist the CLI graph to ~/.nebula/state.json on every mutation and reload
 # it on boot. Survives uvicorn restart so a crash or `kill` no longer wipes
@@ -99,6 +149,199 @@ if _STATE_PATH is not None and _STATE_PATH.exists():
     except Exception as exc:
         print(f"[main] failed to restore graph from {_STATE_PATH}: {exc} — starting fresh", flush=True)
 
+provider_recovery_store = ProviderRecoveryStore(
+    _STATE_DIR / "provider-recoveries.json" if _STATE_PATH is not None else None
+)
+provider_start_guard = ProviderStartGuard(
+    _STATE_DIR / "provider-start-ambiguities.json" if _STATE_PATH is not None else None
+)
+
+
+def _reject_graph_replacement_during_paid_start(action: str) -> None:
+    if provider_start_guard.has_active():
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Cannot {action} while a World Labs paid start is settling. "
+                "Stop the run and wait for its terminal state first."
+            ),
+        )
+    canonical_checkpoints = _graph_worldlabs_recovery_checkpoints(
+        list(cli_graph.nodes.values())
+    )
+    if (
+        provider_start_guard.list()
+        or provider_recovery_store.list()
+        or canonical_checkpoints
+        or _graph_recovery_bootstrap_error is not None
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Cannot {action} while unresolved World Labs paid state exists. "
+                "Check Marble and resolve the exact recovery/ambiguity record first."
+            ),
+        )
+
+
+@contextmanager
+def _paid_graph_mutation(action: str):
+    """Hold the cross-process paid lifecycle fence through a graph commit."""
+    global _graph_recovery_bootstrap_error
+    try:
+        with provider_start_guard.exclusive_lifecycle():
+            # A worker may have booted while another worker owned the lifecycle
+            # lock, or may be carrying a legacy state.json written before the
+            # shared journal existed. Seed its current checkpoint identities
+            # before this mutation is allowed to erase or replace that graph.
+            _seed_shared_graph_recoveries_for_api(
+                list(cli_graph.nodes.values()), source="mutation-preflight"
+            )
+            _graph_recovery_bootstrap_error = None
+            yield
+    except ProviderStartConflictError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Cannot {action} while a World Labs paid start is settling. "
+                "Stop the run and wait for its terminal state first."
+            ),
+        ) from exc
+    except ProviderStartPersistenceError as exc:
+        raise HTTPException(
+            status_code=507,
+            detail=(
+                f"Cannot {action} because Nebula cannot verify the durable "
+                "World Labs paid-start fence."
+            ),
+        ) from exc
+
+
+def _graph_worldlabs_recovery_checkpoints(
+    nodes: list[dict[str, Any]],
+) -> list[tuple[str, str | None, str | None]]:
+    """Extract provider identities that make a graph node a recovery run."""
+    checkpoints: list[tuple[str, str | None, str | None]] = []
+    for node in nodes:
+        definition_id = node.get("definitionId")
+        if not isinstance(definition_id, str) or not uses_durable_recovery(
+            definition_id,
+            provider="worldlabs",
+        ):
+            continue
+        node_id = node.get("id")
+        params = node.get("params") or {}
+        if not isinstance(node_id, str) or not isinstance(params, dict):
+            continue
+        resume_id, existing_id = recovery_identifiers(definition_id, params)
+        if resume_id is not None or existing_id is not None:
+            # A recovery ID remains authoritative even if another stale
+            # parameter would classify a new invocation as free. The handler
+            # validates the recovered result later; admission must lease it now.
+            checkpoints.append((node_id, resume_id, existing_id))
+    return checkpoints
+
+
+def _ensure_shared_graph_recoveries(
+    nodes: list[dict[str, Any]], *, source: str
+) -> list[dict[str, str | None]]:
+    checkpoints = _graph_worldlabs_recovery_checkpoints(nodes)
+    if not checkpoints:
+        return []
+    return provider_recovery_store.ensure_many(
+        run_id=f"graph-{source}-{uuid4().hex}",
+        checkpoints=checkpoints,
+    )
+
+
+def _seed_shared_graph_recoveries_for_api(
+    nodes: list[dict[str, Any]], *, source: str
+) -> list[dict[str, str | None]]:
+    """Fail the graph commit if its recovery control state is not durable."""
+    try:
+        return _ensure_shared_graph_recoveries(nodes, source=source)
+    except ProviderRecoveryCapacityError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ProviderRecoveryConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ProviderRecoveryPersistenceError as exc:
+        raise HTTPException(
+            status_code=507,
+            detail=(
+                "Cannot commit graph-carried World Labs recovery state because "
+                "Nebula could not save the shared recovery journal"
+            ),
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+def _commit_graph_candidate_with_recoveries(
+    candidate: CLIGraph,
+    recovery_nodes: list[dict[str, Any]],
+    *,
+    source: str,
+) -> None:
+    """Commit graph and recovery journal as one failure-atomic API action.
+
+    The recovery journal must land first so a committed graph never exposes a
+    paid provider identity without its control-plane fence. If the graph's
+    atomic replacement fails before commit, remove only the exact records that
+    this attempt added. Existing/idempotently reused records are never touched.
+    """
+    additions = _seed_shared_graph_recoveries_for_api(
+        recovery_nodes,
+        source=source,
+    )
+    try:
+        cli_graph.replace_with(candidate)
+    except Exception as graph_error:
+        try:
+            provider_recovery_store.delete_many_exact(additions)
+        except (
+            ProviderRecoveryConflictError,
+            ProviderRecoveryPersistenceError,
+            ValueError,
+        ) as rollback_error:
+            raise HTTPException(
+                status_code=507,
+                detail=(
+                    "Graph storage rejected the candidate and Nebula could not "
+                    "roll back its newly seeded provider recovery records; "
+                    "paid execution is blocked until the journal is reconciled"
+                ),
+            ) from rollback_error
+        raise graph_error
+
+
+# A persisted graph can predate the shared recovery journal. Seed it once on
+# boot so every backend process sees the same paid-operation identities rather
+# than relying on its process-local cli_graph snapshot.
+_graph_recovery_bootstrap_error: str | None = None
+_bootstrap_checkpoints = _graph_worldlabs_recovery_checkpoints(
+    list(cli_graph.nodes.values())
+)
+if _bootstrap_checkpoints:
+    try:
+        with provider_start_guard.exclusive_lifecycle():
+            provider_recovery_store.ensure_many(
+                run_id=f"graph-bootstrap-{uuid4().hex}",
+                checkpoints=_bootstrap_checkpoints,
+            )
+    except (
+        ProviderRecoveryCapacityError,
+        ProviderRecoveryConflictError,
+        ProviderRecoveryPersistenceError,
+        ProviderStartConflictError,
+        ProviderStartPersistenceError,
+        ValueError,
+    ) as exc:
+        _graph_recovery_bootstrap_error = str(exc)
+        print(
+            "[provider-recovery] could not seed persisted graph checkpoints; "
+            f"paid World Labs admission is blocked in this backend: {exc}",
+            flush=True,
+        )
 app = FastAPI(title="Nebula Node Backend", version="0.1.0")
 
 DYNAMIC_NODE_PROVIDER_BY_DEFINITION = {
@@ -124,55 +367,662 @@ CHAT_UPLOADS_DIR = OUTPUT_ROOT / "chat-uploads"
 CHAT_UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 
 
-def _restore_zip_bundle(zip_bytes: bytes) -> dict[str, str]:
+RESTORE_MAX_COMPRESSED_BYTES = 2 * 1024 * 1024 * 1024  # 2 GiB upload
+RESTORE_SPOOL_MEMORY_BYTES = 8 * 1024 * 1024  # spill larger uploads to disk
+RESTORE_MAX_MEMBERS = 4096
+RESTORE_MAX_MEMBER_BYTES = 2 * 1024 * 1024 * 1024  # 2 GiB per file
+RESTORE_MAX_TOTAL_UNCOMPRESSED_BYTES = 8 * 1024 * 1024 * 1024  # 8 GiB bundle
+RESTORE_MAX_COMPRESSION_RATIO = 250.0
+RESTORE_MAX_PATH_BYTES = 1024
+RESTORE_COPY_CHUNK_BYTES = 1024 * 1024
+RESTORE_MAX_GRAPH_BYTES = 16 * 1024 * 1024
+RESTORE_MAX_GRAPH_NODES = 10_000
+RESTORE_MAX_GRAPH_EDGES = 50_000
+RESTORE_MAX_GRAPH_DEPTH = 64
+RESTORE_MAX_GRAPH_VALUES = 1_000_000
+RESTORE_CONTENT_TYPE = "application/zip"
+_PORTABLE_COMPONENT_FORBIDDEN = re.compile(r'[<>:"|?#*\\\x00-\x1f\x7f]')
+_WINDOWS_DEVICE_NAME = re.compile(
+    r"^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$", re.IGNORECASE
+)
+_PROTOTYPE_COMPONENTS = {"__proto__", "prototype", "constructor"}
+
+
+def _zip_member_kind(member: zipfile.ZipInfo) -> str:
+    """Return regular-file/directory for a safe ZIP member, else reject it.
+
+    ZIP symlinks and special Unix files must never reach the filesystem.  A
+    symlink entry is just bytes to ``zipfile`` and would otherwise look like a
+    harmless small member during the size preflight.
+    """
+    mode = member.external_attr >> 16
+    file_type = stat.S_IFMT(mode)
+    if file_type == stat.S_IFLNK:
+        raise HTTPException(status_code=400, detail="Zip bundle contains a symlink")
+    if file_type not in (0, stat.S_IFREG, stat.S_IFDIR):
+        raise HTTPException(status_code=400, detail="Zip bundle contains a special file")
+
+    archive_kind = "directory" if member.is_dir() else "file"
+    if file_type == stat.S_IFDIR and archive_kind != "directory":
+        raise HTTPException(status_code=400, detail="Zip bundle has an ambiguous directory entry")
+    if file_type == stat.S_IFREG and archive_kind != "file":
+        raise HTTPException(status_code=400, detail="Zip bundle has an ambiguous file entry")
+    return archive_kind
+
+
+def _safe_zip_parts(member_name: str) -> tuple[str, ...]:
+    """Validate and split one portable archive path.
+
+    Case-folded NFC keys are used separately for collision checks so an
+    archive cannot smuggle two names that alias on a case-insensitive or
+    Unicode-normalizing filesystem.
+    """
+    if not member_name or "\x00" in member_name or "\\" in member_name:
+        raise HTTPException(status_code=400, detail="Zip bundle contains an invalid path")
+    if len(member_name.encode("utf-8")) > RESTORE_MAX_PATH_BYTES:
+        raise HTTPException(status_code=400, detail="Zip bundle path is too long")
+
+    stripped = member_name[:-1] if member_name.endswith("/") else member_name
+    raw_parts = stripped.split("/")
+    path = PurePosixPath(stripped)
+    parts = path.parts
+    if (
+        not parts
+        or path.is_absolute()
+        or stripped.startswith("/")
+        or "//" in stripped
+        or any(part in {"", ".", ".."} for part in raw_parts)
+        or (parts and re.fullmatch(r"[A-Za-z]:", parts[0]))
+    ):
+        raise HTTPException(status_code=400, detail="Zip bundle contains an unsafe path")
+
+    for raw_part in parts:
+        if len(raw_part.encode("utf-8")) > 255:
+            raise HTTPException(status_code=400, detail="Zip bundle path component is too long")
+    return tuple(parts)
+
+
+def _decoded_portable_component(raw_part: str) -> tuple[str, str]:
+    """Return once-decoded NFC text and its browser-compatible identity."""
+    if re.search(r"%(?![0-9A-Fa-f]{2})", raw_part):
+        raise HTTPException(status_code=400, detail="Zip bundle path has invalid percent encoding")
+    try:
+        decoded = unquote_to_bytes(raw_part).decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise HTTPException(
+            status_code=400, detail="Zip bundle path is not valid UTF-8"
+        ) from exc
+    decoded = unicodedata.normalize("NFC", decoded)
+
+    def reject_unsafe(value: str) -> None:
+        if (
+            not value
+            or value in {".", ".."}
+            or "/" in value
+            or "\\" in value
+            or _PORTABLE_COMPONENT_FORBIDDEN.search(value)
+            or value.endswith((" ", "."))
+            or _WINDOWS_DEVICE_NAME.fullmatch(value)
+            or value.casefold() in _PROTOTYPE_COMPONENTS
+        ):
+            raise HTTPException(
+                status_code=400, detail="Zip bundle contains a non-portable path"
+            )
+
+    reject_unsafe(decoded)
+    probe = decoded
+    for _decode_pass in range(4):
+        if "%" not in probe:
+            break
+        if re.search(r"%(?![0-9A-Fa-f]{2})", probe):
+            raise HTTPException(
+                status_code=400, detail="Zip bundle path has invalid percent encoding"
+            )
+        try:
+            nested = unquote_to_bytes(probe).decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise HTTPException(
+                status_code=400, detail="Zip bundle path is not valid UTF-8"
+            ) from exc
+        nested = unicodedata.normalize("NFC", nested)
+        if nested == probe:
+            break
+        reject_unsafe(nested)
+        probe = nested
+    if "%" in probe:
+        # The frontend applies the same bounded nested-decode policy. Reject
+        # residual encoding instead of extracting a path the browser will
+        # subsequently refuse (which would orphan a restore directory).
+        raise HTTPException(
+            status_code=400, detail="Zip bundle path has excessive percent encoding"
+        )
+
+    # JavaScript encodeURIComponent's unescaped set, minus '*' which the
+    # portability policy rejects above.
+    canonical = quote(decoded, safe="-_.!~'()")
+    if len(canonical.encode("utf-8")) > 255:
+        raise HTTPException(status_code=400, detail="Zip bundle path component is too long")
+    return decoded, canonical
+
+
+def _canonical_zip_parts(parts: tuple[str, ...]) -> tuple[str, ...]:
+    canonical = tuple(_decoded_portable_component(part)[1] for part in parts)
+    if len("/".join(canonical).encode("utf-8")) > RESTORE_MAX_PATH_BYTES:
+        raise HTTPException(status_code=400, detail="Zip bundle path is too long")
+    return canonical
+
+
+def _collision_key(parts: tuple[str, ...]) -> tuple[str, ...]:
+    keys: list[str] = []
+    for part in parts:
+        decoded, _canonical = _decoded_portable_component(part)
+        # Match the browser's portablePathCollisionKey: compatibility
+        # normalization, en-US-style Unicode lowercase, then the two folds
+        # JavaScript lowercasing does not perform itself.
+        key = (
+            unicodedata.normalize("NFKC", decoded)
+            .lower()
+            .replace("ß", "ss")
+            .replace("ς", "σ")
+        )
+        keys.append(key)
+    return tuple(keys)
+
+
+def _validated_restore_members(
+    archive: zipfile.ZipFile,
+) -> tuple[zipfile.ZipInfo, list[tuple[zipfile.ZipInfo, str, Path]]]:
+    """Preflight the complete central directory before creating output files."""
+    members = archive.infolist()
+    if len(members) > RESTORE_MAX_MEMBERS:
+        raise HTTPException(status_code=413, detail="Zip bundle contains too many members")
+
+    total_uncompressed = 0
+    total_compressed = 0
+    file_keys: set[tuple[str, ...]] = set()
+    directory_keys: set[tuple[str, ...]] = set()
+    graph_member: zipfile.ZipInfo | None = None
+    restore_members: list[tuple[zipfile.ZipInfo, str, Path]] = []
+
+    for member in members:
+        if member.flag_bits & 0x1:
+            raise HTTPException(status_code=400, detail="Encrypted zip bundles are not supported")
+        if member.compress_type not in {zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED}:
+            raise HTTPException(status_code=400, detail="Zip bundle uses an unsupported compression method")
+        if member.file_size < 0 or member.compress_size < 0:
+            raise HTTPException(status_code=400, detail="Zip bundle contains invalid size metadata")
+        if member.file_size > RESTORE_MAX_MEMBER_BYTES:
+            raise HTTPException(status_code=413, detail="Zip bundle member is too large")
+
+        total_uncompressed += member.file_size
+        total_compressed += member.compress_size
+        if total_uncompressed > RESTORE_MAX_TOTAL_UNCOMPRESSED_BYTES:
+            raise HTTPException(status_code=413, detail="Zip bundle expands beyond the restore limit")
+        if member.file_size and (
+            member.compress_size == 0
+            or member.file_size / member.compress_size > RESTORE_MAX_COMPRESSION_RATIO
+        ):
+            raise HTTPException(status_code=413, detail="Zip bundle member has an unsafe compression ratio")
+
+        kind = _zip_member_kind(member)
+        parts = _safe_zip_parts(member.filename)
+        canonical_parts = _canonical_zip_parts(parts)
+        key = _collision_key(parts)
+        parent_keys = {key[:index] for index in range(1, len(key))}
+
+        if key in file_keys or key in directory_keys:
+            raise HTTPException(status_code=400, detail="Zip bundle contains duplicate or colliding paths")
+        if parent_keys & file_keys:
+            raise HTTPException(status_code=400, detail="Zip bundle contains a file/directory collision")
+
+        if kind == "directory":
+            directory_keys.add(key)
+            continue
+
+        # A file at a path that is already an implicit parent directory, or a
+        # file whose path is a parent of an earlier file, is ambiguous on disk.
+        if any(existing[: len(key)] == key for existing in file_keys | directory_keys):
+            raise HTTPException(status_code=400, detail="Zip bundle contains a file/directory collision")
+        file_keys.add(key)
+        directory_keys.update(parent_keys)
+
+        if parts == ("graph.json",):
+            if member.file_size > RESTORE_MAX_GRAPH_BYTES:
+                raise HTTPException(status_code=413, detail="graph.json is too large")
+            graph_member = member
+        if parts[0] == "assets" and len(parts) > 1:
+            inner_parts = parts[1:]
+            inner_path = "/".join(canonical_parts[1:])
+            decoded_inner_parts = tuple(
+                _decoded_portable_component(part)[0] for part in inner_parts
+            )
+            restore_members.append(
+                (member, inner_path, Path(*decoded_inner_parts))
+            )
+
+    if total_uncompressed and (
+        total_compressed == 0
+        or total_uncompressed / total_compressed > RESTORE_MAX_COMPRESSION_RATIO
+    ):
+        raise HTTPException(status_code=413, detail="Zip bundle has an unsafe compression ratio")
+    if graph_member is None:
+        raise HTTPException(status_code=400, detail="Zip bundle is missing graph.json")
+    return graph_member, restore_members
+
+
+def _read_restore_member_bytes(
+    archive: zipfile.ZipFile,
+    member: zipfile.ZipInfo,
+    *,
+    byte_limit: int,
+) -> bytes:
+    payload = bytearray()
+    with archive.open(member, "r") as source:
+        while chunk := source.read(min(RESTORE_COPY_CHUNK_BYTES, byte_limit + 1)):
+            payload.extend(chunk)
+            if len(payload) > byte_limit:
+                raise HTTPException(status_code=413, detail=f"{member.filename} is too large")
+    if len(payload) != member.file_size:
+        raise HTTPException(
+            status_code=400,
+            detail=f"{member.filename} size did not match its metadata",
+        )
+    return bytes(payload)
+
+
+def _reject_duplicate_json_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    value: dict[str, Any] = {}
+    for key, item in pairs:
+        if key in value:
+            raise ValueError(f"duplicate JSON key: {key}")
+        value[key] = item
+    return value
+
+
+def _validate_restore_json_complexity(value: Any) -> None:
+    """Bound nested graph work independently of the serialized byte ceiling."""
+    stack: list[tuple[Any, int]] = [(value, 0)]
+    value_count = 0
+    while stack:
+        current, depth = stack.pop()
+        value_count += 1
+        if value_count > RESTORE_MAX_GRAPH_VALUES:
+            raise HTTPException(status_code=413, detail="graph.json contains too many values")
+        if depth > RESTORE_MAX_GRAPH_DEPTH:
+            raise HTTPException(status_code=400, detail="graph.json is nested too deeply")
+        if isinstance(current, float) and not math.isfinite(current):
+            raise HTTPException(status_code=400, detail="graph.json contains a non-finite number")
+        if isinstance(current, dict):
+            stack.extend((item, depth + 1) for item in current.values())
+        elif isinstance(current, list):
+            stack.extend((item, depth + 1) for item in current)
+
+
+def _restore_runtime_params(
+    definition_id: str,
+    params: dict[str, Any],
+) -> dict[str, Any]:
+    """Mirror the browser's legacy runtime-metadata migration for validation."""
+    normalized = dict(params)
+    valid = _valid_param_keys(definition_id)
+    for key in ("sourceDuration", "sourceFps", "sourceIsVfr"):
+        if key not in normalized or (valid is not None and key in valid):
+            continue
+        normalized.setdefault(f"_{key}", normalized[key])
+        del normalized[key]
+    return normalized
+
+
+def _validate_restore_graph(graph: Any) -> dict[str, Any]:
+    """Validate the complete browser-facing NebulaFile without mutating state."""
+    if not isinstance(graph, dict):
+        raise HTTPException(status_code=400, detail="graph.json must contain an object")
+    _validate_restore_json_complexity(graph)
+
+    version = graph.get("version")
+    if type(version) is not int or version not in {1, 2, 3}:
+        raise HTTPException(status_code=400, detail="Unsupported .nebula file version")
+    if not isinstance(graph.get("name"), str) or not graph["name"].strip():
+        raise HTTPException(status_code=400, detail="graph.json name must be a non-empty string")
+    if not isinstance(graph.get("createdAt"), str) or not graph["createdAt"].strip():
+        raise HTTPException(status_code=400, detail="graph.json createdAt must be a non-empty string")
+
+    nodes = graph.get("nodes")
+    edges = graph.get("edges")
+    if not isinstance(nodes, list) or not isinstance(edges, list):
+        raise HTTPException(status_code=400, detail="graph.json requires nodes and edges arrays")
+    if len(nodes) > RESTORE_MAX_GRAPH_NODES:
+        raise HTTPException(status_code=413, detail="graph.json contains too many nodes")
+    if len(edges) > RESTORE_MAX_GRAPH_EDGES:
+        raise HTTPException(status_code=413, detail="graph.json contains too many edges")
+
+    ingress_nodes: list[dict[str, Any]] = []
+    seen_node_ids: set[str] = set()
+    for index, node in enumerate(nodes):
+        if not isinstance(node, dict):
+            raise HTTPException(status_code=400, detail=f"nodes[{index}] must be an object")
+        node_id = node.get("id")
+        if not isinstance(node_id, str) or not node_id or len(node_id) > 256:
+            raise HTTPException(
+                status_code=400, detail=f"nodes[{index}].id must be a bounded non-empty string"
+            )
+        if node_id in seen_node_ids:
+            raise HTTPException(status_code=400, detail=f"duplicate node id '{node_id}'")
+        seen_node_ids.add(node_id)
+        if not isinstance(node.get("type"), str) or not node["type"]:
+            raise HTTPException(status_code=400, detail=f"nodes[{index}].type must be a string")
+
+        position = node.get("position")
+        if not isinstance(position, dict):
+            raise HTTPException(status_code=400, detail=f"nodes[{index}].position must be an object")
+        x = position.get("x")
+        y = position.get("y")
+        if (
+            not isinstance(x, (int, float))
+            or isinstance(x, bool)
+            or not math.isfinite(float(x))
+            or not isinstance(y, (int, float))
+            or isinstance(y, bool)
+            or not math.isfinite(float(y))
+        ):
+            raise HTTPException(
+                status_code=400, detail=f"nodes[{index}].position requires finite numeric x and y"
+            )
+
+        data = node.get("data")
+        if not isinstance(data, dict):
+            raise HTTPException(status_code=400, detail=f"nodes[{index}].data must be an object")
+        if not isinstance(data.get("label"), str):
+            raise HTTPException(status_code=400, detail=f"nodes[{index}].data.label must be a string")
+        definition_id = data.get("definitionId")
+        if not isinstance(definition_id, str) or not definition_id:
+            raise HTTPException(
+                status_code=400,
+                detail=f"nodes[{index}].data.definitionId must be a non-empty string",
+            )
+        params = data.get("params")
+        if not isinstance(params, dict):
+            raise HTTPException(
+                status_code=400, detail=f"nodes[{index}].data.params must be an object"
+            )
+        normalized_params = _restore_runtime_params(definition_id, params)
+
+        outputs = data.get("outputs", {})
+        if outputs is None:
+            outputs = {}
+        if not isinstance(outputs, dict):
+            raise HTTPException(
+                status_code=400, detail=f"nodes[{index}].data.outputs must be an object"
+            )
+        for port_id, output in outputs.items():
+            if not isinstance(port_id, str) or not port_id:
+                raise HTTPException(
+                    status_code=400, detail=f"nodes[{index}] has an invalid output port id"
+                )
+            if (
+                not isinstance(output, dict)
+                or not isinstance(output.get("type"), str)
+                or not output["type"]
+            ):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"nodes[{index}].data.outputs.{port_id} must be a typed port object",
+                )
+        state = data.get("state")
+        if state is not None and state not in {"idle", "queued", "executing", "complete", "error"}:
+            raise HTTPException(status_code=400, detail=f"nodes[{index}].data.state is invalid")
+
+        ingress_nodes.append(
+            {
+                "id": node_id,
+                "definitionId": definition_id,
+                "params": normalized_params,
+                "outputs": outputs,
+                "position": {"x": x, "y": y},
+            }
+        )
+
+    ingress_edges: list[dict[str, Any]] = []
+    seen_edge_ids: set[str] = set()
+    for index, edge in enumerate(edges):
+        if not isinstance(edge, dict):
+            raise HTTPException(status_code=400, detail=f"edges[{index}] must be an object")
+        edge_id = edge.get("id")
+        if not isinstance(edge_id, str) or not edge_id or len(edge_id) > 256:
+            raise HTTPException(
+                status_code=400, detail=f"edges[{index}].id must be a bounded non-empty string"
+            )
+        if edge_id in seen_edge_ids:
+            raise HTTPException(status_code=400, detail=f"duplicate edge id '{edge_id}'")
+        seen_edge_ids.add(edge_id)
+        if not isinstance(edge.get("type"), str) or not edge["type"]:
+            raise HTTPException(status_code=400, detail=f"edges[{index}].type must be a string")
+        if edge.get("data") is not None and not isinstance(edge.get("data"), dict):
+            raise HTTPException(status_code=400, detail=f"edges[{index}].data must be an object")
+        ingress_edges.append(
+            {
+                "source": edge.get("source"),
+                "sourceHandle": edge.get("sourceHandle"),
+                "target": edge.get("target"),
+                "targetHandle": edge.get("targetHandle"),
+            }
+        )
+
+    viewport = graph.get("viewport")
+    if viewport is not None:
+        if not isinstance(viewport, dict):
+            raise HTTPException(status_code=400, detail="graph.json viewport must be an object")
+        values = [viewport.get(key) for key in ("x", "y", "zoom")]
+        if any(
+            not isinstance(value, (int, float))
+            or isinstance(value, bool)
+            or not math.isfinite(float(value))
+            for value in values
+        ) or float(values[2]) <= 0:
+            raise HTTPException(
+                status_code=400,
+                detail="graph.json viewport requires finite x/y and positive zoom",
+            )
+
+    # Exercise the same registry, param, handle, duplicate-edge, and cycle
+    # validation as /api/graph/import against a persistence-free candidate.
+    candidate = CLIGraph()
+    id_map = _stage_graph_nodes(
+        candidate,
+        ingress_nodes,
+        reference_key="id",
+        include_outputs=True,
+        normalize_image_inputs=False,
+    )
+    _stage_graph_edges(candidate, ingress_edges, id_map)
+    return graph
+
+
+def _read_and_validate_restore_graph(
+    archive: zipfile.ZipFile,
+    member: zipfile.ZipInfo,
+) -> dict[str, Any]:
+    payload = _read_restore_member_bytes(
+        archive,
+        member,
+        byte_limit=RESTORE_MAX_GRAPH_BYTES,
+    )
+    try:
+        text = payload.decode("utf-8")
+        graph = json.loads(
+            text,
+            object_pairs_hook=_reject_duplicate_json_keys,
+            parse_constant=lambda value: (_ for _ in ()).throw(
+                ValueError(f"invalid JSON number: {value}")
+            ),
+        )
+    except (UnicodeDecodeError, ValueError, RecursionError) as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid graph.json: {exc}") from exc
+    return _validate_restore_graph(graph)
+
+
+def _extract_restore_member(
+    archive: zipfile.ZipFile,
+    member: zipfile.ZipInfo,
+    destination: Path,
+    *,
+    extracted_total: int,
+) -> int:
+    """Extract one regular member in bounded chunks and verify actual size."""
+    partial = destination.with_name(f".{destination.name}.part")
+    member_size = 0
+    try:
+        with archive.open(member, "r") as source, partial.open("xb") as output:
+            while chunk := source.read(RESTORE_COPY_CHUNK_BYTES):
+                member_size += len(chunk)
+                if member_size > RESTORE_MAX_MEMBER_BYTES:
+                    raise HTTPException(status_code=413, detail="Zip bundle member is too large")
+                if extracted_total + member_size > RESTORE_MAX_TOTAL_UNCOMPRESSED_BYTES:
+                    raise HTTPException(status_code=413, detail="Zip bundle expands beyond the restore limit")
+                output.write(chunk)
+        if member_size != member.file_size:
+            raise HTTPException(status_code=400, detail="Zip bundle member size did not match its metadata")
+        partial.replace(destination)
+        return member_size
+    except BaseException:
+        partial.unlink(missing_ok=True)
+        raise
+
+
+def _restore_zip_bundle(zip_file: BinaryIO) -> dict[str, Any]:
     """Extract a frontend-produced .nebula.zip (from Save) into a fresh
-    output/<timestamp>/restored-<id>/ directory. Returns a mapping of the
-    original asset path inside the zip (without the 'assets/' prefix) to
-    the URL under which the restored file is served.
+    output/<timestamp>/restored-<id>/ directory. Returns the bounded, validated
+    graph plus a mapping of the original asset path inside the zip (without
+    the 'assets/' prefix) to the URL under which the restored file is served.
 
     A zip entry '<path>' at 'assets/<path>' is extracted to
-    OUTPUT_ROOT / <timestamp> / restored-<id> / <path>. Path-traversal
-    attempts ('..') are skipped silently — the caller can't escape
-    OUTPUT_ROOT even with a hostile zip.
+    OUTPUT_ROOT / <timestamp> / restored-<id> / <path>. The archive is
+    completely preflighted before extraction and every write is
+    bounded.  Any failure removes the fresh restore directory so callers never
+    receive or later discover a partially restored graph.
     """
-    import io
-    import zipfile
     from datetime import datetime, timezone
-    from uuid import uuid4
 
+    restore_dir: Path | None = None
+    timestamp_dir: Path | None = None
+    succeeded = False
     try:
-        zf = zipfile.ZipFile(io.BytesIO(zip_bytes))
-    except zipfile.BadZipFile as exc:
-        raise HTTPException(status_code=400, detail=f"Not a valid zip bundle: {exc}")
+        zip_file.seek(0)
+        with zipfile.ZipFile(zip_file) as archive:
+            graph_member, restore_members = _validated_restore_members(archive)
+            graph = _read_and_validate_restore_graph(archive, graph_member)
+            if not restore_members:
+                succeeded = True
+                return {"graph": graph, "urlMapping": {}}
 
-    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H-%M-%S")
-    restore_dir = OUTPUT_ROOT / timestamp / f"restored-{uuid4().hex[:8]}"
-    restore_dir.mkdir(parents=True, exist_ok=True)
-    restore_root = restore_dir.resolve()
+            timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H-%M-%S")
+            timestamp_dir = OUTPUT_ROOT / timestamp
+            restore_dir = timestamp_dir / f"restored-{uuid4().hex[:8]}"
+            restore_dir.mkdir(parents=True, exist_ok=False)
+            restore_root = restore_dir.resolve()
+            rel_prefix = f"{timestamp}/{restore_dir.name}"
+            url_mapping: dict[str, str] = {}
+            extracted_total = 0
 
-    url_mapping: dict[str, str] = {}
-    rel_prefix = f"{timestamp}/{restore_dir.name}"
+            for member, inner_path, relative_destination in restore_members:
+                destination = (restore_dir / relative_destination).resolve()
+                try:
+                    destination.relative_to(restore_root)
+                except ValueError as exc:
+                    raise HTTPException(status_code=400, detail="Zip bundle contains an unsafe path") from exc
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                extracted_total += _extract_restore_member(
+                    archive,
+                    member,
+                    destination,
+                    extracted_total=extracted_total,
+                )
+                served_path = quote(inner_path, safe="/")
+                url_mapping[inner_path] = f"/api/outputs/{rel_prefix}/{served_path}"
+            succeeded = True
+            return {"graph": graph, "urlMapping": url_mapping}
+    except HTTPException:
+        raise
+    except (zipfile.BadZipFile, zipfile.LargeZipFile, EOFError, RuntimeError, NotImplementedError) as exc:
+        raise HTTPException(status_code=400, detail=f"Not a valid zip bundle: {exc}") from exc
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail="Could not restore zip bundle assets") from exc
+    finally:
+        # A successful return leaves the restore tree in place. During an
+        # exception, Python executes this block before propagating it.
+        if restore_dir is not None and not succeeded:
+            shutil.rmtree(restore_dir, ignore_errors=True)
+            if timestamp_dir is not None:
+                try:
+                    timestamp_dir.rmdir()
+                except OSError:
+                    pass
 
-    for member in zf.namelist():
-        # Only restore entries under the 'assets/' prefix the frontend uses.
-        if not member.startswith("assets/") or member.endswith("/"):
-            continue
-        inner_path = member[len("assets/"):]
-        # Reject path traversal — '..' segments or absolute-looking paths.
-        if ".." in inner_path.split("/") or inner_path.startswith("/"):
-            continue
-        dest = (restore_dir / inner_path).resolve()
+
+async def _spool_restore_request(request: Request) -> BinaryIO:
+    """Stream a restore upload into a memory-then-disk spool with a hard cap."""
+    declared_length = request.headers.get("content-length")
+    if declared_length is not None:
         try:
-            dest.relative_to(restore_root)
-        except ValueError:
-            # Sneaked out of restore_dir via symlink-style trickery — skip.
-            continue
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        with zf.open(member) as src, dest.open("wb") as out:
-            out.write(src.read())
-        url_mapping[inner_path] = f"/api/outputs/{rel_prefix}/{inner_path}"
+            declared = int(declared_length)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="Invalid Content-Length") from exc
+        if declared < 0:
+            raise HTTPException(status_code=400, detail="Invalid Content-Length")
+        if declared > RESTORE_MAX_COMPRESSED_BYTES:
+            raise HTTPException(status_code=413, detail="Zip bundle exceeds the compressed upload limit")
 
-    return url_mapping
+    spool = tempfile.SpooledTemporaryFile(max_size=RESTORE_SPOOL_MEMORY_BYTES, mode="w+b")
+    received = 0
+    try:
+        async for chunk in request.stream():
+            if not chunk:
+                continue
+            received += len(chunk)
+            if received > RESTORE_MAX_COMPRESSED_BYTES:
+                raise HTTPException(status_code=413, detail="Zip bundle exceeds the compressed upload limit")
+            spool.write(chunk)
+        if received == 0:
+            raise HTTPException(status_code=400, detail="Empty request body")
+        spool.seek(0)
+        return spool
+    except BaseException:
+        spool.close()
+        raise
+
+
+def _validate_restore_request_headers(request: Request) -> None:
+    """Reject browser-drive-by restore writes before consuming request bytes."""
+    content_type = request.headers.get("content-type", "").strip().lower()
+    if content_type != RESTORE_CONTENT_TYPE:
+        # Nebula's own save/import path emits application/zip. Avoid accepting
+        # text/plain (a CORS-safelisted type) or legacy aliases we do not need.
+        raise HTTPException(
+            status_code=415,
+            detail="Output restore requires Content-Type: application/zip",
+        )
+
+    origin = request.headers.get("origin")
+    if origin is None:
+        # curl, the CLI, and other non-browser local callers do not send Origin.
+        return
+    try:
+        parsed = urlsplit(origin)
+        port = parsed.port
+    except ValueError as exc:
+        raise HTTPException(status_code=403, detail="Output restore origin is not allowed") from exc
+    if (
+        parsed.scheme != "http"
+        or parsed.hostname not in {"localhost", "127.0.0.1"}
+        or port is None
+        or not 1 <= port <= 65535
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.path
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise HTTPException(status_code=403, detail="Output restore origin is not allowed")
 
 
 _OUTPUT_DIR_PATTERN = re.compile(
@@ -277,22 +1127,50 @@ def _normalize_output_value_for_storage(port_val: Any) -> Any:
         return port_val
 
     value = port_val.get("value")
+    normalized = _normalize_nested_output_refs_for_storage(value)
+    normalized_port = port_val if normalized == value else {**port_val, "value": normalized}
+    port_type = normalized_port.get("type")
+    if port_type in SPATIAL_VALUE_MODELS:
+        if normalized is None:
+            raise ValueError(f"{port_type} output cannot be null")
+        if (
+            port_type == "World"
+            and isinstance(normalized, dict)
+            and normalized.get("schemaVersion", normalized.get("schema_version")) == 1
+        ):
+            normalized_port = {
+                **normalized_port,
+                "value": canonicalize_world_value_v1(normalized),
+            }
+        else:
+            parsed = parse_spatial_value(str(port_type), normalized)
+            normalized_port = {
+                **normalized_port,
+                "value": dump_spatial_value(parsed),
+            }
+    return normalized_port
+
+
+def _normalize_nested_output_refs_for_storage(value: Any) -> Any:
+    """Recursively make run-owned references portable inside structured ports.
+
+    Most ports hold a string or list, but the versioned ``World`` port embeds
+    splats, panorama, collider, and thumbnail paths several levels deep.
+    External provider links (for example ``marbleUrl``) pass through because
+    ``_output_url_from_ref`` only accepts paths owned by Nebula's output root.
+    """
     if isinstance(value, str):
-        url = _output_url_from_ref(value)
-        if url is None:
-            return port_val
-        return {**port_val, "value": url}
-
-    if not isinstance(value, list):
-        return port_val
-
-    normalized = [
-        _output_url_from_ref(item) or item if isinstance(item, str) else item
-        for item in value
-    ]
-    if normalized == value:
-        return port_val
-    return {**port_val, "value": normalized}
+        return _output_url_from_ref(value) or value
+    if isinstance(value, list):
+        return [_normalize_nested_output_refs_for_storage(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_normalize_nested_output_refs_for_storage(item) for item in value)
+    if isinstance(value, dict):
+        return {
+            key: _normalize_nested_output_refs_for_storage(item)
+            for key, item in value.items()
+        }
+    return value
 
 
 def _normalize_outputs_for_storage(outputs: dict[str, Any]) -> dict[str, Any]:
@@ -308,6 +1186,74 @@ def _normalize_outputs_for_storage(outputs: dict[str, Any]) -> dict[str, Any]:
                 continue
         rewritten[key] = value
     return rewritten
+
+
+_DYNAMIC_OUTPUT_DEFINITION_IDS = {
+    "openrouter-universal",
+    "replicate-universal",
+    "fal-universal",
+    "nous-portal-universal",
+}
+
+
+def _known_port_data_types() -> set[str]:
+    return {
+        str(port["dataType"])
+        for definition in node_registry.get_all().values()
+        for port_key in ("inputPorts", "outputPorts")
+        for port in definition.get(port_key, []) or []
+        if isinstance(port, dict)
+        and isinstance(port.get("dataType"), str)
+        and port["dataType"]
+    } | set(SPATIAL_VALUE_MODELS) | {"Any"}
+
+
+def _imported_output_type_is_valid(actual: str, declared: str | None) -> bool:
+    if actual not in _known_port_data_types():
+        return False
+    if declared is None or declared == "Any":
+        return True
+    return actual == declared or {actual, declared} == {"Image", "Mask"}
+
+
+def _validate_imported_outputs(
+    definition_id: str,
+    outputs: dict[str, Any],
+    *,
+    node_index: int,
+) -> None:
+    """Reject fabricated output handles/types before staging graph state."""
+
+    definition = node_registry.get(definition_id) or {}
+    declared_ports = {
+        str(port["id"]): str(port.get("dataType") or "Any")
+        for port in definition.get("outputPorts", []) or []
+        if isinstance(port, dict) and isinstance(port.get("id"), str)
+    }
+    handles_are_dynamic = (
+        definition_id in _DYNAMIC_OUTPUT_DEFINITION_IDS and not declared_ports
+    )
+    for handle, port in outputs.items():
+        if not isinstance(handle, str) or not handle:
+            raise ValueError(f"nodes[{node_index}] has an invalid output handle")
+        if not handles_are_dynamic and handle not in declared_ports:
+            raise ValueError(
+                f"nodes[{node_index}] output handle '{handle}' is not declared by "
+                f"definition '{definition_id}'"
+            )
+        if not isinstance(port, dict):
+            raise ValueError(f"nodes[{node_index}].outputs.{handle} must be an object")
+        actual_type = port.get("type")
+        if not isinstance(actual_type, str) or not actual_type:
+            raise ValueError(
+                f"nodes[{node_index}].outputs.{handle}.type must be a non-empty string"
+            )
+        declared_type = declared_ports.get(handle)
+        if not _imported_output_type_is_valid(actual_type, declared_type):
+            raise ValueError(
+                f"nodes[{node_index}] output '{handle}' declares type {actual_type}, "
+                f"but definition '{definition_id}' outputs {declared_type or 'a known dynamic type'}"
+            )
 
 
 def _import_external_image_to_output_root(file_path_value: str) -> tuple[Path, str] | None:
@@ -435,12 +1381,29 @@ def _substitute_output_paths(outputs: dict[str, Any], mapping: dict[str, str]) -
     for key, port_val in outputs.items():
         if isinstance(port_val, dict):
             value = port_val.get("value")
-            if isinstance(value, str) and value in mapping:
-                rewritten[key] = {**port_val, "value": mapping[value]}
+            substituted = _substitute_nested_output_paths(value, mapping)
+            if substituted != value:
+                rewritten[key] = {**port_val, "value": substituted}
                 changed = True
                 continue
         rewritten[key] = port_val
     return rewritten, changed
+
+
+def _substitute_nested_output_paths(value: Any, mapping: dict[str, str]) -> Any:
+    """Apply graph-import path migration inside structured output values."""
+    if isinstance(value, str):
+        return mapping.get(value, value)
+    if isinstance(value, list):
+        return [_substitute_nested_output_paths(item, mapping) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_substitute_nested_output_paths(item, mapping) for item in value)
+    if isinstance(value, dict):
+        return {
+            key: _substitute_nested_output_paths(item, mapping)
+            for key, item in value.items()
+        }
+    return value
 
 
 def _normalize_cli_graph_output_refs() -> None:
@@ -539,15 +1502,19 @@ async def archive_outputs(older_than_days: int = 30) -> dict:
 
 @app.post("/api/outputs/restore")
 async def restore_outputs(request: Request) -> dict:
-    """Accept a .nebula.zip body, extract assets into a fresh output/
-    subdirectory, and return the old-path → served-URL mapping. The frontend
-    uses the mapping to rewrite graph JSON so loaded nodes point at the
-    restored files instead of the vanished originals."""
-    body = await request.body()
-    if not body:
-        raise HTTPException(status_code=400, detail="Empty request body")
-    url_mapping = _restore_zip_bundle(body)
-    return {"urlMapping": url_mapping}
+    """Bound, validate, and restore a complete .nebula.zip atomically.
+
+    The browser does not inflate graph.json. This endpoint returns the parsed
+    graph with the old-path → served-URL mapping only after both graph
+    validation and asset extraction succeed.
+    """
+    _reject_graph_replacement_during_paid_start("restore a graph bundle")
+    _validate_restore_request_headers(request)
+    spool = await _spool_restore_request(request)
+    try:
+        return await asyncio.to_thread(_restore_zip_bundle, spool)
+    finally:
+        spool.close()
 
 _SUPPORTED_IMAGE_TYPES = {
     b"\x89PNG\r\n\x1a\n": ("image/png", ".png"),
@@ -845,6 +1812,56 @@ class ConnectionManager:
 manager = ConnectionManager()
 
 
+def _try_compact_execution_cancellation(run_id: str) -> bool:
+    """Move an exact Stop record into permanent-deny storage when safe."""
+    try:
+        provider_start_guard.acknowledge_cancel_intent(run_id)
+    except (ProviderStartConflictError, ProviderStartPersistenceError, ValueError):
+        return False
+    # The exact record may already have been compacted by another worker. The
+    # durable filter is authoritative, so local inspection capacity is safe to
+    # release either way.
+    execution_runs.compact_cancel_intent(run_id)
+    return True
+
+
+def _publish_terminal_execution_status(run_id: str, status: str) -> None:
+    """Push authoritative terminal state after the task done callback settles."""
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return
+    async def settle_and_publish() -> None:
+        # A task cancelled before its coroutine receives its first event-loop
+        # turn never enters the route-level ``finally``. This idempotent release
+        # closes that admission lease before announcing terminal state.
+        await _release_paid_worldlabs_starts(run_id)
+        # Exact Stop records are useful only until terminal settlement. Compact
+        # every visible record into the durable permanent-deny filter here;
+        # this also cleans an unknown Stop that initially raced an unrelated
+        # paid lifecycle on another backend worker.
+        compacted = False
+        for cancelled_run_id in provider_start_guard.list_cancel_intents():
+            compacted = (
+                _try_compact_execution_cancellation(cancelled_run_id)
+                or compacted
+            )
+        if compacted:
+            await _broadcast_graph_sync()
+        await manager.broadcast_raw(
+            {
+                "type": "executionStatus",
+                "runId": run_id,
+                "status": status,
+            }
+        )
+
+    loop.create_task(settle_and_publish())
+
+
+execution_runs.set_terminal_callback(_publish_terminal_execution_status)
+
+
 def _snake_to_camel(s: str) -> str:
     parts = s.split("_")
     return parts[0] + "".join(p.capitalize() for p in parts[1:])
@@ -903,6 +1920,11 @@ def _validation_response(errors: list[ValidationErrorDetail]) -> dict[str, Any]:
 async def websocket_endpoint(websocket: WebSocket) -> None:
     await manager.connect(websocket)
     try:
+        # Events emitted while a browser is disconnected are not replayed.
+        # Reconnect therefore starts with an authoritative graph, provider
+        # safety journal, and retained execution-status snapshot.
+        export = await export_graph_for_frontend()
+        await websocket.send_text(json.dumps({"type": "graphSync", **export}))
         while True:
             await websocket.receive_text()
     except WebSocketDisconnect:
@@ -948,6 +1970,7 @@ async def chat_websocket(websocket: WebSocket) -> None:
         agent: str,
         autonomy: str,
         provider: str | None,
+        turn_selection_context: str,
     ) -> None:
         # Single outbound queue so every send path (agent events + canvas-
         # action events from the graph API) is serialized through one drainer
@@ -990,7 +2013,14 @@ async def chat_websocket(websocket: WebSocket) -> None:
                 return
 
             try:
-                agen = runner(message, session_id, model, autonomy, provider=provider)
+                agen = runner(
+                    message,
+                    session_id,
+                    model,
+                    autonomy,
+                    provider=provider,
+                    selection_context=turn_selection_context,
+                )
                 async for event in agen:
                     task = asyncio.current_task()
                     if task is not None and task.cancelling():
@@ -1104,6 +2134,20 @@ async def chat_websocket(websocket: WebSocket) -> None:
             # When omitted, the runner falls back to its default provider.
             provider_raw = payload.get("provider")
             provider = str(provider_raw) if provider_raw else None
+            selected_ids_raw = payload.get("selectedNodeIds")
+            if selected_ids_raw is not None and not isinstance(selected_ids_raw, list):
+                await send_event({
+                    "type": "error",
+                    "message": "selectedNodeIds must be an array of node IDs.",
+                    "source": "system",
+                })
+                continue
+            selection_snapshot = selection_context.snapshot(
+                cli_graph,
+                node_registry,
+                requested_ids=selected_ids_raw,
+            )
+            turn_selection_context = selection_prompt_context(selection_snapshot)
             if not user_message.strip():
                 continue
 
@@ -1123,7 +2167,15 @@ async def chat_websocket(websocket: WebSocket) -> None:
                 })
                 continue
             current_task = asyncio.create_task(
-                stream_response(user_message, session_id, model, agent, autonomy, provider)
+                stream_response(
+                    user_message,
+                    session_id,
+                    model,
+                    agent,
+                    autonomy,
+                    provider,
+                    turn_selection_context,
+                )
             )
             current_agent = agent
     except WebSocketDisconnect:
@@ -1140,6 +2192,33 @@ async def chat_websocket(websocket: WebSocket) -> None:
 @app.get("/api/health")
 async def health() -> dict:
     return {"status": "ok", "app": "nebula", "version": "0.1.0"}
+
+
+@app.get("/api/capabilities/worldlabs")
+async def get_worldlabs_capabilities() -> dict[str, Any]:
+    """Describe World Labs support without credentials or provider traffic."""
+    return worldlabs_capability_gate.manifest()
+
+
+@app.get("/api/canvas/selection")
+async def get_canvas_selection() -> dict[str, Any]:
+    """Return the live, bounded canvas selection for CLI/MCP agents."""
+    return selection_context.snapshot(cli_graph, node_registry)
+
+
+@app.post("/api/canvas/selection")
+async def set_canvas_selection(body: dict[str, Any]) -> dict[str, Any]:
+    """Publish ephemeral selected IDs; authoritative node data stays server-side."""
+    node_ids = body.get("nodeIds")
+    if not isinstance(node_ids, list):
+        raise HTTPException(status_code=422, detail="nodeIds must be an array")
+    if len(node_ids) > 200:
+        raise HTTPException(status_code=422, detail="nodeIds supports at most 200 entries")
+    return selection_context.snapshot(
+        cli_graph,
+        node_registry,
+        requested_ids=node_ids,
+    )
 
 
 @app.get("/api/project")
@@ -1263,14 +2342,292 @@ async def update_settings(body: dict[str, Any]) -> dict:
     return {"status": "saved"}
 
 
+def _execution_is_cancelling(run_id: str) -> bool:
+    record = execution_runs.get(run_id)
+    return record is not None and record.status == "cancelling"
+
+
+async def _finalize_cancelled_execution(
+    nodes: list[GraphNode], run_id: str
+) -> None:
+    """Persist late handler params, then emit exactly one Stop terminal."""
+    if _sync_params_to_cli_graph(nodes):
+        await _broadcast_graph_sync()
+    await manager.broadcast(GraphCancelledEvent(run_id=run_id))
+
+
+def _fresh_paid_worldlabs_claims(
+    nodes: list[GraphNode],
+) -> list[tuple[str, str]]:
+    """Return paid, non-idempotent World Labs starts in an execution scope.
+
+    Environment generation is paid for every model/input mode. PLY conversion
+    is provider-documented as free, so only a fresh HQ-GLB export is admitted
+    through this paid-start gate. Supplying a recovery identifier changes the
+    operation into polling/retrieval and deliberately bypasses the gate.
+    """
+    claims: list[tuple[str, str]] = []
+    for node in nodes:
+        policy = operation_policy(node.definition_id)
+        if (
+            policy is not None
+            and policy.provider == "worldlabs"
+            and requires_fresh_paid_start(node.definition_id, node.params)
+        ):
+            claims.append((node.definition_id, node.id))
+    return claims
+
+
+def _worldlabs_recovery_claims(
+    nodes: list[GraphNode],
+) -> list[tuple[str, str, str | None, str | None]]:
+    claims: list[tuple[str, str, str | None, str | None]] = []
+    for node in nodes:
+        policy = operation_policy(node.definition_id)
+        if policy is None or policy.provider != "worldlabs":
+            continue
+        resume_id, existing_id = recovery_identifiers(
+            node.definition_id, node.params
+        )
+        if resume_id or existing_id:
+            claims.append((node.definition_id, node.id, resume_id, existing_id))
+    return claims
+
+
+def _validate_cinema_base_models(nodes: list[GraphNode]) -> None:
+    """Reject nested handler-dispatch IDs outside Cinema's strict allowlist."""
+    from handlers.cinema_scene import _guard_base_model
+
+    for node in nodes:
+        if node.definition_id != "cinema-scene":
+            continue
+        scene = (node.params or {}).get("scene")
+        if not isinstance(scene, dict):
+            continue
+        base = scene.get("base") or {}
+        if not isinstance(base, dict):
+            raise HTTPException(
+                status_code=400,
+                detail="cinema-scene scene.base must be an object",
+            )
+        try:
+            _guard_base_model(base)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+def _assert_execution_admissible(run_id: str) -> None:
+    """Honor both durable cross-process and local pre-admission Stop intents."""
+    try:
+        provider_start_guard.assert_run_admissible(run_id)
+    except ProviderStartCancelledError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ProviderStartCancellationCapacityError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except ProviderStartPersistenceError as exc:
+        raise HTTPException(
+            status_code=507,
+            detail=(
+                "Nebula cannot verify durable pre-admission Stop state; no "
+                "provider request was sent"
+            ),
+        ) from exc
+    try:
+        execution_runs.assert_admissible(run_id)
+    except ExecutionCancelledBeforeStartError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ExecutionCancellationCapacityError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+def _claim_fresh_paid_worldlabs_starts(
+    *, run_id: str, nodes: list[GraphNode]
+) -> None:
+    claims = _fresh_paid_worldlabs_claims(nodes)
+    recovery_claims = _worldlabs_recovery_claims(nodes)
+    if not claims and not recovery_claims:
+        return
+
+    def prepare_recovery_journal() -> None:
+        global _graph_recovery_bootstrap_error
+        # ProviderStartGuard invokes this callback while holding the shared
+        # cross-process lifecycle + admission journal locks. A recovery resume
+        # and a stale fresh payload therefore cannot both pass their checks.
+        if _graph_recovery_bootstrap_error is not None:
+            try:
+                _ensure_shared_graph_recoveries(
+                    list(cli_graph.nodes.values()), source="bootstrap-retry"
+                )
+            except (
+                ProviderRecoveryCapacityError,
+                ProviderRecoveryConflictError,
+                ProviderRecoveryPersistenceError,
+                ValueError,
+            ) as exc:
+                _graph_recovery_bootstrap_error = str(exc)
+                raise ProviderRecoveryPersistenceError(
+                    "persisted graph recovery bootstrap is unhealthy: "
+                    + _graph_recovery_bootstrap_error
+                ) from exc
+            _graph_recovery_bootstrap_error = None
+        if not provider_recovery_store.is_healthy():
+            raise ProviderRecoveryPersistenceError(
+                "provider recovery storage is unhealthy"
+            )
+        claimed_node_ids = {node_id for _kind, node_id in claims}
+        recovered_node_ids = {
+            str(record.get("nodeId"))
+            for record in provider_recovery_store.list()
+            if isinstance(record, dict)
+        }
+        canonical_recovery_node_ids = {
+            node_id
+            for node_id in claimed_node_ids
+            if (
+                (current := cli_graph.nodes.get(node_id)) is not None
+                and has_recovery_identity(
+                    str(current.get("definitionId") or ""),
+                    current.get("params") or {},
+                )
+            )
+        }
+        stale_nodes = sorted(
+            claimed_node_ids & (recovered_node_ids | canonical_recovery_node_ids)
+        )
+        if stale_nodes:
+            raise ProviderStartConflictError(
+                "Fresh World Labs start blocked because Nebula already has a "
+                "recovery checkpoint for node(s): "
+                + ", ".join(stale_nodes)
+                + ". Restore or explicitly delete the checkpoint before starting "
+                "new paid work."
+            )
+        provider_recovery_store.reserve(
+            run_id=run_id,
+            node_ids=list(
+                dict.fromkeys(node_id for _kind, node_id in claims)
+            ),
+        )
+        provider_recovery_store.reserve_checkpoints(
+            run_id=run_id,
+            checkpoints=[
+                (node_id, resume_id, existing_id)
+                for _kind, node_id, resume_id, existing_id in recovery_claims
+            ],
+        )
+        for _kind, node_id, resume_id, existing_id in recovery_claims:
+            provider_recovery_store.set(
+                run_id=run_id,
+                node_id=node_id,
+                resume_operation_id=resume_id,
+                existing_world_id=existing_id,
+            )
+
+    try:
+        provider_start_guard.claim(
+            run_id=run_id,
+            claims=claims,
+            recovery_claims=[
+                (kind, node_id)
+                for kind, node_id, _resume, _existing in recovery_claims
+            ],
+            pre_commit=prepare_recovery_journal,
+        )
+    except ProviderRecoveryCapacityError as exc:
+        provider_recovery_store.release_reservations(run_id)
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ProviderRecoveryPersistenceError as exc:
+        provider_recovery_store.release_reservations(run_id)
+        raise HTTPException(
+            status_code=507,
+            detail=(
+                "Nebula cannot durably register the supplied World Labs recovery "
+                "ID; no provider request was sent"
+            ),
+        ) from exc
+    except ProviderStartCancellationCapacityError as exc:
+        provider_recovery_store.release_reservations(run_id)
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except ProviderStartConflictError as exc:
+        provider_recovery_store.release_reservations(run_id)
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ProviderStartPersistenceError as exc:
+        provider_recovery_store.release_reservations(run_id)
+        raise HTTPException(
+            status_code=507,
+            detail=(
+                "Nebula cannot verify durable paid-start safety storage; no "
+                "World Labs request was sent"
+            ),
+        ) from exc
+    except ValueError as exc:
+        provider_recovery_store.release_reservations(run_id)
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+async def _release_paid_worldlabs_starts(run_id: str) -> None:
+    """Release a terminal run and surface any failed durable-intent cleanup."""
+    fallback_holds = provider_start_guard.release_run(run_id)
+    provider_recovery_store.release_reservations(run_id)
+    if not fallback_holds:
+        return
+    for hold in fallback_holds:
+        await manager.broadcast(
+            ProviderStartAmbiguousEvent(
+                run_id=str(hold["runId"]),
+                node_id=str(hold["nodeId"]),
+                kind=hold["kind"],
+                message=(
+                    f"{hold['message']} Nebula could not durably close its "
+                    "pre-start intent; keep this tab open."
+                ),
+                durable=False,
+            )
+        )
+    await _broadcast_graph_sync()
+
+
+_shared_stop_watchers: set[asyncio.Task[None]] = set()
+
+
+def _watch_for_cross_process_stop(
+    run_id: str,
+    execution_task: asyncio.Task[None],
+) -> None:
+    """Cancel the owning task when another backend records a durable Stop."""
+
+    async def watch() -> None:
+        try:
+            while not execution_task.done():
+                cancelled = await asyncio.to_thread(
+                    provider_start_guard.is_run_cancelled,
+                    run_id,
+                )
+                if cancelled:
+                    record = execution_runs.get(run_id)
+                    if record is not None and record.status == "running":
+                        execution_runs.cancel(run_id)
+                    return
+                await asyncio.sleep(0.1)
+        except asyncio.CancelledError:
+            return
+
+    watcher = asyncio.create_task(watch())
+    _shared_stop_watchers.add(watcher)
+    watcher.add_done_callback(_shared_stop_watchers.discard)
+    execution_task.add_done_callback(lambda _done: watcher.cancel())
+
+
 @app.post("/api/execute")
 async def execute(request: ExecuteRequest) -> dict:
     run_id = request.run_id or str(uuid4())
+    _assert_execution_admissible(run_id)
     if execution_runs.get(run_id) is not None:
         raise HTTPException(status_code=409, detail=f"run '{run_id}' already exists")
     settings = load_settings()
     api_keys = settings.get("apiKeys", {})
     nodes = _normalize_execute_nodes(request.nodes)
+    _validate_cinema_base_models(nodes)
 
     errors = validate_graph(nodes, request.edges, api_keys)
     if errors:
@@ -1292,9 +2649,10 @@ async def execute(request: ExecuteRequest) -> dict:
                 ]
             )
         )
-        return {"status": "cycle_error"}
+        raise HTTPException(status_code=400, detail=f"Graph contains a cycle: {exc}")
 
     handler_registry = get_handler_registry(emit=_emit_and_sync)
+    _claim_fresh_paid_worldlabs_starts(run_id=run_id, nodes=nodes)
 
     async def _run() -> None:
         import traceback, sys
@@ -1309,6 +2667,13 @@ async def execute(request: ExecuteRequest) -> dict:
                 cache=execution_cache,
                 run_id=run_id,
             )
+            # A provider's non-idempotent POST handshake may deliberately
+            # absorb task cancellation long enough to capture an operation
+            # ID. The engine can then return normally after suppressing its
+            # own terminal events. Preserve the user's Stop as the route's
+            # authoritative terminal state.
+            if _execution_is_cancelling(run_id):
+                raise asyncio.CancelledError
             if _sync_params_to_cli_graph(nodes):
                 # ExecutedEvent carries outputs, but handlers such as
                 # video-edit also enrich params. Without a final graphSync the
@@ -1317,19 +2682,57 @@ async def execute(request: ExecuteRequest) -> dict:
                 await _broadcast_graph_sync()
             print("[exec] _run completed successfully", file=sys.stderr, flush=True)
         except asyncio.CancelledError:
-            await manager.broadcast(GraphCancelledEvent(run_id=run_id))
+            await _finalize_cancelled_execution(nodes, run_id)
             raise
         except Exception as e:
+            if _execution_is_cancelling(run_id):
+                await _finalize_cancelled_execution(nodes, run_id)
+                raise asyncio.CancelledError from e
             print(f"[exec] _run FAILED: {e}", file=sys.stderr, flush=True)
             traceback.print_exc(file=sys.stderr)
             raise
+        finally:
+            # A Stop may be absorbed while the non-idempotent provider POST
+            # settles. The lease therefore belongs to the task, not the HTTP
+            # acknowledgement, and releases only after the task is terminal.
+            await _release_paid_worldlabs_starts(run_id)
 
-    task = asyncio.create_task(_run())
+    task: asyncio.Task[None] | None = None
+    run_coroutine = _run()
     try:
+        task = asyncio.create_task(run_coroutine)
         execution_runs.register(run_id, task)
-    except ValueError as exc:
-        task.cancel()
+        _watch_for_cross_process_stop(run_id, task)
+    except ExecutionCancelledBeforeStartError as exc:
+        if task is None:
+            run_coroutine.close()
+        else:
+            await asyncio.gather(task, return_exceptions=True)
+        await _release_paid_worldlabs_starts(run_id)
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ExecutionCancellationCapacityError as exc:
+        if task is None:
+            run_coroutine.close()
+        else:
+            await asyncio.gather(task, return_exceptions=True)
+        await _release_paid_worldlabs_starts(run_id)
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except ValueError as exc:
+        if task is None:
+            run_coroutine.close()
+        else:
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+        await _release_paid_worldlabs_starts(run_id)
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except Exception:
+        if task is None:
+            run_coroutine.close()
+        else:
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+        await _release_paid_worldlabs_starts(run_id)
+        raise
 
     return {"status": "started", "runId": run_id}
 
@@ -1338,6 +2741,7 @@ async def execute(request: ExecuteRequest) -> dict:
 async def execute_node(request: ExecuteNodeRequest) -> dict:
     """Execute only the subgraph feeding into a specific target node."""
     run_id = request.run_id or str(uuid4())
+    _assert_execution_admissible(run_id)
     if execution_runs.get(run_id) is not None:
         raise HTTPException(status_code=409, detail=f"run '{run_id}' already exists")
     settings = load_settings()
@@ -1350,7 +2754,12 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
     )
 
     if not sub_nodes:
-        return {"status": "error", "message": f"Node '{request.target_node_id}' not found in graph"}
+        raise HTTPException(
+            status_code=404,
+            detail=f"Node '{request.target_node_id}' not found in graph",
+        )
+
+    _validate_cinema_base_models(sub_nodes)
 
     errors = validate_graph(sub_nodes, sub_edges, api_keys)
     if errors:
@@ -1372,9 +2781,10 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
                 ]
             )
         )
-        return {"status": "cycle_error"}
+        raise HTTPException(status_code=400, detail=f"Subgraph contains a cycle: {exc}")
 
     handler_registry = get_handler_registry(emit=_emit_and_sync)
+    _claim_fresh_paid_worldlabs_starts(run_id=run_id, nodes=sub_nodes)
 
     async def _run() -> None:
         import traceback
@@ -1388,21 +2798,42 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
                 cache=execution_cache,
                 run_id=run_id,
             )
+            if _execution_is_cancelling(run_id):
+                raise asyncio.CancelledError
             if _sync_params_to_cli_graph(sub_nodes):
                 await _broadcast_graph_sync()
         except asyncio.CancelledError:
-            await manager.broadcast(GraphCancelledEvent(run_id=run_id))
+            await _finalize_cancelled_execution(sub_nodes, run_id)
             raise
-        except Exception:
+        except Exception as exc:
+            if _execution_is_cancelling(run_id):
+                await _finalize_cancelled_execution(sub_nodes, run_id)
+                raise asyncio.CancelledError from exc
             traceback.print_exc()
             raise
+        finally:
+            await _release_paid_worldlabs_starts(run_id)
 
-    task = asyncio.create_task(_run())
     try:
+        task = asyncio.create_task(_run())
         execution_runs.register(run_id, task)
+        _watch_for_cross_process_stop(run_id, task)
+    except ExecutionCancelledBeforeStartError as exc:
+        await asyncio.gather(task, return_exceptions=True)
+        await _release_paid_worldlabs_starts(run_id)
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ExecutionCancellationCapacityError as exc:
+        await asyncio.gather(task, return_exceptions=True)
+        await _release_paid_worldlabs_starts(run_id)
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     except ValueError as exc:
         task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+        await _release_paid_worldlabs_starts(run_id)
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except Exception:
+        await _release_paid_worldlabs_starts(run_id)
+        raise
 
     return {"status": "started", "nodeCount": len(sub_nodes), "runId": run_id}
 
@@ -1418,14 +2849,82 @@ async def get_execution_status(run_id: str) -> dict:
 @app.delete("/api/executions/{run_id}")
 async def cancel_execution(run_id: str) -> dict:
     """Idempotently request cancellation of a tracked graph execution."""
-    record = execution_runs.cancel(run_id)
+    existing = execution_runs.get(run_id)
+    try:
+        # Persist every Stop, including one received by the task-owning worker.
+        # Otherwise a different backend could reuse the same runId after the
+        # local task becomes terminal and its paid lifecycle lease is released.
+        provider_start_guard.record_cancel_intent(run_id)
+    except ProviderStartCancellationCapacityError as exc:
+        if existing is not None:
+            execution_runs.cancel(run_id)
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except ProviderStartPersistenceError as exc:
+        if existing is not None:
+            execution_runs.cancel(run_id)
+        raise HTTPException(
+            status_code=507,
+            detail="Could not durably record the pre-admission Stop intent",
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    try:
+        record = execution_runs.cancel(run_id)
+    except ExecutionCancellationCapacityError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     if record is None:
-        raise HTTPException(status_code=404, detail=f"run '{run_id}' not found")
+        # No task owns this ID, so the durable exact intent can immediately be
+        # compacted: its Bloom-filter membership permanently rejects any
+        # delayed POST while bounded exact-journal capacity is recovered.
+        if _try_compact_execution_cancellation(run_id):
+            await _broadcast_graph_sync()
+        return {"runId": run_id, "status": "cancelled", "pendingAdmission": True}
     # Yield once so a cooperative task can process CancelledError and the
     # registry can report the terminal state in this acknowledgement.
     await asyncio.sleep(0)
     current = execution_runs.get(run_id) or record
+    if current.status in {"cancelled", "completed", "failed"}:
+        if _try_compact_execution_cancellation(run_id):
+            await _broadcast_graph_sync()
     return {"runId": run_id, "status": current.status}
+
+
+@app.get("/api/execution-cancellations")
+async def list_execution_cancellations() -> dict:
+    """List durable pre-admission Stop tombstones for explicit maintenance."""
+    return {
+        "cancellations": [
+            {"runId": run_id, "status": "cancelled"}
+            for run_id in provider_start_guard.list_cancel_intents()
+        ]
+    }
+
+
+@app.delete("/api/execution-cancellations/{run_id}")
+async def acknowledge_execution_cancellation(run_id: str) -> dict:
+    """Compact one Stop tombstone while permanently denying its old run ID."""
+    try:
+        removed = provider_start_guard.acknowledge_cancel_intent(run_id)
+    except ProviderStartConflictError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail="Wait for all World Labs paid work to become terminal first",
+        ) from exc
+    except ProviderStartPersistenceError as exc:
+        raise HTTPException(
+            status_code=507,
+            detail="Could not durably compact the execution cancellation",
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    # Only discard the process-local exact record after the shared journal has
+    # durably moved this ID into its permanent-deny filter. A delayed POST with
+    # the same runId therefore remains rejected across workers and restarts.
+    execution_runs.compact_cancel_intent(run_id)
+    await _broadcast_graph_sync()
+    return {"status": "compacted", "runId": run_id, "removed": removed}
 
 
 # Per-node locks serialize concurrent single-shot merges on the SAME cinema node.
@@ -1752,6 +3251,10 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
     scene, then merges that one result back into the canonical node so sibling
     shots' outputs/ports are untouched. Upstream character/image inputs resolve
     via the same subgraph mechanism as /api/execute-node."""
+    run_id = request.run_id or f"cinema-shot-{uuid4().hex}"
+    _assert_execution_admissible(run_id)
+    if execution_runs.get(run_id) is not None:
+        raise HTTPException(status_code=409, detail=f"run '{run_id}' already exists")
     settings = load_settings()
     api_keys = settings.get("apiKeys", {})
     nodes = _normalize_execute_nodes(request.nodes)
@@ -1765,6 +3268,7 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
     scene = (target.params or {}).get("scene")
     if not isinstance(scene, dict):
         raise HTTPException(status_code=400, detail="cinema-scene node has no scene spec")
+    _validate_cinema_base_models([target])
     shots = scene.get("shots") or []
     shot = next(
         (s for s in shots if isinstance(s, dict) and str(s.get("id")) == request.shot_id),
@@ -1784,18 +3288,33 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
     sub_nodes, sub_edges = get_subgraph(patched_nodes, request.edges, request.node_id)
     if not sub_nodes:
         raise HTTPException(status_code=404, detail=f"Node '{request.node_id}' not found in graph")
+    fresh_paid_ancestors = _fresh_paid_worldlabs_claims(sub_nodes)
+    if fresh_paid_ancestors:
+        blocked_ids = ", ".join(node_id for _kind, node_id in fresh_paid_ancestors)
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Cinema shot generation cannot implicitly start fresh World Labs "
+                f"paid ancestor(s): {blocked_ids}. Run those World nodes on the "
+                "Canvas first, then retry the shot with their recovered outputs."
+            ),
+        )
 
     errors = validate_graph(sub_nodes, sub_edges, api_keys)
     if errors:
-        await manager.broadcast(ValidationErrorEvent(errors=errors, run_id=request.run_id))
-        return {"status": "validation_error", "errorCount": len(errors)}
+        await manager.broadcast(ValidationErrorEvent(errors=errors, run_id=run_id))
+        return {
+            "status": "validation_error",
+            "errorCount": len(errors),
+            "runId": run_id,
+        }
 
     try:
         topological_sort(sub_nodes, sub_edges)
     except CycleError as exc:
         await manager.broadcast(
             ValidationErrorEvent(
-                run_id=request.run_id,
+                run_id=run_id,
                 errors=[{"node_id": "", "port_id": "", "message": f"Subgraph contains a cycle: {exc}"}]
             )
         )
@@ -1803,6 +3322,15 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
 
     shot_port = f"shot_{request.shot_id}"
     count = request.variations or 1
+
+    # A per-shot run does not acquire the frontend's Canvas-wide ``isExecuting``
+    # gate, so sibling work remains available. It does register its background
+    # Task below for strong ownership, Stop/status, and pre-first-turn cleanup,
+    # and it must own the same paid-provider lifecycle lease as every other
+    # execution surface. Otherwise an exact recovery deletion can race a World
+    # ancestor that is still polling, then admit a stale blank payload as a
+    # fresh paid start.
+    _claim_fresh_paid_worldlabs_starts(run_id=run_id, nodes=sub_nodes)
 
     async def _run() -> None:
         import traceback
@@ -1824,7 +3352,7 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
                             api_keys=api_keys,
                             use_cache=False,
                             seed=seed_i,
-                            run_id=request.run_id,
+                            run_id=run_id,
                         )
                     except _ShotPassError as exc:
                         failures.append(_shot_task_error_message(exc))
@@ -1851,7 +3379,7 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
                     api_keys=api_keys,
                     use_cache=True,
                     seed=request.seed,
-                    run_id=request.run_id,
+                    run_id=run_id,
                 )
                 await _merge_shot_result(
                     request.node_id, request.shot_id, executed_node, outputs
@@ -1862,19 +3390,67 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
             traceback.print_exc()
             terminal_error = _shot_task_error_message(exc)
         finally:
-            if terminal_error is not None:
-                await _merge_shot_result(
-                    request.node_id,
-                    request.shot_id,
-                    None,
-                    {},
-                    terminal_error=terminal_error,
-                )
-            await _broadcast_graph_sync()
+            try:
+                if terminal_error is not None:
+                    await _merge_shot_result(
+                        request.node_id,
+                        request.shot_id,
+                        None,
+                        {},
+                        terminal_error=terminal_error,
+                    )
+                await _broadcast_graph_sync()
+            finally:
+                await _release_paid_worldlabs_starts(run_id)
 
-    asyncio.create_task(_run())
+    task: asyncio.Task[None] | None = None
+    run_coroutine = _run()
+    try:
+        task = asyncio.create_task(run_coroutine)
+        # The registry is the strong owner and its terminal callback performs
+        # an idempotent lease release. That fallback is essential when a Task
+        # is cancelled after create_task succeeds but before _run receives its
+        # first event-loop turn (in which case the coroutine's finally never
+        # executes).
+        execution_runs.register(run_id, task)
+        _watch_for_cross_process_stop(run_id, task)
+    except ExecutionCancelledBeforeStartError as exc:
+        if task is None:
+            run_coroutine.close()
+        else:
+            await asyncio.gather(task, return_exceptions=True)
+        await _release_paid_worldlabs_starts(run_id)
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ExecutionCancellationCapacityError as exc:
+        if task is None:
+            run_coroutine.close()
+        else:
+            await asyncio.gather(task, return_exceptions=True)
+        await _release_paid_worldlabs_starts(run_id)
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except ValueError as exc:
+        if task is None:
+            run_coroutine.close()
+        else:
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+        await _release_paid_worldlabs_starts(run_id)
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except Exception:
+        if task is None:
+            run_coroutine.close()
+        else:
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+        await _release_paid_worldlabs_starts(run_id)
+        raise
 
-    return {"status": "started", "shotId": request.shot_id, "variations": count}
+    return {
+        "status": "started",
+        "shotId": request.shot_id,
+        "variations": count,
+        "runId": run_id,
+    }
 
 
 # ---------- CLI: Node discovery ----------
@@ -1964,10 +3540,70 @@ async def _emit_and_sync(event: ExecutionEvent) -> None:
     into cli_graph. Used by /api/execute and /api/execute-node so the
     frontend-driven execution paths keep cli_graph in sync with what the
     user sees in the canvas."""
+    if isinstance(event, ProviderStartAmbiguousEvent):
+        # This control-plane event must survive Stop just like a recovered
+        # operation ID. It is the only proof that a settled transport/5xx/
+        # malformed-2xx response may have started billable provider work.
+        run_id = event.run_id or execution_run_id.get()
+        if run_id is None:
+            event = event.model_copy(
+                update={
+                    "durable": False,
+                    "message": (
+                        f"{event.message} Nebula could not associate this hold "
+                        "with an execution run; do not reload."
+                    ),
+                }
+            )
+        else:
+            record = provider_start_guard.mark_ambiguous(
+                run_id=run_id,
+                node_id=event.node_id,
+                kind=event.kind,
+            )
+            message = str(record["message"])
+            if not bool(record["durable"]):
+                message += (
+                    " Nebula could not save this hold durably; keep this tab "
+                    "open and do not restart until the provider state is resolved."
+                )
+            event = event.model_copy(
+                update={
+                    "run_id": run_id,
+                    "message": message,
+                    "durable": bool(record["durable"]),
+                }
+            )
+        await manager.broadcast(event)
+        if run_id is not None:
+            await _broadcast_graph_sync()
+        return
+
+    if isinstance(event, ProviderRecoveryEvent):
+        # Paid-provider checkpoints are control-plane state, not progress.
+        # Persist and surface them even after Stop has marked the run as
+        # cancelling so a late start response cannot strand billable work.
+        changed, durability_warning, safety_hold_changed = (
+            _sync_provider_recovery_to_cli_graph(event)
+        )
+        if durability_warning is not None:
+            event = event.model_copy(
+                update={"durable": False, "warning": durability_warning}
+            )
+        await manager.broadcast(event)
+        if changed or safety_hold_changed:
+            await _broadcast_graph_sync()
+        return
+
     run_id = event.run_id or execution_run_id.get()
     record = execution_runs.get(run_id) if run_id else None
     if record is not None and record.status in {"cancelling", "cancelled"}:
         return
+    if isinstance(event, ErrorEvent) and run_id is not None:
+        # The engine reports per-node failures as events and then returns
+        # normally after GraphComplete. Preserve that semantic failure in the
+        # reconnect/status registry instead of misreporting the task completed.
+        execution_runs.mark_error(run_id)
     if isinstance(event, ExecutedEvent):
         # Hand browsers the same portable asset URLs that we persist. Engine
         # handlers intentionally use absolute paths while composing a run, but
@@ -1976,6 +3612,70 @@ async def _emit_and_sync(event: ExecutionEvent) -> None:
         normalized_outputs = _sync_outputs_to_cli_graph(event.node_id, event.outputs)
         event = event.model_copy(update={"outputs": normalized_outputs})
     await manager.broadcast(event)
+
+
+def _sync_provider_recovery_to_cli_graph(
+    event: ProviderRecoveryEvent,
+) -> tuple[bool, str | None, bool]:
+    """Replace the durable recovery checkpoint for one canonical graph node."""
+    run_id = event.run_id or execution_run_id.get()
+    durability_warning: str | None = None
+    safety_hold_changed = False
+    if run_id is not None:
+        try:
+            provider_recovery_store.set(
+                run_id=run_id,
+                node_id=event.node_id,
+                resume_operation_id=event.resume_operation_id,
+                existing_world_id=event.existing_world_id,
+            )
+        except (ProviderRecoveryPersistenceError, ValueError) as exc:
+            # A hostile/legacy node id must not turn a successfully captured
+            # paid operation into an execution failure. The live event and
+            # terminal in-memory param sync remain available as fallbacks.
+            print(f"[provider-recovery] journal rejected checkpoint: {exc}", flush=True)
+            durability_warning = (
+                "Nebula captured this paid-provider recovery ID but could not "
+                "save it durably. Keep this tab open and copy the ID before "
+                "reloading."
+            )
+            try:
+                safety_hold_changed = (
+                    provider_start_guard.hold_nondurable_recovery(
+                        run_id=run_id,
+                        node_id=event.node_id,
+                    )
+                    is not None
+                )
+            except ValueError:
+                # The live recovery event is still the truthful fallback for
+                # a hostile/legacy node identifier that cannot enter a bounded
+                # safety journal.
+                safety_hold_changed = False
+    else:
+        durability_warning = (
+            "Nebula captured this paid-provider recovery ID without a run ID, "
+            "so it could not save it durably. Keep this tab open and copy the "
+            "ID before reloading."
+        )
+
+    current = cli_graph.nodes.get(event.node_id)
+    if current is None:
+        return False, durability_warning, safety_hold_changed
+
+    params = copy.deepcopy(current.get("params") or {})
+    params.pop("resume_operation_id", None)
+    params.pop("existing_world_id", None)
+    if event.resume_operation_id is not None:
+        params["resume_operation_id"] = event.resume_operation_id
+    if event.existing_world_id is not None:
+        params["existing_world_id"] = event.existing_world_id
+    if current.get("params") == params:
+        return False, durability_warning, safety_hold_changed
+
+    current["params"] = params
+    cli_graph._maybe_persist()
+    return True, durability_warning, safety_hold_changed
 
 
 def _sync_params_to_cli_graph(nodes: list[GraphNode]) -> bool:
@@ -2006,50 +3706,54 @@ def _validate_connect_handles(
     *,
     graph: CLIGraph | None = None,
 ) -> None:
-    """Reject a connect() when either handle doesn't exist on its node.
+    """Reject a connection that violates the shared registry contract.
 
-    Raises HTTPException(400). Exists because without this, an agent (or UI)
-    can POST an edge wired to a nonexistent port id — the backend stores it,
-    the graph executes fine (the receiving node just sees no input), but
-    React Flow warns on *every* render, producing thousands of console
-    entries that choke the main thread and freeze the chat panel.
-
-    We check against the node's registered `outputPorts[].id` for the source
-    and `inputPorts[].id` for the target. A universal direction is skipped
-    only when its registered port list is empty (Replicate schemas are
-    provider-driven); fixed universal ports are still validated.
+    The proposed edge is checked together with existing edges so duplicate
+    connections and target-port multiplicity/maxConnections are enforced at
+    graph mutation time as well as immediately before execution.
     """
     target_graph = graph or cli_graph
-    universal_defs = {
-        "openrouter-universal",
-        "replicate-universal",
-        "fal-universal",
-        "nous-portal-universal",
-    }
-    for node_id, port, direction, port_key in [
-        (src_node_id, src_port, "source", "outputPorts"),
-        (dst_node_id, dst_port, "target", "inputPorts"),
-    ]:
-        node = target_graph.nodes.get(node_id)
-        if not node:
-            # Missing-node error is surfaced by cli_graph.connect itself.
-            continue
-        definition_id = node.get("definitionId", "")
-        defn = node_registry.get(definition_id)
-        if not defn:
-            continue
-        if definition_id in universal_defs and not defn.get(port_key):
-            continue
-        valid = [p["id"] for p in defn.get(port_key, []) if isinstance(p, dict) and "id" in p]
-        if port not in valid:
-            raise HTTPException(
-                status_code=400,
-                detail=(
-                    f"Invalid {direction} handle '{port}' on node '{node_id}' "
-                    f"(definition '{definition_id}'). Valid {port_key}: "
-                    f"{valid if valid else '(none)'}"
-                ),
-            )
+    node_contracts = [
+        ContractNode(
+            node_id=node_id,
+            definition_id=str(node.get("definitionId") or ""),
+        )
+        for node_id, node in target_graph.nodes.items()
+    ]
+    edge_contracts = [
+        ContractEdge(
+            edge_id=str(edge.get("id") or ""),
+            source=str(edge.get("source") or ""),
+            source_handle=edge.get("sourceHandle"),
+            target=str(edge.get("target") or ""),
+            target_handle=edge.get("targetHandle"),
+        )
+        for edge in target_graph.edges
+    ]
+    proposed_index = len(edge_contracts)
+    edge_contracts.append(
+        ContractEdge(
+            edge_id=f"__connect_validation__{uuid4()}",
+            source=src_node_id,
+            source_handle=src_port,
+            target=dst_node_id,
+            target_handle=dst_port,
+        )
+    )
+    result = validate_edge_contracts(
+        node_contracts,
+        edge_contracts,
+        node_registry.get_all(),
+    )
+    proposed_issue = next(
+        (issue for issue in result.issues if issue.edge_index == proposed_index),
+        None,
+    )
+    if proposed_issue is not None:
+        raise HTTPException(
+            status_code=400,
+            detail=proposed_issue.message,
+        )
 
 
 def _valid_param_keys(definition_id: str) -> set[str] | None:
@@ -2105,9 +3809,10 @@ def _to_int(v: Any) -> int:
 def _to_float(v: Any) -> float:
     if isinstance(v, bool):
         raise ValueError(f"refusing to coerce bool {v!r} to float")
-    if isinstance(v, (int, float)):
-        return float(v)
-    return float(str(v).strip())
+    value = float(v) if isinstance(v, (int, float)) else float(str(v).strip())
+    if not math.isfinite(value):
+        raise ValueError(f"refusing to coerce non-finite value {v!r} to float")
+    return value
 
 
 def _coerce_params(definition_id: str, params: dict[str, Any]) -> dict[str, Any]:
@@ -2116,23 +3821,33 @@ def _coerce_params(definition_id: str, params: dict[str, Any]) -> dict[str, Any]
     The CLI sends every `--param k=v` as a string, and some providers (Meshy,
     for one) reject string values where booleans or ints are expected. Normalise
     here so handlers always receive correctly-typed params regardless of the
-    caller's transport.
+    caller's transport. Optional numeric controls use ``""`` as their
+    canonical UI sentinel for "unset/random/inherit"; preserve that sentinel
+    instead of attempting ``int("")`` or ``float("")``.
     """
     defn = node_registry.get(definition_id)
     if not defn:
         return dict(params)
-    type_map: dict[str, str] = {}
+    param_specs: dict[str, tuple[str, bool]] = {}
     for source_key in ("params", "sharedParams", "falParams", "directParams"):
         for p in defn.get(source_key, []) or []:
             if isinstance(p, dict) and p.get("key") and p.get("type"):
-                type_map[p["key"]] = p["type"]
+                param_specs[p["key"]] = (p["type"], bool(p.get("required")))
     result: dict[str, Any] = {}
     for k, v in params.items():
         if k.startswith("_") or v is None:
             result[k] = v
             continue
-        t = type_map.get(k)
+        t, required = param_specs.get(k, (None, False))
         try:
+            if (
+                t in {"integer", "float"}
+                and isinstance(v, str)
+                and not v.strip()
+                and not required
+            ):
+                result[k] = ""
+                continue
             if t == "boolean":
                 result[k] = _to_bool(v)
             elif t == "integer":
@@ -2182,12 +3897,33 @@ def _validate_params(definition_id: str, params: dict[str, Any]) -> None:
 
 @app.post("/api/graph/node")
 async def create_graph_node(body: dict[str, Any]) -> dict:
+    _validate_graph_ingress_complexity(body)
     definition_id = body.get("definitionId", "")
-    params = body.get("params", {}) or {}
+    raw_params = body.get("params", {})
+    params = {} if raw_params is None else raw_params
+    if not isinstance(params, dict):
+        raise HTTPException(status_code=400, detail="params must be an object")
     position = body.get("position")
     _validate_params(definition_id, params)
     params = _coerce_params(definition_id, params)
-    short_id = cli_graph.add_node(definition_id, params, position=position)
+    carries_recovery = bool(
+        _graph_worldlabs_recovery_checkpoints(
+            [{"id": "new-node", "definitionId": definition_id, "params": params}]
+        )
+    )
+    mutation = (
+        _paid_graph_mutation("create a graph node")
+        if carries_recovery
+        else nullcontext()
+    )
+    with mutation:
+        candidate = cli_graph.clone()
+        short_id = candidate.add_node(definition_id, params, position=position)
+        _commit_graph_candidate_with_recoveries(
+            candidate,
+            [candidate.nodes[short_id]],
+            source="create",
+        )
     await _broadcast_graph_sync()
     publish_action(f"Added {definition_id} ({short_id})")
     return cli_graph.nodes[short_id]
@@ -2227,45 +3963,65 @@ async def create_node_and_connect(body: dict[str, Any]) -> dict:
     field tells us which port on the `connect` spec should be filled in with
     the new node's id (the other side is the existing node).
     """
+    _validate_graph_ingress_complexity(body)
     definition_id = body.get("definitionId", "")
-    params = body.get("params", {}) or {}
+    raw_params = body.get("params", {})
+    params = {} if raw_params is None else raw_params
+    if not isinstance(params, dict):
+        raise HTTPException(status_code=400, detail="params must be an object")
     position = body.get("position")
     _validate_params(definition_id, params)
     params = _coerce_params(definition_id, params)
-    short_id = cli_graph.add_node(definition_id, params, position=position)
+    carries_recovery = bool(
+        _graph_worldlabs_recovery_checkpoints(
+            [{"id": "new-node", "definitionId": definition_id, "params": params}]
+        )
+    )
+    mutation = (
+        _paid_graph_mutation("create and connect a graph node")
+        if carries_recovery
+        else nullcontext()
+    )
+    with mutation:
+        candidate = cli_graph.clone()
+        short_id = candidate.add_node(definition_id, params, position=position)
 
-    connect_spec = body.get("connect") or {}
-    if connect_spec:
-        is_target = connect_spec.get("newNodeIs") == "target"
-        src = connect_spec.get("source") if is_target else short_id
-        dst = short_id if is_target else connect_spec.get("target")
-        try:
-            _validate_connect_handles(
-                src,
-                connect_spec.get("sourceHandle", ""),
-                dst,
-                connect_spec.get("targetHandle", ""),
-            )
-            cli_graph.connect(
-                src,
-                connect_spec.get("sourceHandle", ""),
-                dst,
-                connect_spec.get("targetHandle", ""),
-            )
-            connected = True
-        except HTTPException:
-            # Invalid handle — roll back the just-created node so the graph
-            # doesn't end up with a dangling node the caller didn't ask for
-            # standalone. Re-raise so the client sees the handle error.
-            cli_graph.remove_node(short_id)
-            raise
-        except ValueError:
-            # Connection failed (e.g. unknown node id in connect_spec) but
-            # node was created — leave the node in place, let the caller
-            # decide.
+        connect_spec = body.get("connect") or {}
+        if connect_spec:
+            is_target = connect_spec.get("newNodeIs") == "target"
+            src = connect_spec.get("source") if is_target else short_id
+            dst = short_id if is_target else connect_spec.get("target")
+            try:
+                _validate_connect_handles(
+                    src,
+                    connect_spec.get("sourceHandle", ""),
+                    dst,
+                    connect_spec.get("targetHandle", ""),
+                    graph=candidate,
+                )
+                candidate.connect(
+                    src,
+                    connect_spec.get("sourceHandle", ""),
+                    dst,
+                    connect_spec.get("targetHandle", ""),
+                )
+                connected = True
+            except HTTPException:
+                # The candidate is persistence-free, so discarding it rolls
+                # back both the new node and its tentative connection.
+                raise
+            except ValueError:
+                # Connection failed (e.g. unknown node id in connect_spec) but
+                # preserve the existing API behavior: keep the standalone node.
+                connected = False
+        else:
             connected = False
-    else:
-        connected = False
+
+        _commit_graph_candidate_with_recoveries(
+            candidate,
+            [candidate.nodes[short_id]],
+            source="create-connect",
+        )
 
     await _broadcast_graph_sync()
     publish_action(f"Added {definition_id} ({short_id})")
@@ -2284,36 +4040,74 @@ async def get_graph() -> dict:
 
 @app.put("/api/graph/node/{node_id}")
 async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]) -> dict:
-    node = cli_graph.nodes.get(node_id)
-    if not node:
-        raise HTTPException(status_code=404, detail=f"Node '{node_id}' not found")
+    _validate_graph_ingress_complexity(body)
+    with _paid_graph_mutation("update graph node parameters"):
+        node = cli_graph.nodes.get(node_id)
+        if not node:
+            raise HTTPException(status_code=404, detail=f"Node '{node_id}' not found")
 
-    # §1.5 guard (mirrors /api/graph/run): when called BY Daedalus, refuse to
-    # mutate params on a node that already has outputs. Without this, Daedalus
-    # could route around the run-target guard via `nebula set` + `run-all`
-    # (cache-bypassed because params changed). The X-Daedalus-Caller header
-    # gate keeps frontend Inspector edits and curl/tests unaffected.
-    if request.headers.get("x-daedalus-caller"):
-        existing_outputs = node.get("outputs")
-        if isinstance(existing_outputs, dict) and len(existing_outputs) > 0:
-            raise HTTPException(
-                status_code=400,
-                detail=(
-                    f"Node '{node_id}' already has output. Per SKILL.md §1.5, "
-                    "add a new node instead of mutating params on this one — the "
-                    "canvas should keep every iteration visible as craft history. "
-                    "Use `nebula create <definition_id>` to start the next cut, "
-                    "wire it from the corrected upstream, then `nebula run` it."
-                ),
+        # §1.5 guard (mirrors /api/graph/run): when called BY Daedalus, refuse to
+        # mutate params on a node that already has outputs. Without this, Daedalus
+        # could route around the run-target guard via `nebula set` + `run-all`
+        # (cache-bypassed because params changed). The X-Daedalus-Caller header
+        # gate keeps frontend Inspector edits and curl/tests unaffected.
+        if request.headers.get("x-daedalus-caller"):
+            existing_outputs = node.get("outputs")
+            if isinstance(existing_outputs, dict) and len(existing_outputs) > 0:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"Node '{node_id}' already has output. Per SKILL.md §1.5, "
+                        "add a new node instead of mutating params on this one — the "
+                        "canvas should keep every iteration visible as craft history. "
+                        "Use `nebula create <definition_id>` to start the next cut, "
+                        "wire it from the corrected upstream, then `nebula run` it."
+                    ),
+                )
+
+        raw_params = body.get("params", {})
+        params = {} if raw_params is None else raw_params
+        if not isinstance(params, dict):
+            raise HTTPException(status_code=400, detail="params must be an object")
+        _validate_params(node.get("definitionId", ""), params)
+        params = _coerce_params(node.get("definitionId", ""), params)
+        recovery_update = isinstance(node.get("definitionId"), str) and uses_durable_recovery(
+            str(node.get("definitionId")),
+            provider="worldlabs",
+        )
+        if recovery_update:
+            # Inspector writes are debounced whole-param snapshots. A response
+            # captured after that snapshot may already have installed a provider
+            # recovery ID, so a late PUT must not erase or rewind server-owned
+            # safety state. The exact provider-recovery DELETE route is the only
+            # way to clear a live checkpoint deliberately.
+            current_params = node.get("params") or {}
+            policy_fields = recovery_param_names(str(node.get("definitionId") or ""))
+            checkpoint = {
+                key: value
+                for key in policy_fields
+                if isinstance((value := current_params.get(key)), str)
+                and bool(value.strip())
+            }
+            if checkpoint:
+                for key in policy_fields:
+                    params.pop(key, None)
+                params.update(checkpoint)
+            candidate = cli_graph.clone()
+            try:
+                candidate.update_params(node_id, params)
+            except ValueError:
+                raise HTTPException(status_code=404, detail=f"Node '{node_id}' not found")
+            _commit_graph_candidate_with_recoveries(
+                candidate,
+                [candidate.nodes[node_id]],
+                source="update",
             )
-
-    params = body.get("params", {}) or {}
-    _validate_params(node.get("definitionId", ""), params)
-    params = _coerce_params(node.get("definitionId", ""), params)
-    try:
-        cli_graph.update_params(node_id, params)
-    except ValueError:
-        raise HTTPException(status_code=404, detail=f"Node '{node_id}' not found")
+        else:
+            try:
+                cli_graph.update_params(node_id, params)
+            except ValueError:
+                raise HTTPException(status_code=404, detail=f"Node '{node_id}' not found")
     await _broadcast_graph_sync()
     publish_action(f"Updated {node_id} params")
     return cli_graph.nodes[node_id]
@@ -2358,19 +4152,162 @@ async def update_graph_layout(body: dict[str, Any]) -> dict:
 
 @app.delete("/api/graph")
 async def clear_graph() -> dict:
-    cli_graph.clear()
+    # Clear Canvas is not consent to forget paid-provider state. Resolve each
+    # recovery/ambiguity through its exact endpoint first; otherwise recreating
+    # a node with the same identity could silently duplicate provider spend.
+    with _paid_graph_mutation("clear the canvas"):
+        _reject_graph_replacement_during_paid_start("clear the canvas")
+        cli_graph.clear()
     await _broadcast_graph_sync()
     publish_action("Cleared the canvas")
     return {"status": "cleared"}
 
 
+@app.delete("/api/provider-recoveries/{run_id}/{node_id}")
+async def delete_provider_recovery(
+    run_id: str,
+    node_id: str,
+    resume_operation_id: str | None = None,
+    existing_world_id: str | None = None,
+) -> dict:
+    """Forget one exact paid-provider checkpoint after an explicit clear."""
+    with _paid_graph_mutation("delete a provider recovery checkpoint"):
+        try:
+            active = provider_start_guard.has_active_node(node_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        if active:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "Cannot delete a World Labs recovery checkpoint while that "
+                    "node's paid start is still settling"
+                ),
+            )
+        try:
+            removed = provider_recovery_store.delete(
+                run_id=run_id,
+                node_id=node_id,
+                resume_operation_id=resume_operation_id,
+                existing_world_id=existing_world_id,
+            )
+        except ProviderRecoveryConflictError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except ProviderRecoveryPersistenceError as exc:
+            raise HTTPException(
+                status_code=507,
+                detail="Could not durably delete provider recovery checkpoint",
+            ) from exc
+        current = cli_graph.nodes.get(node_id)
+        if (
+            removed
+            and current is not None
+            and isinstance(current.get("definitionId"), str)
+            and uses_durable_recovery(
+                str(current.get("definitionId")),
+                provider="worldlabs",
+            )
+        ):
+            params = copy.deepcopy(current.get("params") or {})
+            policy = operation_policy(str(current.get("definitionId") or ""))
+            deleted_by_param = (
+                {
+                    policy.recovery_operation_param: resume_operation_id,
+                    policy.recovery_resource_param: existing_world_id,
+                }
+                if policy is not None
+                else {}
+            )
+            deleted_by_param.pop(None, None)
+            matches_deleted_checkpoint = any(
+                isinstance(provider_id, str)
+                and provider_id
+                and params.get(param_key) == provider_id
+                for param_key, provider_id in deleted_by_param.items()
+            )
+            if matches_deleted_checkpoint:
+                for param_key in deleted_by_param:
+                    params.pop(param_key, None)
+                current["params"] = params
+                cli_graph._maybe_persist()
+    await _broadcast_graph_sync()
+    return {
+        "status": "deleted",
+        "runId": run_id,
+        "nodeId": node_id,
+        "removed": removed,
+    }
+
+
+@app.delete("/api/provider-start-ambiguities/{kind}/{node_id}/{run_id}")
+async def acknowledge_provider_start_ambiguity(
+    kind: str,
+    node_id: str,
+    run_id: str,
+) -> dict:
+    """Explicitly unlock one paid-start hold after checking Marble."""
+    try:
+        removed = provider_start_guard.acknowledge(
+            kind=kind,
+            node_id=node_id,
+            run_id=run_id,
+        )
+    except ProviderStartConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except ProviderStartPersistenceError as exc:
+        raise HTTPException(
+            status_code=507,
+            detail="Could not durably acknowledge World Labs paid-start hold",
+        ) from exc
+    await _broadcast_graph_sync()
+    return {
+        "status": "acknowledged",
+        "kind": kind,
+        "nodeId": node_id,
+        "runId": run_id,
+        "removed": removed,
+    }
+
+
 @app.delete("/api/graph/node/{node_id}")
 async def delete_graph_node(node_id: str) -> dict:
     """Remove a node and any edges touching it from cli_graph."""
-    try:
-        cli_graph.remove_node(node_id)
-    except ValueError:
-        raise HTTPException(status_code=404, detail=f"Node '{node_id}' not found")
+    with _paid_graph_mutation("delete a graph node"):
+        node = cli_graph.nodes.get(node_id)
+        if node is None:
+            raise HTTPException(status_code=404, detail=f"Node '{node_id}' not found")
+        try:
+            active = provider_start_guard.has_active_node(node_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        held = any(
+            record.get("nodeId") == node_id for record in provider_start_guard.list()
+        )
+        recovered = any(
+            record.get("nodeId") == node_id
+            for record in provider_recovery_store.list()
+        )
+        params = node.get("params") or {}
+        live_checkpoint = has_recovery_identity(
+            str(node.get("definitionId") or ""), params
+        )
+        if active or held or recovered or live_checkpoint:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "Cannot delete a node with unresolved World Labs paid state. "
+                    "Check Marble, then resolve its exact recovery/ambiguity record "
+                    "first."
+                ),
+            )
+        try:
+            cli_graph.remove_node(node_id)
+        except ValueError:
+            raise HTTPException(status_code=404, detail=f"Node '{node_id}' not found")
     await _broadcast_graph_sync()
     publish_action(f"Removed {node_id}")
     return {"status": "deleted", "id": node_id}
@@ -2474,12 +4411,32 @@ def _graph_ingress_items(body: dict[str, Any], key: str) -> list[dict[str, Any]]
     return value
 
 
+def _validate_graph_ingress_complexity(value: Any) -> None:
+    """Bound and reject non-finite values on every mutable graph ingress."""
+    stack: list[tuple[Any, int]] = [(value, 0)]
+    value_count = 0
+    while stack:
+        current, depth = stack.pop()
+        value_count += 1
+        if value_count > RESTORE_MAX_GRAPH_VALUES:
+            raise HTTPException(status_code=413, detail="graph payload contains too many values")
+        if depth > RESTORE_MAX_GRAPH_DEPTH:
+            raise HTTPException(status_code=400, detail="graph payload is nested too deeply")
+        if isinstance(current, float) and not math.isfinite(current):
+            raise HTTPException(status_code=400, detail="graph payload contains a non-finite number")
+        if isinstance(current, dict):
+            stack.extend((item, depth + 1) for item in current.values())
+        elif isinstance(current, list):
+            stack.extend((item, depth + 1) for item in current)
+
+
 def _stage_graph_nodes(
     candidate: CLIGraph,
     raw_nodes: list[dict[str, Any]],
     *,
     reference_key: str,
     include_outputs: bool,
+    normalize_image_inputs: bool = True,
 ) -> dict[str, str]:
     """Validate and add ingress nodes to a persistence-free candidate graph."""
     id_map: dict[str, str] = {}
@@ -2506,7 +4463,8 @@ def _stage_graph_nodes(
                 status_code=400,
                 detail=f"unknown node definition '{definition_id}'",
             )
-        params = raw.get("params", {}) or {}
+        raw_params = raw.get("params", {})
+        params = {} if raw_params is None else raw_params
         if not isinstance(params, dict):
             raise HTTPException(
                 status_code=400,
@@ -2514,7 +4472,7 @@ def _stage_graph_nodes(
             )
         _validate_params(definition_id, params)
         params = _coerce_params(definition_id, params)
-        if definition_id == "image-input":
+        if definition_id == "image-input" and normalize_image_inputs:
             params = _normalize_image_input_params(params)
 
         position = raw.get("position")
@@ -2523,15 +4481,41 @@ def _stage_graph_nodes(
                 status_code=400,
                 detail=f"nodes[{index}].position must be an object",
             )
+        if position is not None:
+            coordinates = [position.get("x"), position.get("y")]
+            if any(
+                not isinstance(value, (int, float))
+                or isinstance(value, bool)
+                or not math.isfinite(float(value))
+                for value in coordinates
+            ):
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"nodes[{index}].position requires finite numeric x and y"
+                    ),
+                )
         outputs: dict[str, Any] | None = None
         if include_outputs:
-            raw_outputs = raw.get("outputs", {}) or {}
+            supplied_outputs = raw.get("outputs", {})
+            raw_outputs = {} if supplied_outputs is None else supplied_outputs
             if not isinstance(raw_outputs, dict):
                 raise HTTPException(
                     status_code=400,
                     detail=f"nodes[{index}].outputs must be an object",
                 )
-            outputs = _normalize_outputs_for_storage(raw_outputs)
+            try:
+                _validate_imported_outputs(
+                    definition_id,
+                    raw_outputs,
+                    node_index=index,
+                )
+                outputs = _normalize_outputs_for_storage(raw_outputs)
+            except ValueError as exc:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"nodes[{index}].outputs is invalid: {exc}",
+                ) from exc
         try:
             new_id = candidate.add_node(
                 definition_id,
@@ -2616,6 +4600,7 @@ async def import_graph(body: dict[str, Any]) -> dict:
     short IDs so the rest of the system treats the loaded graph like any other
     CLI-created graph — including Claude's `nebula graph` view.
     """
+    _validate_graph_ingress_complexity(body)
     candidate = CLIGraph()
     raw_nodes = _graph_ingress_items(body, "nodes")
     raw_edges = _graph_ingress_items(body, "edges")
@@ -2626,7 +4611,13 @@ async def import_graph(body: dict[str, Any]) -> dict:
         include_outputs=True,
     )
     _stage_graph_edges(candidate, raw_edges, id_map)
-    cli_graph.replace_with(candidate)
+    with _paid_graph_mutation("replace the graph"):
+        _reject_graph_replacement_during_paid_start("replace the graph")
+        _commit_graph_candidate_with_recoveries(
+            candidate,
+            list(candidate.nodes.values()),
+            source="import",
+        )
     exported = await _broadcast_graph_sync()
     publish_action(
         f"Loaded graph ({len(cli_graph.nodes)} nodes, {len(cli_graph.edges)} edges)"
@@ -2652,17 +4643,23 @@ async def add_graph_cluster(body: dict[str, Any]) -> dict:
     Body: {nodes: [{tempId, definitionId, params, position?}], edges: [{source, sourceHandle, target, targetHandle}]}
     where edge source/target reference tempIds.
     """
-    candidate = cli_graph.clone()
+    _validate_graph_ingress_complexity(body)
     raw_nodes = _graph_ingress_items(body, "nodes")
     raw_edges = _graph_ingress_items(body, "edges")
-    id_map = _stage_graph_nodes(
-        candidate,
-        raw_nodes,
-        reference_key="tempId",
-        include_outputs=False,
-    )
-    created_edge_ids = _stage_graph_edges(candidate, raw_edges, id_map)
-    cli_graph.replace_with(candidate)
+    with _paid_graph_mutation("add a graph cluster"):
+        candidate = cli_graph.clone()
+        id_map = _stage_graph_nodes(
+            candidate,
+            raw_nodes,
+            reference_key="tempId",
+            include_outputs=False,
+        )
+        created_edge_ids = _stage_graph_edges(candidate, raw_edges, id_map)
+        _commit_graph_candidate_with_recoveries(
+            candidate,
+            [candidate.nodes[node_id] for node_id in id_map.values()],
+            source="cluster",
+        )
     await _broadcast_graph_sync()
     publish_action(f"Created cluster ({len(id_map)} nodes)")
 
@@ -2807,7 +4804,18 @@ async def export_graph_for_frontend() -> dict:
     _normalize_cli_graph_output_refs()
     state = cli_graph.get_state()
     if not state["nodes"]:
-        return {"nodes": [], "edges": [], "empty": True}
+        return {
+            "nodes": [],
+            "edges": [],
+            "empty": True,
+            "providerRecoveries": provider_recovery_store.list(),
+            "providerStartAmbiguities": provider_start_guard.list(),
+            "executionStatuses": execution_runs.list_statuses(),
+            "executionCancellationIntents": [
+                {"runId": run_id, "status": "cancelled"}
+                for run_id in provider_start_guard.list_cancel_intents()
+            ],
+        }
 
     all_defs = node_registry.get_all()
     rf_nodes = []
@@ -2857,7 +4865,18 @@ async def export_graph_for_frontend() -> dict:
             "data": {"dataType": data_type},
         })
 
-    return {"nodes": rf_nodes, "edges": rf_edges, "empty": False}
+    return {
+        "nodes": rf_nodes,
+        "edges": rf_edges,
+        "empty": False,
+        "providerRecoveries": provider_recovery_store.list(),
+        "providerStartAmbiguities": provider_start_guard.list(),
+        "executionStatuses": execution_runs.list_statuses(),
+        "executionCancellationIntents": [
+            {"runId": run_id, "status": "cancelled"}
+            for run_id in provider_start_guard.list_cancel_intents()
+        ],
+    }
 
 
 # ---------- CLI: Synchronous execution ----------
@@ -2909,13 +4928,18 @@ async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dic
         sub_nodes = [GraphNode.model_validate(n) for n in nodes_list]
         sub_edges = [GraphEdge.model_validate(e) for e in edges_list]
 
+    _validate_cinema_base_models(sub_nodes)
+
     results: dict[str, Any] = {}
     errors: dict[str, str] = {}
+    run_id = str(uuid4())
 
     import time
 
     async def collect_events(event: ExecutionEvent) -> None:
-        if isinstance(event, ExecutedEvent):
+        if isinstance(event, (ProviderRecoveryEvent, ProviderStartAmbiguousEvent)):
+            await _emit_and_sync(event)
+        elif isinstance(event, ExecutedEvent):
             results[event.node_id] = event.outputs
         elif isinstance(event, ErrorEvent):
             errors[event.node_id] = event.error
@@ -2927,14 +4951,19 @@ async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dic
     )
 
     start = time.time()
-    await execute_graph(
-        nodes=sub_nodes,
-        edges=sub_edges,
-        api_keys=api_keys,
-        handler_registry=handler_registry,
-        emit=collect_events,
-        cache=execution_cache,
-    )
+    _claim_fresh_paid_worldlabs_starts(run_id=run_id, nodes=sub_nodes)
+    try:
+        await execute_graph(
+            nodes=sub_nodes,
+            edges=sub_edges,
+            api_keys=api_keys,
+            handler_registry=handler_registry,
+            emit=collect_events,
+            cache=execution_cache,
+            run_id=run_id,
+        )
+    finally:
+        await _release_paid_worldlabs_starts(run_id)
     duration = time.time() - start
 
     # Update CLI graph node outputs
@@ -3072,8 +5101,28 @@ async def _quick_multi_image_input_handler(
 async def quick_execute(body: dict[str, Any]) -> dict:
     """One-shot: create a temp node, execute, return output."""
     definition_id = body.get("definitionId", "")
+    if not quick_execution_allowed(definition_id):
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "World Labs nodes cannot run through /api/quick because paid-start "
+                "recovery must be attached to a durable graph node. Add the node to "
+                "the canvas and execute it there."
+            ),
+        )
     inputs = body.get("inputs", {})
     params = body.get("params", {})
+    if definition_id == "cinema-scene" and isinstance(params, dict):
+        _validate_cinema_base_models(
+            [
+                GraphNode(
+                    id="_quick_main",
+                    definition_id=definition_id,
+                    params=params,
+                    outputs={},
+                )
+            ]
+        )
 
     settings = load_settings()
     api_keys = settings.get("apiKeys", {})

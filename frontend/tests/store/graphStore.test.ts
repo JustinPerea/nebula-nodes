@@ -11,14 +11,24 @@ vi.mock('../../src/lib/wsClient', () => ({
   },
 }));
 
+const backendDiscovery = vi.hoisted(() => ({ baseUrl: null as string | null }));
+vi.mock('../../src/lib/backend', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/lib/backend')>();
+  return {
+    ...actual,
+    getCachedBackendBaseUrl: () => backendDiscovery.baseUrl,
+  };
+});
+
 // Mock fetch for api.ts. Store tests exercise the frontend-only fallback path,
-// so backend writes should fail in a controlled way instead of returning
-// undefined and breaking async addNode.
+// so backend requests should fail at the transport boundary by default.
 const fetchMock = vi.fn();
 globalThis.fetch = fetchMock as unknown as typeof fetch;
 vi.spyOn(console, 'warn').mockImplementation(() => {});
+const alertMock = vi.spyOn(window, 'alert').mockImplementation(() => {});
 
 import { useGraphStore } from '../../src/store/graphStore';
+import { wsClient, type ExecutionEvent } from '../../src/lib/wsClient';
 
 function mockResponse(body: unknown, ok = true, status = 200) {
   return {
@@ -36,6 +46,11 @@ function resetStore() {
     redoStack: [],
     clipboard: null,
     isExecuting: false,
+    isCancelling: false,
+    providerRecoveryWarning: null,
+    uncertainWorldLabsRunId: null,
+    providerRecoveries: [],
+    providerStartAmbiguities: [],
     backendFreshStartPending: false,
   });
 }
@@ -48,17 +63,425 @@ async function addNode(definitionId: string, position: { x: number; y: number })
 
 beforeEach(() => {
   fetchMock.mockReset();
-  fetchMock.mockResolvedValue({
-    ok: false,
-    status: 503,
-    json: async () => ({}),
-  });
+  fetchMock.mockRejectedValue(new TypeError('Failed to fetch'));
+  alertMock.mockClear();
+  backendDiscovery.baseUrl = null;
 });
 
 describe('graphStore', () => {
   beforeEach(() => {
-    useGraphStore.setState({ nodes: [], edges: [], backendFreshStartPending: false });
+    useGraphStore.getState().resetExecution();
+    useGraphStore.setState({
+      nodes: [],
+      edges: [],
+      runHistory: [],
+      isExecuting: false,
+      isCancelling: false,
+      providerRecoveryWarning: null,
+      uncertainWorldLabsRunId: null,
+      providerRecoveries: [],
+      providerStartAmbiguities: [],
+      backendFreshStartPending: false,
+    });
+    window.localStorage.clear();
   });
+
+  it('does not release the paid-run lock when recovery hydration triggers graph sync', () => {
+    const subscribed = vi.mocked(wsClient.subscribe).mock.calls[0]?.[0] as
+      | ((event: ExecutionEvent) => void)
+      | undefined;
+    expect(subscribed).toBeTypeOf('function');
+    useGraphStore.setState({ isExecuting: true, isCancelling: true });
+
+    subscribed?.({
+      type: 'providerRecovery',
+      runId: 'world-in-flight',
+      nodeId: 'world',
+      resumeOperationId: 'operation-accepted',
+      existingWorldId: null,
+      durable: true,
+      warning: null,
+    });
+    subscribed?.({
+      type: 'graphSync',
+      nodes: [],
+      edges: [],
+      empty: true,
+      providerRecoveries: [{
+        runId: 'world-in-flight',
+        nodeId: 'world',
+        resumeOperationId: 'operation-accepted',
+        existingWorldId: null,
+        durable: true,
+        warning: null,
+      }],
+    });
+
+    expect(useGraphStore.getState()).toMatchObject({
+      isExecuting: true,
+      isCancelling: true,
+    });
+  });
+
+  it('does not let a delayed empty snapshot erase newer live provider safety', () => {
+    const subscribed = vi.mocked(wsClient.subscribe).mock.calls[0]?.[0] as
+      | ((event: ExecutionEvent) => void)
+      | undefined;
+    useGraphStore.setState({
+      nodes: [
+        {
+          id: 'world-recovered',
+          type: 'model-node',
+          position: { x: 0, y: 0 },
+          data: {
+            label: 'Recovered World',
+            definitionId: 'worldlabs-environment',
+            params: {},
+            state: 'idle',
+            outputs: {},
+          },
+        },
+        {
+          id: 'world-ambiguous',
+          type: 'model-node',
+          position: { x: 300, y: 0 },
+          data: {
+            label: 'Ambiguous World',
+            definitionId: 'worldlabs-environment',
+            params: {},
+            state: 'idle',
+            outputs: {},
+          },
+        },
+      ],
+      edges: [],
+    });
+
+    subscribed?.({
+      type: 'providerRecovery',
+      runId: 'paid-run',
+      nodeId: 'world-recovered',
+      resumeOperationId: 'operation-accepted',
+      existingWorldId: null,
+      durable: true,
+      warning: null,
+    });
+    subscribed?.({
+      type: 'providerStartAmbiguous',
+      runId: 'ambiguous-run',
+      nodeId: 'world-ambiguous',
+      kind: 'worldlabs-environment',
+      message: 'The paid start may have been accepted.',
+      durable: true,
+    });
+
+    subscribed?.({
+      type: 'graphSync',
+      nodes: [],
+      edges: [],
+      empty: true,
+      providerRecoveries: [],
+      providerStartAmbiguities: [],
+    });
+
+    expect(useGraphStore.getState()).toMatchObject({
+      providerRecoveries: [expect.objectContaining({
+        runId: 'paid-run',
+        nodeId: 'world-recovered',
+        resumeOperationId: 'operation-accepted',
+      })],
+      providerStartAmbiguities: [expect.objectContaining({
+        runId: 'ambiguous-run',
+        nodeId: 'world-ambiguous',
+      })],
+      nodes: [expect.objectContaining({
+        id: 'world-recovered',
+        data: expect.objectContaining({
+          params: { resume_operation_id: 'operation-accepted' },
+        }),
+      }), expect.objectContaining({ id: 'world-ambiguous' })],
+    });
+  });
+
+  it('overlays a reconnect checkpoint onto graphSync params used for serialization', () => {
+    const subscribed = vi.mocked(wsClient.subscribe).mock.calls[0]?.[0] as
+      | ((event: ExecutionEvent) => void)
+      | undefined;
+
+    subscribed?.({
+      type: 'graphSync',
+      nodes: [{
+        id: 'n1',
+        type: 'model-node',
+        position: { x: 10, y: 20 },
+        data: {
+          label: 'World Labs Environment',
+          definitionId: 'worldlabs-environment',
+          params: { model: 'marble-1.1' },
+          state: 'idle',
+          outputs: {},
+        },
+      }],
+      edges: [],
+      empty: false,
+      providerRecoveries: [{
+        runId: 'paid-run',
+        nodeId: 'n1',
+        resumeOperationId: null,
+        existingWorldId: 'world-accepted',
+        durable: true,
+      }],
+    });
+
+    expect(useGraphStore.getState().nodes).toEqual([
+      expect.objectContaining({
+        id: 'n1',
+        data: expect.objectContaining({
+          params: {
+            model: 'marble-1.1',
+            existing_world_id: 'world-accepted',
+          },
+        }),
+      }),
+    ]);
+  });
+
+  it.each([
+    ['completed', 'complete'],
+    ['failed', 'failed'],
+    ['cancelled', 'cancelled'],
+  ] as const)(
+    'settles a reconnect snapshot whose tracked run is %s',
+    async (backendStatus, historyStatus) => {
+      const subscribed = vi.mocked(wsClient.subscribe).mock.calls[0]?.[0] as
+        | ((event: ExecutionEvent) => void)
+        | undefined;
+      fetchMock.mockResolvedValueOnce(mockResponse({ status: 'started' }));
+      useGraphStore.setState({
+        nodes: [{
+          id: 'world',
+          type: 'model-node',
+          position: { x: 0, y: 0 },
+          data: {
+            label: 'World Labs Environment',
+            definitionId: 'worldlabs-environment',
+            params: {},
+            state: 'idle',
+            outputs: {},
+          },
+        }],
+        edges: [],
+      });
+      await useGraphStore.getState().executeGraph();
+      const runId = useGraphStore.getState().runHistory[0].id;
+
+      subscribed?.({
+        type: 'graphSync',
+        nodes: [],
+        edges: [],
+        empty: true,
+        executionStatuses: [{ runId, status: backendStatus }],
+      });
+
+      expect(useGraphStore.getState()).toMatchObject({
+        isExecuting: false,
+        isCancelling: false,
+        runHistory: [expect.objectContaining({ id: runId, status: historyStatus })],
+      });
+    },
+  );
+
+  it('settles only the exact current run from a terminal executionStatus event', async () => {
+    const subscribed = vi.mocked(wsClient.subscribe).mock.calls[0]?.[0] as
+      | ((event: ExecutionEvent) => void)
+      | undefined;
+    fetchMock.mockResolvedValueOnce(mockResponse({ status: 'started' }));
+    useGraphStore.setState({
+      nodes: [{
+        id: 'world',
+        type: 'model-node',
+        position: { x: 0, y: 0 },
+        data: {
+          label: 'World Labs Environment',
+          definitionId: 'worldlabs-environment',
+          params: {},
+          state: 'idle',
+          outputs: {},
+        },
+      }],
+      edges: [],
+    });
+    await useGraphStore.getState().executeGraph();
+    const runId = useGraphStore.getState().runHistory[0].id;
+
+    subscribed?.({
+      type: 'executionStatus',
+      runId: 'unrelated-run',
+      status: 'completed',
+    });
+    expect(useGraphStore.getState()).toMatchObject({
+      isExecuting: true,
+      runHistory: [expect.objectContaining({ id: runId, status: 'running' })],
+    });
+
+    subscribed?.({ type: 'executionStatus', runId, status: 'completed' });
+    expect(useGraphStore.getState()).toMatchObject({
+      isExecuting: false,
+      isCancelling: false,
+      runHistory: [expect.objectContaining({ id: runId, status: 'complete' })],
+    });
+  });
+
+  it('keeps the tracked lock for running and cancelling reconnect snapshots', async () => {
+    const subscribed = vi.mocked(wsClient.subscribe).mock.calls[0]?.[0] as
+      | ((event: ExecutionEvent) => void)
+      | undefined;
+    fetchMock.mockResolvedValueOnce(mockResponse({ status: 'started' }));
+    useGraphStore.setState({
+      nodes: [{
+        id: 'world',
+        type: 'model-node',
+        position: { x: 0, y: 0 },
+        data: {
+          label: 'World Labs Environment',
+          definitionId: 'worldlabs-environment',
+          params: {},
+          state: 'idle',
+          outputs: {},
+        },
+      }],
+      edges: [],
+    });
+    await useGraphStore.getState().executeGraph();
+    const runId = useGraphStore.getState().runHistory[0].id;
+
+    subscribed?.({
+      type: 'graphSync',
+      nodes: [],
+      edges: [],
+      empty: true,
+      executionStatuses: [{ runId, status: 'cancelling' }],
+    });
+    expect(useGraphStore.getState()).toMatchObject({
+      isExecuting: true,
+      isCancelling: true,
+    });
+
+    subscribed?.({
+      type: 'graphSync',
+      nodes: [],
+      edges: [],
+      empty: true,
+      executionStatuses: [{ runId, status: 'running' }],
+    });
+    expect(useGraphStore.getState()).toMatchObject({
+      isExecuting: true,
+      isCancelling: false,
+      runHistory: [expect.objectContaining({ id: runId, status: 'running' })],
+    });
+
+    useGraphStore.getState().handleExecutionEvent({ type: 'graphCancelled', runId });
+  });
+
+  it('marks a paid run uncertain when an authoritative reconnect snapshot omits it', async () => {
+    const subscribed = vi.mocked(wsClient.subscribe).mock.calls[0]?.[0] as
+      | ((event: ExecutionEvent) => void)
+      | undefined;
+    fetchMock.mockResolvedValueOnce(mockResponse({ status: 'started' }));
+    useGraphStore.setState({
+      nodes: [{
+        id: 'world',
+        type: 'model-node',
+        position: { x: 0, y: 0 },
+        data: {
+          label: 'World Labs Environment',
+          definitionId: 'worldlabs-environment',
+          params: {},
+          state: 'idle',
+          outputs: {},
+        },
+      }],
+      edges: [],
+    });
+    await useGraphStore.getState().executeGraph();
+    const runId = useGraphStore.getState().runHistory[0].id;
+
+    subscribed?.({
+      type: 'graphSync',
+      nodes: [],
+      edges: [],
+      empty: true,
+      executionStatuses: [{ runId: 'unrelated-run', status: 'running' }],
+    });
+
+    expect(useGraphStore.getState()).toMatchObject({
+      isExecuting: true,
+      isCancelling: false,
+      uncertainWorldLabsRunId: runId,
+      providerRecoveryWarning: expect.stringContaining('Run remains locked'),
+      runHistory: [expect.objectContaining({ id: runId, status: 'running' })],
+    });
+
+    useGraphStore.getState().handleExecutionEvent({ type: 'graphCancelled', runId });
+  });
+
+  it.each([
+    ['running', 'completed', 'complete'],
+    ['cancelling', 'cancelled', 'cancelled'],
+  ] as const)(
+    'polls a reconnect snapshot from %s until the tracked run becomes %s',
+    async (snapshotStatus, terminalStatus, historyStatus) => {
+      vi.useFakeTimers();
+      try {
+        const subscribed = vi.mocked(wsClient.subscribe).mock.calls[0]?.[0] as
+          | ((event: ExecutionEvent) => void)
+          | undefined;
+        fetchMock.mockResolvedValueOnce(mockResponse({ status: 'started' }));
+        useGraphStore.setState({
+          nodes: [{
+            id: 'world',
+            type: 'model-node',
+            position: { x: 0, y: 0 },
+            data: {
+              label: 'World Labs Environment',
+              definitionId: 'worldlabs-environment',
+              params: {},
+              state: 'idle',
+              outputs: {},
+            },
+          }],
+          edges: [],
+        });
+        await useGraphStore.getState().executeGraph();
+        const runId = useGraphStore.getState().runHistory[0].id;
+        fetchMock.mockResolvedValueOnce(mockResponse({ runId, status: terminalStatus }));
+
+        subscribed?.({
+          type: 'graphSync',
+          nodes: [],
+          edges: [],
+          empty: true,
+          executionStatuses: [{ runId, status: snapshotStatus }],
+        });
+        expect(useGraphStore.getState()).toMatchObject({
+          isExecuting: true,
+          isCancelling: snapshotStatus === 'cancelling',
+        });
+
+        await vi.advanceTimersByTimeAsync(2_000);
+
+        expect(useGraphStore.getState()).toMatchObject({
+          isExecuting: false,
+          isCancelling: false,
+          uncertainWorldLabsRunId: null,
+          runHistory: [expect.objectContaining({ id: runId, status: historyStatus })],
+        });
+      } finally {
+        useGraphStore.getState().resetExecution();
+        vi.useRealTimers();
+      }
+    },
+  );
 
   it('starts with empty nodes and edges', () => {
     const state = useGraphStore.getState();
@@ -115,6 +538,79 @@ describe('graphStore', () => {
     expect(nodes[0].data.state).toBe('idle');
   });
 
+  it('sends World Labs blank seed default to the backend without adding a local ghost on success', async () => {
+    fetchMock
+      .mockResolvedValueOnce(mockResponse({ empty: true, nodes: [], edges: [] }))
+      .mockResolvedValueOnce(mockResponse({ id: 'n1', definitionId: 'worldlabs-environment' }));
+
+    const nodeId = await useGraphStore.getState().addNode(
+      'worldlabs-environment',
+      { x: 120, y: 80 },
+    );
+
+    expect(nodeId).toBe('n1');
+    expect(fetchMock.mock.calls[1][0]).toBe('http://localhost:8000/api/graph/node');
+    const request = fetchMock.mock.calls[1][1] as RequestInit;
+    const payload = JSON.parse(String(request.body)) as {
+      definitionId: string;
+      params: Record<string, unknown>;
+    };
+    expect(payload.definitionId).toBe('worldlabs-environment');
+    expect(payload.params.seed).toBe('');
+    // A successful backend create is hydrated by graphSync; addNode must not
+    // independently append the fallback UUID that caused the visible ghost.
+    expect(useGraphStore.getState().nodes).toHaveLength(0);
+  });
+
+  it('surfaces a World Labs 400 rejection without adding a local ghost', async () => {
+    fetchMock
+      .mockResolvedValueOnce(mockResponse({ empty: true, nodes: [], edges: [] }))
+      .mockResolvedValueOnce(mockResponse({
+        detail: "Invalid value for param 'seed': expected integer or null",
+      }, false, 400));
+
+    const nodeId = await useGraphStore.getState().addNode(
+      'worldlabs-environment',
+      { x: 120, y: 80 },
+    );
+
+    expect(nodeId).toBeNull();
+    expect(useGraphStore.getState().nodes).toHaveLength(0);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(alertMock).toHaveBeenCalledWith(
+      expect.stringContaining("Invalid value for param 'seed'"),
+    );
+  });
+
+  it('does not reinterpret a backend 503 node rejection as offline local mode', async () => {
+    fetchMock
+      .mockResolvedValueOnce(mockResponse({ empty: true, nodes: [], edges: [] }))
+      .mockResolvedValueOnce(mockResponse({ detail: 'Paid-start safety journal unavailable' }, false, 503));
+
+    const nodeId = await useGraphStore.getState().addNode('worldlabs-environment', { x: 20, y: 40 });
+
+    expect(nodeId).toBeNull();
+    expect(useGraphStore.getState().nodes).toHaveLength(0);
+    expect(alertMock).toHaveBeenCalledWith(
+      expect.stringContaining('Paid-start safety journal unavailable'),
+    );
+  });
+
+  it('does not add a local node when the backend rejects the fresh-canvas clear', async () => {
+    fetchMock
+      .mockResolvedValueOnce(mockResponse({ empty: false, nodes: [{ id: 'n9' }], edges: [] }))
+      .mockResolvedValueOnce(mockResponse({ detail: 'Graph has protected provider state' }, false, 409));
+
+    const nodeId = await useGraphStore.getState().addNode('text-input', { x: 10, y: 20 });
+
+    expect(nodeId).toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(useGraphStore.getState().nodes).toHaveLength(0);
+    expect(alertMock).toHaveBeenCalledWith(
+      expect.stringContaining('Backend rejected graph clear (HTTP 409)'),
+    );
+  });
+
   it('clears stale backend graph before the first manual node on an empty canvas', async () => {
     fetchMock
       .mockResolvedValueOnce(mockResponse({ empty: false, nodes: [{ id: 'n9' }], edges: [] }))
@@ -157,8 +653,9 @@ describe('graphStore', () => {
     expect(fetchMock.mock.calls[0][0]).toBe('http://localhost:8000/api/graph/node');
   });
 
-  it('keeps the first empty-canvas node local when backend freshness cannot be verified', async () => {
-    fetchMock.mockResolvedValueOnce(mockResponse({}, false, 503));
+  it('keeps the first empty-canvas node local when no backend was discovered', async () => {
+    backendDiscovery.baseUrl = null;
+    fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
 
     const nodeId = await useGraphStore.getState().addNode('text-input', { x: 10, y: 20 });
 
@@ -166,6 +663,89 @@ describe('graphStore', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(useGraphStore.getState().nodes).toHaveLength(1);
     expect(useGraphStore.getState().backendFreshStartPending).toBe(true);
+  });
+
+  it('reconciles a committed backend node instead of adding a local duplicate when its response is lost', async () => {
+    const committedNode: Node<NodeData> = {
+      id: 'n1',
+      type: 'model-node',
+      position: { x: 10, y: 20 },
+      data: {
+        label: 'World Environment',
+        definitionId: 'worldlabs-environment',
+        params: { seed: null },
+        state: 'idle',
+        outputs: {},
+      },
+    };
+    fetchMock
+      .mockResolvedValueOnce(mockResponse({ empty: true, nodes: [], edges: [] }))
+      .mockRejectedValueOnce(new TypeError('Response connection lost'))
+      .mockResolvedValueOnce(mockResponse({
+        empty: false,
+        nodes: [committedNode],
+        edges: [],
+      }));
+
+    const nodeId = await useGraphStore.getState().addNode('worldlabs-environment', { x: 10, y: 20 });
+
+    expect(nodeId).toBe('n1');
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(useGraphStore.getState().nodes).toHaveLength(1);
+    expect(useGraphStore.getState().nodes[0].id).toBe('n1');
+    expect(useGraphStore.getState().nodes[0].data.definitionId).toBe('worldlabs-environment');
+    expect(alertMock).not.toHaveBeenCalled();
+  });
+
+  it('blocks another create while a sent node-create result remains uncertain', async () => {
+    fetchMock
+      .mockResolvedValueOnce(mockResponse({ empty: true, nodes: [], edges: [] }))
+      .mockRejectedValueOnce(new TypeError('Response connection lost'))
+      .mockRejectedValueOnce(new TypeError('Reconciliation unavailable'));
+
+    const firstNodeId = await useGraphStore.getState().addNode('worldlabs-environment', { x: 10, y: 20 });
+    const secondNodeId = await useGraphStore.getState().addNode('worldlabs-environment', { x: 30, y: 40 });
+
+    expect(firstNodeId).toBeNull();
+    expect(secondNodeId).toBeNull();
+    expect(useGraphStore.getState().nodes).toHaveLength(0);
+    const mutationCalls = fetchMock.mock.calls.filter(([, init]) =>
+      (init as RequestInit | undefined)?.method === 'POST');
+    expect(mutationCalls).toHaveLength(1);
+    expect(alertMock).toHaveBeenCalledWith(expect.stringContaining('unknown result'));
+
+    // Authoritative graphSync resolves the transient fence for subsequent tests.
+    const subscribed = vi.mocked(wsClient.subscribe).mock.calls[0]?.[0] as
+      | ((event: ExecutionEvent) => void)
+      | undefined;
+    subscribed?.({
+      type: 'graphSync',
+      empty: false,
+      nodes: [{
+        id: 'n1',
+        type: 'model-node',
+        position: { x: 10, y: 20 },
+        data: {
+          label: 'World Environment',
+          definitionId: 'worldlabs-environment',
+          params: { seed: null },
+          state: 'idle',
+          outputs: {},
+        },
+      }],
+      edges: [],
+    } as ExecutionEvent);
+  });
+
+  it('does not enter local mode when a previously discovered backend drops before create', async () => {
+    backendDiscovery.baseUrl = 'http://localhost:8000';
+    fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+
+    const nodeId = await useGraphStore.getState().addNode('text-input', { x: 10, y: 20 });
+
+    expect(nodeId).toBeNull();
+    expect(useGraphStore.getState().nodes).toHaveLength(0);
+    expect(alertMock).toHaveBeenCalledWith(expect.stringContaining('known backend'));
   });
 
   it('removes a node and cleans up connected edges', async () => {
@@ -239,6 +819,36 @@ describe('graphStore', () => {
     expect(state.nodes).toHaveLength(2);
     expect(state.edges).toHaveLength(1);
     expect(state.edges[0].id).toBe('edge-2');
+  });
+
+  it('keeps a CLI node visible when the backend rejects its deletion', async () => {
+    const alert = vi.spyOn(window, 'alert').mockImplementation(() => undefined);
+    const cliNode: Node<NodeData> = {
+      id: 'n1',
+      type: 'model-node',
+      position: { x: 0, y: 0 },
+      data: {
+        definitionId: 'worldlabs-environment',
+        label: 'World Labs Environment',
+        params: {},
+        state: 'idle',
+        outputs: {},
+      },
+    };
+    useGraphStore.setState({ nodes: [cliNode], edges: [] });
+    fetchMock.mockResolvedValueOnce(mockResponse(
+      { detail: 'Cannot delete while provider recovery is unresolved.' },
+      false,
+      409,
+    ));
+
+    useGraphStore.getState().onNodesChange([{ type: 'remove', id: cliNode.id }]);
+
+    expect(useGraphStore.getState().nodes).toEqual([cliNode]);
+    await vi.waitFor(() => expect(alert).toHaveBeenCalledWith(expect.stringContaining(
+      'Cannot delete while provider recovery is unresolved.',
+    )));
+    expect(useGraphStore.getState().nodes).toEqual([cliNode]);
   });
 
   it('replaces an existing wire on non-multiple input handles', () => {

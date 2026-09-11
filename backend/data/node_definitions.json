@@ -3104,6 +3104,260 @@
       }
     ]
   },
+  "camera-pose": {
+    "id": "camera-pose",
+    "displayName": "Camera Pose",
+    "category": "utility",
+    "apiProvider": "utility",
+    "apiEndpoint": "",
+    "envKeyName": [],
+    "executionPattern": "sync",
+    "capabilityNote": "Authors a provider-neutral, versioned camera transform locally. No provider request is made.",
+    "inputPorts": [],
+    "outputPorts": [
+      {
+        "id": "pose",
+        "label": "Camera Pose",
+        "dataType": "CameraPose",
+        "required": false
+      }
+    ],
+    "params": [
+      {
+        "key": "pose_id",
+        "label": "Pose ID",
+        "type": "string",
+        "required": false,
+        "default": "",
+        "placeholder": "Defaults to node ID"
+      },
+      {
+        "key": "coordinate_system_id",
+        "label": "Coordinate System ID",
+        "type": "string",
+        "required": false,
+        "default": "nebula-world"
+      },
+      {
+        "key": "handedness",
+        "label": "Handedness",
+        "type": "enum",
+        "required": false,
+        "default": "right",
+        "options": [
+          { "label": "Right-handed", "value": "right" },
+          { "label": "Left-handed", "value": "left" }
+        ]
+      },
+      {
+        "key": "up_axis",
+        "label": "Up Axis",
+        "type": "enum",
+        "required": false,
+        "default": "y",
+        "options": [
+          { "label": "+X", "value": "x" },
+          { "label": "-X", "value": "-x" },
+          { "label": "+Y", "value": "y" },
+          { "label": "-Y", "value": "-y" },
+          { "label": "+Z", "value": "z" },
+          { "label": "-Z", "value": "-z" }
+        ]
+      },
+      {
+        "key": "forward_axis",
+        "label": "Forward Axis",
+        "type": "enum",
+        "required": false,
+        "default": "-z",
+        "options": [
+          { "label": "+X", "value": "x" },
+          { "label": "-X", "value": "-x" },
+          { "label": "+Y", "value": "y" },
+          { "label": "-Y", "value": "-y" },
+          { "label": "+Z", "value": "z" },
+          { "label": "-Z", "value": "-z" }
+        ]
+      },
+      {
+        "key": "unit",
+        "label": "Spatial Unit",
+        "type": "enum",
+        "required": false,
+        "default": "meters",
+        "options": [
+          { "label": "Meters", "value": "meters" },
+          { "label": "Centimeters", "value": "centimeters" },
+          { "label": "Millimeters", "value": "millimeters" },
+          { "label": "Custom", "value": "custom" }
+        ]
+      },
+      {
+        "key": "meters_per_unit",
+        "label": "Meters per Custom Unit",
+        "type": "float",
+        "required": false,
+        "default": 1.0,
+        "min": 0.000001,
+        "step": 0.001,
+        "visibleWhen": { "unit": ["custom"] }
+      },
+      { "key": "origin_x", "label": "Origin X (m)", "type": "float", "required": false, "default": 0.0, "step": 0.01 },
+      { "key": "origin_y", "label": "Origin Y (m)", "type": "float", "required": false, "default": 0.0, "step": 0.01 },
+      { "key": "origin_z", "label": "Origin Z (m)", "type": "float", "required": false, "default": 0.0, "step": 0.01 },
+      { "key": "position_x", "label": "Position X", "type": "float", "required": false, "default": 0.0, "step": 0.01 },
+      { "key": "position_y", "label": "Position Y", "type": "float", "required": false, "default": 1.7, "step": 0.01 },
+      { "key": "position_z", "label": "Position Z", "type": "float", "required": false, "default": 0.0, "step": 0.01 },
+      { "key": "orientation_x", "label": "Quaternion X", "type": "float", "required": false, "default": 0.0, "min": -1.0, "max": 1.0, "step": 0.01 },
+      { "key": "orientation_y", "label": "Quaternion Y", "type": "float", "required": false, "default": 0.0, "min": -1.0, "max": 1.0, "step": 0.01 },
+      { "key": "orientation_z", "label": "Quaternion Z", "type": "float", "required": false, "default": 0.0, "min": -1.0, "max": 1.0, "step": 0.01 },
+      { "key": "orientation_w", "label": "Quaternion W", "type": "float", "required": false, "default": 1.0, "min": -1.0, "max": 1.0, "step": 0.01 },
+      { "key": "timestamp_seconds", "label": "Timestamp (s)", "type": "float", "required": false, "default": 0.0, "min": 0.0, "step": 0.01 },
+      { "key": "include_intrinsics", "label": "Include Pinhole Intrinsics", "type": "boolean", "required": false, "default": true },
+      { "key": "image_width", "label": "Image Width", "type": "integer", "required": false, "default": 1920, "min": 1, "max": 32768, "visibleWhen": { "include_intrinsics": [true] } },
+      { "key": "image_height", "label": "Image Height", "type": "integer", "required": false, "default": 1080, "min": 1, "max": 32768, "visibleWhen": { "include_intrinsics": [true] } },
+      { "key": "fx", "label": "Focal X", "type": "float", "required": false, "default": 1000.0, "min": 0.000001, "max": 10000000, "step": 0.1, "visibleWhen": { "include_intrinsics": [true] } },
+      { "key": "fy", "label": "Focal Y", "type": "float", "required": false, "default": 1000.0, "min": 0.000001, "max": 10000000, "step": 0.1, "visibleWhen": { "include_intrinsics": [true] } },
+      { "key": "cx", "label": "Principal X", "type": "float", "required": false, "default": 960.0, "min": 0.0, "max": 32768, "step": 0.1, "visibleWhen": { "include_intrinsics": [true] } },
+      { "key": "cy", "label": "Principal Y", "type": "float", "required": false, "default": 540.0, "min": 0.0, "max": 32768, "step": 0.1, "visibleWhen": { "include_intrinsics": [true] } },
+      { "key": "skew", "label": "Skew", "type": "float", "required": false, "default": 0.0, "min": -10000000, "max": 10000000, "step": 0.01, "visibleWhen": { "include_intrinsics": [true] } }
+    ]
+  },
+  "camera-path": {
+    "id": "camera-path",
+    "displayName": "Camera Path",
+    "category": "utility",
+    "apiProvider": "utility",
+    "apiEndpoint": "",
+    "envKeyName": [],
+    "executionPattern": "sync",
+    "capabilityNote": "Combines timestamped Camera Pose values locally; timestamps and coordinate systems are validated.",
+    "inputPorts": [
+      { "id": "poses", "label": "Camera Poses", "dataType": "CameraPose", "required": true, "multiple": true, "maxConnections": 10000 }
+    ],
+    "outputPorts": [
+      { "id": "path", "label": "Camera Path", "dataType": "CameraPath", "required": false }
+    ],
+    "params": [
+      { "key": "path_id", "label": "Path ID", "type": "string", "required": false, "default": "", "placeholder": "Defaults to node ID" },
+      {
+        "key": "interpolation",
+        "label": "Interpolation",
+        "type": "enum",
+        "required": false,
+        "default": "linear",
+        "options": [
+          { "label": "Linear", "value": "linear" },
+          { "label": "Step", "value": "step" },
+          { "label": "Catmull-Rom", "value": "catmull-rom" }
+        ]
+      },
+      { "key": "closed", "label": "Closed Path", "type": "boolean", "required": false, "default": false }
+    ]
+  },
+  "spatial-context": {
+    "id": "spatial-context",
+    "displayName": "Spatial Context",
+    "category": "utility",
+    "apiProvider": "utility",
+    "apiEndpoint": "",
+    "envKeyName": [],
+    "executionPattern": "sync",
+    "capabilityNote": "Pairs local image outputs with Camera Pose anchors. Remote or signed asset URLs are rejected.",
+    "inputPorts": [
+      { "id": "poses", "label": "Camera Poses", "dataType": "CameraPose", "required": true, "multiple": true, "maxConnections": 4096 },
+      { "id": "assets", "label": "Local Images", "dataType": "Image", "required": true, "multiple": true, "maxConnections": 4096 }
+    ],
+    "outputPorts": [
+      { "id": "context", "label": "Spatial Context", "dataType": "SpatialContext", "required": false }
+    ],
+    "params": [
+      { "key": "context_id", "label": "Context ID", "type": "string", "required": false, "default": "", "placeholder": "Defaults to node ID" },
+      {
+        "key": "role",
+        "label": "Anchor Role",
+        "type": "enum",
+        "required": false,
+        "default": "reference",
+        "options": [
+          { "label": "Reference", "value": "reference" },
+          { "label": "Observation", "value": "observation" },
+          { "label": "Target", "value": "target" }
+        ]
+      }
+    ]
+  },
+  "sensor-rig": {
+    "id": "sensor-rig",
+    "displayName": "Sensor Rig",
+    "category": "utility",
+    "apiProvider": "utility",
+    "apiEndpoint": "",
+    "envKeyName": [],
+    "executionPattern": "sync",
+    "capabilityNote": "Builds a local sensor-rig description from Camera Pose inputs; optical and non-optical intrinsics rules are enforced.",
+    "inputPorts": [
+      { "id": "poses", "label": "Sensor Poses", "dataType": "CameraPose", "required": true, "multiple": true, "maxConnections": 256 }
+    ],
+    "outputPorts": [
+      { "id": "rig", "label": "Sensor Rig", "dataType": "SensorRig", "required": false }
+    ],
+    "params": [
+      { "key": "rig_id", "label": "Rig ID", "type": "string", "required": false, "default": "", "placeholder": "Defaults to node ID" },
+      {
+        "key": "modality",
+        "label": "Sensor Modality",
+        "type": "enum",
+        "required": false,
+        "default": "rgb",
+        "options": [
+          { "label": "RGB", "value": "rgb" },
+          { "label": "Depth", "value": "depth" },
+          { "label": "RGB + Depth", "value": "rgbd" },
+          { "label": "LiDAR", "value": "lidar" },
+          { "label": "IMU", "value": "imu" }
+        ]
+      }
+    ]
+  },
+  "spatial-value-validate": {
+    "id": "spatial-value-validate",
+    "displayName": "Spatial Value Validate",
+    "category": "utility",
+    "apiProvider": "utility",
+    "apiEndpoint": "",
+    "envKeyName": [],
+    "executionPattern": "sync",
+    "capabilityNote": "Strictly validates a versioned spatial value locally. Legacy World v1 values are adapted to World v2 in memory only.",
+    "inputPorts": [
+      { "id": "input", "label": "Spatial Value", "dataType": "Any", "required": true }
+    ],
+    "outputPorts": [
+      { "id": "value", "label": "Validated Value", "dataType": "Any", "required": false },
+      { "id": "summary", "label": "Validation Summary", "dataType": "Text", "required": false }
+    ],
+    "params": [
+      {
+        "key": "expected_type",
+        "label": "Expected Type",
+        "type": "enum",
+        "required": true,
+        "default": "CameraPose",
+        "options": [
+          { "label": "Camera Pose", "value": "CameraPose" },
+          { "label": "Camera Path", "value": "CameraPath" },
+          { "label": "Spatial Context", "value": "SpatialContext" },
+          { "label": "Depth Map", "value": "DepthMap" },
+          { "label": "Depth Sequence", "value": "DepthSequence" },
+          { "label": "Point Cloud", "value": "PointCloud" },
+          { "label": "Sensor Rig", "value": "SensorRig" },
+          { "label": "Sensor Stream", "value": "SensorStream" },
+          { "label": "Spatial Session", "value": "SpatialSession" },
+          { "label": "World", "value": "World" }
+        ]
+      }
+    ]
+  },
   "reference-set": {
     "id": "reference-set",
     "displayName": "Reference Set",
@@ -18378,6 +18632,291 @@
         ]
       },
       { "key": "expected_angle", "label": "Expected Angle", "type": "string", "required": false, "default": "", "placeholder": "e.g. low-angle push-in" }
+    ]
+  },
+  "worldlabs-environment": {
+    "id": "worldlabs-environment",
+    "displayName": "World Labs Environment",
+    "category": "3d-gen",
+    "apiProvider": "worldlabs",
+    "apiEndpoint": "/marble/v1/worlds:generate",
+    "envKeyName": "WORLDLABS_API_KEY",
+    "executionPattern": "async-poll",
+    "inputPorts": [
+      {
+        "id": "prompt",
+        "label": "Prompt / Guidance",
+        "dataType": "Text",
+        "required": false
+      },
+      {
+        "id": "images",
+        "label": "Image(s)",
+        "dataType": "Image",
+        "required": false,
+        "multiple": true,
+        "role": "composition"
+      },
+      {
+        "id": "video",
+        "label": "Video",
+        "dataType": "Video",
+        "required": false
+      }
+    ],
+    "outputPorts": [
+      {
+        "id": "world",
+        "label": "World",
+        "dataType": "World",
+        "required": false
+      },
+      {
+        "id": "panorama",
+        "label": "Panorama",
+        "dataType": "Image",
+        "required": false
+      },
+      {
+        "id": "collider",
+        "label": "Collider",
+        "dataType": "Mesh",
+        "required": false
+      },
+      {
+        "id": "thumbnail",
+        "label": "Thumbnail",
+        "dataType": "Image",
+        "required": false
+      },
+      {
+        "id": "caption",
+        "label": "Caption",
+        "dataType": "Text",
+        "required": false
+      }
+    ],
+    "params": [
+      {
+        "key": "model",
+        "label": "Marble Model",
+        "type": "enum",
+        "required": false,
+        "default": "marble-1.1",
+        "options": [
+          {
+            "label": "Marble 1.0 Draft",
+            "value": "marble-1.0-draft"
+          },
+          {
+            "label": "Marble 1.0",
+            "value": "marble-1.0"
+          },
+          {
+            "label": "Marble 1.1",
+            "value": "marble-1.1"
+          },
+          {
+            "label": "Marble 1.1 Plus",
+            "value": "marble-1.1-plus"
+          }
+        ]
+      },
+      {
+        "key": "display_name",
+        "label": "World Name",
+        "type": "string",
+        "required": false,
+        "default": "",
+        "placeholder": "Optional name (64 characters max)"
+      },
+      {
+        "key": "seed",
+        "label": "Seed",
+        "type": "integer",
+        "required": false,
+        "default": "",
+        "min": 0,
+        "max": 4294967295,
+        "placeholder": "Random"
+      },
+      {
+        "key": "is_pano",
+        "label": "Single Image Is Panorama",
+        "type": "enum",
+        "required": false,
+        "default": "auto",
+        "options": [
+          {
+            "label": "Auto Detect",
+            "value": "auto"
+          },
+          {
+            "label": "Yes",
+            "value": "true"
+          },
+          {
+            "label": "No",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "key": "reconstruct_images",
+        "label": "Reconstruct Image Set",
+        "type": "boolean",
+        "required": false,
+        "default": false
+      },
+      {
+        "key": "azimuths",
+        "label": "Image Azimuths",
+        "type": "string",
+        "required": false,
+        "default": "",
+        "placeholder": "Optional, e.g. 0, 90, 180, 270"
+      },
+      {
+        "key": "disable_recaption",
+        "label": "Use Prompt Verbatim",
+        "type": "boolean",
+        "required": false,
+        "default": false
+      },
+      {
+        "key": "tags",
+        "label": "Tags",
+        "type": "string",
+        "required": false,
+        "default": "",
+        "placeholder": "Optional comma-separated tags"
+      },
+      {
+        "key": "resume_operation_id",
+        "label": "Resume Operation ID",
+        "type": "string",
+        "required": false,
+        "default": "",
+        "placeholder": "Recover an accepted generation without starting another"
+      },
+      {
+        "key": "existing_world_id",
+        "label": "Existing World ID",
+        "type": "string",
+        "required": false,
+        "default": "",
+        "placeholder": "Fetch an existing Marble world without generating another"
+      }
+    ]
+  },
+  "worldlabs-world-export": {
+    "id": "worldlabs-world-export",
+    "displayName": "World Labs Export",
+    "category": "transform",
+    "apiProvider": "worldlabs",
+    "apiEndpoint": "/marble/v1/worlds/{world_id}:export",
+    "envKeyName": "WORLDLABS_API_KEY",
+    "executionPattern": "async-poll",
+    "inputPorts": [
+      {
+        "id": "world",
+        "label": "World",
+        "dataType": "World",
+        "required": true
+      }
+    ],
+    "outputPorts": [
+      {
+        "id": "file",
+        "label": "Exported 3D File",
+        "dataType": "Mesh",
+        "required": false
+      },
+      {
+        "id": "format",
+        "label": "Format",
+        "dataType": "Text",
+        "required": false
+      }
+    ],
+    "params": [
+      {
+        "key": "format",
+        "label": "Export Format",
+        "type": "enum",
+        "required": false,
+        "default": "ply",
+        "options": [
+          {
+            "label": "Gaussian Splat (PLY)",
+            "value": "ply"
+          },
+          {
+            "label": "High-Quality Mesh (GLB)",
+            "value": "glb"
+          }
+        ]
+      },
+      {
+        "key": "resolution",
+        "label": "PLY Resolution",
+        "type": "enum",
+        "required": false,
+        "default": "full_res",
+        "visibleWhen": {
+          "format": [
+            "ply"
+          ]
+        },
+        "options": [
+          {
+            "label": "Full Resolution",
+            "value": "full_res"
+          },
+          {
+            "label": "500K",
+            "value": "500k"
+          },
+          {
+            "label": "150K",
+            "value": "150k"
+          },
+          {
+            "label": "100K",
+            "value": "100k"
+          }
+        ]
+      },
+      {
+        "key": "mesh_variant",
+        "label": "GLB Mesh Variant",
+        "type": "enum",
+        "required": false,
+        "default": "textured",
+        "visibleWhen": {
+          "format": [
+            "glb"
+          ]
+        },
+        "options": [
+          {
+            "label": "Textured",
+            "value": "textured"
+          },
+          {
+            "label": "Vertex Colored",
+            "value": "vertex_colored"
+          }
+        ]
+      },
+      {
+        "key": "resume_operation_id",
+        "label": "Resume Export Operation ID",
+        "type": "string",
+        "required": false,
+        "default": "",
+        "placeholder": "Recover an accepted export without starting another"
+      }
     ]
   },
   "identity-edit": {

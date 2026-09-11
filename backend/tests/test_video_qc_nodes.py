@@ -215,7 +215,8 @@ async def test_vision_advisory_is_coerced_and_provider_is_recorded(
 def test_definitions_and_frontend_mirror_match_contract() -> None:
     repo = Path(__file__).resolve().parents[2]
     definitions = json.loads((repo / "backend/data/node_definitions.json").read_text())
-    assert len(definitions) == 172
+    # Two World Labs nodes and five local spatial nodes extend the prior catalog.
+    assert len(definitions) == 179
     frontend = (repo / "frontend/src/constants/nodeDefinitions.ts").read_text()
     for definition_id in QC_IDS:
         definition = definitions[definition_id]

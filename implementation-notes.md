@@ -1059,12 +1059,517 @@ A 16-agent adversarial review (3 dimensions → per-finding verify) surfaced 13 
   This keeps process cleanup and user-visible cancellation truth on one path,
   even if a client bypasses the frontend's disabled-Send state.
 
-## 2026-08-20 — Public evidence privacy
+## 2026-08-21 — Trackpad canvas navigation
 
-- The provider/agent acceptance captures included Chrome's tabs and bookmarks
-  bar. Because this repository is public, publishing those raw desktop details
-  would expose unrelated personal browsing context without adding audit value.
-- Only the clean publish-clone copies were cropped by the fixed 104-pixel
-  browser-chrome height and stripped of image metadata. The Nebula application
-  viewport, error details, agent log, node outputs, and restoration evidence
-  remain visible; the original local captures were left untouched.
+- The canvas explicitly disabled React Flow's scroll-panning path, so a
+  two-finger trackpad scroll changed zoom instead of translating the viewport.
+- Match the Flora-style interaction split: ordinary two-finger scrolling pans
+  freely in both axes, pinch remains zoom, and click-drag panning remains
+  available. Mouse-wheel scrolling follows the same pan path by design. Keep
+  the three React Flow flags in one typed, unit-tested contract so a future
+  canvas refactor cannot silently restore scroll-to-zoom.
+
+## 2026-08-21 — Collapsible canvas minimap
+
+- Performance Mode previously made the minimap permanently visible; disabling
+  the mode also removed render culling and controls, so it was not a suitable
+  minimization path.
+- Add a direct 30px minimize affordance inside the expanded minimap and retain
+  a 44px restore target above the chat launcher when collapsed. Persist the
+  choice independently of Performance Mode so the compact state survives
+  reloads without sacrificing large-graph rendering behavior.
+
+## 2026-08-21 — Flora-inspired workspace rail
+
+- Treat the rail as navigation, not a set of independent floating windows. A
+  single `leftDock` owns Nodes, Assets, Run History, and Settings; the legacy
+  panel visibility fields mirror that authority so the existing panel content
+  can be reused without parallel state paths.
+- Dock panels are intentionally no longer draggable or resizable. Their stable
+  rail-adjacent drawer geometry makes the active destination predictable and
+  prevents several left panels from obscuring the graph at once. Chat remains
+  an independent bottom-right surface because it supports a simultaneous
+  canvas conversation rather than workspace navigation.
+- Keep execution and graph-manipulation actions in the bottom toolbar, but move
+  Settings out of it. Search opens the existing command palette, Help opens the
+  existing onboarding, and Create reuses the existing studio route. Do not add
+  Flora icons for Comments, Flows, or Profile until Nebula has real destination
+  behavior for them.
+- Centralize fit padding around the actual rail, dock drawer, chat, and
+  inspector rectangles. The rail and dock are explicitly classified as left
+  chrome and chat as right chrome; nearest-edge inference misclassified a
+  full-height drawer as top chrome because its top inset is smaller than its
+  left inset.
+
+## 2026-08-21 — Flora-style mode-free canvas selection
+
+- Remove the persistent Pan/Select toggle instead of merely defaulting it to
+  Select. Empty-canvas left drag now always marquee-selects, while dragging a
+  node still moves it. This matches Flora's direct manipulation contract and
+  removes the hidden mode that made the same gesture unexpectedly pan.
+- Preserve every alternative navigation path: trackpad/two-axis wheel scroll
+  pans, pinch zooms, Meta/Control + wheel zooms, middle/right drag pans, and
+  Space temporarily turns left drag into pan. Shift remains the additive node
+  selection modifier and marquee selection uses partial intersection.
+- Keep the whole React Flow gesture configuration in one typed, unit-tested
+  `CANVAS_INTERACTION_PROPS` object. This prevents toolbar/state changes from
+  silently reintroducing left-drag panning or splitting the interaction model
+  across component props.
+
+## 2026-08-21 — Contextual selection actions and shared agent context
+
+- The existing Claude, Codex, and Daedalus agents could inspect the full graph
+  through `nebula graph`, but none received the live React Flow selection. Do
+  not persist selection inside graph nodes or `.nebula` files. A dedicated
+  ephemeral backend store keeps only selected IDs and resolves every read
+  against the canonical `cli_graph`, so a deleted/import-replaced node cannot
+  survive as a valid selected handle.
+- Publish IDs rather than client-authored node data. The backend derives names,
+  params, outputs, and touching connections, caps collection/string sizes,
+  drops internal fields, and redacts credential-like keys plus every data URI.
+  Per-turn chat context is stricter still: it contains only IDs, definition
+  metadata, and internal selection topology so parameter text can never be
+  promoted into a system instruction.
+- A WebSocket chat turn carries its own selected-ID snapshot in addition to the
+  continuously published selection. This makes vague references such as
+  “change these” atomic at Send time instead of racing a later canvas click.
+  Approval follow-ups take a fresh snapshot because the user may legitimately
+  change the selection while an agent is paused.
+- The repository did not contain an MCP server; MCP appeared only in research
+  and roadmap documents. Add a real read-only stdio server rather than calling
+  the REST endpoint “MCP.” Pin the maintained official Python SDK v1 line at
+  `mcp==1.27.0`: it is old enough for the repository's package-age security
+  rule and is locally testable, while the newly released v2 line would add an
+  unproved dependency/lifespan migration. The MCP process reads the same
+  backend selection endpoint as `nebula selection`.
+- The MCP SDK's unconstrained `sse-starlette` dependency currently selects a
+  release that requires a newer Starlette than FastAPI 0.115.12 supports. Pin
+  the existing `starlette==0.46.2` runtime and the mature
+  `sse-starlette==2.4.1` release (which does not impose a base Starlette
+  upgrade), plus `pydantic-settings==2.14.0` to avoid the newer release's
+  unresolved-lifespan warning against Nebula's pinned Pydantic 2.11 runtime.
+  This keeps the optional stdio bridge installable in the main backend
+  environment without changing Nebula's HTTP stack.
+- Keep the contextual toolbar capability-based. Nebula has real batch run,
+  copy, duplicate, dependency-aware arrange, output download, agent, and delete
+  behavior, so those are exposed. Do not add Flora-style grouping or shared
+  parameter editing until the graph has an actual group model and a validated
+  heterogeneous batch-edit contract; decorative controls would create false
+  affordances.
+- Batch deletion routes through the existing React Flow removal path so one
+  undo record, CLI deletion mirror, edge cleanup, and Remotion source pruning
+  remain atomic. Batch arrange operates on the selected induced subgraph and
+  translates its computed layout back to the selection's existing origin.
+
+## 2026-09-03 — World Labs Environment MVP
+
+- Ship against the public World Labs Marble API and name the capability
+  **World Labs Environment**. Atlas remains an adapter target only: its public
+  announcement says partner early access, while the published World API does
+  not expose an Atlas model identifier. Do not present Marble execution as
+  Atlas execution.
+- Introduce a first-class structured `World` port rather than coercing the
+  provider bundle into `Mesh`. A generated world owns several related assets
+  (SPZ resolutions, collider GLB, panorama, thumbnail), provider/world IDs,
+  and metric/ground metadata that must remain atomic across graph edges.
+- Preserve provider assets in the graph run directory before emitting success.
+  Store local paths in the `World` object and in derivative output ports so a
+  signed provider URL cannot become a stale successful output. Download every
+  returned SPZ resolution plus panorama, collider, and thumbnail; do not put
+  API keys or signed query strings into manifests.
+- Render `World` with a dedicated, lazily loaded Spark/Three.js viewport.
+  The graph card uses a cheap thumbnail/fallback; the expanded viewer loads a
+  bounded preview SPZ first and lets the user opt into full resolution. Clean
+  up animation frames, controls, renderer, and WebGL resources on unmount.
+- Keep generation and export separate. World generation exposes the provider's
+  ordinary collider and visual assets; an explicit World Labs Export node owns
+  paid HQ-GLB or PLY export requests, polling, local materialization, and its
+  own cost-facing parameters.
+- Keep World Labs Environment Canvas-only for this MVP. Create Studio currently
+  launches concurrent variation runs without Canvas run history or Stop/recovery
+  ownership; exposing a paid non-idempotent start there would make lost-response
+  and repeated-click ambiguity unrecoverable. Re-enable it only after Create
+  adopts the same tracked execution contract.
+- Treat accepted World Labs IDs as durable paid-work checkpoints. A
+  cancellation-shielded POST handshake captures the provider response, then a
+  `providerRecovery` event persists and hydrates the operation/world ID before
+  Stop can terminate local polling. Generation advances from
+  `resume_operation_id` to a pinned `existing_world_id`; export keeps its
+  `resume_operation_id`. Clearing the field, rather than an ordinary rerun, is
+  the explicit request for a new paid operation.
+- Match history replay to the real billing boundary rather than treating every
+  World Labs node as paid. A fresh environment or fresh HQ GLB export is blocked
+  unless its exact accepted-operation/world ID is restored, including legacy
+  completed records; free PLY conversion remains a normal replay. Checkpoints
+  are journaled by exact run/node and hydrated before startup graph-empty guards;
+  a fully checkpointed snapshot becomes an explicit **Recover** action that
+  resumes/fetches existing paid work without another POST. A journal write
+  failure preserves the live ID but emits a durable=false warning that remains
+  visible through cancellation; volatile records expose their actual ID but no
+  forget action, and cleanup failures return HTTP 507 instead of claiming
+  durable deletion.
+- Reserve every fresh paid start and every supplied recovery ID before the
+  execution task is scheduled. One OS-locked, fail-closed lifecycle boundary
+  coordinates all backend processes, pre-admission Stop intent, unresolved
+  submission ambiguity, provider checkpoints, and graph mutations. Capacity
+  exhaustion refuses new paid work instead of evicting a safety record. This is
+  deliberately stricter than per-process task maps: stale tabs, simultaneous
+  workers, imported recovery params, or an immediate recovery/fresh-start race
+  must not issue a duplicate provider POST.
+- Do not replay POST/DELETE graph or execution mutations after backend
+  rediscovery. GET/HEAD discovery can safely retry; a mutation with a lost
+  response is status-reconciled by its run ID. Frontend execution ownership
+  persists through Stop and reconnect until the backend reports a terminal raw
+  execution status. Transport-ambiguous provider starts require a Marble check
+  and exact run-identity acknowledgement; a stale acknowledgement cannot clear
+  a newer hold.
+- Treat recovery/ambiguity hydration as merge-only, no-eviction safety state.
+  An old snapshot may conservatively over-lock but cannot erase a newer live
+  checkpoint. Save, clear/import, undo/redo, deletion, clone, duplicate, and
+  paste either block during unresolved paid state or carry the current recovery
+  identity. Server-confirmed graph clear is the sole authoritative bulk reset;
+  individual recovery deletion is conditional on the exact identity the user
+  saw so run-ID reuse cannot clear newer work.
+- Bound every untrusted boundary independently: provider downloads are
+  streamed and format-validated; SPZ previews are source-bounded, header-
+  preflighted, and fully gzip-inflated for CRC/exact-length validation before Spark;
+  browser graph JSON and ZIP bundles have byte/shape/member limits; ZIP
+  extraction is backend-only and validates the graph before writing assets.
+  Restore and graph import remain two HTTP calls, so a network failure between
+  them can leave an unreferenced restore directory even though it cannot erase
+  or partially replace the current graph.
+- Browser GLB viewing is explicit and lazy rather than eager: the model viewer
+  mounts only after a bounded 128 MiB fetch, and Blob URLs/resources are cleaned
+  up on close. Panorama downloads derive their safe extension from the backend-
+  validated local path rather than falsely labeling every image as PNG.
+- Structural and mocked-provider verification is intentional for this pass. No
+  billable generation or HQ GLB export is required for acceptance; live UI
+  proof uses a local SPZ fixture and therefore cannot establish provider-account
+  billing, latency, or signed-URL behavior.
+- Use one percent-aware portable path policy for graph-bundle collection and
+  restore remapping. Unsafe or omitted local references become explicit
+  unavailable values with warnings; retaining the old URL could silently bind
+  an imported graph to an unrelated same-named output on another backend.
+- Emit frontend-created ZIP members with STORE compression. World assets are
+  already compressed, and DEFLATE made highly repetitive but valid graph JSON
+  exceed the backend's compression-bomb ratio even when every byte and member
+  limit was otherwise satisfied.
+- The production compile exposed a global entry-budget regression while the
+  World viewer itself remained correctly lazy. Keep React/Zustand, React Flow,
+  and JSZip in stable named vendor chunks rather than weakening the 512 kB /
+  160 kB entry limits. This makes feature-code growth visible again and lets
+  browsers cache those shared frameworks independently.
+- Spark 2.1.0's generic PLY reader ships an optional `new Function` parser
+  compiler plus a non-codegen fallback for CSP-constrained pages. Nebula's
+  World viewer accepts only fully preflighted SPZ, so the Vite build transform
+  disables that unused compiler in both Spark's main module and embedded worker
+  source. The existing all-chunk scanner remains strict—there is no Spark
+  exemption—and fails if the pinned dependency changes its markers.
+
+### Final adversarial follow-up
+
+- Exclude both World Labs nodes from the generic one-hour execution-output
+  cache. Their durable recovery IDs are the idempotency mechanism; caching the
+  original no-ID parameter set would otherwise turn an explicit recovery clear
+  into the old result instead of a deliberately fresh operation.
+- Treat an export operation's returned `resolution` or `mesh_variant` as
+  identity evidence when present. A resumed operation with conflicting live
+  settings now fails before download instead of saving a correctly formatted
+  but semantically mislabeled asset.
+- World previews and graph imports accept asset references only through
+  Nebula's `/api/outputs/` boundary (including localhost backend URLs that are
+  rebound to the discovered backend). Imported provider/CDN/LAN URLs are
+  removed with a warning, preventing a graph file from causing automatic
+  cross-origin thumbnail requests or interactive fetches. `marbleUrl` remains
+  a separately validated World Labs HTTPS navigation link.
+- Fetch SPZ viewer bytes with `cache: no-store`. The output route has no
+  immutable-cache contract and files may be archived or deleted independently
+  of the graph, so a browser cache must not make a removed World asset appear
+  live again after the backend returns it unavailable.
+- Persist a pre-provider intent under an OS advisory lock and fsync both the
+  replacement file and its parent directory before allowing a paid POST. The
+  lock is deliberately shared across World generation, HQ export, recovery,
+  graph replacement, and all backend workers; a second local backend therefore
+  cannot turn a process-local timing window into duplicate spend.
+- Classify provider 3xx, 408, 5xx, malformed success bodies, and transport loss
+  as ambiguous acceptance. Only a trustworthy provider ID or a definite client
+  rejection releases the fresh-start uncertainty. Ambiguities require an exact
+  kind/node/run acknowledgement so a delayed old-tab action cannot erase a
+  newer hold.
+- Keep pre-admission Stop IDs permanently denied after their inspectable exact
+  records are compacted. A fixed 1,048,576-bit, seven-hash Bloom filter was
+  chosen to bound storage without unsafe eviction. False positives can
+  conservatively reject a novel run ID; false negatives (and therefore delayed
+  cancelled-run admission) are not permitted.
+- Register per-shot Cinema tasks in the normal execution registry even though
+  the frontend intentionally leaves the Canvas-wide execution gate open. This
+  gives the task strong ownership, cross-worker Stop observation, and a terminal
+  release fallback when cancellation lands before the coroutine's first turn.
+  Cinema's nested base dispatcher also uses a strict four-model allowlist so a
+  crafted scene cannot invoke a World handler below top-level admission.
+- Validate port data types on the backend for direct connect, import, and
+  clustering, using the same contract as the frontend: exact types, `Any`, and
+  the intentional Image/Mask interchange are compatible. A structured `World`
+  value cannot be wired into an Image or Text input through a raw API payload.
+- Register `.spz` as `application/octet-stream` explicitly. The live macOS UI
+  proof exposed a platform MIME mapping to `text/plain`; SPZ has no registered
+  standard media type, and an opaque binary response avoids proxy or download
+  clients interpreting compressed Gaussian-splat bytes as text.
+
+## 2026-09-03 — World Labs live defect closure
+
+- Preserve a blank string only for optional numeric parameters during backend
+  coercion. The World node intentionally uses `seed: ""` as its Random sentinel;
+  required numeric fields still reject blanks instead of weakening validation.
+- Treat a returned backend rejection as authoritative, and a lost response
+  after mutation dispatch as ambiguous. Node creation falls back to a
+  frontend-only UUID only when backend discovery fails before any mutation is
+  sent. HTTP 400/409/503 responses leave the canvas unchanged; a lost or
+  malformed post-dispatch response reconciles through graph export/graphSync or
+  keeps an uncertainty fence that blocks another create until sync/reload. This
+  prevents both rejected-node ghosts and commit-then-response-loss duplicates.
+- Route one selected node through the existing target-node execution contract,
+  whose backend derives the authoritative ancestor closure. Multi-node selection
+  remains an intentionally induced cluster. This keeps an upstream prompt in a
+  single selected World run without changing multi-selection semantics.
+- Reset raw Marble scenes from their transformed capture origin, not a splat
+  density center. For `marble_raw_opencv`, the position is
+  `[0, +groundPlaneOffset, 0]` facing Three.js `-Z`; sampled geometry bounds are
+  limited to speed, control limits, clipping, and unknown-frame fallback.
+- Do not traverse every splat twice on the browser main thread. Navigation
+  bounds use at most 8,192 stratified indexed reads from `PackedSplats`; the
+  Canvas/camera stay mounted while quality or Orbit/Fly mode changes, and only
+  initial world load or explicit Reset repositions the camera. A decode that
+  resolves after unmount receives a second terminal dispose.
+- Keep the World surface inside Nebula's Slava token language while strengthening
+  keyboard focus locally, including an inset ring on the actual WebGL canvas
+  that cannot be clipped by the stage. Keep every quality variant reachable
+  through a narrow-screen scroller, place the aria-modal viewer above the global
+  recovery banner, and collapse Open in Marble to a centered icon on compact
+  layouts.
+- Reused the completed Mediterranean rooftop output for browser QA and made no
+  additional paid World Labs request. A temporary default World node was added
+  through the real node library, verified as backend ID `n4`, then deleted after
+  confirming there was no local UUID ghost; the original three-node graph and
+  two edges were restored.
+
+## 2026-09-04 — Atlas-ready spatial foundation
+
+- Keep Atlas absent from the executable public catalog. World Labs currently
+  publishes Atlas only as select-partner early access, with no public model ID,
+  endpoint, pricing, limits, cancellation, idempotency, or asset contract. The
+  foundation therefore uses local schemas, fixtures, and backend-authoritative
+  capability states; a frontend flag or configured Marble key cannot enable an
+  Atlas request.
+- Extend Nebula around provider-neutral, versioned spatial values rather than
+  adding `atlas` to the Marble model enum. Existing `World` schema v1 graphs
+  remain schema v1 on import and are adapted to v2 in memory. Persistence
+  canonicalizes their supported fields and local assets instead of retaining
+  opaque provider metadata.
+- Separate authoring primitives from future billable provider tasks. Camera
+  pose/path, spatial context, and sensor descriptions are deterministic local
+  nodes. Future Atlas generation, reconstruction, reframing, and simulation
+  adapters remain unavailable until an official versioned contract is installed
+  and entitlement can be verified without starting billable work.
+- Treat paid-operation admission, recovery identity, cache bypass, and quick-run
+  eligibility as one backend registry. Per-operation billing conditions and
+  recovery parameter names live in policy data so a new provider operation
+  cannot silently skip the lifecycle classifier.
+- Accept absolute paths only while they resolve inside the configured Nebula
+  output root, then canonicalize them to `/api/outputs/...`; persisted spatial
+  values never retain provider URLs or machine-specific paths.
+- World Labs Export consumes the original Marble World v1. Adversarial review
+  found that importable World v2 session metadata cannot authenticate a provider
+  resource ID, so v2 export fails before HTTP until an adapter supplies a
+  backend-verified resource binding. Local v1-to-v2 adaptation remains available.
+- Keep the provider guide focused on the executable Marble workflow and make
+  `docs/spatial-foundation.md` the canonical architecture/boundary reference.
+  Document schema-ready values separately from implemented producers so the
+  presence of depth, point-cloud, sensor-stream, or World-v2 contracts cannot
+  be mistaken for a callable Atlas capability.
+
+## 2026-09-05 — Spatial adversarial corrections
+
+- Final-source verification checkpoint: 1,973 backend tests in 41.80s; 737
+  frontend tests across 81 files; production build/budget, generated model docs,
+  and diff checks passed. Inspected actual saved ZIP: graph.json and both image
+  members present. Native Save/Load dialog remains the outstanding observed-UI
+  acceptance gap; normal Dia use needs a quiet user-approved interaction window.
+
+- Legacy parity closeout found two remaining edges: browser version lookup
+  could skip invalid canonical values for a snake alias; backend null splat
+  entries could skip control/trim validation. Both boundaries now reject these
+  inputs consistently. 58 focused browser/import and 29 backend contract tests
+  pass. Full pre-closeout checkpoint: 1,973 backend, 736 frontend, build passed.
+
+- Native Dia testing stopped when CUA reported user activity; no further
+  interaction with that browser. A temporary integration test exercised real
+  saveToFile ZIP generation and real backend restore with picker I/O captured
+  by the test. It exposed mapping.requestUrl persisting absolute backend URLs,
+  which caused SpatialContext to be discarded. Restore mappings now preserve
+  portable paths. The live archive test passes with nine nodes/six edges,
+  correct context pose n7, zero warnings, and restored image HTTP 200. Added
+  separate-origin regression to repo tests. Native file-dialog behavior remains
+  unverified; archive bytes exist at the temporary runtime spatial-live.nebula.zip.
+
+- Normal-browser save verification could not start: Chrome is unavailable to
+  CUA. Source inspection found graph save revoked fallback Blob URLs immediately
+  unlike World downloads. Applied the same 1s deferred cleanup with finally
+  removal, and regression-check scheduled revocation. This closes a potential
+  asynchronous download race; it is not a claim about the in-app save root cause.
+
+- Rendered remaining six actual preview components in a temporary-only Vite
+  fixture page (depth map/sequence, point cloud, stream, session, World v2).
+  Screenshots show complete cards; links deliberately use synthetic paths and
+  no decoding/provider proof is claimed. Depth-sequence metric labels now say
+  first resolution/encoding because later frames can legitimately differ.
+
+- World v2 now rejects contradictory MIME roles in both parsers: splats must
+  declare their matching SPZ/PLY family, panorama/thumbnail supported raster
+  media, colliders glTF. Generic octet-stream remains accepted for untyped
+  local bytes. This is metadata consistency, not proof of byte-level validity;
+  decoders must still validate content before interactive rendering.
+
+- Depth cards now expose convention/byte order, scale/offset formula, and
+  invalid sample policy as three bounded property chips so compact-card metric
+  truncation cannot hide them. Added a rendered component assertion. Full
+  regression after sensor/depth/cache/fit/import changes: 1,973 backend tests,
+  732 frontend tests across 81 files. Production build/budget checks passed.
+
+- Depth maps now require explicit sample scale/offset, invalid-sample sentinel
+  (null means no finite sentinel), axial versus ray-distance convention, and
+  byte order (including container-defined for encoded containers). Decoded
+  distance = sample * scale + offset in the declared unit; nonfinite samples
+  are always invalid. This tightens unreleased draft data without guessing
+  defaults. It does not implement or attest an image/raw-depth decoder.
+
+- SensorStream now requires an embedded SensorRig snapshot. Stream rigId,
+  sensorId, modality, and coordinate system are checked against that snapshot
+  in both parsers. This tightens the unreleased v1 foundation contract; older
+  draft fixtures without a rig must be regenerated, not silently assigned one.
+  It validates stream-to-rig binding, not physical calibration or provider truth.
+
+- Added docs/spatial-foundation-acceptance.md as a requirement-by-requirement
+  evidence ledger. Corrected the architecture status from shipped to acceptance
+  in progress. Remaining semantic issues are explicit: depth decoding, sensor
+  reference binding, media conformance, rendered fixtures, and live file save.
+  Focused capability/policy/admission/start-guard regression: 86 passed.
+
+- Extended file-import regression across all ten spatial port types: a boolean
+  schema version drops only the invalid output, retains its node, and returns
+  a warning. All 41 graph-file tests pass. Existing tests cover valid plain-JSON
+  spatial round trips. Actual Save button was clicked, but no observable saved
+  artifact/confirmation was available in the in-app browser; do not count that
+  click as proof of completed disk save or load.
+
+- Cache-identity follow-up: engine regression executes two identical Camera
+  Pose nodes twice with a shared cache and requires each output ID match its
+  node; all 26 cache tests pass. Restarted only isolated backend PID 6854
+  (replacement PID 23204), which restored nine nodes/six edges. Two actual
+  canvas runs now preserve n1/n2/n4/n7 identities and context n9 anchors n7.
+  Screenshot shared. This proves backend restart restoration and cached rerun,
+  not yet the user-facing file save/load round trip.
+
+- Actual Spatial Context run exposed cross-node cache aliasing: default Camera
+  Pose n7 reused output ID n4. Local spatial author cache keys now include node
+  identity because pose/path/rig/anchor IDs derive from it. Other nodes retain
+  their prior content-key behavior. Live restart/retest remains required.
+
+- Canvas fit previously reserved side panels but omitted the top canvas tabs
+  and bottom execution toolbar. Added their measured bounds to shared fit
+  padding with the existing 24px safety gap, plus a regression for both edges.
+
+- Actual isolated 5175 canvas QA: rechecked the two-pose Camera Path output
+  (strictly ordered 1s/2s, duration 1s), then added and ran Camera Pose -> Sensor
+  Rig -> Spatial Value Validate through the canvas Run control. Both downstream
+  cards show one RGB sensor in nebula-world. Shared screenshots of both flows.
+  Cluster ingress correctly rejected cross-cluster existing-node references
+  before the self-contained cluster was submitted. No provider calls were made.
+  Fit-to-screen makes six spread-out nodes small and top canvas chrome overlaps
+  the path header; assess viewport fit/occlusion during remaining visual QA.
+
+- Post-alias full regression checkpoint: 1,968 backend tests passed in 65.97s;
+  720 frontend tests passed across 81 files. Production TypeScript/Vite build,
+  bundle-budget/eval checks, generated model reference check, and diff whitespace
+  check passed. Build still warns about the deferred Spark vendor chunk size.
+  These checks do not close the remaining contract audit or canvas acceptance.
+
+- Collider camel/snake aliases now both undergo URI validation, with null
+  camel-case values falling back to the legacy spelling. This aligns backend
+  adaptation with browser imports and prevents hidden invalid alias values.
+
+- Legacy splat aliases now validate every supplied asset even when an earlier
+  alias wins. Null aliases do not reserve a resolution; the first non-null
+  valid asset wins. Browser validation also checks reserved variant names on
+  null entries, matching the backend. Added regression cases on both sides.
+
+- Default Camera Pose nodes now share the catalog's `nebula-world` frame, so
+  separately authored default poses compose into a path or rig.
+- Graph candidate writes reject non-finite JSON and roll back only newly seeded
+  recovery records on a failed graph commit. Once atomic rename succeeds, a
+  directory fsync error is surfaced as a durability warning while memory adopts
+  the committed disk state.
+- Raw graph ingress applies bounded recursive validation before staging; float
+  coercion also rejects non-finite values. Schema versions reject booleans and
+  quaternion normalization uses a stable norm. Thumbnail-only World values are
+  invalid, and World summaries include spatial-context reference assets.
+- Optional spatial nulls normalize to absent fields in both browser and backend.
+  Successful execution now verifies referenced spatial files exist before
+  emitting or caching a result, including legacy World assets.
+- Verification checkpoint: 213 focused backend tests passed on 2026-09-05.
+  Frontend Vitest is still running through iCloud-backed dependencies; full
+  regression and rendered UI acceptance remain pending.
+
+## 2026-09-05 — Regression runtime recovery
+
+- The repository's installed frontend dependencies failed before test collection
+  (`aria-query` destructuring and JSDOM constructor errors). A disposable runtime
+  at `/tmp/nebula-spatial-verify.siqQGO` was installed from the existing lockfile
+  with lifecycle scripts disabled; package versions and repository dependencies
+  were not changed.
+- That runtime passed all 717 frontend tests across 81 files. The production
+  build exposed the missing spatial union in `PortValue.value`; adding the
+  actual spatial types fixed TypeScript. Production build and bundle checks
+  then passed (34 JavaScript assets eval-free).
+- Regenerated MODEL_REFERENCE.md from the 179-node catalog and verified the
+  generator's check mode. Full backend run: 1,960 passed, five older fixtures
+  failed after stricter handler/port admission and catalog growth. Fixtures now
+  use registered nodes and substitute canonical provider handlers at their
+  source, preserving the identity gate during offline cache tests.
+- Browser verification found the existing 5173 preview blank. The clean runtime
+  on 5175 renders the node library and a locally added Camera Pose node; a
+  screenshot was shared. Backend is offline, so this is rendering evidence only,
+  not end-to-end execution acceptance. Legacy canonicalization parity and the
+  remaining contract findings still require closure.
+
+- Legacy World v1 output persistence and execution now reconstruct a validated
+  field allowlist. Unknown provider fields, opaque billing objects, and supplied
+  navigation URLs cannot carry signed URLs into graph/cache records. The Marble
+  navigation link is derived from the World ID on both backend and browser.
+  Cache rebinding continues to verify the referenced physical files while the
+  structured value remains portable. Focused canonicalization/cache/import
+  regression: 71 tests passed.
+- Browser legacy asset URLs now reject query strings as well as fragments,
+  matching the unsigned spatial reference contract. Localhost output URLs
+  without a query still normalize to portable paths. The 60 focused frontend
+  World/spatial/import tests pass after this correction.
+- Full backend regression completed after canonicalization and fixture fixes:
+  1,966 tests passed in 40.87 seconds. This does not close the remaining schema
+  acceptance parity findings or substitute for backend-connected UI execution.
+- Legacy browser parsing now uses the backend's 64-entry splat-map ceiling and
+  preserves insertion order/first alias occurrence. Oversized maps and invalid
+  asset bundles reject rather than silently truncating or filtering assets.
+  Missing splats, malformed asset/semantics containers, unsupported coordinate
+  frames, and nonpositive scales reject at the browser boundary. Import removes
+  the invalid output with its existing warning instead of persisting a partial
+  World. Viewer tests now require valid local splats in their valid fixtures.
+- Browser metadata validation now matches backend ID/model/label bounds using
+  Unicode code points; 61 focused frontend tests pass.
+- Started an isolated backend at 8000 with state/output under
+  `/tmp/nebula-spatial-backend.ZuuVFf` and settings pointed to an absent file
+  there. Through the real 5175 canvas, created backend node n1 and executed
+  Camera Pose successfully. Screenshot QA found the structured card inherited
+  photographic header overlap and a pale theme; spatial CSS now uses a dark
+  readable card and a more-specific zero-overlap rule. A subsequent screenshot
+  confirmed title and output no longer overlap. This proves the single local
+  node flow; multi-node spatial flows remain to be verified.

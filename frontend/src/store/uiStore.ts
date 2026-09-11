@@ -14,11 +14,19 @@ import { useGraphStore } from './graphStore';
 const AGENT_LOG_ENABLED_KEY = 'nebula:agentLog:enabled';
 const CANVAS_PERF_MODE_KEY = 'nebula:canvas:perfMode';
 const CANVAS_LOW_DETAIL_KEY = 'nebula:canvas:lowDetail';
+const MINIMAP_COLLAPSED_KEY = 'nebula:canvas:minimapCollapsed';
 const ONBOARDED_KEY = 'nebula:onboarded';
 const PANEL_EDGE_MARGIN = 16;
 const RUN_HISTORY_WIDTH = 276;
 
 export type AssetScope = 'global' | 'project';
+export type LeftDock = 'library' | 'assets' | 'history' | 'settings';
+
+const LEFT_DOCK_PANELS: readonly LeftDock[] = ['library', 'assets', 'history', 'settings'];
+
+function isLeftDockPanel(panel: string): panel is LeftDock {
+  return LEFT_DOCK_PANELS.includes(panel as LeftDock);
+}
 
 export function defaultRunHistoryPosition(viewportWidth?: number): { x: number; y: number } {
   const width = viewportWidth
@@ -80,10 +88,10 @@ function persistAgentLogEnabled(enabled: boolean): void {
 
 // Canvas performance prefs default ON (perf win with negligible visual cost for
 // render-culling; the minimap/controls chrome and zoom LOD are the visible part).
-function loadCanvasPref(key: string): boolean {
-  if (typeof window === 'undefined') return true;
+function loadCanvasPref(key: string, defaultValue = true): boolean {
+  if (typeof window === 'undefined') return defaultValue;
   const raw = window.localStorage.getItem(key);
-  return raw === null ? true : raw === '1';
+  return raw === null ? defaultValue : raw === '1';
 }
 
 function persistCanvasPref(key: string, enabled: boolean): void {
@@ -157,6 +165,8 @@ interface UIState {
   // (clamp + viewport units) drives the chat width and lines it up with the
   // agent log. Cleared by the toolbar's Reset button.
   chatResized: boolean;
+  /** The single panel allowed to occupy the Flora-style left workspace dock. */
+  leftDock: LeftDock | null;
   panels: {
     library: PanelState;
     inspector: PanelState;
@@ -183,6 +193,7 @@ interface UIState {
   agentLogEnabled: boolean;
   canvasPerfMode: boolean;
   canvasLowDetail: boolean;
+  minimapCollapsed: boolean;
   notificationPrefs: NotificationPrefs;
   hasOnboarded: boolean;
   onboardingActive: boolean;
@@ -191,7 +202,6 @@ interface UIState {
    *  consumed (and cleared) by CreateView on mount. */
   pendingPreset: Preset | null;
   inspectorPinned: boolean;
-  canvasTool: 'pan' | 'select';
 
   enterEditor: (sourceNodeId: string) => void;
   exitEditor: () => void;
@@ -243,6 +253,7 @@ interface UIState {
   setAgentLogEnabled: (enabled: boolean) => void;
   setCanvasPerfMode: (enabled: boolean) => void;
   setCanvasLowDetail: (enabled: boolean) => void;
+  setMinimapCollapsed: (collapsed: boolean) => void;
   setNotificationPrefs: (partial: Partial<NotificationPrefs>) => void;
   startOnboarding: () => void;
   nextOnboardingStep: () => void;
@@ -250,7 +261,7 @@ interface UIState {
   finishOnboarding: () => void;
   setPendingPreset: (preset: Preset | null) => void;
   consumePendingPreset: () => Preset | null;
-  setCanvasTool: (tool: 'pan' | 'select') => void;
+  setLeftDock: (dock: LeftDock | null) => void;
   resetPanelLayout: () => void;
   resetPanelsForFreshCanvas: () => void;
 }
@@ -275,6 +286,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   isPlaying: false,
   renderedPreviewUrl: null,
   chatResized: false,
+  leftDock: 'library',
   panels: createDefaultPanels(),
   librarySearch: '',
   libraryCollapsed: {},
@@ -295,13 +307,13 @@ export const useUIStore = create<UIState>((set, get) => ({
   agentLogEnabled: loadAgentLogEnabled(),
   canvasPerfMode: loadCanvasPref(CANVAS_PERF_MODE_KEY),
   canvasLowDetail: loadCanvasPref(CANVAS_LOW_DETAIL_KEY),
+  minimapCollapsed: loadCanvasPref(MINIMAP_COLLAPSED_KEY, false),
   notificationPrefs: getNotificationPrefs(),
   hasOnboarded: loadOnboarded(),
   onboardingActive: false,
   onboardingStep: 0,
   pendingPreset: null,
   inspectorPinned: false,
-  canvasTool: 'pan',
 
   enterEditor: (sourceNodeId) => {
     const editNodeId = useGraphStore.getState().getOrCreateEditNodeDownstream(sourceNodeId);
@@ -500,20 +512,23 @@ export const useUIStore = create<UIState>((set, get) => ({
 
   togglePanel: (panel) =>
     set((state) => {
+      if (isLeftDockPanel(panel)) {
+        const leftDock = state.leftDock === panel ? null : panel;
+        const panels = { ...state.panels };
+        for (const dockPanel of LEFT_DOCK_PANELS) {
+          panels[dockPanel] = {
+            ...panels[dockPanel],
+            visible: leftDock === dockPanel,
+          };
+        }
+        return { leftDock, panels };
+      }
+
       const opening = !state.panels[panel].visible;
       const panels = {
         ...state.panels,
         [panel]: { ...state.panels[panel], visible: opening },
       };
-
-      // Nodes and Assets own the same left rail. Opening one closes the other
-      // so neither can obscure the other while both launchers claim active.
-      if (opening && panel === 'library') {
-        panels.assets = { ...panels.assets, visible: false };
-      } else if (opening && panel === 'assets') {
-        panels.library = { ...panels.library, visible: false };
-      }
-
       return { panels };
     }),
 
@@ -616,6 +631,11 @@ export const useUIStore = create<UIState>((set, get) => ({
     set({ canvasLowDetail: enabled });
   },
 
+  setMinimapCollapsed: (collapsed) => {
+    persistCanvasPref(MINIMAP_COLLAPSED_KEY, collapsed);
+    set({ minimapCollapsed: collapsed });
+  },
+
   setNotificationPrefs: (partial) => {
     const next = { ...get().notificationPrefs, ...partial };
     persistNotificationPrefs(next);
@@ -642,7 +662,17 @@ export const useUIStore = create<UIState>((set, get) => ({
     return p;
   },
 
-  setCanvasTool: (tool) => set({ canvasTool: tool }),
+  setLeftDock: (leftDock) =>
+    set((state) => {
+      const panels = { ...state.panels };
+      for (const dockPanel of LEFT_DOCK_PANELS) {
+        panels[dockPanel] = {
+          ...panels[dockPanel],
+          visible: leftDock === dockPanel,
+        };
+      }
+      return { leftDock, panels };
+    }),
 
   resetPanelLayout: () => {
     const defaults = createDefaultPanels();
@@ -672,6 +702,7 @@ export const useUIStore = create<UIState>((set, get) => ({
     set({
       selectedNodeId: null,
       chatResized: false,
+      leftDock: 'library',
       inspectorPinned: false,
       pendingPreset: null,
       panels: createDefaultPanels(),

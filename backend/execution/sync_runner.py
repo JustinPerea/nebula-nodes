@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from functools import partial
 from typing import Any, Awaitable, Callable
 
 from models.graph import GraphNode, PortValueDict
@@ -345,6 +346,10 @@ def get_handler_registry(
         from handlers.replicate_universal import handle_replicate_universal
         from handlers.fal_universal import handle_fal_universal, handle_demucs
         from handlers.krea import handle_krea_generate, handle_krea_style_train
+        from handlers.worldlabs import (
+            handle_worldlabs_environment,
+            handle_worldlabs_export,
+        )
 
         async def _runway_video_handler(
             node: GraphNode,
@@ -1124,6 +1129,26 @@ def get_handler_registry(
             from handlers.reference_set import handle_reference_set
             return await handle_reference_set(node, inputs, api_keys, emit=emit)
 
+        async def _camera_pose_handler(node, inputs, api_keys):
+            from handlers.spatial import handle_camera_pose
+            return await handle_camera_pose(node, inputs, api_keys, emit=emit)
+
+        async def _camera_path_handler(node, inputs, api_keys):
+            from handlers.spatial import handle_camera_path
+            return await handle_camera_path(node, inputs, api_keys, emit=emit)
+
+        async def _spatial_context_handler(node, inputs, api_keys):
+            from handlers.spatial import handle_spatial_context
+            return await handle_spatial_context(node, inputs, api_keys, emit=emit)
+
+        async def _sensor_rig_handler(node, inputs, api_keys):
+            from handlers.spatial import handle_sensor_rig
+            return await handle_sensor_rig(node, inputs, api_keys, emit=emit)
+
+        async def _spatial_value_validate_handler(node, inputs, api_keys):
+            from handlers.spatial import handle_spatial_value_validate
+            return await handle_spatial_value_validate(node, inputs, api_keys, emit=emit)
+
         registry["quiver-arrow-generate"] = _quiver_generate_handler
         registry["quiver-arrow-vectorize"] = _quiver_vectorize_handler
         registry["style-reference"] = _style_reference_handler
@@ -1140,6 +1165,11 @@ def get_handler_registry(
         registry["qc-camera-geometry"] = _qc_camera_geometry_handler
         registry["camera-rig"] = _camera_rig_handler
         registry["reference-set"] = _reference_set_handler
+        registry["camera-pose"] = _camera_pose_handler
+        registry["camera-path"] = _camera_path_handler
+        registry["spatial-context"] = _spatial_context_handler
+        registry["sensor-rig"] = _sensor_rig_handler
+        registry["spatial-value-validate"] = _spatial_value_validate_handler
 
         registry["meshy-remesh"] = _meshy_remesh_handler
         registry["meshy-text-to-image"] = _meshy_text_to_image_handler
@@ -1535,5 +1565,17 @@ def get_handler_registry(
         registry["ideogram-train-model"] = _ideogram_train_model_handler
         registry["krea-2-generate"] = _krea_generate_handler
         registry["krea-style-train"] = _krea_style_train_handler
+        # Bind the event sink with ``partial`` so the capability gate can
+        # still prove the exact provider handler identity before execution.
+        # An opaque wrapper would make a lookalike callable indistinguishable
+        # from the audited Marble implementation.
+        registry["worldlabs-environment"] = partial(
+            handle_worldlabs_environment,
+            emit=emit,
+        )
+        registry["worldlabs-world-export"] = partial(
+            handle_worldlabs_export,
+            emit=emit,
+        )
 
     return registry

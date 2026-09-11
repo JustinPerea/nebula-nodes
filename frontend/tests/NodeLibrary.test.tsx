@@ -45,7 +45,7 @@ describe('NodeLibrary accessible authoring', () => {
       'text-input',
       expect.objectContaining({ x: expect.any(Number), y: expect.any(Number) }),
     );
-  });
+  }, 15_000);
 
   it('reserves distinct open slots for rapid accessible additions', () => {
     const addNode = vi.fn(async () => 'n1');

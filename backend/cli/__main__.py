@@ -50,6 +50,7 @@ def build_parser() -> argparse.ArgumentParser:
                        help="Params to set (e.g. aspect_ratio=9:16)")
 
     sub.add_parser("graph", help="Show current graph state")
+    sub.add_parser("selection", help="Show nodes currently selected on the canvas")
 
     save_p = sub.add_parser("save", help="Save graph to file")
     save_p.add_argument("file", help="Output file path (JSON)")
@@ -114,7 +115,7 @@ def main() -> None:
 
     client = NebulaClient(args.url)
 
-    from .commands import context, nodes, keys, graph, execute, quick, path
+    from .commands import context, nodes, keys, graph, execute, quick, path, selection
 
     dispatch = {
         "context": lambda: context.run(client),
@@ -125,6 +126,7 @@ def main() -> None:
         "connect": lambda: graph.run_connect(client, args.src, args.dst),
         "set": lambda: graph.run_set(client, args.node_ref, parse_kv_list(args.params)),
         "graph": lambda: graph.run_show(client),
+        "selection": lambda: selection.run(client),
         "save": lambda: graph.run_save(client, args.file),
         "load": lambda: graph.run_load(client, args.file),
         "clear": lambda: graph.run_clear(client),

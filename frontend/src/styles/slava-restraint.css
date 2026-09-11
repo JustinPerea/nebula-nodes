@@ -2922,7 +2922,8 @@ body.app-slava-restraint .mesh-preview__placeholder {
 }
 
 body.app-slava-restraint .mesh-preview--loading .mesh-preview__placeholder,
-body.app-slava-restraint .mesh-preview--error .mesh-preview__placeholder {
+body.app-slava-restraint .mesh-preview--error .mesh-preview__placeholder,
+body.app-slava-restraint .mesh-preview--file .mesh-preview__placeholder {
   opacity: 1;
 }
 

@@ -45,9 +45,12 @@ class ExecutionCache:
         self._ttl = ttl
 
     @staticmethod
-    def get_key(node_type: str, params: dict[str, Any], inputs: dict[str, Any]) -> str:
+    def get_key(node_type: str, params: dict[str, Any], inputs: dict[str, Any], *, node_id: str | None = None) -> str:
+        # Local spatial authors derive stable entity/anchor IDs from their node.
+        # Equal parameters on different nodes are not interchangeable outputs.
+        identity = node_id if node_type in {"camera-pose", "camera-path", "spatial-context", "sensor-rig"} else None
         raw = json.dumps(
-            {"nodeType": node_type, "params": params, "inputs": inputs},
+            {"nodeType": node_type, "params": params, "inputs": inputs, **({"nodeId": identity} if identity is not None else {})},
             sort_keys=True,
             default=str,
         )
@@ -68,6 +71,9 @@ class ExecutionCache:
 
     def set(self, key: str, outputs: dict[str, Any]) -> None:
         self._store[key] = (outputs, time.monotonic())
+
+    def delete(self, key: str) -> None:
+        self._store.pop(key, None)
 
     def clear(self) -> None:
         self._store.clear()

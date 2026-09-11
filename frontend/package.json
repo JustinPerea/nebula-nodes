@@ -26,6 +26,7 @@
     "@remotion/player": "4.0.479",
     "@remotion/renderer": "4.0.479",
     "@remotion/three": "4.0.479",
+    "@sparkjsdev/spark": "2.1.0",
     "@xyflow/react": "^12.10.2",
     "@xzdarcy/react-timeline-editor": "^1.0.0",
     "jszip": "^3.10.1",

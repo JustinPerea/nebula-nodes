@@ -1,4 +1,7 @@
 import type { PortValue, NodeState } from '../../types';
+import { findStructuredRepresentation } from '../../lib/representationViewerRegistry';
+import { MeshPreview } from '../nodes/MeshPreview';
+import { RepresentationViewer } from '../nodes/RepresentationViewer';
 
 function urlOf(v: PortValue['value']): string | null {
   if (typeof v === 'string') return v;
@@ -52,25 +55,20 @@ export function OutputRenderer({
   }
 
   const isComplete = state === 'complete';
+  const world = isComplete ? findByType(outputs, 'World') : undefined;
   const video = isComplete ? findByType(outputs, 'Video') : undefined;
   const image = isComplete ? (findByType(outputs, 'Image') ?? findByType(outputs, 'SVG')) : undefined;
   const mesh = isComplete ? findByType(outputs, 'Mesh') : undefined;
   const audio = isComplete ? findByType(outputs, 'Audio') : undefined;
+  const spatial = isComplete ? findStructuredRepresentation(outputs, { includeWorld: false }) : undefined;
   const text = findByType(outputs, 'Text');
 
+  if (world) return <RepresentationViewer type={world.type} value={world.value} compact />;
   if (video) return <video className="create-output__media" src={urlOf(video.value) ?? ''} controls loop playsInline />;
   if (image) return <img className="create-output__media" src={urlOf(image.value) ?? ''} alt="Generated output" />;
-  if (mesh) {
-    return (
-      <model-viewer
-        className="create-output__media"
-        src={urlOf(mesh.value) ?? ''}
-        camera-controls
-        auto-rotate
-      />
-    );
-  }
+  if (mesh) return <MeshPreview src={urlOf(mesh.value) ?? ''} />;
   if (audio) return <audio className="create-output__audio" src={urlOf(audio.value) ?? ''} controls />;
+  if (spatial) return <RepresentationViewer type={spatial.type} value={spatial.value} compact />;
   if (text) return <div className="create-output__text">{String(text.value)}</div>;
 
   return <div className="create-output create-output--empty" aria-hidden="true" />;

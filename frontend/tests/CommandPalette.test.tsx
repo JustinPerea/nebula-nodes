@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { ReactFlowProvider } from '@xyflow/react';
 import { CommandPalette } from '../src/components/CommandPalette';
 import { useGraphStore } from '../src/store/graphStore';
@@ -41,5 +41,20 @@ describe('CommandPalette node insertion', () => {
       Math.abs(first.x - second.x) >= 320
       || Math.abs(first.y - second.y) >= 220,
     ).toBe(true);
+  });
+
+  it('opens from the workspace rail event and exposes Run History', () => {
+    render(
+      <ReactFlowProvider>
+        <CommandPalette />
+      </ReactFlowProvider>,
+    );
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('nebula:command-palette-open'));
+    });
+
+    expect(screen.getByRole('textbox', { name: '' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Toggle Run History' })).toBeTruthy();
   });
 });

@@ -76,6 +76,33 @@ class GraphCancelledEvent(RunScopedEvent):
     type: Literal["graph_cancelled"] = "graph_cancelled"
 
 
+class ProviderRecoveryEvent(RunScopedEvent):
+    """Recovery checkpoint for accepted provider-side work.
+
+    Both identifiers are present on the wire. ``None`` explicitly clears the
+    corresponding node parameter when an operation advances to a World ID.
+    The API layer marks whether the checkpoint reached its durable journal;
+    a false value keeps the live ID visible while warning against reload.
+    """
+
+    type: Literal["provider_recovery"] = "provider_recovery"
+    node_id: str
+    resume_operation_id: str | None = None
+    existing_world_id: str | None = None
+    durable: bool = True
+    warning: str | None = None
+
+
+class ProviderStartAmbiguousEvent(RunScopedEvent):
+    """Fail-closed hold after a paid start returned no trustworthy ID."""
+
+    type: Literal["provider_start_ambiguous"] = "provider_start_ambiguous"
+    node_id: str
+    kind: Literal["worldlabs-environment", "worldlabs-world-export"]
+    message: str
+    durable: bool = True
+
+
 class StreamDeltaEvent(RunScopedEvent):
     type: Literal["stream_delta"] = "stream_delta"
     node_id: str
@@ -108,6 +135,8 @@ ExecutionEvent = Union[
     ValidationErrorEvent,
     GraphCompleteEvent,
     GraphCancelledEvent,
+    ProviderRecoveryEvent,
+    ProviderStartAmbiguousEvent,
     StreamDeltaEvent,
     StreamPartialImageEvent,
     StreamPartialSvgEvent,

@@ -6,6 +6,11 @@ export const CREATE_MODEL_CATEGORIES: NodeCategory[] = [
   'image-gen', 'video-gen', 'audio-gen', '3d-gen', 'text-gen',
 ];
 
+// Create Studio uses untracked concurrent variation runs. World Labs paid
+// starts require the Canvas run ID, Stop, journal recovery, and ambiguity guard,
+// so keep the node Canvas-only until Create adopts that execution contract.
+export const CREATE_MODEL_EXCLUDED_IDS = new Set(['worldlabs-environment']);
+
 /** Curated shortlist shown under "Featured". Unknown ids are silently dropped. */
 export const FEATURED_MODEL_IDS: string[] = [
   'nano-banana', 'flux-1-1-ultra', 'imagen-4-generate', 'gpt-image-1-generate',
@@ -14,14 +19,16 @@ export const FEATURED_MODEL_IDS: string[] = [
 
 export function getCreateModels(): ModelNodeDefinition[] {
   return Object.values(NODE_DEFINITIONS).filter((d) =>
-    CREATE_MODEL_CATEGORIES.includes(d.category),
+    CREATE_MODEL_CATEGORIES.includes(d.category) && !CREATE_MODEL_EXCLUDED_IDS.has(d.id),
   );
 }
 
 export function getFeaturedModels(): ModelNodeDefinition[] {
   return FEATURED_MODEL_IDS
     .map((id) => NODE_DEFINITIONS[id])
-    .filter((d): d is ModelNodeDefinition => Boolean(d) && CREATE_MODEL_CATEGORIES.includes(d.category));
+    .filter((d): d is ModelNodeDefinition => Boolean(d)
+      && CREATE_MODEL_CATEGORIES.includes(d.category)
+      && !CREATE_MODEL_EXCLUDED_IDS.has(d.id));
 }
 
 export function searchModels(query: string): ModelNodeDefinition[] {

@@ -108,7 +108,7 @@ export function AssetsPanel() {
   };
 
   return (
-    <div className="panel panel--assets">
+    <div className="panel panel--assets workspace-dock-panel">
       <div className="panel__header">
         <span className="panel__title">Assets</span>
         <button
