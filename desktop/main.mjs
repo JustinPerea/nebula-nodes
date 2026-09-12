@@ -2,6 +2,7 @@ import { app, BrowserWindow } from 'electron';
 import { fileURLToPath } from 'node:url';
 import { dirname } from 'node:path';
 import { startSidecar, stopSidecar, SidecarError } from './sidecar.mjs';
+import { prepareAppDataEnv } from './paths.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -412,7 +413,17 @@ if (!acquiredLock) {
     sidecarStarting = true;
 
     try {
-      sidecarHandle = await startSidecar();
+      // Compute App Support paths and create the directory tree before
+      // spawning the sidecar. The env vars are merged into the child
+      // process environment so the backend resolves state, output,
+      // characters, moodboards, presets, and settings to
+      // ~/Library/Application Support/Nebula Nodes/.
+      // In browser/dev mode (no Electron), none of these are set —
+      // the backend uses its default paths.
+      const { envVars: pathEnvVars } = prepareAppDataEnv();
+      sidecarHandle = await startSidecar({
+        env: { ...process.env, ...pathEnvVars },
+      });
       sidecarStarting = false;
       const handle = sidecarHandle;
       console.log(

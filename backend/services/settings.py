@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -10,7 +11,12 @@ from typing import Any, Callable
 
 import httpx
 
-SETTINGS_PATH = Path(__file__).resolve().parent.parent.parent / "settings.json"
+SETTINGS_PATH = Path(
+    os.environ.get(
+        "NEBULA_SETTINGS_PATH",
+        Path(__file__).resolve().parent.parent.parent / "settings.json",
+    )
+)
 
 DEFAULT_SETTINGS: dict[str, Any] = {
     "apiKeys": {},
