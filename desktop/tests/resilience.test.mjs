@@ -176,49 +176,51 @@ describe('Electron resilience — single-instance, isolation, and quit-during-st
     // Wait for the first instance to start the sidecar (up to 90s for cold start).
     let firstPid = null;
     let firstPort = null;
-    const startDeadline = Date.now() + 90_000;
-    while (Date.now() < startDeadline) {
-      await new Promise((r) => setTimeout(r, 500));
-      firstPid = parseSidecarPid(firstStdout);
-      firstPort = parseSidecarPort(firstStdout);
-      if (firstPid && firstPort) break;
+
+    try {
+      const startDeadline = Date.now() + 90_000;
+      while (Date.now() < startDeadline) {
+        await new Promise((r) => setTimeout(r, 500));
+        firstPid = parseSidecarPid(firstStdout);
+        firstPort = parseSidecarPort(firstStdout);
+        if (firstPid && firstPort) break;
+      }
+
+      assert.ok(firstPid, 'First instance should have started a sidecar');
+      assert.ok(firstPort, 'First instance should have logged a sidecar port');
+
+      // Count children before second launch.
+      const childrenBefore = countUvicornChildren();
+      assert.ok(childrenBefore >= 1, `Expected at least 1 uvicorn child, got ${childrenBefore}`);
+
+      // Launch second instance with the same identity.
+      const secondResult = await runElectron({
+        NEBULA_DESKTOP_USER_DATA_DIR: userData,
+      }, 15_000);
+
+      // The second instance should exit (deferred to the first) — it should
+      // not start a sidecar. On macOS it may exit with code 0 or signal.
+      assert.ok(
+        secondResult.exitCode !== null || secondResult.signal !== null,
+        'Second instance should have exited',
+      );
+
+      // Verify no second sidecar was started.
+      const childrenAfter = countUvicornChildren();
+      assert.equal(
+        childrenAfter,
+        childrenBefore,
+        `Second launch should not start another sidecar (before: ${childrenBefore}, after: ${childrenAfter})`,
+      );
+    } finally {
+      // Cleanup: kill the first instance and sidecar even if an assertion fails.
+      killPid(firstChild.pid);
+      killPid(firstPid);
+
+      // Wait for first instance to exit.
+      await new Promise((r) => setTimeout(r, 3000));
+      try { firstChild.kill('SIGKILL'); } catch { /* already gone */ }
     }
-
-    assert.ok(firstPid, 'First instance should have started a sidecar');
-    assert.ok(firstPort, 'First instance should have logged a sidecar port');
-
-    // Count children before second launch.
-    const childrenBefore = countUvicornChildren();
-    assert.ok(childrenBefore >= 1, `Expected at least 1 uvicorn child, got ${childrenBefore}`);
-
-    // Launch second instance with the same identity.
-    const secondResult = await runElectron({
-      NEBULA_DESKTOP_USER_DATA_DIR: userData,
-    }, 15_000);
-
-    // The second instance should exit (deferred to the first) — it should
-    // not start a sidecar. On macOS it may exit with code 0 or signal.
-    assert.ok(
-      secondResult.exitCode !== null || secondResult.signal !== null,
-      'Second instance should have exited',
-    );
-
-    // Verify no second sidecar was started.
-    const childrenAfter = countUvicornChildren();
-    assert.equal(
-      childrenAfter,
-      childrenBefore,
-      `Second launch should not start another sidecar (before: ${childrenBefore}, after: ${childrenAfter})`,
-    );
-
-    // Cleanup: kill the first instance.
-    killPid(firstChild.pid);
-    // Also stop the sidecar.
-    killPid(firstPid);
-
-    // Wait for first instance to exit.
-    await new Promise((r) => setTimeout(r, 3000));
-    try { firstChild.kill('SIGKILL'); } catch { /* already gone */ }
 
     // Verify no orphan listener.
     assertNoListener(firstPort);
