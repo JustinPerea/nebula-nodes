@@ -16,6 +16,21 @@ if (debugPort) {
   app.commandLine.appendSwitch('remote-debugging-port', debugPort);
 }
 
+/**
+ * Test-only isolated application identity for concurrent validators.
+ *
+ * When set, `app.setName()` is called before the single-instance lock so
+ * each isolated identity gets its own lock. This allows multiple Electron
+ * validators to run simultaneously without interfering with each other or
+ * with normal user launches (which retain the default app name and lock).
+ *
+ * Must be paired with `NEBULA_DESKTOP_USER_DATA_DIR` for full isolation.
+ */
+const appId = process.env.NEBULA_DESKTOP_APP_ID;
+if (appId) {
+  app.setName(appId);
+}
+
 /** Test-only isolated user-data directory for concurrent validators. */
 const userDataDir = process.env.NEBULA_DESKTOP_USER_DATA_DIR;
 if (userDataDir) {
@@ -42,6 +57,7 @@ let loadingWindow = null;
 let isCleaningUp = false;
 let quitRequestedDuringStartup = false;
 let sidecarStarting = false;
+let sidecarDisconnected = false;
 
 // ---------------------------------------------------------------------------
 // Startup and failure surfaces
@@ -96,6 +112,49 @@ pre{font-size:13px;line-height:1.5;white-space:pre-wrap;word-wrap:break-word;col
 <pre>${escapeHtml(message)}</pre>
 </div></body></html>`);
 }
+
+/**
+ * Mid-session disconnected surface — shown when the sidecar exits after
+ * the renderer has loaded. The renderer is NOT replaced (the injected
+ * endpoint metadata stays in place so reconnect attempts target the dead
+ * origin, never rediscovering another backend). A full-screen overlay
+ * is injected on top of the existing page.
+ */
+const DISCONNECTED_OVERLAY_JS = `
+(function() {
+  if (document.getElementById('nebula-disconnected-overlay')) return;
+  var overlay = document.createElement('div');
+  overlay.id = 'nebula-disconnected-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:999999;background:rgba(13,6,8,0.96);display:flex;align-items:center;justify-content:center;font-family:-apple-system,system-ui,sans-serif;user-select:none;-webkit-app-region:drag';
+  var box = document.createElement('div');
+  box.style.cssText = 'text-align:center;max-width:480px;padding:40px';
+  var h1 = document.createElement('h1');
+  h1.textContent = 'Backend disconnected';
+  h1.style.cssText = 'font-size:18px;color:#ff6b6b;margin-bottom:16px;font-weight:600';
+  var p = document.createElement('p');
+  p.textContent = 'The Nebula backend has stopped unexpectedly. Please restart the application to reconnect.';
+  p.style.cssText = 'font-size:14px;color:#ccc;line-height:1.5';
+  box.appendChild(h1);
+  box.appendChild(p);
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+})();
+`;
+
+/** Static disconnected page for window recreation after sidecar death. */
+const DISCONNECTED_HTML = htmlDataUrl(`<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Nebula Nodes \u2014 Disconnected</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0d0608;color:#e0e0e0;font-family:-apple-system,system-ui,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;user-select:none;-webkit-app-region:drag}
+.container{max-width:480px;padding:40px;text-align:center}
+h1{font-size:18px;color:#ff6b6b;margin-bottom:16px;font-weight:600}
+p{font-size:14px;color:#ccc;line-height:1.5}
+</style></head>
+<body><div class="container">
+<h1>Backend disconnected</h1>
+<p>The Nebula backend has stopped unexpectedly. Please restart the application to reconnect.</p>
+</div></body></html>`);
 
 // ---------------------------------------------------------------------------
 // Window creation
@@ -192,6 +251,19 @@ function showFailure(error) {
       },
     });
     loadingWindow.loadURL(failureSurfaceHtml(error));
+  }
+}
+
+/**
+ * Show the mid-session disconnected overlay in the main renderer window.
+ * The renderer page is NOT replaced — the injected endpoint metadata
+ * remains so reconnect attempts target the dead origin, never rediscovering
+ * another backend. No auto-restart occurs.
+ */
+function showDisconnectedState() {
+  sidecarDisconnected = true;
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.executeJavaScript(DISCONNECTED_OVERLAY_JS).catch(() => {});
   }
 }
 
@@ -324,9 +396,13 @@ if (!acquiredLock) {
   app.quit();
 } else {
   app.on('second-instance', () => {
-    if (mainWindow) {
-      if (mainWindow.isMinimized()) mainWindow.restore();
-      mainWindow.focus();
+    // Focus the existing window — no second sidecar is started.
+    // During startup the main window may not exist yet; focus the
+    // loading window in that case.
+    const win = mainWindow || loadingWindow;
+    if (win && !win.isDestroyed()) {
+      if (win.isMinimized()) win.restore();
+      win.focus();
     }
   });
 
@@ -338,10 +414,13 @@ if (!acquiredLock) {
     try {
       sidecarHandle = await startSidecar();
       sidecarStarting = false;
+      const handle = sidecarHandle;
       console.log(
-        `Sidecar started: pid=${sidecarHandle.pid} port=${sidecarHandle.port} ` +
-        `apiBaseUrl=${sidecarHandle.apiBaseUrl} wsBaseUrl=${sidecarHandle.wsBaseUrl}`,
+        `Sidecar started: pid=${handle.pid} port=${handle.port} ` +
+        `apiBaseUrl=${handle.apiBaseUrl} wsBaseUrl=${handle.wsBaseUrl}`,
       );
+      console.log(`NEBULA_SIDECAR_PID=${handle.pid}`);
+      console.log(`NEBULA_SIDECAR_PORT=${handle.port}`);
 
       // If the user quit during startup, clean up and exit without mounting
       // the normal renderer.
@@ -358,10 +437,23 @@ if (!acquiredLock) {
         loadingWindow = null;
       }
 
-      mainWindow = createMainWindow(sidecarHandle);
+      mainWindow = createMainWindow(handle);
+
+      // Watch for mid-session sidecar exit. Show a disconnected state
+      // without auto-restarting or rediscovering another backend.
+      // (VAL-CROSS-003, VAL-LIFE-013)
+      if (handle.child) {
+        handle.child.on('exit', () => {
+          if (sidecarHandle === handle && !isCleaningUp) {
+            console.log(`Sidecar exited mid-session: pid=${handle.pid} port=${handle.port}`);
+            sidecarHandle = null;
+            showDisconnectedState();
+          }
+        });
+      }
 
       if (isSmokeTest) {
-        runSmokeTest(sidecarHandle);
+        runSmokeTest(handle);
       }
     } catch (err) {
       sidecarStarting = false;
@@ -394,8 +486,36 @@ if (!acquiredLock) {
   app.on('activate', () => {
     // macOS: recreate the window when the dock is activated and no windows
     // are open. The same sidecar is reused — no new child is spawned.
-    if (BrowserWindow.getAllWindows().length === 0 && sidecarHandle && !isCleaningUp) {
-      mainWindow = createMainWindow(sidecarHandle);
+    if (BrowserWindow.getAllWindows().length === 0 && !isCleaningUp) {
+      if (sidecarHandle) {
+        mainWindow = createMainWindow(sidecarHandle);
+      } else if (sidecarDisconnected) {
+        // Sidecar died mid-session — show the disconnected page rather
+        // than creating a window with a dead endpoint or spawning a new
+        // sidecar. No auto-restart.
+        mainWindow = new BrowserWindow({
+          show: !isSmokeTest,
+          width: 600,
+          height: 400,
+          resizable: false,
+          minimizable: true,
+          maximizable: false,
+          fullscreenable: false,
+          backgroundColor: '#0d0608',
+          titleBarStyle: 'hiddenInset',
+          title: 'Nebula Nodes \u2014 Disconnected',
+          webPreferences: {
+            contextIsolation: true,
+            nodeIntegration: false,
+            sandbox: true,
+          },
+        });
+        const win = mainWindow;
+        win.loadURL(DISCONNECTED_HTML);
+        win.on('closed', () => {
+          if (mainWindow === win) mainWindow = null;
+        });
+      }
     }
   });
 
@@ -414,8 +534,10 @@ if (!acquiredLock) {
       await cleanupSidecar();
       app.quit();
     } else if (sidecarStarting) {
-      // Quit during cold startup — the startup promise will clean up the
-      // child and quit when it resolves or rejects.
+      // Quit during cold startup — prevent immediate exit so the startup
+      // promise can clean up the child and quit when it resolves/rejects.
+      // Without this, the child process is orphaned.
+      event.preventDefault();
       quitRequestedDuringStartup = true;
     }
   });
