@@ -63,7 +63,15 @@ from models.events import (
 )
 from execution.engine import execute_graph, validate_graph, topological_sort, get_subgraph, CycleError
 from execution.sync_runner import get_handler_registry
-from services.settings import load_settings, save_settings, get_api_key, validate_provider_keys, clear_provider_validation_cache
+from services.settings import (
+    load_settings,
+    save_settings,
+    get_api_key,
+    validate_provider_keys,
+    clear_provider_validation_cache,
+    is_injected_mode,
+    update_injected_keys,
+)
 from services.node_registry import NodeRegistry
 from services.cli_graph import CLIGraph
 from services.port_contracts import (
@@ -2312,7 +2320,11 @@ async def get_settings() -> dict:
 @app.put("/api/settings")
 async def update_settings(body: dict[str, Any]) -> dict:
     current = load_settings()
-    if "apiKeys" in body:
+    # Desktop mode: credentials are managed via the Keychain credential IPC
+    # and POST /api/credentials/update — never via this endpoint. Ignore any
+    # apiKeys in the request body so a compromised renderer cannot overwrite
+    # injected keys.
+    if "apiKeys" in body and not is_injected_mode():
         current_keys = current.get("apiKeys", {})
         for k, v in body["apiKeys"].items():
             if v and not v.startswith("***"):
@@ -2340,6 +2352,58 @@ async def update_settings(body: dict[str, Any]) -> dict:
     # status for up to PROVIDER_CHECK_TTL_SECONDS.
     clear_provider_validation_cache()
     return {"status": "saved"}
+
+
+# The 16-key allowlist for credential updates (must match environment.md).
+_CREDENTIAL_PROVIDER_ALLOWLIST = frozenset({
+    "ANTHROPIC_API_KEY",
+    "ELEVENLABS_API_KEY",
+    "FAL_KEY",
+    "GOOGLE_API_KEY",
+    "HIGGSFIELD_API_KEY",
+    "IDEOGRAM_API_KEY",
+    "KREA_API_TOKEN",
+    "MESHY_API_KEY",
+    "MINIMAX_API_KEY",
+    "OPENAI_API_KEY",
+    "OPENROUTER_API_KEY",
+    "QUIVER_API_KEY",
+    "REPLICATE_API_TOKEN",
+    "RUNWAY_API_KEY",
+    "XAI_API_KEY",
+    "WORLDLABS_API_KEY",
+})
+
+
+@app.post("/api/credentials/update")
+async def credentials_update(body: dict[str, Any]) -> dict:
+    """Update an in-memory injected credential without sidecar restart.
+
+    Called by Electron main when the user changes a provider key via the
+    Settings panel credential IPC. Loopback-only (same security boundary as
+    all other endpoints). Never persists to disk.
+    """
+    provider = body.get("provider")
+    key = body.get("key")
+
+    if not provider or not isinstance(provider, str):
+        raise HTTPException(
+            status_code=422,
+            detail="provider is required and must be a string",
+        )
+    if key is None or not isinstance(key, str):
+        raise HTTPException(
+            status_code=422,
+            detail="key is required and must be a string",
+        )
+    if provider not in _CREDENTIAL_PROVIDER_ALLOWLIST:
+        raise HTTPException(
+            status_code=400,
+            detail=f"unknown provider: {provider}",
+        )
+
+    update_injected_keys(provider, key)
+    return {"status": "updated"}
 
 
 def _execution_is_cancelling(run_id: str) -> bool:

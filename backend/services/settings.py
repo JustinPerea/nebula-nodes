@@ -18,6 +18,51 @@ SETTINGS_PATH = Path(
     )
 )
 
+# ---------------------------------------------------------------------------
+# Injected credentials (desktop mode)
+# ---------------------------------------------------------------------------
+#
+# When Electron launches the sidecar it decrypts API keys from the Keychain
+# and passes them via the NEBULA_INJECTED_KEYS env var as a JSON dict. The
+# backend stores them in this module-level dict (memory only — never persisted
+# to disk). load_settings() merges them into the apiKeys field, giving them
+# precedence over any file-based values. Browser/dev mode (no env var) leaves
+# this dict empty and the backend reads keys from settings.json as before.
+
+_INJECTED_KEYS: dict[str, str] = {}
+_raw_injected = os.environ.get("NEBULA_INJECTED_KEYS", "")
+if _raw_injected:
+    try:
+        _parsed = json.loads(_raw_injected)
+        if isinstance(_parsed, dict):
+            _INJECTED_KEYS = {
+                str(k): str(v) for k, v in _parsed.items() if v
+            }
+    except (json.JSONDecodeError, TypeError):
+        _INJECTED_KEYS = {}
+
+
+def is_injected_mode() -> bool:
+    """Return True when credential injection (desktop mode) is active."""
+    return bool(_INJECTED_KEYS)
+
+
+def update_injected_keys(provider: str, key: str) -> None:
+    """Update a single in-memory injected key.
+
+    Called by the POST /api/credentials/update endpoint when Electron
+    updates a key via the Settings panel credential IPC. Never persists
+    to disk.
+    """
+    global _INJECTED_KEYS
+    if key:
+        _INJECTED_KEYS[provider] = key
+    else:
+        _INJECTED_KEYS.pop(provider, None)
+    # A key change invalidates cached provider validation results.
+    clear_provider_validation_cache()
+
+
 DEFAULT_SETTINGS: dict[str, Any] = {
     "apiKeys": {},
     "routing": {},
@@ -32,13 +77,28 @@ DEFAULT_SETTINGS: dict[str, Any] = {
 def load_settings() -> dict[str, Any]:
     if SETTINGS_PATH.exists():
         with open(SETTINGS_PATH, "r") as f:
-            return json.load(f)
-    return dict(DEFAULT_SETTINGS)
+            settings = json.load(f)
+    else:
+        settings = dict(DEFAULT_SETTINGS)
+
+    # Desktop mode: injected keys replace file-based apiKeys entirely.
+    # Non-secret settings from the file (routing, outputPath, etc.) remain.
+    if _INJECTED_KEYS:
+        settings["apiKeys"] = dict(_INJECTED_KEYS)
+
+    return settings
 
 
 def save_settings(settings: dict[str, Any]) -> None:
+    # Desktop mode: never persist injected keys to disk. The App Support
+    # settings.json must keep apiKeys empty — keys live only in the
+    # Keychain (via Electron) and in _INJECTED_KEYS (memory).
+    to_write = dict(settings)
+    if _INJECTED_KEYS:
+        to_write["apiKeys"] = {}
+
     with open(SETTINGS_PATH, "w") as f:
-        json.dump(settings, f, indent=2)
+        json.dump(to_write, f, indent=2)
         f.write("\n")
 
 
