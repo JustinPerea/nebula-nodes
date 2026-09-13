@@ -1,8 +1,15 @@
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, ipcMain, safeStorage } from 'electron';
 import { fileURLToPath } from 'node:url';
-import { dirname } from 'node:path';
+import { dirname, join } from 'node:path';
 import { startSidecar, stopSidecar, SidecarError } from './sidecar.mjs';
 import { prepareAppDataEnv } from './paths.mjs';
+import {
+  CREDENTIALS_FILE_NAME,
+  MIGRATION_STATE_FILE_NAME,
+  createCredentialService,
+  createSenderValidator,
+  registerCredentialHandlers,
+} from './credentials.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -320,13 +327,37 @@ function runSmokeTest(handle) {
               resolve({ connected: false, reason: 'error' });
             };
           }),
-        ]).then(([health, websocket]) => ({
-          title: document.title,
-          rootMounted: Boolean(document.querySelector('#root')?.children.length),
-          preload: window.nebulaDesktop,
-          health,
-          websocket,
-        }))
+        ]).then(([health, websocket]) => {
+          const c = window.nebulaDesktop && window.nebulaDesktop.credentials;
+          const m = window.nebulaDesktop && window.nebulaDesktop.migration;
+          return {
+            title: document.title,
+            rootMounted: Boolean(document.querySelector('#root')?.children.length),
+            preload: {
+              platform: window.nebulaDesktop && window.nebulaDesktop.platform,
+              shell: window.nebulaDesktop && window.nebulaDesktop.shell,
+              apiBaseUrl: window.nebulaDesktop && window.nebulaDesktop.apiBaseUrl,
+              wsBaseUrl: window.nebulaDesktop && window.nebulaDesktop.wsBaseUrl,
+            },
+            health,
+            websocket,
+            bridge: {
+              hasCredentials: Boolean(c),
+              hasMigration: Boolean(m),
+              setFn: typeof (c && c.set),
+              hasFn: typeof (c && c.has),
+              clearFn: typeof (c && c.clear),
+              getFn: typeof (c && c.get),
+              statusFn: typeof (m && m.status),
+              retryFn: typeof (m && m.retry),
+              rootFrozen: Object.isFrozen(window.nebulaDesktop),
+              credsFrozen: c ? Object.isFrozen(c) : false,
+              migrationFrozen: m ? Object.isFrozen(m) : false,
+              hasRequire: typeof window.require,
+              hasIpcRenderer: typeof window.ipcRenderer,
+            },
+          };
+        })
       `);
 
       const apiBaseUrl = result.preload?.apiBaseUrl ?? '';
@@ -344,6 +375,20 @@ function runSmokeTest(handle) {
         && result.health?.body?.status === 'ok'
         && result.health?.body?.app === 'nebula'
         && result.websocket?.connected === true
+        // Credential bridge surface (VAL-KEY-011, VAL-KEY-012, VAL-KEY-013)
+        && result.bridge?.hasCredentials === true
+        && result.bridge?.setFn === 'function'
+        && result.bridge?.hasFn === 'function'
+        && result.bridge?.clearFn === 'function'
+        && result.bridge?.getFn === 'undefined'
+        && result.bridge?.hasMigration === true
+        && result.bridge?.statusFn === 'function'
+        && result.bridge?.retryFn === 'function'
+        && result.bridge?.rootFrozen === true
+        && result.bridge?.credsFrozen === true
+        && result.bridge?.migrationFrozen === true
+        && result.bridge?.hasRequire === 'undefined'
+        && result.bridge?.hasIpcRenderer === 'undefined'
       );
 
       console.log(`NEBULA_DESKTOP_SMOKE ${JSON.stringify({
@@ -356,6 +401,7 @@ function runSmokeTest(handle) {
         platform: result.preload?.platform,
         health: result.health,
         websocket: result.websocket,
+        bridge: result.bridge,
       })}`);
 
       clearTimeout(smokeTimeout);
@@ -420,7 +466,28 @@ if (!acquiredLock) {
       // ~/Library/Application Support/Nebula Nodes/.
       // In browser/dev mode (no Electron), none of these are set —
       // the backend uses its default paths.
-      const { envVars: pathEnvVars } = prepareAppDataEnv();
+      const { root: appDataRoot, envVars: pathEnvVars } = prepareAppDataEnv();
+
+      // Register credential IPC handlers before the renderer loads.
+      //
+      // The credential service uses safeStorage's async API to encrypt
+      // API keys and stores encrypted blobs (v1:<base64>) in
+      // credentials.json under App Support. The renderer can set, check,
+      // and clear keys but can never read plaintext values (no get
+      // channel). Every handler validates the sender and provider name
+      // against the 16-key allowlist.
+      const credentialsPath = join(appDataRoot, CREDENTIALS_FILE_NAME);
+      const migrationStatePath = join(appDataRoot, MIGRATION_STATE_FILE_NAME);
+      const credentialService = createCredentialService({
+        credentialsPath,
+        migrationStatePath,
+        safeStorage,
+      });
+      const validateSender = createSenderValidator(
+        isDevelopment ? ['http://localhost:5173'] : ['file://'],
+      );
+      registerCredentialHandlers(ipcMain, credentialService, validateSender);
+
       sidecarHandle = await startSidecar({
         env: { ...process.env, ...pathEnvVars },
       });
