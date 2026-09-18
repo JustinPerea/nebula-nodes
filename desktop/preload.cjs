@@ -25,6 +25,18 @@ function readEndpointArg(argv, prefix) {
 const apiBaseUrl = readEndpointArg(process.argv, '--nebula-api-base=');
 const wsBaseUrl = readEndpointArg(process.argv, '--nebula-ws-base=');
 
+// Providers with plaintext API keys detected in App Support settings.json
+// on launch. Empty when all keys are securely stored in the Keychain.
+// VAL-UX-005: the renderer shows a warning when this is non-empty.
+const plaintextWarningRaw = readEndpointArg(process.argv, '--nebula-plaintext-warning=');
+let plaintextKeyWarning;
+try {
+  plaintextKeyWarning = plaintextWarningRaw ? JSON.parse(plaintextWarningRaw) : [];
+  if (!Array.isArray(plaintextKeyWarning)) plaintextKeyWarning = [];
+} catch {
+  plaintextKeyWarning = [];
+}
+
 /**
  * Frozen credential namespace.
  *
@@ -56,6 +68,7 @@ const metadata = Object.freeze({
   wsBaseUrl,
   credentials,
   migration,
+  plaintextKeyWarning: Object.freeze([...plaintextKeyWarning]),
 });
 
 if (contextBridge && typeof contextBridge.exposeInMainWorld === 'function') {

@@ -233,6 +233,23 @@ export async function updateSettings(settings: Record<string, unknown>): Promise
   return response.json();
 }
 
+/**
+ * Update a single in-memory injected credential on the backend (desktop mode).
+ *
+ * Called after `nebulaDesktop.credentials.set()` or `.clear()` to update
+ * the backend's `_INJECTED_KEYS` dict without a sidecar restart. An empty
+ * key string removes the provider from the in-memory store.
+ */
+export async function updateCredential(provider: string, key: string): Promise<{ status: string }> {
+  const response = await apiFetch('/api/credentials/update', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ provider, key }),
+  });
+  if (!response.ok) throw new Error(`Credential update failed: ${response.status}`);
+  return response.json();
+}
+
 export interface OpenRouterModel {
   id: string;
   name: string;

@@ -1,7 +1,8 @@
 import { app, BrowserWindow, ipcMain, safeStorage } from 'electron';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { startSidecar, stopSidecar, SidecarError } from './sidecar.mjs';
+import { homedir } from 'node:os';
+import { startSidecar, stopSidecar, SidecarError, DEFAULT_REPO_ROOT } from './sidecar.mjs';
 import { prepareAppDataEnv } from './paths.mjs';
 import {
   CREDENTIALS_FILE_NAME,
@@ -10,6 +11,11 @@ import {
   createSenderValidator,
   registerCredentialHandlers,
 } from './credentials.mjs';
+import {
+  isMigrationNeeded,
+  runMigration,
+  detectPlaintextKeysInFile,
+} from './migration.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -66,6 +72,7 @@ let isCleaningUp = false;
 let quitRequestedDuringStartup = false;
 let sidecarStarting = false;
 let sidecarDisconnected = false;
+let plaintextProviders = [];
 
 // ---------------------------------------------------------------------------
 // Startup and failure surfaces
@@ -165,6 +172,132 @@ p{font-size:14px;color:#ccc;line-height:1.5}
 </div></body></html>`);
 
 // ---------------------------------------------------------------------------
+// Migration status overlay — VAL-MIG-010, VAL-UX-001, VAL-UX-004
+// ---------------------------------------------------------------------------
+
+function migrationLoadingHtml(step) {
+  const label = step ? `Migrating\u2026 ${step}` : 'Migrating\u2026';
+  return htmlDataUrl(`<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Nebula Nodes \u2014 Migration</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#060607;color:#e0e0e0;font-family:-apple-system,system-ui,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;user-select:none;-webkit-app-region:drag}
+.container{text-align:center}
+.spinner{width:28px;height:28px;border:2px solid #222;border-top-color:#5b8def;border-radius:50%;animation:spin 1s linear infinite;margin:0 auto 18px}
+@keyframes spin{to{transform:rotate(360deg)}}
+h1{font-size:22px;font-weight:600;margin-bottom:10px;color:#fff}
+p{font-size:14px;color:#777}
+</style></head>
+<body><div class="container">
+<div class="spinner"></div>
+<h1>Nebula Nodes</h1>
+<p>${escapeHtml(label)}</p>
+</div></body></html>`);
+}
+
+function migrationCompleteHtml() {
+  return htmlDataUrl(`<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Nebula Nodes \u2014 Migration Complete</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#060607;color:#e0e0e0;font-family:-apple-system,system-ui,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;user-select:none;-webkit-app-region:drag;opacity:0;animation:fadeIn .3s forwards}
+@keyframes fadeIn{to{opacity:1}}
+.container{text-align:center}
+.check{width:40px;height:40px;border-radius:50%;background:#1a3a2a;display:flex;align-items:center;justify-content:center;margin:0 auto 18px;font-size:22px;color:#4ade80}
+h1{font-size:22px;font-weight:600;margin-bottom:10px;color:#fff}
+p{font-size:14px;color:#777}
+</style></head>
+<body><div class="container">
+<div class="check">\u2713</div>
+<h1>Migration Complete</h1>
+<p>Starting Nebula Nodes\u2026</p>
+</div></body></html>`);
+}
+
+function migrationFailedHtml(errorMessage) {
+  return htmlDataUrl(`<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Nebula Nodes \u2014 Migration Failed</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0d0608;color:#e0e0e0;font-family:-apple-system,system-ui,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;user-select:none}
+.container{max-width:560px;padding:40px;text-align:center}
+h1{font-size:18px;color:#ff6b6b;margin-bottom:16px;font-weight:600}
+pre{font-size:13px;line-height:1.5;white-space:pre-wrap;word-wrap:break-word;color:#ccc;background:#160a10;padding:16px;border-radius:8px;overflow:auto;max-height:30vh;margin-bottom:24px;text-align:left}
+button{background:#5b8def;color:#fff;border:none;padding:10px 24px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;-webkit-app-region:no-drag}
+button:hover{background:#4a7fdf}
+</style></head>
+<body><div class="container">
+<h1>Migration Failed</h1>
+<pre>${escapeHtml(errorMessage)}</pre>
+<button onclick="window.location='nebula-retry:'">Retry Migration</button>
+</div></body></html>`);
+}
+
+/**
+ * Run migration with status overlay and retry-on-failure.
+ *
+ * Shows the loading overlay during migration, a brief complete overlay
+ * on success, or a failed overlay with retry button on failure. The
+ * retry button navigates to `nebula-retry:` which is intercepted by
+ * the will-navigate handler to re-run the migration.
+ *
+ * @param {BrowserWindow} win — the overlay window
+ * @param {object} migrationOptions — options for runMigration
+ * @param {object} credentialService — for migration status tracking
+ * @returns {Promise<void>}
+ * @throws on unrecoverable failure (user dismissed or exhausted retries)
+ */
+async function runMigrationWithOverlay(win, migrationOptions, credentialService) {
+  for (;;) {
+    credentialService.setMigrationStatus('in-progress');
+    win.loadURL(migrationLoadingHtml());
+
+    try {
+      await runMigration(migrationOptions);
+      // Show complete briefly before proceeding
+      win.loadURL(migrationCompleteHtml());
+      await new Promise((resolve) => setTimeout(resolve, 1200));
+      return;
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      console.error('Migration failed:', errorMsg);
+      credentialService.setMigrationStatus('failed', { error: errorMsg });
+
+      // Show failure overlay with retry button
+      win.loadURL(migrationFailedHtml(errorMsg));
+
+      // Wait for the user to click retry or close the window.
+      // The retry button navigates to `nebula-retry:` which we
+      // intercept via will-navigate.
+      const shouldRetry = await new Promise((resolve) => {
+        let settled = false;
+        const finish = (val) => {
+          if (settled) return;
+          settled = true;
+          win.webContents.removeListener('will-navigate', navHandler);
+          win.removeListener('closed', closeHandler);
+          resolve(val);
+        };
+        const navHandler = (event, url) => {
+          if (url.startsWith('nebula-retry:')) {
+            event.preventDefault();
+            finish(true);
+          }
+        };
+        const closeHandler = () => finish(false);
+        win.webContents.on('will-navigate', navHandler);
+        win.once('closed', closeHandler);
+      });
+
+      if (!shouldRetry) {
+        throw err;
+      }
+      // Loop back to retry
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Window creation
 // ---------------------------------------------------------------------------
 
@@ -195,9 +328,10 @@ function createLoadingWindow() {
  * through additionalArguments to the sandboxed preload bridge.
  *
  * @param {import('./sidecar.mjs').SidecarHandle} handle
+ * @param {string[]} [plaintextKeyWarning] — providers with plaintext keys detected in settings
  * @returns {BrowserWindow}
  */
-function createMainWindow(handle) {
+function createMainWindow(handle, plaintextKeyWarning = []) {
   const win = new BrowserWindow({
     show: !isSmokeTest,
     width: 1440,
@@ -215,6 +349,7 @@ function createMainWindow(handle) {
       additionalArguments: [
         `--nebula-api-base=${handle.apiBaseUrl}`,
         `--nebula-ws-base=${handle.wsBaseUrl}`,
+        `--nebula-plaintext-warning=${JSON.stringify(plaintextKeyWarning)}`,
       ],
     },
   });
@@ -353,6 +488,10 @@ function runSmokeTest(handle) {
               rootFrozen: Object.isFrozen(window.nebulaDesktop),
               credsFrozen: c ? Object.isFrozen(c) : false,
               migrationFrozen: m ? Object.isFrozen(m) : false,
+              hasPlaintextWarning: Array.isArray(window.nebulaDesktop && window.nebulaDesktop.plaintextKeyWarning),
+              plaintextWarningFrozen: window.nebulaDesktop
+                ? Object.isFrozen(window.nebulaDesktop.plaintextKeyWarning)
+                : false,
               hasRequire: typeof window.require,
               hasIpcRenderer: typeof window.ipcRenderer,
             },
@@ -387,6 +526,8 @@ function runSmokeTest(handle) {
         && result.bridge?.rootFrozen === true
         && result.bridge?.credsFrozen === true
         && result.bridge?.migrationFrozen === true
+        && result.bridge?.hasPlaintextWarning === true
+        && result.bridge?.plaintextWarningFrozen === true
         && result.bridge?.hasRequire === 'undefined'
         && result.bridge?.hasIpcRenderer === 'undefined'
       );
@@ -488,9 +629,57 @@ if (!acquiredLock) {
       );
       registerCredentialHandlers(ipcMain, credentialService, validateSender);
 
-      sidecarHandle = await startSidecar({
-        env: { ...process.env, ...pathEnvVars },
-      });
+      // --- One-time migration (VAL-MIG-007..010, VAL-UX-001..006) ---
+      //
+      // On first desktop launch (no migration-state.json or status != complete),
+      // read legacy settings.json from the repo root, encrypt each non-empty
+      // API key to safeStorage, write new settings.json with apiKeys: {}, copy
+      // ~/.nebula/* and <repo>/output/ to App Support, and write a completion
+      // marker. Source files are NEVER deleted. The migration is idempotent.
+      //
+      // A migration status overlay is shown during migration (loading,
+      // complete, failed). On failure, a retry button lets the user resume
+      // from incomplete work without deleting already-copied data.
+      if (isMigrationNeeded(migrationStatePath)) {
+        const migrationOptions = {
+          appDataRoot,
+          legacySettingsPath: join(DEFAULT_REPO_ROOT, 'settings.json'),
+          legacyNebulaDir: join(homedir(), '.nebula'),
+          legacyOutputDir: join(DEFAULT_REPO_ROOT, 'output'),
+          safeStorage,
+        };
+        await runMigrationWithOverlay(
+          loadingWindow,
+          migrationOptions,
+          credentialService,
+        );
+      }
+
+      // --- Decrypt credentials for sidecar injection (VAL-INJECT-001) ---
+      //
+      // Decrypt all stored API keys from credentials.json via safeStorage.
+      // The decrypted keys are passed to the sidecar via NEBULA_INJECTED_KEYS
+      // (JSON dict). The backend stores them in memory only — never persisted.
+      const injectedKeys = await credentialService.decryptAll();
+      const sidecarEnv = { ...process.env, ...pathEnvVars };
+      if (Object.keys(injectedKeys).length > 0) {
+        sidecarEnv.NEBULA_INJECTED_KEYS = JSON.stringify(injectedKeys);
+      }
+
+      // --- Plaintext key detection (VAL-UX-005) ---
+      //
+      // On every desktop launch, check if App Support settings.json has any
+      // non-empty apiKeys entries. If so, the renderer will show a warning
+      // (secrets detected in settings file after migration). This catches
+      // cases where the user manually edited the file to add plaintext keys.
+      const plaintextWarning = detectPlaintextKeysInFile(
+        join(appDataRoot, 'settings.json'),
+      );
+      plaintextProviders = plaintextWarning.hasPlaintext
+        ? plaintextWarning.providers
+        : [];
+
+      sidecarHandle = await startSidecar({ env: sidecarEnv });
       sidecarStarting = false;
       const handle = sidecarHandle;
       console.log(
@@ -515,7 +704,7 @@ if (!acquiredLock) {
         loadingWindow = null;
       }
 
-      mainWindow = createMainWindow(handle);
+      mainWindow = createMainWindow(handle, plaintextProviders);
 
       // Watch for mid-session sidecar exit. Show a disconnected state
       // without auto-restarting or rediscovering another backend.
@@ -566,7 +755,7 @@ if (!acquiredLock) {
     // are open. The same sidecar is reused — no new child is spawned.
     if (BrowserWindow.getAllWindows().length === 0 && !isCleaningUp) {
       if (sidecarHandle) {
-        mainWindow = createMainWindow(sidecarHandle);
+        mainWindow = createMainWindow(sidecarHandle, plaintextProviders);
       } else if (sidecarDisconnected) {
         // Sidecar died mid-session — show the disconnected page rather
         // than creating a window with a dead endpoint or spawning a new

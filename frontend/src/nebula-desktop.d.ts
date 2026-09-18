@@ -87,6 +87,13 @@ export interface NebulaDesktopBridge {
   readonly credentials: Readonly<CredentialBridge>;
   /** Frozen migration namespace — status / retry. */
   readonly migration: Readonly<MigrationBridge>;
+  /**
+   * Provider names with plaintext API keys detected in App Support
+   * settings.json on launch. Empty when all keys are securely stored
+   * in the Keychain. The renderer shows a warning when non-empty.
+   * VAL-UX-005
+   */
+  readonly plaintextKeyWarning: readonly string[];
 }
 
 declare global {

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { ChevronDown, ChevronRight, X } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
-import { getSettings, updateSettings } from '../../lib/api';
+import { getSettings, updateSettings, updateCredential } from '../../lib/api';
 import { SkinPicker } from '../SkinPicker';
 import { useDelayedUnmount } from '../../hooks/useDelayedUnmount';
 import '../../styles/panels.css';
@@ -57,7 +57,20 @@ export function Settings() {
   const setNotificationPrefs = useUIStore((s) => s.setNotificationPrefs);
   const startOnboarding = useUIStore((s) => s.startOnboarding);
 
+  // Desktop mode: the Electron preload bridge exposes a credentials
+  // namespace when running inside the desktop shell. In browser/dev mode
+  // this is absent and all key updates go through PUT /api/settings.
+  const isDesktopMode = typeof window !== 'undefined'
+    && !!window.nebulaDesktop?.credentials;
+
+  // Plaintext key warning: providers with plaintext keys detected in
+  // App Support settings.json on launch (VAL-UX-005). Empty in browser mode.
+  const plaintextKeyWarning = typeof window !== 'undefined'
+    ? (window.nebulaDesktop?.plaintextKeyWarning ?? [])
+    : [];
+
   const [apiKeys, setApiKeys] = useState<Record<string, string>>({});
+  const [originalApiKeys, setOriginalApiKeys] = useState<Record<string, string>>({});
   const [routing, setRouting] = useState<Record<string, string>>({});
   const [outputPath, setOutputPath] = useState('');
   const [exportFolder, setExportFolder] = useState('');
@@ -88,6 +101,7 @@ export function Settings() {
           zoomTelemetryEnabled?: boolean;
         };
         setApiKeys(settings.apiKeys ?? {});
+        setOriginalApiKeys(settings.apiKeys ?? {});
         setRouting(settings.routing ?? {});
         setOutputPath(settings.outputPath ?? '');
         setExportFolder(settings.exportFolder ?? '');
@@ -109,13 +123,60 @@ export function Settings() {
   const handleSave = useCallback(async () => {
     setSaveStatus('saving');
     try {
-      await updateSettings({
-        apiKeys,
-        routing,
-        outputPath: outputPath || null,
-        exportFolder: exportFolder || null,
-        zoomTelemetryEnabled,
-      });
+      if (isDesktopMode) {
+        // Desktop mode: route API key updates through the Keychain
+        // credential IPC (nebulaDesktop.credentials.set/clear) and
+        // POST /api/credentials/update. Non-secret settings still
+        // use PUT /api/settings. VAL-UX-003, VAL-KEY-004, VAL-KEY-006
+
+        const credentialBridge = window.nebulaDesktop!.credentials!;
+
+        // Process each API key field
+        for (const field of API_KEY_FIELDS) {
+          const currentValue = (apiKeys[field.key] ?? '').trim();
+          const originalValue = (originalApiKeys[field.key] ?? '').trim();
+          const wasConfigured = originalValue.startsWith('***');
+
+          if (currentValue && !currentValue.startsWith('***')) {
+            // User entered a new plaintext key → encrypt to Keychain
+            const setResult = await credentialBridge.set(field.key, currentValue);
+            if (!setResult.ok) {
+              throw new Error(`Failed to store ${field.label} key: ${setResult.error ?? 'unknown'}`);
+            }
+            // Update backend in-memory store
+            await updateCredential(field.key, currentValue);
+          } else if (!currentValue && wasConfigured) {
+            // User cleared a previously-configured key → remove from Keychain
+            const clearResult = await credentialBridge.clear(field.key);
+            if (!clearResult.ok) {
+              throw new Error(`Failed to clear ${field.label} key: ${clearResult.error ?? 'unknown'}`);
+            }
+            // Remove from backend in-memory store
+            await updateCredential(field.key, '');
+          }
+          // If currentValue starts with '***' → unchanged masked value, skip
+          // If !currentValue && !wasConfigured → wasn't configured, still isn't, skip
+        }
+
+        // Non-secret settings still go through PUT /api/settings
+        // (apiKeys is omitted — backend ignores them in desktop mode anyway)
+        await updateSettings({
+          routing,
+          outputPath: outputPath || null,
+          exportFolder: exportFolder || null,
+          zoomTelemetryEnabled,
+        });
+      } else {
+        // Browser mode: all settings including apiKeys go through PUT /api/settings
+        await updateSettings({
+          apiKeys,
+          routing,
+          outputPath: outputPath || null,
+          exportFolder: exportFolder || null,
+          zoomTelemetryEnabled,
+        });
+      }
+
       setSaveStatus('saved');
       window.dispatchEvent(new CustomEvent('nebula:settings-saved'));
       setTimeout(() => setSaveStatus('idle'), 2000);
@@ -124,7 +185,7 @@ export function Settings() {
       setSaveStatus('error');
       setTimeout(() => setSaveStatus('idle'), 3000);
     }
-  }, [apiKeys, routing, outputPath, exportFolder, zoomTelemetryEnabled]);
+  }, [apiKeys, originalApiKeys, routing, outputPath, exportFolder, zoomTelemetryEnabled, isDesktopMode]);
 
   const toggleReveal = useCallback((key: string) => {
     setRevealedKeys((prev) => {
@@ -174,6 +235,17 @@ export function Settings() {
           <div className="settings__loading">Loading...</div>
         ) : (
           <>
+            {/* Plaintext key warning (VAL-UX-005) */}
+            {isDesktopMode && plaintextKeyWarning.length > 0 && (
+              <div className="settings__plaintext-warning" role="alert">
+                <strong>Plaintext credentials detected:</strong> API keys for
+                {' '}{plaintextKeyWarning.join(', ')}{' '}
+                were found in the settings file. Remove them and re-enter keys
+                through the Settings panel to store them securely in the macOS
+                Keychain.
+              </div>
+            )}
+
             {/* API Keys Section */}
             <button
               className="settings__section-toggle"
@@ -182,6 +254,11 @@ export function Settings() {
               onClick={() => setApiKeysOpen((open) => !open)}
             >
               <span className="settings__section-toggle-title">API Keys</span>
+              {isDesktopMode && (
+                <span className="settings__keychain-badge" title="API keys are encrypted and stored in the macOS Keychain">
+                  Managed by macOS Keychain
+                </span>
+              )}
               <span className="settings__section-toggle-count">
                 {configuredApiKeyCount}/{API_KEY_FIELDS.length}
               </span>
