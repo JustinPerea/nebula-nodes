@@ -23,7 +23,7 @@ features:
   - Create view with model picker, presets/styles library, results gallery, and per-result actions
   - Save / load graphs as JSON; configurable output directory; Reveal in Finder
   - Daedalus / Claude / Codex agent chat (builds and edits the graph from natural language)
-  - 2,700+ tests (1,973 backend + 762 frontend + 59 desktop lifecycle)
+  - 3,250+ tests (2,248 backend + 777 frontend + 227 desktop lifecycle)
 hero: docs/assets/banner.svg
 links:
   github: https://github.com/JustinPerea/nebula-nodes
@@ -70,7 +70,7 @@ https://github.com/user-attachments/assets/3a83187d-e186-4378-8a36-822b0a4055cb
   <img alt="NODE 18+" src="https://img.shields.io/badge/NODE-18%2B-f3e6c4?style=flat-square&labelColor=0a1612">
   <img alt="REACT 19" src="https://img.shields.io/badge/REACT-19-f3e6c4?style=flat-square&labelColor=0a1612">
   <img alt="FASTAPI" src="https://img.shields.io/badge/FASTAPI-BACKEND-f3e6c4?style=flat-square&labelColor=0a1612">
-  <img alt="TESTS — 2,700+" src="https://img.shields.io/badge/TESTS-2%2C700%2B-6ba8d6?style=flat-square&labelColor=0a1612">
+  <img alt="TESTS — 3,250+" src="https://img.shields.io/badge/TESTS-3%2C250%2B-6ba8d6?style=flat-square&labelColor=0a1612">
 
 </div>
 
@@ -119,7 +119,7 @@ SPEC // MULTI-SURFACE STUDIO
 | **UNDO THAT STICKS** | 50-step history. Outputs survive undo, so experiment freely. |
 | **SAVE / LOAD** | Graphs serialize to JSON. Outputs written to disk and served via `/api/outputs`. Configurable output directory. Reveal in Finder. |
 | **AGENT CHAT** | Daedalus (Hermes Agent), Claude, or Codex can build and edit graphs from natural language. Sees the live canvas; iterates with you. See [AGENT](#-agent--daedalus). |
-| **AUDIT DISCIPLINE** | Every API-backed node is verified against canonical provider docs. 2,700+ tests (1,973 backend + 762 frontend + 59 desktop lifecycle). Live-smoke gate for high-risk handler paths. See [QUALITY](#-quality--audit-discipline). |
+| **AUDIT DISCIPLINE** | Every API-backed node is verified against canonical provider docs. 3,250+ tests (2,248 backend + 777 frontend + 227 desktop lifecycle). Live-smoke gate for high-risk handler paths. See [QUALITY](#-quality--audit-discipline). |
 
 ## ◆ WORKSPACES
 
@@ -246,7 +246,7 @@ SPEC // CONTRACT-VERIFIED HANDLERS
 Every API-backed node has a contract that gets enforced at multiple layers:
 
 - **Structural audit per provider family.** Each handler is verified against the canonical provider docs (or the official SDK source) and recorded under [`docs/model-providers/<provider>/`](docs/model-providers/). Notes carry `verified:` and `stale_after_days:` frontmatter — a 14-day refresh cycle for fast-moving providers, 30 for stable.
-- **2,700+ tests (1,973 backend + 762 frontend + 59 desktop lifecycle).** Run with `cd backend && python -m pytest` (backend), `cd frontend && npm run lint && npm run build` (frontend), and `cd desktop && npm test` (desktop lifecycle). Body-shape tests pin every direct-provider handler's request envelope against the documented spec.
+- **3,250+ tests (2,248 backend + 777 frontend + 227 desktop lifecycle).** Run with `cd backend && python -m pytest` (backend), `cd frontend && npm run lint && npm run build` (frontend), and `cd desktop && npm test` (desktop lifecycle). Body-shape tests pin every direct-provider handler's request envelope against the documented spec.
 - **Generated MODEL_REFERENCE.md.** [`docs/MODEL_REFERENCE.md`](docs/MODEL_REFERENCE.md) is generated from `backend/data/node_definitions.json`. `scripts/check-node-contracts.mjs --check` fails CI on drift.
 - **Live-smoke gate.** Structural tests can pin *wrong* behavior. A separate live-smoke gate verifies request/response shapes against the real API. Live-smoke has already caught: PCM-as-WAV header bug, Google `responseFormat` enum mismatch, FAL `duration` integer-vs-string, Runway ratio enum reverted from SDK schema to live API value.
 - **One-shot smoke scripts.** Reusable per-family smoke scripts under [`backend/scripts/`](backend/scripts/) — e.g. `smoke_elevenlabs_sts.py` exercises the multipart `voice_settings` JSON path end-to-end.
@@ -305,8 +305,22 @@ immutable API/WS endpoints through the sandboxed preload bridge, and then
 mounts the normal renderer. Browser/Vite development mode remains fully
 supported when the Electron bridge is absent.
 
-See [`desktop/README.md`](desktop/README.md) for runtime overrides, failure
-diagnostics, validation, and deferred packaging notes.
+**App Support migration.** On first desktop launch, Electron migrates
+application data and API keys from legacy locations (`~/.nebula/`,
+`<repo>/output/`, `<repo>/settings.json`) into
+`~/Library/Application Support/Nebula Nodes/`. Source files are copied, never
+deleted. A migration status overlay is shown during the one-time migration.
+
+**Keychain credentials.** API keys are encrypted at rest via macOS Keychain
+using Electron's `safeStorage` async API. The desktop app is the credential
+authority — the backend receives decrypted keys only in memory for the
+duration of the session. `settings.json` in App Support contains no secrets
+(`apiKeys: {}`). The Settings panel shows a "Managed by macOS Keychain"
+badge and routes key updates through the credential IPC, not `PUT /api/settings`.
+
+See [`desktop/README.md`](desktop/README.md) for runtime overrides, migration
+flow, Keychain setup, App Support paths, failure diagnostics, validation, and
+deferred packaging notes.
 
 > [!TIP]
 > Drop a **Text Input** node, wire it into a **GPT Image** node, wire that into a **Preview** node, and hit **Run**. That's the whole mental model. Add a **Style Reference** in front of GPT Image for one-shot style transfer; swap the GPT Image node for a **Quiver Arrow Generate** to get SVG output instead.
@@ -321,9 +335,11 @@ SPEC // BYOK — KEYS LIVE ON YOUR DISK
 
 | | |
 |---|---|
-| **Storage** | `settings.json` at the project root, gitignored, plaintext, owned by you |
+| **Browser/dev storage** | `settings.json` at the project root, gitignored, plaintext, owned by you |
+| **Desktop storage** | Encrypted via macOS Keychain (`safeStorage`), stored as `v1:<base64>` blobs in `~/Library/Application Support/Nebula Nodes/credentials.json`. `settings.json` has `apiKeys: {}` — no secrets on disk. |
 | **Read API** | `GET /api/settings` returns `***` + last 4 chars only — real key never crosses the wire |
-| **Write API** | `PUT /api/settings` short-circuits on `***`-prefixed values — masked round-trip preserves the real key |
+| **Write API (browser)** | `PUT /api/settings` short-circuits on `***`-prefixed values — masked round-trip preserves the real key |
+| **Write API (desktop)** | `nebulaDesktop.credentials.set(provider, key)` → IPC → `safeStorage` encrypt → `credentials.json` → `POST /api/credentials/update` (in-memory, no restart) |
 | **Egress** | Each handler hits exactly one provider URL — no analytics, no telemetry, no aggregator |
 | **CORS** | `localhost` / `127.0.0.1` origin only — a malicious tab cannot read your keys |
 
@@ -392,10 +408,13 @@ nebula-nodes/
 │  ├─ src/components/      canvas, nodes, edges, panels
 │  └─ src/store/           Zustand graph + UI state
 ├─ desktop/                Electron 44.3.0 shell with managed FastAPI sidecar
-│  ├─ main.mjs             Electron main: sidecar startup, window, cleanup
-│  ├─ preload.cjs           sandboxed bridge: apiBaseUrl, wsBaseUrl, platform, shell
+│  ├─ main.mjs             Electron main: sidecar, migration, Keychain, window, cleanup
+│  ├─ preload.cjs           sandboxed bridge: endpoints, credentials (set/has/clear), migration
 │  ├─ sidecar.mjs           Electron-free lifecycle module (port, spawn, health, stop)
-│  └─ tests/               Node lifecycle + integration + resilience tests
+│  ├─ paths.mjs             App Support path computation and env-var injection
+│  ├─ credentials.mjs       Keychain credential service (safeStorage async API)
+│  ├─ migration.mjs         One-time data and key migration to App Support
+│  └─ tests/               Node lifecycle + credential + migration + integration tests
 ├─ .hermes/
 │  ├─ profiles/daedalus/   SOUL.md — persona contract
 │  └─ skills/daedalus-core/ SKILL.md — playbook + cookbook
@@ -433,7 +452,7 @@ If you are extending **Daedalus**, the playbook lives at `.hermes/skills/daedalu
 ## ◆ LIMITATIONS &nbsp;&nbsp;//&nbsp;&nbsp; known gaps
 
 - **Live-smoke gate is partial.** Structural audits are complete for all API-backed handlers, but live-smoke verification has only been run on 9 families. The remaining list (Meshy direct, Hunyuan3D, MiniMax I2V, Higgsfield, xAI Grok, etc.) is tracked in the master plan. Live-smoke has a track record of catching structural-test blind spots.
-- **Desktop app is pre-packaging.** The Electron 44.3.0 shell with a managed FastAPI sidecar is functional (see [desktop/README.md](desktop/README.md)), but bundled Python, signing/notarization, auto-update, and App Support migration are not yet implemented. The web version remains the primary target.
+- **Desktop app is pre-packaging.** The Electron 44.3.0 shell with a managed FastAPI sidecar is functional (see [desktop/README.md](desktop/README.md)). App Support migration and Keychain credential encryption are implemented. Bundled Python, signing/notarization, and auto-update are not yet implemented. The web version remains the primary target.
 - **Not every provider is dual-route.** Some handlers (MiniMax direct, Higgsfield, Grok Video) are direct-only — they don't have a FAL fallback yet. If the direct API is down, those nodes are too.
 - **Chrome-family browsers verified.** Drag-to-create has not yet been validated in Safari.
 - **Agent chat is optional.** The canvas and all seven workspaces work fine without an agent configured, but the chat panel will show an offline state until an agent (Daedalus, Claude, or Codex) is set up.
