@@ -7,8 +7,12 @@ real working tree.
   (and the three handler tests that `shutil.rmtree` their root at teardown)
   don't wipe the user's real output/ directory. The old behavior destroyed
   hours of Daedalus work when the test suite ran against the shared OUTPUT_ROOT.
+- NEBULA_SETTINGS_PATH → temp file, so save_settings() (called by PUT
+  /api/settings) writes to a throwaway file instead of the real repo
+  settings.json. Without this, a full pytest run rewrites the real
+  settings.json with apiKeys:{} on every execution.
 
-Both must be set BEFORE any test module imports `main` or `services.output`,
+All must be set BEFORE any test module imports `main` or `services.output`,
 which happens at collection time for files that do `from main import app`.
 """
 from __future__ import annotations
@@ -28,3 +32,6 @@ os.environ["NEBULA_CHARACTER_ROOT"] = str(_TEST_CHARACTER_DIR)
 
 _TEST_PRESET_DIR = Path(tempfile.mkdtemp(prefix="nebula-test-presets-"))
 os.environ["NEBULA_PRESET_ROOT"] = str(_TEST_PRESET_DIR)
+
+_TEST_SETTINGS_PATH = Path(tempfile.mkdtemp(prefix="nebula-test-settings-")) / "settings.json"
+os.environ["NEBULA_SETTINGS_PATH"] = str(_TEST_SETTINGS_PATH)

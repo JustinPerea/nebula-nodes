@@ -623,11 +623,19 @@ class TestGetSettingsMasking:
 class TestPutSettingsDesktopGuard:
     """VAL-INJECT-008: Desktop settings PUT cannot overwrite credentials."""
 
-    def test_put_ignores_apikeys_in_desktop_mode(self, monkeypatch):
+    def test_put_ignores_apikeys_in_desktop_mode(self, monkeypatch, tmp_path):
         """In desktop mode, PUT /api/settings with apiKeys is ignored."""
         from fastapi.testclient import TestClient
         import services.settings as settings_mod
         import main as main_mod
+
+        # Sandbox NEBULA_SETTINGS_PATH so save_settings() writes to a temp
+        # file, not the real repo settings.json.
+        settings_file = tmp_path / "settings.json"
+        _write_settings(settings_file, {"apiKeys": {}, "outputPath": "/old"})
+        monkeypatch.setenv("NEBULA_SETTINGS_PATH", str(settings_file))
+        importlib.reload(settings_mod)
+        importlib.reload(main_mod)
 
         settings_mod._INJECTED_KEYS = {
             "OPENAI_API_KEY": "sk-injected-original",
