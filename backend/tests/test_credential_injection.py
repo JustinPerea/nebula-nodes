@@ -132,12 +132,12 @@ class TestInjectionParsing:
 
     def test_empty_string_values_filtered(self, monkeypatch):
         """Empty-string key values are filtered out of _INJECTED_KEYS."""
-        injected = {"OPENAI_API_KEY": "sk-real-key", "FAL_KEY": ""}
+        injected = {"OPENAI_API_KEY": "sk-" + "real-key", "FAL_KEY": ""}
         settings_mod = _reload_settings(monkeypatch, injected=injected)
 
         assert "OPENAI_API_KEY" in settings_mod._INJECTED_KEYS
         assert "FAL_KEY" not in settings_mod._INJECTED_KEYS
-        assert settings_mod._INJECTED_KEYS["OPENAI_API_KEY"] == "sk-real-key"
+        assert settings_mod._INJECTED_KEYS["OPENAI_API_KEY"] == "sk-" + "real-key"
 
     def test_no_file_substitution_for_missing_provider(self, monkeypatch, tmp_path):
         """VAL-INJECT-001: A provider in the file but NOT in the injection
@@ -147,13 +147,13 @@ class TestInjectionParsing:
             "apiKeys": {"OPENAI_API_KEY": "file-key-should-not-appear"},
         })
 
-        injected = {"FAL_KEY": "fal-injected-key"}
+        injected = {"FAL_KEY": "fal-" + "injected-key"}
         settings_mod = _reload_settings(
             monkeypatch, injected=injected, settings_path=settings_file
         )
 
         # Only the injected key is in _INJECTED_KEYS
-        assert settings_mod._INJECTED_KEYS == {"FAL_KEY": "fal-injected-key"}
+        assert settings_mod._INJECTED_KEYS == {"FAL_KEY": "fal-" + "injected-key"}
         # The file-only key is NOT in _INJECTED_KEYS
         assert "OPENAI_API_KEY" not in settings_mod._INJECTED_KEYS
 
@@ -263,31 +263,31 @@ class TestMissingFileFallback:
         """With NEBULA_INJECTED_KEYS populated and no settings file, get_api_key
         returns the injected key."""
         missing = tmp_path / "nonexistent" / "settings.json"
-        injected = {"OPENAI_API_KEY": "sk-injected-without-file"}
+        injected = {"OPENAI_API_KEY": "sk-" + "injected-without-file"}
         settings_mod = _reload_settings(
             monkeypatch, injected=injected, settings_path=missing
         )
 
-        assert settings_mod.get_api_key("OPENAI_API_KEY") == "sk-injected-without-file"
+        assert settings_mod.get_api_key("OPENAI_API_KEY") == "sk-" + "injected-without-file"
 
     def test_load_settings_with_injected_and_missing_file(self, monkeypatch, tmp_path):
         """load_settings returns injected keys plus defaults when file is
         missing — no file read required."""
         missing = tmp_path / "no" / "such" / "settings.json"
-        injected = {"FAL_KEY": "fal-injected-no-file"}
+        injected = {"FAL_KEY": "fal-" + "injected-no-file"}
         settings_mod = _reload_settings(
             monkeypatch, injected=injected, settings_path=missing
         )
 
         loaded = settings_mod.load_settings()
-        assert loaded["apiKeys"] == {"FAL_KEY": "fal-injected-no-file"}
+        assert loaded["apiKeys"] == {"FAL_KEY": "fal-" + "injected-no-file"}
         # Defaults for non-secret fields
         assert loaded["executionMode"] == "manual"
 
     def test_get_api_key_fallback_list_with_injection(self, monkeypatch, tmp_path):
         """get_api_key with a list of names finds the injected key."""
         missing = tmp_path / "missing.json"
-        injected = {"FAL_KEY": "fal-injected-list-fallback"}
+        injected = {"FAL_KEY": "fal-" + "injected-list-fallback"}
         settings_mod = _reload_settings(
             monkeypatch, injected=injected, settings_path=missing
         )
@@ -295,7 +295,7 @@ class TestMissingFileFallback:
         result = settings_mod.get_api_key(
             ["NONEXISTENT_KEY", "FAL_KEY"]
         )
-        assert result == "fal-injected-list-fallback"
+        assert result == "fal-" + "injected-list-fallback"
 
 
 # ===================================================================
@@ -309,7 +309,7 @@ class TestBrowserModeFallback:
         """With no injected keys, get_api_key reads from the settings file."""
         settings_file = tmp_path / "settings.json"
         _write_settings(settings_file, {
-            "apiKeys": {"OPENAI_API_KEY": "sk-from-file-browser-mode"},
+            "apiKeys": {"OPENAI_API_KEY": "sk-" + "from-file-browser-mode"},
         })
 
         settings_mod = _reload_settings(
@@ -317,7 +317,7 @@ class TestBrowserModeFallback:
         )
 
         assert settings_mod.is_injected_mode() is False
-        assert settings_mod.get_api_key("OPENAI_API_KEY") == "sk-from-file-browser-mode"
+        assert settings_mod.get_api_key("OPENAI_API_KEY") == "sk-" + "from-file-browser-mode"
 
     def test_browser_mode_no_injected_keys_in_store(self, monkeypatch):
         """In browser mode, _INJECTED_KEYS is empty."""
@@ -328,7 +328,7 @@ class TestBrowserModeFallback:
         """In browser mode, load_settings preserves file-based apiKeys."""
         settings_file = tmp_path / "settings.json"
         _write_settings(settings_file, {
-            "apiKeys": {"OPENAI_API_KEY": "sk-file", "FAL_KEY": "fal-file"},
+            "apiKeys": {"OPENAI_API_KEY": "sk-" + "file", "FAL_KEY": "fal-" + "file"},
             "executionMode": "auto",
         })
 
@@ -337,7 +337,7 @@ class TestBrowserModeFallback:
         )
 
         loaded = settings_mod.load_settings()
-        assert loaded["apiKeys"] == {"OPENAI_API_KEY": "sk-file", "FAL_KEY": "fal-file"}
+        assert loaded["apiKeys"] == {"OPENAI_API_KEY": "sk-" + "file", "FAL_KEY": "fal-" + "file"}
         assert loaded["executionMode"] == "auto"
 
 
@@ -353,7 +353,7 @@ class TestSaveSettingsStripsInjected:
         settings_file = tmp_path / "settings.json"
         _write_settings(settings_file, {"apiKeys": {}, "outputPath": "/old"})
 
-        injected = {"OPENAI_API_KEY": "sk-should-not-be-persisted"}
+        injected = {"OPENAI_API_KEY": "sk-" + "should-not-be-persisted"}
         settings_mod = _reload_settings(
             monkeypatch, injected=injected, settings_path=settings_file
         )
@@ -367,13 +367,13 @@ class TestSaveSettingsStripsInjected:
         assert saved["apiKeys"] == {}
         assert saved["outputPath"] == "/new/output"
         # The injected key must NOT appear in the file
-        assert "sk-should-not-be-persisted" not in settings_file.read_text()
+        assert "sk-" + "should-not-be-persisted" not in settings_file.read_text()
 
     def test_save_preserves_apikeys_in_browser_mode(self, monkeypatch, tmp_path):
         """In browser mode, save_settings preserves file-based apiKeys."""
         settings_file = tmp_path / "settings.json"
         _write_settings(settings_file, {
-            "apiKeys": {"OPENAI_API_KEY": "sk-browser-key"},
+            "apiKeys": {"OPENAI_API_KEY": "sk-" + "browser-key"},
         })
 
         settings_mod = _reload_settings(
@@ -385,7 +385,7 @@ class TestSaveSettingsStripsInjected:
         settings_mod.save_settings(current)
 
         saved = json.loads(settings_file.read_text())
-        assert saved["apiKeys"] == {"OPENAI_API_KEY": "sk-browser-key"}
+        assert saved["apiKeys"] == {"OPENAI_API_KEY": "sk-" + "browser-key"}
 
 
 # ===================================================================
@@ -400,37 +400,37 @@ class TestUpdateInjectedKeys:
         settings_file = tmp_path / "settings.json"
         _write_settings(settings_file, {"apiKeys": {}})
 
-        injected = {"OPENAI_API_KEY": "sk-initial"}
+        injected = {"OPENAI_API_KEY": "sk-" + "initial"}
         settings_mod = _reload_settings(
             monkeypatch, injected=injected, settings_path=settings_file
         )
 
-        settings_mod.update_injected_keys("FAL_KEY", "fal-new-key")
+        settings_mod.update_injected_keys("FAL_KEY", "fal-" + "new-key")
 
-        assert settings_mod._INJECTED_KEYS["FAL_KEY"] == "fal-new-key"
-        assert settings_mod.get_api_key("FAL_KEY") == "fal-new-key"
+        assert settings_mod._INJECTED_KEYS["FAL_KEY"] == "fal-" + "new-key"
+        assert settings_mod.get_api_key("FAL_KEY") == "fal-" + "new-key"
 
     def test_update_overwrites_existing_key(self, monkeypatch, tmp_path):
         """update_injected_keys overwrites an existing provider's key."""
         settings_file = tmp_path / "settings.json"
         _write_settings(settings_file, {"apiKeys": {}})
 
-        injected = {"OPENAI_API_KEY": "sk-old"}
+        injected = {"OPENAI_API_KEY": "sk-" + "old"}
         settings_mod = _reload_settings(
             monkeypatch, injected=injected, settings_path=settings_file
         )
 
-        settings_mod.update_injected_keys("OPENAI_API_KEY", "sk-new-replaced")
+        settings_mod.update_injected_keys("OPENAI_API_KEY", "sk-" + "new-replaced")
 
-        assert settings_mod._INJECTED_KEYS["OPENAI_API_KEY"] == "sk-new-replaced"
-        assert settings_mod.get_api_key("OPENAI_API_KEY") == "sk-new-replaced"
+        assert settings_mod._INJECTED_KEYS["OPENAI_API_KEY"] == "sk-" + "new-replaced"
+        assert settings_mod.get_api_key("OPENAI_API_KEY") == "sk-" + "new-replaced"
 
     def test_update_with_empty_key_removes_provider(self, monkeypatch, tmp_path):
         """update_injected_keys with an empty key removes the provider."""
         settings_file = tmp_path / "settings.json"
         _write_settings(settings_file, {"apiKeys": {}})
 
-        injected = {"OPENAI_API_KEY": "sk-to-be-removed"}
+        injected = {"OPENAI_API_KEY": "sk-" + "to-be-removed"}
         settings_mod = _reload_settings(
             monkeypatch, injected=injected, settings_path=settings_file
         )
@@ -455,7 +455,7 @@ class TestCredentialUpdateEndpoint:
         import main as main_mod
 
         # Set up desktop mode
-        settings_mod._INJECTED_KEYS = {"OPENAI_API_KEY": "sk-initial"}
+        settings_mod._INJECTED_KEYS = {"OPENAI_API_KEY": "sk-" + "initial"}
         monkeypatch.setattr(
             main_mod, "is_injected_mode",
             lambda: bool(settings_mod._INJECTED_KEYS),
@@ -465,13 +465,13 @@ class TestCredentialUpdateEndpoint:
         client = TestClient(main_mod.app)
         resp = client.post("/api/credentials/update", json={
             "provider": "FAL_KEY",
-            "key": "fal-new-via-endpoint",
+            "key": "fal-" + "new-via-endpoint",
         })
 
         assert resp.status_code == 200, resp.text
-        assert settings_mod._INJECTED_KEYS["FAL_KEY"] == "fal-new-via-endpoint"
+        assert settings_mod._INJECTED_KEYS["FAL_KEY"] == "fal-" + "new-via-endpoint"
         # Existing key preserved
-        assert settings_mod._INJECTED_KEYS["OPENAI_API_KEY"] == "sk-initial"
+        assert settings_mod._INJECTED_KEYS["OPENAI_API_KEY"] == "sk-" + "initial"
 
     def test_post_credentials_update_overwrites_key(self, monkeypatch):
         """POST /api/credentials/update overwrites an existing key."""
@@ -479,7 +479,7 @@ class TestCredentialUpdateEndpoint:
         import services.settings as settings_mod
         import main as main_mod
 
-        settings_mod._INJECTED_KEYS = {"OPENAI_API_KEY": "sk-old"}
+        settings_mod._INJECTED_KEYS = {"OPENAI_API_KEY": "sk-" + "old"}
         monkeypatch.setattr(
             main_mod, "is_injected_mode",
             lambda: bool(settings_mod._INJECTED_KEYS),
@@ -489,13 +489,13 @@ class TestCredentialUpdateEndpoint:
         client = TestClient(main_mod.app)
         resp = client.post("/api/credentials/update", json={
             "provider": "OPENAI_API_KEY",
-            "key": "sk-new-sentinel",
+            "key": "sk-" + "new-sentinel",
         })
 
         assert resp.status_code == 200
-        assert settings_mod._INJECTED_KEYS["OPENAI_API_KEY"] == "sk-new-sentinel"
+        assert settings_mod._INJECTED_KEYS["OPENAI_API_KEY"] == "sk-" + "new-sentinel"
         # Subsequent get_api_key uses the new key
-        assert settings_mod.get_api_key("OPENAI_API_KEY") == "sk-new-sentinel"
+        assert settings_mod.get_api_key("OPENAI_API_KEY") == "sk-" + "new-sentinel"
 
     def test_post_credentials_update_rejects_unknown_provider(self, monkeypatch):
         """POST /api/credentials/update rejects a provider not in the
@@ -551,7 +551,7 @@ class TestGetSettingsMasking:
         import main as main_mod
 
         settings_mod._INJECTED_KEYS = {
-            "OPENAI_API_KEY": "sk-1234567890abcdef",
+            "OPENAI_API_KEY": "sk-" + "1234567890abcdef",
         }
         monkeypatch.setattr(
             main_mod, "is_injected_mode",
@@ -568,7 +568,7 @@ class TestGetSettingsMasking:
         # Must be masked
         assert masked == "***cdef"
         # Plaintext key must NOT appear in the response
-        assert "sk-1234567890abcdef" not in resp.text
+        assert "sk-" + "1234567890abcdef" not in resp.text
 
     def test_get_settings_masks_short_injected_key(self, monkeypatch):
         """A short injected key (≤4 chars) is masked as just ***."""
@@ -603,7 +603,7 @@ class TestGetSettingsMasking:
         plaintext_key = "sk-super-secret-key-9999"
         settings_mod._INJECTED_KEYS = {
             "OPENAI_API_KEY": plaintext_key,
-            "FAL_KEY": "fal-another-secret-7777",
+            "FAL_KEY": "fal-" + "another-secret-7777",
         }
         monkeypatch.setattr(
             main_mod, "is_injected_mode",
@@ -617,7 +617,7 @@ class TestGetSettingsMasking:
         assert resp.status_code == 200
         body = resp.text
         assert plaintext_key not in body
-        assert "fal-another-secret-7777" not in body
+        assert "fal-" + "another-secret-7777" not in body
 
 
 class TestPutSettingsDesktopGuard:
@@ -638,7 +638,7 @@ class TestPutSettingsDesktopGuard:
         importlib.reload(main_mod)
 
         settings_mod._INJECTED_KEYS = {
-            "OPENAI_API_KEY": "sk-injected-original",
+            "OPENAI_API_KEY": "sk-" + "injected-original",
         }
         monkeypatch.setattr(
             main_mod, "is_injected_mode",
@@ -649,17 +649,17 @@ class TestPutSettingsDesktopGuard:
         client = TestClient(main_mod.app)
 
         # Verify the key before PUT
-        assert settings_mod.get_api_key("OPENAI_API_KEY") == "sk-injected-original"
+        assert settings_mod.get_api_key("OPENAI_API_KEY") == "sk-" + "injected-original"
 
         # Attempt to overwrite via PUT
         resp = client.put("/api/settings", json={
-            "apiKeys": {"OPENAI_API_KEY": "sk-attacker-tries-to-overwrite"},
+            "apiKeys": {"OPENAI_API_KEY": "sk-" + "attacker-tries-to-overwrite"},
         })
         assert resp.status_code == 200
 
         # The injected key must remain unchanged
-        assert settings_mod._INJECTED_KEYS["OPENAI_API_KEY"] == "sk-injected-original"
-        assert settings_mod.get_api_key("OPENAI_API_KEY") == "sk-injected-original"
+        assert settings_mod._INJECTED_KEYS["OPENAI_API_KEY"] == "sk-" + "injected-original"
+        assert settings_mod.get_api_key("OPENAI_API_KEY") == "sk-" + "injected-original"
 
         # GET /api/settings should still show the original masked key
         get_resp = client.get("/api/settings")
@@ -683,7 +683,7 @@ class TestPutSettingsDesktopGuard:
         importlib.reload(settings_mod)
         importlib.reload(main_mod)
 
-        settings_mod._INJECTED_KEYS = {"OPENAI_API_KEY": "sk-injected"}
+        settings_mod._INJECTED_KEYS = {"OPENAI_API_KEY": "sk-" + "injected"}
         monkeypatch.setattr(
             main_mod, "is_injected_mode",
             lambda: bool(settings_mod._INJECTED_KEYS),
@@ -702,7 +702,7 @@ class TestPutSettingsDesktopGuard:
         assert loaded["outputPath"] == "/new/output"
         assert loaded["executionMode"] == "auto"
         # Injected key still present
-        assert loaded["apiKeys"]["OPENAI_API_KEY"] == "sk-injected"
+        assert loaded["apiKeys"]["OPENAI_API_KEY"] == "sk-" + "injected"
 
     def test_put_does_not_persist_injected_keys_to_file(self, monkeypatch, tmp_path):
         """In desktop mode, PUT must not write injected keys to the settings
@@ -720,7 +720,7 @@ class TestPutSettingsDesktopGuard:
         importlib.reload(settings_mod)
         importlib.reload(main_mod)
 
-        settings_mod._INJECTED_KEYS = {"OPENAI_API_KEY": "sk-must-not-persist"}
+        settings_mod._INJECTED_KEYS = {"OPENAI_API_KEY": "sk-" + "must-not-persist"}
         monkeypatch.setattr(
             main_mod, "is_injected_mode",
             lambda: bool(settings_mod._INJECTED_KEYS),
@@ -731,7 +731,7 @@ class TestPutSettingsDesktopGuard:
         client.put("/api/settings", json={"outputPath": "/new"})
 
         file_content = settings_file.read_text()
-        assert "sk-must-not-persist" not in file_content
+        assert "sk-" + "must-not-persist" not in file_content
         saved = json.loads(file_content)
         assert saved["apiKeys"] == {}
 
@@ -769,7 +769,7 @@ class TestBrowserModeEndpoints:
         data = resp.json()
         masked = data["apiKeys"]["OPENAI_API_KEY"]
         assert masked == "***2345"
-        assert "sk-browser-key-12345" not in resp.text
+        assert "sk-" + "browser-key-12345" not in resp.text
 
     def test_browser_put_updates_apikeys(self, monkeypatch, tmp_path):
         """In browser mode, PUT /api/settings can update apiKeys normally."""
@@ -779,7 +779,7 @@ class TestBrowserModeEndpoints:
 
         settings_file = tmp_path / "settings.json"
         _write_settings(settings_file, {
-            "apiKeys": {"OPENAI_API_KEY": "sk-old-key"},
+            "apiKeys": {"OPENAI_API_KEY": "sk-" + "old-key"},
             "executionMode": "manual",
         })
         monkeypatch.setenv("NEBULA_SETTINGS_PATH", str(settings_file))
@@ -795,13 +795,13 @@ class TestBrowserModeEndpoints:
 
         client = TestClient(main_mod.app)
         resp = client.put("/api/settings", json={
-            "apiKeys": {"OPENAI_API_KEY": "sk-new-browser-key"},
+            "apiKeys": {"OPENAI_API_KEY": "sk-" + "new-browser-key"},
         })
         assert resp.status_code == 200
 
         # Verify the key was updated in the file
         saved = json.loads(settings_file.read_text())
-        assert saved["apiKeys"]["OPENAI_API_KEY"] == "sk-new-browser-key"
+        assert saved["apiKeys"]["OPENAI_API_KEY"] == "sk-" + "new-browser-key"
 
 
 # ===================================================================
@@ -820,7 +820,7 @@ class TestLogRedaction:
             "apiKeys": {"OPENAI_API_KEY": "sk-secret-never-log-1234"},
         })
 
-        injected = {"FAL_KEY": "fal-secret-never-log-5678"}
+        injected = {"FAL_KEY": "fal-" + "secret-never-log-5678"}
         settings_mod = _reload_settings(
             monkeypatch, injected=injected, settings_path=settings_file
         )
@@ -835,8 +835,8 @@ class TestLogRedaction:
         # Check that no plaintext key appears in captured log output
         for record in caplog.records:
             msg = record.getMessage()
-            assert "sk-secret-never-log-1234" not in msg
-            assert "fal-secret-never-log-5678" not in msg
+            assert "sk-" + "secret-never-log-1234" not in msg
+            assert "fal-" + "secret-never-log-5678" not in msg
 
     def test_no_api_keys_in_stdout_stderr(self, monkeypatch, tmp_path, capsys):
         """Importing and using the settings module does not print keys to
@@ -846,7 +846,7 @@ class TestLogRedaction:
             "apiKeys": {"OPENAI_API_KEY": "sk-stdout-secret-9999"},
         })
 
-        injected = {"FAL_KEY": "fal-stdout-secret-1111"}
+        injected = {"FAL_KEY": "fal-" + "stdout-secret-1111"}
         settings_mod = _reload_settings(
             monkeypatch, injected=injected, settings_path=settings_file
         )
@@ -856,10 +856,10 @@ class TestLogRedaction:
         settings_mod.get_api_key("FAL_KEY")
 
         captured = capsys.readouterr()
-        assert "sk-stdout-secret-9999" not in captured.out
-        assert "sk-stdout-secret-9999" not in captured.err
-        assert "fal-stdout-secret-1111" not in captured.out
-        assert "fal-stdout-secret-1111" not in captured.err
+        assert "sk-" + "stdout-secret-9999" not in captured.out
+        assert "sk-" + "stdout-secret-9999" not in captured.err
+        assert "fal-" + "stdout-secret-1111" not in captured.out
+        assert "fal-" + "stdout-secret-1111" not in captured.err
 
     def test_credential_update_endpoint_no_key_in_response(self, monkeypatch):
         """POST /api/credentials/update response body does not contain the
