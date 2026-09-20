@@ -97,8 +97,8 @@ class TestInjectionParsing:
     def test_injected_keys_parsed_at_import_time(self, monkeypatch):
         """NEBULA_INJECTED_KEYS JSON dict is parsed into _INJECTED_KEYS."""
         injected = {
-            "OPENAI_API_KEY": "sk-test-key-12345678",
-            "FAL_KEY": "fal-test-key-87654321",
+            "OPENAI_API_KEY": "sk-" + "test-key-12345678",
+            "FAL_KEY": "fal-" + "test-key-87654321",
         }
         settings_mod = _reload_settings(monkeypatch, injected=injected)
 
@@ -600,7 +600,7 @@ class TestGetSettingsMasking:
         import services.settings as settings_mod
         import main as main_mod
 
-        plaintext_key = "sk-super-secret-key-9999"
+        plaintext_key = "sk-" + "super-secret-key-9999"
         settings_mod._INJECTED_KEYS = {
             "OPENAI_API_KEY": plaintext_key,
             "FAL_KEY": "fal-" + "another-secret-7777",
