@@ -22,10 +22,15 @@ import {
   writeFileSync,
   existsSync,
   mkdirSync,
-  readdirSync,
-  copyFileSync,
-  statSync,
 } from 'node:fs';
+import {
+  readFile,
+  writeFile,
+  mkdir,
+  readdir,
+  copyFile,
+  stat,
+} from 'node:fs/promises';
 
 import {
   CREDENTIALS_FILE_NAME,
@@ -108,17 +113,17 @@ export function detectPlaintextKeys(settings) {
  * Read a settings.json file and check for plaintext API keys.
  *
  * @param {string} settingsPath
- * @param {{ readFileSync?: typeof readFileSync, existsSync?: typeof existsSync }} [deps]
- * @returns {{ hasPlaintext: boolean, providers: string[] }}
+ * @param {{ readFile?: typeof readFile, existsSync?: typeof existsSync }} [deps]
+ * @returns {Promise<{ hasPlaintext: boolean, providers: string[] }>}
  */
-export function detectPlaintextKeysInFile(settingsPath, deps = {}) {
-  const read = deps.readFileSync ?? readFileSync;
+export async function detectPlaintextKeysInFile(settingsPath, deps = {}) {
+  const read = deps.readFile ?? readFile;
   const exists = deps.existsSync ?? existsSync;
   if (!exists(settingsPath)) {
     return { hasPlaintext: false, providers: [] };
   }
   try {
-    const raw = read(settingsPath, 'utf8');
+    const raw = await read(settingsPath, 'utf8');
     const settings = JSON.parse(raw);
     return detectPlaintextKeys(settings);
   } catch {
@@ -135,17 +140,20 @@ export function detectPlaintextKeysInFile(settingsPath, deps = {}) {
  * at the destination. Never overwrites an existing destination file.
  * Never deletes or modifies source files.
  *
+ * Uses async fs/promises methods so the Electron main event loop stays
+ * responsive during large copies (VAL-UX-001, VAL-MIG-010).
+ *
  * @param {string} srcDir — source directory (must exist)
  * @param {string} destDir — destination directory (created if missing)
- * @param {{ readFileSync?: Function, writeFileSync?: Function, existsSync?: Function, mkdirSync?: Function, readdirSync?: Function, copyFileSync?: Function, statSync?: Function }} [deps]
- * @returns {{ copied: string[], skipped: string[] }}
+ * @param {{ existsSync?: Function, mkdir?: Function, readdir?: Function, copyFile?: Function, stat?: Function }} [deps]
+ * @returns {Promise<{ copied: string[], skipped: string[] }>}
  */
-export function copyDirectoryTree(srcDir, destDir, deps = {}) {
+export async function copyDirectoryTree(srcDir, destDir, deps = {}) {
   const exists = deps.existsSync ?? existsSync;
-  const mkdir = deps.mkdirSync ?? mkdirSync;
-  const readdir = deps.readdirSync ?? readdirSync;
-  const copyFile = deps.copyFileSync ?? copyFileSync;
-  const stat = deps.statSync ?? statSync;
+  const mkdirFn = deps.mkdir ?? mkdir;
+  const readdirFn = deps.readdir ?? readdir;
+  const copyFileFn = deps.copyFile ?? copyFile;
+  const statFn = deps.stat ?? stat;
 
   const copied = [];
   const skipped = [];
@@ -154,23 +162,23 @@ export function copyDirectoryTree(srcDir, destDir, deps = {}) {
     return { copied, skipped };
   }
 
-  mkdir(destDir, { recursive: true });
+  await mkdirFn(destDir, { recursive: true });
 
-  const entries = readdir(srcDir);
+  const entries = await readdirFn(srcDir);
   for (const entry of entries) {
     const srcPath = join(srcDir, entry);
     const destPath = join(destDir, entry);
-    const entryStat = stat(srcPath);
+    const entryStat = await statFn(srcPath);
 
     if (entryStat.isDirectory()) {
-      const sub = copyDirectoryTree(srcPath, destPath, deps);
+      const sub = await copyDirectoryTree(srcPath, destPath, deps);
       copied.push(...sub.copied);
       skipped.push(...sub.skipped);
     } else {
       if (exists(destPath)) {
         skipped.push(destPath);
       } else {
-        copyFile(srcPath, destPath);
+        await copyFileFn(srcPath, destPath);
         copied.push(destPath);
       }
     }
@@ -184,21 +192,24 @@ export function copyDirectoryTree(srcDir, destDir, deps = {}) {
  * Skips files that don't exist at the source or already exist at the
  * destination. Never overwrites.
  *
+ * Uses async fs/promises methods so the Electron main event loop stays
+ * responsive during large copies (VAL-UX-001, VAL-MIG-010).
+ *
  * @param {string} srcDir
  * @param {string} destDir
  * @param {string[]} fileNames
- * @param {{ readFileSync?: Function, writeFileSync?: Function, existsSync?: Function, mkdirSync?: Function, copyFileSync?: Function, statSync?: Function }} [deps]
- * @returns {{ copied: string[], skipped: string[] }}
+ * @param {{ existsSync?: Function, mkdir?: Function, copyFile?: Function }} [deps]
+ * @returns {Promise<{ copied: string[], skipped: string[] }>}
  */
-export function copyFiles(srcDir, destDir, fileNames, deps = {}) {
+export async function copyFiles(srcDir, destDir, fileNames, deps = {}) {
   const exists = deps.existsSync ?? existsSync;
-  const mkdir = deps.mkdirSync ?? mkdirSync;
-  const copyFile = deps.copyFileSync ?? copyFileSync;
+  const mkdirFn = deps.mkdir ?? mkdir;
+  const copyFileFn = deps.copyFile ?? copyFile;
 
   const copied = [];
   const skipped = [];
 
-  mkdir(destDir, { recursive: true });
+  await mkdirFn(destDir, { recursive: true });
 
   for (const fileName of fileNames) {
     const srcPath = join(srcDir, fileName);
@@ -209,7 +220,7 @@ export function copyFiles(srcDir, destDir, fileNames, deps = {}) {
     if (exists(destPath)) {
       skipped.push(destPath);
     } else {
-      copyFile(srcPath, destPath);
+      await copyFileFn(srcPath, destPath);
       copied.push(destPath);
     }
   }
@@ -260,7 +271,7 @@ export function isMigrationNeeded(migrationStatePath, deps = {}) {
  *   legacyNebulaDir: string,
  *   legacyOutputDir: string,
  *   safeStorage: object,
- *   fs?: { readFileSync?: Function, writeFileSync?: Function, existsSync?: Function, mkdirSync?: Function, readdirSync?: Function, copyFileSync?: Function, statSync?: Function },
+ *   fs?: { existsSync?: Function, readFile?: Function, writeFile?: Function, mkdir?: Function, readdir?: Function, copyFile?: Function, stat?: Function, readFileSync?: Function, writeFileSync?: Function, mkdirSync?: Function },
  *   onProgress?: (step: string, detail?: unknown) => void,
  * }} options
  * @returns {Promise<{ ok: true, migrated: { keys: string[], settings: boolean, stateFiles: string[], dataDirs: string[], output: boolean } }>}
@@ -277,14 +288,29 @@ export async function runMigration(options) {
   } = options;
 
   const fsDeps = options.fs ?? {};
-  const fileDeps = {
+
+  // Async filesystem operations for copy and settings I/O.
+  // These yield to the event loop on each operation, keeping the
+  // Electron main process responsive during large copies
+  // (VAL-UX-001, VAL-MIG-010).
+  const asyncFs = {
+    existsSync: fsDeps.existsSync ?? existsSync,
+    readFile: fsDeps.readFile ?? readFile,
+    writeFile: fsDeps.writeFile ?? writeFile,
+    mkdir: fsDeps.mkdir ?? mkdir,
+    readdir: fsDeps.readdir ?? readdir,
+    copyFile: fsDeps.copyFile ?? copyFile,
+    stat: fsDeps.stat ?? stat,
+  };
+
+  // Sync filesystem operations for credentials.mjs store functions.
+  // These handle tiny JSON files (credentials.json, migration-state.json)
+  // where sync I/O is acceptable and keeps credentials.mjs unchanged.
+  const syncFs = {
     readFileSync: fsDeps.readFileSync ?? readFileSync,
     writeFileSync: fsDeps.writeFileSync ?? writeFileSync,
     existsSync: fsDeps.existsSync ?? existsSync,
     mkdirSync: fsDeps.mkdirSync ?? mkdirSync,
-    readdirSync: fsDeps.readdirSync ?? readdirSync,
-    copyFileSync: fsDeps.copyFileSync ?? copyFileSync,
-    statSync: fsDeps.statSync ?? statSync,
   };
 
   const credentialsPath = join(appDataRoot, CREDENTIALS_FILE_NAME);
@@ -318,9 +344,9 @@ export async function runMigration(options) {
   onProgress('encrypt-keys');
 
   let legacySettings = {};
-  if (fileDeps.existsSync(legacySettingsPath)) {
+  if (asyncFs.existsSync(legacySettingsPath)) {
     try {
-      const raw = fileDeps.readFileSync(legacySettingsPath, 'utf8');
+      const raw = await asyncFs.readFile(legacySettingsPath, 'utf8');
       legacySettings = JSON.parse(raw);
     } catch (err) {
       throw new MigrationError(
@@ -332,7 +358,7 @@ export async function runMigration(options) {
   }
 
   const legacyApiKeys = legacySettings[API_KEYS_FIELD] ?? {};
-  const store = readCredentialsStore(credentialsPath, fileDeps);
+  const store = readCredentialsStore(credentialsPath, syncFs);
 
   for (const [provider, value] of Object.entries(legacyApiKeys)) {
     if (!isProviderAllowed(provider)) continue;
@@ -356,20 +382,20 @@ export async function runMigration(options) {
 
   // Only write if we added new providers
   if (result.migrated.keys.length > 0) {
-    writeCredentialsStore(credentialsPath, store, fileDeps);
+    writeCredentialsStore(credentialsPath, store, syncFs);
   }
 
   // --- Step 2: Write migrated settings.json with apiKeys: {} ---
   onProgress('write-settings');
 
-  if (!fileDeps.existsSync(newSettingsPath)) {
+  if (!asyncFs.existsSync(newSettingsPath)) {
     const migratedSettings = { ...legacySettings };
     migratedSettings[API_KEYS_FIELD] = {};
 
     try {
       // Ensure root exists
-      fileDeps.mkdirSync(appDataRoot, { recursive: true });
-      fileDeps.writeFileSync(newSettingsPath, JSON.stringify(migratedSettings, null, 2) + '\n', 'utf8');
+      await asyncFs.mkdir(appDataRoot, { recursive: true });
+      await asyncFs.writeFile(newSettingsPath, JSON.stringify(migratedSettings, null, 2) + '\n', 'utf8');
       result.migrated.settings = true;
     } catch (err) {
       throw new MigrationError(
@@ -380,16 +406,23 @@ export async function runMigration(options) {
     }
   }
 
+  // Yield to the event loop between major steps so the Electron main
+  // process can process renderer paint events (VAL-UX-001, VAL-MIG-010).
+  await new Promise((resolve) => setImmediate(resolve));
+
   // --- Step 3: Copy state files ---
   onProgress('copy-state');
 
-  const stateResult = copyFiles(
+  const stateResult = await copyFiles(
     legacyNebulaDir,
     stateDir,
     LEGACY_STATE_FILES,
-    fileDeps,
+    asyncFs,
   );
   result.migrated.stateFiles = stateResult.copied;
+
+  // Yield between copy steps
+  await new Promise((resolve) => setImmediate(resolve));
 
   // --- Step 4: Copy data directories ---
   onProgress('copy-data');
@@ -397,19 +430,24 @@ export async function runMigration(options) {
   for (const subdir of LEGACY_DATA_SUBDIRS) {
     const srcDir = join(legacyNebulaDir, subdir);
     const destDir = join(appDataRoot, subdir);
-    const dirResult = copyDirectoryTree(srcDir, destDir, fileDeps);
+    const dirResult = await copyDirectoryTree(srcDir, destDir, asyncFs);
     if (dirResult.copied.length > 0) {
       result.migrated.dataDirs.push(subdir);
     }
+    // Yield between each data subdirectory copy
+    await new Promise((resolve) => setImmediate(resolve));
   }
 
   // --- Step 5: Copy output directory ---
   onProgress('copy-output');
 
-  if (fileDeps.existsSync(legacyOutputDir)) {
-    const outputResult = copyDirectoryTree(legacyOutputDir, outputDir, fileDeps);
+  if (asyncFs.existsSync(legacyOutputDir)) {
+    const outputResult = await copyDirectoryTree(legacyOutputDir, outputDir, asyncFs);
     result.migrated.output = outputResult.copied.length > 0 || outputResult.skipped.length > 0;
   }
+
+  // Yield before writing the completion marker
+  await new Promise((resolve) => setImmediate(resolve));
 
   // --- Step 6: Write migration completion marker ---
   onProgress('write-marker');
@@ -418,7 +456,7 @@ export async function runMigration(options) {
     writeMigrationState(
       migrationStatePath,
       { status: 'complete', timestamp: new Date().toISOString() },
-      fileDeps,
+      syncFs,
     );
   } catch (err) {
     throw new MigrationError(

@@ -213,34 +213,34 @@ describe('detectPlaintextKeys', () => {
 // ---------------------------------------------------------------------------
 
 describe('detectPlaintextKeysInFile', () => {
-  test('reads file and detects plaintext keys', () => {
+  test('reads file and detects plaintext keys', async () => {
     const dir = mkTemp();
     const settingsPath = join(dir, 'settings.json');
     writeFileSync(settingsPath, JSON.stringify({ apiKeys: { OPENAI_API_KEY: 'test-fake-key' } }));
 
-    const result = detectPlaintextKeysInFile(settingsPath);
+    const result = await detectPlaintextKeysInFile(settingsPath);
     assert.equal(result.hasPlaintext, true);
     assert.deepEqual(result.providers, ['OPENAI_API_KEY']);
   });
 
-  test('returns false for missing file', () => {
-    const result = detectPlaintextKeysInFile(join(mkTemp(), 'nope.json'));
+  test('returns false for missing file', async () => {
+    const result = await detectPlaintextKeysInFile(join(mkTemp(), 'nope.json'));
     assert.equal(result.hasPlaintext, false);
   });
 
-  test('returns false for unparseable file', () => {
+  test('returns false for unparseable file', async () => {
     const dir = mkTemp();
     const settingsPath = join(dir, 'settings.json');
     writeFileSync(settingsPath, 'NOT JSON{{{');
-    const result = detectPlaintextKeysInFile(settingsPath);
+    const result = await detectPlaintextKeysInFile(settingsPath);
     assert.equal(result.hasPlaintext, false);
   });
 
-  test('returns false for file with empty apiKeys', () => {
+  test('returns false for file with empty apiKeys', async () => {
     const dir = mkTemp();
     const settingsPath = join(dir, 'settings.json');
     writeFileSync(settingsPath, JSON.stringify({ apiKeys: {} }));
-    const result = detectPlaintextKeysInFile(settingsPath);
+    const result = await detectPlaintextKeysInFile(settingsPath);
     assert.equal(result.hasPlaintext, false);
   });
 });
@@ -250,7 +250,7 @@ describe('detectPlaintextKeysInFile', () => {
 // ---------------------------------------------------------------------------
 
 describe('copyDirectoryTree', () => {
-  test('copies files recursively', () => {
+  test('copies files recursively', async () => {
     const root = mkTemp();
     const src = join(root, 'src');
     const dest = join(root, 'dest');
@@ -259,13 +259,13 @@ describe('copyDirectoryTree', () => {
     writeFileSync(join(src, 'a.txt'), 'aaa');
     writeFileSync(join(src, 'sub', 'b.txt'), 'bbb');
 
-    const result = copyDirectoryTree(src, dest);
+    const result = await copyDirectoryTree(src, dest);
     assert.ok(result.copied.length >= 2);
     assert.equal(readFileSync(join(dest, 'a.txt'), 'utf8'), 'aaa');
     assert.equal(readFileSync(join(dest, 'sub', 'b.txt'), 'utf8'), 'bbb');
   });
 
-  test('skips existing destination files (idempotent)', () => {
+  test('skips existing destination files (idempotent)', async () => {
     const root = mkTemp();
     const src = join(root, 'src');
     const dest = join(root, 'dest');
@@ -275,20 +275,20 @@ describe('copyDirectoryTree', () => {
     writeFileSync(join(src, 'a.txt'), 'source-content');
     writeFileSync(join(dest, 'a.txt'), 'dest-content-DO-NOT-OVERWRITE');
 
-    const result = copyDirectoryTree(src, dest);
+    const result = await copyDirectoryTree(src, dest);
     assert.equal(result.copied.length, 0);
     assert.ok(result.skipped.length >= 1);
     // Destination must NOT be overwritten
     assert.equal(readFileSync(join(dest, 'a.txt'), 'utf8'), 'dest-content-DO-NOT-OVERWRITE');
   });
 
-  test('does nothing when source does not exist', () => {
+  test('does nothing when source does not exist', async () => {
     const root = mkTemp();
-    const result = copyDirectoryTree(join(root, 'nope'), join(root, 'dest'));
+    const result = await copyDirectoryTree(join(root, 'nope'), join(root, 'dest'));
     assert.equal(result.copied.length, 0);
   });
 
-  test('source files are never modified', () => {
+  test('source files are never modified', async () => {
     const root = mkTemp();
     const src = join(root, 'src');
     const dest = join(root, 'dest');
@@ -296,7 +296,7 @@ describe('copyDirectoryTree', () => {
     mkdirSync(src, { recursive: true });
     writeFileSync(join(src, 'original.txt'), 'original-data');
 
-    copyDirectoryTree(src, dest);
+    await copyDirectoryTree(src, dest);
 
     // Source must be untouched
     assert.equal(readFileSync(join(src, 'original.txt'), 'utf8'), 'original-data');
@@ -308,7 +308,7 @@ describe('copyDirectoryTree', () => {
 // ---------------------------------------------------------------------------
 
 describe('copyFiles', () => {
-  test('copies listed files that exist', () => {
+  test('copies listed files that exist', async () => {
     const root = mkTemp();
     const src = join(root, 'src');
     const dest = join(root, 'dest');
@@ -317,13 +317,13 @@ describe('copyFiles', () => {
     writeFileSync(join(src, 'state.json'), '{}');
     writeFileSync(join(src, 'provider-recoveries.json'), '{}');
 
-    const result = copyFiles(src, dest, ['state.json', 'provider-recoveries.json', 'missing.json']);
+    const result = await copyFiles(src, dest, ['state.json', 'provider-recoveries.json', 'missing.json']);
     assert.equal(result.copied.length, 2);
     assert.equal(result.skipped.length, 0);
     assert.ok(existsSync(join(dest, 'state.json')));
   });
 
-  test('skips files already at destination', () => {
+  test('skips files already at destination', async () => {
     const root = mkTemp();
     const src = join(root, 'src');
     const dest = join(root, 'dest');
@@ -333,7 +333,7 @@ describe('copyFiles', () => {
     writeFileSync(join(src, 'state.json'), 'new-content');
     writeFileSync(join(dest, 'state.json'), 'existing-content');
 
-    const result = copyFiles(src, dest, ['state.json']);
+    const result = await copyFiles(src, dest, ['state.json']);
     assert.equal(result.copied.length, 0);
     assert.equal(result.skipped.length, 1);
     assert.equal(readFileSync(join(dest, 'state.json'), 'utf8'), 'existing-content');

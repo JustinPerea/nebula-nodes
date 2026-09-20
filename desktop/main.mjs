@@ -234,12 +234,49 @@ button:hover{background:#4a7fdf}
 }
 
 /**
+ * Load a URL in a BrowserWindow and wait for did-finish-load.
+ *
+ * Ensures the page has committed and painted before proceeding. This is
+ * critical for the migration overlay: if runMigration starts before the
+ * loading overlay finishes loading, the overlay window appears blank
+ * during the in-progress phase (VAL-UX-001, VAL-MIG-010).
+ *
+ * @param {BrowserWindow} win
+ * @param {string} url
+ * @returns {Promise<void>}
+ */
+function loadURLAndWait(win, url) {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const onLoad = () => {
+      if (settled) return;
+      settled = true;
+      win.webContents.removeListener('did-fail-load', onFail);
+      resolve();
+    };
+    const onFail = (_event, errorCode, errorDescription) => {
+      if (settled) return;
+      settled = true;
+      win.webContents.removeListener('did-finish-load', onLoad);
+      reject(new Error(`Window load failed (${errorCode}): ${errorDescription}`));
+    };
+    win.webContents.once('did-finish-load', onLoad);
+    win.webContents.once('did-fail-load', onFail);
+    win.loadURL(url);
+  });
+}
+
+/**
  * Run migration with status overlay and retry-on-failure.
  *
  * Shows the loading overlay during migration, a brief complete overlay
  * on success, or a failed overlay with retry button on failure. The
  * retry button navigates to `nebula-retry:` which is intercepted by
  * the will-navigate handler to re-run the migration.
+ *
+ * The loading overlay URL is loaded and awaited (did-finish-load) before
+ * runMigration starts, so the overlay paints during the in-progress phase
+ * even when migration involves large file copies (VAL-UX-001, VAL-MIG-010).
  *
  * @param {BrowserWindow} win — the overlay window
  * @param {object} migrationOptions — options for runMigration
@@ -250,12 +287,18 @@ button:hover{background:#4a7fdf}
 async function runMigrationWithOverlay(win, migrationOptions, credentialService) {
   for (;;) {
     credentialService.setMigrationStatus('in-progress');
-    win.loadURL(migrationLoadingHtml());
+
+    // Load the migration loading overlay and await did-finish-load BEFORE
+    // starting runMigration. This ensures the overlay commits and paints
+    // during the in-progress phase. Without this, the data: URL navigation
+    // cannot complete while synchronous I/O blocks the event loop
+    // (VAL-UX-001, VAL-MIG-010).
+    await loadURLAndWait(win, migrationLoadingHtml());
 
     try {
       await runMigration(migrationOptions);
       // Show complete briefly before proceeding
-      win.loadURL(migrationCompleteHtml());
+      await loadURLAndWait(win, migrationCompleteHtml());
       await new Promise((resolve) => setTimeout(resolve, 1200));
       return;
     } catch (err) {
@@ -264,7 +307,7 @@ async function runMigrationWithOverlay(win, migrationOptions, credentialService)
       credentialService.setMigrationStatus('failed', { error: errorMsg });
 
       // Show failure overlay with retry button
-      win.loadURL(migrationFailedHtml(errorMsg));
+      await loadURLAndWait(win, migrationFailedHtml(errorMsg));
 
       // Wait for the user to click retry or close the window.
       // The retry button navigates to `nebula-retry:` which we
@@ -672,7 +715,7 @@ if (!acquiredLock) {
       // non-empty apiKeys entries. If so, the renderer will show a warning
       // (secrets detected in settings file after migration). This catches
       // cases where the user manually edited the file to add plaintext keys.
-      const plaintextWarning = detectPlaintextKeysInFile(
+      const plaintextWarning = await detectPlaintextKeysInFile(
         join(appDataRoot, 'settings.json'),
       );
       plaintextProviders = plaintextWarning.hasPlaintext
