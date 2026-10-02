@@ -2,482 +2,113 @@
 name: Nebula Nodes
 slug: nebula-nodes
 status: active
-tagline: A multi-surface AI creation studio — node graph, Create view, Cinema, Character, and Moodboard — running locally on your own keys.
-description: AI creation studio built around a visual node graph. 174 built-in nodes across 17 external provider families, four universal nodes that reach 300+ more (OpenRouter, Nous Portal, Replicate, FAL), seven specialized workspaces (Canvas, Create, Cinema Studio, Character Studio, Moodboard Studio, Video Editor, Remotion Editor), smart subgraph caching, real-time streaming, and an optional chat agent that builds graphs from natural language.
-stack:
-  - Python 3.12+
-  - FastAPI
-  - React 19
-  - TypeScript
-  - Vite
-  - React Flow (@xyflow/react)
-  - Zustand
-  - WebSockets
-  - Hermes Agent (optional)
+tagline: A local AI creation studio. Connect models, media, and editable artwork on one canvas.
+description: A visual node graph for image, video, audio, text, 3D, and world generation, with specialized creative workspaces and optional agent chat. Runs locally using your own provider keys.
+stack: [Python 3.12, FastAPI, React 19, TypeScript, Vite, React Flow, Zustand, WebSockets, Hermes Agent (optional)]
 features:
-  - 174-node BYOK catalog across 17 external provider families
-  - Universal nodes for OpenRouter / Nous Portal / Replicate / FAL
-  - Seven workspaces: Canvas, Create, Cinema Studio, Character Studio, Moodboard Studio, Video Editor, Remotion Editor
-  - Smart subgraph caching with topological execution
-  - Real-time streaming (text tokens, video / audio / SVG previews)
-  - Create view with model picker, presets/styles library, results gallery, and per-result actions
-  - Save / load graphs as JSON; configurable output directory; Reveal in Finder
-  - Daedalus / Claude / Codex agent chat (builds and edits the graph from natural language)
-  - 3,250+ tests (2,248 backend + 777 frontend + 227 desktop lifecycle)
+  - Bring your own provider keys
+  - Typed node graph with streaming previews and subgraph caching
+  - Canvas, Create, Cinema, Character, Moodboard, Video Editor, and Remotion workspaces
+  - Paper-linked artwork with immutable snapshots and explicit recipe reruns
+  - Saveable graphs, local outputs, and retained run history
+  - Optional Daedalus, Claude, and Codex agent chat
 hero: docs/assets/banner.svg
 links:
   github: https://github.com/JustinPerea/nebula-nodes
   lab: https://justinperea.com/lab/nebula-quiver
 visibility: public
-lastUpdated: 2026-09-03
+lastUpdated: 2026-10-02
 ---
 
 <div align="center">
   <img src="docs/assets/banner.svg" alt="Nebula Nodes — an open-source canvas for AI graphs" width="900">
 </div>
 
+# Nebula Nodes
+
+**A local AI creation studio. Connect models, media, and editable artwork on one canvas.**
+
+Drop nodes, connect their inputs and outputs, and run a creative pipeline using your own provider keys. Generate images, video, audio, text, 3D assets, and worlds; keep the graph and its outputs on your machine.
+
+[Quickstart](#quickstart) · [Recently added](#recently-added) · [Documentation](#documentation) · [Contributing](CONTRIBUTING.md)
+
+## Recently added
+
+### Paper Source
+
+Link an editable logo or asset from **[Paper](https://paper.design)** to a canvas node and use its exported artwork downstream. **Open in Paper** takes you back to the original; edit it, return to Nebula, and **Refresh source** to capture the new artwork.
+
+When the artwork changes, refresh marks previous results **out of date**. Choose **Rerun with latest source** to run the saved recipe again. Your connections, earlier snapshots, and run history stay intact. **Refresh alone never triggers generation.**
+
 <div align="center">
-  <sub><em>Plotted with light. &nbsp;·&nbsp; An open-source canvas for AI graphs.</em></sub>
+  <img src="docs/assets/paper-source.png" alt="Paper Source with a refreshed cyan logo, the earlier pink animation marked out of date, and a new cyan animation below it" width="900">
 </div>
 
-```
-┌──────────────────────────────────────────────────────────────────┐
-│  NEBULA NODES                                                    │
-│  AI CREATION STUDIO · IMAGE · VIDEO · WORLD · 3D · AUDIO · TEXT │
-└──────────────────────────────────────────────────────────────────┘
+Requires Paper Desktop running on the same computer as the Nebula backend, signed in to your own Paper account. [Paper setup and workflow](docs/PAPER-SOURCE.md) · [Watch the 40-second demo](videos/paper-linked-source/renders/paper-linked-source-demo.mp4)
+
+## What you can do
+
+- **Build visual pipelines** with typed ports for images, video, audio, text, SVG, 3D, and reusable references.
+- **Choose provider nodes or universal nodes** for FAL, Replicate, OpenRouter, and Nous Portal. Browse the [node catalog](docs/MODEL_REFERENCE.md) and [provider guides](docs/api-guides/README.md).
+- **Iterate on part of a graph** with partial execution, caching, and streaming previews.
+- **Work across Canvas, Create, Cinema, Character, and Moodboard**, then assemble clips in the Video or Remotion editor.
+- **Keep your work** with saved JSON graphs, local media outputs, and run history.
+- **Build with an agent** through optional Daedalus, Claude, or Codex chat. [Daedalus setup](docs/HERMES-SETUP.md).
+
+## Quickstart
+
+Use **Python 3.12** and **Node.js 24**. Install **FFmpeg** (`ffmpeg` and `ffprobe` on your PATH) for video processing and QC.
+
+```bash
+git clone https://github.com/JustinPerea/nebula-nodes.git
+cd nebula-nodes
 ```
 
-<div align="center">
+**Terminal 1 — backend**, from the repository root:
+
+```bash
+python3.12 -m venv backend/.venv
+backend/.venv/bin/python -m pip install -r backend/requirements.txt
+backend/.venv/bin/python -m uvicorn main:app --app-dir backend --reload --reload-dir backend --host 127.0.0.1 --port 8000
+```
+
+**Terminal 2 — frontend**, from the repository root:
+
+```bash
+npm --prefix frontend ci
+npm --prefix frontend run dev -- --host 127.0.0.1 --port 5173
+```
+
+Open **[127.0.0.1:5173](http://127.0.0.1:5173)**, then add the provider keys you need in **Settings**. Provider usage is billed to your accounts. Browser mode stores keys in the gitignored, plaintext `settings.json`; the macOS desktop app uses Keychain encryption.
+
+Try a **Text Input → GPT Image 2 → Preview** graph and hit **Run**. Generated files go to `output/` by default; change the location in Settings.
+
+Prefer a desktop window? See the [Electron setup guide](desktop/README.md). Agent chat and Paper are optional; configure them when you need them.
+
+## Documentation
+
+| Guide | What it covers |
+| --- | --- |
+| [Paper Source](docs/PAPER-SOURCE.md) | Link artwork, edit, refresh, and rerun |
+| [Node catalog](docs/MODEL_REFERENCE.md) | Nodes, parameters, ports, and endpoints |
+| [Provider guides](docs/api-guides/README.md) | Example pipelines and API coverage |
+| [Desktop app](desktop/README.md) | Launch, local backend, migration, and Keychain |
+| [Daedalus agent](docs/HERMES-SETUP.md) | Hermes and Daedalus setup |
+| [External-agent MCP](docs/MCP-SETUP.md) | Read-only canvas selection context |
+| [Provider contracts](docs/contracts/README.md) | Maintained API contracts and verification |
+| [Contributing](CONTRIBUTING.md) | Development checks and adding nodes |
+
+<details>
+<summary>Watch an agent build a pipeline</summary>
 
 https://github.com/user-attachments/assets/3a83187d-e186-4378-8a36-822b0a4055cb
 
-<sub><em>2:07 — the optional Daedalus chat agent building a creative pipeline from a plain-language prompt. <a href="https://github.com/JustinPerea/nebula-nodes/releases/download/v0.1.0-hackathon/stitched-with-music.mp4">Download the full-quality 1080p MP4</a>.</em></sub>
-
-</div>
-
-<div align="center">
-  <a href="#-quickstart">QUICKSTART</a> · <a href="#-workspaces">WORKSPACES</a> · <a href="#-catalog">CATALOG</a> · <a href="#-universal-nodes">UNIVERSAL NODES</a> · <a href="#-agent--daedalus">AGENT</a> · <a href="#-architecture">ARCHITECTURE</a> · <a href="#-quality--audit-discipline">QUALITY</a>
-</div>
-
-<div align="center">
-
-  <a href="LICENSE"><img alt="LICENSE — AGPL-3.0" src="https://img.shields.io/badge/LICENSE-AGPL--3.0-6ba8d6?style=flat-square&labelColor=0a1612"></a>
-  <img alt="NODES — 174" src="https://img.shields.io/badge/NODES-174-f3e6c4?style=flat-square&labelColor=0a1612">
-  <img alt="PROVIDERS — 17 FAMILIES · 300%2B VIA UNIVERSAL" src="https://img.shields.io/badge/PROVIDERS-17%20FAMILIES%20%C2%B7%20300%2B%20VIA%20UNIVERSAL-f3e6c4?style=flat-square&labelColor=0a1612">
-  <img alt="BYOK — BRING YOUR OWN KEYS" src="https://img.shields.io/badge/BYOK-BRING%20YOUR%20OWN%20KEYS-6ba8d6?style=flat-square&labelColor=0a1612">
-  <br>
-  <img alt="PYTHON 3.12+" src="https://img.shields.io/badge/PYTHON-3.12%2B-f3e6c4?style=flat-square&labelColor=0a1612">
-  <img alt="NODE 18+" src="https://img.shields.io/badge/NODE-18%2B-f3e6c4?style=flat-square&labelColor=0a1612">
-  <img alt="REACT 19" src="https://img.shields.io/badge/REACT-19-f3e6c4?style=flat-square&labelColor=0a1612">
-  <img alt="FASTAPI" src="https://img.shields.io/badge/FASTAPI-BACKEND-f3e6c4?style=flat-square&labelColor=0a1612">
-  <img alt="TESTS — 3,250+" src="https://img.shields.io/badge/TESTS-3%2C250%2B-6ba8d6?style=flat-square&labelColor=0a1612">
-
-</div>
-
----
-
-## ◆ THESIS &nbsp;&nbsp;//&nbsp;&nbsp; why this exists
-
-There's a cambrian explosion of image, video, spatial-world, 3D, audio, and text models happening — every week brings a new provider with a new endpoint. Stitching them together today means writing throwaway scripts, juggling API docs, and rebuilding the same plumbing for every idea.
-
-**Nebula Nodes is the multi-surface studio for that stitching.** At its core is a visual node graph — drop nodes, wire them up, hit Run. Wrapped around the graph are seven specialized workspaces: a Higgsfield-style **Create** view for prompt-driven generation with a presets library and results gallery; **Soul Cinema** for shot-based storyboard editing; **Nebula Character** for reusable character identities across shots; **Moodboard Studio** for style briefs that feed generators; plus a **Video Editor**, a **Remotion Editor**, and the node **Canvas** itself. An agent chat (Claude, Codex, or Daedalus) can build and edit the graph from natural language.
-
-174 built-in nodes across 17 external provider families, plus four **universal nodes** that proxy 300+ more models on OpenRouter, Nous Portal, Replicate, and FAL. Smart caching skips unchanged subgraphs. Streaming nodes show text / video / audio / SVG previews live as they generate.
-
-Everything runs locally against your own API keys. No platform markup. No data leaving your machine to a middleman. No rate-limited hosted tier. You see the graph, you see the outputs, you own the keys.
-
-> [!NOTE]
-> **BYOK ◆ BRING YOUR OWN KEYS.** The app proxies calls from your local backend to OpenAI, Anthropic, Google, Runway, FAL, OpenRouter, Replicate, ElevenLabs, MiniMax, Meshy, Quiver, xAI, Higgsfield, Krea, Ideogram, World Labs, and Nous Portal using keys you paste into the settings panel. They never touch a Nebula-hosted server because there isn't one.
-
-## ◆ FEATURES
-
-```
-SPEC // MULTI-SURFACE STUDIO
-```
-
-| | |
-|---|---|
-| **174-NODE CATALOG** | Every major provider as a first-class node. Image, video, spatial-world, 3D, audio, and text generation across 17 external provider families — see [CATALOG](#-catalog) for the breakdown. |
-| **7 WORKSPACES** | Canvas (node graph), Create, Cinema Studio, Character Studio, Moodboard Studio, Video Editor, Remotion Editor. See [WORKSPACES](#-workspaces). |
-| **CREATE VIEW** | Prompt → generate with a model picker, parameter pills, reference image slots, quantity/variations control, a results gallery (Session + Canvas tabs), a Presets/Styles library, and per-result actions: download, open-in-canvas, use-as-input, Reveal in Finder, Save to folder, delete. Generations author real nodes onto the canvas and persist. |
-| **UNIVERSAL NODES** | One node each for OpenRouter, Nous Portal, Replicate, and FAL. The universal node pattern means a single node reaches every model on that platform — 300+ models total, no per-model wrapper needed. |
-| **WORLD LABS ENVIRONMENTS** | Generate navigable Marble environments from text, one image, multiple views, or video. A first-class `World` port keeps local SPZ splats, panorama, collider, scale metadata, and world identity together; an expandable Spark viewer supports orbit/fly inspection, and a separate export node produces PLY or HQ GLB. |
-| **SMART EXECUTION** | Topological graph sort, parallel where independent, sequential where dependent. Unchanged subgraphs skip re-computation automatically — if you change a prompt downstream, only the affected nodes re-run. |
-| **STREAMING OUTPUTS** | Token-by-token text via WebSocket, live frame previews for video and audio nodes, SSE streaming for Quiver SVG generation. The canvas updates in real time as outputs arrive. |
-| **PARTIAL EXECUTION** | Run the full graph, or just the upstream subgraph of any single node. Fast iteration on the bit you care about. |
-| **TYPED PORTS** | Every port carries a type (Image, Video, Text, Audio, Mesh, **World**, SVG, Array, CameraRig, Character, ReferenceSet, Any). Wrong wires fail at design time, not runtime. Color-coded for visual rhythm. |
-| **CAMERA RIG** | New CameraRig typed port and camera-rig utility node. 9 numeric camera parameters (height, pitch, yaw, roll, focal length, subject distance, focus distance, screen X/Y) packed into a typed bundle for downstream video nodes. |
-| **IDENTITY EDIT** | New identity-edit node combining nano-banana image editing with Character bundle identity preservation. Injects character reference views and trait strings when a Character is connected. |
-| **SEMANTIC REFERENCE ROLES** | Image reference ports carry typed semantic roles (Style, Identity, Composition, Pose, Lighting, Subject, Background) with per-reference weight controls. 32 existing nodes updated with role metadata. |
-| **REFERENCE SET NODE** | New utility node that bundles multiple reference images with roles and weights into a typed ReferenceSet bundle for downstream nodes. Items sorted by weight for precedence ordering. |
-| **MEDIA VALIDATION** | Output files are validated against actual media content (magic bytes for images, ffprobe for video). Mismatched extensions are automatically corrected. |
-| **OUTPUT METADATA** | Each graph execution writes a manifest.json recording model, prompt, params, and timestamp per output. Queryable via GET /api/outputs/{path}/meta. |
-| **UPLOAD SAFETY** | Failed uploads now clean up orphaned files and roll back graph mutations. Video probe failures delete the file; broadcast failures remove the created node. |
-| **VIDEO DURATION CHECK** | New analyzer node that probes generated video with ffprobe and reports requested vs landed duration with match/delta. |
-| **PROVIDER KEY VALIDATION** | `GET /api/health/providers` reports all 17 auth families (16 Settings credentials plus Nous OAuth), using non-billable authenticated reads where providers expose them and a 5-minute TTL cache. |
-| **PYTHONPATH SANITIZATION** | Automatic stripping of incompatible Python paths at startup to prevent pydantic_core ABI mismatches. |
-| **UNDO THAT STICKS** | 50-step history. Outputs survive undo, so experiment freely. |
-| **SAVE / LOAD** | Graphs serialize to JSON. Outputs written to disk and served via `/api/outputs`. Configurable output directory. Reveal in Finder. |
-| **AGENT CHAT** | Daedalus (Hermes Agent), Claude, or Codex can build and edit graphs from natural language. Sees the live canvas; iterates with you. See [AGENT](#-agent--daedalus). |
-| **AUDIT DISCIPLINE** | Every API-backed node is verified against canonical provider docs. 3,250+ tests (2,248 backend + 777 frontend + 227 desktop lifecycle). Live-smoke gate for high-risk handler paths. See [QUALITY](#-quality--audit-discipline). |
-
-## ◆ WORKSPACES
-
-```
-SPEC // 7 SURFACES · ONE STUDIO
-```
-
-| Workspace | Purpose |
-|---|---|
-| **Canvas** | The node graph — the spine of the studio. Drop nodes, wire ports, hit Run. |
-| **Create** | Higgsfield-style prompt→generate surface. Model picker, prompt field, parameter pills, reference image slots, quantity and variation controls. Results land in a gallery with Session and Canvas tabs. Per-result actions: download, open-in-canvas, use-as-input, Reveal in Finder, Save to folder, delete. A Presets/Styles library stores reusable generation setups. Generations author real nodes onto the canvas and persist. |
-| **Cinema Studio** | Shot-based storyboard editor (Soul Cinema). Build a scene sequence; each shot can reference Character and Moodboard assets. |
-| **Character Studio** | Define a reusable character identity — reference images, prompt overrides, style strength — and wire it consistently across shots and generators. |
-| **Moodboard Studio** | Assemble style briefs and palettes that plug directly into generators as style references. |
-| **Video Editor** | ffmpeg-backed timeline editor for trimming, cutting, and compositing generated clips. |
-| **Remotion Editor** | Programmatic composition editor for code-driven video scenes. |
-
-## ◆ CATALOG
-
-```
-SPEC // 174 NODES · 17 EXTERNAL PROVIDER FAMILIES · 12 CATEGORIES
-```
-
-Full per-node reference (params, endpoints, exec patterns, audit status) lives in [`docs/MODEL_REFERENCE.md`](docs/MODEL_REFERENCE.md), generated from the registry.
-
-Prefer a guided tour? [`docs/api-guides/`](docs/api-guides/) has a **user-facing guide per provider** — what you can make, the node table, example pipelines, and a coverage audit of how much of each provider's API Nebula actually wires up. Start at the [coverage matrix](docs/api-guides/README.md).
-
-| Category | Count | Highlights |
-|---|---:|---|
-| **Video generation** | 42 | Veo 3.1 (direct + FAL), Runway Gen-4.5 / Seedance 2 / HappyHorse / Aleph 2 / Act-Two, Sora 2 (API sunsets 2026-09-24), Kling v2.1 / v3 / Omni 3, Wan 2.6 (T2V / I2V / R2V), Luma Ray 2 (T2V / I2V / Modify), LTX 2 / 2.3, Seedance 1.5 / 2 (T2V / I2V / R2V / Fast), MiniMax Hailuo / S2V, Higgsfield, Grok Imagine, PixVerse V4.5 |
-| **Image generation** | 39 | GPT Image 1 / 1.5 / 2 (direct + FAL, gen + edit), Ideogram 4 (gen + inpaint / prompt-edit / remix / replace-background / transparent / character + custom-model training; direct API + FAL dual-route), Imagen 4, FLUX 1.1 Ultra / Schnell / 2 Pro / Kontext / Fill (Inpaint), Nano Banana (Gemini), Recraft V4 (raster + SVG), Seedream 4.5, Krea 2 / Style Train, Meshy T2I / I2I, Quiver Arrow, Fast SDXL, Runway Image |
-| **Utility** | 25 | Text / Image / Audio / Video inputs, Mask Painter (paint inpaint masks in-app), Combine Text, Gemini Embeddings, Image Iterator / Text Iterator, Array Builder / Selector, Image Compare, Preview, Reroute, Router, Sticky Note, Style Reference, Krea Style / Image Style Ref / Moodboard, Remotion Composition, Video Edit |
-| **Audio generation** | 20 | ElevenLabs TTS / STT / SFX / STS / Isolation / Dubbing, Lyria 3, Gemini TTS, Stable Audio 2.5, ACE-Step, MMAudio V2, Demucs, OpenAI TTS / Whisper STT / Translate, Runway TTS / STS / Dubbing |
-| **3D generation** | 11 | World Labs Environment (text/image/multi-image/video → typed World + local SPZ/panorama/collider), Meshy 6 Text/Image to 3D (direct + FAL), Meshy Multi-Image / Retexture / Rigging / Animate / Remesh / 3D Print, Hunyuan3D V3 Text/Image to 3D |
-| **Universal** | 4 | OpenRouter, **Nous Portal**, Replicate, FAL — each reaches its full catalog. See [UNIVERSAL NODES](#-universal-nodes). |
-| **Transform** | 16 | World Labs Export (World → PLY splat or HQ GLB), Quiver Arrow Vectorize (raster → SVG), Remove Background, Ideogram Reframe (outpaint) / Upscale / Remove BG / Layerize Text, SeedVR2 Upscale, Clarity Upscaler, Runway Upscale (Magnific), SeedVR2 Video Upscale, SVG Rasterize |
-| **Text generation** | 4 | Claude (Fable 5 / Opus 4.8), OpenAI Chat (GPT-5.5 / 5.4), Gemini (3.5 Flash), Ideogram Magic Prompt |
-| **Cinematic** | 3 | Cinema Color, Cinema Look, Cinema Scene |
-| **Character** | 1 | Character (reusable identity node for consistent references) |
-| **Analyzer** | 8 | Krea Style Search, Ideogram Describe, Video Duration Check, and four Video QC analyzers for loop safety, frame drift, compositing, and camera geometry |
-| **Moodboard** | 1 | Moodboard (reusable visual direction bundle) |
-
-### A few worth calling out
-
-- **Quiver Arrow** (gen + vectorize) — text-or-image → SVG with SSE streaming. SVG previews fill in live during generation. [`/lab/nebula-quiver`](https://justinperea.com/lab/nebula-quiver) is the public demo.
-- **Style Reference** — local utility node that pulls a style descriptor from any reference image via Gemini. Pairs into prompts as a style override.
-- **Krea 2 + Style Train** — generate images with trained style LoRAs; the Style Train node kicks off a full Krea fine-tune from reference images.
-- **Seedance 2 family** — T2V / I2V / R2V / Fast variants covering the full ByteDance Seedance 2.0 lineup.
-- **Nous Portal universal** — single OAuth via Hermes Agent reaches 300+ models. No per-model API key.
-- **World Labs Environment** — public Marble generation from text/image/multi-image/video into a typed `World`. Provider assets are materialized locally before success; choose **Explore** for a lazy Spark SPZ viewer, or chain the World into PLY/HQ-GLB export. [Guide and cost boundaries.](docs/api-guides/worldlabs.md)
-
-## ◆ UNIVERSAL NODES
-
-```
-SPEC // ONE NODE · EVERY MODEL ON THE PLATFORM
-```
-
-Most nodes wrap one specific model. Universal nodes wrap a *platform's entire catalog*. Drop a universal node, pick a model from the in-app picker, and the inspector populates with that model's exact parameter schema — fetched at configuration time.
-
-| Node | Platform | What it gives you | Auth |
-|------|----------|-------------------|------|
-| **OPENROUTER** | OpenRouter | Any model in the OpenRouter catalog; schema fetched at config time | `OPENROUTER_API_KEY` |
-| **◆ NOUS PORTAL** | Nous Portal | 300+ models including Kimi K2.6, DeepSeek, Hermes 4, Llama 4. Single OAuth via Hermes Agent — no API key field. | OAuth (via [Hermes Agent](https://github.com/NousResearch/hermes-agent)) |
-| **REPLICATE** | Replicate | Any versioned model on Replicate; ports built dynamically from the model's JSON schema | `REPLICATE_API_TOKEN` |
-| **FAL** | FAL | Any FAL endpoint via the submit/poll async pattern; covers anything not already in the static catalog | `FAL_KEY` |
-
-The universal node pattern is the multiplier — the static catalog is 174 nodes, but the *reachable model count* is several hundred more. Every time OpenRouter / Nous Portal / Replicate / FAL adds a model, it's already supported.
-
-## ◆ AGENT &nbsp;&nbsp;//&nbsp;&nbsp; DAEDALUS
-
-```
-SPEC // OPTIONAL HERMES AGENT CHAT PERSONA
-```
-
-**Daedalus** is an optional chat agent that builds graphs from natural language. He runs as a subprocess of [Hermes Agent](https://github.com/NousResearch/hermes-agent) and can be powered by any model Hermes supports — Kimi K2.6 (default), DeepSeek, Hermes 4, Anthropic, OpenAI, local Ollama, anything with an `hermes-daedalus login` path.
-
-Drop a node yourself, OR ask Daedalus to build something. Same canvas. Drag and chat are dual front doors.
-
-Skip this section if you don't want a chat agent — the canvas works fine without it.
-
-### Pick how Daedalus reaches its brain
-
-| Path | What you need | Best for |
-|------|---------------|----------|
-| **Nous Portal** | A [Nous Research subscription](https://portal.nousresearch.com) | Already paying Nous; want the full Hermes/Kimi/DeepSeek catalog without juggling separate keys. |
-| **OpenRouter** | An [OpenRouter API key](https://openrouter.ai/keys) | $0 monthly baseline; pay-per-use BYOK. |
-| **Anything else** | Whatever credential Hermes supports (Anthropic key, OpenAI key, local Ollama, etc.) | Already paying Anthropic / OpenAI / running local models — no new account needed. |
-
-### Setup
-
-```bash
-# 1. Install Hermes Agent (Nous Research) — one-time
-curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash
-
-# 2. Create the Daedalus profile + alias
-hermes profile create daedalus
-hermes profile alias daedalus --name hermes-daedalus
-
-# 3. Authenticate — pick one path:
-hermes-daedalus model              # Nous Portal (browser OAuth)
-hermes-daedalus login              # OpenRouter / Anthropic / etc. (paste key)
-
-# 4. Install Daedalus's persona + skills (from inside this repo)
-cp .hermes/profiles/daedalus/SOUL.md ~/.hermes/profiles/daedalus/SOUL.md
-mkdir -p ~/.hermes/profiles/daedalus/skills/creative
-cp -R .hermes/skills/daedalus-core ~/.hermes/profiles/daedalus/skills/creative/
-
-# 5. Smoke test
-hermes-daedalus chat -q "Introduce yourself." -Q --skills daedalus-core
-```
-
-In the running app: open the chat panel, switch the agent picker to **Daedalus**, send a message. The backend spawns `hermes-daedalus chat …` per turn and streams Daedalus's prose + canvas actions back over WebSocket.
-
-Full step-by-step: **[`docs/HERMES-SETUP.md`](docs/HERMES-SETUP.md)**.
-
-> Daedalus and the demo video at the top of this README were built for the **Hermes Agent Creative Hackathon 2026**. The persona + skill cookbook + narrator-fallback + universal Nous node + canvas polish are documented in [`docs/HERMES-SETUP.md`](docs/HERMES-SETUP.md) and tagged at release [`v0.1.0-hackathon`](https://github.com/JustinPerea/nebula-nodes/releases/tag/v0.1.0-hackathon).
-
-## ◆ QUALITY &nbsp;&nbsp;//&nbsp;&nbsp; AUDIT DISCIPLINE
-
-```
-SPEC // CONTRACT-VERIFIED HANDLERS
-```
-
-Every API-backed node has a contract that gets enforced at multiple layers:
-
-- **Structural audit per provider family.** Each handler is verified against the canonical provider docs (or the official SDK source) and recorded under [`docs/model-providers/<provider>/`](docs/model-providers/). Notes carry `verified:` and `stale_after_days:` frontmatter — a 14-day refresh cycle for fast-moving providers, 30 for stable.
-- **3,250+ tests (2,248 backend + 777 frontend + 227 desktop lifecycle).** Run with `cd backend && python -m pytest` (backend), `cd frontend && npm run lint && npm run build` (frontend), and `cd desktop && npm test` (desktop lifecycle). Body-shape tests pin every direct-provider handler's request envelope against the documented spec.
-- **Generated MODEL_REFERENCE.md.** [`docs/MODEL_REFERENCE.md`](docs/MODEL_REFERENCE.md) is generated from `backend/data/node_definitions.json`. `scripts/check-node-contracts.mjs --check` fails CI on drift.
-- **Live-smoke gate.** Structural tests can pin *wrong* behavior. A separate live-smoke gate verifies request/response shapes against the real API. Live-smoke has already caught: PCM-as-WAV header bug, Google `responseFormat` enum mismatch, FAL `duration` integer-vs-string, Runway ratio enum reverted from SDK schema to live API value.
-- **One-shot smoke scripts.** Reusable per-family smoke scripts under [`backend/scripts/`](backend/scripts/) — e.g. `smoke_elevenlabs_sts.py` exercises the multipart `voice_settings` JSON path end-to-end.
-
-Status as of 2026-06-03: structural audit complete for all API-backed handlers; live-smoke verified for 9 families. Cross-platform contract rules live in [`docs/contracts/`](docs/contracts/); per-provider audit notes in [`docs/model-providers/`](docs/model-providers/).
-
-## ◆ QUICKSTART
-
-```
-SPEC // REQUIRES Python 3.12+, Node.js 18+
-```
-
-```bash
-# 1. Clone
-git clone https://github.com/JustinPerea/nebula-nodes.git
-cd nebula-nodes
-
-# 2. Backend (terminal 1)
-cd backend
-python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-uvicorn main:app --reload --port 8000
-
-# 3. Frontend (terminal 2)
-cd frontend
-npm install
-npm run dev
-
-# 4. Open http://localhost:5173
-```
-
-> [!NOTE]
-> Chrome-family browsers are the current verified target for drag-to-create. Manual QA on 2026-05-09 passed in Comet/Chrome-family browsers; Safari did not drag library nodes reliably in that pass.
-
-### Desktop app (Electron, managed sidecar)
-
-The `desktop/` directory contains an Electron 44.3.0 shell that manages the
-FastAPI backend as a sidecar. A single command starts a dynamic-port backend
-and then the packaged renderer — no manual `uvicorn` or Vite dev server is
-required.
-
-```bash
-# One-time: install dependencies
-cd frontend && npm install && cd ../desktop && npm install
-
-# Build the packaged renderer (after frontend changes)
-cd frontend && npm run build:desktop
-
-# Launch the app — starts the sidecar, waits for health, opens the window
-cd desktop && npm run start
-```
-
-Electron acquires the single-instance lock, starts one uvicorn sidecar on an
-OS-assigned loopback port, waits for confirmed Nebula health, injects the
-immutable API/WS endpoints through the sandboxed preload bridge, and then
-mounts the normal renderer. Browser/Vite development mode remains fully
-supported when the Electron bridge is absent.
-
-**App Support migration.** On first desktop launch, Electron migrates
-application data and API keys from legacy locations (`~/.nebula/`,
-`<repo>/output/`, `<repo>/settings.json`) into
-`~/Library/Application Support/Nebula Nodes/`. Source files are copied, never
-deleted. A migration status overlay is shown during the one-time migration.
-
-**Keychain credentials.** API keys are encrypted at rest via macOS Keychain
-using Electron's `safeStorage` async API. The desktop app is the credential
-authority — the backend receives decrypted keys only in memory for the
-duration of the session. `settings.json` in App Support contains no secrets
-(`apiKeys: {}`). The Settings panel shows a "Managed by macOS Keychain"
-badge and routes key updates through the credential IPC, not `PUT /api/settings`.
-
-See [`desktop/README.md`](desktop/README.md) for runtime overrides, migration
-flow, Keychain setup, App Support paths, failure diagnostics, validation, and
-deferred packaging notes.
-
-> [!TIP]
-> Drop a **Text Input** node, wire it into a **GPT Image** node, wire that into a **Preview** node, and hit **Run**. That's the whole mental model. Add a **Style Reference** in front of GPT Image for one-shot style transfer; swap the GPT Image node for a **Quiver Arrow Generate** to get SVG output instead.
-
-## ◆ KEYS
-
-```
-SPEC // BYOK — KEYS LIVE ON YOUR DISK
-```
-
-**Via the Settings panel** (recommended) — click the gear icon, paste your keys, hit Save. Keys are masked on read; the backend stores the raw value but never logs it.
-
-| | |
-|---|---|
-| **Browser/dev storage** | `settings.json` at the project root, gitignored, plaintext, owned by you |
-| **Desktop storage** | Encrypted via macOS Keychain (`safeStorage`), stored as `v1:<base64>` blobs in `~/Library/Application Support/Nebula Nodes/credentials.json`. `settings.json` has `apiKeys: {}` — no secrets on disk. |
-| **Read API** | `GET /api/settings` returns `***` + last 4 chars only — real key never crosses the wire |
-| **Write API (browser)** | `PUT /api/settings` short-circuits on `***`-prefixed values — masked round-trip preserves the real key |
-| **Write API (desktop)** | `nebulaDesktop.credentials.set(provider, key)` → IPC → `safeStorage` encrypt → `credentials.json` → `POST /api/credentials/update` (in-memory, no restart) |
-| **Egress** | Each handler hits exactly one provider URL — no analytics, no telemetry, no aggregator |
-| **CORS** | `localhost` / `127.0.0.1` origin only — a malicious tab cannot read your keys |
-
-<details>
-<summary><strong>Via settings.json</strong> — manual alternative, edit at the project root</summary>
-
-```bash
-cp settings.example.json settings.json
-```
-
-Fill only the keys you use. `settings.example.json` is the checked-in complete
-schema; `settings.json` is in `.gitignore` by default and will not be committed.
+The optional Daedalus agent builds a creative pipeline from a plain-language prompt. [Download the demo](https://github.com/JustinPerea/nebula-nodes/releases/download/v0.1.0-hackathon/stitched-with-music.mp4).
 
 </details>
 
-## ◆ ARCHITECTURE
+## Contributing and support
 
-```mermaid
-graph LR
-    UI[React 19 + Vite<br/>7 workspaces · Canvas @xyflow/react] -->|REST /api/*| API[FastAPI backend]
-    UI <-->|WebSocket /ws| WS[Execution stream]
-    API --> ENGINE[Graph engine<br/>topological sort + cache]
-    ENGINE --> HANDLERS[Handler registry<br/>backend/handlers/*.py]
-    HANDLERS --> PROVIDERS[(17 external provider families<br/>300%2B via universal nodes)]
-    API --> OUT["/api/outputs<br/>configurable dir · files on disk"]
-    UI <-.->|optional WebSocket /chat| CHAT[Agent chat session]
-    CHAT -.-> HERMES[Daedalus / Claude / Codex subprocess]
+[Issues](https://github.com/JustinPerea/nebula-nodes/issues) and pull requests are welcome. Read the [contribution guide](CONTRIBUTING.md) before adding a node or changing a provider integration.
 
-    style UI fill:#0a1612,color:#f3e6c4,stroke:#6ba8d6
-    style API fill:#0a1612,color:#f3e6c4,stroke:#f3e6c4
-    style ENGINE fill:#0e1c18,color:#f3e6c4,stroke:#f3e6c4
-    style HANDLERS fill:#0e1c18,color:#f3e6c4,stroke:#f3e6c4
-    style PROVIDERS fill:#13231e,color:#f3e6c4,stroke:#f3e6c4
-    style OUT fill:#0e1c18,color:#f3e6c4,stroke:#f3e6c4
-    style WS fill:#0e1c18,color:#f3e6c4,stroke:#f3e6c4
-    style CHAT fill:#0a1612,color:#6ba8d6,stroke:#6ba8d6,stroke-dasharray: 5 5
-    style HERMES fill:#0a1612,color:#6ba8d6,stroke:#6ba8d6,stroke-dasharray: 5 5
-```
-
-- **FRONTEND** — React 19 + Vite SPA. Seven workspace views share a single layout shell. `@xyflow/react` powers the Canvas workspace. [Zustand](https://github.com/pmndrs/zustand) holds all graph and UI state, with `node.data` as the single source of truth for params, outputs, and execution status.
-- **BACKEND** — FastAPI. REST endpoints for execution and a WebSocket at `/ws` that streams per-node events (started, progress, partial-image, partial-svg, output, error) back to the UI in real time.
-- **EXECUTION ENGINE** — topologically sorts the graph, dispatches handlers in dependency order, passes outputs forward through the edge graph, and short-circuits when a subgraph's inputs haven't changed since the last run.
-- **HANDLERS** — one function per provider in [`backend/handlers/`](backend/handlers/) (e.g., `openai_image.py`, `runway.py`, `quiver.py`, `fal_universal.py`). Each handler receives typed params, returns a typed output, and is structurally + (where verified) live-smoke tested.
-- **OUTPUT MANAGEMENT** — outputs are written to a configurable directory (default: `outputs/` at project root). The settings panel exposes the path; a per-output Reveal in Finder action and a Save to folder action are available from both the Create gallery and individual canvas nodes.
-- **SPATIAL OUTPUTS** — World Labs results are downloaded into the run directory and emitted as a versioned `World` bundle. The canvas lazy-loads `@sparkjsdev/spark` only when the expandable SPZ viewer opens; panorama and collider files remain available when WebGL is unavailable.
-- **AGENT BRIDGE (optional)** — `backend/services/hermes_session.py` wraps the agent subprocess (Daedalus / Claude / Codex) per turn, parses events, narrates canvas actions live to the chat panel via WebSocket, and falls back to a narrator (`backend/services/narrator.py`) when the model emits empty `content` alongside `tool_calls`.
-- **SHARED SELECTION CONTEXT** — the active canvas selection is ephemeral backend state available to in-canvas Claude/Codex/Daedalus turns, `nebula selection`, and the read-only local MCP server. Every read revalidates IDs against the live graph; parameter summaries are bounded and secret/data-URI values are redacted.
-
-## ◆ PROJECT LAYOUT
-
-```
-nebula-nodes/
-├─ backend/                FastAPI app
-│  ├─ handlers/            one file per provider (openai, runway, fal, quiver, …)
-│  ├─ execution/           topological graph runner + caching
-│  ├─ routes/              REST + WS + provider proxies
-│  ├─ scripts/             one-off smoke scripts (live-smoke runners)
-│  ├─ services/
-│  │  ├─ hermes_session.py Daedalus subprocess bridge
-│  │  ├─ narrator.py       Hermes narrator-fallback
-│  │  ├─ chat_actions.py   per-turn action buffer
-│  │  └─ nous_auth.py      Nous Portal OAuth from ~/.hermes/
-│  ├─ cli/                 scriptable pipelines (nebula CLI)
-│  └─ mcp_server.py        read-only stdio MCP selection context
-├─ frontend/               React 19 + Vite canvas UI
-│  ├─ src/components/      canvas, nodes, edges, panels
-│  └─ src/store/           Zustand graph + UI state
-├─ desktop/                Electron 44.3.0 shell with managed FastAPI sidecar
-│  ├─ main.mjs             Electron main: sidecar, migration, Keychain, window, cleanup
-│  ├─ preload.cjs           sandboxed bridge: endpoints, credentials (set/has/clear), migration
-│  ├─ sidecar.mjs           Electron-free lifecycle module (port, spawn, health, stop)
-│  ├─ paths.mjs             App Support path computation and env-var injection
-│  ├─ credentials.mjs       Keychain credential service (safeStorage async API)
-│  ├─ migration.mjs         One-time data and key migration to App Support
-│  └─ tests/               Node lifecycle + credential + migration + integration tests
-├─ .hermes/
-│  ├─ profiles/daedalus/   SOUL.md — persona contract
-│  └─ skills/daedalus-core/ SKILL.md — playbook + cookbook
-├─ themes/daedalus/        Hermes Agent dashboard theme (TDR × Marathon)
-├─ docs/
-│  ├─ MCP-SETUP.md         external-agent MCP configuration
-│  ├─ contracts/           platform-neutral provider contracts
-│  ├─ MODEL_REFERENCE.md   generated catalog (do not edit by hand)
-│  └─ model-providers/     per-family audit notes
-└─ scripts/                demo recording pipeline + check-node-contracts + generate-model-reference
-```
-
-## ◆ CONTRIBUTING
-
-Issues and pull requests are welcome. Before opening a PR, please run the test suites:
-
-```bash
-# backend
-cd backend && python -m pytest
-
-# frontend
-cd frontend && npm run lint && npm run build
-
-# desktop (Electron sidecar lifecycle + integration)
-cd desktop && npm test
-
-# node contract checks (runs MODEL_REFERENCE drift check too)
-node scripts/check-node-contracts.mjs
-```
-
-If you are adding a new model, the smallest useful contribution is a single handler in `backend/handlers/` plus a node definition in `backend/data/node_definitions.json` and its mirror in `frontend/src/constants/nodeDefinitions.ts`. Add a structural audit note under `docs/model-providers/<provider>/`. Existing nodes are good templates — copy the closest match and adjust.
-
-If you are extending **Daedalus**, the playbook lives at `.hermes/skills/daedalus-core/SKILL.md`. The persona contract is `.hermes/profiles/daedalus/SOUL.md`. Both are copied into the user's Hermes profile during setup.
-
-## ◆ LIMITATIONS &nbsp;&nbsp;//&nbsp;&nbsp; known gaps
-
-- **Live-smoke gate is partial.** Structural audits are complete for all API-backed handlers, but live-smoke verification has only been run on 9 families. The remaining list (Meshy direct, Hunyuan3D, MiniMax I2V, Higgsfield, xAI Grok, etc.) is tracked in the master plan. Live-smoke has a track record of catching structural-test blind spots.
-- **Desktop app is pre-packaging.** The Electron 44.3.0 shell with a managed FastAPI sidecar is functional (see [desktop/README.md](desktop/README.md)). App Support migration and Keychain credential encryption are implemented. Bundled Python, signing/notarization, and auto-update are not yet implemented. The web version remains the primary target.
-- **Not every provider is dual-route.** Some handlers (MiniMax direct, Higgsfield, Grok Video) are direct-only — they don't have a FAL fallback yet. If the direct API is down, those nodes are too.
-- **Chrome-family browsers verified.** Drag-to-create has not yet been validated in Safari.
-- **Agent chat is optional.** The canvas and all seven workspaces work fine without an agent configured, but the chat panel will show an offline state until an agent (Daedalus, Claude, or Codex) is set up.
-- **Atlas is not a public API integration.** Nebula's World Labs nodes use the public Marble World API. Atlas is early access with select partners and is not offered as a model option until World Labs publishes an accessible API contract.
-
-## ◆ ACKNOWLEDGMENTS &nbsp;&nbsp;//&nbsp;&nbsp; standing on giants
-
-- **Provider APIs** — OpenAI, Anthropic, Google (Gemini / Imagen / Veo / Lyria), Runway, FAL, OpenRouter, Replicate, ElevenLabs, MiniMax, Higgsfield, Meshy, Quiver, Krea, Hunyuan, Black Forest Labs, ByteDance, xAI, Recraft, Ideogram, and World Labs. BYOK against each.
-- **Spatial rendering** — [Spark](https://sparkjs.dev/) renders locally materialized Marble SPZ worlds inside the expandable canvas viewer.
-- **[Hermes Agent](https://github.com/NousResearch/hermes-agent)** — Nous Research's open-source agent runtime. Daedalus is a profile + skill on top of it.
-- **[Nous Portal](https://portal.nousresearch.com)** — single-OAuth gateway to 300+ models. Powers the universal Nous node and the in-app model picker.
-- **[Kimi K2.6](https://moonshotai.github.io/Kimi-K2/)** — Moonshot AI. Daedalus's default brain when routed via OpenRouter or Nous Portal.
-- **Open-source frontend stack** — [React Flow / @xyflow](https://github.com/xyflow/xyflow), [Zustand](https://github.com/pmndrs/zustand), [Vite](https://vitejs.dev), [FastAPI](https://fastapi.tiangolo.com).
-- **Theme lineage** — the `themes/daedalus/` Hermes dashboard skin is a tribute to [The Designers Republic](https://thedesignersrepublic.com) × [Kurppa Hosk's Marathon (Bungie 2026)](https://www.kurppahosk.com/) brand system.
-- **Demo voice + music** — both generated in-app with ElevenLabs (voice = Brian, music = the v1 music API).
-
-## ◆ LICENSE
-
-[AGPL-3.0](LICENSE). You may use, modify, and self-host Nebula Nodes freely. If you distribute a modified version — including running it as a network service — you must make your source available under the same license.
-
----
-
-```
-┌──────────────────────────────────────────────────────────────────┐
-│  NEBULA NODES                              BYOK · LOCAL · TYPED   │
-│                                              © 2026 JUSTIN PEREA  │
-└──────────────────────────────────────────────────────────────────┘
-```
+Built with React Flow, FastAPI, and an optional [Hermes Agent](https://github.com/NousResearch/hermes-agent) integration. Licensed under [AGPL-3.0](LICENSE).
