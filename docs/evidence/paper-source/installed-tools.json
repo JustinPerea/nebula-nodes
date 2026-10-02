@@ -1,0 +1,269 @@
+{
+  "observedAt": "2026-10-02T00:04:16.646569+00:00",
+  "transport": "installed official paper mcp over stdio",
+  "tools": [
+    {
+      "name": "open_file",
+      "description": "Opens a Paper file by its ID or URL. Optional pageId is applied only on the initial open; if the file is already open the page will not switch. Returns a get_basic_info response.",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "fileId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The Paper file ID to open. Accepts a bare ID, a /file/<id> route path, or the files URL."
+          },
+          "pageId": {
+            "description": "Optional page ID to open. Only applied when the file is not already open \u2014 if the file is already open the current page is left unchanged so the user is not pulled away from what they are looking at. A page ID in a /file/<id>/<pageId> URL passed as fileId is also accepted.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "fileId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "list_files",
+      "description": "Lists Paper files that the user has open, then files that have been recently accessed in their active team. Timestamps will be missing for files that are outside the users active team.",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "limit": {
+            "description": "Maximum number of files to return. Defaults to 50. Files are sorted by updatedAt, most recent first.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_basic_info",
+      "description": "Get essential context about the current design: file name, page name, node count, artboards with their dimensions, font families used, a compact list of design tokens.\nCall get_basic_info first to understand the canvas situation.\n- When no fileId is provided the file the user is viewing is used.\n- Pass pageId to inspect a specific page; omit to use the page the user is viewing.\n- worldX/worldY properties are the world position of the node\n- worldX/worldY/width/height are null when the size or position depends on layout (e.g. fit-content, flex children) and the node was not measured (i.e. the page is inactive)\n- pages lists every page in the file; the one with isActive is what the user sees and controls, and it can change while you work if the user switches pages\n- you can work on other pages without disrupting the user by passing their pageId to page-scoped tools (create_artboard, export, get_basic_info); tools that take a nodeId act on whichever page the node lives on",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "pageId": {
+            "description": "The page ID that the tool should operate on. When omitted the active page will be used. The active page can change between tool calls, prefer passing explicit page IDs.",
+            "type": "string"
+          },
+          "fileId": {
+            "description": "The file ID that the tool should operate on. When omitted the file the user is viewing is used.",
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_selection",
+      "description": "Get detailed information about the currently selected nodes, including IDs, names, component types, size, and which artboard they belong to. When no fileId is provided the file the user is viewing is used.",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "fileId": {
+            "description": "The file ID that the tool should operate on. When omitted the file the user is viewing is used.",
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_node_info",
+      "description": "Get detailed information about a specific node by ID, including its size, visibility, lock state, parent, children IDs, text content (for text nodes), and the node's worldX/worldY (world position) and x/y (relative to parent).\n- When the node has a generated image, also returns imageGeneration.status (processing / ready / error) and imageGeneration.output (raster / svg) \u2014 poll this to know when generation completes.\n- Raster fills are read with get_fill_image; SVG output is read with get_jsx.\n- x/y/worldX/worldY/width/height are null when the size or position depends on layout (e.g. fit-content, flex children) and the node was not measured (i.e. the page is inactive)\n- Returns an error if the node does not exist.",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "nodeId": {
+            "type": "string",
+            "description": "The ID of the node to inspect"
+          },
+          "fileId": {
+            "type": "string",
+            "description": "The file ID that the tool should operate on."
+          }
+        },
+        "required": [
+          "nodeId",
+          "fileId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_children",
+      "description": "Get the direct children of a node.\n- Returns a list of child nodes with their IDs, names, component types, how many children each has, and each child's worldX/worldY (world position) and x/y (relative to parent)\n- x/y/worldX/worldY are null when the size or position depends on layout (e.g. fit-content, flex children) and the node was not measured (i.e. the page is inactive)\n- Returns an error if the node does not exist.",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "nodeId": {
+            "type": "string",
+            "description": "The ID of the parent node to get children from"
+          },
+          "fileId": {
+            "type": "string",
+            "description": "The file ID that the tool should operate on."
+          }
+        },
+        "required": [
+          "nodeId",
+          "fileId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "export",
+      "description": "Export nodes as image or video files. Unless the user specifies, do not override the default export settings.",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "pageId": {
+            "description": "The page ID that the tool should operate on. When omitted the active page will be used. The active page can change between tool calls, prefer passing explicit page IDs.",
+            "type": "string"
+          },
+          "type": {
+            "description": "Export type, defaults to \"image\".",
+            "type": "string",
+            "enum": [
+              "image",
+              "video"
+            ]
+          },
+          "nodes": {
+            "anyOf": [
+              {
+                "type": "string",
+                "const": "nodes-with-exports-only",
+                "description": "Exports all nodes on the target page that already have export settings. Uses pageId when provided, otherwise the page the user is viewing. Ignored when exporting explicit node IDs."
+              },
+              {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "format": {
+                        "type": "string",
+                        "enum": [
+                          "avif",
+                          "jpg",
+                          "mp4",
+                          "pdf",
+                          "png",
+                          "svg",
+                          "webm",
+                          "webp"
+                        ],
+                        "description": "Format to export the node as. SVG exports are only supported for SVG nodes. For video, use \"mp4\" (opaque, page background) or \"webm\" (transparent)."
+                      },
+                      "scale": {
+                        "type": "string",
+                        "pattern": "^\\d+(\\.\\d+)?(x|w|h|p)$",
+                        "description": "Export scale. A number followed by a unit: \"x\" (multiplier, e.g. \"0.5x\", \"1x\", \"2x\"), \"p\" (pixels on shortest side, e.g. \"720p\", \"1440p\"), \"w\" (target width, e.g. \"512w\"), or \"h\" (target height, e.g. \"512h\")"
+                      },
+                      "durationSeconds": {
+                        "description": "Video duration in seconds. Only applicable when type is \"video\".",
+                        "default": 10,
+                        "type": "number",
+                        "minimum": 1,
+                        "maximum": 300
+                      },
+                      "pdfQuality": {
+                        "description": "PDF image quality for images. Only applicable when format is \"pdf\".",
+                        "default": "high",
+                        "type": "string",
+                        "enum": [
+                          "low",
+                          "medium",
+                          "high"
+                        ]
+                      },
+                      "pdfResampling": {
+                        "description": "PDF image resizing resampling strategy. \"detailed\" preserves fine detail with the Lanczos algorithm, \"basic\" produces smaller files and uses the Hamming algorithm. Only applicable when format is \"pdf\".",
+                        "default": "detailed",
+                        "type": "string",
+                        "enum": [
+                          "detailed",
+                          "basic"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "format",
+                      "scale"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "description": "Used to override the default export settings for the node. Set to an empty array `[]` to export with default settings."
+                },
+                "description": "Record of nodes to export, keyed by nodeId."
+              }
+            ]
+          },
+          "fileId": {
+            "type": "string",
+            "description": "The file ID that the tool should operate on."
+          }
+        },
+        "required": [
+          "nodes",
+          "fileId"
+        ],
+        "additionalProperties": false
+      }
+    }
+  ],
+  "allToolNames": [
+    "open_file",
+    "list_files",
+    "create_file",
+    "create_page",
+    "rename_pages",
+    "get_basic_info",
+    "get_selection",
+    "get_node_info",
+    "get_children",
+    "get_screenshot",
+    "get_jsx",
+    "get_tree_summary",
+    "get_computed_styles",
+    "get_fill_image",
+    "find_nodes",
+    "list_comment_threads",
+    "get_comment_thread",
+    "list_comment_thread_authors",
+    "set_comment_thread_status",
+    "get_font_family_info",
+    "get_guide",
+    "export",
+    "export_combined_pdf",
+    "write_html",
+    "create_artboard",
+    "delete_nodes",
+    "set_text_content",
+    "rename_nodes",
+    "update_styles",
+    "duplicate_nodes",
+    "move_nodes",
+    "finish_working_on_nodes",
+    "get_tokens",
+    "create_tokens",
+    "set_tokens"
+  ]
+}

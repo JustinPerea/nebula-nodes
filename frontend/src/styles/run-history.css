@@ -83,6 +83,8 @@
 }
 .run-history__item-actions {
   display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
   margin-top: 4px;
 }
 .run-history__replay {
@@ -112,6 +114,20 @@
   text-align: center;
   font-size: 12px;
 }
+
+.run-history__paper-stale { display: grid; gap: 3px; margin-top: 4px; font-size: 10px; line-height: 1.4; }
+.run-history__paper-details { margin-top: 5px; font-size: 10px; }
+.run-history__paper-details summary { cursor: pointer; line-height: 1.4; }
+.run-history__paper-recipe { display: block; margin-top: 5px; overflow-wrap: anywhere; }
+.run-history__paper-snapshot { display: grid; gap: 5px; margin-top: 10px; }
+.run-history__paper-snapshot img,
+.run-history__paper-snapshot video { width: 100%; max-height: 140px; object-fit: contain; }
+.run-history__paper-snapshot audio { width: 100%; }
+.run-history__paper-snapshot code { font-size: 9px; overflow-wrap: anywhere; user-select: text; }
+body.app-slava-restraint .run-history__paper-stale { color: var(--sr-ink, #1a1a1a); }
+body.app-slava-restraint .run-history__paper-snapshot a { color: var(--sr-accent, #5d70cc); }
+body:not(.app-slava-restraint) .run-history__paper-stale { color: #e8c99e; }
+body:not(.app-slava-restraint) .run-history__paper-snapshot a { color: #a5b4fc; }
 
 .run-history__safeguards {
   margin: 2px 0 12px;
@@ -216,12 +232,12 @@ body.app-slava-restraint .run-history__safeguards button {
   color: inherit;
 }
 body.app-slava-restraint .run-history__replay {
-  border: 1px solid var(--sr-edge, rgba(0, 0, 0, 0.14));
-  color: var(--sr-ink, #1a1a1a);
-  background: var(--sr-paper, rgba(255, 255, 255, 0.62));
+  border: 1px solid var(--sr-edge-strong, rgba(255, 255, 255, 0.12));
+  color: var(--sr-ink, rgba(255, 255, 255, 0.92));
+  background: var(--sr-glass-raised, rgba(28, 28, 31, 0.78));
 }
 body.app-slava-restraint .run-history__replay:not(:disabled):hover {
-  background: var(--sr-glass-raised, rgba(255, 255, 255, 0.9));
+  background: var(--sr-glass-strong, rgba(36, 36, 40, 0.86));
 }
 body.app-slava-restraint .run-history__action:disabled {
   opacity: 0.35;

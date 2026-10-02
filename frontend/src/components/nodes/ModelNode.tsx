@@ -2,6 +2,7 @@ import { memo, useCallback, useMemo, useState } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { Download, Repeat2, Sparkles } from 'lucide-react';
 import type { NodeData } from '../../types';
+import type { PaperSourceRecord } from '../../lib/paperSource';
 import { NODE_DEFINITIONS } from '../../constants/nodeDefinitions';
 import { PORT_COLORS } from '../../lib/portCompatibility';
 import { findStructuredRepresentation } from '../../lib/representationViewerRegistry';
@@ -51,6 +52,7 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
   const setInspectorVisible = useUIStore((s) => s.setInspectorVisible);
   const isSlavaSkin = useUIStore((s) => s.skin === 'slava-restraint');
   const updateNodeData = useGraphStore((s) => s.updateNodeData);
+  const isExecuting = useGraphStore((s) => s.isExecuting);
   const entranceClass = useSlavaNodeEntranceClass();
   const [videoLoop, setVideoLoop] = useState<boolean>(true);
   const isTextInput = nodeData.definitionId === 'text-input';
@@ -247,6 +249,10 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
   const inlineTextValue = inlineTextParamKey ? String(nodeData.params[inlineTextParamKey] ?? '') : '';
   const inlineTextPlaceholder = inlineTextParam?.placeholder ?? 'Enter text...';
   const isNodeSelected = selected || selectedNodeId === id;
+  const latestPaperSourceReady = nodeData.outputFreshness?.paperInputs.every((input) => {
+    const source = nodes.find((node) => node.id === input.nodeId)?.data.params._paperSource as PaperSourceRecord | undefined;
+    return source?.state === 'current' && Boolean(source.snapshot);
+  });
 
   return (
     <div
@@ -348,6 +354,20 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
           </button>
         )}
       </div>
+
+      {nodeData.outputFreshness && nodeData.outputFreshness.outOfDateReasons.length > 0 && (
+        <div className="model-node__source-stale nodrag nopan" role="status">
+          <strong>Out of date — source updated</strong>
+          {nodeData.outputFreshness.outOfDateReasons.map((reason) => <span key={reason}>{reason}</span>)}
+          {nodeData.outputFreshness.runId && <button type="button" disabled={isExecuting || !latestPaperSourceReady}
+            title={latestPaperSourceReady ? 'Reuse the saved recipe with the latest exported artwork' : 'Refresh or reconnect the Paper source first'}
+            onClick={(event) => {
+            event.stopPropagation();
+            const runId = nodeData.outputFreshness?.runId;
+            if (runId) void useGraphStore.getState().rerunHistoryWithLatestPaperSource(runId);
+          }}>Rerun with latest source</button>}
+        </div>
+      )}
 
       {definition.inputPorts.length > 0 && (
         <div className="model-node__ports model-node__ports--input">

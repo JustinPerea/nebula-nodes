@@ -3,6 +3,7 @@ import type {
   CameraPose, CameraPath, SpatialContext, DepthMap, DepthSequence,
   PointCloud, SensorRig, SensorStream, SpatialSessionMetadata, WorldValueV2,
 } from './spatial';
+import type { PaperSourceSnapshot } from '../lib/paperSource';
 
 export type PortDataType =
   | 'Text'
@@ -348,6 +349,20 @@ export interface PortValue {
     | Record<string, unknown> | ArrayBuffer | null;
 }
 
+export interface PaperRunInput {
+  nodeId: string;
+  sourceId: string;
+  snapshot: PaperSourceSnapshot;
+}
+
+/** Attribution of the visible output, independent of mutable source previews. */
+export interface PaperOutputFreshness {
+  runId?: string;
+  recipeRevision?: string;
+  paperInputs: PaperRunInput[];
+  outOfDateReasons: string[];
+}
+
 export interface NodeData {
   [key: string]: unknown;
   label: string;
@@ -356,6 +371,7 @@ export interface NodeData {
   state: NodeState;
   progress?: number;
   outputs: Record<string, PortValue>;
+  outputFreshness?: PaperOutputFreshness;
   error?: string;
   /** Friendly classification of `error` (see backend error_classifier). `error`
    *  still holds the raw provider string for the expandable debug details. */

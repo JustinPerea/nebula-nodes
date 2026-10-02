@@ -22,6 +22,7 @@ from handlers.krea import (
     handle_krea_style_search,
 )
 from handlers.moodboard import handle_moodboard_node
+from handlers.paper_source import handle_paper_source
 
 
 SYNC_HANDLERS: dict[
@@ -31,6 +32,7 @@ SYNC_HANDLERS: dict[
         Awaitable[dict[str, Any]],
     ],
 ] = {
+    "paper-source": handle_paper_source,
     "gpt-image-1-generate": handle_openai_image_generate,
     "gpt-image-1-edit": handle_openai_image_edit,
     "imagen-4-generate": handle_imagen4,

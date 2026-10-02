@@ -1,0 +1,36 @@
+{
+  "sourceId": "38d611548548491392a191ffdf120281",
+  "liveHash": "4b4596dc5351513271122f70339af7a384578faaf9ee0b9c85011f26758851e3",
+  "liveSnapshots": 3,
+  "executionStatuses": [
+    {
+      "runId": "d453484c-584b-43d0-b131-e02a68412419",
+      "status": "completed"
+    },
+    {
+      "runId": "37f6ec1c-e5ee-4105-836a-a92f06834655",
+      "status": "completed"
+    }
+  ],
+  "receipts": [
+    {
+      "path": "/Users/justinperea/.codex/worktrees/paper-linked-source/nebula_nodes/output/paper-acceptance/2026-10-01_23-49-19_223635-0737f75b-4fce-485f-b4c0-270ca436-0b14b9d2/paper-inputs.json",
+      "runId": "0737f75b-4fce-485f-b4c0-270ca436bb01",
+      "hash": "927448a6d1e53c7747e5d1991c2a43fbba762c3797f728fd44e2d7335958afad",
+      "recipeRevision": "ad225603d65f15d3a30dda10254a67e5c9cf9e8347fc59ede93611388753caa0"
+    },
+    {
+      "path": "/Users/justinperea/.codex/worktrees/paper-linked-source/nebula_nodes/output/paper-acceptance/2026-10-01_23-54-15_164308-d453484c-584b-43d0-b131-e02a6841-e5df6fc8/paper-inputs.json",
+      "runId": "d453484c-584b-43d0-b131-e02a68412419",
+      "hash": "927448a6d1e53c7747e5d1991c2a43fbba762c3797f728fd44e2d7335958afad",
+      "recipeRevision": "10052868c02db8353942bf5ca6891a0cea285211f2e778b515f3f508e862c71e"
+    },
+    {
+      "path": "/Users/justinperea/.codex/worktrees/paper-linked-source/nebula_nodes/output/paper-acceptance/2026-10-01_23-58-23_688518-37f6ec1c-e5ee-4105-836a-a92f0683-3e813956/paper-inputs.json",
+      "runId": "37f6ec1c-e5ee-4105-836a-a92f06834655",
+      "hash": "927448a6d1e53c7747e5d1991c2a43fbba762c3797f728fd44e2d7335958afad",
+      "recipeRevision": "a6b64127f968b4f98456d852ec35774793349d00da9a15ae440d02632c9779ec"
+    }
+  ],
+  "check": "Refresh C while delayed B run37f6ec1c executing; completion leaves C current and B result stale."
+}

@@ -465,6 +465,7 @@ LOCAL_EXECUTION_NODE_IDS = frozenset(
     {
         "text-input",
         "image-input",
+        "paper-source",
         "document-input",
         "video-input",
         "audio-input",
@@ -779,6 +780,8 @@ async def _execute_graph(
     bound_run_dir = run_dir
     start_time = time.monotonic()
     started_at = datetime.now(timezone.utc)  # wall clock, for the run manifest
+    from services.paper_run import write_paper_receipt
+    write_paper_receipt(nodes, edges, bound_run_dir, run_id)
     nodes_executed = 0
     node_map: dict[str, GraphNode] = {n.id: n for n in nodes}
     outputs_cache: dict[str, dict[str, PortValueDict]] = {}
@@ -858,6 +861,7 @@ async def _execute_graph(
             cache_key: str | None = None
             cache_enabled = (
                 cache is not None
+                and node.definition_id != "paper-source"
                 and not bypasses_output_cache(node.definition_id)
             )
             if cache_enabled:

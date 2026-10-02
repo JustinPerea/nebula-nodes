@@ -33,6 +33,7 @@ class ExecuteRequest(BaseModel):
     nodes: list[GraphNode]
     edges: list[GraphEdge]
     run_id: str | None = Field(None, alias="runId")
+    preserve_graph_params: bool = Field(False, alias="preserveGraphParams")
 
     model_config = {"populate_by_name": True}
 
@@ -42,6 +43,7 @@ class ExecuteNodeRequest(BaseModel):
     edges: list[GraphEdge]
     target_node_id: str = Field(alias="targetNodeId")
     run_id: str | None = Field(None, alias="runId")
+    preserve_graph_params: bool = Field(False, alias="preserveGraphParams")
 
     model_config = {"populate_by_name": True}
 

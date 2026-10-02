@@ -1,0 +1,61 @@
+{
+  "state": "missing",
+  "identity": {
+    "fileId": "01M3WWYCQ4Q8BQQVPE963SJXET",
+    "pageId": "p-1-0",
+    "objectId": "A-0",
+    "fileName": "Nebula Paper source acceptance \u2014 disposable",
+    "pageName": "Page 1",
+    "objectName": "Renamed editable logo",
+    "openUrl": "https://app.paper.design/file/01M3WWYCQ4Q8BQQVPE963SJXET/p-1-0",
+    "navigation": "file"
+  },
+  "lastError": "Linked Paper object is missing or detached from its page",
+  "retainedSnapshot": {
+    "id": "35aa72d77afee59db9cd5b911f02d08835e947d3042352e63a5614f3b151df61",
+    "hash": "4b4596dc5351513271122f70339af7a384578faaf9ee0b9c85011f26758851e3",
+    "capturedAt": "2026-10-02T00:07:17.749664+00:00",
+    "width": 240,
+    "height": 180,
+    "hasAlpha": true,
+    "hasTransparency": true,
+    "bounds": {
+      "width": 240,
+      "height": 180
+    },
+    "filePath": "/Users/justinperea/.codex/worktrees/paper-linked-source/nebula_nodes/output/paper-acceptance/paper-sources/35aa72d77afee59db9cd5b911f02d08835e947d3042352e63a5614f3b151df61.png",
+    "previewUrl": "/api/paper/snapshots/35aa72d77afee59db9cd5b911f02d08835e947d3042352e63a5614f3b151df61",
+    "identity": {
+      "fileId": "01M3WWYCQ4Q8BQQVPE963SJXET",
+      "pageId": "p-1-0",
+      "objectId": "A-0",
+      "fileName": "Nebula Paper source acceptance \u2014 disposable",
+      "pageName": "Page 1",
+      "objectName": "Renamed editable logo",
+      "openUrl": "https://app.paper.design/file/01M3WWYCQ4Q8BQQVPE963SJXET/p-1-0",
+      "navigation": "file"
+    },
+    "exportSettings": {
+      "format": "png",
+      "scale": "1x",
+      "bounds": "object",
+      "background": "artwork"
+    }
+  },
+  "snapshots": 6,
+  "lastSuccessfulRefresh": "2026-10-02T00:07:17.749664+00:00",
+  "edges": [
+    {
+      "id": "e1",
+      "source": "n1",
+      "sourceHandle": "image",
+      "target": "n2",
+      "targetHandle": "image",
+      "type": "typed-edge",
+      "data": {
+        "dataType": "Image"
+      }
+    }
+  ],
+  "executionStatuses": []
+}

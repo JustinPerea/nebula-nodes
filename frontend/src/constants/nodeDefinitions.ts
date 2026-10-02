@@ -1,6 +1,18 @@
 import type { ModelNodeDefinition } from '../types';
 
 export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
+  'paper-source': {
+    id: 'paper-source',
+    displayName: 'Paper Source',
+    category: 'utility',
+    apiProvider: 'utility',
+    apiEndpoint: '',
+    envKeyName: [],
+    executionPattern: 'sync',
+    inputPorts: [],
+    outputPorts: [{ id: 'image', label: 'Image', dataType: 'Image', required: false }],
+    params: [],
+  },
   'gpt-image-1-generate': {
     id: 'gpt-image-1-generate',
     displayName: 'GPT Image 1',

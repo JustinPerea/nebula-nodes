@@ -278,7 +278,7 @@ export async function backendWebSocketUrl(
 // discovered backend origin (the frontend may be on a different origin/port,
 // e.g. the Vite dev server or a packaged shell). Generated media live under
 // /api/outputs/; shipped preset thumbnails under /api/presets/thumbnails/.
-const BACKEND_ASSET_PREFIXES = ['/api/outputs/', '/api/presets/thumbnails/'];
+const BACKEND_ASSET_PREFIXES = ['/api/outputs/', '/api/presets/thumbnails/', '/api/paper/snapshots/'];
 
 function hasBackendAssetPrefix(pathname: string): boolean {
   return BACKEND_ASSET_PREFIXES.some((prefix) => pathname.startsWith(prefix));

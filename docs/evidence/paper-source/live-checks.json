@@ -1,0 +1,100 @@
+{
+  "fileUrl": "https://app.paper.design/file/01M3WWYCQ4Q8BQQVPE963SJXET/p-1-0",
+  "sourceId": "38d611548548491392a191ffdf120281",
+  "identity": {
+    "fileId": "01M3WWYCQ4Q8BQQVPE963SJXET",
+    "pageId": "p-1-0",
+    "objectId": "6-0",
+    "fileName": "Nebula Paper source acceptance \u2014 disposable",
+    "pageName": "Page 1",
+    "objectName": "Linked logo object",
+    "openUrl": "https://app.paper.design/file/01M3WWYCQ4Q8BQQVPE963SJXET/p-1-0",
+    "navigation": "file"
+  },
+  "snapshots": [
+    {
+      "id": "17cef1e1af086a9629709f9a77d9ac36dc0a1fbdfa746e7fa609809b0d156022",
+      "hash": "f2333d386bcaafdf7e96dfe90f0dde70112bb8c47cb96636629425c812669c64",
+      "capturedAt": "2026-10-01T23:38:26.458222+00:00",
+      "width": 240,
+      "height": 180,
+      "hasAlpha": true,
+      "hasTransparency": true,
+      "bounds": {
+        "width": 240,
+        "height": 180
+      },
+      "filePath": "/Users/justinperea/.codex/worktrees/paper-linked-source/nebula_nodes/output/paper-acceptance/paper-sources/17cef1e1af086a9629709f9a77d9ac36dc0a1fbdfa746e7fa609809b0d156022.png",
+      "previewUrl": "http://127.0.0.1:8019/api/paper/snapshots/17cef1e1af086a9629709f9a77d9ac36dc0a1fbdfa746e7fa609809b0d156022",
+      "identity": {
+        "fileId": "01M3WWYCQ4Q8BQQVPE963SJXET",
+        "pageId": "p-1-0",
+        "objectId": "6-0",
+        "fileName": "Nebula Paper source acceptance \u2014 disposable",
+        "pageName": "Page 1",
+        "objectName": "Linked logo object",
+        "openUrl": "https://app.paper.design/file/01M3WWYCQ4Q8BQQVPE963SJXET/p-1-0",
+        "navigation": "file"
+      },
+      "exportSettings": {
+        "format": "png",
+        "scale": "1x",
+        "bounds": "object",
+        "transparent": true
+      }
+    },
+    {
+      "id": "2ac4a9b15a90036d08da9029f3783c574fd9cebcea7ee35c00493a3958d23f2e",
+      "hash": "927448a6d1e53c7747e5d1991c2a43fbba762c3797f728fd44e2d7335958afad",
+      "capturedAt": "2026-10-01T23:47:44.596164+00:00",
+      "width": 240,
+      "height": 180,
+      "hasAlpha": true,
+      "hasTransparency": true,
+      "bounds": {
+        "width": 240,
+        "height": 180
+      },
+      "filePath": "/Users/justinperea/.codex/worktrees/paper-linked-source/nebula_nodes/output/paper-acceptance/paper-sources/2ac4a9b15a90036d08da9029f3783c574fd9cebcea7ee35c00493a3958d23f2e.png",
+      "previewUrl": "http://127.0.0.1:8019/api/paper/snapshots/2ac4a9b15a90036d08da9029f3783c574fd9cebcea7ee35c00493a3958d23f2e",
+      "identity": {
+        "fileId": "01M3WWYCQ4Q8BQQVPE963SJXET",
+        "pageId": "p-1-0",
+        "objectId": "6-0",
+        "fileName": "Nebula Paper source acceptance \u2014 disposable",
+        "pageName": "Page 1",
+        "objectName": "Linked logo object",
+        "openUrl": "https://app.paper.design/file/01M3WWYCQ4Q8BQQVPE963SJXET/p-1-0",
+        "navigation": "file"
+      },
+      "exportSettings": {
+        "format": "png",
+        "scale": "1x",
+        "bounds": "object",
+        "transparent": true
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source": "n1",
+      "sourceHandle": "image",
+      "target": "n2",
+      "targetHandle": "image",
+      "type": "typed-edge",
+      "data": {
+        "dataType": "Image"
+      }
+    }
+  ],
+  "checks": {
+    "initialRealExport": true,
+    "transparentPng": true,
+    "unchangedRefreshKeptOneSnapshot": true,
+    "paperEditThenRefreshToB": true,
+    "refreshKeptOldVideo": true,
+    "refreshDidNotExecute": true,
+    "fileOnlyOpen": true
+  }
+}

@@ -2,6 +2,11 @@
   "category": "utility",
   "nodes": [
     {
+      "id": "paper-source",
+      "backend": "pinned-snapshot-handler",
+      "browser": "real-paper-export-and-deterministic-fixture-rerun"
+    },
+    {
       "id": "text-input",
       "backend": "native",
       "browser": "execute"

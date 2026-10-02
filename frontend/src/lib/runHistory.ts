@@ -1,3 +1,6 @@
+import type { PaperRunInput, PortValue } from '../types';
+import type { PaperSourceRecord } from './paperSource';
+
 /** Persistent run-history records for the Run History panel. Records contain the
  * exact JSON graph sent to the backend so a later replay never reads mutable
  * canvas state. Storage helpers are exception-safe because history must never
@@ -5,7 +8,7 @@
 
 export type RunStatus = 'running' | 'complete' | 'failed' | 'cancelled';
 export type RunTrigger = 'graph' | 'node' | 'cluster';
-export type RunReplayAction = 'rerun' | 'retry-failed';
+export type RunReplayAction = 'rerun' | 'retry-failed' | 'latest-paper-source';
 
 export interface RunSnapshotNode {
   id: string;
@@ -39,6 +42,10 @@ export interface RunRecord {
   durationSec?: number;
   nodesExecuted?: number;
   statusNote?: string;
+  paperInputs?: PaperRunInput[];
+  recipeRevision?: string;
+  resultOutputs?: Record<string, Record<string, PortValue>>;
+  outOfDateReasons?: string[];
   /** Immutable admission fact. Unlike snapshot params, this stays true after
    * a recovery event patches the accepted operation ID into the snapshot. */
   startedFreshPaidWorldLabs?: boolean;
@@ -114,6 +121,137 @@ function nodesInRunScope(
     snapshot.nodes.forEach((node) => scopeIds.add(node.id));
   }
   return snapshot.nodes.filter((node) => scopeIds.has(node.id));
+}
+
+/** Paper snapshot metadata is exported bytes attribution, not a mutable link. */
+export function paperInputsForSnapshot(
+  snapshot: RunGraphSnapshot,
+  targetNodeId?: string,
+): PaperRunInput[] {
+  return nodesInRunScope(snapshot, targetNodeId).flatMap((node) => {
+    if (node.definitionId !== 'paper-source') return [];
+    const source = node.params._paperSource as PaperSourceRecord | undefined;
+    if (!source?.snapshot?.id || !source.snapshot.hash || !source.snapshot.identity || !source.id) return [];
+    return [{ nodeId: node.id, sourceId: source.id, snapshot: source.snapshot }];
+  });
+}
+
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+  if (value && typeof value === 'object') {
+    return `{${Object.entries(value as Record<string, unknown>)
+      .filter(([, child]) => child !== undefined)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, child]) => `${JSON.stringify(key)}:${canonicalJson(child)}`).join(',')}}`;
+  }
+  return JSON.stringify(value) ?? 'null';
+}
+
+/** Canonical saved graph/settings; runtime source metadata is input, not recipe. */
+export function paperRecipeContent(snapshot: RunGraphSnapshot, targetNodeId?: string): string {
+  // engine._maybe_probe_video_output adds these observed output facts after
+  // admission. They configure downstream editing UI, never the saved model run.
+  const outputMetadataKeys = new Set(['_sourceDuration', '_sourceFps', '_sourceIsVfr']);
+  const nodes = nodesInRunScope(snapshot, targetNodeId);
+  const ids = new Set(nodes.map((node) => node.id));
+  return canonicalJson({
+    nodes: nodes.map((node) => ({
+      id: node.id,
+      definitionId: node.definitionId,
+      params: Object.fromEntries(Object.entries(node.params)
+        .filter(([key]) => !outputMetadataKeys.has(key)
+          && (node.definitionId !== 'paper-source' || key !== '_paperSource'))),
+    })).sort((left, right) => left.id.localeCompare(right.id)),
+    edges: snapshot.edges.filter((edge) => ids.has(edge.source) && ids.has(edge.target))
+      .map(({ source, sourceHandle, target, targetHandle }) => ({ source, sourceHandle, target, targetHandle }))
+      .sort((left, right) => canonicalJson(left).localeCompare(canonicalJson(right))),
+  });
+}
+
+/** Readable local revision identifier. Full canonical equality decides freshness;
+ * this fingerprint is never treated as a cryptographic or Paper revision. */
+export function paperRecipeRevision(snapshot: RunGraphSnapshot, targetNodeId?: string): string {
+  const content = paperRecipeContent(snapshot, targetNodeId);
+  let hash = 0xcbf29ce484222325n;
+  for (let index = 0; index < content.length; index += 1) {
+    hash ^= BigInt(content.charCodeAt(index));
+    hash = BigInt.asUintN(64, hash * 0x100000001b3n);
+  }
+  return `recipe-v1-${hash.toString(16).padStart(16, '0')}`;
+}
+
+export function paperInputOutOfDateReasons(
+  inputs: PaperRunInput[],
+  current: RunGraphSnapshot,
+): string[] {
+  return inputs.flatMap((input) => {
+    const node = current.nodes.find((candidate) => candidate.id === input.nodeId);
+    const source = node?.definitionId === 'paper-source'
+      ? node.params._paperSource as PaperSourceRecord | undefined
+      : undefined;
+    if (!source?.snapshot?.identity) return [`Paper source ${input.nodeId} is no longer linked.`];
+    const before = input.snapshot.identity;
+    const after = source.snapshot.identity;
+    if (source.id !== input.sourceId || before.fileId !== after.fileId
+      || before.pageId !== after.pageId || before.objectId !== after.objectId) {
+      return [`Paper source ${input.nodeId} was reconnected to another object.`];
+    }
+    return source.snapshot.hash !== input.snapshot.hash
+      ? [`Paper source ${input.nodeId} updated after this input was captured.`]
+      : [];
+  });
+}
+
+export function paperRunOutOfDateReasons(
+  record: RunRecord,
+  current: RunGraphSnapshot,
+  targetNodeId = record.targetNodeId,
+): string[] {
+  const inputs = paperInputsForSnapshot(record.snapshot, targetNodeId);
+  if (!inputs.length) return [];
+  const reasons = paperInputOutOfDateReasons(inputs, current);
+  // Cluster replays retain only their saved nodes. Other canvas work is irrelevant.
+  const relevantCurrent = record.trigger === 'cluster'
+    ? { ...current, nodes: current.nodes.filter((node) => record.snapshot.nodes.some((saved) => saved.id === node.id)) }
+    : current;
+  if (paperRecipeContent(record.snapshot, targetNodeId) !== paperRecipeContent(relevantCurrent, targetNodeId)) {
+    reasons.push('Recipe settings or connections changed after this run was saved.');
+  }
+  return reasons;
+}
+
+/** Retain an immutable result reference alongside the exact accepted input. */
+export function recordPaperRunOutput(
+  history: RunRecord[], runId: string, nodeId: string, outputs: Record<string, PortValue>,
+): RunRecord[] {
+  return history.map((record) => record.id === runId && record.paperInputs?.length
+    ? { ...record, resultOutputs: deepFreeze(JSON.parse(JSON.stringify({
+        ...record.resultOutputs, [nodeId]: outputs,
+      })) as Record<string, Record<string, PortValue>>) }
+    : record);
+}
+
+/** Replace only pinned Paper inputs. Recipe params and topology remain saved. */
+export function snapshotWithLatestPaperSources(
+  record: RunRecord,
+  current: RunGraphSnapshot,
+): RunGraphSnapshot | null {
+  const inputs = paperInputsForSnapshot(record.snapshot, record.targetNodeId);
+  if (!inputs.length) return null;
+  const inputIds = new Set(inputs.map((input) => input.nodeId));
+  const replacements = new Map<string, PaperSourceRecord>();
+  for (const input of inputs) {
+    const node = current.nodes.find((candidate) => candidate.id === input.nodeId && candidate.definitionId === 'paper-source');
+    const source = node?.params._paperSource as PaperSourceRecord | undefined;
+    if (!source?.snapshot?.identity || source.state !== 'current') return null;
+    replacements.set(input.nodeId, { ...source, snapshots: [source.snapshot] });
+  }
+  return freezeRunSnapshot({
+    ...record.snapshot,
+    nodes: record.snapshot.nodes.map((node) => inputIds.has(node.id)
+      ? { ...node, params: { ...node.params, _paperSource: replacements.get(node.id) }, outputs: {} }
+      : node),
+  });
 }
 
 function scopedWorldLabsNodes(
@@ -334,7 +472,15 @@ export function freezeRunSnapshot(snapshot: RunGraphSnapshot): RunGraphSnapshot 
 /** Prepend a new running record, capping the list. Pure with respect to history;
  * the incoming snapshot is cloned so later canvas mutations cannot alter it. */
 export function openRunRecord(history: RunRecord[], rec: OpenRunRecord): RunRecord[] {
-  return [{ ...rec, snapshot: freezeRunSnapshot(rec.snapshot), status: 'running' as const }, ...history]
+  const snapshot = freezeRunSnapshot(rec.snapshot);
+  const paperInputs = paperInputsForSnapshot(snapshot, rec.targetNodeId);
+  const contract = paperInputs.length ? {
+    paperInputs: deepFreeze(JSON.parse(JSON.stringify(paperInputs)) as PaperRunInput[]),
+    recipeRevision: paperRecipeRevision(snapshot, rec.targetNodeId),
+    resultOutputs: {},
+    outOfDateReasons: [],
+  } : {};
+  return [{ ...rec, ...contract, snapshot, status: 'running' as const }, ...history]
     .slice(0, MAX_RUN_HISTORY);
 }
 
@@ -450,7 +596,7 @@ function isRunSnapshot(value: unknown): value is RunGraphSnapshot {
 
 const RUN_STATUSES: RunStatus[] = ['running', 'complete', 'failed', 'cancelled'];
 const RUN_TRIGGERS: RunTrigger[] = ['graph', 'node', 'cluster'];
-const REPLAY_ACTIONS: RunReplayAction[] = ['rerun', 'retry-failed'];
+const REPLAY_ACTIONS: RunReplayAction[] = ['rerun', 'retry-failed', 'latest-paper-source'];
 
 function isRunRecord(value: unknown): value is RunRecord {
   if (!isObject(value)) return false;
@@ -469,7 +615,19 @@ function isRunRecord(value: unknown): value is RunRecord {
     && (value.startedFreshPaidWorldLabs === undefined
       || typeof value.startedFreshPaidWorldLabs === 'boolean')
     && (value.statusNote === undefined
-      || (typeof value.statusNote === 'string' && value.statusNote.length <= 1_000));
+      || (typeof value.statusNote === 'string' && value.statusNote.length <= 1_000))
+    && (value.recipeRevision === undefined || typeof value.recipeRevision === 'string')
+    && (value.paperInputs === undefined || (Array.isArray(value.paperInputs)
+      && value.paperInputs.every((input) => isObject(input)
+        && typeof input.nodeId === 'string' && typeof input.sourceId === 'string'
+        && isObject(input.snapshot) && typeof input.snapshot.hash === 'string'
+        && typeof input.snapshot.id === 'string' && isObject(input.snapshot.identity))))
+    && (value.resultOutputs === undefined || (isObject(value.resultOutputs)
+      && Object.values(value.resultOutputs).every((outputs) => isObject(outputs)
+        && Object.values(outputs).every((output) => isObject(output)
+          && typeof output.type === 'string' && 'value' in output))))
+    && (value.outOfDateReasons === undefined || (Array.isArray(value.outOfDateReasons)
+      && value.outOfDateReasons.every((reason) => typeof reason === 'string')));
 }
 
 /** Persist a capped history list. Quota, privacy-mode, and unavailable-storage
@@ -528,6 +686,8 @@ export function loadRunHistory(
       return {
         ...record,
         snapshot: freezeRunSnapshot(record.snapshot),
+        ...(record.paperInputs ? { paperInputs: deepFreeze(record.paperInputs) } : {}),
+        ...(record.resultOutputs ? { resultOutputs: deepFreeze(record.resultOutputs) } : {}),
         status,
         statusNote,
       };

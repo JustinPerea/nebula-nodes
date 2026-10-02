@@ -1,0 +1,74 @@
+.paper-source-node {
+  width: 286px;
+  position: relative;
+  padding: 12px;
+  border-radius: 8px;
+  font-size: 11px;
+  cursor: default;
+}
+.paper-source-node__header,
+.paper-source-node__actions,
+.paper-source-node__actions button {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.paper-source-node__header { font-size: 13px; font-weight: 600; }
+.paper-source-node__status { margin: 5px 0 9px; font-size: 10px; }
+.paper-source-node__preview { margin: 0 0 9px; }
+.paper-source-node__preview img { width: 100%; height: 148px; object-fit: contain; border-radius: 4px; }
+.paper-source-node__preview figcaption { margin-top: 5px; font-size: 10px; }
+.paper-source-node__empty { padding: 22px 10px; line-height: 1.5; text-align: center; }
+.paper-source-node__identity,
+.paper-source-node__link-form,
+.paper-source-node__link-form label { display: grid; gap: 5px; }
+.paper-source-node__identity { margin-bottom: 10px; overflow-wrap: anywhere; }
+.paper-source-node__identity code { font-size: 10px; }
+.paper-source-node__actions { flex-wrap: wrap; }
+.paper-source-node button { padding: 5px 7px; border-radius: 4px; cursor: pointer; font: inherit; }
+.paper-source-node button:disabled { opacity: 0.45; cursor: default; }
+.paper-source-node select,
+.paper-source-node input { width: 100%; padding: 5px; font: inherit; border-radius: 4px; box-sizing: border-box; }
+.paper-source-node__note,
+.paper-source-node__error { font-size: 10px; line-height: 1.5; margin: 7px 0; }
+.paper-source-node__link-form { margin-top: 10px; padding: 8px; border-radius: 4px; }
+.paper-source-node__history { margin-top: 8px; font-size: 10px; }
+.paper-source-node__history summary { cursor: pointer; }
+.paper-source-node__history a { display: block; margin-top: 5px; overflow-wrap: anywhere; }
+.paper-source-node__output { position: relative; margin: 10px -12px -12px; padding: 8px 12px; text-align: right; font-size: 10px; }
+.paper-source-node__handle { width: 8px; height: 8px; }
+body.app-slava-restraint .paper-source-node {
+  color: var(--sr-ink, rgba(255, 255, 255, 0.92));
+  background: var(--sr-glass, rgba(22, 22, 24, 0.66));
+  border: 1px solid var(--sr-edge-strong, rgba(255, 255, 255, 0.12));
+}
+body.app-slava-restraint .paper-source-node--selected { border-color: var(--sr-accent, #ff5a1f); }
+body.app-slava-restraint .paper-source-node__status,
+body.app-slava-restraint .paper-source-node__note,
+body.app-slava-restraint .paper-source-node__preview figcaption { color: var(--sr-ink-meta, rgba(255, 255, 255, 0.4)); }
+body.app-slava-restraint .paper-source-node__error { color: var(--sr-danger, #b42318); }
+body.app-slava-restraint .paper-source-node button,
+body.app-slava-restraint .paper-source-node input,
+body.app-slava-restraint .paper-source-node select {
+  color: var(--sr-ink, rgba(255, 255, 255, 0.92));
+  border: 1px solid var(--sr-edge-strong, rgba(255, 255, 255, 0.12));
+  background: var(--sr-glass-raised, rgba(28, 28, 31, 0.78));
+}
+body.app-slava-restraint .paper-source-node__link-form { background: var(--sr-glass-raised, rgba(28, 28, 31, 0.78)); }
+body.app-slava-restraint .paper-source-node__preview img {
+  background-color: #fff;
+  background-image: conic-gradient(#e9e9e9 25%, transparent 0 50%, #e9e9e9 0 75%, transparent 0);
+  background-size: 16px 16px;
+}
+body.app-slava-restraint .paper-source-node__history a { color: var(--sr-accent, #5d70cc); }
+body.app-slava-restraint .paper-source-node__output { border-top: 1px solid var(--sr-edge, #ddd); }
+body.app-slava-restraint .paper-source-node__handle { background: #66bb6a; }
+body:not(.app-slava-restraint) .paper-source-node { color: #ddd; background: #222; border: 1px solid #444; }
+body:not(.app-slava-restraint) .paper-source-node button,
+body:not(.app-slava-restraint) .paper-source-node input,
+body:not(.app-slava-restraint) .paper-source-node select { color: inherit; border: 1px solid #555; background: #333; }
+body:not(.app-slava-restraint) .paper-source-node__preview img { background: #555; }
+body:not(.app-slava-restraint) .paper-source-node__note { color: #aaa; }
+body:not(.app-slava-restraint) .paper-source-node__error { color: #fca5a5; }
+body:not(.app-slava-restraint) .paper-source-node__history a { color: #a5b4fc; }
+body:not(.app-slava-restraint) .paper-source-node__handle { background: #66bb6a; }

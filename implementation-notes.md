@@ -1573,3 +1573,37 @@ A 16-agent adversarial review (3 dimensions → per-finding verify) surfaced 13 
   readable card and a more-specific zero-overlap rule. A subsequent screenshot
   confirmed title and output no longer overlap. This proves the single local
   node flow; multi-node spatial flows remain to be verified.
+
+## 2026-10-01 — Paper source loop
+
+- Built only in the managed `paper-linked-source` worktree from parent HEAD; parent uncommitted work and brand-lab remain independent.
+- Use the currently installed official Paper CLI (`~/.paper/bin/paper mcp`); no new dependency, copied credential, watcher, or provider run on refresh. Transport and snapshot lifecycle are separate.
+- Paper tools export one explicit file/page/object. Token contentHash is not an artwork revision; snapshots record observed PNG bytes, SHA-256, capture time, bounds, scale, actual alpha and transparency. An artboard export can be opaque even when a nested object is transparent.
+- Keep immutable content-addressed PNGs and metadata in the isolated output root. SQLite request sequences reject late exports/errors and preserve histories across backend restarts. Failed reconnect retains the old binding until a successful export.
+- The source handler resolves only the snapshot pinned into the submitted recipe. Existing handlers read/upload local owned media; no cloud provider is given a localhost preview URL.
+- File/page link is the honest Open in Paper fallback: installed tools expose open_file, but no object-select/navigation tool. No object navigation claimed.
+- Browser downstream proof will use an explicitly labeled deterministic fixture; paid provider execution is a separate unproven limit.
+
+- Added an accepted `paper-inputs.json` receipt inside each Paper-backed backend run directory before dispatch: original snapshot descriptor, stable SHA-256 recipe revision, nodes/settings/edges. Credential field names are excluded; actual API key dictionaries never enter the receipt. Frontend history retains exact submitted snapshots and outputs for replay and inspection.
+- Browser acceptance exposed derived video duration/FPS metadata falsely invalidating a just-finished run; exclude those observed-output fields from recipe revisions, while retaining real prompt/model/settings/connection changes.
+
+- Explicit rerun exposed a source-history regression: trimmed request-only snapshot arrays were being merged back into the live canvas/source. Preserve equal-sequence live source records on graph sync and canonical source histories on backend export; run receipts remain pinned to one input.
+- Added the source to the utility test manifest and advanced the intentional catalog-size assertion to 180 after the full backend suite caught both old catalog baselines.
+
+- Live deletion returned a surviving Paper tombstone (same ID/name/size, null parent, no children) and a blank PNG instead of an error. The adapter must validate reciprocal ancestor membership to the exact page before and after export. The disposable fixture retains that early blank capture in history; repeated acceptance checks use the corrected adapter, without erasing earlier test evidence.
+- Historical replay uses an explicit `preserveGraphParams` request flag: execute saved settings, keep live edited params, and retain output/recovery writes. Ordinary runs still persist handler-derived metadata. The backend guard is required because a frontend-only preservation rule would be undone by graph sync.
+- The deterministic local fixture copies the immutable PNG before its artificial delay. Refresh to C during a B run kept C current and completed against B. This proves input pinning and deterministic compositing, not paid-provider generation or identical generative motion.
+- Unchanged-refresh copy says no new snapshot; it no longer implies an already-stale output became current.
+
+### Paper execution pins: final backend review
+
+- The snapshot store allows an optional expected hash for preview delivery. Execution now requires both snapshot ID and content SHA-256 to be complete lowercase 64-hex strings before lookup; an incomplete saved recipe cannot silently omit its promised hash.
+- Paper sources bypass the ordinary graph output cache so every run verifies the original immutable snapshot bytes. A preseeded unrelated cached success cannot substitute artwork or hide damaged source bytes.
+- The complete backend suite passed 2,482 tests before this final pin-validation adjustment. The affected Paper/cache/utility/Video QC gate passed 108 tests after the adjustment; this distinction keeps the full-suite evidence tied to the code actually tested.
+
+- Installed export schema has no transparent-background override. Export settings record `background: artwork`, and actual PNG alpha/transparency is measured separately. The card makes no promise to strip an opaque artboard background. Earlier disposable captures retain their earlier intent metadata.
+
+### Paper final backend validation
+
+- Final stabilized code, including replay preservation and SDK grouped-error handling, passed the complete backend suite: 2,542 tests, exit 0, 61.54 seconds, 12 inherited FastAPI startup deprecation warnings. This supersedes the earlier pre-tightening full-suite ceiling.
+- Fixture protocol checks now include the exact page-root reciprocal ancestor chain before and after export. Export settings describe native artwork background; no unsupported transparent-background override is recorded, and actual alpha remains derived from PNG bytes.

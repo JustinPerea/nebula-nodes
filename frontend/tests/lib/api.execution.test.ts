@@ -53,6 +53,18 @@ describe('execution API run correlation', () => {
     });
   });
 
+  it('opts historical graph/node replays into preserving live graph params while ordinary runs keep their payload', async () => {
+    await executeGraph(nodes, edges, 'ordinary-graph');
+    await executeNode(nodes, edges, 'n1', 'ordinary-node');
+    await executeGraph(nodes, edges, 'replay-graph', true);
+    await executeNode(nodes, edges, 'n1', 'replay-node', true);
+    const payloads = apiFetchMock.mock.calls.map((call) => JSON.parse(call[1].body));
+    expect(payloads[0]).not.toHaveProperty('preserveGraphParams');
+    expect(payloads[1]).not.toHaveProperty('preserveGraphParams');
+    expect(payloads[2]).toMatchObject({ runId: 'replay-graph', preserveGraphParams: true });
+    expect(payloads[3]).toMatchObject({ runId: 'replay-node', targetNodeId: 'n1', preserveGraphParams: true });
+  });
+
   it('cancels the exact encoded backend run', async () => {
     apiFetchMock.mockResolvedValueOnce({
       ok: true,

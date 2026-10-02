@@ -1592,6 +1592,8 @@ app.include_router(nous_router)
 app.include_router(quiver_router)
 app.include_router(video_edit_preview_router)
 app.include_router(render_exports_router)
+from services.paper_routes import router as paper_router
+app.include_router(paper_router)
 
 
 @app.post("/api/uploads")
@@ -2412,10 +2414,10 @@ def _execution_is_cancelling(run_id: str) -> bool:
 
 
 async def _finalize_cancelled_execution(
-    nodes: list[GraphNode], run_id: str
+    nodes: list[GraphNode], run_id: str, *, preserve_graph_params: bool = False,
 ) -> None:
-    """Persist late handler params, then emit exactly one Stop terminal."""
-    if _sync_params_to_cli_graph(nodes):
+    """Sync late live-run params, preserve replay canvas params, then emit Stop."""
+    if not preserve_graph_params and _sync_params_to_cli_graph(nodes):
         await _broadcast_graph_sync()
     await manager.broadcast(GraphCancelledEvent(run_id=run_id))
 
@@ -2738,7 +2740,7 @@ async def execute(request: ExecuteRequest) -> dict:
             # authoritative terminal state.
             if _execution_is_cancelling(run_id):
                 raise asyncio.CancelledError
-            if _sync_params_to_cli_graph(nodes):
+            if not request.preserve_graph_params and _sync_params_to_cli_graph(nodes):
                 # ExecutedEvent carries outputs, but handlers such as
                 # video-edit also enrich params. Without a final graphSync the
                 # backend persisted those edits while the live Canvas stayed
@@ -2746,11 +2748,11 @@ async def execute(request: ExecuteRequest) -> dict:
                 await _broadcast_graph_sync()
             print("[exec] _run completed successfully", file=sys.stderr, flush=True)
         except asyncio.CancelledError:
-            await _finalize_cancelled_execution(nodes, run_id)
+            await _finalize_cancelled_execution(nodes, run_id, preserve_graph_params=request.preserve_graph_params)
             raise
         except Exception as e:
             if _execution_is_cancelling(run_id):
-                await _finalize_cancelled_execution(nodes, run_id)
+                await _finalize_cancelled_execution(nodes, run_id, preserve_graph_params=request.preserve_graph_params)
                 raise asyncio.CancelledError from e
             print(f"[exec] _run FAILED: {e}", file=sys.stderr, flush=True)
             traceback.print_exc(file=sys.stderr)
@@ -2864,14 +2866,14 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
             )
             if _execution_is_cancelling(run_id):
                 raise asyncio.CancelledError
-            if _sync_params_to_cli_graph(sub_nodes):
+            if not request.preserve_graph_params and _sync_params_to_cli_graph(sub_nodes):
                 await _broadcast_graph_sync()
         except asyncio.CancelledError:
-            await _finalize_cancelled_execution(sub_nodes, run_id)
+            await _finalize_cancelled_execution(sub_nodes, run_id, preserve_graph_params=request.preserve_graph_params)
             raise
         except Exception as exc:
             if _execution_is_cancelling(run_id):
-                await _finalize_cancelled_execution(sub_nodes, run_id)
+                await _finalize_cancelled_execution(sub_nodes, run_id, preserve_graph_params=request.preserve_graph_params)
                 raise asyncio.CancelledError from exc
             traceback.print_exc()
             raise
@@ -3594,6 +3596,14 @@ def _sync_outputs_to_cli_graph(
     if node_id not in cli_graph.nodes:
         return normalized_outputs
 
+    # A running recipe can still be consuming source A after explicit refresh
+    # to B. Its event records A, but must not rewind the live source preview.
+    current_node = cli_graph.nodes[node_id]
+    if current_node.get("definitionId") == "paper-source":
+        pinned = current_node.get("params", {}).get("_paperSource", {}).get("snapshot", {})
+        if pinned.get("filePath") and normalized_outputs.get("image", {}).get("value") != pinned["filePath"]:
+            return normalized_outputs
+
     cli_graph.nodes[node_id]["outputs"] = normalized_outputs
     cli_graph._maybe_persist()
     return normalized_outputs
@@ -3751,6 +3761,12 @@ def _sync_params_to_cli_graph(nodes: list[GraphNode]) -> bool:
     reverts to whatever the user last set manually."""
     persisted = False
     for node in nodes:
+        current = cli_graph.nodes.get(node.id, {})
+        if node.definition_id == "paper-source":
+            live = current.get("params", {}).get("_paperSource", {})
+            pinned = node.params.get("_paperSource", {})
+            if live.get("id") == pinned.get("id") and live.get("sequence", 0) >= pinned.get("sequence", 0):
+                continue
         if (
             node.id in cli_graph.nodes
             and cli_graph.nodes[node.id].get("params") != node.params
@@ -4796,7 +4812,9 @@ def _cli_node_to_rf(n: dict[str, Any], position: dict[str, float], all_defs: dic
     defn = all_defs.get(definition_id, {})
     is_dynamic_node = definition_id in DYNAMIC_NODE_PROVIDER_BY_DEFINITION
     node_type = (
-        "reroute-node"
+        "paperSourceNode"
+        if definition_id == "paper-source"
+        else "reroute-node"
         if definition_id == "reroute"
         else "editNode"
         if definition_id == "video-edit"
@@ -4829,6 +4847,22 @@ def _cli_node_to_rf(n: dict[str, Any], position: dict[str, float], all_defs: dic
     # For image-input nodes: keep file paths current after repo moves and
     # derive _previewUrl from local output refs when it was not stored.
     params = dict(n.get("params", {}))
+    if definition_id == "paper-source":
+        # Run payloads pin one input; the owned source service retains its full
+        # immutable history. Reading it here is not a Paper refresh.
+        linked = params.get("_paperSource", {})
+        if linked.get("id"):
+            from services.paper_routes import paper_sources
+            try:
+                current_source = paper_sources.get(linked["id"])
+            except KeyError:
+                current_source = None
+            if current_source and current_source["sequence"] >= linked.get("sequence", 0):
+                params["_paperSource"] = current_source
+        snapshot = params.get("_paperSource", {}).get("snapshot")
+        if snapshot:
+            outputs = _rewrite_output_paths({"image": {"type": "Image", "value": snapshot["filePath"]}})
+            node_state = "complete"
     if definition_id == "image-input":
         params = _normalize_image_input_params(params)
 

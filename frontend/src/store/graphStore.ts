@@ -24,6 +24,12 @@ import {
   loadRunHistory,
   openRunRecord,
   persistRunHistory,
+  paperInputsForSnapshot,
+  paperInputOutOfDateReasons,
+  paperRecipeRevision,
+  paperRunOutOfDateReasons,
+  recordPaperRunOutput,
+  snapshotWithLatestPaperSources,
   providerRecoveryWarningText,
   isWorldLabsRecoveryReplayBlocked,
   runIncludesFreshPaidWorldLabsStart,
@@ -35,6 +41,7 @@ import {
   type RunRecord,
   type RunReplayAction,
 } from '../lib/runHistory';
+import type { PaperSourceRecord } from '../lib/paperSource';
 import {
   executeGraph as apiExecuteGraph,
   executeNode as apiExecuteNode,
@@ -58,6 +65,7 @@ import {
 } from '../lib/backend';
 import { wsClient, type ExecutionEvent } from '../lib/wsClient';
 import { notifyJobComplete } from '../lib/jobNotifications';
+import { showAlert } from '../lib/dialogs';
 import { useUIStore } from './uiStore';
 import { clipSpeed, type EditClip } from '../lib/editor/virtualPlayback';
 import type { KeyframeData, VideoGraphManifest, TrackItem } from '../types/video';
@@ -73,6 +81,12 @@ export type TrackItemOrderAction = 'send-to-back' | 'send-backward' | 'bring-for
  * clamp doesn't reset duration from a stale `speed=1`. Same transform that
  * `frontend/src/lib/editor/api.ts` applies for the preview-render path. */
 function paramsForBackend(definitionId: string, params: Record<string, unknown>): Record<string, unknown> {
+  if (definitionId === 'paper-source') {
+    const source = params._paperSource as PaperSourceRecord | undefined;
+    // The run pins this one snapshot; source history stays on the canvas and
+    // in the backend journal rather than being copied into every request.
+    return source ? { ...params, _paperSource: { ...source, snapshots: source.snapshot ? [source.snapshot] : [] } } : params;
+  }
   if (definitionId !== 'video-edit') return params;
   const clips = Array.isArray(params.clips) ? (params.clips as EditClip[]) : null;
   if (!clips) return params;
@@ -459,6 +473,7 @@ interface GraphState {
   onEdgesChange: (changes: EdgeChange[]) => void;
   onConnect: (connection: Connection, options?: { skipUndo?: boolean }) => void;
   updateNodeData: (nodeId: string, data: Partial<NodeData>) => void;
+  applyPaperSource: (nodeId: string, source: PaperSourceRecord) => void;
   updateRemotionManifest: (nodeId: string, patch: Partial<VideoGraphManifest>) => void;
   addTrackItemWithCanvasMirror: (
     remotionNodeId: string,
@@ -547,6 +562,7 @@ interface GraphState {
   autoLayout: () => void;
   runHistory: RunRecord[];
   rerunHistoryRecord: (runId: string) => Promise<void>;
+  rerunHistoryWithLatestPaperSource: (runId: string) => Promise<void>;
   retryFailedRun: (runId: string) => Promise<void>;
   clearRunHistory: () => void;
   clearGraph: () => void;
@@ -1321,8 +1337,8 @@ async function executeHistoricalRun(
   pendingStartRunIds.add(runId);
   try {
     const result = targetNodeId
-      ? await apiExecuteNode(snapshot.nodes, snapshot.edges, targetNodeId, runId)
-      : await apiExecuteGraph(snapshot.nodes, snapshot.edges, runId);
+      ? await apiExecuteNode(snapshot.nodes, snapshot.edges, targetNodeId, runId, true)
+      : await apiExecuteGraph(snapshot.nodes, snapshot.edges, runId, true);
     pendingStartRunIds.delete(runId);
     if (await honorCancellationAfterStart(runId, result.status, set, get)) return;
     if (result.status !== 'started' && result.status !== 'validation_error') {
@@ -1609,9 +1625,16 @@ wsClient.subscribe((event) => {
         // overrides common keys like label/definitionId/params.
         const cliOutputs = cliNode.data?.outputs ?? {};
         const hasCliOutputs = Object.keys(cliOutputs).length > 0;
+        const isPaperSource = cliNode.data.definitionId === 'paper-source';
+        const previousSource = existing.data.params._paperSource as PaperSourceRecord | undefined;
+        const incomingSource = cliNode.data.params._paperSource as PaperSourceRecord | undefined;
+        const paperSource = isPaperSource && previousSource
+          && (!incomingSource || (previousSource.id === incomingSource.id
+            && previousSource.sequence >= incomingSource.sequence))
+          ? previousSource : incomingSource;
         return {
           ...cliNode,
-          type: existing.type ?? cliNode.type,
+          type: isPaperSource ? 'paperSourceNode' : existing.type ?? cliNode.type,
           position: existing.position,
           data: {
             ...existing.data,
@@ -1619,6 +1642,13 @@ wsClient.subscribe((event) => {
             outputs: hasCliOutputs ? cliOutputs : existing.data.outputs,
             state: hasCliOutputs ? cliNode.data.state : existing.data.state,
             keyStatus,
+            ...(isPaperSource && paperSource ? {
+              params: { ...cliNode.data.params, _paperSource: paperSource },
+              outputs: paperSource.snapshot
+                ? { image: { type: 'Image' as const, value: paperSource.snapshot.filePath } }
+                : existing.data.outputs,
+              state: paperSource.snapshot ? 'complete' as const : 'idle' as const,
+            } : {}),
           },
         };
       }
@@ -1627,6 +1657,7 @@ wsClient.subscribe((event) => {
       // create`) and round-trips user-saved positions for imported graphs.
       return {
         ...cliNode,
+        type: cliNode.data.definitionId === 'paper-source' ? 'paperSourceNode' : cliNode.type,
         position: {
           x: cliNode.position?.x ?? 0,
           y: cliNode.position?.y ?? 100,
@@ -2033,6 +2064,8 @@ export const useGraphStore = create<GraphState>((set, get) => ({
           ? 'reroute-node'
           : definitionId === 'camera-rig'
             ? 'cameraRigNode'
+            : definitionId === 'paper-source'
+              ? 'paperSourceNode'
             : definitionId === 'reference-set'
               ? 'referenceSetNode'
               : definitionId.startsWith('qc-')
@@ -2454,6 +2487,53 @@ export const useGraphStore = create<GraphState>((set, get) => ({
           { skipUndo: true },
         );
       }
+    }
+  },
+
+  applyPaperSource: (nodeId, source) => {
+    const state = get();
+    const node = state.nodes.find((candidate) => candidate.id === nodeId && candidate.data.definitionId === 'paper-source');
+    if (!node) return;
+    const previous = node.data.params._paperSource as PaperSourceRecord | undefined;
+    if (previous?.id === source.id && source.sequence < previous.sequence) return;
+    if (previous?.id === source.id && source.sequence === previous.sequence
+      && previous.snapshot?.hash !== source.snapshot?.hash) return;
+    // Refresh replaces only the source preview, never downstream outputs/edges.
+    const nextSource = JSON.parse(JSON.stringify(source)) as PaperSourceRecord;
+    get().updateNodeData(nodeId, {
+      params: { ...node.data.params, _paperSource: nextSource },
+      outputs: source.snapshot
+        ? { image: { type: 'Image', value: source.snapshot.filePath } }
+        : node.data.outputs,
+      state: source.snapshot ? 'complete' : 'idle',
+    });
+    // Older results from before provenance was introduced still retain their
+    // media and receive a truthful source-change label after first refresh.
+    if (previous?.snapshot && source.snapshot
+      && (previous.snapshot.hash !== source.snapshot.hash
+        || previous.identity.fileId !== source.identity.fileId
+        || previous.identity.objectId !== source.identity.objectId)) {
+      const descendants = new Set<string>([nodeId]);
+      let changed = true;
+      while (changed) {
+        changed = false;
+        for (const edge of state.edges) {
+          if (descendants.has(edge.source) && !descendants.has(edge.target)) {
+            descendants.add(edge.target);
+            changed = true;
+          }
+        }
+      }
+      set((current) => ({
+        nodes: current.nodes.map((candidate) => candidate.id !== nodeId
+          && descendants.has(candidate.id) && !candidate.data.outputFreshness
+          && Object.keys(candidate.data.outputs).length > 0
+          ? { ...candidate, data: { ...candidate.data, outputFreshness: {
+              paperInputs: [{ nodeId, sourceId: previous.id, snapshot: previous.snapshot! }],
+              outOfDateReasons: ['Paper source updated after this output was produced.'],
+            } } }
+          : candidate),
+      }));
     }
   },
 
@@ -3962,6 +4042,18 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     await executeHistoricalRun(source, 'rerun', set, get);
   },
 
+  rerunHistoryWithLatestPaperSource: async (runId) => {
+    const state = get();
+    const source = state.runHistory.find((record) => record.id === runId);
+    if (!source) return;
+    const snapshot = snapshotWithLatestPaperSources(source, captureRunSnapshot(state.nodes, state.edges));
+    if (!snapshot) {
+      await showAlert('Refresh or reconnect the Paper sources in this saved recipe before rerunning with the latest snapshot. Their last successful snapshots remain in source history.');
+      return;
+    }
+    await executeHistoricalRun({ ...source, snapshot }, 'latest-paper-source', set, get);
+  },
+
   retryFailedRun: async (runId) => {
     const source = get().runHistory.find((record) => record.id === runId);
     if (!source || source.status !== 'failed') return;
@@ -4241,7 +4333,26 @@ export const useGraphStore = create<GraphState>((set, get) => ({
             outputs[key] = outputVal;
           }
         }
-        get().updateNodeData(event.nodeId, { state: 'complete', outputs: outputs as NodeData['outputs'], progress: undefined, streamingText: undefined, streamingPartials: undefined, streamingSvg: undefined });
+        const runId = event.runId ?? currentRunId;
+        const record = get().runHistory.find((candidate) => candidate.id === runId);
+        if (record && runId) {
+          set((state) => ({ runHistory: persistedRunHistory(recordPaperRunOutput(state.runHistory, runId, event.nodeId, outputs)) }));
+        }
+        const live = get().nodes.find((node) => node.id === event.nodeId);
+        // A captured A source event may arrive after the live source refreshed
+        // to B. Retain A in history without rewinding B's visible preview.
+        if (live?.data.definitionId === 'paper-source') {
+          get().updateNodeData(event.nodeId, { state: 'complete', progress: undefined });
+          break;
+        }
+        const paperInputs = record ? paperInputsForSnapshot(record.snapshot, event.nodeId) : [];
+        const outputFreshness = record && paperInputs.length ? {
+          runId: record.id,
+          recipeRevision: paperRecipeRevision(record.snapshot, event.nodeId),
+          paperInputs,
+          outOfDateReasons: paperRunOutOfDateReasons(record, captureRunSnapshot(get().nodes, get().edges), event.nodeId),
+        } : undefined;
+        get().updateNodeData(event.nodeId, { state: 'complete', outputs: outputs as NodeData['outputs'], outputFreshness, progress: undefined, streamingText: undefined, streamingPartials: undefined, streamingSvg: undefined });
         break;
       }
       case 'streamDelta':
@@ -4525,6 +4636,58 @@ export const useGraphStore = create<GraphState>((set, get) => ({
 
   dismissProviderRecoveryWarning: () => set({ providerRecoveryWarning: null }),
 }));
+
+// Source, recipe and edge edits share one freshness path, including graphSync,
+// undo and reload. This subscriber changes attribution only; it never executes.
+let reconcilingPaperFreshness = false;
+useGraphStore.subscribe((state, previous) => {
+  if (reconcilingPaperFreshness
+    || (state.nodes === previous.nodes && state.edges === previous.edges && state.runHistory === previous.runHistory)) return;
+  if (!state.runHistory.some((record) => record.paperInputs?.length)
+    && !state.nodes.some((node) => node.data.outputFreshness)) return;
+  const current = captureRunSnapshot(state.nodes, state.edges);
+  let historyChanged = false;
+  const runHistory = state.runHistory.map((record) => {
+    if (!record.paperInputs?.length) return record;
+    const reasons = paperRunOutOfDateReasons(record, current);
+    if (JSON.stringify(reasons) === JSON.stringify(record.outOfDateReasons ?? [])) return record;
+    historyChanged = true;
+    return { ...record, outOfDateReasons: reasons };
+  });
+  let nodesChanged = false;
+  const nodes = state.nodes.map((node) => {
+    let attribution = node.data.outputFreshness;
+    if (!attribution && node.data.definitionId !== 'paper-source' && Object.keys(node.data.outputs).length) {
+      const saved = runHistory.find((record) => record.paperInputs?.length
+        && paperInputsForSnapshot(record.snapshot, node.id).length > 0
+        && JSON.stringify(record.resultOutputs?.[node.id]) === JSON.stringify(node.data.outputs));
+      if (saved) {
+        attribution = {
+          runId: saved.id,
+          recipeRevision: paperRecipeRevision(saved.snapshot, node.id),
+          paperInputs: paperInputsForSnapshot(saved.snapshot, node.id),
+          outOfDateReasons: [],
+        };
+      }
+    }
+    if (!attribution) return node;
+    const record = runHistory.find((candidate) => candidate.id === attribution.runId);
+    const reasons = record
+      ? paperRunOutOfDateReasons(record, current, node.id)
+      : paperInputOutOfDateReasons(attribution.paperInputs, current);
+    if (node.data.outputFreshness && JSON.stringify(reasons) === JSON.stringify(attribution.outOfDateReasons)) return node;
+    nodesChanged = true;
+    return { ...node, data: { ...node.data, outputFreshness: { ...attribution, outOfDateReasons: reasons } } };
+  });
+  if (!historyChanged && !nodesChanged) return;
+  reconcilingPaperFreshness = true;
+  try {
+    if (historyChanged) persistRunHistory(runHistory);
+    useGraphStore.setState({ ...(historyChanged ? { runHistory } : {}), ...(nodesChanged ? { nodes } : {}) });
+  } finally {
+    reconcilingPaperFreshness = false;
+  }
+});
 
 // Dev-only window bridge so the Puppeteer driver in scripts/puppeteer-driver/
 // can call clearGraph() between automated demo runs.

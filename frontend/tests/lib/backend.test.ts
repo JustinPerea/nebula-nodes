@@ -24,6 +24,12 @@ describe('backendAssetUrlSync', () => {
     );
   });
 
+  it('rebases immutable Paper snapshot URLs onto the backend origin', () => {
+    expect(backendAssetUrlSync('/api/paper/snapshots/sha256-a.png')).toBe(
+      'http://localhost:8000/api/paper/snapshots/sha256-a.png',
+    );
+  });
+
   it('leaves non-asset paths and plain strings untouched', () => {
     // /api/presets/<id> is a JSON endpoint, not an asset — must NOT be rewritten.
     expect(backendAssetUrlSync('/api/presets/abc123')).toBe('/api/presets/abc123');

@@ -3,6 +3,8 @@ import { X, RotateCcw, ShieldCheck, Square, Trash2 } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
 import { useDelayedUnmount } from '../../hooks/useDelayedUnmount';
+import { PaperRunInspection } from './PaperRunInspection';
+import type { PaperSourceRecord } from '../../lib/paperSource';
 import {
   formatRunAge,
   formatRunDuration,
@@ -32,11 +34,13 @@ export function RunHistoryPanel() {
   const togglePanel = useUIStore((s) => s.togglePanel);
 
   const runHistory = useGraphStore((s) => s.runHistory);
+  const nodes = useGraphStore((s) => s.nodes);
   const clearRunHistory = useGraphStore((s) => s.clearRunHistory);
   const providerRecoveries = useGraphStore((s) => s.providerRecoveries);
   const providerStartAmbiguities = useGraphStore((s) => s.providerStartAmbiguities);
   const deleteProviderRecovery = useGraphStore((s) => s.deleteProviderRecovery);
   const rerunHistoryRecord = useGraphStore((s) => s.rerunHistoryRecord);
+  const rerunHistoryWithLatestPaperSource = useGraphStore((s) => s.rerunHistoryWithLatestPaperSource);
   const retryFailedRun = useGraphStore((s) => s.retryFailedRun);
   const isExecuting = useGraphStore((s) => s.isExecuting);
   const isCancelling = useGraphStore((s) => s.isCancelling);
@@ -167,6 +171,10 @@ export function RunHistoryPanel() {
             {runHistory.map((r) => {
               const recoveryReplayBlocked = isWorldLabsRecoveryReplayBlocked(r);
               const recoveryReplayReady = isWorldLabsRecoveryReplayReady(r);
+              const latestSourceReady = r.paperInputs?.every((input) => {
+                const source = nodes.find((node) => node.id === input.nodeId)?.data.params._paperSource as PaperSourceRecord | undefined;
+                return source?.state === 'current' && Boolean(source.snapshot);
+              });
               return (
               <li key={r.id} className="run-history__item">
                 <span
@@ -197,6 +205,13 @@ export function RunHistoryPanel() {
                   {r.statusNote && (
                     <span className="run-history__status-note">{r.statusNote}</span>
                   )}
+                  {Boolean(r.outOfDateReasons?.length) && (
+                    <span className="run-history__paper-stale" role="status">
+                      <strong>Out of date</strong>
+                      {r.outOfDateReasons?.map((reason) => <span key={reason}>{reason}</span>)}
+                    </span>
+                  )}
+                  <PaperRunInspection record={r} />
                   {r.status !== 'running' && !recoveryReplayBlocked && (
                     <span className="run-history__item-actions">
                       <button
@@ -221,6 +236,18 @@ export function RunHistoryPanel() {
                         <RotateCcw size={11} strokeWidth={2} aria-hidden="true" focusable="false" />
                         {recoveryReplayReady ? 'Recover' : r.status === 'failed' ? 'Retry failed' : 'Rerun'}
                       </button>
+                      {Boolean(r.paperInputs?.length) && !recoveryReplayReady && (
+                        <button
+                          type="button"
+                          className="run-history__replay"
+                          disabled={isExecuting || !latestSourceReady}
+                          onClick={() => void rerunHistoryWithLatestPaperSource(r.id)}
+                          aria-label={`Rerun ${runTriggerLabel(r.trigger)} with latest source`}
+                          title={latestSourceReady
+                            ? 'Reuse saved recipe settings and connections with the latest exported Paper input'
+                            : 'Refresh or reconnect the Paper source before using its latest artwork'}
+                        >Rerun with latest source</button>
+                      )}
                     </span>
                   )}
                   {recoveryReplayBlocked && (

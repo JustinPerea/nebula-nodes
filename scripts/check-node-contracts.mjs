@@ -62,6 +62,7 @@ const PARAM_GROUPS = ['params', 'sharedParams', 'falParams', 'directParams'];
 const LOCAL_EXECUTION_NODE_IDS = new Set([
   'text-input',
   'image-input',
+  'paper-source',
   'video-input',
   'audio-input',
   'sticky-note',

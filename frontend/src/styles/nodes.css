@@ -773,3 +773,11 @@ body:not(.app-slava-restraint) .mesh-modal__download:hover {
 .model-node__card {
   display: contents;  /* skipped in layout — children participate in .model-node's flow */
 }
+/* Source freshness is separate from execution state; retained output stays visible. */
+.model-node__source-stale { display: grid; gap: 5px; padding: 10px; font-size: 10px; line-height: 1.4; }
+.model-node__source-stale button { padding: 5px 7px; width: fit-content; border-radius: 4px; font: inherit; cursor: pointer; }
+.model-node__source-stale button:disabled { opacity: 0.45; cursor: default; }
+body.app-slava-restraint .model-node__source-stale { color: var(--sr-ink, #1a1a1a); background: color-mix(in srgb, var(--sr-warning, #f5c518) 10%, transparent); }
+body.app-slava-restraint .model-node__source-stale button { color: var(--sr-ink, rgba(255, 255, 255, 0.92)); border: 1px solid var(--sr-edge-strong, rgba(255, 255, 255, 0.12)); background: var(--sr-glass-raised, rgba(28, 28, 31, 0.78)); }
+body:not(.app-slava-restraint) .model-node__source-stale { color: #e8c99e; background: #2a2116; }
+body:not(.app-slava-restraint) .model-node__source-stale button { color: inherit; border: 1px solid #765a35; background: #342819; }
