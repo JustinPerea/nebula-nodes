@@ -126,7 +126,7 @@ retain their ordinary provider behavior. Link a selected object, or inspect
 explicit file/page/object identity, then export. Refresh and run are separate
 actions.
 
-## Final gates
+## Original development-worktree gates
 
 - Full backend: **2,542 passed**, exit 0; twelve inherited FastAPI startup
   deprecation warnings. Includes 105 Paper checks across lifecycle, mounted
@@ -148,3 +148,35 @@ Final receipts and videos: [A receipt](evidence/paper-source/final-replay-a-rece
 [A video](evidence/paper-source/final-replay-a-video.mp4),
 [latest receipt](evidence/paper-source/final-latest-source-receipt.json),
 [latest video](evidence/paper-source/final-latest-source-video.mp4).
+
+## Scoped GitHub main integration
+
+The publication branch starts from GitHub main `07b3c957`, carrying only the
+Paper feature, its desktop link and the demo. It does not publish the 60
+unrelated ancestor commits from the active development branch.
+
+- Full backend: **2,129 tests passed** on the scoped main checkout.
+- Full frontend: **818 tests in 86 files passed**; lint, TypeScript, production
+  build and bundle budget passed.
+- Node contract gate: **180 definitions passed**; provider inventory and the
+  generated model-reference check passed.
+- Fresh real Paper export through the main port's standalone path guard:
+  **480 × 360 PNG**, alpha/transparency retained and exact expected SHA-256.
+  [Integration export evidence](evidence/paper-source/main-integration-export.json).
+- The user subsequently confirmed the real Open in Paper desktop launch works.
+  The automated proof remains unit dispatch plus actual HTTPS navigation;
+  browser protocol-launch restrictions were respected.
+- [40-second captioned demo](../videos/paper-linked-source/README.md) uses real
+  UI captures and a visibly labeled deterministic downstream fixture. Its
+  final H.264 movie is included with the source composition and verification.
+
+Main uses a narrow Paper-specific export-path guard and desktop IPC namespace,
+avoiding dependencies on unpublished file/dialog/workspace features. Refresh
+remains an export-only action; generation requires an explicit run or replay.
+
+Desktop verification passed 267 non-UI checks and the Electron integration and
+single-instance checks after the documented desktop build. Two preexisting
+resilience assertions expect the machine-wide uvicorn process count to be zero;
+four active preview/service processes prevent those assertions from passing.
+The previews were preserved and the tests were not weakened. Paper-link dispatch
+also passed its 47 focused native checks.
