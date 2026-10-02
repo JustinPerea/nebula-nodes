@@ -1,9 +1,10 @@
-import { app, BrowserWindow, ipcMain, safeStorage } from 'electron';
+import { app, BrowserWindow, ipcMain, safeStorage, shell } from 'electron';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { homedir } from 'node:os';
 import { startSidecar, stopSidecar, SidecarError, DEFAULT_REPO_ROOT } from './sidecar.mjs';
 import { prepareAppDataEnv } from './paths.mjs';
+import { createPaperLinkSenderValidator, registerPaperLinkHandler } from './paper-links.mjs';
 import {
   CREDENTIALS_FILE_NAME,
   MIGRATION_STATE_FILE_NAME,
@@ -671,6 +672,7 @@ if (!acquiredLock) {
         isDevelopment ? ['http://localhost:5173'] : ['file://'],
       );
       registerCredentialHandlers(ipcMain, credentialService, validateSender);
+      registerPaperLinkHandler(ipcMain, shell, createPaperLinkSenderValidator(rendererUrl, () => mainWindow?.webContents));
 
       // --- One-time migration (VAL-MIG-007..010, VAL-UX-001..006) ---
       //

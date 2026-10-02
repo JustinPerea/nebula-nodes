@@ -118,6 +118,21 @@ Keychain access), setting or migrating a credential shows a clear error
 state. No plaintext fallback is used — no key is written to disk in
 plaintext form.
 
+## Paper source links
+
+The Paper source node offers **Open in Paper** and an HTTPS **Open source link**
+for the exact bound file, page, and object. A browser follows these anchors in
+the original click gesture. Electron delegates them through the frozen
+`paperLinks.open` preload method and `shell.openExternal`.
+
+The dedicated IPC handler accepts only canonical artwork routes:
+`paper://file/<fileId>/<pageId>/<objectId>` and the corresponding
+`https://app.paper.design/file/<fileId>/<pageId>/<objectId>`. It rejects other
+Paper actions, other hosts/protocols, queries, fragments, credentials,
+encoded paths, and normalized traversal. Only the current application window's
+main frame at the configured renderer origin or packaged entry file can call it.
+Opening either link does not refresh the snapshot or execute the graph.
+
 ## Smoke test
 
 ```bash

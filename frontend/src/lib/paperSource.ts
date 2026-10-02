@@ -12,6 +12,17 @@ export interface PaperSourceIdentity {
   navigation: 'file';
 }
 
+/** Desktop and web routes verified against Paper's installed deep-link handler.
+ * Derive from the bound identity, never a URL supplied by an imported graph.
+ * Legacy snapshot navigation metadata remains immutable and file-scoped.
+ */
+export function paperObjectLinks(identity: Pick<PaperSourceIdentity, 'fileId' | 'pageId' | 'objectId'>): { desktop: string; web: string } | null {
+  const ids = [identity.fileId, identity.pageId, identity.objectId];
+  if (ids.some((id) => typeof id !== 'string' || id.length < 1 || id.length > 128 || /[^A-Za-z0-9_-]/.test(id))) return null;
+  const path = `file/${ids.join('/')}`;
+  return { desktop: `paper://${path}`, web: `https://app.paper.design/${path}` };
+}
+
 export interface PaperExportSettings {
   format: 'png';
   scale: '1x' | '2x';

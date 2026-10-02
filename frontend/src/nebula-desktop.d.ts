@@ -13,6 +13,7 @@
  *   - `credentials` has `set` / `has` / `clear` — deliberately NO `get`
  *     method (renderer never sees plaintext API keys).
  *   - `migration` has `status` / `retry`.
+ *   - `paperLinks` has one guarded artwork-opening method.
  */
 
 /** Result of a credential `set` operation. */
@@ -78,6 +79,11 @@ export interface MigrationBridge {
   readonly retry: () => Promise<MigrationRetryResult>;
 }
 
+export interface PaperLinkBridge {
+  /** Open the exact linked Paper artwork in its registered desktop app or browser. */
+  readonly open: (url: string) => Promise<{ readonly ok: boolean; readonly error?: string }>;
+}
+
 export interface NebulaDesktopBridge {
   readonly platform: string;
   readonly shell: string;
@@ -87,6 +93,8 @@ export interface NebulaDesktopBridge {
   readonly credentials: Readonly<CredentialBridge>;
   /** Frozen migration namespace — status / retry. */
   readonly migration: Readonly<MigrationBridge>;
+  /** Frozen canonical Paper artwork-link namespace. Optional for older desktop shells. */
+  readonly paperLinks?: Readonly<PaperLinkBridge>;
   /**
    * Provider names with plaintext API keys detected in App Support
    * settings.json on launch. Empty when all keys are securely stored

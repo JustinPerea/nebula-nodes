@@ -3,7 +3,6 @@ vi.mock('../src/lib/wsClient', () => ({ wsClient: { connect: vi.fn(), subscribe:
 import { useGraphStore } from '../src/store/graphStore';
 import { wsClient, type ExecutionEvent } from '../src/lib/wsClient';
 import * as api from '../src/lib/api';
-import * as dialogs from '../src/lib/dialogs';
 import { loadRunHistory, RUN_HISTORY_STORAGE_KEY } from '../src/lib/runHistory';
 import type { PaperSourceRecord } from '../src/lib/paperSource';
 
@@ -61,7 +60,7 @@ describe('Paper source execution contract', () => {
     window.localStorage.removeItem(RUN_HISTORY_STORAGE_KEY);
     vi.spyOn(api, 'executeNode').mockResolvedValue({ status: 'started' });
     vi.spyOn(api, 'executeGraph').mockResolvedValue({ status: 'started' });
-    vi.spyOn(dialogs, 'showAlert').mockResolvedValue();
+    vi.spyOn(window, 'alert').mockImplementation(() => {});
     setGraph();
   });
 
@@ -184,7 +183,7 @@ describe('Paper source execution contract', () => {
     expect(node('paper').data.outputs.image.value).toBe('/api/outputs/paper/B.png');
     await useGraphStore.getState().rerunHistoryWithLatestPaperSource(id);
     expect(api.executeNode).toHaveBeenCalledTimes(1);
-    expect(dialogs.showAlert).toHaveBeenCalledWith(expect.stringContaining('Refresh or reconnect'));
+    expect(window.alert).toHaveBeenCalledWith(expect.stringContaining('Refresh or reconnect'));
     useGraphStore.getState().applyPaperSource('paper', source('B', 5, 'replacement-logo'));
     expect(useGraphStore.getState().runHistory[0].outOfDateReasons).toEqual([
       'Paper source paper was reconnected to another object.',

@@ -12,7 +12,8 @@ const ipcRenderer = electron.ipcRenderer;
 //   - No raw ipcRenderer exposure.
 //   - credentials has set / has / clear — deliberately NO get method.
 //   - migration has status / retry.
-//   - All three objects (nebulaDesktop, credentials, migration) are frozen.
+//   - paperLinks has one guarded artwork-opening method.
+//   - The root and every namespace are frozen.
 function readEndpointArg(argv, prefix) {
   for (const arg of argv) {
     if (typeof arg === 'string' && arg.startsWith(prefix)) {
@@ -61,6 +62,11 @@ const migration = Object.freeze({
   retry: () => ipcRenderer.invoke('credentials:retry-migration'),
 });
 
+// Only canonical Paper desktop/HTTPS artwork links are accepted by main.
+const paperLinks = Object.freeze({
+  open: (url) => ipcRenderer.invoke('paper:open-artwork', url),
+});
+
 const metadata = Object.freeze({
   platform: process.platform,
   shell: 'electron',
@@ -68,6 +74,7 @@ const metadata = Object.freeze({
   wsBaseUrl,
   credentials,
   migration,
+  paperLinks,
   plaintextKeyWarning: Object.freeze([...plaintextKeyWarning]),
 });
 

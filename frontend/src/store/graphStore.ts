@@ -65,7 +65,6 @@ import {
 } from '../lib/backend';
 import { wsClient, type ExecutionEvent } from '../lib/wsClient';
 import { notifyJobComplete } from '../lib/jobNotifications';
-import { showAlert } from '../lib/dialogs';
 import { useUIStore } from './uiStore';
 import { clipSpeed, type EditClip } from '../lib/editor/virtualPlayback';
 import type { KeyframeData, VideoGraphManifest, TrackItem } from '../types/video';
@@ -4048,7 +4047,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     if (!source) return;
     const snapshot = snapshotWithLatestPaperSources(source, captureRunSnapshot(state.nodes, state.edges));
     if (!snapshot) {
-      await showAlert('Refresh or reconnect the Paper sources in this saved recipe before rerunning with the latest snapshot. Their last successful snapshots remain in source history.');
+      window.alert('Refresh or reconnect the Paper sources in this saved recipe before rerunning with the latest snapshot. Their last successful snapshots remain in source history.');
       return;
     }
     await executeHistoricalRun({ ...source, snapshot }, 'latest-paper-source', set, get);

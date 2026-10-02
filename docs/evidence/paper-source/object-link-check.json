@@ -1,0 +1,55 @@
+{
+  "observedAt": "2026-10-02T00:37:30.354348+00:00",
+  "sourceId": "38d611548548491392a191ffdf120281",
+  "identity": {
+    "fileId": "01M3WWYCQ4Q8BQQVPE963SJXET",
+    "pageId": "p-1-0",
+    "objectId": "D-0",
+    "objectName": "Final editable logo"
+  },
+  "desktopLink": "paper://file/01M3WWYCQ4Q8BQQVPE963SJXET/p-1-0/D-0",
+  "webLink": "https://app.paper.design/file/01M3WWYCQ4Q8BQQVPE963SJXET/p-1-0/D-0",
+  "webClick": {
+    "verified": true,
+    "exactObjectUrlOpened": true,
+    "artworkVisible": true,
+    "browserIsGuestViewer": true,
+    "editingAndSelectionApiRequireLogin": true
+  },
+  "desktopNavigation": {
+    "installedVersion": "0.5.13",
+    "shippedProtocolHandlerVerified": true,
+    "shippedSources": [
+      "src/deep-links/parse.ts:30",
+      "src/main.ts:68-102",
+      "src/window/paper-window.ts:902-927"
+    ],
+    "nativeBridgeTestsPassed": 139,
+    "liveActivationAndObjectSelectionVerified": false,
+    "reason": "Browser automation security policy blocked paper:// navigation; no alternate launch attempted."
+  },
+  "preservedState": {
+    "sourceHash": "685a2efff5ff506694d96473f25de56a559e3eee983daa1a3b224a93636ab0ae",
+    "lastSuccessfulRefresh": "2026-10-02T00:11:01.441689+00:00",
+    "sourceSnapshots": 7,
+    "nodeCount": 2,
+    "edges": [
+      {
+        "id": "e1",
+        "source": "n1",
+        "sourceHandle": "image",
+        "target": "n2",
+        "targetHandle": "image",
+        "type": "typed-edge",
+        "data": {
+          "dataType": "Image"
+        }
+      }
+    ],
+    "observedBrowserHistoryEntriesAfterReload": 4,
+    "latestCurrentAndThreeEarlierOutOfDate": true,
+    "sourceAndRecipeUnchanged": true
+  },
+  "frontendTestsPassed": 66,
+  "buildTypeScriptBudgetEslintCssChecksPassed": true
+}

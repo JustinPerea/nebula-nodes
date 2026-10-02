@@ -1607,3 +1607,11 @@ A 16-agent adversarial review (3 dimensions → per-finding verify) surfaced 13 
 
 - Final stabilized code, including replay preservation and SDK grouped-error handling, passed the complete backend suite: 2,542 tests, exit 0, 61.54 seconds, 12 inherited FastAPI startup deprecation warnings. This supersedes the earlier pre-tightening full-suite ceiling.
 - Fixture protocol checks now include the exact page-root reciprocal ancestor chain before and after export. Export settings describe native artwork background; no unsupported transparent-background override is recorded, and actual alpha remains derived from PNG bytes.
+
+### 2026-10-01 — Paper desktop navigation follow-up
+
+- The installed Paper 0.5.13 app ships a `paper://file/<file>/<page>/<object>` deep-link parser. Its main handler restores/focuses the window; the tab handler forwards the full page/object route even for an already-open file. This is a separate capability from MCP `open_file`, which cannot select an object or activate an existing tab.
+- Open in Paper now follows that desktop link directly in the click gesture. Electron routes it through the existing native external-link bridge. A visible HTTPS Open source link targets the same bound object and remains available when a browser has no protocol handler.
+- Links are derived from validated stable IDs instead of imported `openUrl` strings. Opening does not read selection, refresh, mutate source records, or execute a recipe; existing snapshot metadata stays immutable.
+- The real HTTPS fallback click opened the bound file/page/object route and displayed the logo. Browser automation blocked `paper://` navigation by security policy; no alternate desktop launch was attempted. Actual desktop activation/selection remains unverified. This browser is a guest viewer: artwork is visible, but editing/selection API verification requires an existing Paper login. No sharing/access setting changed.
+- After opening and reloading, the same source hash, last refresh time, 7 source snapshots, 2 nodes, 1 edge and 4 run-history entries remain. Focused frontend lifecycle/desktop-mode/state checks pass (66), native bridge checks pass (139), and TypeScript/build/budget, targeted ESLint and CSS guards pass.

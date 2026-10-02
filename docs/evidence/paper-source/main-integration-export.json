@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "ok": true,
+  "observedAt": "2026-10-02T01:28:17.936378+00:00",
+  "scope": "One live PNG export of the owned disposable original pink logo; no Paper artwork edit, source binding change, generation, desktop protocol launch, or shared runtime state mutation.",
+  "identity": {
+    "fileId": "01M3WWYCQ4Q8BQQVPE963SJXET",
+    "pageId": "p-1-0",
+    "objectId": "D-0",
+    "fileName": "Nebula Paper source acceptance \u2014 disposable",
+    "pageName": "Page 1",
+    "objectName": "Final editable logo",
+    "openUrl": "https://app.paper.design/file/01M3WWYCQ4Q8BQQVPE963SJXET/p-1-0",
+    "navigation": "file"
+  },
+  "exportSettings": {
+    "format": "png",
+    "scale": "2x",
+    "bounds": "object",
+    "background": "artwork"
+  },
+  "bounds": {
+    "width": 240,
+    "height": 180
+  },
+  "artwork": {
+    "sha256": "685a2efff5ff506694d96473f25de56a559e3eee983daa1a3b224a93636ab0ae",
+    "bytes": 12486,
+    "format": "PNG",
+    "width": 480,
+    "height": 360,
+    "hasAlpha": true,
+    "hasTransparency": true,
+    "dominantOpaqueColor": "#c953a2"
+  },
+  "validatedNativeExportPaths": [
+    "/Users/justinperea/Downloads/Final editable logo@2x (4).png"
+  ],
+  "integrationGuard": "services.paper_export_path.require_allowed_path",
+  "temporaryApplicationState": true,
+  "transportSourceSha256": "a101b5970078ad85ead9329ac59063bf391f8bd19539a1dfa4cffae1e6fc02c9",
+  "guardSourceSha256": "8087490c72d9785ba00fd0d3ee5ca6593ef76e3f9c17d6cb69e512d83635741d"
+}

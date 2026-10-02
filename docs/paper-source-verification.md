@@ -14,12 +14,33 @@ relevant schemas are saved in [installed-tools.json](evidence/paper-source/insta
 It exposes explicit file/page/node reads, PNG export and `open_file`.
 
 `open_file` supports file navigation. Its schema explicitly leaves the current
-page unchanged when the file is already open; the browser/native check also
-showed that the existing file tab may need choosing manually. The UI says to
-choose the file tab, page and object. No supported object-selection or watcher
-tool was observed. Paper's returned `contentHash.tokens` is a token hash, not an
-artwork revision. Snapshots describe observed exported bytes, without an
-invented Paper revision.
+page unchanged when the file is already open; the initial browser/native check
+also showed that the existing file tab may need choosing manually. No supported
+object-selection or watcher **MCP tool** was observed. Paper's returned
+`contentHash.tokens` is a token hash, not an artwork revision. Snapshots describe
+observed exported bytes, without an invented Paper revision.
+
+The navigation follow-up verified a separate desktop capability in the installed
+Paper 0.5.13 app (`/Applications/Paper.app/Contents/Resources/app.asar`):
+`src/deep-links/parse.ts:30` accepts `paper://file/<file>/<page>/<object>`;
+`src/main.ts:68-102` restores/focuses the window;
+`src/window/paper-window.ts:902-927` forwards the page/object route and activates
+an existing file tab. Paper's [official support docs](https://paper.design/docs/support)
+also confirm the `paper://` protocol handler. Open in Paper now follows this link
+within the original click gesture, or uses Nebula's native external-link bridge
+in Electron. **Open source link** opens the same exact object URL over HTTPS.
+IDs are validated and imported `openUrl` strings are ignored; immutable snapshot
+records retain their original navigation metadata.
+
+The actual HTTPS fallback click opened the correct file/page/object URL with the
+logo visible: [web destination](evidence/paper-source/08-object-web-link.png).
+This browser is a guest viewer, so editing and a `get_selection` check require
+an existing Paper login. No access setting was changed. Browser automation
+blocked the `paper://` navigation by security policy; no alternate launch was
+attempted. Desktop routing is verified from shipped code and bridge tests, but
+actual desktop activation/object selection still needs a manual click.
+[Navigation and preserved history](evidence/paper-source/07-object-links-canvas.png)
+and [checks](evidence/paper-source/object-link-check.json) document this boundary.
 
 PNG export preserves artwork transparency; the tool has no background-removal
 override. Settings record `background: artwork`, and the exported PNG is checked
@@ -45,6 +66,7 @@ call or provider credential dependency.
 | Unavailable transport / failed refresh | [Unavailable check](evidence/paper-source/unavailable-check.json): isolated runtime deliberately configured with a nonexistent CLI, retaining last good artwork, time, edge and history; the user's Paper app was kept open |
 | Deleted object and explicit reconnect | [Missing-state screenshot](evidence/paper-source/05-deleted-last-good.jpg), [deletion check](evidence/paper-source/deletion-check.json), [reconnect check](evidence/paper-source/reconnect-check.json): same logical source, edge and history; 2× export is 480 × 360 with alpha |
 | Late export/error, tampering, malformed pins | Portable tests cover superseded responses, failed reconnect retaining old identity, unchanged hashes, post-export deletion, mismatched pages, cycles, damaged bytes and missing hashes |
+| Open editable source | Exact HTTPS object URL opens with artwork visible; desktop protocol and guarded native dispatch verified statically/in tests, live desktop navigation blocked by browser automation policy; same 7 snapshots, edge and 4 earlier run records retained after reload |
 
 Each admitted Paper run writes `paper-inputs.json` before dispatch: exact input
 descriptors and a SHA-256 revision of saved nodes, settings and connections.

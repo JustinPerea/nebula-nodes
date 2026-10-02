@@ -5,14 +5,16 @@ import { PaperSourceNode } from '../src/components/nodes/PaperSourceNode';
 import { useGraphStore } from '../src/store/graphStore';
 import {
   getPaperSelection, inspectPaperObject, openPaperSource, linkPaperSource, refreshPaperSource, reconnectPaperSource,
-  PaperSourceError, type PaperSourceRecord,
+  paperObjectLinks, PaperSourceError, type PaperSourceRecord,
 } from '../src/lib/paperSource';
+import { isDesktopMode, openExternalUrl } from '../src/lib/paperDesktop';
 
 vi.mock('../src/lib/paperSource', async (original) => ({
   ...await original<typeof import('../src/lib/paperSource')>(),
   getPaperSelection: vi.fn(), linkPaperSource: vi.fn(), refreshPaperSource: vi.fn(), reconnectPaperSource: vi.fn(),
   inspectPaperObject: vi.fn(), openPaperSource: vi.fn(),
 }));
+vi.mock('../src/lib/paperDesktop', () => ({ isDesktopMode: vi.fn(), openExternalUrl: vi.fn() }));
 
 const INITIAL_STATE = { ...useGraphStore.getState() };
 const identity = { fileId: 'file-a', pageId: 'page-a', objectId: 'logo-a', fileName: 'Logo file', pageName: 'Page 1', objectName: 'Editable A', openUrl: 'https://app.paper.design/file-a', navigation: 'file' as const };
@@ -35,6 +37,8 @@ function seed(linked?: PaperSourceRecord) {
 describe('Paper source explicit UI lifecycle', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(isDesktopMode).mockReturnValue(false);
+    vi.mocked(openExternalUrl).mockResolvedValue();
     useGraphStore.setState(INITIAL_STATE, true);
   });
 
@@ -118,15 +122,86 @@ describe('Paper source explicit UI lifecycle', () => {
     expect(useGraphStore.getState().edges[0].id).toBe('edge-kept');
   });
 
-  it('requests file opening without claiming tab, page or object focus', async () => {
+  it('offers the exact bound object in desktop and browser links without relying on an imported URL', () => {
     seed(source);
-    vi.mocked(openPaperSource).mockResolvedValue({ navigation: 'file', objectNavigation: false, url: identity.openUrl, opened: true });
     render(<Harness />);
-    expect(screen.getByText('If the file is already open, choose the “Logo file” tab in Paper. Navigate to “Page 1” and select “Editable A” manually.')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Open in Paper' }));
-    await waitFor(() => expect(openPaperSource).toHaveBeenCalledWith(source.id));
-    await screen.findByText('Paper accepted the file link. If needed, choose the “Logo file” tab, then “Page 1” and “Editable A” manually.');
+    expect(screen.getByRole('link', { name: 'Open in Paper' })).toHaveAttribute('href', 'paper://file/file-a/page-a/logo-a');
+    expect(screen.getByRole('link', { name: 'Open source link' })).toHaveAttribute('href', 'https://app.paper.design/file/file-a/page-a/logo-a');
+    expect(screen.getByRole('link', { name: 'Open source link' })).toHaveAttribute('rel', 'noopener noreferrer');
+    expect(openPaperSource).not.toHaveBeenCalled();
+    expect(getPaperSelection).not.toHaveBeenCalled();
     expect(refreshPaperSource).not.toHaveBeenCalled();
+  });
+
+  it('hands the exact desktop route to the native bridge within the click and preserves graph state', async () => {
+    seed(source);
+    vi.mocked(isDesktopMode).mockReturnValue(true);
+    const executeGraph = vi.fn();
+    const executeNode = vi.fn();
+    useGraphStore.setState({ executeGraph, executeNode });
+    const before = useGraphStore.getState();
+    render(<Harness />);
+    expect(fireEvent.click(screen.getByRole('link', { name: 'Open in Paper' }))).toBe(false);
+    // No awaited API call precedes OS routing, preserving browser user activation.
+    expect(openExternalUrl).toHaveBeenCalledWith('paper://file/file-a/page-a/logo-a');
+    await screen.findByText('Opening this object in Paper Desktop. If it does not open, use Open source link.');
+    expect(fireEvent.click(screen.getByRole('link', { name: 'Open source link' }))).toBe(false);
+    expect(openExternalUrl).toHaveBeenLastCalledWith('https://app.paper.design/file/file-a/page-a/logo-a');
+    expect(screen.queryByText(/Opening this object/)).not.toBeInTheDocument();
+    expect(useGraphStore.getState().nodes).toBe(before.nodes);
+    expect(useGraphStore.getState().edges).toBe(before.edges);
+    expect(useGraphStore.getState().runHistory).toBe(before.runHistory);
+    expect(openPaperSource).not.toHaveBeenCalled();
+    expect(getPaperSelection).not.toHaveBeenCalled();
+    expect(refreshPaperSource).not.toHaveBeenCalled();
+    expect(executeGraph).not.toHaveBeenCalled();
+    expect(executeNode).not.toHaveBeenCalled();
+  });
+
+  it('lets browsers follow both anchors in the click gesture without an asynchronous transport', () => {
+    seed(source);
+    const prevented: boolean[] = [];
+    render(<div onClick={(event) => {
+      prevented.push(event.defaultPrevented);
+      // Observe the component's decision, then stop jsdom trying to navigate.
+      event.preventDefault();
+    }}><Harness /></div>);
+    fireEvent.click(screen.getByRole('link', { name: 'Open in Paper' }));
+    fireEvent.click(screen.getByRole('link', { name: 'Open source link' }));
+    expect(prevented).toEqual([false, false]);
+    expect(openExternalUrl).not.toHaveBeenCalled();
+    expect(openPaperSource).not.toHaveBeenCalled();
+    expect(refreshPaperSource).not.toHaveBeenCalled();
+  });
+
+  it('keeps a usable web fallback after the native handler fails without marking the source unavailable', async () => {
+    seed(source);
+    vi.mocked(isDesktopMode).mockReturnValue(true);
+    vi.mocked(openExternalUrl).mockRejectedValue(new Error('No protocol handler'));
+    render(<Harness />);
+    fireEvent.click(screen.getByRole('link', { name: 'Open in Paper' }));
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Could not open Paper Desktop. Use Open source link.'));
+    expect(screen.queryByText(/Opening this object/)).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Open source link' })).toHaveAttribute('href', 'https://app.paper.design/file/file-a/page-a/logo-a');
+    expect(useGraphStore.getState().nodes[0].data.params._paperSource).toBe(source);
+    expect(screen.getByText('Connected')).toBeInTheDocument();
+    expect(refreshPaperSource).not.toHaveBeenCalled();
+  });
+
+  it('uses the explicitly reconnected identity while earlier snapshot links retain their original identity', () => {
+    seed({ ...source, identity: { ...identity, objectId: 'logo-b' } });
+    render(<Harness />);
+    expect(screen.getByRole('link', { name: 'Open in Paper' })).toHaveAttribute('href', 'paper://file/file-a/page-a/logo-b');
+    expect(source.snapshots[0].identity.objectId).toBe('logo-a');
+  });
+
+  it.each(['../other', 'logo/a', 'logo?redirect=evil', 'logo#evil', 'logo%2Fa', 'logo\n', '', 'a'.repeat(129)])('rejects invalid route identity %s without exposing an external target', (objectId) => {
+    seed({ ...source, identity: { ...identity, objectId, openUrl: 'javascript:alert(1)' } });
+    render(<Harness />);
+    expect(paperObjectLinks({ ...identity, objectId })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Open in Paper' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Open source link' })).not.toBeInTheDocument();
+    expect(screen.getByText(/Source links unavailable/)).toBeInTheDocument();
   });
 
   it('inspects exact IDs before confirmation when Paper has no selection', async () => {

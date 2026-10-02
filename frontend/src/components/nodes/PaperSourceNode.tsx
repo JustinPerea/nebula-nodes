@@ -1,16 +1,17 @@
-import { useState } from 'react';
+import { useState, type MouseEvent } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { ExternalLink, Link2, RefreshCw } from 'lucide-react';
 import type { NodeData } from '../../types';
 import { useGraphStore } from '../../store/graphStore';
 import { backendAssetUrlSync } from '../../lib/backend';
+import { isDesktopMode, openExternalUrl } from '../../lib/paperDesktop';
 import {
   getPaperSelection,
   inspectPaperObject,
   linkPaperSource,
   reconnectPaperSource,
   refreshPaperSource,
-  openPaperSource,
+  paperObjectLinks,
   PaperSourceError,
   type PaperSelection,
   type PaperSourceRecord,
@@ -37,6 +38,7 @@ export function PaperSourceNode({ id, data, selected }: NodeProps) {
   const [manual, setManual] = useState(false);
   const [manualIds, setManualIds] = useState({ fileId: '', pageId: '', objectId: '' });
   const snapshot = source?.snapshot;
+  const sourceLinks = source ? paperObjectLinks(source.identity) : null;
 
   function reportError(value: unknown) {
     const message = value instanceof Error ? value.message : 'Paper source is unavailable.';
@@ -89,15 +91,24 @@ export function PaperSourceNode({ id, data, selected }: NodeProps) {
     }
   }
 
-  async function open() {
-    if (!source) return;
+  function open(event: MouseEvent<HTMLAnchorElement>, destination: 'desktop' | 'web') {
+    if (!sourceLinks) { event.preventDefault(); return; }
     setError('');
-    try {
-      const result = await openPaperSource(source.id);
-      if (!result.opened) throw new Error('Paper did not confirm opening the source file.');
-      setNotice(`Paper accepted the file link. If needed, choose the “${source.identity.fileName}” tab, then “${source.identity.pageName}” and “${source.identity.objectName}” manually.`);
-    } catch (value) {
-      setError(value instanceof Error ? value.message : 'Could not open the Paper file.');
+    setNotice('');
+    if (destination === 'desktop') {
+      setNotice('Opening this object in Paper Desktop. If it does not open, use Open source link.');
+    }
+    // A normal browser follows the anchor within the original user gesture,
+    // allowing its registered protocol handler to activate Paper. Electron
+    // delegates to the OS instead of navigating its own app window.
+    if (isDesktopMode()) {
+      event.preventDefault();
+      void openExternalUrl(sourceLinks[destination]).catch(() => {
+        setNotice('');
+        setError(destination === 'desktop'
+          ? 'Could not open Paper Desktop. Use Open source link.'
+          : 'Could not open the source link. Copy its address and open it in your browser.');
+      });
     }
   }
 
@@ -169,15 +180,16 @@ export function PaperSourceNode({ id, data, selected }: NodeProps) {
       )}
       <div className="paper-source-node__actions nodrag nopan">
         {source && <>
-          <button type="button" disabled={Boolean(busy)} onClick={() => void open()}>
+          {sourceLinks && <a className="paper-source-node__action-link" href={sourceLinks.desktop} onClick={(event) => open(event, 'desktop')}>
             <ExternalLink size={12} aria-hidden="true" /> Open in Paper
-          </button>
+          </a>}
           <button type="button" disabled={Boolean(busy)} onClick={() => void refresh()}><RefreshCw size={12} aria-hidden="true" /> Refresh source</button>
         </>}
         <button type="button" disabled={Boolean(busy)} onClick={() => void readSelection()}>{source ? 'Reconnect object' : 'Link selected object'}</button>
         <button type="button" disabled={Boolean(busy)} onClick={chooseManual}>{source ? 'Reconnect by ID' : 'Link object by ID'}</button>
       </div>
-      {source && <p className="paper-source-node__note">If the file is already open, choose the “{source.identity.fileName}” tab in Paper. Navigate to “{source.identity.pageName}” and select “{source.identity.objectName}” manually.</p>}
+      {sourceLinks && <p className="paper-source-node__note nodrag nopan"><a href={sourceLinks.web} target="_blank" rel="noopener noreferrer" onClick={(event) => open(event, 'web')}>Open source link</a> · This editable object in Paper.</p>}
+      {source && !sourceLinks && <p className="paper-source-node__note">Source links unavailable. Reconnect with the exact Paper file, page and object IDs.</p>}
       {manual && <div className="paper-source-node__link-form nodrag nopan" role="group" aria-label="Choose exact Paper identity">
         {(['fileId', 'pageId', 'objectId'] as const).map((field) => <label key={field}>{field === 'fileId' ? 'File ID' : field === 'pageId' ? 'Page ID' : 'Object ID'}
           <input aria-label={`Paper ${field}`} value={manualIds[field]} disabled={Boolean(busy)} onChange={(event) => {
