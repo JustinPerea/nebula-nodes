@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=1920, height=1080">
+  <title>Paper source · Nebula Nodes</title>
+  <script src="assets/gsap.min.js"></script>
+  <style>
+    @font-face { font-family: Inter; src: url("assets/fonts/InterVariable.woff2") format("woff2"); font-weight: 100 900; font-display: block; }
+    @font-face { font-family: "JetBrains Mono"; src: url("assets/fonts/JetBrainsMono-Regular.woff2") format("woff2"); font-weight: 400; font-display: block; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #050506; }
+    body { color: #f7f7f8; font-family: Inter, sans-serif; }
+    #root { position: relative; width: 100%; height: 100%; overflow: hidden; background: #050506; }
+    .clip { position: absolute; inset: 0; width: 100%; height: 100%; }
+    .scene { position: absolute; inset: 0; padding: 72px 80px; }
+    .brand { display: flex; align-items: center; gap: 14px; height: 44px; font-size: 23px; font-weight: 560; letter-spacing: -.02em; }
+    .brand img { width: 40px; height: 40px; }
+    .topline { display: flex; justify-content: space-between; align-items: center; }
+    .eyebrow, .step, .proof-label, .fixture, .footer-label { font-family: "JetBrains Mono", monospace; font-weight: 400; }
+    .step { color: #b4b4bb; font-size: 20px; letter-spacing: .025em; }
+    .editorial { display: grid; grid-template-columns: 660px 1028px; gap: 72px; align-items: center; height: 806px; margin-top: 34px; }
+    .copy { padding-right: 12px; }
+    .eyebrow { margin: 0 0 24px; font-size: 20px; line-height: 1.4; color: #ff8b5f; letter-spacing: .08em; text-transform: uppercase; }
+    h1, h2, p { margin: 0; }
+    h2 { font-size: 78px; font-weight: 620; line-height: 1.045; letter-spacing: -.052em; max-width: 650px; }
+    .copy p { margin-top: 30px; color: #b6b6be; font-size: 29px; line-height: 1.42; max-width: 580px; letter-spacing: -.012em; }
+    .accent { color: #ff7945; }
+    .proof { position: relative; height: 806px; border: 1px solid #36363b; border-radius: 22px; overflow: hidden; background: #121215; box-shadow: 0 30px 110px #0008; }
+    .proof-label { position: absolute; inset: 0 0 auto; height: 48px; background: #19191e; border-bottom: 1px solid #3a3a40; color: #d5d5dc; font-size: 17px; display: flex; align-items: center; gap: 11px; padding: 0 22px; z-index: 5; }
+    .proof-label .dot { width: 7px; height: 7px; border-radius: 50%; background: #ff7945; }
+    .capture-window { position: absolute; inset: 48px 0 0; overflow: hidden; }
+    .capture { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; object-position: center; }
+    .capture.graph-crop { inset: auto; left: -659.6px; top: -404px; width: 2110.6px; height: 1187.2px; max-width: none; object-fit: fill; }
+    .capture.history-crop { inset: auto; left: -171px; top: -123.5px; width: 2432px; height: 1368px; max-width: none; object-fit: fill; }
+    .capture.paper-detail { inset: auto; left: -257px; top: -102.8726px; width: 1446px; height: 870.8726px; max-width: none; object-fit: fill; }
+    .paper-wide .editorial { display: block; height: auto; margin-top: 34px; }
+    .paper-wide .headline-row { display: flex; gap: 80px; justify-content: space-between; align-items: end; margin-bottom: 30px; }
+    .paper-wide h2 { max-width: 1090px; font-size: 70px; }
+    .paper-wide .headline-row p { font-size: 27px; line-height: 1.4; color: #b6b6be; max-width: 500px; }
+    .paper-wide .proof { height: 672px; width: 1760px; }
+    .paper-wide .capture { object-fit: cover; object-position: center 42.03%; }
+    .footer { position: absolute; bottom: 32px; left: 80px; right: 80px; display: flex; align-items: center; justify-content: space-between; color: #a8a8b1; }
+    .footer-label { font-size: 16px; line-height: 1.2; }
+    .fixture { font-size: 17px; line-height: 1.2; color: #e0e0e6; background: #19191f; border: 1px solid #45454d; border-radius: 100px; padding: 12px 19px; }
+    .bookend { display: flex; align-items: center; justify-content: center; }
+    .card { width: 1410px; padding: 78px 94px 76px; border: 1px solid #48484e; border-radius: 32px; background: linear-gradient(140deg, #1a1a20ed, #0b0b0eed); box-shadow: 0 40px 160px #000a, inset 0 1px 0 #ffffff17; text-align: center; }
+    .card-mark { width: 68px; height: 68px; margin-bottom: 22px; }
+    .card .eyebrow { margin-bottom: 26px; font-size: 19px; }
+    .card h1 { font-size: 99px; line-height: 1.01; font-weight: 650; letter-spacing: -.055em; }
+    .card p { color: #b6b6be; font-size: 31px; line-height: 1.4; max-width: 960px; margin: 28px auto 0; }
+    .card .end-line { margin-top: 35px; color: #ededf1; font-size: 26px; }
+    .word { display: inline-block; }
+    .hint { margin-top: 31px; display: flex; gap: 13px; }
+    .hint span { font-family: "JetBrains Mono", monospace; color: #d8d8e0; background: #202026; border: 1px solid #4d4d56; border-radius: 10px; font-size: 18px; padding: 14px 17px; }
+    .focus { position: absolute; border: 3px solid #ff7945; border-radius: 10px; box-shadow: 0 0 0 5px #ff794520; pointer-events: none; opacity: 0; z-index: 4; }
+    #open-focus { left: 35px; top: 467px; width: 161px; height: 48px; }
+    #refresh-focus { left: 190px; top: 467px; width: 170px; height: 48px; }
+    #rerun-focus { left: 181px; top: 236px; width: 264px; height: 62px; }
+    .scene-progress { position: absolute; inset: auto 80px 0; height: 3px; background: #27272f; }
+    .scene-progress > span { display: block; width: 100%; height: 3px; background: #ff7945; transform-origin: left center; }
+  </style>
+</head>
+<body>
+<div data-hf-id="hf-9rbe" id="root" data-composition-id="main" data-start="0" data-duration="40" data-width="1920" data-height="1080" data-fps="30">
+  <section data-hf-id="hf-k2z7" id="intro" class="clip" data-start="0" data-duration="3" data-track-index="0">
+    <div data-hf-id="hf-rnta" class="scene bookend">
+      <div data-hf-id="hf-rnvh" id="intro-card" class="card">
+        <img data-hf-id="hf-f7pq" class="card-mark" src="assets/nebula-mark.svg" alt="Nebula Nodes">
+        <div data-hf-id="hf-xp7f" class="eyebrow">Paper source · Nebula Nodes</div>
+        <h1 data-hf-id="hf-m3fm"><span data-hf-id="hf-gi0h" class="word">Your logo.</span> <span data-hf-id="hf-z2fv" class="word accent">Still editable.</span></h1>
+        <p data-hf-id="hf-pt8e">From the original artwork to a connected canvas.</p>
+      </div>
+    </div>
+  </section>
+
+  <section data-hf-id="hf-oh2f" id="linked" class="clip" data-start="3" data-duration="5" data-track-index="0">
+    <div data-hf-id="hf-wua0" class="scene">
+      <div data-hf-id="hf-o5lv" class="topline"><div data-hf-id="hf-br4d" class="brand"><img data-hf-id="hf-6qep" src="assets/nebula-mark.svg" alt="">Nebula Nodes</div><div data-hf-id="hf-yl8g" class="step">01 / LINK THE SOURCE</div></div>
+      <div data-hf-id="hf-i52n" class="editorial">
+        <div data-hf-id="hf-vwtk" id="linked-copy" class="copy"><div data-hf-id="hf-mp4l" class="eyebrow">A real source, on the canvas</div><h2 data-hf-id="hf-rcu0">Link the <span data-hf-id="hf-brks" class="accent">original</span> Paper artwork.</h2><p data-hf-id="hf-ikii">One editable logo. One source node. Connected downstream.</p></div>
+        <div data-hf-id="hf-3zw6" id="linked-proof" class="proof"><div data-hf-id="hf-t10y" class="proof-label"><span data-hf-id="hf-9gry" class="dot"></span>NEBULA · CONNECTED GRAPH</div><div data-hf-id="hf-xa56" class="capture-window" data-layout-allow-overflow="true"><img data-hf-id="hf-gufz" class="capture graph-crop" src="assets/real-ui/canvas-a.jpg" alt="Actual Paper source connected to a deterministic video fixture in Nebula"></div></div>
+      </div>
+      <div data-hf-id="hf-yh7l" class="footer"><div data-hf-id="hf-t4pd" class="footer-label">Captured from the working product</div><div data-hf-id="hf-q7b1" class="fixture">Deterministic video fixture</div></div>
+    </div>
+  </section>
+
+  <section data-hf-id="hf-savs" id="open" class="clip" data-start="8" data-duration="4" data-track-index="0">
+    <div data-hf-id="hf-md34" class="scene">
+      <div data-hf-id="hf-pz6r" class="topline"><div data-hf-id="hf-gawx" class="brand"><img data-hf-id="hf-4tut" src="assets/nebula-mark.svg" alt="">Nebula Nodes</div><div data-hf-id="hf-9h9k" class="step">02 / OPEN IN PAPER</div></div>
+      <div data-hf-id="hf-c4zz" class="editorial">
+        <div data-hf-id="hf-w2dl" id="open-copy" class="copy"><div data-hf-id="hf-qgyv" class="eyebrow">Back to the editable original</div><h2 data-hf-id="hf-k8t5">One click <span data-hf-id="hf-zkjv" class="accent">back to Paper.</span></h2><p data-hf-id="hf-7imq">Open the linked artwork in the desktop app.</p></div>
+        <div data-hf-id="hf-rx1h" id="open-proof" class="proof"><div data-hf-id="hf-wzsm" class="proof-label"><span data-hf-id="hf-zcc2" class="dot"></span>OPEN IN PAPER → DESKTOP</div><div data-hf-id="hf-99ku" class="capture-window" data-layout-allow-overflow="true"><img data-hf-id="hf-adhs" id="open-control" class="capture graph-crop" src="assets/real-ui/canvas-a.jpg" alt="Actual Open in Paper source control"><img data-hf-id="hf-9kqu" id="open-destination" class="capture paper-detail" src="assets/real-ui/paper-a.png" alt="Linked logo in the Paper desktop app"><div data-hf-id="hf-zii1" id="open-focus" class="focus"></div></div></div>
+      </div>
+      <div data-hf-id="hf-ll85" class="footer"><div data-hf-id="hf-ihot" class="footer-label">Real UI · edited sequence</div><div data-hf-id="hf-4q52" class="footer-label">Paper desktop</div></div>
+    </div>
+  </section>
+
+  <section data-hf-id="hf-l7ls" id="edit" class="clip" data-start="12" data-duration="5" data-track-index="0">
+    <div data-hf-id="hf-qw1q" class="scene paper-wide">
+      <div data-hf-id="hf-pkvq" class="topline"><div data-hf-id="hf-hhu0" class="brand"><img data-hf-id="hf-60rw" src="assets/nebula-mark.svg" alt="">Nebula Nodes</div><div data-hf-id="hf-gbtw" class="step">03 / EDIT THE ORIGINAL</div></div>
+      <div data-hf-id="hf-bqoy" class="editorial">
+        <div data-hf-id="hf-y6zb" class="headline-row"><h2 data-hf-id="hf-e2ay" id="edit-title">Edit it <span data-hf-id="hf-6kge" class="accent">where it lives.</span></h2><p data-hf-id="hf-ssos">Paper stays the place you edit.</p></div>
+        <div data-hf-id="hf-hqch" id="edit-proof" class="proof"><div data-hf-id="hf-hfyc" class="proof-label"><span data-hf-id="hf-zqn3" class="dot"></span>PAPER DESKTOP · SAME LINKED LOGO</div><div data-hf-id="hf-t727" class="capture-window"><img data-hf-id="hf-mw2i" id="edit-before" class="capture" src="assets/real-ui/paper-a.png" alt="Original logo before the Paper edit"><img data-hf-id="hf-6lxc" id="edit-after" class="capture" src="assets/real-ui/paper-b.png" alt="Same editable Paper logo after changing its artwork"></div></div>
+      </div>
+      <div data-hf-id="hf-ms58" class="footer"><div data-hf-id="hf-l75h" class="footer-label">Actual editable artwork · captured before and after</div><div data-hf-id="hf-thxh" class="footer-label">Same bound object</div></div>
+    </div>
+  </section>
+
+  <section data-hf-id="hf-3zwe" id="refresh" class="clip" data-start="17" data-duration="7" data-track-index="0">
+    <div data-hf-id="hf-l661" class="scene">
+      <div data-hf-id="hf-p6kp" class="topline"><div data-hf-id="hf-h3iz" class="brand"><img data-hf-id="hf-5mgv" src="assets/nebula-mark.svg" alt="">Nebula Nodes</div><div data-hf-id="hf-9yox" class="step">04 / REFRESH THE SNAPSHOT</div></div>
+      <div data-hf-id="hf-bcdx" class="editorial">
+        <div data-hf-id="hf-ynko" id="refresh-copy" class="copy"><div data-hf-id="hf-u3xn" class="eyebrow">Fresh source. Earlier result.</div><h2 data-hf-id="hf-c0n6">Refresh <span data-hf-id="hf-fprp" class="accent">does not rerun.</span></h2><p data-hf-id="hf-nh6t">The new artwork is ready. The previous result is marked out of date.</p><div data-hf-id="hf-g0kr" class="hint"><span data-hf-id="hf-x2mn">New snapshot</span><span data-hf-id="hf-vqak">Earlier output kept</span></div></div>
+        <div data-hf-id="hf-17bw" id="refresh-proof" class="proof"><div data-hf-id="hf-oie9" class="proof-label"><span data-hf-id="hf-04y4" class="dot"></span>NEBULA · SOURCE REFRESH</div><div data-hf-id="hf-9nvv" class="capture-window" data-layout-allow-overflow="true"><img data-hf-id="hf-5e4e" id="refresh-before" class="capture graph-crop" src="assets/real-ui/canvas-pre-refresh.jpg" alt="Connected graph before explicit Paper source refresh"><img data-hf-id="hf-os7e" id="refresh-after" class="capture graph-crop" src="assets/real-ui/canvas-stale-b.jpg" alt="New source snapshot and previous result marked out of date after refresh"><div data-hf-id="hf-wtik" id="refresh-focus" class="focus"></div></div></div>
+      </div>
+      <div data-hf-id="hf-mdu7" class="footer"><div data-hf-id="hf-apw3" class="footer-label">Nothing runs until you choose</div><div data-hf-id="hf-i93l" class="fixture">Deterministic video fixture</div></div>
+    </div>
+  </section>
+
+  <section data-hf-id="hf-kusa" id="rerun" class="clip" data-start="24" data-duration="6" data-track-index="0">
+    <div data-hf-id="hf-lkh2" class="scene">
+      <div data-hf-id="hf-os9o" class="topline"><div data-hf-id="hf-f3zu" class="brand"><img data-hf-id="hf-6tdy" src="assets/nebula-mark.svg" alt="">Nebula Nodes</div><div data-hf-id="hf-th2a" class="step">05 / RERUN BY CHOICE</div></div>
+      <div data-hf-id="hf-e4j4" class="editorial">
+        <div data-hf-id="hf-muhp" id="rerun-copy" class="copy"><div data-hf-id="hf-ymca" class="eyebrow">An explicit next run</div><h2 data-hf-id="hf-9d5t">Same recipe. <span data-hf-id="hf-ko09" class="accent">New snapshot.</span></h2><p data-hf-id="hf-atr9">Choose the saved recipe with the latest Paper source.</p></div>
+        <div data-hf-id="hf-1kjb" id="rerun-proof" class="proof"><div data-hf-id="hf-tcb4" class="proof-label"><span data-hf-id="hf-0j95" class="dot"></span>NEBULA · SAVED RECIPE</div><div data-hf-id="hf-a26w" class="capture-window" data-layout-allow-overflow="true"><img data-hf-id="hf-uxk0" id="rerun-choice" class="capture history-crop" src="assets/real-ui/history-rerun.jpg" alt="Actual explicit rerun action for the saved recipe with the latest Paper source"><img data-hf-id="hf-h7hn" id="rerun-result" class="capture graph-crop" src="assets/real-ui/canvas-complete-b.jpg" alt="Completed downstream result using the new Paper snapshot"><div data-hf-id="hf-papn" id="rerun-focus" class="focus"></div></div></div>
+      </div>
+      <div data-hf-id="hf-nkra" class="footer"><div data-hf-id="hf-e7fu" class="footer-label">The saved settings and connection are reused</div><div data-hf-id="hf-jg0o" class="fixture">Deterministic video fixture</div></div>
+    </div>
+  </section>
+
+  <section data-hf-id="hf-85fn" id="history" class="clip" data-start="30" data-duration="6" data-track-index="0">
+    <div data-hf-id="hf-kdjz" class="scene">
+      <div data-hf-id="hf-odyn" class="topline"><div data-hf-id="hf-epot" class="brand"><img data-hf-id="hf-6f2x" src="assets/nebula-mark.svg" alt="">Nebula Nodes</div><div data-hf-id="hf-u9mh" class="step">06 / KEEP THE HISTORY</div></div>
+      <div data-hf-id="hf-dq83" class="editorial">
+        <div data-hf-id="hf-pr2v" id="history-copy" class="copy"><div data-hf-id="hf-50q3" class="eyebrow">A connection with memory</div><h2 data-hf-id="hf-x3h6">Every version <span data-hf-id="hf-djc3" class="accent">stays.</span></h2><p data-hf-id="hf-kcd4">The connection remains intact. Both runs keep their original source snapshots and results.</p></div>
+        <div data-hf-id="hf-3or9" id="history-proof" class="proof"><div data-hf-id="hf-mkyi" class="proof-label"><span data-hf-id="hf-0xk6" class="dot"></span>NEBULA · BOTH RUNS RETAINED</div><div data-hf-id="hf-7a1p" class="capture-window" data-layout-allow-overflow="true"><img data-hf-id="hf-pfbk" class="capture history-crop" src="assets/real-ui/history-two-runs.jpg" alt="Earlier and latest saved runs with their exact source snapshots and outputs"></div></div>
+      </div>
+      <div data-hf-id="hf-n6g9" class="footer"><div data-hf-id="hf-yckw" class="footer-label">Earlier input + output · Latest input + output</div><div data-hf-id="hf-j1pn" class="fixture">Deterministic video fixture</div></div>
+    </div>
+  </section>
+
+  <section data-hf-id="hf-r1r6" id="outro" class="clip" data-start="36" data-duration="4" data-track-index="0">
+    <div data-hf-id="hf-os42" class="scene bookend">
+      <div data-hf-id="hf-tmd0" id="outro-card" class="card">
+        <img data-hf-id="hf-fkya" class="card-mark" src="assets/nebula-mark.svg" alt="Nebula Nodes">
+        <div data-hf-id="hf-n95n" class="eyebrow">Paper source · Nebula Nodes</div>
+        <h1 data-hf-id="hf-qr63">Editable in Paper.<br data-hf-id="hf-x5px"><span data-hf-id="hf-jx6u" class="accent">Connected in Nebula.</span></h1>
+        <p data-hf-id="hf-58rt">Refresh first. Rerun by choice. Keep every result.</p>
+        <div data-hf-id="hf-c4i8" class="end-line">Paper-linked sources</div>
+      </div>
+    </div>
+  </section>
+
+  <div data-hf-id="hf-vrq0" class="scene-progress"><span data-hf-id="hf-0x13" id="progress"></span></div>
+</div>
+<script>
+  const tl = gsap.timeline({ paused: true });
+  tl.set('#progress', { scaleX: 0 }, 0);
+  tl.to('#progress', { scaleX: 1, duration: 39.8, ease: 'none' }, 0);
+
+  tl.fromTo('#intro-card', { opacity: 0, y: 20, scale: .965 }, { opacity: 1, y: 0, scale: 1, duration: .65, ease: 'power3.out' }, 0);
+  tl.fromTo('#intro-card .word', { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: .45, stagger: .15, ease: 'power3.out' }, .2);
+  tl.to('#intro-card', { opacity: 0, y: -14, duration: .3, ease: 'power2.in' }, 2.65);
+
+  function enter(copy, proof, at) {
+    tl.fromTo(copy, { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: .55, ease: 'power3.out', immediateRender: false }, at);
+    tl.fromTo(proof, { opacity: 0, y: 22 }, { opacity: 1, y: 0, duration: .6, ease: 'power3.out', immediateRender: false }, at + .08);
+  }
+  enter('#linked-copy', '#linked-proof', 3);
+  enter('#open-copy', '#open-proof', 8);
+  tl.fromTo('#open-focus', { opacity: 0, scale: .98 }, { opacity: 1, scale: 1, duration: .2, ease: 'power3.out', immediateRender: false }, 8.85);
+  tl.to('#open-focus', { opacity: 0, duration: .18, ease: 'power2.in' }, 9.6);
+  tl.set('#open-destination', { opacity: 0 }, 0);
+  tl.set('#open-control', { opacity: 0 }, 9.8);
+  tl.set('#open-destination', { opacity: 1 }, 9.8);
+
+  tl.fromTo('#edit-title', { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: .5, ease: 'power3.out', immediateRender: false }, 12);
+  tl.fromTo('#edit-proof', { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: .6, ease: 'power3.out', immediateRender: false }, 12.08);
+  tl.set('#edit-after', { opacity: 0 }, 0);
+  tl.set('#edit-before', { opacity: 0 }, 14.3);
+  tl.set('#edit-after', { opacity: 1 }, 14.3);
+
+  enter('#refresh-copy', '#refresh-proof', 17);
+  tl.fromTo('#refresh-focus', { opacity: 0, scale: .98 }, { opacity: 1, scale: 1, duration: .2, ease: 'power3.out', immediateRender: false }, 18.15);
+  tl.to('#refresh-focus', { opacity: 0, duration: .18, ease: 'power2.in' }, 19);
+  tl.set('#refresh-after', { opacity: 0 }, 0);
+  tl.set('#refresh-before', { opacity: 0 }, 19.2);
+  tl.set('#refresh-after', { opacity: 1 }, 19.2);
+
+  enter('#rerun-copy', '#rerun-proof', 24);
+  tl.fromTo('#rerun-focus', { opacity: 0, scale: .98 }, { opacity: 1, scale: 1, duration: .2, ease: 'power3.out', immediateRender: false }, 25.15);
+  tl.to('#rerun-focus', { opacity: 0, duration: .18, ease: 'power2.in' }, 27.1);
+  tl.set('#rerun-result', { opacity: 0 }, 0);
+  tl.set('#rerun-choice', { opacity: 0 }, 27.3);
+  tl.set('#rerun-result', { opacity: 1 }, 27.3);
+  enter('#history-copy', '#history-proof', 30);
+
+  tl.fromTo('#outro-card', { opacity: 0, y: 18, scale: .97 }, { opacity: 1, y: 0, scale: 1, duration: .65, ease: 'power3.out', immediateRender: false }, 36);
+  window.__timelines = window.__timelines || {};
+  window.__timelines.main = tl;
+</script>
+</body>
+</html>

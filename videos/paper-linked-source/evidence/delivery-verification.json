@@ -1,0 +1,49 @@
+{
+  "file": "renders/paper-linked-source-demo.mp4",
+  "sha256": "7f98a47ee5d17e8b0a00b4f2e536f4dc9b5fb5a68171a7fb47b720557d6ea2d7",
+  "bytes": 5993316,
+  "width": 1920,
+  "height": 1080,
+  "durationSeconds": 40,
+  "fps": 30,
+  "frames": 1200,
+  "codec": "h264",
+  "pixelFormat": "yuv420p",
+  "silent": true,
+  "captioned": true,
+  "fullDecode": {
+    "exitCode": 0,
+    "errors": 0
+  },
+  "visualReview": {
+    "source": "encoded MP4",
+    "contactSheet": "evidence/movie-contact-sheet.jpg",
+    "times": [
+      5,
+      9.2,
+      10.7,
+      15,
+      20.5,
+      25.8,
+      28.5,
+      33,
+      38
+    ],
+    "passed": true
+  },
+  "hyperframes": {
+    "version": "0.8.41",
+    "runtimeErrors": 0,
+    "layoutErrors": 0,
+    "contrastPassed": 38,
+    "reviewedLintWarnings": 3,
+    "capture": "screenshot",
+    "gpu": "hardware",
+    "streamingEncode": true
+  },
+  "loopVerified": true,
+  "preview": "http://localhost:3021/#project/paper-linked-source",
+  "paidGeneration": false,
+  "desktopTransition": "Edited real UI captures; desktop launch confirmed by the user.",
+  "publicationPlates": "Native Paper captures cropped to exclude unrelated project tabs; raw JPEG originals remain local."
+}

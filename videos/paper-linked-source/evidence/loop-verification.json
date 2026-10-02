@@ -1,0 +1,41 @@
+{
+  "ok": true,
+  "sourceId": "9ebc189bb3a14c73885a18d2c30988b1",
+  "runIds": [
+    "ec39bfc5-0c9e-4e2d-af49-9b598ef7488f",
+    "fd2ff2b2-8c3a-4910-92f9-ff5b23010399"
+  ],
+  "completedRunCount": 2,
+  "recipeRevision": "7ffcdf3f781784f3cd602f7ba93955bf1fd6e211bf6cf5c9bd2a17631b2be022",
+  "sameSavedRecipeAndConnection": true,
+  "bothSnapshotsRetained": true,
+  "immutableSnapshotHashesMatchReceipts": true,
+  "exactArtworkPixelsComposited": true,
+  "artwork": [
+    {
+      "snapshotId": "92bbfca494e4bf0807a595ba4c366143eea0d96426b031e0b6b1340becfdfd02",
+      "hash": "685a2efff5ff506694d96473f25de56a559e3eee983daa1a3b224a93636ab0ae",
+      "width": 480,
+      "height": 360,
+      "dominantOpaqueColor": "#c953a2",
+      "hasTransparency": true
+    },
+    {
+      "snapshotId": "fc9a62c92becbf1d48c3aca3ab92c183348f5cbef0612aead3ccd07836ba904f",
+      "hash": "225269f6bf0d64f1b5e489f030f23780a93b586c7ae68dae2918ddcea3e995c9",
+      "width": 480,
+      "height": 360,
+      "dominantOpaqueColor": "#51a4ca",
+      "hasTransparency": true
+    }
+  ],
+  "timing": {
+    "firstRun": "2026-10-02T00:58:00.885977+00:00",
+    "refreshB": "2026-10-02T00:59:01.384417+00:00",
+    "staleCapture": "2026-10-02T00:59:17.608355+00:00",
+    "latestRerun": "2026-10-02T01:00:00.974866+00:00",
+    "secondsRefreshToRerun": 59.590449
+  },
+  "noRunReceiptBetweenRefreshAndStaleCapture": true,
+  "proofCeiling": "Durable local fixture artifacts and capture file timestamps; explicit rerun interaction and visible staleness are supported separately by real UI captures. No paid provider generation is claimed."
+}

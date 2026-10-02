@@ -1,0 +1,165 @@
+{
+  "captureMethod": "Real UI plates composed into an edited feature demo. No synthetic interface markup or live paid provider generation.",
+  "desktopTransition": "Human confirmed Open in Paper works. Edited source-control/native-destination captures; no continuous automated protocol-launch recording.",
+  "runtime": {
+    "frontend": "http://127.0.0.1:5191",
+    "backend": "http://127.0.0.1:8021",
+    "outputRoot": "output/paper-demo",
+    "provider": "deterministic local fixture"
+  },
+  "paperEdit": {
+    "originalColor": "#D948A6",
+    "demoColor": "#24A6CE",
+    "originalRestored": true
+  },
+  "assets": [
+    {
+      "path": "assets/fonts/InterVariable.woff2",
+      "sha256": "693b77d4f32ee9b8bfc995589b5fad5e99adf2832738661f5402f9978429a8e3",
+      "bytes": 352240,
+      "origin": "Existing Nebula brand v0.3.0 font asset"
+    },
+    {
+      "path": "assets/fonts/JetBrainsMono-Regular.woff2",
+      "sha256": "a9cb1cd82332b23a47e3a1239d25d13c86d16c4220695e34b243effa999f45f2",
+      "bytes": 92164,
+      "origin": "Existing Nebula brand v0.3.0 font asset"
+    },
+    {
+      "path": "assets/gsap.min.js",
+      "sha256": "19e3ad578c9c583ddf9bdca2ad87bb55c3d70b331058e28abacab898f799b2ee",
+      "bytes": 72777,
+      "origin": "Existing local brand-studio-demo GSAP3.14.2 asset (license-header/EOF whitespace normalized)"
+    },
+    {
+      "path": "assets/nebula-mark.svg",
+      "sha256": "ccb977f3a957272ae20f7c9ecc5c2271e7f5032e3665b5148a8a5ace898bf0bb",
+      "bytes": 10538,
+      "origin": "Existing worktree docs/assets/helix-mark.svg"
+    },
+    {
+      "path": "assets/real-ui/canvas-a.jpg",
+      "sha256": "e0bc70a49ae494208953e7af81af1e5500f03f7700e9fd94513af7ed16b577e6",
+      "bytes": 61142,
+      "width": 1280,
+      "height": 720,
+      "origin": "CUA real UI capture",
+      "description": "Actual linked Paper source A and completed deterministic fixture A.",
+      "encoding": "JPEG",
+      "capturedAt": "2026-10-02T00:58:32.592112+00:00"
+    },
+    {
+      "path": "assets/real-ui/canvas-complete-b.jpg",
+      "sha256": "1148e180dbd481c1d917b01e348910890689e1a50915a491f69b8a4cdcba60b6",
+      "bytes": 61823,
+      "width": 1280,
+      "height": 720,
+      "origin": "CUA real UI capture",
+      "description": "Completed explicitly requested B run, same graph connection.",
+      "encoding": "JPEG",
+      "capturedAt": "2026-10-02T01:00:14.861055+00:00"
+    },
+    {
+      "path": "assets/real-ui/canvas-pre-refresh.jpg",
+      "sha256": "e0bc70a49ae494208953e7af81af1e5500f03f7700e9fd94513af7ed16b577e6",
+      "bytes": 61142,
+      "width": 1280,
+      "height": 720,
+      "origin": "CUA real UI capture",
+      "description": "Canvas remains on immutable pink A after editable Paper artwork was changed to cyan B.",
+      "encoding": "JPEG",
+      "capturedAt": "2026-10-02T00:59:01.231731+00:00"
+    },
+    {
+      "path": "assets/real-ui/canvas-stale-b.jpg",
+      "sha256": "119754d225c878fb419e0f7266158818abe2aaa1b0efca901516c49dd5fbfa34",
+      "bytes": 65277,
+      "width": 1280,
+      "height": 720,
+      "origin": "CUA real UI capture",
+      "description": "Actual refresh B: cyan source and previous pink output explicitly out of date; no run requested.",
+      "encoding": "JPEG",
+      "capturedAt": "2026-10-02T00:59:17.608355+00:00"
+    },
+    {
+      "path": "assets/real-ui/history-rerun.jpg",
+      "sha256": "4afea2cb68f69ddb76138baf0fbb3bf5ef6755198a231c9b705664b83365aa27",
+      "bytes": 73518,
+      "width": 1280,
+      "height": 720,
+      "origin": "CUA real UI capture",
+      "description": "Real saved recipe controls before explicit latest-source rerun; A out of date.",
+      "encoding": "JPEG",
+      "capturedAt": "2026-10-02T00:59:44.650163+00:00"
+    },
+    {
+      "path": "assets/real-ui/history-two-runs.jpg",
+      "sha256": "7dbc89b1e5c943079c93fe294270dcb2af18269a0af0ad1021e2381ed30b7e03",
+      "bytes": 74907,
+      "width": 1280,
+      "height": 720,
+      "origin": "CUA real UI capture",
+      "description": "Both completed runs preserved: current B and out-of-date historical A.",
+      "encoding": "JPEG",
+      "capturedAt": "2026-10-02T01:00:08.385501+00:00"
+    },
+    {
+      "path": "assets/real-ui/paper-a.png",
+      "sha256": "f0f137ac28146a16b82c601d0ced948d43a838f09bc497f34a154e35e47ad7ad",
+      "bytes": 417191,
+      "width": 2814,
+      "height": 1694,
+      "origin": "Lossless pixel crop of CUA real UI capture",
+      "description": "Actual native Paper selected editable logo A; captured again after original pink style restoration. Recaptured after temporary guest viewer was closed to remove its remote cursor; same native artwork state.",
+      "encoding": "PNG",
+      "capturedAt": "2026-10-02T01:07:36.700892+00:00",
+      "derivedFrom": {
+        "path": "assets/real-ui/paper-a.jpg",
+        "sha256": "762918da5fb629a430f86454ca534450ad6531014e2874391f1d9963dd7a88ba",
+        "bytes": 288114,
+        "width": 2814,
+        "height": 1774,
+        "encoding": "JPEG",
+        "retainedLocally": true,
+        "published": false
+      },
+      "publicationCrop": {
+        "tool": "FFmpeg",
+        "x": 0,
+        "y": 80,
+        "width": 2814,
+        "height": 1694,
+        "purpose": "Exclude unrelated project tab titles from the public native Paper plate."
+      }
+    },
+    {
+      "path": "assets/real-ui/paper-b.png",
+      "sha256": "ed14b2cd359d5853eebb3708c07cc94eda92d0b822567d6dd16c1a2aa9785a35",
+      "bytes": 415705,
+      "width": 2814,
+      "height": 1694,
+      "origin": "Lossless pixel crop of CUA real UI capture",
+      "description": "Actual native Paper selected editable logo B; update notice dismissed, cyan artwork. Recaptured after temporary guest viewer was closed to remove its remote cursor; same native artwork state.",
+      "encoding": "PNG",
+      "capturedAt": "2026-10-02T01:07:50.816389+00:00",
+      "derivedFrom": {
+        "path": "assets/real-ui/paper-b.jpg",
+        "sha256": "313064716d796ce327fce6d8822f5dbf8fcf63e42c0013b81b9371bcd4219c15",
+        "bytes": 287706,
+        "width": 2814,
+        "height": 1774,
+        "encoding": "JPEG",
+        "retainedLocally": true,
+        "published": false
+      },
+      "publicationCrop": {
+        "tool": "FFmpeg",
+        "x": 0,
+        "y": 80,
+        "width": 2814,
+        "height": 1694,
+        "purpose": "Exclude unrelated project tab titles from the public native Paper plate."
+      }
+    }
+  ]
+}

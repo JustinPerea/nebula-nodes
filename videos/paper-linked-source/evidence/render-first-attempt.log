@@ -1,0 +1,55 @@
+
+◆  Rendering paper-linked-source → /Users/justinperea/.codex/worktrees/paper-linked-source/nebula_nodes/videos/paper-linked-source/renders/paper-linked-source-demo.mp4
+   30fps · high · 4 workers
+   GPU: browser GPU (auto-detect)
+
+[?25l│
+◇  Browser: env
+[?25h
+  ⚠ duplicate_media_discovery_risk: Detected 8 matching img entries with the same source/start/duration.
+    Fix: Avoid duplicated media nodes that can be discovered twice during compilation.
+  ⚠ duplicate_media_discovery_risk: Detected 2 matching img entries with the same source/start/duration.
+    Fix: Avoid duplicated media nodes that can be discovered twice during compilation.
+  ⚠ timeline_track_too_dense: Track 0 has 8 timed elements in this HTML file. Smaller sub-compositions keep timelines easier to read, iterate on, and diff.
+    Fix: Move coherent scene groups into separate .html files under compositions/ and mount them from the parent with data-composition-src so the timeline stays easier to inspect, revise, and validate.
+  Continuing render despite lint issues. Use --strict to block errors.
+
+[INFO] [Render] Pipeline started {"renderJobId":"8923fffe-4255-4327-a40d-09b4ba26462b","platform":"darwin","arch":"arm64","nodeVersion":"v22.16.0","fps":{"num":30,"den":1},"format":"mp4","quality":"high","browserGpuMode":"auto","forceScreenshot":false,"protocolTimeout":300000,"browserTimeout":120000,"pageNavigationTimeout":60000,"playerReadyTimeout":45000}
+[INFO] [Render:trace] {"renderJobId":"8923fffe-4255-4327-a40d-09b4ba26462b","phase":"pipeline","status":"checkpoint","elapsedMs":1,"message":"started","format":"mp4","quality":"high","browserGpuMode":"auto","forceScreenshot":false,"protocolTimeoutMs":300000,"pageNavigationTimeoutMs":60000,"playerReadyTimeoutMs":45000,"requestedWorkers":4}
+[INFO] [Render:trace] {"renderJobId":"8923fffe-4255-4327-a40d-09b4ba26462b","phase":"compile","status":"start","elapsedMs":2,"needsAlpha":false}
+  █░░░░░░░░░░░░░░░░░░░░░░░░  5%  Compiling composition
+[INFO] [Compiler] Embedded local font file: assets/fonts/InterVariable.woff2 (344 KB → data URI)
+[INFO] [Compiler] Embedded local font file: assets/fonts/JetBrainsMono-Regular.woff2 (90 KB → data URI)
+[INFO] Compiled composition metadata {"renderJobId":"8923fffe-4255-4327-a40d-09b4ba26462b","entryFile":"index.html","staticDuration":40,"width":1920,"height":1080,"videoCount":0,"audioCount":0,"renderModeHints":{"recommendScreenshot":false,"reasons":[]}}
+[INFO] [Render:trace] {"renderJobId":"8923fffe-4255-4327-a40d-09b4ba26462b","phase":"compile","status":"end","elapsedMs":226,"durationMs":224,"needsAlpha":false}
+[INFO] [Render:trace] {"renderJobId":"8923fffe-4255-4327-a40d-09b4ba26462b","phase":"compile","status":"checkpoint","elapsedMs":227,"message":"composition metadata resolved","width":1920,"height":1080,"videoCount":0,"audioCount":0,"imageCount":18,"deviceScaleFactor":1,"forceScreenshot":false,"compositionHash":"91214f6a594d3492"}
+[INFO] [Render:trace] {"renderJobId":"8923fffe-4255-4327-a40d-09b4ba26462b","phase":"browser_probe","status":"start","elapsedMs":227,"forceScreenshot":false,"stagePhase":"calibrating"}
+[INFO] [Render:trace] {"renderJobId":"8923fffe-4255-4327-a40d-09b4ba26462b","phase":"browser_probe","status":"end","elapsedMs":233,"durationMs":6,"forceScreenshot":false,"stagePhase":"calibrating"}
+[INFO] [Render:trace] {"renderJobId":"8923fffe-4255-4327-a40d-09b4ba26462b","phase":"browser_probe","status":"checkpoint","elapsedMs":234,"message":"duration resolved","durationSeconds":40,"totalFrames":1200,"compositionHash":"91214f6a594d3492","beginFrameStalled":false}
+[INFO] [Render:trace] {"renderJobId":"8923fffe-4255-4327-a40d-09b4ba26462b","phase":"video_extract","status":"start","elapsedMs":234,"videoCount":0}
+  ██░░░░░░░░░░░░░░░░░░░░░░░  10%  Extracting video frames
+[INFO] [Render:trace] {"renderJobId":"8923fffe-4255-4327-a40d-09b4ba26462b","phase":"video_extract","status":"end","elapsedMs":236,"durationMs":2,"videoCount":0}
+[INFO] [Render:trace] {"renderJobId":"8923fffe-4255-4327-a40d-09b4ba26462b","phase":"video_extract","status":"checkpoint","elapsedMs":239,"message":"frames resolved","videoCount":0,"extractedVideoCount":0,"totalFramesExtracted":0,"maxFramesPerVideo":0,"avgFramesPerExtractedVideo":null,"vfrPreflightCount":null,"vfrPreflightMs":null,"cacheHits":null,"cacheMisses":null,"transientRetries":null,"minVideoFrameCoverageRatio":null,"authoredTimedClipCount":9}
+[INFO] [Render] No HDR sources detected — rendering SDR {"renderJobId":"8923fffe-4255-4327-a40d-09b4ba26462b"}
+[INFO] [Render:trace] {"renderJobId":"8923fffe-4255-4327-a40d-09b4ba26462b","phase":"hdr_detection","status":"checkpoint","elapsedMs":239,"message":"resolved","requestedHdrMode":"auto","effectiveHdr":"sdr","nativeHdrVideoCount":0,"nativeHdrImageCount":0}
+[INFO] [Render:trace] {"renderJobId":"8923fffe-4255-4327-a40d-09b4ba26462b","phase":"audio_process","status":"start","elapsedMs":239,"audioCount":0}
+  █████░░░░░░░░░░░░░░░░░░░░  20%  Processing audio tracks
+[INFO] [Render:trace] {"renderJobId":"8923fffe-4255-4327-a40d-09b4ba26462b","phase":"audio_process","status":"end","elapsedMs":239,"durationMs":0,"audioCount":0}
+[INFO] [Render:trace] {"renderJobId":"8923fffe-4255-4327-a40d-09b4ba26462b","phase":"file_server","status":"start","elapsedMs":239,"reused":false}
+  ██████░░░░░░░░░░░░░░░░░░░  25%  Starting frame capture
+[INFO] [Render:trace] {"renderJobId":"8923fffe-4255-4327-a40d-09b4ba26462b","phase":"file_server","status":"end","elapsedMs":244,"durationMs":5}
+[hyperframes] browserGpuMode probe → hardware (WebGL renderer vendor="Google Inc. (Apple)" renderer="ANGLE (Apple, ANGLE Metal Renderer: Apple M5 Max, Unspecified Version)")
+[INFO] [Render:trace] {"renderJobId":"8923fffe-4255-4327-a40d-09b4ba26462b","phase":"capture_calibration","status":"checkpoint","elapsedMs":460,"message":"skipped","requestedWorkers":4,"totalFrames":1200,"htmlInCanvasDetected":false,"lowMemoryMode":false,"deInversionEligible":false,"deParallelRouterEligible":false}
+[INFO] [Render:trace] {"renderJobId":"8923fffe-4255-4327-a40d-09b4ba26462b","phase":"worker_resolution","status":"checkpoint","elapsedMs":460,"message":"resolved","workerCount":4}
+[INFO] [Render] Fast capture: default-on drawElement disabled for this render — parallel capture has no runtime self-verification. Set PRODUCER_EXPERIMENTAL_FAST_CAPTURE=true to override. {"renderJobId":"8923fffe-4255-4327-a40d-09b4ba26462b"}
+[INFO] streaming-encode gate {"renderJobId":"8923fffe-4255-4327-a40d-09b4ba26462b","enabled":false,"configFlag":true,"outputFormat":"mp4","workerCount":4,"durationSeconds":40,"maxDurationSeconds":240}
+[INFO] [Render:trace] {"renderJobId":"8923fffe-4255-4327-a40d-09b4ba26462b","phase":"capture_strategy","status":"checkpoint","elapsedMs":460,"message":"resolved","workerCount":4,"forceScreenshot":false,"captureBeyondViewport":null,"useStreamingEncode":false,"useLayeredComposite":false,"usePageSideCompositing":false,"hasHdrContent":false,"hasShaderTransitions":false,"isPngSequence":false}
+[INFO] [Render:trace] {"renderJobId":"8923fffe-4255-4327-a40d-09b4ba26462b","phase":"capture_disk","status":"start","elapsedMs":460,"stagePhase":"capturing","needsAlpha":false,"workerCount":4,"forceScreenshot":false,"totalFrames":1200,"framesCompleted":0,"captureMode":"beginframe","captureOperation":"beginFrame"}
+[INFO] [Render:trace] {"renderJobId":"8923fffe-4255-4327-a40d-09b4ba26462b","phase":"capture_disk","status":"error","elapsedMs":461,"durationMs":1,"message":"Disk capture may need ~9953.3 MB of temporary frame storage, but only 11040.7 MB is free at [path] Re-run with --low-memory-mode to stream frames, raise PRODUCER_STREAMING_ENCODE_MAX_DURATION_SECONDS if streaming is supported, or free up d…","stagePhase":"capturing","needsAlpha":false,"workerCount":4,"forceScreenshot":false,"totalFrames":1200,"framesCompleted":0,"captureMode":"beginframe","captureOperation":"beginFrame"}
+  ██████░░░░░░░░░░░░░░░░░░░  25%  Failed: Disk capture may need ~9953.3 MB of temporary frame storage, but only 11040.7 MB is free at /Users/justinperea/.codex/worktrees/paper-linked-source/nebula_nodes/videos/paper-linked-source/renders/work-8923fffe-4255-4327-a40d-09b4ba26462b-rHOfCv/captured-frames. Re-run with --low-memory-mode to stream frames, raise PRODUCER_STREAMING_ENCODE_MAX_DURATION_SECONDS if streaming is supported, or free up disk space.
+[INFO] [Render] Failure summary {"renderJobId":"8923fffe-4255-4327-a40d-09b4ba26462b","failedStage":"Starting frame capture","error":"Disk capture may need ~9953.3 MB of temporary frame storage, but only 11040.7 MB is free at /Users/justinperea/.codex/worktrees/paper-linked-source/nebula_nodes/videos/paper-linked-source/renders/work-8923fffe-4255-4327-a40d-09b4ba26462b-rHOfCv/captured-frames. Re-run with --low-memory-mode to stream frames, raise PRODUCER_STREAMING_ENCODE_MAX_DURATION_SECONDS if streaming is supported, or free up disk space.","elapsedMs":462,"stageTimings":{"compileOnlyMs":48,"browserProbeMs":6,"compileMs":232,"videoExtractMs":1,"audioProcessMs":0},"isTimeout":false,"workers":4,"protocolTimeout":300000,"observedFailedPhase":"capture_disk","observedLastPhase":"capture_disk","observedLastStatus":"error","browserDiagnostics":{"total":0,"errors":0,"pageErrors":0,"requestFailed":0,"httpErrors":0,"navigationStarts":0,"navigationFailures":0,"consoleErrors":0,"consoleWarnings":0},"extraction":{"videoCount":0,"extractedVideoCount":0,"totalFramesExtracted":0,"maxFramesPerVideo":0,"authoredTimedClipCount":9},"browserConsoleErrors":[]}
+
+✗  Render failed
+
+   Disk capture may need ~9953.3 MB of temporary frame storage, but only 11040.7 MB is free at /Users/justinperea/.codex/worktrees/paper-linked-source/nebula_nodes/videos/paper-linked-source/renders/work-8923fffe-4255-4327-a40d-09b4ba26462b-rHOfCv/captured-frames. Re-run with --low-memory-mode to stream frames, raise PRODUCER_STREAMING_ENCODE_MAX_DURATION_SECONDS if streaming is supported, or free up disk space.
+   Try --docker for containerized rendering

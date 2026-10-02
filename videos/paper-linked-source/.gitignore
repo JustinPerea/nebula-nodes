@@ -1,0 +1,7 @@
+renders/
+.hyperframes/
+.thumbnails/
+snapshots/
+__pycache__/
+assets/real-ui/paper-a.jpg
+assets/real-ui/paper-b.jpg
