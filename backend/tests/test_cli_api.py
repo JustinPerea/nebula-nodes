@@ -117,6 +117,18 @@ class TestGraphEndpoints:
         assert r1.json()["id"] == "n1"
         assert r2.json()["id"] == "n2"
 
+    def test_export_batch_as_custom_card_with_legacy_handle_contract(self, client):
+        params = {"display_name": "colors", "items_text": "red\nblue",
+                  "split_mode": "by_line", "batch_size_cap": 10}
+        client.post("/api/graph/node", json={"definitionId": "batch", "params": params})
+        node = client.get("/api/graph/export").json()["nodes"][0]
+        assert node["type"] == "batchNode"
+        assert node["data"]["params"] == params
+        definition = client.get("/api/nodes/batch").json()
+        assert definition["inputPorts"] == []
+        assert definition["outputPorts"][0]["id"] == "set"
+        assert definition["outputPorts"][0]["dataType"] == "Text"
+
     def test_export_nous_portal_as_dynamic_node(self, client):
         client.post("/api/graph/node", json={
             "definitionId": "nous-portal-universal",

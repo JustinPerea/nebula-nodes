@@ -9671,6 +9671,33 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     ],
   },
 
+  'batch': {
+    id: 'batch',
+    displayName: 'Batch',
+    category: 'utility',
+    apiProvider: 'utility',
+    apiEndpoint: '',
+    envKeyName: [],
+    executionPattern: 'sync',
+    capabilityNote: 'Runs each text item through the downstream workflow when you press Run. Each model may charge per item; the item cap limits expansion.',
+    inputPorts: [],
+    outputPorts: [
+      { id: 'set', label: 'Items', dataType: 'Text', required: false },
+    ],
+    params: [
+      { key: 'display_name', label: 'Name', type: 'string', required: false, default: 'Batch', placeholder: 'colors' },
+      { key: 'items_text', label: 'Items', type: 'textarea', required: false, default: '', placeholder: 'one item per line' },
+      {
+        key: 'split_mode', label: 'Split mode', type: 'enum', required: false, default: 'by_line',
+        options: [
+          { label: 'By line (one item per line)', value: 'by_line' },
+          { label: 'None (entire text is one item)', value: 'none' },
+        ],
+      },
+      { key: 'batch_size_cap', label: 'Item cap', type: 'integer', required: false, default: 10, min: 1, max: 25 },
+    ],
+  },
+
   'iterator-image': {
     id: 'iterator-image',
     displayName: 'Image Iterator',

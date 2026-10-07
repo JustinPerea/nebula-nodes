@@ -46,12 +46,22 @@ class ExecutionCache:
         self._ttl = ttl
 
     @staticmethod
-    def get_key(node_type: str, params: dict[str, Any], inputs: dict[str, Any], *, node_id: str | None = None) -> str:
+    def get_key(
+        node_type: str, params: dict[str, Any], inputs: dict[str, Any], *,
+        node_id: str | None = None,
+        batch_context: tuple[tuple[str, int], ...] | None = None,
+    ) -> str:
         # Local spatial authors derive stable entity/anchor IDs from their node.
         # Equal parameters on different nodes are not interchangeable outputs.
         identity = node_id if node_type in {"camera-pose", "camera-path", "spatial-context", "sensor-rig"} else None
         raw = json.dumps(
-            {"nodeType": node_type, "params": params, "inputs": inputs, **({"nodeId": identity} if identity is not None else {})},
+            {
+                "nodeType": node_type, "params": params, "inputs": inputs,
+                **({"nodeId": identity} if identity is not None else {}),
+                # Only explicit Batch exploration opts in: equal item text at
+                # distinct positions is two variants, with stable warm replay.
+                **({"batchContext": batch_context} if batch_context is not None else {}),
+            },
             sort_keys=True,
             default=str,
         )

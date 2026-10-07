@@ -129,10 +129,12 @@ async function runPureUtilityExecutionCheck(cdp) {
       'image-compare': 'Image Compare',
       'iterator-image': 'Image Iterator',
       'iterator-text': 'Text Iterator',
+      batch: 'Batch',
     };
     const makeNode = (id, definitionId, params, index) => ({
       id,
-      type: definitionId === 'reroute' ? 'reroute-node' : 'model-node',
+      type: definitionId === 'reroute' ? 'reroute-node'
+        : definitionId === 'batch' ? 'batchNode' : 'model-node',
       position: { x: 120 + (index % 5) * 260, y: 120 + Math.floor(index / 5) * 210 },
       data: {
         label: labels[definitionId] ?? definitionId,
@@ -170,6 +172,11 @@ async function runPureUtilityExecutionCheck(cdp) {
       makeNode('util-text-iterator', 'iterator-text', { batch_size_cap: 10 }, 14),
       makeNode('util-image-iterator', 'iterator-image', { batch_size_cap: 10 }, 15),
       makeNode('util-compare', 'image-compare', {}, 16),
+      makeNode('util-batch', 'batch', {
+        display_name: 'colors', items_text: 'red\nblue', split_mode: 'by_line', batch_size_cap: 10,
+      }, 17),
+      makeNode('util-batch-combine', 'combine-text', { template: 'logo in {text1}' }, 18),
+      makeNode('util-batch-preview', 'preview', {}, 19),
     ];
     const edges = [
       edge('util-text-a', 'text', 'util-combine', 'text1'),
@@ -186,6 +193,8 @@ async function runPureUtilityExecutionCheck(cdp) {
       edge('util-image-array', 'array', 'util-image-iterator', 'array'),
       edge('util-image-a', 'image', 'util-compare', 'imageA'),
       edge('util-image-b', 'image', 'util-compare', 'imageB'),
+      edge('util-batch', 'set', 'util-batch-combine', 'text1'),
+      edge('util-batch-combine', 'text', 'util-batch-preview', 'input'),
     ];
 
     graph.setState({
@@ -215,7 +224,8 @@ async function runPureUtilityExecutionCheck(cdp) {
         && byId['util-preview']?.data.state === 'complete'
         && byId['util-selector']?.data.state === 'complete'
         && byId['util-image-iterator']?.data.state === 'complete'
-        && byId['util-compare']?.data.state === 'complete';
+        && byId['util-compare']?.data.state === 'complete'
+        && byId['util-batch-preview']?.data.state === 'complete';
     })()
   `, 10000, `
     (() => {
@@ -255,12 +265,15 @@ async function runPureUtilityExecutionCheck(cdp) {
       imageIterator: output('util-image-iterator', 'image'),
       compareA: output('util-compare', 'imageA'),
       compareB: output('util-compare', 'imageB'),
+      batchItems: byId['util-batch']?.data.batchOutputs?.map((item) => item.set.value),
+      batchPreviewItems: byId['util-batch-preview']?.data.batchOutputs?.map((item) => item.input.value),
+      batchPreviewLabels: byId['util-batch-preview']?.data.batchVariants?.map((scope) => scope.label),
       runHistory: window.__nebulaGraphStore.getState().runHistory,
       errors: nodes.filter((node) => node.data.state === 'error').map((node) => [node.id, node.data.error]),
     };
   });
 
-  assertEqual(assertions.renderedNodes, 17, 'renders seeded utility nodes');
+  assertEqual(assertions.renderedNodes, 20, 'renders seeded utility nodes');
   assertEqual(assertions.textInput, 'Alpha', 'text input output');
   assertStartsWith(assertions.imageInput, '/api/outputs/chat-uploads/', 'image input A output');
   assertStartsWith(assertions.imageInputB, '/api/outputs/chat-uploads/', 'image input B output');
@@ -278,9 +291,12 @@ async function runPureUtilityExecutionCheck(cdp) {
   assertEqual(assertions.imageIterator, assertions.imageInputB, 'image iterator latest output');
   assertEqual(assertions.compareA, assertions.imageInput, 'image compare A output');
   assertEqual(assertions.compareB, assertions.imageInputB, 'image compare B output');
+  assertArrayEqual(assertions.batchItems, ['red', 'blue'], 'Batch source scalar snapshots');
+  assertArrayEqual(assertions.batchPreviewItems, ['logo in red', 'logo in blue'], 'Batch utility cascade');
+  assertArrayEqual(assertions.batchPreviewLabels, ['red', 'blue'], 'Batch labels survive cascade');
   assertEqual(assertions.runHistory.length, 1, 'records utility run history');
   assertEqual(assertions.runHistory[0]?.status, 'complete', 'closes utility run history');
-  assertEqual(assertions.runHistory[0]?.snapshot?.nodes?.length, 17, 'stores utility run snapshot');
+  assertEqual(assertions.runHistory[0]?.snapshot?.nodes?.length, 20, 'stores utility run snapshot');
   if (assertions.errors.length) {
     throw new Error(`Utility graph had errored nodes: ${JSON.stringify(assertions.errors)}`);
   }
@@ -330,9 +346,9 @@ async function runHistoryRerunAndReloadCheck(cdp) {
   assertEqual(replay.latestStatus, 'complete', 'history rerun completes');
   assertEqual(replay.sourceRunId, sourceRunId, 'history rerun links its source');
   assertEqual(replay.replayAction, 'rerun', 'history rerun records action');
-  assertEqual(replay.nodesExecuted, 17, 'history rerun executes saved graph');
+  assertEqual(replay.nodesExecuted, 22, 'history rerun executes saved graph and repeated Batch consumers');
   assertEqual(replay.savedText, 'Alpha', 'history rerun preserves pre-mutation params');
-  assertEqual(replay.savedEdgeCount, 14, 'history rerun preserves pre-mutation edges');
+  assertEqual(replay.savedEdgeCount, 16, 'history rerun preserves pre-mutation edges');
 
   const loadEvent = cdp.waitForEvent('Page.loadEventFired', 10000);
   await cdp.send('Page.reload', { ignoreCache: true });

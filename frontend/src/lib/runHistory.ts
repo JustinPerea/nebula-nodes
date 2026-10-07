@@ -1,4 +1,4 @@
-import type { PaperRunInput, PortValue } from '../types';
+import type { PaperRunInput, PortValue, VariantScope } from '../types';
 import type { PaperSourceRecord } from './paperSource';
 
 /** Persistent run-history records for the Run History panel. Records contain the
@@ -73,6 +73,8 @@ export interface RunRecord {
   resultOutputs?: Record<string, Record<string, PortValue>>;
   /** Cumulative iterator results; the node's visible output remains scalar. */
   batchOutputs?: Record<string, Array<Record<string, PortValue>>>;
+  /** Optional item attribution parallel to each node's immutable batch results. */
+  batchVariants?: Record<string, VariantScope[]>;
   outOfDateReasons?: string[];
   /** Immutable admission fact. Unlike snapshot params, this stays true after
    * a recovery event patches the accepted operation ID into the snapshot. */
@@ -267,12 +269,65 @@ export function recordPaperRunOutput(
 export function recordRunBatchOutputs(
   history: RunRecord[], runId: string, nodeId: string,
   outputs: Array<Record<string, PortValue>>,
+  variants?: unknown,
 ): RunRecord[] {
-  return history.map((record) => record.id === runId
-    ? { ...record, batchOutputs: deepFreeze(JSON.parse(JSON.stringify({
+  const scopes = sanitizeVariantScopes(variants, outputs.length);
+  return history.map((record) => {
+    if (record.id !== runId) return record;
+    const batchVariants = { ...record.batchVariants };
+    delete batchVariants[nodeId];
+    if (scopes) batchVariants[nodeId] = scopes;
+    return {
+      ...record,
+      batchOutputs: deepFreeze(JSON.parse(JSON.stringify({
         ...record.batchOutputs, [nodeId]: outputs,
-      })) as Record<string, Array<Record<string, PortValue>>>) }
-    : record);
+      })) as Record<string, Array<Record<string, PortValue>>>),
+      batchVariants: Object.keys(batchVariants).length
+        ? deepFreeze(JSON.parse(JSON.stringify(batchVariants)) as Record<string, VariantScope[]>)
+        : undefined,
+    };
+  });
+}
+
+/** Copy only well-formed display attribution from untrusted storage/WS data. */
+export function sanitizeVariantScope(value: unknown): VariantScope | undefined {
+  if (!isObject(value) || typeof value.index !== 'number' || !Number.isSafeInteger(value.index) || value.index < 0
+    || typeof value.label !== 'string' || !Array.isArray(value.lineage)) return undefined;
+  const lineage: VariantScope['lineage'] = [];
+  for (const item of value.lineage) {
+    if (!isObject(item) || typeof item.source_node_id !== 'string' || !item.source_node_id
+      || typeof item.source_label !== 'string' || typeof item.index !== 'number' || !Number.isSafeInteger(item.index)
+      || item.index < 0 || typeof item.item_label !== 'string') return undefined;
+    lineage.push({ source_node_id: item.source_node_id, source_label: item.source_label,
+      index: item.index, item_label: item.item_label });
+  }
+  return { index: value.index, label: value.label, lineage };
+}
+
+/** Keep item positions aligned. Invalid or mismatched metadata is omitted whole. */
+export function sanitizeVariantScopes(
+  value: unknown, expectedLength?: number,
+): VariantScope[] | undefined {
+  if (!Array.isArray(value) || (expectedLength !== undefined && value.length !== expectedLength)) return undefined;
+  const scopes: VariantScope[] = [];
+  for (const [index, item] of value.entries()) {
+    const scope = sanitizeVariantScope(item);
+    if (!scope || scope.index !== index) return undefined;
+    scopes.push(scope);
+  }
+  return scopes;
+}
+
+function sanitizeRunBatchVariants(record: RunRecord): Record<string, VariantScope[]> | undefined {
+  if (!isObject(record.batchVariants)) return undefined;
+  const entries: Array<[string, VariantScope[]]> = [];
+  for (const [nodeId, value] of Object.entries(record.batchVariants)) {
+    const outputs = record.batchOutputs?.[nodeId];
+    if (!outputs) continue;
+    const scopes = sanitizeVariantScopes(value, outputs.length);
+    if (scopes) entries.push([nodeId, scopes]);
+  }
+  return entries.length ? Object.fromEntries(entries) : undefined;
 }
 
 /** Replace only pinned Paper inputs. Recipe params and topology remain saved. */
@@ -756,7 +811,10 @@ export function loadRunHistory(
     }
 
     const validRecords = cappedRunHistory(parsed.records.filter(isRunRecord));
+    let metadataChanged = false;
     const recovered = validRecords.map((record) => {
+      const batchVariants = sanitizeRunBatchVariants(record);
+      if (JSON.stringify(record.batchVariants) !== JSON.stringify(batchVariants)) metadataChanged = true;
       const reconnectingWorldLabs = record.status === 'running'
         && (record.startedFreshPaidWorldLabs === true
           || (record.startedFreshPaidWorldLabs === undefined
@@ -780,12 +838,13 @@ export function loadRunHistory(
         ...(record.paperInputs ? { paperInputs: deepFreeze(record.paperInputs) } : {}),
         ...(record.resultOutputs ? { resultOutputs: deepFreeze(record.resultOutputs) } : {}),
         ...(record.batchOutputs ? { batchOutputs: deepFreeze(record.batchOutputs) } : {}),
+        batchVariants: batchVariants ? deepFreeze(batchVariants) : undefined,
         status,
         statusNote,
       };
     });
 
-    if (validRecords.length !== parsed.records.length
+    if (metadataChanged || validRecords.length !== parsed.records.length
       || parsed.records.length > MAX_RUN_HISTORY
       || validRecords.some((record, index) => (
         record.status !== recovered[index].status

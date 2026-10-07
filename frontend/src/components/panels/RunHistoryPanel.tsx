@@ -170,6 +170,9 @@ export function RunHistoryPanel() {
         ) : (
           <ul className="run-history__list">
             {runHistory.map((r) => {
+              // Fanout executes downstream nodes repeatedly. The engine count
+              // measures execution steps, rather than distinct canvas nodes.
+              const executedUnit = r.batchOutputs ? 'step' : 'node';
               const recoveryReplayBlocked = isWorldLabsRecoveryReplayBlocked(r);
               const recoveryReplayReady = isWorldLabsRecoveryReplayReady(r);
               const latestSourceReady = r.paperInputs?.every((input) => {
@@ -195,7 +198,7 @@ export function RunHistoryPanel() {
                       <> · {formatRunDuration(r.durationSec)}</>
                     )}
                     {r.nodesExecuted != null && (
-                      <> · {r.nodesExecuted} node{r.nodesExecuted === 1 ? '' : 's'}</>
+                      <> · {r.nodesExecuted} {executedUnit}{r.nodesExecuted === 1 ? '' : 's'}</>
                     )}
                     {r.targetNodeId && (
                       <span className="run-history__target" title={r.targetNodeId}>

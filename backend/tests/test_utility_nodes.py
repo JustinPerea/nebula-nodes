@@ -76,6 +76,27 @@ def test_manifest_covers_every_utility_node() -> None:
 
 
 @pytest.mark.asyncio
+async def test_manifest_batch_fixture_executes_scalar_cascade() -> None:
+    manifest = json.loads(MANIFEST_PATH.read_text())
+    fixture = next(item for item in manifest["nodes"] if item["id"] == "batch")["fixture"]
+    nodes = [
+        _node("batch", "batch", fixture["params"]),
+        _node("combine", "combine-text", {"template": "logo in {text1}"}),
+        _node("preview", "preview"),
+    ]
+    edges = [
+        _edge("batch", "combine", "set", "text1"),
+        _edge("combine", "preview", "text", "input"),
+    ]
+    executed = await _execute(nodes, edges)
+    assert executed["batch"] == [
+        {"set": {"type": "Text", "value": value}} for value in fixture["expectedItems"]]
+    assert executed["preview"] == [
+        {"input": {"type": "Text", "value": f"logo in {value}"}}
+        for value in fixture["expectedItems"]]
+
+
+@pytest.mark.asyncio
 async def test_text_combine_router_reroute_and_preview() -> None:
     nodes = [
         _node("text-a", "text-input", {"value": "A cat playing drums"}),

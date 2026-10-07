@@ -87,6 +87,20 @@
       "browser": "execute"
     },
     {
+      "id": "batch",
+      "backend": "native",
+      "browser": "execute-cascade-and-lineage",
+      "fixture": {
+        "params": {
+          "display_name": "colors",
+          "items_text": "red\nblue",
+          "split_mode": "by_line",
+          "batch_size_cap": 10
+        },
+        "expectedItems": ["red", "blue"]
+      }
+    },
+    {
       "id": "style-reference",
       "backend": "mocked-handler",
       "browser": "mocked-event"

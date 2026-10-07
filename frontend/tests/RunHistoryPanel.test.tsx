@@ -107,6 +107,34 @@ describe('RunHistoryPanel replay actions', () => {
     expect(clearRunHistory).toHaveBeenCalledOnce();
   });
 
+  it('labels the two-node seven-item fanout as execution steps instead of eight canvas nodes', () => {
+    const colors = ['red', 'orange', 'yellow', 'green', 'blue', 'indigo', 'violet'];
+    const saved = record('colors-run', 'complete');
+    saved.nodesExecuted = 8;
+    saved.snapshot.nodes = [
+      { id: 'colors', definitionId: 'batch', params: { items_text: colors.join('\n') }, outputs: {} },
+      { id: 'preview', definitionId: 'preview', params: {}, outputs: {} },
+    ];
+    saved.batchOutputs = {
+      colors: colors.map((color) => ({ set: { type: 'Text', value: color } })),
+      preview: colors.map((color) => ({ input: { type: 'Text', value: color } })),
+    };
+    useGraphStore.setState({ runHistory: [saved], isExecuting: false });
+
+    render(<RunHistoryPanel />);
+    expect(screen.getByText(/8 steps/)).toBeInTheDocument();
+    expect(screen.queryByText(/8 nodes/)).not.toBeInTheDocument();
+    expect(screen.getByText('Batch results · 14')).toBeInTheDocument();
+  });
+
+  it.each([1, 2])('keeps the ordinary %i-node execution count label', (count) => {
+    useGraphStore.setState({ runHistory: [{ ...record('ordinary', 'complete'), nodesExecuted: count }],
+      isExecuting: false });
+    render(<RunHistoryPanel />);
+    expect(screen.getByText(new RegExp(`${count} node${count === 1 ? '' : 's'}`))).toBeInTheDocument();
+    expect(screen.queryByText(/\d steps?/)).not.toBeInTheDocument();
+  });
+
   it.each([
     {
       label: 'an active execution',

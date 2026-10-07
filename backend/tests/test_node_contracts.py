@@ -228,6 +228,23 @@ async def test_every_nonlocal_node_has_execution_handler(definitions: dict[str, 
     assert extra == []
 
 
+def test_batch_is_a_bounded_local_scalar_text_source(definitions: dict[str, dict[str, Any]]) -> None:
+    definition = definitions["batch"]
+    assert "batch" in LOCAL_EXECUTION_NODE_IDS
+    assert definition["apiProvider"] == "utility"
+    assert definition["envKeyName"] == []
+    assert definition["executionPattern"] == "sync"
+    assert definition["inputPorts"] == []
+    assert [(port["id"], port["dataType"]) for port in definition["outputPorts"]] == [("set", "Text")]
+    params = {param["key"]: param for param in definition["params"]}
+    assert params["items_text"]["type"] == "textarea"
+    assert params["items_text"]["default"] == ""
+    assert params["split_mode"]["default"] == "by_line"
+    assert {option["value"] for option in params["split_mode"]["options"]} == {"by_line", "none"}
+    assert (params["batch_size_cap"]["default"], params["batch_size_cap"]["min"],
+            params["batch_size_cap"]["max"]) == (10, 1, 25)
+
+
 def test_frontend_and_backend_registry_ids_match(definitions: dict[str, dict[str, Any]]) -> None:
     source = (REPO_ROOT / "frontend" / "src" / "constants" / "nodeDefinitions.ts").read_text()
     frontend_ids = set(re.findall(r"^\s+'([^']+)':\s+\{", source, flags=re.MULTILINE))
