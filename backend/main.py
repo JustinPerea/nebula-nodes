@@ -4870,7 +4870,9 @@ def _cli_node_to_rf(n: dict[str, Any], position: dict[str, float], all_defs: dic
     defn = all_defs.get(definition_id, {})
     is_dynamic_node = definition_id in DYNAMIC_NODE_PROVIDER_BY_DEFINITION
     node_type = (
-        "paperSourceNode"
+        "batchNode"
+        if definition_id == "batch"
+        else "paperSourceNode"
         if definition_id == "paper-source"
         else "reroute-node"
         if definition_id == "reroute"

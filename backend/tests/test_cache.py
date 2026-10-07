@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import time
+import hashlib
+import json
 from pathlib import Path
 from unittest.mock import patch
 
@@ -22,6 +24,24 @@ from services.output import (
 
 
 class TestGetKey:
+    def test_absent_batch_scope_preserves_existing_key_bytes(self) -> None:
+        params = {"seed": 1}
+        inputs = {"prompt": {"type": "Text", "value": "logo"}}
+        old_raw = json.dumps({"nodeType": "nano-banana", "params": params, "inputs": inputs},
+                             sort_keys=True, default=str)
+        expected = hashlib.sha256(old_raw.encode()).hexdigest()
+        assert ExecutionCache.get_key("nano-banana", params, inputs) == expected
+        assert ExecutionCache.get_key("nano-banana", params, inputs, batch_context=None) == expected
+
+    def test_full_batch_scope_distinguishes_duplicate_and_nested_axis_items(self) -> None:
+        plain = ExecutionCache.get_key("nano-banana", {}, {})
+        first = ExecutionCache.get_key("nano-banana", {}, {}, batch_context=(("source", 0),))
+        second = ExecutionCache.get_key("nano-banana", {}, {}, batch_context=(("source", 1),))
+        other_axis = ExecutionCache.get_key("nano-banana", {}, {}, batch_context=(("other", 0),))
+        nested = ExecutionCache.get_key("nano-banana", {}, {}, batch_context=(("source", 0), ("nested", 0)))
+        assert len({plain, first, second, other_axis, nested}) == 5
+        assert first == ExecutionCache.get_key("nano-banana", {}, {}, batch_context=(("source", 0),))
+
     @pytest.mark.parametrize("kind", ["camera-pose", "camera-path", "spatial-context", "sensor-rig"])
     def test_spatial_authors_include_node_identity(self, kind: str) -> None:
         assert ExecutionCache.get_key(kind, {}, {}, node_id="a") != ExecutionCache.get_key(kind, {}, {}, node_id="b")

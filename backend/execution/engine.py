@@ -54,6 +54,7 @@ from models.events import (
     ValidationErrorDetail,
     GraphCompleteEvent,
     execution_run_id,
+    execution_variant,
 )
 
 CycleError = _GraphlibCycleError
@@ -485,6 +486,7 @@ LOCAL_EXECUTION_NODE_IDS = frozenset(
         "mask-painter",
         "iterator-image",
         "iterator-text",
+        "batch",
         "preview",
         "combine-text",
         "router",
@@ -594,7 +596,17 @@ def get_subgraph(
 
 
 _ITERATOR_NODE_IDS = {"iterator-image", "iterator-text"}
+_FANOUT_NODE_IDS = _ITERATOR_NODE_IDS | {"batch"}
 InvocationContext = tuple[tuple[str, int], ...]
+
+# ECMAScript TrimString: WhiteSpace union LineTerminator. Python's default
+# strip() additionally removes control separators and does not remove BOM.
+# https://tc39.es/ecma262/multipage/text-processing.html#sec-trimstring
+_JS_TRIM_WHITESPACE = (
+    "\u0009\u000a\u000b\u000c\u000d\u0020\u00a0\u1680"
+    "\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a"
+    "\u2028\u2029\u202f\u205f\u3000\ufeff"
+)
 
 
 @dataclass(frozen=True)
@@ -604,15 +616,53 @@ class _InvocationResult:
     context: InvocationContext
 
 
+def _batch_items(params: dict[str, Any]) -> list[str]:
+    """Parse the editable source without coercion or silent truncation."""
+    for key, default in (("display_name", "Batch"), ("items_text", "")):
+        if not isinstance(params.get(key, default), str):
+            raise ValueError(f"Batch {key} must be a string")
+    mode = params.get("split_mode", "by_line")
+    if not isinstance(mode, str) or mode not in {"by_line", "none"}:
+        raise ValueError("Batch split_mode must be 'by_line' or 'none'")
+    cap = params.get("batch_size_cap", 10)
+    if isinstance(cap, bool) or not isinstance(cap, int) or not 1 <= cap <= 25:
+        raise ValueError("Batch batch_size_cap must be an integer from 1 to 25")
+    text = params.get("items_text", "")
+    if mode == "none":
+        items = [text] if text else []
+    else:
+        items = [trimmed for line in text.split("\n")
+                 if (trimmed := line.strip(_JS_TRIM_WHITESPACE))]
+    if len(items) > cap:
+        raise ValueError(
+            f"Batch has {len(items)} items, exceeding its batch_size_cap of {cap}. "
+            "Reduce the list or raise the cap before running; no generation was started."
+        )
+    return items
+
+
+def _variant_label(item: Any) -> str:
+    text = str(item)
+    return text if len(text) <= 40 else f"{text[:37]}…"
+
+
 def _iterator_validation_errors(
     nodes: list[GraphNode], edges: list[GraphEdge]
 ) -> list[ValidationErrorDetail]:
     """Reject ambiguous batch joins rather than multiplying paid work silently."""
     node_map = {node.id: node for node in nodes}
-    if not any(node.definition_id in _ITERATOR_NODE_IDS for node in nodes):
+    if not any(node.definition_id in _FANOUT_NODE_IDS for node in nodes):
         return []
     errors = []
     for node in nodes:
+        if node.definition_id == "batch":
+            try:
+                _batch_items(node.params)
+            except ValueError as exc:
+                errors.append(ValidationErrorDetail(
+                    node_id=node.id, port_id="set", message=str(exc),
+                ))
+            continue
         if node.definition_id not in _ITERATOR_NODE_IDS:
             continue
         cap = node.params.get("batch_size_cap", 10)
@@ -652,7 +702,7 @@ def _iterator_validation_errors(
                 message="World Labs recovery-aware operations cannot run inside an iterator. "
                         "Use separate tracked nodes so every operation retains its own recovery ID.",
             ))
-        ancestors[nid] = upstream | ({nid} if node_map[nid].definition_id in _ITERATOR_NODE_IDS else set())
+        ancestors[nid] = upstream | ({nid} if node_map[nid].definition_id in _FANOUT_NODE_IDS else set())
     return errors
 
 
@@ -826,8 +876,9 @@ async def execute_graph(
     if iterator_errors:
         raise ValueError(iterator_errors[0].message)
     manifest_run_id = run_id or str(uuid4())
-    token = execution_run_id.set(run_id)
     run_dir = create_run_dir(manifest_run_id)
+    token = execution_run_id.set(run_id)
+    variant_token = execution_variant.set(None)
     run_dir_token = execution_run_dir.set(run_dir)
     try:
         await _execute_graph(
@@ -844,6 +895,7 @@ async def execute_graph(
     finally:
         execution_run_dir.reset(run_dir_token)
         execution_run_id.reset(token)
+        execution_variant.reset(variant_token)
 
 
 async def _execute_graph(
@@ -869,6 +921,8 @@ async def _execute_graph(
     # Static ancestors use (), and a nested iterator appends its item index.
     invocation_outputs: dict[str, dict[InvocationContext, dict[str, PortValueDict]]] = {}
     batch_outputs: dict[str, list[dict[str, Any]]] = {}
+    batch_variants: dict[str, list[dict[str, Any]]] = {}
+    axis_items: dict[InvocationContext, Any] = {}
     invocation_results: dict[str, list[_InvocationResult]] = {}
     order = topological_sort(nodes, edges)
     order_index = {nid: index for index, nid in enumerate(order)}
@@ -936,6 +990,27 @@ async def _execute_graph(
                         resolved_inputs[edge.target_handle] = incoming
         return resolved_inputs
 
+    def variant_scope(nid: str, context: InvocationContext) -> dict[str, Any] | None:
+        if not any(node_map[axis].definition_id == "batch" for axis, _index in context):
+            return None
+        lineage = []
+        for depth, (axis, index) in enumerate(context, 1):
+            source = node_map[axis]
+            if source.definition_id == "batch":
+                raw_name = source.params.get("display_name", "Batch")
+                source_label = raw_name if raw_name.strip(_JS_TRIM_WHITESPACE) else "Batch"
+            else:
+                source_label = (_node_def_for(source.definition_id) or {}).get("displayName", source.definition_id)
+            lineage.append({
+                "source_node_id": axis, "source_label": source_label,
+                "index": index, "item_label": _variant_label(axis_items[context[:depth]]),
+            })
+        return {
+            "index": len(batch_outputs.get(nid, [])),
+            "label": _variant_label(" × ".join(item["item_label"] for item in lineage)),
+            "lineage": lineage,
+        }
+
     async def record_outputs(
         nid: str, context: InvocationContext, node_outputs: dict[str, Any],
         effective_params: dict[str, Any],
@@ -943,8 +1018,11 @@ async def _execute_graph(
         snapshot = copy.deepcopy(node_outputs)
         typed = {key: PortValueDict(type=value.get("type", "Any"), value=value.get("value"))
                  for key, value in snapshot.items()}
+        scope = variant_scope(nid, context)
         invocation_outputs.setdefault(nid, {})[context] = typed
         batch_outputs.setdefault(nid, []).append(snapshot)
+        if scope is not None:
+            batch_variants.setdefault(nid, []).append(copy.deepcopy(scope))
         invocation_results.setdefault(nid, []).append(_InvocationResult(
             outputs=copy.deepcopy(snapshot), params=copy.deepcopy(effective_params),
             context=context,
@@ -952,7 +1030,9 @@ async def _execute_graph(
         await emit(ExecutedEvent(
             node_id=nid, outputs=snapshot,
             batch_outputs=copy.deepcopy(batch_outputs[nid])
-            if context or node_map[nid].definition_id in _ITERATOR_NODE_IDS else None,
+            if context or node_map[nid].definition_id in _FANOUT_NODE_IDS else None,
+            variant=scope,
+            batch_variants=copy.deepcopy(batch_variants[nid]) if scope is not None else None,
         ))
 
     async def run_invocation(
@@ -999,7 +1079,10 @@ async def _execute_graph(
                         from services.krea_connector import connection_revision
                         cache_params["_kreaConnectionRevision"] = connection_revision()
                 cache_key = ExecutionCache.get_key(
-                    node.definition_id, cache_params, inputs_for_key, node_id=node.id
+                    node.definition_id, cache_params, inputs_for_key, node_id=node.id,
+                    batch_context=context if any(
+                        node_map[axis].definition_id == "batch" for axis, _index in context
+                    ) else None,
                 )
                 cached_outputs = cache.get(cache_key)
                 if cached_outputs is not None:
@@ -1286,27 +1369,38 @@ async def _execute_graph(
         node = node_map[nid]
         contexts = invocation_contexts(nid)
         invocation_outputs[nid] = {}
-        if node.definition_id in _ITERATOR_NODE_IDS:
+        if node.definition_id in _FANOUT_NODE_IDS:
             await emit(ExecutingEvent(node_id=nid))
             try:
                 cap = node.params.get("batch_size_cap", 10)
                 planned: list[tuple[InvocationContext, Any]] = []
                 for context in contexts:
-                    source = resolve_inputs(nid, context).get("array")
-                    if source is None or not isinstance(source.value, list):
-                        raise ValueError("Iterator requires an Array input")
+                    if node.definition_id == "batch":
+                        items = _batch_items(node.params)
+                    else:
+                        source = resolve_inputs(nid, context).get("array")
+                        if source is None or not isinstance(source.value, list):
+                            raise ValueError("Iterator requires an Array input")
+                        items = source.value[:cap]
                     planned.extend((context + ((nid, index),), item)
-                                   for index, item in enumerate(source.value[:cap]))
+                                   for index, item in enumerate(items))
                 if len(planned) > cap:
                     raise ValueError(
                         f"Nested iterator expands to {len(planned)} items, exceeding "
                         f"this iterator's batch_size_cap of {cap}. Reduce the batch "
                         "before running; no downstream generation was started."
                     )
-                out_type, out_key = ("Image", "image") if node.definition_id == "iterator-image" else ("Text", "text")
+                out_type, out_key = (
+                    ("Text", "set") if node.definition_id == "batch" else
+                    ("Image", "image") if node.definition_id == "iterator-image" else ("Text", "text")
+                )
                 if not planned:
-                    await emit(ExecutedEvent(node_id=nid, outputs={}, batch_outputs=[]))
+                    await emit(ExecutedEvent(
+                        node_id=nid, outputs={}, batch_outputs=[],
+                        batch_variants=[] if node.definition_id == "batch" else None,
+                    ))
                 for context, item in planned:
+                    axis_items[context] = item
                     await record_outputs(nid, context, {out_key: {"type": out_type, "value": item}}, node.params)
                 return nid, True, len(contexts)
             except Exception as exc:
@@ -1326,6 +1420,7 @@ async def _execute_graph(
                 item_dir.mkdir(parents=True, exist_ok=False)
                 token = execution_run_dir.set(item_dir)
             invocation_node = node.model_copy(deep=True, update={"params": copy.deepcopy(recipe_params)}) if context else node
+            scope_token = execution_variant.set(variant_scope(nid, context))
             try:
                 _, succeeded, count = await run_invocation(nid, context, invocation_node)
             finally:
@@ -1335,6 +1430,7 @@ async def _execute_graph(
                     node.params = copy.deepcopy(invocation_node.params)
                 if token is not None:
                     execution_run_dir.reset(token)
+                execution_variant.reset(scope_token)
             executed_count += count
             if not succeeded:
                 return nid, False, executed_count

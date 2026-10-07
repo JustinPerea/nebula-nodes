@@ -8,6 +8,8 @@ import { CATEGORY_COLORS } from '../../constants/ports';
 import { findStructuredRepresentation } from '../../lib/representationViewerRegistry';
 import { useUIStore } from '../../store/uiStore';
 import { useSlavaNodeEntranceClass } from '../../hooks/useSlavaNodeEntrance';
+import { useBatchPreview } from '../../hooks/useBatchPreview';
+import { BatchCarousel } from './BatchCarousel';
 import { MeshPreview } from './MeshPreview';
 import { RepresentationViewer } from './RepresentationViewer';
 import { NodeError } from './NodeError';
@@ -19,6 +21,9 @@ function isDynamicData(data: NodeData): data is DynamicNodeData {
 
 function DynamicNodeComponent({ id, data, selected }: NodeProps) {
   const nodeData = data as unknown as NodeData;
+  const batchPreview = useBatchPreview(id, nodeData);
+  const previewOutputs = batchPreview.outputs;
+  const previewComplete = nodeData.state === 'complete' || batchPreview.browsing;
   const selectNode = useUIStore((s) => s.selectNode);
   const selectedNodeId = useUIStore((s) => s.selectedNodeId);
   const inspectorVisible = useUIStore((s) => s.panels.inspector.visible);
@@ -35,30 +40,36 @@ function DynamicNodeComponent({ id, data, selected }: NodeProps) {
   const inputPorts = dynData?.dynamicInputPorts ?? definition?.inputPorts ?? [];
   const outputPorts = dynData?.dynamicOutputPorts ?? definition?.outputPorts ?? [];
 
-  const imageOutput = Object.values(nodeData.outputs).find((o) => o.type === 'Image' && o.value);
-  const textOutput = Object.values(nodeData.outputs).find((o) => o.type === 'Text' && o.value);
-  const meshOutput = Object.values(nodeData.outputs).find((o) => o.type === 'Mesh' && o.value);
-  const worldOutput = Object.values(nodeData.outputs).find((o) => o.type === 'World' && o.value);
-  const videoOutput = Object.values(nodeData.outputs).find((o) => o.type === 'Video' && o.value);
-  const spatialOutput = findStructuredRepresentation(nodeData.outputs, { includeWorld: false });
-  const displayText = nodeData.streamingText ?? (textOutput && typeof textOutput.value === 'string' ? textOutput.value : null);
+  const imageOutput = Object.values(previewOutputs).find((o) => o.type === 'Image' && o.value);
+  const textOutput = Object.values(previewOutputs).find((o) => o.type === 'Text' && o.value);
+  const meshOutput = Object.values(previewOutputs).find((o) => o.type === 'Mesh' && o.value);
+  const worldOutput = Object.values(previewOutputs).find((o) => o.type === 'World' && o.value);
+  const videoOutput = Object.values(previewOutputs).find((o) => o.type === 'Video' && o.value);
+  const audioOutput = Object.values(previewOutputs).find((o) => o.type === 'Audio' && o.value);
+  const svgOutput = Object.values(previewOutputs).find((o) => o.type === 'SVG' && o.value);
+  const spatialOutput = findStructuredRepresentation(previewOutputs, { includeWorld: false });
+  const outputText = textOutput && typeof textOutput.value === 'string' ? textOutput.value : null;
+  const displayText = batchPreview.browsing ? outputText : nodeData.streamingText ?? outputText;
   const isStreaming = nodeData.state === 'executing' && nodeData.streamingText != null;
 
   // Streaming image partial preview
-  const partials = nodeData.streamingPartials;
+  const partials = batchPreview.browsing ? undefined : nodeData.streamingPartials;
   const latestPartial = partials && partials.length > 0 ? partials[partials.length - 1] : null;
-  const finalImageSrc = imageOutput && typeof imageOutput.value === 'string' ? imageOutput.value : null;
+  const finalImageSrc = imageOutput && typeof imageOutput.value === 'string' ? imageOutput.value
+    : previewComplete && svgOutput && typeof svgOutput.value === 'string' ? svgOutput.value : null;
   const previewImageSrc = finalImageSrc ?? latestPartial?.src ?? null;
   const isStreamingImage = nodeData.state === 'executing' && partials != null && partials.length > 0 && finalImageSrc == null;
-  const shouldRenderSpatial = nodeData.state === 'complete'
+  const shouldRenderSpatial = previewComplete
     && !worldOutput
     && Boolean(spatialOutput)
     && !imageOutput
     && !videoOutput
-    && !meshOutput;
+    && !meshOutput
+    && !audioOutput
+    && !svgOutput;
   const isImageSurface = !worldOutput && Boolean(previewImageSrc);
   const isTextSurface = !worldOutput && !shouldRenderSpatial && Boolean(displayText);
-  const isWorldSurface = nodeData.state === 'complete' && Boolean(worldOutput);
+  const isWorldSurface = previewComplete && Boolean(worldOutput);
 
   // Model badge: show selected model compactly
   const modelBadge = dynData?.modelId || (nodeData.params.model as string) || (nodeData.params.model_id as string) || (nodeData.params.endpoint_id as string) || null;
@@ -109,6 +120,7 @@ function DynamicNodeComponent({ id, data, selected }: NodeProps) {
       <div className="model-node__header">
         <span className="model-node__category-dot" style={{ backgroundColor: categoryColor }} />
         <span className="model-node__label">{nodeData.label}</span>
+        {batchPreview.label && <span className="batch-carousel__active-label" title={batchPreview.lineage}>[{batchPreview.label}]</span>}
         {nodeData.keyStatus === 'missing' && <span className="model-node__badge model-node__badge--warning" title="API Key Missing">&#x26A0;</span>}
       </div>
 
@@ -156,7 +168,7 @@ function DynamicNodeComponent({ id, data, selected }: NodeProps) {
         </div>
       )}
 
-      {nodeData.state === 'complete' && worldOutput && (
+      {previewComplete && worldOutput && (
         <div className="model-node__preview model-node__preview--world">
           <RepresentationViewer type={worldOutput.type} value={worldOutput.value} />
         </div>
@@ -173,7 +185,7 @@ function DynamicNodeComponent({ id, data, selected }: NodeProps) {
           <img
             src={previewImageSrc}
             className={isStreamingImage ? 'model-node__preview-image--streaming' : 'model-node__preview-image'}
-            alt={isStreamingImage ? 'Streaming preview' : 'Generated image'}
+            alt={isStreamingImage ? 'Streaming preview' : !imageOutput && svgOutput ? 'Generated SVG' : 'Generated image'}
             loading="lazy"
           />
         </div>
@@ -187,13 +199,13 @@ function DynamicNodeComponent({ id, data, selected }: NodeProps) {
         </div>
       )}
 
-      {nodeData.state === 'complete' && !worldOutput && meshOutput && typeof meshOutput.value === 'string' && (
+      {previewComplete && !worldOutput && meshOutput && typeof meshOutput.value === 'string' && (
         <div className="model-node__preview">
           <MeshPreview src={meshOutput.value} />
         </div>
       )}
 
-      {nodeData.state === 'complete' && videoOutput && typeof videoOutput.value === 'string' && (
+      {previewComplete && videoOutput && typeof videoOutput.value === 'string' && (
         <div className="model-node__preview">
           <video
             src={videoOutput.value}
@@ -232,6 +244,15 @@ function DynamicNodeComponent({ id, data, selected }: NodeProps) {
           raw={nodeData.error}
         />
       )}
+
+      {previewComplete && audioOutput && typeof audioOutput.value === 'string' && (
+        <div className="model-node__preview">
+          <audio src={audioOutput.value} controls className="model-node__preview-audio nodrag nowheel"
+            onMouseDown={(event) => event.stopPropagation()} />
+        </div>
+      )}
+
+      <BatchCarousel preview={batchPreview} />
 
       {outputPorts.length > 0 && (
         <div className="model-node__ports model-node__ports--output">

@@ -1,0 +1,72 @@
+body.app-slava-restraint .batch-node {
+  width: 240px;
+  padding: 12px 14px;
+  position: relative;
+  border: 1px solid var(--sr-edge);
+  border-radius: var(--sr-radius-node, 6px);
+  background: var(--sr-glass);
+  color: var(--sr-ink);
+  font-size: 12px;
+}
+
+body.app-slava-restraint .batch-node--selected { border-color: var(--sr-accent); }
+body.app-slava-restraint .batch-node__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+body.app-slava-restraint .batch-node__name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+body.app-slava-restraint .batch-node__count { color: var(--sr-ink-meta); white-space: nowrap; }
+body.app-slava-restraint .batch-node__edit {
+  background: transparent;
+  border: 0;
+  color: var(--sr-ink);
+  font-size: 18px;
+  cursor: pointer;
+  padding: 0 3px;
+}
+body.app-slava-restraint .batch-node__list { display: grid; gap: 5px; }
+body.app-slava-restraint .batch-node__item { display: flex; gap: 8px; min-width: 0; }
+body.app-slava-restraint .batch-node__item > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+body.app-slava-restraint .batch-node__item-index { color: var(--sr-ink-meta); min-width: 15px; }
+body.app-slava-restraint .batch-node__empty,
+body.app-slava-restraint .batch-node__overflow,
+body.app-slava-restraint .batch-node__guidance { color: var(--sr-ink-meta); }
+body.app-slava-restraint .batch-node__guidance { margin: 10px 0; font-size: 10px; line-height: 1.4; }
+body.app-slava-restraint .batch-node__warning {
+  margin: 8px 0;
+  padding: 7px;
+  border-left: 2px solid #fbbf24;
+  color: #fbbf24;
+  font-size: 11px;
+  line-height: 1.4;
+}
+body.app-slava-restraint .batch-node__output { position: relative; text-align: right; margin-top: 8px; }
+body.app-slava-restraint .batch-node__output .model-node__handle { right: -15px; }
+body.app-slava-restraint .batch-carousel {
+  border-top: 1px solid var(--sr-edge);
+  padding: 8px 10px;
+  color: var(--sr-ink);
+  font-size: 11px;
+}
+body.app-slava-restraint .batch-carousel__controls { display: flex; align-items: center; gap: 8px; }
+body.app-slava-restraint .batch-carousel__controls button {
+  padding: 0;
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--sr-edge);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--sr-ink);
+  font-size: 18px;
+  cursor: pointer;
+}
+body.app-slava-restraint .batch-carousel__controls button:disabled { opacity: 0.35; cursor: default; }
+body.app-slava-restraint .batch-carousel__position { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+body.app-slava-restraint .batch-carousel__note { display: block; margin-top: 5px; color: var(--sr-ink-meta); font-size: 9px; }
+body.app-slava-restraint .batch-carousel__active-label { color: var(--sr-ink-meta); font-size: 11px; }

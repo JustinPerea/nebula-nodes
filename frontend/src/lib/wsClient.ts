@@ -1,5 +1,5 @@
 import { backendWebSocketUrl } from './backend';
-import type { PortValue } from '../types';
+import type { PortValue, VariantScope } from '../types';
 import type { ExecutionStatusResult } from './api';
 import type {
   ProviderRecoveryCheckpoint,
@@ -19,10 +19,10 @@ export type ErrorCategory =
 
 export type ExecutionEvent = (
   | { type: 'queued'; nodeId: string }
-  | { type: 'executing'; nodeId: string }
-  | { type: 'progress'; nodeId: string; value: number }
-  | { type: 'executed'; nodeId: string; outputs: Record<string, PortValue>; batchOutputs?: Array<Record<string, PortValue>> | null }
-  | { type: 'error'; nodeId: string; error: string; retryable: boolean; category?: ErrorCategory; friendly?: string }
+  | { type: 'executing'; nodeId: string; variant?: VariantScope | null }
+  | { type: 'progress'; nodeId: string; value: number; variant?: VariantScope | null }
+  | { type: 'executed'; nodeId: string; outputs: Record<string, PortValue>; batchOutputs?: Array<Record<string, PortValue>> | null; variant?: VariantScope | null; batchVariants?: VariantScope[] | null }
+  | { type: 'error'; nodeId: string; error: string; retryable: boolean; category?: ErrorCategory; friendly?: string; variant?: VariantScope | null }
   | { type: 'validationError'; errors: Array<{ nodeId: string; portId: string; message: string }> }
   | { type: 'graphComplete'; duration: number; nodesExecuted: number }
   | { type: 'graphCancelled' }

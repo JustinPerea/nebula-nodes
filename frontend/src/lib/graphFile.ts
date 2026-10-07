@@ -253,7 +253,7 @@ export function deserializeGraph(
     }
     return {
       id: n.id,
-      type: n.type,
+      type: n.data.definitionId === 'batch' ? 'batchNode' : n.type,
       position: n.position,
       data,
     };

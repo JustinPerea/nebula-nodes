@@ -3,6 +3,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { BatchRunInspection } from '../src/components/panels/BatchRunInspection';
 import type { RunRecord } from '../src/lib/runHistory';
 import { getBackendBaseUrl } from '../src/lib/backend';
+import { useGraphStore } from '../src/store/graphStore';
 
 function record(status: RunRecord['status']): RunRecord {
   return { id: 'batch-run', trigger: 'graph', startedAt: 1, status, snapshot: { nodes: [], edges: [] },
@@ -41,5 +42,43 @@ describe('historical batch result access', () => {
     delete saved.batchOutputs;
     const { container } = render(<BatchRunInspection record={saved} />);
     expect(container).toBeEmptyDOMElement();
+  });
+
+  it('keeps saved labels and lineage after the live source is edited', () => {
+    const saved = record('complete');
+    saved.batchVariants = { model: [
+      { index: 0, label: 'Red logo', lineage: [{ source_node_id: 'source', source_label: 'Colors',
+        index: 0, item_label: 'red' }] },
+      { index: 1, label: 'Blue logo', lineage: [{ source_node_id: 'source', source_label: 'Colors',
+        index: 1, item_label: 'blue' }] },
+    ] };
+    const originalNodes = useGraphStore.getState().nodes;
+    const rendered = render(<BatchRunInspection record={saved} />);
+    try {
+      useGraphStore.setState({ nodes: [{ id: 'source', position: { x: 0, y: 0 }, data: {
+        label: 'Changed source', definitionId: 'batch', params: {
+          display_name: 'Changed palette', items_text: 'yellow\npurple',
+        }, outputs: {}, state: 'idle',
+      } }] });
+      rendered.rerender(<BatchRunInspection record={saved} />);
+      expect(screen.getByText('model · Red logo')).toBeInTheDocument();
+      expect(screen.getByText('model · Blue logo')).toBeInTheDocument();
+      expect(screen.getByText('Colors: red')).toBeInTheDocument();
+      expect(screen.getByText('Colors: blue')).toBeInTheDocument();
+      expect(screen.queryByText(/Changed palette|yellow|purple/)).not.toBeInTheDocument();
+      expect(screen.queryByRole('button')).not.toBeInTheDocument();
+    } finally {
+      rendered.unmount();
+      useGraphStore.setState({ nodes: originalNodes });
+    }
+  });
+
+  it('falls back to result numbers for the whole node when metadata count does not match', () => {
+    const saved = record('complete');
+    saved.batchVariants = { model: [{ index: 0, label: 'Misaligned label', lineage: [] }] };
+    render(<BatchRunInspection record={saved} />);
+    expect(screen.getByText('model · Result 1')).toBeInTheDocument();
+    expect(screen.getByText('model · Result 2')).toBeInTheDocument();
+    expect(screen.queryByText(/Misaligned label/)).not.toBeInTheDocument();
   });
 });

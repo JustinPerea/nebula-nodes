@@ -31,6 +31,7 @@ import {
   paperRunOutOfDateReasons,
   recordPaperRunOutput,
   recordRunBatchOutputs,
+  sanitizeVariantScopes,
   snapshotWithLatestPaperSources,
   providerRecoveryWarningText,
   isWorldLabsRecoveryReplayBlocked,
@@ -138,6 +139,51 @@ function captureRunSnapshot(nodes: Node<NodeData>[], edges: Edge[]): RunGraphSna
 function persistedRunHistory(history: RunRecord[]): RunRecord[] {
   persistRunHistory(history);
   return history;
+}
+
+function clearBatchPreview(runId?: string): Partial<NodeData> {
+  return { batchOutputs: undefined, batchVariants: undefined, batchRunId: runId };
+}
+
+function sameExecutionOutputs(left: NodeData['outputs'], right: NodeData['outputs']): boolean {
+  const stable = (outputs: NodeData['outputs']) => JSON.stringify(normalizedExecutionOutputs(outputs),
+    (_key, value: unknown) => value && typeof value === 'object' && !Array.isArray(value)
+      ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b))) : value);
+  return stable(left) === stable(right);
+}
+
+function recordIncludesNode(record: RunRecord, nodeId: string): boolean {
+  if (!record.targetNodeId) return record.snapshot.nodes.some((node) => node.id === nodeId);
+  const ids = new Set([record.targetNodeId]);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const edge of record.snapshot.edges) {
+      if (ids.has(edge.target) && !ids.has(edge.source)) {
+        ids.add(edge.source);
+        changed = true;
+      }
+    }
+  }
+  return ids.has(nodeId);
+}
+
+/** Restore a gallery only from the latest run that actually owned this node.
+ * Matching the current scalar result prevents history from rewinding a newer
+ * backend output. The saved recipe, rather than editable source text, labels it. */
+function restoreBatchPreview(node: Node<NodeData>, history: RunRecord[]): Node<NodeData> {
+  if (node.data.batchRunId !== undefined || node.data.state === 'queued'
+    || node.data.state === 'executing' || scopeOverlaps([node.id])) return node;
+  const record = history.find((candidate) => recordIncludesNode(candidate, node.id)
+    && candidate.snapshot.nodes.some((saved) => saved.id === node.id
+      && saved.definitionId === node.data.definitionId));
+  const snapshots = record?.batchOutputs?.[node.id];
+  if (!record || !snapshots) return node;
+  const outputs = snapshots.map(normalizedExecutionOutputs);
+  if (outputs.length && !sameExecutionOutputs(outputs[outputs.length - 1], node.data.outputs)) return node;
+  if (!outputs.length && Object.keys(node.data.outputs).length) return node;
+  return { ...node, data: { ...node.data, batchRunId: record.id, batchOutputs: outputs,
+    batchVariants: sanitizeVariantScopes(record.batchVariants?.[node.id], outputs.length) } };
 }
 
 function buildDefaultParams(def: ModelNodeDefinition): Record<string, unknown> {
@@ -297,6 +343,9 @@ function createSnapshot(nodes: Node<NodeData>[], edges: Edge[]): UndoSnapshot {
         // Outputs deliberately excluded — they persist through undo
         outputs: {},
         state: 'idle' as const,
+        batchOutputs: undefined,
+        batchVariants: undefined,
+        batchRunId: undefined,
         error: undefined,
         progress: undefined,
         streamingText: undefined,
@@ -322,14 +371,20 @@ function restoreWithOutputs(
       outputs: NodeData['outputs'];
       state: NodeData['state'];
       streamingText?: string;
+      batchOutputs?: NodeData['batchOutputs'];
+      batchVariants?: NodeData['batchVariants'];
+      batchRunId?: string;
     }
   >();
   for (const n of currentNodes) {
-    if (Object.keys(n.data.outputs).length > 0) {
+    if (Object.keys(n.data.outputs).length > 0 || n.data.batchOutputs !== undefined) {
       currentOutputs.set(n.id, {
         outputs: n.data.outputs,
         state: n.data.state,
         streamingText: n.data.streamingText,
+        batchOutputs: n.data.batchOutputs,
+        batchVariants: n.data.batchVariants,
+        batchRunId: n.data.batchRunId,
       });
     }
   }
@@ -344,6 +399,9 @@ function restoreWithOutputs(
           outputs: preserved.outputs as NodeData['outputs'],
           state: preserved.state,
           streamingText: preserved.streamingText,
+          batchOutputs: preserved.batchOutputs,
+          batchVariants: preserved.batchVariants,
+          batchRunId: preserved.batchRunId,
         },
       };
     }
@@ -1728,6 +1786,7 @@ wsClient.subscribe((event) => {
         // overrides common keys like label/definitionId/params.
         const cliOutputs = cliNode.data?.outputs ?? {};
         const hasCliOutputs = Object.keys(cliOutputs).length > 0;
+        const changedOutput = hasCliOutputs && !sameExecutionOutputs(cliOutputs, existing.data.outputs);
         const isPaperSource = cliNode.data.definitionId === 'paper-source';
         const previousSource = existing.data.params._paperSource as PaperSourceRecord | undefined;
         const incomingSource = cliNode.data.params._paperSource as PaperSourceRecord | undefined;
@@ -1737,7 +1796,8 @@ wsClient.subscribe((event) => {
           ? previousSource : incomingSource;
         return {
           ...cliNode,
-          type: isPaperSource ? 'paperSourceNode' : existing.type ?? cliNode.type,
+          type: isPaperSource ? 'paperSourceNode' : cliNode.data.definitionId === 'batch'
+            ? 'batchNode' : existing.type ?? cliNode.type,
           position: existing.position,
           data: {
             ...existing.data,
@@ -1745,6 +1805,7 @@ wsClient.subscribe((event) => {
             outputs: hasCliOutputs ? cliOutputs : existing.data.outputs,
             state: hasCliOutputs ? cliNode.data.state : existing.data.state,
             keyStatus,
+            ...(changedOutput ? clearBatchPreview() : {}),
             ...(isPaperSource && paperSource ? {
               params: { ...cliNode.data.params, _paperSource: paperSource },
               outputs: paperSource.snapshot
@@ -1760,7 +1821,8 @@ wsClient.subscribe((event) => {
       // create`) and round-trips user-saved positions for imported graphs.
       return {
         ...cliNode,
-        type: cliNode.data.definitionId === 'paper-source' ? 'paperSourceNode' : cliNode.type,
+        type: cliNode.data.definitionId === 'paper-source' ? 'paperSourceNode'
+          : cliNode.data.definitionId === 'batch' ? 'batchNode' : cliNode.type,
         position: {
           x: cliNode.position?.x ?? 0,
           y: cliNode.position?.y ?? 100,
@@ -1977,6 +2039,9 @@ export const useGraphStore = create<GraphState>((set, get) => ({
           params: safeParams.get(node.id)!,
           state: 'idle' as const,
           outputs: {},
+          batchOutputs: undefined,
+          batchVariants: undefined,
+          batchRunId: undefined,
           error: undefined,
           progress: undefined,
           streamingText: undefined,
@@ -2046,6 +2111,9 @@ export const useGraphStore = create<GraphState>((set, get) => ({
           params: safeParams.get(node.id)!,
           state: 'idle' as const,
           outputs: {},
+          batchOutputs: undefined,
+          batchVariants: undefined,
+          batchRunId: undefined,
           error: undefined,
           progress: undefined,
           streamingText: undefined,
@@ -2171,6 +2239,8 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       const nodeType =
         definitionId === 'reroute'
           ? 'reroute-node'
+          : definitionId === 'batch'
+            ? 'batchNode'
           : definitionId === 'camera-rig'
             ? 'cameraRigNode'
             : definitionId === 'paper-source'
@@ -3803,6 +3873,9 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         params,
         state: 'idle' as const,
         outputs: {},
+        batchOutputs: undefined,
+        batchVariants: undefined,
+        batchRunId: undefined,
         error: undefined,
         progress: undefined,
         streamingText: undefined,
@@ -4394,7 +4467,8 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     // applied before graphCancelled so a paid provider job is never stranded.
     if (
       event.runId
-      && (cancelledRunIds.has(event.runId) || terminalRunIds.has(event.runId))
+      && (cancelledRunIds.has(event.runId) || terminalRunIds.has(event.runId)
+        || get().runHistory.some((record) => record.id === event.runId && record.status !== 'running'))
       && event.type !== 'graphCancelled'
       && event.type !== 'providerRecovery'
       && event.type !== 'providerStartAmbiguous'
@@ -4467,26 +4541,37 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       case 'queued':
         get().updateNodeData(event.nodeId, {
           state: 'queued',
+          ...clearBatchPreview(event.runId ?? currentRunId ?? undefined),
           streamingText: undefined,
           streamingPartials: undefined,
         });
         break;
-      case 'executing':
-        get().updateNodeData(event.nodeId, { state: 'executing', progress: 0, streamingText: undefined, streamingPartials: undefined, streamingSvg: undefined });
+      case 'executing': {
+        const runId = event.runId ?? currentRunId ?? undefined;
+        const live = get().nodes.find((node) => node.id === event.nodeId);
+        get().updateNodeData(event.nodeId, { state: 'executing', progress: 0, streamingText: undefined,
+          streamingPartials: undefined, streamingSvg: undefined,
+          ...(live?.data.batchRunId !== runId ? clearBatchPreview(runId) : {}),
+        });
         break;
+      }
       case 'progress':
         get().updateNodeData(event.nodeId, { progress: event.value });
         break;
       case 'executed': {
         const outputs = normalizedExecutionOutputs(event.outputs);
         const runId = event.runId ?? currentRunId;
+        const batchOutputs = Array.isArray(event.batchOutputs)
+          ? event.batchOutputs.map(normalizedExecutionOutputs) : undefined;
+        const batchVariants = batchOutputs
+          ? sanitizeVariantScopes(event.batchVariants, batchOutputs.length) : undefined;
         const record = get().runHistory.find((candidate) => candidate.id === runId);
         if (record && runId) {
           set((state) => {
             let runHistory = recordPaperRunOutput(state.runHistory, runId, event.nodeId, outputs);
-            if (Array.isArray(event.batchOutputs)) {
+            if (batchOutputs) {
               runHistory = recordRunBatchOutputs(runHistory, runId, event.nodeId,
-                event.batchOutputs.map(normalizedExecutionOutputs));
+                batchOutputs, batchVariants);
             }
             return { runHistory: persistedRunHistory(runHistory) };
           });
@@ -4505,7 +4590,9 @@ export const useGraphStore = create<GraphState>((set, get) => ({
           paperInputs,
           outOfDateReasons: paperRunOutOfDateReasons(record, captureRunSnapshot(get().nodes, get().edges), event.nodeId),
         } : undefined;
-        get().updateNodeData(event.nodeId, { state: 'complete', outputs: outputs as NodeData['outputs'], outputFreshness, progress: undefined, streamingText: undefined, streamingPartials: undefined, streamingSvg: undefined });
+        get().updateNodeData(event.nodeId, { state: 'complete', outputs: outputs as NodeData['outputs'],
+          batchOutputs, batchVariants, batchRunId: runId ?? undefined,
+          outputFreshness, progress: undefined, streamingText: undefined, streamingPartials: undefined, streamingSvg: undefined });
         break;
       }
       case 'streamDelta':
@@ -4740,6 +4827,19 @@ export const useGraphStore = create<GraphState>((set, get) => ({
 
   dismissProviderRecoveryWarning: () => set({ providerRecoveryWarning: null }),
 }));
+
+// Gallery hydration is read-only: reload/import can match saved scalar outputs
+// to the latest owning record without replaying or changing the graph recipe.
+let restoringBatchPreviews = false;
+useGraphStore.subscribe((state, previous) => {
+  if (restoringBatchPreviews || (state.nodes === previous.nodes && state.runHistory === previous.runHistory)
+    || !state.runHistory.some((record) => record.batchOutputs)) return;
+  const nodes = state.nodes.map((node) => restoreBatchPreview(node, state.runHistory));
+  if (nodes.every((node, index) => node === state.nodes[index])) return;
+  restoringBatchPreviews = true;
+  try { useGraphStore.setState({ nodes }); }
+  finally { restoringBatchPreviews = false; }
+});
 
 // Source, recipe and edge edits share one freshness path, including graphSync,
 // undo and reload. This subscriber changes attribution only; it never executes.

@@ -12,6 +12,8 @@ import { useUIStore } from '../../store/uiStore';
 import { isKreaGateway, kreaModeForParams } from '../../lib/kreaConnection';
 import { useGraphStore } from '../../store/graphStore';
 import { useSlavaNodeEntranceClass } from '../../hooks/useSlavaNodeEntrance';
+import { useBatchPreview } from '../../hooks/useBatchPreview';
+import { BatchCarousel } from './BatchCarousel';
 import { MeshPreview } from './MeshPreview';
 import { RepresentationViewer } from './RepresentationViewer';
 import { NodeError } from './NodeError';
@@ -46,6 +48,9 @@ function filenameFor(nodeLabel: string, nodeId: string, url: string, fallbackExt
 
 function ModelNodeComponent({ id, data, selected }: NodeProps) {
   const nodeData = data as unknown as NodeData;
+  const batchPreview = useBatchPreview(id, nodeData);
+  const previewOutputs = batchPreview.outputs;
+  const previewComplete = nodeData.state === 'complete' || batchPreview.browsing;
   const definition = NODE_DEFINITIONS[nodeData.definitionId];
   const selectNode = useUIStore((s) => s.selectNode);
   const selectedNodeId = useUIStore((s) => s.selectedNodeId);
@@ -145,6 +150,10 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
   const edges = useGraphStore((s) => s.edges);
   const nodes = useGraphStore((s) => s.nodes);
   const maskSourcePreview = useMemo(() => {
+    // A retained mask result belongs to its own captured source. Live graph
+    // inputs may already point at the last item, so show the produced artifact
+    // while browsing instead of reconstructing a composite from those inputs.
+    if (batchPreview.browsing) return null;
     if (nodeData.definitionId !== 'mask-painter') return null;
     const inEdge = edges.find(
       (edge) => edge.target === id && (edge.targetHandle ?? 'image') === 'image',
@@ -162,22 +171,23 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
     if (imgOut) return String(imgOut.value);
     if (sd.params._previewUrl) return String(sd.params._previewUrl);
     return null;
-  }, [nodeData.definitionId, id, edges, nodes]);
+  }, [batchPreview.browsing, nodeData.definitionId, id, edges, nodes]);
 
   if (!definition) return <div className="model-node model-node--error">Unknown node type</div>;
 
   const categoryColor = CATEGORY_COLORS[definition.category] ?? '#424242';
   const stateClass = `model-node--${nodeData.state}`;
-  const imageOutput = Object.values(nodeData.outputs).find((o) => o.type === 'Image' && o.value);
-  const textOutput = Object.values(nodeData.outputs).find((o) => o.type === 'Text' && o.value);
-  const videoOutput = Object.values(nodeData.outputs).find((o) => o.type === 'Video' && o.value);
-  const meshOutput = Object.values(nodeData.outputs).find((o) => o.type === 'Mesh' && o.value);
-  const worldOutput = Object.values(nodeData.outputs).find((o) => o.type === 'World' && o.value);
-  const audioOutput = Object.values(nodeData.outputs).find((o) => o.type === 'Audio' && o.value);
-  const svgOutput = Object.values(nodeData.outputs).find((o) => o.type === 'SVG' && o.value);
-  const spatialOutput = findStructuredRepresentation(nodeData.outputs, { includeWorld: false });
+  const imageOutput = Object.values(previewOutputs).find((o) => o.type === 'Image' && o.value);
+  const textOutput = Object.values(previewOutputs).find((o) => o.type === 'Text' && o.value);
+  const videoOutput = Object.values(previewOutputs).find((o) => o.type === 'Video' && o.value);
+  const meshOutput = Object.values(previewOutputs).find((o) => o.type === 'Mesh' && o.value);
+  const worldOutput = Object.values(previewOutputs).find((o) => o.type === 'World' && o.value);
+  const audioOutput = Object.values(previewOutputs).find((o) => o.type === 'Audio' && o.value);
+  const svgOutput = Object.values(previewOutputs).find((o) => o.type === 'SVG' && o.value);
+  const spatialOutput = findStructuredRepresentation(previewOutputs, { includeWorld: false });
 
-  const displayText = nodeData.streamingText ?? (textOutput && typeof textOutput.value === 'string' ? textOutput.value : null);
+  const outputText = textOutput && typeof textOutput.value === 'string' ? textOutput.value : null;
+  const displayText = batchPreview.browsing ? outputText : nodeData.streamingText ?? outputText;
   const previewText = displayText ? displayText.replace(/\\n/g, '\n') : null;
   const isStreaming = nodeData.state === 'executing' && nodeData.streamingText != null;
   const isImageInput = nodeData.definitionId === 'image-input';
@@ -187,7 +197,7 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
     ? nodeData.params._maskData
     : null;
   const showMaskComposite = Boolean(isMaskPainter && maskSourcePreview && maskOverlayData);
-  const finalImageOutput = nodeData.state === 'complete' && imageOutput && typeof imageOutput.value === 'string'
+  const finalImageOutput = previewComplete && imageOutput && typeof imageOutput.value === 'string'
     ? imageOutput.value
     : null;
   // Quiver Arrow progressive preview: stream.draft fires StreamPartialSvgEvent
@@ -196,19 +206,19 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
   const streamingSvgPreview = nodeData.streamingSvg && nodeData.state === 'executing'
     ? `data:image/svg+xml;utf8,${encodeURIComponent(nodeData.streamingSvg.svg)}`
     : null;
-  const finalSvgOutput = nodeData.state === 'complete' && svgOutput && typeof svgOutput.value === 'string'
+  const finalSvgOutput = previewComplete && svgOutput && typeof svgOutput.value === 'string'
     ? svgOutput.value
     : null;
   // Image Compare node: render a before/after wipe of its two image inputs
   // (passed through as outputs imageA/imageB) rather than just the first image.
   const isImageCompare = nodeData.definitionId === 'image-compare';
   const compareBefore =
-    isImageCompare && nodeData.state === 'complete' && typeof nodeData.outputs.imageA?.value === 'string'
-      ? nodeData.outputs.imageA.value
+    isImageCompare && previewComplete && typeof previewOutputs.imageA?.value === 'string'
+      ? previewOutputs.imageA.value
       : null;
   const compareAfter =
-    isImageCompare && nodeData.state === 'complete' && typeof nodeData.outputs.imageB?.value === 'string'
-      ? nodeData.outputs.imageB.value
+    isImageCompare && previewComplete && typeof previewOutputs.imageB?.value === 'string'
+      ? previewOutputs.imageB.value
       : null;
   const showCompare = Boolean(compareBefore && compareAfter);
 
@@ -220,7 +230,7 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
     || showCompare
     || (isMaskPainter && maskSourcePreview),
   );
-  const shouldRenderSpatial = nodeData.state === 'complete'
+  const shouldRenderSpatial = previewComplete
     && !worldOutput
     && Boolean(spatialOutput)
     && !isImageSurface
@@ -230,18 +240,18 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
   const isTextSurface = !worldOutput
     && !shouldRenderSpatial
     && (isInlineTextNode || Boolean(displayText && !isInlineTextNode));
-  const isWorldSurface = nodeData.state === 'complete' && Boolean(worldOutput);
+  const isWorldSurface = previewComplete && Boolean(worldOutput);
   const imageClassName = isSlavaSkin ? 'model-node__preview-image' : 'model-node__preview-image nodrag';
   const downloadableOutput =
     finalImageOutput
       ? { url: finalImageOutput, fallbackExt: 'png', title: 'Download image' }
       : finalSvgOutput
         ? { url: finalSvgOutput, fallbackExt: 'svg', title: 'Download SVG' }
-        : nodeData.state === 'complete' && videoOutput && typeof videoOutput.value === 'string'
+        : previewComplete && videoOutput && typeof videoOutput.value === 'string'
           ? { url: videoOutput.value, fallbackExt: 'mp4', title: 'Download video' }
-          : nodeData.state === 'complete' && meshOutput && typeof meshOutput.value === 'string'
+          : previewComplete && meshOutput && typeof meshOutput.value === 'string'
             ? { url: meshOutput.value, fallbackExt: 'glb', title: 'Download mesh' }
-            : nodeData.state === 'complete' && audioOutput && typeof audioOutput.value === 'string'
+            : previewComplete && audioOutput && typeof audioOutput.value === 'string'
               ? { url: audioOutput.value, fallbackExt: 'mp3', title: 'Download audio' }
               : null;
   const inlineTextParam = inlineTextParamKey
@@ -293,6 +303,7 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
       <div className="model-node__header">
         <span className="model-node__category-dot" style={{ backgroundColor: categoryColor }} />
         <span className="model-node__label">{nodeData.label}</span>
+        {batchPreview.label && <span className="batch-carousel__active-label" title={batchPreview.lineage}>[{batchPreview.label}]</span>}
         {nodeData.keyStatus === 'missing' && <span className="model-node__badge model-node__badge--warning"
           title={isKreaGateway(definition) && kreaModeForParams(nodeData.params) === 'mcp' ? 'Krea sign-in required' : 'API Key Missing'}>&#x26A0;</span>}
         <span
@@ -500,7 +511,7 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
         </div>
       )}
 
-      {nodeData.state === 'complete' && worldOutput && (
+      {previewComplete && worldOutput && (
         <div className="model-node__preview model-node__preview--world">
           <RepresentationViewer type={worldOutput.type} value={worldOutput.value} />
         </div>
@@ -594,7 +605,7 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
         </div>
       )}
 
-      {nodeData.state === 'complete' && videoOutput && typeof videoOutput.value === 'string' && (
+      {previewComplete && videoOutput && typeof videoOutput.value === 'string' && (
         <div className="model-node__preview">
           <video
             src={videoOutput.value}
@@ -644,7 +655,7 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
         </div>
       )}
 
-      {nodeData.state === 'complete' && !worldOutput && meshOutput && typeof meshOutput.value === 'string' && (
+      {previewComplete && !worldOutput && meshOutput && typeof meshOutput.value === 'string' && (
         <div className="model-node__preview">
           <MeshPreview src={meshOutput.value} />
           <button
@@ -668,7 +679,7 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
         </div>
       )}
 
-      {nodeData.state === 'complete' && audioOutput && typeof audioOutput.value === 'string' && (
+      {previewComplete && audioOutput && typeof audioOutput.value === 'string' && (
         <div className="model-node__preview">
           <audio
             src={audioOutput.value}
@@ -697,7 +708,7 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
         </div>
       )}
 
-      {nodeData.state === 'complete' && !imageOutput && !textOutput && !videoOutput && !meshOutput && !worldOutput && !audioOutput && !svgOutput && !spatialOutput && Object.keys(nodeData.outputs).length > 0 && (
+      {previewComplete && !imageOutput && !textOutput && !videoOutput && !meshOutput && !worldOutput && !audioOutput && !svgOutput && !spatialOutput && Object.keys(previewOutputs).length > 0 && (
         <div className="model-node__preview">
           <div className="model-node__preview-placeholder">Output ready</div>
         </div>
@@ -710,6 +721,8 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
           raw={nodeData.error}
         />
       )}
+
+      <BatchCarousel preview={batchPreview} />
 
       {definition.outputPorts.length > 0 && (
         <div className="model-node__ports model-node__ports--output">

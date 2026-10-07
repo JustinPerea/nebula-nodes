@@ -73,6 +73,7 @@ const LOCAL_EXECUTION_NODE_IDS = new Set([
   'svg-rasterize',
   'iterator-image',
   'iterator-text',
+  'batch',
   'preview',
   'combine-text',
   'router',

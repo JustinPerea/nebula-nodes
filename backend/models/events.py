@@ -1,15 +1,26 @@
 from __future__ import annotations
 
+import copy
 from contextvars import ContextVar
 from typing import Any, Literal, Union
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 execution_run_id: ContextVar[str | None] = ContextVar(
     "execution_run_id",
     default=None,
 )
+
+# Handler progress callbacks inherit the invocation that created their task.
+# This is metadata beside scalar outputs, never a change to their port values.
+execution_variant: ContextVar[dict[str, Any] | None] = ContextVar(
+    "execution_variant", default=None,
+)
+
+
+def _current_variant() -> dict[str, Any] | None:
+    return copy.deepcopy(execution_variant.get())
 
 
 class RunScopedEvent(BaseModel):
@@ -30,12 +41,14 @@ class QueuedEvent(RunScopedEvent):
 class ExecutingEvent(RunScopedEvent):
     type: Literal["executing"] = "executing"
     node_id: str
+    variant: dict[str, Any] | None = Field(default_factory=_current_variant)
 
 
 class ProgressEvent(RunScopedEvent):
     type: Literal["progress"] = "progress"
     node_id: str
     value: float
+    variant: dict[str, Any] | None = Field(default_factory=_current_variant)
 
 
 class ExecutedEvent(RunScopedEvent):
@@ -45,11 +58,14 @@ class ExecutedEvent(RunScopedEvent):
     # Current outputs remain scalar. Batch snapshots retain earlier iterator
     # invocations without changing any node's declared output-port contract.
     batch_outputs: list[dict[str, Any]] | None = None
+    variant: dict[str, Any] | None = Field(default_factory=_current_variant)
+    batch_variants: list[dict[str, Any]] | None = None
 
 
 class ErrorEvent(RunScopedEvent):
     type: Literal["error"] = "error"
     node_id: str
+    variant: dict[str, Any] | None = Field(default_factory=_current_variant)
     error: str
     retryable: bool = False
     # Optional friendly classification (see execution.error_classifier). `error`

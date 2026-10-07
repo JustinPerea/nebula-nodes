@@ -365,6 +365,18 @@ export interface PaperOutputFreshness {
   outOfDateReasons: string[];
 }
 
+/** A repeated invocation's display attribution. Canonical port values stay scalar. */
+export interface VariantScope {
+  index: number;
+  label: string;
+  lineage: Array<{
+    source_node_id: string;
+    source_label: string;
+    index: number;
+    item_label: string;
+  }>;
+}
+
 export interface NodeData {
   [key: string]: unknown;
   label: string;
@@ -373,6 +385,10 @@ export interface NodeData {
   state: NodeState;
   progress?: number;
   outputs: Record<string, PortValue>;
+  /** UI-only cumulative previews; excluded from recipe and graph-file data. */
+  batchOutputs?: Array<Record<string, PortValue>>;
+  batchVariants?: VariantScope[];
+  batchRunId?: string;
   outputFreshness?: PaperOutputFreshness;
   error?: string;
   /** Friendly classification of `error` (see backend error_classifier). `error`

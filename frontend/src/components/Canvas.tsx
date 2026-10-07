@@ -28,6 +28,7 @@ import { ReferenceSetNode } from './nodes/ReferenceSetNode';
 import { MoodboardNode } from './nodes/MoodboardNode';
 import { VideoQcNode } from './nodes/VideoQcNode';
 import { PaperSourceNode } from './nodes/PaperSourceNode';
+import { BatchNode } from './nodes/BatchNode';
 import { TypedEdge } from './edges/TypedEdge';
 import { ContextMenu } from './ContextMenu';
 import { ConnectionPopup } from './ConnectionPopup';
@@ -54,6 +55,7 @@ const nodeTypes: NodeTypes = {
   moodboardNode: MoodboardNode,
   videoQcNode: VideoQcNode,
   paperSourceNode: PaperSourceNode,
+  batchNode: BatchNode,
 };
 
 const edgeTypes: EdgeTypes = {
