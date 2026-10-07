@@ -1,5 +1,6 @@
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { useUIStore } from '../../store/uiStore';
+import { NODE_DEFINITIONS } from '../../constants/nodeDefinitions';
 import { PORT_COLORS } from '../../lib/portCompatibility';
 import { shotPortId } from '../../constants/ports';
 import type { CinemaSceneSpec, CinemaShot } from '../../types';
@@ -17,6 +18,7 @@ export function CinemaSceneNode({ id, data, selected }: NodeProps) {
   const scene = params?.scene;
   const shots: CinemaShot[] = scene?.shots ?? [];
   const shotCount = shots.length;
+  const inputPorts = NODE_DEFINITIONS['cinema-scene'].inputPorts;
 
   // Contact-sheet thumbnail: first shot with a finished image, else placeholder.
   const thumbUrl =
@@ -37,15 +39,6 @@ export function CinemaSceneNode({ id, data, selected }: NodeProps) {
 
   return (
     <div className={`cinema-scene-node ${selected ? 'cinema-scene-node--selected' : ''}`}>
-      {/* Optional shared character refs come in on the left. */}
-      <Handle
-        type="target"
-        position={Position.Left}
-        id="character_refs"
-        className="cinema-scene-node__handle"
-        style={{ backgroundColor: PORT_COLORS.Image }}
-      />
-
       <div className="cinema-scene-node__title">⛭ Cinema Scene</div>
 
       <div className="cinema-scene-node__thumb">
@@ -57,6 +50,22 @@ export function CinemaSceneNode({ id, data, selected }: NodeProps) {
       </div>
 
       <div className="cinema-scene-node__summary">{summary}</div>
+
+      <div className="cinema-scene-node__input-ports">
+        {inputPorts.map((port) => (
+          <div key={port.id} className="cinema-scene-node__input-port-row">
+            <Handle
+              type="target"
+              position={Position.Left}
+              id={port.id}
+              aria-label={`${port.label} input`}
+              className="cinema-scene-node__handle"
+              style={{ backgroundColor: PORT_COLORS[port.dataType] }}
+            />
+            <span className="cinema-scene-node__input-label">{port.label}</span>
+          </div>
+        ))}
+      </div>
 
       {selected && (
         <button

@@ -75,10 +75,6 @@ NANO_BANANA_FAL_MODEL_ENDPOINTS: dict[str, str] = {
 IDENTITY_EDIT_RESOLUTION_MAP: dict[str, str] = {"1024": "1K", "2048": "2K"}
 IDENTITY_EDIT_THINKING_MAP: dict[str, str] = {"low": "minimal", "medium": "high", "high": "high"}
 
-# identity_strength (0..1) maps onto input_fidelity, the FAL edit family's
-# source-preservation knob (high = strict). Threshold at the midpoint.
-IDENTITY_EDIT_FIDELITY_THRESHOLD = 0.5
-
 HUNYUAN3D_PROMPT_MAX_CHARS = 1024
 
 # The graph stores defaults for both sides of a dual-route node. FAL must only
@@ -1284,12 +1280,43 @@ def get_handler_registry(
 
         async def _seedream45_handler(node, inputs, api_keys):
             model = node.params.get("model", "4.5")
+            if str(model) != "5.0-lite" and node.params.get("image_size") == "auto_3K":
+                # Switching from 5 Lite can retain its saved size. The 4.5 text
+                # and edit schemas do not declare auto_3K; reject before billing
+                # rather than silently changing the recipe or posting a 422.
+                raise ValueError(
+                    "Seedream 4.5 does not support image_size auto_3K; "
+                    "choose a supported size or Seedream 5.0 Lite"
+                )
+            images_input = inputs.get("images")
+            raw_refs = images_input.value if images_input and images_input.value else None
+            if not raw_refs:
+                image_input = inputs.get("image")
+                raw_refs = image_input.value if image_input and image_input.value else None
+            refs = [str(ref) for ref in (raw_refs if isinstance(raw_refs, list) else [raw_refs]) if ref]
+            if len(refs) > 10:
+                # Both supported edit routes silently use only the last ten.
+                # Reject before submission so explicit references cannot vanish.
+                raise ValueError(
+                    f"Seedream accepts at most 10 reference images (received {len(refs)})"
+                )
+            operation = "edit" if refs else "text-to-image"
             if str(model) == "5.0-lite":
-                endpoint_id = "fal-ai/bytedance/seedream/v5/lite/text-to-image"
+                endpoint_id = f"fal-ai/bytedance/seedream/v5/lite/{operation}"
             else:
-                endpoint_id = "fal-ai/bytedance/seedream/v4.5/text-to-image"
-            routed_node = _fal_wrapper_node(node, endpoint_id, internal_params=("model",))
-            return await handle_fal_universal(routed_node, inputs, api_keys, emit=emit)
+                endpoint_id = f"fal-ai/bytedance/seedream/v4.5/{operation}"
+            # Seedream 5 Lite has no seed parameter in either exact route.
+            # Preserve saved seeds on the source recipe without sending a
+            # nonexistent determinism control to the provider.
+            internal_params = ("model", "seed") if str(model) == "5.0-lite" else ("model",)
+            routed_node = _fal_wrapper_node(node, endpoint_id, internal_params=internal_params)
+            routed_inputs = dict(inputs)
+            routed_inputs.pop("image", None)
+            if refs:
+                routed_inputs["images"] = PortValueDict(type="Image", value=refs)
+            else:
+                routed_inputs.pop("images", None)
+            return await handle_fal_universal(routed_node, routed_inputs, api_keys, emit=emit)
 
         async def _sora2_i2v_handler(
             node: GraphNode,
@@ -1372,6 +1399,15 @@ def get_handler_registry(
             if not base_image:
                 raise ValueError("identity-edit requires a base image on the 'image' port")
 
+            mask_input = inputs.get("mask")
+            if mask_input and mask_input.value:
+                # Retain old graph ports/edges, but never bill an unsupported
+                # masked edit or quietly generate a different, unmasked image.
+                raise ValueError(
+                    "Identity Edit does not support masks on the Nano Banana 2 endpoint; "
+                    "disconnect Mask before running this node"
+                )
+
             prompt_input = inputs.get("prompt")
             base_prompt = str(prompt_input.value) if prompt_input and prompt_input.value else ""
 
@@ -1379,7 +1415,13 @@ def get_handler_registry(
             bundle = character_input.value if character_input and character_input.value else None
 
             params = dict(node.params)
-            strength_raw = params.pop("identity_strength", None)
+            # The exact nano-banana-2/edit schema has no native identity
+            # adherence field. Keep saved strength metadata on the source node,
+            # but never translate it into an invented provider parameter.
+            # Also strip input_fidelity from older saved recipes: that field is
+            # supported by other image-edit APIs, not this endpoint.
+            params.pop("identity_strength", None)
+            params.pop("input_fidelity", None)
 
             # handle_fal_universal maps the multi-image `images` port to the
             # endpoint's required `image_urls`; the singular `image` port would
@@ -1400,17 +1442,6 @@ def get_handler_registry(
                 # target back to the front, identity refs (stored order) after.
                 image_urls = [base_image] + list(expanded["image_urls"])[:-1]
                 routed_inputs["prompt"] = PortValueDict(type="Text", value=expanded["prompt"])
-
-                # Node param wins; else the bundle's effective strength
-                # (strengthOverride, else consistencyStrength); else 0.8.
-                strength = expanded.get("strength") if strength_raw in (None, "") else strength_raw
-                try:
-                    strength_value = float(strength) if strength is not None else 0.8
-                except (TypeError, ValueError):
-                    strength_value = 0.8
-                params["input_fidelity"] = (
-                    "high" if strength_value >= IDENTITY_EDIT_FIDELITY_THRESHOLD else "low"
-                )
 
                 if expanded.get("seed") is not None and not params.get("seed"):
                     params["seed"] = expanded["seed"]

@@ -1927,9 +1927,12 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     apiEndpoint: '',
     envKeyName: [],
     executionPattern: 'async-poll',
+    capabilityNote: 'Camera Rig adds prompt guidance. Reference Set sends ordered images with role guidance. Neither provides a native camera or reference-strength control.',
     inputPorts: [
       { id: 'character_refs', label: 'Character Refs', dataType: 'Image', required: false, multiple: true, role: 'identity' },
       { id: 'character', label: 'Character', dataType: 'Character', required: false },
+      { id: 'camera_rig', label: 'Camera Rig', dataType: 'CameraRig', required: false },
+      { id: 'reference_set', label: 'Reference Set', dataType: 'ReferenceSet', required: false },
     ],
     // Output ports are dynamic — one Image port per shot, written at runtime from
     // the editor-managed scene spec. Starts empty (mirrors remotion-node).
@@ -1972,7 +1975,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       // Optional extra Image refs layered on top of the stored referenceViews.
       { key: 'override_refs', label: 'Override Refs', type: 'file', required: false, default: '' },
       // Empty string = inherit the Character's stored consistencyStrength.
-      { key: 'strength_override', label: 'Strength Override', type: 'float', required: false, default: '', min: 0, max: 1, step: 0.05 },
+      { key: 'strength_override', label: 'Strength Override', type: 'float', required: false, default: '', min: 0, max: 1, step: 0.05,
+        disabledReason: 'Unavailable: current Character consumers use reference images and traits without a consistency-strength control. Your stored value is retained.' },
     ],
   },
 
@@ -2202,7 +2206,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     executionPattern: 'sync',
     // Seven role-labeled Image inputs (one per semantic reference role). The
     // handler packs connected images into a ReferenceSetBundle tagged with
-    // each port's role and weight, sorted by weight descending.
+    // each port's role and priority, sorted by priority descending; zero excludes.
     inputPorts: [
       { id: 'style', label: 'Style', dataType: 'Image', required: false },
       { id: 'identity', label: 'Identity', dataType: 'Image', required: false },
@@ -2216,13 +2220,13 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       { id: 'reference_set', label: 'Reference Set', dataType: 'ReferenceSet', required: false },
     ],
     params: [
-      { key: 'style_weight', label: 'Style Weight', type: 'float', required: false, default: 1.0, min: 0.0, max: 1.0, step: 0.05 },
-      { key: 'identity_weight', label: 'Identity Weight', type: 'float', required: false, default: 1.0, min: 0.0, max: 1.0, step: 0.05 },
-      { key: 'composition_weight', label: 'Composition Weight', type: 'float', required: false, default: 1.0, min: 0.0, max: 1.0, step: 0.05 },
-      { key: 'pose_weight', label: 'Pose Weight', type: 'float', required: false, default: 1.0, min: 0.0, max: 1.0, step: 0.05 },
-      { key: 'lighting_weight', label: 'Lighting Weight', type: 'float', required: false, default: 1.0, min: 0.0, max: 1.0, step: 0.05 },
-      { key: 'subject_weight', label: 'Subject Weight', type: 'float', required: false, default: 1.0, min: 0.0, max: 1.0, step: 0.05 },
-      { key: 'background_weight', label: 'Background Weight', type: 'float', required: false, default: 1.0, min: 0.0, max: 1.0, step: 0.05 },
+      { key: 'style_weight', label: 'Style Priority', type: 'float', required: false, default: 1.0, min: 0.0, max: 1.0, step: 0.05 },
+      { key: 'identity_weight', label: 'Identity Priority', type: 'float', required: false, default: 1.0, min: 0.0, max: 1.0, step: 0.05 },
+      { key: 'composition_weight', label: 'Composition Priority', type: 'float', required: false, default: 1.0, min: 0.0, max: 1.0, step: 0.05 },
+      { key: 'pose_weight', label: 'Pose Priority', type: 'float', required: false, default: 1.0, min: 0.0, max: 1.0, step: 0.05 },
+      { key: 'lighting_weight', label: 'Lighting Priority', type: 'float', required: false, default: 1.0, min: 0.0, max: 1.0, step: 0.05 },
+      { key: 'subject_weight', label: 'Subject Priority', type: 'float', required: false, default: 1.0, min: 0.0, max: 1.0, step: 0.05 },
+      { key: 'background_weight', label: 'Background Priority', type: 'float', required: false, default: 1.0, min: 0.0, max: 1.0, step: 0.05 },
     ],
   },
 
@@ -8344,6 +8348,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     executionPattern: 'async-poll',
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
+      { id: 'images', label: 'References', dataType: 'Image', required: false, multiple: true, maxConnections: 10 },
     ],
     outputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: false },
@@ -8375,7 +8380,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
           { label: 'Landscape 16:9', value: 'landscape_16_9' },
           { label: 'Auto 2K', value: 'auto_2K' },
           { label: 'Auto 4K', value: 'auto_4K' },
-          { label: 'Auto 3K', value: 'auto_3K' },
+          { label: 'Auto 3K', value: 'auto_3K', visibleWhen: { model: ['5.0-lite'] } },
         ],
       },
       {
@@ -8405,6 +8410,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'seed',
+        visibleWhen: { model: ['4.5'] },
         label: 'Seed',
         type: 'integer',
         required: false,
@@ -11158,6 +11164,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     apiEndpoint: 'fal-ai/nano-banana-2/edit',
     envKeyName: 'FAL_KEY',
     executionPattern: 'async-poll',
+    capabilityNote: 'Identity guidance uses Character reference images and traits. This model has no identity-strength or mask control.',
     // nano-banana-2/edit with optional Character-bundle identity preservation:
     // when a Character is wired in, its trait string leads the prompt and its
     // reference views ride as additional images behind the base edit target.
@@ -11165,7 +11172,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       { id: 'image', label: 'Image', dataType: 'Image', required: true, role: 'identity' },
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
       { id: 'character', label: 'Character', dataType: 'Character', required: false },
-      { id: 'mask', label: 'Mask', dataType: 'Mask', required: false },
+      { id: 'mask', label: 'Mask (unavailable)', dataType: 'Mask', required: false },
     ],
     outputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: false },
@@ -11197,6 +11204,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       {
         key: 'identity_strength',
         label: 'Identity Strength',
+        disabledReason: 'Unavailable: this model uses reference images and traits without an identity-strength control. Your stored value is retained.',
         type: 'float',
         required: false,
         default: 0.8,

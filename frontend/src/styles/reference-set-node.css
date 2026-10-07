@@ -25,6 +25,13 @@ body.app-slava-restraint .reference-set-node__title {
   margin-bottom: 8px;
 }
 
+body.app-slava-restraint .reference-set-node__guidance {
+  margin: 0 0 8px;
+  color: var(--sr-ink-meta);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
 body.app-slava-restraint .reference-set-node__slots {
   display: flex;
   flex-direction: column;
@@ -32,6 +39,7 @@ body.app-slava-restraint .reference-set-node__slots {
 }
 
 body.app-slava-restraint .reference-set-node__slot {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 8px;

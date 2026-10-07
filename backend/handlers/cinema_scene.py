@@ -4,7 +4,7 @@ Self-contained handler that, per shot, runs the Soul Cinema stack:
 
 1. **Base / identity** — call the chosen base *edit* model (reference-edit:
    character refs condition identity) with ``{prompt + shot.prompt,
-   image_urls = character.refImageUrls + shot.refImageUrls, aspectRatio}``.
+   image_urls = character.refImageUrls + shot.refImageUrls, image sizing}``.
    The base model is dispatched by REUSING the existing handler registry — we
    synthesize a ``GraphNode`` for the base model and invoke its registered
    closure exactly as ``execute_graph`` would. No new network channel.
@@ -14,6 +14,10 @@ Self-contained handler that, per shot, runs the Soul Cinema stack:
    The effective consistency strength is injected into the base params ONLY for
    a base model that exposes a real IP-adherence knob (``strength_param_for``);
    v1 reference-edit bases have none, so it is carried but not applied (spec §4.4).
+   Optional typed CameraRig inputs append labeled prompt guidance. ReferenceSet
+   inputs append ordered role references with a legend of the actual image
+   indexes. Combined references must fit the selected adapter's verified limit;
+   they are never silently truncated.
 2. **Color** — :func:`cinema.color.transfer_to_palette` with the shared palette
    (or the shot's ``overrides.palette``).
 3. **Look** — :func:`cinema.look.apply_look` with the shared look (or the
@@ -22,8 +26,8 @@ Self-contained handler that, per shot, runs the Soul Cinema stack:
 The finished shot is written under ``OUTPUT_ROOT`` and mapped to that shot's
 **dynamic output port** (port id derived from ``shot.id``). Per-shot isolation:
 a shot that raises is recorded as ``status: 'error'`` and the scene continues;
-the scene completes partially. Per-shot caching keys on a stable input hash so
-re-running regenerates only changed shots.
+the scene completes partially. Successful shots record a stable input hash;
+execution caching and explicit single-shot reruns are owned by the graph engine.
 
 License guard: the default base must be a commercial-OK model
 (``seedream-4-5`` / ``nano-banana``); FLUX.1-dev is never used as the default.
@@ -33,6 +37,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from fractions import Fraction
 from pathlib import Path
 from typing import Any, Awaitable, Callable
 from uuid import uuid4
@@ -40,8 +45,16 @@ from uuid import uuid4
 import httpx
 from PIL import Image
 
+from cinema.art_direction import (
+    append_reference_guidance,
+    camera_prompt_guidance,
+    check_reference_cap,
+    reference_cap_for,
+    reference_items,
+    validate_base_input_params,
+)
 from cinema.color import transfer_to_palette
-from cinema.identity import expand_character, max_refs_for, strength_param_for
+from cinema.identity import expand_character, strength_param_for
 from cinema.look import apply_look
 from models.events import ExecutionEvent, ProgressEvent
 from models.graph import GraphNode, PortValueDict
@@ -179,6 +192,55 @@ def _merge_look(scene_look: dict[str, Any] | None, override: dict[str, Any] | No
 _ASPECT_RATIO_SNAKE_BASES = frozenset({"nano-banana", "nano-banana-fal-edit", "flux-kontext"})
 
 
+def _seedream_image_size(aspect_ratio: str, extra_params: dict[str, Any]) -> Any:
+    """Use the actual Seedream image_size field; explicit recipe size wins.
+
+    Both supported edit adapters accept these common enums or integer pixel
+    dimensions. Custom ratios use a 4096px long side within their documented
+    pixel area bounds, including Cinema's anamorphic 2.39:1 format.
+    """
+    selector = str(extra_params.get("model") or "4.5")
+    enums = {
+        "square_hd", "square", "portrait_4_3", "portrait_16_9",
+        "landscape_4_3", "landscape_16_9", "auto_2K", "auto_4K",
+    }
+    if selector == "5.0-lite":
+        enums.add("auto_3K")
+    size = extra_params.get("image_size")
+    if size not in (None, ""):
+        if isinstance(size, str) and size in enums:
+            return size
+        if isinstance(size, dict):
+            width, height = size.get("width"), size.get("height")
+            if (
+                type(width) is int and type(height) is int
+                and 0 < width <= 14142 and 0 < height <= 14142
+                and 2560 * 1440 <= width * height <= 4096 * 4096
+            ):
+                return {"width": width, "height": height}
+        raise ValueError("Cinema Seedream image_size must be a supported size or valid width/height dimensions")
+    common = {
+        "1:1": "square_hd", "16:9": "landscape_16_9", "9:16": "portrait_16_9",
+        "4:3": "landscape_4_3", "3:4": "portrait_4_3",
+    }
+    if aspect_ratio in common:
+        return common[aspect_ratio]
+    try:
+        numerator, denominator = aspect_ratio.split(":")
+        ratio = Fraction(numerator) / Fraction(denominator)
+        if ratio <= 0:
+            raise ValueError
+        if ratio >= 1:
+            width, height = 4096, round(4096 / ratio)
+        else:
+            width, height = round(4096 * ratio), 4096
+    except (ValueError, ZeroDivisionError):
+        raise ValueError("Cinema Seedream aspectRatio must be a positive width:height ratio") from None
+    if not (0 < width <= 14142 and 0 < height <= 14142 and 2560 * 1440 <= width * height <= 4096 * 4096):
+        raise ValueError("Cinema Seedream aspectRatio cannot fit supported image dimensions; use a less extreme ratio")
+    return {"width": width, "height": height}
+
+
 def _build_base_node(
     base_model: str,
     prompt: str,
@@ -189,20 +251,26 @@ def _build_base_node(
 ) -> tuple[GraphNode, dict[str, PortValueDict]]:
     """Synthesize a GraphNode + resolved-inputs dict for the base edit model.
 
-    We feed the prompt through the ``prompt`` input port and the reference
-    images through BOTH ``image`` (single, e.g. flux-kontext) and ``images``
-    (multiple, e.g. nano-banana) ports so whichever port the base handler reads
-    is populated — the universal/base handlers ignore ports they don't map."""
-    aspect_key = "aspect_ratio" if base_model in _ASPECT_RATIO_SNAKE_BASES else "aspectRatio"
-    params: dict[str, Any] = {aspect_key: aspect_ratio, **extra_params}
+    Use only the actual adapter input: Flux Kontext is singular, while Google
+    Nano Banana and the FAL Nano Banana/Seedream edit routes are plural. Sending
+    both fields to a schema-driven adapter can manufacture an unknown request
+    field or silently lose references."""
+    validate_base_input_params(extra_params)
+    if base_model == "seedream-4-5":
+        params = {**extra_params, "image_size": _seedream_image_size(aspect_ratio, extra_params)}
+    else:
+        aspect_key = "aspect_ratio" if base_model in _ASPECT_RATIO_SNAKE_BASES else "aspectRatio"
+        params = {aspect_key: aspect_ratio, **extra_params}
     base_node = GraphNode(id=f"{node_id}__base", definitionId=base_model, params=params)
 
     inputs: dict[str, PortValueDict] = {
         "prompt": PortValueDict(type="Text", value=prompt),
     }
     if image_urls:
-        inputs["image"] = PortValueDict(type="Image", value=image_urls[0])
-        inputs["images"] = PortValueDict(type="Image", value=list(image_urls))
+        if base_model == "flux-kontext":
+            inputs["image"] = PortValueDict(type="Image", value=image_urls[0])
+        else:
+            inputs["images"] = PortValueDict(type="Image", value=list(image_urls))
     return base_node, inputs
 
 
@@ -233,6 +301,7 @@ async def handle_cinema_scene(
     base = scene.get("base") or {}
     base_model = _guard_base_model(base)
     base_extra_params: dict[str, Any] = dict(base.get("params") or {})
+    validate_base_input_params(base_extra_params)
 
     character = scene.get("character") or {}
     character_refs: list[str] = list(character.get("refImageUrls") or [])
@@ -256,7 +325,11 @@ async def handle_cinema_scene(
     # When absent, behaviour is byte-identical to the no-Character path.
     char_port = inputs.get("character")
     bundle = char_port.value if char_port and char_port.value else None
-    model_max_refs = max_refs_for(base_model)
+    model_max_refs = reference_cap_for(base_model, base_extra_params)
+    camera_port = inputs.get("camera_rig")
+    camera_guidance = camera_prompt_guidance(camera_port.value if camera_port else None)
+    references_port = inputs.get("reference_set")
+    role_refs = reference_items(references_port.value if references_port else None)
 
     # Fail-fast capability guardrail (anti-FLORA): base_model + bundle are
     # scene-level constants, so if the bundle's stored views + the scene-level
@@ -264,14 +337,22 @@ async def handle_cinema_scene(
     # fail identically. Raise ONCE for the whole scene with the clear message
     # rather than emitting N duplicate per-shot errors. (Per-shot refs that
     # additionally push a single shot over the cap are still caught inside the
-    # loop by expand_character.)
-    if bundle:
-        expand_character(
+    # loop by Cinema's final adapter-limit check.)
+    if bundle and not role_refs:
+        scene_refs = expand_character(
             bundle,
             base_prompt="",
             override_refs=character_refs,
-            model_max_refs=model_max_refs,
+            # Cinema applies its own adapter limit below. In particular, the
+            # original Gemini 2.5 limit is a conservative adapter policy, not
+            # a claim about a vendor hard cap from the shared Character helper.
+            model_max_refs=max(
+                model_max_refs,
+                len(bundle.get("referenceViews") or [])
+                + len(bundle.get("overrideRefs") or []) + len(character_refs),
+            ),
         )
+        check_reference_cap(base_model, scene_refs["image_urls"], model_max_refs)
 
     scene_palette = scene.get("palette") or None
     scene_look = scene.get("look") or None
@@ -321,10 +402,29 @@ async def handle_cinema_scene(
                 bundle,
                 base_prompt=full_prompt,
                 override_refs=(character_refs + shot_refs),
-                model_max_refs=model_max_refs,
+                # Expand before applying Cinema's own adapter-limit wording.
+                # Active role refs then deduplicate the combined image list;
+                # the checked count is always the ACTUAL final delivery.
+                model_max_refs=(
+                    max(
+                        model_max_refs,
+                        len(bundle.get("referenceViews") or [])
+                        + len(bundle.get("overrideRefs") or [])
+                        + len(character_refs) + len(shot_refs),
+                    ) if bundle else model_max_refs
+                ),
             )
             full_prompt = expanded["prompt"]
             image_urls = expanded["image_urls"]
+            if camera_guidance:
+                full_prompt = (
+                    full_prompt + "\n\n" + camera_guidance
+                    if full_prompt else camera_guidance
+                )
+            full_prompt, image_urls = append_reference_guidance(full_prompt, image_urls, role_refs)
+            # Applies even without a Character bundle; no adapter may silently
+            # truncate the combined Character, shot and Reference Set images.
+            check_reference_cap(base_model, image_urls, model_max_refs)
 
             # Inject the bundle's seed for deterministic identity — ONLY when a
             # bundle is present, so the existing seedless behaviour is untouched.

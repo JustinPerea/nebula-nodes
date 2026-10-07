@@ -24,6 +24,40 @@ function ControlledPills({
 }
 
 describe('Create parameter values', () => {
+  it('uses default Seedream capabilities without writing defaults into saved values', () => {
+    const onChange = vi.fn();
+    render(<ControlledPills def={NODE_DEFINITIONS['seedream-4-5']}
+      initial={{ seed: 37 }} onChange={onChange} />);
+    expect(screen.getByRole('spinbutton', { name: 'Seed' })).toHaveValue(37);
+    const size = screen.getByRole('combobox', { name: 'Size' });
+    expect(size.querySelector('option[value="auto_3K"]')).toBeNull();
+    fireEvent.change(screen.getByRole('combobox', { name: 'Model' }), { target: { value: '5.0-lite' } });
+    expect(screen.queryByRole('spinbutton', { name: 'Seed' })).toBeNull();
+    expect(size.querySelector('option[value="auto_3K"]')).toHaveTextContent('Auto 3K');
+    expect(onChange).toHaveBeenLastCalledWith({ seed: 37, model: '5.0-lite' });
+    fireEvent.change(size, { target: { value: 'auto_3K' } });
+    fireEvent.change(screen.getByRole('combobox', { name: 'Model' }), { target: { value: '4.5' } });
+    expect(size).toHaveValue('auto_3K');
+    expect(size.querySelector('option[value="auto_3K"]')).toHaveTextContent('Auto 3K (unavailable for selected model)');
+    expect(size.querySelector('option[value="auto_3K"]')).toBeDisabled();
+    expect(onChange).toHaveBeenLastCalledWith({ seed: 37, model: '4.5', image_size: 'auto_3K' });
+    fireEvent.change(size, { target: { value: 'square_hd' } });
+    expect(onChange).toHaveBeenLastCalledWith({ seed: 37, model: '4.5', image_size: 'square_hd' });
+  });
+
+  it('shows unavailable identity strength without changing its stored value', () => {
+    const onChange = vi.fn();
+    render(<ControlledPills def={NODE_DEFINITIONS['identity-edit']}
+      initial={{ identity_strength: 0.37 }} onChange={onChange} />);
+    const strength = screen.getByRole('spinbutton', { name: 'Identity Strength' });
+    expect(strength).toBeDisabled();
+    expect(strength).toHaveValue(0.37);
+    expect(screen.getByText('Identity Strength · unavailable')).toBeVisible();
+    expect(strength).toHaveAttribute('aria-description', expect.stringContaining('without an identity-strength control'));
+    fireEvent.change(strength, { target: { value: '0.9' } });
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
   it('shows unset optional Krea dimensions as blank without writing a value', () => {
     const onChange = vi.fn();
     render(<ControlledPills onChange={onChange} />);

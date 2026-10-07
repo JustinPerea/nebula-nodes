@@ -25,6 +25,13 @@ body.app-slava-restraint .camera-rig-node__title {
   margin-bottom: 8px;
 }
 
+body.app-slava-restraint .camera-rig-node__guidance {
+  margin: 0 0 8px;
+  color: var(--sr-ink-meta);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
 body.app-slava-restraint .camera-rig-node__diagram {
   display: flex;
   align-items: center;

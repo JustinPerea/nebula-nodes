@@ -2885,6 +2885,18 @@
         "label": "Character",
         "dataType": "Character",
         "required": false
+      },
+      {
+        "id": "camera_rig",
+        "label": "Camera Rig",
+        "dataType": "CameraRig",
+        "required": false
+      },
+      {
+        "id": "reference_set",
+        "label": "Reference Set",
+        "dataType": "ReferenceSet",
+        "required": false
       }
     ],
     "outputPorts": [],
@@ -2896,7 +2908,8 @@
         "required": false,
         "hidden": true
       }
-    ]
+    ],
+    "capabilityNote": "Camera Rig adds prompt guidance. Reference Set sends ordered images with role guidance. Neither provides a native camera or reference-strength control."
   },
   "character": {
     "id": "character",
@@ -2939,7 +2952,8 @@
         "default": "",
         "min": 0,
         "max": 1,
-        "step": 0.05
+        "step": 0.05,
+        "disabledReason": "Unavailable: current Character consumers use reference images and traits without a consistency-strength control. Your stored value is retained."
       }
     ]
   },
@@ -3440,7 +3454,7 @@
     "params": [
       {
         "key": "style_weight",
-        "label": "Style Weight",
+        "label": "Style Priority",
         "type": "float",
         "required": false,
         "default": 1.0,
@@ -3450,7 +3464,7 @@
       },
       {
         "key": "identity_weight",
-        "label": "Identity Weight",
+        "label": "Identity Priority",
         "type": "float",
         "required": false,
         "default": 1.0,
@@ -3460,7 +3474,7 @@
       },
       {
         "key": "composition_weight",
-        "label": "Composition Weight",
+        "label": "Composition Priority",
         "type": "float",
         "required": false,
         "default": 1.0,
@@ -3470,7 +3484,7 @@
       },
       {
         "key": "pose_weight",
-        "label": "Pose Weight",
+        "label": "Pose Priority",
         "type": "float",
         "required": false,
         "default": 1.0,
@@ -3480,7 +3494,7 @@
       },
       {
         "key": "lighting_weight",
-        "label": "Lighting Weight",
+        "label": "Lighting Priority",
         "type": "float",
         "required": false,
         "default": 1.0,
@@ -3490,7 +3504,7 @@
       },
       {
         "key": "subject_weight",
-        "label": "Subject Weight",
+        "label": "Subject Priority",
         "type": "float",
         "required": false,
         "default": 1.0,
@@ -3500,7 +3514,7 @@
       },
       {
         "key": "background_weight",
-        "label": "Background Weight",
+        "label": "Background Priority",
         "type": "float",
         "required": false,
         "default": 1.0,
@@ -13826,6 +13840,14 @@
         "label": "Prompt",
         "dataType": "Text",
         "required": true
+      },
+      {
+        "id": "images",
+        "label": "References",
+        "dataType": "Image",
+        "required": false,
+        "multiple": true,
+        "maxConnections": 10
       }
     ],
     "outputPorts": [
@@ -13895,7 +13917,12 @@
           },
           {
             "label": "Auto 3K",
-            "value": "auto_3K"
+            "value": "auto_3K",
+            "visibleWhen": {
+              "model": [
+                "5.0-lite"
+              ]
+            }
           }
         ]
       },
@@ -13929,7 +13956,12 @@
         "label": "Seed",
         "type": "integer",
         "required": false,
-        "placeholder": "Random"
+        "placeholder": "Random",
+        "visibleWhen": {
+          "model": [
+            "4.5"
+          ]
+        }
       }
     ]
   },
@@ -18968,7 +19000,7 @@
       },
       {
         "id": "mask",
-        "label": "Mask",
+        "label": "Mask (unavailable)",
         "dataType": "Mask",
         "required": false
       }
@@ -19028,9 +19060,11 @@
         "default": 0.8,
         "min": 0.0,
         "max": 1.0,
-        "step": 0.05
+        "step": 0.05,
+        "disabledReason": "Unavailable: this model uses reference images and traits without an identity-strength control. Your stored value is retained."
       }
-    ]
+    ],
+    "capabilityNote": "Identity guidance uses Character reference images and traits. This model has no identity-strength or mask control."
   },
   "krea-image-krea-krea-2-medium": {
     "id": "krea-image-krea-krea-2-medium",

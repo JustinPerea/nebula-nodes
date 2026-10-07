@@ -17,7 +17,9 @@ const SUBJECT_TYPES: Array<{ id: CharacterDraft['subjectType']; label: string }>
 
 /** The Character definition form (spec §4.5): name, subjectType, the multi-view
  *  reference bundle (≥3 required), the verbatim frozenTraitString, seed, and the
- *  consistencyStrength slider. Mirrors CinemaSharedControls for the /api/uploads
+ *  stored consistencyStrength value. Current consumers use references and trait
+ *  guidance without a supported strength parameter, so its slider is disabled.
+ *  Mirrors CinemaSharedControls for the /api/uploads
  *  multi-image uploader.
  *
  *  Verbatim contract (spec §6): the UI never reorders referenceViews or
@@ -170,8 +172,8 @@ export function CharacterDefinitionPanel({
         <label className="character-def__field">
           <span className="character-def__label">Frozen trait string</span>
           <span className="character-def__hint">
-            Re-emitted verbatim into every prompt — paraphrasing breaks identity.
-            Write it once, exactly as the model should read it.
+            Preserved verbatim in prompts that use this Character.
+            Write it exactly as the model should read it.
           </span>
           <textarea
             className="character-def__textarea"
@@ -200,7 +202,7 @@ export function CharacterDefinitionPanel({
         </label>
         <label className="character-def__field character-def__field--grow">
           <span className="character-def__label">
-            Consistency strength · {draft.consistencyStrength.toFixed(2)}
+            Consistency strength · unavailable
           </span>
           <input
             type="range"
@@ -208,13 +210,13 @@ export function CharacterDefinitionPanel({
             max={1}
             step={0.05}
             value={draft.consistencyStrength}
-            onChange={(e) =>
-              onChange({
-                ...draft,
-                consistencyStrength: Number(e.target.value),
-              })
-            }
+            disabled
+            aria-describedby="character-consistency-strength-help"
           />
+          <span id="character-consistency-strength-help" className="character-def__hint">
+            Current models use image references and trait guidance. Strength is unsupported;
+            saved value {draft.consistencyStrength.toFixed(2)} is retained.
+          </span>
         </label>
       </section>
     </div>

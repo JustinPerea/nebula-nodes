@@ -5,8 +5,9 @@ preservation. With a Character wired into the `character` port, the handler
 folds the bundle through cinema.identity.expand_character: the verbatim trait
 string leads the prompt, the bundle's reference views are injected as
 additional images behind the base (edit-target) image, the bundle seed pins
-determinism when the node seed is unset, and identity_strength maps onto
-input_fidelity. Without a Character, the node is a standard nano-banana edit.
+determinism when the node seed is unset. Saved strength metadata is retained,
+but this endpoint has no native adherence control. Without a Character, the
+node is a standard nano-banana edit.
 """
 
 from __future__ import annotations
@@ -132,34 +133,43 @@ async def test_character_trait_prepended_verbatim() -> None:
 
 
 @pytest.mark.asyncio
-async def test_identity_strength_default_maps_to_high_fidelity() -> None:
-    """identity_strength 0.8 (the definition default) -> input_fidelity high."""
-    _, mock_client = await _run(_node({"identity_strength": 0.8}), _inputs(character=_bundle()))
+@pytest.mark.parametrize("strength", [0.0, 0.3, 0.8, 1.0, "invalid"])
+async def test_saved_identity_strength_is_not_a_native_provider_control(strength) -> None:
+    """Legacy strength values remain in the recipe without invented payload fields."""
+    node = _node({"identity_strength": strength})
+    bundle = _bundle(strengthOverride=0.9, consistencyStrength=0.2)
+    _, mock_client = await _run(node, _inputs(character=bundle))
 
-    assert _submit_body(mock_client)["input_fidelity"] == "high"
+    body = _submit_body(mock_client)
+    assert "identity_strength" not in body
+    assert "input_fidelity" not in body
+    assert "consistencyStrength" not in body
+    assert "strengthOverride" not in body
+    assert node.params == {"identity_strength": strength}
+    assert bundle["consistencyStrength"] == 0.2
+    assert bundle["strengthOverride"] == 0.9
+    assert body["image_urls"] == [BASE_IMAGE, *REF_VIEWS]
+    assert body["prompt"] == f"{TRAIT}. change the background to a beach"
 
 
 @pytest.mark.asyncio
-async def test_identity_strength_low_maps_to_low_fidelity() -> None:
-    """A weak identity dial -> input_fidelity low (looser preservation)."""
-    _, mock_client = await _run(_node({"identity_strength": 0.3}), _inputs(character=_bundle()))
-
-    assert _submit_body(mock_client)["input_fidelity"] == "low"
-
-
-@pytest.mark.asyncio
-async def test_identity_strength_falls_back_to_bundle_strength() -> None:
-    """Param unset -> the bundle's effective strength (strengthOverride, else
-    consistencyStrength) drives input_fidelity."""
+async def test_bundle_strength_without_node_override_is_not_injected() -> None:
     _, mock_client = await _run(
         _node(), _inputs(character=_bundle(consistencyStrength=0.2))
     )
-    assert _submit_body(mock_client)["input_fidelity"] == "low"
+    assert "input_fidelity" not in _submit_body(mock_client)
 
-    _, mock_client = await _run(
-        _node(), _inputs(character=_bundle(strengthOverride=0.9, consistencyStrength=0.2))
-    )
-    assert _submit_body(mock_client)["input_fidelity"] == "high"
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("character", [None, _bundle()])
+async def test_legacy_input_fidelity_is_stripped_from_provider_request(character) -> None:
+    node = _node({"identity_strength": 0.8, "input_fidelity": "high"})
+    _, mock_client = await _run(node, _inputs(character=character))
+    body = _submit_body(mock_client)
+    assert "input_fidelity" not in body
+    assert "identity_strength" not in body
+    # Source recipes and previous run snapshots still contain their saved values.
+    assert node.params == {"identity_strength": 0.8, "input_fidelity": "high"}
 
 
 @pytest.mark.asyncio
@@ -238,21 +248,37 @@ async def test_ui_enums_translated_to_endpoint_dialect() -> None:
 
 @pytest.mark.asyncio
 async def test_identity_strength_never_leaks_to_fal() -> None:
-    """identity_strength is an internal dial — only input_fidelity goes out."""
+    """The endpoint receives neither saved strength nor an invented fidelity field."""
     _, mock_client = await _run(
         _node({"identity_strength": 0.6}), _inputs(character=_bundle())
     )
     body = _submit_body(mock_client)
     assert "identity_strength" not in body
-    assert body["input_fidelity"] == "high"
+    assert "input_fidelity" not in body
 
 
 @pytest.mark.asyncio
-async def test_mask_passthrough() -> None:
-    """An optional Mask port value rides through as mask_url."""
-    _, mock_client = await _run(_node(), _inputs(mask="https://cdn.example.com/mask.png"))
+@pytest.mark.parametrize("character", [None, _bundle()])
+async def test_unsupported_mask_rejected_before_provider_submission(character) -> None:
+    """Saved mask connections stay available, but unsupported requests never submit."""
+    from execution.sync_runner import get_handler_registry
 
-    assert _submit_body(mock_client)["mask_url"] == "https://cdn.example.com/mask.png"
+    handler = get_handler_registry(emit=AsyncMock())["identity-edit"]
+    with patch("handlers.fal_universal.httpx.AsyncClient") as transport:
+        with pytest.raises(ValueError, match="does not support masks.*disconnect Mask"):
+            await handler(
+                _node(), _inputs(character=character, mask="https://cdn.example.com/mask.png"),
+                {"FAL_KEY": "fixture-key"},
+            )
+        transport.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_empty_legacy_mask_port_remains_valid_standard_edit() -> None:
+    inputs = _inputs()
+    inputs["mask"] = PortValueDict(type="Mask", value=None)
+    _, mock_client = await _run(_node(), inputs)
+    assert "mask_url" not in _submit_body(mock_client)
 
 
 @pytest.mark.asyncio

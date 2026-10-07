@@ -352,6 +352,11 @@ body.app-slava-restraint .character-def__hint {
   line-height: 1.4;
 }
 
+body.app-slava-restraint .character-def__field input[type='range']:disabled {
+  opacity: var(--sr-disabled-opacity, 0.5);
+  cursor: not-allowed;
+}
+
 body.app-slava-restraint .character-def__error {
   font-size: 11px;
   color: #e0796b;
