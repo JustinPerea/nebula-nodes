@@ -21,6 +21,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
@@ -44,6 +45,50 @@ APPROVED_EXECUTION_PATTERN_CHANGES = {
     "fast-sdxl": ("sync", "async-poll"),
     "ideogram-transparent": ("async-poll", "sync"),
     "ideogram-edit-prompt": ("async-poll", "sync"),
+}
+
+# Exact approved Cinema art-direction additions and truthfulness repairs. Keep
+# the historical fingerprints: normalize only these reviewed values rather
+# than exempting entire definitions or accepting an arbitrary new baseline.
+APPROVED_INPUT_PORT_ADDITIONS = {
+    "cinema-scene": [
+        {"id": "camera_rig", "label": "Camera Rig", "dataType": "CameraRig", "required": False},
+        {"id": "reference_set", "label": "Reference Set", "dataType": "ReferenceSet", "required": False},
+    ],
+    "seedream-4-5": [
+        {"id": "images", "label": "References", "dataType": "Image", "required": False,
+         "multiple": True, "maxConnections": 10},
+    ],
+}
+APPROVED_CAPABILITY_NOTE_ADDITIONS = {
+    "cinema-scene": "Camera Rig adds prompt guidance. Reference Set sends ordered images with role guidance. Neither provides a native camera or reference-strength control.",
+    "identity-edit": "Identity guidance uses Character reference images and traits. This model has no identity-strength or mask control.",
+}
+APPROVED_PARAM_FIELD_ADDITIONS = {
+    "character": {
+        "strength_override": {"disabledReason": "Unavailable: current Character consumers use reference images and traits without a consistency-strength control. Your stored value is retained."},
+    },
+    "identity-edit": {
+        "identity_strength": {"disabledReason": "Unavailable: this model uses reference images and traits without an identity-strength control. Your stored value is retained."},
+    },
+    "seedream-4-5": {"seed": {"visibleWhen": {"model": ["4.5"]}}},
+}
+APPROVED_PARAM_LABEL_CHANGES = {
+    "reference-set": {
+        "style_weight": ("Style Weight", "Style Priority"),
+        "identity_weight": ("Identity Weight", "Identity Priority"),
+        "composition_weight": ("Composition Weight", "Composition Priority"),
+        "pose_weight": ("Pose Weight", "Pose Priority"),
+        "lighting_weight": ("Lighting Weight", "Lighting Priority"),
+        "subject_weight": ("Subject Weight", "Subject Priority"),
+        "background_weight": ("Background Weight", "Background Priority"),
+    },
+}
+APPROVED_PORT_LABEL_CHANGES = {
+    "identity-edit": {"mask": ("Mask", "Mask (unavailable)")},
+}
+APPROVED_OPTION_FIELD_ADDITIONS = {
+    "seedream-4-5": {"image_size": {"auto_3K": {"visibleWhen": {"model": ["5.0-lite"]}}}},
 }
 
 # The 7 standard roles — mirrors REFERENCE_ROLE_IDS in referenceRoles.ts.
@@ -114,13 +159,51 @@ def definitions() -> dict[str, dict[str, Any]]:
     return json.loads(BACKEND_DEFS_PATH.read_text())
 
 
+def _sole_entry(entries: list[dict[str, Any]], key: str, value: str) -> dict[str, Any]:
+    matches = [entry for entry in entries if entry.get(key) == value]
+    assert len(matches) == 1, f"expected exactly one {key}={value!r}, got {len(matches)}"
+    return matches[0]
+
+
+def _remove_approved_fields(container: dict[str, Any], additions: dict[str, Any]) -> None:
+    for key, approved_value in additions.items():
+        assert container.get(key) == approved_value, f"unapproved value for {key}: {container.get(key)!r}"
+        del container[key]
+
+
 def _without_role_additions(node_id: str, node: dict[str, Any]) -> dict[str, Any]:
-    """Return a node normalized only for explicitly approved additive changes."""
-    normalized = dict(node)
+    """Normalize exact approved deltas without mutating shared fixture data."""
+    normalized = deepcopy(node)
+    added_ports = APPROVED_INPUT_PORT_ADDITIONS.get(node_id, [])
+    if added_ports:
+        assert normalized["inputPorts"][-len(added_ports):] == added_ports, (
+            f"unapproved appended input ports: {node_id}"
+        )
+    for approved_port in added_ports:
+        port = _sole_entry(normalized["inputPorts"], "id", approved_port["id"])
+        assert port == approved_port, f"unapproved added port: {node_id}.{approved_port['id']}"
+        normalized["inputPorts"].remove(port)
+    capability_note = APPROVED_CAPABILITY_NOTE_ADDITIONS.get(node_id)
+    if capability_note is not None:
+        _remove_approved_fields(normalized, {"capabilityNote": capability_note})
+    for param_key, additions in APPROVED_PARAM_FIELD_ADDITIONS.get(node_id, {}).items():
+        _remove_approved_fields(_sole_entry(normalized["params"], "key", param_key), additions)
+    for param_key, (baseline_label, current_label) in APPROVED_PARAM_LABEL_CHANGES.get(node_id, {}).items():
+        param = _sole_entry(normalized["params"], "key", param_key)
+        assert param["label"] == current_label, f"unapproved label: {node_id}.{param_key}"
+        param["label"] = baseline_label
+    for port_id, (baseline_label, current_label) in APPROVED_PORT_LABEL_CHANGES.get(node_id, {}).items():
+        port = _sole_entry(normalized["inputPorts"], "id", port_id)
+        assert port["label"] == current_label, f"unapproved label: {node_id}.{port_id}"
+        port["label"] = baseline_label
+    for param_key, options in APPROVED_OPTION_FIELD_ADDITIONS.get(node_id, {}).items():
+        param = _sole_entry(normalized["params"], "key", param_key)
+        for option_value, additions in options.items():
+            _remove_approved_fields(_sole_entry(param["options"], "value", option_value), additions)
     for section in ("inputPorts", "outputPorts"):
         normalized[section] = [
             {key: value for key, value in port.items() if key not in {"role", "weight"}}
-            for port in node.get(section, [])
+            for port in normalized.get(section, [])
         ]
     approved = APPROVED_EXECUTION_PATTERN_CHANGES.get(node_id)
     if approved is not None:
@@ -277,6 +360,49 @@ def test_role_additions_are_additive_only(
         "baseline nodes changed outside additive port role/weight metadata: "
         f"{mismatches}"
     )
+
+
+@pytest.mark.parametrize(
+    "node_id", ["cinema-scene", "character", "reference-set", "seedream-4-5", "identity-edit"],
+)
+def test_approved_art_direction_normalization_preserves_fixture_and_other_fields(definitions, node_id):
+    original = deepcopy(definitions[node_id])
+    assert _node_fingerprint(node_id, definitions[node_id]) == _baseline_fingerprints()[node_id]
+    assert definitions[node_id] == original
+
+    # These five nodes are still fully fingerprinted. An unrelated field change
+    # must not disappear along with their specifically approved repairs.
+    changed = deepcopy(original)
+    changed["displayName"] += " unauthorized change"
+    assert _node_fingerprint(node_id, changed) != _baseline_fingerprints()[node_id]
+
+
+@pytest.mark.parametrize("node_id,section,selector,field,value", [
+    ("cinema-scene", "inputPorts", "camera_rig", "required", True),
+    ("cinema-scene", None, None, "capabilityNote", "Native camera control"),
+    ("seedream-4-5", "inputPorts", "images", "maxConnections", 14),
+    ("character", "params", "strength_override", "disabledReason", "Strength works"),
+    ("identity-edit", "params", "identity_strength", "disabledReason", "Strength works"),
+    ("reference-set", "params", "style_weight", "label", "Style Strength"),
+    ("seedream-4-5", "params", "seed", "visibleWhen", {"model": ["4.5", "5.0-lite"]}),
+    ("identity-edit", "inputPorts", "mask", "label", "Mask"),
+])
+def test_approved_art_direction_values_cannot_drift(definitions, node_id, section, selector, field, value):
+    changed = deepcopy(definitions[node_id])
+    target = changed if section is None else _sole_entry(
+        changed[section], "key" if section == "params" else "id", selector,
+    )
+    target[field] = value
+    with pytest.raises(AssertionError):
+        _node_fingerprint(node_id, changed)
+
+
+def test_seedream_auto_3k_approved_visibility_cannot_expand(definitions):
+    changed = deepcopy(definitions["seedream-4-5"])
+    sizes = _sole_entry(changed["params"], "key", "image_size")
+    _sole_entry(sizes["options"], "value", "auto_3K")["visibleWhen"] = {"model": ["4.5", "5.0-lite"]}
+    with pytest.raises(AssertionError):
+        _node_fingerprint("seedream-4-5", changed)
 
 
 # ---------------------------------------------------------------------------

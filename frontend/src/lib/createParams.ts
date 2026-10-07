@@ -41,12 +41,13 @@ export function deriveVisibleParams(
   apiKeys: Record<string, string> = {},
 ): ParamDefinition[] {
   const sources = resolveCreateParamDefinitions(def, apiKeys);
+  const effectiveValues = Object.fromEntries(sources.map((p) => [p.key, params[p.key] ?? p.default]));
   return sources
     .filter((p) => !p.hidden)
-    .filter((p) => matchesVisibleWhen(p.visibleWhen, params))
+    .filter((p) => matchesVisibleWhen(p.visibleWhen, { ...params, ...effectiveValues }))
     .map((p) => ({
       ...p,
-      options: p.options?.filter((o: ParamOption) => matchesVisibleWhen(o.visibleWhen, params)),
+      options: p.options?.filter((o: ParamOption) => matchesVisibleWhen(o.visibleWhen, { ...params, ...effectiveValues })),
     }));
 }
 

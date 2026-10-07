@@ -58,6 +58,25 @@ body.app-slava-restraint .cinema-scene-node__summary {
   margin-bottom: 8px;
 }
 
+body.app-slava-restraint .cinema-scene-node__input-ports {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-bottom: 10px;
+}
+
+body.app-slava-restraint .cinema-scene-node__input-port-row {
+  position: relative;
+  margin-left: -14px;
+  padding-left: 14px;
+  min-height: 14px;
+}
+
+body.app-slava-restraint .cinema-scene-node__input-label {
+  font-size: 10px;
+  color: var(--sr-ink-meta);
+}
+
 body.app-slava-restraint .cinema-scene-node__open {
   display: block;
   width: 100%;

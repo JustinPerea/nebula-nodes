@@ -208,7 +208,32 @@ async def test_weight_clamped_to_0_1() -> None:
 
     by_role = {item["role"]: item for item in result["reference_set"]["value"]["items"]}
     assert by_role["style"]["weight"] == pytest.approx(1.0)
-    assert by_role["pose"]["weight"] == pytest.approx(0.0)
+    assert "pose" not in by_role
+
+
+@pytest.mark.asyncio
+async def test_zero_priority_excludes_all_images_in_role() -> None:
+    from handlers.reference_set import handle_reference_set
+
+    result = await handle_reference_set(
+        _node({"style_weight": 0}),
+        {"style": _image(["a.png", "b.png"])}, {},
+    )
+    assert result["reference_set"]["value"] == {"items": []}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf"), True])
+async def test_nonfinite_or_boolean_priority_uses_finite_default(value) -> None:
+    from handlers.reference_set import handle_reference_set
+
+    result = await handle_reference_set(
+        _node({"style_weight": value}), {"style": _image("a.png")}, {},
+    )
+    assert result["reference_set"]["value"]["items"] == [
+        {"url": "a.png", "role": "style", "weight": 1.0}
+    ]
+    json.dumps(result, allow_nan=False)
 
 
 @pytest.mark.asyncio

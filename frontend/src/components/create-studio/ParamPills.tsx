@@ -1,5 +1,5 @@
 import type { ModelNodeDefinition } from '../../types';
-import { deriveVisibleParams } from '../../lib/createParams';
+import { deriveVisibleParams, resolveCreateParamDefinitions } from '../../lib/createParams';
 import { useUIStore } from '../../store/uiStore';
 
 interface ParamPillsProps {
@@ -25,14 +25,27 @@ export function ParamPills({ def, params, onChange }: ParamPillsProps) {
     <div className="param-pills">
       {visible.map((p) => {
         const optionalWithoutDefault = !p.required && p.default == null;
+        if (p.disabledReason) {
+          return (
+            <label key={p.key} className="param-pill" title={p.disabledReason}>
+              <span className="param-pill__label">{p.label} · unavailable</span>
+              <input className="param-pill__number" type="number" aria-label={p.label}
+                aria-description={p.disabledReason} value={Number(params[p.key] ?? p.default ?? 0)} disabled />
+            </label>
+          );
+        }
         if (p.type === 'enum') {
           const hasEmptyOption = p.options?.some((o) => o.value === '');
+          const value = String(params[p.key] ?? p.default ?? '');
+          const unavailableChoice = value !== '' && !p.options?.some((o) => String(o.value) === value);
+          const storedLabel = resolveCreateParamDefinitions(def, apiKeys).find((param) => param.key === p.key)
+            ?.options?.find((o) => String(o.value) === value)?.label ?? 'Saved choice';
           return (
             <label key={p.key} className="param-pill" title={p.label}>
               <span className="param-pill__label">{p.label}</span>
               <select
                 className="param-pill__select"
-                value={String(params[p.key] ?? p.default ?? '')}
+                value={value}
                 onChange={(e) => {
                   const option = p.options?.find((o) => String(o.value) === e.target.value);
                   if (optionalWithoutDefault && e.target.value === '' && !option) {
@@ -42,6 +55,7 @@ export function ParamPills({ def, params, onChange }: ParamPillsProps) {
                   set(p.key, option?.value ?? e.target.value);
                 }}
               >
+                {unavailableChoice && <option value={value} disabled>{storedLabel} (unavailable for selected model)</option>}
                 {p.default == null && !hasEmptyOption && <option value="">{p.required ? 'Choose…' : 'Default'}</option>}
                 {(p.options ?? []).map((o) => (
                   <option key={String(o.value)} value={String(o.value)}>{o.label}</option>

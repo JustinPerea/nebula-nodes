@@ -408,7 +408,7 @@ Nodes: 254 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **API Key** | FAL_KEY |
 | **Endpoint** | `fal-ai/nano-banana-2/edit` |
 | **Execution** | async-poll |
-| **Inputs** | Image (Image)*, Prompt (Text)*, Character (Character), Mask (Mask) |
+| **Inputs** | Image (Image)*, Prompt (Text)*, Character (Character), Mask (unavailable) (Mask) |
 | **Outputs** | Image (Image) |
 | **Audited** | — |
 
@@ -416,7 +416,7 @@ Nodes: 254 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |-----------|------|---------|---------------|
 | Resolution | enum | 1024 | 1024, 2048 |
 | Thinking Level | enum | low | Low, Medium, High |
-| Identity Strength | float | 0.8 | 0–1 |
+| Identity Strength | float | 0.8 | Unavailable: this model uses reference images and traits without an identity-strength control. Your stored value is retained. |
 
 ---
 
@@ -1835,7 +1835,7 @@ Nodes: 254 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **API Key** | FAL_KEY |
 | **Endpoint** | `fal-ai/bytedance/seedream/v4.5/text-to-image` |
 | **Execution** | async-poll |
-| **Inputs** | Prompt (Text)* |
+| **Inputs** | Prompt (Text)*, References (Image ×n) |
 | **Outputs** | Image (Image) |
 | **Audited** | 2026-05-17 |
 
@@ -5421,7 +5421,7 @@ Nodes: 254 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **Provider** | Utility |
 | **API Key** | — |
 | **Execution** | async-poll |
-| **Inputs** | Character Refs (Image ×n), Character (Character) |
+| **Inputs** | Character Refs (Image ×n), Character (Character), Camera Rig (CameraRig), Reference Set (ReferenceSet) |
 | **Outputs** | — |
 | **Audited** | — |
 
@@ -5449,7 +5449,7 @@ Nodes: 254 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |-----------|------|---------|---------------|
 | Override Prompt | textarea | — | — |
 | Override Refs | file | — | — |
-| Strength Override | float | — | 0–1 |
+| Strength Override | float | — | Unavailable: current Character consumers use reference images and traits without a consistency-strength control. Your stored value is retained. |
 
 ---
 
@@ -5837,13 +5837,13 @@ Nodes: 254 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Style Weight | float | 1 | 0–1 |
-| Identity Weight | float | 1 | 0–1 |
-| Composition Weight | float | 1 | 0–1 |
-| Pose Weight | float | 1 | 0–1 |
-| Lighting Weight | float | 1 | 0–1 |
-| Subject Weight | float | 1 | 0–1 |
-| Background Weight | float | 1 | 0–1 |
+| Style Priority | float | 1 | 0–1 |
+| Identity Priority | float | 1 | 0–1 |
+| Composition Priority | float | 1 | 0–1 |
+| Pose Priority | float | 1 | 0–1 |
+| Lighting Priority | float | 1 | 0–1 |
+| Subject Priority | float | 1 | 0–1 |
+| Background Priority | float | 1 | 0–1 |
 
 ---
 

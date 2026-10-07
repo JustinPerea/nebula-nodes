@@ -122,6 +122,7 @@ function formatParamRow(param) {
     const hi = param.max != null ? String(param.max) : '…';
     options = `${lo}–${hi}`;
   }
+  if (param.disabledReason) options = escapeCell(param.disabledReason);
 
   return [label, typeStr, defaultVal, options];
 }

@@ -16,9 +16,10 @@ import '../../styles/reference-set-node.css';
 
 // The ReferenceSetNode is the canvas card for the reference-set utility node.
 // It renders one role-labeled input slot per semantic reference role (7 total,
-// handles colored from referenceRoles.ts), a weight slider per slot, and a
+// handles colored from referenceRoles.ts), a priority slider per slot, and a
 // live ordered preview of the bundle the backend handler will pack: connected
-// roles sorted by weight descending. Slider edits write straight back into
+// roles with positive priority sorted descending. Serialized *_weight keys
+// remain unchanged for saved graph compatibility. Slider edits write back into
 // node params via updateNodeData — the same path the Inspector uses — so the
 // card and the Inspector never disagree. At execution time
 // handlers/reference_set.py packs connected images into the ReferenceSetBundle
@@ -30,7 +31,8 @@ interface ReferenceSetNodeData {
 
 function readWeight(params: Record<string, unknown>, role: ReferenceRoleId): number {
   const raw = params[`${role}_weight`];
-  if (raw === null || raw === undefined || raw === '') return REFERENCE_WEIGHT_DEFAULT;
+  if ((typeof raw !== 'number' && typeof raw !== 'string') || raw === ''
+    || (typeof raw === 'string' && raw.trim() === '')) return REFERENCE_WEIGHT_DEFAULT;
   const value = typeof raw === 'number' ? raw : Number(raw);
   if (!Number.isFinite(value)) return REFERENCE_WEIGHT_DEFAULT;
   return clampReferenceWeight(value);
@@ -68,7 +70,7 @@ export function ReferenceSetNode({ id, data, selected }: NodeProps) {
   const preview = useMemo(
     () =>
       REFERENCE_ROLE_IDS
-        .filter((role) => connectedRoles.has(role))
+        .filter((role) => connectedRoles.has(role) && weights[role] > 0)
         .map((role, index) => ({ role, weight: weights[role], index }))
         .sort((a, b) => b.weight - a.weight || a.index - b.index),
     [connectedRoles, weights]
@@ -89,6 +91,9 @@ export function ReferenceSetNode({ id, data, selected }: NodeProps) {
   return (
     <div className={`reference-set-node ${selected ? 'reference-set-node--selected' : ''}`}>
       <div className="reference-set-node__title">▤ Reference Set</div>
+      <p className="reference-set-node__guidance">
+        Connect to Cinema Scene. Reference priority sets image order; 0 excludes.
+      </p>
 
       <div className="reference-set-node__slots">
         {REFERENCE_ROLE_IDS.map((role) => {
@@ -118,7 +123,7 @@ export function ReferenceSetNode({ id, data, selected }: NodeProps) {
                 step={REFERENCE_WEIGHT_STEP}
                 value={weights[role]}
                 onChange={handleWeightChange(role)}
-                aria-label={`${roleDef.label} weight`}
+                aria-label={`${roleDef.label} reference priority`}
               />
               <span className="reference-set-node__weight-value">
                 {formatWeight(weights[role])}
@@ -130,7 +135,7 @@ export function ReferenceSetNode({ id, data, selected }: NodeProps) {
 
       <div className="reference-set-node__preview">
         {preview.length === 0 ? (
-          <div className="reference-set-node__preview-empty">Connect references to pack a set</div>
+          <div className="reference-set-node__preview-empty">Connect references with priority above 0</div>
         ) : (
           preview.map(({ role, weight }) => (
             <div key={role} className="reference-set-node__preview-item">
@@ -151,6 +156,7 @@ export function ReferenceSetNode({ id, data, selected }: NodeProps) {
         type="source"
         position={Position.Right}
         id="reference_set"
+        aria-label="Ordered references output"
         className="reference-set-node__handle"
         style={{ backgroundColor: PORT_COLORS.ReferenceSet }}
       />

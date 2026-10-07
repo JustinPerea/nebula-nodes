@@ -242,7 +242,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
       if (param.hidden) return false;
       if (!param.visibleWhen) return true;
       return Object.entries(param.visibleWhen).every(([key, allowedValues]) => {
-        const currentValue = nodeData.params[key];
+        const currentValue = nodeData.params[key] ?? resolvedParams.find((p) => p.key === key)?.default;
         // If the controlling param isn't set (e.g. model in directParams when using FAL), pass through
         if (currentValue === undefined || currentValue === null) return true;
         return allowedValues.includes(currentValue as string | number | boolean);
@@ -450,7 +450,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
     return baseOptions.filter((opt) => {
       if (!('visibleWhen' in opt) || !opt.visibleWhen) return true;
       return Object.entries(opt.visibleWhen).every(([key, allowedValues]) => {
-        const currentValue = activeNodeData.params[key];
+        const currentValue = activeNodeData.params[key] ?? resolvedParams.find((p) => p.key === key)?.default;
         if (currentValue === undefined || currentValue === null) return true;
         return allowedValues.includes(currentValue as string | number | boolean);
       });
@@ -541,6 +541,10 @@ export function Inspector({ embedded = false }: InspectorProps) {
   function renderParamControl(param: InspectorParamDefinition) {
     const value = activeNodeData.params[param.key] ?? param.default ?? '';
 
+    if ('disabledReason' in param && param.disabledReason) {
+      return <input className="inspector__field" aria-label={param.label} value={String(value)} disabled />;
+    }
+
     if (universalProvider && param.key === 'model') {
       return renderUniversalModelControl();
     }
@@ -548,6 +552,8 @@ export function Inspector({ embedded = false }: InspectorProps) {
     if (param.type === 'enum') {
       const options = getVisibleOptions(param);
       const hasEmptyOption = options.some((opt) => opt.value === '');
+      const unavailableChoice = value !== '' && !options.some((opt) => String(opt.value) === String(value));
+      const storedLabel = param.options?.find((opt) => String(opt.value) === String(value))?.label ?? 'Saved choice';
       return (
         <select
           className="inspector__field"
@@ -563,6 +569,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
             onParamChange(param.key, option?.value ?? e.target.value);
           }}
         >
+          {unavailableChoice && <option value={String(value)} disabled>{storedLabel} (unavailable for selected model)</option>}
           {options.length === 0 ? (
             <option value="">No options available</option>
           ) : (
@@ -596,6 +603,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
         <input
           className="inspector__field"
           type="number"
+          aria-label={param.label}
           value={String(value)}
           onChange={(e) => {
             const next = e.target.value;
@@ -857,6 +865,9 @@ export function Inspector({ embedded = false }: InspectorProps) {
       >
         {showLabel && <div className="inspector__label">{param.label}</div>}
         {renderParamControl(param)}
+        {'disabledReason' in param && param.disabledReason && (
+          <div className="inspector__notice" role="note">{param.disabledReason}</div>
+        )}
         {activeNodeData.definitionId === 'replicate-universal' && param.key === 'model_id' && (
           <button
             type="button"

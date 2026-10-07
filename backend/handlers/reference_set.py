@@ -4,8 +4,9 @@ A pure utility/glue node: it packs the images connected to its seven
 role-labeled input ports (style, identity, composition, pose, lighting,
 subject, background) into a ReferenceSetBundle and emits it on the
 ``reference_set`` output port. Each item pairs an image URL with the semantic
-role of the port it arrived on and that role's weight param (default 1.0,
-clamped to 0..1). Items are sorted by weight descending (stable for ties, so
+role of the port it arrived on and that role's priority (legacy weight param,
+default 1.0, clamped to 0..1). Zero-priority roles are excluded. Items are
+sorted by priority descending (stable for ties, so
 equal weights keep port declaration order) so downstream handlers can read
 precedence directly.
 
@@ -17,6 +18,7 @@ from __future__ import annotations
 
 from typing import Any, Awaitable, Callable
 
+from cinema.art_direction import parse_reference_priority
 from models.events import ExecutionEvent
 from models.graph import GraphNode, PortValueDict
 
@@ -53,13 +55,7 @@ def _parse_weight(raw: Any) -> float:
     Missing/empty/unparseable values fall back to 1.0 — a malformed slider
     value should not break graph execution (mirrors camera_rig._parse_field).
     """
-    if raw is None or raw == "":
-        return WEIGHT_DEFAULT
-    try:
-        value = float(raw)
-    except (TypeError, ValueError):
-        return WEIGHT_DEFAULT
-    return max(WEIGHT_MIN, min(WEIGHT_MAX, value))
+    return parse_reference_priority(raw)
 
 
 async def handle_reference_set(
@@ -76,6 +72,8 @@ async def handle_reference_set(
         if not value:
             continue
         weight = _parse_weight(params.get(f"{role}_weight"))
+        if weight == 0:
+            continue
         # A multi-connection port arrives as a list of URLs; a single
         # connection is a scalar string. Both produce one item per URL.
         urls = value if isinstance(value, list) else [value]

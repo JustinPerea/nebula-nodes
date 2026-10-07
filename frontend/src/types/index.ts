@@ -118,6 +118,8 @@ export interface ParamDefinition {
    *  that has a dedicated editor surface — e.g. cinema-scene's `scene` spec,
    *  authored via the Cinema Studio rather than a generic param control. */
   hidden?: boolean;
+  /** Stored for compatibility, but unavailable in the current model adapter. */
+  disabledReason?: string;
 }
 
 export interface ModelNodeDefinition {
@@ -200,7 +202,7 @@ export interface Character {
   referenceViews: string[];        // the multi-view bundle (required, >=3); /api/outputs or /api/uploads URLs
   frozenTraitString: string;       // re-emitted VERBATIM into prompts — paraphrase breaks identity (Seedance finding)
   seed: number;                    // fixed seed for repeatability (Pheme "seed 84" pattern)
-  consistencyStrength: number;     // 0..1 — the --ow / IP-adherence analog
+  consistencyStrength: number;     // retained metadata; current reference adapters expose no adherence control
   thumbnail: string;               // auto-picked from referenceViews
   projectId?: string;              // project-scoped; absent = global
   createdAt: string;
@@ -227,14 +229,14 @@ export interface CharacterBundle {
   overridePrompt?: string;
   /** Per-use extra reference images, appended after referenceViews (empty = none). */
   overrideRefs?: string[];
-  /** Per-use consistency strength; overrides consistencyStrength when set.
-   *  null/absent = inherit consistencyStrength. */
+  /** Retained per-use strength metadata; current reference adapters do not apply it.
+   *  null/absent = inherit the stored metadata. */
   strengthOverride?: number | null;
 }
 
 /** Typed bundle emitted by the camera-rig utility node on its CameraRig port.
- *  Camera geometry as inspectable numeric values, so downstream generation/edit
- *  nodes can ground camera direction in data instead of prompt prose. */
+ *  Cinema translates these inspectable values into labeled prompt guidance;
+ *  they are not native model camera controls. */
 export interface CameraRigBundle {
   height: number;          // camera height in meters
   pitch: number;           // degrees, -90 (straight down) to 90 (straight up)

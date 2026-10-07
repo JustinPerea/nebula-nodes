@@ -122,6 +122,16 @@ async def test_unparseable_params_fall_back_to_defaults() -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf"), True])
+async def test_nonfinite_or_boolean_params_use_finite_defaults(value) -> None:
+    from handlers.camera_rig import handle_camera_rig
+
+    result = await handle_camera_rig(_node({"height": value}), {}, {})
+    assert result["camera_rig"]["value"]["height"] == pytest.approx(1.7)
+    json.dumps(result, allow_nan=False)
+
+
+@pytest.mark.asyncio
 async def test_output_is_json_serializable() -> None:
     """The bundle rides through PortValueDict / websocket events as plain JSON."""
     from handlers.camera_rig import handle_camera_rig

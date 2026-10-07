@@ -77,6 +77,8 @@ function readRig(params: Record<string, unknown>): CameraRigBundle {
   const rig = { ...DEFAULTS };
   for (const key of FIELD_ORDER) {
     const raw = params[key];
+    if ((typeof raw !== 'number' && typeof raw !== 'string') || raw === ''
+      || (typeof raw === 'string' && raw.trim() === '')) continue;
     const value = typeof raw === 'number' ? raw : Number(raw);
     if (Number.isFinite(value)) rig[key] = value;
   }
@@ -212,6 +214,9 @@ export function CameraRigNode({ id, data, selected }: NodeProps) {
   return (
     <div className={`camera-rig-node ${selected ? 'camera-rig-node--selected' : ''}`}>
       <div className="camera-rig-node__title">◈ Camera Rig</div>
+      <p className="camera-rig-node__guidance">
+        Connect to Cinema Scene for camera prompt guidance. Models may interpret it differently.
+      </p>
 
       <div className="camera-rig-node__diagram">
         <SideView rig={rig} />
@@ -246,6 +251,7 @@ export function CameraRigNode({ id, data, selected }: NodeProps) {
         type="source"
         position={Position.Right}
         id="camera_rig"
+        aria-label="Camera guidance output"
         className="camera-rig-node__handle"
         style={{ backgroundColor: PORT_COLORS.CameraRig }}
       />

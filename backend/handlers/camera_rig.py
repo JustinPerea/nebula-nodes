@@ -1,10 +1,9 @@
 """camera-rig utility node.
 
 A pure utility/glue node: it packs its numeric slider params into a
-CameraRigBundle and emits it on the ``camera_rig`` output port. Downstream
-generation/edit nodes can consume the bundle to ground camera direction in
-typed, inspectable values (height, pitch, focal length, subject framing…)
-instead of prose buried in a prompt.
+CameraRigBundle and emits it on the ``camera_rig`` output port. Cinema consumes
+these inspectable values (height, pitch, focal length, subject framing…) as
+explicitly labeled camera prompt guidance.
 
 No network, no generation — this node is deterministic given its params.
 Same typed-bundle pattern as handlers/character_node.py.
@@ -12,6 +11,7 @@ Same typed-bundle pattern as handlers/character_node.py.
 
 from __future__ import annotations
 
+import math
 from typing import Any, Awaitable, Callable
 
 from models.events import ExecutionEvent
@@ -40,12 +40,13 @@ def _parse_field(raw: Any, default: float) -> float:
     unparseable) is treated as unset rather than raising — a bad slider value
     should not break graph execution.
     """
-    if raw is None or raw == "":
+    if raw is None or raw == "" or isinstance(raw, bool):
         return default
     try:
-        return float(raw)
+        value = float(raw)
     except (TypeError, ValueError):
         return default
+    return value if math.isfinite(value) else default
 
 
 async def handle_camera_rig(
