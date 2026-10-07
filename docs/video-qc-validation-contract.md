@@ -41,9 +41,25 @@ under Factory mission `a06170a9-b974-43ea-9dc3-82b2bd937afd`.
 ### `qc-frame-review`
 
 - Samples the clip at a bounded rate and measures color/background stability.
-  OpenCV mode optionally detects and tracks faces when `track_faces` is true.
-- Reports frame count, per-frame face detection, identity/expression drift,
-  background stability, color drift, and a pass/fail summary.
+  OpenCV mode optionally detects face boxes when `track_faces` is true.
+- Reports frame count, per-frame face detection, background stability, color
+  drift, and a pass/fail summary. A `null` face flag means detection was not
+  available for that sample; it does not mean no face was detected.
+- `identity_drift_score`, `expression_drift_score`, and the corresponding
+  `pass_fail_summary` entries are `null` when unmeasured. Heuristic mode and
+  OpenCV mode cannot certify identity or expression consistency.
+- OpenCV's separately named `face_geometry_drift_score` and
+  `face_edge_drift_score` measure box position/size and crop edge density only.
+  They require at least two face observations and otherwise return `null`.
+  `face_detection_coverage` records detected/sample counts and fraction, so
+  partial coverage is visible. No subject correspondence or identity tracking
+  is claimed; the largest detected face supplies each frame's proxy.
+- `assessment_provenance` labels each identity/expression/face-proxy check as
+  `unavailable`, `proxy`, or `advisory`, with a reason. Vision identity/expression
+  scores and threshold verdicts are advisory and require valid parsed JSON
+  containing finite numeric scores in [0, 1]. Missing, malformed, boolean,
+  nonfinite, and out-of-range scores remain unmeasured independently; they
+  never inherit a zero/pass default. Annotated output labels these distinctions.
 - The annotated output is a contact sheet with sampled-frame and face overlays.
 
 ### `qc-composited-look`

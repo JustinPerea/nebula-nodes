@@ -1,5 +1,11 @@
 /* ─── Reference tray ─────────────────────────────────────────────────────── */
 
+body.app-slava-restraint .result-card__save-error {
+  padding: 8px 10px;
+  font-size: 12px;
+  color: var(--sr-ink);
+}
+
 body.app-slava-restraint .reference-tray {
   display: flex;
   flex-wrap: wrap;

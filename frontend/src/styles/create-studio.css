@@ -30,6 +30,7 @@ body.app-slava-restraint .create-view__back {
 }
 body.app-slava-restraint .create-view__back:hover { border-color: var(--sr-edge-strong); }
 body.app-slava-restraint .create-view__title { color: var(--sr-ink-meta); font-size: 13px; letter-spacing: 0.04em; }
+body.app-slava-restraint .create-view__save-error { color: var(--sr-ink); font-size: 12px; }
 
 body.app-slava-restraint .create-view__stage {
   position: relative;

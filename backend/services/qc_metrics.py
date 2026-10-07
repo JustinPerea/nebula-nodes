@@ -153,7 +153,12 @@ def frame_stability_metrics(frames: Sequence[Image.Image]) -> dict[str, float]:
     }
 
 
-def detect_faces(frames: Sequence[Image.Image]) -> tuple[list[list[tuple[int, int, int, int]]], dict[str, float]]:
+def detect_faces(frames: Sequence[Image.Image]) -> tuple[list[list[tuple[int, int, int, int]]], dict[str, float | None]]:
+    """Detect face boxes and report coarse geometry/edge proxies only.
+
+    Neither box motion nor crop edge density measures a person's identity or
+    expression. With fewer than two face observations, drift is unavailable.
+    """
     active_cv2 = _require_opencv()
     cascade_path = active_cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
     cascade = active_cv2.CascadeClassifier(cascade_path)
@@ -175,14 +180,14 @@ def detect_faces(frames: Sequence[Image.Image]) -> tuple[list[list[tuple[int, in
             edge_density.append(float(np.mean(active_cv2.Canny(crop, 80, 160) > 0)))
     if len(primary_geometry) > 1:
         geom = np.asarray(primary_geometry, dtype=np.float32)
-        identity_drift = clamp_score(float(np.mean(np.std(geom, axis=0))) * 6.0)
-        expression_drift = clamp_score(float(np.std(edge_density)) * 5.0 if edge_density else 0.0)
+        geometry_drift = clamp_score(float(np.mean(np.std(geom, axis=0))) * 6.0)
+        edge_drift = clamp_score(float(np.std(edge_density)) * 5.0)
     else:
-        identity_drift = 0.0
-        expression_drift = 0.0
+        geometry_drift = None
+        edge_drift = None
     return detections, {
-        "identity_drift_score": identity_drift,
-        "expression_drift_score": expression_drift,
+        "face_geometry_drift_score": geometry_drift,
+        "face_edge_drift_score": edge_drift,
     }
 
 
