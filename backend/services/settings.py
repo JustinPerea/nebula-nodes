@@ -71,6 +71,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "batchSizeCap": 25,
     "exportFolder": None,
     "zoomTelemetryEnabled": False,
+    "kreaConnectionMode": "api-token",
 }
 
 

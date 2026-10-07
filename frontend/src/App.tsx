@@ -19,6 +19,7 @@ import { BackendConnectionStatus } from './components/BackendConnectionStatus';
 import { ProviderRecoveryStatus } from './components/ProviderRecoveryStatus';
 import { startWorkingBadge } from './lib/jobNotifications';
 import { getSettings, fetchCLIGraph } from './lib/api';
+import { getKreaConnection, normalizeKreaMode, nodeKeyStatus } from './lib/kreaConnection';
 import { useUIStore } from './store/uiStore';
 import { useGraphStore } from './store/graphStore';
 import { useZoomManifest } from './hooks/useZoomManifest';
@@ -146,15 +147,60 @@ function ZoomManifestRecorder() {
 }
 
 export default function App() {
+  const credentialCache = useUIStore((s) => s.settingsCache);
+  const settingsVisible = useUIStore((s) => s.panels.settings.visible
+    && (s.viewMode === 'canvas' || s.viewMode === 'create'));
   // Fetch settings on mount to populate the API key cache used for warning badges
   useEffect(() => {
     getSettings()
       .then((settings) => {
         const apiKeys = (settings.apiKeys ?? {}) as Record<string, string>;
-        useUIStore.getState().setSettingsCache(apiKeys);
+        useUIStore.getState().setSettingsCache(apiKeys, normalizeKreaMode(settings.kreaConnectionMode));
       })
       .catch((err) => console.warn('Failed to load settings for key check:', err));
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const initialConnection = useUIStore.getState().settingsCache.kreaConnection;
+    getKreaConnection().then((connection) => {
+      if (!cancelled && useUIStore.getState().settingsCache.kreaConnection === initialConnection) {
+        useUIStore.getState().setKreaConnection(connection);
+      }
+    }).catch(() => {
+      if (!cancelled && useUIStore.getState().settingsCache.kreaConnection === initialConnection) {
+        useUIStore.getState().setKreaConnection({ status: 'error' });
+      }
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  // The Settings card polls while open; keep pending consent alive when closed.
+  useEffect(() => {
+    const connection = credentialCache.kreaConnection;
+    if (settingsVisible || connection?.status !== 'connecting') return;
+    let cancelled = false;
+    const stillCurrent = () => !cancelled
+      && useUIStore.getState().settingsCache.kreaConnection === connection;
+    const timer = window.setTimeout(() => {
+      getKreaConnection().then((state) => {
+        if (stillCurrent()) useUIStore.getState().setKreaConnection(state);
+      }).catch(() => {
+        if (stillCurrent()) useUIStore.getState().setKreaConnection({ status: 'error' });
+      });
+    }, 2000);
+    return () => { cancelled = true; window.clearTimeout(timer); };
+  }, [credentialCache.kreaConnection, settingsVisible]);
+
+  // Connection readiness only changes warnings, never node parameters or runs.
+  useEffect(() => {
+    const nodes = useGraphStore.getState().nodes;
+    const updated = nodes.map((node) => {
+      const keyStatus = nodeKeyStatus(NODE_DEFINITIONS[node.data.definitionId], node.data.params, credentialCache);
+      return node.data.keyStatus === keyStatus ? node : { ...node, data: { ...node.data, keyStatus } };
+    });
+    if (updated.some((node, index) => node !== nodes[index])) useGraphStore.setState({ nodes: updated });
+  }, [credentialCache]);
 
   // Re-check all node key statuses whenever settings are saved
   useEffect(() => {
@@ -162,25 +208,7 @@ export default function App() {
       getSettings()
         .then((settings) => {
           const apiKeys = (settings.apiKeys ?? {}) as Record<string, string>;
-          useUIStore.getState().setSettingsCache(apiKeys);
-
-          const { nodes } = useGraphStore.getState();
-          const updatedNodes = nodes.map((node) => {
-            const def = NODE_DEFINITIONS[node.data.definitionId];
-            if (!def) return node;
-            const keyNames = Array.isArray(def.envKeyName)
-              ? def.envKeyName
-              : [def.envKeyName];
-            const hasKey = keyNames.length === 0 || keyNames.some((k) => Boolean(apiKeys[k]));
-            return {
-              ...node,
-              data: {
-                ...node.data,
-                keyStatus: hasKey ? undefined : ('missing' as const),
-              },
-            };
-          });
-          useGraphStore.setState({ nodes: updatedNodes });
+          useUIStore.getState().setSettingsCache(apiKeys, normalizeKreaMode(settings.kreaConnectionMode));
         })
         .catch(console.warn);
     }
@@ -276,7 +304,7 @@ export default function App() {
       {isCanvas && assetsPanelVisible && <AssetsPanel />}
       {isCanvas && <RunHistoryPanel />}
       {isCanvas && <NodeInspectorPopover />}
-      {isCanvas && <Settings />}
+      {(isCanvas || isCreate) && <Settings />}
       {!isBrandShowcase && <ChatPanel />}
       {isCanvas && <WorkspaceRail />}
       {isCanvas && <ChatLauncher />}

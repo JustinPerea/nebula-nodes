@@ -1,104 +1,86 @@
 # Krea in Nebula Nodes
 
-> Generate high-quality images with Krea's own **Krea 2** model — steered by your own style references, moodboards, and custom-trained LoRA styles — straight from a node on the canvas.
+You can also [connect your Krea account through MCP](../KREA-MCP.md) in Settings.
+Gateway models save a choice between **Krea account · workspace compute** and
+**API token · API balance**. Old graphs and the legacy style tools retain API
+tokens. Connecting or checking the account never generates media.
 
-## What you can make
+Use Krea as a direct provider for image and video models, including Krea 2, Nano Banana, GPT Image, Flux, Kling, Veo, Seedance, Hailuo, and Runway. Each model has its own node and model-specific controls. The catalog is generated from Krea's public OpenAPI document, checked **2026-10-03**: **33 image routes and 41 video routes**.
 
-**Images**
-- **Krea 2 generations** — text-to-image from a prompt, in 8 aspect ratios (1:1 through 9:16, including cinematic 2.35:1), at 1K resolution, with tunable "creativity" (raw / low / medium / high).
-- **Style-steered images** — feed in reference images (your own uploads or upstream node outputs) so the result picks up their look, with per-reference strength control.
-- **Moodboard-steered images** — bias a generation toward a Nebula moodboard or an existing Krea moodboard ID.
+Choose a specific Krea model in the model picker. Canvas supports the full catalog and its advanced inputs. Create exposes models that work with its prompt, image attachments, and simple controls; use Canvas for Runway's tagged references, H3 camera trajectories, and Flux Video Edit's source video. Krea is the provider used for that run, even when the underlying model comes from another company. Nebula does not switch to another provider or use another provider's key automatically.
 
-**Custom styles (training)**
-- **Train a LoRA style/object/character** from a set of training images, on your choice of base model (FLUX Dev/Schnell, Wan, Wan 2.2, Qwen, Z-Image), then reuse the resulting style ID to generate on-brand images. Optionally share the trained style with your API workspace.
+## Set up an API token
 
-**Style discovery**
-- **Search Krea's style library** — your own styles, community styles, Krea's curated styles, shared/public/gallery styles — filter by model, by user, by liked, and page through results. Useful for finding a `style_id` to plug into a Krea 2 generation.
+1. Enable API access on your Krea workspace and create a token at [Krea API tokens](https://www.krea.ai/settings/api-tokens). Workspace owners and admins can create tokens.
+2. In Nebula **Settings**, enter the token in the **Krea** field and choose **Save Settings**. The documented key is `KREA_API_TOKEN`; the backend also accepts the older `KREA_API_KEY` name.
+3. Check your workspace's [API balance](https://www.krea.ai/app/api). Direct API calls use a separate USD balance from the compute units used by the Krea web app. A configured token alone does not establish that generation is funded or permitted.
 
-## Nodes available in Nebula (3)
+No restart is required after saving settings. API-token recipes call `https://api.krea.ai` with bearer-token authentication. A depleted API balance returns HTTP 402; Nebula surfaces the provider error. See [Krea's authentication and billing reference](https://www.krea.ai/docs/developers/api-keys-and-billing).
 
-| Node (as shown in app) | Node ID | Type | Key inputs | Notable params | Use it for |
-|---|---|---|---|---|---|
-| **Krea 2** | `krea-2-generate` | image-gen | `prompt` (Text, required); `style_images` (Image, up to 10); `image_style_references` (Any, up to 10); `styles` (Any); `moodboard` (Any) | `variant` (medium/large), `aspect_ratio` (1:1…9:16, 2.35:1), `resolution` (1K), `creativity` (raw/low/medium/high), `seed`, `style_reference_strength` (0–1), `style_id`, `style_strength` (−2–2), `moodboard_id`, `moodboard_strength` (0–1) | Generating a Krea 2 image from a prompt, optionally steered by reference images, trained styles, or a moodboard. |
-| **Krea Style Search** | `krea-style-search` | analyzer | (none) | `filter` (all/user/community/krea/shared/public/gallery), `model` (e.g. flux_dev, qwen, z-image, wan), `ids`, `user`, `liked`, `limit` (1–1000), `cursor` | Browsing/finding Krea styles and their IDs to feed into a Krea 2 generation. Outputs a `styles` array plus a text summary. |
-| **Krea Style Train** | `krea-style-train` | image-gen | `images` (Image, required, multiple) | `name` (required), `model` (flux_dev/flux_schnell/wan/wan22/qwen/z-image), `training_type` (Style/Object/Character/Default), `trigger_word`, `max_train_steps` (1–2000), `learning_rate`, `batch_size`, `generation_strength` (−2–2), `share_with_workspace` | Training a custom LoRA style from your images; outputs a reusable `style_id` (and the full `style` object) to wire into Krea 2. |
+## Choose and connect a model
 
-> Note: `krea-2-generate` and `krea-style-train` run **async-poll** (Nebula submits a job and polls `GET /jobs/{id}` until it completes). `krea-style-search` runs **sync**. `learning_rate` and `batch_size` only appear for the FLUX/Wan training models (they're hidden for Qwen and Z-Image).
+The new nodes have stable IDs derived from the API route. For example:
 
-## How to use it in Nebula
-
-**Where the nodes appear.** Open the node palette and look under the category each node belongs to: **Krea 2** and **Krea Style Train** sit under image-generation nodes; **Krea Style Search** sits under analyzer nodes. Drag one onto the canvas, then wire its input ports.
-
-**API-key setup.** All three nodes authenticate with a single token. Get the key from the Krea dashboard (Developers → API Keys & Billing). Open Nebula **Settings**, paste it into the **Krea** field (`KREA_API_TOKEN`), and choose **Save Settings**. Nebula stores it under `apiKeys.KREA_API_TOKEN` in the project-root `settings.json`; no restart is required. Nebula sends it as `Authorization: Bearer <token>` to `https://api.krea.ai`. If the key is missing you'll get a "KREA_API_TOKEN is required" error; if your Krea balance is depleted you'll see a `402` error surfaced from the API. (For backward-compat the handler also accepts `KREA_API_KEY`, but `KREA_API_TOKEN` is the documented name.)
-
-**Recipe 1 — Straight Krea 2 text-to-image.**
-1. Drop a **Krea 2** (`krea-2-generate`) node.
-2. Connect a text/prompt source into `prompt` (or type one upstream).
-3. Set `aspect_ratio` (e.g. `16:9`), `creativity` (`medium` is the default), optionally a `seed` for repeatability.
-4. Run. The `image` output is your generated image; the `job` output carries the raw Krea job (handy for debugging/seeds).
-
-**Recipe 2 — Style-referenced generation (look transfer).**
-1. Bring in one or more images — an upload, or the `image` output of any upstream generator node — and connect them into the **Krea 2** node's `style_images` port (up to 10).
-2. Tune `style_reference_strength` (0–1) to control how strongly the references bias the result.
-3. Connect your `prompt` and run. Nebula automatically uploads any local/generated images to Krea's `/assets` endpoint and passes them as `image_style_references`. A connected Nebula moodboard on the `moodboard` port adds both reference images and a style-brief suffix to the prompt.
-
-**Recipe 3 — Train a custom style, then generate with it.**
-1. Drop a **Krea Style Train** (`krea-style-train`) node; connect a set of training images into `images` and give it a `name` (required). Pick a `model` (e.g. `flux_dev`) and `training_type` (`Style`). Optionally set a `trigger_word`.
-2. Run it. When training completes, it emits `style_id` (Text) and a `style` object.
-3. Wire that `style` output (or paste the `style_id` into the `style_id` param) into a **Krea 2** node's `styles` input, set `style_strength`, add your `prompt`, and generate on-brand images. Tip: use **Krea Style Search** first to discover existing community/Krea styles instead of training your own.
-
-## API coverage — what Nebula uses vs. what Krea offers
-
-| Capability / Endpoint | In the API | In Nebula |
+| Model | Node ID | Typical input |
 |---|---|---|
-| Krea 2 image generation (`POST /generate/image/krea/krea-2/{variant}`, medium & large) | Yes | **full** — medium + large variants, all aspect ratios, creativity, seed, style refs, styles, moodboards |
-| Krea 2 Medium **Turbo** (`/generate/image/krea/krea-2-medium-turbo`) | Yes | **none** — only medium/large variants are exposed; turbo is not |
-| Search styles (`GET /styles`) | Yes | **full** — filter, model, ids, user, liked, limit, cursor all wired |
-| Train custom style / LoRA (`POST /styles/train`) | Yes | **full** — all 6 base models + type, trigger word, steps, LR, batch size |
-| Share a style with workspace (`POST /styles/{id}/share/workspace`) | Yes | **partial** — invoked only as an option inside Style Train (`share_with_workspace`); no standalone node |
-| Get a single style by ID (`GET /styles/{id}`) | Yes | **none** |
-| Update a style (`PATCH /styles/{id}`) | Yes | **none** |
-| Get shareable link / remove style from workspace | Yes | **none** |
-| Upload an asset (`POST /assets`) | Yes | **partial** — used internally to upload local/generated images for style refs & training; not a user-facing node |
-| List / get / delete assets (`GET`/`DELETE /assets…`) | Yes | **none** |
-| Jobs: get by ID (`GET /jobs/{id}`) | Yes | **partial** — used internally for polling only; no list/delete |
-| Jobs: list (`GET /jobs`), delete (`DELETE /jobs/{id}`) | Yes | **none** |
-| Moodboards: reference existing by ID in a generation | Yes | **partial** — Krea 2 accepts a `moodboard_id`/moodboard input, but there's no create/list moodboard endpoint in the API to back it |
-| **Image-to-image / editing** (Flux Kontext `POST /generate/image/bfl/flux-1-kontext-dev`, SeedEdit, Seedream 4, etc.) | Yes | **none** |
-| **Other image models via Krea** (Flux, Flux 1.1 Pro/Ultra, Imagen 3/4/Fast/Ultra, Ideogram 2/3, Nano Banana / 2 / Pro, Qwen 2512, Z-Image, ChatGPT Image / 2, Luma UNI-1, Runway Gen-4, Seedream 4 / 5 Lite) | Yes | **none** — Nebula only calls Krea's own Krea 2 model through this provider |
-| **Video generation** (`POST /generate/video/{provider}/{model}` — Veo 2/3/3.1, Kling 1.0–3.0 + o1, Hailuo, Runway Gen-3/4/4.5/Aleph, Seedance, Wan 2.1/2.2/2.5, Ray 2, LTX-2.3, Grok Imagine) | Yes | **none** |
-| **Image enhancement / upscale** (Topaz, Topaz Bloom, Topaz Generative — `POST /generate/enhance/topaz/…`) | Yes | **none** |
-| **Node apps** (list / get / execute saved Krea node workflows — `POST /node-apps/{id}/execute`) | Yes | **none** |
-| **Webhooks** (job-completion callbacks) | Yes | **none** — Nebula uses polling instead |
-| 3D generation | User-facing only (no documented public API endpoint) | n/a |
+| Nano Banana 2 | `krea-image-google-nano-banana-2` | `prompt`; optional `image_urls` |
+| GPT Image 2 (Krea labels it ChatGPT 2) | `krea-image-openai-gpt-image-2` | `prompt`; optional `image_urls` |
+| Krea 2 Turbo | `krea-image-krea-krea-2-medium-turbo` | `prompt`; optional image/style inputs |
+| Kling 3.0 | `krea-video-kling-kling-3-0` | `prompt`; optional `start_image` and `end_image` |
+| Veo 3.1 | `krea-video-google-veo-3-1` | `prompt`; optional image inputs |
+| Seedance 2.0 | `krea-video-bytedance-seedance-2` | `prompt`; optional image/video/audio references |
 
-**Coverage: ~10% of the Krea API surface is exposed in Nebula.** (Nebula deliberately scopes this provider to Krea's *own* Krea 2 model plus its style system. The vast majority of the surface — Krea's gateway to dozens of third-party image and video models, plus editing, upscaling, and node-apps — is reachable through Krea's API but not wired up here. Many of those third-party models are covered by *other* Nebula providers, so the low number reflects scope, not a missing-feature gap.)
+Connect a text source to `prompt` or enter the prompt in the node's control. Supply supported media through connections or media URL fields, set the model's normal controls, then explicitly run the node. Required request fields can be filled by either connections or controls and are checked before submission. Reference inputs, aspect ratios, resolution, duration, audio, and other options differ by model; a control on one Krea node is not a promise that another model supports it.
 
-**Notable unused capabilities:** video generation (Veo, Kling, Runway, Hailuo, Seedance, Wan, Ray 2, etc.); image-to-image / editing (Flux Kontext, SeedEdit, Seedream 4); Topaz upscaling/enhancement; the entire third-party image-model gateway (Flux, Imagen, Ideogram, Nano Banana, Qwen, Z-Image, ChatGPT Image, Luma); Krea 2 Medium **Turbo**; node-apps execution; full style CRUD (get/update/shareable-link); asset list/get/delete; job list/delete; and webhook callbacks.
+Create attachments feed the model's first image input. Use Canvas to assign separate start/end frames or different reference roles.
 
-## Agent skill coverage
+Image nodes emit `image`, an `images` array, and the raw `job`. Video nodes emit `video`, a `videos` array, and `job`. Both also emit `artifacts` (Array), containing typed local records, including previews when present. Connect the singular media output to a downstream node when you need one result, or use the array when the model returns multiple results.
 
-**A complete skill exists** at `.claude/skills/krea/SKILL.md` (new 2026-06-04). It covers all **3** Krea nodes, giving an agent the node IDs and params, the style→generation workflow, the reference-image and moodboard models, auth/failure modes, execution semantics, and the only-Krea-2-plus-styles scope boundary.
+Local uploads and upstream Nebula media are uploaded to Krea before submission. Krea also accepts public media URLs. A file path on your Mac is not a public URL: connect it through a media input instead of pasting the path into an advanced JSON field.
 
-What it covers:
-- **The 3 nodes and their IDs/params** — `krea-2-generate`, `krea-style-search`, `krea-style-train` — with the param enums (variants, aspect ratios, creativity, training models, `training_type`) and the `visibleWhen` quirk that hides `learning_rate`/`batch_size` for Qwen/Z-Image.
-- **The style → generation workflow** — how to chain Style Search or Style Train into Krea 2's `styles` input, and how `style_id`/`style_strength` map.
-- **The reference-image path** — `style_images` accepts upstream image outputs and local files (auto-uploaded to `/assets`), with real strength semantics (`style_reference_strength`, 0–1, default 0.5; max 10 refs).
-- **The moodboard model** — native Nebula moodboards vs. raw Krea `moodboard_id`, the one-moodboard limit, and how a moodboard injects reference images plus a prompt suffix.
-- **Auth + failure modes** — `KREA_API_TOKEN`, the `402` balance-depleted error, required `prompt`/`name` validation, and the `resolution=1K`-only constraint.
-- **Execution semantics** — async-poll for generate/train (submit → poll `/jobs/{id}`), sync for search; outputs include a `job` object alongside the image/style.
-- **Scope boundary** — only Krea 2 + styles are exposed; video/editing/upscaling/other-model needs should be routed to another Nebula provider.
+Simple parameters use ordinary controls. Optional complex parameters use JSON fields for the exact Krea request shape, such as Kling's multi-shot prompts:
 
-## Sources
+```json
+[
+  {"prompt": "A wide shot of a ceramic bird", "duration": 3},
+  {"prompt": "A close-up of the glaze", "duration": 2}
+]
+```
 
-- https://docs.krea.ai/llms.txt — complete documentation index (full endpoint list)
-- https://docs.krea.ai/api-reference/introduction.md — API reference overview, base URL, async job model
-- https://docs.krea.ai/api-reference/krea/krea-2-medium.md / krea-2-large.md / krea-2-medium-turbo.md — Krea 2 generation endpoints
-- https://docs.krea.ai/api-reference/styles/search-styles.md, train-a-custom-style-lora.md, share-a-style-with-your-workspace.md — styles & training
-- https://docs.krea.ai/api-reference/assets/upload-an-asset.md — asset upload
-- https://docs.krea.ai/api-reference/general/get-a-job-by-id.md — job lifecycle / polling
-- https://docs.krea.ai/api-reference/image/flux-kontext.md — image editing endpoint (unused by Nebula)
-- https://docs.krea.ai/api-reference/video/veo-31.md — representative video endpoint (unused by Nebula)
-- https://docs.krea.ai/api-reference/image-enhance/topaz.md — Topaz upscaler (unused by Nebula)
-- https://docs.krea.ai/api-reference/node-apps/execute-a-node-app.md — node-apps execution (unused by Nebula)
-- https://docs.krea.ai/3-d.md — 3D feature (user-facing, no documented API endpoint)
+This JSON belongs in the chosen Kling model's `multi_prompt` field. It does not select a model. Leave optional advanced fields empty when you do not need them. Consult the [gateway reference](../model-providers/krea/krea-gateway.md) for route and schema details, and the generated [model reference](../MODEL_REFERENCE.md) for the full Nebula catalog.
+
+## Keep using Krea 2 styles and moodboards
+
+The six existing Krea nodes remain available:
+
+| Node ID | Purpose |
+|---|---|
+| `krea-2-generate` | Krea 2 Medium/Large generation with Nebula's style and moodboard wiring |
+| `krea-image-style-reference` | Wrap an image with its own reference strength |
+| `krea-style` | Wrap an existing style/LoRA ID with strength |
+| `krea-moodboard` | Reference an existing Krea moodboard ID |
+| `krea-style-search` | Find styles available to the authenticated API identity |
+| `krea-style-train` | Train a style from images and emit a reusable style ID/object |
+
+For per-image style strength, connect an image to **Krea Image Style Reference**, then its `image_style_reference` output to `krea-2-generate.image_style_references`. For a trained style, connect `krea-style-train.style` to `krea-2-generate.styles`. Style Train also emits `style_id` and `job`; Style Search is synchronous.
+
+A provider-neutral `nebula-moodboard` can also feed the legacy Krea 2 node: Nebula adapts its representative images and style brief. A Krea-owned moodboard requires an existing Krea ID; this integration does not create Krea moodboards. Styles created in the app and through the API have separate identities unless shared with the workspace.
+
+Use these legacy wrapper nodes for their established graph wiring. The new Krea 2 model nodes expose the canonical API schema, including Turbo and image-to-image controls; do not assume legacy wrapper objects are interchangeable with raw API JSON.
+
+## Runs, results, and errors
+
+Image/video generation and style training are asynchronous. Nebula submits a job, polls it while queued or processing, and materializes completed media into the local run output. Stop requests cancel Nebula's pending work and request Krea cancellation after a job ID is known; Krea decides whether cancellation is still possible. Earlier results and run history remain available.
+
+Common failures are missing/rejected credentials, HTTP 402 for API balance, invalid model-specific parameters, moderation, or provider job errors. A public catalog entry establishes the documented route and schema, not successful execution for every workspace. Catalog verification does not include a paid provider run.
+
+This expansion covers Krea's image and video generation routes. Enhancement, 3D/audio generation, saved Krea node apps, asset management, and standalone style-management endpoints are outside this catalog expansion. Nebula uses asset upload and job polling/cancellation internally.
+
+## References
+
+- [Nebula Krea gateway contract](../model-providers/krea/krea-gateway.md)
+- [Krea agent skill](../../.agents/skills/krea/SKILL.md)
+- [Krea API reference](https://www.krea.ai/docs/api-reference/introduction)
+- [Public OpenAPI document](https://api.krea.ai/openapi.json)
+- [Job lifecycle](https://www.krea.ai/docs/developers/job-lifecycle)
+- [Asset upload](https://www.krea.ai/docs/api-reference/assets/upload-an-asset)

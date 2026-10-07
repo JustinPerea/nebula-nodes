@@ -2,6 +2,7 @@ import { useRef, useEffect, useState, useMemo } from 'react';
 import { Brush, Copy, Info, Play, Plus, RefreshCw, Star, Trash2, Upload, X } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
+import { isKreaGateway, kreaModeForParams } from '../../lib/kreaConnection';
 import { NODE_DEFINITIONS } from '../../constants/nodeDefinitions';
 import { CATEGORY_COLORS } from '../../constants/ports';
 import { PORT_COLORS } from '../../lib/portCompatibility';
@@ -409,12 +410,19 @@ export function Inspector({ embedded = false }: InspectorProps) {
     });
   }
 
+  function clearParam(key: string) {
+    const params = { ...activeNodeData.params };
+    delete params[key];
+    updateNodeData(activeNode.id, { params });
+  }
+
   const requiredKeys = definition
     ? Array.isArray(definition.envKeyName)
       ? definition.envKeyName
       : [definition.envKeyName]
     : [];
-  const missingApiKeys = activeNodeData.keyStatus === 'missing'
+  const usesKreaMcp = isKreaGateway(definition) && kreaModeForParams(activeNodeData.params) === 'mcp';
+  const missingApiKeys = activeNodeData.keyStatus === 'missing' && !usesKreaMcp
     ? requiredKeys.filter(Boolean)
     : [];
 
@@ -539,21 +547,33 @@ export function Inspector({ embedded = false }: InspectorProps) {
 
     if (param.type === 'enum') {
       const options = getVisibleOptions(param);
+      const hasEmptyOption = options.some((opt) => opt.value === '');
       return (
         <select
           className="inspector__field"
+          aria-label={param.label}
           value={String(value)}
           disabled={options.length === 0}
-          onChange={(e) => onParamChange(param.key, e.target.value)}
+          onChange={(e) => {
+            const option = options.find((opt) => String(opt.value) === e.target.value);
+            if (!param.required && param.default == null && e.target.value === '' && !option) {
+              clearParam(param.key);
+              return;
+            }
+            onParamChange(param.key, option?.value ?? e.target.value);
+          }}
         >
           {options.length === 0 ? (
             <option value="">No options available</option>
           ) : (
-            options.map((opt) => (
-              <option key={String(opt.value)} value={String(opt.value)}>
-                {opt.label}
-              </option>
-            ))
+            <>
+              {param.default == null && !hasEmptyOption && <option value="">{param.required ? 'Choose…' : 'Default'}</option>}
+              {options.map((opt) => (
+                <option key={String(opt.value)} value={String(opt.value)}>
+                  {opt.label}
+                </option>
+              ))}
+            </>
           )}
         </select>
       );
@@ -785,6 +805,23 @@ export function Inspector({ embedded = false }: InspectorProps) {
     }
 
     if (param.type === 'boolean') {
+      if (!param.required && param.default == null) {
+        return (
+          <select
+            className="inspector__field"
+            aria-label={param.label}
+            value={value === true ? 'true' : value === false ? 'false' : ''}
+            onChange={(e) => {
+              if (e.target.value === '') clearParam(param.key);
+              else onParamChange(param.key, e.target.value === 'true');
+            }}
+          >
+            <option value="">Default</option>
+            <option value="true">On</option>
+            <option value="false">Off</option>
+          </select>
+        );
+      }
       return (
         <label className="inspector__checkbox-row">
           <input
@@ -809,7 +846,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
   }
 
   function renderParamSection(param: InspectorParamDefinition, source: 'definition' | 'dynamic') {
-    const showLabel = param.type !== 'boolean';
+    const showLabel = param.type !== 'boolean' || (!param.required && param.default == null);
     return (
       <div
         key={`${source}-${param.key}`}
@@ -894,6 +931,11 @@ export function Inspector({ embedded = false }: InspectorProps) {
       {missingApiKeys.length > 0 && (
         <div className="inspector__notice inspector__notice--warning" role="status">
           Missing API key: {missingApiKeys.join(', ')}
+        </div>
+      )}
+      {usesKreaMcp && activeNodeData.keyStatus === 'missing' && (
+        <div className="inspector__notice inspector__notice--warning" role="status">
+          Krea sign-in required. Connect or check Krea in Settings.
         </div>
       )}
 

@@ -118,6 +118,43 @@ async def test_happy_path_yields_text_and_done():
 
 
 @pytest.mark.asyncio
+async def test_scoped_hermes_mcp_preserves_profile_auth_skills_and_cleans_up(tmp_path, monkeypatch):
+    import json
+    from services import krea_agent_mcp
+
+    monkeypatch.setattr(krea_agent_mcp, "HERMES_SYSTEM_MANAGED_DIR", tmp_path / "no-policy")
+    monkeypatch.delenv("HERMES_MANAGED_DIR", raising=False)
+    monkeypatch.setenv("NEBULA_URL", "http://127.0.0.1:8033")
+    monkeypatch.setenv("HERMES_HOME", str(tmp_path / "existing-profile"))
+    monkeypatch.setenv("NEBULA_CONNECTOR_ENCRYPTION_KEY", "vault-fixture")
+    monkeypatch.setenv("NEBULA_INJECTED_KEYS", "injected-fixture")
+    proc = AsyncMock()
+    proc.stdout.readline = AsyncMock(side_effect=_readline_chunks(_verbose_bytes(prose_boxes=[["ok"]])))
+    proc.stderr.read = AsyncMock(return_value=b"")
+    proc.wait = AsyncMock(return_value=0)
+    proc.returncode = 0
+    overlay_path = None
+
+    async def fake_create(*args, **kwargs):
+        nonlocal overlay_path
+        env = kwargs["env"]
+        assert env["HERMES_HOME"] == str(tmp_path / "existing-profile")
+        assert "NEBULA_CONNECTOR_ENCRYPTION_KEY" not in env
+        assert "NEBULA_INJECTED_KEYS" not in env
+        assert args[args.index("--skills") + 1] == "daedalus-core"
+        assert args[args.index("--provider") + 1] == "nous"
+        overlay_path = Path(env["HERMES_MANAGED_DIR"]) / "config.yaml"
+        config = json.loads(overlay_path.read_text())
+        assert config["mcp_servers"]["nebula_krea"]["args"][-1] == "http://127.0.0.1:8033"
+        return proc
+
+    with patch("services.hermes_session.asyncio.create_subprocess_exec", side_effect=fake_create):
+        await _collect(run_hermes("Krea models", None))
+    assert overlay_path is not None
+    assert not overlay_path.parent.exists()
+
+
+@pytest.mark.asyncio
 async def test_emits_session_event_when_session_id_present():
     """Hermes -Q mode prints `session_id: <id>` on the first stdout line automatically.
     Format verified from Task 0 fixture: session_id is lowercase, leading line."""

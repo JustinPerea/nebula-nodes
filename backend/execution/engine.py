@@ -178,6 +178,7 @@ async def _rebind_cached_output_artifacts(
 
     async def rewrite(value: Any, *, portable_assets: bool) -> Any:
         if isinstance(value, str):
+            portable_value = portable_assets or value.startswith("/api/outputs/")
             source = _owned_output_path(value)
             if source is None:
                 return value
@@ -185,7 +186,7 @@ async def _rebind_cached_output_artifacts(
                 raise _CachedArtifactMissingError(str(source))
             try:
                 source.relative_to(run_root)
-                return portable_output_ref(str(source)) if portable_assets else str(source)
+                return portable_output_ref(str(source)) if portable_value else str(source)
             except ValueError:
                 pass
 
@@ -204,7 +205,7 @@ async def _rebind_cached_output_artifacts(
                 rebound_paths[source] = destination
             return (
                 portable_output_ref(str(destination))
-                if portable_assets
+                if portable_value
                 else str(destination)
             )
         if isinstance(value, dict):
@@ -670,7 +671,14 @@ def validate_graph(
         else:
             key_names = []
 
-        if key_names and not any(api_keys.get(k) for k in key_names):
+        from handlers.krea_gateway import catalog_models
+        krea_account = node.definition_id in catalog_models() and node.params.get("_kreaAuth", "api-token") == "mcp"
+        if krea_account:
+            from services.krea_connector import is_krea_connected
+            if not is_krea_connected():
+                errors.append(ValidationErrorDetail(node_id=node.id, port_id="",
+                                                   message="Connect your Krea account in Settings before running this recipe"))
+        if key_names and not krea_account and not any(api_keys.get(k) for k in key_names):
             key_display = " or ".join(key_names)
             errors.append(
                 ValidationErrorDetail(
@@ -869,8 +877,14 @@ async def _execute_graph(
                     k: {"type": v.type, "value": v.value}
                     for k, v in resolved_inputs.items()
                 }
+                cache_params = dict(node.params)
+                if node.params.get("_kreaAuth") == "mcp":
+                    from handlers.krea_gateway import catalog_models
+                    if node.definition_id in catalog_models():
+                        from services.krea_connector import connection_revision
+                        cache_params["_kreaConnectionRevision"] = connection_revision()
                 cache_key = ExecutionCache.get_key(
-                    node.definition_id, dict(node.params), inputs_for_key, node_id=node.id
+                    node.definition_id, cache_params, inputs_for_key, node_id=node.id
                 )
                 cached_outputs = cache.get(cache_key)
                 if cached_outputs is not None:

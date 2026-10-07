@@ -10,7 +10,19 @@ frontend/dist/
 
 # Environment & secrets
 .env
+.env.*
+!.env.example
 settings.json
+credentials.json
+*.pem
+*.key
+
+# Local connector credentials and state
+.nebula/
+oauth.enc
+.key
+.revision
+connector-vault-key.enc
 
 # Generated output
 output/

@@ -1,15 +1,61 @@
 ---
 name: krea
-description: Use when building or editing a Nebula graph containing Krea 2 direct API nodes, Krea image style references, Krea styles, moodboards, style search, or style training. Covers node IDs, graph wiring, params, provider resource objects, direct-Krea-only routing, API-key requirements, and live-test caveats.
+description: Use when building or editing a Nebula graph with Krea image/video provider nodes, Krea 2, image style references, styles, moodboards, style search, or style training. Covers the schema-generated model catalog, exact node IDs and ports, direct-Krea routing, media upload, async jobs, legacy style wiring, credentials, and verification boundaries.
 ---
 
 # Krea — Nebula Integration
 
-Use Krea direct API nodes only. FAL Krea endpoints are intentionally not part of this integration.
+Use Krea direct API nodes when the user chooses Krea. FAL Krea endpoints and automatic routing through another provider are not part of this integration.
 
-Source of truth for provider behavior: `docs/model-providers/krea/krea-2.md`.
+Current image/video gateway contract: `docs/model-providers/krea/krea-gateway.md`. User-facing setup and recipes: `docs/api-guides/krea.md`. The older `docs/model-providers/krea/krea-2.md` describes the preserved legacy wrapper; it is not the full current provider catalog.
 
-## Node IDs
+## Account connection through MCP
+
+Setup: `docs/KREA-MCP.md`. The gateway nodes persist `_kreaAuth` as `api-token`
+or `mcp`. Missing values on old graphs mean `api-token`. Account/MCP runs use
+the consent-selected workspace's compute; API-token runs use API balance.
+Never change that billing source implicitly or fall back to another connection.
+Connect/check/refresh only authenticate or discover; generation requires an
+explicit graph run. The managed agent MCP bridge exposes only `list_models`
+and `get_model_schema`; generate through Nebula GRAPH commands with
+`_kreaAuth=mcp` when the user chooses their connected Krea account.
+
+## Image and Video Model Nodes
+
+The public Krea OpenAPI catalog checked **2026-10-03** defines **33 image and 41 video routes** included as specific first-class Nebula nodes. Canvas supports the full catalog. Create exposes models compatible with its prompt, image attachments, and simple controls; Runway's tagged references, H3 camera trajectories, and Flux Video Edit require Canvas. The nodes have model-specific controls and connectable prompt/media ports; JSON fields hold complex parameters, not a model selection UI.
+
+Node IDs are `krea-` plus the API path after `/generate/`, with non-alphanumeric characters replaced by hyphens. For example:
+
+| Model | Node ID | Input examples |
+|---|---|---|
+| Nano Banana 2 | `krea-image-google-nano-banana-2` | `prompt`, optional `image_urls` |
+| GPT Image 2 (Krea's ChatGPT 2 label) | `krea-image-openai-gpt-image-2` | `prompt`, optional `image_urls` |
+| Krea 2 Turbo | `krea-image-krea-krea-2-medium-turbo` | `prompt`, optional `image_url` |
+| Kling 3.0 | `krea-video-kling-kling-3-0` | `prompt`, optional `start_image`/`end_image` |
+| Veo 3.1 | `krea-video-google-veo-3-1` | `prompt`, optional image inputs |
+| Seedance 2.0 | `krea-video-bytedance-seedance-2` | `prompt`, optional media references |
+
+Inspect `backend/data/node_definitions.json` for the actual ports and parameter definitions before wiring a model. `docs/MODEL_REFERENCE.md` is generated from that registry; do not edit it manually. Do not infer a route from a display name or reconstruct the API path from a sanitized node ID.
+
+Catalog source metadata and exact request schemas live in `backend/data/krea_gateway_models.json`. Use `python3 scripts/sync-krea-catalog.py --check` for an offline consistency check; the script's default mode regenerates offline, while `--refresh` fetches only the public OpenAPI. These are catalog operations, not generation runs.
+
+Image model outputs are `image` (Image), `images` (Array), and `job` (Any); video outputs are `video` (Video), `videos` (Array), and `job` (Any). Both also emit `artifacts` (Array), containing typed local records, including previews when present. Complex object/array inputs can use structured `Any` bindings, while media arrays expose their specific media type and schema-defined connection limits.
+
+### Gateway Graph Rules
+
+- Keep the user's chosen Krea node/provider identity. Other configured provider keys are not fallback authorization.
+- Use each model's exact inputs and enums. `image_url`, `image_urls`, `start_image`, and `reference_images` have different meanings and limits across schemas.
+- Supply prompt/media fields through connections or controls. Gateway ports are optional connections; required request fields remain enforced by the schema before submission. A prompt entered in the node does not also need a connected Text port.
+- Create attachments target only the first Image port. Use Canvas for separate start/end frames, reference roles, and advanced JSON/video inputs. Cinema's base-model allowlist is separate and does not include this catalog.
+- Connect local/upstream media through its supported port so Nebula can upload it before submission. Do not put unresolved local file paths in advanced JSON.
+- Complex optional fields need canonical JSON objects/arrays. For Kling `multi_prompt`, an example is `[{"prompt":"Wide shot","duration":3},{"prompt":"Close-up","duration":2}]`. Leave optional fields empty when unnecessary.
+- Do not transfer parameters blindly across models. Duration, resolution spelling, audio, and reference limits are model-specific.
+- Catalog presence verifies a documented route/schema, not paid execution or universal workspace access. No real provider run was used to establish the 2026-10-03 catalog.
+- Enhancement, 3D/audio generation, and Krea saved node apps are outside this image/video catalog expansion.
+
+Generation is async: submit, retain the job ID, poll pending states, then materialize completed media locally. On Stop, unwind local work and request provider cancellation after the job ID is known; do not guarantee that remote work stopped. Keep prior completed outputs/history. Krea job errors are top-level `error` in the current schema, and output URL shapes can differ; see the gateway contract rather than assuming `result.urls[0]` always suffices.
+
+## Legacy Node IDs
 
 | Node | Purpose |
 |---|---|
@@ -21,13 +67,16 @@ Source of truth for provider behavior: `docs/model-providers/krea/krea-2.md`.
 | `krea-style-search` | List/search Krea styles from the authenticated API workspace/public filters |
 | `krea-style-train` | Train a Krea style from image inputs and emit a style object plus style ID |
 
+These six Krea nodes are preserved alongside the new catalog; `nebula-moodboard` is a separate provider-neutral node. Use `krea-2-generate` for the established wrapper-node style/moodboard adaptation below. New Krea 2 route nodes expose the canonical API fields, including Turbo, image-to-image strength, `3:4`, and generative sliders; their defaults and raw JSON shapes do not alter the legacy wrapper contract.
+
 ## Auth
 
 - Nebula expects `KREA_API_TOKEN` in settings/API keys. `KREA_API_KEY` is accepted as a fallback by the backend handler.
 - Krea API balance is separate from workspace compute balance. A valid token can still return `402` until the API balance is topped up.
+- API access must also be enabled for the Krea workspace. Public catalog discovery does not validate the token or API balance.
 - Never store or print user tokens in docs, screenshots, logs, or skill files.
 
-## Krea 2 Generate
+## Legacy Krea 2 Generate
 
 Required port:
 - `prompt` (`Text`)
@@ -122,18 +171,19 @@ Do not hand-roll these shapes unless necessary. Prefer the wrapper nodes so the 
 
 ## Agent Workflow
 
-1. Build Krea graphs with the direct Krea nodes above, not FAL.
-2. Keep Krea 2 defaults conservative for first runs: `variant: medium`, `resolution: 1K`, `creativity: low` or `medium`.
-3. If the user gives multiple visual references, prefer `krea-image-style-reference` nodes so each strength is explicit.
-4. If the user asks for a reusable style, use `krea-style-train`; if they already have a style ID, use `krea-style`.
-5. If the user asks for moodboards, ask for or use an existing Krea moodboard ID. Do not claim Nebula can create moodboards through Krea yet.
-6. When testing live generation, expect possible `402` API-balance failures even when auth is correct. Verify low-cost paths such as `krea-style-search` when generation credits are unavailable.
+1. Choose the specific direct Krea image/video node matching the requested model, or use the legacy Krea 2 workflow when wrapper-node styling is needed. Do not silently choose another provider.
+2. Inspect the selected node's schema and supply required fields through connections or controls before running. For legacy Krea 2, keep first-run defaults conservative: `variant: medium`, `resolution: 1K`, `creativity: low` or `medium`.
+3. For legacy Krea 2 styling with multiple visual references, prefer `krea-image-style-reference` nodes so each strength is explicit. For gateway models, use their specific reference inputs.
+4. For a reusable Krea 2 style, use `krea-style-train`; if a style ID already exists, use `krea-style` with the legacy generation workflow.
+5. Use a Nebula-native moodboard through its documented Krea 2 adaptation, or an existing ID for a Krea-owned moodboard. Do not claim Nebula can create Krea-owned moodboards through the API.
+6. Treat catalog/schema checks, deterministic tests, credential reads, and paid generation receipts as separate evidence. A style-search success does not prove generation balance or every model's runtime availability. Do not claim a paid generation without its actual receipt.
 
 ## Validation
 
 Useful checks after editing Krea nodes or handlers:
 
 ```bash
-backend/.venv/bin/python -m pytest backend/tests/test_krea_handler.py backend/tests/test_node_registry.py backend/tests/test_node_contracts.py backend/tests/test_codex_session.py -q
+backend/.venv/bin/python -m pytest -o pythonpath=backend backend/tests/test_krea_catalog.py backend/tests/test_krea_gateway.py backend/tests/test_krea_handler.py backend/tests/test_node_registry.py backend/tests/test_node_contracts.py -q
+python3 scripts/sync-krea-catalog.py --check
 node scripts/check-node-contracts.mjs
 ```

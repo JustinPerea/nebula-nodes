@@ -11,6 +11,8 @@ interface ModelPickerProps {
 
 export function ModelPicker({ value, onSelect, onClose }: ModelPickerProps) {
   const [query, setQuery] = useState('');
+  const [provider, setProvider] = useState('');
+  const providers = useMemo(() => [...new Set(getCreateModels().map((model) => String(model.apiProvider)))].sort(), []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
@@ -19,12 +21,13 @@ export function ModelPicker({ value, onSelect, onClose }: ModelPickerProps) {
   }, [onClose]);
 
   const groups = useMemo(() => {
+    const matchesProvider = (model: ModelNodeDefinition) => !provider || model.apiProvider === provider;
     if (query.trim()) {
-      return [{ label: 'Results', models: searchModels(query) }];
+      return [{ label: 'Results', models: searchModels(query).filter(matchesProvider) }];
     }
-    const featured = getFeaturedModels();
+    const featured = getFeaturedModels().filter(matchesProvider);
     const featuredIds = new Set(featured.map((m) => m.id));
-    const rest = getCreateModels().filter((m) => !featuredIds.has(m.id));
+    const rest = getCreateModels().filter((m) => matchesProvider(m) && !featuredIds.has(m.id));
     const byCategory = new Map<string, ModelNodeDefinition[]>();
     for (const m of rest) {
       const arr = byCategory.get(m.category) ?? [];
@@ -35,7 +38,7 @@ export function ModelPicker({ value, onSelect, onClose }: ModelPickerProps) {
       { label: 'Featured', models: featured },
       ...Array.from(byCategory.entries()).map(([label, models]) => ({ label, models })),
     ];
-  }, [query]);
+  }, [query, provider]);
 
   return (
     <div className="model-picker" role="dialog" aria-label="Choose a model">
@@ -45,13 +48,22 @@ export function ModelPicker({ value, onSelect, onClose }: ModelPickerProps) {
           type="text"
           autoFocus
           placeholder="Search models…"
+          aria-label="Search models"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => e.key === 'Escape' && onClose()}
         />
       </div>
+      <label className="model-picker__provider">
+        Provider
+        <select aria-label="Model provider" value={provider} onChange={(event) => setProvider(event.target.value)}>
+          <option value="">All providers</option>
+          {providers.map((item) => <option key={item} value={item}>{item === 'krea' ? 'Krea' : item}</option>)}
+        </select>
+      </label>
       <div className="model-picker__list">
-        {groups.map((group) => (
+        {groups.every((group) => group.models.length === 0) && <div className="model-picker__empty" role="status">No models match this search and provider.</div>}
+        {groups.filter((group) => group.models.length > 0).map((group) => (
           <div key={group.label} className="model-picker__group">
             <div className="model-picker__group-label">{group.label}</div>
             {group.models.map((m) => (
@@ -59,6 +71,8 @@ export function ModelPicker({ value, onSelect, onClose }: ModelPickerProps) {
                 key={m.id}
                 type="button"
                 className={`model-picker__row${value === m.id ? ' model-picker__row--active' : ''}`}
+                aria-label={`${m.displayName}, ${m.category}, ${m.apiProvider}`}
+                aria-pressed={value === m.id}
                 onClick={() => {
                   onSelect(m.id);
                   onClose();

@@ -230,7 +230,14 @@ function shouldRetryWithDiscovery(baseUrl: string, response?: Response): boolean
 export async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
   const baseUrl = await getBackendBaseUrl();
   const requestUrl = joinBackendPath(baseUrl, path);
-  const send = (url: string) => (init === undefined ? fetch(url) : fetch(url, init));
+  let requestInit = init;
+  const connectorSession = window.nebulaDesktop?.connectorSession;
+  if (getInjectedApiBaseUrl() && connectorSession && path.startsWith('/api/krea/')) {
+    const headers = new Headers(init?.headers);
+    headers.set('X-Nebula-Connector-Session', connectorSession);
+    requestInit = { ...init, headers };
+  }
+  const send = (url: string) => (requestInit === undefined ? fetch(url) : fetch(url, requestInit));
   const method = String(init?.method ?? 'GET').toUpperCase();
   // Replaying a mutation against another discovered backend is not a retry: it
   // is a second side effect in a different process. This is especially

@@ -22,6 +22,7 @@ from services.agent_process import (
     agent_process_group_options,
     terminate_agent_process_tree,
 )
+from services.krea_agent_mcp import agent_child_env, codex_mcp_args
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -129,6 +130,7 @@ async def _codex_logout_before_chatgpt_login() -> None:
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
         cwd=str(PROJECT_ROOT),
+        env=agent_child_env(),
     )
     try:
         await asyncio.wait_for(proc.communicate(), timeout=10)
@@ -153,6 +155,7 @@ async def _codex_chatgpt_login_worker(*, device_auth: bool) -> None:
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             cwd=str(PROJECT_ROOT),
+            env=agent_child_env(),
         )
     except FileNotFoundError:
         _codex_login_state.update({
@@ -376,6 +379,7 @@ def _codex_base_args(model: str | None) -> list[str]:
     # Codex; let the user's Codex config/account pick the active Codex model.
     if model and not model.startswith("claude-"):
         args.extend(["--model", model])
+    args.extend(codex_mcp_args())
     return args
 
 
@@ -386,7 +390,7 @@ def _codex_exec_env() -> dict[str, str]:
     `codex login status`, strip API credential env vars so the subprocess
     cannot silently fall back to project billing.
     """
-    env = {**os.environ, "NEBULA_DISABLE_QUICK": "1", "NO_COLOR": "1"}
+    env = {**agent_child_env(), "NEBULA_DISABLE_QUICK": "1", "NO_COLOR": "1"}
     for key in CODEX_FORBIDDEN_API_ENV_KEYS:
         env.pop(key, None)
     return env
@@ -439,6 +443,13 @@ def _normalize_codex_event(ev: dict[str, Any]) -> list[dict[str, Any]]:
                 "tool": "shell",
                 "input": {"command": item.get("command") or ""},
             })
+        elif item.get("type") == "mcp_tool_call":
+            normalized.append({
+                "type": "tool_use",
+                "toolUseId": str(item.get("id") or ""),
+                "tool": f"mcp__{item.get('server') or ''}__{item.get('tool') or ''}",
+                "input": item.get("arguments") or {},
+            })
         return normalized
 
     if event_type == "item.completed":
@@ -458,6 +469,28 @@ def _normalize_codex_event(ev: dict[str, Any]) -> list[dict[str, Any]]:
                 "toolUseId": str(item.get("id") or ""),
                 "content": str(output),
                 "isError": status not in (None, "completed") or exit_code not in (None, 0),
+            })
+            return normalized
+        if item_type == "mcp_tool_call":
+            result = item.get("result") if isinstance(item.get("result"), dict) else {}
+            error = item.get("error")
+            if error:
+                content = error.get("message", "MCP tool failed") if isinstance(error, dict) else str(error)
+            else:
+                blocks = result.get("content") or []
+                parts = [
+                    block["text"] for block in blocks
+                    if isinstance(block, dict) and block.get("type") == "text" and isinstance(block.get("text"), str)
+                ]
+                content = "\n".join(parts)
+                if not content:
+                    structured = result.get("structured_content", result.get("structuredContent"))
+                    content = json.dumps(structured if structured is not None else blocks, ensure_ascii=False)
+            normalized.append({
+                "type": "tool_result",
+                "toolUseId": str(item.get("id") or ""),
+                "content": content,
+                "isError": bool(error) or item.get("status") not in (None, "completed") or bool(result.get("isError")),
             })
             return normalized
 
@@ -567,6 +600,7 @@ async def codex_login_status() -> dict[str, Any]:
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             cwd=str(PROJECT_ROOT),
+            env=agent_child_env(),
             **agent_process_group_options(),
         )
     except FileNotFoundError:

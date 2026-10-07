@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from pathlib import Path
 import sys
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -48,6 +49,9 @@ async def test_claude_stream_yields_normalized_events_and_done(monkeypatch):
     captured_env: dict[str, str] | None = None
     captured_spawn_options: dict[str, object] = {}
     monkeypatch.setenv("NEBULA_DISABLE_QUICK", "0")
+    monkeypatch.setenv("NEBULA_URL", "http://127.0.0.1:8033")
+    monkeypatch.setenv("NEBULA_CONNECTOR_ENCRYPTION_KEY", "vault-fixture")
+    monkeypatch.setenv("NEBULA_INJECTED_KEYS", "injected-fixture")
 
     async def fake_create(*args, **kwargs):
         nonlocal captured_args, captured_env
@@ -95,6 +99,12 @@ async def test_claude_stream_yields_normalized_events_and_done(monkeypatch):
     assert captured_args[-1] == "inspect the graph"
     assert captured_env is not None
     assert captured_env["NEBULA_DISABLE_QUICK"] == "1"
+    assert "NEBULA_CONNECTOR_ENCRYPTION_KEY" not in captured_env
+    assert "NEBULA_INJECTED_KEYS" not in captured_env
+    mcp_config = json.loads(captured_args[captured_args.index("--mcp-config") + 1])
+    assert captured_args[captured_args.index("--mcp-config") + 2] == "--append-system-prompt"
+    assert mcp_config["mcpServers"]["nebula_krea"]["args"][-1] == "http://127.0.0.1:8033"
+    assert "--strict-mcp-config" not in captured_args
     if sys.platform != "win32":
         assert captured_spawn_options["start_new_session"] is True
 

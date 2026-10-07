@@ -1,5 +1,5 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 
 // ---------------------------------------------------------------------------
 // Mocks — must be set up before importing components
@@ -8,6 +8,10 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 const getSettingsMock = vi.fn();
 const updateSettingsMock = vi.fn();
 const updateCredentialMock = vi.fn();
+const getKreaConnectionMock = vi.fn();
+const connectKreaMock = vi.fn();
+const checkKreaConnectionMock = vi.fn();
+const disconnectKreaMock = vi.fn();
 
 vi.mock('../src/lib/api', () => ({
   getSettings: (...args: unknown[]) => getSettingsMock(...args),
@@ -19,12 +23,21 @@ vi.mock('../src/components/SkinPicker', () => ({
   SkinPicker: () => null,
 }));
 
+vi.mock('../src/lib/kreaConnection', async (importOriginal) => ({
+  ...await importOriginal<typeof import('../src/lib/kreaConnection')>(),
+  getKreaConnection: (...args: unknown[]) => getKreaConnectionMock(...args),
+  connectKrea: (...args: unknown[]) => connectKreaMock(...args),
+  checkKreaConnection: (...args: unknown[]) => checkKreaConnectionMock(...args),
+  disconnectKrea: (...args: unknown[]) => disconnectKreaMock(...args),
+}));
+
 // ---------------------------------------------------------------------------
 // Import after mocks
 // ---------------------------------------------------------------------------
 
 import { Settings } from '../src/components/panels/Settings';
 import { useUIStore } from '../src/store/uiStore';
+import { useGraphStore } from '../src/store/graphStore';
 
 // ---------------------------------------------------------------------------
 // Test setup
@@ -46,12 +59,19 @@ beforeEach(() => {
   updateCredentialMock.mockReset();
   updateSettingsMock.mockResolvedValue({ status: 'ok' });
   updateCredentialMock.mockResolvedValue({ status: 'updated' });
+  getKreaConnectionMock.mockReset().mockResolvedValue({ status: 'disconnected' });
+  connectKreaMock.mockReset().mockResolvedValue({ status: 'connecting',
+    authorizationUrl: 'https://www.krea.ai/auth/v1/oauth/authorize?state=test' });
+  checkKreaConnectionMock.mockReset().mockResolvedValue({ status: 'connected', tools: ['list_models'] });
+  disconnectKreaMock.mockReset().mockResolvedValue({ status: 'disconnected' });
+  vi.spyOn(window, 'open').mockReturnValue(null);
 
   // Clean window.nebulaDesktop between tests
   delete (window as Record<string, unknown>).nebulaDesktop;
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   delete (window as Record<string, unknown>).nebulaDesktop;
   vi.restoreAllMocks();
 });
@@ -68,6 +88,7 @@ function setupDesktopBridge(overrides?: {
   clear?: (provider: string) => Promise<unknown>;
   has?: (provider: string) => Promise<unknown>;
   plaintextKeyWarning?: string[];
+  kreaOpen?: (url: string) => Promise<unknown>;
 }) {
   const credentials = Object.freeze({
     set: overrides?.set ?? vi.fn().mockResolvedValue({ ok: true }),
@@ -86,6 +107,7 @@ function setupDesktopBridge(overrides?: {
     wsBaseUrl: 'ws://127.0.0.1:9999',
     credentials,
     migration,
+    ...(overrides?.kreaOpen ? { kreaLinks: Object.freeze({ open: overrides.kreaOpen }) } : {}),
     plaintextKeyWarning: Object.freeze(overrides?.plaintextKeyWarning ?? []),
   });
 
@@ -171,6 +193,194 @@ describe('Settings — browser mode (no desktop bridge)', () => {
     const callArgs = updateSettingsMock.mock.calls[0][0];
     expect(callArgs.apiKeys).toBeDefined();
     expect(callArgs.outputPath).toBe('/custom');
+  });
+});
+
+describe('Settings — Krea MCP connection', () => {
+  beforeEach(() => {
+    getSettingsMock.mockResolvedValue({ apiKeys: {}, routing: {}, outputPath: '' });
+  });
+
+  it('starts consent, exposes a browser link and leaves recipes and generation untouched', async () => {
+    const params = { prompt: 'saved logo', _kreaAuth: 'api-token' };
+    const nodes = [{ id: 'saved', type: 'model-node', position: { x: 0, y: 0 },
+      data: { label: 'Saved Krea recipe', definitionId: 'krea-image-openai-gpt-image-2',
+        params, state: 'idle' as const, outputs: {} } }];
+    useGraphStore.setState({ nodes, edges: [], runHistory: [] });
+    const executeNode = vi.spyOn(useGraphStore.getState(), 'executeNode');
+    const executeGraph = vi.spyOn(useGraphStore.getState(), 'executeGraph');
+    render(<Settings />);
+    await screen.findByText('Not connected');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Connect to Krea' }));
+    const link = await screen.findByRole('link', { name: 'Open Krea sign-in' });
+    expect(link).toHaveAttribute('href', 'https://www.krea.ai/auth/v1/oauth/authorize?state=test');
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(screen.getByText(/workspace’s compute units/)).toBeInTheDocument();
+    expect(connectKreaMock).toHaveBeenCalledOnce();
+    expect(useGraphStore.getState().nodes).toEqual(nodes);
+    expect(useGraphStore.getState().runHistory).toEqual([]);
+    expect(updateSettingsMock).not.toHaveBeenCalled();
+    expect(executeNode).not.toHaveBeenCalled();
+    expect(executeGraph).not.toHaveBeenCalled();
+  });
+
+  it('polls pending consent and allows checking and disconnecting without changing the default', async () => {
+    render(<Settings />);
+    await screen.findByText('Not connected');
+    vi.useFakeTimers();
+    getKreaConnectionMock.mockResolvedValueOnce({ status: 'connected', tools: ['generate_image'] });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Connect to Krea' })); });
+    expect(screen.getByText('Waiting for Krea sign-in…')).toBeInTheDocument();
+    await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
+    expect(screen.getByText('Connected')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Open Krea sign-in' })).not.toBeInTheDocument();
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Check connection' })); });
+    expect(checkKreaConnectionMock).toHaveBeenCalledOnce();
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Disconnect' })); });
+    expect(disconnectKreaMock).toHaveBeenCalledOnce();
+    expect(screen.getByText('Not connected')).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: 'Default Krea connection for new nodes' })).toHaveValue('api-token');
+    expect(updateSettingsMock).not.toHaveBeenCalled();
+  });
+
+  it('saves the future-node default explicitly and does not rewrite existing nodes', async () => {
+    const saved = { id: 'old', type: 'model-node', position: { x: 0, y: 0 }, data: {
+      label: 'Old recipe', definitionId: 'krea-video-kling-kling-3-0',
+      params: { duration: 5 }, state: 'idle' as const, outputs: {},
+    } };
+    useGraphStore.setState({ nodes: [saved], runHistory: [] });
+    await act(async () => { render(<Settings />); });
+    const select = await screen.findByRole('combobox', { name: 'Default Krea connection for new nodes' });
+    fireEvent.change(select, { target: { value: 'mcp' } });
+    expect(useUIStore.getState().settingsCache.kreaConnectionMode).toBeUndefined();
+    expect(updateSettingsMock).not.toHaveBeenCalled();
+    clickSave();
+    await waitFor(() => expect(useUIStore.getState().settingsCache.kreaConnectionMode).toBe('mcp'));
+    expect(updateSettingsMock.mock.calls[0][0]).toMatchObject({ kreaConnectionMode: 'mcp' });
+    expect(useGraphStore.getState().nodes[0].data.params).toEqual({ duration: 5 });
+    expect(useGraphStore.getState().runHistory).toEqual([]);
+  });
+
+  it('automatically uses the desktop external-browser bridge and keeps the manual fallback', async () => {
+    const open = vi.fn().mockResolvedValue({ ok: true });
+    setupDesktopBridge({ kreaOpen: open });
+    render(<Settings />);
+    await screen.findByText('Not connected');
+    fireEvent.click(screen.getByRole('button', { name: 'Connect to Krea' }));
+    const link = await screen.findByRole('link', { name: 'Open Krea sign-in' });
+    expect(open).toHaveBeenCalledOnce();
+    expect(window.open).not.toHaveBeenCalled();
+    fireEvent.click(link);
+    expect(open).toHaveBeenCalledTimes(2);
+    expect(open).toHaveBeenCalledWith('https://www.krea.ai/auth/v1/oauth/authorize?state=test');
+  });
+
+  it('reserves a browser tab in the click before waiting for Krea registration', async () => {
+    let finishConnect!: (state: { status: 'connecting'; authorizationUrl: string }) => void;
+    connectKreaMock.mockImplementationOnce(() => new Promise((resolve) => { finishConnect = resolve; }));
+    const signInWindow = { opener: window, closed: false, document: { title: '', body: { textContent: '' } },
+      location: { replace: vi.fn() }, close: vi.fn() };
+    vi.mocked(window.open).mockReturnValue(signInWindow as unknown as Window);
+    render(<Settings />);
+    await screen.findByText('Not connected');
+    fireEvent.click(screen.getByRole('button', { name: 'Connect to Krea' }));
+    expect(window.open).toHaveBeenCalledWith('about:blank', '_blank');
+    expect(signInWindow.opener).toBeNull();
+    expect(signInWindow.location.replace).not.toHaveBeenCalled();
+    const url = 'https://www.krea.ai/auth/v1/oauth/authorize?state=test';
+    await act(async () => { finishConnect({ status: 'connecting', authorizationUrl: url }); });
+    expect(signInWindow.location.replace).toHaveBeenCalledExactlyOnceWith(url);
+    expect(screen.getByRole('link', { name: 'Open Krea sign-in' })).toHaveAttribute('href', url);
+    expect(signInWindow.close).not.toHaveBeenCalled();
+  });
+
+  it.each(['blocked', 'closed'])('keeps an actionable link when the browser tab is %s', async (reason) => {
+    const replace = vi.fn();
+    if (reason === 'closed') vi.mocked(window.open).mockReturnValue({ opener: null, closed: true,
+      document: { body: {} }, location: { replace }, close: vi.fn() } as unknown as Window);
+    render(<Settings />);
+    await screen.findByText('Not connected');
+    fireEvent.click(screen.getByRole('button', { name: 'Connect to Krea' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Click Open Krea sign-in below');
+    expect(screen.getByRole('link', { name: 'Open Krea sign-in' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Restart sign-in' })).toBeEnabled();
+    expect(window.open).toHaveBeenCalledOnce();
+    expect(replace).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Check connection' }));
+    await screen.findByText('Connected');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(window.open).toHaveBeenCalledOnce();
+  });
+
+  it('opens sign-in even when the browser prevents decorating the blank tab', async () => {
+    const signInWindow = { opener: window, closed: false,
+      get document() { throw new Error('fixture document unavailable'); },
+      location: { replace: vi.fn() }, close: vi.fn() };
+    vi.mocked(window.open).mockReturnValue(signInWindow as unknown as Window);
+    render(<Settings />);
+    await screen.findByText('Not connected');
+    fireEvent.click(screen.getByRole('button', { name: 'Connect to Krea' }));
+    await screen.findByRole('link', { name: 'Open Krea sign-in' });
+    expect(signInWindow.opener).toBeNull();
+    expect(signInWindow.location.replace).toHaveBeenCalledExactlyOnceWith('https://www.krea.ai/auth/v1/oauth/authorize?state=test');
+    expect(signInWindow.close).not.toHaveBeenCalled();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it.each(['untrusted URL', 'registration failure'])('closes the blank tab after %s', async (reason) => {
+    const signInWindow = { opener: null, closed: false, document: { body: {} },
+      location: { replace: vi.fn() }, close: vi.fn() };
+    vi.mocked(window.open).mockReturnValue(signInWindow as unknown as Window);
+    if (reason === 'untrusted URL') connectKreaMock.mockResolvedValueOnce({ status: 'connecting',
+      authorizationUrl: 'https://untrusted.test/?token=fixture' });
+    else connectKreaMock.mockRejectedValueOnce(new Error('Could not update the Krea connection.'));
+    render(<Settings />);
+    await screen.findByText('Not connected');
+    fireEvent.click(screen.getByRole('button', { name: 'Connect to Krea' }));
+    await screen.findByRole('alert');
+    expect(signInWindow.close).toHaveBeenCalledOnce();
+    expect(signInWindow.location.replace).not.toHaveBeenCalled();
+    expect(screen.queryByRole('link', { name: 'Open Krea sign-in' })).not.toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent('token=fixture');
+  });
+
+  it('keeps the manual fallback when the desktop browser launch fails', async () => {
+    const open = vi.fn().mockRejectedValue(new Error('fixture launch failure'));
+    setupDesktopBridge({ kreaOpen: open });
+    render(<Settings />);
+    await screen.findByText('Not connected');
+    fireEvent.click(screen.getByRole('button', { name: 'Connect to Krea' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Click Open Krea sign-in below');
+    expect(screen.getByRole('link', { name: 'Open Krea sign-in' })).toBeInTheDocument();
+    expect(open).toHaveBeenCalledOnce();
+    expect(window.open).not.toHaveBeenCalled();
+  });
+
+  it('does not open a browser when Settings loads or polls an already pending sign-in', async () => {
+    const open = vi.fn().mockResolvedValue({ ok: true });
+    setupDesktopBridge({ kreaOpen: open });
+    getKreaConnectionMock.mockResolvedValue({ status: 'connecting',
+      authorizationUrl: 'https://www.krea.ai/auth/v1/oauth/authorize?state=test' });
+    vi.useFakeTimers();
+    await act(async () => { render(<Settings />); });
+    expect(screen.getByText('Waiting for Krea sign-in…')).toBeInTheDocument();
+    const checksBeforePoll = getKreaConnectionMock.mock.calls.length;
+    await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
+    expect(getKreaConnectionMock).toHaveBeenCalledTimes(checksBeforePoll + 1);
+    expect(connectKreaMock).not.toHaveBeenCalled();
+    expect(open).not.toHaveBeenCalled();
+    expect(window.open).not.toHaveBeenCalled();
+  });
+
+  it('never renders an untrusted authorization URL as a link', async () => {
+    getKreaConnectionMock.mockResolvedValue({ status: 'needs_auth',
+      authorizationUrl: 'https://untrusted.test/?token=fixture', error: 'Sign in again.' });
+    render(<Settings />);
+    await screen.findByText('Sign-in needed');
+    expect(screen.queryByRole('link', { name: 'Open Krea sign-in' })).not.toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('Sign in again.');
+    expect(document.body).not.toHaveTextContent('token=fixture');
   });
 });
 

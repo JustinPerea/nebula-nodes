@@ -164,6 +164,19 @@ describe('backendWebSocketUrl with injected endpoint (VAL-TRANSPORT-005)', () =>
     return import('../../src/lib/backend');
   }
 
+  it('sends the desktop nonce only to the connector API on its injected backend', async () => {
+    const backend = await importWithBridge({ apiBaseUrl: 'http://127.0.0.1:56789',
+      wsBaseUrl: 'ws://127.0.0.1:56789', connectorSession: 'synthetic-desktop-nonce' });
+    fetchSpy.mockResolvedValue({ ok: true, status: 200 });
+    await backend.apiFetch('/api/krea/connection', { method: 'GET', headers: { 'X-Existing': 'preserved' } });
+    const [url, init] = fetchSpy.mock.calls[0];
+    expect(url).toBe('http://127.0.0.1:56789/api/krea/connection');
+    expect(init.headers.get('X-Nebula-Connector-Session')).toBe('synthetic-desktop-nonce');
+    expect(init.headers.get('X-Existing')).toBe('preserved');
+    await backend.apiFetch('/api/settings');
+    expect(fetchSpy.mock.calls[1]).toEqual(['http://127.0.0.1:56789/api/settings']);
+  });
+
   afterEach(() => {
     delete (window as Record<string, unknown>).nebulaDesktop;
     vi.unstubAllGlobals();

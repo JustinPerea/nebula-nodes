@@ -9,7 +9,15 @@ export const CREATE_MODEL_CATEGORIES: NodeCategory[] = [
 // Create Studio uses untracked concurrent variation runs. World Labs paid
 // starts require the Canvas run ID, Stop, journal recovery, and ambiguity guard,
 // so keep the node Canvas-only until Create adopts that execution contract.
-export const CREATE_MODEL_EXCLUDED_IDS = new Set(['worldlabs-environment']);
+export const CREATE_MODEL_EXCLUDED_IDS = new Set([
+  'worldlabs-environment',
+  // These Krea routes need structured references, a camera trajectory, or a
+  // video input. Canvas exposes those controls; Create's image attachments
+  // and scalar parameter pills cannot complete these requests.
+  'krea-image-runway-gen-4-image',
+  'krea-video-minimax-h3-max-camera-controls',
+  'krea-video-black-forest-labs-flux-video-edit',
+]);
 
 /** Curated shortlist shown under "Featured". Unknown ids are silently dropped. */
 export const FEATURED_MODEL_IDS: string[] = [

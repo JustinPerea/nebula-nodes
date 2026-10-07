@@ -210,6 +210,36 @@ body.app-slava-restraint .model-picker__search input {
   font-family: inherit;
   font-size: 13px;
 }
+body.app-slava-restraint .model-picker__provider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--sr-edge);
+  color: var(--sr-ink-meta);
+  font-size: 12px;
+}
+body.app-slava-restraint .model-picker__provider select {
+  color-scheme: dark;
+  flex: 1;
+  min-width: 0;
+  padding: 5px 7px;
+  border: 1px solid var(--sr-edge-strong);
+  border-radius: 6px;
+  background: var(--sr-glass-raised);
+  color: var(--sr-ink);
+  font: inherit;
+}
+body.app-slava-restraint .model-picker__provider select:focus-visible {
+  outline: 1px solid var(--sr-accent);
+  outline-offset: 2px;
+}
+body.app-slava-restraint .model-picker__empty {
+  padding: 16px 8px;
+  color: var(--sr-ink-meta);
+  font-size: 12px;
+  line-height: 1.5;
+}
 body.app-slava-restraint .model-picker__list { overflow-y: auto; padding: 6px; }
 body.app-slava-restraint .model-picker__group-label {
   font-size: 11px;

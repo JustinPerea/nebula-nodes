@@ -1,0 +1,7425 @@
+{
+  "sourceUrl": "https://api.krea.ai/openapi.json",
+  "fetchedAt": "2026-10-03",
+  "openapiSha256": "d62455db4f84a470c6a9fa34bd64b2dfdaa1c6781764218f1fa09f26e1e65064",
+  "models": {
+    "krea-image-krea-krea-2-medium": {
+      "endpoint": "/generate/image/krea/krea-2/medium",
+      "displayName": "Krea 2 Medium",
+      "requestSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string"
+          },
+          "seed": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "styles": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "strength": {
+                  "type": "number",
+                  "minimum": -2,
+                  "maximum": 2
+                }
+              },
+              "required": [
+                "id",
+                "strength"
+              ]
+            }
+          },
+          "image_style_references": {
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "strength": {
+                  "default": 0.5,
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "url": {
+                  "type": "string",
+                  "maxLength": 1024,
+                  "format": "uri"
+                }
+              },
+              "required": [
+                "url"
+              ]
+            }
+          },
+          "aspect_ratio": {
+            "type": "string",
+            "enum": [
+              "1:1",
+              "4:3",
+              "3:2",
+              "16:9",
+              "2.35:1",
+              "4:5",
+              "3:4",
+              "2:3",
+              "9:16"
+            ]
+          },
+          "resolution": {
+            "type": "string",
+            "enum": [
+              "1K"
+            ]
+          },
+          "creativity": {
+            "default": "low",
+            "type": "string",
+            "enum": [
+              "raw",
+              "low",
+              "medium",
+              "high"
+            ]
+          },
+          "intensity": {
+            "default": 0,
+            "type": "integer",
+            "minimum": -100,
+            "maximum": 100
+          },
+          "complexity": {
+            "default": 0,
+            "type": "integer",
+            "minimum": -100,
+            "maximum": 100
+          },
+          "movement": {
+            "default": 0,
+            "type": "integer",
+            "minimum": -100,
+            "maximum": 100
+          },
+          "moodboards": {
+            "maxItems": 1,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                },
+                "strength": {
+                  "default": 0.23,
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                }
+              },
+              "required": [
+                "id"
+              ]
+            }
+          },
+          "image_url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "strength": {
+            "default": 0.99,
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          }
+        },
+        "required": [
+          "prompt",
+          "aspect_ratio",
+          "resolution"
+        ],
+        "additionalProperties": false
+      },
+      "mediaType": "Image",
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": false
+        },
+        {
+          "id": "styles",
+          "label": "Styles",
+          "dataType": "Any",
+          "required": false,
+          "multiple": true
+        },
+        {
+          "id": "image_style_references",
+          "label": "Image style references",
+          "dataType": "Any",
+          "required": false,
+          "multiple": true,
+          "maxConnections": 10
+        },
+        {
+          "id": "moodboards",
+          "label": "Moodboards",
+          "dataType": "Any",
+          "required": false,
+          "multiple": true,
+          "maxConnections": 1
+        },
+        {
+          "id": "image_url",
+          "label": "Image URL",
+          "dataType": "Image",
+          "required": false
+        }
+      ],
+      "jsonParams": [
+        "styles",
+        "image_style_references",
+        "moodboards"
+      ]
+    },
+    "krea-image-krea-krea-2-large": {
+      "endpoint": "/generate/image/krea/krea-2/large",
+      "displayName": "Krea 2 Large",
+      "requestSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string"
+          },
+          "seed": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "styles": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "strength": {
+                  "type": "number",
+                  "minimum": -2,
+                  "maximum": 2
+                }
+              },
+              "required": [
+                "id",
+                "strength"
+              ]
+            }
+          },
+          "image_style_references": {
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "strength": {
+                  "default": 0.5,
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "url": {
+                  "type": "string",
+                  "maxLength": 1024,
+                  "format": "uri"
+                }
+              },
+              "required": [
+                "url"
+              ]
+            }
+          },
+          "aspect_ratio": {
+            "type": "string",
+            "enum": [
+              "1:1",
+              "4:3",
+              "3:2",
+              "16:9",
+              "2.35:1",
+              "4:5",
+              "3:4",
+              "2:3",
+              "9:16"
+            ]
+          },
+          "resolution": {
+            "type": "string",
+            "enum": [
+              "1K"
+            ]
+          },
+          "creativity": {
+            "default": "low",
+            "type": "string",
+            "enum": [
+              "raw",
+              "low",
+              "medium",
+              "high"
+            ]
+          },
+          "intensity": {
+            "default": 0,
+            "type": "integer",
+            "minimum": -100,
+            "maximum": 100
+          },
+          "complexity": {
+            "default": 0,
+            "type": "integer",
+            "minimum": -100,
+            "maximum": 100
+          },
+          "movement": {
+            "default": 0,
+            "type": "integer",
+            "minimum": -100,
+            "maximum": 100
+          },
+          "moodboards": {
+            "maxItems": 1,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                },
+                "strength": {
+                  "default": 0.23,
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                }
+              },
+              "required": [
+                "id"
+              ]
+            }
+          },
+          "image_url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "strength": {
+            "default": 0.99,
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          }
+        },
+        "required": [
+          "prompt",
+          "aspect_ratio",
+          "resolution"
+        ],
+        "additionalProperties": false
+      },
+      "mediaType": "Image",
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": false
+        },
+        {
+          "id": "styles",
+          "label": "Styles",
+          "dataType": "Any",
+          "required": false,
+          "multiple": true
+        },
+        {
+          "id": "image_style_references",
+          "label": "Image style references",
+          "dataType": "Any",
+          "required": false,
+          "multiple": true,
+          "maxConnections": 10
+        },
+        {
+          "id": "moodboards",
+          "label": "Moodboards",
+          "dataType": "Any",
+          "required": false,
+          "multiple": true,
+          "maxConnections": 1
+        },
+        {
+          "id": "image_url",
+          "label": "Image URL",
+          "dataType": "Image",
+          "required": false
+        }
+      ],
+      "jsonParams": [
+        "styles",
+        "image_style_references",
+        "moodboards"
+      ]
+    },
+    "krea-image-krea-krea-2-medium-turbo": {
+      "endpoint": "/generate/image/krea/krea-2/medium-turbo",
+      "displayName": "Krea 2 Turbo",
+      "requestSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string"
+          },
+          "seed": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "styles": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "strength": {
+                  "type": "number",
+                  "minimum": -2,
+                  "maximum": 2
+                }
+              },
+              "required": [
+                "id",
+                "strength"
+              ]
+            }
+          },
+          "image_style_references": {
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "strength": {
+                  "default": 0.5,
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "url": {
+                  "type": "string",
+                  "maxLength": 1024,
+                  "format": "uri"
+                }
+              },
+              "required": [
+                "url"
+              ]
+            }
+          },
+          "aspect_ratio": {
+            "type": "string",
+            "enum": [
+              "1:1",
+              "4:3",
+              "3:2",
+              "16:9",
+              "2.35:1",
+              "4:5",
+              "3:4",
+              "2:3",
+              "9:16"
+            ]
+          },
+          "resolution": {
+            "type": "string",
+            "enum": [
+              "1K"
+            ]
+          },
+          "creativity": {
+            "default": "low",
+            "type": "string",
+            "enum": [
+              "raw",
+              "low",
+              "medium",
+              "high"
+            ]
+          },
+          "intensity": {
+            "default": 0,
+            "type": "integer",
+            "minimum": -100,
+            "maximum": 100
+          },
+          "complexity": {
+            "default": 0,
+            "type": "integer",
+            "minimum": -100,
+            "maximum": 100
+          },
+          "movement": {
+            "default": 0,
+            "type": "integer",
+            "minimum": -100,
+            "maximum": 100
+          },
+          "moodboards": {
+            "maxItems": 1,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                },
+                "strength": {
+                  "default": 0.23,
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                }
+              },
+              "required": [
+                "id"
+              ]
+            }
+          },
+          "image_url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "strength": {
+            "default": 0.99,
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          }
+        },
+        "required": [
+          "prompt",
+          "aspect_ratio",
+          "resolution"
+        ],
+        "additionalProperties": false
+      },
+      "mediaType": "Image",
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": false
+        },
+        {
+          "id": "styles",
+          "label": "Styles",
+          "dataType": "Any",
+          "required": false,
+          "multiple": true
+        },
+        {
+          "id": "image_style_references",
+          "label": "Image style references",
+          "dataType": "Any",
+          "required": false,
+          "multiple": true,
+          "maxConnections": 10
+        },
+        {
+          "id": "moodboards",
+          "label": "Moodboards",
+          "dataType": "Any",
+          "required": false,
+          "multiple": true,
+          "maxConnections": 1
+        },
+        {
+          "id": "image_url",
+          "label": "Image URL",
+          "dataType": "Image",
+          "required": false
+        }
+      ],
+      "jsonParams": [
+        "styles",
+        "image_style_references",
+        "moodboards"
+      ]
+    },
+    "krea-image-ideogram-ideogram-4-5": {
+      "endpoint": "/generate/image/ideogram/ideogram-4.5",
+      "displayName": "Ideogram 4.5",
+      "requestSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 10000
+          },
+          "seed": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2147483647
+          },
+          "quality": {
+            "default": "high",
+            "type": "string",
+            "enum": [
+              "very_low",
+              "low",
+              "medium",
+              "high"
+            ]
+          },
+          "preserve_source_size": {
+            "default": false,
+            "type": "boolean"
+          },
+          "skip_prompt_expansion": {
+            "default": false,
+            "type": "boolean"
+          },
+          "aspect_ratio": {
+            "default": "1:1",
+            "type": "string",
+            "enum": [
+              "1:1",
+              "4:3",
+              "3:2",
+              "16:9",
+              "2.4:1",
+              "4:5",
+              "2:3",
+              "9:16"
+            ]
+          },
+          "resolution": {
+            "default": "2K",
+            "type": "string",
+            "enum": [
+              "2K"
+            ]
+          },
+          "image_urls": {
+            "maxItems": 5,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 1024,
+              "format": "uri"
+            }
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "additionalProperties": false
+      },
+      "mediaType": "Image",
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": false
+        },
+        {
+          "id": "image_urls",
+          "label": "Image URLs",
+          "dataType": "Image",
+          "required": false,
+          "multiple": true,
+          "maxConnections": 5
+        }
+      ],
+      "jsonParams": [
+        "image_urls"
+      ]
+    },
+    "krea-image-bfl-flux-1-dev": {
+      "endpoint": "/generate/image/bfl/flux-1-dev",
+      "displayName": "Flux.1 Dev",
+      "requestSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "maxLength": 1800
+          },
+          "seed": {
+            "default": 3114443573,
+            "type": "number"
+          },
+          "steps": {
+            "default": 25,
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "width": {
+            "default": 1024,
+            "type": "number",
+            "minimum": 512,
+            "maximum": 2368
+          },
+          "height": {
+            "default": 1024,
+            "type": "number",
+            "minimum": 512,
+            "maximum": 2368
+          },
+          "image_url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "styles": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "strength": {
+                  "type": "number",
+                  "minimum": -2,
+                  "maximum": 2
+                }
+              },
+              "required": [
+                "id",
+                "strength"
+              ]
+            }
+          },
+          "strength": {
+            "default": 1,
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "guidance_scale": {
+            "default": 3,
+            "type": "number",
+            "minimum": 0,
+            "maximum": 24
+          },
+          "style_images": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "strength": {
+                  "type": "number",
+                  "minimum": -2,
+                  "maximum": 2
+                },
+                "url": {
+                  "type": "string",
+                  "maxLength": 1024,
+                  "format": "uri"
+                }
+              },
+              "required": [
+                "strength"
+              ]
+            }
+          },
+          "image_style_references": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "strength": {
+                  "type": "number",
+                  "minimum": -2,
+                  "maximum": 2
+                },
+                "url": {
+                  "type": "string",
+                  "maxLength": 1024,
+                  "format": "uri"
+                }
+              },
+              "required": [
+                "strength"
+              ]
+            }
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "additionalProperties": false
+      },
+      "mediaType": "Image",
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": false
+        },
+        {
+          "id": "image_url",
+          "label": "Image URL",
+          "dataType": "Image",
+          "required": false
+        },
+        {
+          "id": "styles",
+          "label": "Styles",
+          "dataType": "Any",
+          "required": false,
+          "multiple": true
+        },
+        {
+          "id": "style_images",
+          "label": "Style images",
+          "dataType": "Any",
+          "required": false,
+          "multiple": true
+        },
+        {
+          "id": "image_style_references",
+          "label": "Image style references",
+          "dataType": "Any",
+          "required": false,
+          "multiple": true
+        }
+      ],
+      "jsonParams": [
+        "styles",
+        "style_images",
+        "image_style_references"
+      ]
+    },
+    "krea-image-bfl-flux-1-kontext-dev": {
+      "endpoint": "/generate/image/bfl/flux-1-kontext-dev",
+      "displayName": "Flux Kontext Dev",
+      "requestSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "minLength": 1
+          },
+          "seed": {
+            "default": 1337,
+            "type": "number"
+          },
+          "steps": {
+            "default": 28,
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "width": {
+            "default": 1024,
+            "type": "number",
+            "minimum": 512,
+            "maximum": 8192
+          },
+          "height": {
+            "default": 1024,
+            "type": "number",
+            "minimum": 512,
+            "maximum": 8192
+          },
+          "image_url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "guidance_scale": {
+            "default": 3,
+            "type": "number",
+            "minimum": 0,
+            "maximum": 24
+          },
+          "style_images": {
+            "maxItems": 1,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "strength": {
+                  "type": "number",
+                  "minimum": -2,
+                  "maximum": 2
+                },
+                "url": {
+                  "type": "string",
+                  "maxLength": 1024,
+                  "format": "uri"
+                }
+              },
+              "required": [
+                "strength"
+              ]
+            }
+          },
+          "strength": {
+            "default": 1,
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "additionalProperties": false
+      },
+      "mediaType": "Image",
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": false
+        },
+        {
+          "id": "image_url",
+          "label": "Image URL",
+          "dataType": "Image",
+          "required": false
+        },
+        {
+          "id": "style_images",
+          "label": "Style images",
+          "dataType": "Any",
+          "required": false,
+          "multiple": true,
+          "maxConnections": 1
+        }
+      ],
+      "jsonParams": [
+        "style_images"
+      ]
+    },
+    "krea-image-google-nano-banana-pro": {
+      "endpoint": "/generate/image/google/nano-banana-pro",
+      "displayName": "Nano Banana Pro",
+      "requestSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "minLength": 3
+          },
+          "width": {
+            "type": "number"
+          },
+          "height": {
+            "type": "number"
+          },
+          "image_urls": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 1024,
+              "format": "uri"
+            }
+          },
+          "aspect_ratio": {
+            "type": "string",
+            "enum": [
+              "21:9",
+              "1:1",
+              "4:3",
+              "3:2",
+              "2:3",
+              "5:4",
+              "4:5",
+              "3:4",
+              "16:9",
+              "9:16"
+            ]
+          },
+          "resolution": {
+            "default": "1K",
+            "type": "string",
+            "enum": [
+              "1K",
+              "2K",
+              "4K"
+            ]
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "additionalProperties": false
+      },
+      "mediaType": "Image",
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": false
+        },
+        {
+          "id": "image_urls",
+          "label": "Image URLs",
+          "dataType": "Image",
+          "required": false,
+          "multiple": true
+        }
+      ],
+      "jsonParams": [
+        "image_urls"
+      ]
+    },
+    "krea-image-google-nano-banana-2": {
+      "endpoint": "/generate/image/google/nano-banana-2",
+      "displayName": "Nano Banana 2",
+      "requestSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "minLength": 3
+          },
+          "width": {
+            "type": "number"
+          },
+          "height": {
+            "type": "number"
+          },
+          "image_urls": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 1024,
+              "format": "uri"
+            }
+          },
+          "aspect_ratio": {
+            "type": "string",
+            "enum": [
+              "4:1",
+              "21:9",
+              "1:1",
+              "4:3",
+              "3:2",
+              "2:3",
+              "5:4",
+              "4:5",
+              "3:4",
+              "16:9",
+              "9:16",
+              "1:4",
+              "1:8"
+            ]
+          },
+          "resolution": {
+            "default": "1K",
+            "type": "string",
+            "enum": [
+              "1K",
+              "2K",
+              "4K"
+            ]
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "additionalProperties": false
+      },
+      "mediaType": "Image",
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": false
+        },
+        {
+          "id": "image_urls",
+          "label": "Image URLs",
+          "dataType": "Image",
+          "required": false,
+          "multiple": true
+        }
+      ],
+      "jsonParams": [
+        "image_urls"
+      ]
+    },
+    "krea-image-google-nano-banana-flash-lite": {
+      "endpoint": "/generate/image/google/nano-banana-flash-lite",
+      "displayName": "Nano Banana 2 Lite",
+      "requestSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "minLength": 1
+          },
+          "width": {
+            "type": "number"
+          },
+          "height": {
+            "type": "number"
+          },
+          "image_urls": {
+            "maxItems": 14,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 1024,
+              "format": "uri"
+            }
+          },
+          "aspect_ratio": {
+            "type": "string",
+            "enum": [
+              "21:9",
+              "1:1",
+              "4:3",
+              "3:2",
+              "2:3",
+              "5:4",
+              "4:5",
+              "3:4",
+              "16:9",
+              "9:16"
+            ]
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "additionalProperties": false
+      },
+      "mediaType": "Image",
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": false
+        },
+        {
+          "id": "image_urls",
+          "label": "Image URLs",
+          "dataType": "Image",
+          "required": false,
+          "multiple": true,
+          "maxConnections": 14
+        }
+      ],
+      "jsonParams": [
+        "image_urls"
+      ]
+    },
+    "krea-image-google-nano-banana": {
+      "endpoint": "/generate/image/google/nano-banana",
+      "displayName": "Nano Banana",
+      "requestSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "minLength": 1
+          },
+          "width": {
+            "type": "number"
+          },
+          "height": {
+            "type": "number"
+          },
+          "image_urls": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 1024,
+              "format": "uri"
+            }
+          },
+          "aspect_ratio": {
+            "type": "string",
+            "enum": [
+              "21:9",
+              "1:1",
+              "4:3",
+              "3:2",
+              "2:3",
+              "5:4",
+              "4:5",
+              "3:4",
+              "16:9",
+              "9:16"
+            ]
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "additionalProperties": false
+      },
+      "mediaType": "Image",
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": false
+        },
+        {
+          "id": "image_urls",
+          "label": "Image URLs",
+          "dataType": "Image",
+          "required": false,
+          "multiple": true
+        }
+      ],
+      "jsonParams": [
+        "image_urls"
+      ]
+    },
+    "krea-image-bfl-flux-1-1-pro": {
+      "endpoint": "/generate/image/bfl/flux-1.1-pro",
+      "displayName": "Flux 1.1 Pro",
+      "requestSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "minLength": 1
+          },
+          "width": {
+            "type": "number",
+            "minimum": 256,
+            "maximum": 1440
+          },
+          "height": {
+            "type": "number",
+            "minimum": 256,
+            "maximum": 1440
+          },
+          "seed": {
+            "default": 1337,
+            "type": "number"
+          }
+        },
+        "required": [
+          "prompt",
+          "width",
+          "height"
+        ],
+        "additionalProperties": false
+      },
+      "mediaType": "Image",
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": false
+        }
+      ],
+      "jsonParams": []
+    },
+    "krea-image-bfl-flux-1-1-pro-ultra": {
+      "endpoint": "/generate/image/bfl/flux-1.1-pro-ultra",
+      "displayName": "Flux 1.1 Pro Ultra",
+      "requestSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "minLength": 1
+          },
+          "width": {
+            "default": 1024,
+            "type": "number",
+            "minimum": 512,
+            "maximum": 8192
+          },
+          "height": {
+            "default": 1024,
+            "type": "number",
+            "minimum": 512,
+            "maximum": 8192
+          },
+          "seed": {
+            "default": 1337,
+            "type": "number"
+          },
+          "raw": {
+            "default": true,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "additionalProperties": false
+      },
+      "mediaType": "Image",
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": false
+        }
+      ],
+      "jsonParams": []
+    },
+    "krea-image-ideogram-ideogram-2-turbo": {
+      "endpoint": "/generate/image/ideogram/ideogram-2-turbo",
+      "displayName": "Ideogram 2.0A Turbo",
+      "requestSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "minLength": 1
+          },
+          "width": {
+            "default": 1024,
+            "type": "number",
+            "minimum": 512,
+            "maximum": 8192
+          },
+          "height": {
+            "default": 1024,
+            "type": "number",
+            "minimum": 512,
+            "maximum": 8192
+          },
+          "seed": {
+            "default": 1337,
+            "type": "number"
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "additionalProperties": false
+      },
+      "mediaType": "Image",
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": false
+        }
+      ],
+      "jsonParams": []
+    },
+    "krea-image-ideogram-ideogram-3": {
+      "endpoint": "/generate/image/ideogram/ideogram-3",
+      "displayName": "Ideogram 3.0",
+      "requestSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "minLength": 1
+          },
+          "width": {
+            "default": 1024,
+            "type": "number",
+            "minimum": 512,
+            "maximum": 8192
+          },
+          "height": {
+            "default": 1024,
+            "type": "number",
+            "minimum": 512,
+            "maximum": 8192
+          },
+          "seed": {
+            "default": 1337,
+            "type": "number"
+          },
+          "character_reference_images": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 1024,
+              "format": "uri"
+            }
+          },
+          "style_images": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "strength": {
+                  "type": "number",
+                  "minimum": -2,
+                  "maximum": 2
+                },
+                "url": {
+                  "type": "string",
+                  "maxLength": 1024,
+                  "format": "uri"
+                }
+              },
+              "required": [
+                "strength"
+              ]
+            }
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "additionalProperties": false
+      },
+      "mediaType": "Image",
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": false
+        },
+        {
+          "id": "character_reference_images",
+          "label": "Character reference images",
+          "dataType": "Image",
+          "required": false,
+          "multiple": true
+        },
+        {
+          "id": "style_images",
+          "label": "Style images",
+          "dataType": "Any",
+          "required": false,
+          "multiple": true
+        }
+      ],
+      "jsonParams": [
+        "character_reference_images",
+        "style_images"
+      ]
+    },
+    "krea-image-runway-gen-4-image": {
+      "endpoint": "/generate/image/runway/gen-4-image",
+      "displayName": "Runway Gen-4 Image",
+      "requestSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1000
+          },
+          "width": {
+            "default": 1024,
+            "type": "number",
+            "minimum": 512,
+            "maximum": 8192
+          },
+          "height": {
+            "default": 1024,
+            "type": "number",
+            "minimum": 512,
+            "maximum": 8192
+          },
+          "seed": {
+            "default": 1337,
+            "type": "number"
+          },
+          "reference_images": {
+            "minItems": 1,
+            "maxItems": 3,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "url": {
+                  "type": "string",
+                  "maxLength": 1024,
+                  "format": "uri"
+                },
+                "tag": {
+                  "type": "string",
+                  "minLength": 3,
+                  "maxLength": 16,
+                  "pattern": "^[a-z][a-z0-9_]+$"
+                }
+              },
+              "required": [
+                "url",
+                "tag"
+              ]
+            }
+          }
+        },
+        "required": [
+          "prompt",
+          "reference_images"
+        ],
+        "additionalProperties": false
+      },
+      "mediaType": "Image",
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": false
+        },
+        {
+          "id": "reference_images",
+          "label": "Reference images",
+          "dataType": "Any",
+          "required": false,
+          "multiple": true,
+          "maxConnections": 3
+        }
+      ],
+      "jsonParams": [
+        "reference_images"
+      ]
+    },
+    "krea-image-openai-gpt-image": {
+      "endpoint": "/generate/image/openai/gpt-image",
+      "displayName": "ChatGPT Image",
+      "requestSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "minLength": 1
+          },
+          "width": {
+            "default": 1024,
+            "type": "number",
+            "minimum": 512,
+            "maximum": 8192
+          },
+          "height": {
+            "default": 1024,
+            "type": "number",
+            "minimum": 512,
+            "maximum": 8192
+          },
+          "quality": {
+            "default": "auto",
+            "type": "string",
+            "enum": [
+              "low",
+              "medium",
+              "high",
+              "auto"
+            ]
+          },
+          "image_urls": {
+            "maxItems": 15,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 1024,
+              "format": "uri"
+            }
+          },
+          "styles": {
+            "maxItems": 5,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "strength": {
+                  "type": "number",
+                  "minimum": -2,
+                  "maximum": 2
+                }
+              },
+              "required": [
+                "id",
+                "strength"
+              ]
+            }
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "additionalProperties": false
+      },
+      "mediaType": "Image",
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": false
+        },
+        {
+          "id": "image_urls",
+          "label": "Image URLs",
+          "dataType": "Image",
+          "required": false,
+          "multiple": true,
+          "maxConnections": 15
+        },
+        {
+          "id": "styles",
+          "label": "Styles",
+          "dataType": "Any",
+          "required": false,
+          "multiple": true,
+          "maxConnections": 5
+        }
+      ],
+      "jsonParams": [
+        "image_urls",
+        "styles"
+      ]
+    },
+    "krea-image-openai-gpt-image-2": {
+      "endpoint": "/generate/image/openai/gpt-image-2",
+      "displayName": "ChatGPT 2",
+      "requestSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "minLength": 1
+          },
+          "quality": {
+            "default": "high",
+            "type": "string",
+            "enum": [
+              "low",
+              "medium",
+              "high",
+              "auto"
+            ]
+          },
+          "image_urls": {
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 1024,
+              "format": "uri"
+            }
+          },
+          "width": {
+            "type": "number"
+          },
+          "height": {
+            "type": "number"
+          },
+          "aspect_ratio": {
+            "type": "string",
+            "enum": [
+              "16:9",
+              "2:1",
+              "3:2",
+              "4:3",
+              "1:1",
+              "3:4",
+              "2:3",
+              "1:2",
+              "9:16"
+            ]
+          },
+          "resolution": {
+            "type": "string",
+            "enum": [
+              "1K",
+              "2K",
+              "4K"
+            ]
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "additionalProperties": false
+      },
+      "mediaType": "Image",
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": false
+        },
+        {
+          "id": "image_urls",
+          "label": "Image URLs",
+          "dataType": "Image",
+          "required": false,
+          "multiple": true,
+          "maxConnections": 10
+        }
+      ],
+      "jsonParams": [
+        "image_urls"
+      ]
+    },
+    "krea-image-openai-gpt-image-2-5-flare": {
+      "endpoint": "/generate/image/openai/gpt-image-2.5-flare",
+      "displayName": "GPT Image 2.5 Flare",
+      "requestSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "minLength": 1
+          },
+          "quality": {
+            "default": "high",
+            "type": "string",
+            "enum": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ]
+          },
+          "image_urls": {
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 1024,
+              "format": "uri"
+            }
+          },
+          "aspect_ratio": {
+            "type": "string",
+            "enum": [
+              "16:9",
+              "2:1",
+              "3:2",
+              "4:3",
+              "1:1",
+              "3:4",
+              "2:3",
+              "1:2",
+              "9:16"
+            ]
+          },
+          "resolution": {
+            "type": "string",
+            "enum": [
+              "1K",
+              "2K",
+              "4K"
+            ]
+          },
+          "background": {
+            "type": "string",
+            "enum": [
+              "transparent",
+              "opaque",
+              "auto"
+            ]
+          }
+        },
+        "required": [
+          "prompt",
+          "aspect_ratio",
+          "resolution"
+        ],
+        "additionalProperties": false
+      },
+      "mediaType": "Image",
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": false
+        },
+        {
+          "id": "image_urls",
+          "label": "Image URLs",
+          "dataType": "Image",
+          "required": false,
+          "multiple": true,
+          "maxConnections": 10
+        }
+      ],
+      "jsonParams": [
+        "image_urls"
+      ]
+    },
+    "krea-image-openai-gpt-image-2-5-sunburst": {
+      "endpoint": "/generate/image/openai/gpt-image-2.5-sunburst",
+      "displayName": "GPT Image 2.5 Sunburst",
+      "requestSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "minLength": 1
+          },
+          "quality": {
+            "default": "high",
+            "type": "string",
+            "enum": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ]
+          },
+          "image_urls": {
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 1024,
+              "format": "uri"
+            }
+          },
+          "aspect_ratio": {
+            "type": "string",
+            "enum": [
+              "16:9",
+              "2:1",
+              "3:2",
+              "4:3",
+              "1:1",
+              "3:4",
+              "2:3",
+              "1:2",
+              "9:16"
+            ]
+          },
+          "resolution": {
+            "type": "string",
+            "enum": [
+              "1K",
+              "2K",
+              "4K"
+            ]
+          }
+        },
+        "required": [
+          "prompt",
+          "aspect_ratio",
+          "resolution"
+        ],
+        "additionalProperties": false
+      },
+      "mediaType": "Image",
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": false
+        },
+        {
+          "id": "image_urls",
+          "label": "Image URLs",
+          "dataType": "Image",
+          "required": false,
+          "multiple": true,
+          "maxConnections": 10
+        }
+      ],
+      "jsonParams": [
+        "image_urls"
+      ]
+    },
+    "krea-image-xai-grok-imagine-2": {
+      "endpoint": "/generate/image/xai/grok-imagine-2",
+      "displayName": "Grok Imagine 2.0",
+      "requestSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4000
+          },
+          "quality": {
+            "default": "medium",
+            "type": "string",
+            "enum": [
+              "low",
+              "medium"
+            ]
+          },
+          "aspect_ratio": {
+            "type": "string",
+            "enum": [
+              "2:1",
+              "20:9",
+              "19.5:9",
+              "16:9",
+              "3:2",
+              "4:3",
+              "1:1",
+              "3:4",
+              "2:3",
+              "9:16",
+              "9:19.5",
+              "9:20",
+              "1:2"
+            ]
+          },
+          "resolution": {
+            "type": "string",
+            "enum": [
+              "1K",
+              "2K"
+            ]
+          },
+          "style_images": {
+            "maxItems": 3,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "strength": {
+                  "type": "number",
+                  "minimum": -2,
+                  "maximum": 2
+                },
+                "url": {
+                  "type": "string",
+                  "maxLength": 1024,
+                  "format": "uri"
+                }
+              },
+              "required": [
+                "strength"
+              ]
+            }
+          }
+        },
+        "required": [
+          "prompt",
+          "aspect_ratio",
+          "resolution"
+        ],
+        "additionalProperties": false
+      },
+      "mediaType": "Image",
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": false
+        },
+        {
+          "id": "style_images",
+          "label": "Style images",
+          "dataType": "Any",
+          "required": false,
+          "multiple": true,
+          "maxConnections": 3
+        }
+      ],
+      "jsonParams": [
+        "style_images"
+      ]
+    },
+    "krea-image-xai-grok-imagine-2-edit": {
+      "endpoint": "/generate/image/xai/grok-imagine-2-edit",
+      "displayName": "Grok Imagine 2.0",
+      "requestSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4000
+          },
+          "quality": {
+            "default": "medium",
+            "type": "string",
+            "enum": [
+              "low",
+              "medium"
+            ]
+          },
+          "resolution": {
+            "default": "1K",
+            "type": "string",
+            "enum": [
+              "1K",
+              "2K"
+            ]
+          },
+          "image_urls": {
+            "minItems": 1,
+            "maxItems": 3,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 1024,
+              "format": "uri"
+            }
+          }
+        },
+        "required": [
+          "prompt",
+          "image_urls"
+        ],
+        "additionalProperties": false
+      },
+      "mediaType": "Image",
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": false
+        },
+        {
+          "id": "image_urls",
+          "label": "Image URLs",
+          "dataType": "Image",
+          "required": false,
+          "multiple": true,
+          "maxConnections": 3
+        }
+      ],
+      "jsonParams": [
+        "image_urls"
+      ]
+    },
+    "krea-image-meta-muse-image": {
+      "endpoint": "/generate/image/meta/muse-image",
+      "displayName": "Muse Image",
+      "requestSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "minLength": 1
+          },
+          "aspect_ratio": {
+            "type": "string",
+            "enum": [
+              "21:9",
+              "16:9",
+              "4:3",
+              "3:2",
+              "1:1",
+              "2:3",
+              "3:4",
+              "9:16",
+              "9:21"
+            ]
+          },
+          "style_images": {
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "strength": {
+                  "type": "number",
+                  "minimum": -2,
+                  "maximum": 2
+                },
+                "url": {
+                  "type": "string",
+                  "maxLength": 1024,
+                  "format": "uri"
+                }
+              },
+              "required": [
+                "strength"
+              ]
+            }
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "additionalProperties": false
+      },
+      "mediaType": "Image",
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": false
+        },
+        {
+          "id": "style_images",
+          "label": "Style images",
+          "dataType": "Any",
+          "required": false,
+          "multiple": true,
+          "maxConnections": 10
+        }
+      ],
+      "jsonParams": [
+        "style_images"
+      ]
+    },
+    "krea-image-alibaba-qwen-image-3": {
+      "endpoint": "/generate/image/alibaba/qwen-image-3",
+      "displayName": "Qwen Image 3",
+      "requestSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 18000
+          },
+          "width": {
+            "default": 1024,
+            "type": "integer",
+            "minimum": 512,
+            "maximum": 2048
+          },
+          "height": {
+            "default": 1024,
+            "type": "integer",
+            "minimum": 512,
+            "maximum": 2048
+          },
+          "seed": {
+            "default": 1337,
+            "type": "number"
+          },
+          "style_images": {
+            "maxItems": 3,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "strength": {
+                  "type": "number",
+                  "minimum": -2,
+                  "maximum": 2
+                },
+                "url": {
+                  "type": "string",
+                  "maxLength": 1024,
+                  "format": "uri"
+                }
+              },
+              "required": [
+                "strength"
+              ]
+            }
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "additionalProperties": false
+      },
+      "mediaType": "Image",
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": false
+        },
+        {
+          "id": "style_images",
+          "label": "Style images",
+          "dataType": "Any",
+          "required": false,
+          "multiple": true,
+          "maxConnections": 3
+        }
+      ],
+      "jsonParams": [
+        "style_images"
+      ]
+    },
+    "krea-image-alibaba-qwen-image-2-1": {
+      "endpoint": "/generate/image/alibaba/qwen-image-2.1",
+      "displayName": "Qwen Image 2.1",
+      "requestSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "minLength": 1
+          },
+          "width": {
+            "default": 1024,
+            "type": "integer",
+            "minimum": 512,
+            "maximum": 2048
+          },
+          "height": {
+            "default": 1024,
+            "type": "integer",
+            "minimum": 512,
+            "maximum": 2048
+          },
+          "seed": {
+            "default": 1337,
+            "type": "number"
+          },
+          "style_images": {
+            "maxItems": 3,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "strength": {
+                  "type": "number",
+                  "minimum": -2,
+                  "maximum": 2
+                },
+                "url": {
+                  "type": "string",
+                  "maxLength": 1024,
+                  "format": "uri"
+                }
+              },
+              "required": [
+                "strength"
+              ]
+            }
+          },
+          "background": {
+            "type": "string",
+            "enum": [
+              "transparent",
+              "opaque",
+              "auto"
+            ]
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "additionalProperties": false
+      },
+      "mediaType": "Image",
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": false
+        },
+        {
+          "id": "style_images",
+          "label": "Style images",
+          "dataType": "Any",
+          "required": false,
+          "multiple": true,
+          "maxConnections": 3
+        }
+      ],
+      "jsonParams": [
+        "style_images"
+      ]
+    },
+    "krea-image-luma-uni-1": {
+      "endpoint": "/generate/image/luma/uni-1",
+      "displayName": "Luma UNI-1",
+      "requestSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 6000
+          },
+          "width": {
+            "default": 1024,
+            "type": "number",
+            "minimum": 512,
+            "maximum": 8192
+          },
+          "height": {
+            "default": 1024,
+            "type": "number",
+            "minimum": 512,
+            "maximum": 8192
+          },
+          "mode": {
+            "default": "standard",
+            "type": "string",
+            "enum": [
+              "standard",
+              "max"
+            ]
+          },
+          "style": {
+            "default": "auto",
+            "type": "string",
+            "enum": [
+              "auto",
+              "manga"
+            ]
+          },
+          "output_format": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "png",
+                  "jpeg"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "web_search": {
+            "default": false,
+            "type": "boolean"
+          },
+          "style_images": {
+            "maxItems": 9,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "strength": {
+                  "type": "number",
+                  "minimum": -2,
+                  "maximum": 2
+                },
+                "url": {
+                  "type": "string",
+                  "maxLength": 1024,
+                  "format": "uri"
+                }
+              },
+              "required": [
+                "strength"
+              ]
+            }
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "additionalProperties": false
+      },
+      "mediaType": "Image",
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": false
+        },
+        {
+          "id": "style_images",
+          "label": "Style images",
+          "dataType": "Any",
+          "required": false,
+          "multiple": true,
+          "maxConnections": 9
+        }
+      ],
+      "jsonParams": [
+        "style_images"
+      ]
+    },
+    "krea-image-recraft-recraft-v4-1-flash": {
+      "endpoint": "/generate/image/recraft/recraft-v4.1-flash",
+      "displayName": "Recraft V4.1 Flash",
+      "requestSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "minLength": 1
+          },
+          "aspect_ratio": {
+            "type": "string",
+            "enum": [
+              "1:1",
+              "4:3",
+              "3:2",
+              "16:9",
+              "3:4",
+              "2:3",
+              "9:16"
+            ]
+          },
+          "resolution": {
+            "type": "string",
+            "enum": [
+              "1K"
+            ]
+          }
+        },
+        "required": [
+          "prompt",
+          "aspect_ratio",
+          "resolution"
+        ],
+        "additionalProperties": false
+      },
+      "mediaType": "Image",
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": false
+        }
+      ],
+      "jsonParams": []
+    },
+    "krea-image-bytedance-seedream-4": {
+      "endpoint": "/generate/image/bytedance/seedream-4",
+      "displayName": "Seedream 4",
+      "requestSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "minLength": 1
+          },
+          "width": {
+            "type": "number",
+            "maximum": 4096
+          },
+          "height": {
+            "type": "number",
+            "maximum": 4096
+          },
+          "seed": {
+            "default": 1337,
+            "type": "number"
+          },
+          "style_images": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "strength": {
+                  "type": "number",
+                  "minimum": -2,
+                  "maximum": 2
+                },
+                "url": {
+                  "type": "string",
+                  "maxLength": 1024,
+                  "format": "uri"
+                }
+              },
+              "required": [
+                "strength"
+              ]
+            }
+          }
+        },
+        "required": [
+          "prompt",
+          "width",
+          "height"
+        ],
+        "additionalProperties": false
+      },
+      "mediaType": "Image",
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": false
+        },
+        {
+          "id": "style_images",
+          "label": "Style images",
+          "dataType": "Any",
+          "required": false,
+          "multiple": true
+        }
+      ],
+      "jsonParams": [
+        "style_images"
+      ]
+    },
+    "krea-image-bytedance-seedream-5-lite": {
+      "endpoint": "/generate/image/bytedance/seedream-5-lite",
+      "displayName": "Seedream 5 Lite",
+      "requestSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "minLength": 1
+          },
+          "width": {
+            "type": "number",
+            "maximum": 4096
+          },
+          "height": {
+            "type": "number",
+            "maximum": 4096
+          },
+          "seed": {
+            "default": 1337,
+            "type": "number"
+          },
+          "style_images": {
+            "maxItems": 14,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "strength": {
+                  "type": "number",
+                  "minimum": -2,
+                  "maximum": 2
+                },
+                "url": {
+                  "type": "string",
+                  "maxLength": 1024,
+                  "format": "uri"
+                }
+              },
+              "required": [
+                "strength"
+              ]
+            }
+          }
+        },
+        "required": [
+          "prompt",
+          "width",
+          "height"
+        ],
+        "additionalProperties": false
+      },
+      "mediaType": "Image",
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": false
+        },
+        {
+          "id": "style_images",
+          "label": "Style images",
+          "dataType": "Any",
+          "required": false,
+          "multiple": true,
+          "maxConnections": 14
+        }
+      ],
+      "jsonParams": [
+        "style_images"
+      ]
+    },
+    "krea-image-bytedance-seedream-5-pro": {
+      "endpoint": "/generate/image/bytedance/seedream-5-pro",
+      "displayName": "Seedream 5 Pro",
+      "requestSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "minLength": 1
+          },
+          "width": {
+            "type": "number",
+            "maximum": 4096
+          },
+          "height": {
+            "type": "number",
+            "maximum": 4096
+          },
+          "seed": {
+            "default": 1337,
+            "type": "number"
+          },
+          "style_images": {
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "strength": {
+                  "type": "number",
+                  "minimum": -2,
+                  "maximum": 2
+                },
+                "url": {
+                  "type": "string",
+                  "maxLength": 1024,
+                  "format": "uri"
+                }
+              },
+              "required": [
+                "strength"
+              ]
+            }
+          }
+        },
+        "required": [
+          "prompt",
+          "width",
+          "height"
+        ],
+        "additionalProperties": false
+      },
+      "mediaType": "Image",
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": false
+        },
+        {
+          "id": "style_images",
+          "label": "Style images",
+          "dataType": "Any",
+          "required": false,
+          "multiple": true,
+          "maxConnections": 10
+        }
+      ],
+      "jsonParams": [
+        "style_images"
+      ]
+    },
+    "krea-image-qwen-2512": {
+      "endpoint": "/generate/image/qwen/2512",
+      "displayName": "Qwen Image 2512",
+      "requestSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "minLength": 1
+          },
+          "negative_prompt": {
+            "default": "",
+            "type": "string"
+          },
+          "width": {
+            "default": 1024,
+            "type": "number",
+            "minimum": 256,
+            "maximum": 4096
+          },
+          "height": {
+            "default": 1024,
+            "type": "number",
+            "minimum": 256,
+            "maximum": 4096
+          },
+          "num_inference_steps": {
+            "default": 28,
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50
+          },
+          "cfg_scale": {
+            "default": 4,
+            "type": "number"
+          },
+          "seed": {
+            "default": 1337,
+            "type": "number"
+          },
+          "styles": {
+            "maxItems": 3,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "strength": {
+                  "type": "number",
+                  "minimum": -2,
+                  "maximum": 2
+                }
+              },
+              "required": [
+                "id",
+                "strength"
+              ]
+            }
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "additionalProperties": false
+      },
+      "mediaType": "Image",
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": false
+        },
+        {
+          "id": "styles",
+          "label": "Styles",
+          "dataType": "Any",
+          "required": false,
+          "multiple": true,
+          "maxConnections": 3
+        }
+      ],
+      "jsonParams": [
+        "styles"
+      ]
+    },
+    "krea-image-z-image-z-image": {
+      "endpoint": "/generate/image/z-image/z-image",
+      "displayName": "Z Image",
+      "requestSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "minLength": 1
+          },
+          "seed": {
+            "default": 1337,
+            "type": "number"
+          },
+          "denoising_strength": {
+            "default": 0.6,
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "styles": {
+            "maxItems": 3,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "strength": {
+                  "type": "number",
+                  "minimum": -2,
+                  "maximum": 2
+                }
+              },
+              "required": [
+                "id",
+                "strength"
+              ]
+            }
+          },
+          "skip_prompt_expansion": {
+            "default": false,
+            "type": "boolean"
+          },
+          "aspect_ratio": {
+            "type": "string",
+            "enum": [
+              "1:1",
+              "4:3",
+              "2:3",
+              "16:9",
+              "9:16"
+            ]
+          },
+          "resolution": {
+            "type": "string",
+            "enum": [
+              "1K"
+            ]
+          },
+          "image_url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "style_images": {
+            "maxItems": 1,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "strength": {
+                  "type": "number",
+                  "minimum": -2,
+                  "maximum": 2
+                },
+                "url": {
+                  "type": "string",
+                  "maxLength": 1024,
+                  "format": "uri"
+                }
+              },
+              "required": [
+                "strength"
+              ]
+            }
+          }
+        },
+        "required": [
+          "prompt",
+          "aspect_ratio",
+          "resolution"
+        ],
+        "additionalProperties": false
+      },
+      "mediaType": "Image",
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": false
+        },
+        {
+          "id": "styles",
+          "label": "Styles",
+          "dataType": "Any",
+          "required": false,
+          "multiple": true,
+          "maxConnections": 3
+        },
+        {
+          "id": "image_url",
+          "label": "Image URL",
+          "dataType": "Image",
+          "required": false
+        },
+        {
+          "id": "style_images",
+          "label": "Style images",
+          "dataType": "Any",
+          "required": false,
+          "multiple": true,
+          "maxConnections": 1
+        }
+      ],
+      "jsonParams": [
+        "styles",
+        "style_images"
+      ]
+    },
+    "krea-video-kling-kling-2-5": {
+      "endpoint": "/generate/video/kling/kling-2.5",
+      "displayName": "Kling 2.5",
+      "requestSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string"
+          },
+          "start_image": {
+            "type": "string",
+            "maxLength": 1024,
+            "format": "uri"
+          },
+          "aspect_ratio": {
+            "default": "16:9",
+            "type": "string",
+            "enum": [
+              "16:9",
+              "9:16",
+              "1:1"
+            ]
+          },
+          "duration": {
+            "default": 5,
+            "anyOf": [
+              {
+                "type": "number",
+                "const": 5
+              },
+              {
+                "type": "number",
+                "const": 10
+              }
+            ]
+          },
+          "end_image": {
+            "type": "string",
+            "maxLength": 1024,
+            "format": "uri"
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "additionalProperties": false
+      },
+      "mediaType": "Video",
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": false
+        },
+        {
+          "id": "start_image",
+          "label": "Start image",
+          "dataType": "Image",
+          "required": false
+        },
+        {
+          "id": "end_image",
+          "label": "End image",
+          "dataType": "Image",
+          "required": false
+        }
+      ],
+      "jsonParams": []
+    },
+    "krea-video-kling-kling-2-6": {
+      "endpoint": "/generate/video/kling/kling-2.6",
+      "displayName": "Kling 2.6",
+      "requestSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string"
+          },
+          "start_image": {
+            "type": "string",
+            "maxLength": 1024,
+            "format": "uri"
+          },
+          "aspect_ratio": {
+            "default": "16:9",
+            "type": "string",
+            "enum": [
+              "16:9",
+              "9:16"
+            ]
+          },
+          "duration": {
+            "default": 5,
+            "anyOf": [
+              {
+                "type": "number",
+                "const": 5
+              },
+              {
+                "type": "number",
+                "const": 10
+              }
+            ]
+          },
+          "end_image": {
+            "type": "string",
+            "maxLength": 1024,
+            "format": "uri"
+          },
+          "generate_audio": {
+            "default": false,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "additionalProperties": false
+      },
+      "mediaType": "Video",
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": false
+        },
+        {
+          "id": "start_image",
+          "label": "Start image",
+          "dataType": "Image",
+          "required": false
+        },
+        {
+          "id": "end_image",
+          "label": "End image",
+          "dataType": "Image",
+          "required": false
+        }
+      ],
+      "jsonParams": []
+    },
+    "krea-video-kling-kling-3-0": {
+      "endpoint": "/generate/video/kling/kling-3.0",
+      "displayName": "Kling 3.0",
+      "requestSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "maxLength": 2500
+          },
+          "start_image": {
+            "type": "string",
+            "maxLength": 1024,
+            "format": "uri"
+          },
+          "aspect_ratio": {
+            "default": "16:9",
+            "type": "string",
+            "enum": [
+              "16:9",
+              "9:16"
+            ]
+          },
+          "duration": {
+            "default": 5,
+            "type": "number",
+            "minimum": 3,
+            "maximum": 15
+          },
+          "end_image": {
+            "type": "string",
+            "maxLength": 1024,
+            "format": "uri"
+          },
+          "generate_audio": {
+            "default": false,
+            "type": "boolean"
+          },
+          "mode": {
+            "default": "std",
+            "type": "string",
+            "enum": [
+              "std",
+              "pro",
+              "4k"
+            ]
+          },
+          "multi_prompt": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "prompt": {
+                  "type": "string",
+                  "maxLength": 512
+                },
+                "duration": {
+                  "type": "number",
+                  "minimum": 1,
+                  "maximum": 15
+                }
+              },
+              "required": [
+                "prompt",
+                "duration"
+              ]
+            }
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "additionalProperties": false
+      },
+      "mediaType": "Video",
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": false
+        },
+        {
+          "id": "start_image",
+          "label": "Start image",
+          "dataType": "Image",
+          "required": false
+        },
+        {
+          "id": "end_image",
+          "label": "End image",
+          "dataType": "Image",
+          "required": false
+        },
+        {
+          "id": "multi_prompt",
+          "label": "Multi prompt",
+          "dataType": "Any",
+          "required": false,
+          "multiple": true
+        }
+      ],
+      "jsonParams": [
+        "multi_prompt"
+      ]
+    },
+    "krea-video-kling-kling-o1": {
+      "endpoint": "/generate/video/kling/kling-o1",
+      "displayName": "Kling o1",
+      "requestSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string"
+          },
+          "start_image": {
+            "type": "string",
+            "maxLength": 1024,
+            "format": "uri"
+          },
+          "aspect_ratio": {
+            "default": "16:9",
+            "type": "string",
+            "enum": [
+              "16:9",
+              "9:16",
+              "1:1"
+            ]
+          },
+          "duration": {
+            "default": 5,
+            "type": "number",
+            "minimum": 3,
+            "maximum": 10
+          },
+          "end_image": {
+            "type": "string",
+            "maxLength": 1024,
+            "format": "uri"
+          },
+          "style_references": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "url": {
+                  "type": "string",
+                  "maxLength": 1024,
+                  "format": "uri"
+                },
+                "tag": {
+                  "type": "string",
+                  "minLength": 3,
+                  "maxLength": 16,
+                  "pattern": "^[a-z][a-z0-9_-]+$"
+                }
+              },
+              "required": [
+                "url",
+                "tag"
+              ]
+            }
+          },
+          "element_references": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "images": {
+                  "minItems": 1,
+                  "maxItems": 3,
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "maxLength": 1024,
+                    "format": "uri"
+                  }
+                },
+                "tag": {
+                  "type": "string",
+                  "minLength": 3,
+                  "maxLength": 16,
+                  "pattern": "^[a-z][a-z0-9_-]+$"
+                }
+              },
+              "required": [
+                "images",
+                "tag"
+              ]
+            }
+          },
+          "video_reference": {
+            "type": "object",
+            "properties": {
+              "url": {
+                "type": "string",
+                "maxLength": 1024,
+                "format": "uri"
+              },
+              "tag": {
+                "type": "string",
+                "minLength": 3,
+                "maxLength": 16,
+                "pattern": "^[a-z][a-z0-9_-]+$"
+              }
+            },
+            "required": [
+              "url",
+              "tag"
+            ]
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "additionalProperties": false
+      },
+      "mediaType": "Video",
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": false
+        },
+        {
+          "id": "start_image",
+          "label": "Start image",
+          "dataType": "Image",
+          "required": false
+        },
+        {
+          "id": "end_image",
+          "label": "End image",
+          "dataType": "Image",
+          "required": false
+        },
+        {
+          "id": "style_references",
+          "label": "Style references",
+          "dataType": "Any",
+          "required": false,
+          "multiple": true
+        },
+        {
+          "id": "element_references",
+          "label": "Element references",
+          "dataType": "Any",
+          "required": false,
+          "multiple": true
+        },
+        {
+          "id": "video_reference",
+          "label": "Video reference",
+          "dataType": "Any",
+          "required": false
+        }
+      ],
+      "jsonParams": [
+        "style_references",
+        "element_references",
+        "video_reference"
+      ]
+    },
+    "krea-video-minimax-hailuo": {
+      "endpoint": "/generate/video/minimax/hailuo",
+      "displayName": "Hailuo",
+      "requestSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string"
+          },
+          "start_image": {
+            "type": "string",
+            "maxLength": 1024,
+            "format": "uri"
+          },
+          "expand_prompt": {
+            "default": true,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "additionalProperties": false
+      },
+      "mediaType": "Video",
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": false
+        },
+        {
+          "id": "start_image",
+          "label": "Start image",
+          "dataType": "Image",
+          "required": false
+        }
+      ],
+      "jsonParams": []
+    },
+    "krea-video-minimax-hailuo-02": {
+      "endpoint": "/generate/video/minimax/hailuo-02",
+      "displayName": "Hailuo 02",
+      "requestSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string"
+          },
+          "start_image": {
+            "type": "string",
+            "maxLength": 1024,
+            "format": "uri"
+          },
+          "expand_prompt": {
+            "default": true,
+            "type": "boolean"
+          },
+          "end_image": {
+            "type": "string",
+            "maxLength": 1024,
+            "format": "uri"
+          },
+          "resolution": {
+            "default": "768p",
+            "type": "string",
+            "enum": [
+              "512p",
+              "768p",
+              "1080p"
+            ]
+          },
+          "duration": {
+            "default": 6,
+            "type": "number",
+            "minimum": 6,
+            "maximum": 10
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "additionalProperties": false
+      },
+      "mediaType": "Video",
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": false
+        },
+        {
+          "id": "start_image",
+          "label": "Start image",
+          "dataType": "Image",
+          "required": false
+        },
+        {
+          "id": "end_image",
+          "label": "End image",
+          "dataType": "Image",
+          "required": false
+        }
+      ],
+      "jsonParams": []
+    },
+    "krea-video-minimax-hailuo-2-3": {
+      "endpoint": "/generate/video/minimax/hailuo-2.3",
+      "displayName": "Hailuo 2.3",
+      "requestSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string"
+          },
+          "start_image": {
+            "type": "string",
+            "maxLength": 1024,
+            "format": "uri"
+          },
+          "expand_prompt": {
+            "default": true,
+            "type": "boolean"
+          },
+          "end_image": {
+            "type": "string",
+            "maxLength": 1024,
+            "format": "uri"
+          },
+          "resolution": {
+            "default": "768p",
+            "type": "string",
+            "enum": [
+              "768p",
+              "1080p"
+            ]
+          },
+          "duration": {
+            "default": 6,
+            "anyOf": [
+              {
+                "type": "number",
+                "const": 6
+              },
+              {
+                "type": "number",
+                "const": 10
+              }
+            ]
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "additionalProperties": false
+      },
+      "mediaType": "Video",
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": false
+        },
+        {
+          "id": "start_image",
+          "label": "Start image",
+          "dataType": "Image",
+          "required": false
+        },
+        {
+          "id": "end_image",
+          "label": "End image",
+          "dataType": "Image",
+          "required": false
+        }
+      ],
+      "jsonParams": []
+    },
+    "krea-video-minimax-hailuo-2-3-fast": {
+      "endpoint": "/generate/video/minimax/hailuo-2.3-fast",
+      "displayName": "Hailuo 2.3 Fast",
+      "requestSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string"
+          },
+          "start_image": {
+            "type": "string",
+            "maxLength": 1024,
+            "format": "uri"
+          },
+          "expand_prompt": {
+            "default": true,
+            "type": "boolean"
+          },
+          "end_image": {
+            "type": "string",
+            "maxLength": 1024,
+            "format": "uri"
+          },
+          "resolution": {
+            "default": "768p",
+            "type": "string",
+            "enum": [
+              "768p",
+              "1080p"
+            ]
+          },
+          "duration": {
+            "default": 6,
+            "anyOf": [
+              {
+                "type": "number",
+                "const": 6
+              },
+              {
+                "type": "number",
+                "const": 10
+              }
+            ]
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "additionalProperties": false
+      },
+      "mediaType": "Video",
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": false
+        },
+        {
+          "id": "start_image",
+          "label": "Start image",
+          "dataType": "Image",
+          "required": false
+        },
+        {
+          "id": "end_image",
+          "label": "End image",
+          "dataType": "Image",
+          "required": false
+        }
+      ],
+      "jsonParams": []
+    },
+    "krea-video-minimax-hailuo-3": {
+      "endpoint": "/generate/video/minimax/hailuo-3",
+      "displayName": "MiniMax H3",
+      "requestSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 7000
+          },
+          "start_image": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "aspect_ratio": {
+            "default": "16:9",
+            "type": "string",
+            "enum": [
+              "adaptive",
+              "21:9",
+              "16:9",
+              "4:3",
+              "1:1",
+              "3:4",
+              "9:16"
+            ]
+          },
+          "end_image": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reference_images": {
+            "maxItems": 9,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 1024,
+              "format": "uri"
+            }
+          },
+          "reference_videos": {
+            "maxItems": 3,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 1024,
+              "format": "uri"
+            }
+          },
+          "reference_video_seconds": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 15
+          },
+          "reference_audios": {
+            "maxItems": 3,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 1024,
+              "format": "uri"
+            }
+          },
+          "duration": {
+            "default": 5,
+            "type": "integer",
+            "minimum": 5,
+            "maximum": 15
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "additionalProperties": false
+      },
+      "mediaType": "Video",
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": false
+        },
+        {
+          "id": "start_image",
+          "label": "Start image",
+          "dataType": "Image",
+          "required": false
+        },
+        {
+          "id": "end_image",
+          "label": "End image",
+          "dataType": "Image",
+          "required": false
+        },
+        {
+          "id": "reference_images",
+          "label": "Reference images",
+          "dataType": "Image",
+          "required": false,
+          "multiple": true,
+          "maxConnections": 9
+        },
+        {
+          "id": "reference_videos",
+          "label": "Reference videos",
+          "dataType": "Video",
+          "required": false,
+          "multiple": true,
+          "maxConnections": 3
+        },
+        {
+          "id": "reference_audios",
+          "label": "Reference audios",
+          "dataType": "Audio",
+          "required": false,
+          "multiple": true,
+          "maxConnections": 3
+        }
+      ],
+      "jsonParams": [
+        "reference_images",
+        "reference_videos",
+        "reference_audios"
+      ]
+    },
+    "krea-video-minimax-h3-max": {
+      "endpoint": "/generate/video/minimax/h3-max",
+      "displayName": "MiniMax H3 Max",
+      "requestSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 7000
+          },
+          "start_image": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "aspect_ratio": {
+            "default": "16:9",
+            "type": "string",
+            "enum": [
+              "21:9",
+              "16:9",
+              "4:3",
+              "1:1",
+              "3:4",
+              "9:16"
+            ]
+          },
+          "end_image": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "resolution": {
+            "default": "768p",
+            "type": "string",
+            "enum": [
+              "480p",
+              "768p",
+              "1080p"
+            ]
+          },
+          "duration": {
+            "default": 5,
+            "type": "integer",
+            "minimum": 5,
+            "maximum": 15
+          },
+          "seed": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2147483647
+          },
+          "prompt_expansion_mode": {
+            "default": "balanced",
+            "type": "string",
+            "enum": [
+              "disabled",
+              "fast",
+              "balanced",
+              "quality"
+            ]
+          },
+          "reference_images": {
+            "maxItems": 12,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 1024,
+              "format": "uri"
+            }
+          },
+          "reference_videos": {
+            "maxItems": 7,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 1024,
+              "format": "uri"
+            }
+          },
+          "reference_video_seconds": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 15
+          },
+          "reference_audios": {
+            "maxItems": 7,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 1024,
+              "format": "uri"
+            }
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "additionalProperties": false
+      },
+      "mediaType": "Video",
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": false
+        },
+        {
+          "id": "start_image",
+          "label": "Start image",
+          "dataType": "Image",
+          "required": false
+        },
+        {
+          "id": "end_image",
+          "label": "End image",
+          "dataType": "Image",
+          "required": false
+        },
+        {
+          "id": "reference_images",
+          "label": "Reference images",
+          "dataType": "Image",
+          "required": false,
+          "multiple": true,
+          "maxConnections": 12
+        },
+        {
+          "id": "reference_videos",
+          "label": "Reference videos",
+          "dataType": "Video",
+          "required": false,
+          "multiple": true,
+          "maxConnections": 7
+        },
+        {
+          "id": "reference_audios",
+          "label": "Reference audios",
+          "dataType": "Audio",
+          "required": false,
+          "multiple": true,
+          "maxConnections": 7
+        }
+      ],
+      "jsonParams": [
+        "reference_images",
+        "reference_videos",
+        "reference_audios"
+      ]
+    },
+    "krea-video-minimax-h3-max-turbo": {
+      "endpoint": "/generate/video/minimax/h3-max-turbo",
+      "displayName": "MiniMax H3 Max Turbo",
+      "requestSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 50000
+          },
+          "start_image": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "aspect_ratio": {
+            "default": "16:9",
+            "type": "string",
+            "enum": [
+              "21:9",
+              "16:9",
+              "4:3",
+              "1:1",
+              "3:4",
+              "9:16"
+            ]
+          },
+          "end_image": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "resolution": {
+            "default": "768p",
+            "type": "string",
+            "enum": [
+              "480p",
+              "768p",
+              "1080p"
+            ]
+          },
+          "duration": {
+            "default": 5,
+            "type": "integer",
+            "minimum": 5,
+            "maximum": 15
+          },
+          "seed": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2147483647
+          },
+          "prompt_expansion_mode": {
+            "default": "balanced",
+            "type": "string",
+            "enum": [
+              "balanced",
+              "quality"
+            ]
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "additionalProperties": false
+      },
+      "mediaType": "Video",
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": false
+        },
+        {
+          "id": "start_image",
+          "label": "Start image",
+          "dataType": "Image",
+          "required": false
+        },
+        {
+          "id": "end_image",
+          "label": "End image",
+          "dataType": "Image",
+          "required": false
+        }
+      ],
+      "jsonParams": []
+    },
+    "krea-video-minimax-h3-max-camera-controls": {
+      "endpoint": "/generate/video/minimax/h3-max-camera-controls",
+      "displayName": "minimax_h3max_camera",
+      "requestSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 50000
+          },
+          "start_image": {
+            "type": "string",
+            "maxLength": 1024,
+            "format": "uri"
+          },
+          "resolution": {
+            "default": "768p",
+            "type": "string",
+            "enum": [
+              "480p",
+              "768p",
+              "1080p"
+            ]
+          },
+          "duration": {
+            "default": 5,
+            "type": "integer",
+            "minimum": 5,
+            "maximum": 15
+          },
+          "seed": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2147483647
+          },
+          "prompt_expansion_mode": {
+            "default": "balanced",
+            "type": "string",
+            "enum": [
+              "balanced",
+              "quality"
+            ]
+          },
+          "camera_trajectory": {
+            "minItems": 2,
+            "maxItems": 12,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "time": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "distance": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "azimuth": {
+                  "type": "number"
+                },
+                "elevation": {
+                  "type": "number",
+                  "minimum": -90,
+                  "maximum": 90
+                }
+              },
+              "required": [
+                "time",
+                "distance",
+                "azimuth",
+                "elevation"
+              ]
+            }
+          }
+        },
+        "required": [
+          "prompt",
+          "start_image",
+          "camera_trajectory"
+        ],
+        "additionalProperties": false
+      },
+      "mediaType": "Video",
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": false
+        },
+        {
+          "id": "start_image",
+          "label": "Start image",
+          "dataType": "Image",
+          "required": false
+        },
+        {
+          "id": "camera_trajectory",
+          "label": "Camera trajectory",
+          "dataType": "Any",
+          "required": false,
+          "multiple": true,
+          "maxConnections": 12
+        }
+      ],
+      "jsonParams": [
+        "camera_trajectory"
+      ]
+    },
+    "krea-video-alibaba-wan-2-1": {
+      "endpoint": "/generate/video/alibaba/wan-2.1",
+      "displayName": "Wan 2.1",
+      "requestSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string"
+          },
+          "start_image": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "width": {
+            "type": "number"
+          },
+          "height": {
+            "type": "number"
+          },
+          "end_image": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "aspect_ratio": {
+            "default": "16:9",
+            "type": "string",
+            "enum": [
+              "16:9",
+              "9:16"
+            ]
+          },
+          "styles": {
+            "maxItems": 3,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "strength": {
+                  "type": "number",
+                  "minimum": -2,
+                  "maximum": 2
+                }
+              },
+              "required": [
+                "id",
+                "strength"
+              ]
+            }
+          }
+        },
+        "required": [
+          "prompt",
+          "width",
+          "height"
+        ],
+        "additionalProperties": false
+      },
+      "mediaType": "Video",
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": false
+        },
+        {
+          "id": "start_image",
+          "label": "Start image",
+          "dataType": "Image",
+          "required": false
+        },
+        {
+          "id": "end_image",
+          "label": "End image",
+          "dataType": "Image",
+          "required": false
+        },
+        {
+          "id": "styles",
+          "label": "Styles",
+          "dataType": "Any",
+          "required": false,
+          "multiple": true,
+          "maxConnections": 3
+        }
+      ],
+      "jsonParams": [
+        "styles"
+      ]
+    },
+    "krea-video-alibaba-wan-2-2": {
+      "endpoint": "/generate/video/alibaba/wan-2.2",
+      "displayName": "Wan 2.2",
+      "requestSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string"
+          },
+          "start_image": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "width": {
+            "type": "number"
+          },
+          "height": {
+            "type": "number"
+          },
+          "aspect_ratio": {
+            "default": "16:9",
+            "type": "string",
+            "enum": [
+              "16:9",
+              "9:16"
+            ]
+          }
+        },
+        "required": [
+          "prompt",
+          "width",
+          "height"
+        ],
+        "additionalProperties": false
+      },
+      "mediaType": "Video",
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": false
+        },
+        {
+          "id": "start_image",
+          "label": "Start image",
+          "dataType": "Image",
+          "required": false
+        }
+      ],
+      "jsonParams": []
+    },
+    "krea-video-alibaba-wan-2-5": {
+      "endpoint": "/generate/video/alibaba/wan-2.5",
+      "displayName": "Wan 2.5",
+      "requestSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "minLength": 1
+          },
+          "start_image": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "aspect_ratio": {
+            "default": "16:9",
+            "type": "string",
+            "enum": [
+              "16:9",
+              "9:16",
+              "1:1"
+            ]
+          },
+          "resolution": {
+            "default": "1080p",
+            "type": "string",
+            "enum": [
+              "480p",
+              "720p",
+              "1080p"
+            ]
+          },
+          "enable_prompt_expansion": {
+            "default": true,
+            "type": "boolean"
+          },
+          "duration": {
+            "default": 5,
+            "type": "number",
+            "minimum": 5,
+            "maximum": 10
+          },
+          "seed": {
+            "type": "number"
+          },
+          "audio_url": {
+            "type": "string",
+            "maxLength": 1024,
+            "format": "uri"
+          },
+          "generate_audio": {
+            "default": false,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "additionalProperties": false
+      },
+      "mediaType": "Video",
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": false
+        },
+        {
+          "id": "start_image",
+          "label": "Start image",
+          "dataType": "Image",
+          "required": false
+        },
+        {
+          "id": "audio_url",
+          "label": "Audio URL",
+          "dataType": "Audio",
+          "required": false
+        }
+      ],
+      "jsonParams": []
+    },
+    "krea-video-alibaba-wan-3-0": {
+      "endpoint": "/generate/video/alibaba/wan-3.0",
+      "displayName": "Wan 3.0",
+      "requestSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 5000
+          },
+          "start_image": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "aspect_ratio": {
+            "default": "adaptive",
+            "type": "string",
+            "enum": [
+              "adaptive",
+              "16:9",
+              "4:3",
+              "1:1",
+              "3:4",
+              "9:16"
+            ]
+          },
+          "resolution": {
+            "default": "720p",
+            "type": "string",
+            "enum": [
+              "480p",
+              "720p",
+              "1080p"
+            ]
+          },
+          "duration": {
+            "default": 5,
+            "type": "integer",
+            "minimum": 2,
+            "maximum": 30
+          },
+          "seed": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2147483647
+          },
+          "generate_audio": {
+            "default": true,
+            "type": "boolean"
+          },
+          "enable_prompt_expansion": {
+            "default": true,
+            "type": "boolean"
+          },
+          "end_image": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reference_images": {
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 1024,
+              "format": "uri"
+            }
+          },
+          "reference_videos": {
+            "maxItems": 5,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 1024,
+              "format": "uri"
+            }
+          },
+          "reference_audios": {
+            "maxItems": 5,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 1024,
+              "format": "uri"
+            }
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "additionalProperties": false
+      },
+      "mediaType": "Video",
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": false
+        },
+        {
+          "id": "start_image",
+          "label": "Start image",
+          "dataType": "Image",
+          "required": false
+        },
+        {
+          "id": "end_image",
+          "label": "End image",
+          "dataType": "Image",
+          "required": false
+        },
+        {
+          "id": "reference_images",
+          "label": "Reference images",
+          "dataType": "Image",
+          "required": false,
+          "multiple": true,
+          "maxConnections": 10
+        },
+        {
+          "id": "reference_videos",
+          "label": "Reference videos",
+          "dataType": "Video",
+          "required": false,
+          "multiple": true,
+          "maxConnections": 5
+        },
+        {
+          "id": "reference_audios",
+          "label": "Reference audios",
+          "dataType": "Audio",
+          "required": false,
+          "multiple": true,
+          "maxConnections": 5
+        }
+      ],
+      "jsonParams": [
+        "reference_images",
+        "reference_videos",
+        "reference_audios"
+      ]
+    },
+    "krea-video-google-veo-2": {
+      "endpoint": "/generate/video/google/veo-2",
+      "displayName": "Veo 2",
+      "requestSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string"
+          },
+          "start_image": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "start_video": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "aspect_ratio": {
+            "default": "16:9",
+            "type": "string",
+            "enum": [
+              "16:9",
+              "9:16"
+            ]
+          },
+          "duration": {
+            "default": 5,
+            "type": "number",
+            "minimum": 5,
+            "maximum": 8
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "additionalProperties": false
+      },
+      "mediaType": "Video",
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": false
+        },
+        {
+          "id": "start_image",
+          "label": "Start image",
+          "dataType": "Image",
+          "required": false
+        },
+        {
+          "id": "start_video",
+          "label": "Start video",
+          "dataType": "Video",
+          "required": false
+        }
+      ],
+      "jsonParams": []
+    },
+    "krea-video-google-veo-3": {
+      "endpoint": "/generate/video/google/veo-3",
+      "displayName": "Veo 3",
+      "requestSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string"
+          },
+          "start_image": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "aspect_ratio": {
+            "default": "16:9",
+            "type": "string",
+            "enum": [
+              "16:9",
+              "9:16",
+              "1:1"
+            ]
+          },
+          "duration": {
+            "default": 8,
+            "type": "number",
+            "enum": [
+              4,
+              6,
+              8
+            ],
+            "anyOf": [
+              {
+                "type": "number",
+                "const": 4
+              },
+              {
+                "type": "number",
+                "const": 6
+              },
+              {
+                "type": "number",
+                "const": 8
+              }
+            ]
+          },
+          "generate_audio": {
+            "default": false,
+            "type": "boolean"
+          },
+          "resolution": {
+            "default": "720p",
+            "type": "string",
+            "enum": [
+              "720p",
+              "1080p"
+            ]
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "additionalProperties": false
+      },
+      "mediaType": "Video",
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": false
+        },
+        {
+          "id": "start_image",
+          "label": "Start image",
+          "dataType": "Image",
+          "required": false
+        }
+      ],
+      "jsonParams": []
+    },
+    "krea-video-google-veo-3-fast": {
+      "endpoint": "/generate/video/google/veo-3-fast",
+      "displayName": "Veo 3 Fast",
+      "requestSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string"
+          },
+          "start_image": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "aspect_ratio": {
+            "default": "16:9",
+            "type": "string",
+            "enum": [
+              "16:9",
+              "9:16",
+              "1:1"
+            ]
+          },
+          "duration": {
+            "default": 8,
+            "type": "number",
+            "enum": [
+              4,
+              6,
+              8
+            ],
+            "anyOf": [
+              {
+                "type": "number",
+                "const": 4
+              },
+              {
+                "type": "number",
+                "const": 6
+              },
+              {
+                "type": "number",
+                "const": 8
+              }
+            ]
+          },
+          "generate_audio": {
+            "default": false,
+            "type": "boolean"
+          },
+          "resolution": {
+            "default": "720p",
+            "type": "string",
+            "enum": [
+              "720p",
+              "1080p"
+            ]
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "additionalProperties": false
+      },
+      "mediaType": "Video",
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": false
+        },
+        {
+          "id": "start_image",
+          "label": "Start image",
+          "dataType": "Image",
+          "required": false
+        }
+      ],
+      "jsonParams": []
+    },
+    "krea-video-google-veo-3-1": {
+      "endpoint": "/generate/video/google/veo-3.1",
+      "displayName": "Veo 3.1",
+      "requestSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string"
+          },
+          "start_image": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "aspect_ratio": {
+            "default": "16:9",
+            "type": "string",
+            "enum": [
+              "16:9",
+              "9:16"
+            ]
+          },
+          "duration": {
+            "default": 8,
+            "type": "number",
+            "enum": [
+              4,
+              6,
+              8
+            ],
+            "anyOf": [
+              {
+                "type": "number",
+                "const": 4
+              },
+              {
+                "type": "number",
+                "const": 6
+              },
+              {
+                "type": "number",
+                "const": 8
+              }
+            ]
+          },
+          "generate_audio": {
+            "default": false,
+            "type": "boolean"
+          },
+          "resolution": {
+            "default": "720p",
+            "type": "string",
+            "enum": [
+              "720p",
+              "1080p",
+              "4K"
+            ]
+          },
+          "end_image": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reference_images": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 1024,
+              "format": "uri"
+            }
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "additionalProperties": false
+      },
+      "mediaType": "Video",
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": false
+        },
+        {
+          "id": "start_image",
+          "label": "Start image",
+          "dataType": "Image",
+          "required": false
+        },
+        {
+          "id": "end_image",
+          "label": "End image",
+          "dataType": "Image",
+          "required": false
+        },
+        {
+          "id": "reference_images",
+          "label": "Reference images",
+          "dataType": "Image",
+          "required": false,
+          "multiple": true
+        }
+      ],
+      "jsonParams": [
+        "reference_images"
+      ]
+    },
+    "krea-video-google-veo-3-1-fast": {
+      "endpoint": "/generate/video/google/veo-3.1-fast",
+      "displayName": "Veo 3.1 Fast",
+      "requestSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string"
+          },
+          "start_image": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "aspect_ratio": {
+            "default": "16:9",
+            "type": "string",
+            "enum": [
+              "16:9",
+              "9:16"
+            ]
+          },
+          "duration": {
+            "default": 8,
+            "type": "number",
+            "enum": [
+              4,
+              6,
+              8
+            ],
+            "anyOf": [
+              {
+                "type": "number",
+                "const": 4
+              },
+              {
+                "type": "number",
+                "const": 6
+              },
+              {
+                "type": "number",
+                "const": 8
+              }
+            ]
+          },
+          "generate_audio": {
+            "default": false,
+            "type": "boolean"
+          },
+          "resolution": {
+            "default": "720p",
+            "type": "string",
+            "enum": [
+              "720p",
+              "1080p",
+              "4K"
+            ]
+          },
+          "end_image": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reference_images": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 1024,
+              "format": "uri"
+            }
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "additionalProperties": false
+      },
+      "mediaType": "Video",
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": false
+        },
+        {
+          "id": "start_image",
+          "label": "Start image",
+          "dataType": "Image",
+          "required": false
+        },
+        {
+          "id": "end_image",
+          "label": "End image",
+          "dataType": "Image",
+          "required": false
+        },
+        {
+          "id": "reference_images",
+          "label": "Reference images",
+          "dataType": "Image",
+          "required": false,
+          "multiple": true
+        }
+      ],
+      "jsonParams": [
+        "reference_images"
+      ]
+    },
+    "krea-video-google-veo-3-1-lite": {
+      "endpoint": "/generate/video/google/veo-3.1-lite",
+      "displayName": "Veo 3.1 Lite",
+      "requestSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string"
+          },
+          "start_image": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "aspect_ratio": {
+            "default": "16:9",
+            "type": "string",
+            "enum": [
+              "16:9",
+              "9:16"
+            ]
+          },
+          "duration": {
+            "default": 8,
+            "type": "number",
+            "enum": [
+              4,
+              6,
+              8
+            ],
+            "anyOf": [
+              {
+                "type": "number",
+                "const": 4
+              },
+              {
+                "type": "number",
+                "const": 6
+              },
+              {
+                "type": "number",
+                "const": 8
+              }
+            ]
+          },
+          "resolution": {
+            "default": "720p",
+            "type": "string",
+            "enum": [
+              "720p",
+              "1080p"
+            ]
+          },
+          "end_image": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "additionalProperties": false
+      },
+      "mediaType": "Video",
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": false
+        },
+        {
+          "id": "start_image",
+          "label": "Start image",
+          "dataType": "Image",
+          "required": false
+        },
+        {
+          "id": "end_image",
+          "label": "End image",
+          "dataType": "Image",
+          "required": false
+        }
+      ],
+      "jsonParams": []
+    },
+    "krea-video-google-gemini-omni-flash": {
+      "endpoint": "/generate/video/google/gemini-omni-flash",
+      "displayName": "Gemini Omni Flash",
+      "requestSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string"
+          },
+          "start_image": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "aspect_ratio": {
+            "default": "16:9",
+            "type": "string",
+            "enum": [
+              "16:9",
+              "9:16"
+            ]
+          },
+          "duration": {
+            "default": 8,
+            "type": "integer",
+            "minimum": 3,
+            "maximum": 10
+          },
+          "reference_images": {
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 1024,
+              "format": "uri"
+            }
+          },
+          "reference_videos": {
+            "maxItems": 1,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 1024,
+              "format": "uri"
+            }
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "additionalProperties": false
+      },
+      "mediaType": "Video",
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": false
+        },
+        {
+          "id": "start_image",
+          "label": "Start image",
+          "dataType": "Image",
+          "required": false
+        },
+        {
+          "id": "reference_images",
+          "label": "Reference images",
+          "dataType": "Image",
+          "required": false,
+          "multiple": true,
+          "maxConnections": 10
+        },
+        {
+          "id": "reference_videos",
+          "label": "Reference videos",
+          "dataType": "Video",
+          "required": false,
+          "multiple": true,
+          "maxConnections": 1
+        }
+      ],
+      "jsonParams": [
+        "reference_images",
+        "reference_videos"
+      ]
+    },
+    "krea-video-google-gemini-omni-flash-1-1": {
+      "endpoint": "/generate/video/google/gemini-omni-flash-1.1",
+      "displayName": "Gemini Omni Flash 1.1",
+      "requestSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string"
+          },
+          "start_image": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "aspect_ratio": {
+            "default": "16:9",
+            "type": "string",
+            "enum": [
+              "16:9",
+              "9:16"
+            ]
+          },
+          "duration": {
+            "default": 8,
+            "type": "integer",
+            "minimum": 3,
+            "maximum": 10
+          },
+          "reference_images": {
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 1024,
+              "format": "uri"
+            }
+          },
+          "reference_videos": {
+            "maxItems": 1,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 1024,
+              "format": "uri"
+            }
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "additionalProperties": false
+      },
+      "mediaType": "Video",
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": false
+        },
+        {
+          "id": "start_image",
+          "label": "Start image",
+          "dataType": "Image",
+          "required": false
+        },
+        {
+          "id": "reference_images",
+          "label": "Reference images",
+          "dataType": "Image",
+          "required": false,
+          "multiple": true,
+          "maxConnections": 10
+        },
+        {
+          "id": "reference_videos",
+          "label": "Reference videos",
+          "dataType": "Video",
+          "required": false,
+          "multiple": true,
+          "maxConnections": 1
+        }
+      ],
+      "jsonParams": [
+        "reference_images",
+        "reference_videos"
+      ]
+    },
+    "krea-video-bytedance-seedance-1-0-pro": {
+      "endpoint": "/generate/video/bytedance/seedance-1.0-pro",
+      "displayName": "Seedance 1.0 Pro",
+      "requestSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string"
+          },
+          "start_image": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "start_video": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "aspect_ratio": {
+            "default": "16:9",
+            "type": "string",
+            "enum": [
+              "1:1",
+              "16:9",
+              "9:16",
+              "4:3",
+              "3:4",
+              "21:9",
+              "9:21"
+            ]
+          },
+          "end_image": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reference_images": {
+            "maxItems": 4,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 1024,
+              "format": "uri"
+            }
+          },
+          "duration": {
+            "default": 5,
+            "type": "number"
+          },
+          "resolution": {
+            "default": "720p",
+            "type": "string",
+            "enum": [
+              "720p",
+              "1080p"
+            ]
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "additionalProperties": false
+      },
+      "mediaType": "Video",
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": false
+        },
+        {
+          "id": "start_image",
+          "label": "Start image",
+          "dataType": "Image",
+          "required": false
+        },
+        {
+          "id": "start_video",
+          "label": "Start video",
+          "dataType": "Video",
+          "required": false
+        },
+        {
+          "id": "end_image",
+          "label": "End image",
+          "dataType": "Image",
+          "required": false
+        },
+        {
+          "id": "reference_images",
+          "label": "Reference images",
+          "dataType": "Image",
+          "required": false,
+          "multiple": true,
+          "maxConnections": 4
+        }
+      ],
+      "jsonParams": [
+        "reference_images"
+      ]
+    },
+    "krea-video-bytedance-seedance-1-0-pro-fast": {
+      "endpoint": "/generate/video/bytedance/seedance-1.0-pro-fast",
+      "displayName": "Seedance 1.0 Pro Fast",
+      "requestSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string"
+          },
+          "start_image": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "start_video": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "aspect_ratio": {
+            "default": "16:9",
+            "type": "string",
+            "enum": [
+              "1:1",
+              "16:9",
+              "9:16",
+              "4:3",
+              "3:4",
+              "21:9",
+              "9:21"
+            ]
+          },
+          "duration": {
+            "default": 5,
+            "type": "number",
+            "minimum": 2,
+            "maximum": 12
+          },
+          "resolution": {
+            "default": "720p",
+            "type": "string",
+            "enum": [
+              "480p",
+              "720p",
+              "1080p"
+            ]
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "additionalProperties": false
+      },
+      "mediaType": "Video",
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": false
+        },
+        {
+          "id": "start_image",
+          "label": "Start image",
+          "dataType": "Image",
+          "required": false
+        },
+        {
+          "id": "start_video",
+          "label": "Start video",
+          "dataType": "Video",
+          "required": false
+        }
+      ],
+      "jsonParams": []
+    },
+    "krea-video-bytedance-seedance-2": {
+      "endpoint": "/generate/video/bytedance/seedance-2",
+      "displayName": "Seedance 2.0*",
+      "requestSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string"
+          },
+          "start_image": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "aspect_ratio": {
+            "default": "16:9",
+            "type": "string",
+            "enum": [
+              "16:9",
+              "4:3",
+              "1:1",
+              "3:4",
+              "9:16",
+              "21:9"
+            ]
+          },
+          "end_image": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reference_images": {
+            "maxItems": 9,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 1024,
+              "format": "uri"
+            }
+          },
+          "reference_videos": {
+            "maxItems": 3,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 1024,
+              "format": "uri"
+            }
+          },
+          "reference_audios": {
+            "maxItems": 3,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 1024,
+              "format": "uri"
+            }
+          },
+          "duration": {
+            "default": 5,
+            "type": "number",
+            "minimum": 4,
+            "maximum": 15
+          },
+          "resolution": {
+            "default": "720p",
+            "type": "string",
+            "enum": [
+              "480p",
+              "720p",
+              "1080p",
+              "4k"
+            ]
+          },
+          "seed": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "generate_audio": {
+            "deprecated": true,
+            "type": "boolean"
+          },
+          "effects": {
+            "maxItems": 12,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                },
+                "name": {
+                  "type": "string",
+                  "maxLength": 100
+                },
+                "asset_url": {
+                  "type": "string",
+                  "maxLength": 1024,
+                  "format": "uri"
+                },
+                "asset_type": {
+                  "type": "string",
+                  "enum": [
+                    "image",
+                    "video"
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "name",
+                "asset_url",
+                "asset_type"
+              ]
+            }
+          },
+          "upscale": {
+            "default": false,
+            "type": "boolean"
+          },
+          "enhance_prompt": {
+            "default": false,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "additionalProperties": false
+      },
+      "mediaType": "Video",
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": false
+        },
+        {
+          "id": "start_image",
+          "label": "Start image",
+          "dataType": "Image",
+          "required": false
+        },
+        {
+          "id": "end_image",
+          "label": "End image",
+          "dataType": "Image",
+          "required": false
+        },
+        {
+          "id": "reference_images",
+          "label": "Reference images",
+          "dataType": "Image",
+          "required": false,
+          "multiple": true,
+          "maxConnections": 9
+        },
+        {
+          "id": "reference_videos",
+          "label": "Reference videos",
+          "dataType": "Video",
+          "required": false,
+          "multiple": true,
+          "maxConnections": 3
+        },
+        {
+          "id": "reference_audios",
+          "label": "Reference audios",
+          "dataType": "Audio",
+          "required": false,
+          "multiple": true,
+          "maxConnections": 3
+        },
+        {
+          "id": "effects",
+          "label": "Effects",
+          "dataType": "Any",
+          "required": false,
+          "multiple": true,
+          "maxConnections": 12
+        }
+      ],
+      "jsonParams": [
+        "reference_images",
+        "reference_videos",
+        "reference_audios",
+        "effects"
+      ]
+    },
+    "krea-video-bytedance-seedance-2-fast": {
+      "endpoint": "/generate/video/bytedance/seedance-2-fast",
+      "displayName": "Seedance 2.0 Fast*",
+      "requestSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string"
+          },
+          "start_image": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "aspect_ratio": {
+            "default": "16:9",
+            "type": "string",
+            "enum": [
+              "16:9",
+              "4:3",
+              "1:1",
+              "3:4",
+              "9:16",
+              "21:9"
+            ]
+          },
+          "end_image": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reference_images": {
+            "maxItems": 9,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 1024,
+              "format": "uri"
+            }
+          },
+          "reference_videos": {
+            "maxItems": 3,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 1024,
+              "format": "uri"
+            }
+          },
+          "reference_audios": {
+            "maxItems": 3,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 1024,
+              "format": "uri"
+            }
+          },
+          "duration": {
+            "default": 5,
+            "type": "number",
+            "minimum": 4,
+            "maximum": 15
+          },
+          "resolution": {
+            "default": "720p",
+            "type": "string",
+            "enum": [
+              "480p",
+              "720p"
+            ]
+          },
+          "seed": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "generate_audio": {
+            "deprecated": true,
+            "type": "boolean"
+          },
+          "effects": {
+            "maxItems": 12,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                },
+                "name": {
+                  "type": "string",
+                  "maxLength": 100
+                },
+                "asset_url": {
+                  "type": "string",
+                  "maxLength": 1024,
+                  "format": "uri"
+                },
+                "asset_type": {
+                  "type": "string",
+                  "enum": [
+                    "image",
+                    "video"
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "name",
+                "asset_url",
+                "asset_type"
+              ]
+            }
+          },
+          "upscale": {
+            "default": false,
+            "type": "boolean"
+          },
+          "enhance_prompt": {
+            "default": false,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "additionalProperties": false
+      },
+      "mediaType": "Video",
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": false
+        },
+        {
+          "id": "start_image",
+          "label": "Start image",
+          "dataType": "Image",
+          "required": false
+        },
+        {
+          "id": "end_image",
+          "label": "End image",
+          "dataType": "Image",
+          "required": false
+        },
+        {
+          "id": "reference_images",
+          "label": "Reference images",
+          "dataType": "Image",
+          "required": false,
+          "multiple": true,
+          "maxConnections": 9
+        },
+        {
+          "id": "reference_videos",
+          "label": "Reference videos",
+          "dataType": "Video",
+          "required": false,
+          "multiple": true,
+          "maxConnections": 3
+        },
+        {
+          "id": "reference_audios",
+          "label": "Reference audios",
+          "dataType": "Audio",
+          "required": false,
+          "multiple": true,
+          "maxConnections": 3
+        },
+        {
+          "id": "effects",
+          "label": "Effects",
+          "dataType": "Any",
+          "required": false,
+          "multiple": true,
+          "maxConnections": 12
+        }
+      ],
+      "jsonParams": [
+        "reference_images",
+        "reference_videos",
+        "reference_audios",
+        "effects"
+      ]
+    },
+    "krea-video-bytedance-seedance-2-mini": {
+      "endpoint": "/generate/video/bytedance/seedance-2-mini",
+      "displayName": "Seedance 2.0 Mini",
+      "requestSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string"
+          },
+          "start_image": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "aspect_ratio": {
+            "default": "16:9",
+            "type": "string",
+            "enum": [
+              "16:9",
+              "4:3",
+              "1:1",
+              "3:4",
+              "9:16",
+              "21:9"
+            ]
+          },
+          "end_image": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reference_images": {
+            "maxItems": 9,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 1024,
+              "format": "uri"
+            }
+          },
+          "reference_videos": {
+            "maxItems": 3,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 1024,
+              "format": "uri"
+            }
+          },
+          "reference_audios": {
+            "maxItems": 3,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 1024,
+              "format": "uri"
+            }
+          },
+          "duration": {
+            "default": 5,
+            "type": "number",
+            "minimum": 4,
+            "maximum": 15
+          },
+          "resolution": {
+            "default": "720p",
+            "type": "string",
+            "enum": [
+              "480p",
+              "720p"
+            ]
+          },
+          "seed": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "generate_audio": {
+            "deprecated": true,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "additionalProperties": false
+      },
+      "mediaType": "Video",
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": false
+        },
+        {
+          "id": "start_image",
+          "label": "Start image",
+          "dataType": "Image",
+          "required": false
+        },
+        {
+          "id": "end_image",
+          "label": "End image",
+          "dataType": "Image",
+          "required": false
+        },
+        {
+          "id": "reference_images",
+          "label": "Reference images",
+          "dataType": "Image",
+          "required": false,
+          "multiple": true,
+          "maxConnections": 9
+        },
+        {
+          "id": "reference_videos",
+          "label": "Reference videos",
+          "dataType": "Video",
+          "required": false,
+          "multiple": true,
+          "maxConnections": 3
+        },
+        {
+          "id": "reference_audios",
+          "label": "Reference audios",
+          "dataType": "Audio",
+          "required": false,
+          "multiple": true,
+          "maxConnections": 3
+        }
+      ],
+      "jsonParams": [
+        "reference_images",
+        "reference_videos",
+        "reference_audios"
+      ]
+    },
+    "krea-video-bytedance-seedance-2-5": {
+      "endpoint": "/generate/video/bytedance/seedance-2-5",
+      "displayName": "Seedance 2.5*",
+      "requestSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string"
+          },
+          "start_image": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "aspect_ratio": {
+            "default": "16:9",
+            "type": "string",
+            "enum": [
+              "16:9",
+              "4:3",
+              "1:1",
+              "3:4",
+              "9:16",
+              "21:9"
+            ]
+          },
+          "end_image": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reference_images": {
+            "maxItems": 30,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 1024,
+              "format": "uri"
+            }
+          },
+          "reference_videos": {
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 1024,
+              "format": "uri"
+            }
+          },
+          "reference_audios": {
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 1024,
+              "format": "uri"
+            }
+          },
+          "duration": {
+            "default": 5,
+            "type": "number",
+            "minimum": 4,
+            "maximum": 30
+          },
+          "resolution": {
+            "default": "720p",
+            "type": "string",
+            "enum": [
+              "480p",
+              "720p",
+              "1080p"
+            ]
+          },
+          "seed": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "generate_audio": {
+            "deprecated": true,
+            "type": "boolean"
+          },
+          "effects": {
+            "maxItems": 12,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                },
+                "name": {
+                  "type": "string",
+                  "maxLength": 100
+                },
+                "asset_url": {
+                  "type": "string",
+                  "maxLength": 1024,
+                  "format": "uri"
+                },
+                "asset_type": {
+                  "type": "string",
+                  "enum": [
+                    "image",
+                    "video"
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "name",
+                "asset_url",
+                "asset_type"
+              ]
+            }
+          },
+          "enhance_prompt": {
+            "default": false,
+            "type": "boolean"
+          },
+          "draft": {
+            "default": false,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "additionalProperties": false
+      },
+      "mediaType": "Video",
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": false
+        },
+        {
+          "id": "start_image",
+          "label": "Start image",
+          "dataType": "Image",
+          "required": false
+        },
+        {
+          "id": "end_image",
+          "label": "End image",
+          "dataType": "Image",
+          "required": false
+        },
+        {
+          "id": "reference_images",
+          "label": "Reference images",
+          "dataType": "Image",
+          "required": false,
+          "multiple": true,
+          "maxConnections": 30
+        },
+        {
+          "id": "reference_videos",
+          "label": "Reference videos",
+          "dataType": "Video",
+          "required": false,
+          "multiple": true,
+          "maxConnections": 10
+        },
+        {
+          "id": "reference_audios",
+          "label": "Reference audios",
+          "dataType": "Audio",
+          "required": false,
+          "multiple": true,
+          "maxConnections": 10
+        },
+        {
+          "id": "effects",
+          "label": "Effects",
+          "dataType": "Any",
+          "required": false,
+          "multiple": true,
+          "maxConnections": 12
+        }
+      ],
+      "jsonParams": [
+        "reference_images",
+        "reference_videos",
+        "reference_audios",
+        "effects"
+      ]
+    },
+    "krea-video-lightricks-ltx-video-2-3-22b": {
+      "endpoint": "/generate/video/lightricks/ltx-video-2.3-22b",
+      "displayName": "LTX-2.3 22B",
+      "requestSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "minLength": 1
+          },
+          "start_image": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "aspect_ratio": {
+            "default": "16:9",
+            "type": "string",
+            "enum": [
+              "16:9",
+              "9:16"
+            ]
+          },
+          "duration": {
+            "default": 5,
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "anyOf": [
+                      {
+                        "type": "number",
+                        "const": 5
+                      },
+                      {
+                        "type": "number",
+                        "const": 10
+                      }
+                    ]
+                  },
+                  {
+                    "type": "number",
+                    "const": 15
+                  }
+                ]
+              },
+              {
+                "type": "number",
+                "const": 20
+              }
+            ]
+          },
+          "num_frames": {
+            "type": "integer",
+            "minimum": 9,
+            "maximum": 481
+          },
+          "seed": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2147483647
+          },
+          "generate_audio": {
+            "default": true,
+            "type": "boolean"
+          },
+          "end_image": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "styles": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "strength": {
+                  "type": "number",
+                  "minimum": -2,
+                  "maximum": 2
+                }
+              },
+              "required": [
+                "id",
+                "strength"
+              ]
+            }
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "additionalProperties": false
+      },
+      "mediaType": "Video",
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": false
+        },
+        {
+          "id": "start_image",
+          "label": "Start image",
+          "dataType": "Image",
+          "required": false
+        },
+        {
+          "id": "end_image",
+          "label": "End image",
+          "dataType": "Image",
+          "required": false
+        },
+        {
+          "id": "styles",
+          "label": "Styles",
+          "dataType": "Any",
+          "required": false,
+          "multiple": true
+        }
+      ],
+      "jsonParams": [
+        "styles"
+      ]
+    },
+    "krea-video-lightricks-ltx-video-2-5-pro": {
+      "endpoint": "/generate/video/lightricks/ltx-video-2.5-pro",
+      "displayName": "LTX-2.5 Pro",
+      "requestSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "minLength": 1
+          },
+          "start_image": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "aspect_ratio": {
+            "default": "16:9",
+            "type": "string",
+            "enum": [
+              "16:9",
+              "9:16"
+            ]
+          },
+          "duration": {
+            "default": 6,
+            "anyOf": [
+              {
+                "type": "number",
+                "const": 6
+              },
+              {
+                "type": "number",
+                "const": 8
+              },
+              {
+                "type": "number",
+                "const": 10
+              }
+            ]
+          },
+          "resolution": {
+            "default": "1080p",
+            "type": "string",
+            "enum": [
+              "720p",
+              "1080p"
+            ]
+          },
+          "generate_audio": {
+            "default": true,
+            "type": "boolean"
+          },
+          "camera_motion": {
+            "type": "string",
+            "enum": [
+              "dolly_in",
+              "dolly_out",
+              "dolly_left",
+              "dolly_right",
+              "jib_up",
+              "jib_down",
+              "static",
+              "focus_shift"
+            ]
+          },
+          "end_image": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "additionalProperties": false
+      },
+      "mediaType": "Video",
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": false
+        },
+        {
+          "id": "start_image",
+          "label": "Start image",
+          "dataType": "Image",
+          "required": false
+        },
+        {
+          "id": "end_image",
+          "label": "End image",
+          "dataType": "Image",
+          "required": false
+        }
+      ],
+      "jsonParams": []
+    },
+    "krea-video-lightricks-ltx-video-2-5-fast": {
+      "endpoint": "/generate/video/lightricks/ltx-video-2.5-fast",
+      "displayName": "LTX-2.5 Fast",
+      "requestSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "minLength": 1
+          },
+          "start_image": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "aspect_ratio": {
+            "default": "16:9",
+            "type": "string",
+            "enum": [
+              "16:9",
+              "9:16"
+            ]
+          },
+          "duration": {
+            "default": 6,
+            "anyOf": [
+              {
+                "type": "number",
+                "const": 6
+              },
+              {
+                "type": "number",
+                "const": 8
+              },
+              {
+                "type": "number",
+                "const": 10
+              },
+              {
+                "type": "number",
+                "const": 12
+              },
+              {
+                "type": "number",
+                "const": 14
+              },
+              {
+                "type": "number",
+                "const": 16
+              },
+              {
+                "type": "number",
+                "const": 18
+              },
+              {
+                "type": "number",
+                "const": 20
+              }
+            ]
+          },
+          "resolution": {
+            "default": "720p",
+            "type": "string",
+            "enum": [
+              "720p",
+              "1080p",
+              "1440p",
+              "4k"
+            ]
+          },
+          "generate_audio": {
+            "default": true,
+            "type": "boolean"
+          },
+          "camera_motion": {
+            "type": "string",
+            "enum": [
+              "dolly_in",
+              "dolly_out",
+              "dolly_left",
+              "dolly_right",
+              "jib_up",
+              "jib_down",
+              "static",
+              "focus_shift"
+            ]
+          },
+          "end_image": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "additionalProperties": false
+      },
+      "mediaType": "Video",
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": false
+        },
+        {
+          "id": "start_image",
+          "label": "Start image",
+          "dataType": "Image",
+          "required": false
+        },
+        {
+          "id": "end_image",
+          "label": "End image",
+          "dataType": "Image",
+          "required": false
+        }
+      ],
+      "jsonParams": []
+    },
+    "krea-video-vidu-q3": {
+      "endpoint": "/generate/video/vidu/q3",
+      "displayName": "Vidu Q3",
+      "requestSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "start_image": {
+            "type": "string",
+            "maxLength": 1024,
+            "format": "uri"
+          },
+          "aspect_ratio": {
+            "default": "16:9",
+            "type": "string",
+            "enum": [
+              "16:9",
+              "9:16"
+            ]
+          },
+          "duration": {
+            "default": 5,
+            "type": "number",
+            "minimum": 1,
+            "maximum": 16
+          },
+          "resolution": {
+            "default": "720p",
+            "type": "string",
+            "enum": [
+              "540p",
+              "720p",
+              "1080p"
+            ]
+          },
+          "generate_audio": {
+            "default": true,
+            "type": "boolean"
+          },
+          "seed": {
+            "type": "number"
+          },
+          "movement_amplitude": {
+            "default": "auto",
+            "type": "string",
+            "enum": [
+              "auto",
+              "small",
+              "medium",
+              "large"
+            ]
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "additionalProperties": false
+      },
+      "mediaType": "Video",
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": false
+        },
+        {
+          "id": "start_image",
+          "label": "Start image",
+          "dataType": "Image",
+          "required": false
+        }
+      ],
+      "jsonParams": []
+    },
+    "krea-video-luma-ray-2": {
+      "endpoint": "/generate/video/luma/ray-2",
+      "displayName": "Ray 2",
+      "requestSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string"
+          },
+          "start_image": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "aspect_ratio": {
+            "default": "16:9",
+            "type": "string",
+            "enum": [
+              "1:1",
+              "16:9",
+              "9:16",
+              "4:3",
+              "3:4",
+              "21:9",
+              "9:21"
+            ]
+          },
+          "loop": {
+            "default": false,
+            "type": "boolean"
+          },
+          "width": {
+            "default": 960,
+            "type": "integer",
+            "minimum": 540,
+            "maximum": 2520
+          },
+          "height": {
+            "default": 540,
+            "type": "integer",
+            "minimum": 540,
+            "maximum": 2520
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "additionalProperties": false
+      },
+      "mediaType": "Video",
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": false
+        },
+        {
+          "id": "start_image",
+          "label": "Start image",
+          "dataType": "Image",
+          "required": false
+        }
+      ],
+      "jsonParams": []
+    },
+    "krea-video-runway-gen-4-video": {
+      "endpoint": "/generate/video/runway/gen-4-video",
+      "displayName": "Runway Gen-4 Video",
+      "requestSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string"
+          },
+          "start_image": {
+            "type": "string",
+            "maxLength": 1024,
+            "format": "uri"
+          },
+          "aspect_ratio": {
+            "default": "1280:720",
+            "type": "string",
+            "enum": [
+              "1280:720",
+              "720:1280"
+            ]
+          },
+          "duration": {
+            "default": 5,
+            "anyOf": [
+              {
+                "type": "number",
+                "const": 5
+              },
+              {
+                "type": "number",
+                "const": 10
+              }
+            ]
+          },
+          "seed": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "additionalProperties": false
+      },
+      "mediaType": "Video",
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": false
+        },
+        {
+          "id": "start_image",
+          "label": "Start image",
+          "dataType": "Image",
+          "required": false
+        }
+      ],
+      "jsonParams": []
+    },
+    "krea-video-runway-gen-4-5": {
+      "endpoint": "/generate/video/runway/gen-4.5",
+      "displayName": "Runway Gen-4.5",
+      "requestSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string"
+          },
+          "start_image": {
+            "type": "string",
+            "maxLength": 1024,
+            "format": "uri"
+          },
+          "aspect_ratio": {
+            "default": "1280:720",
+            "type": "string",
+            "enum": [
+              "1280:720",
+              "720:1280",
+              "1104:832",
+              "832:1104",
+              "960:960",
+              "1584:672",
+              "672:1584"
+            ]
+          },
+          "duration": {
+            "default": 5,
+            "type": "number",
+            "minimum": 2,
+            "maximum": 10
+          },
+          "seed": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "additionalProperties": false
+      },
+      "mediaType": "Video",
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": false
+        },
+        {
+          "id": "start_image",
+          "label": "Start image",
+          "dataType": "Image",
+          "required": false
+        }
+      ],
+      "jsonParams": []
+    },
+    "krea-video-xai-grok-video": {
+      "endpoint": "/generate/video/xai/grok-video",
+      "displayName": "Grok Imagine",
+      "requestSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "maxLength": 4096
+          },
+          "start_image": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "start_video": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "duration": {
+            "default": 6,
+            "type": "number",
+            "minimum": 1,
+            "maximum": 15
+          },
+          "resolution": {
+            "default": "720p",
+            "type": "string",
+            "enum": [
+              "480p",
+              "720p"
+            ]
+          },
+          "aspect_ratio": {
+            "type": "string",
+            "enum": [
+              "16:9",
+              "9:16",
+              "1:1",
+              "4:3",
+              "3:4",
+              "3:2",
+              "2:3"
+            ]
+          },
+          "reference_images": {
+            "maxItems": 7,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 1024,
+              "format": "uri"
+            }
+          },
+          "edit_video": {
+            "type": "string",
+            "maxLength": 1024,
+            "format": "uri"
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "additionalProperties": false
+      },
+      "mediaType": "Video",
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": false
+        },
+        {
+          "id": "start_image",
+          "label": "Start image",
+          "dataType": "Image",
+          "required": false
+        },
+        {
+          "id": "start_video",
+          "label": "Start video",
+          "dataType": "Video",
+          "required": false
+        },
+        {
+          "id": "reference_images",
+          "label": "Reference images",
+          "dataType": "Image",
+          "required": false,
+          "multiple": true,
+          "maxConnections": 7
+        },
+        {
+          "id": "edit_video",
+          "label": "Edit video",
+          "dataType": "Video",
+          "required": false
+        }
+      ],
+      "jsonParams": [
+        "reference_images"
+      ]
+    },
+    "krea-video-xai-grok-video-1-5": {
+      "endpoint": "/generate/video/xai/grok-video-1.5",
+      "displayName": "Grok Imagine 1.5",
+      "requestSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "maxLength": 4096
+          },
+          "start_image": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "start_video": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "duration": {
+            "default": 6,
+            "type": "number",
+            "minimum": 1,
+            "maximum": 15
+          },
+          "resolution": {
+            "default": "720p",
+            "type": "string",
+            "enum": [
+              "480p",
+              "720p",
+              "1080p"
+            ]
+          },
+          "aspect_ratio": {
+            "default": "16:9",
+            "type": "string",
+            "enum": [
+              "16:9",
+              "9:16",
+              "1:1"
+            ]
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "additionalProperties": false
+      },
+      "mediaType": "Video",
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": false
+        },
+        {
+          "id": "start_image",
+          "label": "Start image",
+          "dataType": "Image",
+          "required": false
+        },
+        {
+          "id": "start_video",
+          "label": "Start video",
+          "dataType": "Video",
+          "required": false
+        }
+      ],
+      "jsonParams": []
+    },
+    "krea-video-black-forest-labs-flux-3-video": {
+      "endpoint": "/generate/video/black-forest-labs/flux-3-video",
+      "displayName": "Flux 3 Video",
+      "requestSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "maxLength": 5000
+          },
+          "start_image": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "start_video": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "end_image": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "duration": {
+            "default": 5,
+            "type": "integer",
+            "minimum": 5,
+            "maximum": 20
+          },
+          "resolution": {
+            "default": "720p",
+            "type": "string",
+            "enum": [
+              "720p",
+              "1080p"
+            ]
+          },
+          "aspect_ratio": {
+            "default": "16:9",
+            "type": "string",
+            "enum": [
+              "21:9",
+              "2:1",
+              "16:9",
+              "4:3",
+              "1:1",
+              "3:4",
+              "9:16"
+            ]
+          },
+          "generate_audio": {
+            "default": true,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "additionalProperties": false
+      },
+      "mediaType": "Video",
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": false
+        },
+        {
+          "id": "start_image",
+          "label": "Start image",
+          "dataType": "Image",
+          "required": false
+        },
+        {
+          "id": "start_video",
+          "label": "Start video",
+          "dataType": "Video",
+          "required": false
+        },
+        {
+          "id": "end_image",
+          "label": "End image",
+          "dataType": "Image",
+          "required": false
+        }
+      ],
+      "jsonParams": []
+    },
+    "krea-video-black-forest-labs-flux-video-edit": {
+      "endpoint": "/generate/video/black-forest-labs/flux-video-edit",
+      "displayName": "Flux Video Edit",
+      "requestSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          },
+          "start_video": {
+            "type": "string",
+            "maxLength": 1024,
+            "format": "uri"
+          }
+        },
+        "required": [
+          "prompt",
+          "start_video"
+        ],
+        "additionalProperties": false
+      },
+      "mediaType": "Video",
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": false
+        },
+        {
+          "id": "start_video",
+          "label": "Start video",
+          "dataType": "Video",
+          "required": false
+        }
+      ],
+      "jsonParams": []
+    },
+    "krea-image-ideogram-ideogram-4-5-precise": {
+      "endpoint": "/generate/image/ideogram/ideogram-4.5-precise",
+      "displayName": "Ideogram 4.5 Precise",
+      "requestSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 10000
+          },
+          "seed": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2147483647
+          },
+          "quality": {
+            "default": "high",
+            "type": "string",
+            "enum": [
+              "low",
+              "medium",
+              "high",
+              "very_high"
+            ]
+          },
+          "image_url": {
+            "type": "string",
+            "maxLength": 1024,
+            "format": "uri"
+          },
+          "mask_url": {
+            "type": "string",
+            "maxLength": 1024,
+            "format": "uri"
+          },
+          "reference_images": {
+            "default": [],
+            "maxItems": 4,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 1024,
+              "format": "uri"
+            }
+          }
+        },
+        "required": [
+          "prompt",
+          "image_url"
+        ],
+        "additionalProperties": false
+      },
+      "mediaType": "Image",
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": false
+        },
+        {
+          "id": "image_url",
+          "label": "Image URL",
+          "dataType": "Image",
+          "required": false
+        },
+        {
+          "id": "mask_url",
+          "label": "Mask URL",
+          "dataType": "Mask",
+          "required": false
+        },
+        {
+          "id": "reference_images",
+          "label": "Reference images",
+          "dataType": "Image",
+          "required": false,
+          "multiple": true,
+          "maxConnections": 4
+        }
+      ],
+      "jsonParams": [
+        "reference_images"
+      ]
+    },
+    "krea-image-bytedance-seededit": {
+      "endpoint": "/generate/image/bytedance/seededit",
+      "displayName": "SeedEdit",
+      "requestSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "minLength": 1
+          },
+          "seed": {
+            "default": 1337,
+            "type": "number"
+          },
+          "image_url": {
+            "type": "string",
+            "maxLength": 1024,
+            "format": "uri"
+          }
+        },
+        "required": [
+          "prompt",
+          "image_url"
+        ],
+        "additionalProperties": false
+      },
+      "mediaType": "Image",
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": false
+        },
+        {
+          "id": "image_url",
+          "label": "Image URL",
+          "dataType": "Image",
+          "required": false
+        }
+      ],
+      "jsonParams": []
+    }
+  }
+}

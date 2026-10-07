@@ -1,6 +1,7 @@
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 import { buildDefaultParamsForUi } from './createParams';
 import type { Preset } from './createPresets';
+import { isKreaGateway, kreaModeForParams, type KreaConnectionMode } from './kreaConnection';
 
 export interface ComposerState {
   modelId: string | null;
@@ -13,6 +14,7 @@ export function applyPresetToComposer(
   preset: Preset,
   current: ComposerState,
   apiKeys: Record<string, string> = {},
+  kreaConnectionMode: KreaConnectionMode = 'api-token',
 ): ComposerState {
   // Prompt: append the fragment to whatever the user already typed.
   const fragment = preset.prompt.trim();
@@ -25,7 +27,11 @@ export function applyPresetToComposer(
   let baseParams = current.params;
   if (preset.modelId && NODE_DEFINITIONS[preset.modelId]) {
     modelId = preset.modelId;
-    baseParams = buildDefaultParamsForUi(NODE_DEFINITIONS[preset.modelId], apiKeys);
+    baseParams = buildDefaultParamsForUi(NODE_DEFINITIONS[preset.modelId], apiKeys, kreaConnectionMode);
+    // A saved Krea preset is an existing recipe. Missing old modes retain API billing.
+    if (isKreaGateway(NODE_DEFINITIONS[preset.modelId])) {
+      baseParams._kreaAuth = kreaModeForParams(preset.params);
+    }
   }
 
   return { modelId, prompt, params: { ...baseParams, ...preset.params } };

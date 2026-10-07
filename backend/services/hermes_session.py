@@ -30,6 +30,7 @@ from services.chat_actions import (
     seconds_since_activity,
 )
 from services.hermes_verbose_parser import HermesVerboseParser
+from services.krea_agent_mcp import KREA_MCP_PRIMER, agent_child_env, prepare_hermes_mcp
 from services.narrator import narrate_actions
 
 # Fire a heartbeat only when nothing user-visible has happened for this long.
@@ -216,6 +217,7 @@ async def run_hermes(
         if selection_context
         else message
     )
+    turn_message = f"{KREA_MCP_PRIMER}\n\n{turn_message}"
     args = [
         HERMES_BIN, "chat", "-q", turn_message,
         "--provider", effective_provider,
@@ -226,7 +228,7 @@ async def run_hermes(
         args.extend(["--resume", session_id])
 
     env = {
-        **os.environ,
+        **agent_child_env(),
         "NEBULA_DISABLE_QUICK": "1",
         "DAEDALUS_APPROVAL": autonomy,
         # Force Python-CLI Hermes to flush stdout after every print so the
@@ -236,6 +238,9 @@ async def run_hermes(
         # the streaming reader.
         "PYTHONUNBUFFERED": "1",
     }
+    mcp_overlay = prepare_hermes_mcp(env)
+    if mcp_overlay.limitation:
+        yield {"type": "thinking", "text": mcp_overlay.limitation}
 
     # Capture the log's current size BEFORE spawn so the tailer only surfaces
     # lines from *this* turn, not stale entries from previous runs.
@@ -257,6 +262,7 @@ async def run_hermes(
             **agent_process_group_options(),
         )
     except FileNotFoundError:
+        mcp_overlay.cleanup()
         yield {
             "type": "error",
             "message": (
@@ -267,6 +273,9 @@ async def run_hermes(
         }
         yield {"type": "done"}
         return
+    except BaseException:
+        mcp_overlay.cleanup()
+        raise
 
     # Start the log-tailer task in parallel with the subprocess so we can emit
     # `thinking` events while stdout is still buffering.
@@ -414,8 +423,11 @@ async def run_hermes(
             pass
         # If the task was cancelled mid-read, the subprocess is still alive.
         # Kill it to prevent orphaned hermes processes.
-        if proc.returncode is None:
-            await terminate_agent_process_tree(proc)
+        try:
+            if proc.returncode is None:
+                await terminate_agent_process_tree(proc)
+        finally:
+            mcp_overlay.cleanup()
 
     # Event accumulators.
     # Session ID in verbose mode comes from the footer's `Session: <id>` line,

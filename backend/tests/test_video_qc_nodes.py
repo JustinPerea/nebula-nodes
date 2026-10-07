@@ -216,7 +216,7 @@ def test_definitions_and_frontend_mirror_match_contract() -> None:
     repo = Path(__file__).resolve().parents[2]
     definitions = json.loads((repo / "backend/data/node_definitions.json").read_text())
     # The local Paper source extends the prior 179-node catalog.
-    assert len(definitions) == 180
+    assert len(definitions) == 254
     frontend = (repo / "frontend/src/constants/nodeDefinitions.ts").read_text()
     for definition_id in QC_IDS:
         definition = definitions[definition_id]

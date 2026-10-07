@@ -338,6 +338,9 @@ def get_handler_registry(
     ],
 ]:
     registry = dict(SYNC_HANDLERS)
+    from handlers.krea_gateway import catalog_models, handle_krea_gateway
+    for definition_id in catalog_models():
+        registry[definition_id] = partial(handle_krea_gateway, emit=emit)
 
     if emit is not None:
         from handlers.runway import handle_runway_video

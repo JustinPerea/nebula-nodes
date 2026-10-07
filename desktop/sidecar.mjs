@@ -411,7 +411,7 @@ async function spawnAndAwaitHealth(opts) {
 
   const child = spawnFn(argv[0], argv.slice(1), {
     cwd,
-    env,
+    env: { ...env, NEBULA_URL: `http://127.0.0.1:${port}` },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
 

@@ -89,12 +89,16 @@ export interface NebulaDesktopBridge {
   readonly shell: string;
   readonly apiBaseUrl: string;
   readonly wsBaseUrl: string;
+  /** Per-sidecar request nonce for the packaged renderer's connector API. */
+  readonly connectorSession?: string;
   /** Frozen credential namespace — set / has / clear (NO get). */
   readonly credentials: Readonly<CredentialBridge>;
   /** Frozen migration namespace — status / retry. */
   readonly migration: Readonly<MigrationBridge>;
   /** Frozen canonical Paper artwork-link namespace. Optional for older desktop shells. */
   readonly paperLinks?: Readonly<PaperLinkBridge>;
+  /** Open Krea's verified OAuth consent URL in the external browser. */
+  readonly kreaLinks?: Readonly<PaperLinkBridge>;
   /**
    * Provider names with plaintext API keys detected in App Support
    * settings.json on launch. Empty when all keys are securely stored

@@ -9,6 +9,7 @@ import { findStructuredRepresentation } from '../../lib/representationViewerRegi
 import { getReferenceRole } from '../../lib/referenceRoles';
 import { CATEGORY_COLORS } from '../../constants/ports';
 import { useUIStore } from '../../store/uiStore';
+import { isKreaGateway, kreaModeForParams } from '../../lib/kreaConnection';
 import { useGraphStore } from '../../store/graphStore';
 import { useSlavaNodeEntranceClass } from '../../hooks/useSlavaNodeEntrance';
 import { MeshPreview } from './MeshPreview';
@@ -292,7 +293,8 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
       <div className="model-node__header">
         <span className="model-node__category-dot" style={{ backgroundColor: categoryColor }} />
         <span className="model-node__label">{nodeData.label}</span>
-        {nodeData.keyStatus === 'missing' && <span className="model-node__badge model-node__badge--warning" title="API Key Missing">&#x26A0;</span>}
+        {nodeData.keyStatus === 'missing' && <span className="model-node__badge model-node__badge--warning"
+          title={isKreaGateway(definition) && kreaModeForParams(nodeData.params) === 'mcp' ? 'Krea sign-in required' : 'API Key Missing'}>&#x26A0;</span>}
         <span
           className="model-node__id-chip nodrag"
           title="Drag into the chat panel to reference this node"

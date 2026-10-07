@@ -34,6 +34,10 @@ Drop nodes, connect their inputs and outputs, and run a creative pipeline using 
 
 ## Recently added
 
+### Krea image and video models
+
+Connect your Krea account in Settings or use a Krea API token for **33 image and 41 video models**, including GPT Image 2, Nano Banana, Veo, Kling, and Seedance. Choose **Krea** in Create's provider filter or search the node library. Saved recipes keep their account/API-token choice. [Connect Krea with MCP](docs/KREA-MCP.md) · [Model workflows](docs/api-guides/krea.md).
+
 ### Paper Source
 
 Link an editable logo or asset from **[Paper](https://paper.design)** to a canvas node and use its exported artwork downstream. **Open in Paper** takes you back to the original; edit it, return to Nebula, and **Refresh source** to capture the new artwork.

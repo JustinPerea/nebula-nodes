@@ -39,6 +39,22 @@ function makeEdge(source: string, target: string): Edge {
 }
 
 describe('composerStateFromSelection', () => {
+  it('keeps a saved Krea billing choice while removing generation runtime fields', () => {
+    const saved = makeNode('krea', 'krea-image-openai-gpt-image-2', true,
+      { _kreaAuth: 'mcp', _variant: 'old-run', prompt: 'logo' });
+    expect(composerStateFromSelection([saved], []).prefill?.params).toEqual({
+      _kreaAuth: 'mcp', prompt: 'logo',
+    });
+  });
+
+  it('materializes API billing for an older saved Krea node with no auth field', () => {
+    const saved = makeNode('krea', 'krea-video-kling-kling-3-0', true, { duration: 5 });
+    expect(composerStateFromSelection([saved], []).prefill?.params).toEqual({
+      duration: 5, _kreaAuth: 'api-token',
+    });
+    expect(saved.data.params).toEqual({ duration: 5 });
+  });
+
   it('returns empty selectedIds and null prefill when nothing is selected', () => {
     const node = makeNode('n1', 'nano-banana', false);
     const result = composerStateFromSelection([node], []);

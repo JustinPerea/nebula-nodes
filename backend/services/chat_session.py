@@ -18,6 +18,7 @@ from services.agent_process import (
     agent_process_group_options,
     terminate_agent_process_tree,
 )
+from services.krea_agent_mcp import KREA_MCP_PRIMER, agent_child_env, claude_mcp_args
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -164,7 +165,7 @@ NEBULA_SYSTEM_PRIMER = (
     "work around it by misusing the multi-image endpoint. Only use "
     "`meshy-multi-image-to-3d` when the user actually provides multiple "
     "reference views of the same subject."
-)
+) + "\n\n" + KREA_MCP_PRIMER
 
 
 async def claude_login_status() -> dict[str, Any]:
@@ -178,6 +179,7 @@ async def claude_login_status() -> dict[str, Any]:
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             cwd=str(PROJECT_ROOT),
+            env=agent_child_env(),
         )
     except FileNotFoundError:
         return {
@@ -258,8 +260,11 @@ async def run_claude(
         system_prompt = f"{system_prompt}\n\n{selection_context}"
     args = ["claude", "-p", "--dangerously-skip-permissions",
             "--output-format", "stream-json", "--verbose",
-            "--model", model,
-            "--append-system-prompt", system_prompt]
+            "--model", model]
+    # --mcp-config is variadic; a following option prevents it consuming the
+    # positional user message as a second configuration string.
+    args.extend(claude_mcp_args())
+    args.extend(["--append-system-prompt", system_prompt])
     if session_id:
         args.extend(["--resume", session_id])
     args.append(message)
@@ -267,7 +272,7 @@ async def run_claude(
     # Hard-gate `nebula quick` for any subprocess spawned from this chat — the
     # CLI checks this env var and refuses to run. Prevents Claude from silently
     # using quick mode, which bypasses the canvas sync.
-    env = {**os.environ, "NEBULA_DISABLE_QUICK": "1"}
+    env = {**agent_child_env(), "NEBULA_DISABLE_QUICK": "1"}
 
     try:
         # Default asyncio StreamReader limit is 64KB. Claude Code's stream-json

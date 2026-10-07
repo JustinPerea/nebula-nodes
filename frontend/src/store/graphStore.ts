@@ -66,6 +66,7 @@ import {
 import { wsClient, type ExecutionEvent } from '../lib/wsClient';
 import { notifyJobComplete } from '../lib/jobNotifications';
 import { useUIStore } from './uiStore';
+import { isKreaGateway, normalizeKreaMode, nodeKeyStatus, withNewKreaMode } from '../lib/kreaConnection';
 import { clipSpeed, type EditClip } from '../lib/editor/virtualPlayback';
 import type { KeyframeData, VideoGraphManifest, TrackItem } from '../types/video';
 import { createEmptyManifest, DEFAULT_FPS } from '../types/video';
@@ -1511,14 +1512,7 @@ async function reconcilePendingNodeCreation(
 
   const { settingsCache } = useUIStore.getState();
   const definition = NODE_DEFINITIONS[matchedNode.data.definitionId];
-  const keyNames = definition?.envKeyName
-    ? (Array.isArray(definition.envKeyName) ? definition.envKeyName : [definition.envKeyName])
-    : [];
-  const keyStatus = settingsCache.loaded
-    && keyNames.length > 0
-    && !keyNames.some((key) => Boolean(settingsCache.apiKeys[key]))
-    ? 'missing' as const
-    : undefined;
+  const keyStatus = nodeKeyStatus(definition, matchedNode.data.params, settingsCache);
   const reconciledNode: Node<NodeData> = {
     ...matchedNode,
     position: {
@@ -1605,17 +1599,12 @@ wsClient.subscribe((event) => {
     // Compute keyStatus for a node given its definition. Used for both new and
     // existing cli nodes so the "missing API key" badge shows up consistently.
     const { settingsCache } = useUIStore.getState();
-    const keyStatusFor = (definitionId: string): 'missing' | undefined => {
-      const def = NODE_DEFINITIONS[definitionId];
-      if (!def?.envKeyName || !settingsCache.loaded) return undefined;
-      const keyNames = Array.isArray(def.envKeyName) ? def.envKeyName : [def.envKeyName];
-      if (keyNames.length === 0) return undefined;
-      return keyNames.some((k) => Boolean(settingsCache.apiKeys[k])) ? undefined : 'missing';
-    };
+    const keyStatusFor = (definitionId: string, params: Record<string, unknown>): 'missing' | undefined =>
+      nodeKeyStatus(NODE_DEFINITIONS[definitionId], params, settingsCache);
 
     const cliMerged = (cliNodes as Node<NodeData>[]).map((cliNode) => {
       const existing = existingById.get(cliNode.id);
-      const keyStatus = keyStatusFor(cliNode.data.definitionId);
+      const keyStatus = keyStatusFor(cliNode.data.definitionId, cliNode.data.params);
       if (existing) {
         // Preserve position (user may have dragged) and existing outputs when
         // the CLI side doesn't have newer ones. Spread existing.data FIRST so
@@ -2050,6 +2039,9 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     for (const param of allParamSources) {
       if (param.default !== undefined) defaults[param.key] = param.default;
     }
+    if (isKreaGateway(definition)) {
+      defaults._kreaAuth = normalizeKreaMode(useUIStore.getState().settingsCache.kreaConnectionMode);
+    }
 
     const localCanvasWasEmpty = get().nodes.length === 0 && get().edges.length === 0;
 
@@ -2072,16 +2064,8 @@ export const useGraphStore = create<GraphState>((set, get) => ({
               : definitionId === 'nebula-moodboard'
                 ? 'moodboardNode'
                 : 'model-node';
-      let keyStatus: 'missing' | undefined;
       const { settingsCache } = useUIStore.getState();
-      if (settingsCache.loaded && definition.envKeyName) {
-        const keyNames = Array.isArray(definition.envKeyName)
-          ? definition.envKeyName
-          : [definition.envKeyName];
-        if (keyNames.length > 0 && !keyNames.some((k) => Boolean(settingsCache.apiKeys[k]))) {
-          keyStatus = 'missing';
-        }
-      }
+      const keyStatus = nodeKeyStatus(definition, defaults, settingsCache);
       const newNode: Node<NodeData> = {
         id: uuidv4(),
         type: nodeType,
@@ -2176,6 +2160,9 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       : definition.params;
     for (const param of allParamSources) {
       if (param.default !== undefined) defaults[param.key] = param.default;
+    }
+    if (isKreaGateway(definition)) {
+      defaults._kreaAuth = normalizeKreaMode(useUIStore.getState().settingsCache.kreaConnectionMode);
     }
 
     try {
@@ -2544,7 +2531,14 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     }
     set((state) => ({
       nodes: state.nodes.map((node) =>
-        node.id === nodeId ? { ...node, data: { ...node.data, ...data } } : node
+        node.id === nodeId ? { ...node, data: {
+          ...node.data, ...data,
+          ...(isParamChange ? { keyStatus: nodeKeyStatus(
+            NODE_DEFINITIONS[data.definitionId ?? node.data.definitionId],
+            data.params ?? node.data.params,
+            useUIStore.getState().settingsCache,
+          ) } : {}),
+        } } : node
       ),
     }));
 
@@ -3543,7 +3537,11 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     for (let v = 0; v < count; v++) {
       const t = uuidv4();
       modelTemps.push(t);
-      const params = { ...buildDefaultParams(def), ...request.params };
+      const params = {
+        ...withNewKreaMode(def, buildDefaultParams(def),
+          normalizeKreaMode(useUIStore.getState().settingsCache.kreaConnectionMode)),
+        ...request.params,
+      };
       if (hasSeed) {
         params.seed = seedBase + v;
       } else {
@@ -3573,7 +3571,9 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     const origin: CreateOriginTag = { sessionId: request.sessionId, genId: request.genId, ts: Date.now(), prompt: request.prompt };
     const modelIds = new Set(modelTemps.map((t) => idMap[t]).filter(Boolean));
     const taggedNodes = rfNodes.map((n) =>
-      modelIds.has(n.id) ? { ...n, data: { ...n.data, _createOrigin: origin } } : n,
+      modelIds.has(n.id) ? { ...n, data: { ...n.data, _createOrigin: origin,
+        keyStatus: nodeKeyStatus(def, n.data.params, useUIStore.getState().settingsCache),
+      } } : n,
     );
 
     pushUndo(set, get);

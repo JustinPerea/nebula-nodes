@@ -1,4 +1,5 @@
 import type { ModelNodeDefinition, ParamDefinition, ParamOption } from '../types';
+import { withNewKreaMode, type KreaConnectionMode } from './kreaConnection';
 
 export function resolveCreateParamDefinitions(
   def: ModelNodeDefinition,
@@ -52,11 +53,12 @@ export function deriveVisibleParams(
 export function buildDefaultParamsForUi(
   def: ModelNodeDefinition,
   apiKeys: Record<string, string> = {},
+  kreaConnectionMode: KreaConnectionMode = 'api-token',
 ): Record<string, unknown> {
   const defaults: Record<string, unknown> = {};
   const sources = resolveCreateParamDefinitions(def, apiKeys);
   for (const p of sources) {
     if (p.default !== undefined) defaults[p.key] = p.default;
   }
-  return defaults;
+  return withNewKreaMode(def, defaults, kreaConnectionMode);
 }

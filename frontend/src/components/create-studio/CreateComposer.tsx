@@ -4,6 +4,8 @@ import type { ModelNodeDefinition } from '../../types';
 import { enhancePrompt } from '../../lib/enhancePrompt';
 import { ModelPicker } from './ModelPicker';
 import { ParamPills } from './ParamPills';
+import { useUIStore } from '../../store/uiStore';
+import { isKreaGateway, kreaModeForParams } from '../../lib/kreaConnection';
 
 interface CreateComposerProps {
   modelDef: ModelNodeDefinition | null;
@@ -25,6 +27,7 @@ export function CreateComposer({
   modelDef, prompt, params, activeCount, maxConcurrent, quantity,
   onPromptChange, onSelectModel, onParamsChange, onGenerate, onAttach, onQuantityChange, onOpenStyles,
 }: CreateComposerProps) {
+  const kreaConnection = useUIStore((s) => s.settingsCache.kreaConnection);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [enhancing, setEnhancing] = useState(false);
   const [prevPrompt, setPrevPrompt] = useState<string | null>(null);
@@ -128,6 +131,13 @@ export function CreateComposer({
           <span className="create-composer__enhance-error" role="alert">{enhanceError}</span>
         )}
         {modelDef && <ParamPills def={modelDef} params={params} onChange={onParamsChange} />}
+        {isKreaGateway(modelDef ?? undefined) && kreaModeForParams(params) === 'mcp'
+          && kreaConnection?.status !== 'connected' && (
+            <span className="create-composer__capability-note" role="status">Krea sign-in required.{' '}
+              <button type="button" className="create-composer__styles"
+                onClick={() => useUIStore.getState().setLeftDock('settings')}>Open connection settings</button>
+            </span>
+          )}
         <div className="create-composer__qty" role="group" aria-label="Number of variations">
           <button type="button" onClick={() => onQuantityChange(Math.max(1, quantity - 1))} aria-label="Fewer" disabled={quantity <= 1}>−</button>
           <span>{quantity}</span>

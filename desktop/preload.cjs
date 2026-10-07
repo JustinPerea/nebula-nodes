@@ -25,6 +25,25 @@ function readEndpointArg(argv, prefix) {
 
 const apiBaseUrl = readEndpointArg(process.argv, '--nebula-api-base=');
 const wsBaseUrl = readEndpointArg(process.argv, '--nebula-ws-base=');
+const connectorSession = readEndpointArg(process.argv, '--nebula-connector-session=');
+const rendererUrl = readEndpointArg(process.argv, '--nebula-renderer-url=');
+
+// Sandboxed preloads cannot require local helper modules. Keep this comparison
+// aligned with navigation.mjs, and fail closed outside the trusted main frame.
+function isTrustedRenderer() {
+  if (process.isMainFrame !== true || typeof location === 'undefined') return false;
+  try {
+    const actual = new URL(location.href);
+    const expected = new URL(rendererUrl);
+    if (!['file:', 'http:', 'https:'].includes(expected.protocol)
+      || actual.username || actual.password || expected.username || expected.password) return false;
+    actual.hash = '';
+    expected.hash = '';
+    return actual.href === expected.href;
+  } catch {
+    return false;
+  }
+}
 
 // Providers with plaintext API keys detected in App Support settings.json
 // on launch. Empty when all keys are securely stored in the Keychain.
@@ -66,15 +85,20 @@ const migration = Object.freeze({
 const paperLinks = Object.freeze({
   open: (url) => ipcRenderer.invoke('paper:open-artwork', url),
 });
+const kreaLinks = Object.freeze({
+  open: (url) => ipcRenderer.invoke('krea:open-authorization', url),
+});
 
 const metadata = Object.freeze({
   platform: process.platform,
   shell: 'electron',
   apiBaseUrl,
   wsBaseUrl,
+  ...(isTrustedRenderer() ? { connectorSession } : {}),
   credentials,
   migration,
   paperLinks,
+  kreaLinks,
   plaintextKeyWarning: Object.freeze([...plaintextKeyWarning]),
 });
 

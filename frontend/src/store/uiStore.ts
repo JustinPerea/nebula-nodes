@@ -8,6 +8,7 @@ import {
   primeAudio,
   type NotificationPrefs,
 } from '../lib/jobNotifications';
+import type { KreaConnectionMode, KreaConnectionState } from '../lib/kreaConnection';
 import type { Preset } from '../lib/createPresets';
 import { useGraphStore } from './graphStore';
 
@@ -188,6 +189,8 @@ interface UIState {
   settingsCache: {
     apiKeys: Record<string, string>;
     loaded: boolean;
+    kreaConnectionMode?: KreaConnectionMode;
+    kreaConnection?: KreaConnectionState;
   };
   skin: SkinId;
   agentLogEnabled: boolean;
@@ -248,7 +251,9 @@ interface UIState {
   hideContextMenu: () => void;
   showConnectionPopup: (popup: Omit<ConnectionPopupState, 'visible'>) => void;
   hideConnectionPopup: () => void;
-  setSettingsCache: (apiKeys: Record<string, string>) => void;
+  setSettingsCache: (apiKeys: Record<string, string>, kreaConnectionMode?: KreaConnectionMode) => void;
+  setKreaConnection: (connection: KreaConnectionState) => void;
+  setKreaConnectionMode: (mode: KreaConnectionMode) => void;
   setSkin: (skin: SkinId) => void;
   setAgentLogEnabled: (enabled: boolean) => void;
   setCanvasPerfMode: (enabled: boolean) => void;
@@ -607,8 +612,17 @@ export const useUIStore = create<UIState>((set, get) => ({
       connectionPopup: { ...state.connectionPopup, visible: false },
     })),
 
-  setSettingsCache: (apiKeys) =>
-    set({ settingsCache: { apiKeys, loaded: true } }),
+  setSettingsCache: (apiKeys, kreaConnectionMode) =>
+    set((state) => ({ settingsCache: {
+      ...state.settingsCache, apiKeys, loaded: true,
+      ...(kreaConnectionMode ? { kreaConnectionMode } : {}),
+    } })),
+
+  setKreaConnection: (kreaConnection) =>
+    set((state) => ({ settingsCache: { ...state.settingsCache, kreaConnection } })),
+
+  setKreaConnectionMode: (kreaConnectionMode) =>
+    set((state) => ({ settingsCache: { ...state.settingsCache, kreaConnectionMode } })),
 
   setSkin: (skin) => {
     persistSkin(skin);

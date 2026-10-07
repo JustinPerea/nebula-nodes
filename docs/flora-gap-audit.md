@@ -34,9 +34,9 @@ Audit of what Flora (app.flora.ai, 369 models via MCP `client.models.list`) offe
 | Flux Kontext **Max**, Flux Canny / Depth / Redux | Nebula has base Kontext; no ControlNet-style structure guidance. |
 | Recraft V4.1 family (Pro / Vector / Utility / Utility Pro) | Nebula has V4 raster+SVG. |
 | Arrow 1.1 / 1.1 Max / References | Nebula has Arrow 1.0 (quiver) only. |
-| Grok Imagine **image** (t2i/i2i, + Quality) | Nebula only wraps Grok video. |
+| Grok Imagine **image** (t2i/i2i, + Quality) | **Closed 2026-10-03 through Krea:** `krea-image-xai-grok-imagine-2` and `krea-image-xai-grok-imagine-2-edit` expose generation/editing with the API's quality control. Provider account access and live results remain separate checks. |
 | Kling O1 image (i2i / refs) | |
-| Reve 2.1, Uni-1 / Uni-1 Max, Z-Image Turbo, Luma Photon, Wan 2.2 t2i, SD 3.5 | Long tail; SD 3.5 reachable via FAL universal. |
+| Reve 2.1, Uni-1 / Uni-1 Max, Z-Image Turbo, Luma Photon, Wan 2.2 t2i, SD 3.5 | **Partially closed 2026-10-03:** `krea-image-luma-uni-1` exposes standard/max modes. Other listed models remain; SD 3.5 is reachable via FAL universal. |
 | Imagen 3 Outpainting; Nano Banana Pro Inpainting; GPT Image 1.5 Inpainting | Nebula inpainting = Flux Fill + mask-painter; no outpainting node. |
 | **Magnific** upscalers (Creative / Precision / V2), Topaz image, Topaz Generative | Nebula has Clarity, Runway, Ideogram, SeedVR upscale. |
 
@@ -44,10 +44,10 @@ Audit of what Flora (app.flora.ai, 369 models via MCP `client.models.list`) offe
 
 | Flora has | Notes |
 |---|---|
-| Kling depth: 2.5/2.6 Pro, 3.0 **Pro** (+Turbo), O1 family, O3 **Pro**, O1/O3 **Edit** + **Reference** | **Partially closed 2026-08-14:** `kling-o3` now has Pro model enum (O3 Pro i2v). Kling 2.5/2.6 Pro, v3 Pro, O1, Edit, Reference, and Motion Control remain. |
+| Kling depth: 2.5/2.6 Pro, 3.0 **Pro** (+Turbo), O1 family, O3 **Pro**, O1/O3 **Edit** + **Reference** | **Further closed 2026-10-03:** `krea-video-kling-kling-3-0` exposes std/pro/4k, and `krea-video-kling-kling-o1` exposes image/element/video references. Existing `kling-o3` retains its Pro enum. This does not establish the remaining Turbo, Pro, Edit, or Motion Control variants. |
 | Kling **Motion Control** (2.6 / 3.0) and Kling Avatar v2 Pro | Motion-driven and avatar generation. |
-| **First/last-frame (f2v) breadth**: Kling, Luma Ray 2, Seedance, Veo 3.1 Frames, Hailuo 02 | **Further closed 2026-08-14:** Added `veo-3-flf` (dedicated Veo 3.1 first-last-frame endpoint) and extended `kling-o3` with Pro model enum (O3 Pro supports end_image_url). Combined with existing `seedance-2-i2v` end frame, `kling-v2-1` tail image, `kling-o3` end image, and `veo-3` last frame. Hailuo FLF and loop QC remain. |
-| Veo 3.1 **Ingredients** (r2v), Frames, Fast, Lite | Nebula has base Veo 3.1 t2v/i2v only. |
+| **First/last-frame (f2v) breadth**: Kling, Luma Ray 2, Seedance, Veo 3.1 Frames, Hailuo 02 | **Further closed 2026-10-03:** Krea-specific Kling 3.0, Veo 3.1, and Hailuo 02 nodes expose `start_image`/`end_image`, adding provider breadth to the existing endpoints. This is schema-backed integration; independent loop-quality checks remain necessary. |
+| Veo 3.1 **Ingredients** (r2v), Frames, Fast, Lite | **Closed 2026-10-03 through Krea:** `krea-video-google-veo-3-1` exposes reference images and start/end frames; `krea-video-google-veo-3-1-fast` and `krea-video-google-veo-3-1-lite` are specific nodes with their own API options. |
 | Sora 2 **Pro** | Nebula's Sora 2 node sunsets Sep '26. |
 | WAN 2.5 / 2.7, WAN 2.2 Animate **Move/Replace**, WAN 2.6 audio-to-video | Nebula has WAN 2.6 t2v/i2v/r2v. |
 | Marey + Motion Transfer + Pose Transfer | Performance/pose transfer beyond Runway Act-Two. |
@@ -95,3 +95,4 @@ Add entries as gaps are hit in real Flora work. Format: date — model/capabilit
 | 2026-08-10 | Camera ownership, gesture intent, and foreground-limb QC | A Fixa-derived near-field sleeve preserved lens geometry but lost the action that justified it, making Nari appear to hold the camera; identity/integration checks missed the contradiction | High |
 | 2026-08-15 | **All BYOK-reachable gaps closed** | Comprehensive 5-wave implementation (Waves 1-5) closed all 28 BYOK-reachable gaps from the full audit. 13 gaps remain blocked (no FAL endpoint or direct API). Node count: 142 → 164 (+22 new nodes/enum expansions). See `docs/flora-gap-matrix.md` for the complete matrix. | — |
 | 2026-08-17 | Video QC suite closed | Added first-class `qc-loop-safety`, `qc-frame-review`, `qc-composited-look`, and `qc-camera-geometry` analyzers with keyless heuristic/OpenCV modes plus an optional bounded vision-LLM advisory mode. This closes the logged loop-seam, identity-drift, integrated-scene, and camera-geometry QC tooling gaps. | High → Closed |
+| 2026-10-03 | Krea image/video catalog closes provider gaps | Added 74 first-class Krea API routes. Grok image quality and Veo 3.1 variants are covered; UNI-1/max, Kling tiers/references, and Hailuo first/last-frame breadth are partially closed as detailed above. Exact controls derive from current official schemas; this is catalog and deterministic execution evidence, not paid generation or loop-quality proof. | Mixed → Closed/Partial |

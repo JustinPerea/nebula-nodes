@@ -2,9 +2,12 @@ import { app, BrowserWindow, ipcMain, safeStorage, shell } from 'electron';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { homedir } from 'node:os';
+import { randomBytes } from 'node:crypto';
 import { startSidecar, stopSidecar, SidecarError, DEFAULT_REPO_ROOT } from './sidecar.mjs';
 import { prepareAppDataEnv } from './paths.mjs';
 import { createPaperLinkSenderValidator, registerPaperLinkHandler } from './paper-links.mjs';
+import { getConnectorEncryptionKey, registerKreaAuthLinkHandler } from './connector-vault.mjs';
+import { installRendererNavigationGuard } from './navigation.mjs';
 import {
   CREDENTIALS_FILE_NAME,
   MIGRATION_STATE_FILE_NAME,
@@ -65,6 +68,7 @@ const preloadPath = fileURLToPath(new URL('./preload.cjs', import.meta.url));
 
 /** @type {import('./sidecar.mjs').SidecarHandle | null} */
 let sidecarHandle = null;
+const connectorSession = randomBytes(32).toString('hex');
 /** @type {BrowserWindow | null} */
 let mainWindow = null;
 /** @type {BrowserWindow | null} */
@@ -394,9 +398,13 @@ function createMainWindow(handle, plaintextKeyWarning = []) {
         `--nebula-api-base=${handle.apiBaseUrl}`,
         `--nebula-ws-base=${handle.wsBaseUrl}`,
         `--nebula-plaintext-warning=${JSON.stringify(plaintextKeyWarning)}`,
+        `--nebula-connector-session=${connectorSession}`,
+        `--nebula-renderer-url=${rendererUrl}`,
       ],
     },
   });
+
+  installRendererNavigationGuard(win.webContents, rendererUrl, shell);
 
   win.on('closed', () => {
     if (mainWindow === win) mainWindow = null;
@@ -673,6 +681,7 @@ if (!acquiredLock) {
       );
       registerCredentialHandlers(ipcMain, credentialService, validateSender);
       registerPaperLinkHandler(ipcMain, shell, createPaperLinkSenderValidator(rendererUrl, () => mainWindow?.webContents));
+      registerKreaAuthLinkHandler(ipcMain, shell, createPaperLinkSenderValidator(rendererUrl, () => mainWindow?.webContents));
 
       // --- One-time migration (VAL-MIG-007..010, VAL-UX-001..006) ---
       //
@@ -707,6 +716,17 @@ if (!acquiredLock) {
       // (JSON dict). The backend stores them in memory only — never persisted.
       const injectedKeys = await credentialService.decryptAll();
       const sidecarEnv = { ...process.env, ...pathEnvVars };
+      sidecarEnv.NEBULA_DESKTOP_MODE = '1';
+      sidecarEnv.NEBULA_CONNECTOR_SESSION = connectorSession;
+      try {
+        sidecarEnv.NEBULA_CONNECTOR_ENCRYPTION_KEY = await getConnectorEncryptionKey(
+          join(appDataRoot, 'connector-vault-key.enc'), safeStorage,
+        );
+      } catch {
+        // Existing API-key workflows remain available; OAuth fails closed.
+        delete sidecarEnv.NEBULA_CONNECTOR_ENCRYPTION_KEY;
+        console.warn('Krea account connection unavailable: OS credential storage is locked');
+      }
       if (Object.keys(injectedKeys).length > 0) {
         sidecarEnv.NEBULA_INJECTED_KEYS = JSON.stringify(injectedKeys);
       }

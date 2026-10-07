@@ -17,6 +17,7 @@ import math
 import os
 import random
 import re
+import secrets
 import shutil
 import stat
 import tempfile
@@ -98,6 +99,7 @@ from routes.nous_proxy import router as nous_router
 from routes.quiver_proxy import router as quiver_router
 from routes.video_edit_preview import router as video_edit_preview_router
 from routes.render_exports import router as render_exports_router
+from routes.krea_connector import router as krea_connector_router
 from services.ffmpeg import ffprobe_video
 from services.preset_store import preset_store
 from services.selection_context import SelectionContextStore, selection_prompt_context
@@ -367,6 +369,37 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def krea_desktop_cors(request: Request, call_next):
+    # A packaged Electron file has an opaque origin. Limit this exception to
+    # the private sidecar's connector API; browser mode keeps normal CORS.
+    desktop_krea = (
+        os.environ.get("NEBULA_DESKTOP_MODE") == "1"
+        and request.url.path.startswith("/api/krea/")
+        and request.headers.get("origin") == "null"
+        and request.client is not None
+        and request.client.host in {"127.0.0.1", "::1"}
+        and bool(os.environ.get("NEBULA_CONNECTOR_SESSION"))
+        and (request.method == "OPTIONS" or secrets.compare_digest(
+            request.headers.get("x-nebula-connector-session", "").encode(),
+            os.environ["NEBULA_CONNECTOR_SESSION"].encode(),
+        ))
+    )
+    if desktop_krea and request.method == "OPTIONS":
+        response = Response(status_code=204)
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, DELETE, OPTIONS"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type, X-Nebula-Connector-Session"
+    else:
+        response = await call_next(request)
+    if desktop_krea:
+        response.headers["Access-Control-Allow-Origin"] = "null"
+        response.headers["Vary"] = "Origin"
+    return response
+
+
+app.include_router(krea_connector_router)
 
 # Serve output files as static assets (mounted after dynamic routes — mounts are catch-all)
 OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
@@ -2321,6 +2354,8 @@ async def get_settings() -> dict:
 
 @app.put("/api/settings")
 async def update_settings(body: dict[str, Any]) -> dict:
+    if "kreaConnectionMode" in body and body["kreaConnectionMode"] not in ("api-token", "mcp"):
+        raise HTTPException(400, "Krea connection mode must be api-token or mcp")
     current = load_settings()
     # Desktop mode: credentials are managed via the Keychain credential IPC
     # and POST /api/credentials/update — never via this endpoint. Ignore any
@@ -2340,6 +2375,7 @@ async def update_settings(body: dict[str, Any]) -> dict:
         "favorites",
         "exportFolder",
         "zoomTelemetryEnabled",
+        "kreaConnectionMode",
     ):
         if key in body:
             if key == "zoomTelemetryEnabled" and not isinstance(body[key], bool):

@@ -1,6 +1,7 @@
 import type { Node, Edge } from '@xyflow/react';
 import type { NodeData } from '../types';
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
+import { isKreaGateway, kreaModeForParams } from './kreaConnection';
 
 const RAW_INPUT_TYPES = ['text-input', 'image-input', 'reroute'];
 
@@ -24,7 +25,7 @@ export interface ComposerSelectionState {
  *   (exists in NODE_DEFINITIONS and is not a raw-input/wiring type).
  *   For that node:
  *     • `modelId`  = its definitionId
- *     • `params`   = its params with all `_`-prefixed keys stripped (so a fresh
+ *     • `params`   = its params with runtime `_`-prefixed keys stripped (so a fresh
  *                    `_variant` is minted on the next generate call)
  *     • `prompt`   = the `value` param of the upstream text-input node feeding
  *                    it (traced via edges), else ''
@@ -49,10 +50,13 @@ export function composerStateFromSelection(
 
   const modelNode = modelNodes[0];
 
-  // Strip _-prefixed params so a fresh variant is minted on next generate
+  // Billing choice is recipe data; strip only the other private/runtime keys.
   const params: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(modelNode.data.params ?? {})) {
-    if (!k.startsWith('_')) params[k] = v;
+    if (!k.startsWith('_') || k === '_kreaAuth') params[k] = v;
+  }
+  if (isKreaGateway(NODE_DEFINITIONS[modelNode.data.definitionId])) {
+    params._kreaAuth = kreaModeForParams(modelNode.data.params);
   }
 
   // Trace upstream text-input: find an edge whose target is this node and

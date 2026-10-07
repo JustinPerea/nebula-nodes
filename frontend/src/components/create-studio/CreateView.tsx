@@ -5,6 +5,7 @@ import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
 import { NODE_DEFINITIONS } from '../../constants/nodeDefinitions';
 import { buildDefaultParamsForUi } from '../../lib/createParams';
+import { normalizeKreaMode } from '../../lib/kreaConnection';
 import { uploadReference } from '../../lib/createUploads';
 import { revealInFinder, saveToFolder } from '../../lib/createFiles';
 import { type GenerationRecord, galleryItemsFromCanvas } from '../../lib/createGallery';
@@ -25,6 +26,7 @@ export function CreateView() {
   const exitCreateView = useUIStore((s) => s.exitCreateView);
   const sessionId = useUIStore((s) => s.createSessionId);
   const apiKeys = useUIStore((s) => s.settingsCache.apiKeys);
+  const kreaConnectionMode = useUIStore((s) => s.settingsCache.kreaConnectionMode);
   const allNodes = useGraphStore((s) => s.nodes);
 
   // Snapshot selection once on mount — used to prefill composer + default tab.
@@ -76,11 +78,11 @@ export function CreateView() {
 
   const handleSelectModel = (id: string) => {
     setModelId(id);
-    setParams(buildDefaultParamsForUi(NODE_DEFINITIONS[id], apiKeys));
+    setParams(buildDefaultParamsForUi(NODE_DEFINITIONS[id], apiKeys, normalizeKreaMode(kreaConnectionMode)));
   };
 
   const handleApplyPreset = (preset: Preset) => {
-    const next = applyPresetToComposer(preset, { modelId, prompt, params }, apiKeys);
+    const next = applyPresetToComposer(preset, { modelId, prompt, params }, apiKeys, normalizeKreaMode(kreaConnectionMode));
     if (next.modelId && next.modelId !== modelId) setModelId(next.modelId);
     setPrompt(next.prompt);
     setParams(next.params);

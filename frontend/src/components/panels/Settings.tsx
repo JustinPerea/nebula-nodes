@@ -3,6 +3,8 @@ import { ChevronDown, ChevronRight, X } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import { getSettings, updateSettings, updateCredential } from '../../lib/api';
 import { SkinPicker } from '../SkinPicker';
+import { KreaConnectionCard } from './KreaConnectionCard';
+import { normalizeKreaMode, type KreaConnectionMode } from '../../lib/kreaConnection';
 import { useDelayedUnmount } from '../../hooks/useDelayedUnmount';
 import '../../styles/panels.css';
 import '../../styles/skin-picker.css';
@@ -72,6 +74,7 @@ export function Settings() {
   const [apiKeys, setApiKeys] = useState<Record<string, string>>({});
   const [originalApiKeys, setOriginalApiKeys] = useState<Record<string, string>>({});
   const [routing, setRouting] = useState<Record<string, string>>({});
+  const [kreaConnectionMode, setKreaConnectionMode] = useState<KreaConnectionMode>('api-token');
   const [outputPath, setOutputPath] = useState('');
   const [exportFolder, setExportFolder] = useState('');
   const [zoomTelemetryEnabled, setZoomTelemetryEnabled] = useState(false);
@@ -99,10 +102,12 @@ export function Settings() {
           outputPath?: string;
           exportFolder?: string;
           zoomTelemetryEnabled?: boolean;
+          kreaConnectionMode?: KreaConnectionMode;
         };
         setApiKeys(settings.apiKeys ?? {});
         setOriginalApiKeys(settings.apiKeys ?? {});
         setRouting(settings.routing ?? {});
+        setKreaConnectionMode(normalizeKreaMode(settings.kreaConnectionMode));
         setOutputPath(settings.outputPath ?? '');
         setExportFolder(settings.exportFolder ?? '');
         setZoomTelemetryEnabled(settings.zoomTelemetryEnabled === true);
@@ -165,6 +170,7 @@ export function Settings() {
           outputPath: outputPath || null,
           exportFolder: exportFolder || null,
           zoomTelemetryEnabled,
+          kreaConnectionMode,
         });
       } else {
         // Browser mode: all settings including apiKeys go through PUT /api/settings
@@ -174,10 +180,12 @@ export function Settings() {
           outputPath: outputPath || null,
           exportFolder: exportFolder || null,
           zoomTelemetryEnabled,
+          kreaConnectionMode,
         });
       }
 
       setSaveStatus('saved');
+      useUIStore.getState().setKreaConnectionMode(kreaConnectionMode);
       window.dispatchEvent(new CustomEvent('nebula:settings-saved'));
       setTimeout(() => setSaveStatus('idle'), 2000);
     } catch (err) {
@@ -185,7 +193,7 @@ export function Settings() {
       setSaveStatus('error');
       setTimeout(() => setSaveStatus('idle'), 3000);
     }
-  }, [apiKeys, originalApiKeys, routing, outputPath, exportFolder, zoomTelemetryEnabled, isDesktopMode]);
+  }, [apiKeys, originalApiKeys, routing, outputPath, exportFolder, zoomTelemetryEnabled, kreaConnectionMode, isDesktopMode]);
 
   const toggleReveal = useCallback((key: string) => {
     setRevealedKeys((prev) => {
@@ -245,6 +253,9 @@ export function Settings() {
                 Keychain.
               </div>
             )}
+
+            <div className="settings__section-label">Connections</div>
+            <KreaConnectionCard mode={kreaConnectionMode} onModeChange={setKreaConnectionMode} />
 
             {/* API Keys Section */}
             <button

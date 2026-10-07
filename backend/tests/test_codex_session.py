@@ -182,6 +182,8 @@ async def test_run_codex_strips_openai_api_credentials_from_exec_env(monkeypatch
     monkeypatch.setenv("OPENAI_API_KEY", "sk-proj-test")
     monkeypatch.setenv("OPENAI_ACCESS_TOKEN", "openai-access-test")
     monkeypatch.setenv("CODEX_ACCESS_TOKEN", "codex-access-test")
+    monkeypatch.setenv("NEBULA_CONNECTOR_ENCRYPTION_KEY", "vault-fixture")
+    monkeypatch.setenv("NEBULA_INJECTED_KEYS", "injected-fixture")
 
     async def fake_create(*args, **kwargs):
         nonlocal exec_env
@@ -199,6 +201,43 @@ async def test_run_codex_strips_openai_api_credentials_from_exec_env(monkeypatch
     assert "OPENAI_API_KEY" not in exec_env
     assert "OPENAI_ACCESS_TOKEN" not in exec_env
     assert "CODEX_ACCESS_TOKEN" not in exec_env
+    assert "NEBULA_CONNECTOR_ENCRYPTION_KEY" not in exec_env
+    assert "NEBULA_INJECTED_KEYS" not in exec_env
+
+
+def test_codex_mcp_events_are_visible_and_include_structured_results():
+    item = {
+        "id": "discovery-1", "type": "mcp_tool_call", "server": "nebula_krea",
+        "tool": "list_models", "arguments": {"kind": "image"}, "status": "in_progress",
+    }
+    assert codex_session._normalize_codex_event({"type": "item.started", "item": item}) == [{
+        "type": "tool_use", "toolUseId": "discovery-1", "tool": "mcp__nebula_krea__list_models",
+        "input": {"kind": "image"},
+    }]
+    item.update(status="completed", result={"content": [], "structured_content": {"models": ["image/example"]}})
+    events = codex_session._normalize_codex_event({"type": "item.completed", "item": item})
+    assert events == [{
+        "type": "tool_result", "toolUseId": "discovery-1",
+        "content": '{"models": ["image/example"]}', "isError": False,
+    }]
+    item.update(status="failed", error={"message": "Connect Krea in Nebula"})
+    assert codex_session._normalize_codex_event({"type": "item.completed", "item": item}) == [{
+        "type": "tool_result", "toolUseId": "discovery-1",
+        "content": "Connect Krea in Nebula", "isError": True,
+    }]
+
+
+def test_codex_mcp_config_is_per_invocation_and_preserves_skills(monkeypatch):
+    monkeypatch.setenv("NEBULA_URL", "http://127.0.0.1:8033")
+    args = codex_session._codex_base_args(None)
+    assert any(value.startswith("mcp_servers.nebula_krea.command=") for value in args)
+    assert any(value.startswith("mcp_servers.nebula_krea.args=") and "8033" in value for value in args)
+    assert "--ignore-user-config" not in args
+    assert "--ignore-rules" not in args
+    prompt = codex_session._build_prompt("Krea models")
+    assert "Repo-backed Nebula skills" in prompt
+    assert "list_models and get_model_schema" in prompt
+    assert "_kreaAuth mcp" in prompt
 
 
 @pytest.mark.asyncio

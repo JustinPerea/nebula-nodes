@@ -1,5 +1,9 @@
 # Nebula Nodes MCP setup
 
+To connect a Krea account for Nebula's agents and Canvas/Create generation,
+use **Settings → Connections → Krea**. [Krea MCP setup](KREA-MCP.md) explains
+sign-in, saved connection choices and workspace billing.
+
 Nebula includes a local stdio MCP server that exposes the active canvas
 selection to external agents. The normal FastAPI backend must already be
 running because the MCP process reads the same authoritative graph state as the
