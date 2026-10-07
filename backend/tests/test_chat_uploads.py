@@ -494,6 +494,31 @@ async def test_emit_and_sync_broadcasts_custom_root_media_as_served_url(
 
 
 @pytest.mark.asyncio
+async def test_batch_events_use_portable_media_refs_under_custom_output_root(tmp_path, monkeypatch):
+    output_root = tmp_path / "batch-artwork-root"
+    first = output_root / "batch" / "one" / "fixture.png"
+    second = output_root / "batch" / "two" / "fixture.png"
+    for path in (first, second):
+        path.parent.mkdir(parents=True)
+        path.write_bytes(b"fixture")
+    monkeypatch.setattr(main_module, "OUTPUT_ROOT", output_root)
+    main_module.cli_graph.add_node("flux-schnell", {})
+    broadcast = AsyncMock()
+    monkeypatch.setattr(main_module.manager, "broadcast", broadcast)
+    snapshots = [{"image": {"type": "Image", "value": str(path)}} for path in (first, second)]
+    await main_module._emit_and_sync(ExecutedEvent(
+        node_id="n1", outputs=snapshots[-1], batch_outputs=snapshots,
+    ))
+    sent = broadcast.await_args.args[0]
+    assert sent.outputs["image"]["value"] == "/api/outputs/batch/two/fixture.png"
+    assert [item["image"]["value"] for item in sent.batch_outputs] == [
+        "/api/outputs/batch/one/fixture.png", "/api/outputs/batch/two/fixture.png",
+    ]
+    assert snapshots[0]["image"]["value"] == str(first)
+    assert snapshots[1]["image"]["value"] == str(second)
+
+
+@pytest.mark.asyncio
 async def test_emit_and_sync_shaped_list_matches_persisted_outputs(
     tmp_path, monkeypatch
 ):

@@ -1,5 +1,4 @@
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
-import { SKINS, type SkinId } from './skins';
 
 export type PaletteGroup = 'Actions' | 'View' | 'Agent' | 'Canvas' | 'Nodes';
 
@@ -28,9 +27,10 @@ export interface PaletteContext {
   fitView: () => void;
   enterCreateView: () => void;
   togglePanel: (p: 'library' | 'inspector' | 'settings' | 'chat' | 'assets' | 'history') => void;
-  setSkin: (s: SkinId) => void;
   startAgentQuery: () => void;
   canRun: boolean;
+  canSave: boolean;
+  canLoad: boolean;
   /** Existing nodes on the canvas, for search-and-focus. */
   canvasNodes: Array<{ id: string; label: string }>;
   focusNode: (id: string) => void;
@@ -50,8 +50,8 @@ const PANELS: Array<[PanelKey, string]> = [
 export function buildCommands(ctx: PaletteContext): PaletteCommand[] {
   const cmds: PaletteCommand[] = [
     { id: 'action:run', title: 'Run graph', group: 'Actions', keywords: 'execute play', enabled: ctx.canRun, perform: ctx.runGraph },
-    { id: 'action:save', title: 'Save graph', group: 'Actions', keywords: 'export json download', perform: ctx.save },
-    { id: 'action:load', title: 'Load graph', group: 'Actions', keywords: 'open import json', perform: ctx.load },
+    { id: 'action:save', title: 'Save graph', group: 'Actions', keywords: 'export json download', enabled: ctx.canSave, perform: ctx.save },
+    { id: 'action:load', title: 'Load graph', group: 'Actions', keywords: 'open import json', enabled: ctx.canLoad, perform: ctx.load },
     { id: 'action:fit', title: 'Fit view', group: 'Actions', keywords: 'zoom center frame fit', perform: ctx.fitView },
     { id: 'agent:ask', title: 'Ask the agent…', subtitle: 'Describe what to build', group: 'Agent', keywords: 'daedalus chat ai prompt generate', perform: ctx.startAgentQuery },
     { id: 'view:create', title: 'Open Create view', group: 'View', keywords: 'generate studio prompt', perform: ctx.enterCreateView },
@@ -64,16 +64,6 @@ export function buildCommands(ctx: PaletteContext): PaletteCommand[] {
       group: 'View',
       keywords: `panel show hide ${panel}`,
       perform: () => ctx.togglePanel(panel),
-    });
-  }
-
-  for (const skin of SKINS) {
-    cmds.push({
-      id: `view:skin:${skin.id}`,
-      title: `Skin: ${skin.label}`,
-      group: 'View',
-      keywords: `theme appearance skin ${skin.label}`,
-      perform: () => ctx.setSkin(skin.id),
     });
   }
 

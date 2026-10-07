@@ -19,10 +19,6 @@ vi.mock('../src/lib/api', () => ({
   updateCredential: (...args: unknown[]) => updateCredentialMock(...args),
 }));
 
-vi.mock('../src/components/SkinPicker', () => ({
-  SkinPicker: () => null,
-}));
-
 vi.mock('../src/lib/kreaConnection', async (importOriginal) => ({
   ...await importOriginal<typeof import('../src/lib/kreaConnection')>(),
   getKreaConnection: (...args: unknown[]) => getKreaConnectionMock(...args),
@@ -142,6 +138,38 @@ function clickSave() {
 // ---------------------------------------------------------------------------
 
 describe('Settings — browser mode (no desktop bridge)', () => {
+  it('keeps interface and connection settings without alternate theme choices', async () => {
+    getSettingsMock.mockResolvedValue({ apiKeys: {}, routing: {}, outputPath: '' });
+    render(<Settings />);
+    await waitFor(() => expect(screen.getByText('Interface')).toBeInTheDocument());
+
+    expect(screen.getByRole('dialog', { name: 'Settings' })).toBeInTheDocument();
+    expect(screen.getByText('Connections')).toBeInTheDocument();
+    expect(screen.queryByText('Skin')).not.toBeInTheDocument();
+    expect(screen.queryByRole('radio')).not.toBeInTheDocument();
+    expect(screen.getByText('Only render on-screen nodes; show minimap. Recommended for large graphs.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Close settings panel' })).toHaveFocus();
+  });
+
+  it('closes from focused settings controls with Escape and restores the opener', async () => {
+    getSettingsMock.mockResolvedValue({ apiKeys: {}, routing: {}, outputPath: '' });
+    const opener = document.createElement('button');
+    document.body.append(opener);
+    opener.focus();
+    useUIStore.getState().setLeftDock('settings');
+    const rendered = render(<Settings />);
+    try {
+      const close = await screen.findByRole('button', { name: 'Close settings panel' });
+      await waitFor(() => expect(close).toHaveFocus());
+      fireEvent.keyDown(close, { key: 'Escape' });
+      expect(useUIStore.getState().panels.settings.visible).toBe(false);
+      await waitFor(() => expect(opener).toHaveFocus());
+    } finally {
+      rendered.unmount();
+      opener.remove();
+    }
+  });
+
   it('does not show the Keychain badge', async () => {
     getSettingsMock.mockResolvedValue({
       apiKeys: { OPENAI_API_KEY: 'test-fake-key-123' },

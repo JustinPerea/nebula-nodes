@@ -28,7 +28,8 @@ function node(id: string, definitionId: string): Node<NodeData> {
 }
 
 function resetStore() {
-  useGraphStore.setState({ nodes: [], edges: [], undoStack: [], redoStack: [], isExecuting: false });
+  useGraphStore.getState().resetExecution();
+  useGraphStore.setState({ nodes: [], edges: [], undoStack: [], redoStack: [], runHistory: [], isExecuting: false });
 }
 
 beforeEach(() => {
@@ -57,7 +58,7 @@ function baseRequest(overrides: Partial<GenerationRequest>): GenerationRequest {
 }
 
 describe('executeClusterConcurrent', () => {
-  it('posts only the cluster nodes and their internal edges without touching isExecuting', async () => {
+  it('posts only the cluster nodes and their internal edges with aggregate ownership', async () => {
     const t = node('t1', 'text-input');
     const m = node('m1', 'nano-banana');
     const unrelated = node('u1', 'flux-schnell');
@@ -72,8 +73,7 @@ describe('executeClusterConcurrent', () => {
     const [postedNodes, postedEdges] = executeGraphMock.mock.calls[0];
     expect(postedNodes.map((n: { id: string }) => n.id).sort()).toEqual(['m1', 't1']);
     expect(postedEdges.map((e: { id: string }) => e.id)).toEqual(['e1']);
-    // isExecuting must stay false — concurrent path never touches the global lock
-    expect(useGraphStore.getState().isExecuting).toBe(false);
+    expect(useGraphStore.getState().isExecuting).toBe(true);
     // cluster nodes should be queued
     expect(useGraphStore.getState().nodes.find((n) => n.id === 'm1')?.data.state).toBe('queued');
     expect(useGraphStore.getState().nodes.find((n) => n.id === 't1')?.data.state).toBe('queued');
@@ -82,19 +82,17 @@ describe('executeClusterConcurrent', () => {
   });
 
   it('a 2nd call while a 1st is in-flight still posts (not a no-op)', async () => {
-    // Simulate first call already running: isExecuting=true (set by canvas path, not us)
-    // executeClusterConcurrent must ignore isExecuting entirely
-    useGraphStore.setState({ nodes: [node('m1', 'nano-banana'), node('m2', 'nano-banana')], edges: [], isExecuting: true });
+    useGraphStore.setState({ nodes: [node('m1', 'nano-banana'), node('m2', 'nano-banana')], edges: [] });
 
     await useGraphStore.getState().executeClusterConcurrent(['m1']);
     await useGraphStore.getState().executeClusterConcurrent(['m2']);
 
     expect(executeGraphMock).toHaveBeenCalledTimes(2);
-    // isExecuting was never touched by the concurrent path
+    // Aggregate ownership keeps global Stop available for both jobs.
     expect(useGraphStore.getState().isExecuting).toBe(true);
   });
 
-  it('cannot unlock or close an overlapping Canvas run when it completes', async () => {
+  it('cannot unlock or close a disjoint Canvas run when it completes', async () => {
     useGraphStore.setState({
       nodes: [node('canvas', 'text-input'), node('create', 'nano-banana')],
       edges: [],
@@ -102,11 +100,11 @@ describe('executeClusterConcurrent', () => {
       runHistory: [],
     });
 
-    await useGraphStore.getState().executeGraph();
+    await useGraphStore.getState().executeCluster(['canvas']);
     const canvasRunId = executeGraphMock.mock.calls[0][2] as string;
     expect(canvasRunId).toEqual(expect.any(String));
     expect(useGraphStore.getState().isExecuting).toBe(true);
-    expect(useGraphStore.getState().runHistory[0].status).toBe('running');
+    expect(useGraphStore.getState().runHistory.find((run) => run.id === canvasRunId)?.status).toBe('running');
 
     await useGraphStore.getState().executeClusterConcurrent(['create']);
     const createRunId = executeGraphMock.mock.calls[1][2] as string;
@@ -121,7 +119,7 @@ describe('executeClusterConcurrent', () => {
     });
 
     expect(useGraphStore.getState().isExecuting).toBe(true);
-    expect(useGraphStore.getState().runHistory[0].status).toBe('running');
+    expect(useGraphStore.getState().runHistory.find((run) => run.id === canvasRunId)?.status).toBe('running');
 
     useGraphStore.getState().handleExecutionEvent({
       type: 'graphComplete',

@@ -295,6 +295,8 @@ body.app-slava-restraint {
   --sr-layer-panel: 10;
   --sr-layer-agent-log: 11;
   --sr-layer-settings: 30;
+  --sr-layer-workspace: 50;
+  --sr-layer-workspace-overlay: 55;
   --sr-layer-popover: 40;
   --sr-layer-modal: 60;
   --sr-layer-modal-control: 61;
@@ -484,6 +486,15 @@ body.app-slava-restraint .panel {
 body.app-slava-restraint .panel--settings {
   z-index: var(--sr-layer-settings);
 }
+
+/* Panels intentionally available while a fullscreen studio is active. */
+body.app-slava-restraint .workspace-overlays--studio .panel--settings {
+  z-index: calc(var(--sr-layer-workspace-overlay) + 1);
+}
+body.app-slava-restraint .workspace-overlays--studio .chat-panel {
+  z-index: var(--sr-layer-workspace-overlay);
+}
+
 
 body.app-slava-restraint .panel--library {
   z-index: calc(var(--sr-layer-panel) + 1);
@@ -4709,40 +4720,6 @@ body.app-slava-restraint .editor-tl__playhead {
   body.app-slava-restraint .editor-tl__clip-handle {
     transition: none;
   }
-}
-
-/* ─────────────────────────────────────────────────────────────────────
- * Skin picker overrides — match the restraint palette
- * ───────────────────────────────────────────────────────────────────── */
-body.app-slava-restraint .skin-picker__option {
-  border: 1px solid var(--sr-edge);
-  border-radius: 8px;
-  background: transparent;
-}
-body.app-slava-restraint .skin-picker__option:hover {
-  border-color: var(--sr-edge-strong);
-  background: rgba(255, 255, 255, 0.03);
-}
-body.app-slava-restraint .skin-picker__option--active {
-  border-color: var(--sr-accent);
-  background: var(--sr-accent-soft);
-}
-body.app-slava-restraint .skin-picker__radio { border-color: var(--sr-ink-light); }
-body.app-slava-restraint .skin-picker__option--active .skin-picker__radio { border-color: var(--sr-accent); }
-body.app-slava-restraint .skin-picker__option--active .skin-picker__radio-dot { background: var(--sr-accent); }
-body.app-slava-restraint .skin-picker__label {
-  color: var(--sr-ink-bold);
-  font-family: var(--sr-ui);
-  font-weight: 600;
-  font-size: var(--sr-type-control);
-  letter-spacing: 0;
-}
-body.app-slava-restraint .skin-picker__description {
-  color: var(--sr-ink-light);
-  font-family: var(--sr-ui);
-  font-size: var(--sr-type-label);
-  letter-spacing: 0;
-  line-height: var(--sr-line-meta);
 }
 
 /* ─────────────────────────────────────────────────────────────────────

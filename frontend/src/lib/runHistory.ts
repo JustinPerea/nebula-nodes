@@ -7,8 +7,34 @@ import type { PaperSourceRecord } from './paperSource';
  * prevent the canvas from loading or executing. */
 
 export type RunStatus = 'running' | 'complete' | 'failed' | 'cancelled';
-export type RunTrigger = 'graph' | 'node' | 'cluster';
+export type RunTrigger = 'graph' | 'node' | 'cluster' | 'shot';
 export type RunReplayAction = 'rerun' | 'retry-failed' | 'latest-paper-source';
+
+export interface CreateRunOrigin {
+  genId: string;
+  sessionId: string;
+  prompt: string;
+  ts: number;
+  modelNodeIds: string[];
+  allNodeIds: string[];
+}
+
+export interface CinemaShotRun {
+  nodeId: string;
+  shotId: string;
+  seed?: number;
+  variations?: number;
+}
+
+/** Live ownership is separate from persistent terminal history. */
+export interface ActiveRun {
+  id: string;
+  kind: 'graph' | 'cinema-shot';
+  nodeIds: string[];
+  nodeId?: string;
+  shotId?: string;
+  status: 'starting' | 'running' | 'cancelling' | 'uncertain';
+}
 
 export interface RunSnapshotNode {
   id: string;
@@ -45,10 +71,14 @@ export interface RunRecord {
   paperInputs?: PaperRunInput[];
   recipeRevision?: string;
   resultOutputs?: Record<string, Record<string, PortValue>>;
+  /** Cumulative iterator results; the node's visible output remains scalar. */
+  batchOutputs?: Record<string, Array<Record<string, PortValue>>>;
   outOfDateReasons?: string[];
   /** Immutable admission fact. Unlike snapshot params, this stays true after
    * a recovery event patches the accepted operation ID into the snapshot. */
   startedFreshPaidWorldLabs?: boolean;
+  createOrigin?: CreateRunOrigin;
+  cinemaShot?: CinemaShotRun;
 }
 
 export interface ProviderRecoveryCheckpoint {
@@ -228,6 +258,20 @@ export function recordPaperRunOutput(
     ? { ...record, resultOutputs: deepFreeze(JSON.parse(JSON.stringify({
         ...record.resultOutputs, [nodeId]: outputs,
       })) as Record<string, Record<string, PortValue>>) }
+    : record);
+}
+
+/** Keep every repeated result immutable, including successful items in a run
+ * that is later cancelled or fails. Batch events replace only their node's
+ * cumulative list and never alter the saved recipe or canonical port output. */
+export function recordRunBatchOutputs(
+  history: RunRecord[], runId: string, nodeId: string,
+  outputs: Array<Record<string, PortValue>>,
+): RunRecord[] {
+  return history.map((record) => record.id === runId
+    ? { ...record, batchOutputs: deepFreeze(JSON.parse(JSON.stringify({
+        ...record.batchOutputs, [nodeId]: outputs,
+      })) as Record<string, Array<Record<string, PortValue>>>) }
     : record);
 }
 
@@ -469,6 +513,13 @@ export function freezeRunSnapshot(snapshot: RunGraphSnapshot): RunGraphSnapshot 
   return deepFreeze(JSON.parse(JSON.stringify(snapshot)) as RunGraphSnapshot);
 }
 
+function cappedRunHistory(history: RunRecord[]): RunRecord[] {
+  // Parallel owners must retain cancellation and recovery identity even when
+  // their count exceeds the terminal history budget.
+  let terminalBudget = Math.max(0, MAX_RUN_HISTORY - history.filter((record) => record.status === 'running').length);
+  return history.filter((record) => record.status === 'running' || terminalBudget-- > 0);
+}
+
 /** Prepend a new running record, capping the list. Pure with respect to history;
  * the incoming snapshot is cloned so later canvas mutations cannot alter it. */
 export function openRunRecord(history: RunRecord[], rec: OpenRunRecord): RunRecord[] {
@@ -480,8 +531,10 @@ export function openRunRecord(history: RunRecord[], rec: OpenRunRecord): RunReco
     resultOutputs: {},
     outOfDateReasons: [],
   } : {};
-  return [{ ...rec, ...contract, snapshot, status: 'running' as const }, ...history]
-    .slice(0, MAX_RUN_HISTORY);
+  return cappedRunHistory([{ ...rec, ...contract, snapshot,
+    createOrigin: rec.createOrigin ? deepFreeze(JSON.parse(JSON.stringify(rec.createOrigin)) as CreateRunOrigin) : undefined,
+    cinemaShot: rec.cinemaShot ? deepFreeze({ ...rec.cinemaShot }) : undefined,
+    status: 'running' as const }, ...history]);
 }
 
 /** Patch a record (by id) with its terminal status/metrics. Pure; no-op if absent. */
@@ -495,7 +548,7 @@ export function closeRunRecord(
     statusNote?: string;
   },
 ): RunRecord[] {
-  return history.map((record) => {
+  return cappedRunHistory(history.map((record) => {
     if (record.id !== id) return record;
     const next = { ...record, ...patch };
     if (patch.statusNote !== undefined) {
@@ -518,7 +571,7 @@ export function closeRunRecord(
       delete next.statusNote;
     }
     return next;
-  });
+  }));
 }
 
 export const WORLD_LABS_CANCELLATION_NOTE =
@@ -532,6 +585,23 @@ export const WORLD_LABS_RECOVERY_READY_NOTE =
 
 export const WORLD_LABS_RECONNECTING_NOTE =
   'Reconnecting to this World Labs run. Run remains locked until Nebula confirms its backend status.';
+
+export const EXECUTION_RECONNECTING_NOTE =
+  'Reconnecting to this run. It remains active until Nebula confirms its backend status.';
+
+/** Confirmation removes only temporary connection advice. Provider diagnostics
+ * and terminal notes remain intact. */
+export function clearRunReconnectingNote(history: RunRecord[], runId: string): RunRecord[] {
+  const record = history.find((candidate) => candidate.id === runId);
+  if (!record || record.status !== 'running'
+    || (record.statusNote !== EXECUTION_RECONNECTING_NOTE && record.statusNote !== WORLD_LABS_RECONNECTING_NOTE)) return history;
+  return history.map((candidate) => {
+    if (candidate.id !== runId) return candidate;
+    const confirmed = { ...candidate };
+    delete confirmed.statusNote;
+    return confirmed;
+  });
+}
 
 export function worldLabsCancellationNote(
   snapshot: RunGraphSnapshot,
@@ -595,7 +665,7 @@ function isRunSnapshot(value: unknown): value is RunGraphSnapshot {
 }
 
 const RUN_STATUSES: RunStatus[] = ['running', 'complete', 'failed', 'cancelled'];
-const RUN_TRIGGERS: RunTrigger[] = ['graph', 'node', 'cluster'];
+const RUN_TRIGGERS: RunTrigger[] = ['graph', 'node', 'cluster', 'shot'];
 const REPLAY_ACTIONS: RunReplayAction[] = ['rerun', 'retry-failed', 'latest-paper-source'];
 
 function isRunRecord(value: unknown): value is RunRecord {
@@ -614,6 +684,9 @@ function isRunRecord(value: unknown): value is RunRecord {
     && isOptionalFiniteNumber(value.nodesExecuted)
     && (value.startedFreshPaidWorldLabs === undefined
       || typeof value.startedFreshPaidWorldLabs === 'boolean')
+    && (value.createOrigin === undefined || isCreateRunOrigin(value.createOrigin))
+    && (value.cinemaShot === undefined || isCinemaShotRun(value.cinemaShot))
+    && (value.trigger !== 'shot' || isCinemaShotRun(value.cinemaShot))
     && (value.statusNote === undefined
       || (typeof value.statusNote === 'string' && value.statusNote.length <= 1_000))
     && (value.recipeRevision === undefined || typeof value.recipeRevision === 'string')
@@ -626,8 +699,26 @@ function isRunRecord(value: unknown): value is RunRecord {
       && Object.values(value.resultOutputs).every((outputs) => isObject(outputs)
         && Object.values(outputs).every((output) => isObject(output)
           && typeof output.type === 'string' && 'value' in output))))
+    && (value.batchOutputs === undefined || (isObject(value.batchOutputs)
+      && Object.values(value.batchOutputs).every((batch) => Array.isArray(batch)
+        && batch.every((outputs) => isObject(outputs)
+          && Object.values(outputs).every((output) => isObject(output)
+            && typeof output.type === 'string' && 'value' in output)))))
     && (value.outOfDateReasons === undefined || (Array.isArray(value.outOfDateReasons)
       && value.outOfDateReasons.every((reason) => typeof reason === 'string')));
+}
+
+function isCreateRunOrigin(value: unknown): value is CreateRunOrigin {
+  return isObject(value) && typeof value.genId === 'string'
+    && typeof value.sessionId === 'string' && typeof value.prompt === 'string'
+    && typeof value.ts === 'number' && Number.isFinite(value.ts) && value.ts >= 0
+    && Array.isArray(value.modelNodeIds) && value.modelNodeIds.every((id) => typeof id === 'string')
+    && Array.isArray(value.allNodeIds) && value.allNodeIds.every((id) => typeof id === 'string');
+}
+
+function isCinemaShotRun(value: unknown): value is CinemaShotRun {
+  return isObject(value) && typeof value.nodeId === 'string' && typeof value.shotId === 'string'
+    && isOptionalFiniteNumber(value.seed) && isOptionalFiniteNumber(value.variations);
 }
 
 /** Persist a capped history list. Quota, privacy-mode, and unavailable-storage
@@ -639,7 +730,7 @@ export function persistRunHistory(
   if (!storage) return;
   const payload: StoredRunHistory = {
     version: RUN_HISTORY_STORAGE_VERSION,
-    records: history.slice(0, MAX_RUN_HISTORY),
+    records: cappedRunHistory(history),
   };
   try {
     storage.setItem(RUN_HISTORY_STORAGE_KEY, JSON.stringify(payload));
@@ -648,9 +739,8 @@ export function persistRunHistory(
   }
 }
 
-/** Load and normalize persisted history. Invalid individual records are dropped;
- * invalid JSON/envelopes are removed. A browser reload cannot reconnect to a
- * prior process, so orphaned running records recover as cancelled. */
+/** Load immutable history. Running records retain their client-owned IDs so
+ * browser reload can reconcile the backend task instead of inventing a stop. */
 export function loadRunHistory(
   storage: RunHistoryStorage | null = browserStorage(),
 ): RunRecord[] {
@@ -665,17 +755,16 @@ export function loadRunHistory(
       throw new Error('Invalid run-history envelope');
     }
 
-    const validRecords = parsed.records.filter(isRunRecord).slice(0, MAX_RUN_HISTORY);
+    const validRecords = cappedRunHistory(parsed.records.filter(isRunRecord));
     const recovered = validRecords.map((record) => {
       const reconnectingWorldLabs = record.status === 'running'
         && (record.startedFreshPaidWorldLabs === true
           || (record.startedFreshPaidWorldLabs === undefined
             && runIncludesWorldLabs(record.snapshot, record.targetNodeId)));
-      const status = record.status === 'running' && !reconnectingWorldLabs
-        ? 'cancelled' as const
-        : record.status;
+      const status = record.status;
       const statusNote = reconnectingWorldLabs
         ? WORLD_LABS_RECONNECTING_NOTE
+        : status === 'running' ? EXECUTION_RECONNECTING_NOTE
         : status === 'cancelled'
         ? (record.statusNote ?? (record.startedFreshPaidWorldLabs === false
           ? undefined
@@ -686,8 +775,11 @@ export function loadRunHistory(
       return {
         ...record,
         snapshot: freezeRunSnapshot(record.snapshot),
+        createOrigin: record.createOrigin ? deepFreeze(record.createOrigin) : undefined,
+        cinemaShot: record.cinemaShot ? deepFreeze(record.cinemaShot) : undefined,
         ...(record.paperInputs ? { paperInputs: deepFreeze(record.paperInputs) } : {}),
         ...(record.resultOutputs ? { resultOutputs: deepFreeze(record.resultOutputs) } : {}),
+        ...(record.batchOutputs ? { batchOutputs: deepFreeze(record.batchOutputs) } : {}),
         status,
         statusNote,
       };
@@ -701,7 +793,7 @@ export function loadRunHistory(
       ))) {
       persistRunHistory(recovered, storage);
     }
-    return recovered;
+    return cappedRunHistory(recovered);
   } catch {
     try {
       storage.removeItem(RUN_HISTORY_STORAGE_KEY);
@@ -727,6 +819,7 @@ const TRIGGER_LABELS: Record<RunTrigger, string> = {
   graph: 'Full graph',
   node: 'Single node',
   cluster: 'Selection',
+  shot: 'Cinema shot',
 };
 
 /** Human label for a run's trigger. Pure. */

@@ -1,7 +1,9 @@
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { Search, Check } from 'lucide-react';
 import type { ModelNodeDefinition } from '../../types';
 import { getCreateModels, getFeaturedModels, searchModels } from '../../lib/createModels';
+import { usePanelFocus } from '../../hooks/usePanelFocus';
 
 interface ModelPickerProps {
   value: string | null;
@@ -12,13 +14,9 @@ interface ModelPickerProps {
 export function ModelPicker({ value, onSelect, onClose }: ModelPickerProps) {
   const [query, setQuery] = useState('');
   const [provider, setProvider] = useState('');
+  const panelRef = useRef<HTMLDivElement>(null);
   const providers = useMemo(() => [...new Set(getCreateModels().map((model) => String(model.apiProvider)))].sort(), []);
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  usePanelFocus(true, panelRef, onClose, { initialFocus: 'input', trap: true });
 
   const groups = useMemo(() => {
     const matchesProvider = (model: ModelNodeDefinition) => !provider || model.apiProvider === provider;
@@ -40,18 +38,18 @@ export function ModelPicker({ value, onSelect, onClose }: ModelPickerProps) {
     ];
   }, [query, provider]);
 
-  return (
-    <div className="model-picker" role="dialog" aria-label="Choose a model">
+  return createPortal(
+    <div className="model-picker-overlay" onMouseDown={onClose}>
+    <div ref={panelRef} className="model-picker" role="dialog" aria-modal="true" aria-label="Choose a model"
+      tabIndex={-1} onMouseDown={(event) => event.stopPropagation()}>
       <div className="model-picker__search">
         <Search size={15} strokeWidth={1.75} aria-hidden="true" />
         <input
           type="text"
-          autoFocus
           placeholder="Search models…"
           aria-label="Search models"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={(e) => e.key === 'Escape' && onClose()}
         />
       </div>
       <label className="model-picker__provider">
@@ -87,5 +85,6 @@ export function ModelPicker({ value, onSelect, onClose }: ModelPickerProps) {
         ))}
       </div>
     </div>
+    </div>, document.body,
   );
 }

@@ -1711,6 +1711,100 @@ class TestCinemaScenePersistsScene:
         finally:
             client.delete(f"/api/graph/node/{short_id}")
 
+    def test_import_restores_shot_outputs_saved_edges_and_manual_reconnection(self, client):
+        scene = {
+            **self._SCENE,
+            "shots": [
+                {"id": "opening", "prompt": "A green logo",
+                 "output": {"status": "done", "imageUrl": "https://example.test/logo.png"},
+                 "variations": [{"url": "https://example.test/logo.png", "seed": 7}],
+                 "selectedVariation": 0},
+                {"id": "close-up", "prompt": "The logo close up"},
+            ],
+        }
+        outputs = {"shot_opening": {"type": "Image", "value": "https://example.test/logo.png"}}
+        response = client.post("/api/graph/import", json={
+            "nodes": [
+                {"id": "saved-scene", "definitionId": "cinema-scene", "params": {"scene": scene},
+                 "outputs": outputs, "position": {"x": 10, "y": 20}},
+                {"id": "saved-model", "definitionId": "nano-banana", "params": {}},
+            ],
+            "edges": [{"source": "saved-scene", "sourceHandle": "shot_opening",
+                       "target": "saved-model", "targetHandle": "images"}],
+        })
+        assert response.status_code == 200, response.text
+        imported = response.json()
+        scene_id, model_id = (imported["idMap"][key] for key in ["saved-scene", "saved-model"])
+        exported = client.get("/api/graph/export").json()
+        node = next(node for node in exported["nodes"] if node["id"] == scene_id)
+        assert node["type"] == "cinemaSceneNode"
+        assert node["data"]["params"]["scene"] == scene
+        assert node["data"]["outputs"] == outputs
+        assert node["data"]["dynamicOutputPorts"] == [
+            {"id": "shot_opening", "label": "Shot 1", "dataType": "Image", "required": False},
+            {"id": "shot_close-up", "label": "Shot 2", "dataType": "Image", "required": False},
+        ]
+        saved_edge = exported["edges"][0]
+        assert (saved_edge["source"], saved_edge["sourceHandle"], saved_edge["target"], saved_edge["targetHandle"]) == (
+            scene_id, "shot_opening", model_id, "images")
+
+        # This is the persistence request sent after dragging the second shot's
+        # visible output handle to the same multiple-image target after import.
+        connected = client.post("/api/graph/connect", json={
+            "source": scene_id, "sourceHandle": "shot_close-up", "target": model_id, "targetHandle": "images",
+        })
+        assert connected.status_code == 200, connected.text
+        graph = client.get("/api/graph/export").json()
+        assert len(graph["edges"]) == 2
+        assert next(edge for edge in graph["edges"] if edge["id"] == saved_edge["id"]) == saved_edge
+        restored_node = next(node for node in graph["nodes"] if node["id"] == scene_id)
+        assert restored_node["data"]["params"]["scene"] == scene
+        assert restored_node["data"]["outputs"] == outputs
+
+        for handle, target_handle in [("shot_removed", "images"), ("shot_opening", "prompt")]:
+            rejected = client.post("/api/graph/connect", json={
+                "source": scene_id, "sourceHandle": handle, "target": model_id, "targetHandle": target_handle,
+            })
+            assert rejected.status_code == 400, rejected.text
+        assert len(client.get("/api/graph/export").json()["edges"]) == 2
+
+    @pytest.mark.parametrize("handle, output_type", [("shot_removed", "Image"), ("shot_s1", "Video")])
+    def test_import_rejects_fabricated_shot_outputs_and_types(self, client, handle, output_type):
+        response = client.post("/api/graph/import", json={
+            "nodes": [{"id": "scene", "definitionId": "cinema-scene", "params": {"scene": self._SCENE},
+                       "outputs": {handle: {"type": output_type, "value": "https://example.test/asset"}}}],
+            "edges": [],
+        })
+        assert response.status_code == 400, response.text
+        assert client.get("/api/graph").json()["nodes"] == []
+
+    def test_saved_zip_restore_accepts_the_scene_generated_output_and_wire(self, client):
+        import io
+        import zipfile
+
+        graph = {
+            "version": 3, "name": "Saved Cinema shots", "createdAt": "2026-10-07T00:00:00Z",
+            "nodes": [
+                {"id": "scene", "type": "cinemaSceneNode", "position": {"x": 10, "y": 20},
+                 "data": {"label": "Storyboard", "definitionId": "cinema-scene",
+                          "params": {"scene": self._SCENE}, "state": "complete",
+                          "outputs": {"shot_s1": {"type": "Image", "value": "https://example.test/logo.png"}}}},
+                {"id": "model", "type": "model-node", "position": {"x": 400, "y": 20},
+                 "data": {"label": "Nano Banana", "definitionId": "nano-banana", "params": {}}},
+            ],
+            "edges": [{"id": "saved-wire", "type": "typed-edge", "source": "scene",
+                       "sourceHandle": "shot_s1", "target": "model", "targetHandle": "images"}],
+        }
+        bundle = io.BytesIO()
+        with zipfile.ZipFile(bundle, "w", zipfile.ZIP_DEFLATED) as archive:
+            archive.writestr("graph.json", json.dumps(graph))
+        restored = client.post("/api/outputs/restore", content=bundle.getvalue(),
+                               headers={"Content-Type": "application/zip"})
+        assert restored.status_code == 200, restored.text
+        assert restored.json()["graph"] == graph
+        assert restored.json()["urlMapping"] == {}
+        assert client.get("/api/graph").json()["nodes"] == []
+
 
 class TestQuickImageInputParams:
     """Regression: /api/quick previously built image-input nodes with

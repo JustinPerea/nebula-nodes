@@ -6,12 +6,14 @@ import { ModelPicker } from './ModelPicker';
 import { ParamPills } from './ParamPills';
 import { useUIStore } from '../../store/uiStore';
 import { isKreaGateway, kreaModeForParams } from '../../lib/kreaConnection';
+import { isCreateModel } from '../../lib/createModels';
 
 interface CreateComposerProps {
   modelDef: ModelNodeDefinition | null;
   prompt: string;
   params: Record<string, unknown>;
   activeCount: number;
+  isLaunching?: boolean;
   maxConcurrent: number;
   quantity: number;
   onPromptChange: (value: string) => void;
@@ -24,7 +26,7 @@ interface CreateComposerProps {
 }
 
 export function CreateComposer({
-  modelDef, prompt, params, activeCount, maxConcurrent, quantity,
+  modelDef, prompt, params, activeCount, maxConcurrent, quantity, isLaunching = false,
   onPromptChange, onSelectModel, onParamsChange, onGenerate, onAttach, onQuantityChange, onOpenStyles,
 }: CreateComposerProps) {
   const kreaConnection = useUIStore((s) => s.settingsCache.kreaConnection);
@@ -32,7 +34,8 @@ export function CreateComposer({
   const [enhancing, setEnhancing] = useState(false);
   const [prevPrompt, setPrevPrompt] = useState<string | null>(null);
   const [enhanceError, setEnhanceError] = useState<string | null>(null);
-  const canGenerate = Boolean(modelDef) && activeCount < maxConcurrent;
+  const modelSupported = Boolean(modelDef && isCreateModel(modelDef));
+  const canGenerate = modelSupported && !isLaunching && activeCount < maxConcurrent;
   const canEnhance = prompt.trim().length > 0 && !enhancing;
   const promptRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -66,10 +69,12 @@ export function CreateComposer({
   return (
     <div className="create-composer">
       {pickerOpen && (
-        <>
-          <div className="create-composer__picker-backdrop" onClick={() => setPickerOpen(false)} />
-          <ModelPicker value={modelDef?.id ?? null} onSelect={onSelectModel} onClose={() => setPickerOpen(false)} />
-        </>
+        <ModelPicker value={modelDef?.id ?? null} onSelect={onSelectModel} onClose={() => setPickerOpen(false)} />
+      )}
+      {modelDef && !modelSupported && (
+        <div className="create-composer__capability-note" role="note">
+          This model needs Canvas input controls. Choose another model or return to Canvas.
+        </div>
       )}
       {modelDef?.capabilityNote && (
         <div className="create-composer__capability-note" role="note">
@@ -89,7 +94,7 @@ export function CreateComposer({
           if (enhanceError) setEnhanceError(null);
         }}
         onKeyDown={(e) => {
-          if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && canGenerate) {
+          if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !e.repeat && canGenerate) {
             e.preventDefault();
             onGenerate();
           }
@@ -147,7 +152,7 @@ export function CreateComposer({
           type="button"
           className="create-composer__generate"
           disabled={!canGenerate}
-          onClick={onGenerate}
+          onClick={(e) => { if (e.detail <= 1 && canGenerate) onGenerate(); }}
         >
           <Sparkles size={16} strokeWidth={1.9} aria-hidden="true" />
           {activeCount > 0 ? `Generating… (${activeCount})` : 'Generate'}

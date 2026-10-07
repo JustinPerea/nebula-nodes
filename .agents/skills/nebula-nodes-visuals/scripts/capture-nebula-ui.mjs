@@ -40,7 +40,6 @@ async function main() {
   if (!ready) throw new Error('Nebula stores never appeared');
 
   await page.evaluate(() => {
-    window.__nebulaUIStore.getState().setSkin('slava-restraint');
     let s = document.getElementById('capture-clean');
     if (!s) { s = document.createElement('style'); s.id = 'capture-clean'; document.head.appendChild(s); }
     s.textContent = '.panel--moodboard-library,.panel--character-library{display:none !important;}';

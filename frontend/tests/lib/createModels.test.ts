@@ -71,6 +71,31 @@ describe('createModels', () => {
     expect(createIds.has('krea-image-xai-grok-imagine-2-edit')).toBe(true);
   });
 
+  it('offers only models whose required ports Create can author', () => {
+    for (const model of getCreateModels()) {
+      const authoredIds = [
+        model.inputPorts.find((port) => port.dataType === 'Text')?.id,
+        model.inputPorts.find((port) => port.dataType === 'Image')?.id,
+      ];
+      const unsupported = model.inputPorts.filter((port) => port.required && !authoredIds.includes(port.id));
+      expect(unsupported, model.id).toEqual([]);
+    }
+  });
+
+  it('keeps required audio, video, masks and distinct end frames discoverable only on Canvas', () => {
+    const createIds = new Set(getCreateModels().map((model) => model.id));
+    for (const id of ['runway-aleph', 'mmaudio-v2', 'elevenlabs-sts', 'sync-lipsync',
+      'flux-fill-inpaint', 'ideogram-edit', 'veo-3-flf']) {
+      const definition = NODE_DEFINITIONS[id];
+      expect(definition, id).toBeDefined();
+      expect(createIds.has(id), id).toBe(false);
+      expect(getFeaturedModels().some((model) => model.id === id), id).toBe(false);
+      expect(searchModels(definition.displayName).some((model) => model.id === id), id).toBe(false);
+    }
+    expect(createIds.has('nano-banana')).toBe(true);
+    expect(createIds.has('krea-video-kling-kling-3-0')).toBe(true);
+  });
+
   it('keeps GPT Image prompts separate from multiple typed Paper artwork references', () => {
     const model = getCreateModels().find((item) => item.id === 'krea-image-openai-gpt-image-2')!;
     const prompt = model.inputPorts.find((port) => port.id === 'prompt')!;

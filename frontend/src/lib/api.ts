@@ -194,7 +194,7 @@ export async function generateCinemaShot(
     try { detail = (await response.json()).detail ?? ''; } catch {
       /* Non-JSON error responses still fall back to status text. */
     }
-    throw new Error(detail || `Generate shot failed: ${response.status} ${response.statusText}`);
+    throw executionStartResponseError(detail || `Generate shot failed: ${response.status} ${response.statusText}`, response.status);
   }
   return response.json();
 }

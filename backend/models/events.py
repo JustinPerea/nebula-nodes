@@ -42,6 +42,9 @@ class ExecutedEvent(RunScopedEvent):
     type: Literal["executed"] = "executed"
     node_id: str
     outputs: dict[str, Any]
+    # Current outputs remain scalar. Batch snapshots retain earlier iterator
+    # invocations without changing any node's declared output-port contract.
+    batch_outputs: list[dict[str, Any]] | None = None
 
 
 class ErrorEvent(RunScopedEvent):

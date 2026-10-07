@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it } from 'vitest';
-import { applySkinBodyClass, DEFAULT_SKIN, loadSkin, persistSkin } from '../../src/lib/skins';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { applySkinBodyClass, DEFAULT_SKIN, loadSkin } from '../../src/lib/skins';
 
 describe('skins', () => {
   beforeEach(() => {
@@ -7,34 +7,44 @@ describe('skins', () => {
     document.body.className = '';
   });
 
+  afterEach(() => vi.restoreAllMocks());
+
   it('uses Slava Restraint as the fresh-session default', () => {
     expect(DEFAULT_SKIN).toBe('slava-restraint');
     expect(loadSkin()).toBe('slava-restraint');
+    expect(window.localStorage.getItem('nebula:skin')).toBe('slava-restraint');
   });
 
-  it('keeps explicitly persisted legacy skins selectable', () => {
-    persistSkin('default');
-    expect(loadSkin()).toBe('default');
+  it.each(['default', 'hermes', 'slava-wayfinding', 'slava-restraint', 'unknown', ''])(
+    'normalizes the saved appearance %j to Slava Restraint', (savedSkin) => {
+      window.localStorage.setItem('nebula:skin', savedSkin);
+      window.localStorage.setItem('nebula:hermes-tone', 'obsidian');
 
-    persistSkin('hermes');
-    expect(loadSkin()).toBe('hermes');
+      expect(loadSkin()).toBe('slava-restraint');
+      expect(window.localStorage.getItem('nebula:skin')).toBe('slava-restraint');
+      expect(window.localStorage.getItem('nebula:hermes-tone')).toBeNull();
+    },
+  );
+
+  it('still applies the supported appearance when storage is unavailable', () => {
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('Storage is disabled', 'SecurityError');
+    });
+    expect(loadSkin()).toBe('slava-restraint');
+    expect(() => applySkinBodyClass()).not.toThrow();
+    expect(document.body.className).toBe('app-slava-restraint');
   });
 
-  it('preserves the Hermes tone migration when no skin is saved', () => {
+  it('migrates pre-registry Hermes preferences without restoring Hermes', () => {
     window.localStorage.setItem('nebula:hermes-tone', 'classic');
-    expect(loadSkin()).toBe('hermes');
+    expect(loadSkin()).toBe('slava-restraint');
+    expect(window.localStorage.getItem('nebula:hermes-tone')).toBeNull();
   });
 
-  it('applies only the active skin body class', () => {
-    applySkinBodyClass('slava-restraint', { animate: false });
-    expect(document.body.classList.contains('app-slava-restraint')).toBe(true);
-
-    applySkinBodyClass('hermes', { animate: false });
-    expect(document.body.classList.contains('app-slava-restraint')).toBe(false);
-    expect(document.body.classList.contains('app-hermes')).toBe(true);
-
-    applySkinBodyClass('default', { animate: false });
-    expect(document.body.classList.contains('app-hermes')).toBe(false);
-    expect(document.body.className).toBe('');
+  it('clears obsolete theme and transition classes while preserving unrelated state', () => {
+    document.body.className = 'app-hermes app-slava-wayfinding tone-verdant tone-obsidian chat-bloom-active app-skin-switching-slava unrelated';
+    applySkinBodyClass();
+    applySkinBodyClass();
+    expect([...document.body.classList]).toEqual(['unrelated', 'app-slava-restraint']);
   });
 });

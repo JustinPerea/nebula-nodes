@@ -21,7 +21,7 @@ export type ExecutionEvent = (
   | { type: 'queued'; nodeId: string }
   | { type: 'executing'; nodeId: string }
   | { type: 'progress'; nodeId: string; value: number }
-  | { type: 'executed'; nodeId: string; outputs: Record<string, PortValue> }
+  | { type: 'executed'; nodeId: string; outputs: Record<string, PortValue>; batchOutputs?: Array<Record<string, PortValue>> | null }
   | { type: 'error'; nodeId: string; error: string; retryable: boolean; category?: ErrorCategory; friendly?: string }
   | { type: 'validationError'; errors: Array<{ nodeId: string; portId: string; message: string }> }
   | { type: 'graphComplete'; duration: number; nodesExecuted: number }

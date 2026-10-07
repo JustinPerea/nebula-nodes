@@ -48,6 +48,9 @@ describe('graphStore run-history lifecycle', () => {
       providerRecoveries: [],
       providerStartAmbiguities: [],
     });
+    // A transport error is ambiguous; this default fixture supplies a terminal
+    // backend result. Uncertainty-specific cases override it explicitly.
+    vi.spyOn(api, 'getExecutionStatus').mockResolvedValue({ runId: '', status: 'failed' });
   });
 
   afterEach(() => {
@@ -65,7 +68,7 @@ describe('graphStore run-history lifecycle', () => {
     expect(isExecuting).toBe(false);
   });
 
-  it('closes the run as failed when apiExecute throws', async () => {
+  it('closes the run as failed when a lost acknowledgement reconciles as failed', async () => {
     vi.spyOn(api, 'executeGraph').mockRejectedValue(new Error('network down'));
 
     await useGraphStore.getState().executeGraph();
@@ -471,9 +474,10 @@ describe('graphStore run-history lifecycle', () => {
 
     await useGraphStore.getState().executeNode('ordinary-target');
 
-    expect(status).not.toHaveBeenCalled();
+    expect(status).toHaveBeenCalledTimes(1);
     expect(useGraphStore.getState().isExecuting).toBe(false);
     expect(useGraphStore.getState().runHistory[0].status).toBe('failed');
+    expect(useGraphStore.getState().uncertainWorldLabsRunId).toBeNull();
   });
 
   it('does not retain a paid-start lock for a repeat-safe PLY export', async () => {
@@ -497,7 +501,7 @@ describe('graphStore run-history lifecycle', () => {
 
     await useGraphStore.getState().executeGraph();
 
-    expect(status).not.toHaveBeenCalled();
+    expect(status).toHaveBeenCalledTimes(1);
     expect(useGraphStore.getState().isExecuting).toBe(false);
     expect(useGraphStore.getState().runHistory[0].status).toBe('failed');
   });
@@ -544,7 +548,7 @@ describe('graphStore run-history lifecycle', () => {
     expect(useGraphStore.getState().isExecuting).toBe(false);
   });
 
-  it('does not relock persisted repeat-safe World Labs runs', async () => {
+  it('reconciles repeat-safe World Labs owners and releases confirmed terminal runs', async () => {
     const safeRuns: RunRecord[] = [
       {
         id: 'safe-ply',
@@ -590,7 +594,7 @@ describe('graphStore run-history lifecycle', () => {
 
     await useGraphStore.getState().reconcilePersistedWorldLabsRun();
 
-    expect(status).not.toHaveBeenCalled();
+    expect(status).toHaveBeenCalledTimes(2);
     expect(useGraphStore.getState()).toMatchObject({
       isExecuting: false,
       isCancelling: false,

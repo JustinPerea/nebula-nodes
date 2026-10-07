@@ -10,9 +10,10 @@ function ctx(overrides: Partial<PaletteContext> = {}): PaletteContext {
     fitView: vi.fn(),
     enterCreateView: vi.fn(),
     togglePanel: vi.fn(),
-    setSkin: vi.fn(),
     startAgentQuery: vi.fn(),
     canRun: true,
+    canSave: true,
+    canLoad: true,
     canvasNodes: [],
     focusNode: vi.fn(),
     ...overrides,
@@ -40,5 +41,16 @@ describe('buildCommands — canvas search', () => {
     const hit = filterCommands(cmds, 'veo').filter((c) => c.group === 'Canvas');
     expect(hit).toHaveLength(1);
     expect(hit[0].id).toBe('canvas:n3');
+  });
+
+  it('does not expose removed alternate-theme commands', () => {
+    expect(buildCommands(ctx()).some((command) => command.id.startsWith('view:skin:'))).toBe(false);
+    expect(filterCommands(buildCommands(ctx()), 'theme')).toEqual([]);
+  });
+
+  it('disables graph-file commands when their owner cannot safely admit them', () => {
+    const commands = buildCommands(ctx({ canSave: false, canLoad: false }));
+    expect(commands.find((command) => command.id === 'action:save')?.enabled).toBe(false);
+    expect(commands.find((command) => command.id === 'action:load')?.enabled).toBe(false);
   });
 });

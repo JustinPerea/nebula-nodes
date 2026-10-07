@@ -8,6 +8,26 @@ export interface GenerationRecord {
   modelNodeIds: string[];
 }
 
+/** History owns completed and in-flight generation metadata across Create visits. */
+export function generationRecordsFromHistory(
+  history: readonly { createOrigin?: GenerationRecord & { sessionId: string } }[],
+  sessionId?: string,
+): GenerationRecord[] {
+  const records = new Map<string, GenerationRecord>();
+  for (const run of history) {
+    const origin = run.createOrigin;
+    if (!origin || origin.modelNodeIds.length === 0 || (sessionId && origin.sessionId !== sessionId)) continue;
+    // Replays retain the original generation identity. Keep one gallery group.
+    if (!records.has(origin.genId)) records.set(origin.genId, {
+      genId: origin.genId,
+      prompt: origin.prompt,
+      ts: origin.ts,
+      modelNodeIds: [...origin.modelNodeIds],
+    });
+  }
+  return [...records.values()].sort((a, b) => b.ts - a.ts);
+}
+
 export type ViewableKind = 'image' | 'video';
 
 export interface ViewableMedia {

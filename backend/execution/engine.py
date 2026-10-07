@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 import hashlib
 import logging
 import os
 import shutil
 import time
 from collections import deque
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from graphlib import TopologicalSorter, CycleError as _GraphlibCycleError
 from pathlib import Path
@@ -262,30 +264,34 @@ def _image_input_output(params: dict) -> dict:
 
 
 async def _maybe_probe_video_output(node: GraphNode, node_outputs: dict[str, Any]) -> None:
-    """If a node produced a Video output and we haven't yet probed it,
+    """Probe the current Video artwork whenever an output is replaced,
     run ffprobe and stash private source metadata on node.params. Mirrors the
     upload-time probe so every video source —
     Veo, Kling, Sora, Seedance, Wan, etc. — opens its downstream editor
     with a pre-populated clip instead of forcing the user to Run the
     edit node first. Best-effort: failures are silent (the editor's
     Run-to-populate fallback still works as graceful degradation)."""
-    if (
-        node.params.get("_sourceDuration") is not None
-        or node.params.get("sourceDuration") is not None
-    ):
-        return
     from pathlib import Path
     for v in node_outputs.values():
         if not isinstance(v, dict) or v.get("type") != "Video":
             continue
         value = v.get("value")
+        if isinstance(value, list):
+            value = value[0] if value else None
+        for key in ("_sourceDuration", "_sourceFps", "_sourceIsVfr"):
+            node.params.pop(key, None)
+        # video-edit's public metadata describes its upstream timeline, while
+        # private metadata describes its newly rendered output for consumers.
+        if node.definition_id != "video-edit":
+            for key in ("sourceDuration", "sourceFps", "sourceIsVfr"):
+                node.params.pop(key, None)
         if not isinstance(value, str) or not value:
             continue
         # Outputs are absolute local paths after handlers write to OUTPUT_ROOT.
         # Skip remote URLs and missing files — nothing we can probe.
         if value.startswith(("http://", "https://")):
             continue
-        path = Path(value)
+        path = Path(resolve_output_ref(value))
         if not path.exists():
             continue
         try:
@@ -587,18 +593,82 @@ def get_subgraph(
     return sub_nodes, sub_edges
 
 
+_ITERATOR_NODE_IDS = {"iterator-image", "iterator-text"}
+InvocationContext = tuple[tuple[str, int], ...]
+
+
+@dataclass(frozen=True)
+class _InvocationResult:
+    outputs: dict[str, Any]
+    params: dict[str, Any]
+    context: InvocationContext
+
+
+def _iterator_validation_errors(
+    nodes: list[GraphNode], edges: list[GraphEdge]
+) -> list[ValidationErrorDetail]:
+    """Reject ambiguous batch joins rather than multiplying paid work silently."""
+    node_map = {node.id: node for node in nodes}
+    if not any(node.definition_id in _ITERATOR_NODE_IDS for node in nodes):
+        return []
+    errors = []
+    for node in nodes:
+        if node.definition_id not in _ITERATOR_NODE_IDS:
+            continue
+        cap = node.params.get("batch_size_cap", 10)
+        if isinstance(cap, bool) or not isinstance(cap, int) or not 1 <= cap <= 25:
+            errors.append(ValidationErrorDetail(
+                node_id=node.id, port_id="array",
+                message="Iterator batch_size_cap must be an integer from 1 to 25",
+            ))
+    try:
+        order = topological_sort(nodes, edges)
+    except CycleError:
+        return errors  # The normal cycle check supplies its own error.
+    incoming: dict[str, set[str]] = {node.id: set() for node in nodes}
+    for edge in edges:
+        if edge.source in node_map and edge.target in node_map:
+            incoming[edge.target].add(edge.source)
+    ancestors: dict[str, set[str]] = {}
+    for nid in order:
+        if nid not in node_map:
+            continue
+        upstream = set().union(*(ancestors[src] for src in incoming[nid]))
+        independent = any(
+            left not in ancestors[right] and right not in ancestors[left]
+            for left in upstream for right in upstream if left != right
+        )
+        if independent:
+            errors.append(ValidationErrorDetail(
+                node_id=nid, port_id="",
+                message="Joining independent iterator batches is unsupported. "
+                        "Use one iterator for the shared downstream workflow; "
+                        "Nebula will not implicitly multiply generation requests.",
+            ))
+        policy = operation_policy(node_map[nid].definition_id)
+        if upstream and policy is not None and policy.provider == "worldlabs":
+            errors.append(ValidationErrorDetail(
+                node_id=nid, port_id="",
+                message="World Labs recovery-aware operations cannot run inside an iterator. "
+                        "Use separate tracked nodes so every operation retains its own recovery ID.",
+            ))
+        ancestors[nid] = upstream | ({nid} if node_map[nid].definition_id in _ITERATOR_NODE_IDS else set())
+    return errors
+
+
 def validate_graph(
     nodes: list[GraphNode],
     edges: list[GraphEdge],
     api_keys: dict[str, str],
 ) -> list[ValidationErrorDetail]:
     errors: list[ValidationErrorDetail] = []
+    errors.extend(_iterator_validation_errors(nodes, edges))
 
     definitions = dict(NODE_DEFS)
     definitions.update(_registry_node_defs())
     edge_contracts = validate_edge_contracts(
         [
-            ContractNode(node_id=node.id, definition_id=node.definition_id)
+            ContractNode(node_id=node.id, definition_id=node.definition_id, params=node.params)
             for node in nodes
         ],
         [
@@ -752,6 +822,9 @@ async def execute_graph(
     event serialized from this async task, including child node tasks.
     """
 
+    iterator_errors = _iterator_validation_errors(nodes, edges)
+    if iterator_errors:
+        raise ValueError(iterator_errors[0].message)
     manifest_run_id = run_id or str(uuid4())
     token = execution_run_id.set(run_id)
     run_dir = create_run_dir(manifest_run_id)
@@ -792,7 +865,11 @@ async def _execute_graph(
     write_paper_receipt(nodes, edges, bound_run_dir, run_id)
     nodes_executed = 0
     node_map: dict[str, GraphNode] = {n.id: n for n in nodes}
-    outputs_cache: dict[str, dict[str, PortValueDict]] = {}
+    # Values used on edges belong to an invocation, not merely a node ID.
+    # Static ancestors use (), and a nested iterator appends its item index.
+    invocation_outputs: dict[str, dict[InvocationContext, dict[str, PortValueDict]]] = {}
+    batch_outputs: dict[str, list[dict[str, Any]]] = {}
+    invocation_results: dict[str, list[_InvocationResult]] = {}
     order = topological_sort(nodes, edges)
     order_index = {nid: index for index, nid in enumerate(order)}
     concurrency = max(1, max_parallel_nodes)
@@ -823,13 +900,31 @@ async def _execute_graph(
         for nid in list(ready):
             await queue_ready_node(nid)
 
-    def resolve_inputs(nid: str) -> dict[str, PortValueDict]:
+    def invocation_contexts(nid: str) -> list[InvocationContext]:
+        parents = list(dict.fromkeys(edge.source for edge in incoming_edges[nid]))
+        if not parents:
+            return [()]
+        contexts = {context for parent in parents for context in invocation_outputs.get(parent, {})}
+        # An outer context broadcasts to its nested children; sibling branches
+        # of the same iterator join on the exact item context.
+        leaves = [context for context in contexts if not any(
+            len(other) > len(context) and other[:len(context)] == context for other in contexts
+        )]
+        return sorted(context for context in leaves if all(
+            any(context[:len(parent_context)] == parent_context
+                for parent_context in invocation_outputs.get(parent, {}))
+            for parent in parents
+        ))
+
+    def resolve_inputs(nid: str, context: InvocationContext) -> dict[str, PortValueDict]:
         node = node_map[nid]
         resolved_inputs: dict[str, PortValueDict] = {}
         multiple_ports = _multiple_input_ports(node.definition_id)
         for edge in incoming_edges[nid]:
             if edge.source_handle and edge.target_handle:
-                upstream_outputs = outputs_cache.get(edge.source, {})
+                candidates = invocation_outputs.get(edge.source, {})
+                compatible = [key for key in candidates if context[:len(key)] == key]
+                upstream_outputs = candidates[max(compatible, key=len)] if compatible else {}
                 if edge.source_handle in upstream_outputs:
                     incoming = upstream_outputs[edge.source_handle]
                     if edge.target_handle in multiple_ports:
@@ -841,8 +936,28 @@ async def _execute_graph(
                         resolved_inputs[edge.target_handle] = incoming
         return resolved_inputs
 
-    async def run_node(nid: str) -> tuple[str, bool, int]:
-        node = node_map[nid]
+    async def record_outputs(
+        nid: str, context: InvocationContext, node_outputs: dict[str, Any],
+        effective_params: dict[str, Any],
+    ) -> None:
+        snapshot = copy.deepcopy(node_outputs)
+        typed = {key: PortValueDict(type=value.get("type", "Any"), value=value.get("value"))
+                 for key, value in snapshot.items()}
+        invocation_outputs.setdefault(nid, {})[context] = typed
+        batch_outputs.setdefault(nid, []).append(snapshot)
+        invocation_results.setdefault(nid, []).append(_InvocationResult(
+            outputs=copy.deepcopy(snapshot), params=copy.deepcopy(effective_params),
+            context=context,
+        ))
+        await emit(ExecutedEvent(
+            node_id=nid, outputs=snapshot,
+            batch_outputs=copy.deepcopy(batch_outputs[nid])
+            if context or node_map[nid].definition_id in _ITERATOR_NODE_IDS else None,
+        ))
+
+    async def run_invocation(
+        nid: str, context: InvocationContext, node: GraphNode
+    ) -> tuple[str, bool, int]:
         registered_node_def = _node_def_for(node.definition_id)
         definition_metadata = registered_node_def or {}
         provider_policy = operation_policy(node.definition_id)
@@ -851,7 +966,7 @@ async def _execute_graph(
             definition_metadata.get("apiProvider") not in {None, "utility"}
         )
         await emit(ExecutingEvent(node_id=nid))
-        resolved_inputs = resolve_inputs(nid)
+        resolved_inputs = resolve_inputs(nid, context)
 
         try:
             if (
@@ -888,6 +1003,12 @@ async def _execute_graph(
                 )
                 cached_outputs = cache.get(cache_key)
                 if cached_outputs is not None:
+                    # A cache hit describes the original artifact, including
+                    # handler-selected settings. Do not replace the submitted
+                    # recipe/live node params with historical cache metadata.
+                    effective_params = cache.get_effective_params(cache_key)
+                    if effective_params is None:
+                        effective_params = copy.deepcopy(node.params)
                     try:
                         durable_cached_outputs = (
                             await _materialize_media_outputs(cached_outputs, bound_run_dir)
@@ -904,13 +1025,11 @@ async def _execute_graph(
                         cache.delete(cache_key)
                     else:
                         if rebound_cached_outputs != cached_outputs:
-                            cache.set(cache_key, rebound_cached_outputs)
+                            cache.set(cache_key, rebound_cached_outputs,
+                                      effective_params=effective_params)
                         cached_outputs = rebound_cached_outputs
-                        outputs_cache[nid] = {
-                            k: PortValueDict(type=v.get("type", "Any"), value=v.get("value"))
-                            for k, v in cached_outputs.items()
-                        }
-                        await emit(ExecutedEvent(node_id=nid, outputs=cached_outputs))
+                        await _maybe_probe_video_output(node, cached_outputs)
+                        await record_outputs(nid, context, cached_outputs, effective_params)
                         return nid, True, 1
 
             if handler is None:
@@ -936,11 +1055,14 @@ async def _execute_graph(
                     if not video_input or not video_input.value:
                         raise ValueError("Video input is required for frame extraction")
                     try:
-                        import subprocess
+                        from services.ffmpeg import ffprobe_video, run_ffmpeg
                         from services.output import get_run_dir
                         from uuid import uuid4
 
-                        video_path = str(video_input.value)
+                        video_path = resolve_output_ref(str(video_input.value))
+                        is_remote = video_path.startswith(("http://", "https://"))
+                        if not is_remote and not Path(video_path).is_file():
+                            raise ValueError("Video source file not found; restore or upload the source video before extracting frames")
                         mode = node.params.get("mode", "first_frame")
                         timestamp = float(node.params.get("timestamp", 0))
 
@@ -950,30 +1072,19 @@ async def _execute_graph(
                         if mode == "first_frame":
                             ts = "00:00:00.000"
                         elif mode == "last_frame":
-                            probe = subprocess.run(
-                                ["ffprobe", "-v", "error", "-show_entries", "format=duration",
-                                 "-of", "default=noprint_wrappers=1:nokey=1", video_path],
-                                capture_output=True, text=True
-                            )
-                            dur = float(probe.stdout.strip()) if probe.stdout.strip() else 1.0
+                            dur = (await ffprobe_video(video_path)).duration
                             ts_secs = max(0, dur - 0.1)
                             ts = f"{int(ts_secs//3600):02d}:{int((ts_secs%3600)//60):02d}:{ts_secs%60:06.3f}"
                         elif mode == "middle_frame":
-                            probe = subprocess.run(
-                                ["ffprobe", "-v", "error", "-show_entries", "format=duration",
-                                 "-of", "default=noprint_wrappers=1:nokey=1", video_path],
-                                capture_output=True, text=True
-                            )
-                            dur = float(probe.stdout.strip()) if probe.stdout.strip() else 1.0
+                            dur = (await ffprobe_video(video_path)).duration
                             ts_secs = dur / 2
                             ts = f"{int(ts_secs//3600):02d}:{int((ts_secs%3600)//60):02d}:{ts_secs%60:06.3f}"
                         else:  # timestamp mode
                             ts = f"{int(timestamp//3600):02d}:{int((timestamp%3600)//60):02d}:{timestamp%60:06.3f}"
 
-                        subprocess.run(
-                            ["ffmpeg", "-y", "-ss", ts, "-i", video_path, "-frames:v", "1",
-                             "-q:v", "2", str(out_path)],
-                            capture_output=True, check=True
+                        await run_ffmpeg(
+                            ["-ss", ts, "-i", video_path, "-frames:v", "1",
+                             "-q:v", "2", str(out_path)]
                         )
                         node_outputs = {"image": {"type": "Image", "value": str(out_path)}}
                     except FileNotFoundError:
@@ -1093,20 +1204,6 @@ async def _execute_graph(
                     out_path = get_run_dir() / f"{uuid4().hex[:12]}.png"
                     mask_img.save(out_path, format="PNG")
                     node_outputs = {"mask": {"type": "Image", "value": str(out_path)}}
-                elif node.definition_id in ("iterator-image", "iterator-text"):
-                    array_input = resolved_inputs.get("array")
-                    if array_input and isinstance(array_input.value, list) and len(array_input.value) > 0:
-                        cap = int(node.params.get("batch_size_cap", 10))
-                        items = array_input.value[:cap]
-                        out_type = "Image" if node.definition_id == "iterator-image" else "Text"
-                        out_key = "image" if node.definition_id == "iterator-image" else "text"
-                        # Emit each item as a separate executed event
-                        for i, item in enumerate(items):
-                            iter_outputs = {out_key: {"type": out_type, "value": item}}
-                            await emit(ExecutedEvent(node_id=nid, outputs=iter_outputs))
-                        return nid, True, 1
-                    else:
-                        node_outputs = {}
                 elif node.definition_id == "preview":
                     node_outputs = {}
                     if "input" in resolved_inputs:
@@ -1164,17 +1261,12 @@ async def _execute_graph(
 
             node_outputs = _canonicalize_spatial_outputs(node_outputs)
 
-            outputs_cache[nid] = {
-                k: PortValueDict(type=v.get("type", "Any"), value=v.get("value"))
-                for k, v in node_outputs.items()
-            }
-
-            if cache_enabled and cache is not None and cache_key is not None and handler is not None:
-                cache.set(cache_key, node_outputs)
-
             await _maybe_probe_video_output(node, node_outputs)
 
-            await emit(ExecutedEvent(node_id=nid, outputs=node_outputs))
+            if cache_enabled and cache is not None and cache_key is not None and handler is not None:
+                cache.set(cache_key, node_outputs, effective_params=node.params)
+
+            await record_outputs(nid, context, node_outputs, node.params)
             return nid, True, 1
 
         except Exception as exc:
@@ -1189,6 +1281,64 @@ async def _execute_graph(
                 )
             )
             return nid, False, 0
+
+    async def run_node(nid: str) -> tuple[str, bool, int]:
+        node = node_map[nid]
+        contexts = invocation_contexts(nid)
+        invocation_outputs[nid] = {}
+        if node.definition_id in _ITERATOR_NODE_IDS:
+            await emit(ExecutingEvent(node_id=nid))
+            try:
+                cap = node.params.get("batch_size_cap", 10)
+                planned: list[tuple[InvocationContext, Any]] = []
+                for context in contexts:
+                    source = resolve_inputs(nid, context).get("array")
+                    if source is None or not isinstance(source.value, list):
+                        raise ValueError("Iterator requires an Array input")
+                    planned.extend((context + ((nid, index),), item)
+                                   for index, item in enumerate(source.value[:cap]))
+                if len(planned) > cap:
+                    raise ValueError(
+                        f"Nested iterator expands to {len(planned)} items, exceeding "
+                        f"this iterator's batch_size_cap of {cap}. Reduce the batch "
+                        "before running; no downstream generation was started."
+                    )
+                out_type, out_key = ("Image", "image") if node.definition_id == "iterator-image" else ("Text", "text")
+                if not planned:
+                    await emit(ExecutedEvent(node_id=nid, outputs={}, batch_outputs=[]))
+                for context, item in planned:
+                    await record_outputs(nid, context, {out_key: {"type": out_type, "value": item}}, node.params)
+                return nid, True, len(contexts)
+            except Exception as exc:
+                category, friendly, retryable = classify_error(str(exc))
+                await emit(ErrorEvent(node_id=nid, error=str(exc), category=category,
+                                      friendly=friendly, retryable=retryable))
+                return nid, False, 0
+
+        executed_count = 0
+        recipe_params = copy.deepcopy(node.params)
+        for context in contexts:
+            # Even a handler with a fixed filename must not overwrite the
+            # artwork produced by an earlier item of the same node/run.
+            token = None
+            if context:
+                item_dir = bound_run_dir / "batch" / uuid4().hex
+                item_dir.mkdir(parents=True, exist_ok=False)
+                token = execution_run_dir.set(item_dir)
+            invocation_node = node.model_copy(deep=True, update={"params": copy.deepcopy(recipe_params)}) if context else node
+            try:
+                _, succeeded, count = await run_invocation(nid, context, invocation_node)
+            finally:
+                # Runtime metadata from the latest item is retained for the
+                # canvas, but it cannot become the next item's input recipe.
+                if invocation_node is not node:
+                    node.params = copy.deepcopy(invocation_node.params)
+                if token is not None:
+                    execution_run_dir.reset(token)
+            executed_count += count
+            if not succeeded:
+                return nid, False, executed_count
+        return nid, True, executed_count
 
     running: dict[asyncio.Task[tuple[str, bool, int]], str] = {}
     try:
@@ -1240,26 +1390,28 @@ async def _execute_graph(
         if pending:
             await asyncio.gather(*pending, return_exceptions=True)
 
-    duration = time.monotonic() - start_time
+        # A failed or cancelled batch still owns every successful earlier
+        # artifact. Manifest settlement happens in cleanup, before any terminal
+        # event, and therefore also runs when cancellation unwinds this task.
+        completed_at = datetime.now(timezone.utc)
+        try:
+            manifest_outputs = {
+                nid: {"batch": PortValueDict(type="Any", value=snapshots)}
+                for nid, snapshots in batch_outputs.items()
+            }
+            manifest_records = _collect_manifest_records(
+                node_map, manifest_outputs, order, run_dir,
+                invocation_results=invocation_results,
+            )
+            write_manifest(
+                run_id=run_id or str(uuid4()), started_at=started_at,
+                completed_at=completed_at, outputs=manifest_records,
+                output_dir=run_dir,
+            )
+        except Exception as exc:
+            logger.warning("[engine] manifest write failed for run %s: %s", run_id, exc)
 
-    # F-21: per-execution metadata manifest. Written exactly once, here, after
-    # every node has finished — never inside the scheduling loop above. A
-    # failure must not affect the outputs the run already produced, so the
-    # whole block is best-effort.
-    completed_at = datetime.now(timezone.utc)
-    try:
-        manifest_records = _collect_manifest_records(
-            node_map, outputs_cache, order, run_dir
-        )
-        write_manifest(
-            run_id=run_id or str(uuid4()),
-            started_at=started_at,
-            completed_at=completed_at,
-            outputs=manifest_records,
-            output_dir=run_dir,
-        )
-    except Exception as exc:
-        logger.warning("[engine] manifest write failed for run %s: %s", run_id, exc)
+    duration = time.monotonic() - start_time
 
     # Terminal success is emitted last: once the frontend sees this event the
     # run directory and best-effort manifest lifecycle are already settled.
@@ -1328,20 +1480,29 @@ def _collect_manifest_records(
     outputs_cache: dict[str, dict[str, PortValueDict]],
     order: list[str],
     run_dir: Path,
+    *,
+    invocation_results: dict[str, list[_InvocationResult]] | None = None,
 ) -> list[dict[str, Any]]:
     """Build manifest records for files contained by the bound run directory.
 
     Files outside this run are never silently adopted or used to select a
     different manifest directory.
     """
-    files: list[tuple[str, Path]] = []  # (node_id, path), topological order
+    files: list[tuple[str, Path, dict[str, Any], InvocationContext]] = []
     seen_files: set[tuple[str, Path]] = set()
     for nid in order:
-        node_outputs = outputs_cache.get(nid)
-        if not node_outputs:
-            continue
-        for port_value in node_outputs.values():
-            for value in _nested_output_values(port_value.value):
+        results = invocation_results.get(nid, []) if invocation_results is not None else []
+        if not results:
+            node_outputs = outputs_cache.get(nid)
+            if not node_outputs:
+                continue
+            results = [_InvocationResult(
+                outputs={key: {"type": port.type, "value": port.value}
+                         for key, port in node_outputs.items()},
+                params=node_map[nid].params, context=(),
+            )]
+        for result in results:
+            for value in _nested_output_values(result.outputs):
                 path = _local_output_file(value)
                 if path is None:
                     continue
@@ -1349,11 +1510,11 @@ def _collect_manifest_records(
                 if identity in seen_files:
                     continue
                 seen_files.add(identity)
-                files.append((nid, identity[1]))
+                files.append((nid, identity[1], result.params, result.context))
 
     records: list[dict[str, Any]] = []
     resolved_run_dir = run_dir.resolve()
-    for nid, path in files:
+    for nid, path, params, context in files:
         try:
             rel = path.relative_to(resolved_run_dir).as_posix()
         except ValueError:
@@ -1365,9 +1526,9 @@ def _collect_manifest_records(
             continue
         node = node_map[nid]
         node_def = _node_def_for(node.definition_id) or {}
-        endpoint = node_def.get("apiEndpoint") or node.params.get("endpoint_id") or None
-        model = node.params.get("model")
-        prompt = node.params.get("prompt")
+        endpoint = node_def.get("apiEndpoint") or params.get("endpoint_id") or None
+        model = params.get("model")
+        prompt = params.get("prompt")
         timestamp = datetime.fromtimestamp(path.stat().st_mtime, timezone.utc).isoformat()
         records.append(
             {
@@ -1376,9 +1537,11 @@ def _collect_manifest_records(
                 "model": str(model) if model else None,
                 "endpoint": str(endpoint) if endpoint else None,
                 "prompt": str(prompt) if prompt else None,
-                "params": dict(node.params),
+                "params": copy.deepcopy(params),
                 "output_path": rel,
                 "timestamp": timestamp,
+                **({"batch_context": [{"iterator_node_id": iterator, "item_index": index}
+                                      for iterator, index in context]} if context else {}),
             }
         )
     return records

@@ -1,11 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
-import { Map, Minimize2 } from 'lucide-react';
 import {
   ReactFlow,
   Background,
   BackgroundVariant,
-  MiniMap,
-  Controls,
   Panel,
   useReactFlow,
   useStore,
@@ -35,6 +32,7 @@ import { TypedEdge } from './edges/TypedEdge';
 import { ContextMenu } from './ContextMenu';
 import { ConnectionPopup } from './ConnectionPopup';
 import { SelectionToolbar } from './SelectionToolbar';
+import { CanvasNavigation } from './CanvasNavigation';
 import { CrabMarkAnimated } from './brand/CrabMarkAnimated';
 import { CHARACTER_DRAG_MIME, MOODBOARD_DRAG_MIME } from '../lib/dragMime';
 import { apiFetch } from '../lib/backend';
@@ -222,9 +220,8 @@ export function Canvas() {
   const skin = useUIStore((s) => s.skin);
   const canvasPerfMode = useUIStore((s) => s.canvasPerfMode);
   const canvasLowDetail = useUIStore((s) => s.canvasLowDetail);
-  const minimapCollapsed = useUIStore((s) => s.minimapCollapsed);
-  const setMinimapCollapsed = useUIStore((s) => s.setMinimapCollapsed);
   const onboardingActive = useUIStore((s) => s.onboardingActive);
+  const leftDock = useUIStore((s) => s.leftDock);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const showContextMenu = useUIStore((s) => s.showContextMenu);
   const hideContextMenu = useUIStore((s) => s.hideContextMenu);
@@ -506,7 +503,7 @@ export function Canvas() {
       // Ctrl+S — Save graph
       if (isCtrlOrCmd && event.key === 's') {
         event.preventDefault();
-        // Dispatched as custom event — picked up by the save handler registered in Toolbar
+        // The persistent GraphFileActions controller handles this request.
         window.dispatchEvent(new CustomEvent('nebula:save'));
         return;
       }
@@ -567,6 +564,7 @@ export function Canvas() {
     <div
       ref={wrapperRef}
       className={`canvas-wrapper${isSlavaSkin ? ' canvas-wrapper--slava' : ''}${isSlavaSkin && nodes.length === 0 ? ' canvas-wrapper--slava-empty' : ''}`}
+      data-dock-open={leftDock !== null}
       onKeyDown={onKeyDown}
       tabIndex={0}
       onDrop={onDrop}
@@ -607,50 +605,7 @@ export function Canvas() {
         <Panel position="top-center" className="selection-toolbar-panel">
           <SelectionToolbar />
         </Panel>
-        {canvasPerfMode && (
-          <>
-            <Controls showInteractive={false} fitViewOptions={{ padding: computeCanvasFitPadding() }} />
-            <Panel
-              position="bottom-right"
-              className={`canvas-minimap-panel${minimapCollapsed ? ' canvas-minimap-panel--collapsed' : ''}`}
-            >
-              {minimapCollapsed ? (
-                <button
-                  type="button"
-                  className="canvas-minimap-toggle canvas-minimap-toggle--restore"
-                  aria-label="Show canvas minimap"
-                  title="Show canvas minimap"
-                  onClick={() => setMinimapCollapsed(false)}
-                >
-                  <Map size={18} aria-hidden="true" />
-                </button>
-              ) : (
-                <>
-                  <MiniMap
-                    className="canvas-minimap"
-                    pannable
-                    zoomable
-                    nodeStrokeWidth={2}
-                    nodeColor={isSlavaSkin ? 'var(--sr-minimap-node, #c9c4ba)' : '#3a3a3a'}
-                    maskColor="var(--xy-minimap-mask-background-color-default, rgba(0,0,0,0.6))"
-                  />
-                  <button
-                    type="button"
-                    className="canvas-minimap-toggle canvas-minimap-toggle--collapse"
-                    aria-label="Minimize canvas minimap"
-                    title="Minimize canvas minimap"
-                    onClick={() => setMinimapCollapsed(true)}
-                  >
-                    <Minimize2 size={16} aria-hidden="true" />
-                  </button>
-                </>
-              )}
-            </Panel>
-            <Panel position="bottom-left" className="canvas-node-count">
-              {nodes.length} {nodes.length === 1 ? 'node' : 'nodes'}
-            </Panel>
-          </>
-        )}
+        <CanvasNavigation nodeCount={nodes.length} />
       </ReactFlow>
       {isSlavaSkin && nodes.length === 0 && !onboardingActive ? (
         <div className="nn-splash" aria-hidden="true">
