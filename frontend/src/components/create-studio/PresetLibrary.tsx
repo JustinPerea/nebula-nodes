@@ -8,9 +8,10 @@ export interface PresetLibraryProps {
   onSaveCurrent: () => void;
   onClose: () => void;
   reloadKey: number; // bump to refetch after a save
+  saving?: boolean;
 }
 
-export function PresetLibrary({ onApply, onSaveCurrent, onClose, reloadKey }: PresetLibraryProps) {
+export function PresetLibrary({ onApply, onSaveCurrent, onClose, reloadKey, saving = false }: PresetLibraryProps) {
   const [presets, setPresets] = useState<Preset[]>([]);
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState<string>('All');
@@ -48,8 +49,8 @@ export function PresetLibrary({ onApply, onSaveCurrent, onClose, reloadKey }: Pr
           <Search size={15} strokeWidth={1.75} aria-hidden="true" />
           <input autoFocus type="text" placeholder="Search styles…" value={query} onChange={(e) => setQuery(e.target.value)} />
         </div>
-        <button type="button" className="preset-library__save" onClick={onSaveCurrent}>
-          <Bookmark size={14} strokeWidth={1.75} aria-hidden="true" /> Save current
+        <button type="button" className="preset-library__save" onClick={onSaveCurrent} disabled={saving}>
+          <Bookmark size={14} strokeWidth={1.75} aria-hidden="true" /> {saving ? 'Saving…' : 'Save current'}
         </button>
       </div>
       <div className="preset-library__cats">

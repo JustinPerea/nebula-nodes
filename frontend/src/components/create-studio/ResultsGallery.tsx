@@ -14,7 +14,7 @@ export interface ResultsGalleryProps {
   onUseAsInput: (url: string) => void;
   onDelete: (nodeId: string) => void;
   onReveal?: (url: string) => void;
-  onSaveToFolder?: (url: string) => void;
+  onSaveToFolder?: (url: string) => Promise<{ savedPath: string }>;
 }
 
 export function ResultsGallery({

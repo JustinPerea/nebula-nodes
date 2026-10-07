@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Download, SquareArrowOutUpRight, ImagePlus, Trash2, FolderOpen, FolderDown, Maximize2 } from 'lucide-react';
 import type { Node } from '@xyflow/react';
 import type { NodeData, PortValue } from '../../types';
@@ -19,16 +19,40 @@ export interface ResultCardProps {
   onUseAsInput: (url: string) => void;
   onDelete: () => void;
   onReveal?: (url: string) => void;
-  onSaveToFolder?: (url: string) => void;
+  onSaveToFolder?: (url: string) => Promise<{ savedPath: string }>;
   onZoom?: () => void;
 }
 
-export function ResultCard({ node, onOpenInCanvas, onUseAsInput, onDelete, onReveal, onSaveToFolder, onZoom }: ResultCardProps) {
-  const [saved, setSaved] = useState(false);
-  const [dlOpen, setDlOpen] = useState(false);
-
+export function ResultCard(props: ResultCardProps) {
+  const { node } = props;
   if (!node) return null;
   const url = firstMediaUrl(node.data.outputs);
+  // Each output owns its save state and timer. Replacing media keeps the old
+  // export running, but its completion cannot update the replacement card.
+  return <ResultCardOutput key={JSON.stringify([node.id, url])} {...props} node={node} url={url} />;
+}
+
+function ResultCardOutput({ node, url, onOpenInCanvas, onUseAsInput, onDelete, onReveal, onSaveToFolder, onZoom }: ResultCardProps & {
+  node: Node<NodeData>;
+  url: string | null;
+}) {
+  const [saved, setSaved] = useState(false);
+  const [dlOpen, setDlOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const savePending = useRef(false);
+  const saveRequestVersion = useRef(0);
+  const successTimer = useRef<number | null>(null);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      saveRequestVersion.current += 1;
+      if (successTimer.current !== null) window.clearTimeout(successTimer.current);
+      successTimer.current = null;
+    };
+  }, []);
 
   // Only completed image/video results are zoomable. Images get a full-area
   // click target; video gets only the corner button so its controls stay live.
@@ -42,11 +66,33 @@ export function ResultCard({ node, onOpenInCanvas, onUseAsInput, onDelete, onRev
   // Raster images (not SVG) can be downloaded in a chosen format via the server.
   const isRaster = complete && Object.values(outs).some((o) => o.type === 'Image' && o.value);
 
-  const handleSave = () => {
-    if (!url || !onSaveToFolder) return;
-    onSaveToFolder(url);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+  const handleSave = async () => {
+    if (!url || !onSaveToFolder || savePending.current) return;
+    const requestVersion = ++saveRequestVersion.current;
+    const ownsRequest = () => mounted.current && saveRequestVersion.current === requestVersion;
+    savePending.current = true;
+    setSaving(true);
+    setSaved(false);
+    setSaveError(null);
+    if (successTimer.current !== null) window.clearTimeout(successTimer.current);
+    try {
+      const result = await onSaveToFolder(url);
+      if (ownsRequest() && result.savedPath.trim()) {
+        setSaved(true);
+        successTimer.current = window.setTimeout(() => {
+          if (!ownsRequest()) return;
+          setSaved(false);
+          successTimer.current = null;
+        }, 2000);
+      }
+    } catch (error) {
+      if (ownsRequest()) setSaveError(error instanceof Error ? error.message : 'Could not save this output. Please try again.');
+    } finally {
+      if (ownsRequest()) {
+        savePending.current = false;
+        setSaving(false);
+      }
+    }
   };
 
   const handleFormat = (fmt: (typeof DOWNLOAD_FORMATS)[number]) => {
@@ -122,12 +168,13 @@ export function ResultCard({ node, onOpenInCanvas, onUseAsInput, onDelete, onRev
           </button>
         )}
         {url && onSaveToFolder && (
-          <button className="result-card__btn" type="button" onClick={handleSave} title={saved ? 'Saved!' : 'Save to folder'}>
+          <button className="result-card__btn" type="button" onClick={() => void handleSave()} disabled={saving} title={saving ? 'Saving…' : saved ? 'Saved!' : 'Save to folder'}>
             <FolderDown size={15} strokeWidth={1.75} />
           </button>
         )}
         <button className="result-card__btn result-card__btn--danger" type="button" onClick={onDelete} title="Delete"><Trash2 size={15} strokeWidth={1.75} /></button>
       </div>
+      {saveError && <div className="result-card__save-error" role="alert">{saveError}</div>}
     </div>
   );
 }

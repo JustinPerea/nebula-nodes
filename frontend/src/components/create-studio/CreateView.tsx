@@ -17,6 +17,7 @@ import { CreateComposer } from './CreateComposer';
 import { PresetLibrary } from './PresetLibrary';
 import { ResultsGallery } from './ResultsGallery';
 import { ReferenceTray } from './ReferenceTray';
+import { usePrompt } from '../../hooks/usePrompt';
 import type { AttachedRef } from './ReferenceTray';
 import '../../styles/create-studio.css';
 import '../../styles/create-gallery.css';
@@ -73,6 +74,11 @@ export function CreateView() {
   const [quantity, setQuantity] = useState(1);
   const [stylesOpen, setStylesOpen] = useState(false);
   const [presetReloadKey, setPresetReloadKey] = useState(0);
+  const [ask, promptElement] = usePrompt();
+  const [savingStyle, setSavingStyle] = useState(false);
+  const [styleSaveError, setStyleSaveError] = useState<string | null>(null);
+  const styleSavePending = useRef(false);
+  const styleName = useRef<string | null>(null);
 
   const mounted = useRef(true);
   useEffect(() => {
@@ -115,10 +121,14 @@ export function CreateView() {
   }, []);
 
   const handleSaveCurrentStyle = async () => {
-    if (!modelDef) return;
-    const name = window.prompt('Name this style:', prompt.slice(0, 40) || modelDef.displayName);
-    if (!name) return;
+    if (!modelDef || styleSavePending.current) return;
+    styleSavePending.current = true;
+    setStyleSaveError(null);
     try {
+      const name = (await ask('Name this style:', styleName.current ?? (prompt.slice(0, 40) || modelDef.displayName)))?.trim();
+      if (!name || !mounted.current) return;
+      styleName.current = name;
+      setSavingStyle(true);
       // Capture the first image output from the most-recent completed generation
       // as the thumbnail so saved user styles show a real result instead of the
       // gradient placeholder.
@@ -138,8 +148,14 @@ export function CreateView() {
         }
       }
       await createPreset({ name, category: 'My Styles', prompt, params, modelId: modelDef.id, refImages: refs.map((r) => r.filePath), scope: 'project', thumbnail });
-      setPresetReloadKey((k) => k + 1);
-    } catch (err) { console.error('save style failed', err); }
+      styleName.current = null;
+      if (mounted.current) setPresetReloadKey((k) => k + 1);
+    } catch (err) {
+      if (mounted.current) setStyleSaveError(err instanceof Error ? err.message : 'Could not save this style. Please try again.');
+    } finally {
+      styleSavePending.current = false;
+      if (mounted.current) setSavingStyle(false);
+    }
   };
 
   const handleAttach = async (files: FileList) => {
@@ -226,11 +242,7 @@ export function CreateView() {
   };
 
   const handleSaveToFolder = async (url: string) => {
-    try {
-      await saveToFolder(url);
-    } catch (e) {
-      console.error('save failed', e);
-    }
+    return saveToFolder(url);
   };
 
   return (
@@ -240,6 +252,7 @@ export function CreateView() {
           <ArrowLeft size={16} strokeWidth={1.75} aria-hidden="true" /> Canvas
         </button>
         <span className="create-view__title">Create</span>
+        {styleSaveError && <span className="create-view__save-error" role="alert">{styleSaveError}</span>}
         {generationError && <span className="create-view__run-error" role="alert">{generationError}</span>}
         {createLaunchingIds.length > 0 && <span role="status">Preparing generation…</span>}
         {createLaunchingIds.map((genId) => {
@@ -302,6 +315,7 @@ export function CreateView() {
           onSaveCurrent={handleSaveCurrentStyle}
           onClose={() => setStylesOpen(false)}
           reloadKey={presetReloadKey}
+          saving={savingStyle}
         />
       )}
       <CreateComposer
@@ -320,6 +334,7 @@ export function CreateView() {
         onQuantityChange={setQuantity}
         onOpenStyles={() => setStylesOpen(true)}
       />
+      {promptElement}
     </div>
   );
 }
