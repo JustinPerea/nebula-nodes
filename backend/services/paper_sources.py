@@ -13,6 +13,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from PIL import Image
+from services.file_access import require_allowed_path
 from services.paper_transport import PaperCLI, PaperError
 
 
@@ -28,7 +29,7 @@ class SourceRefreshError(PaperError):
 
 class PaperSources:
     def __init__(self, root: Path, transport=None):
-        self.root = root / "paper-sources"
+        self.root = require_allowed_path(root / "paper-sources")
         self.root.mkdir(parents=True, exist_ok=True)
         self.transport = transport or PaperCLI()
         with self.db() as db:
@@ -36,7 +37,7 @@ class PaperSources:
             db.execute("CREATE TABLE IF NOT EXISTS snapshots (id TEXT PRIMARY KEY, record TEXT NOT NULL)")
 
     def db(self):
-        return sqlite3.connect(self.root / "sources.sqlite3", timeout=10)
+        return sqlite3.connect(require_allowed_path(self.root / "sources.sqlite3"), timeout=10)
 
     def get(self, source_id):
         with self.db() as db:
@@ -99,7 +100,7 @@ class PaperSources:
             changed = not previous or previous["id"] != sid
             stamp = now()
             if changed:
-                path = self.root / f"{sid}.png"
+                path = require_allowed_path(self.root / f"{sid}.png")
                 # Exclusive create: old bytes can never be overwritten by a refresh.
                 try:
                     with path.open("xb") as out:
@@ -139,7 +140,10 @@ class PaperSources:
         if row is None:
             raise KeyError("Snapshot not found; refresh or reconnect explicitly")
         record = json.loads(row[0])
-        path = self.root / f"{snapshot_id}.png"
+        path = require_allowed_path(self.root / f"{snapshot_id}.png")
         if not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest() != record["hash"] or (expected_hash and expected_hash != record["hash"]):
             raise PaperError("Pinned snapshot is missing or damaged; execution stopped")
+        # The persisted label is metadata, not filesystem authority. Preview
+        # responses and downstream consumers receive exactly the checked PNG.
+        record["filePath"] = str(path)
         return record

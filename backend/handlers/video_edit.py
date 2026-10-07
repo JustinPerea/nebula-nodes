@@ -15,6 +15,7 @@ from uuid import uuid4
 
 from models.events import ExecutionEvent, ProgressEvent
 from models.graph import GraphNode, PortValueDict
+from services.file_access import require_allowed_path
 from services.ffmpeg import ProbeResult, ffprobe_video, run_ffmpeg
 from services.output import OUTPUT_ROOT, get_run_dir
 
@@ -42,10 +43,12 @@ def _resolve_local_path(value: str) -> Path | None:
             candidate.relative_to(OUTPUT_ROOT.resolve())
         except ValueError:
             return None
+        candidate = require_allowed_path(candidate)
         return candidate if candidate.exists() else None
     candidate = Path(value).expanduser()
-    if candidate.is_absolute() and candidate.exists():
-        return candidate
+    if candidate.is_absolute():
+        candidate = require_allowed_path(candidate)
+        return candidate if candidate.exists() else None
     return None
 
 
@@ -196,6 +199,7 @@ async def render_video_edit_file(
         raise ValueError(f"unsupported video export quality: {quality}")
     if not clips:
         raise ValueError("clips required")
+    source_path = require_allowed_path(source_path)
 
     # GIF never carries audio. For other containers, build an audio graph only
     # when the source actually has an audio stream. Clip mute/volume state
@@ -230,7 +234,7 @@ async def render_video_edit_file(
         if has_audio:
             filter_complex += ";[outa]aresample=async=1[outas]"
 
-    destination_dir = output_dir or get_run_dir()
+    destination_dir = require_allowed_path(output_dir or get_run_dir())
     destination_dir.mkdir(parents=True, exist_ok=True)
     output_path = destination_dir / f"{uuid4().hex[:12]}.{output_format}"
 

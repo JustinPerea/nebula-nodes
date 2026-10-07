@@ -25,6 +25,7 @@ from PIL import Image
 from cinema.color import extract_palette, transfer_to_palette
 from models.events import ExecutionEvent
 from models.graph import GraphNode, PortValueDict
+from services.file_access import require_allowed_path
 from services.output import OUTPUT_ROOT, get_run_dir
 
 
@@ -120,7 +121,7 @@ async def handle_cinema_color(
             source_path = _resolve_local_path(str(source_ref))
             if source_path is None:
                 raise ValueError(f"Source image not found: {source_ref}")
-            with Image.open(source_path) as src_img:
+            with Image.open(require_allowed_path(source_path)) as src_img:
                 swatches = extract_palette(src_img.convert("RGB"))
 
     # An empty palette would pass the image through unchanged, which reads as
@@ -141,7 +142,7 @@ async def handle_cinema_color(
 
     method = str(params.get("method", "lab-transfer"))
 
-    with Image.open(abs_path) as img:
+    with Image.open(require_allowed_path(abs_path)) as img:
         result = transfer_to_palette(
             img.convert("RGB"), swatches, strength=strength, method=method
         )

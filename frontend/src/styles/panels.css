@@ -2574,3 +2574,28 @@ body:not(.app-slava-restraint) .chat-panel__thinking-line {
 body:not(.app-slava-restraint) .chat-panel__thinking-line:last-child {
   color: inherit; /* brighten most recent line */
 }
+
+/* Commons scope controls exist only after backend capability opt-in. */
+body.app-slava-restraint .chat-panel__brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  color: var(--sr-ink-meta);
+  font-size: 11px;
+}
+body.app-slava-restraint .chat-panel__brand input {
+  min-width: 0;
+  width: 160px;
+  padding: 4px 6px;
+  border: 1px solid var(--sr-edge);
+  border-radius: 4px;
+  background: var(--sr-surface);
+  color: var(--sr-ink);
+  font: inherit;
+}
+body.app-slava-restraint .chat-panel__scope-hint {
+  margin: 4px 0 0;
+  color: var(--sr-ink-meta);
+  font-size: 10px;
+}

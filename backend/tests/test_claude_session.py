@@ -92,9 +92,12 @@ async def test_claude_stream_yields_normalized_events_and_done(monkeypatch):
     ]
     assert captured_args is not None
     assert captured_args[:2] == ("claude", "-p")
-    assert "--dangerously-skip-permissions" in captured_args
+    assert "--dangerously-skip-permissions" not in captured_args
+    assert "--restricted" in captured_args
     assert captured_args[captured_args.index("--model") + 1] == "claude-sonnet-4-6"
-    assert captured_args[captured_args.index("--append-system-prompt") + 1] == NEBULA_SYSTEM_PRIMER
+    system_prompt = captured_args[captured_args.index("--append-system-prompt") + 1]
+    assert NEBULA_SYSTEM_PRIMER in system_prompt
+    assert "Repo-backed Nebula skills" in system_prompt
     assert captured_args[captured_args.index("--resume") + 1] == "existing-session"
     assert captured_args[-1] == "inspect the graph"
     assert captured_env is not None
@@ -102,9 +105,9 @@ async def test_claude_stream_yields_normalized_events_and_done(monkeypatch):
     assert "NEBULA_CONNECTOR_ENCRYPTION_KEY" not in captured_env
     assert "NEBULA_INJECTED_KEYS" not in captured_env
     mcp_config = json.loads(captured_args[captured_args.index("--mcp-config") + 1])
-    assert captured_args[captured_args.index("--mcp-config") + 2] == "--append-system-prompt"
+    assert captured_args[captured_args.index("--mcp-config") + 2] == "--settings"
     assert mcp_config["mcpServers"]["nebula_krea"]["args"][-1] == "http://127.0.0.1:8033"
-    assert "--strict-mcp-config" not in captured_args
+    assert "--strict-mcp-config" in captured_args
     if sys.platform != "win32":
         assert captured_spawn_options["start_new_session"] is True
 

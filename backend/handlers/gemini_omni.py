@@ -11,6 +11,7 @@ import httpx
 
 from models.events import ExecutionEvent, ProgressEvent
 from models.graph import GraphNode, PortValueDict
+from services.file_access import require_allowed_path
 from services.cancellation import schedule_detached_cancel
 from services.output import get_run_dir
 from services.provider_capabilities import enforce_gemini_omni_capabilities
@@ -69,7 +70,7 @@ async def _load_bytes(value: str) -> tuple[bytes, str]:
     path = Path(value)
     if not path.exists():
         raise ValueError(f"Media not found: {value}")
-    return path.read_bytes(), _mime_for_path(path)
+    return require_allowed_path(path).read_bytes(), _mime_for_path(path)
 
 
 async def _build_input_parts(

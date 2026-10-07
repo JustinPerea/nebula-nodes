@@ -190,6 +190,11 @@ async def run_hermes(
     autonomy: str = "auto",
     provider: str | None = None,
     selection_context: str | None = None,
+    effort: str | None = None,
+    backend_url: str | None = None,
+    extra_dirs: list[Path] | None = None,
+    workdir: Path | None = None,
+    agent_token: str | None = None,
 ) -> AsyncIterator[dict[str, Any]]:
     """Run a single Daedalus turn via `hermes-daedalus chat -q` and yield events.
 
@@ -198,6 +203,18 @@ async def run_hermes(
     quiet-mode first-line `session_id:` handshake is replaced by parsing
     `Session: <id>` from the footer that prints at the end of the turn.
     """
+    from commons.activation import is_enabled
+    if is_enabled() or agent_token:
+        yield {"type": "error", "message": (
+            "Daedalus cannot run while Commons is enabled because its private "
+            "file access boundary has not been verified. Choose Claude or Codex "
+            "for a scoped Commons chat, or restart with Commons disabled."
+        )}
+        yield {"type": "done"}
+        return
+    # Keep the existing normal Daedalus profile/skills/autonomy contract. Do not
+    # pretend that accepting private-workspace keywords enforces a native sandbox.
+    del effort, extra_dirs, workdir
     # Model handoff: the frontend chat panel sends a single `model` field,
     # but its meaning depends on the active agent. For Daedalus turns (the
     # only path that hits this function), we want whatever Nous-Portal model
@@ -238,6 +255,9 @@ async def run_hermes(
         # the streaming reader.
         "PYTHONUNBUFFERED": "1",
     }
+    env.pop("NEBULA_AGENT_TOKEN", None)
+    if backend_url:
+        env["NEBULA_URL"] = backend_url
     mcp_overlay = prepare_hermes_mcp(env)
     if mcp_overlay.limitation:
         yield {"type": "thinking", "text": mcp_overlay.limitation}

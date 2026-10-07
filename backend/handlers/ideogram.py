@@ -35,6 +35,7 @@ import httpx
 
 from models.events import ExecutionEvent
 from models.graph import GraphNode, PortValueDict
+from services.file_access import require_allowed_path
 from services.output import get_run_dir, save_base64_image
 
 IDEOGRAM_API_BASE = "https://api.ideogram.ai"
@@ -100,7 +101,7 @@ async def _load_binary(value: str) -> tuple[bytes, str]:
     if not path.exists():
         raise ValueError(f"Image file not found: {value}")
     mime = _MIME_BY_SUFFIX.get(path.suffix.lstrip(".").lower(), "image/png")
-    return path.read_bytes(), mime
+    return require_allowed_path(path).read_bytes(), mime
 
 
 async def _file_part(field: str, value: str) -> tuple[str, tuple[str, bytes, str]]:

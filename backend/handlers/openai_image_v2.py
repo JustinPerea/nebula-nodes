@@ -7,6 +7,7 @@ from typing import Any, Awaitable, Callable
 from execution.stream_runner import StreamConfig, stream_execute_image
 from models.events import ExecutionEvent
 from models.graph import GraphNode, PortValueDict
+from services.file_access import require_allowed_path
 from services.output import get_run_dir
 
 OPENAI_GENERATIONS_URL = "https://api.openai.com/v1/images/generations"
@@ -149,11 +150,11 @@ async def handle_gpt_image_2_edit(
     files: list[tuple[str, tuple[str, bytes, str]]] = []
     for path in image_paths:
         p = Path(path)
-        files.append(("image[]", (p.name, p.read_bytes(), _guess_mime(p))))
+        files.append(("image[]", (p.name, require_allowed_path(p).read_bytes(), _guess_mime(p))))
     mask_input = inputs.get("mask")
     if mask_input and mask_input.value:
         mp = Path(str(mask_input.value))
-        files.append(("mask", (mp.name, mp.read_bytes(), "image/png")))
+        files.append(("mask", (mp.name, require_allowed_path(mp).read_bytes(), "image/png")))
 
     form: dict[str, str] = {}
     for key in ("model", "prompt", "size", "quality", "moderation", "output_format"):

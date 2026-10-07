@@ -15,6 +15,7 @@ import asyncio
 import json
 import os
 import re
+import stat
 from pathlib import Path
 from typing import Any, AsyncIterator
 
@@ -22,7 +23,12 @@ from services.agent_process import (
     agent_process_group_options,
     terminate_agent_process_tree,
 )
-from services.krea_agent_mcp import agent_child_env, codex_mcp_args
+from services.krea_agent_mcp import agent_child_env
+from services.agent_profiles import (
+    DEFAULT_EFFORT, GrantOverlapsProtectedDir, agent_workspace, agent_workspace_env,
+    clean_mcp_servers, codex_default_model, codex_filesystem_args, codex_profile_args,
+    default_secret_paths, normalize_effort, protected_agent_dirs,
+)
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -204,7 +210,11 @@ async def codex_chatgpt_login_state() -> dict[str, Any]:
 
 def _read_text(path: Path, limit: int | None = None) -> str:
     try:
-        text = path.read_text(encoding="utf-8")
+        info = path.lstat()
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or path.resolve() != path:
+            return ""
+        with path.open("r", encoding="utf-8") as stream:
+            text = stream.read(limit + 1) if limit is not None else stream.read()
     except OSError:
         return ""
     if limit is not None and len(text) > limit:
@@ -227,16 +237,24 @@ def _parse_frontmatter(text: str) -> dict[str, str]:
 
 
 def _skill_index() -> list[dict[str, str]]:
+    from services.agent_knowledge import KnowledgeSnapshotError, _tracked_files
+
     skills: list[dict[str, str]] = []
     if not SKILL_ROOT.exists():
         return skills
+    try:
+        tracked = set(_tracked_files(PROJECT_ROOT))
+    except KnowledgeSnapshotError:
+        return skills
     for skill_file in sorted(SKILL_ROOT.glob("*/SKILL.md")):
-        text = _read_text(skill_file, MAX_SKILL_DOC_CHARS)
-        fields = _parse_frontmatter(text)
         try:
             rel_path = skill_file.relative_to(PROJECT_ROOT)
         except ValueError:
-            rel_path = skill_file
+            continue
+        if str(rel_path) not in tracked:
+            continue
+        text = _read_text(skill_file, MAX_SKILL_DOC_CHARS)
+        fields = _parse_frontmatter(text)
         name = fields.get("name") or skill_file.parent.name
         skills.append({
             "name": name,
@@ -349,6 +367,10 @@ def _build_prompt(message: str, selection_context: str | None = None) -> str:
 
     skill_bootstrap = _build_skill_bootstrap(message)
     live_context = f"\n\n{selection_context}" if selection_context else ""
+    from commons.activation import is_enabled
+    if is_enabled():
+        from commons.skill import COMMONS_SKILL
+        live_context = f"\n\n{COMMONS_SKILL}{live_context}"
     return (
         f"{NEBULA_SYSTEM_PRIMER}{live_context}\n\n"
         f"{skill_bootstrap}\n\n"
@@ -359,31 +381,41 @@ def _build_prompt(message: str, selection_context: str | None = None) -> str:
     )
 
 
-def _codex_base_args(model: str | None) -> list[str]:
+def _codex_model(model: str | None) -> str | None:
+    # Preserve an explicit model while ignoring the chat's Claude fallback.
+    if model and not model.startswith("claude-"):
+        return model
+    return codex_default_model()
+
+
+def _codex_base_args(model: str | None, effort: str = DEFAULT_EFFORT,
+                     workdir: Path | None = None, backend_url: str | None = None) -> list[str]:
+    workdir = workdir or agent_workspace()
     args = [
         CODEX_BIN,
         "exec",
         "--json",
         "--color",
         "never",
-        "--sandbox",
-        "workspace-write",
+        *codex_profile_args(effort=effort),
+        *codex_filesystem_args(workdir=workdir,
+                               deny_paths=[*protected_agent_dirs(), *default_secret_paths()]),
         "-c",
         'approval_policy="never"',
-        "-c",
-        "sandbox_workspace_write.network_access=true",
         "--cd",
-        str(PROJECT_ROOT),
+        str(workdir),
     ]
     # The frontend's default model is Claude-specific. Do not forward that to
     # Codex; let the user's Codex config/account pick the active Codex model.
     if model and not model.startswith("claude-"):
         args.extend(["--model", model])
-    args.extend(codex_mcp_args())
+    for server_name, config in clean_mcp_servers(backend_url).items():
+        args.extend(["-c", f"mcp_servers.{server_name}.command={json.dumps(config['command'])}",
+                     "-c", f"mcp_servers.{server_name}.args={json.dumps(config['args'])}"])
     return args
 
 
-def _codex_exec_env() -> dict[str, str]:
+def _codex_exec_env(backend_url: str | None = None, agent_token: str | None = None) -> dict[str, str]:
     """Environment for Nebula-owned Codex turns.
 
     Nebula's Codex agent is subscription-auth only. Even after verifying
@@ -391,6 +423,11 @@ def _codex_exec_env() -> dict[str, str]:
     cannot silently fall back to project billing.
     """
     env = {**agent_child_env(), "NEBULA_DISABLE_QUICK": "1", "NO_COLOR": "1"}
+    env.pop("NEBULA_AGENT_TOKEN", None)
+    if backend_url:
+        env["NEBULA_URL"] = backend_url
+    if agent_token:
+        env["NEBULA_AGENT_TOKEN"] = agent_token
     for key in CODEX_FORBIDDEN_API_ENV_KEYS:
         env.pop(key, None)
     return env
@@ -508,12 +545,18 @@ async def run_codex(
     autonomy: str = "auto",
     provider: str | None = None,
     selection_context: str | None = None,
+    effort: str | None = None,
+    backend_url: str | None = None,
+    extra_dirs: list[Path] | None = None,
+    workdir: Path | None = None,
+    agent_token: str | None = None,
 ) -> AsyncIterator[dict[str, Any]]:
     """Run one Codex turn and yield normalized chat events."""
     # Accepted for runner signature parity. Codex auth/provider selection lives
     # in the Codex CLI configuration and login state.
     del autonomy
     del provider
+    del extra_dirs
 
     auth_error = await _require_codex_chatgpt_login()
     if auth_error:
@@ -521,13 +564,21 @@ async def run_codex(
         yield {"type": "done"}
         return
 
-    args = _codex_base_args(model)
+    effective_effort = normalize_effort(effort)
+    effective_model = _codex_model(model)
+    agent_cwd = workdir or agent_workspace()
+    try:
+        args = _codex_base_args(effective_model, effective_effort, agent_cwd, backend_url)
+    except GrantOverlapsProtectedDir as exc:
+        yield {"type": "error", "message": str(exc)}
+        yield {"type": "done"}
+        return
     if session_id:
         args.extend(["resume", session_id, "-"])
     else:
         args.append("-")
 
-    env = _codex_exec_env()
+    env = {**_codex_exec_env(backend_url, agent_token), **agent_workspace_env(agent_cwd)}
     prompt = _build_prompt(message, selection_context)
 
     try:
@@ -536,7 +587,7 @@ async def run_codex(
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
-            cwd=str(PROJECT_ROOT),
+            cwd=str(agent_cwd),
             env=env,
             limit=64 * 1024 * 1024,
             **agent_process_group_options(),
@@ -569,6 +620,10 @@ async def run_codex(
             except json.JSONDecodeError:
                 continue
             for normalized in _normalize_codex_event(ev):
+                if normalized.get("type") == "session" and effort is not None:
+                    normalized["effort"] = effective_effort
+                    if effective_model:
+                        normalized["model"] = effective_model
                 yield normalized
 
         return_code = await proc.wait()

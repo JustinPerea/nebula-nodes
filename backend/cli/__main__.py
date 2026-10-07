@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
+from contextlib import nullcontext
+from pathlib import Path
 
 from .client import NebulaClient
 
@@ -11,8 +14,8 @@ def build_parser() -> argparse.ArgumentParser:
         prog="nebula",
         description="Nebula Nodes CLI — build and run media generation pipelines",
     )
-    parser.add_argument("--url", default="http://localhost:8000",
-                        help="Backend URL (default: http://localhost:8000)")
+    parser.add_argument("--url", default=os.environ.get("NEBULA_URL", "http://localhost:8000"),
+                        help="Backend URL (default: $NEBULA_URL or http://localhost:8000)")
     sub = parser.add_subparsers(dest="command")
 
     # -- Discovery --
@@ -79,6 +82,42 @@ def build_parser() -> argparse.ArgumentParser:
     quick_p.add_argument("--param", action="append", nargs="*", default=[], metavar="key=value",
                          help="Params (e.g. --param aspect_ratio=9:16)")
 
+    # -- Commons --
+    commons_p = sub.add_parser("commons", help="Search, read, add to and borrow from the commons")
+    csub = commons_p.add_subparsers(dest="commons_cmd", required=True)
+    s = csub.add_parser("search", help="Search analyzed references")
+    s.add_argument("query", nargs="?", default="")
+    s.add_argument("--brand")
+    s.add_argument("--filters", help="JSON object of filters")
+    s.add_argument("--limit", type=int, default=10)
+    g = csub.add_parser("get", help="Read one reference")
+    g.add_argument("id")
+    g.add_argument("--fields", help="Comma-separated field names")
+    g.add_argument("--brand")
+    f = csub.add_parser("fetch", help="Download reference pixels into the turn workdir")
+    f.add_argument("id")
+    f.add_argument("--out", help="Destination directory (default: current workdir)")
+    f.add_argument("--brand")
+    a = csub.add_parser("add", help="Add a reference to a collection's inbox")
+    a.add_argument("source", help="A URL or local file path")
+    a.add_argument("--collection", required=True)
+    a.add_argument("--why", required=True)
+    a.add_argument("--made-by", dest="made_by", default="unknown", choices=["human", "ai", "unknown"])
+    c = csub.add_parser("comment", help="Comment on a reference")
+    c.add_argument("id")
+    c.add_argument("text")
+    c.add_argument("--region")
+    c.add_argument("--brand")
+    b = csub.add_parser("borrow", help="Record an attribute borrowed from a reference")
+    b.add_argument("id")
+    b.add_argument("--attribute", required=True)
+    b.add_argument("--value", required=True)
+    b.add_argument("--used-in", dest="used_in", required=True, help='JSON, e.g. {"kind":"external","ref":"..."}')
+    b.add_argument("--why", required=True)
+    b.add_argument("--region")
+    b.add_argument("--brand")
+    csub.add_parser("status", help="Worker, meter and queue status")
+
     return parser
 
 
@@ -115,9 +154,10 @@ def main() -> None:
 
     client = NebulaClient(args.url)
 
-    from .commands import context, nodes, keys, graph, execute, quick, path, selection
+    from .commands import commons, context, nodes, keys, graph, execute, quick, path, selection
 
     dispatch = {
+        "commons": lambda: commons.run(client, args),
         "context": lambda: context.run(client),
         "nodes": lambda: nodes.run_list(client, query=args.query, category=args.category),
         "info": lambda: nodes.run_info(client, args.node_id),
@@ -140,7 +180,19 @@ def main() -> None:
 
     handler = dispatch.get(args.command)
     if handler:
-        handler()
+        scope = nullcontext()
+        if os.environ.get("NEBULA_AGENT_TOKEN"):
+            # The backend registry is authoritative; caller-controlled directory
+            # environment variables never select an agent's workspace.
+            context = client.get_agent_context()
+            workspace = context.get("workspace") if isinstance(context, dict) else None
+            if not isinstance(workspace, str) or not workspace or not Path(workspace).is_absolute():
+                print("error: backend did not return a valid agent workspace", file=sys.stderr)
+                sys.exit(1)
+            from services.agent_workspaces import workspace_scope
+            scope = workspace_scope(Path(workspace))
+        with scope:
+            handler()
     else:
         parser.print_help()
 

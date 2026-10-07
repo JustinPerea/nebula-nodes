@@ -13,6 +13,7 @@ import httpx
 
 from models.events import ExecutionEvent, ProgressEvent
 from models.graph import GraphNode, PortValueDict
+from services.file_access import require_allowed_path
 from services.cancellation import schedule_detached_cancel
 from services.output import OUTPUT_ROOT, get_run_dir
 
@@ -181,7 +182,7 @@ async def _upload_asset(
         if path is None:
             raise ValueError(f"Krea image reference is not a URL or local file: {raw}")
         mime = _mime_for_path(path)
-        payload = path.read_bytes()
+        payload = require_allowed_path(path).read_bytes()
         filename = path.name
 
     files = {"file": (filename, payload, mime)}

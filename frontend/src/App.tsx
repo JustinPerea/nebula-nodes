@@ -23,6 +23,7 @@ import { getSettings, fetchCLIGraph } from './lib/api';
 import { getKreaConnection, normalizeKreaMode, nodeKeyStatus } from './lib/kreaConnection';
 import { useUIStore } from './store/uiStore';
 import { useGraphStore } from './store/graphStore';
+import { useCommonsCapability } from './hooks/useCommonsCapability';
 import { useZoomManifest } from './hooks/useZoomManifest';
 import { NODE_DEFINITIONS } from './constants/nodeDefinitions';
 import { computeCanvasFitPadding } from './lib/canvasFit';
@@ -65,6 +66,10 @@ const BrandShowcaseView = lazy(() =>
   import('./components/brand/BrandShowcaseView').then((module) => ({
     default: module.BrandShowcaseView,
   })),
+);
+
+const CommonsView = lazy(() =>
+  import('./components/commons/CommonsView').then((module) => ({ default: module.CommonsView })),
 );
 
 /** Pull the backend's in-memory cli_graph onto the canvas on first mount —
@@ -146,6 +151,7 @@ function ZoomManifestRecorder() {
 }
 
 export default function App() {
+  useCommonsCapability();
   const credentialCache = useUIStore((s) => s.settingsCache);
   const settingsVisible = useUIStore((s) => s.panels.settings.visible
     && (s.viewMode === 'canvas' || s.viewMode === 'create'));
@@ -254,7 +260,9 @@ export default function App() {
   const viewMode = useUIStore((s) => s.viewMode);
   const assetsPanelVisible = useUIStore((s) => s.panels.assets.visible);
 
-  const isCanvas = viewMode === 'canvas';
+  const commonsEnabled = useUIStore((s) => s.commonsEnabled);
+  const isCommons = viewMode === 'commons' && commonsEnabled;
+  const isCanvas = viewMode === 'canvas' || (viewMode === 'commons' && !commonsEnabled);
   const isRemotion = viewMode === 'remotion-editor';
   const isCinema = viewMode === 'cinema-editor';
   const isCharacter = viewMode === 'character-editor';
@@ -265,6 +273,8 @@ export default function App() {
   let mainView;
   if (isCanvas) {
     mainView = <Canvas />;
+  } else if (isCommons) {
+    mainView = <CommonsView />;
   } else if (isBrandShowcase) {
     mainView = <BrandShowcaseView />;
   } else if (isRemotion) {
@@ -288,7 +298,7 @@ export default function App() {
       <GraphHydrator />
       <GraphFileActions />
       <ZoomManifestRecorder />
-      {!isBrandShowcase && <CanvasTabs />}
+      {!isBrandShowcase && !isCommons && <CanvasTabs />}
       <Suspense
         fallback={(
           <div className="workspace-loading" role="status" aria-live="polite">
@@ -304,7 +314,7 @@ export default function App() {
       {isCanvas && <RunHistoryPanel />}
       {isCanvas && <NodeInspectorPopover />}
       {!isBrandShowcase && (
-        <div className={`workspace-overlays${isCanvas ? '' : ' workspace-overlays--studio'}`}>
+        <div className={`workspace-overlays${isCanvas ? '' : ' workspace-overlays--studio'}${isCommons ? ' workspace-overlays--hidden' : ''}`} inert={isCommons}>
           <Settings />
           <ChatPanel />
         </div>
@@ -313,7 +323,7 @@ export default function App() {
       {isCanvas && <ChatLauncher />}
       {isCanvas && <Toolbar />}
       {isCanvas && <AgentLog />}
-      {!isBrandShowcase && <CommandPalette />}
+      {!isBrandShowcase && !isCommons && <CommandPalette />}
       {isCanvas && <OnboardingOverlay />}
     </ReactFlowProvider>
   );

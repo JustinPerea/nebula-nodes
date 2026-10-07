@@ -17,6 +17,7 @@ import numpy as np
 from PIL import Image, UnidentifiedImageError
 
 from cinema.color import extract_palette
+from services.file_access import ProtectedPathError, require_allowed_path
 from services.output import OUTPUT_ROOT, DEFAULT_OUTPUT_ROOT
 
 _MODE_LABELS = {
@@ -175,7 +176,10 @@ def resolve_moodboard_image_path(value: str) -> Path | None:
             except (ValueError, OSError):
                 continue
             if candidate.exists():
-                return candidate
+                try:
+                    return require_allowed_path(candidate)
+                except ProtectedPathError:
+                    return None
         return None
 
     candidate = Path(raw).expanduser()
@@ -184,7 +188,12 @@ def resolve_moodboard_image_path(value: str) -> Path | None:
         for root in _roots:
             try:
                 resolved.relative_to(root.resolve())
-                return resolved if resolved.exists() else None
+                if resolved.exists():
+                    try:
+                        return require_allowed_path(resolved)
+                    except ProtectedPathError:
+                        return None
+                return None
             except ValueError:
                 continue
         return None

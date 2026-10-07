@@ -28,6 +28,7 @@ import httpx
 
 from models.events import ExecutionEvent
 from models.graph import GraphNode, PortValueDict
+from services.file_access import require_allowed_path
 from services.output import OUTPUT_ROOT
 
 
@@ -102,7 +103,7 @@ async def _describe_style(api_key: str, image_path: Path, system_prompt: str) ->
     Uses the non-streaming `generateContent` endpoint — we want one
     short answer, not progressive text.
     """
-    b64_data = base64.b64encode(image_path.read_bytes()).decode("ascii")
+    b64_data = base64.b64encode(require_allowed_path(image_path).read_bytes()).decode("ascii")
     mime_type = _mime_for_path(image_path)
     body: dict[str, Any] = {
         "contents": [

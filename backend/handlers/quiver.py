@@ -18,6 +18,7 @@ from uuid import uuid4
 
 from models.events import ExecutionEvent, StreamPartialSvgEvent
 from models.graph import GraphNode, PortValueDict
+from services.file_access import require_allowed_path
 from services.output import OUTPUT_ROOT, get_run_dir
 from services.quiver_client import (
     QuiverAuthError,
@@ -77,7 +78,7 @@ def _to_quiver_image_arg(value: str) -> tuple[str | None, str | None]:
     local = _resolve_local_path(value)
     if local is None:
         raise ValueError(f"Cannot resolve image input to a fetchable form: {value!r}")
-    return None, base64.b64encode(local.read_bytes()).decode("ascii")
+    return None, base64.b64encode(require_allowed_path(local).read_bytes()).decode("ascii")
 
 
 def _ref_to_quiver_item(value: str) -> str | dict[str, str]:
@@ -102,7 +103,7 @@ def _ref_to_quiver_item(value: str) -> str | dict[str, str]:
     local = _resolve_local_path(value)
     if local is None:
         raise ValueError(f"Cannot resolve reference image: {value!r}")
-    b64 = base64.b64encode(local.read_bytes()).decode("ascii")
+    b64 = base64.b64encode(require_allowed_path(local).read_bytes()).decode("ascii")
     return {"base64": b64}
 
 

@@ -12,6 +12,52 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
+from services.file_access import require_allowed_path
+
+
+# Single-file containers used by Nebula's video/audio ports. Deliberately omit
+# HLS, DASH, concat, image2, and other demuxers that open secondary resources.
+# Match demuxer aliases, not filename suffixes: renaming a playlist cannot turn
+# it into an accepted video. The MOV external-track options default to false;
+# callers cannot override them below. FFmpeg rejects those MOV-only options for
+# WebM/AVI, while ffprobe accepts them as explicit defensive defaults.
+_MEDIA_FORMAT_WHITELIST = (
+    "mov,mp4,m4a,3gp,3g2,mj2,matroska,webm,avi,m4v,mp3,wav,flac,ogg,aac"
+)
+_DECODER_POLICY_OPTIONS = {
+    "-format_whitelist", "-protocol_whitelist", "-enable_drefs", "-use_absolute_path",
+}
+
+
+def _media_input_args(source: Path | str) -> list[str]:
+    if str(source).startswith(("http://", "https://", "data:")):
+        raise ValueError("Video decoding requires a downloaded local media file")
+    path = require_allowed_path(source)
+    return [
+        "-protocol_whitelist", "file",
+        "-format_whitelist", _MEDIA_FORMAT_WHITELIST,
+        "-i", f"file:{path}",
+    ]
+
+
+def _guard_ffmpeg_inputs(args: list[str]) -> list[str]:
+    """Give every local input the same policy without affecting output format."""
+    guarded: list[str] = []
+    index = 0
+    while index < len(args):
+        arg = args[index]
+        if arg.split("=", 1)[0] in _DECODER_POLICY_OPTIONS:
+            raise ValueError("FFmpeg decoder policy options cannot be overridden")
+        if arg == "-i":
+            if index + 1 >= len(args):
+                raise ValueError("FFmpeg input is missing a source")
+            guarded.extend(_media_input_args(args[index + 1]))
+            index += 2
+        else:
+            guarded.append(arg)
+            index += 1
+    return guarded
+
 
 # Local alias for the asyncio subprocess factory. Using a variable keeps the
 # literal "exec(" substring out of the call sites — purely a CI-hook hygiene
@@ -62,7 +108,8 @@ async def ffprobe_video(source: Path | str) -> ProbeResult:
         "-v", "error",
         "-show_entries", "format=duration:stream=codec_type,r_frame_rate,avg_frame_rate",
         "-of", "json",
-        str(source),
+        "-enable_drefs", "0", "-use_absolute_path", "0",
+        *_media_input_args(source),
     ]
     proc = await _spawn_subprocess(
         *cmd,
@@ -122,7 +169,7 @@ async def run_ffmpeg(
     Raises RuntimeError on non-zero exit. Progress callback receives a dict
     of key=value pairs (e.g. {'out_time_us': '1500000', 'progress': 'continue'}).
     """
-    cmd = ["ffmpeg", "-hide_banner", "-y", *args]
+    cmd = ["ffmpeg", "-hide_banner", "-y", *_guard_ffmpeg_inputs(args)]
     proc = await _spawn_subprocess(
         *cmd,
         stdout=asyncio.subprocess.PIPE,

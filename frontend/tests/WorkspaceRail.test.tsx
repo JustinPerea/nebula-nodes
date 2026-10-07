@@ -8,6 +8,7 @@ describe('WorkspaceRail', () => {
     useUIStore.getState().setLeftDock('library');
     useUIStore.setState({
       viewMode: 'canvas',
+      commonsEnabled: false,
       onboardingActive: false,
       onboardingStep: 0,
     });

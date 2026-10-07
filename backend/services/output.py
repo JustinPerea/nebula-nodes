@@ -6,6 +6,7 @@ import logging
 import mimetypes
 import os
 import re
+import threading
 from contextvars import ContextVar
 from datetime import datetime, timezone
 from pathlib import Path
@@ -15,6 +16,7 @@ from uuid import uuid4
 
 from services.ffmpeg import ffprobe_video
 from services.settings import load_settings
+from services.file_access import require_allowed_path
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +67,8 @@ def _resolve_output_root() -> Path:
     if not candidate.is_absolute():
         candidate = DEFAULT_OUTPUT_ROOT.parent / candidate
 
+    candidate = require_allowed_path(candidate)
+
     # Fix 1: guarantee the directory exists; fall back if it can't be created.
     try:
         candidate.mkdir(parents=True, exist_ok=True)
@@ -75,7 +79,7 @@ def _resolve_output_root() -> Path:
             f" — falling back to {DEFAULT_OUTPUT_ROOT}",
             flush=True,
         )
-        DEFAULT_OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
+        require_allowed_path(DEFAULT_OUTPUT_ROOT).mkdir(parents=True, exist_ok=True)
         return DEFAULT_OUTPUT_ROOT
 
 
@@ -93,6 +97,7 @@ execution_run_dir: ContextVar[Path | None] = ContextVar(
 
 def create_run_dir(run_id: str | None = None) -> Path:
     """Create a collision-proof output directory for one execution run."""
+    require_allowed_path(OUTPUT_ROOT)
     timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H-%M-%S_%f")
     safe_run_id = re.sub(r"[^A-Za-z0-9_-]+", "-", str(run_id or "run")).strip("-")
     safe_run_id = (safe_run_id or "run")[:32]
@@ -109,7 +114,7 @@ def create_run_dir(run_id: str | None = None) -> Path:
 def get_run_dir() -> Path:
     """Return the bound graph-run directory or allocate a standalone one."""
     bound = execution_run_dir.get()
-    return bound if bound is not None else create_run_dir()
+    return require_allowed_path(bound) if bound is not None else create_run_dir()
 
 
 # ---------------------------------------------------------------------------
@@ -230,7 +235,7 @@ async def _validate_and_correct_extension(path: Path) -> Path:
 def save_base64_image(b64_data: str, run_dir: Path, extension: str = "png") -> Path:
     image_bytes = base64.b64decode(b64_data)
     filename = f"{uuid4().hex[:12]}.{extension}"
-    file_path = run_dir / filename
+    file_path = require_allowed_path(run_dir / filename)
     file_path.write_bytes(image_bytes)
     # Sync write path: magic-byte validation only (ffprobe is async and image
     # bytes never need it).
@@ -241,7 +246,7 @@ def save_base64_image_named(
     b64_data: str, run_dir: Path, name: str, extension: str = "png"
 ) -> Path:
     image_bytes = base64.b64decode(b64_data)
-    file_path = run_dir / f"{name}.{extension}"
+    file_path = require_allowed_path(run_dir / f"{name}.{extension}")
     file_path.write_bytes(image_bytes)
     return _validate_magic_bytes(file_path)
 
@@ -249,7 +254,7 @@ def save_base64_image_named(
 async def save_video_from_url(url: str, run_dir: Path, extension: str = "mp4") -> Path:
     import httpx
     filename = f"{uuid4().hex[:12]}.{extension}"
-    file_path = run_dir / filename
+    file_path = require_allowed_path(run_dir / filename)
     async with httpx.AsyncClient(timeout=120.0) as client:
         response = await client.get(url)
         response.raise_for_status()
@@ -260,7 +265,7 @@ async def save_video_from_url(url: str, run_dir: Path, extension: str = "mp4") -
 async def save_mesh_from_url(url: str, run_dir: Path, extension: str = "glb") -> Path:
     import httpx
     filename = f"{uuid4().hex[:12]}.{extension}"
-    file_path = run_dir / filename
+    file_path = require_allowed_path(run_dir / filename)
     async with httpx.AsyncClient(timeout=120.0) as client:
         response = await client.get(url)
         response.raise_for_status()
@@ -348,13 +353,13 @@ async def materialize_media_value(value: str, media_type: str, run_dir: Path) ->
         else:
             payload = unquote_to_bytes(body)
     else:
-        return Path(value)
+        return require_allowed_path(value)
 
     if not payload:
         raise RuntimeError("provider returned an empty media artifact")
 
     extension = _media_extension(media_type, content_type, value)
-    path = Path(run_dir) / f"{uuid4().hex[:12]}.{extension}"
+    path = require_allowed_path(Path(run_dir) / f"{uuid4().hex[:12]}.{extension}")
     path.write_bytes(payload)
 
     if media_type in {"Image", "Video", "Mesh"}:
@@ -442,6 +447,7 @@ def portable_output_ref(value: str, *, require_file: bool = False) -> str:
 
 
 def image_to_data_uri(file_path: Path) -> str:
+    file_path = require_allowed_path(file_path)
     image_bytes = file_path.read_bytes()
     b64 = base64.b64encode(image_bytes).decode("ascii")
     suffix = file_path.suffix.lstrip(".").lower()
@@ -632,6 +638,28 @@ def read_manifest(run_dir: Path) -> dict[str, Any]:
         raise ManifestError("malformed manifest: missing run fields or outputs list")
     return data
 
+
+_COMMONS_MANIFEST_LOCK = threading.Lock()
+
+
+def append_commons_borrowing(run_dir: Path, record: dict[str, Any]) -> bool:
+    """Record a commons borrowing in a run's manifest (smart-moodboard spec §7.4).
+
+    Returns False when the run has no readable manifest; the borrowing row
+    still exists in the commons, so nothing is lost."""
+    # Borrow routes run in worker threads; the lock keeps two borrows into one
+    # run from racing their read-modify-write (and their shared tmp file).
+    with _COMMONS_MANIFEST_LOCK:
+        try:
+            manifest = read_manifest(run_dir)
+        except (FileNotFoundError, ManifestError):
+            return False
+        manifest.setdefault("commons_borrowings", []).append(record)
+        path = Path(run_dir) / MANIFEST_FILENAME
+        tmp = path.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(manifest, ensure_ascii=False, indent=2, default=str) + "\n", encoding="utf-8")
+        tmp.replace(path)
+        return True
 
 def find_output_record(
     manifest: dict[str, Any], file_path: Path, run_dir: Path

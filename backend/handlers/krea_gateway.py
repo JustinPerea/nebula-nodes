@@ -34,6 +34,7 @@ from handlers.krea import (
 from models.events import ExecutionEvent, ProgressEvent
 from models.graph import GraphNode, PortValueDict
 from services.cancellation import schedule_detached_cancel
+from services.file_access import require_allowed_path
 from services.output import _MEDIA_EXTENSIONS, get_run_dir, materialize_media_value, portable_output_ref
 
 
@@ -150,7 +151,12 @@ def _asset_data(value: str) -> tuple[str, bytes, str] | None:
         if parsed.scheme:
             raise ValueError("Krea media must be an HTTP URL, base64 data URI, or local file")
         path = _resolve_local_path(value)
-        if path is None or not path.is_file():
+        if path is None:
+            raise ValueError("Krea media input is not a readable local file")
+        # Nested JSON fields are decoded here, after generic graph validation.
+        # Enforce the protected-store/workspace boundary at the actual reader.
+        path = require_allowed_path(path)
+        if not path.is_file():
             raise ValueError("Krea media input is not a readable local file")
         if path.stat().st_size > MAX_ASSET_BYTES:
             raise ValueError("Krea media input exceeds the 75 MB asset limit")

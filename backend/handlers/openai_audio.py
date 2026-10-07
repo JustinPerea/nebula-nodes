@@ -7,6 +7,7 @@ from uuid import uuid4
 import httpx
 
 from models.graph import GraphNode, PortValueDict
+from services.file_access import require_allowed_path
 from services.output import get_run_dir
 
 OPENAI_AUDIO_BASE = "https://api.openai.com/v1/audio"
@@ -36,7 +37,7 @@ async def handle_openai_stt(
     model = node.params.get("model", "whisper-1")
     response_format = node.params.get("response_format", "text")
 
-    files = {"file": (audio_path.name, audio_path.read_bytes(), "audio/mpeg")}
+    files = {"file": (audio_path.name, require_allowed_path(audio_path).read_bytes(), "audio/mpeg")}
     data: dict[str, str] = {"model": model}
 
     if response_format:
@@ -93,7 +94,7 @@ async def handle_openai_translate(
     if not audio_path.exists():
         raise ValueError(f"Audio file not found: {audio_path}")
 
-    files = {"file": (audio_path.name, audio_path.read_bytes(), "audio/mpeg")}
+    files = {"file": (audio_path.name, require_allowed_path(audio_path).read_bytes(), "audio/mpeg")}
     # Only whisper-1 supports the translation endpoint; model is fixed.
     data: dict[str, str] = {"model": "whisper-1"}
 

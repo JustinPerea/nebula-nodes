@@ -3,6 +3,7 @@ import {
   CircleHelp,
   FolderHeart,
   History,
+  LibraryBig,
   Plus,
   Search,
   Settings,
@@ -44,6 +45,8 @@ export function WorkspaceRail() {
   const leftDock = useUIStore((s) => s.leftDock);
   const setLeftDock = useUIStore((s) => s.setLeftDock);
   const enterCreateView = useUIStore((s) => s.enterCreateView);
+  const commonsEnabled = useUIStore((s) => s.commonsEnabled);
+  const enterCommons = useUIStore((s) => s.enterCommons);
   const startOnboarding = useUIStore((s) => s.startOnboarding);
 
   const toggleDock = (dock: LeftDock) => {
@@ -90,6 +93,7 @@ export function WorkspaceRail() {
           onClick={() => toggleDock('library')}
         />
         <RailItem label="Open Create studio" icon={Sparkles} onClick={enterCreateView} />
+        {commonsEnabled && <RailItem label="Open Commons" icon={LibraryBig} onClick={enterCommons} />}
         <div className="workspace-rail__divider" aria-hidden="true" />
         <RailItem
           label="Open assets"

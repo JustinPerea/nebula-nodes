@@ -58,6 +58,7 @@ from cinema.identity import expand_character, strength_param_for
 from cinema.look import apply_look
 from models.events import ExecutionEvent, ProgressEvent
 from models.graph import GraphNode, PortValueDict
+from services.file_access import require_allowed_path
 from services.output import OUTPUT_ROOT, get_run_dir
 
 
@@ -114,7 +115,7 @@ async def _load_image(value: str) -> Image.Image:
     local = _resolve_local_path(value)
     if local is None:
         raise ValueError(f"Base model output could not be resolved to an image: {value!r}")
-    with Image.open(local) as img:
+    with Image.open(require_allowed_path(local)) as img:
         return img.convert("RGB")
 
 

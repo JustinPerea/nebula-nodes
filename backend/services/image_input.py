@@ -55,7 +55,8 @@ def load_local_image(path_str: str) -> tuple[str, str]:
     Only call this for local filesystem paths. data: URIs and http(s) URLs are
     forwarded by the caller before reaching here (see :func:`is_remote_or_data_uri`).
     """
-    path = Path(path_str)
+    from services.file_access import require_allowed_path
+    path = require_allowed_path(path_str)
 
     if not path.exists():
         msg = (

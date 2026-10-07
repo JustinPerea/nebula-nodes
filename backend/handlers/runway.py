@@ -6,6 +6,7 @@ from typing import Any, Awaitable, Callable
 from models.graph import GraphNode, PortValueDict
 from models.events import ExecutionEvent
 from execution.async_poll_runner import AsyncPollConfig, async_poll_execute
+from services.file_access import require_allowed_path
 from services.output import get_run_dir, save_video_from_url, save_base64_image, image_to_data_uri
 
 import base64
@@ -150,7 +151,7 @@ async def handle_runway_aleph(
         video_path = Path(video_value)
         if not video_path.exists():
             raise ValueError(f"Video file not found: {video_value}")
-        b64 = base64.b64encode(video_path.read_bytes()).decode("ascii")
+        b64 = base64.b64encode(require_allowed_path(video_path).read_bytes()).decode("ascii")
         video_value = f"data:video/mp4;base64,{b64}"
 
     submit_body: dict[str, Any] = {
@@ -342,7 +343,7 @@ async def handle_runway_act_two(
             p = Path(v)
             if not p.exists():
                 raise ValueError(f"Video file not found: {v}")
-            v = f"data:video/mp4;base64,{base64.b64encode(p.read_bytes()).decode('ascii')}"
+            v = f"data:video/mp4;base64,{base64.b64encode(require_allowed_path(p).read_bytes()).decode('ascii')}"
         character = {"type": "video", "uri": v}
     else:
         raise ValueError("Character image or video is required")
@@ -357,7 +358,7 @@ async def handle_runway_act_two(
         p = Path(ref_value)
         if not p.exists():
             raise ValueError(f"Reference video not found: {ref_value}")
-        ref_value = f"data:video/mp4;base64,{base64.b64encode(p.read_bytes()).decode('ascii')}"
+        ref_value = f"data:video/mp4;base64,{base64.b64encode(require_allowed_path(p).read_bytes()).decode('ascii')}"
 
     submit_body: dict[str, Any] = {
         "model": "act_two",
@@ -483,7 +484,7 @@ async def handle_runway_speech_to_speech(
             p = Path(media_value)
             if not p.exists():
                 raise ValueError(f"Audio file not found: {media_value}")
-            media_value = f"data:audio/mpeg;base64,{base64.b64encode(p.read_bytes()).decode('ascii')}"
+            media_value = f"data:audio/mpeg;base64,{base64.b64encode(require_allowed_path(p).read_bytes()).decode('ascii')}"
         media = {"type": "audio", "uri": media_value}
     elif video_input and video_input.value:
         media_value = str(video_input.value)
@@ -491,7 +492,7 @@ async def handle_runway_speech_to_speech(
             p = Path(media_value)
             if not p.exists():
                 raise ValueError(f"Video file not found: {media_value}")
-            media_value = f"data:video/mp4;base64,{base64.b64encode(p.read_bytes()).decode('ascii')}"
+            media_value = f"data:video/mp4;base64,{base64.b64encode(require_allowed_path(p).read_bytes()).decode('ascii')}"
         media = {"type": "video", "uri": media_value}
     else:
         raise ValueError("Audio or video input is required")
@@ -552,7 +553,7 @@ async def handle_runway_voice_dubbing(
         p = Path(audio_value)
         if not p.exists():
             raise ValueError(f"Audio file not found: {audio_value}")
-        audio_value = f"data:audio/mpeg;base64,{base64.b64encode(p.read_bytes()).decode('ascii')}"
+        audio_value = f"data:audio/mpeg;base64,{base64.b64encode(require_allowed_path(p).read_bytes()).decode('ascii')}"
 
     target_lang = node.params.get("targetLang", "es")
 

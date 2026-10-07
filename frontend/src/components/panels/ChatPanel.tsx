@@ -17,6 +17,7 @@ import {
   type NousModel,
 } from '../../lib/api';
 import { apiFetch, backendAssetUrlSync, backendWebSocketUrl } from '../../lib/backend';
+import { commonsChatAuthority } from '../../lib/commonsChatAuthority';
 import { normalizeAgentEventSource } from '../../lib/agentEvents';
 import {
   chatCancellationDisconnectNotice,
@@ -368,6 +369,7 @@ function insertAtCaret(target: HTMLTextAreaElement, token: string): void {
 }
 
 export function ChatPanel() {
+  const commonsEnabled = useUIStore((s) => s.commonsEnabled);
   const visible = useUIStore((s) => s.panels.chat.visible);
   const { shouldRender, exiting } = useDelayedUnmount(visible, 500);
   const width = useUIStore((s) => s.panels.chat.width) ?? 300;
@@ -388,6 +390,9 @@ export function ChatPanel() {
   const [input, setInput] = useState('');
   const [model, setModel] = useState<string>(DEFAULT_MODEL);
   const [agent, setAgent] = useState<ChatAgent>('claude');
+  const [brand, setBrand] = useState('');
+  const [authorizing, setAuthorizing] = useState(false);
+  const authorityPendingRef = useRef(false);
   const [autonomy, setAutonomy] = useState<'auto' | 'step'>('auto');
   const chatPanelRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -733,13 +738,22 @@ export function ChatPanel() {
   // clear sessionId on change — the next turn starts fresh on the new agent.
   const handleAgentChange = useCallback(
     (next: ChatAgent) => {
-      if (next === agent) return;
+      if (next === agent || busy || authorityPendingRef.current || (commonsEnabled && next === 'daedalus')) return;
 
       setAgent(next);
       setSessionId(null);
     },
-    [agent],
+    [agent, busy, commonsEnabled],
   );
+
+  const changeBrand = useCallback((next: string) => {
+    if (busy || authorityPendingRef.current) return;
+    setBrand(next);
+    if (next.trim() !== brand.trim()) {
+      setSessionId(null);
+      setNotice('Brand changed. Your next message starts a new conversation.');
+    }
+  }, [brand, busy]);
 
   const wsRef = useRef<WebSocket | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -751,6 +765,7 @@ export function ChatPanel() {
   const applyCancellationEvent = useCallback((event: ChatCancellationEvent) => {
     const transition = transitionChatCancellation(cancelStateRef.current, event);
     cancelStateRef.current = transition.state;
+    busyRef.current = transition.busy;
     setCancelState(transition.state);
     setBusy(transition.busy);
     return transition;
@@ -1268,7 +1283,7 @@ export function ChatPanel() {
     };
   }, []);
 
-  const send = useCallback(() => {
+  const send = useCallback(async () => {
     const raw = input.trim();
     if (!raw) return;
 
@@ -1325,7 +1340,20 @@ export function ChatPanel() {
 
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
-    if (busyRef.current) return;
+    if (busyRef.current || authorityPendingRef.current) return;
+    if (commonsEnabled && agent === 'daedalus') {
+      setNotice('Commons private reference chats support Claude and Codex. Select one to continue.');
+      return;
+    }
+    let authority: Awaited<ReturnType<typeof commonsChatAuthority>> = {};
+    if (commonsEnabled) {
+      authorityPendingRef.current = true;
+      setAuthorizing(true);
+      try { authority = await commonsChatAuthority(true, brand); }
+      catch (error) { setNotice((error as Error).message); return; }
+      finally { authorityPendingRef.current = false; setAuthorizing(false); }
+      if (busyRef.current || ws.readyState !== WebSocket.OPEN || !useUIStore.getState().commonsEnabled) return;
+    }
 
     const enhanceTargetId = pendingEnhanceTargetRef.current ?? undefined;
     pendingEnhanceTargetRef.current = null;
@@ -1334,7 +1362,8 @@ export function ChatPanel() {
     const attachedImages = pendingImages
       .filter((p): p is Extract<PendingImage, { status: 'ready' }> => p.status === 'ready')
       .map((p) => ({ nodeId: p.nodeId, thumbUrl: p.thumbUrl }));
-    setPendingImages([]);
+    const submittedImageIds = new Set(pendingImages.map((image) => image.id));
+    setPendingImages((current) => current.filter((image) => !submittedImageIds.has(image.id)));
     setMessages((prev) => [
       ...prev,
       {
@@ -1346,7 +1375,7 @@ export function ChatPanel() {
       { role: 'assistant', id: newId(), streaming: true, parts: [], enhanceTargetId },
     ]);
     applyCancellationEvent({ type: 'send' });
-    setInput('');
+    setInput((current) => current.trim() === raw ? '' : current);
 
     ws.send(
       JSON.stringify({
@@ -1356,6 +1385,7 @@ export function ChatPanel() {
           .filter((node) => node.selected)
           .map((node) => node.id),
         sessionId,
+        ...authority,
         model: agent === 'daedalus' ? daedalusModel : agent === 'codex' ? null : model,
         agent,
         autonomy,
@@ -1372,6 +1402,8 @@ export function ChatPanel() {
     daedalusProvider,
     sessionId,
     pendingImages,
+    commonsEnabled,
+    brand,
     agent,
     autonomy,
     changeDaedalusModel,
@@ -1390,10 +1422,19 @@ export function ChatPanel() {
   // in `send()` — appends user + assistant placeholder, flips busy, posts
   // the JSON envelope with agent/autonomy/sessionId/model.
   const handleApprovalResponse = useCallback(
-    (response: string) => {
+    async (response: string) => {
       const ws = wsRef.current;
-      if (!ws || ws.readyState !== WebSocket.OPEN) return;
-      if (busyRef.current) return;
+      if (!ws || ws.readyState !== WebSocket.OPEN || authorityPendingRef.current || busyRef.current) return;
+      if (commonsEnabled && agent === 'daedalus') return;
+      let authority: Awaited<ReturnType<typeof commonsChatAuthority>> = {};
+      if (commonsEnabled) {
+        authorityPendingRef.current = true;
+        setAuthorizing(true);
+        try { authority = await commonsChatAuthority(true, brand); }
+        catch (error) { setNotice((error as Error).message); return; }
+        finally { authorityPendingRef.current = false; setAuthorizing(false); }
+        if (ws.readyState !== WebSocket.OPEN || !useUIStore.getState().commonsEnabled) return;
+      }
       setMessages((prev) => {
         // Mark the most recent approval message as responded so its
         // Approve/Reject buttons disable + dim during streaming.
@@ -1422,6 +1463,7 @@ export function ChatPanel() {
             .filter((node) => node.selected)
             .map((node) => node.id),
           sessionId,
+          ...authority,
           model: agent === 'daedalus' ? daedalusModel : agent === 'codex' ? null : model,
           agent,
           autonomy,
@@ -1429,7 +1471,7 @@ export function ChatPanel() {
         }),
       );
     },
-    [sessionId, model, daedalusModel, daedalusProvider, agent, autonomy, applyCancellationEvent],
+    [sessionId, model, daedalusModel, daedalusProvider, agent, autonomy, commonsEnabled, brand, applyCancellationEvent],
   );
 
   const cancel = useCallback(() => {
@@ -1695,6 +1737,7 @@ export function ChatPanel() {
                   : 'chat-panel__agent-btn'
               }
               onClick={() => handleAgentChange('claude')}
+              disabled={busy || authorizing}
             >
               Claude
             </button>
@@ -1706,6 +1749,7 @@ export function ChatPanel() {
                   : 'chat-panel__agent-btn'
               }
               onClick={() => handleAgentChange('codex')}
+              disabled={busy || authorizing}
             >
               Codex
             </button>
@@ -1717,10 +1761,19 @@ export function ChatPanel() {
                   : 'chat-panel__agent-btn'
               }
               onClick={() => handleAgentChange('daedalus')}
+              disabled={busy || authorizing || commonsEnabled}
+              title={commonsEnabled ? 'Commons private reference chats currently support Claude and Codex.' : undefined}
             >
               Daedalus
             </button>
           </div>
+          {commonsEnabled && <label className="chat-panel__brand" onMouseDown={(event) => event.stopPropagation()}>
+            Brand
+            <input aria-label="Chat brand" value={brand} onChange={(event) => changeBrand(event.target.value)}
+              disabled={busy || authorizing} placeholder="Unbranded" maxLength={128}
+              title="Changing brand starts a new conversation with separate reference downloads." />
+          </label>}
+          {commonsEnabled && <p className="chat-panel__scope-hint">Private reference chats: Claude or Codex.</p>}
           {agent === 'daedalus' && (
             <div
               className="chat-panel__autonomy-toggle"
@@ -2225,7 +2278,7 @@ export function ChatPanel() {
               aria-label="Send message"
               title="Send message"
               disabled={
-                !connected ||
+                !connected || authorizing ||
                 !input.trim() ||
                 pendingImages.some((p) => p.status === 'uploading')
               }

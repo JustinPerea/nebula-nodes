@@ -9,6 +9,7 @@ from typing import Any, Callable
 from uuid import uuid4
 
 from services.output import get_run_dir
+from services.file_access import require_allowed_path, validate_file_references
 
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -28,10 +29,11 @@ async def render_remotion_manifest(
     both ``selectComposition()`` and ``renderMedia()``. Cancelling this coroutine
     terminates the worker, whose Remotion cancel signal stops browser/ffmpeg work.
     """
+    validate_file_references(manifest)
     if not _RENDER_SCRIPT.is_file():
         raise RuntimeError(f"Remotion render worker not found: {_RENDER_SCRIPT}")
 
-    destination_dir = output_dir or get_run_dir()
+    destination_dir = require_allowed_path(output_dir or get_run_dir())
     destination_dir.mkdir(parents=True, exist_ok=True)
     token = uuid4().hex[:12]
     request_path = destination_dir / f".{token}-remotion-request.json"

@@ -20,7 +20,9 @@ from services.codex_session import (
 
 
 @pytest.fixture(autouse=True)
-def reset_codex_login_state():
+def reset_codex_login_state(monkeypatch):
+    # Fake CLI tests must never inspect the real user's Codex preferences.
+    monkeypatch.setattr(codex_session, "codex_default_model", lambda: None)
     codex_session._codex_login_task = None
     codex_session._codex_login_state.clear()
     codex_session._codex_login_state.update({
@@ -232,8 +234,8 @@ def test_codex_mcp_config_is_per_invocation_and_preserves_skills(monkeypatch):
     args = codex_session._codex_base_args(None)
     assert any(value.startswith("mcp_servers.nebula_krea.command=") for value in args)
     assert any(value.startswith("mcp_servers.nebula_krea.args=") and "8033" in value for value in args)
-    assert "--ignore-user-config" not in args
-    assert "--ignore-rules" not in args
+    assert "--ignore-user-config" in args
+    assert "--ignore-rules" in args
     prompt = codex_session._build_prompt("Krea models")
     assert "Repo-backed Nebula skills" in prompt
     assert "list_models and get_model_schema" in prompt
@@ -410,6 +412,9 @@ def test_skill_bootstrap_indexes_and_preloads_relevant_repo_skill(tmp_path, monk
 
     monkeypatch.setattr(codex_session, "PROJECT_ROOT", tmp_path)
     monkeypatch.setattr(codex_session, "SKILL_ROOT", tmp_path / ".agents" / "skills")
+    monkeypatch.setattr("services.agent_knowledge._tracked_files", lambda root: [
+        ".agents/skills/gpt-image-2/SKILL.md", ".agents/skills/fal/SKILL.md",
+    ])
 
     bootstrap = codex_session._build_skill_bootstrap("make a GPT Image 2 graph")
 

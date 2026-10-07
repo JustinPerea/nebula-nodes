@@ -8,6 +8,7 @@ import httpx
 
 from models.graph import GraphNode, PortValueDict
 from models.events import ExecutionEvent, ProgressEvent
+from services.file_access import require_allowed_path
 from services.cancellation import schedule_detached_cancel
 from services.output import get_run_dir, save_base64_image
 
@@ -61,7 +62,7 @@ def _to_fal_url(value: str) -> str:
         "mp3": "audio/mpeg", "wav": "audio/wav",
     }
     mime = mime_map.get(suffix, "application/octet-stream")
-    b64 = base64.b64encode(p.read_bytes()).decode()
+    b64 = base64.b64encode(require_allowed_path(p).read_bytes()).decode()
     return f"data:{mime};base64,{b64}"
 
 

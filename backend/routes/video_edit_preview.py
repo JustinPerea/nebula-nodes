@@ -15,6 +15,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from handlers.video_edit import _build_filter_complex, _resolve_local_path
+from services.file_access import ProtectedPathError
 from services.ffmpeg import ffprobe_video, run_ffmpeg
 from services.output import OUTPUT_ROOT, get_run_dir
 
@@ -32,7 +33,10 @@ class PreviewRenderResponse(BaseModel):
 
 @router.post("/preview-render", response_model=PreviewRenderResponse)
 async def preview_render(req: PreviewRenderRequest) -> PreviewRenderResponse:
-    src_path = _resolve_local_path(req.sourceUrl)
+    try:
+        src_path = _resolve_local_path(req.sourceUrl)
+    except ProtectedPathError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     if src_path is None:
         raise HTTPException(status_code=404, detail=f"Source not found: {req.sourceUrl}")
     if not req.clips:
