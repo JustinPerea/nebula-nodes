@@ -4,6 +4,7 @@ import type { StoreApi, UseBoundStore } from 'zustand';
 import type { Node } from '@xyflow/react';
 import type { NodeData } from '../../src/types';
 import { CreateView } from '../../src/components/create-studio/CreateView';
+import { CREATE_DRAFT_STORAGE_KEY, useCreateDraftStore } from '../../src/store/createDraftStore';
 
 interface CreateOrigin {
   genId: string; prompt: string; ts: number; sessionId: string; modelNodeIds: string[]; allNodeIds: string[];
@@ -72,6 +73,8 @@ function model(id: string): Node<NodeData> {
   return { id, position: { x: 0, y: 0 }, data: { label: id, definitionId: 'nano-banana', params: {}, state: 'queued', outputs: {} } };
 }
 beforeEach(() => {
+  useCreateDraftStore.setState({ drafts: {} });
+  localStorage.removeItem(CREATE_DRAFT_STORAGE_KEY);
   mocks.author.mockReset().mockResolvedValue({ modelNodeIds: ['model'], allNodeIds: ['model'] });
   mocks.execute.mockReset(); mocks.cancel.mockReset(); mocks.exit.mockReset(); mocks.dock.mockReset();
   mocks.ui.consumePendingPreset.mockReset().mockReturnValue(null);

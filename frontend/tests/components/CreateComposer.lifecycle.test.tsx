@@ -1,9 +1,11 @@
-import { fireEvent, render } from '@testing-library/react';
+import { act, fireEvent, render } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { CreateComposer } from '../../src/components/create-studio/CreateComposer';
 import { NODE_DEFINITIONS } from '../../src/constants/nodeDefinitions';
+import { enhancePrompt } from '../../src/lib/enhancePrompt';
 
 vi.mock('../../src/components/create-studio/ParamPills', () => ({ ParamPills: () => null }));
+vi.mock('../../src/lib/enhancePrompt', () => ({ enhancePrompt: vi.fn() }));
 
 function composer(onGenerate: () => void, activeCount = 0, isLaunching = false, modelId = 'nano-banana') {
   return <CreateComposer modelDef={NODE_DEFINITIONS[modelId]} prompt="Synthetic prompt" params={{}}
@@ -48,5 +50,33 @@ describe('Create composer launch intent', () => {
     fireEvent.click(view.getByRole('button', { name: 'Generating… (2)' }));
     fireEvent.keyDown(prompt, { key: 'Enter', ctrlKey: true });
     expect(generate).not.toHaveBeenCalled();
+  });
+
+  it.each(['Uploading references…', 'Retry, attach again or remove failed references to generate.'])('blocks button and shortcut until references resolve: %s', (referenceStatus) => {
+    const generate = vi.fn();
+    const base = composer(generate);
+    const view = render(<CreateComposer {...base.props} referencesBlocked referenceStatus={referenceStatus} />);
+    expect(view.getByRole('status')).toHaveTextContent(referenceStatus);
+    expect(view.getByRole('button', { name: 'Generate' })).toBeDisabled();
+    fireEvent.click(view.getByRole('button', { name: 'Generate' }));
+    fireEvent.keyDown(view.getByPlaceholderText('Describe what you want to create…'), { key: 'Enter', metaKey: true });
+    expect(generate).not.toHaveBeenCalled();
+    view.rerender(<CreateComposer {...base.props} referencesBlocked={false} />);
+    expect(generate).not.toHaveBeenCalled();
+    fireEvent.keyDown(view.getByPlaceholderText('Describe what you want to create…'), { key: 'Enter', ctrlKey: true });
+    expect(generate).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['edit', 'unmount'] as const)('does not apply a late prompt enhancement after %s', async (action) => {
+    let finish!: (value: string) => void;
+    vi.mocked(enhancePrompt).mockReturnValueOnce(new Promise<string>((resolve) => { finish = resolve; }));
+    const base = composer(vi.fn());
+    const changed = vi.fn();
+    const view = render(<CreateComposer {...base.props} onPromptChange={changed} />);
+    fireEvent.click(view.getByRole('button', { name: 'Enhance' }));
+    if (action === 'edit') view.rerender(<CreateComposer {...base.props} prompt="A newer draft edit" onPromptChange={changed} />);
+    else view.unmount();
+    await act(async () => { finish('Enhanced old prompt'); });
+    expect(changed).not.toHaveBeenCalled();
   });
 });

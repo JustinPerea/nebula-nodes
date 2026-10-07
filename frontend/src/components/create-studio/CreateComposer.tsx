@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { ChevronDown, Plus, Sparkles, Wand2 } from 'lucide-react';
 import type { ModelNodeDefinition } from '../../types';
 import { enhancePrompt } from '../../lib/enhancePrompt';
@@ -14,6 +14,8 @@ interface CreateComposerProps {
   params: Record<string, unknown>;
   activeCount: number;
   isLaunching?: boolean;
+  referencesBlocked?: boolean;
+  referenceStatus?: string;
   maxConcurrent: number;
   quantity: number;
   onPromptChange: (value: string) => void;
@@ -25,8 +27,14 @@ interface CreateComposerProps {
   onOpenStyles: () => void;
 }
 
+function autoGrow(el: HTMLTextAreaElement) {
+  el.style.height = 'auto';
+  el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+}
+
 export function CreateComposer({
   modelDef, prompt, params, activeCount, maxConcurrent, quantity, isLaunching = false,
+  referencesBlocked = false, referenceStatus,
   onPromptChange, onSelectModel, onParamsChange, onGenerate, onAttach, onQuantityChange, onOpenStyles,
 }: CreateComposerProps) {
   const kreaConnection = useUIStore((s) => s.settingsCache.kreaConnection);
@@ -35,24 +43,40 @@ export function CreateComposer({
   const [prevPrompt, setPrevPrompt] = useState<string | null>(null);
   const [enhanceError, setEnhanceError] = useState<string | null>(null);
   const modelSupported = Boolean(modelDef && isCreateModel(modelDef));
-  const canGenerate = modelSupported && !isLaunching && activeCount < maxConcurrent;
+  const canGenerate = modelSupported && !isLaunching && !referencesBlocked && activeCount < maxConcurrent;
   const canEnhance = prompt.trim().length > 0 && !enhancing;
   const promptRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const mounted = useRef(false);
+  const enhanceRequest = useRef(0);
+  const currentPrompt = useRef(prompt);
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; enhanceRequest.current += 1; };
+  }, []);
+  useLayoutEffect(() => {
+    currentPrompt.current = prompt;
+    if (promptRef.current) autoGrow(promptRef.current);
+  }, [prompt]);
 
   const handleEnhance = async () => {
     if (!canEnhance) return;
     setEnhancing(true);
     setEnhanceError(null);
     const original = prompt;
+    const request = ++enhanceRequest.current;
     try {
       const enhanced = await enhancePrompt(original);
+      if (!mounted.current || request !== enhanceRequest.current || currentPrompt.current !== original) return;
       setPrevPrompt(original);
       onPromptChange(enhanced);
     } catch (err) {
-      setEnhanceError(err instanceof Error ? err.message : 'Enhance failed.');
+      if (mounted.current && request === enhanceRequest.current && currentPrompt.current === original) {
+        setEnhanceError(err instanceof Error ? err.message : 'Enhance failed.');
+      }
     } finally {
-      setEnhancing(false);
+      if (mounted.current && request === enhanceRequest.current) setEnhancing(false);
     }
   };
 
@@ -60,10 +84,6 @@ export function CreateComposer({
     if (prevPrompt === null) return;
     onPromptChange(prevPrompt);
     setPrevPrompt(null);
-  };
-  const autoGrow = (el: HTMLTextAreaElement) => {
-    el.style.height = 'auto';
-    el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
   };
 
   return (
@@ -81,6 +101,7 @@ export function CreateComposer({
           {modelDef.capabilityNote}
         </div>
       )}
+      {referenceStatus && <div className="create-composer__capability-note" role="status">{referenceStatus}</div>}
       <textarea
         ref={promptRef}
         className="create-composer__prompt"
@@ -104,7 +125,7 @@ export function CreateComposer({
         <button type="button" className="create-composer__attach" onClick={() => fileInputRef.current?.click()} title="Attach reference image" aria-label="Attach reference image">
           <Plus size={16} strokeWidth={1.9} aria-hidden="true" />
         </button>
-        <input ref={fileInputRef} type="file" accept="image/*" multiple hidden
+        <input ref={fileInputRef} type="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden
           onChange={(e) => { if (e.target.files?.length) onAttach(e.target.files); e.target.value = ''; }} />
         <button
           type="button"

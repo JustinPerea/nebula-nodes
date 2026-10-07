@@ -4,6 +4,7 @@ import type { Node } from '@xyflow/react';
 import type { NodeData, PortValue } from '../../types';
 import { OutputRenderer } from './OutputRenderer';
 import { downloadTranscoded, DOWNLOAD_FORMATS } from '../../lib/createTranscode';
+import { usePanelFocus } from '../../hooks/usePanelFocus';
 
 function firstMediaUrl(outputs: Record<string, PortValue>): string | null {
   for (const t of ['Image', 'Video', 'Audio', 'Mesh', 'SVG'] as const) {
@@ -15,6 +16,7 @@ function firstMediaUrl(outputs: Record<string, PortValue>): string | null {
 
 export interface ResultCardProps {
   node: Node<NodeData> | undefined;
+  prompt?: string;
   onOpenInCanvas: () => void;
   onUseAsInput: (url: string) => void;
   onDelete: () => void;
@@ -32,7 +34,7 @@ export function ResultCard(props: ResultCardProps) {
   return <ResultCardOutput key={JSON.stringify([node.id, url])} {...props} node={node} url={url} />;
 }
 
-function ResultCardOutput({ node, url, onOpenInCanvas, onUseAsInput, onDelete, onReveal, onSaveToFolder, onZoom }: ResultCardProps & {
+function ResultCardOutput({ node, prompt, url, onOpenInCanvas, onUseAsInput, onDelete, onReveal, onSaveToFolder, onZoom }: ResultCardProps & {
   node: Node<NodeData>;
   url: string | null;
 }) {
@@ -44,6 +46,18 @@ function ResultCardOutput({ node, url, onOpenInCanvas, onUseAsInput, onDelete, o
   const saveRequestVersion = useRef(0);
   const successTimer = useRef<number | null>(null);
   const mounted = useRef(true);
+  const downloadRef = useRef<HTMLSpanElement>(null);
+  const downloadMenuRef = useRef<HTMLDivElement>(null);
+  usePanelFocus(dlOpen, downloadMenuRef, () => setDlOpen(false), { initialFocus: '[role="menuitem"]' });
+  useEffect(() => {
+    if (!dlOpen) return;
+    const dismissOutside = (event: PointerEvent) => {
+      if (event.target instanceof globalThis.Node && !downloadRef.current?.contains(event.target)
+        && !downloadMenuRef.current?.contains(event.target)) setDlOpen(false);
+    };
+    document.addEventListener('pointerdown', dismissOutside);
+    return () => document.removeEventListener('pointerdown', dismissOutside);
+  }, [dlOpen]);
   useEffect(() => {
     mounted.current = true;
     return () => {
@@ -127,54 +141,75 @@ function ResultCardOutput({ node, url, onOpenInCanvas, onUseAsInput, onDelete, o
             type="button"
             className="result-card__zoom-overlay"
             onClick={() => onZoom?.()}
-            aria-label="View full screen"
+            tabIndex={-1}
+            aria-hidden="true"
           />
         )}
       </div>
-      <div className="result-card__actions">
-        {url && isRaster ? (
-          <span className="result-card__dl">
-            <button
-              type="button"
-              className="result-card__btn"
-              onClick={() => setDlOpen((v) => !v)}
-              title="Download as…"
-              aria-haspopup="menu"
-              aria-expanded={dlOpen}
-            >
-              <Download size={15} strokeWidth={1.75} />
+      <div className="result-card__details">
+        <div className="result-card__caption" title={node.data.label}>{node.data.label}</div>
+        {prompt && prompt !== node.data.label && <p className="result-card__prompt" title={prompt}>{prompt}</p>}
+        <div className="result-card__actions">
+          {url && isRaster ? (
+            <span ref={downloadRef} className="result-card__dl">
+              <button
+                type="button"
+                className="result-card__btn"
+                onClick={() => setDlOpen((v) => !v)}
+                title="Download as…"
+                aria-label="Download as…"
+                aria-haspopup="menu"
+                aria-expanded={dlOpen}
+              >
+                <Download size={15} strokeWidth={1.75} />
+              </button>
+            </span>
+          ) : (
+            url && <a className="result-card__btn" href={url} download title="Download" aria-label="Download"><Download size={15} strokeWidth={1.75} /></a>
+          )}
+          <button className="result-card__btn" type="button" onClick={onOpenInCanvas} title="Open in canvas" aria-label="Open in canvas"><SquareArrowOutUpRight size={15} strokeWidth={1.75} /></button>
+          {url && <button className="result-card__btn" type="button" onClick={() => onUseAsInput(url)} title="Use as input" aria-label="Use as input"><ImagePlus size={15} strokeWidth={1.75} /></button>}
+          {url && onReveal && (
+            <button className="result-card__btn" type="button" onClick={() => onReveal(url)} title="Reveal in Finder" aria-label="Reveal in Finder">
+              <FolderOpen size={15} strokeWidth={1.75} />
             </button>
-            {dlOpen && (
-              <div className="result-card__dl-menu" role="menu">
-                <a className="result-card__dl-item" href={url} download role="menuitem" onClick={() => setDlOpen(false)}>
-                  Original
-                </a>
-                {DOWNLOAD_FORMATS.map((fmt) => (
-                  <button key={fmt} type="button" className="result-card__dl-item" role="menuitem" onClick={() => handleFormat(fmt)}>
-                    {fmt.toUpperCase()}
-                  </button>
-                ))}
-              </div>
-            )}
-          </span>
-        ) : (
-          url && <a className="result-card__btn" href={url} download title="Download"><Download size={15} strokeWidth={1.75} /></a>
+          )}
+          {url && onSaveToFolder && (
+            <button className="result-card__btn" type="button" onClick={() => void handleSave()} disabled={saving} title={saving ? 'Saving…' : saved ? 'Saved!' : 'Save to folder'} aria-label={saving ? 'Saving…' : saved ? 'Saved!' : 'Save to folder'}>
+              <FolderDown size={15} strokeWidth={1.75} />
+            </button>
+          )}
+          <button className="result-card__btn result-card__btn--danger" type="button" onClick={onDelete} title="Delete" aria-label="Delete"><Trash2 size={15} strokeWidth={1.75} /></button>
+        </div>
+        {dlOpen && url && (
+          <div ref={downloadMenuRef} className="result-card__dl-menu" role="menu" aria-label="Download format" aria-orientation="horizontal"
+            onBlur={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget) && !downloadRef.current?.contains(event.relatedTarget)) setDlOpen(false);
+            }}
+            onKeyDown={(event) => {
+              const choices = [...event.currentTarget.querySelectorAll<HTMLElement>('[role="menuitem"]')];
+              const current = choices.indexOf(document.activeElement as HTMLElement);
+              let next: number;
+              if (event.key === 'ArrowDown' || event.key === 'ArrowRight') next = (current + 1) % choices.length;
+              else if (event.key === 'ArrowUp' || event.key === 'ArrowLeft') next = (current - 1 + choices.length) % choices.length;
+              else if (event.key === 'Home') next = 0;
+              else if (event.key === 'End') next = choices.length - 1;
+              else return;
+              event.preventDefault();
+              choices[next]?.focus();
+            }}>
+            <a className="result-card__dl-item" href={url} download role="menuitem" onClick={() => setDlOpen(false)}>
+              Original
+            </a>
+            {DOWNLOAD_FORMATS.map((fmt) => (
+              <button key={fmt} type="button" className="result-card__dl-item" role="menuitem" onClick={() => handleFormat(fmt)}>
+                {fmt.toUpperCase()}
+              </button>
+            ))}
+          </div>
         )}
-        <button className="result-card__btn" type="button" onClick={onOpenInCanvas} title="Open in canvas"><SquareArrowOutUpRight size={15} strokeWidth={1.75} /></button>
-        {url && <button className="result-card__btn" type="button" onClick={() => onUseAsInput(url)} title="Use as input"><ImagePlus size={15} strokeWidth={1.75} /></button>}
-        {url && onReveal && (
-          <button className="result-card__btn" type="button" onClick={() => onReveal(url)} title="Reveal in Finder">
-            <FolderOpen size={15} strokeWidth={1.75} />
-          </button>
-        )}
-        {url && onSaveToFolder && (
-          <button className="result-card__btn" type="button" onClick={() => void handleSave()} disabled={saving} title={saving ? 'Saving…' : saved ? 'Saved!' : 'Save to folder'}>
-            <FolderDown size={15} strokeWidth={1.75} />
-          </button>
-        )}
-        <button className="result-card__btn result-card__btn--danger" type="button" onClick={onDelete} title="Delete"><Trash2 size={15} strokeWidth={1.75} /></button>
+        {saveError && <div className="result-card__save-error" role="alert">{saveError}</div>}
       </div>
-      {saveError && <div className="result-card__save-error" role="alert">{saveError}</div>}
     </div>
   );
 }

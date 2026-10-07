@@ -8,6 +8,7 @@ import { generationRecordsFromHistory } from '../src/lib/createGallery';
 import { useGraphStore } from '../src/store/graphStore';
 import { useUIStore } from '../src/store/uiStore';
 import { CreateView } from '../src/components/create-studio/CreateView';
+import { useCreateDraftStore } from '../src/store/createDraftStore';
 
 vi.mock('../src/lib/wsClient', () => ({ wsClient: { connect: vi.fn(), subscribe: vi.fn() } }));
 vi.mock('../src/components/create-studio/CreateComposer', () => ({
@@ -31,6 +32,7 @@ beforeEach(() => {
   useGraphStore.getState().resetExecution();
   useGraphStore.getState().releaseGraphImport();
   localStorage.clear();
+  useCreateDraftStore.setState({ drafts: {} });
   useGraphStore.setState({ nodes: [model], edges: [], runHistory: [], providerStartAmbiguities: [] });
   useUIStore.setState({ createSessionId: origin.sessionId, viewMode: 'create' });
   vi.spyOn(api, 'executeGraph').mockResolvedValue({ status: 'started' });

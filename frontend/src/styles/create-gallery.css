@@ -50,6 +50,43 @@ body.app-slava-restraint .reference-tray__remove:hover {
   background: var(--sr-glass);
 }
 
+body.app-slava-restraint .reference-tray__upload {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+  padding: 7px 8px;
+  border: 1px solid var(--sr-edge);
+  border-radius: 8px;
+  background: var(--sr-glass-raised);
+  font-size: 12px;
+}
+body.app-slava-restraint .reference-tray__name {
+  display: block;
+  min-width: 0;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+body.app-slava-restraint .reference-tray__status {
+  display: block;
+  max-width: 320px;
+  color: var(--sr-ink-meta);
+  overflow-wrap: anywhere;
+}
+body.app-slava-restraint .reference-tray__upload > div { min-width: 0; }
+body.app-slava-restraint .reference-tray__retry {
+  padding: 4px 7px;
+  border: 1px solid var(--sr-edge-strong);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--sr-ink);
+  cursor: pointer;
+}
+
 /* ─── Composer new controls ──────────────────────────────────────────────── */
 
 body.app-slava-restraint .create-composer__attach {
@@ -119,9 +156,12 @@ body.app-slava-restraint .create-composer__qty span {
 
 body.app-slava-restraint .results-gallery {
   width: 100%;
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
 }
 
 body.app-slava-restraint .results-gallery__bar {
@@ -129,11 +169,21 @@ body.app-slava-restraint .results-gallery__bar {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+body.app-slava-restraint .results-gallery__display {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
 }
 
 body.app-slava-restraint .results-gallery__count {
   font-size: 13px;
   color: var(--sr-ink-meta);
+  white-space: nowrap;
 }
 
 body.app-slava-restraint .results-gallery__layout {
@@ -161,13 +211,28 @@ body.app-slava-restraint .results-gallery__layout button.is-active {
   color: var(--sr-ink-bold);
 }
 
-body.app-slava-restraint .results-gallery__items--grid {
+body.app-slava-restraint .results-gallery__items {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  padding: 2px 4px 8px 2px;
+}
+
+/* Grid/list content keeps its natural height inside the bounded scroller.
+   Giving the grid the scroller's definite height can shrink implicit rows. */
+body.app-slava-restraint .results-gallery__cards--grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr));
+  grid-auto-rows: max-content;
+  align-content: start;
+  align-items: start;
   gap: 12px;
 }
 
-body.app-slava-restraint .results-gallery__items--list {
+body.app-slava-restraint .results-gallery__cards--list {
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -227,6 +292,8 @@ body.app-slava-restraint .results-gallery__selected-toggle:hover {
 /* ─── Per-tab empty state ────────────────────────────────────────────────── */
 
 body.app-slava-restraint .results-gallery__empty {
+  min-height: 0;
+  overflow-y: auto;
   padding: 32px 0;
   text-align: center;
   font-size: 13px;
@@ -237,6 +304,8 @@ body.app-slava-restraint .results-gallery__empty {
 
 body.app-slava-restraint .result-card {
   position: relative;
+  flex-shrink: 0;
+  min-width: 0;
   border-radius: 10px;
   border: 1px solid var(--sr-edge);
   background: var(--sr-glass);
@@ -251,27 +320,64 @@ body.app-slava-restraint .result-card__media {
   justify-content: center;
   overflow: hidden;
   background: var(--sr-glass-raised);
+  border-radius: 9px 9px 0 0;
 }
 
+body.app-slava-restraint .result-card__media .create-output__media {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border: none;
+  border-radius: 0;
+}
+body.app-slava-restraint .result-card__media .create-output__text {
+  max-width: 100%;
+  max-height: 100%;
+  overflow: auto;
+  padding: 12px;
+  font-size: 12px;
+}
+body.app-slava-restraint .result-card__media .create-output__audio { max-width: 100%; }
+
+body.app-slava-restraint .result-card__details {
+  min-width: 0;
+  padding: 8px;
+}
+body.app-slava-restraint .result-card__caption,
+body.app-slava-restraint .result-card__prompt {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+body.app-slava-restraint .result-card__caption { font-size: 12px; color: var(--sr-ink); }
+body.app-slava-restraint .result-card__prompt { margin: 4px 0 0; font-size: 12px; color: var(--sr-ink-meta); }
+
+body.app-slava-restraint .results-gallery__items--list .result-card {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  align-items: start;
+}
 body.app-slava-restraint .results-gallery__items--list .result-card__media {
-  aspect-ratio: unset;
-  min-height: 80px;
-  max-height: 200px;
+  width: 96px;
+  height: 96px;
+  border-radius: 9px 0 0 9px;
+}
+body.app-slava-restraint .results-gallery__items--list .result-card__details {
+  padding: 8px 10px;
 }
 
 body.app-slava-restraint .result-card__actions {
-  display: none;
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  z-index: 2; /* above the full-area zoom overlay (z-index: 1) so actions stay clickable */
-  padding: 6px;
+  display: flex;
+  position: relative;
+  padding-top: 8px;
   gap: 4px;
-  background: linear-gradient(to top, rgba(0,0,0,0.65) 0%, transparent 100%);
   flex-direction: row;
+  flex-wrap: wrap;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: flex-start;
 }
 
 /* Full-area invisible click target that opens the lightbox (images only). */
@@ -285,15 +391,15 @@ body.app-slava-restraint .result-card__zoom-overlay {
   cursor: zoom-in;
 }
 
-/* Corner expand affordance, shown on hover (images + video). */
+/* Fullscreen is always available, including keyboard and touch. */
 body.app-slava-restraint .result-card__zoom-btn {
-  display: none;
+  display: inline-flex;
   position: absolute;
   top: 6px;
   right: 6px;
   z-index: 3;
-  width: 28px;
-  height: 28px;
+  width: 34px;
+  height: 34px;
   align-items: center;
   justify-content: center;
   background: rgba(0, 0, 0, 0.45);
@@ -303,24 +409,17 @@ body.app-slava-restraint .result-card__zoom-btn {
   cursor: pointer;
 }
 
-body.app-slava-restraint .result-card:hover .result-card__zoom-btn {
-  display: inline-flex;
-}
-
 body.app-slava-restraint .result-card__zoom-btn:hover {
   background: rgba(0, 0, 0, 0.65);
-}
-
-body.app-slava-restraint .result-card:hover .result-card__actions {
-  display: flex;
 }
 
 body.app-slava-restraint .result-card__btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
   background: rgba(255,255,255,0.12);
   border: 1px solid rgba(255,255,255,0.2);
   border-radius: 7px;
@@ -338,19 +437,28 @@ body.app-slava-restraint .result-card__btn--danger:hover {
   border-color: rgba(220, 50, 50, 0.6);
 }
 
+body.app-slava-restraint .result-card:focus-within { border-color: var(--sr-edge-strong); }
+body.app-slava-restraint .result-card__btn:focus-visible,
+body.app-slava-restraint .result-card__zoom-btn:focus-visible,
+body.app-slava-restraint .result-card__dl-item:focus-visible,
+body.app-slava-restraint .results-gallery button:focus-visible,
+body.app-slava-restraint .results-gallery__items:focus-visible,
+body.app-slava-restraint .reference-tray button:focus-visible,
+body.app-slava-restraint .lightbox button:focus-visible {
+  outline: 2px solid var(--sr-accent);
+  outline-offset: 2px;
+}
+
 /* Download-format menu (raster gallery results) */
 .result-card__dl {
   position: relative;
   display: inline-flex;
 }
 .result-card__dl-menu {
-  position: absolute;
-  bottom: calc(100% + 4px);
-  left: 0;
-  z-index: 20;
   display: flex;
-  flex-direction: column;
-  min-width: 92px;
+  flex-wrap: wrap;
+  gap: 2px;
+  margin-top: 8px;
   padding: 4px;
   border-radius: 8px;
 }

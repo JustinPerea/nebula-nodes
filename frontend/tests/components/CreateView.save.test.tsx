@@ -4,6 +4,7 @@ import type { Node } from '@xyflow/react';
 import type { NodeData } from '../../src/types';
 import type { Preset } from '../../src/lib/createPresets';
 import { CreateView } from '../../src/components/create-studio/CreateView';
+import { CREATE_DRAFT_STORAGE_KEY, useCreateDraftStore } from '../../src/store/createDraftStore';
 
 const mocks = vi.hoisted(() => ({
   createPreset: vi.fn(), fetchPresets: vi.fn(),
@@ -27,6 +28,8 @@ vi.mock('../../src/components/create-studio/CreateComposer', () => ({
 vi.mock('../../src/components/create-studio/ReferenceTray', () => ({ ReferenceTray: () => null }));
 
 beforeEach(() => {
+  useCreateDraftStore.setState({ drafts: {} });
+  localStorage.removeItem(CREATE_DRAFT_STORAGE_KEY);
   mocks.createPreset.mockReset().mockResolvedValue({ id: 'saved' });
   mocks.fetchPresets.mockReset().mockResolvedValue([]);
   mocks.saveToFolder.mockReset().mockResolvedValue({ savedPath: '/tmp/synthetic-result.png' });

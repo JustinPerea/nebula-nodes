@@ -3,11 +3,12 @@ import { v4 as uuidv4 } from 'uuid';
 import { ArrowLeft } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
+import { useCreateDraftStore, type CreateDraft, type CreateDraftSeed } from '../../store/createDraftStore';
 import { NODE_DEFINITIONS } from '../../constants/nodeDefinitions';
 import { buildDefaultParamsForUi } from '../../lib/createParams';
 import { isCreateModel } from '../../lib/createModels';
 import { normalizeKreaMode } from '../../lib/kreaConnection';
-import { uploadReference } from '../../lib/createUploads';
+import { attachCreateReferences, canRetryCreateReference, retryCreateReference, removeCreateReferenceUpload, clearCreateReferenceUploads } from '../../lib/createUploads';
 import { revealInFinder, saveToFolder } from '../../lib/createFiles';
 import { generationRecordsFromHistory, galleryItemsFromCanvas } from '../../lib/createGallery';
 import { composerStateFromSelection } from '../../lib/createSelection';
@@ -53,14 +54,25 @@ export function CreateView() {
 
   const selectedIds = useMemo(() => new Set(initial.selectedIds), [initial]);
 
-  const [modelId, setModelId] = useState<string | null>(
-    () => initial.prefill?.modelId ?? 'nano-banana',
-  );
-  const [prompt, setPrompt] = useState(() => initial.prefill?.prompt ?? '');
-  const [params, setParams] = useState<Record<string, unknown>>(() => {
-    if (initial.prefill) return initial.prefill.params;
-    return buildDefaultParamsForUi(NODE_DEFINITIONS['nano-banana'], apiKeys);
+  const defaultDraft = (): CreateDraftSeed => ({
+    modelId: 'nano-banana', prompt: '',
+    params: buildDefaultParamsForUi(NODE_DEFINITIONS['nano-banana'], apiKeys, normalizeKreaMode(kreaConnectionMode)),
+    refs: [], quantity: 1,
   });
+  const [seededDraft] = useState<CreateDraft>(() => {
+    const seed = { ...defaultDraft(), ...initial.prefill };
+    return sessionId ? useCreateDraftStore.getState().getOrCreateDraft(sessionId, seed)
+      : { ...seed, revision: 'uninitialized', uploads: [] };
+  });
+  const draft = useCreateDraftStore((state) => sessionId ? state.drafts[sessionId] : undefined) ?? seededDraft;
+  const { modelId, prompt, params, refs, quantity, uploads } = draft;
+  const updateDraft = (patch: Partial<CreateDraft> | ((current: CreateDraft) => Partial<CreateDraft>)) => {
+    if (sessionId) useCreateDraftStore.getState().updateDraft(sessionId, patch);
+  };
+  const setPrompt = (value: string) => updateDraft({ prompt: value });
+  const setParams = (value: Record<string, unknown>) => updateDraft({ params: value });
+  const setQuantity = (value: number) => updateDraft({ quantity: value });
+  const setRefs = (updater: (current: AttachedRef[]) => AttachedRef[]) => updateDraft((current) => ({ refs: updater(current.refs) }));
   const generations = useMemo(() => generationRecordsFromHistory(runHistory, sessionId ?? undefined), [runHistory, sessionId]);
   const activeCreateRuns = useMemo(() => runHistory.filter((run) => run.status === 'running' && run.createOrigin), [runHistory]);
   const galleryNodes = useMemo(() => {
@@ -70,8 +82,6 @@ export function CreateView() {
       : node);
   }, [allNodes, activeCreateRuns]);
   const [generationError, setGenerationError] = useState<string | null>(null);
-  const [refs, setRefs] = useState<AttachedRef[]>([]);
-  const [quantity, setQuantity] = useState(1);
   const [stylesOpen, setStylesOpen] = useState(false);
   const [presetReloadKey, setPresetReloadKey] = useState(0);
   const [ask, promptElement] = usePrompt();
@@ -93,23 +103,16 @@ export function CreateView() {
   const activeCount = createLaunchingIds.length + activeCreateRuns.length;
 
   const handleSelectModel = (id: string) => {
-    setModelId(id);
-    setParams(buildDefaultParamsForUi(NODE_DEFINITIONS[id], apiKeys, normalizeKreaMode(kreaConnectionMode)));
+    updateDraft({ modelId: id, params: buildDefaultParamsForUi(NODE_DEFINITIONS[id], apiKeys, normalizeKreaMode(kreaConnectionMode)) });
   };
 
   const handleApplyPreset = (preset: Preset) => {
     const next = applyPresetToComposer(preset, { modelId, prompt, params }, apiKeys, normalizeKreaMode(kreaConnectionMode));
-    if (next.modelId && next.modelId !== modelId) setModelId(next.modelId);
-    setPrompt(next.prompt);
-    setParams(next.params);
-    if (preset.refImages.length > 0) {
-      setRefs((prev) => {
-        const add = preset.refImages
-          .filter((fp) => !prev.some((r) => r.filePath === fp))
-          .map((fp) => ({ filePath: fp, previewUrl: fp }));
-        return [...prev, ...add];
-      });
-    }
+    updateDraft((current) => ({
+      modelId: next.modelId ?? current.modelId, prompt: next.prompt, params: next.params,
+      refs: [...current.refs, ...preset.refImages.filter((fp) => !current.refs.some((ref) => ref.filePath === fp))
+        .map((fp) => ({ filePath: fp, previewUrl: fp }))],
+    }));
   };
 
   // If the Assets panel's Styles tab handed us a preset before switching to
@@ -122,6 +125,10 @@ export function CreateView() {
 
   const handleSaveCurrentStyle = async () => {
     if (!modelDef || styleSavePending.current) return;
+    if (uploads.length > 0) {
+      setStyleSaveError('Finish attaching references or remove them before saving this style.');
+      return;
+    }
     styleSavePending.current = true;
     setStyleSaveError(null);
     try {
@@ -158,20 +165,30 @@ export function CreateView() {
     }
   };
 
-  const handleAttach = async (files: FileList) => {
-    for (const file of Array.from(files)) {
-      try {
-        const up = await uploadReference(file);
-        setRefs((prev) => prev.some((r) => r.filePath === up.filePath) ? prev : [...prev, up]);
-      } catch (err) { console.error('reference upload failed', err); }
-    }
+  const handleAttach = (files: FileList) => {
+    if (sessionId) attachCreateReferences(sessionId, files);
+  };
+
+  const handleNewDraft = () => {
+    if (!sessionId) return;
+    clearCreateReferenceUploads(sessionId);
+    useCreateDraftStore.getState().resetDraft(sessionId, defaultDraft());
+    setGenerationError(null);
+    setStyleSaveError(null);
   };
 
   const handleGenerate = async () => {
-    if (!modelDef || !sessionId) return;
+    if (!sessionId) return;
+    const currentDraft = useCreateDraftStore.getState().drafts[sessionId];
+    const currentModel = currentDraft?.modelId ? NODE_DEFINITIONS[currentDraft.modelId] : null;
+    if (!currentDraft || !currentModel) return;
+    if (currentDraft.uploads.length > 0) {
+      setGenerationError('Finish attaching references or remove them before generating.');
+      return;
+    }
     // Selection and saved styles can prefill models outside the Create picker.
     // Check admission before reserving a job or authoring an incomplete recipe.
-    if (!isCreateModel(modelDef)) {
+    if (!isCreateModel(currentModel)) {
       setGenerationError('This model needs Canvas input controls. Choose another model or return to Canvas.');
       return;
     }
@@ -186,11 +203,11 @@ export function CreateView() {
     const layoutY = Math.max(80, ...store.nodes.filter((node) => node.data._createOrigin).map((node) => node.position.y + 320));
     try {
       const { modelNodeIds, allNodeIds } = await store.authorGenerationCluster({
-        definitionId: modelDef.id,
-        prompt,
-        params,
-        refPaths: refs.map((r) => r.filePath),
-        quantity,
+        definitionId: currentModel.id,
+        prompt: currentDraft.prompt,
+        params: currentDraft.params,
+        refPaths: currentDraft.refs.map((r) => r.filePath),
+        quantity: currentDraft.quantity,
         sessionId,
         genId,
         layoutOrigin: { x: 80, y: layoutY },
@@ -200,7 +217,7 @@ export function CreateView() {
       if (modelNodeIds.length === 0 || allNodeIds.length === 0) throw new Error('Could not create generation nodes. Please try again.');
       // The shared execution store consumes the reservation atomically when it
       // creates the history/Stop owner. This survives leaving Create mid-launch.
-      await store.executeClusterConcurrent(allNodeIds, { genId, prompt, ts, sessionId, modelNodeIds, allNodeIds });
+      await store.executeClusterConcurrent(allNodeIds, { genId, prompt: currentDraft.prompt, ts, sessionId, modelNodeIds, allNodeIds });
     } catch (error) {
       if (mounted.current && !useGraphStore.getState().createCancelledLaunchIds.includes(genId)) {
         setGenerationError(error instanceof Error ? error.message : 'Could not start generation. Please try again.');
@@ -252,6 +269,7 @@ export function CreateView() {
           <ArrowLeft size={16} strokeWidth={1.75} aria-hidden="true" /> Canvas
         </button>
         <span className="create-view__title">Create</span>
+        <button type="button" className="create-view__back" onClick={handleNewDraft}>New draft</button>
         {styleSaveError && <span className="create-view__save-error" role="alert">{styleSaveError}</span>}
         {generationError && <span className="create-view__run-error" role="alert">{generationError}</span>}
         {createLaunchingIds.length > 0 && <span role="status">Preparing generation…</span>}
@@ -308,7 +326,6 @@ export function CreateView() {
         })()}
       </div>
 
-      <ReferenceTray refs={refs} onRemove={(fp) => setRefs((p) => p.filter((r) => r.filePath !== fp))} />
       {stylesOpen && (
         <PresetLibrary
           onApply={handleApplyPreset}
@@ -318,22 +335,33 @@ export function CreateView() {
           saving={savingStyle}
         />
       )}
-      <CreateComposer
-        modelDef={modelDef}
-        prompt={prompt}
-        params={params}
-        activeCount={activeCount}
-        isLaunching={createLaunchingIds.length > 0 || isImportingGraph}
-        maxConcurrent={MAX_CONCURRENT}
-        quantity={quantity}
-        onPromptChange={setPrompt}
-        onSelectModel={handleSelectModel}
-        onParamsChange={setParams}
-        onGenerate={handleGenerate}
-        onAttach={handleAttach}
-        onQuantityChange={setQuantity}
-        onOpenStyles={() => setStylesOpen(true)}
-      />
+      <div className="create-view__composer-area">
+        <ReferenceTray refs={refs} uploads={uploads}
+          onRemove={(fp) => setRefs((p) => p.filter((r) => r.filePath !== fp))}
+          canRetry={(id) => Boolean(sessionId && canRetryCreateReference(sessionId, id))}
+          onRetry={(id, file) => { if (sessionId) retryCreateReference(sessionId, id, file); }}
+          onRemoveUpload={(id) => { if (sessionId) removeCreateReferenceUpload(sessionId, id); }} />
+        <CreateComposer
+          key={draft.revision}
+          modelDef={modelDef}
+          prompt={prompt}
+          params={params}
+          activeCount={activeCount}
+          isLaunching={createLaunchingIds.length > 0 || isImportingGraph}
+          referencesBlocked={uploads.length > 0}
+          referenceStatus={uploads.some((upload) => upload.status === 'uploading')
+            ? 'Uploading references…' : uploads.length > 0 ? 'Retry, attach again or remove failed references to generate.' : undefined}
+          maxConcurrent={MAX_CONCURRENT}
+          quantity={quantity}
+          onPromptChange={setPrompt}
+          onSelectModel={handleSelectModel}
+          onParamsChange={setParams}
+          onGenerate={handleGenerate}
+          onAttach={handleAttach}
+          onQuantityChange={setQuantity}
+          onOpenStyles={() => setStylesOpen(true)}
+        />
+      </div>
       {promptElement}
     </div>
   );

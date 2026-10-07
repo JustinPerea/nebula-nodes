@@ -1,0 +1,9 @@
+# Create draft continuity decisions — 2026-10-07
+
+- Keep authoring state in a small session-keyed store, separate from graph nodes, active job reservations and immutable run-history recipes. Leaving Create or opening History is not a new session and must not clear a draft.
+- Persist prompt, selected model, parameters, accepted reference paths/previews and variation quantity in origin-local browser storage. This matches the existing persisted Create session ID, so an ordinary reload resumes both identity and unfinished work. No provider credentials or generation requests are part of the draft store.
+- Canvas selection can initialize a session that has never had a draft. Once a draft exists, selection on a later visit cannot silently replace it; importing a selection must be a deliberate UI action.
+- Explicit reset replaces only composer values with blank/default fields. It retains the Create session ID and all earlier runs. Root integrates the reset UI; the store never authors nodes or runs a model.
+- Each draft has a persisted revision token that changes only on explicit reset. Upload/enhance completion handlers can check that token, upload ID and attempt against the latest draft before applying results. Ordinary edits retain the revision.
+- Copy nested parameter/reference values on seed and update to avoid changing a Canvas recipe, saved style or earlier state snapshot through shared object references.
+- Ignore corrupt or unsupported-version persisted values and retain valid siblings when one session's draft is malformed. Storage access/quota failures preserve in-memory edits. Uploaded attachments are persisted only after they have a backend path. Pending/error metadata persists without a `File`, blob preview or controller; on reload, pending uploads become visible interrupted errors that ask the user to attach again or remove. File/controller maps and asynchronous handlers remain UI-coordinator-owned.

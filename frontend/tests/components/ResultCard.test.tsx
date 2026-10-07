@@ -53,6 +53,57 @@ describe('ResultCard zoom affordances', () => {
   });
 });
 
+describe('ResultCard action access', () => {
+  it('exposes named actions and fullscreen without any hover event; focus alone performs no action', () => {
+    const onZoom = vi.fn();
+    const onUseAsInput = vi.fn();
+    const onOpenInCanvas = vi.fn();
+    const onDelete = vi.fn();
+    const view = render(<ResultCard node={node('complete', { image: { type: 'Image', value: '/api/outputs/a.png' } })}
+      onZoom={onZoom} onUseAsInput={onUseAsInput} onOpenInCanvas={onOpenInCanvas} onDelete={onDelete} />);
+    for (const name of ['View full screen', 'Download as…', 'Open in canvas', 'Use as input', 'Delete']) {
+      const button = view.getByRole('button', { name });
+      expect(button.tabIndex).toBe(0);
+      button.focus();
+      expect(button).toHaveFocus();
+    }
+    expect(onZoom).not.toHaveBeenCalled();
+    expect(onUseAsInput).not.toHaveBeenCalled();
+    expect(onOpenInCanvas).not.toHaveBeenCalled();
+    expect(onDelete).not.toHaveBeenCalled();
+    fireEvent.click(view.getByRole('button', { name: 'Use as input' }));
+    expect(onUseAsInput).toHaveBeenCalledExactlyOnceWith('/api/outputs/a.png');
+  });
+
+  it('focuses download formats, supports arrows and Escape, and returns to Download', () => {
+    const view = render(<ResultCard node={node('complete', { image: { type: 'Image', value: '/api/outputs/a.png' } })}
+      onOpenInCanvas={noop} onUseAsInput={noop} onDelete={noop} />);
+    const opener = view.getByRole('button', { name: 'Download as…' });
+    opener.focus();
+    fireEvent.click(opener);
+    const original = view.getByRole('menuitem', { name: 'Original' });
+    expect(original).toHaveFocus();
+    fireEvent.keyDown(original, { key: 'ArrowRight' });
+    expect(view.getByRole('menuitem', { name: 'PNG' })).toHaveFocus();
+    fireEvent.keyDown(document.activeElement!, { key: 'End' });
+    expect(view.getByRole('menuitem', { name: 'WEBP' })).toHaveFocus();
+    fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
+    expect(view.queryByRole('menu')).toBeNull();
+    expect(opener).toHaveFocus();
+    expect(opener).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('dismisses download choices on outside pointer input without activating another action', () => {
+    const onDelete = vi.fn();
+    const view = render(<ResultCard node={node('complete', { image: { type: 'Image', value: '/api/outputs/a.png' } })}
+      onOpenInCanvas={noop} onUseAsInput={noop} onDelete={onDelete} />);
+    fireEvent.click(view.getByRole('button', { name: 'Download as…' }));
+    fireEvent.pointerDown(document.body);
+    expect(view.queryByRole('menu')).toBeNull();
+    expect(onDelete).not.toHaveBeenCalled();
+  });
+});
+
 describe('ResultCard saves', () => {
   const completed = () => node('complete', { image: { type: 'Image', value: '/api/outputs/a.png' } });
 
