@@ -59,7 +59,7 @@ try {
   await loadEvent;
 
   await waitForRuntime(cdp, 'window.__nebulaUIStore && window.__nebulaGraphStore');
-  await runSkinSwitchSmokeChecks(cdp);
+  await runAppearanceSmokeChecks(cdp);
   await setupSlavaScene(cdp);
   await waitForRuntime(cdp, 'document.body.classList.contains("app-slava-restraint") && document.querySelectorAll(".react-flow__node").length >= 7');
 
@@ -202,7 +202,6 @@ async function setupSlavaScene(cdp) {
   await evaluate(cdp, () => {
     const ui = window.__nebulaUIStore;
     const graph = window.__nebulaGraphStore;
-    ui.getState().setSkin('slava-restraint');
     window.localStorage.setItem('nebula:agentLog:enabled', '0');
     window.__nebulaChat?.clear?.();
     window.__nebulaChat?.setInput?.('');
@@ -345,105 +344,70 @@ async function setupSlavaScene(cdp) {
   await sleep(500);
 }
 
-async function runSkinSwitchSmokeChecks(cdp) {
-  debugStep('smoke: skin defaults and settings picker');
+async function runAppearanceSmokeChecks(cdp) {
+  debugStep('smoke: supported appearance and legacy preference migration');
   await waitForRuntime(cdp, 'document.querySelector(".canvas-wrapper")');
 
   const defaultAssertions = await evaluate(cdp, () => ({
     storedSkin: window.localStorage.getItem('nebula:skin'),
     storeSkin: window.__nebulaUIStore.getState().skin,
     slavaBody: document.body.classList.contains('app-slava-restraint'),
-    hermesBody: document.body.classList.contains('app-hermes'),
+    legacyBody: document.body.classList.contains('app-hermes') || document.body.classList.contains('app-slava-wayfinding'),
     slavaBackground: !!document.querySelector('.react-flow__background.slava-canvas-background'),
     slavaDot: !!document.querySelector('.react-flow__background.slava-canvas-background .slava-canvas-background__dot'),
-    libraryVisible: !!document.querySelector('.panel--library'),
-    chatHidden: !document.querySelector('.chat-panel'),
-    nodeLauncher: !!document.querySelector('.panel-launcher--nodes'),
-    nodeLauncherActive: !!document.querySelector('.panel-launcher--nodes.panel-launcher--active'),
-    chatLauncher: !!document.querySelector('.panel-launcher--chat'),
   }));
-  assertSlavaCheck(defaultAssertions.storedSkin === null, 'fresh profile has no persisted skin before smoke check');
-  assertSlavaCheck(defaultAssertions.storeSkin === 'slava-restraint', 'fresh profile defaults to Slava skin');
-  assertSlavaCheck(defaultAssertions.slavaBody, 'fresh profile applies Slava body class');
-  assertSlavaCheck(!defaultAssertions.hermesBody, 'fresh Slava default does not also apply Hermes body class');
-  assertSlavaCheck(defaultAssertions.slavaBackground, 'fresh Slava default renders dot-matrix background layer');
-  assertSlavaCheck(defaultAssertions.slavaDot, 'fresh Slava default renders the dot-matrix marker element');
-  assertSlavaCheck(defaultAssertions.libraryVisible, 'fresh Slava default starts with node library open');
-  assertSlavaCheck(defaultAssertions.chatHidden, 'fresh Slava default starts with chat collapsed');
-  assertSlavaCheck(defaultAssertions.nodeLauncher, 'fresh Slava default renders node launcher');
-  assertSlavaCheck(defaultAssertions.nodeLauncherActive, 'fresh Slava default marks node launcher active');
-  assertSlavaCheck(defaultAssertions.chatLauncher, 'fresh Slava default renders chat launcher');
+  assertSlavaCheck(defaultAssertions.storedSkin === 'slava-restraint', 'fresh profile stores the supported appearance');
+  assertSlavaCheck(defaultAssertions.storeSkin === 'slava-restraint', 'fresh profile uses Slava');
+  assertSlavaCheck(defaultAssertions.slavaBody && !defaultAssertions.legacyBody, 'only the supported theme body class is applied');
+  assertSlavaCheck(defaultAssertions.slavaBackground && defaultAssertions.slavaDot, 'supported appearance renders the dot-matrix background');
 
   await evaluate(cdp, () => {
-    window.__nebulaUIStore.setState((state) => ({
-      panels: {
-        ...state.panels,
-        library: { ...state.panels.library, visible: false },
-        inspector: { ...state.panels.inspector, visible: false },
-        chat: { ...state.panels.chat, visible: false },
-        settings: { ...state.panels.settings, visible: true, position: { x: 24, y: 24 } },
-      },
-    }));
+    window.localStorage.setItem('nebula:skin', 'hermes');
+    window.localStorage.setItem('nebula:hermes-tone', 'obsidian');
   });
-  await waitForRuntime(cdp, 'document.querySelector(".panel--settings .skin-picker__option")');
-
-  const activeDefault = await getActiveSkinPickerLabel(cdp);
-  assertSlavaCheck(activeDefault.includes('Slava'), `settings picker marks Slava active by default, got "${activeDefault}"`);
-
-  await clickElementByText(cdp, '.skin-picker__option', 'Default');
-  await waitForRuntime(cdp, 'window.__nebulaUIStore.getState().skin === "default" && !document.body.classList.contains("app-slava-restraint") && !document.body.classList.contains("app-hermes")');
-  const baseAssertions = await evaluate(cdp, () => ({
-    storedSkin: window.localStorage.getItem('nebula:skin'),
-    activeSkin: document.querySelector('.skin-picker__option--active .skin-picker__label')?.textContent?.trim() ?? '',
-    slavaBackground: !!document.querySelector('.react-flow__background.slava-canvas-background'),
+  const reloadEvent = cdp.waitForEvent('Page.loadEventFired', 10000).catch(() => null);
+  await cdp.send('Page.reload');
+  await reloadEvent;
+  await waitForRuntime(cdp, 'window.__nebulaUIStore && document.querySelector(".canvas-wrapper")');
+  const migrated = await evaluate(cdp, () => ({
+    skin: window.__nebulaUIStore.getState().skin,
+    stored: window.localStorage.getItem('nebula:skin'),
+    tone: window.localStorage.getItem('nebula:hermes-tone'),
+    slavaBody: document.body.classList.contains('app-slava-restraint'),
+    hermesBody: document.body.classList.contains('app-hermes'),
   }));
-  assertSlavaCheck(baseAssertions.storedSkin === 'default', 'Default skin persists through settings picker');
-  assertSlavaCheck(baseAssertions.activeSkin === 'Default', `Default skin option is active, got "${baseAssertions.activeSkin}"`);
-  assertSlavaCheck(!baseAssertions.slavaBackground, 'Default skin removes the Slava background class');
+  assertSlavaCheck(migrated.skin === 'slava-restraint' && migrated.stored === 'slava-restraint', 'legacy saved theme migrates on reload');
+  assertSlavaCheck(migrated.tone === null && migrated.slavaBody && !migrated.hermesBody, 'legacy Hermes tone cannot restore an unsupported theme');
 
-  await clickElementByText(cdp, '.skin-picker__option', 'Hermes');
-  await waitForRuntime(cdp, 'window.__nebulaUIStore.getState().skin === "hermes" && document.body.classList.contains("app-hermes") && !document.body.classList.contains("app-slava-restraint")');
-  const hermesAssertions = await evaluate(cdp, () => ({
-    storedSkin: window.localStorage.getItem('nebula:skin'),
-    activeSkin: document.querySelector('.skin-picker__option--active .skin-picker__label')?.textContent?.trim() ?? '',
-    slavaBackground: !!document.querySelector('.react-flow__background.slava-canvas-background'),
+  await evaluate(cdp, () => window.__nebulaUIStore.getState().setLeftDock('settings'));
+  await waitForRuntime(cdp, 'document.querySelector(".panel--settings .settings__toggle-row")');
+  const settings = await evaluate(cdp, () => ({
+    dialog: document.querySelector('.panel--settings')?.getAttribute('role') === 'dialog',
+    picker: !!document.querySelector('.panel--settings .skin-picker'),
+    theme: window.__nebulaUIStore.getState().skin,
   }));
-  assertSlavaCheck(hermesAssertions.storedSkin === 'hermes', 'Hermes skin persists through settings picker');
-  assertSlavaCheck(hermesAssertions.activeSkin === 'Hermes', `Hermes skin option is active, got "${hermesAssertions.activeSkin}"`);
-  assertSlavaCheck(!hermesAssertions.slavaBackground, 'Hermes skin keeps the Slava background class removed');
+  assertSlavaCheck(settings.dialog && !settings.picker && settings.theme === 'slava-restraint', 'settings retains its interface controls without alternate theme choices');
 
   await evaluate(cdp, () => {
-    window.__slavaSkinSwitchSawClass = document.body.classList.contains('app-skin-switching-slava');
-    window.__slavaSkinSwitchObserver?.disconnect?.();
-    window.__slavaSkinSwitchObserver = new MutationObserver(() => {
-      if (document.body.classList.contains('app-skin-switching-slava')) {
-        window.__slavaSkinSwitchSawClass = true;
-      }
-    });
-    window.__slavaSkinSwitchObserver.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+    window.__nebulaUIStore.getState().setLeftDock(null);
+    window.__nebulaUIStore.getState().togglePanel('chat');
   });
-  await clickElementByText(cdp, '.skin-picker__option', 'Slava');
-  await waitForRuntime(cdp, 'window.__slavaSkinSwitchSawClass === true', 1000);
-  await waitForRuntime(cdp, 'window.__nebulaUIStore.getState().skin === "slava-restraint" && document.body.classList.contains("app-slava-restraint") && !document.body.classList.contains("app-hermes")');
-  await waitForRuntime(cdp, '!document.body.classList.contains("app-skin-switching-slava")', 1200);
-  const slavaAssertions = await evaluate(cdp, () => {
-    window.__slavaSkinSwitchObserver?.disconnect?.();
-    window.__slavaSkinSwitchObserver = null;
-    return {
-      storedSkin: window.localStorage.getItem('nebula:skin'),
-      activeSkin: document.querySelector('.skin-picker__option--active .skin-picker__label')?.textContent?.trim() ?? '',
-      slavaBackground: !!document.querySelector('.react-flow__background.slava-canvas-background'),
-      slavaDot: !!document.querySelector('.react-flow__background.slava-canvas-background .slava-canvas-background__dot'),
-      switchClassLingering: document.body.classList.contains('app-skin-switching-slava'),
-    };
-  });
-  assertSlavaCheck(slavaAssertions.storedSkin === 'slava-restraint', 'Slava skin persists after switching back');
-  assertSlavaCheck(slavaAssertions.activeSkin.includes('Slava'), `Slava skin option is active after switching back, got "${slavaAssertions.activeSkin}"`);
-  assertSlavaCheck(slavaAssertions.slavaBackground, 'Slava background class returns after switching back');
-  assertSlavaCheck(slavaAssertions.slavaDot, 'Slava dot-matrix marker returns after switching back');
-  assertSlavaCheck(!slavaAssertions.switchClassLingering, 'Slava skin switch mask class cleans itself up');
-
-  debugStep('smoke: skin defaults and settings picker complete');
+  await waitForRuntime(cdp, 'document.querySelector(".chat-panel__agent-selector")');
+  await clickElementByText(cdp, '.chat-panel__agent-selector button', 'Daedalus');
+  const daedalus = await evaluate(cdp, () => ({
+    selected: document.querySelector('.chat-panel')?.getAttribute('data-chat-agent') === 'daedalus',
+    slavaBody: document.body.classList.contains('app-slava-restraint'),
+    hermesBody: document.body.classList.contains('app-hermes'),
+    tone: !!document.querySelector('.chat-panel__tone-toggle'),
+    bloom: !!document.querySelector('.hermes-bloom-portal'),
+    autonomy: !!document.querySelector('.chat-panel__autonomy-toggle'),
+    model: !!document.querySelector('.chat-panel__model-trigger'),
+  }));
+  assertSlavaCheck(daedalus.selected && daedalus.slavaBody && !daedalus.hermesBody, 'selecting Daedalus keeps the supported appearance');
+  assertSlavaCheck(!daedalus.tone && !daedalus.bloom && daedalus.autonomy && daedalus.model, 'Daedalus retains model and autonomy controls without theme controls');
+  await clickElementByText(cdp, '.chat-panel__agent-selector button', 'Claude');
+  await evaluate(cdp, () => window.__nebulaUIStore.getState().togglePanel('chat'));
+  debugStep('smoke: supported appearance complete');
 }
 
 async function runSlavaChatCoverage(cdp) {
@@ -1430,26 +1394,26 @@ async function runSlavaInteractionChecks(cdp) {
   debugStep('interaction: daedalus mode switch');
   await clickElementByText(cdp, '.chat-panel__agent-selector button', 'Daedalus');
   await waitForRuntime(cdp, `
-    window.__nebulaUIStore.getState().skin === "hermes"
-    && document.body.classList.contains("app-hermes")
-    && !document.body.classList.contains("app-slava-restraint")
-    && document.body.classList.contains("chat-bloom-active")
-    && document.querySelector(".chat-panel--agent-daedalus")
-    && document.querySelector(".hermes-bloom-portal")
+    document.querySelector(".chat-panel--agent-daedalus")
   `);
   const daedalusModeAssertions = await evaluate(cdp, () => ({
-    storedSkin: window.__nebulaUIStore.getState().skin,
-    hermesBody: document.body.classList.contains('app-hermes'),
+    storeSkin: window.__nebulaUIStore.getState().skin,
+    storedSkin: window.localStorage.getItem('nebula:skin'),
     slavaBody: document.body.classList.contains('app-slava-restraint'),
-    bloomActive: document.body.classList.contains('chat-bloom-active'),
+    legacyAppearance: [
+      'app-hermes', 'app-slava-wayfinding', 'tone-verdant', 'tone-obsidian',
+      'chat-bloom-active', 'app-skin-switching-slava',
+    ].some((className) => document.body.classList.contains(className)),
+    toneControl: !!document.querySelector('.chat-panel__tone-toggle'),
     bloomPortal: !!document.querySelector('.hermes-bloom-portal'),
+    autonomyControl: !!document.querySelector('.chat-panel__autonomy-toggle'),
+    modelControl: !!document.querySelector('.chat-panel__model-trigger'),
     agent: document.querySelector('.chat-panel')?.getAttribute('data-chat-agent') ?? '',
   }));
-  assertSlavaCheck(daedalusModeAssertions.storedSkin === 'hermes', 'Daedalus agent switch activates Hermes skin');
-  assertSlavaCheck(daedalusModeAssertions.hermesBody, 'Daedalus agent switch applies Hermes body class');
-  assertSlavaCheck(!daedalusModeAssertions.slavaBody, 'Daedalus agent switch removes Slava body class');
-  assertSlavaCheck(daedalusModeAssertions.bloomActive, 'Daedalus agent switch starts bloom animation state');
-  assertSlavaCheck(daedalusModeAssertions.bloomPortal, 'Daedalus agent switch mounts the bloom portal');
+  assertSlavaCheck(daedalusModeAssertions.storeSkin === 'slava-restraint' && daedalusModeAssertions.storedSkin === 'slava-restraint', 'Daedalus agent switch keeps the supported saved appearance');
+  assertSlavaCheck(daedalusModeAssertions.slavaBody && !daedalusModeAssertions.legacyAppearance, 'Daedalus agent switch keeps Slava without obsolete theme or transition classes');
+  assertSlavaCheck(!daedalusModeAssertions.toneControl && !daedalusModeAssertions.bloomPortal, 'Daedalus agent switch has no obsolete tone controls or bloom portal');
+  assertSlavaCheck(daedalusModeAssertions.autonomyControl && daedalusModeAssertions.modelControl, 'Daedalus agent switch retains autonomy and model controls');
   assertSlavaCheck(daedalusModeAssertions.agent === 'daedalus', 'Daedalus agent switch updates chat agent state');
 
   await clickElementByText(cdp, '.chat-panel__agent-selector button', 'Claude');
@@ -1459,16 +1423,21 @@ async function runSlavaInteractionChecks(cdp) {
     && !document.body.classList.contains("app-hermes")
     && document.querySelector(".chat-panel--agent-claude")
   `);
-  await waitForRuntime(cdp, '!document.body.classList.contains("app-skin-switching-slava")', 1200);
   const claudeModeAssertions = await evaluate(cdp, () => ({
-    storedSkin: window.__nebulaUIStore.getState().skin,
+    storeSkin: window.__nebulaUIStore.getState().skin,
+    storedSkin: window.localStorage.getItem('nebula:skin'),
     slavaBody: document.body.classList.contains('app-slava-restraint'),
-    hermesBody: document.body.classList.contains('app-hermes'),
+    legacyAppearance: [
+      'app-hermes', 'app-slava-wayfinding', 'tone-verdant', 'tone-obsidian',
+      'chat-bloom-active', 'app-skin-switching-slava',
+    ].some((className) => document.body.classList.contains(className)),
+    toneControl: !!document.querySelector('.chat-panel__tone-toggle'),
+    bloomPortal: !!document.querySelector('.hermes-bloom-portal'),
     agent: document.querySelector('.chat-panel')?.getAttribute('data-chat-agent') ?? '',
   }));
-  assertSlavaCheck(claudeModeAssertions.storedSkin === 'slava-restraint', 'Claude agent switch restores previous Slava skin');
-  assertSlavaCheck(claudeModeAssertions.slavaBody, 'Claude agent switch restores Slava body class');
-  assertSlavaCheck(!claudeModeAssertions.hermesBody, 'Claude agent switch removes Hermes body class');
+  assertSlavaCheck(claudeModeAssertions.storeSkin === 'slava-restraint' && claudeModeAssertions.storedSkin === 'slava-restraint', 'Claude agent switch keeps the supported saved appearance');
+  assertSlavaCheck(claudeModeAssertions.slavaBody && !claudeModeAssertions.legacyAppearance, 'Claude agent switch keeps Slava without obsolete theme or transition classes');
+  assertSlavaCheck(!claudeModeAssertions.toneControl && !claudeModeAssertions.bloomPortal, 'Claude agent switch has no obsolete tone controls or bloom portal');
   assertSlavaCheck(claudeModeAssertions.agent === 'claude', 'Claude agent switch updates chat agent state');
 
   debugStep('interaction: image drag');
@@ -1635,7 +1604,6 @@ async function runSlavaInteractionChecks(cdp) {
 
 async function runSlavaPersistenceChecks(cdp) {
   await evaluate(cdp, () => {
-    window.__nebulaUIStore.getState().setSkin('slava-restraint');
     window.__nebulaUIStore.getState().setAgentLogEnabled(true);
     window.localStorage.setItem('nebula:agentLog:pos', JSON.stringify({ left: 84, top: 120 }));
   });
@@ -1849,12 +1817,6 @@ async function clickElementByText(cdp, selector, text) {
   await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y, button: 'none' });
   await cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', buttons: 1, clickCount: 1 });
   await cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', buttons: 0, clickCount: 1 });
-}
-
-async function getActiveSkinPickerLabel(cdp) {
-  return evaluate(cdp, () => (
-    document.querySelector('.skin-picker__option--active .skin-picker__label')?.textContent?.trim() ?? ''
-  ));
 }
 
 async function fillSelector(cdp, selector, text) {

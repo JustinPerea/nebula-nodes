@@ -16,6 +16,7 @@ import { buildSampleGraph } from '../constants/sampleGraph';
 import { computeLayout } from '../lib/autoLayout';
 import {
   clearPersistedRunHistory,
+  clearRunReconnectingNote,
   closeRunRecord,
   freezeRunSnapshot,
   applyProviderRecoveriesToHistory,
@@ -29,6 +30,7 @@ import {
   paperRecipeRevision,
   paperRunOutOfDateReasons,
   recordPaperRunOutput,
+  recordRunBatchOutputs,
   snapshotWithLatestPaperSources,
   providerRecoveryWarningText,
   isWorldLabsRecoveryReplayBlocked,
@@ -40,6 +42,8 @@ import {
   type RunGraphSnapshot,
   type RunRecord,
   type RunReplayAction,
+  type ActiveRun,
+  type CreateRunOrigin,
 } from '../lib/runHistory';
 import type { PaperSourceRecord } from '../lib/paperSource';
 import {
@@ -74,6 +78,20 @@ import { validateManifest } from '../lib/video/manifestValidator';
 import { componentTypeToCanvasDefId, pruneTrackItemsForDeletedNode } from '../lib/video/mirroring';
 
 export type TrackItemOrderAction = 'send-to-back' | 'send-backward' | 'bring-forward' | 'bring-to-front';
+
+function normalizedExecutionOutputs(raw: Record<string, PortValue>): Record<string, PortValue> {
+  const outputs: Record<string, PortValue> = {};
+  for (const [key, output] of Object.entries(raw)) {
+    if (output.type === 'World') {
+      outputs[key] = rewriteExecutionAssetUrls(output);
+    } else if (['Image', 'Video', 'Mesh', 'Audio', 'SVG'].includes(output.type) && output.value) {
+      outputs[key] = { ...output, value: rewriteExecutionAssetUrls(output.value) };
+    } else {
+      outputs[key] = output;
+    }
+  }
+  return outputs;
+}
 
 /** Backend contract: video-edit's ffmpeg pipeline still operates on
  * sourceIn/sourceOut/speed even though the frontend stores `duration` as
@@ -349,23 +367,89 @@ function pushUndo(
 let lastUndoPush = 0;
 let lastUndoNodeId = '';
 
-// Whether the current run has produced any node error / validation error. Reset
-// at run start (resetExecution) and read at graphComplete so job notifications
-// can report ok vs failed — the backend has no single terminal "failed" event.
-let currentRunHadError = false;
-
-// Id of the in-flight run-history record (opened by the execute* methods, closed
-// at graphComplete/validationError). Null between runs / for Create concurrent gens.
+// Canvas and saved replay keep an exclusive owner. Create and Cinema use the
+// same scoped registry without taking this exclusive slot.
 let currentRunId: string | null = null;
 
-// Error state for locally-started scoped runs. This includes the global Canvas
-// run and concurrent Create generations; Cinema-shot passes suppress their
-// graphComplete event, so they are intentionally not registered here.
+// Errors are correlated per owner so parallel jobs retain independent verdicts.
 const runErrors = new Map<string, boolean>();
+const activeRunOwners = new Map<string, ActiveRun>();
+const runShareableInputs = new Map<string, Set<string>>();
+const STATIC_INPUT_IDS = new Set(['text-input', 'image-input', 'document-input', 'video-input', 'audio-input']);
+const createLaunchOwners = new Set<string>();
+const cancelledCreateLaunches = new Set<string>();
+// Terminal correlation survives history clearing and prevents delayed events
+// from overwriting the next owner of the same node.
+const terminalRunIds = new Set<string>();
+const settledCinemaRuns = new Map<string, 'complete' | 'failed' | 'cancelled'>();
 const cancelledRunIds = new Set<string>();
 const pendingStartRunIds = new Set<string>();
 const cancellationRequestedRunIds = new Set<string>();
 const statusReconciliationTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+function ownershipState(): Pick<GraphState, 'activeRuns' | 'isExecuting' | 'isCancelling'> {
+  const activeRuns = [...activeRunOwners.values()].map((run) => ({ ...run, nodeIds: [...run.nodeIds] }));
+  return { activeRuns, isExecuting: activeRuns.length > 0 || createLaunchOwners.size > 0,
+    isCancelling: activeRuns.some((run) => run.status === 'cancelling') || cancelledCreateLaunches.size > 0 };
+}
+
+function registerRun(runId: string, snapshot: RunGraphSnapshot, targetNodeId?: string, shotId?: string): void {
+  if (targetNodeId && shotId) settledCinemaRuns.delete(`${targetNodeId}\u0000${shotId}`);
+  activeRunOwners.set(runId, { id: runId, kind: shotId ? 'cinema-shot' : 'graph',
+    nodeIds: [...snapshotExecutionScopeIds(snapshot, targetNodeId)],
+    nodeId: targetNodeId, shotId, status: 'starting' });
+  runErrors.set(runId, false);
+  runShareableInputs.set(runId, new Set(snapshot.nodes.filter((node) => STATIC_INPUT_IDS.has(node.definitionId)).map((node) => node.id)));
+}
+
+function ownsRun(runId: string): boolean { return activeRunOwners.has(runId); }
+
+function updateRunPhase(runId: string, status: ActiveRun['status'], set: GraphSet): void {
+  const owner = activeRunOwners.get(runId);
+  if (!owner) return;
+  activeRunOwners.set(runId, { ...owner, status });
+  set(ownershipState());
+}
+
+function clearConfirmedRunAdvisory(runId: string, set: GraphSet): void {
+  if (!ownsRun(runId)) return;
+  set((state) => {
+    const history = clearRunReconnectingNote(state.runHistory, runId);
+    return history === state.runHistory ? {} : { runHistory: persistedRunHistory(history) };
+  });
+}
+
+function scopeOverlaps(nodeIds: Iterable<string>, shot?: { nodeId: string; shotId: string; shareableInputs: Set<string> }): boolean {
+  const ids = new Set(nodeIds);
+  return [...activeRunOwners.values()].some((owner) => {
+    if (shot && owner.kind === 'cinema-shot' && owner.nodeId === shot.nodeId) {
+      return owner.shotId === shot.shotId || owner.nodeIds.some((id) => id !== shot.nodeId && ids.has(id)
+        && !(shot.shareableInputs.has(id) && runShareableInputs.get(owner.id)?.has(id)));
+    }
+    return owner.nodeIds.some((id) => ids.has(id));
+  });
+}
+
+function closeTrackedRun(set: GraphSet, runId: string, patch: Parameters<typeof closeRunRecord>[2]): void {
+  const owner = activeRunOwners.get(runId);
+  if (!owner) return;
+  if (owner.nodeId && owner.shotId && patch.status !== 'running') {
+    settledCinemaRuns.set(`${owner.nodeId}\u0000${owner.shotId}`, patch.status);
+    if (settledCinemaRuns.size > 1000) settledCinemaRuns.delete(settledCinemaRuns.keys().next().value!);
+  }
+  activeRunOwners.delete(runId);
+  terminalRunIds.add(runId);
+  if (terminalRunIds.size > 1000) terminalRunIds.delete(terminalRunIds.values().next().value!);
+  if (currentRunId === runId) currentRunId = null;
+  pendingStartRunIds.delete(runId);
+  cancellationRequestedRunIds.delete(runId);
+  const timer = statusReconciliationTimers.get(runId);
+  if (timer !== undefined) clearTimeout(timer);
+  statusReconciliationTimers.delete(runId);
+  runErrors.delete(runId);
+  runShareableInputs.delete(runId);
+  set((state) => ({ ...ownershipState(), runHistory: persistedRunHistory(closeRunRecord(state.runHistory, runId, patch)) }));
+}
 
 function rememberCancelledRun(runId: string): void {
   cancelledRunIds.add(runId);
@@ -385,23 +469,7 @@ function closeCurrentRun(
   patch: Parameters<typeof closeRunRecord>[2],
 ): void {
   if (!currentRunId) return;
-  const rid = currentRunId;
-  currentRunId = null;
-  pendingStartRunIds.delete(rid);
-  cancellationRequestedRunIds.delete(rid);
-  const timer = statusReconciliationTimers.get(rid);
-  if (timer !== undefined) clearTimeout(timer);
-  statusReconciliationTimers.delete(rid);
-  runErrors.delete(rid);
-  set((s) => ({
-    runHistory: persistedRunHistory(closeRunRecord(s.runHistory, rid, patch)),
-  }));
-}
-
-/** Scoped events may only own the global Canvas lifecycle when they match its
- * run id. Missing ids retain the pre-correlation behavior for older backends. */
-function eventOwnsCurrentRun(runId?: string): boolean {
-  return currentRunId !== null && (runId === undefined || runId === currentRunId);
+  closeTrackedRun(set, currentRunId, patch);
 }
 
 /** Like pushUndo but debounces rapid param changes on the same node (500ms window). */
@@ -428,6 +496,10 @@ interface GraphState {
   edges: Edge[];
   isExecuting: boolean;
   isCancelling: boolean;
+  /** Import owns graph replacement without creating an execution/history record. */
+  isImportingGraph: boolean;
+  reserveGraphImport: () => boolean;
+  releaseGraphImport: () => void;
   providerRecoveryWarning: string | null;
   providerRecoveries: ProviderRecoveryCheckpoint[];
   uncertainWorldLabsRunId: string | null;
@@ -527,6 +599,13 @@ interface GraphState {
   ) => void;
   executeGraph: () => Promise<void>;
   cancelExecution: () => Promise<void>;
+  cancelRun: (runId: string) => Promise<void>;
+  activeRuns: ActiveRun[];
+  createLaunchingIds: string[];
+  createCancelledLaunchIds: string[];
+  reserveCreateGeneration: (genId: string) => boolean;
+  releaseCreateGeneration: (genId: string) => void;
+  cancelCreateGeneration: (genId: string) => void;
   resetExecution: () => void;
   handleExecutionEvent: (event: ExecutionEvent) => void;
   hydrateProviderRecoveries: (checkpoints: ProviderRecoveryCheckpoint[]) => void;
@@ -541,14 +620,14 @@ interface GraphState {
   reconcilePersistedWorldLabsRun: () => Promise<void>;
   dismissProviderRecoveryWarning: () => void;
   executeNode: (nodeId: string) => Promise<void>;
-  /** Regenerate a single cinema-scene shot (does NOT touch the global
-   *  isExecuting lock — the rail spinner scopes to that one shot's status).
-   *  `variations` > 1 generates that many seeded candidates into shot.variations. */
+  /** Regenerate one tracked Cinema shot. Distinct shots may run concurrently.
+   * `variations` > 1 generates seeded candidates into shot.variations. */
   executeShot: (nodeId: string, shotId: string, seed?: number, variations?: number) => Promise<void>;
+  isShotAdmissionBlocked: (nodeId: string, shotId: string) => boolean;
   /** Promote a variation to the canonical scene image and dynamic output port. */
   promoteShotVariation: (nodeId: string, shotId: string, index: number) => Promise<void>;
   executeCluster: (nodeIds: string[]) => Promise<void>;
-  executeClusterConcurrent: (nodeIds: string[]) => Promise<void>;
+  executeClusterConcurrent: (nodeIds: string[], createOrigin?: CreateRunOrigin) => Promise<void>;
   authorGenerationCluster: (request: GenerationRequest) => Promise<{ modelNodeIds: string[]; allNodeIds: string[] }>;
   deleteGeneration: (modelNodeIds: string[]) => void;
   duplicateNode: (nodeId: string) => void;
@@ -713,6 +792,11 @@ function applySceneToNode(set: GraphSet, nodeId: string, scene: CinemaSceneSpec)
           isDynamic: true,
           providerType: data.providerType ?? 'fal',
           params: { ...data.params, scene },
+          // Deleted shot results have no live port. Historical runs retain their
+          // original snapshot and outputs independently of the current scene.
+          outputs: Object.fromEntries(Object.entries(data.outputs ?? {}).filter(
+            ([portId]) => !portId.startsWith('shot_') || validHandleIds.has(portId),
+          )),
           dynamicInputPorts: data.dynamicInputPorts ?? [],
           dynamicOutputPorts: outputPorts,
           dynamicParams: data.dynamicParams ?? [],
@@ -893,29 +977,40 @@ function settleTrackedExecutionStatus(
   runId: string,
   set: GraphSet,
   get: GraphGet,
-  extra: Partial<Pick<RunRecord, 'statusNote'>> = {},
+  extra: Partial<Pick<RunRecord, 'statusNote' | 'durationSec' | 'nodesExecuted'>> = {},
 ): void {
-  if (currentRunId !== runId) return;
+  const owner = activeRunOwners.get(runId);
+  if (!owner) return;
   if (status === 'cancelled') rememberCancelledRun(runId);
-  closeCurrentRun(set, {
-    status: status === 'completed' ? 'complete' : status,
+  const failed = status === 'failed' || runErrors.get(runId) === true;
+  closeTrackedRun(set, runId, {
+    status: status === 'completed' ? (failed ? 'failed' : 'complete') : status,
     ...extra,
   });
   set((state) => ({
-    isExecuting: false,
-    isCancelling: false,
-    uncertainWorldLabsRunId: null,
-    nodes: state.nodes.map((node) => ({
-      ...node,
-      data: {
-        ...node.data,
-        state: node.data.state === 'queued' || node.data.state === 'executing'
-          ? 'idle' as const
-          : node.data.state,
+    ...ownershipState(),
+    uncertainWorldLabsRunId: state.uncertainWorldLabsRunId === runId ? null : state.uncertainWorldLabsRunId,
+    nodes: state.nodes.map((node) => {
+      if (!owner.nodeIds.includes(node.id) || scopeOverlaps([node.id])) return node;
+      const pending = node.data.state === 'queued' || node.data.state === 'executing';
+      return { ...node, data: { ...node.data,
+        // A zero-item iterator or failed dependency can skip an invocation,
+        // leaving prequeued descendants without an executed event.
+        state: pending ? 'idle' as const : node.data.state,
         progress: undefined,
-      },
-    })),
+        ...(pending ? { streamingText: undefined, streamingPartials: undefined, streamingSvg: undefined } : {}),
+      } };
+    }),
   }));
+  if (owner.kind === 'cinema-shot' && owner.nodeId && owner.shotId) {
+    const node = get().nodes.find((candidate) => candidate.id === owner.nodeId);
+    const scene = node?.data.params.scene as CinemaSceneSpec | undefined;
+    if (scene?.shots) applySceneToNode(set, owner.nodeId, { ...scene, shots: scene.shots.map((shot) =>
+      shot.id === owner.shotId && shot.output?.status === 'running'
+        ? { ...shot, output: { ...shot.output, status: status === 'cancelled' ? 'idle' : failed ? 'error' : shot.output.imageUrl ? 'done' : 'idle',
+          error: failed ? (shot.output.error ?? 'Shot generation failed.') : undefined } }
+        : shot) });
+  }
   if (get().providerRecoveryWarning === WORLD_LABS_STATUS_UNCERTAIN_WARNING) {
     set({ providerRecoveryWarning: null });
   }
@@ -926,27 +1021,28 @@ async function requestTrackedCancellation(
   set: GraphSet,
   get: GraphGet,
 ): Promise<void> {
-  if (currentRunId !== runId) return;
+  if (!ownsRun(runId)) return;
   cancellationRequestedRunIds.add(runId);
-  set({ isExecuting: true, isCancelling: true });
+  updateRunPhase(runId, 'cancelling', set);
   try {
     const result = await apiCancelExecution(runId);
-    if (currentRunId !== runId) return;
+    if (!ownsRun(runId)) return;
     if (result.status === 'cancelling') {
       // A paid provider POST may still be settling so its recovery ID can be
       // captured. Keep retrying authoritative status until a terminal event.
-      set({ isExecuting: true, isCancelling: true });
+      updateRunPhase(runId, 'cancelling', set);
+      clearConfirmedRunAdvisory(runId, set);
       scheduleWorldLabsStatusReconciliation(runId, set, get);
       return;
     }
     settleTrackedExecutionStatus(result.status, runId, set, get);
   } catch (error) {
     console.error('Failed to cancel execution:', error);
-    if (currentRunId !== runId) return;
+    if (!ownsRun(runId)) return;
     // The client-owned run ID may not be registered yet when Stop races the
     // start request. Preserve the cancellation intent and retry via status
     // reconciliation instead of silently allowing that later start to run.
-    set({ isExecuting: true, isCancelling: true });
+    updateRunPhase(runId, 'cancelling', set);
     scheduleWorldLabsStatusReconciliation(runId, set, get);
   }
 }
@@ -957,8 +1053,8 @@ async function honorCancellationAfterStart(
   set: GraphSet,
   get: GraphGet,
 ): Promise<boolean> {
-  if (!cancellationRequestedRunIds.has(runId) || currentRunId !== runId) return false;
-  if (startStatus === 'validation_error') {
+  if (!cancellationRequestedRunIds.has(runId) || !ownsRun(runId)) return false;
+  if (startStatus !== 'started') {
     // The request was definitively rejected before execution, but Stop remains
     // the user's terminal intent for the locally opened history record.
     settleTrackedExecutionStatus('cancelled', runId, set, get);
@@ -980,37 +1076,31 @@ async function reconcileWorldLabsExecutionStatus(
   try {
     result = await apiGetExecutionStatus(runId);
   } catch {
-    if (currentRunId !== runId) return 'stale';
+    if (!ownsRun(runId)) return 'stale';
     const paidStart = trackedRunHasFreshPaidWorldLabs(runId, get);
+    updateRunPhase(runId, cancellationRequestedRunIds.has(runId) ? 'cancelling' : 'uncertain', set);
     set((state) => ({
-      isExecuting: true,
-      isCancelling: cancellationRequestedRunIds.has(runId),
+      ...ownershipState(),
       uncertainWorldLabsRunId: paidStart ? runId : null,
       providerRecoveryWarning: paidStart
         ? WORLD_LABS_STATUS_UNCERTAIN_WARNING
         : state.providerRecoveryWarning,
     }));
-    if (cancellationRequestedRunIds.has(runId)) {
+    if (cancellationRequestedRunIds.has(runId) || !paidStart) {
       scheduleWorldLabsStatusReconciliation(runId, set, get);
     }
     return 'unknown';
   }
-  if (currentRunId !== runId) return 'stale';
+  if (!ownsRun(runId)) return 'stale';
   if (result.status === 'running' || result.status === 'cancelling') {
+    clearConfirmedRunAdvisory(runId, set);
     if (cancellationRequestedRunIds.has(runId)) {
-      set({
-        isExecuting: true,
-        isCancelling: true,
-        uncertainWorldLabsRunId: null,
-      });
+      updateRunPhase(runId, 'cancelling', set);
       void requestTrackedCancellation(runId, set, get);
       return 'active';
     }
-    set({
-      isExecuting: true,
-      isCancelling: result.status === 'cancelling',
-      uncertainWorldLabsRunId: null,
-    });
+    updateRunPhase(runId, result.status === 'cancelling' ? 'cancelling' : 'running', set);
+    set({ uncertainWorldLabsRunId: null });
     scheduleWorldLabsStatusReconciliation(runId, set, get);
     return 'active';
   }
@@ -1023,7 +1113,7 @@ function scheduleWorldLabsStatusReconciliation(
   set: GraphSet,
   get: GraphGet,
 ): void {
-  if (currentRunId !== runId || statusReconciliationTimers.has(runId)) return;
+  if (!ownsRun(runId) || statusReconciliationTimers.has(runId)) return;
   const timer = setTimeout(() => {
     statusReconciliationTimers.delete(runId);
     void reconcileWorldLabsExecutionStatus(runId, set, get);
@@ -1292,7 +1382,7 @@ async function executeHistoricalRun(
   get: GraphGet,
 ): Promise<void> {
   const { isExecuting, resetExecution } = get();
-  if (isExecuting || source.status === 'running') return;
+  if (isExecuting || get().isImportingGraph || source.status === 'running') return;
   if (isWorldLabsRecoveryReplayBlocked(source)) {
     console.warn(
       '[nebula] Saved replay blocked: a failed/cancelled World Labs snapshot may omit a paid operation recovery ID. Use the live node after checking Marble.',
@@ -1317,9 +1407,10 @@ async function executeHistoricalRun(
   const runId = uuidv4();
   const scopeIds = snapshotExecutionScopeIds(snapshot, targetNodeId);
   currentRunId = runId;
-  runErrors.set(runId, false);
+  registerRun(runId, snapshot, targetNodeId, source.cinemaShot?.shotId);
   set((state) => ({
     nodes: markSnapshotScopeQueued(state.nodes, scopeIds),
+    activeRuns: ownershipState().activeRuns,
     isExecuting: true,
     isCancelling: false,
     runHistory: persistedRunHistory(openRunRecord(state.runHistory, {
@@ -1330,17 +1421,27 @@ async function executeHistoricalRun(
       targetNodeId,
       sourceRunId: source.id,
       replayAction,
+      createOrigin: source.createOrigin,
+      cinemaShot: source.cinemaShot,
       startedFreshPaidWorldLabs: runIncludesFreshPaidWorldLabsStart(snapshot, targetNodeId),
     })),
   }));
 
   pendingStartRunIds.add(runId);
   try {
-    const result = targetNodeId
+    const result = source.cinemaShot
+      ? await apiGenerateShot(snapshot.nodes, snapshot.edges.map((edge) => ({ ...edge,
+        sourceHandle: edge.sourceHandle, targetHandle: edge.targetHandle })), source.cinemaShot.nodeId,
+        source.cinemaShot.shotId, source.cinemaShot.seed, source.cinemaShot.variations, runId)
+      : targetNodeId
       ? await apiExecuteNode(snapshot.nodes, snapshot.edges, targetNodeId, runId, true)
       : await apiExecuteGraph(snapshot.nodes, snapshot.edges, runId, true);
     pendingStartRunIds.delete(runId);
     if (await honorCancellationAfterStart(runId, result.status, set, get)) return;
+    if (result.status === 'started' && ownsRun(runId)) {
+      updateRunPhase(runId, 'running', set);
+      if (source.cinemaShot) scheduleWorldLabsStatusReconciliation(runId, set, get);
+    }
     if (result.status !== 'started' && result.status !== 'validation_error') {
       throw new ExecutionStartRejectedError(
         `Execution did not start (${result.status || 'unknown status'}).`,
@@ -1353,19 +1454,17 @@ async function executeHistoricalRun(
         nodes: markNodesWithValidationErrors(
           state.nodes,
           scopeIds,
-          result.errors,
+          'errors' in result ? result.errors as ExecutionValidationError[] : undefined,
           'Validation failed before execution. Check the saved inputs and API keys.',
         ),
-        isExecuting: false,
-        isCancelling: false,
+        ...ownershipState(),
       }));
     }
   } catch (err) {
     pendingStartRunIds.delete(runId);
     console.error('Failed to replay historical run:', err);
     if (currentRunId !== runId) return;
-    if (runIncludesFreshPaidWorldLabsStart(snapshot, targetNodeId)
-      && !(err instanceof ExecutionStartRejectedError)) {
+    if (!(err instanceof ExecutionStartRejectedError)) {
       await reconcileWorldLabsExecutionStatus(runId, set, get);
       return;
     }
@@ -1376,8 +1475,7 @@ async function executeHistoricalRun(
         scopeIds,
         err instanceof Error ? err.message : 'Failed to replay historical run.',
       ),
-      isExecuting: false,
-      isCancelling: false,
+      ...ownershipState(),
     }));
   }
 }
@@ -1573,7 +1671,24 @@ wsClient.subscribe((event) => {
     if (executionStatuses !== undefined) {
       useGraphStore.getState().hydrateExecutionStatuses(executionStatuses);
     }
-    const cliNodes = rewriteBackendAssetUrls(rawCliNodes);
+    const cliNodes = rewriteBackendAssetUrls(rawCliNodes).map((raw) => {
+      const node = raw as Node<NodeData>;
+      if (node.data.definitionId !== 'cinema-scene') return node;
+      const scene = node.data.params.scene as CinemaSceneSpec | undefined;
+      if (!scene?.shots) return node;
+      // The backend final graph snapshot can arrive after executionStatus and
+      // still contain its optimistic spinner. Terminal ownership wins over that
+      // spinner; completed media and a newly launched owner remain untouched.
+      return { ...node, data: { ...node.data, params: { ...node.data.params, scene: {
+        ...scene, shots: scene.shots.map((shot) => {
+          const status = settledCinemaRuns.get(`${node.id}\u0000${shot.id}`);
+          const active = [...activeRunOwners.values()].some((owner) => owner.nodeId === node.id && owner.shotId === shot.id);
+          if (!status || active || shot.output?.status !== 'running') return shot;
+          return { ...shot, output: { ...shot.output, status: status === 'failed' ? 'error' as const : 'idle' as const,
+            error: status === 'failed' ? 'Shot generation failed.' : undefined } };
+        }),
+      } } } };
+    });
     const observedPendingNodeId = observePendingNodeCreation(cliNodes as Node<NodeData>[]);
 
     const state = useGraphStore.getState();
@@ -1732,19 +1847,22 @@ function reflowClips(clips: EditClipLike[]): EditClipLike[] {
 }
 
 const initialRunHistory = loadRunHistory();
-const initialWorldLabsRun = initialRunHistory.find((record) => (
-  record.status === 'running'
-  && (record.startedFreshPaidWorldLabs === true
-    || (record.startedFreshPaidWorldLabs === undefined
-      && runIncludesWorldLabs(record.snapshot, record.targetNodeId)))
-));
-if (initialWorldLabsRun) currentRunId = initialWorldLabsRun.id;
+for (const record of initialRunHistory) {
+  if (record.status !== 'running') continue;
+  registerRun(record.id, record.snapshot, record.targetNodeId, record.cinemaShot?.shotId);
+  activeRunOwners.get(record.id)!.status = 'uncertain';
+}
+currentRunId = initialRunHistory.find((record) => record.status === 'running' && !record.createOrigin && !record.cinemaShot)?.id ?? null;
 
 export const useGraphStore = create<GraphState>((set, get) => ({
   nodes: [],
   edges: [],
-  isExecuting: Boolean(initialWorldLabsRun),
+  isExecuting: activeRunOwners.size > 0,
   isCancelling: false,
+  isImportingGraph: false,
+  activeRuns: ownershipState().activeRuns,
+  createLaunchingIds: [],
+  createCancelledLaunchIds: [],
   providerRecoveryWarning: null,
   providerRecoveries: [],
   uncertainWorldLabsRunId: null,
@@ -3054,15 +3172,26 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     });
   },
 
+  reserveGraphImport: () => {
+    const state = get();
+    if (state.isImportingGraph || state.isExecuting || state.createLaunchingIds.length > 0) return false;
+    set({ isImportingGraph: true });
+    return true;
+  },
+  releaseGraphImport: () => { set({ isImportingGraph: false }); },
+
   resetExecution: () => {
-    currentRunHadError = false;
     // A still-open run at this point means the user cancelled mid-flight (at the start
     // of a fresh run the prior run has already closed, so currentRunId is null → no-op).
-    closeCurrentRun(set, { status: 'cancelled' });
+    for (const runId of [...activeRunOwners.keys()]) closeTrackedRun(set, runId, { status: 'cancelled' });
+    createLaunchOwners.clear();
+    cancelledCreateLaunches.clear();
     set((state) => ({
-      isExecuting: false,
-      isCancelling: false,
+      ...ownershipState(),
       uncertainWorldLabsRunId: null,
+      activeRuns: [],
+      createLaunchingIds: [],
+      createCancelledLaunchIds: [],
       nodes: state.nodes.map((node) => ({
         ...node,
         data: {
@@ -3078,22 +3207,38 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   },
 
   cancelExecution: async () => {
-    const runId = currentRunId;
-    if (!runId) {
-      get().resetExecution();
-      return;
-    }
-    cancellationRequestedRunIds.add(runId);
-    set({ isExecuting: true, isCancelling: true });
-    // DELETE is sent even while the POST is pending. Current backends install
-    // a cancellation tombstone before admission; older ones may return 404,
-    // in which case requestTrackedCancellation preserves intent and polls.
-    await requestTrackedCancellation(runId, set, get);
+    for (const id of createLaunchOwners) cancelledCreateLaunches.add(id);
+    set({ ...ownershipState(), createCancelledLaunchIds: [...cancelledCreateLaunches] });
+    await Promise.all([...activeRunOwners.keys()].map((runId) => requestTrackedCancellation(runId, set, get)));
+  },
+
+  cancelRun: async (runId) => { await requestTrackedCancellation(runId, set, get); },
+
+  reserveCreateGeneration: (genId) => {
+    const state = get();
+    if (state.isImportingGraph) return false;
+    const activeCreateCount = state.runHistory.filter((run) => run.status === 'running' && run.createOrigin).length;
+    if (state.createLaunchingIds.includes(genId)
+      || state.runHistory.some((run) => run.status === 'running' && run.createOrigin?.genId === genId)
+      || state.createLaunchingIds.length + activeCreateCount >= 2) return false;
+    createLaunchOwners.add(genId);
+    set({ ...ownershipState(), createLaunchingIds: [...createLaunchOwners] });
+    return true;
+  },
+  releaseCreateGeneration: (genId) => {
+    createLaunchOwners.delete(genId);
+    cancelledCreateLaunches.delete(genId);
+    set({ ...ownershipState(), createLaunchingIds: [...createLaunchOwners], createCancelledLaunchIds: [...cancelledCreateLaunches] });
+  },
+  cancelCreateGeneration: (genId) => {
+    if (!createLaunchOwners.has(genId)) return;
+    cancelledCreateLaunches.add(genId);
+    set({ ...ownershipState(), createCancelledLaunchIds: [...cancelledCreateLaunches] });
   },
 
   executeGraph: async () => {
     const { nodes, edges, isExecuting, resetExecution } = get();
-    if (isExecuting) return;
+    if (isExecuting || get().isImportingGraph) return;
     resetExecution();
     const snapshot = captureRunSnapshot(nodes, edges);
     const heldStart = blockedProviderStart(snapshot, get().providerStartAmbiguities);
@@ -3103,8 +3248,9 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     }
     const runId = uuidv4();
     currentRunId = runId;
-    runErrors.set(runId, false);
+    registerRun(runId, snapshot);
     set((state) => ({
+      activeRuns: ownershipState().activeRuns,
       nodes: markExecutionScopeQueued(state.nodes, state.edges),
       isExecuting: true,
       isCancelling: false,
@@ -3136,16 +3282,14 @@ export const useGraphStore = create<GraphState>((set, get) => ({
             result.errors,
             'Validation failed before execution. Check required inputs and API keys.',
           ),
-          isExecuting: false,
-          isCancelling: false,
+          ...ownershipState(),
         }));
       }
     } catch (err) {
       pendingStartRunIds.delete(runId);
       console.error('Failed to start execution:', err);
       if (currentRunId !== runId) return;
-      if (runIncludesFreshPaidWorldLabsStart(snapshot)
-        && !(err instanceof ExecutionStartRejectedError)) {
+      if (!(err instanceof ExecutionStartRejectedError)) {
         await reconcileWorldLabsExecutionStatus(runId, set, get);
         return;
       }
@@ -3156,15 +3300,14 @@ export const useGraphStore = create<GraphState>((set, get) => ({
           new Set(nodesInExecutionScope(state.nodes, state.edges).map((node) => node.id)),
           err instanceof Error ? err.message : 'Failed to start execution.',
         ),
-        isExecuting: false,
-        isCancelling: false,
+        ...ownershipState(),
       }));
     }
   },
 
   executeNode: async (nodeId) => {
     const { nodes, edges, isExecuting, resetExecution } = get();
-    if (isExecuting) return;
+    if (isExecuting || get().isImportingGraph) return;
     resetExecution();
     const snapshot = captureRunSnapshot(nodes, edges);
     const heldStart = blockedProviderStart(
@@ -3178,8 +3321,9 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     }
     const runId = uuidv4();
     currentRunId = runId;
-    runErrors.set(runId, false);
+    registerRun(runId, snapshot, nodeId);
     set((state) => ({
+      activeRuns: ownershipState().activeRuns,
       nodes: markExecutionScopeQueued(state.nodes, state.edges, nodeId),
       isExecuting: true,
       isCancelling: false,
@@ -3212,16 +3356,14 @@ export const useGraphStore = create<GraphState>((set, get) => ({
             result.errors,
             'Validation failed before execution. Check required inputs and API keys.',
           ),
-          isExecuting: false,
-          isCancelling: false,
+          ...ownershipState(),
         }));
       }
     } catch (err) {
       pendingStartRunIds.delete(runId);
       console.error('Failed to start node execution:', err);
       if (currentRunId !== runId) return;
-      if (runIncludesFreshPaidWorldLabsStart(snapshot, nodeId)
-        && !(err instanceof ExecutionStartRejectedError)) {
+      if (!(err instanceof ExecutionStartRejectedError)) {
         await reconcileWorldLabsExecutionStatus(runId, set, get);
         return;
       }
@@ -3232,14 +3374,24 @@ export const useGraphStore = create<GraphState>((set, get) => ({
           new Set(nodesInExecutionScope(state.nodes, state.edges, nodeId).map((node) => node.id)),
           err instanceof Error ? err.message : 'Failed to start node execution.',
         ),
-        isExecuting: false,
-        isCancelling: false,
+        ...ownershipState(),
       }));
     }
   },
 
+  isShotAdmissionBlocked: (nodeId, shotId) => {
+    if (get().isImportingGraph) return true;
+    const snapshot = captureRunSnapshot(get().nodes, get().edges);
+    const scope = snapshotExecutionScopeIds(snapshot, nodeId);
+    const shareableInputs = new Set(snapshot.nodes.filter((node) => STATIC_INPUT_IDS.has(node.definitionId)).map((node) => node.id));
+    return scopeOverlaps(scope, { nodeId, shotId, shareableInputs });
+  },
+
   executeShot: async (nodeId, shotId, seed, variations) => {
     const { nodes, edges } = get();
+    // Check IDs before looking at the live graph: deleting a node cannot erase
+    // its outstanding owner and allow a second paid launch for that same shot.
+    if (get().isShotAdmissionBlocked(nodeId, shotId)) return;
     const node = nodes.find((n) => n.id === nodeId);
     if (!node || node.data.definitionId !== 'cinema-scene') return;
     const scene = (node.data.params as { scene?: CinemaSceneSpec }).scene;
@@ -3291,15 +3443,34 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     };
 
     const runId = uuidv4();
+    registerRun(runId, shotSnapshot, nodeId, shotId);
+    pendingStartRunIds.add(runId);
+    set((state) => ({ ...ownershipState(), runHistory: persistedRunHistory(openRunRecord(state.runHistory, {
+      id: runId, trigger: 'shot', startedAt: Date.now(), snapshot: shotSnapshot,
+      targetNodeId: nodeId, startedFreshPaidWorldLabs: false,
+      cinemaShot: { nodeId, shotId, seed, variations },
+    })) }));
     try {
       const result = await apiGenerateShot(graphNodes, graphEdges, nodeId, shotId, seed, variations, runId);
-      if (result.status === 'validation_error') {
-        failShot('Validation failed. Check inputs and API keys.');
+      pendingStartRunIds.delete(runId);
+      if (!ownsRun(runId)) return;
+      if (await honorCancellationAfterStart(runId, result.status, set, get)) return;
+      if (result.status !== 'started') {
+        failShot(result.status === 'validation_error' ? 'Validation failed. Check inputs and API keys.' : `Shot did not start (${result.status}).`);
+        settleTrackedExecutionStatus('failed', runId, set, get);
+        return;
       }
+      updateRunPhase(runId, 'running', set);
+      scheduleWorldLabsStatusReconciliation(runId, set, get);
       // status 'started' → the generated image(s) (or per-shot error) arrive via graphSync.
     } catch (err) {
+      pendingStartRunIds.delete(runId);
+      if (!ownsRun(runId)) return;
       console.error('Failed to generate shot:', err);
-      failShot(err instanceof Error ? err.message : 'Failed to generate shot.');
+      if (err instanceof ExecutionStartRejectedError) {
+        failShot(err.message);
+        settleTrackedExecutionStatus('failed', runId, set, get);
+      } else await reconcileWorldLabsExecutionStatus(runId, set, get);
     }
   },
 
@@ -3344,7 +3515,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
 
   executeCluster: async (nodeIds) => {
     const { nodes, edges, isExecuting, resetExecution } = get();
-    if (isExecuting) return;
+    if (isExecuting || get().isImportingGraph) return;
     const idSet = new Set(nodeIds);
     const clusterNodes = nodes.filter((n) => idSet.has(n.id));
     if (clusterNodes.length === 0) return;
@@ -3358,8 +3529,9 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     }
     const runId = uuidv4();
     currentRunId = runId;
-    runErrors.set(runId, false);
+    registerRun(runId, snapshot);
     set((state) => ({
+      activeRuns: ownershipState().activeRuns,
       nodes: state.nodes.map((n) =>
         idSet.has(n.id)
           ? {
@@ -3406,97 +3578,89 @@ export const useGraphStore = create<GraphState>((set, get) => ({
             result.errors,
             'Validation failed before generation. Check required inputs and API keys.',
           ),
-          isExecuting: false,
-          isCancelling: false,
+          ...ownershipState(),
         }));
       }
     } catch (err) {
       pendingStartRunIds.delete(runId);
       console.error('Failed to start generation:', err);
       if (currentRunId !== runId) return;
-      if (runIncludesFreshPaidWorldLabsStart(snapshot)
-        && !(err instanceof ExecutionStartRejectedError)) {
+      if (!(err instanceof ExecutionStartRejectedError)) {
         await reconcileWorldLabsExecutionStatus(runId, set, get);
         return;
       }
       closeCurrentRun(set, { status: 'failed' });
       set((state) => ({
         nodes: markNodesErrored(state.nodes, idSet, err instanceof Error ? err.message : 'Failed to start generation.'),
-        isExecuting: false,
-        isCancelling: false,
+        ...ownershipState(),
       }));
     }
   },
 
-  executeClusterConcurrent: async (nodeIds) => {
+  executeClusterConcurrent: async (nodeIds, createOrigin) => {
+    if (get().isImportingGraph) return;
     const { nodes, edges } = get();
+    if (createOrigin && (!get().createLaunchingIds.includes(createOrigin.genId)
+      || get().createCancelledLaunchIds.includes(createOrigin.genId))) return;
     const idSet = new Set(nodeIds);
-    const clusterNodes = nodes.filter((n) => idSet.has(n.id));
+    if (scopeOverlaps(idSet)) return;
+    const clusterNodes = nodes.filter((node) => idSet.has(node.id));
     if (clusterNodes.length === 0) return;
-    const clusterEdges = edges.filter((e) => idSet.has(e.source) && idSet.has(e.target));
+    const clusterEdges = edges.filter((edge) => idSet.has(edge.source) && idSet.has(edge.target));
     const snapshot = captureRunSnapshot(clusterNodes, clusterEdges);
     if (runIncludesWorldLabs(snapshot)) {
-      // Concurrent Create runs have no global Stop/history owner. World Labs is
-      // normally excluded from Create; this guard routes any programmatic call
-      // through the tracked Canvas lifecycle as defense in depth.
+      // Keep paid World Labs starts in the exclusive Canvas admission path.
       await get().executeCluster(nodeIds);
       return;
     }
+    const heldStart = blockedProviderStart(snapshot, get().providerStartAmbiguities);
+    if (heldStart) { warnBlockedProviderStart(heldStart); return; }
     const runId = uuidv4();
-    runErrors.set(runId, false);
-    // Mark ONLY the cluster nodes queued — no global resetExecution, no isExecuting touch.
+    registerRun(runId, snapshot);
+    pendingStartRunIds.add(runId);
+    if (createOrigin) createLaunchOwners.delete(createOrigin.genId);
     set((state) => ({
-      nodes: state.nodes.map((n) =>
-        idSet.has(n.id)
-          ? {
-              ...n,
-              data: {
-                ...n.data,
-                state: 'queued' as const,
-                error: undefined,
-                progress: undefined,
-                streamingText: undefined,
-                streamingPartials: undefined,
-                streamingSvg: undefined,
-              },
-            }
-          : n,
-      ),
+      ...ownershipState(),
+      createLaunchingIds: createOrigin ? state.createLaunchingIds.filter((id) => id !== createOrigin.genId) : state.createLaunchingIds,
+      nodes: markSnapshotScopeQueued(state.nodes, idSet),
+      runHistory: persistedRunHistory(openRunRecord(state.runHistory, {
+        id: runId, trigger: 'cluster', startedAt: Date.now(), snapshot,
+        startedFreshPaidWorldLabs: false, createOrigin,
+      })),
     }));
-    const graphNodes = snapshot.nodes;
-    const graphEdges = snapshot.edges;
     try {
-      const result = await apiExecuteGraph(graphNodes, graphEdges, runId);
-      if (result.status === 'validation_error') {
-        runErrors.delete(runId);
-        set((state) => ({
-          nodes: markNodesWithValidationErrors(
-            state.nodes,
-            idSet,
-            result.errors,
-            'Validation failed before generation. Check required inputs and API keys.',
-          ),
-        }));
-      } else if (result.status !== 'started') {
-        runErrors.delete(runId);
-        set((state) => ({
-          nodes: markNodesErrored(
-            state.nodes,
-            idSet,
-            `Execution did not start (${result.status || 'unknown status'}).`,
-          ),
-        }));
+      const result = await apiExecuteGraph(snapshot.nodes, snapshot.edges, runId);
+      pendingStartRunIds.delete(runId);
+      if (!ownsRun(runId)) return;
+      if (await honorCancellationAfterStart(runId, result.status, set, get)) return;
+      if (result.status === 'started') {
+        updateRunPhase(runId, 'running', set);
+        scheduleWorldLabsStatusReconciliation(runId, set, get);
+        return;
       }
-    } catch (err) {
-      console.error('Failed to start concurrent generation:', err);
-      runErrors.delete(runId);
-      set((state) => ({
-        nodes: markNodesErrored(state.nodes, idSet, err instanceof Error ? err.message : 'Failed to start generation.'),
-      }));
+      closeTrackedRun(set, runId, { status: 'failed' });
+      set((state) => ({ nodes: result.status === 'validation_error'
+        ? markNodesWithValidationErrors(state.nodes, idSet, result.errors,
+          'Validation failed before generation. Check required inputs and API keys.')
+        : markNodesErrored(state.nodes, idSet, `Execution did not start (${result.status || 'unknown status'}).`) }));
+    } catch (error) {
+      pendingStartRunIds.delete(runId);
+      if (!ownsRun(runId)) return;
+      console.error('Failed to start concurrent generation:', error);
+      // A lost HTTP acknowledgement can follow an accepted start. Query the
+      // client-owned ID before releasing ownership and permitting duplicate work.
+      if (!(error instanceof ExecutionStartRejectedError)) {
+        await reconcileWorldLabsExecutionStatus(runId, set, get);
+        return;
+      }
+      closeTrackedRun(set, runId, { status: cancellationRequestedRunIds.has(runId) ? 'cancelled' : 'failed' });
+      set((state) => ({ nodes: markNodesErrored(state.nodes, idSet,
+        error instanceof Error ? error.message : 'Failed to start generation.') }));
     }
   },
 
   authorGenerationCluster: async (request) => {
+    if (get().isImportingGraph) throw new Error('Wait for the graph import to finish.');
     const def = NODE_DEFINITIONS[request.definitionId];
     if (!def) return { modelNodeIds: [], allNodeIds: [] };
 
@@ -4230,13 +4394,16 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     // applied before graphCancelled so a paid provider job is never stranded.
     if (
       event.runId
-      && cancelledRunIds.has(event.runId)
+      && (cancelledRunIds.has(event.runId) || terminalRunIds.has(event.runId))
       && event.type !== 'graphCancelled'
       && event.type !== 'providerRecovery'
       && event.type !== 'providerStartAmbiguous'
     ) {
       return;
     }
+    if ('nodeId' in event && event.runId && event.type !== 'providerRecovery'
+      && event.type !== 'providerStartAmbiguous' && !ownsRun(event.runId)
+      && scopeOverlaps([event.nodeId])) return;
     switch (event.type) {
       case 'executionStatus':
         if (event.runId) get().hydrateExecutionStatuses([{
@@ -4311,31 +4478,18 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         get().updateNodeData(event.nodeId, { progress: event.value });
         break;
       case 'executed': {
-        const outputs: Record<string, PortValue> = {};
-        for (const [key, val] of Object.entries(event.outputs)) {
-          const outputVal = val as PortValue;
-          if (outputVal.type === 'World') {
-            outputs[key] = rewriteExecutionAssetUrls(outputVal);
-          } else if (
-            (outputVal.type === 'Image'
-              || outputVal.type === 'Video'
-              || outputVal.type === 'Mesh'
-              || outputVal.type === 'Audio'
-              || outputVal.type === 'SVG')
-            && outputVal.value
-          ) {
-            outputs[key] = {
-              ...outputVal,
-              value: rewriteExecutionAssetUrls(outputVal.value),
-            };
-          } else {
-            outputs[key] = outputVal;
-          }
-        }
+        const outputs = normalizedExecutionOutputs(event.outputs);
         const runId = event.runId ?? currentRunId;
         const record = get().runHistory.find((candidate) => candidate.id === runId);
         if (record && runId) {
-          set((state) => ({ runHistory: persistedRunHistory(recordPaperRunOutput(state.runHistory, runId, event.nodeId, outputs)) }));
+          set((state) => {
+            let runHistory = recordPaperRunOutput(state.runHistory, runId, event.nodeId, outputs);
+            if (Array.isArray(event.batchOutputs)) {
+              runHistory = recordRunBatchOutputs(runHistory, runId, event.nodeId,
+                event.batchOutputs.map(normalizedExecutionOutputs));
+            }
+            return { runHistory: persistedRunHistory(runHistory) };
+          });
         }
         const live = get().nodes.find((node) => node.id === event.nodeId);
         // A captured A source event may arrive after the live source refreshed
@@ -4377,9 +4531,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         if (event.runId && runErrors.has(event.runId)) {
           runErrors.set(event.runId, true);
         }
-        if (!event.runId || event.runId === currentRunId) {
-          currentRunHadError = true;
-        }
+        if (!event.runId && currentRunId) runErrors.set(currentRunId, true);
         get().updateNodeData(event.nodeId, {
           state: 'error',
           error: event.error,
@@ -4391,71 +4543,39 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         });
         break;
       case 'validationError': {
-        const trackedScopedRun = event.runId ? runErrors.has(event.runId) : false;
-        if (event.runId && trackedScopedRun) {
-          runErrors.set(event.runId, true);
-        }
-        if (!event.runId || event.runId === currentRunId) {
-          currentRunHadError = true;
-        }
-        for (const err of event.errors) {
-          if (err.nodeId) {
-            get().updateNodeData(err.nodeId, {
-              state: 'error',
-              error: err.message,
-              errorCategory: undefined,
-              errorFriendly: undefined,
+        const runId = event.runId ?? currentRunId;
+        // CLI runs also annotate their validation errors, but an unrelated
+        // external validation cannot overwrite a locally owned node.
+        for (const error of event.errors) {
+          if (error.nodeId && ((runId && ownsRun(runId)) || !scopeOverlaps([error.nodeId]))) {
+            get().updateNodeData(error.nodeId, {
+              state: 'error', error: error.message, errorCategory: undefined, errorFriendly: undefined,
             });
           }
         }
-        if (!event.runId || eventOwnsCurrentRun(event.runId)) {
-          set({ isExecuting: false, isCancelling: false });
-          // validationError ends the run with no following graphComplete, so close + notify here.
-          closeCurrentRun(set, { status: 'failed' });
-          notifyJobComplete({ ok: false, durationSec: 0, nodesExecuted: 0 });
-        } else if (trackedScopedRun) {
-          // A locally-started concurrent Create run owns its notification and
-          // bookkeeping, but never the global Canvas execution lock/history.
-          runErrors.delete(event.runId);
+        if (runId && ownsRun(runId)) {
+          runErrors.set(runId, true);
+          settleTrackedExecutionStatus(cancellationRequestedRunIds.has(runId) ? 'cancelled' : 'failed', runId, set, get);
           notifyJobComplete({ ok: false, durationSec: 0, nodesExecuted: 0 });
         }
         break;
       }
       case 'graphComplete': {
-        console.log(`[execution] complete in ${event.duration}s, ${event.nodesExecuted} nodes executed`);
-        const trackedScopedRun = event.runId ? runErrors.has(event.runId) : false;
-        const runFailed = event.runId
-          ? (runErrors.get(event.runId) ?? currentRunHadError)
-          : currentRunHadError;
-        if (!event.runId || eventOwnsCurrentRun(event.runId)) {
-          set({ isExecuting: false, isCancelling: false });
-          closeCurrentRun(set, {
-            status: runFailed ? 'failed' : 'complete',
-            durationSec: event.duration,
-            nodesExecuted: event.nodesExecuted,
-          });
-          notifyJobComplete({
-            ok: !runFailed,
-            durationSec: event.duration,
-            nodesExecuted: event.nodesExecuted,
-          });
-        } else if (trackedScopedRun) {
-          runErrors.delete(event.runId);
-          notifyJobComplete({
-            ok: !runFailed,
-            durationSec: event.duration,
-            nodesExecuted: event.nodesExecuted,
-          });
-        }
+        const runId = event.runId ?? currentRunId;
+        if (!runId || !ownsRun(runId)) break;
+        const runFailed = runErrors.get(runId) === true;
+        // A completion after Stop remains authoritative: completed work is
+        // complete; DELETE/status reconciliation decides actual cancellation.
+        settleTrackedExecutionStatus('completed', runId, set, get, {
+          durationSec: event.duration, nodesExecuted: event.nodesExecuted });
+        notifyJobComplete({ ok: !runFailed, durationSec: event.duration, nodesExecuted: event.nodesExecuted });
         break;
       }
       case 'graphCancelled': {
-        if (event.runId) {
-          rememberCancelledRun(event.runId);
-          runErrors.delete(event.runId);
-        }
-        if (!event.runId || eventOwnsCurrentRun(event.runId)) {
-          get().resetExecution();
+        const runId = event.runId ?? currentRunId;
+        if (runId) {
+          rememberCancelledRun(runId);
+          settleTrackedExecutionStatus('cancelled', runId, set, get);
         }
         break;
       }
@@ -4542,36 +4662,22 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   },
 
   hydrateExecutionStatuses: (statuses) => {
-    if (!currentRunId) return;
-    const status = statuses.find((candidate) => candidate.runId === currentRunId);
-    if (!status) {
-      if (pendingStartRunIds.has(currentRunId)) return;
-      const record = get().runHistory.find((candidate) => candidate.id === currentRunId);
-      if (record && (record.startedFreshPaidWorldLabs === true
-        || (record.startedFreshPaidWorldLabs === undefined
-          && runIncludesWorldLabs(record.snapshot, record.targetNodeId)))) {
-        set({
-          isExecuting: true,
-          isCancelling: false,
-          uncertainWorldLabsRunId: currentRunId,
-          providerRecoveryWarning: WORLD_LABS_STATUS_UNCERTAIN_WARNING,
-        });
-      }
-      return;
+    for (const status of statuses) {
+      if (!ownsRun(status.runId)) continue;
+      if (status.status === 'running' || status.status === 'cancelling') {
+        clearConfirmedRunAdvisory(status.runId, set);
+        updateRunPhase(status.runId, cancellationRequestedRunIds.has(status.runId)
+          || status.status === 'cancelling' ? 'cancelling' : 'running', set);
+        if (get().uncertainWorldLabsRunId === status.runId) set({ uncertainWorldLabsRunId: null });
+        if (get().providerRecoveryWarning === WORLD_LABS_STATUS_UNCERTAIN_WARNING) set({ providerRecoveryWarning: null });
+        scheduleWorldLabsStatusReconciliation(status.runId, set, get);
+      } else settleTrackedExecutionStatus(status.status, status.runId, set, get);
     }
-    if (status.status === 'running' || status.status === 'cancelling') {
-      set({
-        isExecuting: true,
-        isCancelling: status.status === 'cancelling',
-        uncertainWorldLabsRunId: null,
-      });
-      if (get().providerRecoveryWarning === WORLD_LABS_STATUS_UNCERTAIN_WARNING) {
-        set({ providerRecoveryWarning: null });
-      }
-      scheduleWorldLabsStatusReconciliation(status.runId, set, get);
-      return;
+    if (currentRunId && !statuses.some((status) => status.runId === currentRunId)
+      && !pendingStartRunIds.has(currentRunId) && trackedRunHasFreshPaidWorldLabs(currentRunId, get)) {
+      updateRunPhase(currentRunId, 'uncertain', set);
+      set({ uncertainWorldLabsRunId: currentRunId, providerRecoveryWarning: WORLD_LABS_STATUS_UNCERTAIN_WARNING });
     }
-    settleTrackedExecutionStatus(status.status, status.runId, set, get);
   },
 
   acknowledgeProviderStartAmbiguity: async (kind, nodeId) => {
@@ -4621,16 +4727,15 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   },
 
   reconcilePersistedWorldLabsRun: async () => {
-    const pending = get().runHistory.find((record) => (
-      record.status === 'running'
-      && (record.startedFreshPaidWorldLabs === true
-        || (record.startedFreshPaidWorldLabs === undefined
-          && runIncludesWorldLabs(record.snapshot, record.targetNodeId)))
-    ));
-    if (!pending) return;
-    currentRunId = pending.id;
-    set({ isExecuting: true });
-    await reconcileWorldLabsExecutionStatus(pending.id, set, get);
+    // Legacy method name retained for App's bootstrap call. Reconnect every
+    // persisted owner, including ordinary Create and Cinema work.
+    const pending = get().runHistory.filter((record) => record.status === 'running');
+    for (const record of pending) {
+      if (!ownsRun(record.id)) registerRun(record.id, record.snapshot, record.targetNodeId, record.cinemaShot?.shotId);
+    }
+    currentRunId = pending.find((record) => !record.createOrigin && !record.cinemaShot)?.id ?? null;
+    set(ownershipState());
+    await Promise.all(pending.map((record) => reconcileWorldLabsExecutionStatus(record.id, set, get)));
   },
 
   dismissProviderRecoveryWarning: () => set({ providerRecoveryWarning: null }),

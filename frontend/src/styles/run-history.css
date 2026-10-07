@@ -283,3 +283,28 @@ body:not(.app-slava-restraint) .run-history__action:disabled {
   opacity: 0.35;
   cursor: default;
 }
+
+
+.run-history__batch-details {
+  margin-top: 6px;
+  font-size: 11px;
+}
+
+.run-history__batch-details summary { cursor: pointer; }
+
+.run-history__batch-result {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.run-history__batch-result a { color: var(--accent, #b9a8ff); }
+
+.run-history__batch-result pre {
+  max-height: 140px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin: 0;
+}

@@ -28,6 +28,12 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
   const executeShot = useGraphStore((s) => s.executeShot);
   const promoteShotVariation = useGraphStore((s) => s.promoteShotVariation);
   const isExecuting = useGraphStore((s) => s.isExecuting);
+  const isImportingGraph = useGraphStore((s) => s.isImportingGraph);
+  const activeRuns = useGraphStore((s) => s.activeRuns);
+  const cancelRun = useGraphStore((s) => s.cancelRun);
+  const shotRun = activeRuns.find((run) => run.kind === 'cinema-shot' && run.nodeId === cinemaNodeId && run.shotId === shot.id);
+  const overlappingGraph = activeRuns.some((run) => run.kind === 'graph' && run.nodeIds.includes(cinemaNodeId));
+  const admissionBlocked = useGraphStore((state) => state.isShotAdmissionBlocked(cinemaNodeId, shot.id));
   const addNodeAndConnect = useGraphStore((s) => s.addNodeAndConnect);
   const addNode = useGraphStore((s) => s.addNode);
   const onConnect = useGraphStore((s) => s.onConnect);
@@ -90,7 +96,13 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
   // row and siblings' outputs are untouched. "Generate all" still runs the whole
   // cinema-scene node. Both stream results back into scene.shots[*].output via
   // the same graphSync channel that drives ModelNode previews.
-  const shotRunning = status === 'running';
+  const shotRunning = Boolean(shotRun) || status === 'running';
+  const shotBlocked = shotRunning || overlappingGraph || admissionBlocked;
+  const sharedInputsBlocked = admissionBlocked && !shotRunning && !overlappingGraph;
+  const sharedInputsMessage = isImportingGraph
+    ? 'Wait for the graph import to finish.'
+    : 'Another run is using shared inputs. Wait for it to finish or stop it.';
+  const shotStopping = shotRun?.status === 'cancelling';
   const handleGenerateShot = () => {
     executeShot(cinemaNodeId, shot.id);
   };
@@ -238,7 +250,7 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
             type="button"
             className="cinema-shot-panel__stepper-btn"
             onClick={() => setVariationCount((c) => Math.max(1, c - 1))}
-            disabled={variationCount <= 1 || shotRunning}
+            disabled={variationCount <= 1 || shotBlocked}
             aria-label="Fewer variations"
           >
             −
@@ -248,7 +260,7 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
             type="button"
             className="cinema-shot-panel__stepper-btn"
             onClick={() => setVariationCount((c) => Math.min(4, c + 1))}
-            disabled={variationCount >= 4 || shotRunning}
+            disabled={variationCount >= 4 || shotBlocked}
             aria-label="More variations"
           >
             +
@@ -258,26 +270,41 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
           type="button"
           className="cinema-shot-panel__action"
           onClick={handleGenerateVariations}
-          disabled={shotRunning || isExecuting}
+          disabled={shotBlocked}
+          title={sharedInputsBlocked ? sharedInputsMessage : undefined}
         >
           Generate {variationCount}
         </button>
       </div>
+
+      {sharedInputsBlocked && <div className="cinema-shot-panel__variations-label" role="status">{sharedInputsMessage}</div>}
 
       <div className="cinema-shot-panel__actions">
         <button
           type="button"
           className="cinema-shot-panel__action cinema-shot-panel__action--primary"
           onClick={handleGenerateShot}
-          disabled={shotRunning || isExecuting}
+          disabled={shotBlocked}
+          title={sharedInputsBlocked ? sharedInputsMessage : undefined}
         >
           {shotRunning ? 'Generating…' : 'Generate shot'}
         </button>
+        {shotRun && (
+          <button
+            type="button"
+            className="cinema-shot-panel__action"
+            onClick={() => void cancelRun(shotRun.id)}
+            disabled={shotStopping}
+            aria-busy={shotStopping}
+          >
+            {shotStopping ? 'Stopping…' : 'Stop shot'}
+          </button>
+        )}
         <button
           type="button"
           className="cinema-shot-panel__action"
           onClick={handleGenerateAll}
-          disabled={isExecuting}
+          disabled={isExecuting || isImportingGraph}
         >
           Generate all
         </button>

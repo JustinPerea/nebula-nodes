@@ -9,7 +9,6 @@ const SHARED_CSS_FILES = new Set([
   'layouts.css',
   'nodes.css',
   'panels.css',
-  'skin-picker.css',
 ]);
 
 const VISUAL_PROPS = new Set([
@@ -67,7 +66,6 @@ const SENSITIVE_SELECTOR_PATTERNS = [
   /\.react-flow(?:__|--|-|\b)/,
   /\.reroute-node(?:__|--|\b)/,
   /\.settings(?:__|--|\b)/,
-  /\.skin-picker(?:__|--|\b)/,
   /\.toolbar(?:__|--|\b)/,
 ];
 

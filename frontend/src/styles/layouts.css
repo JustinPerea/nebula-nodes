@@ -390,3 +390,6 @@ body:not(.app-slava-restraint) .agent-log__msg {
 .agent-log__msg {
   word-break: break-word;
 }
+
+/* Group shared docks without introducing another stacking context. */
+.workspace-overlays { display: contents; }

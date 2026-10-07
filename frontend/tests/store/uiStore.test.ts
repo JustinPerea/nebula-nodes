@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { defaultRunHistoryPosition, useUIStore } from '../../src/store/uiStore';
+import { useGraphStore } from '../../src/store/graphStore';
 
 describe('uiStore', () => {
   it('keeps the Run History default fully visible on narrow viewports', () => {
@@ -143,12 +144,50 @@ describe('uiStore', () => {
     expect((state.createSessionId as string).length).toBeGreaterThan(0);
   });
 
-  it('exitCreateView returns to canvas and clears the session id', () => {
+  it('retains one Create session across Canvas visits and clears an unused preset handoff', () => {
     useUIStore.getState().enterCreateView();
+    const sessionId = useUIStore.getState().createSessionId;
     useUIStore.getState().exitCreateView();
     const state = useUIStore.getState();
     expect(state.viewMode).toBe('canvas');
-    expect(state.createSessionId).toBeNull();
+    expect(state.createSessionId).toBe(sessionId);
+    expect(state.pendingPreset).toBeNull();
+    useUIStore.getState().enterCreateView();
+    expect(useUIStore.getState().createSessionId).toBe(sessionId);
+  });
+
+  it('persists and reloads the Create session identity', async () => {
+    localStorage.removeItem('nebula:create:sessionId');
+    useGraphStore.setState({ runHistory: [] });
+    useUIStore.setState({ createSessionId: null });
+    useUIStore.getState().enterCreateView();
+    const sessionId = useUIStore.getState().createSessionId;
+    expect(localStorage.getItem('nebula:create:sessionId')).toBe(sessionId);
+    vi.resetModules();
+    const reloaded = await import('../../src/store/uiStore');
+    expect(reloaded.useUIStore.getState().createSessionId).toBe(sessionId);
+    reloaded.useUIStore.getState().enterCreateView();
+    expect(reloaded.useUIStore.getState().createSessionId).toBe(sessionId);
+  });
+
+  it('recovers a pre-persistence Create session from tracked history after reload', () => {
+    localStorage.removeItem('nebula:create:sessionId');
+    useGraphStore.setState({ runHistory: [{ id: 'restore-create', trigger: 'cluster', status: 'running', startedAt: 1,
+      snapshot: { nodes: [], edges: [] }, createOrigin: { genId: 'g', sessionId: 'restored-session', prompt: '', ts: 1, modelNodeIds: ['model'], allNodeIds: ['model'] } }] });
+    useUIStore.setState({ createSessionId: null });
+    useUIStore.getState().enterCreateView();
+    expect(useUIStore.getState().createSessionId).toBe('restored-session');
+    expect(localStorage.getItem('nebula:create:sessionId')).toBe('restored-session');
+    useGraphStore.setState({ runHistory: [] });
+  });
+
+  it('keeps Create usable when session persistence is unavailable', () => {
+    useUIStore.setState({ createSessionId: null });
+    const write = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('unavailable'); });
+    try {
+      expect(() => useUIStore.getState().enterCreateView()).not.toThrow();
+      expect(useUIStore.getState().createSessionId).toBeTruthy();
+    } finally { write.mockRestore(); }
   });
 
   it('retains the selected scope when opening asset studios', () => {

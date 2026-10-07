@@ -8,6 +8,7 @@ import {
   MAX_RUN_HISTORY,
   openRunRecord,
   persistRunHistory,
+  recordRunBatchOutputs,
   RUN_HISTORY_STORAGE_KEY,
   runTriggerLabel,
   WORLD_LABS_CANCELLATION_NOTE,
@@ -66,12 +67,36 @@ describe('openRunRecord', () => {
   it('caps the list at 100 records, dropping the oldest', () => {
     let h: RunRecord[] = [];
     for (let i = 0; i < MAX_RUN_HISTORY + 10; i += 1) {
+      if (i > 0) h = closeRunRecord(h, `r${i - 1}`, { status: 'complete' });
       h = open(h, `r${i}`, 'graph', i);
     }
     expect(MAX_RUN_HISTORY).toBe(100);
     expect(h).toHaveLength(MAX_RUN_HISTORY);
     expect(h[0].id).toBe(`r${MAX_RUN_HISTORY + 9}`);
     expect(h[h.length - 1].id).toBe('r10');
+  });
+
+  it('never capacity-evicts active owners, including from persisted records', () => {
+    let history: RunRecord[] = [];
+    for (let i = 0; i < MAX_RUN_HISTORY + 3; i += 1) history = open(history, `active-${i}`);
+    expect(history).toHaveLength(MAX_RUN_HISTORY + 3);
+    persistRunHistory(history);
+    expect(JSON.parse(localStorage.getItem(RUN_HISTORY_STORAGE_KEY)!).records).toHaveLength(MAX_RUN_HISTORY + 3);
+    expect(loadRunHistory()).toHaveLength(MAX_RUN_HISTORY + 3);
+  });
+
+  it('validates and freezes persisted Create and Cinema metadata', () => {
+    const history = openRunRecord([], { id: 'shot', trigger: 'shot', startedAt: 1, snapshot: makeSnapshot(),
+      cinemaShot: { nodeId: 'node-a', shotId: 'shot-a', seed: 2, variations: 3 },
+      createOrigin: { genId: 'g', sessionId: 's', prompt: 'original', ts: 1, modelNodeIds: ['node-a'], allNodeIds: ['node-a'] } });
+    persistRunHistory(history);
+    const loaded = loadRunHistory();
+    expect(loaded[0].cinemaShot).toEqual(history[0].cinemaShot);
+    expect(loaded[0].createOrigin).toEqual(history[0].createOrigin);
+    expect(Object.isFrozen(loaded[0].createOrigin?.modelNodeIds)).toBe(true);
+    const corrupt = { ...history[0], createOrigin: { ...history[0].createOrigin, ts: null } };
+    localStorage.setItem(RUN_HISTORY_STORAGE_KEY, JSON.stringify({ version: 1, records: [corrupt] }));
+    expect(loadRunHistory()).toEqual([]);
   });
 
   it('captures an independent, deeply frozen graph snapshot', () => {
@@ -405,11 +430,11 @@ describe('persistent run history', () => {
     expect(Object.isFrozen(loaded[0].snapshot.nodes[0].params)).toBe(true);
   });
 
-  it('recovers an orphaned running record as cancelled and persists recovery', () => {
+  it('preserves an ordinary running record for authoritative reconciliation after reload', () => {
     persistRunHistory(open([], 'interrupted'));
 
-    expect(loadRunHistory()[0].status).toBe('cancelled');
-    expect(loadRunHistory()[0].status).toBe('cancelled');
+    expect(loadRunHistory()[0].status).toBe('running');
+    expect(loadRunHistory()[0].status).toBe('running');
   });
 
   it('preserves a running World Labs record for backend status reconciliation', () => {
@@ -435,7 +460,7 @@ describe('persistent run history', () => {
     expect(loaded.statusNote).toBe(WORLD_LABS_RECONNECTING_NOTE);
   });
 
-  it('only preserves running World Labs records that could have started new paid work', () => {
+  it('also preserves repeat-safe World Labs runs without claiming a fresh paid start', () => {
     const safeWorldRuns: RunRecord[] = [
       {
         id: 'ply-export',
@@ -475,7 +500,7 @@ describe('persistent run history', () => {
     persistRunHistory(safeWorldRuns);
 
     const loaded = loadRunHistory();
-    expect(loaded.map((record) => record.status)).toEqual(['cancelled', 'cancelled']);
+    expect(loaded.map((record) => record.status)).toEqual(['running', 'running']);
     expect(loaded.every((record) => (
       !runIncludesFreshPaidWorldLabsStart(record.snapshot, record.targetNodeId)
     ))).toBe(true);
@@ -624,5 +649,38 @@ describe('runTriggerLabel', () => {
     expect(runTriggerLabel('graph')).toBe('Full graph');
     expect(runTriggerLabel('node')).toBe('Single node');
     expect(runTriggerLabel('cluster')).toBe('Selection');
+  });
+});
+
+
+describe('iterator batch history retention', () => {
+  beforeEach(() => localStorage.clear());
+
+  it.each(['failed', 'cancelled'] as const)('retains immutable successful outputs when the run is %s', (status) => {
+    const batch = [{ image: { type: 'Image' as const, value: '/outputs/r/item1.png' } }];
+    const initial = open([], 'iterator-run');
+    const recorded = recordRunBatchOutputs(initial, 'iterator-run', 'model', batch);
+    batch[0].image.value = '/outputs/replaced.png';
+    expect(initial[0].batchOutputs).toBeUndefined();
+    expect(recorded[0].batchOutputs?.model[0].image.value).toBe('/outputs/r/item1.png');
+    expect(Object.isFrozen(recorded[0].batchOutputs?.model[0].image)).toBe(true);
+    const closed = closeRunRecord(recorded, 'iterator-run', { status });
+    persistRunHistory(closed);
+    const reloaded = loadRunHistory();
+    expect(reloaded[0].status).toBe(status);
+    expect(reloaded[0].batchOutputs).toEqual(recorded[0].batchOutputs);
+    expect(Object.isFrozen(reloaded[0].batchOutputs?.model[0].image)).toBe(true);
+    expect(reloaded[0].snapshot).toEqual(initial[0].snapshot);
+  });
+
+  it('replaces a cumulative node batch without changing another node or older record', () => {
+    let history = recordRunBatchOutputs(open(open([], 'earlier'), 'current'), 'current', 'a', []);
+    history = recordRunBatchOutputs(history, 'current', 'b', [{ text: { type: 'Text', value: 'B' } }]);
+    history = recordRunBatchOutputs(history, 'current', 'a', [
+      { text: { type: 'Text', value: 'one' } }, { text: { type: 'Text', value: 'two' } },
+    ]);
+    expect(history[0].batchOutputs?.a).toHaveLength(2);
+    expect(history[0].batchOutputs?.b[0].text.value).toBe('B');
+    expect(history[1].batchOutputs).toBeUndefined();
   });
 });

@@ -103,7 +103,6 @@ async function runPureUtilityExecutionCheck(cdp) {
   await evaluate(cdp, async (imageAPath, imageBPath, videoPath) => {
     const graph = window.__nebulaGraphStore;
     const ui = window.__nebulaUIStore;
-    ui.getState().setSkin('slava-restraint');
     ui.setState((state) => ({
       selectedNodeId: null,
       panels: {

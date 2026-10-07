@@ -16,10 +16,12 @@ vi.mock('@xyflow/react', async (importOriginal) => {
       fitView: vi.fn(),
       getViewport: vi.fn(() => ({ x: 0, y: 0, zoom: 1 })),
     }),
+    useStore: () => [0, 0, 1],
   };
 });
 
 import { Toolbar } from '../src/components/panels/Toolbar';
+import { GraphFileActions } from '../src/components/GraphFileActions';
 import { useGraphStore } from '../src/store/graphStore';
 
 describe('Toolbar execution lifecycle', () => {
@@ -47,6 +49,7 @@ describe('Toolbar execution lifecycle', () => {
       uncertainWorldLabsRunId: null,
       providerRecoveries: [],
       providerStartAmbiguities: [],
+      createLaunchingIds: [],
     });
   });
 
@@ -54,7 +57,7 @@ describe('Toolbar execution lifecycle', () => {
     const cancelExecution = vi.fn(async () => undefined);
     useGraphStore.setState({ cancelExecution });
 
-    render(<Toolbar />);
+    render(<><GraphFileActions /><Toolbar /></>);
 
     const stopping = screen.getByRole('button', { name: 'Stopping…' });
     expect(stopping).toBeDisabled();
@@ -65,7 +68,7 @@ describe('Toolbar execution lifecycle', () => {
   });
 
   it('blocks button and keyboard-event saves while a paid start is unsettled', () => {
-    render(<Toolbar />);
+    render(<><GraphFileActions /><Toolbar /></>);
 
     const save = screen.getByRole('button', { name: 'Save' });
     expect(save).toBeDisabled();
@@ -89,7 +92,7 @@ describe('Toolbar execution lifecycle', () => {
       }],
     });
 
-    render(<Toolbar />);
+    render(<><GraphFileActions /><Toolbar /></>);
     const save = screen.getByRole('button', { name: 'Save' });
     expect(save).toBeDisabled();
     expect(save).toHaveAttribute(
@@ -127,7 +130,7 @@ describe('Toolbar execution lifecycle', () => {
       providerStartAmbiguities: [],
     });
 
-    render(<Toolbar />);
+    render(<><GraphFileActions /><Toolbar /></>);
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
     await waitFor(() => expect(graphFileMocks.saveToFile).toHaveBeenCalledWith(

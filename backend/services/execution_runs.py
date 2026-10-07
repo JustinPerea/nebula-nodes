@@ -64,6 +64,11 @@ class ExecutionRunRegistry:
     def get(self, run_id: str) -> ExecutionRunRecord | None:
         return self._records.get(run_id)
 
+    def has_active(self) -> bool:
+        """Keep graph replacement fenced until every owning task is terminal."""
+        return any(record.status in {"running", "cancelling"}
+                   for record in self._records.values())
+
     def list_statuses(self) -> list[dict[str, str]]:
         """Return a bounded reconnect snapshot of every retained run."""
         statuses = [

@@ -15,6 +15,15 @@ export function CinemaStudioToolbar({ cinemaNodeId }: CinemaStudioToolbarProps) 
   const exitCinemaEditor = useUIStore((s) => s.exitCinemaEditor);
   const executeNode = useGraphStore((s) => s.executeNode);
   const isExecuting = useGraphStore((s) => s.isExecuting);
+  const isImportingGraph = useGraphStore((s) => s.isImportingGraph);
+  const activeRuns = useGraphStore((s) => s.activeRuns);
+  const cancelRun = useGraphStore((s) => s.cancelRun);
+  const sceneRuns = activeRuns.filter((run) => run.nodeIds.includes(cinemaNodeId));
+  const stopping = sceneRuns.length > 0 && sceneRuns.every((run) => run.status === 'cancelling');
+  const openHistory = () => {
+    exitCinemaEditor();
+    useUIStore.getState().setLeftDock('history');
+  };
 
   return (
     <div className="cinema-studio-toolbar">
@@ -27,14 +36,28 @@ export function CinemaStudioToolbar({ cinemaNodeId }: CinemaStudioToolbarProps) 
       </button>
       <span className="cinema-studio-toolbar__crumb">Cinema Studio</span>
       <div className="cinema-studio-toolbar__spacer" />
+      <button type="button" className="cinema-studio-toolbar__action" onClick={openHistory}>
+        Run history
+      </button>
+      {sceneRuns.length > 0 && (
+        <button
+          type="button"
+          className="cinema-studio-toolbar__action"
+          onClick={() => void Promise.all(sceneRuns.map((run) => cancelRun(run.id)))}
+          disabled={stopping}
+          aria-busy={stopping}
+        >
+          {stopping ? 'Stopping…' : 'Stop scene'}
+        </button>
+      )}
       <button
         type="button"
         className="cinema-studio-toolbar__action"
         onClick={() => executeNode(cinemaNodeId)}
-        disabled={isExecuting}
+        disabled={isExecuting || isImportingGraph}
         title="Run the cinema-scene node — generates every shot via the existing execution pipeline"
       >
-        {isExecuting ? 'Generating…' : 'Generate all'}
+        {sceneRuns.length > 0 ? 'Generating…' : 'Generate all'}
       </button>
     </div>
   );

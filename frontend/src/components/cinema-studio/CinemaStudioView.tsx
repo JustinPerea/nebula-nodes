@@ -133,6 +133,7 @@ export function CinemaStudioView() {
 
       <div className="cinema-studio-view__rail">
         <CinemaShotsRail
+          cinemaNodeId={cinemaNodeId}
           scene={scene}
           selectedShotId={effectiveShotId}
           onSelect={setSelectedShotId}

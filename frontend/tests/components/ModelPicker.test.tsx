@@ -87,6 +87,44 @@ describe('Create model picker provider filter', () => {
     expect(onClose).toHaveBeenCalledOnce();
   });
 
+  it('handles Escape once from search and isolates it from the workspace', () => {
+    const onClose = vi.fn();
+    const workspaceEscape = vi.fn();
+    document.addEventListener('keydown', workspaceEscape);
+    render(<ModelPicker value={null} onSelect={vi.fn()} onClose={onClose} />);
+    const search = screen.getByRole('textbox', { name: 'Search models' });
+    expect(search).toHaveFocus();
+    fireEvent.keyDown(search, { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledOnce();
+    expect(workspaceEscape).not.toHaveBeenCalled();
+    document.removeEventListener('keydown', workspaceEscape);
+  });
+
+  it('keeps keyboard focus in the picker and returns to its opener on dismissal', () => {
+    const opener = document.createElement('button');
+    document.body.append(opener);
+    opener.focus();
+    const { unmount } = render(<ModelPicker value={null} onSelect={vi.fn()} onClose={vi.fn()} />);
+    const search = screen.getByRole('textbox', { name: 'Search models' });
+    const rows = screen.getAllByRole('button');
+    fireEvent.keyDown(search, { key: 'Tab', shiftKey: true });
+    expect(rows.at(-1)).toHaveFocus();
+    fireEvent.keyDown(rows.at(-1)!, { key: 'Tab' });
+    expect(search).toHaveFocus();
+    unmount();
+    expect(opener).toHaveFocus();
+    opener.remove();
+  });
+
+  it('closes on the outside surface without treating filter interactions as dismissal', () => {
+    const onClose = vi.fn();
+    render(<ModelPicker value={null} onSelect={vi.fn()} onClose={onClose} />);
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Model provider' }));
+    expect(onClose).not.toHaveBeenCalled();
+    fireEvent.mouseDown(screen.getByRole('dialog').parentElement!);
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
   it('exposes filtered Krea selection from the actual Create composer without starting generation', () => {
     const onSelectModel = vi.fn();
     const onGenerate = vi.fn();

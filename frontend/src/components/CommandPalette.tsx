@@ -11,11 +11,12 @@ import {
 } from '../lib/commandPalette';
 import { findAvailableNodePosition, type NodePosition } from '../lib/nodePlacement';
 import { computeCanvasFitPadding } from '../lib/canvasFit';
+import { canLoadGraph, canSaveGraph, requestGraphLoad, requestGraphSave } from '../lib/graphFileActions';
 import '../styles/command-palette.css';
 
 /**
  * Global ⌘K / Ctrl+K command palette. Searches + inserts nodes, runs toolbar
- * actions, switches views/panels/skins, and hands a query to the agent. Mounted
+ * actions, switches views/panels, and hands a query to the agent. Mounted
  * once at the app root. It deliberately yields to the video/Remotion editor's
  * own Cmd+K (cut clip at playhead) by ignoring the hotkey in those views.
  */
@@ -31,10 +32,12 @@ export function CommandPalette() {
   const addNode = useGraphStore((s) => s.addNode);
   const executeGraph = useGraphStore((s) => s.executeGraph);
   const isExecuting = useGraphStore((s) => s.isExecuting);
+  const isImportingGraph = useGraphStore((s) => s.isImportingGraph);
+  const canSave = useGraphStore(canSaveGraph);
+  const canLoad = useGraphStore(canLoadGraph);
   const nodeCount = useGraphStore((s) => s.nodes.length);
   const enterCreateView = useUIStore((s) => s.enterCreateView);
   const togglePanel = useUIStore((s) => s.togglePanel);
-  const setSkin = useUIStore((s) => s.setSkin);
   const selectNode = useUIStore((s) => s.selectNode);
   const nodes = useGraphStore((s) => s.nodes);
 
@@ -96,21 +99,22 @@ export function CommandPalette() {
       buildCommands({
         addNodeAtCenter,
         runGraph: () => executeGraph(),
-        save: () => window.dispatchEvent(new CustomEvent('nebula:save')),
-        load: () => window.dispatchEvent(new CustomEvent('nebula:load')),
+        save: requestGraphSave,
+        load: requestGraphLoad,
         fitView: () => fitView({ padding: computeCanvasFitPadding(), duration: 300 }),
         enterCreateView,
         togglePanel,
-        setSkin,
         startAgentQuery: () => {
           setMode('agent');
           setQuery('');
         },
-        canRun: nodeCount > 0 && !isExecuting,
+        canRun: nodeCount > 0 && !isExecuting && !isImportingGraph,
+        canSave,
+        canLoad,
         canvasNodes,
         focusNode,
       }),
-    [addNodeAtCenter, executeGraph, fitView, enterCreateView, togglePanel, setSkin, nodeCount, isExecuting, canvasNodes, focusNode]
+    [addNodeAtCenter, executeGraph, fitView, enterCreateView, togglePanel, nodeCount, isExecuting, isImportingGraph, canSave, canLoad, canvasNodes, focusNode]
   );
 
   // Mirror `open` into a ref so the global hotkey handler stays subscribed once.

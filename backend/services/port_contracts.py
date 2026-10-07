@@ -21,6 +21,7 @@ DYNAMIC_PORT_DEFINITION_IDS = frozenset(
 class ContractNode:
     node_id: str
     definition_id: str
+    params: Mapping[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -64,18 +65,35 @@ def port_types_compatible(source_type: str, target_type: str) -> bool:
     )
 
 
+def cinema_output_ports(params: Mapping[str, Any] | None) -> list[dict[str, Any]]:
+    """Derive Cinema's typed handles from the authoritative saved shot IDs."""
+    scene = params.get("scene") if isinstance(params, Mapping) else None
+    shots = scene.get("shots") if isinstance(scene, Mapping) else None
+    if not isinstance(shots, list):
+        return []
+    return [
+        {"id": f"shot_{shot['id']}", "label": f"Shot {index + 1}",
+         "dataType": "Image", "required": False}
+        for index, shot in enumerate(shots)
+        if isinstance(shot, Mapping) and isinstance(shot.get("id"), str) and shot["id"]
+    ]
+
+
 def _declared_port(
     definition_id: str,
     port_id: str | None,
     *,
     port_key: str,
     definitions: Mapping[str, Mapping[str, Any]],
+    params: Mapping[str, Any] | None = None,
 ) -> _PortLookup:
     definition = definitions.get(definition_id)
     if definition is None:
         return _PortLookup(None)
 
-    raw_ports = definition.get(port_key, [])
+    raw_ports = (cinema_output_ports(params)
+                 if definition_id == "cinema-scene" and port_key == "outputPorts"
+                 else definition.get(port_key, []))
     ports = raw_ports if isinstance(raw_ports, list) else []
     if definition_id in DYNAMIC_PORT_DEFINITION_IDS and not ports:
         return _PortLookup(None, dynamic=True)
@@ -217,6 +235,7 @@ def validate_edge_contracts(
             edge.source_handle,
             port_key="outputPorts",
             definitions=definitions,
+            params=source_node.params,
         )
         target_port = _declared_port(
             target_node.definition_id,
@@ -238,6 +257,9 @@ def validate_edge_contracts(
                 )
             )
         elif source_port.definition is None and not source_port.dynamic:
+            valid_outputs = (cinema_output_ports(source_node.params)
+                             if source_node.definition_id == "cinema-scene"
+                             else source_definition.get("outputPorts", []))
             edge_issues.append(
                 PortContractIssue(
                     node_id=edge.source,
@@ -245,7 +267,7 @@ def validate_edge_contracts(
                     message=(
                         f"Invalid source handle '{source_handle}' on node '{edge.source}' "
                         f"(definition '{source_node.definition_id}'). Valid outputPorts: "
-                        f"{_valid_port_ids(source_definition, 'outputPorts') or '(none)'}"
+                        f"{_valid_port_ids({'outputPorts': valid_outputs}, 'outputPorts') or '(none)'}"
                     ),
                     edge_index=index,
                 )

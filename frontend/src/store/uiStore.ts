@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
-import { type SkinId, loadSkin, persistSkin, applySkinBodyClass } from '../lib/skins';
+import { type SkinId, loadSkin, applySkinBodyClass } from '../lib/skins';
 import {
   getNotificationPrefs,
   setNotificationPrefs as persistNotificationPrefs,
@@ -17,6 +17,7 @@ const CANVAS_PERF_MODE_KEY = 'nebula:canvas:perfMode';
 const CANVAS_LOW_DETAIL_KEY = 'nebula:canvas:lowDetail';
 const MINIMAP_COLLAPSED_KEY = 'nebula:canvas:minimapCollapsed';
 const ONBOARDED_KEY = 'nebula:onboarded';
+const CREATE_SESSION_KEY = 'nebula:create:sessionId';
 const PANEL_EDGE_MARGIN = 16;
 const RUN_HISTORY_WIDTH = 276;
 
@@ -46,6 +47,19 @@ function loadOnboarded(): boolean {
 function persistOnboarded(done: boolean): void {
   if (typeof window === 'undefined') return;
   window.localStorage.setItem(ONBOARDED_KEY, done ? '1' : '0');
+}
+
+function loadCreateSessionId(): string | null {
+  try {
+    if (typeof window === 'undefined') return null;
+    return window.localStorage.getItem(CREATE_SESSION_KEY)?.trim() || null;
+  } catch { return null; }
+}
+
+function persistCreateSessionId(sessionId: string): void {
+  try {
+    if (typeof window !== 'undefined') window.localStorage.setItem(CREATE_SESSION_KEY, sessionId);
+  } catch { /* Session continuity stays in memory if storage is unavailable. */ }
 }
 
 const DEFAULT_PANELS = {
@@ -254,7 +268,6 @@ interface UIState {
   setSettingsCache: (apiKeys: Record<string, string>, kreaConnectionMode?: KreaConnectionMode) => void;
   setKreaConnection: (connection: KreaConnectionState) => void;
   setKreaConnectionMode: (mode: KreaConnectionMode) => void;
-  setSkin: (skin: SkinId) => void;
   setAgentLogEnabled: (enabled: boolean) => void;
   setCanvasPerfMode: (enabled: boolean) => void;
   setCanvasLowDetail: (enabled: boolean) => void;
@@ -281,7 +294,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   characterEditorScope: 'global',
   moodboardEditorId: null,
   moodboardEditorScope: 'global',
-  createSessionId: null,
+  createSessionId: loadCreateSessionId(),
   selectedTrackItemId: null,
   selectedTrackItemIds: [],
   isKeyframeRecording: false,
@@ -413,11 +426,16 @@ export const useUIStore = create<UIState>((set, get) => ({
   },
 
   enterCreateView: () => {
-    set({ viewMode: 'create', createSessionId: uuidv4() });
+    const restoredSession = useGraphStore.getState().runHistory.find((run) => run.createOrigin)?.createOrigin?.sessionId;
+    set((state) => {
+      const createSessionId = state.createSessionId ?? loadCreateSessionId() ?? restoredSession ?? uuidv4();
+      persistCreateSessionId(createSessionId);
+      return { viewMode: 'create', createSessionId };
+    });
   },
   exitCreateView: () => {
     // Clear any un-consumed Styles-tab preset so it can't leak into a later visit.
-    set({ viewMode: 'canvas', createSessionId: null, pendingPreset: null });
+    set({ viewMode: 'canvas', pendingPreset: null });
   },
 
   enterBrandShowcase: () => {
@@ -624,12 +642,6 @@ export const useUIStore = create<UIState>((set, get) => ({
   setKreaConnectionMode: (kreaConnectionMode) =>
     set((state) => ({ settingsCache: { ...state.settingsCache, kreaConnectionMode } })),
 
-  setSkin: (skin) => {
-    persistSkin(skin);
-    applySkinBodyClass(skin);
-    set({ skin });
-  },
-
   setAgentLogEnabled: (enabled) => {
     persistAgentLogEnabled(enabled);
     set({ agentLogEnabled: enabled });
@@ -732,11 +744,9 @@ export const useUIStore = create<UIState>((set, get) => ({
   },
 }));
 
-// Apply the persisted skin's body class on module load so the first paint
-// is already correct (no flash of unskinned content). The store's setSkin
-// keeps it in sync after that.
+// Apply the supported appearance on module load so the first paint is correct.
 if (typeof document !== 'undefined') {
-  applySkinBodyClass(useUIStore.getState().skin, { animate: false });
+  applySkinBodyClass();
 }
 
 // Expose store globally for puppeteer-driven demo scripts (mirrors the

@@ -370,12 +370,15 @@ def resolve_output_ref(value: str) -> str:
     """
     if not isinstance(value, str) or not value.startswith("/api/outputs/"):
         return value
-    rel = value[len("/api/outputs/"):]
-    candidate = (OUTPUT_ROOT / rel).resolve()
     try:
-        candidate.relative_to(OUTPUT_ROOT.resolve())
-    except ValueError:
-        return value  # traversal attempt — refuse
+        # Reuse canonical decoding and segment/containment checks. The served
+        # reference escapes filenames (spaces, unicode and literal percent),
+        # so treating its URL path as a filesystem path loses valid artwork.
+        canonical = portable_output_ref(value)
+        rel = unquote(canonical[len("/api/outputs/"):], errors="strict")
+        candidate = (OUTPUT_ROOT / rel).resolve()
+    except (ValueError, OSError, RuntimeError):
+        return value  # malformed or escaping reference — refuse
     return str(candidate)
 
 

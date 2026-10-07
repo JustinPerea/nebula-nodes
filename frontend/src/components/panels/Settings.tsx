@@ -1,13 +1,12 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { ChevronDown, ChevronRight, X } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import { getSettings, updateSettings, updateCredential } from '../../lib/api';
-import { SkinPicker } from '../SkinPicker';
 import { KreaConnectionCard } from './KreaConnectionCard';
 import { normalizeKreaMode, type KreaConnectionMode } from '../../lib/kreaConnection';
 import { useDelayedUnmount } from '../../hooks/useDelayedUnmount';
+import { usePanelFocus } from '../../hooks/usePanelFocus';
 import '../../styles/panels.css';
-import '../../styles/skin-picker.css';
 
 interface ApiKeyField {
   key: string;
@@ -208,6 +207,8 @@ export function Settings() {
   }, []);
 
   const { shouldRender, exiting } = useDelayedUnmount(visible, 500);
+  const panelRef = useRef<HTMLDivElement>(null);
+  usePanelFocus(visible && shouldRender, panelRef, () => useUIStore.getState().setLeftDock(null));
   if (!shouldRender) return null;
 
   const configuredApiKeyCount = API_KEY_FIELDS.reduce(
@@ -217,6 +218,9 @@ export function Settings() {
 
   return (
     <div
+      ref={panelRef}
+      role="dialog"
+      aria-label="Settings"
       className={`panel panel--settings workspace-dock-panel${exiting ? ' panel--exiting' : ''}`}
     >
       <div className="panel__header">
@@ -355,12 +359,6 @@ export function Settings() {
               </>
             )}
 
-            {/* Skin Section */}
-            <div className="settings__section-label settings__section-label--stacked">
-              Skin
-            </div>
-            <SkinPicker />
-
             {/* Interface Section */}
             <div className="settings__section-label settings__section-label--stacked">
               Interface
@@ -389,7 +387,7 @@ export function Settings() {
               <span className="settings__toggle-copy">
                 <span className="settings__toggle-title">Performance mode</span>
                 <span className="settings__toggle-description">
-                  Only render on-screen nodes; show minimap + controls. Recommended for large graphs.
+                  Only render on-screen nodes; show minimap. Recommended for large graphs.
                 </span>
               </span>
             </label>

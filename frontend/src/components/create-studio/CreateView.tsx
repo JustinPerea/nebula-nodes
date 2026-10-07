@@ -5,10 +5,11 @@ import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
 import { NODE_DEFINITIONS } from '../../constants/nodeDefinitions';
 import { buildDefaultParamsForUi } from '../../lib/createParams';
+import { isCreateModel } from '../../lib/createModels';
 import { normalizeKreaMode } from '../../lib/kreaConnection';
 import { uploadReference } from '../../lib/createUploads';
 import { revealInFinder, saveToFolder } from '../../lib/createFiles';
-import { type GenerationRecord, galleryItemsFromCanvas } from '../../lib/createGallery';
+import { generationRecordsFromHistory, galleryItemsFromCanvas } from '../../lib/createGallery';
 import { composerStateFromSelection } from '../../lib/createSelection';
 import { applyPresetToComposer } from '../../lib/applyPreset';
 import { createPreset, type Preset } from '../../lib/createPresets';
@@ -28,6 +29,15 @@ export function CreateView() {
   const apiKeys = useUIStore((s) => s.settingsCache.apiKeys);
   const kreaConnectionMode = useUIStore((s) => s.settingsCache.kreaConnectionMode);
   const allNodes = useGraphStore((s) => s.nodes);
+  const runHistory = useGraphStore((s) => s.runHistory);
+  const activeRuns = useGraphStore((s) => s.activeRuns);
+  const createLaunchingIds = useGraphStore((s) => s.createLaunchingIds);
+  const isImportingGraph = useGraphStore((s) => s.isImportingGraph);
+  const createCancelledLaunchIds = useGraphStore((s) => s.createCancelledLaunchIds);
+  const cancelCreateGeneration = useGraphStore((s) => s.cancelCreateGeneration);
+  const cancelRun = useGraphStore((s) => s.cancelRun);
+  const setLeftDock = useUIStore((s) => s.setLeftDock);
+
 
   // Snapshot selection once on mount — used to prefill composer + default tab.
   // Empty deps array is intentional: we only want the canvas state at open time.
@@ -50,31 +60,31 @@ export function CreateView() {
     if (initial.prefill) return initial.prefill.params;
     return buildDefaultParamsForUi(NODE_DEFINITIONS['nano-banana'], apiKeys);
   });
-  const [generations, setGenerations] = useState<GenerationRecord[]>([]);
-  const genIndexRef = useRef(0);
-  // Counts launches that are mid-flight inside handleGenerate's async author
-  // window (before their nodes exist in the store for activeCount to see). The
-  // cap is gated on activeCount + launchingRef so rapid clicks can't bypass it.
-  const launchingRef = useRef(0);
+  const generations = useMemo(() => generationRecordsFromHistory(runHistory, sessionId ?? undefined), [runHistory, sessionId]);
+  const activeCreateRuns = useMemo(() => runHistory.filter((run) => run.status === 'running' && run.createOrigin), [runHistory]);
+  const galleryNodes = useMemo(() => {
+    const activeModelIds = new Set(activeCreateRuns.flatMap((run) => run.createOrigin!.modelNodeIds));
+    return allNodes.map((node) => activeModelIds.has(node.id) && node.data.state === 'idle'
+      ? { ...node, data: { ...node.data, state: 'queued' as const } }
+      : node);
+  }, [allNodes, activeCreateRuns]);
+  const [generationError, setGenerationError] = useState<string | null>(null);
   const [refs, setRefs] = useState<AttachedRef[]>([]);
   const [quantity, setQuantity] = useState(1);
   const [stylesOpen, setStylesOpen] = useState(false);
   const [presetReloadKey, setPresetReloadKey] = useState(0);
 
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
+
   const modelDef = modelId ? NODE_DEFINITIONS[modelId] ?? null : null;
 
-  // activeCount: number of generations whose model nodes are not all settled.
-  // A generation is settled when every modelNodeId resolves to a node with
-  // state 'complete' or 'error', or the node is gone (was deleted).
-  const activeCount = useMemo(() => {
-    return generations.filter((g) => {
-      return g.modelNodeIds.some((id) => {
-        const n = allNodes.find((node) => node.id === id);
-        if (!n) return false; // gone = settled
-        return n.data.state !== 'complete' && n.data.state !== 'error';
-      });
-    }).length;
-  }, [generations, allNodes]);
+  // A variation batch occupies one shared job slot. Reservations cover the
+  // authoring window; history covers accepted jobs until their terminal event.
+  const activeCount = createLaunchingIds.length + activeCreateRuns.length;
 
   const handleSelectModel = (id: string) => {
     setModelId(id);
@@ -143,16 +153,23 @@ export function CreateView() {
 
   const handleGenerate = async () => {
     if (!modelDef || !sessionId) return;
-    // launchingRef bridges the async author window: activeCount can't see the
-    // new generation's nodes until they're in the store, so without this a
-    // rapid second click would pass the cap before the first set queued.
-    if (activeCount + launchingRef.current >= MAX_CONCURRENT) return;
-    const { authorGenerationCluster, executeClusterConcurrent } = useGraphStore.getState();
+    // Selection and saved styles can prefill models outside the Create picker.
+    // Check admission before reserving a job or authoring an incomplete recipe.
+    if (!isCreateModel(modelDef)) {
+      setGenerationError('This model needs Canvas input controls. Choose another model or return to Canvas.');
+      return;
+    }
+    const store = useGraphStore.getState();
+    // Do not turn repeated clicks during authoring into duplicate paid jobs.
+    // Once the first job is tracked, an intentional second launch is allowed.
+    if (store.createLaunchingIds.length > 0) return;
     const genId = uuidv4();
-    const genIndex = genIndexRef.current++;
-    launchingRef.current += 1;
+    if (!store.reserveCreateGeneration(genId)) return;
+    const ts = Date.now();
+    setGenerationError(null);
+    const layoutY = Math.max(80, ...store.nodes.filter((node) => node.data._createOrigin).map((node) => node.position.y + 320));
     try {
-      const { modelNodeIds, allNodeIds } = await authorGenerationCluster({
+      const { modelNodeIds, allNodeIds } = await store.authorGenerationCluster({
         definitionId: modelDef.id,
         prompt,
         params,
@@ -160,16 +177,20 @@ export function CreateView() {
         quantity,
         sessionId,
         genId,
-        layoutOrigin: { x: 80, y: 80 + genIndex * 320 },
+        layoutOrigin: { x: 80, y: layoutY },
       });
-      if (modelNodeIds.length > 0) {
-        setGenerations((prev) => [...prev, { genId, prompt, ts: Date.now(), modelNodeIds }]);
+      const lifecycle = useGraphStore.getState();
+      if (!lifecycle.createLaunchingIds.includes(genId) || lifecycle.createCancelledLaunchIds.includes(genId)) return;
+      if (modelNodeIds.length === 0 || allNodeIds.length === 0) throw new Error('Could not create generation nodes. Please try again.');
+      // The shared execution store consumes the reservation atomically when it
+      // creates the history/Stop owner. This survives leaving Create mid-launch.
+      await store.executeClusterConcurrent(allNodeIds, { genId, prompt, ts, sessionId, modelNodeIds, allNodeIds });
+    } catch (error) {
+      if (mounted.current && !useGraphStore.getState().createCancelledLaunchIds.includes(genId)) {
+        setGenerationError(error instanceof Error ? error.message : 'Could not start generation. Please try again.');
       }
-      // By the time executeClusterConcurrent resolves, its nodes are marked
-      // 'queued' in the store, so activeCount picks them up as launchingRef drops.
-      await executeClusterConcurrent(allNodeIds);
     } finally {
-      launchingRef.current -= 1;
+      store.releaseCreateGeneration(genId);
     }
   };
 
@@ -198,11 +219,6 @@ export function CreateView() {
 
   const handleDelete = (nodeId: string) => {
     useGraphStore.getState().deleteGeneration([nodeId]);
-    setGenerations((prev) =>
-      prev
-        .map((g) => ({ ...g, modelNodeIds: g.modelNodeIds.filter((id) => id !== nodeId) }))
-        .filter((g) => g.modelNodeIds.length > 0),
-    );
   };
 
   const handleReveal = (url: string) => {
@@ -224,6 +240,23 @@ export function CreateView() {
           <ArrowLeft size={16} strokeWidth={1.75} aria-hidden="true" /> Canvas
         </button>
         <span className="create-view__title">Create</span>
+        {generationError && <span className="create-view__run-error" role="alert">{generationError}</span>}
+        {createLaunchingIds.length > 0 && <span role="status">Preparing generation…</span>}
+        {createLaunchingIds.map((genId) => {
+          const cancelling = createCancelledLaunchIds.includes(genId);
+          return <button key={genId} type="button" className="create-view__back" disabled={cancelling}
+            aria-label={cancelling ? 'Cancelling preparation' : 'Stop preparing generation'} onClick={() => cancelCreateGeneration(genId)}>
+            {cancelling ? 'Cancelling…' : 'Stop preparing'}
+          </button>;
+        })}
+        {activeCreateRuns.map((run, index) => {
+          const cancelling = activeRuns.some((active) => active.id === run.id && active.status === 'cancelling');
+          return <button key={run.id} type="button" className="create-view__back" disabled={cancelling}
+            aria-label={`${cancelling ? 'Cancelling' : 'Stop'} generation ${index + 1}`} onClick={() => void cancelRun(run.id)}>
+            {cancelling ? 'Cancelling…' : `Stop ${index + 1}`}
+          </button>;
+        })}
+        <button type="button" className="create-view__back" onClick={() => { exitCreateView(); setLeftDock('history'); }}>History</button>
       </header>
 
       <div
@@ -249,7 +282,7 @@ export function CreateView() {
           return (
             <ResultsGallery
               records={generations}
-              nodes={allNodes}
+              nodes={galleryNodes}
               selectedIds={selectedIds}
               defaultTab={defaultTab}
               onOpenInCanvas={handleOpenInCanvas}
@@ -276,6 +309,7 @@ export function CreateView() {
         prompt={prompt}
         params={params}
         activeCount={activeCount}
+        isLaunching={createLaunchingIds.length > 0 || isImportingGraph}
         maxConcurrent={MAX_CONCURRENT}
         quantity={quantity}
         onPromptChange={setPrompt}

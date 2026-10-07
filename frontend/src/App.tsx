@@ -8,6 +8,7 @@ import { AssetsPanel } from './components/panels/AssetsPanel';
 import { RunHistoryPanel } from './components/panels/RunHistoryPanel';
 import { Settings } from './components/panels/Settings';
 import { Toolbar } from './components/panels/Toolbar';
+import { GraphFileActions } from './components/GraphFileActions';
 import { WorkspaceRail } from './components/WorkspaceRail';
 import { ChatLauncher } from './components/ChatLauncher';
 import { NodeInspectorPopover } from './components/panels/NodeInspectorPopover';
@@ -28,9 +29,7 @@ import { computeCanvasFitPadding } from './lib/canvasFit';
 import type { NodeData } from './types';
 import './App.css';
 import './styles/layouts.css';
-// Skin stylesheets — each scoped under its own body class so multiple can
-// coexist without leakage. Loaded once at the app root so the active skin's
-// CSS is always available the moment uiStore.setSkin flips the body class.
+// The single supported appearance is available to every workspace.
 import './styles/slava-restraint.css';
 
 // Alternate studios carry large, view-specific dependencies (Remotion,
@@ -287,6 +286,7 @@ export default function App() {
       <BackendConnectionStatus />
       <ProviderRecoveryStatus />
       <GraphHydrator />
+      <GraphFileActions />
       <ZoomManifestRecorder />
       {!isBrandShowcase && <CanvasTabs />}
       <Suspense
@@ -298,14 +298,17 @@ export default function App() {
       >
         {mainView}
       </Suspense>
-      {/* Canvas-only chrome: library, inspector, settings, launchers, toolbar, agent log.
-          The editor view is a focused workspace — only the pill control and chat remain. */}
+      {/* Canvas chrome stays scoped; Settings and Chat are shared workspace docks. */}
       {isCanvas && <NodeLibrary />}
       {isCanvas && assetsPanelVisible && <AssetsPanel />}
       {isCanvas && <RunHistoryPanel />}
       {isCanvas && <NodeInspectorPopover />}
-      {(isCanvas || isCreate) && <Settings />}
-      {!isBrandShowcase && <ChatPanel />}
+      {!isBrandShowcase && (
+        <div className={`workspace-overlays${isCanvas ? '' : ' workspace-overlays--studio'}`}>
+          <Settings />
+          <ChatPanel />
+        </div>
+      )}
       {isCanvas && <WorkspaceRail />}
       {isCanvas && <ChatLauncher />}
       {isCanvas && <Toolbar />}

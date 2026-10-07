@@ -1,4 +1,4 @@
-import { useEffect, useCallback } from 'react';
+import { useCallback } from 'react';
 import { useReactFlow } from '@xyflow/react';
 import {
   FolderOpen,
@@ -14,7 +14,7 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
-import { saveToFile, loadFromFile } from '../../lib/graphFile';
+import { canLoadGraph, canSaveGraph, requestGraphLoad, requestGraphSave } from '../../lib/graphFileActions';
 import { fetchCLIGraph } from '../../lib/api';
 import { apiFetch } from '../../lib/backend';
 import { computeCanvasFitPadding } from '../../lib/canvasFit';
@@ -23,82 +23,29 @@ import type { Edge, Node } from '@xyflow/react';
 import '../../styles/panels.css';
 
 export function Toolbar() {
-  const { fitView, getViewport } = useReactFlow();
+  const { fitView } = useReactFlow();
   const executeGraph = useGraphStore((s) => s.executeGraph);
   const cancelExecution = useGraphStore((s) => s.cancelExecution);
   const isExecuting = useGraphStore((s) => s.isExecuting);
+  const isImportingGraph = useGraphStore((s) => s.isImportingGraph);
   const isCancelling = useGraphStore((s) => s.isCancelling);
+  const canSave = useGraphStore(canSaveGraph);
+  const canLoad = useGraphStore(canLoadGraph);
+  const isPreparing = useGraphStore((s) => s.createLaunchingIds.length > 0);
   const providerStartAmbiguities = useGraphStore((s) => s.providerStartAmbiguities);
   const nodeCount = useGraphStore((s) => s.nodes.length);
   const autoLayout = useGraphStore((s) => s.autoLayout);
   const resetPanelLayout = useUIStore((s) => s.resetPanelLayout);
 
-  const handleSave = useCallback(async () => {
-    const { nodes, edges, isExecuting: executing, providerStartAmbiguities: ambiguities } = useGraphStore.getState();
-    // Never serialize a pre-checkpoint paid node while its start is unsettled.
-    // Recovery hydration overlays durable IDs onto live params; an ambiguity
-    // has no safe ID and remains unsaveable until Marble is checked.
-    if (executing || ambiguities.length > 0) return;
-    const viewport = getViewport();
-    await saveToFile(nodes as Node<NodeData>[], edges, viewport);
-  }, [getViewport]);
-
-  const handleLoad = useCallback(async () => {
-    if (useGraphStore.getState().isExecuting) return;
-    const result = await loadFromFile();
-    if (!result) return; // User cancelled
-    // The file picker may have stayed open while a run started elsewhere.
-    if (useGraphStore.getState().isExecuting) return;
-
-    if (result.warnings.length > 0) {
-      console.warn('[nebula] Load warnings:', result.warnings);
-    }
-
-    // Validate and replace the backend graph first. The local canvas remains
-    // untouched until the backend confirms the whole import succeeded.
-    try {
-      const res = await apiFetch('/api/graph/import', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          nodes: result.nodes.map((n) => ({
-            id: n.id,
-            definitionId: (n.data as { definitionId: string }).definitionId,
-            params: (n.data as { params?: Record<string, unknown> }).params ?? {},
-            outputs: (n.data as { outputs?: Record<string, unknown> }).outputs ?? {},
-            position: { x: n.position.x, y: n.position.y },
-          })),
-          edges: result.edges.map((e) => ({
-            source: e.source,
-            sourceHandle: e.sourceHandle ?? '',
-            target: e.target,
-            targetHandle: e.targetHandle ?? '',
-          })),
-        }),
-      });
-      if (!res.ok) {
-        let detail = '';
-        try { detail = (await res.json()).detail ?? ''; } catch { /* status fallback */ }
-        throw new Error(detail || `Import failed: ${res.status}`);
-      }
-      const imported = (await res.json()) as { nodes: Node<NodeData>[]; edges: Edge[] };
-      useGraphStore.getState().loadGraph(imported.nodes, imported.edges);
-      setTimeout(() => fitView({ padding: computeCanvasFitPadding(), duration: 300 }), 120);
-    } catch (err) {
-      console.error('Graph import failed; existing graph preserved:', err);
-      alert(err instanceof Error ? err.message : 'Graph import failed. Existing graph was preserved.');
-    }
-  }, [fitView]);
-
   const handleClear = useCallback(async () => {
-    if (useGraphStore.getState().isExecuting) return;
+    if (!canLoadGraph(useGraphStore.getState())) return;
     const { nodes } = useGraphStore.getState();
     const msg =
       nodes.length > 0
         ? `Clear the canvas and wipe cli_graph? ${nodes.length} node${nodes.length === 1 ? '' : 's'} will be removed. This can't be undone from here (save first if you want a copy).`
         : `Wipe cli_graph? This removes any phantom nodes from prior sessions.`;
     if (!window.confirm(msg)) return;
-    if (useGraphStore.getState().isExecuting) return;
+    if (!canLoadGraph(useGraphStore.getState())) return;
     // Confirm the backend clear before replacing the local graph. The backend
     // rejects this while any tracked execution owns provider lifecycle state.
     try {
@@ -143,10 +90,10 @@ export function Toolbar() {
   }, [resetPanelLayout]);
 
   const handleImportCLI = useCallback(async () => {
-    if (useGraphStore.getState().isExecuting) return;
+    if (!canLoadGraph(useGraphStore.getState())) return;
     try {
       const data = await fetchCLIGraph();
-      if (useGraphStore.getState().isExecuting) return;
+      if (!canLoadGraph(useGraphStore.getState())) return;
       if (data.empty) {
         alert('CLI graph is empty — build one with the nebula CLI first.');
         return;
@@ -160,22 +107,6 @@ export function Toolbar() {
       alert('Could not fetch CLI graph — is the backend running?');
     }
   }, [fitView]);
-
-  // Listen for custom events from keyboard shortcuts (Ctrl+S, Ctrl+O)
-  useEffect(() => {
-    function onSave() {
-      handleSave();
-    }
-    function onLoad() {
-      handleLoad();
-    }
-    window.addEventListener('nebula:save', onSave);
-    window.addEventListener('nebula:load', onLoad);
-    return () => {
-      window.removeEventListener('nebula:save', onSave);
-      window.removeEventListener('nebula:load', onLoad);
-    };
-  }, [handleSave, handleLoad]);
 
   return (
     <div className="toolbar">
@@ -194,8 +125,8 @@ export function Toolbar() {
         <button
           className="toolbar__button"
           onClick={() => executeGraph()}
-          disabled={nodeCount === 0}
-          title="Run graph (Ctrl+Enter)"
+          disabled={nodeCount === 0 || isImportingGraph}
+          title={isImportingGraph ? 'Wait for the graph import to finish' : 'Run graph (Ctrl+Enter)'}
         >
           <ToolbarIcon name="run" />
           <span className="toolbar__label">Run</span>
@@ -204,9 +135,11 @@ export function Toolbar() {
       <div className="toolbar__divider" />
       <button
         className="toolbar__button"
-        onClick={handleSave}
-        disabled={isExecuting || providerStartAmbiguities.length > 0}
-        title={isExecuting
+        onClick={requestGraphSave}
+        disabled={!canSave}
+        title={isPreparing
+          ? 'Wait for generation preparation to finish before saving'
+          : isExecuting
           ? 'Wait for the active run to finish before saving'
           : providerStartAmbiguities.length > 0
             ? 'Resolve the World Labs paid-start review before saving'
@@ -217,9 +150,9 @@ export function Toolbar() {
       </button>
       <button
         className="toolbar__button"
-        onClick={handleLoad}
-        disabled={isExecuting}
-        title={isExecuting ? 'Wait for the active run to finish' : 'Load graph (Ctrl+O)'}
+        onClick={requestGraphLoad}
+        disabled={!canLoad}
+        title={isPreparing ? 'Wait for generation preparation to finish' : isExecuting ? 'Wait for the active run to finish' : 'Load graph (Ctrl+O)'}
       >
         <ToolbarIcon name="load" />
         <span className="toolbar__label">Load</span>
@@ -227,7 +160,7 @@ export function Toolbar() {
       <button
         className="toolbar__button"
         onClick={handleImportCLI}
-        disabled={isExecuting}
+        disabled={!canLoad}
         title={isExecuting ? 'Wait for the active run to finish' : 'Import graph built by nebula CLI'}
       >
         <ToolbarIcon name="cli" />
@@ -236,7 +169,7 @@ export function Toolbar() {
       <button
         className="toolbar__button"
         onClick={() => void handleClear()}
-        disabled={isExecuting}
+        disabled={!canLoad}
         title={isExecuting ? 'Wait for the active run to finish' : 'Clear canvas and backend cli_graph'}
       >
         <ToolbarIcon name="clear" />

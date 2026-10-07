@@ -1,7 +1,8 @@
 import JSZip from 'jszip';
 import type { Node, Edge, Viewport } from '@xyflow/react';
-import type { NodeData, NodeState } from '../types';
+import type { DynamicNodeData, NodeData, NodeState } from '../types';
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
+import { shotPortId } from '../constants/ports';
 import { apiFetch, backendAssetUrlSync, getCachedBackendBaseUrl } from './backend';
 import { AssetByteLimitError, readBoundedAssetResponse } from './boundedAsset';
 import {
@@ -222,17 +223,39 @@ export function deserializeGraph(
     const hasOutputs = Object.keys(outputs).length > 0;
     // v2+: trust saved state (complete if outputs present). v1: always idle, no outputs.
     const state = hasOutputs ? (n.data.state ?? 'complete') : 'idle';
+    const params = normalizeRuntimeMediaParams(n.data.definitionId, n.data.params);
+    const data: NodeData = {
+      label: n.data.label,
+      definitionId: n.data.definitionId,
+      params,
+      state,
+      outputs,
+    };
+    if (n.data.definitionId === 'cinema-scene') {
+      // These handles are derived from the saved shot identities, not runtime
+      // metadata. Restore them so visible shots can be wired after import.
+      const scene = params.scene as { shots?: unknown } | null | undefined;
+      const shots = Array.isArray(scene?.shots) ? scene.shots : [];
+      const dynamic: Partial<DynamicNodeData> = {
+        isDynamic: true,
+        providerType: 'fal', // inert for the custom Cinema node
+        dynamicInputPorts: definition?.inputPorts ?? [],
+        dynamicOutputPorts: shots.flatMap((shot: unknown, index: number) => {
+          if (!shot || typeof shot !== 'object' || !('id' in shot)
+            || typeof shot.id !== 'string' || !shot.id) return [];
+          return [{ id: shotPortId(shot.id), label: `Shot ${index + 1}`,
+            dataType: 'Image', required: false }];
+        }),
+        dynamicParams: [],
+        providerMeta: {},
+      };
+      Object.assign(data, dynamic);
+    }
     return {
       id: n.id,
       type: n.type,
       position: n.position,
-      data: {
-        label: n.data.label,
-        definitionId: n.data.definitionId,
-        params: normalizeRuntimeMediaParams(n.data.definitionId, n.data.params),
-        state,
-        outputs,
-      },
+      data,
     };
   });
 

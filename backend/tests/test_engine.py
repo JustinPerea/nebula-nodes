@@ -374,7 +374,7 @@ class TestVideoOutputProbe:
         assert node.params["_sourceIsVfr"] is False
 
     @pytest.mark.asyncio
-    async def test_skips_when_sourceDuration_already_set(self, tmp_path, monkeypatch):
+    async def test_replacement_refreshes_previous_source_metadata(self, tmp_path, monkeypatch):
         from unittest.mock import AsyncMock, patch
         from execution.engine import _maybe_probe_video_output
 
@@ -383,12 +383,80 @@ class TestVideoOutputProbe:
         node = GraphNode(id="n1", definitionId="veo-3", params={"_sourceDuration": 5.0})
         outputs = {"video": {"type": "Video", "value": str(vid)}}
 
-        ffprobe_mock = AsyncMock()
+        probe = type("PR", (), {"duration": 8.0, "fps": 24.0, "is_vfr": False})()
+        ffprobe_mock = AsyncMock(return_value=probe)
         with patch("services.ffmpeg.ffprobe_video", ffprobe_mock):
             await _maybe_probe_video_output(node, outputs)
 
-        ffprobe_mock.assert_not_called()
-        assert node.params["_sourceDuration"] == 5.0  # untouched
+        ffprobe_mock.assert_awaited_once_with(vid)
+        assert node.params["_sourceDuration"] == 8.0
+
+    @pytest.mark.asyncio
+    async def test_portable_video_output_is_resolved_and_probed(self):
+        from unittest.mock import AsyncMock, patch
+        from uuid import uuid4
+        from execution.engine import _maybe_probe_video_output
+        from services.output import OUTPUT_ROOT, portable_output_ref
+
+        vid = OUTPUT_ROOT / f"{uuid4().hex}.mp4"
+        vid.parent.mkdir(parents=True, exist_ok=True)
+        vid.write_bytes(b"fake")
+        node = GraphNode(id="n1", definitionId="veo-3", params={"sourceDuration": 2})
+        probe = type("PR", (), {"duration": 5.0, "fps": 30.0, "is_vfr": False})()
+        mocked = AsyncMock(return_value=probe)
+        with patch("services.ffmpeg.ffprobe_video", mocked):
+            await _maybe_probe_video_output(node, {"video": {"type": "Video", "value": portable_output_ref(str(vid))}})
+        mocked.assert_awaited_once_with(vid.resolve())
+        assert node.params["_sourceDuration"] == 5
+        assert "sourceDuration" not in node.params
+
+    @pytest.mark.asyncio
+    async def test_video_edit_output_metadata_does_not_replace_upstream_timeline(self, tmp_path):
+        from unittest.mock import AsyncMock, patch
+        from execution.engine import _maybe_probe_video_output
+
+        vid = tmp_path / "edited.mp4"
+        vid.write_bytes(b"fake")
+        node = GraphNode(id="n1", definitionId="video-edit", params={"sourceDuration": 8.0, "_sourceDuration": 5})
+        probe = type("PR", (), {"duration": 2.0, "fps": 24.0, "is_vfr": False})()
+        with patch("services.ffmpeg.ffprobe_video", AsyncMock(return_value=probe)):
+            await _maybe_probe_video_output(node, {"video": {"type": "Video", "value": str(vid)}})
+        assert node.params["sourceDuration"] == 8
+        assert node.params["_sourceDuration"] == 2
+
+    @pytest.mark.asyncio
+    async def test_failed_replacement_probe_clears_stale_metadata(self, tmp_path):
+        from unittest.mock import AsyncMock, patch
+        from execution.engine import _maybe_probe_video_output
+
+        vid = tmp_path / "broken.mp4"
+        vid.write_bytes(b"fake")
+        node = GraphNode(id="n1", definitionId="veo-3", params={"_sourceDuration": 5, "_sourceFps": 24, "_sourceIsVfr": True})
+        with patch("services.ffmpeg.ffprobe_video", AsyncMock(side_effect=RuntimeError("broken video"))):
+            await _maybe_probe_video_output(node, {"video": {"type": "Video", "value": str(vid)}})
+        assert all(key not in node.params for key in ["_sourceDuration", "_sourceFps", "_sourceIsVfr"])
+
+    @pytest.mark.asyncio
+    async def test_cache_hit_reprobes_current_video_before_emitting(self):
+        from unittest.mock import AsyncMock, patch
+        from uuid import uuid4
+        from services.cache import ExecutionCache
+        from services.output import OUTPUT_ROOT
+
+        vid = OUTPUT_ROOT / f"{uuid4().hex}.mp4"
+        vid.parent.mkdir(parents=True, exist_ok=True)
+        vid.write_bytes(b"fake")
+        node = GraphNode(id="n1", definitionId="veo-3", params={"_sourceDuration": 2})
+        cache = ExecutionCache()
+        cache.set(cache.get_key("veo-3", node.params, {}), {"video": {"type": "Video", "value": str(vid)}})
+        handler = AsyncMock()
+        probe = type("PR", (), {"duration": 5.0, "fps": 30.0, "is_vfr": False})()
+        async def emit(_event):
+            pass
+        with patch("services.ffmpeg.ffprobe_video", AsyncMock(return_value=probe)):
+            await execute_graph([node], [], {}, {"veo-3": handler}, emit, cache=cache)
+        handler.assert_not_called()
+        assert node.params["_sourceDuration"] == 5
 
     @pytest.mark.asyncio
     async def test_skips_remote_urls(self, tmp_path, monkeypatch):

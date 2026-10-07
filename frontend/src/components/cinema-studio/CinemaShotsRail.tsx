@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { backendAssetUrlSync } from '../../lib/backend';
+import { useGraphStore } from '../../store/graphStore';
 import type { CinemaSceneSpec, CinemaShot } from '../../types';
 
 interface CinemaShotsRailProps {
+  cinemaNodeId: string;
   scene: CinemaSceneSpec;
   selectedShotId: string | null;
   onSelect: (shotId: string) => void;
@@ -12,15 +14,16 @@ interface CinemaShotsRailProps {
   onReorder: (shots: CinemaShot[]) => void;
 }
 
-function statusBadge(shot: CinemaShot): { label: string; cls: string } | null {
+function statusBadge(shot: CinemaShot): { label: string; cls: string; description: string } | null {
   const status = shot.output?.status;
   if (!status || status === 'idle') return null;
-  if (status === 'running') return { label: '●', cls: 'cinema-shots-rail__badge--running' };
-  if (status === 'done') return { label: '✓', cls: 'cinema-shots-rail__badge--done' };
-  return { label: '⚠', cls: 'cinema-shots-rail__badge--error' };
+  if (status === 'running') return { label: '●', cls: 'cinema-shots-rail__badge--running', description: 'Generating' };
+  if (status === 'done') return { label: '✓', cls: 'cinema-shots-rail__badge--done', description: 'Complete' };
+  return { label: '⚠', cls: 'cinema-shots-rail__badge--error', description: 'Failed' };
 }
 
 export function CinemaShotsRail({
+  cinemaNodeId,
   scene,
   selectedShotId,
   onSelect,
@@ -29,6 +32,7 @@ export function CinemaShotsRail({
   onReorder,
 }: CinemaShotsRailProps) {
   const [dragId, setDragId] = useState<string | null>(null);
+  const activeRuns = useGraphStore((state) => state.activeRuns);
 
   const handleDrop = (targetId: string) => {
     if (!dragId || dragId === targetId) {
@@ -51,7 +55,12 @@ export function CinemaShotsRail({
   return (
     <div className="cinema-shots-rail">
       {scene.shots.map((shot, idx) => {
-        const badge = statusBadge(shot);
+        const owner = activeRuns.find((run) => run.nodeIds.includes(cinemaNodeId)
+          && (run.kind === 'graph' || run.shotId === shot.id));
+        const badge = owner ? {
+          label: '●', cls: 'cinema-shots-rail__badge--running',
+          description: owner.status === 'cancelling' ? 'Stopping' : 'Generating',
+        } : statusBadge(shot);
         const thumb = shot.output?.imageUrl ?? null;
         return (
           <div
@@ -71,7 +80,8 @@ export function CinemaShotsRail({
               ) : (
                 <div className="cinema-shots-rail__thumb-empty">{idx + 1}</div>
               )}
-              {badge && <span className={`cinema-shots-rail__badge ${badge.cls}`}>{badge.label}</span>}
+              {badge && <span role="status" aria-label={`${badge.description} Shot ${idx + 1}`}
+                className={`cinema-shots-rail__badge ${badge.cls}`}>{badge.label}</span>}
             </div>
             <div className="cinema-shots-rail__caption">
               <span className="cinema-shots-rail__num">Shot {idx + 1}</span>

@@ -10,7 +10,7 @@ Use `scripts/capture-nebula-ui.mjs` as the template. It uses the repo's own Pupp
 
 | Global | Use |
 |---|---|
-| `window.__nebulaUIStore` | Zustand UI store. `getState().setSkin('slava-restraint')`, `setState(st => ({ panels: {...}, chatResized: true, ... }))`. |
+| `window.__nebulaUIStore` | Zustand UI store. `setState(st => ({ panels: {...}, chatResized: true, ... }))`. |
 | `window.__nebulaGraphStore` | Graph store. `setState({ nodes, edges, isExecuting })` to build any graph instantly. `getState().addNode(...)`, `clearGraph()`. |
 | `window.__nebulaCanvas` | `getViewport()`, `setViewport({x,y,zoom})`, `centerOn`, `zoomTo` — frame the graph precisely. |
 | `window.__nebulaChat` | DEV chat bridge: `clear()`, `setInput(t)`, `pushUser(t, {images})`, `pushAssistant(t, {streaming})`, `pushThinking(lines)`, `setBusy(b)`. |
@@ -19,7 +19,7 @@ Use `scripts/capture-nebula-ui.mjs` as the template. It uses the repo's own Pupp
 
 ## Building real states
 
-**Slava skin:** `ui.getState().setSkin('slava-restraint')` (it's the default; body gets `app-slava-restraint`).
+**Appearance:** Slava Restraint is always applied; the body has `app-slava-restraint`.
 
 **A graph** — `graphStore.setState` with genuine `definitionId`s so it renders as the real product:
 ```js

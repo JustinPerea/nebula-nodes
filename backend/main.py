@@ -78,6 +78,7 @@ from services.cli_graph import CLIGraph
 from services.port_contracts import (
     ContractEdge,
     ContractNode,
+    cinema_output_ports,
     validate_edge_contracts,
 )
 from services.output import OUTPUT_ROOT, DEFAULT_OUTPUT_ROOT, resolve_output_ref, ManifestError, find_output_record, read_manifest
@@ -1262,13 +1263,16 @@ def _validate_imported_outputs(
     outputs: dict[str, Any],
     *,
     node_index: int,
+    params: dict[str, Any] | None = None,
 ) -> None:
     """Reject fabricated output handles/types before staging graph state."""
 
     definition = node_registry.get(definition_id) or {}
+    output_ports = (cinema_output_ports(params) if definition_id == "cinema-scene"
+                    else definition.get("outputPorts", []) or [])
     declared_ports = {
         str(port["id"]): str(port.get("dataType") or "Any")
-        for port in definition.get("outputPorts", []) or []
+        for port in output_ports
         if isinstance(port, dict) and isinstance(port.get("id"), str)
     }
     handles_are_dynamic = (
@@ -3720,7 +3724,13 @@ async def _emit_and_sync(event: ExecutionEvent) -> None:
         # those paths are not browser-loadable and may live under a relocated
         # output root whose directory name is not literally ``output``.
         normalized_outputs = _sync_outputs_to_cli_graph(event.node_id, event.outputs)
-        event = event.model_copy(update={"outputs": normalized_outputs})
+        updates: dict[str, Any] = {"outputs": normalized_outputs}
+        if event.batch_outputs is not None:
+            updates["batch_outputs"] = [
+                _normalize_outputs_for_storage(snapshot)
+                for snapshot in event.batch_outputs
+            ]
+        event = event.model_copy(update=updates)
     await manager.broadcast(event)
 
 
@@ -3833,6 +3843,7 @@ def _validate_connect_handles(
         ContractNode(
             node_id=node_id,
             definition_id=str(node.get("definitionId") or ""),
+            params=node.get("params"),
         )
         for node_id, node in target_graph.nodes.items()
     ]
@@ -4625,6 +4636,7 @@ def _stage_graph_nodes(
                     definition_id,
                     raw_outputs,
                     node_index=index,
+                    params=params,
                 )
                 outputs = _normalize_outputs_for_storage(raw_outputs)
             except ValueError as exc:
@@ -4729,6 +4741,16 @@ async def import_graph(body: dict[str, Any]) -> dict:
     _stage_graph_edges(candidate, raw_edges, id_map)
     with _paid_graph_mutation("replace the graph"):
         _reject_graph_replacement_during_paid_start("replace the graph")
+        if execution_runs.has_active():
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "Cannot replace the graph while a run is active. "
+                    "Stop the run and wait for its terminal state first."
+                ),
+            )
+        # Check and commit are synchronous on this event loop. No other graph
+        # or Cinema task can be admitted between this fence and replacement.
         _commit_graph_candidate_with_recoveries(
             candidate,
             list(candidate.nodes.values()),
@@ -4916,6 +4938,17 @@ def _cli_node_to_rf(n: dict[str, Any], position: dict[str, float], all_defs: dic
             "modelId": params.get("model") or params.get("model_id") or params.get("endpoint_id"),
             "dynamicInputPorts": defn.get("inputPorts", []),
             "dynamicOutputPorts": defn.get("outputPorts", []),
+            "dynamicParams": [],
+            "providerMeta": {},
+        })
+    elif definition_id == "cinema-scene":
+        # Saved scenes retain shot identities but not runtime port metadata.
+        # Rebuild the visible shot handles for imports and graphSync alike.
+        data.update({
+            "isDynamic": True,
+            "providerType": "fal",  # inert for the custom Cinema node
+            "dynamicInputPorts": defn.get("inputPorts", []),
+            "dynamicOutputPorts": cinema_output_ports(params),
             "dynamicParams": [],
             "providerMeta": {},
         })

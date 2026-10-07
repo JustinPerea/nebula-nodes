@@ -4,6 +4,7 @@ import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
 import { useDelayedUnmount } from '../../hooks/useDelayedUnmount';
 import { PaperRunInspection } from './PaperRunInspection';
+import { BatchRunInspection } from './BatchRunInspection';
 import type { PaperSourceRecord } from '../../lib/paperSource';
 import {
   formatRunAge,
@@ -212,6 +213,7 @@ export function RunHistoryPanel() {
                     </span>
                   )}
                   <PaperRunInspection record={r} />
+                  <BatchRunInspection record={r} />
                   {r.status !== 'running' && !recoveryReplayBlocked && (
                     <span className="run-history__item-actions">
                       <button

@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { ArrowUp, ChevronDown, ChevronRight, ExternalLink, LogIn, Square, X } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
 import { useDelayedUnmount } from '../../hooks/useDelayedUnmount';
+import { usePanelFocus } from '../../hooks/usePanelFocus';
 import '../../styles/panels.css';
-import '../../styles/hermes.css';
 import {
   fetchClaudeStatus,
   fetchCodexChatGPTLoginState,
@@ -18,7 +17,6 @@ import {
   type NousModel,
 } from '../../lib/api';
 import { apiFetch, backendAssetUrlSync, backendWebSocketUrl } from '../../lib/backend';
-import type { SkinId } from '../../lib/skins';
 import { normalizeAgentEventSource } from '../../lib/agentEvents';
 import {
   chatCancellationDisconnectNotice,
@@ -28,18 +26,7 @@ import {
   type ChatCancellationState,
 } from '../../lib/chatCancellation';
 
-// Daedalus mode palette. Persisted so the user's choice survives reloads.
 type ChatAgent = 'claude' | 'codex' | 'daedalus';
-type HermesTone = 'verdant' | 'obsidian';
-const HERMES_TONE_KEY = 'nebula:hermes-tone';
-function loadHermesTone(): HermesTone {
-  try {
-    const v = window.localStorage.getItem(HERMES_TONE_KEY);
-    return v === 'obsidian' ? 'obsidian' : 'verdant';
-  } catch {
-    return 'verdant';
-  }
-}
 
 // Daedalus model picker — separate from Claude's `model` state because the
 // frontend chat panel reuses the same WS for both agents and we want each
@@ -402,18 +389,10 @@ export function ChatPanel() {
   const [model, setModel] = useState<string>(DEFAULT_MODEL);
   const [agent, setAgent] = useState<ChatAgent>('claude');
   const [autonomy, setAutonomy] = useState<'auto' | 'step'>('auto');
-  const [hermesTone, setHermesTone] = useState<HermesTone>(loadHermesTone);
-  // Bumped on every claude→daedalus transition so the sigil-bloom FX
-  // remounts via React key and replays the keyframe animation cleanly.
-  const [bloomKey, setBloomKey] = useState(0);
-  // Center of the chat panel at FX-fire time, captured so the portalled
-  // bloom can position itself relative to the panel even though it
-  // renders in document.body and escapes the panel's overflow:hidden.
-  const [bloomCenter, setBloomCenter] = useState<{ x: number; y: number } | null>(null);
   const chatPanelRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const skinBeforeDaedalusRef = useRef<SkinId | null>(null);
-  const daedalusChangedSkinRef = useRef(false);
+  usePanelFocus(visible && shouldRender, chatPanelRef,
+    () => useUIStore.getState().togglePanel('chat'), { initialFocus: 'textarea' });
 
   // Auto-grow the textarea as the user types so the full prompt is visible
   // (instead of scrolling inside a fixed 2-row box). Capped at 200px so a
@@ -424,47 +403,6 @@ export function ChatPanel() {
     ta.style.height = 'auto';
     ta.style.height = `${Math.min(ta.scrollHeight, 200)}px`;
   }, [input]);
-
-  // Toggle a body-level class while the sigil bloom is firing so a
-  // full-screen veil can dim everything except the chat panel for the
-  // duration of the FX. Auto-clears after the animation completes.
-  useEffect(() => {
-    if (bloomKey === 0) return;
-    const body = document.body;
-    body.classList.add('chat-bloom-active');
-    const t = window.setTimeout(() => {
-      body.classList.remove('chat-bloom-active');
-    }, 2750);
-    return () => {
-      window.clearTimeout(t);
-      body.classList.remove('chat-bloom-active');
-    };
-  }, [bloomKey]);
-
-  // Hermes tone (Verdant/Obsidian) is a sub-option of the Hermes skin. Settings
-  // still owns manual skin selection, but the Daedalus agent button can enter
-  // Hermes mode temporarily so the character-specific animation actually plays.
-  const activeSkin = useUIStore((s) => s.skin);
-  const setSkin = useUIStore((s) => s.setSkin);
-  useEffect(() => {
-    const body = document.body;
-    if (activeSkin === 'hermes') {
-      body.classList.toggle('tone-verdant', hermesTone === 'verdant');
-      body.classList.toggle('tone-obsidian', hermesTone === 'obsidian');
-    } else {
-      body.classList.remove('tone-verdant', 'tone-obsidian');
-    }
-    return () => {
-      body.classList.remove('tone-verdant', 'tone-obsidian');
-    };
-  }, [activeSkin, hermesTone]);
-
-  const changeHermesTone = useCallback((next: HermesTone) => {
-    setHermesTone(next);
-    try { window.localStorage.setItem(HERMES_TONE_KEY, next); } catch {
-      /* localStorage may be unavailable in private contexts. */
-    }
-  }, []);
 
   // Daedalus model picker state
   const [daedalusModel, setDaedalusModel] = useState<string>(loadDaedalusModel);
@@ -797,40 +735,10 @@ export function ChatPanel() {
     (next: ChatAgent) => {
       if (next === agent) return;
 
-      if (next === 'daedalus') {
-        if (activeSkin !== 'hermes') {
-          skinBeforeDaedalusRef.current = activeSkin;
-          daedalusChangedSkinRef.current = true;
-          setSkin('hermes');
-        } else {
-          daedalusChangedSkinRef.current = false;
-          skinBeforeDaedalusRef.current = null;
-        }
-      } else if (daedalusChangedSkinRef.current) {
-        if (activeSkin === 'hermes') {
-          setSkin(skinBeforeDaedalusRef.current ?? 'slava-restraint');
-        }
-        daedalusChangedSkinRef.current = false;
-        skinBeforeDaedalusRef.current = null;
-      }
-
       setAgent(next);
       setSessionId(null);
-      // Fire the sigil-bloom only on the awakening transition, not when
-      // returning to plain Claude. Capture chat panel center so the
-      // portalled bloom can radiate outward from the panel's midpoint.
-      if (next === 'daedalus') {
-        const rect = chatPanelRef.current?.getBoundingClientRect();
-        if (rect) {
-          setBloomCenter({
-            x: rect.left + rect.width / 2,
-            y: rect.top + rect.height / 2,
-          });
-        }
-        setBloomKey((k) => k + 1);
-      }
     },
-    [activeSkin, agent, setSkin],
+    [agent],
   );
 
   const wsRef = useRef<WebSocket | null>(null);
@@ -1750,6 +1658,8 @@ export function ChatPanel() {
   return (
     <div
       ref={chatPanelRef}
+      role="dialog"
+      aria-label="Chat"
       className={`chat-panel chat-panel--agent-${agent}${isFreePositioned ? ' chat-panel--free' : ''}${exiting ? ' chat-panel--exiting' : ''}`}
       style={panelStyle}
       onMouseDown={startPanelDrag}
@@ -1760,27 +1670,6 @@ export function ChatPanel() {
       data-chat-message-count={messages.length}
       data-chat-pending-image-count={pendingImages.length}
     >
-      {/* Daedalus sigil-bloom FX — Hermes-only, fires on agent transition.
-       * Rendered via portal to document.body so the rings/glow can
-       * radiate beyond the chat panel's overflow:hidden clipping
-       * boundary. Centered on the chat panel via captured rect. */}
-      {agent === 'daedalus' && bloomKey > 0 && bloomCenter && createPortal(
-        <div
-          className="hermes-bloom-portal"
-          key={bloomKey}
-          aria-hidden="true"
-          style={{
-            ['--bloom-x' as never]: `${bloomCenter.x}px`,
-            ['--bloom-y' as never]: `${bloomCenter.y}px`,
-          }}
-        >
-          <span className="hermes-bloom-portal__glow" />
-          <span className="hermes-bloom-portal__ring" />
-          <span className="hermes-bloom-portal__ring hermes-bloom-portal__ring--late" />
-          <span className="hermes-bloom-portal__sigil" />
-        </div>,
-        document.body,
-      )}
       {/* Edges */}
       <div className="chat-panel__resize-handle chat-panel__resize-handle--left" onMouseDown={(e) => startResize(e, 'l')} title="Drag to resize width" />
       <div className="chat-panel__resize-handle chat-panel__resize-handle--right" onMouseDown={(e) => startResize(e, 'r')} title="Drag to resize width" />
@@ -1860,36 +1749,6 @@ export function ChatPanel() {
                 title="Step Approval: Daedalus pauses before expensive operations"
               >
                 Step ⏸
-              </button>
-            </div>
-          )}
-          {agent === 'daedalus' && (
-            <div
-              className="chat-panel__tone-toggle"
-              onMouseDown={(e) => e.stopPropagation()}
-              title="Daedalus palette: Verdant (deep green-black) or Obsidian (pure black + muted gold)"
-            >
-              <button
-                type="button"
-                className={
-                  hermesTone === 'verdant'
-                    ? 'chat-panel__tone-btn--active'
-                    : 'chat-panel__tone-btn'
-                }
-                onClick={() => changeHermesTone('verdant')}
-              >
-                Verdant
-              </button>
-              <button
-                type="button"
-                className={
-                  hermesTone === 'obsidian'
-                    ? 'chat-panel__tone-btn--active'
-                    : 'chat-panel__tone-btn'
-                }
-                onClick={() => changeHermesTone('obsidian')}
-              >
-                Obsidian
               </button>
             </div>
           )}

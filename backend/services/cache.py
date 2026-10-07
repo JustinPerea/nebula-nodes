@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import time
@@ -41,7 +42,7 @@ def _cached_artifacts_exist(value: Any) -> bool:
 
 class ExecutionCache:
     def __init__(self, ttl: int = 3600) -> None:
-        self._store: dict[str, tuple[dict[str, Any], float]] = {}
+        self._store: dict[str, tuple[dict[str, Any], float, dict[str, Any] | None]] = {}
         self._ttl = ttl
 
     @staticmethod
@@ -60,7 +61,7 @@ class ExecutionCache:
         entry = self._store.get(key)
         if entry is None:
             return None
-        outputs, timestamp = entry
+        outputs, timestamp, _params = entry
         if time.monotonic() - timestamp > self._ttl:
             del self._store[key]
             return None
@@ -69,8 +70,18 @@ class ExecutionCache:
             return None
         return outputs
 
-    def set(self, key: str, outputs: dict[str, Any]) -> None:
-        self._store[key] = (outputs, time.monotonic())
+    def get_effective_params(self, key: str) -> dict[str, Any] | None:
+        """Return retained artifact settings, independently of a live node recipe."""
+        if self.get(key) is None:
+            return None
+        params = self._store[key][2]
+        return copy.deepcopy(params) if params is not None else None
+
+    def set(self, key: str, outputs: dict[str, Any], *, effective_params: dict[str, Any] | None = None) -> None:
+        # Handlers may enrich a node's parameters with an effective seed or
+        # timeline. Keep that artifact provenance when a later run reuses it.
+        params = copy.deepcopy(effective_params) if effective_params is not None else None
+        self._store[key] = (outputs, time.monotonic(), params)
 
     def delete(self, key: str) -> None:
         self._store.pop(key, None)
