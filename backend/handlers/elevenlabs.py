@@ -9,6 +9,7 @@ from uuid import uuid4
 import httpx
 
 from models.graph import GraphNode, PortValueDict
+from services.file_access import require_allowed_path
 from services.cancellation import schedule_detached_cancel
 from services.output import get_run_dir
 
@@ -245,7 +246,7 @@ async def handle_elevenlabs_sts(
     audio_path = Path(str(audio_input.value))
     if not audio_path.exists():
         raise ValueError(f"Audio file not found: {audio_path}")
-    audio_bytes = audio_path.read_bytes()
+    audio_bytes = require_allowed_path(audio_path).read_bytes()
 
     url = f"https://api.elevenlabs.io/v1/speech-to-speech/{voice_id}"
     if output_format:
@@ -312,7 +313,7 @@ async def handle_elevenlabs_isolation(
     audio_path = Path(str(audio_input.value))
     if not audio_path.exists():
         raise ValueError(f"Audio file not found: {audio_path}")
-    audio_bytes = audio_path.read_bytes()
+    audio_bytes = require_allowed_path(audio_path).read_bytes()
 
     files = {"audio": (audio_path.name, audio_bytes, "audio/mpeg")}
 
@@ -348,7 +349,7 @@ async def handle_elevenlabs_dubbing(
     audio_path = Path(str(audio_input.value))
     if not audio_path.exists():
         raise ValueError(f"Audio file not found: {audio_path}")
-    audio_bytes = audio_path.read_bytes()
+    audio_bytes = require_allowed_path(audio_path).read_bytes()
 
     files = {"file": (audio_path.name, audio_bytes, "audio/mpeg")}
     data: dict[str, str] = {
@@ -419,7 +420,7 @@ async def handle_elevenlabs_stt(
 
     model_id = node.params.get("model_id", "scribe_v1") or "scribe_v1"
 
-    files = {"file": (audio_path.name, audio_path.read_bytes(), "audio/mpeg")}
+    files = {"file": (audio_path.name, require_allowed_path(audio_path).read_bytes(), "audio/mpeg")}
     data: dict[str, str] = {"model_id": model_id}
 
     language_code = node.params.get("language_code")

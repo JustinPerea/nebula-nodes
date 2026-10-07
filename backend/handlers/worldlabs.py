@@ -26,6 +26,7 @@ from models.events import (
     ProviderStartAmbiguousEvent,
 )
 from models.graph import GraphNode, PortValueDict
+from services.file_access import require_allowed_path
 from services.output import get_run_dir, resolve_output_ref
 from services.provider_start_guard import AMBIGUITY_MESSAGE
 
@@ -397,6 +398,7 @@ async def _upload_local_media(
     kind: str,
     headers: dict[str, str],
 ) -> dict[str, str]:
+    path = require_allowed_path(path)
     size = path.stat().st_size
     if size <= 0:
         raise ValueError(f"{kind.capitalize()} file is empty: {path}")

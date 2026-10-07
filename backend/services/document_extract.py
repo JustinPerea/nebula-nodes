@@ -42,7 +42,8 @@ def _extract_pdf(path: Path) -> str:
 def extract_text(path: Path | str) -> str:
     """Extract text from a document file. Raises UnsupportedDocumentError for
     unknown types; pypdf/IO errors propagate to the caller."""
-    p = Path(path)
+    from services.file_access import require_allowed_path
+    p = require_allowed_path(path)
     kind = classify_document(p.suffix)
     if kind == "pdf":
         return _extract_pdf(p)

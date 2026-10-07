@@ -1,0 +1,12 @@
+body.commons-labeling-page {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: #1c211d;
+  --sr-ink: #e5e9df;
+  --sr-edge: #536047;
+  --sr-accent: #cfe59c;
+  --sr-disabled-opacity: .4;
+}
+body.commons-labeling-page .commons-evaluation {
+  min-height: 100vh;
+}

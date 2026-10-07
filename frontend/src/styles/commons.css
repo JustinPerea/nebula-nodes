@@ -1,0 +1,950 @@
+/* Commons view (smart moodboard, phase 1). Every rule is scoped to the Slava restraint skin
+   and uses its --sr-* tokens, following moodboard-studio.css. Motion is a short spring
+   (cubic-bezier with overshoot, under 240 ms) and switches off for prefers-reduced-motion. */
+
+body.app-slava-restraint .commons-view {
+  --commons-spring: cubic-bezier(0.2, 0.9, 0.3, 1.2);
+  --commons-detail-w: 0px;
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  grid-template-rows: 44px auto auto minmax(0, 1fr);
+  grid-template-columns: 250px minmax(0, 1fr) var(--commons-detail-w);
+  grid-template-areas:
+    "toolbar toolbar toolbar"
+    "messages messages messages"
+    "candidates candidates candidates"
+    "filters main detail";
+  background: var(--sr-canvas);
+  color: var(--sr-ink);
+  font-family: var(--sr-ui);
+  font-size: 12px;
+  overflow: hidden;
+}
+
+body.app-slava-restraint .commons-view--detail {
+  --commons-detail-w: minmax(340px, 420px);
+}
+
+/* -- toolbar ------------------------------------------------------------------ */
+
+body.app-slava-restraint .commons-toolbar {
+  grid-area: toolbar;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--sr-edge-strong);
+  background: var(--sr-glass);
+  min-width: 0;
+}
+
+body.app-slava-restraint .commons-toolbar__title {
+  color: var(--sr-accent);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+body.app-slava-restraint .commons-spacer {
+  flex: 1;
+}
+
+body.app-slava-restraint .commons-tabs {
+  display: inline-flex;
+  gap: 2px;
+}
+
+body.app-slava-restraint .commons-tab {
+  border: 1px solid transparent;
+  border-radius: 2px;
+  background: none;
+  color: var(--sr-ink-meta);
+  font: inherit;
+  padding: 4px 10px;
+  cursor: pointer;
+  transition: color var(--sr-motion-fast), border-color var(--sr-motion-fast);
+}
+
+body.app-slava-restraint .commons-tab:hover {
+  color: var(--sr-ink);
+}
+
+body.app-slava-restraint .commons-tab--active {
+  color: var(--sr-ink);
+  border-color: var(--sr-edge-strong);
+}
+
+body.app-slava-restraint .commons-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid var(--sr-edge);
+  border-radius: 2px;
+  background: none;
+  color: var(--sr-ink);
+  padding: 4px 10px;
+  font: inherit;
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: border-color var(--sr-motion-fast), color var(--sr-motion-fast);
+}
+
+body.app-slava-restraint .commons-button:hover:not(:disabled) {
+  border-color: var(--sr-accent);
+  color: var(--sr-accent);
+}
+
+body.app-slava-restraint .commons-button:disabled {
+  opacity: var(--sr-disabled-opacity);
+  cursor: default;
+}
+
+body.app-slava-restraint .commons-button--primary {
+  border-color: var(--sr-accent-border);
+  color: var(--sr-accent);
+}
+
+body.app-slava-restraint .commons-button--danger {
+  border-color: var(--sr-danger-border);
+  color: var(--sr-danger);
+}
+
+body.app-slava-restraint .commons-link {
+  border: 0;
+  background: none;
+  color: var(--sr-ink-meta);
+  font: inherit;
+  font-size: 11px;
+  padding: 0 2px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+body.app-slava-restraint .commons-link:hover:not(:disabled) {
+  color: var(--sr-accent);
+}
+
+body.app-slava-restraint .commons-link:disabled {
+  opacity: var(--sr-disabled-opacity);
+  cursor: default;
+  text-decoration: none;
+}
+
+body.app-slava-restraint .commons-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--sr-ink-meta);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+body.app-slava-restraint .commons-status--stopped,
+body.app-slava-restraint .commons-status--cap_reached,
+body.app-slava-restraint .commons-status--paused_load,
+body.app-slava-restraint .commons-status--budget_exhausted {
+  color: var(--sr-pending);
+}
+
+body.app-slava-restraint .commons-add {
+  position: relative;
+}
+
+body.app-slava-restraint .commons-add__menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 320px;
+  padding: 10px;
+  border: 1px solid var(--sr-edge-strong);
+  border-radius: var(--sr-radius-panel);
+  background: var(--sr-glass-strong);
+  box-shadow: var(--sr-shadow-popover);
+  animation: commons-rise 200ms var(--commons-spring) both;
+}
+
+body.app-slava-restraint .commons-add__url {
+  display: flex;
+  gap: 6px;
+}
+
+/* -- fields -------------------------------------------------------------------- */
+
+body.app-slava-restraint .commons-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  color: var(--sr-ink-meta);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+body.app-slava-restraint .commons-field--inline {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+}
+
+body.app-slava-restraint .commons-field--grow {
+  flex: 1;
+}
+
+body.app-slava-restraint .commons-view input:not([type="range"]):not([type="checkbox"]),
+body.app-slava-restraint .commons-view select,
+body.app-slava-restraint .commons-view textarea {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--sr-edge);
+  border-radius: 3px;
+  background: var(--sr-surface-control);
+  color: var(--sr-ink);
+  font: inherit;
+  font-size: 12px;
+  padding: 5px 7px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+body.app-slava-restraint .commons-field--inline select {
+  width: auto;
+  max-width: 180px;
+}
+
+body.app-slava-restraint .commons-view textarea {
+  resize: vertical;
+  line-height: 1.35;
+}
+
+body.app-slava-restraint .commons-view input:focus-visible,
+body.app-slava-restraint .commons-view select:focus-visible,
+body.app-slava-restraint .commons-view textarea:focus-visible,
+body.app-slava-restraint .commons-view button:focus-visible {
+  outline: var(--sr-focus-outline);
+  outline-offset: var(--sr-focus-offset);
+}
+
+body.app-slava-restraint .commons-view input[type="range"] {
+  width: 100%;
+  accent-color: var(--sr-accent);
+}
+
+body.app-slava-restraint .commons-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--sr-ink-light);
+}
+
+body.app-slava-restraint .commons-meta {
+  color: var(--sr-ink-meta);
+  font-size: 11px;
+  margin: 0;
+}
+
+body.app-slava-restraint .commons-heading {
+  margin: 0;
+  color: var(--sr-ink);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* -- messages + page candidates ---------------------------------------------- */
+
+body.app-slava-restraint .commons-messages {
+  grid-area: messages;
+  padding: 8px 16px 0;
+}
+
+body.app-slava-restraint .commons-notice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  border-left: 2px solid currentColor;
+  padding: 6px 10px;
+  background: var(--sr-surface-control);
+  color: var(--sr-ink-light);
+}
+
+body.app-slava-restraint .commons-notice--error {
+  color: var(--sr-error);
+}
+
+body.app-slava-restraint .commons-candidates {
+  grid-area: candidates;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--sr-edge);
+}
+
+body.app-slava-restraint .commons-candidates__head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+  color: var(--sr-ink-light);
+}
+
+body.app-slava-restraint .commons-candidates__list {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+}
+
+body.app-slava-restraint .commons-candidate {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 0 0 120px;
+  border: 1px solid var(--sr-edge);
+  border-radius: 3px;
+  background: none;
+  padding: 4px;
+  cursor: pointer;
+}
+
+body.app-slava-restraint .commons-candidate:hover {
+  border-color: var(--sr-accent);
+}
+
+body.app-slava-restraint .commons-candidate img {
+  width: 100%;
+  height: 80px;
+  object-fit: cover;
+  display: block;
+}
+
+/* -- filters ------------------------------------------------------------------ */
+
+body.app-slava-restraint .commons-filters {
+  grid-area: filters;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  padding: 14px;
+  border-right: 1px solid var(--sr-edge-strong);
+  background: var(--sr-glass-strong);
+  overflow-y: auto;
+}
+
+body.app-slava-restraint .commons-filters__group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+body.app-slava-restraint .commons-filters__group legend {
+  margin-bottom: 6px;
+  padding: 0;
+  color: var(--sr-ink-meta);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+body.app-slava-restraint .commons-filters__row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  align-items: center;
+}
+
+body.app-slava-restraint .commons-axis {
+  display: grid;
+  gap: 2px;
+  color: var(--sr-ink-faint);
+}
+
+body.app-slava-restraint .commons-axis--set {
+  color: var(--sr-ink-light);
+}
+
+body.app-slava-restraint .commons-axis__head {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+}
+
+body.app-slava-restraint .commons-axis__value {
+  color: var(--sr-ink-meta);
+  font-family: var(--sr-mono);
+  font-size: 10px;
+}
+
+body.app-slava-restraint .commons-axis__inputs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+body.app-slava-restraint .commons-axis .commons-link {
+  justify-self: end;
+}
+
+body.app-slava-restraint .commons-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+body.app-slava-restraint .commons-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--sr-edge);
+  border-radius: var(--sr-radius-pill);
+  padding: 1px 4px 1px 8px;
+  color: var(--sr-ink-light);
+  font-size: 11px;
+}
+
+body.app-slava-restraint .commons-chip button {
+  border: 0;
+  background: none;
+  color: var(--sr-ink-meta);
+  font: inherit;
+  padding: 0 3px;
+  cursor: pointer;
+}
+
+body.app-slava-restraint .commons-chip button:hover {
+  color: var(--sr-danger);
+}
+
+/* -- grid --------------------------------------------------------------------- */
+
+body.app-slava-restraint .commons-main {
+  grid-area: main;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 14px 18px 40px;
+}
+
+body.app-slava-restraint .commons-main--settings {
+  grid-column: 1 / -1;
+}
+
+body.app-slava-restraint .commons-grid-wrap {
+  min-height: 100%;
+  border: 1px dashed transparent;
+  border-radius: 4px;
+  transition: border-color 160ms var(--commons-spring);
+}
+
+body.app-slava-restraint .commons-grid-wrap--dragging {
+  border-color: var(--sr-accent);
+}
+
+body.app-slava-restraint .commons-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  grid-auto-rows: 180px;
+  gap: 10px;
+}
+
+body.app-slava-restraint .commons-tile {
+  position: relative;
+  display: block;
+  border: 1px solid var(--sr-edge);
+  border-radius: 4px;
+  background: var(--sr-node-media-bg);
+  padding: 0;
+  overflow: hidden;
+  cursor: pointer;
+  transition: border-color 160ms var(--commons-spring), transform 200ms var(--commons-spring);
+}
+
+body.app-slava-restraint .commons-tile:hover {
+  border-color: var(--sr-edge-strong);
+  transform: translateY(-1px);
+}
+
+body.app-slava-restraint .commons-tile--selected {
+  border-color: var(--sr-accent);
+}
+
+body.app-slava-restraint .commons-tile__media {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+body.app-slava-restraint .commons-tile__badges {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  right: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+body.app-slava-restraint .commons-tile__caption {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 14px 8px 6px;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.72), transparent);
+  color: var(--sr-ink);
+  font-size: 11px;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+body.app-slava-restraint .commons-empty {
+  margin: 40px auto;
+  max-width: 360px;
+  color: var(--sr-ink-meta);
+  text-align: center;
+}
+
+/* -- badges ------------------------------------------------------------------- */
+
+body.app-slava-restraint .commons-badge {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--sr-edge);
+  border-radius: var(--sr-radius-pill);
+  padding: 1px 7px;
+  background: var(--sr-glass-strong);
+  color: var(--sr-ink-light);
+  font-size: 10px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  transition: color 200ms var(--commons-spring), border-color 200ms var(--commons-spring),
+    background-color 200ms var(--commons-spring), transform 200ms var(--commons-spring);
+  animation: commons-pop 220ms var(--commons-spring) both;
+}
+
+body.app-slava-restraint .commons-badge--queued,
+body.app-slava-restraint .commons-badge--held,
+body.app-slava-restraint .commons-badge--downloading,
+body.app-slava-restraint .commons-badge--fidelity-pending,
+body.app-slava-restraint .commons-badge--region-proposed {
+  color: var(--sr-pending);
+  border-color: var(--sr-edge-strong);
+}
+
+body.app-slava-restraint .commons-badge--analyzing,
+body.app-slava-restraint .commons-badge--inbox {
+  color: var(--sr-accent);
+  border-color: var(--sr-accent-border);
+}
+
+body.app-slava-restraint .commons-badge--analysis_failed,
+body.app-slava-restraint .commons-badge--missing,
+body.app-slava-restraint .commons-badge--download_failed,
+body.app-slava-restraint .commons-badge--fidelity-fail,
+body.app-slava-restraint .commons-badge--role-avoid {
+  color: var(--sr-error);
+  border-color: var(--sr-error-border);
+}
+
+body.app-slava-restraint .commons-badge--ready,
+body.app-slava-restraint .commons-badge--fidelity-pass,
+body.app-slava-restraint .commons-badge--role-attract,
+body.app-slava-restraint .commons-badge--region-confirmed {
+  color: var(--sr-success);
+}
+
+body.app-slava-restraint .commons-badge--archived,
+body.app-slava-restraint .commons-badge--superseded,
+body.app-slava-restraint .commons-badge--fidelity-unverifiable {
+  color: var(--sr-ink-faint);
+}
+
+body.app-slava-restraint .commons-source {
+  border-radius: 2px;
+  padding: 0 5px;
+  font-size: 9px;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: var(--sr-ink-faint);
+  border: 1px solid var(--sr-edge);
+}
+
+body.app-slava-restraint .commons-source--corrected {
+  color: var(--sr-accent);
+  border-color: var(--sr-accent-border);
+}
+
+body.app-slava-restraint .commons-source--model {
+  color: var(--sr-ink-meta);
+}
+
+/* -- detail panel ------------------------------------------------------------ */
+
+body.app-slava-restraint .commons-detail {
+  grid-area: detail;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  padding: 12px 14px 40px;
+  border-left: 1px solid var(--sr-edge-strong);
+  background: var(--sr-glass-strong);
+  overflow-y: auto;
+  animation: commons-enter 220ms var(--commons-spring) both;
+}
+
+body.app-slava-restraint .commons-detail__bar,
+body.app-slava-restraint .commons-detail__row,
+body.app-slava-restraint .commons-detail__actions,
+body.app-slava-restraint .commons-membership__head,
+body.app-slava-restraint .commons-folder__head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+body.app-slava-restraint .commons-detail__row {
+  align-items: end;
+}
+
+body.app-slava-restraint .commons-detail__section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border-top: 1px solid var(--sr-edge);
+  padding-top: 12px;
+}
+
+body.app-slava-restraint .commons-detail__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  align-items: end;
+}
+
+body.app-slava-restraint .commons-field-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+body.app-slava-restraint .commons-field-block__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--sr-ink-meta);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* Region overlays: the box comes from --rx/--ry/--rw/--rh set inline as data, not styling. */
+body.app-slava-restraint .commons-stage {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+body.app-slava-restraint .commons-stage__image {
+  display: block;
+  width: 100%;
+  max-height: 60vh;
+  object-fit: contain;
+  border-radius: 3px;
+  background: var(--sr-node-media-bg);
+  user-select: none;
+}
+
+body.app-slava-restraint .commons-stage:not(.commons-stage--video) {
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+}
+
+body.app-slava-restraint .commons-stage:not(.commons-stage--video) .commons-stage__image {
+  width: auto;
+  max-width: 100%;
+}
+
+body.app-slava-restraint .commons-stage__overlay {
+  position: absolute;
+  inset: 0;
+  cursor: crosshair;
+  touch-action: none;
+}
+
+body.app-slava-restraint .commons-region {
+  position: absolute;
+  left: var(--rx);
+  top: var(--ry);
+  width: var(--rw);
+  height: var(--rh);
+  border: 1.5px solid var(--sr-accent);
+  border-radius: 2px;
+  pointer-events: none;
+}
+
+body.app-slava-restraint .commons-region--proposed {
+  border-style: dashed;
+  border-color: var(--sr-ink-light);
+}
+
+body.app-slava-restraint .commons-region--draft {
+  border-style: dashed;
+  background: var(--sr-accent-soft);
+}
+
+body.app-slava-restraint .commons-region__label {
+  position: absolute;
+  left: -1px;
+  bottom: 100%;
+  max-width: 180px;
+  padding: 0 4px;
+  background: var(--sr-glass-strong);
+  color: var(--sr-ink);
+  font-size: 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+body.app-slava-restraint .commons-keyframes {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+}
+
+body.app-slava-restraint .commons-keyframe {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 0 0 76px;
+  border: 1px solid var(--sr-edge);
+  border-radius: 3px;
+  background: none;
+  color: var(--sr-ink-meta);
+  font: inherit;
+  font-size: 10px;
+  font-family: var(--sr-mono);
+  padding: 2px;
+  cursor: pointer;
+}
+
+body.app-slava-restraint .commons-keyframe--active {
+  border-color: var(--sr-accent);
+  color: var(--sr-accent);
+}
+
+body.app-slava-restraint .commons-keyframe img {
+  width: 100%;
+  height: 44px;
+  object-fit: cover;
+  display: block;
+}
+
+body.app-slava-restraint .commons-palette {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+body.app-slava-restraint .commons-swatch {
+  display: grid;
+  grid-template-columns: 18px auto;
+  column-gap: 6px;
+  align-items: center;
+  font-family: var(--sr-mono);
+  font-size: 10px;
+  color: var(--sr-ink-light);
+}
+
+body.app-slava-restraint .commons-swatch__chip {
+  grid-row: span 2;
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--sr-edge);
+  border-radius: 2px;
+  background: var(--swatch);
+}
+
+body.app-slava-restraint .commons-swatch--accent .commons-swatch__chip {
+  border-color: var(--sr-ink);
+  border-radius: 50%;
+}
+
+body.app-slava-restraint .commons-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+body.app-slava-restraint .commons-list__item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+body.app-slava-restraint .commons-list__text {
+  flex: 1;
+  min-width: 0;
+  color: var(--sr-ink-light);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+body.app-slava-restraint .commons-thread {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+body.app-slava-restraint .commons-comment {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  border-left: 2px solid var(--sr-edge-strong);
+  padding-left: 8px;
+}
+
+body.app-slava-restraint .commons-comment__actor {
+  color: var(--sr-ink);
+  font-weight: 600;
+}
+
+body.app-slava-restraint .commons-comment__text {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--sr-ink-light);
+  line-height: 1.4;
+  white-space: pre-wrap;
+}
+
+body.app-slava-restraint .commons-thread__form {
+  display: flex;
+  gap: 6px;
+}
+
+/* -- settings ------------------------------------------------------------------ */
+
+body.app-slava-restraint .commons-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 760px;
+}
+
+body.app-slava-restraint .commons-folders {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+body.app-slava-restraint .commons-folder {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border: 1px solid var(--sr-edge);
+  border-radius: 3px;
+  padding: 10px;
+}
+
+body.app-slava-restraint .commons-folder__path {
+  flex: 1;
+  min-width: 0;
+  color: var(--sr-ink);
+  font-family: var(--sr-mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* -- prompt ---------------------------------------------------------------------- */
+
+body.app-slava-restraint .commons-prompt {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.4);
+}
+
+body.app-slava-restraint .commons-prompt__card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: min(380px, calc(100vw - 32px));
+  padding: 16px;
+  border: 1px solid var(--sr-edge-strong);
+  border-radius: var(--sr-radius-panel);
+  background: var(--sr-canvas-elevated);
+  box-shadow: var(--sr-shadow-panel);
+  animation: commons-rise 220ms var(--commons-spring) both;
+}
+
+body.app-slava-restraint .commons-prompt__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* -- motion ----------------------------------------------------------------------- */
+
+@keyframes commons-enter {
+  from { opacity: 0; transform: translateX(16px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes commons-rise {
+  from { opacity: 0; transform: translateY(6px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes commons-pop {
+  from { transform: scale(0.85); }
+  to { transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.app-slava-restraint .commons-detail,
+  body.app-slava-restraint .commons-add__menu,
+  body.app-slava-restraint .commons-prompt__card,
+  body.app-slava-restraint .commons-badge {
+    animation: none;
+  }
+
+  body.app-slava-restraint .commons-tile,
+  body.app-slava-restraint .commons-badge,
+  body.app-slava-restraint .commons-grid-wrap,
+  body.app-slava-restraint .commons-tab,
+  body.app-slava-restraint .commons-button {
+    transition: none;
+  }
+
+  body.app-slava-restraint .commons-tile:hover {
+    transform: none;
+  }
+}

@@ -393,3 +393,6 @@ body:not(.app-slava-restraint) .agent-log__msg {
 
 /* Group shared docks without introducing another stacking context. */
 .workspace-overlays { display: contents; }
+
+/* Preserve shared Settings/Chat state while Commons temporarily owns the screen. */
+.workspace-overlays--hidden { display: none; }

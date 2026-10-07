@@ -8,6 +8,8 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+from services.file_access import require_allowed_path, validate_file_references
+
 
 class CLIGraph:
     """In-memory graph state for CLI operations.
@@ -238,7 +240,7 @@ class CLIGraph:
         edges: list[dict[str, str]],
         counter: int,
     ) -> None:
-        target = Path(path)
+        target = require_allowed_path(path)
         data = {
             "nodes": list(nodes.values()),
             "edges": list(edges),
@@ -277,7 +279,9 @@ class CLIGraph:
 
     def load(self, path: Path) -> None:
         """Replace current graph state with contents of a JSON file."""
-        data = json.loads(Path(path).read_text())
+        source = require_allowed_path(path)
+        data = json.loads(source.read_text())
+        validate_file_references(data)
         self.nodes = {n["id"]: n for n in data["nodes"]}
         self.edges = data["edges"]
         self._counter = data.get("counter", len(self.nodes))

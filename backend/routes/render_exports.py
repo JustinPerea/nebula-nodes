@@ -16,6 +16,7 @@ from handlers.video_edit import (
     render_video_edit_file,
 )
 from services.remotion_render import render_remotion_manifest
+from services.file_access import ProtectedPathError, validate_file_references
 from services.render_jobs import render_job_manager
 
 
@@ -36,7 +37,10 @@ class RemotionRenderRequest(BaseModel):
 
 @router.post("/api/video-edit/export", status_code=202)
 async def start_video_export(req: VideoExportRequest) -> dict[str, object | None]:
-    source_path = _resolve_local_path(req.sourceUrl)
+    try:
+        source_path = _resolve_local_path(req.sourceUrl)
+    except ProtectedPathError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     if source_path is None:
         raise HTTPException(status_code=404, detail=f"Source not found: {req.sourceUrl}")
     if not req.clips:
@@ -65,6 +69,7 @@ async def start_video_export(req: VideoExportRequest) -> dict[str, object | None
 async def start_remotion_render(req: RemotionRenderRequest) -> dict[str, object | None]:
     try:
         _validate_manifest(req.manifest)
+        validate_file_references(req.manifest)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

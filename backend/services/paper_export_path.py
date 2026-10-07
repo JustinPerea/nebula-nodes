@@ -1,7 +1,7 @@
 """Validate the local PNG returned by Paper's native export tool.
 
-This boundary reads one exported image only. It does not import the unrelated
-chat-workspace or general media-file security services.
+This boundary reads one exported image only. Paper-specific format checks
+compose with the application's protected-store and workspace path policy.
 """
 from __future__ import annotations
 
@@ -9,6 +9,8 @@ import os
 from pathlib import Path
 import stat
 import unicodedata
+
+from services.file_access import require_allowed_path as require_media_path
 
 
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
@@ -57,6 +59,9 @@ def require_allowed_path(value: str | Path) -> Path:
         raise ValueError("Paper export must be a standalone regular file")
     if info.st_size > MAX_PAPER_EXPORT_BYTES:
         raise ValueError("Paper export exceeds 32 MiB")
+    # Custom Commons roots and authenticated peer workspaces can live outside
+    # Paper's historical state/secret namespaces. Check them before opening PNG.
+    resolved = require_media_path(lexical)
     with resolved.open("rb") as stream:
         if stream.read(len(PNG_SIGNATURE)) != PNG_SIGNATURE:
             raise ValueError("Paper export is not a PNG image")

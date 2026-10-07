@@ -6,6 +6,7 @@ from typing import Any
 import httpx
 
 from models.graph import GraphNode, PortValueDict
+from services.file_access import require_allowed_path
 from services.output import get_run_dir, save_base64_image
 
 OPENAI_IMAGE_EDIT_URL = "https://api.openai.com/v1/images/edits"
@@ -15,7 +16,7 @@ def _resolve_image_bytes(value: Any) -> bytes:
     """Convert a filesystem path to raw bytes for multipart upload."""
     image_path = Path(str(value))
     if image_path.exists():
-        return image_path.read_bytes()
+        return require_allowed_path(image_path).read_bytes()
     raise ValueError(f"Image file not found: {value}")
 
 

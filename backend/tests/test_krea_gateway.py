@@ -517,7 +517,7 @@ async def test_execute_http_admits_param_prompt_and_connected_prompt(monkeypatch
         edges.append(GraphEdge(id="edge", source="prompt", sourceHandle="text", target=target.id, targetHandle="prompt"))
     body = {"nodes": [item.model_dump(by_alias=True) for item in nodes],
             "edges": [item.model_dump(by_alias=True) for item in edges], "runId": f"krea-http-{connected}"}
-    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=main_module.app), base_url="http://nebula.test") as client:
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=main_module.app), base_url="http://127.0.0.1") as client:
         response = await client.post("/api/execute", json=body)
     assert response.status_code == 200 and response.json()["status"] == "started"
     record = registry.get(body["runId"])

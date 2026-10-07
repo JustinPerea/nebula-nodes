@@ -18,6 +18,7 @@ from typing import Any, Awaitable, Callable
 from models.graph import GraphNode, PortValueDict
 from models.events import ExecutionEvent
 from execution.stream_runner import StreamConfig, stream_execute
+from services.file_access import require_allowed_path
 from services.nous_auth import NousNotAuthenticatedError, load_nous_credential
 
 
@@ -32,7 +33,7 @@ def _image_to_content_block(value: Any) -> dict[str, Any] | None:
         return {"type": "image_url", "image_url": {"url": s}}
     p = Path(s)
     if p.exists() and p.is_file():
-        b64 = base64.b64encode(p.read_bytes()).decode("ascii")
+        b64 = base64.b64encode(require_allowed_path(p).read_bytes()).decode("ascii")
         suffix = p.suffix.lstrip(".").lower()
         mime = {
             "png": "image/png",

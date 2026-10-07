@@ -21,6 +21,8 @@ const CREATE_SESSION_KEY = 'nebula:create:sessionId';
 const PANEL_EDGE_MARGIN = 16;
 const RUN_HISTORY_WIDTH = 276;
 
+export type ViewMode = 'canvas' | 'editor' | 'remotion-editor' | 'cinema-editor' | 'character-editor' | 'moodboard-editor' | 'create' | 'brand-showcase' | 'commons';
+
 export type AssetScope = 'global' | 'project';
 export type LeftDock = 'library' | 'assets' | 'history' | 'settings';
 
@@ -140,7 +142,9 @@ interface UIState {
   selectedNodeId: string | null;
 
   // Editor view state — Phase 1 video-editor pivot
-  viewMode: 'canvas' | 'editor' | 'remotion-editor' | 'cinema-editor' | 'character-editor' | 'moodboard-editor' | 'create' | 'brand-showcase';
+  viewMode: ViewMode;
+  commonsEnabled: boolean;
+  commonsReturnView: Exclude<ViewMode, 'commons'>;
   editorTargetNodeId: string | null;
   // Phase 2 Remotion editor
   remotionEditorTargetNodeId: string | null;
@@ -230,6 +234,9 @@ interface UIState {
   exitCharacterEditor: () => void;
   enterMoodboardEditor: (moodboardId: string, scope?: AssetScope) => void;
   exitMoodboardEditor: () => void;
+  setCommonsEnabled: (enabled: boolean) => void;
+  enterCommons: () => void;
+  exitCommons: () => void;
   enterCreateView: () => void;
   exitCreateView: () => void;
   // Brand / Dynamic Mark showcase — a standalone reference + demo surface
@@ -287,6 +294,8 @@ interface UIState {
 export const useUIStore = create<UIState>((set, get) => ({
   selectedNodeId: null,
   viewMode: 'canvas',
+  commonsEnabled: false,
+  commonsReturnView: 'canvas',
   editorTargetNodeId: null,
   remotionEditorTargetNodeId: null,
   cinemaEditorNodeId: null,
@@ -424,6 +433,18 @@ export const useUIStore = create<UIState>((set, get) => ({
       moodboardEditorId: null,
     });
   },
+
+  setCommonsEnabled: (enabled) => set((state) => ({
+    commonsEnabled: enabled,
+    ...(!enabled && state.viewMode === 'commons' ? { viewMode: state.commonsReturnView } : {}),
+  })),
+  enterCommons: () => set((state) => {
+    if (!state.commonsEnabled || state.viewMode === 'commons') return {};
+    return { viewMode: 'commons', commonsReturnView: state.viewMode };
+  }),
+  exitCommons: () => set((state) => state.viewMode === 'commons'
+    ? { viewMode: state.commonsReturnView }
+    : {}),
 
   enterCreateView: () => {
     const restoredSession = useGraphStore.getState().runHistory.find((run) => run.createOrigin)?.createOrigin?.sessionId;

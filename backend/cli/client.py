@@ -17,15 +17,22 @@ class NebulaClient:
         self.base_url = base_url.rstrip("/")
         self._client = httpx.Client(base_url=self.base_url, timeout=300.0)
 
-    def _request(self, method: str, path: str, **kwargs: Any) -> Any:
+    def _identity_headers(self, headers: dict | None = None) -> dict:
+        headers = dict(headers or {})
         # When the CLI is invoked from inside a Daedalus subprocess, the parent
         # hermes runtime sets DAEDALUS_APPROVAL in env. Pass that through as a
         # header so backend guards (e.g. the §1.5 iteration-integrity check on
         # /api/graph/run) can distinguish agent callers from human callers.
         if os.environ.get("DAEDALUS_APPROVAL"):
-            headers = dict(kwargs.pop("headers", {}) or {})
             headers.setdefault("X-Daedalus-Caller", "1")
-            kwargs["headers"] = headers
+        token = os.environ.get("NEBULA_AGENT_TOKEN")
+        if token:
+            headers = {key: value for key, value in headers.items() if key.lower() != "authorization"}
+            headers["Authorization"] = f"Agent {token}"
+        return headers
+
+    def _request(self, method: str, path: str, *, binary: bool = False, **kwargs: Any) -> Any:
+        kwargs["headers"] = self._identity_headers(kwargs.get("headers"))
         try:
             resp = self._client.request(method, path, **kwargs)
         except httpx.ConnectError:
@@ -40,7 +47,20 @@ class NebulaClient:
                 detail = resp.text
             print(f"error: {detail}", file=sys.stderr)
             sys.exit(1)
-        return resp.json()
+        return resp.content if binary else resp.json()
+
+    def commons_enabled(self) -> bool:
+        capability = self._request("GET", "/api/capabilities/commons")
+        return isinstance(capability, dict) and capability.get("enabled") is True
+
+    def commons(self, method: str, path: str, **kwargs: Any) -> Any:
+        headers = dict(kwargs.pop("headers", {}) or {})
+        if not os.environ.get("NEBULA_AGENT_TOKEN"):
+            headers["X-Nebula-Client"] = "nebula-cli"
+        return self._request(method, f"/api/commons{path}", headers=headers, **kwargs)
+
+    def get_agent_context(self) -> dict[str, Any]:
+        return self._request("GET", "/api/agent/context")
 
     # -- Discovery --
     def get_nodes(self) -> dict[str, Any]:
@@ -78,7 +98,8 @@ class NebulaClient:
         """Call GET /api/graph/node/{id}/path. Raises RuntimeError on HTTP error
         with a message suitable for stderr."""
         try:
-            resp = self._client.request("GET", f"/api/graph/node/{node_id}/path", timeout=10)
+            resp = self._client.request("GET", f"/api/graph/node/{node_id}/path", timeout=10,
+                                        headers=self._identity_headers())
         except httpx.ConnectError:
             raise RuntimeError(
                 f"cannot connect to Nebula backend at {self.base_url} — is the server running?"

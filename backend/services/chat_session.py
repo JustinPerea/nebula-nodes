@@ -18,7 +18,13 @@ from services.agent_process import (
     agent_process_group_options,
     terminate_agent_process_tree,
 )
-from services.krea_agent_mcp import KREA_MCP_PRIMER, agent_child_env, claude_mcp_args
+from services.krea_agent_mcp import KREA_MCP_PRIMER, agent_child_env
+from services.agent_profiles import (
+    GrantOverlapsProtectedDir, agent_workspace, agent_workspace_env,
+    claude_profile_args, claude_profile_env, default_secret_paths,
+    normalize_claude_model, normalize_effort, protected_agent_dirs,
+    validate_agent_read_grants,
+)
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -238,6 +244,11 @@ async def run_claude(
     autonomy: str = "auto",
     provider: str | None = None,
     selection_context: str | None = None,
+    effort: str | None = None,
+    backend_url: str | None = None,
+    extra_dirs: list[Path] | None = None,
+    workdir: Path | None = None,
+    agent_token: str | None = None,
 ) -> AsyncIterator[dict[str, Any]]:
     """Run `claude -p` once and yield normalized events.
 
@@ -256,14 +267,47 @@ async def run_claude(
     del autonomy
     del provider
     system_prompt = NEBULA_SYSTEM_PRIMER
+    from commons.activation import is_enabled
+    if is_enabled():
+        from commons.skill import COMMONS_SKILL
+        system_prompt = f"{system_prompt}\n\n{COMMONS_SKILL}"
     if selection_context:
         system_prompt = f"{system_prompt}\n\n{selection_context}"
-    args = ["claude", "-p", "--dangerously-skip-permissions",
+    requested_model = normalize_claude_model(model)
+    effective_effort = normalize_effort(effort)
+    agent_cwd = workdir or agent_workspace()
+    from services.agent_workspaces import workspace_deny_roots
+    protected = protected_agent_dirs()
+    try:
+        validate_agent_read_grants(workdir=agent_cwd, extra_dirs=list(extra_dirs or []), protected=protected)
+    except GrantOverlapsProtectedDir as exc:
+        yield {"type": "error", "message": str(exc)}
+        yield {"type": "done"}
+        return
+    from services.agent_knowledge import KnowledgeSnapshotError, snapshot_provider_knowledge
+    from services.codex_session import _build_skill_bootstrap
+    try:
+        snapshot_provider_knowledge(PROJECT_ROOT, agent_cwd)
+    except KnowledgeSnapshotError as exc:
+        yield {"type": "error", "message": str(exc)}
+        yield {"type": "done"}
+        return
+    system_prompt = (
+        f"{system_prompt}\n\n{_build_skill_bootstrap(message)}\n\n"
+        "Tracked Nebula provider skills and reference docs are copied into this "
+        "private working directory at the relative paths above. Read those local "
+        "snapshot files; do not read user/global agent configuration. Use `nebula "
+        "nodes` and `nebula info` to verify the current node registry."
+    )
+    denied_workspaces = [root for root in workspace_deny_roots(agent_cwd)
+                         if not agent_cwd.resolve().is_relative_to(root.resolve())]
+    args = ["claude", "-p",
+            *claude_profile_args(extra_dirs=list(extra_dirs or []),
+                                 secret_paths=default_secret_paths(),
+                                 deny_read_dirs=[*protected, *denied_workspaces],
+                                 backend_url=backend_url, include_krea=True),
             "--output-format", "stream-json", "--verbose",
-            "--model", model]
-    # --mcp-config is variadic; a following option prevents it consuming the
-    # positional user message as a second configuration string.
-    args.extend(claude_mcp_args())
+            "--model", requested_model, "--effort", effective_effort]
     args.extend(["--append-system-prompt", system_prompt])
     if session_id:
         args.extend(["--resume", session_id])
@@ -272,7 +316,13 @@ async def run_claude(
     # Hard-gate `nebula quick` for any subprocess spawned from this chat — the
     # CLI checks this env var and refuses to run. Prevents Claude from silently
     # using quick mode, which bypasses the canvas sync.
-    env = {**agent_child_env(), "NEBULA_DISABLE_QUICK": "1"}
+    env = {**agent_child_env(), "NEBULA_DISABLE_QUICK": "1",
+           **claude_profile_env(), **agent_workspace_env(agent_cwd)}
+    env.pop("NEBULA_AGENT_TOKEN", None)
+    if backend_url:
+        env["NEBULA_URL"] = backend_url
+    if agent_token:
+        env["NEBULA_AGENT_TOKEN"] = agent_token
 
     try:
         # Default asyncio StreamReader limit is 64KB. Claude Code's stream-json
@@ -284,7 +334,7 @@ async def run_claude(
             *args,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
-            cwd=str(PROJECT_ROOT),
+            cwd=str(agent_cwd),
             env=env,
             limit=64 * 1024 * 1024,
             **agent_process_group_options(),
@@ -335,7 +385,10 @@ async def run_claude(
             if t == "system" and st == "init":
                 sid = ev.get("session_id")
                 if sid and not session_emitted:
-                    yield {"type": "session", "sessionId": sid}
+                    session_event = {"type": "session", "sessionId": sid}
+                    if ev.get("model") or effort is not None:
+                        session_event.update(model=ev.get("model") or requested_model, effort=effective_effort)
+                    yield session_event
                     session_emitted = True
                 continue
 

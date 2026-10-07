@@ -77,7 +77,7 @@ def graph_snapshot(graph):
 async def test_import_blocks_real_active_run_without_graph_commit_or_replacement_sync(monkeypatch, kind):
     graph, registry, route, request = prepare_run(monkeypatch, kind)
     started, release, _stopping = held_handler(monkeypatch, kind)
-    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=main_module.app), base_url="http://test") as client:
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=main_module.app), base_url="http://127.0.0.1") as client:
         response = await client.post(route, json=request)
         assert response.status_code == 200, response.text
         assert response.json()["status"] == "started"
@@ -115,7 +115,7 @@ async def test_import_blocks_real_active_run_without_graph_commit_or_replacement
 async def test_import_stays_blocked_until_cancelled_handler_cleanup_is_terminal(monkeypatch, kind):
     graph, registry, route, request = prepare_run(monkeypatch, kind)
     started, release, stopping = held_handler(monkeypatch, kind, cancelling=True)
-    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=main_module.app), base_url="http://test") as client:
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=main_module.app), base_url="http://127.0.0.1") as client:
         response = await client.post(route, json=request)
         assert response.status_code == 200, response.text
         record = registry.get(request["runId"])

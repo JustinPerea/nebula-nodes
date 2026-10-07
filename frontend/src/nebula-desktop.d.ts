@@ -105,6 +105,8 @@ export interface NebulaDesktopBridge {
    * in the Keychain. The renderer shows a warning when non-empty.
    * VAL-UX-005
    */
+  /** Optional Commons session bridge; browser mode uses a terminal dev link. */
+  readonly commons?: Readonly<{ uiToken: () => Promise<string | null> }>;
   readonly plaintextKeyWarning: readonly string[];
 }
 

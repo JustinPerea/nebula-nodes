@@ -11,6 +11,7 @@ import httpx
 
 from models.graph import GraphNode, PortValueDict
 from models.events import ExecutionEvent, ProgressEvent
+from services.file_access import require_allowed_path
 from services.cancellation import schedule_detached_cancel
 from services.output import get_run_dir
 
@@ -51,7 +52,7 @@ async def _image_to_veo_payload(img_str: str) -> dict[str, Any]:
     else:
         img_path = Path(img_str)
         if img_path.exists():
-            b64_data = base64.b64encode(img_path.read_bytes()).decode("ascii")
+            b64_data = base64.b64encode(require_allowed_path(img_path).read_bytes()).decode("ascii")
             suffix = img_path.suffix.lstrip(".").lower()
             mime_map = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg", "webp": "image/webp"}
             return {"bytesBase64Encoded": b64_data, "mimeType": mime_map.get(suffix, "image/png")}

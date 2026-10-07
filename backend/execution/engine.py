@@ -24,6 +24,7 @@ from models.spatial import (
     parse_spatial_value,
 )
 from services.cache import ExecutionCache
+from services.file_access import require_allowed_path, validate_file_references
 from services.image_input import is_remote_or_data_uri
 from services.output import (
     OUTPUT_ROOT,
@@ -143,23 +144,18 @@ async def _materialize_media_outputs(
 
 def _link_or_copy_cached_artifact(source: Path, destination: Path) -> None:
     """Atomically clone an immutable cached artifact into the current run."""
+    source = require_allowed_path(source)
+    destination = require_allowed_path(destination)
     if destination.is_file():
         return
     partial = destination.with_name(f".{destination.name}.{uuid4().hex[:8]}.part")
     try:
         try:
-            os.link(source, partial)
+            shutil.copy2(source, partial)
         except FileNotFoundError as exc:
             if not source.is_file():
                 raise _CachedArtifactMissingError(str(source)) from exc
             raise
-        except OSError:
-            try:
-                shutil.copy2(source, partial)
-            except FileNotFoundError as exc:
-                if not source.is_file():
-                    raise _CachedArtifactMissingError(str(source)) from exc
-                raise
         partial.replace(destination)
     finally:
         partial.unlink(missing_ok=True)
@@ -172,7 +168,7 @@ async def _rebind_cached_output_artifacts(
 
     A cache entry points at the run that first produced it. Re-emitting those
     paths would make the new manifest omit them and allow archiving the old run
-    to break the current result. Hard-link (or cross-filesystem copy) each
+    to break the current result. Copy each
     nested artifact into the bound run, preserving duplicate references such
     as ``World.assets.panorama`` and the separate panorama output.
     """
@@ -252,6 +248,7 @@ async def _rebind_cached_output_artifacts(
 
 def _image_input_output(params: dict) -> dict:
     file_path = resolve_output_ref(str(params.get("filePath", "")))
+    validate_file_references(file_path)
     # Fail at the source when the configured file is gone, rather than passing a
     # dead path downstream where a vision node would otherwise silently analyze
     # zero references. An empty path (unconfigured node) and remote/data values
@@ -1049,6 +1046,8 @@ async def _execute_graph(
         resolved_inputs = resolve_inputs(nid, context)
 
         try:
+            validate_file_references(node.params)
+            validate_file_references({key: port.value for key, port in resolved_inputs.items()})
             if (
                 definition_metadata.get("apiProvider") == "worldlabs"
                 or (
@@ -1092,6 +1091,7 @@ async def _execute_graph(
                     effective_params = cache.get_effective_params(cache_key)
                     if effective_params is None:
                         effective_params = copy.deepcopy(node.params)
+                    validate_file_references(cached_outputs)
                     try:
                         durable_cached_outputs = (
                             await _materialize_media_outputs(cached_outputs, bound_run_dir)
@@ -1223,7 +1223,7 @@ async def _execute_graph(
                         from pathlib import Path as _Path
                         svg_path = _Path(svg_value)
                         if svg_path.exists():
-                            svg_data = svg_path.read_text()
+                            svg_data = require_allowed_path(svg_path).read_text()
                         else:
                             svg_data = svg_value
 
@@ -1275,7 +1275,7 @@ async def _execute_graph(
                             _resp.raise_for_status()
                         src_img = _PILImage.open(_io.BytesIO(_resp.content))
                     else:
-                        src_img = _PILImage.open(src_value)
+                        src_img = _PILImage.open(require_allowed_path(src_value))
 
                     if mask_img.size != src_img.size:
                         # NEAREST keeps mask edges hard instead of introducing greys.
@@ -1337,6 +1337,7 @@ async def _execute_graph(
             else:
                 node_outputs = await handler(node, resolved_inputs, api_keys)
 
+            validate_file_references(node_outputs)
             if handler is not None and materialize_provider_outputs:
                 node_outputs = await _materialize_media_outputs(
                     node_outputs, bound_run_dir

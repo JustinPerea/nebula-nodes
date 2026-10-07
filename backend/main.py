@@ -23,7 +23,7 @@ import stat
 import tempfile
 import unicodedata
 import zipfile
-from contextlib import contextmanager, nullcontext
+from contextlib import aclosing, contextmanager, nullcontext
 from pathlib import Path
 from pathlib import PurePosixPath
 from typing import Any, BinaryIO
@@ -34,7 +34,7 @@ from uuid import uuid4
 from dotenv import load_dotenv
 from fastapi import FastAPI, Form, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, Response, JSONResponse
 
 # Load only process-level path/runtime overrides from the optional project
 # file. Provider handlers deliberately read credentials from settings.json,
@@ -81,6 +81,7 @@ from services.port_contracts import (
     cinema_output_ports,
     validate_edge_contracts,
 )
+from services.file_access import ProtectedPathError, require_allowed_path, validate_file_references
 from services.output import OUTPUT_ROOT, DEFAULT_OUTPUT_ROOT, resolve_output_ref, ManifestError, find_output_record, read_manifest
 from services.image_input import is_remote_or_data_uri
 from services.cache import ExecutionCache
@@ -90,6 +91,13 @@ from services.execution_runs import (
     ExecutionRunRegistry,
 )
 from services.chat_session import run_claude
+from services.agent_profiles import (
+    GrantOverlapsProtectedDir,
+    agent_read_grants,
+    protected_agent_dirs,
+)
+from services.local_guard import LocalRequestGuard
+from services.agent_workspaces import AgentWorkspaceContext, WorkspaceSessions, WorkspaceSessionError, workspace_scope
 from services.chat_actions import publish_action
 from services.zoom_manifest import init_manifest, append_entry
 from services.project_context import get_current_project
@@ -101,6 +109,8 @@ from routes.quiver_proxy import router as quiver_router
 from routes.video_edit_preview import router as video_edit_preview_router
 from routes.render_exports import router as render_exports_router
 from routes.krea_connector import router as krea_connector_router
+from routes.commons import router as commons_router
+from commons import actors as commons_actors
 from services.ffmpeg import ffprobe_video
 from services.preset_store import preset_store
 from services.selection_context import SelectionContextStore, selection_prompt_context
@@ -138,6 +148,7 @@ execution_cache = ExecutionCache(ttl=3600)
 execution_runs = ExecutionRunRegistry()
 node_registry = NodeRegistry()
 selection_context = SelectionContextStore()
+workspace_sessions = WorkspaceSessions()
 
 # Persist the CLI graph to ~/.nebula/state.json on every mutation and reload
 # it on boot. Survives uvicorn restart so a crash or `kill` no longer wipes
@@ -355,6 +366,12 @@ if _bootstrap_checkpoints:
         )
 app = FastAPI(title="Nebula Node Backend", version="0.1.0")
 
+
+@app.exception_handler(ProtectedPathError)
+async def protected_file_error(request, exc: ProtectedPathError):
+    return JSONResponse(status_code=400, content={"detail": str(exc)})
+
+
 DYNAMIC_NODE_PROVIDER_BY_DEFINITION = {
     "openrouter-universal": "openrouter",
     "nous-portal-universal": "nous",
@@ -370,6 +387,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+# Added after CORS so it runs first (Starlette wraps later middleware around
+# earlier ones): foreign Hosts and Origins never reach CORS or the routes.
+app.add_middleware(AgentWorkspaceContext)
+app.add_middleware(LocalRequestGuard)
 
 
 @app.middleware("http")
@@ -1141,13 +1162,13 @@ def _output_path_from_ref(value: str) -> Path | None:
     rel = _output_relative_from_ref(value)
     if rel is None:
         return None
-    primary = (OUTPUT_ROOT / rel).resolve()
+    primary = require_allowed_path(OUTPUT_ROOT / rel)
     if primary.exists():
         return primary
     # Fallback: check DEFAULT_OUTPUT_ROOT for outputs created before a relocation.
     if DEFAULT_OUTPUT_ROOT != OUTPUT_ROOT:
         try:
-            candidate = (DEFAULT_OUTPUT_ROOT / rel).resolve()
+            candidate = require_allowed_path(DEFAULT_OUTPUT_ROOT / rel)
             candidate.relative_to(DEFAULT_OUTPUT_ROOT.resolve())  # containment check
             if candidate.exists():
                 return candidate
@@ -1316,7 +1337,9 @@ def _import_external_image_to_output_root(file_path_value: str) -> tuple[Path, s
     """
     if not file_path_value:
         return None
-    src = Path(file_path_value).expanduser()
+    if is_remote_or_data_uri(file_path_value):
+        return None
+    src = require_allowed_path(file_path_value)
     try:
         src_resolved = src.resolve(strict=True)
     except (OSError, RuntimeError):
@@ -1337,7 +1360,7 @@ def _import_external_image_to_output_root(file_path_value: str) -> tuple[Path, s
         return None
     _, ext = sniffed
     digest = hashlib.sha256(data).hexdigest()
-    saved_path = CHAT_UPLOADS_DIR / f"{digest}{ext}"
+    saved_path = require_allowed_path(CHAT_UPLOADS_DIR / f"{digest}{ext}")
     if not saved_path.exists():
         saved_path.write_bytes(data)
     return saved_path.resolve(), f"/api/outputs/chat-uploads/{saved_path.name}"
@@ -1362,6 +1385,7 @@ def _preset_thumbnail_path_from_ref(value: str) -> Path | None:
 
 def _normalize_image_input_params(params: dict[str, Any]) -> dict[str, Any]:
     """Normalize image-input file paths after repo/output-root moves."""
+    validate_file_references(params)
     rewritten = dict(params)
 
     for key in ("filePath", "file"):
@@ -1631,6 +1655,28 @@ app.include_router(video_edit_preview_router)
 app.include_router(render_exports_router)
 from services.paper_routes import router as paper_router
 app.include_router(paper_router)
+app.include_router(commons_router)
+
+
+@app.on_event("startup")
+async def _commons_startup() -> None:
+    """Initialize human authority before serving, then scan linked folders."""
+    from commons.activation import is_enabled
+    if not is_enabled():
+        return
+    from commons.ui_auth import initialize_ui_session
+
+    initialize_ui_session(commons_actors.ui_session)
+    if os.environ.get("NEBULA_COMMONS_NO_STARTUP_SCAN") == "1":
+        return
+    from commons import folders as commons_folders, records as commons_records, review as commons_review, runtime as commons_runtime
+
+    store = commons_runtime.get_store()
+    await asyncio.to_thread(commons_records.requeue_stale_analyzing, store)
+    await asyncio.to_thread(commons_review.fail_interrupted, store)
+    for link in store.list_folder_links():
+        commons_runtime.spawn(commons_folders.scan_and_fetch(store, link["id"],
+                                                             downloader=commons_runtime.get_downloader()))
 
 
 @app.post("/api/uploads")
@@ -1696,7 +1742,7 @@ async def upload_file_consolidated(
         raise HTTPException(status_code=415, detail="Only image, video, or document (PDF/text) files are accepted")
 
     digest = hashlib.sha256(content).hexdigest()
-    saved_path = CHAT_UPLOADS_DIR / f"{digest}{ext}"
+    saved_path = require_allowed_path(CHAT_UPLOADS_DIR / f"{digest}{ext}")
     # Track whether THIS request created the file: content-hash dedup means the
     # file may already exist from an earlier upload, in which case a later
     # failure must NOT delete it (other nodes/requests may reference it).
@@ -1796,7 +1842,7 @@ async def convert_to_glb(path: str) -> Any:
     source_path: Path | None = None
     for root in (OUTPUT_ROOT, DEFAULT_OUTPUT_ROOT) if DEFAULT_OUTPUT_ROOT != OUTPUT_ROOT else (OUTPUT_ROOT,):
         try:
-            candidate = (root / path).resolve()
+            candidate = require_allowed_path(root / path)
             candidate.relative_to(root.resolve())  # containment — block ../ traversal
         except (ValueError, OSError):
             continue
@@ -1812,13 +1858,14 @@ async def convert_to_glb(path: str) -> Any:
         return FileResponse(str(source_path), media_type="model/gltf-binary")
 
     # Check for cached conversion
-    preview_path = source_path.with_suffix(".preview.glb")
+    preview_path = require_allowed_path(source_path.with_suffix(".preview.glb"))
     if preview_path.exists():
         return FileResponse(str(preview_path), media_type="model/gltf-binary")
 
     # Convert to GLB using trimesh
     try:
-        mesh = trimesh.load(str(source_path))
+        from services.mesh_input import ProtectedFileResolver
+        mesh = trimesh.load(str(source_path), resolver=ProtectedFileResolver(source_path))
         mesh.export(str(preview_path), file_type="glb")
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Conversion failed: {exc}")
@@ -1987,7 +2034,9 @@ async def chat_websocket(websocket: WebSocket) -> None:
     Client sends: {
         type: "send",
         message: str,
-        sessionId: str|null,
+        sessionId: str|null (opaque Claude/Codex conversation ID),
+        commonsToken: str (human UI token, required only with Commons enabled),
+        brand: str|null (Commons-enabled Claude/Codex turns),
         model: str|null,
         agent: "claude" | "daedalus" | "codex" (default "claude"),
         autonomy: "auto" | "step" (default "auto", daedalus-only)
@@ -1998,8 +2047,11 @@ async def chat_websocket(websocket: WebSocket) -> None:
     from services.chat_actions import register_action_handler, unregister_action_handler
 
     await websocket.accept()
+    server_host, server_port = websocket.scope.get("server") or ("127.0.0.1", 8000)
+    backend_url = f"http://{server_host}:{server_port}"
     current_task: asyncio.Task[None] | None = None
     current_agent: str | None = None
+    current_finished: asyncio.Event | None = None
     send_lock = asyncio.Lock()
 
     async def send_event(event: dict[str, Any]) -> None:
@@ -2018,6 +2070,9 @@ async def chat_websocket(websocket: WebSocket) -> None:
         autonomy: str,
         provider: str | None,
         turn_selection_context: str,
+        effort: str | None,
+        brand: str | None,
+        finished: asyncio.Event,
     ) -> None:
         # Single outbound queue so every send path (agent events + canvas-
         # action events from the graph API) is serialized through one drainer
@@ -2048,6 +2103,9 @@ async def chat_websocket(websocket: WebSocket) -> None:
         # register the enqueuer so they flow through the same outbound queue
         # as the agent's own events.
         register_action_handler(enqueue)
+        workspace_session = None
+        agent_token = None
+        terminal_done = None
 
         try:
             runner = AGENT_RUNNERS.get(agent)
@@ -2060,30 +2118,53 @@ async def chat_websocket(websocket: WebSocket) -> None:
                 return
 
             try:
-                agen = runner(
-                    message,
-                    session_id,
-                    model,
-                    autonomy,
-                    provider=provider,
-                    selection_context=turn_selection_context,
-                )
-                async for event in agen:
-                    task = asyncio.current_task()
-                    if task is not None and task.cancelling():
-                        # Some async generators yield a final `done` while
-                        # unwinding. A cancellation is not confirmed until
-                        # the runner and its process tree have fully stopped.
-                        raise asyncio.CancelledError
-                    enqueue(event)
+                runner_kwargs = {"provider": provider, "selection_context": turn_selection_context}
+                if agent in {"claude", "codex"}:
+                    workspace_session = workspace_sessions.acquire(_STATE_DIR, agent, brand, session_id)
+                    workdir = workspace_session.workspace
+                    read_grants = agent_read_grants(output_root=OUTPUT_ROOT, workdir=workdir,
+                                                    protected=protected_agent_dirs())
+                    agent_token = commons_actors.agent_registry.mint(
+                        agent, [OUTPUT_ROOT, workdir], brand=workspace_session.brand, workspace=workdir)
+                    if model:
+                        commons_actors.agent_registry.set_model(agent_token, model)
+                    runner_kwargs.update(effort=effort, backend_url=backend_url, extra_dirs=read_grants,
+                                         workdir=workdir, agent_token=agent_token)
+                    runner_session = workspace_session.provider_session_id
+                else:
+                    runner_session = session_id
+                with workspace_scope(workspace_session.workspace if workspace_session else None):
+                    agen = runner(message, runner_session, model, autonomy, **runner_kwargs)
+                    async with aclosing(agen):
+                        async for event in agen:
+                            task = asyncio.current_task()
+                            if task is not None and task.cancelling():
+                                # Confirm cancellation only after process cleanup and capability revocation.
+                                raise asyncio.CancelledError
+                            if event.get("type") == "done":
+                                terminal_done = event
+                                continue
+                            if workspace_session is not None and event.get("type") == "session":
+                                workspace_sessions.bind_provider(workspace_session, event.get("sessionId"))
+                                if event.get("model") and agent_token:
+                                    commons_actors.agent_registry.set_model(agent_token, str(event["model"]))
+                                event = {**event, "sessionId": workspace_session.id, "brand": workspace_session.brand}
+                            enqueue(event)
             except Exception as exc:
                 task = asyncio.current_task()
                 if task is not None and task.cancelling():
                     raise
                 enqueue({"type": "error", "message": str(exc)})
-                enqueue({"type": "done"})
+                terminal_done = {"type": "done"}
         finally:
+            if agent_token is not None:
+                commons_actors.agent_registry.revoke(agent_token)
+            if workspace_session is not None:
+                workspace_sessions.release(workspace_session)
             unregister_action_handler()
+            finished.set()
+            if terminal_done is not None:
+                enqueue(terminal_done)
             # Sentinel stops the drainer; wait for it so remaining events flush.
             outbound.put_nowait(None)
             try:
@@ -2098,6 +2179,10 @@ async def chat_websocket(websocket: WebSocket) -> None:
                 payload = json.loads(raw)
             except json.JSONDecodeError:
                 await send_event({"type": "error", "message": "invalid JSON", "source": "system"})
+                continue
+
+            if not isinstance(payload, dict):
+                await send_event({"type": "error", "message": "message envelope must be an object", "source": "system"})
                 continue
 
             msg_type = payload.get("type")
@@ -2167,9 +2252,46 @@ async def chat_websocket(websocket: WebSocket) -> None:
             if msg_type != "send":
                 continue
 
+            if current_task and not current_task.done() and current_finished is not None and current_finished.is_set():
+                # Done becomes visible while send_text is still returning.
+                # Cleanup has completed; settle the old drainer before admitting
+                # the next turn so its handler cannot outlive the new one.
+                await current_task
+            if current_task and not current_task.done():
+                # Reject a competing turn before validating its fields. A
+                # rejected second send must never emit done for the active one.
+                await send_event({
+                    "type": "error",
+                    "message": (
+                        "Another response is active. Stop it and wait for "
+                        "cancellation confirmation before sending again."
+                    ),
+                    "source": _event_source(current_agent or "system"),
+                })
+                continue
+
+            from commons.activation import is_enabled
+            commons_enabled = is_enabled()
+            if commons_enabled:
+                human_token = payload.get("commonsToken")
+                if not isinstance(human_token, str) or not commons_actors.ui_session.verify(human_token):
+                    await send_event({"type": "error", "message": "No current UI session: use the Commons dev link before starting a private reference turn.", "source": "system"})
+                    await send_event({"type": "done", "source": "system"})
+                    continue
             user_message = payload.get("message", "")
+            if not isinstance(user_message, str):
+                await send_event({"type": "error", "message": "message must be text.", "source": "system"})
+                continue
             session_id = payload.get("sessionId") or None
             agent = payload.get("agent") or "claude"
+            if not isinstance(agent, str):
+                await send_event({"type": "error", "message": "agent must be text.", "source": "system"})
+                await send_event({"type": "done", "source": "system"})
+                continue
+            if commons_enabled and agent not in {"claude", "codex"}:
+                await send_event({"type": "error", "message": "Commons private reference turns support Claude and Codex; disable Commons to use Daedalus.", "source": "system"})
+                await send_event({"type": "done", "source": "system"})
+                continue
             model_raw = payload.get("model")
             model = (
                 str(model_raw)
@@ -2198,21 +2320,7 @@ async def chat_websocket(websocket: WebSocket) -> None:
             if not user_message.strip():
                 continue
 
-            if current_task and not current_task.done():
-                # A second raw WebSocket send must not become an unacknowledged
-                # cancellation path. In particular, swallowing a cleanup error
-                # here could start another agent while descendants from the
-                # previous turn were still alive. The UI normally disables Send
-                # while busy, but the backend contract is authoritative.
-                await send_event({
-                    "type": "error",
-                    "message": (
-                        "Another response is active. Stop it and wait for "
-                        "cancellation confirmation before sending again."
-                    ),
-                    "source": _event_source(current_agent or "system"),
-                })
-                continue
+            current_finished = asyncio.Event()
             current_task = asyncio.create_task(
                 stream_response(
                     user_message,
@@ -2222,10 +2330,15 @@ async def chat_websocket(websocket: WebSocket) -> None:
                     autonomy,
                     provider,
                     turn_selection_context,
+                    payload.get("effort"),
+                    payload.get("brand") if commons_enabled else None,
+                    current_finished,
                 )
             )
             current_agent = agent
     except WebSocketDisconnect:
+        pass
+    finally:
         if current_task and not current_task.done():
             current_task.cancel()
             try:
@@ -2235,6 +2348,24 @@ async def chat_websocket(websocket: WebSocket) -> None:
 
 
 # ---------- REST endpoints ----------
+
+@app.get("/api/capabilities/commons")
+async def commons_capabilities() -> dict[str, Any]:
+    """Discover opt-in without initializing authority, storage or workers."""
+    from commons.activation import is_enabled
+    return {"enabled": is_enabled(), "scopedAgents": ["claude", "codex"]}
+
+
+@app.get("/api/agent/context")
+async def agent_context(request: Request) -> dict[str, Any]:
+    """Resolve a private workspace only through a current backend capability."""
+    try:
+        actor = commons_actors.resolve_actor(request.headers)
+    except commons_actors.AuthError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    if not actor.is_agent or actor.workspace is None:
+        raise HTTPException(status_code=401, detail="A scoped agent turn is required")
+    return {"workspace": str(actor.workspace), "brand": actor.brand}
 
 @app.get("/api/health")
 async def health() -> dict:
@@ -4555,6 +4686,7 @@ def _validate_graph_ingress_complexity(value: Any) -> None:
             stack.extend((item, depth + 1) for item in current.values())
         elif isinstance(current, list):
             stack.extend((item, depth + 1) for item in current)
+    validate_file_references(value)
 
 
 def _stage_graph_nodes(
@@ -5281,6 +5413,8 @@ async def quick_execute(body: dict[str, Any]) -> dict:
         )
     inputs = body.get("inputs", {})
     params = body.get("params", {})
+    validate_file_references(inputs)
+    validate_file_references(params)
     if definition_id == "cinema-scene" and isinstance(params, dict):
         _validate_cinema_base_models(
             [
@@ -5872,7 +6006,10 @@ async def export_file(body: dict[str, Any]) -> dict:
 
     settings = load_settings()
     folder = settings.get("exportFolder")
-    dest_dir = Path(folder).expanduser() if folder else Path.home() / "Downloads"
+    dest_dir = require_allowed_path(Path(folder).expanduser() if folder else Path.home() / "Downloads")
+    filename = body.get("filename") or src.name
+    if not isinstance(filename, str) or filename in {".", ".."} or Path(filename).name != filename or "/" in filename or "\\" in filename:
+        raise HTTPException(status_code=400, detail="filename must be a single file name")
 
     try:
         dest_dir.mkdir(parents=True, exist_ok=True)
@@ -5880,7 +6017,6 @@ async def export_file(body: dict[str, Any]) -> dict:
         raise HTTPException(status_code=500, detail=str(exc))
 
     # Determine filename with collision avoidance
-    filename = body.get("filename") or src.name
     stem = Path(filename).stem
     suffix = Path(filename).suffix
     dest = dest_dir / filename
@@ -5890,7 +6026,7 @@ async def export_file(body: dict[str, Any]) -> dict:
         counter += 1
 
     try:
-        _shutil.copy2(src, dest)
+        _shutil.copy2(require_allowed_path(src), require_allowed_path(dest))
     except OSError as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 
@@ -5927,7 +6063,7 @@ async def output_meta(rel: str):
     candidate: Path | None = None
     for root in roots:
         try:
-            resolved = (root / rel).resolve()
+            resolved = require_allowed_path(root / rel)
             resolved.relative_to(root.resolve())  # containment — block ../ traversal
         except (ValueError, OSError):
             continue
@@ -5971,7 +6107,7 @@ async def serve_output(rel: str):
     roots = [OUTPUT_ROOT] + ([DEFAULT_OUTPUT_ROOT] if DEFAULT_OUTPUT_ROOT != OUTPUT_ROOT else [])
     for root in roots:
         try:
-            candidate = (root / rel).resolve()
+            candidate = require_allowed_path(root / rel)
             candidate.relative_to(root.resolve())  # containment — block ../ traversal
         except (ValueError, OSError):
             continue

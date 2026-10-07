@@ -20,6 +20,7 @@ from PIL import Image
 from cinema.look import PRESETS, apply_look
 from models.events import ExecutionEvent
 from models.graph import GraphNode, PortValueDict
+from services.file_access import require_allowed_path
 from services.output import OUTPUT_ROOT, get_run_dir
 
 
@@ -127,7 +128,7 @@ async def handle_cinema_look(
 
     look = _build_look(params)
 
-    with Image.open(abs_path) as img:
+    with Image.open(require_allowed_path(abs_path)) as img:
         result = apply_look(img.convert("RGB"), look)
 
     url = _save_output_image(result)

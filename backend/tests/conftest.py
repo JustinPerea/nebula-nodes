@@ -35,3 +35,23 @@ os.environ["NEBULA_PRESET_ROOT"] = str(_TEST_PRESET_DIR)
 
 _TEST_SETTINGS_PATH = Path(tempfile.mkdtemp(prefix="nebula-test-settings-")) / "settings.json"
 os.environ["NEBULA_SETTINGS_PATH"] = str(_TEST_SETTINGS_PATH)
+
+_TEST_COMMONS_DIR = Path(tempfile.mkdtemp(prefix="nebula-test-commons-"))
+os.environ["NEBULA_COMMONS_ROOT"] = str(_TEST_COMMONS_DIR)
+os.environ["NEBULA_COMMONS_NO_STARTUP_SCAN"] = "1"
+# Ordinary tests exercise the released default: Commons remains inactive.
+os.environ.pop("NEBULA_COMMONS_ENABLED", None)
+
+import pytest  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def isolated_commons_opt_in(request, monkeypatch):
+    """Only the dedicated synthetic Commons tests opt into store access."""
+    name = request.node.path.name
+    controls_activation = name in {
+        "test_commons_activation.py", "test_commons_clients_activation.py",
+        "test_commons_integration.py",
+    }
+    if (name.startswith("test_commons_") and not controls_activation) or name == "test_agent_workspace_authority.py":
+        monkeypatch.setenv("NEBULA_COMMONS_ENABLED", "1")

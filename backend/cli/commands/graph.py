@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
-from pathlib import Path
 from typing import Any
+from uuid import uuid4
+
+from services.file_access import ProtectedPathError, require_allowed_path, validate_file_references
 
 from ..client import NebulaClient
 from ..formatter import format_graph
@@ -46,21 +49,43 @@ def run_show(client: NebulaClient) -> None:
 
 
 def run_save(client: NebulaClient, filepath: str) -> None:
+    try:
+        path = require_allowed_path(filepath)
+    except ProtectedPathError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        sys.exit(1)
     state = client.get_graph()
-    path = Path(filepath)
-    path.write_text(json.dumps(state, indent=2))
+    # Keep the previous export intact until the complete replacement is ready.
+    temporary = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
+    try:
+        with temporary.open("x", encoding="utf-8") as handle:
+            json.dump(state, handle, indent=2, allow_nan=False)
+            handle.flush()
+            os.fsync(handle.fileno())
+        temporary.replace(path)
+    finally:
+        temporary.unlink(missing_ok=True)
     node_count = len(state.get("nodes", []))
     edge_count = len(state.get("edges", []))
     print(f"Saved graph ({node_count} nodes, {edge_count} connections) to {filepath}")
 
 
 def run_load(client: NebulaClient, filepath: str) -> None:
-    path = Path(filepath)
+    try:
+        path = require_allowed_path(filepath)
+    except ProtectedPathError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        sys.exit(1)
     if not path.exists():
         print(f"error: file not found: {filepath}", file=sys.stderr)
         sys.exit(1)
 
     data = json.loads(path.read_text())
+    try:
+        validate_file_references(data)
+    except ProtectedPathError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        sys.exit(1)
     client.clear_graph()
 
     nodes = data.get("nodes", [])
