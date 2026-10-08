@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect } from 'react';
+import { lazy, Suspense, useEffect, useRef } from 'react';
 import { ReactFlowProvider, useReactFlow } from '@xyflow/react';
 import type { Node, Edge } from '@xyflow/react';
 import { Canvas } from './components/Canvas';
@@ -123,7 +123,7 @@ function GraphHydrator() {
         useGraphStore.getState().loadGraph(
           data.nodes as Node<NodeData>[],
           data.edges as Edge[],
-          { allowDuringExecution: true },
+          { allowDuringExecution: true, preserveCinemaUploads: true },
         );
         setTimeout(() => fitView({ padding: computeCanvasFitPadding(), duration: 300 }), 50);
       } catch {
@@ -155,14 +155,23 @@ export default function App() {
   const credentialCache = useUIStore((s) => s.settingsCache);
   const settingsVisible = useUIStore((s) => s.panels.settings.visible
     && (s.viewMode === 'canvas' || s.viewMode === 'create'));
+  const settingsCacheRequest = useRef(0);
   // Fetch settings on mount to populate the API key cache used for warning badges
   useEffect(() => {
+    let cancelled = false;
+    const request = ++settingsCacheRequest.current;
+    const initialCache = useUIStore.getState().settingsCache;
     getSettings()
       .then((settings) => {
+        const currentCache = useUIStore.getState().settingsCache;
+        if (cancelled || request !== settingsCacheRequest.current
+          || currentCache.apiKeys !== initialCache.apiKeys
+          || currentCache.kreaConnectionMode !== initialCache.kreaConnectionMode) return;
         const apiKeys = (settings.apiKeys ?? {}) as Record<string, string>;
         useUIStore.getState().setSettingsCache(apiKeys, normalizeKreaMode(settings.kreaConnectionMode));
       })
       .catch((err) => console.warn('Failed to load settings for key check:', err));
+    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
@@ -209,9 +218,16 @@ export default function App() {
 
   // Re-check all node key statuses whenever settings are saved
   useEffect(() => {
+    let cancelled = false;
     function handleSettingsSaved() {
+      const request = ++settingsCacheRequest.current;
+      const initialCache = useUIStore.getState().settingsCache;
       getSettings()
         .then((settings) => {
+          const currentCache = useUIStore.getState().settingsCache;
+          if (cancelled || request !== settingsCacheRequest.current
+            || currentCache.apiKeys !== initialCache.apiKeys
+            || currentCache.kreaConnectionMode !== initialCache.kreaConnectionMode) return;
           const apiKeys = (settings.apiKeys ?? {}) as Record<string, string>;
           useUIStore.getState().setSettingsCache(apiKeys, normalizeKreaMode(settings.kreaConnectionMode));
         })
@@ -219,7 +235,10 @@ export default function App() {
     }
 
     window.addEventListener('nebula:settings-saved', handleSettingsSaved);
-    return () => window.removeEventListener('nebula:settings-saved', handleSettingsSaved);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('nebula:settings-saved', handleSettingsSaved);
+    };
   }, []);
 
   // Hash route for the Dynamic Mark showcase. `#brand` (or `#dynamic-mark`)

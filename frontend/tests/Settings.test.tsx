@@ -8,6 +8,7 @@ import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 const getSettingsMock = vi.fn();
 const updateSettingsMock = vi.fn();
 const updateCredentialMock = vi.fn();
+const deleteSettingsApiKeyMock = vi.fn();
 const getKreaConnectionMock = vi.fn();
 const connectKreaMock = vi.fn();
 const checkKreaConnectionMock = vi.fn();
@@ -17,6 +18,7 @@ vi.mock('../src/lib/api', () => ({
   getSettings: (...args: unknown[]) => getSettingsMock(...args),
   updateSettings: (...args: unknown[]) => updateSettingsMock(...args),
   updateCredential: (...args: unknown[]) => updateCredentialMock(...args),
+  deleteSettingsApiKey: (...args: unknown[]) => deleteSettingsApiKeyMock(...args),
 }));
 
 vi.mock('../src/lib/kreaConnection', async (importOriginal) => ({
@@ -34,14 +36,17 @@ vi.mock('../src/lib/kreaConnection', async (importOriginal) => ({
 import { Settings } from '../src/components/panels/Settings';
 import { useUIStore } from '../src/store/uiStore';
 import { useGraphStore } from '../src/store/graphStore';
+import { useSettingsDraftStore } from '../src/store/settingsDraftStore';
 
 // ---------------------------------------------------------------------------
 // Test setup
 // ---------------------------------------------------------------------------
 
 const INITIAL_UI_STATE = { ...useUIStore.getState() };
+const INITIAL_DRAFT_STATE = { ...useSettingsDraftStore.getState() };
 
 beforeEach(() => {
+  useSettingsDraftStore.setState(INITIAL_DRAFT_STATE, true);
   useUIStore.setState(INITIAL_UI_STATE, true);
   useUIStore.setState((state) => ({
     panels: {
@@ -53,6 +58,7 @@ beforeEach(() => {
   getSettingsMock.mockReset();
   updateSettingsMock.mockReset();
   updateCredentialMock.mockReset();
+  deleteSettingsApiKeyMock.mockReset().mockResolvedValue({ status: 'removed' });
   updateSettingsMock.mockResolvedValue({ status: 'ok' });
   updateCredentialMock.mockResolvedValue({ status: 'updated' });
   getKreaConnectionMock.mockReset().mockResolvedValue({ status: 'disconnected' });
@@ -283,6 +289,7 @@ describe('Settings — Krea MCP connection', () => {
     fireEvent.change(select, { target: { value: 'mcp' } });
     expect(useUIStore.getState().settingsCache.kreaConnectionMode).toBeUndefined();
     expect(updateSettingsMock).not.toHaveBeenCalled();
+    getSettingsMock.mockResolvedValue({ apiKeys: {}, routing: {}, kreaConnectionMode: 'mcp' });
     clickSave();
     await waitFor(() => expect(useUIStore.getState().settingsCache.kreaConnectionMode).toBe('mcp'));
     expect(updateSettingsMock.mock.calls[0][0]).toMatchObject({ kreaConnectionMode: 'mcp' });
@@ -673,5 +680,252 @@ describe('Settings — desktop mode batch key updates', () => {
     expect(credentials.clear).toHaveBeenCalledWith('ANTHROPIC_API_KEY');
     expect(updateCredentialMock).toHaveBeenCalledWith('OPENAI_API_KEY', 'test-new-openai');
     expect(updateCredentialMock).toHaveBeenCalledWith('ANTHROPIC_API_KEY', '');
+  });
+});
+
+// Deferred requests exercise ownership and recovery without a real credential.
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
+function setSettingsVisible(visible: boolean) {
+  act(() => useUIStore.setState((state) => ({
+    panels: { ...state.panels, settings: { ...state.panels.settings, visible } },
+  })));
+}
+
+describe('Settings — load, draft, and provider removal safety', () => {
+  it.each([{}, { apiKeys: [] }, { apiKeys: { OPENAI_API_KEY: 12 } }])('rejects malformed settings instead of enabling defaults (%j)', async (response) => {
+    getSettingsMock.mockResolvedValue(response);
+    render(<Settings />);
+    expect(await screen.findByRole('alert')).toHaveTextContent('Settings could not load');
+    expect(screen.queryByRole('button', { name: 'Save Settings' })).not.toBeInTheDocument();
+    expect(updateSettingsMock).not.toHaveBeenCalled();
+  });
+
+  it('keeps a failed GET actionable and cannot save initial defaults; Retry loads the real form', async () => {
+    getSettingsMock.mockRejectedValueOnce(new Error('fixture settings unavailable'));
+    render(<Settings />);
+    expect(await screen.findByRole('alert')).toHaveTextContent('Settings could not load');
+    expect(screen.queryByRole('button', { name: 'Save Settings' })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Output Path')).not.toBeInTheDocument();
+    vi.useFakeTimers();
+    await act(async () => vi.advanceTimersByTimeAsync(4000));
+    expect(screen.getByRole('alert')).toHaveTextContent('Settings could not load');
+    vi.useRealTimers();
+    getSettingsMock.mockResolvedValueOnce({ apiKeys: {}, outputPath: '/saved-path' });
+    fireEvent.click(screen.getByRole('button', { name: 'Retry loading settings' }));
+    expect(await screen.findByLabelText('Output Path')).toHaveValue('/saved-path');
+    expect(updateSettingsMock).not.toHaveBeenCalled();
+  });
+
+  it('offers neither editable fields nor Save before an initial pending GET resolves', async () => {
+    const load = deferred<Record<string, unknown>>();
+    getSettingsMock.mockReturnValueOnce(load.promise);
+    render(<Settings />);
+    expect(await screen.findByText('Loading settings…')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Output Path')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Save Settings' })).not.toBeInTheDocument();
+    await act(async () => load.resolve({ apiKeys: {}, outputPath: '/loaded' }));
+    expect(screen.getByLabelText('Output Path')).toHaveValue('/loaded');
+    expect(updateSettingsMock).not.toHaveBeenCalled();
+  });
+
+  it('ignores an old load after closing and reopening, including after the newer form is edited', async () => {
+    const oldLoad = deferred<Record<string, unknown>>();
+    const newLoad = deferred<Record<string, unknown>>();
+    getSettingsMock.mockReturnValueOnce(oldLoad.promise).mockReturnValueOnce(newLoad.promise);
+    render(<Settings />);
+    await screen.findByText('Loading settings…');
+    setSettingsVisible(false);
+    setSettingsVisible(true);
+    await waitFor(() => expect(getSettingsMock).toHaveBeenCalledTimes(2));
+    await act(async () => newLoad.resolve({ apiKeys: {}, outputPath: '/newer' }));
+    fireEvent.change(screen.getByLabelText('Output Path'), { target: { value: '/newer-edit' } });
+    await act(async () => oldLoad.resolve({ apiKeys: {}, outputPath: '/old' }));
+    expect(screen.getByLabelText('Output Path')).toHaveValue('/newer-edit');
+    expect(screen.getByText(/Unsaved changes stay here/)).toBeInTheDocument();
+    expect(updateSettingsMock).not.toHaveBeenCalled();
+  });
+
+  it('retains unsaved fields and credentials through dismiss and unmount without browser persistence', async () => {
+    getSettingsMock.mockResolvedValue({ apiKeys: {}, outputPath: '/original', exportFolder: '/original-exports' });
+    const localWrite = vi.spyOn(Storage.prototype, 'setItem');
+    const rendered = render(<Settings />);
+    await expandApiKeys();
+    localWrite.mockClear();
+    fireEvent.change(screen.getByLabelText('OpenAI API key'), { target: { value: 'fixture-private-draft' } });
+    fireEvent.change(screen.getByLabelText('Output Path'), { target: { value: '/draft-output' } });
+    fireEvent.change(screen.getByLabelText('Default Save Folder'), { target: { value: '/draft-exports' } });
+    fireEvent.change(screen.getByRole('combobox', { name: 'Default Krea connection for new nodes' }), { target: { value: 'mcp' } });
+    fireEvent.click(screen.getByRole('checkbox', { name: /Demo zoom telemetry/ }));
+    expect(localWrite).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Close settings panel' }));
+    rendered.unmount();
+    setSettingsVisible(true);
+    render(<Settings />);
+    await expandApiKeys();
+    expect(screen.getByLabelText('OpenAI API key')).toHaveValue('fixture-private-draft');
+    expect(screen.getByLabelText('Output Path')).toHaveValue('/draft-output');
+    expect(screen.getByLabelText('Default Save Folder')).toHaveValue('/draft-exports');
+    expect(screen.getByRole('combobox', { name: 'Default Krea connection for new nodes' })).toHaveValue('mcp');
+    expect(screen.getByRole('checkbox', { name: /Demo zoom telemetry/ })).toBeChecked();
+    expect(getSettingsMock).toHaveBeenCalledOnce();
+    expect(updateSettingsMock).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Discard changes' }));
+    expect(screen.getByLabelText('OpenAI API key')).toHaveValue('');
+    expect(screen.getByLabelText('Output Path')).toHaveValue('/original');
+    expect(screen.queryByText(/Unsaved changes stay here/)).not.toBeInTheDocument();
+  });
+
+  it('keeps a failed save and intended edits available, and only explicitly retries the write', async () => {
+    getSettingsMock.mockResolvedValue({ apiKeys: {}, outputPath: '/original' });
+    updateSettingsMock.mockRejectedValueOnce(new Error('fixture write failure'));
+    render(<Settings />);
+    await screen.findByLabelText('Output Path');
+    fireEvent.change(screen.getByLabelText('Output Path'), { target: { value: '/intended' } });
+    clickSave();
+    expect(await screen.findByRole('alert')).toHaveTextContent('Your edits are still here');
+    expect(screen.getByLabelText('Output Path')).toHaveValue('/intended');
+    vi.useFakeTimers();
+    await act(async () => vi.advanceTimersByTimeAsync(4000));
+    expect(screen.getByRole('alert')).toHaveTextContent('could not be saved');
+    vi.useRealTimers();
+    expect(updateSettingsMock).toHaveBeenCalledOnce();
+    getSettingsMock.mockResolvedValueOnce({ apiKeys: {}, outputPath: '/intended' });
+    fireEvent.click(screen.getByRole('button', { name: 'Error — Retry' }));
+    expect(await screen.findByRole('button', { name: 'Saved' })).toBeInTheDocument();
+    expect(updateSettingsMock).toHaveBeenCalledTimes(2);
+    expect(updateSettingsMock.mock.calls[1][0].outputPath).toBe('/intended');
+  });
+
+  it('blocks edits and a second save while a write is pending, including after unmount and reopen', async () => {
+    const write = deferred<{ status: string }>();
+    getSettingsMock.mockResolvedValueOnce({ apiKeys: {}, outputPath: '/original' })
+      .mockResolvedValueOnce({ apiKeys: {}, outputPath: '/saved-draft' });
+    updateSettingsMock.mockReturnValueOnce(write.promise);
+    const rendered = render(<Settings />);
+    await screen.findByLabelText('Output Path');
+    fireEvent.change(screen.getByLabelText('Output Path'), { target: { value: '/saved-draft' } });
+    const save = screen.getByRole('button', { name: 'Save Settings' });
+    fireEvent.click(save);
+    fireEvent.click(save);
+    expect(screen.getByLabelText('Output Path')).toBeDisabled();
+    rendered.unmount();
+    render(<Settings />);
+    expect(await screen.findByLabelText('Output Path')).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Saving...' })).toBeDisabled();
+    expect(updateSettingsMock).toHaveBeenCalledOnce();
+    await act(async () => write.resolve({ status: 'saved' }));
+    expect(screen.getByLabelText('Output Path')).toHaveValue('/saved-draft');
+    expect(screen.getByLabelText('Output Path')).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Saved' })).toBeInTheDocument();
+    expect(getSettingsMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('refreshes after a successful save without repeating the write when refresh fails', async () => {
+    getSettingsMock.mockResolvedValueOnce({ apiKeys: {}, outputPath: '/original' })
+      .mockRejectedValueOnce(new Error('fixture refresh failure'));
+    render(<Settings />);
+    await screen.findByLabelText('Output Path');
+    fireEvent.change(screen.getByLabelText('Output Path'), { target: { value: '/saved' } });
+    clickSave();
+    expect(await screen.findByRole('alert')).toHaveTextContent('Settings were saved');
+    expect(screen.getByLabelText('Output Path')).toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'Save Settings' })).not.toBeInTheDocument();
+    getSettingsMock.mockResolvedValueOnce({ apiKeys: {}, outputPath: '/saved' });
+    expect(screen.queryByText(/Unsaved changes stay here/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Retry refresh' }));
+    expect(await screen.findByRole('button', { name: 'Saved' })).toBeInTheDocument();
+    expect(updateSettingsMock).toHaveBeenCalledOnce();
+    expect(screen.getByLabelText('Output Path')).toHaveValue('/saved');
+  });
+
+  it('treats whitespace-only browser key edits as blank without removing the configured key', async () => {
+    getSettingsMock.mockResolvedValue({ apiKeys: { OPENAI_API_KEY: '***configured' } });
+    render(<Settings />); await expandApiKeys();
+    fireEvent.change(screen.getByLabelText('OpenAI API key'), { target: { value: '   ' } });
+    clickSave(); await waitFor(() => expect(updateSettingsMock).toHaveBeenCalled());
+    expect(updateSettingsMock.mock.calls[0][0].apiKeys.OPENAI_API_KEY).toBe('');
+    expect(deleteSettingsApiKeyMock).not.toHaveBeenCalled();
+  });
+  it('explains that blanking a configured browser key keeps it, and removal is explicit', async () => {
+    getSettingsMock.mockResolvedValue({ apiKeys: { OPENAI_API_KEY: '***configured' } });
+    render(<Settings />);
+    await expandApiKeys();
+    fireEvent.change(screen.getByLabelText('OpenAI API key'), { target: { value: '' } });
+    expect(screen.getByText('This key is still configured. Use Remove to disconnect it.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Remove OpenAI API key' })).toBeInTheDocument();
+    expect(deleteSettingsApiKeyMock).not.toHaveBeenCalled();
+    expect(updateSettingsMock).not.toHaveBeenCalled();
+  });
+
+  it('removes one provider, refreshes readiness and retains unrelated drafts through reopening', async () => {
+    getSettingsMock.mockResolvedValueOnce({ apiKeys: { OPENAI_API_KEY: '***openai', ANTHROPIC_API_KEY: '***anthropic' }, outputPath: '/original' })
+      .mockResolvedValueOnce({ apiKeys: { ANTHROPIC_API_KEY: '***anthropic' }, outputPath: '/original' });
+    useUIStore.getState().setSettingsCache({ OPENAI_API_KEY: '***openai', ANTHROPIC_API_KEY: '***anthropic' });
+    const rendered = render(<Settings />);
+    await expandApiKeys();
+    fireEvent.change(screen.getByLabelText('Output Path'), { target: { value: '/unsaved-output' } });
+    fireEvent.change(screen.getByLabelText('Anthropic API key'), { target: { value: 'fixture-anthropic-edit' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Remove OpenAI API key' }));
+    expect(await screen.findByText('OpenAI key removed.')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByLabelText('Output Path')).toBeEnabled());
+    expect(deleteSettingsApiKeyMock).toHaveBeenCalledExactlyOnceWith('OPENAI_API_KEY');
+    expect(screen.getByLabelText('OpenAI API key')).toHaveValue('');
+    expect(screen.queryByRole('button', { name: 'Remove OpenAI API key' })).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Anthropic API key')).toHaveValue('fixture-anthropic-edit');
+    expect(screen.getByLabelText('Output Path')).toHaveValue('/unsaved-output');
+    expect(useUIStore.getState().settingsCache.apiKeys).toEqual({ ANTHROPIC_API_KEY: '***anthropic' });
+    rendered.unmount();
+    render(<Settings />);
+    await expandApiKeys();
+    expect(screen.getByLabelText('OpenAI API key')).toHaveValue('');
+    expect(screen.getByLabelText('Output Path')).toHaveValue('/unsaved-output');
+    expect(getSettingsMock).toHaveBeenCalledTimes(2);
+    expect(updateSettingsMock).not.toHaveBeenCalled();
+  });
+
+  it('keeps a successfully deleted key absent when GET fails, then retries only refresh', async () => {
+    getSettingsMock.mockResolvedValueOnce({ apiKeys: { OPENAI_API_KEY: '***openai', FAL_KEY: '***fal' } })
+      .mockRejectedValueOnce(new Error('fixture refresh failure'));
+    useUIStore.getState().setSettingsCache({ OPENAI_API_KEY: '***openai', FAL_KEY: '***fal' });
+    render(<Settings />);
+    await expandApiKeys();
+    fireEvent.click(screen.getByRole('button', { name: 'Remove OpenAI API key' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('The key was removed');
+    expect(screen.getByLabelText('OpenAI API key')).toHaveValue('');
+    expect(useUIStore.getState().settingsCache.apiKeys).toEqual({ FAL_KEY: '***fal' });
+    expect(screen.queryByRole('button', { name: 'Save Settings' })).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Output Path')).toBeDisabled();
+    getSettingsMock.mockResolvedValueOnce({ apiKeys: { FAL_KEY: '***fal' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Retry refresh' }));
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
+    expect(deleteSettingsApiKeyMock).toHaveBeenCalledOnce();
+    expect(updateSettingsMock).not.toHaveBeenCalled();
+    expect(screen.getByLabelText('OpenAI API key')).toHaveValue('');
+    expect(screen.getByLabelText('fal.ai API key')).toHaveValue('***fal');
+  });
+
+  it('keeps removal errors visible and retries only the selected provider', async () => {
+    getSettingsMock.mockResolvedValueOnce({ apiKeys: { OPENAI_API_KEY: '***openai', FAL_KEY: '***fal' } })
+      .mockResolvedValueOnce({ apiKeys: { FAL_KEY: '***fal' } });
+    deleteSettingsApiKeyMock.mockRejectedValueOnce(new Error('fixture deletion failure'));
+    render(<Settings />);
+    await expandApiKeys();
+    fireEvent.click(screen.getByRole('button', { name: 'Remove OpenAI API key' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Retry Remove');
+    expect(screen.getByLabelText('OpenAI API key')).toHaveValue('***openai');
+    expect(screen.getByLabelText('fal.ai API key')).toHaveValue('***fal');
+    fireEvent.click(screen.getByRole('button', { name: 'Remove OpenAI API key' }));
+    await screen.findByText('OpenAI key removed.');
+    expect(deleteSettingsApiKeyMock.mock.calls).toEqual([['OPENAI_API_KEY'], ['OPENAI_API_KEY']]);
+    expect(updateSettingsMock).not.toHaveBeenCalled();
   });
 });

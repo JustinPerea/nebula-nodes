@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, PrivateAttr
 
 
 class PortValueDict(BaseModel):
@@ -15,6 +15,9 @@ class GraphNode(BaseModel):
     definition_id: str = Field(alias="definitionId")
     params: dict[str, Any] = Field(default_factory=dict)
     outputs: dict[str, PortValueDict] = Field(default_factory=dict)
+    # Execution-local proof of Cinema runtime produced by this handler. It is
+    # never accepted from JSON or serialized into graph/recipe history.
+    _cinema_produced_outputs: dict[str, Any] = PrivateAttr(default_factory=dict)
 
     model_config = {"populate_by_name": True}
 

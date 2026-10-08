@@ -2491,12 +2491,21 @@ async def get_settings() -> dict:
 async def update_settings(body: dict[str, Any]) -> dict:
     if "kreaConnectionMode" in body and body["kreaConnectionMode"] not in ("api-token", "mcp"):
         raise HTTPException(400, "Krea connection mode must be api-token or mcp")
-    current = load_settings()
+    if "zoomTelemetryEnabled" in body and not isinstance(body["zoomTelemetryEnabled"], bool):
+        raise HTTPException(400, "zoomTelemetryEnabled must be a boolean")
     # Desktop mode: credentials are managed via the Keychain credential IPC
     # and POST /api/credentials/update — never via this endpoint. Ignore any
     # apiKeys in the request body so a compromised renderer cannot overwrite
     # injected keys.
-    if "apiKeys" in body and not is_injected_mode():
+    accepts_keys = not is_injected_mode()
+    if "apiKeys" in body and accepts_keys:
+        if not isinstance(body["apiKeys"], dict) or any(
+            not isinstance(value, str) for value in body["apiKeys"].values()
+        ):
+            raise HTTPException(400, "apiKeys must be an object of string values")
+    # Do not mutate a loaded/shared object until the complete request is valid.
+    current = copy.deepcopy(load_settings())
+    if "apiKeys" in body and accepts_keys:
         current_keys = current.get("apiKeys", {})
         for k, v in body["apiKeys"].items():
             if v and not v.startswith("***"):
@@ -2513,11 +2522,6 @@ async def update_settings(body: dict[str, Any]) -> dict:
         "kreaConnectionMode",
     ):
         if key in body:
-            if key == "zoomTelemetryEnabled" and not isinstance(body[key], bool):
-                raise HTTPException(
-                    status_code=400,
-                    detail="zoomTelemetryEnabled must be a boolean",
-                )
             current[key] = body[key]
     save_settings(current)
     # API keys may have changed — drop cached validation results so the next
@@ -2546,6 +2550,26 @@ _CREDENTIAL_PROVIDER_ALLOWLIST = frozenset({
     "XAI_API_KEY",
     "WORLDLABS_API_KEY",
 })
+
+
+@app.delete("/api/settings/api-keys/{provider}")
+async def remove_settings_api_key(provider: str) -> dict:
+    """Explicitly remove one browser credential without replacing Settings.
+
+    Credential values and Krea MCP OAuth state never enter the response. The
+    desktop credential bridge remains responsible for injected credentials.
+    """
+    if provider not in _CREDENTIAL_PROVIDER_ALLOWLIST:
+        raise HTTPException(400, "Unknown credential provider")
+    if is_injected_mode():
+        raise HTTPException(409, "Injected credentials must be removed through the credential bridge")
+    current = copy.deepcopy(load_settings())
+    current_keys = current.get("apiKeys", {})
+    current_keys.pop(provider, None)
+    current["apiKeys"] = current_keys
+    save_settings(current)
+    clear_provider_validation_cache()
+    return {"status": "removed"}
 
 
 @app.post("/api/credentials/update")
@@ -3736,10 +3760,11 @@ async def get_node(node_id: str) -> dict:
 
 # ---------- CLI: Graph management ----------
 
-async def _broadcast_graph_sync() -> dict[str, Any]:
+async def _broadcast_graph_sync(*, graph_replaced: bool = False) -> dict[str, Any]:
     """Push the current CLI graph to all connected frontends via WebSocket."""
     export = await export_graph_for_frontend()
-    await manager.broadcast_raw({"type": "graphSync", **export})
+    await manager.broadcast_raw({"type": "graphSync", **export,
+                                 **({"graphReplaced": True} if graph_replaced else {})})
     return export
 
 
@@ -3752,8 +3777,9 @@ def _sync_outputs_to_cli_graph(
     pattern used by /api/graph/run so every execution path converges on the
     same stored shape.
 
-    Return that canonical shape so callers can broadcast the exact value that
-    was persisted without running path normalization a second time.
+    Return the complete normalized recipe outputs for its execution history.
+    Source previews and Cinema shot ports may preserve newer canonical state
+    instead of storing every output from an older recipe.
     """
     if not isinstance(outputs, dict):
         normalized_outputs: dict[str, Any] = {}
@@ -3774,6 +3800,30 @@ def _sync_outputs_to_cli_graph(
         pinned = current_node.get("params", {}).get("_paperSource", {}).get("snapshot", {})
         if pinned.get("filePath") and normalized_outputs.get("image", {}).get("value") != pinned["filePath"]:
             return normalized_outputs
+
+    if current_node.get("definitionId") == "cinema-scene":
+        # A whole-scene recipe owns results for its original shot IDs, not
+        # today's authored shot set. Keep newer shots' ports and omit removed
+        # shots from the live node, while the event still records all results.
+        scene = (current_node.get("params") or {}).get("scene")
+        shots = scene.get("shots") if isinstance(scene, dict) else None
+        valid_ports = {
+            f"shot_{shot['id']}" for shot in shots
+            if isinstance(shot, dict) and isinstance(shot.get("id"), str) and shot["id"]
+        } if isinstance(shots, list) else set()
+        stored_outputs = {
+            port: copy.deepcopy(value)
+            for port, value in (current_node.get("outputs") or {}).items()
+            if not port.startswith("shot_") or port in valid_ports
+        }
+        stored_outputs.update({
+            port: copy.deepcopy(value) for port, value in normalized_outputs.items()
+            if not port.startswith("shot_") or port in valid_ports
+        })
+        if current_node.get("outputs") != stored_outputs:
+            current_node["outputs"] = stored_outputs
+            cli_graph._maybe_persist()
+        return normalized_outputs
 
     cli_graph.nodes[node_id]["outputs"] = normalized_outputs
     cli_graph._maybe_persist()
@@ -3939,6 +3989,46 @@ def _sync_params_to_cli_graph(nodes: list[GraphNode]) -> bool:
     persisted = False
     for node in nodes:
         current = cli_graph.nodes.get(node.id, {})
+        if node.definition_id == "cinema-scene":
+            # Whole-scene execution mutates only shot.output. The request's
+            # authored scene and variation history are snapshots: copying
+            # either would erase uploads/edits or a later promotion.
+            if current.get("definitionId") != "cinema-scene":
+                continue
+            params = copy.deepcopy(current.get("params") or {})
+            current_scene = params.get("scene")
+            current_shots = current_scene.get("shots") if isinstance(current_scene, dict) else None
+            if not isinstance(current_shots, list):
+                continue
+            produced_ports: dict[str, Any] = {}
+            valid_ports: set[str] = set()
+            for shot in current_shots:
+                if not isinstance(shot, dict) or not isinstance(shot.get("id"), str):
+                    continue
+                valid_ports.add(f"shot_{shot['id']}")
+                if shot["id"] in node._cinema_produced_outputs:
+                    runtime = copy.deepcopy(node._cinema_produced_outputs[shot["id"]])
+                    shot["output"] = runtime
+                    if runtime.get("status") in {"done", "error"}:
+                        produced_ports[f"shot_{shot['id']}"] = {
+                            "type": "Image",
+                            "value": runtime.get("imageUrl") if runtime["status"] == "done" else None,
+                        }
+            if current.get("params") != params:
+                current["params"] = params
+                persisted = True
+            # Partial cancellation may occur before the whole-scene handler
+            # returns an ExecutedEvent. Its completed shots still need live
+            # ports that agree with the media now shown in their scene output.
+            outputs = {
+                port: copy.deepcopy(value) for port, value in (current.get("outputs") or {}).items()
+                if not port.startswith("shot_") or port in valid_ports
+            }
+            outputs.update(_normalize_outputs_for_storage(produced_ports))
+            if current.get("outputs") != outputs:
+                current["outputs"] = outputs
+                persisted = True
+            continue
         if node.definition_id == "paper-source":
             live = current.get("params", {}).get("_paperSource", {})
             pinned = node.params.get("_paperSource", {})
@@ -4329,6 +4419,46 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
             raise HTTPException(status_code=400, detail="params must be an object")
         _validate_params(node.get("definitionId", ""), params)
         params = _coerce_params(node.get("definitionId", ""), params)
+        if node.get("definitionId") == "cinema-scene" and "scene" in params:
+            # Studio/Inspector PUTs carry authoring snapshots captured before
+            # a generation or promotion may have installed fresher media.
+            # Runtime media belongs to the canonical shot, not that snapshot.
+            incoming_scene = params["scene"]
+            if not isinstance(incoming_scene, dict) or not isinstance(incoming_scene.get("shots"), list):
+                raise HTTPException(400, "Cinema scene must be an object with a shots array")
+            shots = incoming_scene["shots"]
+            if any(not isinstance(shot, dict) or not isinstance(shot.get("id"), str)
+                   or not shot["id"] for shot in shots):
+                raise HTTPException(400, "Cinema shots require non-empty string IDs")
+            if len({shot["id"] for shot in shots}) != len(shots):
+                raise HTTPException(400, "Cinema shot IDs must be unique")
+            current_scene = (node.get("params") or {}).get("scene")
+            stored_shots = current_scene.get("shots") if isinstance(current_scene, dict) else None
+            current_shots = {
+                shot["id"]: shot for shot in (stored_shots if isinstance(stored_shots, list) else [])
+                if isinstance(shot, dict) and isinstance(shot.get("id"), str)
+            }
+            authored_scene = copy.deepcopy(incoming_scene)
+            for shot in authored_scene["shots"]:
+                canonical = current_shots.get(shot["id"])
+                for field in ("output", "variations", "selectedVariation"):
+                    shot.pop(field, None)
+                    if canonical is not None and field in canonical:
+                        shot[field] = copy.deepcopy(canonical[field])
+                if canonical is None:
+                    shot["output"] = {"status": "idle"}
+            params["scene"] = authored_scene
+            # Deleted shots no longer own live ports/connections. Import and
+            # generation/promotion routes retain their separate media contract.
+            valid_ports = {f"shot_{shot['id']}" for shot in authored_scene["shots"]}
+            node["outputs"] = {
+                port: output for port, output in (node.get("outputs") or {}).items()
+                if not port.startswith("shot_") or port in valid_ports
+            }
+            cli_graph.edges = [edge for edge in cli_graph.edges
+                               if edge.get("source") != node_id
+                               or not str(edge.get("sourceHandle", "")).startswith("shot_")
+                               or edge["sourceHandle"] in valid_ports]
         recovery_update = isinstance(node.get("definitionId"), str) and uses_durable_recovery(
             str(node.get("definitionId")),
             provider="worldlabs",
@@ -4888,7 +5018,7 @@ async def import_graph(body: dict[str, Any]) -> dict:
             list(candidate.nodes.values()),
             source="import",
         )
-    exported = await _broadcast_graph_sync()
+    exported = await _broadcast_graph_sync(graph_replaced=True)
     publish_action(
         f"Loaded graph ({len(cli_graph.nodes)} nodes, {len(cli_graph.edges)} edges)"
     )

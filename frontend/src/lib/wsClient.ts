@@ -53,6 +53,8 @@ export type ExecutionEvent = (
       nodes: unknown[];
       edges: unknown[];
       empty: boolean;
+      /** Explicit committed graph import; ordinary updates remain merges. */
+      graphReplaced?: boolean;
       providerRecoveries?: ProviderRecoveryCheckpoint[];
       providerStartAmbiguities?: ProviderStartAmbiguity[];
       executionStatuses?: ExecutionStatusResult[];

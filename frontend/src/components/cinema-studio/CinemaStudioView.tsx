@@ -107,14 +107,23 @@ export function CinemaStudioView() {
   };
 
   const handleReorder = (shots: CinemaShot[]) => {
-    updateScene(cinemaNodeId, { ...scene, shots });
+    const orderedIds = shots.map((shot) => shot.id);
+    updateScene(cinemaNodeId, (current) => {
+      const byId = new Map(current.shots.map((shot) => [shot.id, shot]));
+      const ordered = orderedIds.flatMap((id) => {
+        const shot = byId.get(id);
+        return shot ? [shot] : [];
+      });
+      return { ...current, shots: [...ordered, ...current.shots.filter((shot) => !orderedIds.includes(shot.id))] };
+    });
   };
 
-  const handleChangeShot = (next: CinemaShot) => {
-    updateScene(cinemaNodeId, {
-      ...scene,
-      shots: scene.shots.map((s) => (s.id === next.id ? next : s)),
-    });
+  const handleChangeShot = (update: (current: CinemaShot) => CinemaShot) => {
+    if (!selectedShot) return;
+    updateScene(cinemaNodeId, (current) => ({
+      ...current,
+      shots: current.shots.map((shot) => shot.id === selectedShot.id ? update(shot) : shot),
+    }));
   };
 
   return (
@@ -125,9 +134,10 @@ export function CinemaStudioView() {
 
       <div className="cinema-studio-view__shared">
         <CinemaSharedControls
+          cinemaNodeId={cinemaNodeId}
           scene={scene}
           connectedRefs={connectedCharacterRefs}
-          onChange={(next) => updateScene(cinemaNodeId, next)}
+          onChange={(update) => updateScene(cinemaNodeId, update)}
         />
       </div>
 

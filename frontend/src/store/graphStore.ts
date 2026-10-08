@@ -71,6 +71,7 @@ import {
 import { wsClient, type ExecutionEvent } from '../lib/wsClient';
 import { notifyJobComplete } from '../lib/jobNotifications';
 import { useUIStore } from './uiStore';
+import { getCinemaUploadIssue, useCinemaUploadStore } from './cinemaUploadStore';
 import { isKreaGateway, normalizeKreaMode, nodeKeyStatus, withNewKreaMode } from '../lib/kreaConnection';
 import { clipSpeed, type EditClip } from '../lib/editor/virtualPlayback';
 import type { KeyframeData, VideoGraphManifest, TrackItem } from '../types/video';
@@ -239,6 +240,20 @@ function nodesInExecutionScope(nodes: Node<NodeData>[], edges: Edge[], targetNod
     }
   }
   return nodes.filter((node) => ids.has(node.id));
+}
+
+function pendingCinemaUploadIssue(nodes: Node<NodeData>[], selected?: { nodeId: string; shotId: string }): string | null {
+  for (const node of nodes) {
+    if (node.data.definitionId !== 'cinema-scene') continue;
+    const issue = getCinemaUploadIssue(node.id, selected?.nodeId === node.id ? selected.shotId : undefined,
+      selected?.nodeId !== node.id);
+    if (issue) return issue;
+  }
+  return null;
+}
+
+function warnPendingCinemaUpload(issue: string): void {
+  if (typeof window !== 'undefined') window.alert(issue);
 }
 
 function markExecutionScopeQueued(
@@ -693,7 +708,7 @@ interface GraphState {
   loadGraph: (
     nodes: Node<NodeData>[],
     edges: Edge[],
-    options?: { allowDuringExecution?: boolean },
+    options?: { allowDuringExecution?: boolean; preserveCinemaUploads?: boolean },
   ) => void;
   loadSampleGraph: () => void;
   autoLayout: () => void;
@@ -723,7 +738,7 @@ interface GraphState {
   // spec (without changing the shot set).
   addShot: (nodeId: string) => string | null;
   removeShot: (nodeId: string, shotId: string) => void;
-  updateScene: (nodeId: string, spec: CinemaSceneSpec) => void;
+  updateScene: (nodeId: string, spec: CinemaSceneSpec | ((current: CinemaSceneSpec) => CinemaSceneSpec | null)) => void;
 
   // Character node helper. Creates a `character` static node with
   // params._characterId set, plus denormalized name/thumbnail for canvas
@@ -903,24 +918,215 @@ function applyShotVariationPromotion(
   }));
 }
 
-/** Sync the scene spec back to cli_graph so Claude's `nebula graph` reflects
- *  shot edits. CLI-origin nodes only (UUID/frontend-only nodes aren't on the
- *  backend yet); fire-and-forget like updateNodeData's param push. */
-function persistSceneParam(nodeId: string, scene: CinemaSceneSpec): void {
-  if (!CLI_ID_RE.test(nodeId)) return;
-  const node = useGraphStore.getState().nodes.find((n) => n.id === nodeId);
-  if (!node) return;
-  apiFetch(`/api/graph/node/${nodeId}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ params: { ...node.data.params, scene } }),
-  }).catch((err) => console.warn(`[nebula] Scene sync for ${nodeId} failed:`, err));
-}
-
 // Per-node timers for debounced param-sync to the backend. Keyed by node id
 // so one node's typing never stalls another node's flush.
 const paramPushTimers: Record<string, number> = {};
 const PARAM_PUSH_DEBOUNCE_MS = 250;
+
+interface CinemaScenePersistence {
+  authoredScene: CinemaSceneSpec;
+  pending: boolean;
+  acknowledged: boolean;
+  inFlight: AbortController | null;
+  sentScenes: CinemaSceneSpec[];
+  settleTimer: ReturnType<typeof setTimeout> | null;
+}
+const cinemaScenePersistence = new Map<string, CinemaScenePersistence>();
+let suspendedCinemaScenes: Map<string, CinemaSceneSpec> | null = null;
+
+function canonicalCinemaValue(value: unknown): string {
+  return JSON.stringify(value, (_key, item) => {
+    if (item && typeof item === 'object' && !Array.isArray(item)) {
+      return Object.fromEntries(Object.entries(item).sort(([a], [b]) => a.localeCompare(b)));
+    }
+    return item;
+  });
+}
+
+function cinemaAuthoringKey(scene: CinemaSceneSpec): string {
+  // Asset references can be relative locally and absolute in graphSync.
+  const normalized = rewriteBackendAssetUrls(scene);
+  return canonicalCinemaValue({ ...normalized, shots: normalized.shots.map((shot) => {
+    const authored = { ...shot };
+    delete authored.output;
+    delete authored.variations;
+    delete authored.selectedVariation;
+    return authored;
+  }) });
+}
+
+function cinemaShotRuntimeKey(shot: CinemaShot): string {
+  return canonicalCinemaValue({
+    output: shot.output, variations: shot.variations, selectedVariation: shot.selectedVariation,
+  });
+}
+
+/** Invalidate only this lifetime's queued writes. Abort is a client fence;
+ * it cannot undo a mutation the backend has already committed. */
+export function clearCinemaScenePersistence(nodeId?: string): void {
+  if (nodeId === undefined) suspendedCinemaScenes = null;
+  else suspendedCinemaScenes?.delete(nodeId);
+  const ids = nodeId === undefined ? [...cinemaScenePersistence.keys()] : [nodeId];
+  for (const id of ids) {
+    const entry = cinemaScenePersistence.get(id);
+    cinemaScenePersistence.delete(id);
+    if (paramPushTimers[id] !== undefined) {
+      window.clearTimeout(paramPushTimers[id]);
+      delete paramPushTimers[id];
+    }
+    if (entry?.settleTimer) clearTimeout(entry.settleTimer);
+    entry?.inFlight?.abort();
+  }
+}
+
+/** An import can fail before replacing the graph. Keep the authored intent
+ * while revoking its old requests and allowing authoritative import echoes. */
+function suspendCinemaScenePersistence(): void {
+  if (suspendedCinemaScenes !== null) return;
+  const suspended = new Map<string, CinemaSceneSpec>();
+  for (const nodeId of cinemaScenePersistence.keys()) {
+    const node = useGraphStore.getState().nodes.find((candidate) => candidate.id === nodeId);
+    const scene = node?.data.params.scene as CinemaSceneSpec | undefined;
+    if (node?.data.definitionId === 'cinema-scene' && scene?.shots) {
+      suspended.set(nodeId, JSON.parse(JSON.stringify(scene)) as CinemaSceneSpec);
+    }
+  }
+  clearCinemaScenePersistence();
+  suspendedCinemaScenes = suspended;
+}
+
+function resumeCinemaScenePersistence(): void {
+  const suspended = suspendedCinemaScenes;
+  suspendedCinemaScenes = null;
+  if (!suspended || useGraphStore.getState().backendFreshStartPending) return;
+  for (const [nodeId, authored] of suspended) {
+    const node = useGraphStore.getState().nodes.find((candidate) => candidate.id === nodeId);
+    const current = node?.data.params.scene as CinemaSceneSpec | undefined;
+    if (node?.data.definitionId !== 'cinema-scene' || !current?.shots) continue;
+    const currentShots = new Map(current.shots.map((shot) => [shot.id, shot]));
+    const restored = { ...authored, shots: authored.shots.map((shot) => {
+      const latest = currentShots.get(shot.id);
+      return latest ? { ...shot, output: latest.output ?? shot.output,
+        variations: latest.variations ?? shot.variations,
+        selectedVariation: latest.selectedVariation ?? shot.selectedVariation } : shot;
+    }) };
+    applySceneToNode(useGraphStore.setState, nodeId, restored);
+    persistSceneParam(nodeId, restored);
+  }
+}
+
+function maybeSettleCinemaPersistence(nodeId: string, entry: CinemaScenePersistence): void {
+  if (cinemaScenePersistence.get(nodeId) !== entry || entry.inFlight || entry.pending) return;
+  if (entry.acknowledged) {
+    clearCinemaScenePersistence(nodeId);
+    return;
+  }
+  // A disconnected socket may never deliver the write's echo. Do not hide
+  // unrelated external edits indefinitely after HTTP confirms the save.
+  entry.settleTimer = setTimeout(() => {
+    if (cinemaScenePersistence.get(nodeId) === entry && !entry.inFlight && !entry.pending) {
+      clearCinemaScenePersistence(nodeId);
+    }
+  }, 5000);
+}
+
+async function flushCinemaScenePersistence(nodeId: string, entry: CinemaScenePersistence): Promise<void> {
+  if (cinemaScenePersistence.get(nodeId) !== entry || entry.inFlight || !entry.pending
+    || paramPushTimers[nodeId] !== undefined) return;
+  const node = useGraphStore.getState().nodes.find((candidate) => candidate.id === nodeId);
+  const scene = node?.data.params.scene as CinemaSceneSpec | undefined;
+  if (node?.data.definitionId !== 'cinema-scene' || !scene?.shots) {
+    clearCinemaScenePersistence(nodeId);
+    return;
+  }
+  // Re-read live runtime media at dispatch, after earlier echoes/results.
+  const sentScene = JSON.parse(JSON.stringify(scene)) as CinemaSceneSpec;
+  entry.sentScenes.push(sentScene);
+  if (entry.sentScenes.length > 32) entry.sentScenes.shift();
+  entry.pending = false;
+  const controller = new AbortController();
+  entry.inFlight = controller;
+  let failed = false;
+  try {
+    const response = await apiFetch(`/api/graph/node/${nodeId}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, signal: controller.signal,
+      body: JSON.stringify({ params: { ...node.data.params, scene: sentScene } }),
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  } catch (error) {
+    failed = true;
+    if (cinemaScenePersistence.get(nodeId) === entry && !controller.signal.aborted) {
+      console.warn(`[nebula] Scene sync for ${nodeId} failed; edit again to retry:`, error);
+    }
+  } finally {
+    if (cinemaScenePersistence.get(nodeId) === entry) {
+      entry.inFlight = null;
+      if (entry.pending) void flushCinemaScenePersistence(nodeId, entry);
+      else if (failed) clearCinemaScenePersistence(nodeId);
+      else maybeSettleCinemaPersistence(nodeId, entry);
+    }
+  }
+}
+
+/** Serialize whole-scene PUTs and coalesce edits while one is in flight.
+ * Register the authoring overlay before any debounce can expose an old echo. */
+function persistSceneParam(nodeId: string, scene: CinemaSceneSpec, debounceMs = 0): void {
+  if (!CLI_ID_RE.test(nodeId)) return;
+  const node = useGraphStore.getState().nodes.find((candidate) => candidate.id === nodeId);
+  if (node?.data.definitionId !== 'cinema-scene') return;
+  if (suspendedCinemaScenes !== null) {
+    suspendedCinemaScenes.set(nodeId, JSON.parse(JSON.stringify(scene)) as CinemaSceneSpec);
+    return;
+  }
+  let entry = cinemaScenePersistence.get(nodeId);
+  if (!entry) {
+    entry = { authoredScene: scene, pending: false, acknowledged: false,
+      inFlight: null, sentScenes: [], settleTimer: null };
+    cinemaScenePersistence.set(nodeId, entry);
+  }
+  if (entry.settleTimer) clearTimeout(entry.settleTimer);
+  entry.settleTimer = null;
+  entry.authoredScene = JSON.parse(JSON.stringify(scene)) as CinemaSceneSpec;
+  entry.acknowledged = false;
+  entry.pending = true;
+  if (paramPushTimers[nodeId] !== undefined) {
+    window.clearTimeout(paramPushTimers[nodeId]);
+    delete paramPushTimers[nodeId];
+  }
+  if (debounceMs > 0) {
+    const owner = entry;
+    paramPushTimers[nodeId] = window.setTimeout(() => {
+      delete paramPushTimers[nodeId];
+      void flushCinemaScenePersistence(nodeId, owner);
+    }, debounceMs);
+  } else void flushCinemaScenePersistence(nodeId, entry);
+}
+
+function mergePendingCinemaScene(nodeId: string, local: CinemaSceneSpec, incoming: CinemaSceneSpec): CinemaSceneSpec {
+  const entry = cinemaScenePersistence.get(nodeId);
+  if (!entry) return incoming;
+  const incomingKey = cinemaAuthoringKey(incoming);
+  if (incomingKey === cinemaAuthoringKey(entry.authoredScene)) {
+    entry.acknowledged = true;
+    maybeSettleCinemaPersistence(nodeId, entry);
+  }
+  const incomingShots = new Map(incoming.shots.map((shot) => [shot.id, shot]));
+  return { ...local, shots: local.shots.map((shot) => {
+    const received = incomingShots.get(shot.id);
+    if (!received) return shot;
+    const runtimeKey = cinemaShotRuntimeKey(received);
+    const knownWriteEcho = entry.sentScenes.some((sent) => {
+      const sentShot = sent.shots.find((candidate) => candidate.id === shot.id);
+      return sentShot && cinemaAuthoringKey(sent) === incomingKey
+        && cinemaShotRuntimeKey(sentShot) === runtimeKey;
+    });
+    if ((knownWriteEcho && cinemaShotRuntimeKey(shot) !== runtimeKey)
+      || (shot.output?.status === 'running' && received.output?.status === 'idle')) return shot;
+    return { ...shot, output: received.output ?? shot.output,
+      variations: received.variations ?? shot.variations,
+      selectedVariation: received.selectedVariation ?? shot.selectedVariation };
+  }) };
+}
 
 function persistNodePositions(positions: Record<string, { x: number; y: number }>): void {
   const persisted = Object.fromEntries(
@@ -1712,6 +1918,7 @@ wsClient.subscribe((event) => {
       nodes: rawCliNodes,
       edges: cliEdges,
       empty,
+      graphReplaced = false,
       providerRecoveries = [],
       providerStartAmbiguities = [],
       executionStatuses,
@@ -1720,10 +1927,17 @@ wsClient.subscribe((event) => {
       nodes: Node<NodeData>[];
       edges: Edge[];
       empty: boolean;
+      graphReplaced?: boolean;
       providerRecoveries?: ProviderRecoveryCheckpoint[];
       providerStartAmbiguities?: ProviderStartAmbiguity[];
       executionStatuses?: ExecutionStatusResult[];
     };
+    if (graphReplaced) {
+      // The committed import can arrive before, or instead of, its HTTP ack.
+      // Revoke old same-ID uploads/writes and suspended drafts before merging.
+      clearCinemaScenePersistence();
+      useCinemaUploadStore.getState().clear();
+    }
     useGraphStore.getState().hydrateProviderRecoveries(providerRecoveries);
     useGraphStore.getState().hydrateProviderStartAmbiguities(providerStartAmbiguities);
     if (executionStatuses !== undefined) {
@@ -1753,7 +1967,7 @@ wsClient.subscribe((event) => {
 
     if (empty) {
       // cli_graph was cleared — drop only cli-origin nodes/edges; keep frontend work.
-      const remainingNodes = state.nodes.filter((n) => !CLI_ID_RE.test(n.id));
+      const remainingNodes = graphReplaced ? [] : state.nodes.filter((n) => !CLI_ID_RE.test(n.id));
       const remainingIds = new Set(remainingNodes.map((n) => n.id));
       const remainingEdges = state.edges.filter(
         (e) => remainingIds.has(e.source) && remainingIds.has(e.target),
@@ -1763,11 +1977,12 @@ wsClient.subscribe((event) => {
         edges: remainingEdges,
         backendFreshStartPending: false,
       });
+      useCinemaUploadStore.getState().reconcileTargets(remainingNodes);
       return;
     }
 
-    const existingById = new Map(state.nodes.map((n) => [n.id, n]));
-    const frontendOnlyNodes = state.nodes.filter((n) => !CLI_ID_RE.test(n.id));
+    const existingById = new Map((graphReplaced ? [] : state.nodes).map((n) => [n.id, n]));
+    const frontendOnlyNodes = graphReplaced ? [] : state.nodes.filter((n) => !CLI_ID_RE.test(n.id));
 
     // Compute keyStatus for a node given its definition. Used for both new and
     // existing cli nodes so the "missing API key" badge shows up consistently.
@@ -1794,6 +2009,22 @@ wsClient.subscribe((event) => {
           && (!incomingSource || (previousSource.id === incomingSource.id
             && previousSource.sequence >= incomingSource.sequence))
           ? previousSource : incomingSource;
+        const localScene = existing.data.params.scene as CinemaSceneSpec | undefined;
+        const incomingScene = cliNode.data.params.scene as CinemaSceneSpec | undefined;
+        const cinemaScene = cliNode.data.definitionId === 'cinema-scene'
+          && cinemaScenePersistence.has(cliNode.id) && localScene?.shots && incomingScene?.shots
+          ? mergePendingCinemaScene(cliNode.id, localScene, incomingScene) : null;
+        const cinemaOutputs = cinemaScene ? Object.fromEntries(
+          Object.entries(hasCliOutputs ? cliOutputs : existing.data.outputs).filter(([port]) =>
+            !port.startsWith('shot_') || cinemaScene.shots.some((shot) => shotPortId(shot.id) === port)),
+        ) : null;
+        if (cinemaScene && cinemaOutputs) {
+          for (const shot of cinemaScene.shots) {
+            if (shot.output?.imageUrl) cinemaOutputs[shotPortId(shot.id)] = {
+              type: 'Image', value: shot.output.imageUrl,
+            };
+          }
+        }
         return {
           ...cliNode,
           type: isPaperSource ? 'paperSourceNode' : cliNode.data.definitionId === 'batch'
@@ -1812,6 +2043,11 @@ wsClient.subscribe((event) => {
                 ? { image: { type: 'Image' as const, value: paperSource.snapshot.filePath } }
                 : existing.data.outputs,
               state: paperSource.snapshot ? 'complete' as const : 'idle' as const,
+            } : {}),
+            ...(cinemaScene ? {
+              params: { ...cliNode.data.params, scene: cinemaScene },
+              dynamicOutputPorts: shotOutputPorts(cinemaScene),
+              outputs: cinemaOutputs!,
             } : {}),
           },
         };
@@ -1848,7 +2084,7 @@ wsClient.subscribe((event) => {
     const edgeKey = (e: Edge): string =>
       `${e.source}:${e.sourceHandle ?? ''}->${e.target}:${e.targetHandle ?? ''}`;
     const cliEdgeKeys = new Set((cliEdges as Edge[]).map(edgeKey));
-    const frontendOnlyEdges = state.edges.filter(
+    const frontendOnlyEdges = graphReplaced ? [] : state.edges.filter(
       (e) => !cliEdgeKeys.has(edgeKey(e)) && mergedIds.has(e.source) && mergedIds.has(e.target),
     );
     const mergedEdges = [...frontendOnlyEdges, ...cliEdges];
@@ -1858,6 +2094,7 @@ wsClient.subscribe((event) => {
       edges: mergedEdges,
       backendFreshStartPending: false,
     });
+    useCinemaUploadStore.getState().reconcileTargets(merged);
     if (
       observedPendingNodeId
       && pendingNodeCreationAttempt?.phase === 'uncertain'
@@ -2736,6 +2973,12 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     // value is what matters. Execution state updates (outputs/state/progress)
     // don't need to sync.
     if (isParamChange && CLI_ID_RE.test(nodeId)) {
+      const currentNode = get().nodes.find((node) => node.id === nodeId);
+      const currentScene = currentNode?.data.params.scene as CinemaSceneSpec | undefined;
+      if (currentNode?.data.definitionId === 'cinema-scene' && currentScene?.shots) {
+        persistSceneParam(nodeId, currentScene, PARAM_PUSH_DEBOUNCE_MS);
+        return;
+      }
       if (paramPushTimers[nodeId] !== undefined) {
         window.clearTimeout(paramPushTimers[nodeId]);
       }
@@ -3245,10 +3488,15 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   reserveGraphImport: () => {
     const state = get();
     if (state.isImportingGraph || state.isExecuting || state.createLaunchingIds.length > 0) return false;
+    suspendCinemaScenePersistence();
+    useCinemaUploadStore.getState().interrupt();
     set({ isImportingGraph: true });
     return true;
   },
-  releaseGraphImport: () => { set({ isImportingGraph: false }); },
+  releaseGraphImport: () => {
+    set({ isImportingGraph: false });
+    resumeCinemaScenePersistence();
+  },
 
   resetExecution: () => {
     // A still-open run at this point means the user cancelled mid-flight (at the start
@@ -3309,6 +3557,8 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   executeGraph: async () => {
     const { nodes, edges, isExecuting, resetExecution } = get();
     if (isExecuting || get().isImportingGraph) return;
+    const uploadIssue = pendingCinemaUploadIssue(nodes);
+    if (uploadIssue) { warnPendingCinemaUpload(uploadIssue); return; }
     resetExecution();
     const snapshot = captureRunSnapshot(nodes, edges);
     const heldStart = blockedProviderStart(snapshot, get().providerStartAmbiguities);
@@ -3378,6 +3628,8 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   executeNode: async (nodeId) => {
     const { nodes, edges, isExecuting, resetExecution } = get();
     if (isExecuting || get().isImportingGraph) return;
+    const uploadIssue = pendingCinemaUploadIssue(nodesInExecutionScope(nodes, edges, nodeId));
+    if (uploadIssue) { warnPendingCinemaUpload(uploadIssue); return; }
     resetExecution();
     const snapshot = captureRunSnapshot(nodes, edges);
     const heldStart = blockedProviderStart(
@@ -3451,6 +3703,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
 
   isShotAdmissionBlocked: (nodeId, shotId) => {
     if (get().isImportingGraph) return true;
+    if (pendingCinemaUploadIssue(nodesInExecutionScope(get().nodes, get().edges, nodeId), { nodeId, shotId })) return true;
     const snapshot = captureRunSnapshot(get().nodes, get().edges);
     const scope = snapshotExecutionScopeIds(snapshot, nodeId);
     const shareableInputs = new Set(snapshot.nodes.filter((node) => STATIC_INPUT_IDS.has(node.definitionId)).map((node) => node.id));
@@ -3589,6 +3842,8 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     const idSet = new Set(nodeIds);
     const clusterNodes = nodes.filter((n) => idSet.has(n.id));
     if (clusterNodes.length === 0) return;
+    const uploadIssue = pendingCinemaUploadIssue(clusterNodes);
+    if (uploadIssue) { warnPendingCinemaUpload(uploadIssue); return; }
     const clusterEdges = edges.filter((e) => idSet.has(e.source) && idSet.has(e.target));
     resetExecution();
     const snapshot = captureRunSnapshot(clusterNodes, clusterEdges);
@@ -3676,6 +3931,8 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     if (scopeOverlaps(idSet)) return;
     const clusterNodes = nodes.filter((node) => idSet.has(node.id));
     if (clusterNodes.length === 0) return;
+    const uploadIssue = pendingCinemaUploadIssue(clusterNodes);
+    if (uploadIssue) { warnPendingCinemaUpload(uploadIssue); return; }
     const clusterEdges = edges.filter((edge) => idSet.has(edge.source) && idSet.has(edge.target));
     const snapshot = captureRunSnapshot(clusterNodes, clusterEdges);
     if (runIncludesWorldLabs(snapshot)) {
@@ -4102,9 +4359,12 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     persistSceneParam(nodeId, nextScene);
   },
 
-  updateScene: (nodeId, spec) => {
+  updateScene: (nodeId, change) => {
     const node = get().nodes.find((n) => n.id === nodeId);
-    if (!node) return;
+    if (!node || node.data.definitionId !== 'cinema-scene') return;
+    const current = sceneFromNode(node);
+    const spec = typeof change === 'function' ? change(current) : change;
+    if (!spec || spec === current) return;
 
     maybePushUndo(set, get, nodeId);
 
@@ -4231,6 +4491,8 @@ export const useGraphStore = create<GraphState>((set, get) => ({
 
   loadGraph: (nodes, edges, options) => {
     if (get().isExecuting && !options?.allowDuringExecution) return;
+    clearCinemaScenePersistence();
+    if (!options?.preserveCinemaUploads) useCinemaUploadStore.getState().clear();
     // Hydration/import must never release a paid-run owner. Only terminal
     // execution events or status reconciliation may unlock the Run control.
     set({
@@ -4240,6 +4502,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       redoStack: [],
       backendFreshStartPending: false,
     });
+    useCinemaUploadStore.getState().reconcileTargets(get().nodes);
   },
 
   loadSampleGraph: () => {
@@ -4313,6 +4576,8 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       providerStartAmbiguities,
     } = get();
     if (isExecuting || providerRecoveries.length > 0 || providerStartAmbiguities.length > 0) return;
+    clearCinemaScenePersistence();
+    useCinemaUploadStore.getState().clear();
     const snapshot = createSnapshot(nodes, edges);
     const newStack = [...undoStack, snapshot];
     if (newStack.length > UNDO_CAP) newStack.shift();
@@ -4583,6 +4848,13 @@ export const useGraphStore = create<GraphState>((set, get) => ({
           get().updateNodeData(event.nodeId, { state: 'complete', progress: undefined });
           break;
         }
+        // Whole-scene work retains its original recipe in history, but the
+        // live scene may have removed/added shots since generation began.
+        // Accept results only for surviving ports and retain newer siblings.
+        const liveOutputs = live?.data.definitionId === 'cinema-scene'
+          ? Object.fromEntries(Object.entries({ ...live.data.outputs, ...outputs }).filter(([portId]) =>
+            !portId.startsWith('shot_') || sceneFromNode(live).shots.some((shot) => shotPortId(shot.id) === portId)))
+          : outputs;
         const paperInputs = record ? paperInputsForSnapshot(record.snapshot, event.nodeId) : [];
         const outputFreshness = record && paperInputs.length ? {
           runId: record.id,
@@ -4590,7 +4862,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
           paperInputs,
           outOfDateReasons: paperRunOutOfDateReasons(record, captureRunSnapshot(get().nodes, get().edges), event.nodeId),
         } : undefined;
-        get().updateNodeData(event.nodeId, { state: 'complete', outputs: outputs as NodeData['outputs'],
+        get().updateNodeData(event.nodeId, { state: 'complete', outputs: liveOutputs as NodeData['outputs'],
           batchOutputs, batchVariants, batchRunId: runId ?? undefined,
           outputFreshness, progress: undefined, streamingText: undefined, streamingPartials: undefined, streamingSvg: undefined });
         break;
@@ -4827,6 +5099,22 @@ export const useGraphStore = create<GraphState>((set, get) => ({
 
   dismissProviderRecoveryWarning: () => set({ providerRecoveryWarning: null }),
 }));
+
+// Removal/wrong-type replacement permanently revokes ownership. Undoing the
+// deletion may restore the graph, but cannot restore an old upload request.
+useGraphStore.subscribe((state, previous) => {
+  if (state.nodes === previous.nodes) return;
+  // Before authoritative hydration, an empty local graph does not mean a
+  // restored interrupted-upload target was deleted from the saved graph.
+  useCinemaUploadStore.getState().reconcileTargets(state.nodes,
+    new Set(previous.nodes.filter((node) => node.data.definitionId === 'cinema-scene').map((node) => node.id)));
+  for (const node of previous.nodes) {
+    if (node.data.definitionId === 'cinema-scene'
+      && !state.nodes.some((next) => next.id === node.id && next.data.definitionId === 'cinema-scene')) {
+      clearCinemaScenePersistence(node.id);
+    }
+  }
+});
 
 // Gallery hydration is read-only: reload/import can match saved scalar outputs
 // to the latest owning record without replaying or changing the graph recipe.

@@ -150,3 +150,11 @@ The original audit does not claim live provider generation, native file-dialog s
 - Added model/node labels and available prompt excerpts from item 10; full recipe inspection, comparison and Reuse settings remain outstanding.
 - Verified with 1,225 frontend tests, lint, TypeScript/production build/budget, and native Chrome with 30 synthetic results at 100% and 200% zoom. No paid provider was called.
 - Full acceptance and proof limits: [Create UI repair acceptance](create-ui-repairs-2026-10-07.md). Settings, Cinema, discovery, onboarding and shared navigation remain in the audit queue.
+
+## Second repair slice — 2026-10-07
+
+- Implemented the Cinema portion of item 3: stable upload ownership, visible per-file recovery, interrupted reload handling and generation admission. Converted authoring to latest-state field patches and protected browser/backend scene persistence against stale writes. Results, edges and frozen history remain intact.
+- Implemented item 4: guarded Settings loading, volatile unsaved drafts, visible retry, scoped browser provider-key removal and readiness response ownership.
+- Final integrated checks passed: 3,425 backend tests, 1,298 frontend tests in 136 files, full lint, TypeScript/production build/budget, independent review and staged whitespace/credential scans.
+- Verification and proof limits: [Cinema and Settings repair acceptance](cinema-settings-ui-repairs-2026-10-07.md). The native chooser is still unverified; no paid provider, real credential, packaged Electron or main publication was used.
+- The next correctness item is truthful Send to motion feedback (item 9); Cinema selected-shot layout/override controls and keyboard selection also remain. Discovery, onboarding, full recipe comparison and shared workspace chrome are still outstanding.

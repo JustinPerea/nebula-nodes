@@ -235,6 +235,15 @@ export async function updateSettings(settings: Record<string, unknown>): Promise
   return response.json();
 }
 
+/** Remove one browser-managed provider key without resubmitting other settings. */
+export async function deleteSettingsApiKey(provider: string): Promise<{ status: string }> {
+  const response = await apiFetch(`/api/settings/api-keys/${encodeURIComponent(provider)}`, {
+    method: 'DELETE',
+  });
+  if (!response.ok) throw new Error(`Remove API key failed: ${response.status}`);
+  return response.json();
+}
+
 /**
  * Update a single in-memory injected credential on the backend (desktop mode).
  *

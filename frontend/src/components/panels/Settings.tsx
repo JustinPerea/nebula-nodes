@@ -1,9 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { ChevronDown, ChevronRight, X } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
-import { getSettings, updateSettings, updateCredential } from '../../lib/api';
+import { getSettings, updateSettings, updateCredential, deleteSettingsApiKey } from '../../lib/api';
+import { v4 as uuidv4 } from 'uuid';
+import { useSettingsDraftStore, readSettingsDraft, settingsDraftIsDirty, type SettingsDraft, type SettingsMutation } from '../../store/settingsDraftStore';
 import { KreaConnectionCard } from './KreaConnectionCard';
-import { normalizeKreaMode, type KreaConnectionMode } from '../../lib/kreaConnection';
+import type { KreaConnectionMode } from '../../lib/kreaConnection';
 import { useDelayedUnmount } from '../../hooks/useDelayedUnmount';
 import { usePanelFocus } from '../../hooks/usePanelFocus';
 import '../../styles/panels.css';
@@ -70,129 +72,185 @@ export function Settings() {
     ? (window.nebulaDesktop?.plaintextKeyWarning ?? [])
     : [];
 
-  const [apiKeys, setApiKeys] = useState<Record<string, string>>({});
-  const [originalApiKeys, setOriginalApiKeys] = useState<Record<string, string>>({});
-  const [routing, setRouting] = useState<Record<string, string>>({});
-  const [kreaConnectionMode, setKreaConnectionMode] = useState<KreaConnectionMode>('api-token');
-  const [outputPath, setOutputPath] = useState('');
-  const [exportFolder, setExportFolder] = useState('');
-  const [zoomTelemetryEnabled, setZoomTelemetryEnabled] = useState(false);
+  const { draft, baseline, mutation, pendingRefresh, saveStatus, error, removedProvider } = useSettingsDraftStore();
+  const apiKeys = draft?.apiKeys ?? {};
+  const originalApiKeys = baseline?.apiKeys ?? {};
+  const routing = draft?.routing ?? {};
+  const kreaConnectionMode = draft?.kreaConnectionMode ?? 'api-token';
+  const outputPath = draft?.outputPath ?? '';
+  const exportFolder = draft?.exportFolder ?? '';
+  const zoomTelemetryEnabled = draft?.zoomTelemetryEnabled ?? false;
+  const dirty = settingsDraftIsDirty(draft, baseline);
   const [revealedKeys, setRevealedKeys] = useState<Set<string>>(new Set());
   const [apiKeysOpen, setApiKeysOpen] = useState(false);
-  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
-  const [loading, setLoading] = useState(false);
+  const [loadState, setLoadState] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
+  const [retryLoad, setRetryLoad] = useState(0);
+  const loadRequest = useRef(0);
+  const loadReady = useRef(false);
 
-  // Load settings when panel opens
+  // Editing is unavailable during the initial load. A dismissed dirty draft
+  // remains volatile and is reused; a clean reopen gets a fresh baseline.
   useEffect(() => {
     if (!visible) return;
+    const request = ++loadRequest.current;
+    const current = useSettingsDraftStore.getState();
     let cancelled = false;
+    const retained = settingsDraftIsDirty(current.draft, current.baseline)
+      || current.mutation !== null || current.pendingRefresh !== null || current.error !== null;
+    loadReady.current = retained;
     queueMicrotask(() => {
       if (cancelled) return;
-      setLoading(true);
-      setApiKeysOpen(false);
+      setLoadState(retained ? 'ready' : 'loading');
       setRevealedKeys(new Set());
+      if (!retained) setApiKeysOpen(false);
     });
-    getSettings()
-      .then((data) => {
-        if (cancelled) return;
-        const settings = data as {
-          apiKeys?: Record<string, string>;
-          routing?: Record<string, string>;
-          outputPath?: string;
-          exportFolder?: string;
-          zoomTelemetryEnabled?: boolean;
-          kreaConnectionMode?: KreaConnectionMode;
-        };
-        setApiKeys(settings.apiKeys ?? {});
-        setOriginalApiKeys(settings.apiKeys ?? {});
-        setRouting(settings.routing ?? {});
-        setKreaConnectionMode(normalizeKreaMode(settings.kreaConnectionMode));
-        setOutputPath(settings.outputPath ?? '');
-        setExportFolder(settings.exportFolder ?? '');
-        setZoomTelemetryEnabled(settings.zoomTelemetryEnabled === true);
-        setSaveStatus('idle');
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        console.error('Failed to load settings:', err);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
+    if (!retained) {
+      const initialDraft = current.draft;
+      getSettings().then((data) => {
+        if (cancelled || request !== loadRequest.current
+          || useSettingsDraftStore.getState().draft !== initialDraft) return;
+        const loaded = readSettingsDraft(data);
+        useSettingsDraftStore.setState({ draft: loaded, baseline: loaded,
+          saveStatus: 'idle', error: null, removedProvider: null });
+        loadReady.current = true;
+        setLoadState('ready');
+      }).catch(() => {
+        if (!cancelled && request === loadRequest.current) setLoadState('error');
       });
-    return () => {
-      cancelled = true;
-    };
-  }, [visible]);
+    }
+    return () => { cancelled = true; loadReady.current = false; };
+  }, [visible, retryLoad]);
+
+  const updateDraft = useCallback((update: Partial<SettingsDraft> | ((value: SettingsDraft) => Partial<SettingsDraft>)) => {
+    const state = useSettingsDraftStore.getState();
+    if (!state.draft || state.mutation || state.pendingRefresh || !loadReady.current || loadState !== 'ready' || !visible) return;
+    useSettingsDraftStore.setState({
+      draft: { ...state.draft, ...(typeof update === 'function' ? update(state.draft) : update) },
+      saveStatus: 'idle', error: null,
+    });
+  }, [loadState, visible]);
+
+  // A write can finish after dismissal/unmount. Its store-owned identity lets
+  // the same draft finish safely without an old load replacing reopened edits.
+  const refreshMutation = useCallback(async (operation: SettingsMutation) => {
+    try {
+      const refreshed = readSettingsDraft(await getSettings());
+      const state = useSettingsDraftStore.getState();
+      if (state.mutation?.id !== operation.id) return;
+      const refreshedKeys = { ...refreshed.apiKeys };
+      if (operation.provider && state.draft) {
+        for (const [provider, value] of Object.entries(state.draft.apiKeys)) {
+          if (provider !== operation.provider && value !== state.baseline?.apiKeys[provider]) {
+            refreshedKeys[provider] = value;
+          }
+        }
+      }
+      const nextDraft = operation.provider && state.draft
+        ? { ...state.draft, apiKeys: refreshedKeys }
+        : refreshed;
+      const nextBaseline = operation.provider && state.baseline
+        ? { ...state.baseline, apiKeys: refreshed.apiKeys }
+        : refreshed;
+      useSettingsDraftStore.setState({ draft: nextDraft, baseline: nextBaseline,
+        mutation: null, pendingRefresh: null, error: null,
+        removedProvider: operation.provider ?? null,
+        saveStatus: operation.provider ? 'idle' : 'saved' });
+      useUIStore.getState().setSettingsCache(refreshed.apiKeys, refreshed.kreaConnectionMode);
+      window.dispatchEvent(new CustomEvent('nebula:settings-saved'));
+    } catch {
+      if (useSettingsDraftStore.getState().mutation?.id !== operation.id) return;
+      useSettingsDraftStore.setState({ mutation: null, pendingRefresh: operation,
+        saveStatus: operation.provider ? 'idle' : 'saved',
+        error: operation.provider
+          ? 'The key was removed, but connection status could not refresh. Retry refresh.'
+          : 'Settings were saved, but connection status could not refresh. Retry refresh.' });
+    }
+  }, []);
 
   const handleSave = useCallback(async () => {
-    setSaveStatus('saving');
+    const state = useSettingsDraftStore.getState();
+    if (!visible || !loadReady.current || loadState !== 'ready' || !state.draft || state.mutation || state.pendingRefresh) return;
+    const submitted = state.draft;
+    const operation: SettingsMutation = { id: uuidv4() };
+    useSettingsDraftStore.setState({ mutation: operation, saveStatus: 'saving', error: null });
     try {
       if (isDesktopMode) {
-        // Desktop mode: route API key updates through the Keychain
-        // credential IPC (nebulaDesktop.credentials.set/clear) and
-        // POST /api/credentials/update. Non-secret settings still
-        // use PUT /api/settings. VAL-UX-003, VAL-KEY-004, VAL-KEY-006
-
         const credentialBridge = window.nebulaDesktop!.credentials!;
-
-        // Process each API key field
         for (const field of API_KEY_FIELDS) {
-          const currentValue = (apiKeys[field.key] ?? '').trim();
-          const originalValue = (originalApiKeys[field.key] ?? '').trim();
+          const currentValue = (submitted.apiKeys[field.key] ?? '').trim();
+          const originalValue = (state.baseline?.apiKeys[field.key] ?? '').trim();
           const wasConfigured = originalValue.startsWith('***');
-
           if (currentValue && !currentValue.startsWith('***')) {
-            // User entered a new plaintext key → encrypt to Keychain
             const setResult = await credentialBridge.set(field.key, currentValue);
-            if (!setResult.ok) {
-              throw new Error(`Failed to store ${field.label} key: ${setResult.error ?? 'unknown'}`);
-            }
-            // Update backend in-memory store
+            if (!setResult.ok) throw new Error('Credential storage failed');
             await updateCredential(field.key, currentValue);
           } else if (!currentValue && wasConfigured) {
-            // User cleared a previously-configured key → remove from Keychain
             const clearResult = await credentialBridge.clear(field.key);
-            if (!clearResult.ok) {
-              throw new Error(`Failed to clear ${field.label} key: ${clearResult.error ?? 'unknown'}`);
-            }
-            // Remove from backend in-memory store
+            if (!clearResult.ok) throw new Error('Credential removal failed');
             await updateCredential(field.key, '');
           }
-          // If currentValue starts with '***' → unchanged masked value, skip
-          // If !currentValue && !wasConfigured → wasn't configured, still isn't, skip
         }
-
-        // Non-secret settings still go through PUT /api/settings
-        // (apiKeys is omitted — backend ignores them in desktop mode anyway)
-        await updateSettings({
-          routing,
-          outputPath: outputPath || null,
-          exportFolder: exportFolder || null,
-          zoomTelemetryEnabled,
-          kreaConnectionMode,
-        });
-      } else {
-        // Browser mode: all settings including apiKeys go through PUT /api/settings
-        await updateSettings({
-          apiKeys,
-          routing,
-          outputPath: outputPath || null,
-          exportFolder: exportFolder || null,
-          zoomTelemetryEnabled,
-          kreaConnectionMode,
-        });
       }
-
-      setSaveStatus('saved');
-      useUIStore.getState().setKreaConnectionMode(kreaConnectionMode);
-      window.dispatchEvent(new CustomEvent('nebula:settings-saved'));
-      setTimeout(() => setSaveStatus('idle'), 2000);
-    } catch (err) {
-      console.error('Failed to save settings:', err);
-      setSaveStatus('error');
-      setTimeout(() => setSaveStatus('idle'), 3000);
+      await updateSettings({
+        ...(!isDesktopMode ? { apiKeys: Object.fromEntries(Object.entries(submitted.apiKeys)
+          .map(([provider, value]) => [provider, value.trim()])) } : {}),
+        routing: submitted.routing,
+        outputPath: submitted.outputPath || null,
+        exportFolder: submitted.exportFolder || null,
+        zoomTelemetryEnabled: submitted.zoomTelemetryEnabled,
+        kreaConnectionMode: submitted.kreaConnectionMode,
+      });
+      await refreshMutation(operation);
+    } catch {
+      if (useSettingsDraftStore.getState().mutation?.id !== operation.id) return;
+      useSettingsDraftStore.setState({ mutation: null, saveStatus: 'error',
+        error: 'Settings could not be saved. Your edits are still here. Retry Save Settings.' });
     }
-  }, [apiKeys, originalApiKeys, routing, outputPath, exportFolder, zoomTelemetryEnabled, kreaConnectionMode, isDesktopMode]);
+  }, [isDesktopMode, loadState, refreshMutation, visible]);
+
+  const handleRemoveKey = useCallback(async (provider: string) => {
+    const state = useSettingsDraftStore.getState();
+    if (!visible || !loadReady.current || loadState !== 'ready' || isDesktopMode || !state.draft
+      || state.mutation || state.pendingRefresh || !state.baseline?.apiKeys[provider]) return;
+    const operation: SettingsMutation = { id: uuidv4(), provider };
+    useSettingsDraftStore.setState({ mutation: operation, saveStatus: 'idle', error: null,
+      removedProvider: null });
+    try {
+      await deleteSettingsApiKey(provider);
+      const latest = useSettingsDraftStore.getState();
+      if (latest.mutation?.id !== operation.id || !latest.draft || !latest.baseline) return;
+      // The deletion is already known to have succeeded, even if GET fails.
+      useSettingsDraftStore.setState({
+        draft: { ...latest.draft, apiKeys: { ...latest.draft.apiKeys, [provider]: '' } },
+        baseline: { ...latest.baseline, apiKeys: { ...latest.baseline.apiKeys, [provider]: '' } },
+        removedProvider: provider,
+      });
+      const cache = useUIStore.getState().settingsCache;
+      const nextKeys = { ...cache.apiKeys };
+      delete nextKeys[provider];
+      useUIStore.getState().setSettingsCache(nextKeys);
+      await refreshMutation(operation);
+    } catch {
+      if (useSettingsDraftStore.getState().mutation?.id !== operation.id) return;
+      useSettingsDraftStore.setState({ mutation: null,
+        error: 'The key could not be removed. Retry Remove; your other edits are still here.' });
+    }
+  }, [isDesktopMode, loadState, refreshMutation, visible]);
+
+  const handleRetryRefresh = useCallback(() => {
+    const state = useSettingsDraftStore.getState();
+    if (!visible || state.mutation || !state.pendingRefresh) return;
+    const operation = state.pendingRefresh;
+    useSettingsDraftStore.setState({ mutation: operation, error: null });
+    void refreshMutation(operation);
+  }, [refreshMutation, visible]);
+
+  const handleDiscard = useCallback(() => {
+    const state = useSettingsDraftStore.getState();
+    if (!visible || state.mutation || state.pendingRefresh || !state.baseline) return;
+    useSettingsDraftStore.setState({ draft: state.baseline, saveStatus: 'idle', error: null });
+    setRevealedKeys(new Set());
+  }, [visible]);
 
   const toggleReveal = useCallback((key: string) => {
     setRevealedKeys((prev) => {
@@ -212,7 +270,7 @@ export function Settings() {
   if (!shouldRender) return null;
 
   const configuredApiKeyCount = API_KEY_FIELDS.reduce(
-    (count, field) => count + (apiKeys[field.key]?.trim() ? 1 : 0),
+    (count, field) => count + (originalApiKeys[field.key]?.trim() ? 1 : 0),
     0,
   );
 
@@ -221,6 +279,7 @@ export function Settings() {
       ref={panelRef}
       role="dialog"
       aria-label="Settings"
+      aria-busy={loadState === 'loading' || loadState === 'idle' || !!mutation}
       className={`panel panel--settings workspace-dock-panel${exiting ? ' panel--exiting' : ''}`}
     >
       <div className="panel__header">
@@ -243,10 +302,15 @@ export function Settings() {
       </div>
 
       <div className="panel__body">
-        {loading ? (
-          <div className="settings__loading">Loading...</div>
+        {loadState === 'idle' || loadState === 'loading' ? (
+          <div className="settings__loading" role="status">Loading settings…</div>
+        ) : loadState === 'error' ? (
+          <div className="settings__load-error">
+            <p role="alert">Settings could not load. Your saved settings have not been changed.</p>
+            <button type="button" className="settings__secondary-button" onClick={() => setRetryLoad((value) => value + 1)}>Retry loading settings</button>
+          </div>
         ) : (
-          <>
+          <fieldset className="settings__fields" disabled={!visible || !!mutation || !!pendingRefresh}>
             {/* Plaintext key warning (VAL-UX-005) */}
             {isDesktopMode && plaintextKeyWarning.length > 0 && (
               <div className="settings__plaintext-warning" role="alert">
@@ -259,7 +323,7 @@ export function Settings() {
             )}
 
             <div className="settings__section-label">Connections</div>
-            <KreaConnectionCard mode={kreaConnectionMode} onModeChange={setKreaConnectionMode} />
+            <KreaConnectionCard mode={kreaConnectionMode} onModeChange={(value: KreaConnectionMode) => updateDraft({ kreaConnectionMode: value })} />
 
             {/* API Keys Section */}
             <button
@@ -312,9 +376,10 @@ export function Settings() {
                         type={revealedKeys.has(field.key) ? 'text' : 'password'}
                         value={apiKeys[field.key] ?? ''}
                         onChange={(e) =>
-                          setApiKeys((prev) => ({ ...prev, [field.key]: e.target.value }))
+                          updateDraft((value) => ({ apiKeys: { ...value.apiKeys, [field.key]: e.target.value } }))
                         }
                         placeholder={field.placeholder}
+                        aria-label={`${field.label} API key`}
                         autoComplete="off"
                         spellCheck={false}
                       />
@@ -322,11 +387,24 @@ export function Settings() {
                         className="settings__reveal-button"
                         onClick={() => toggleReveal(field.key)}
                         title={revealedKeys.has(field.key) ? 'Hide' : 'Show'}
+                        aria-label={`${revealedKeys.has(field.key) ? 'Hide' : 'Show'} ${field.label} API key`}
                         type="button"
                       >
-                        {revealedKeys.has(field.key) ? '\u{1F441}' : '\u25CF'}
+                        {revealedKeys.has(field.key) ? 'Hide' : 'Show'}
                       </button>
+                      {!isDesktopMode && originalApiKeys[field.key]?.trim() && (
+                        <button type="button" className="settings__secondary-button settings__remove-key"
+                          aria-label={`Remove ${field.label} API key`} onClick={() => void handleRemoveKey(field.key)}>
+                          {mutation?.provider === field.key ? 'Removing…' : 'Remove'}
+                        </button>
+                      )}
                     </div>
+                    {!isDesktopMode && originalApiKeys[field.key]?.trim() && !apiKeys[field.key]?.trim() && (
+                      <p className="settings__key-status">This key is still configured. Use Remove to disconnect it.</p>
+                    )}
+                    {removedProvider === field.key && (
+                      <p className="settings__key-status" role="status">{field.label} key removed.</p>
+                    )}
                   </div>
                 ))}
               </div>
@@ -345,7 +423,7 @@ export function Settings() {
                       className="inspector__field"
                       value={routing[opt.provider] ?? opt.options[0]?.value ?? ''}
                       onChange={(e) =>
-                        setRouting((prev) => ({ ...prev, [opt.provider]: e.target.value }))
+                        updateDraft((value) => ({ routing: { ...value.routing, [opt.provider]: e.target.value } }))
                       }
                     >
                       {opt.options.map((o) => (
@@ -363,6 +441,7 @@ export function Settings() {
             <div className="settings__section-label settings__section-label--stacked">
               Interface
             </div>
+            <p className="settings__key-status">Interface preferences apply immediately.</p>
             <label className="settings__toggle-row">
               <input
                 className="settings__toggle-input"
@@ -456,7 +535,8 @@ export function Settings() {
                 className="inspector__field"
                 type="text"
                 value={outputPath}
-                onChange={(e) => setOutputPath(e.target.value)}
+                onChange={(e) => updateDraft({ outputPath: e.target.value })}
+                aria-label="Output Path"
                 placeholder="Default: ./output — absolute path; applies after backend restart"
               />
             </div>
@@ -466,7 +546,8 @@ export function Settings() {
                 className="inspector__field"
                 type="text"
                 value={exportFolder}
-                onChange={(e) => setExportFolder(e.target.value)}
+                onChange={(e) => updateDraft({ exportFolder: e.target.value })}
+                aria-label="Default Save Folder"
                 placeholder="Default: ~/Downloads"
               />
             </div>
@@ -475,7 +556,7 @@ export function Settings() {
                 className="settings__toggle-input"
                 type="checkbox"
                 checked={zoomTelemetryEnabled}
-                onChange={(event) => setZoomTelemetryEnabled(event.target.checked)}
+                onChange={(event) => updateDraft({ zoomTelemetryEnabled: event.target.checked })}
               />
               <span className="settings__toggle-copy">
                 <span className="settings__toggle-title">Demo zoom telemetry</span>
@@ -485,16 +566,23 @@ export function Settings() {
               </span>
             </label>
 
-          </>
+          </fieldset>
         )}
       </div>
 
-      {!loading && (
+      {loadState === 'ready' && (
         <div className="settings__footer">
-          <button
+          {error && <p className="settings__error" role="alert">{error}</p>}
+          {dirty && (!pendingRefresh || pendingRefresh.provider) && <p className="settings__draft-status" role="status">Unsaved changes stay here when you close Settings. Reloading the page discards them.</p>}
+          {pendingRefresh ? (
+            <button type="button" className="settings__save-button" onClick={handleRetryRefresh} disabled={!!mutation}>
+              {mutation ? 'Refreshing…' : 'Retry refresh'}
+            </button>
+          ) : <button
             className="settings__save-button"
             onClick={handleSave}
-            disabled={saveStatus === 'saving'}
+            type="button"
+            disabled={!visible || !!mutation}
           >
             {saveStatus === 'saving'
               ? 'Saving...'
@@ -503,7 +591,8 @@ export function Settings() {
                 : saveStatus === 'error'
                   ? 'Error — Retry'
                   : 'Save Settings'}
-          </button>
+          </button>}
+          {dirty && !pendingRefresh && <button type="button" className="settings__secondary-button settings__discard-button" onClick={handleDiscard} disabled={!visible || !!mutation}>Discard changes</button>}
         </div>
       )}
     </div>

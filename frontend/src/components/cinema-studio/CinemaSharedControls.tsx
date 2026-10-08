@@ -1,14 +1,17 @@
-import { useRef, useState } from 'react';
-import { apiFetch, backendAssetUrlSync } from '../../lib/backend';
+import { useRef } from 'react';
+import { backendAssetUrlSync } from '../../lib/backend';
+import { attachCinemaReferences, removeCinemaReferenceUpload, retryCinemaReferenceUpload } from '../../lib/cinemaUploads';
+import { useCinemaUploadStore } from '../../store/cinemaUploadStore';
 import type { CinemaSceneSpec } from '../../types';
 
 interface CinemaSharedControlsProps {
+  cinemaNodeId: string;
   scene: CinemaSceneSpec;
   /** Character refs wired into the node's `character_refs` port on the canvas.
    *  Shown read-only here (disconnect on the canvas to remove) so the Studio and
    *  the node view stay in sync. */
   connectedRefs?: string[];
-  onChange: (next: CinemaSceneSpec) => void;
+  onChange: (update: (current: CinemaSceneSpec) => CinemaSceneSpec) => void;
 }
 
 /** Edit-capable base models the storyboard supports. Reference-edit identity is
@@ -46,6 +49,10 @@ function defaultLook(): NonNullable<CinemaSceneSpec['look']> {
   return { preset: 'custom', grain: 0.2, halation: 0.2, vignette: 0.25, contrast: 0, saturation: 0, temperature: 0 };
 }
 
+function defaultPalette(): NonNullable<CinemaSceneSpec['palette']> {
+  return { swatches: [], strength: 0.7, method: 'lab-transfer' };
+}
+
 function normalizeHex(input: string): string | null {
   let v = input.trim().toLowerCase();
   if (!v) return null;
@@ -54,71 +61,53 @@ function normalizeHex(input: string): string | null {
   return /^#[0-9a-f]{6}$/.test(v) ? v : null;
 }
 
-export function CinemaSharedControls({ scene, connectedRefs = [], onChange }: CinemaSharedControlsProps) {
+export function CinemaSharedControls({ cinemaNodeId, scene, connectedRefs = [], onChange }: CinemaSharedControlsProps) {
   const refInputRef = useRef<HTMLInputElement>(null);
-  const [uploading, setUploading] = useState(false);
+  const uploads = useCinemaUploadStore((state) => state.uploads);
+  const characterUploads = uploads.filter((upload) => upload.nodeId === cinemaNodeId && upload.shotId === undefined);
 
-  const palette = scene.palette ?? { swatches: [], strength: 0.7, method: 'lab-transfer' as const };
+  const palette = scene.palette ?? defaultPalette();
   const look = scene.look ?? defaultLook();
   const characterRefs = scene.character?.refImageUrls ?? [];
 
-  const setBase = (model: string) => onChange({ ...scene, base: { ...scene.base, model } });
-  const setAspect = (aspectRatio: string) => onChange({ ...scene, aspectRatio });
+  const setBase = (model: string) => onChange((current) => ({ ...current, base: { ...current.base, model } }));
+  const setAspect = (aspectRatio: string) => onChange((current) => ({ ...current, aspectRatio }));
 
   const setPalette = (next: Partial<NonNullable<CinemaSceneSpec['palette']>>) =>
-    onChange({ ...scene, palette: { ...palette, ...next } });
+    onChange((current) => ({ ...current, palette: { ...defaultPalette(), ...current.palette, ...next } }));
   const setLook = (next: Partial<NonNullable<CinemaSceneSpec['look']>>) =>
-    onChange({ ...scene, look: { ...look, ...next } });
+    onChange((current) => ({ ...current, look: { ...defaultLook(), ...current.look, ...next } }));
   // Selecting a named preset drops the neutral default sliders: the backend lets
   // explicit float values override a preset, so carrying the editor's defaults
   // (grain 0.2 / contrast 0 / temperature 0 …) would flatten the preset's grade
   // back to a plain darken. 'custom' restores the editable sliders.
   const selectPreset = (id: string) =>
-    onChange({
-      ...scene,
-      look: id === 'custom' ? { ...defaultLook(), ...look, preset: 'custom' } : { preset: id },
-    });
+    onChange((current) => ({
+      ...current,
+      look: id === 'custom' ? { ...defaultLook(), ...current.look, preset: 'custom' } : { preset: id },
+    }));
 
-  const setSwatches = (swatches: string[]) => setPalette({ swatches });
+  const setSwatches = (update: (current: string[]) => string[]) =>
+    onChange((current) => ({
+      ...current,
+      palette: { ...defaultPalette(), ...current.palette, swatches: update(current.palette?.swatches ?? []) },
+    }));
 
-  const addCharacterRefs = (urls: string[]) => {
-    const merged = [...characterRefs, ...urls];
-    onChange({
-      ...scene,
-      character: {
-        refImageUrls: merged,
-        strength: scene.character?.strength ?? 0.8,
-        sheetUrl: scene.character?.sheetUrl,
-      },
-    });
-  };
-
-  const removeCharacterRef = (idx: number) => {
-    const next = characterRefs.filter((_, i) => i !== idx);
-    onChange({
-      ...scene,
-      character: next.length
-        ? { refImageUrls: next, strength: scene.character?.strength ?? 0.8, sheetUrl: scene.character?.sheetUrl }
-        : undefined,
+  const removeCharacterRef = (url: string) => {
+    onChange((current) => {
+      const character = current.character;
+      if (!character?.refImageUrls.includes(url)) return current;
+      const next = character.refImageUrls.filter((ref) => ref !== url);
+      return {
+        ...current,
+        character: next.length || character.sheetUrl ? { ...character, refImageUrls: next } : undefined,
+      };
     });
   };
 
-  // Multi-image upload via the existing /api/uploads endpoint (spec §8). Each
-  // file is posted independently; the server returns { filePath, url }.
   const handleFiles = (files: FileList | null) => {
     if (!files || files.length === 0) return;
-    setUploading(true);
-    const uploads = Array.from(files).map((file) => {
-      const fd = new FormData();
-      fd.append('file', file);
-      return apiFetch('/api/uploads', { method: 'POST', body: fd })
-        .then((r) => r.json())
-        .then((data: { filePath: string; url: string }) => data.url);
-    });
-    Promise.all(uploads)
-      .then((urls) => addCharacterRefs(urls.filter(Boolean)))
-      .catch((err) => console.error('[cinema] character ref upload failed:', err))
-      .finally(() => setUploading(false));
+    attachCinemaReferences(cinemaNodeId, undefined, Array.from(files));
   };
 
   return (
@@ -172,7 +161,8 @@ export function CinemaSharedControls({ scene, connectedRefs = [], onChange }: Ci
                 type="button"
                 className="cinema-shared-controls__ref-remove"
                 title="Remove reference"
-                onClick={() => removeCharacterRef(idx)}
+                aria-label={`Remove character reference ${idx + 1}`}
+                onClick={() => removeCharacterRef(url)}
               >
                 ×
               </button>
@@ -182,14 +172,15 @@ export function CinemaSharedControls({ scene, connectedRefs = [], onChange }: Ci
             type="button"
             className="cinema-shared-controls__ref-add"
             onClick={() => refInputRef.current?.click()}
-            disabled={uploading}
+            aria-label="Attach character references"
           >
-            {uploading ? '…' : '+'}
+            +
           </button>
           <input
             ref={refInputRef}
             type="file"
-            accept="image/*"
+            accept="image/png,image/jpeg,image/gif,image/webp"
+            aria-label="Character reference images"
             multiple
             hidden
             onChange={(e) => {
@@ -198,6 +189,24 @@ export function CinemaSharedControls({ scene, connectedRefs = [], onChange }: Ci
             }}
           />
         </div>
+        {characterUploads.length > 0 && (
+          <div className="cinema-reference-uploads" aria-label="Character reference uploads">
+            {characterUploads.map((upload) => (
+              <div key={upload.id} className="cinema-reference-upload" aria-busy={upload.status === 'uploading'}>
+                <span className="cinema-reference-upload__name">{upload.name}</span>
+                <span className="cinema-reference-upload__status" role={upload.status === 'error' ? 'alert' : 'status'}>
+                  {upload.status === 'uploading' ? 'Uploading…' : upload.error ?? 'Could not upload this image.'}
+                </span>
+                <div className="cinema-reference-upload__actions">
+                  {upload.status === 'error' && upload.canRetry && (
+                    <button type="button" onClick={() => retryCinemaReferenceUpload(upload.id)} aria-label={`Retry ${upload.name}`}>Retry</button>
+                  )}
+                  <button type="button" onClick={() => removeCinemaReferenceUpload(upload.id)} aria-label={`Remove upload ${upload.name}`}>Remove</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </section>
 
       {/* Palette swatches */}
@@ -213,16 +222,15 @@ export function CinemaSharedControls({ scene, connectedRefs = [], onChange }: Ci
                   value={safe}
                   aria-label={`Swatch ${idx + 1}`}
                   onChange={(e) => {
-                    const next = [...palette.swatches];
-                    next[idx] = e.target.value;
-                    setSwatches(next);
+                    const value = e.target.value;
+                    setSwatches((swatches) => swatches.map((swatch, i) => i === idx ? value : swatch));
                   }}
                 />
                 <button
                   type="button"
                   className="cinema-shared-controls__swatch-remove"
                   title="Remove swatch"
-                  onClick={() => setSwatches(palette.swatches.filter((_, i) => i !== idx))}
+                  onClick={() => setSwatches((swatches) => swatches.filter((_, i) => i !== idx))}
                 >
                   ×
                 </button>
@@ -233,7 +241,7 @@ export function CinemaSharedControls({ scene, connectedRefs = [], onChange }: Ci
             type="button"
             className="cinema-shared-controls__swatch-add"
             title="Add swatch"
-            onClick={() => setSwatches([...palette.swatches, '#808080'])}
+            onClick={() => setSwatches((swatches) => [...swatches, '#808080'])}
           >
             +
           </button>

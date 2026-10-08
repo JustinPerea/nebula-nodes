@@ -1719,7 +1719,13 @@ class TestCinemaScenePersistsScene:
             # dicts with params at the top level (not under a `data` key).
             graph = client.get("/api/graph").json()
             node = next(n for n in graph["nodes"] if n["id"] == short_id)
-            assert node["params"]["scene"] == self._SCENE
+            # An authoring PUT seeds new shot runtime as idle; imported media
+            # uses the separate graph-import contract.
+            assert node["params"]["scene"] == {
+                **self._SCENE,
+                "shots": [{**shot, "output": {"status": "idle"}}
+                          for shot in self._SCENE["shots"]],
+            }
         finally:
             client.delete(f"/api/graph/node/{short_id}")
 

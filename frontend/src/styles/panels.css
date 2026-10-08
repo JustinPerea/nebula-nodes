@@ -670,6 +670,65 @@ body:not(.app-slava-restraint) .settings__section-label {
   text-align: center;
 }
 
+.settings__fields {
+  min-width: 0;
+  padding: 0;
+  margin: 0;
+  border: 0;
+}
+
+.settings__load-error,
+.settings__error,
+.settings__draft-status,
+.settings__key-status {
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.settings__load-error {
+  padding: 12px;
+}
+
+body.app-slava-restraint .settings__error {
+  color: var(--sr-danger, #e97e75);
+}
+
+.settings__draft-status,
+.settings__key-status {
+  opacity: 0.8;
+  margin: 6px 0 10px;
+}
+
+.settings__secondary-button {
+  flex-shrink: 0;
+  padding: 6px 8px;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.settings__secondary-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+body.app-slava-restraint .settings__secondary-button {
+  border: 1px solid var(--sr-hairline, #444);
+}
+
+body.app-slava-restraint .settings__secondary-button:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+.settings__discard-button {
+  margin-top: 8px;
+  width: 100%;
+}
+
 body:not(.app-slava-restraint) .settings__loading {
   color: #666;
 }
@@ -789,6 +848,7 @@ body:not(.app-slava-restraint) .settings__key-link:hover {
 
 .settings__key-input {
   flex: 1;
+  min-width: 0;
 }
 
 body:not(.app-slava-restraint) .settings__key-input {

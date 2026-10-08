@@ -1111,6 +1111,32 @@ async def _execute_graph(
                             cache.set(cache_key, rebound_cached_outputs,
                                       effective_params=effective_params)
                         cached_outputs = rebound_cached_outputs
+                        if node.definition_id == "cinema-scene":
+                            # A cache hit is a produced runtime result too;
+                            # its authored scene/variation metadata remains a
+                            # historical snapshot, but rebound shot URLs own
+                            # the current run's artifacts.
+                            cached_scene = effective_params.get("scene")
+                            cached_shots = cached_scene.get("shots") if isinstance(cached_scene, dict) else None
+                            runtime_by_id = {
+                                shot["id"]: shot.get("output")
+                                for shot in cached_shots
+                                if isinstance(shot, dict) and isinstance(shot.get("id"), str)
+                            } if isinstance(cached_shots, list) else {}
+                            node._cinema_produced_outputs.clear()
+                            for port, output in cached_outputs.items():
+                                if not port.startswith("shot_") or not isinstance(output, dict):
+                                    continue
+                                shot_id = port.removeprefix("shot_")
+                                metadata = runtime_by_id.get(shot_id)
+                                runtime = copy.deepcopy(metadata) if isinstance(metadata, dict) else {}
+                                value = output.get("value")
+                                if isinstance(value, str) and value:
+                                    runtime.update({"status": "done", "imageUrl": value})
+                                    runtime.pop("error", None)
+                                elif runtime.get("status") != "error":
+                                    runtime = {"status": "error", "error": "Cached shot produced no image"}
+                                node._cinema_produced_outputs[shot_id] = runtime
                         await _maybe_probe_video_output(node, cached_outputs)
                         await record_outputs(nid, context, cached_outputs, effective_params)
                         return nid, True, 1
@@ -1429,6 +1455,8 @@ async def _execute_graph(
                 # canvas, but it cannot become the next item's input recipe.
                 if invocation_node is not node:
                     node.params = copy.deepcopy(invocation_node.params)
+                    if node.definition_id == "cinema-scene":
+                        node._cinema_produced_outputs = copy.deepcopy(invocation_node._cinema_produced_outputs)
                 if token is not None:
                     execution_run_dir.reset(token)
                 execution_variant.reset(scope_token)

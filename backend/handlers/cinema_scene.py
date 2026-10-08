@@ -35,6 +35,7 @@ License guard: the default base must be a commercial-OK model
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 from fractions import Fraction
@@ -294,6 +295,7 @@ async def handle_cinema_scene(
     emit: Callable[[ExecutionEvent], Awaitable[None]] | None = None,
 ) -> dict[str, Any]:
     """Orchestrate base -> color -> look per shot. See module docstring."""
+    node._cinema_produced_outputs.clear()
     params = node.params or {}
     scene = params.get("scene") or {}
     if not isinstance(scene, dict):
@@ -490,6 +492,10 @@ async def handle_cinema_scene(
         except Exception as exc:  # per-shot isolation — never abort the scene
             shot["output"] = {"status": "error", "error": str(exc)}
             outputs[port_id] = {"type": "Image", "value": None}
+
+        # Mark each settled shot immediately: cancellation during a later
+        # shot must not copy untouched snapshot outputs back into live state.
+        node._cinema_produced_outputs[shot_id] = copy.deepcopy(shot["output"])
 
         if emit is not None:
             await emit(ProgressEvent(node_id=node.id, value=min((index + 1) / total, 1.0)))

@@ -1,5 +1,6 @@
 import sys
 from pathlib import Path
+from unittest.mock import AsyncMock
 
 import pytest
 from fastapi.testclient import TestClient
@@ -22,6 +23,39 @@ def clear_graph():
     main_module.cli_graph = CLIGraph()
     yield
     main_module.cli_graph = CLIGraph()
+
+
+@pytest.mark.parametrize("replacement_nodes", [[], [
+    {"id": "imported", "definitionId": "text-input", "params": {"value": "replacement"}},
+]])
+def test_only_committed_import_broadcasts_explicit_graph_replacement(monkeypatch, replacement_nodes):
+    main_module.cli_graph.add_node("text-input", {"value": "old"})
+    broadcast = AsyncMock()
+    monkeypatch.setattr(main_module.manager, "broadcast_raw", broadcast)
+    client = TestClient(app)
+
+    denied = client.post("/api/graph/import", json={
+        "nodes": [{"id": "invalid", "definitionId": "unknown-model", "params": {}}], "edges": [],
+    })
+    assert denied.status_code == 400
+    broadcast.assert_not_awaited()
+
+    updated = client.put("/api/graph/node/n1", json={"params": {"value": "ordinary edit"}})
+    assert updated.status_code == 200
+    ordinary = broadcast.await_args.args[0]
+    assert ordinary["type"] == "graphSync"
+    assert "graphReplaced" not in ordinary
+    broadcast.reset_mock()
+
+    imported = client.post("/api/graph/import", json={"nodes": replacement_nodes, "edges": []})
+    assert imported.status_code == 200
+    broadcast.assert_awaited_once()
+    replacement = broadcast.await_args.args[0]
+    assert replacement["type"] == "graphSync"
+    assert replacement["graphReplaced"] is True
+    assert replacement["nodes"] == imported.json()["nodes"]
+    assert replacement["edges"] == imported.json()["edges"]
+    assert replacement["empty"] is (not replacement_nodes)
 
 
 def test_image_input_resolves_api_outputs_url(tmp_path, monkeypatch):

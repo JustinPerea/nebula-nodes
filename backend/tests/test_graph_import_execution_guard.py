@@ -102,7 +102,7 @@ async def test_import_blocks_real_active_run_without_graph_commit_or_replacement
             accepted = await client.post("/api/graph/import", json=REPLACEMENT)
             assert accepted.status_code == 200, accepted.text
             assert [node["params"]["value"] for node in graph.nodes.values()] == ["new graph"]
-            sync.assert_awaited_once()
+            sync.assert_awaited_once_with(graph_replaced=True)
         finally:
             release.set()
             if not record.task.done():
@@ -140,7 +140,7 @@ async def test_import_stays_blocked_until_cancelled_handler_cleanup_is_terminal(
             sync.reset_mock()
             accepted = await client.post("/api/graph/import", json=REPLACEMENT)
             assert accepted.status_code == 200, accepted.text
-            sync.assert_awaited_once()
+            sync.assert_awaited_once_with(graph_replaced=True)
         finally:
             release.set()
             if not record.task.done():

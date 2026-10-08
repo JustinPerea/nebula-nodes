@@ -252,11 +252,13 @@ export function paperRunOutOfDateReasons(
   return reasons;
 }
 
-/** Retain an immutable result reference alongside the exact accepted input. */
+/** Retain Paper/Cinema result references alongside the exact accepted recipe.
+ * Cinema may delete a live shot while its original result is still in flight. */
 export function recordPaperRunOutput(
   history: RunRecord[], runId: string, nodeId: string, outputs: Record<string, PortValue>,
 ): RunRecord[] {
-  return history.map((record) => record.id === runId && record.paperInputs?.length
+  return history.map((record) => record.id === runId && (record.paperInputs?.length
+    || record.snapshot.nodes.some((node) => node.id === nodeId && node.definitionId === 'cinema-scene'))
     ? { ...record, resultOutputs: deepFreeze(JSON.parse(JSON.stringify({
         ...record.resultOutputs, [nodeId]: outputs,
       })) as Record<string, Record<string, PortValue>>) }

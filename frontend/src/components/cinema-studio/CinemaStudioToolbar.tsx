@@ -1,5 +1,6 @@
 import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
+import { getCinemaUploadIssue, useCinemaUploadStore } from '../../store/cinemaUploadStore';
 
 interface CinemaStudioToolbarProps {
   cinemaNodeId: string;
@@ -18,6 +19,8 @@ export function CinemaStudioToolbar({ cinemaNodeId }: CinemaStudioToolbarProps) 
   const isImportingGraph = useGraphStore((s) => s.isImportingGraph);
   const activeRuns = useGraphStore((s) => s.activeRuns);
   const cancelRun = useGraphStore((s) => s.cancelRun);
+  useCinemaUploadStore((state) => state.uploads);
+  const referenceIssue = getCinemaUploadIssue(cinemaNodeId, undefined, true);
   const sceneRuns = activeRuns.filter((run) => run.nodeIds.includes(cinemaNodeId));
   const stopping = sceneRuns.length > 0 && sceneRuns.every((run) => run.status === 'cancelling');
   const openHistory = () => {
@@ -53,9 +56,11 @@ export function CinemaStudioToolbar({ cinemaNodeId }: CinemaStudioToolbarProps) 
       <button
         type="button"
         className="cinema-studio-toolbar__action"
-        onClick={() => executeNode(cinemaNodeId)}
-        disabled={isExecuting || isImportingGraph}
-        title="Run the cinema-scene node — generates every shot via the existing execution pipeline"
+        onClick={() => {
+          if (!getCinemaUploadIssue(cinemaNodeId, undefined, true)) executeNode(cinemaNodeId);
+        }}
+        disabled={isExecuting || isImportingGraph || Boolean(referenceIssue)}
+        title={referenceIssue ?? 'Run the cinema-scene node — generates every shot via the existing execution pipeline'}
       >
         {sceneRuns.length > 0 ? 'Generating…' : 'Generate all'}
       </button>

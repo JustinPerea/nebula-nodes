@@ -1,5 +1,7 @@
 import { useRef, useState } from 'react';
-import { apiFetch, backendAssetUrlSync } from '../../lib/backend';
+import { backendAssetUrlSync } from '../../lib/backend';
+import { attachCinemaReferences, removeCinemaReferenceUpload, retryCinemaReferenceUpload } from '../../lib/cinemaUploads';
+import { getCinemaUploadIssue, useCinemaUploadStore } from '../../store/cinemaUploadStore';
 import { useGraphStore } from '../../store/graphStore';
 import { shotPortId } from '../../constants/ports';
 import type { CinemaSceneSpec, CinemaShot } from '../../types';
@@ -8,7 +10,7 @@ interface CinemaShotPanelProps {
   cinemaNodeId: string;
   scene: CinemaSceneSpec;
   shot: CinemaShot;
-  onChangeShot: (next: CinemaShot) => void;
+  onChangeShot: (update: (current: CinemaShot) => CinemaShot) => void;
 }
 
 /** Motion model the "Send to motion" button targets. veo-3's first-frame input
@@ -20,7 +22,6 @@ const CLI_ID_RE = /^n\d+$/;
 
 export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: CinemaShotPanelProps) {
   const refInputRef = useRef<HTMLInputElement>(null);
-  const [uploading, setUploading] = useState(false);
   const [sentToMotion, setSentToMotion] = useState(false);
   const [variationCount, setVariationCount] = useState(2);
 
@@ -37,6 +38,10 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
   const addNodeAndConnect = useGraphStore((s) => s.addNodeAndConnect);
   const addNode = useGraphStore((s) => s.addNode);
   const onConnect = useGraphStore((s) => s.onConnect);
+  const uploads = useCinemaUploadStore((state) => state.uploads);
+  const shotUploads = uploads.filter((upload) => upload.nodeId === cinemaNodeId && upload.shotId === shot.id);
+  const referenceIssue = getCinemaUploadIssue(cinemaNodeId, shot.id);
+  const allReferenceIssue = getCinemaUploadIssue(cinemaNodeId, undefined, true);
 
   const shotRefs = shot.refImageUrls ?? [];
   const paletteOverridden = shot.overrides?.palette !== undefined;
@@ -44,51 +49,45 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
   const previewUrl = shot.output?.imageUrl ?? null;
   const status = shot.output?.status ?? 'idle';
 
-  const setPrompt = (prompt: string) => onChangeShot({ ...shot, prompt });
+  const setPrompt = (prompt: string) => onChangeShot((current) => ({ ...current, prompt }));
+
+  const currentSharedScene = () => (useGraphStore.getState().nodes.find((node) => node.id === cinemaNodeId)
+    ?.data.params.scene as CinemaSceneSpec | undefined) ?? scene;
 
   const togglePaletteOverride = () => {
-    const overrides = { ...(shot.overrides ?? {}) };
-    if (paletteOverridden) {
-      delete overrides.palette;
-    } else {
-      // Seed the override from the shared palette so the user starts from parity.
-      overrides.palette = scene.palette ? { ...scene.palette } : {};
-    }
-    onChangeShot({ ...shot, overrides: Object.keys(overrides).length ? overrides : undefined });
+    onChangeShot((current) => {
+      const overrides = { ...(current.overrides ?? {}) };
+      if (overrides.palette !== undefined) delete overrides.palette;
+      else {
+        const palette = currentSharedScene().palette;
+        overrides.palette = palette ? structuredClone(palette) : {};
+      }
+      return { ...current, overrides: Object.keys(overrides).length ? overrides : undefined };
+    });
   };
 
   const toggleLookOverride = () => {
-    const overrides = { ...(shot.overrides ?? {}) };
-    if (lookOverridden) {
-      delete overrides.look;
-    } else {
-      overrides.look = scene.look ? { ...scene.look } : {};
-    }
-    onChangeShot({ ...shot, overrides: Object.keys(overrides).length ? overrides : undefined });
+    onChangeShot((current) => {
+      const overrides = { ...(current.overrides ?? {}) };
+      if (overrides.look !== undefined) delete overrides.look;
+      else {
+        const look = currentSharedScene().look;
+        overrides.look = look ? { ...look } : {};
+      }
+      return { ...current, overrides: Object.keys(overrides).length ? overrides : undefined };
+    });
   };
 
-  const addShotRefs = (urls: string[]) =>
-    onChangeShot({ ...shot, refImageUrls: [...shotRefs, ...urls] });
-
-  const removeShotRef = (idx: number) => {
-    const next = shotRefs.filter((_, i) => i !== idx);
-    onChangeShot({ ...shot, refImageUrls: next.length ? next : undefined });
+  const removeShotRef = (url: string) => {
+    onChangeShot((current) => {
+      const next = (current.refImageUrls ?? []).filter((ref) => ref !== url);
+      return { ...current, refImageUrls: next.length ? next : undefined };
+    });
   };
 
   const handleFiles = (files: FileList | null) => {
     if (!files || files.length === 0) return;
-    setUploading(true);
-    const uploads = Array.from(files).map((file) => {
-      const fd = new FormData();
-      fd.append('file', file);
-      return apiFetch('/api/uploads', { method: 'POST', body: fd })
-        .then((r) => r.json())
-        .then((data: { filePath: string; url: string }) => data.url);
-    });
-    Promise.all(uploads)
-      .then((urls) => addShotRefs(urls.filter(Boolean)))
-      .catch((err) => console.error('[cinema] shot ref upload failed:', err))
-      .finally(() => setUploading(false));
+    attachCinemaReferences(cinemaNodeId, shot.id, Array.from(files));
   };
 
   // "Generate shot" regenerates ONLY this shot via the dedicated per-shot
@@ -97,20 +96,23 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
   // cinema-scene node. Both stream results back into scene.shots[*].output via
   // the same graphSync channel that drives ModelNode previews.
   const shotRunning = Boolean(shotRun) || status === 'running';
-  const shotBlocked = shotRunning || overlappingGraph || admissionBlocked;
-  const sharedInputsBlocked = admissionBlocked && !shotRunning && !overlappingGraph;
+  const shotBlocked = shotRunning || overlappingGraph || admissionBlocked || Boolean(referenceIssue);
+  const sharedInputsBlocked = admissionBlocked && !shotRunning && !overlappingGraph && !referenceIssue;
   const sharedInputsMessage = isImportingGraph
     ? 'Wait for the graph import to finish.'
     : 'Another run is using shared inputs. Wait for it to finish or stop it.';
   const shotStopping = shotRun?.status === 'cancelling';
   const handleGenerateShot = () => {
+    if (getCinemaUploadIssue(cinemaNodeId, shot.id)) return;
     executeShot(cinemaNodeId, shot.id);
   };
   const handleGenerateAll = () => {
+    if (getCinemaUploadIssue(cinemaNodeId, undefined, true)) return;
     executeNode(cinemaNodeId);
   };
   // Variations: one base-model run per distinct seed, collected into the strip.
   const handleGenerateVariations = () => {
+    if (getCinemaUploadIssue(cinemaNodeId, shot.id)) return;
     executeShot(cinemaNodeId, shot.id, undefined, variationCount);
   };
 
@@ -205,7 +207,8 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
               type="button"
               className="cinema-shot-panel__ref-remove"
               title="Remove ref"
-              onClick={() => removeShotRef(idx)}
+              aria-label={`Remove composition reference ${idx + 1}`}
+              onClick={() => removeShotRef(url)}
             >
               ×
             </button>
@@ -215,14 +218,15 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
           type="button"
           className="cinema-shot-panel__ref-add"
           onClick={() => refInputRef.current?.click()}
-          disabled={uploading}
+          aria-label="Attach composition references"
         >
-          {uploading ? '…' : '+'}
+          +
         </button>
         <input
           ref={refInputRef}
           type="file"
-          accept="image/*"
+          accept="image/png,image/jpeg,image/gif,image/webp"
+          aria-label="Composition reference images"
           multiple
           hidden
           onChange={(e) => {
@@ -231,6 +235,24 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
           }}
         />
       </div>
+      {shotUploads.length > 0 && (
+        <div className="cinema-reference-uploads" aria-label="Composition reference uploads">
+          {shotUploads.map((upload) => (
+            <div key={upload.id} className="cinema-reference-upload" aria-busy={upload.status === 'uploading'}>
+              <span className="cinema-reference-upload__name">{upload.name}</span>
+              <span className="cinema-reference-upload__status" role={upload.status === 'error' ? 'alert' : 'status'}>
+                {upload.status === 'uploading' ? 'Uploading…' : upload.error ?? 'Could not upload this image.'}
+              </span>
+              <div className="cinema-reference-upload__actions">
+                {upload.status === 'error' && upload.canRetry && (
+                  <button type="button" onClick={() => retryCinemaReferenceUpload(upload.id)} aria-label={`Retry ${upload.name}`}>Retry</button>
+                )}
+                <button type="button" onClick={() => removeCinemaReferenceUpload(upload.id)} aria-label={`Remove upload ${upload.name}`}>Remove</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className="cinema-shot-panel__toggles">
         <label className="cinema-shot-panel__toggle">
@@ -271,13 +293,15 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
           className="cinema-shot-panel__action"
           onClick={handleGenerateVariations}
           disabled={shotBlocked}
-          title={sharedInputsBlocked ? sharedInputsMessage : undefined}
+          title={referenceIssue ?? (sharedInputsBlocked ? sharedInputsMessage : undefined)}
         >
           Generate {variationCount}
         </button>
       </div>
 
       {sharedInputsBlocked && <div className="cinema-shot-panel__variations-label" role="status">{sharedInputsMessage}</div>}
+      {referenceIssue && <div className="cinema-reference-upload__message" role="status">{referenceIssue}</div>}
+      {!referenceIssue && allReferenceIssue && <div className="cinema-reference-upload__message" role="status">{allReferenceIssue} Generate all will be available when the other shot’s references are resolved.</div>}
 
       <div className="cinema-shot-panel__actions">
         <button
@@ -285,7 +309,7 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
           className="cinema-shot-panel__action cinema-shot-panel__action--primary"
           onClick={handleGenerateShot}
           disabled={shotBlocked}
-          title={sharedInputsBlocked ? sharedInputsMessage : undefined}
+          title={referenceIssue ?? (sharedInputsBlocked ? sharedInputsMessage : undefined)}
         >
           {shotRunning ? 'Generating…' : 'Generate shot'}
         </button>
@@ -304,7 +328,8 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
           type="button"
           className="cinema-shot-panel__action"
           onClick={handleGenerateAll}
-          disabled={isExecuting || isImportingGraph}
+          disabled={isExecuting || isImportingGraph || Boolean(allReferenceIssue)}
+          title={allReferenceIssue ?? undefined}
         >
           Generate all
         </button>
