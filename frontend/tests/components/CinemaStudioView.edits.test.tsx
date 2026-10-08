@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, render } from '@testing-library/react';
+import { act, cleanup, render } from '@testing-library/react';
 import { CinemaStudioView } from '../../src/components/cinema-studio/CinemaStudioView';
 import { useGraphStore } from '../../src/store/graphStore';
 import { useUIStore } from '../../src/store/uiStore';
@@ -56,6 +56,7 @@ describe('Cinema Studio current-scene field ownership', () => {
   });
 
   afterEach(() => {
+    cleanup();
     useGraphStore.setState(initialGraph, true);
     useUIStore.setState(initialUi, true);
     localStorage.clear();

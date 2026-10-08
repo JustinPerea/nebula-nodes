@@ -37,6 +37,7 @@ describe('Cinema tracked run controls', () => {
 
   it('stops only active runs belonging to the current scene', () => {
     render(<CinemaStudioToolbar cinemaNodeId="n1" />);
+    expect(screen.getByRole('button', { name: 'Generating…' })).toBeDisabled();
     fireEvent.click(screen.getByRole('button', { name: 'Stop scene' }));
     expect(cancelRun.mock.calls.map(([id]) => id)).toEqual(['shot-a', 'shot-b']);
   });
@@ -63,7 +64,8 @@ describe('Cinema tracked run controls', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Stop shot' }));
     expect(cancelRun).toHaveBeenCalledExactlyOnceWith('shot-a');
     expect(screen.getByRole('button', { name: 'Generating…' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Generate all' })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'Generate all' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Generate 2' })).toBeDisabled();
   });
 
   it('allows a distinct idle shot while another shot is owned', () => {

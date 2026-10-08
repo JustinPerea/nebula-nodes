@@ -165,3 +165,11 @@ The original audit does not claim live provider generation, native file-dialog s
 - Protected handoff ownership against shot switching, deletion/retyping, replacement, stale HTTP and canonical edge-only removal. Earlier results/history remain intact; local scene handoff has one undo snapshot.
 - Final checks passed: 3,465 backend tests, 1,342 frontend tests in 140 files, lint/TypeScript/production build/budget and independent review. Native Chrome verified failure/retry/connection/focused return with synthetic logos and no generation.
 - Acceptance and protocol ceiling: [Cinema motion handoff](cinema-motion-handoff-2026-10-08.md). Cinema selected-shot layout/override controls and keyboard selection are the next slice; discovery, onboarding, recipe comparison and shared workspace chrome remain.
+
+## Fourth repair slice — 2026-10-08
+
+- Implemented item 5: selected-shot preview/prompt layout, collapsed bounded scene settings, editable palette/look overrides, Reset to scene and all four named connected input roles with View on Canvas.
+- Implemented the Cinema keyboard portion of item 7: native selection, arrows/Home/End, explicit and Alt-arrow reordering, stable selection/focus after reorder/delete. Editing no longer scrolls the compact body back to the rail.
+- Corrected the renderer contract so a named shot film-look preset owns its grade instead of inheriting scene custom values/LUTs. Partial overrides continue to inherit; edits preserve earlier outputs, connections and frozen run history and never generate.
+- Final checks passed: 3,479 backend tests, 1,391 frontend tests in 144 files, lint/TypeScript/production build/budget and independent review. Native Chrome at 100%/200% verified controls, inheritance/reset, keyboard reorder and source selection with synthetic artwork and zero generation requests.
+- Acceptance and proof limits: [Cinema layout and controls](cinema-layout-controls-2026-10-08.md). Discovery/readiness (item 6) is the next slice; onboarding, full recipe comparison and shared workspace chrome remain outstanding.

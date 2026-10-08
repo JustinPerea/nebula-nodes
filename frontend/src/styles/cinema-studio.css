@@ -2,9 +2,8 @@
  * CinemaStudioView styles — Slava-restraint skin.
  *
  * All rules scoped under body.app-slava-restraint, mirroring remotion-editor.css.
- * The studio is a focused full-screen workspace: a top toolbar, a shared-controls
- * header band, a horizontal shots rail, and a selected-shot panel — laid out per
- * spec §8 / the approved storyboard mock. Tokens reused from slava-restraint.css:
+ * A focused workspace with bounded scene settings and a selected-shot editor.
+ * Tokens reused from slava-restraint.css:
  *   --sr-canvas / --sr-glass / --sr-glass-strong  → surfaces
  *   --sr-ink / --sr-ink-meta                       → type
  *   --sr-edge / --sr-edge-strong                   → hairlines
@@ -15,15 +14,23 @@ body.app-slava-restraint .cinema-studio-view {
   position: fixed;
   inset: 0;
   display: grid;
-  grid-template-rows: 44px auto auto 1fr;
+  grid-template-rows: auto minmax(0, 1fr);
   grid-template-areas:
     "toolbar"
-    "shared"
-    "rail"
-    "panel";
+    "body";
   background: var(--sr-canvas);
   color: var(--sr-ink);
   z-index: 50;
+  overflow: hidden;
+}
+
+body.app-slava-restraint .cinema-studio-view__body {
+  grid-area: body;
+  min-height: 0;
+  min-width: 0;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-areas: "shared" "rail" "panel";
   overflow: hidden;
 }
 
@@ -53,9 +60,10 @@ body.app-slava-restraint .cinema-studio-view__header { grid-area: toolbar; }
 body.app-slava-restraint .cinema-studio-toolbar {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 12px;
-  height: 100%;
-  padding: 0 16px;
+  min-height: 48px;
+  padding: 8px 16px;
   border-bottom: 1px solid var(--sr-edge-strong);
   background: var(--sr-glass);
 }
@@ -96,13 +104,82 @@ body.app-slava-restraint .cinema-studio-view__shared {
   grid-area: shared;
   border-bottom: 1px solid var(--sr-edge-strong);
   background: var(--sr-glass-strong);
+  min-width: 0;
+  max-height: min(40vh, 380px);
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+body.app-slava-restraint .cinema-scene-settings__summary {
+  padding: 12px 16px;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+body.app-slava-restraint .cinema-scene-settings__title {
+  color: var(--sr-ink);
+  font-weight: 600;
+  margin-right: 12px;
+}
+
+body.app-slava-restraint .cinema-scene-settings__overview {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  color: var(--sr-ink-meta);
+  overflow-wrap: anywhere;
+}
+
+body.app-slava-restraint .cinema-scene-settings[open] .cinema-scene-settings__summary {
+  border-bottom: 1px solid var(--sr-edge);
+}
+
+body.app-slava-restraint .cinema-scene-settings__body {
+  min-width: 0;
+}
+
+body.app-slava-restraint .cinema-connected-inputs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 16px 10px;
   overflow-x: auto;
 }
+
+body.app-slava-restraint .cinema-connected-inputs__label {
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: var(--sr-ink-meta);
+}
+
+body.app-slava-restraint .cinema-connected-inputs__source {
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 2px 8px;
+  max-width: 300px;
+  padding: 6px 8px;
+  border: 1px solid var(--sr-edge);
+  border-radius: 3px;
+  background: var(--sr-surface-control, rgba(255, 255, 255, 0.04));
+  color: var(--sr-ink);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+body.app-slava-restraint .cinema-connected-inputs__source:hover { border-color: var(--sr-accent); }
+body.app-slava-restraint .cinema-connected-inputs__role { font-weight: 600; }
+body.app-slava-restraint .cinema-connected-inputs__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+body.app-slava-restraint .cinema-connected-inputs__detail { grid-column: 1 / 3; font-size: 11px; color: var(--sr-ink-meta); }
+body.app-slava-restraint .cinema-connected-inputs__view { grid-column: 3; grid-row: 1 / 3; align-self: center; color: var(--sr-accent); }
 
 body.app-slava-restraint .cinema-shared-controls {
   display: flex;
   flex-wrap: wrap;
-  gap: 18px;
+  gap: 20px 28px;
   padding: 12px 16px;
 }
 
@@ -113,7 +190,7 @@ body.app-slava-restraint .cinema-shared-controls__section {
   min-width: 120px;
 }
 
-body.app-slava-restraint .cinema-shared-controls__section--wide { min-width: 200px; }
+body.app-slava-restraint .cinema-shared-controls__section--wide { min-width: 200px; flex: 1 1 240px; }
 
 body.app-slava-restraint .cinema-shared-controls__label {
   font-size: 11px;
@@ -143,6 +220,7 @@ body.app-slava-restraint .cinema-shared-controls__select--sm { padding: 2px 4px;
 body.app-slava-restraint .cinema-shared-controls__inline {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
@@ -322,14 +400,14 @@ body.app-slava-restraint .cinema-studio-view__rail {
 body.app-slava-restraint .cinema-shots-rail {
   display: flex;
   gap: 10px;
-  padding: 12px 16px;
+  padding: 10px 16px;
   align-items: stretch;
-  min-height: 116px;
+  min-height: 0;
 }
 
 body.app-slava-restraint .cinema-shots-rail__shot {
   flex: 0 0 auto;
-  width: 132px;
+  width: 116px;
   border: 1px solid var(--sr-edge);
   border-radius: 4px;
   background: var(--sr-glass-strong);
@@ -337,11 +415,45 @@ body.app-slava-restraint .cinema-shots-rail__shot {
   overflow: hidden;
 }
 
+body.app-slava-restraint .cinema-shots-rail__select {
+  display: block;
+  width: 100%;
+  border: 0;
+  padding: 0;
+  background: none;
+  color: var(--sr-ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+body.app-slava-restraint .cinema-shots-rail__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 4px;
+  padding: 3px 5px;
+  border-top: 1px solid var(--sr-edge);
+}
+
+body.app-slava-restraint .cinema-shots-rail__move {
+  min-width: 26px;
+  min-height: 24px;
+  border: 1px solid var(--sr-edge);
+  border-radius: 2px;
+  background: none;
+  color: var(--sr-ink);
+  font: inherit;
+  cursor: pointer;
+}
+
+body.app-slava-restraint .cinema-shots-rail__move:disabled { opacity: var(--sr-disabled-opacity, 0.5); cursor: default; }
+
 body.app-slava-restraint .cinema-shots-rail__shot--selected { border-color: var(--sr-accent); }
 body.app-slava-restraint .cinema-shots-rail__shot--dragging { opacity: 0.5; }
 
 body.app-slava-restraint .cinema-shots-rail__thumb {
   position: relative;
+  display: block;
   width: 100%;
   aspect-ratio: 16 / 9;
   background: rgba(0, 0, 0, 0.25);
@@ -393,14 +505,16 @@ body.app-slava-restraint .cinema-shots-rail__remove {
   color: var(--sr-ink-meta);
   cursor: pointer;
   font-size: 14px;
-  padding: 0 2px;
+  padding: 0 4px;
+  min-width: 24px;
+  min-height: 24px;
 }
 
 body.app-slava-restraint .cinema-shots-rail__remove:hover { color: var(--sr-danger, #c0392b); }
 
 body.app-slava-restraint .cinema-shots-rail__add {
   flex: 0 0 auto;
-  width: 132px;
+  width: 116px;
   border: 1px dashed var(--sr-edge-strong);
   border-radius: 4px;
   background: none;
@@ -418,27 +532,51 @@ body.app-slava-restraint .cinema-shots-rail__add:hover {
 /* ── Selected-shot panel ─────────────────────────────────────────────────────── */
 body.app-slava-restraint .cinema-studio-view__panel {
   grid-area: panel;
+  min-height: 0;
   overflow: auto;
   background: var(--sr-canvas);
 }
 
 body.app-slava-restraint .cinema-shot-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(300px, 0.9fr);
+  align-items: start;
+  gap: 24px;
+  padding: 20px 24px;
+  max-width: 1600px;
+  margin: 0 auto;
+}
+
+body.app-slava-restraint .cinema-shot-panel__media,
+body.app-slava-restraint .cinema-shot-panel__editor {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding: 16px;
-  max-width: 920px;
-  margin: 0 auto;
+  min-width: 0;
 }
+
+body.app-slava-restraint .cinema-shot-panel__heading { margin: 0; font-size: 15px; font-weight: 600; }
+body.app-slava-restraint .cinema-shot-panel__heading h2 { margin: 0 0 4px; font-size: 18px; }
+body.app-slava-restraint .cinema-shot-panel__heading span { font-size: 12px; font-weight: 400; color: var(--sr-ink-meta); }
 
 body.app-slava-restraint .cinema-shot-panel__preview {
   position: relative;
   width: 100%;
   aspect-ratio: 16 / 9;
+  max-height: 60vh;
   border: 1px solid var(--sr-edge);
   border-radius: 4px;
   background: rgba(0, 0, 0, 0.3);
   overflow: hidden;
+}
+
+body.app-slava-restraint .cinema-shot-panel__preview[data-aspect="2.39:1"] { aspect-ratio: 2.39; }
+body.app-slava-restraint .cinema-shot-panel__preview[data-aspect="4:5"] { aspect-ratio: 4 / 5; }
+body.app-slava-restraint .cinema-shot-panel__preview[data-aspect="1:1"] { aspect-ratio: 1; }
+body.app-slava-restraint .cinema-shot-panel__preview[data-aspect="9:16"] { aspect-ratio: 9 / 16; }
+body.app-slava-restraint .cinema-shot-panel__preview--empty {
+  aspect-ratio: auto;
+  height: clamp(140px, 30vh, 280px);
 }
 
 body.app-slava-restraint .cinema-shot-panel__preview img {
@@ -493,6 +631,7 @@ body.app-slava-restraint .cinema-shot-panel__variations-control {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-wrap: wrap;
   margin-top: 4px;
 }
 
@@ -557,6 +696,7 @@ body.app-slava-restraint .cinema-shot-panel__label {
 body.app-slava-restraint .cinema-shot-panel__prompt {
   width: 100%;
   min-height: 72px;
+  max-height: 240px;
   resize: vertical;
   background: var(--sr-surface-control, rgba(255, 255, 255, 0.04));
   border: 1px solid var(--sr-edge);
@@ -565,6 +705,92 @@ body.app-slava-restraint .cinema-shot-panel__prompt {
   padding: 8px;
   font: inherit;
   font-size: 13px;
+}
+
+body.app-slava-restraint .cinema-shot-panel__advanced,
+body.app-slava-restraint .cinema-shot-panel__overrides,
+body.app-slava-restraint .cinema-shot-panel__override {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+body.app-slava-restraint .cinema-shot-panel__advanced,
+body.app-slava-restraint .cinema-shot-panel__override {
+  border-top: 1px solid var(--sr-edge);
+  padding-top: 14px;
+}
+
+body.app-slava-restraint .cinema-shot-panel__override-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+body.app-slava-restraint .cinema-shot-panel__reset {
+  padding: 4px 7px;
+  border: 1px solid var(--sr-edge);
+  border-radius: 3px;
+  background: none;
+  color: var(--sr-ink);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+body.app-slava-restraint .cinema-shot-panel__inheritance {
+  margin: 0;
+  color: var(--sr-ink-meta);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+body.app-slava-restraint .cinema-shared-controls__slider-row input[type="range"] { flex: 1; min-width: 60px; }
+body.app-slava-restraint .cinema-shared-controls__slider-row .cinema-shared-controls__value,
+body.app-slava-restraint .cinema-shared-controls__inline .cinema-shared-controls__value {
+  min-width: 32px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  color: var(--sr-ink);
+}
+
+body.app-slava-restraint .cinema-studio-view input[type="range"],
+body.app-slava-restraint .cinema-studio-view input[type="checkbox"] { accent-color: var(--sr-accent); }
+
+body.app-slava-restraint .cinema-studio-view button:focus-visible,
+body.app-slava-restraint .cinema-studio-view summary:focus-visible,
+body.app-slava-restraint .cinema-studio-view input:focus-visible,
+body.app-slava-restraint .cinema-studio-view select:focus-visible,
+body.app-slava-restraint .cinema-studio-view textarea:focus-visible {
+  outline: 2px solid var(--sr-accent);
+  outline-offset: 2px;
+}
+
+@media (max-width: 860px), (max-height: 520px) {
+  body.app-slava-restraint .cinema-studio-view__body { display: block; overflow: auto; overscroll-behavior: contain; }
+  body.app-slava-restraint .cinema-studio-view__panel { overflow: visible; }
+  body.app-slava-restraint .cinema-studio-toolbar { gap: 6px 8px; padding: 6px 12px; }
+  body.app-slava-restraint .cinema-scene-settings__summary { padding: 9px 12px; }
+  body.app-slava-restraint .cinema-connected-inputs { padding: 0 12px 8px; }
+  body.app-slava-restraint .cinema-shots-rail { padding: 8px 12px; gap: 8px; }
+  body.app-slava-restraint .cinema-shots-rail__shot,
+  body.app-slava-restraint .cinema-shots-rail__add { width: 96px; }
+  body.app-slava-restraint .cinema-shots-rail__thumb { height: 42px; aspect-ratio: auto; }
+  body.app-slava-restraint .cinema-shot-panel { padding: 16px 12px; gap: 16px; }
+  body.app-slava-restraint .cinema-shot-panel__preview { max-height: 240px; }
+}
+
+@media (max-width: 860px) {
+  body.app-slava-restraint .cinema-shot-panel { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (max-height: 520px) {
+  body.app-slava-restraint .cinema-shot-panel__preview { max-height: 140px; }
+  body.app-slava-restraint .cinema-shot-panel__variation { width: 64px; }
 }
 
 body.app-slava-restraint .cinema-shot-panel__toggles {

@@ -1,10 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
 import { CinemaStudioToolbar } from './CinemaStudioToolbar';
 import { CinemaSharedControls } from './CinemaSharedControls';
 import { CinemaShotsRail } from './CinemaShotsRail';
 import { CinemaShotPanel } from './CinemaShotPanel';
+import { cinemaConnectedInputs, type CinemaConnectedInput } from '../../lib/cinemaInputs';
 import type { CinemaSceneSpec, CinemaShot } from '../../types';
 import '../../styles/cinema-studio.css';
 
@@ -36,8 +37,13 @@ export function CinemaStudioView() {
   const removeShot = useGraphStore((s) => s.removeShot);
   const edges = useGraphStore((s) => s.edges);
   const nodes = useGraphStore((s) => s.nodes);
+  const panelRef = useRef<HTMLDivElement>(null);
 
-  const [selectedShotId, setSelectedShotId] = useState<string | null>(null);
+  const [selection, setSelection] = useState<{ nodeId: string; shotId: string } | null>(null);
+  const selectedShotId = selection?.nodeId === cinemaNodeId ? selection.shotId : null;
+  const setSelectedShotId = (shotId: string | null) => setSelection(
+    cinemaNodeId && shotId ? { nodeId: cinemaNodeId, shotId } : null,
+  );
 
   const scene: CinemaSceneSpec =
     (node?.data as { params?: { scene?: CinemaSceneSpec } } | undefined)?.params?.scene ?? emptyScene();
@@ -51,36 +57,18 @@ export function CinemaStudioView() {
     ? selectedShotId
     : (shotIds[0] ?? null);
 
-  // Canvas ↔ Studio parity: character refs wired into the node's `character_refs`
-  // input port on the canvas must show here too (the backend already conditions
-  // on them — handlers/cinema_scene.py reads inputs['character_refs']). Resolve
-  // each connected edge to its source node's output image URL.
-  const connectedCharacterRefs = useMemo(() => {
-    if (!cinemaNodeId) return [];
-    const urls: string[] = [];
-    const asStr = (v: unknown): string | undefined => (typeof v === 'string' && v ? v : undefined);
-    for (const e of edges) {
-      if (e.target !== cinemaNodeId || e.targetHandle !== 'character_refs') continue;
-      const sdata = nodes.find((n) => n.id === e.source)?.data as
-        | { outputs?: Record<string, { value?: unknown }>; params?: Record<string, unknown> }
-        | undefined;
-      const outputs = sdata?.outputs;
-      const params = sdata?.params;
-      // A generated source (e.g. gpt-image-2) keeps its result in data.outputs;
-      // a static image-input keeps it in params (_previewUrl / filePath) and may
-      // have empty outputs until run. Cover both.
-      const val =
-        (e.sourceHandle ? asStr(outputs?.[e.sourceHandle]?.value) : undefined) ??
-        asStr(outputs?.image?.value) ??
-        (outputs ? asStr(Object.values(outputs).map((o) => o?.value).find((v) => asStr(v))) : undefined) ??
-        asStr(params?._previewUrl) ??
-        asStr(params?.filePath);
-      if (val) urls.push(val);
-    }
-    return urls;
-  }, [cinemaNodeId, edges, nodes]);
+  useLayoutEffect(() => {
+    // A new selected object starts at its prompt/preview. Authoring and output
+    // updates keep the user's current scroll position within that same shot.
+    if (panelRef.current) panelRef.current.scrollTop = 0;
+  }, [cinemaNodeId, effectiveShotId]);
 
-  if (!cinemaNodeId || !node) {
+  const connectedInputs = useMemo(() => cinemaNodeId
+    ? cinemaConnectedInputs(cinemaNodeId, nodes, edges) : [], [cinemaNodeId, edges, nodes]);
+  const connectedCharacterRefs = connectedInputs.filter((input) => input.role === 'character_refs')
+    .flatMap((input) => input.imageUrls);
+
+  if (!cinemaNodeId || !node || node.data.definitionId !== 'cinema-scene') {
     return (
       <div className="cinema-studio-view">
         <div className="cinema-studio-view__empty">
@@ -101,9 +89,21 @@ export function CinemaStudioView() {
   };
 
   const handleRemoveShot = (shotId: string) => {
+    const current = useGraphStore.getState().nodes.find((candidate) => candidate.id === cinemaNodeId)
+      ?.data.params.scene as CinemaSceneSpec | undefined;
+    const index = current?.shots.findIndex((shot) => shot.id === shotId) ?? -1;
+    if (effectiveShotId === shotId && index >= 0) {
+      setSelectedShotId(current?.shots[index + 1]?.id ?? current?.shots[index - 1]?.id ?? null);
+    }
     removeShot(cinemaNodeId, shotId);
-    // Clear stored id; effectiveShotId will auto-fall-back to the next shot.
-    if (selectedShotId === shotId) setSelectedShotId(null);
+  };
+
+  const viewInput = (input: CinemaConnectedInput) => {
+    const graph = useGraphStore.getState();
+    if (graph.isImportingGraph) return;
+    const surviving = cinemaConnectedInputs(cinemaNodeId, graph.nodes, graph.edges)
+      .some((candidate) => candidate.edgeId === input.edgeId && candidate.sourceId === input.sourceId && candidate.role === input.role);
+    if (surviving) useUIStore.getState().requestCanvasNodeFocus(input.sourceId);
   };
 
   const handleReorder = (shots: CinemaShot[]) => {
@@ -132,40 +132,61 @@ export function CinemaStudioView() {
         <CinemaStudioToolbar cinemaNodeId={cinemaNodeId} />
       </header>
 
-      <div className="cinema-studio-view__shared">
-        <CinemaSharedControls
-          cinemaNodeId={cinemaNodeId}
-          scene={scene}
-          connectedRefs={connectedCharacterRefs}
-          onChange={(update) => updateScene(cinemaNodeId, update)}
-        />
-      </div>
-
-      <div className="cinema-studio-view__rail">
-        <CinemaShotsRail
-          cinemaNodeId={cinemaNodeId}
-          scene={scene}
-          selectedShotId={effectiveShotId}
-          onSelect={setSelectedShotId}
-          onAddShot={handleAddShot}
-          onRemoveShot={handleRemoveShot}
-          onReorder={handleReorder}
-        />
-      </div>
-
-      <div className="cinema-studio-view__panel">
-        {selectedShot ? (
-          <CinemaShotPanel
+      <div className="cinema-studio-view__body">
+        <div className="cinema-studio-view__shared">
+          <CinemaSharedControls
+            key={cinemaNodeId}
             cinemaNodeId={cinemaNodeId}
             scene={scene}
-            shot={selectedShot}
-            onChangeShot={handleChangeShot}
+            connectedRefs={connectedCharacterRefs}
+            onChange={(update) => updateScene(cinemaNodeId, update)}
           />
-        ) : (
-          <div className="cinema-studio-view__panel-empty">
-            Add a shot to begin storyboarding.
-          </div>
-        )}
+          {connectedInputs.length > 0 && (
+            <div className="cinema-connected-inputs" aria-label="Connected scene inputs">
+              <span className="cinema-connected-inputs__label">From Canvas</span>
+              {connectedInputs.map((input) => (
+                <button type="button" key={input.edgeId} className="cinema-connected-inputs__source"
+                  aria-label={`View ${input.roleLabel} on Canvas: ${input.sourceLabel}`}
+                  title={`${input.roleLabel}: ${input.sourceLabel} · ${input.summary}`}
+                  onClick={() => viewInput(input)}>
+                  <span className="cinema-connected-inputs__role">{input.roleLabel}</span>
+                  <span className="cinema-connected-inputs__name">{input.sourceLabel}</span>
+                  <span className="cinema-connected-inputs__detail">{input.summary}</span>
+                  <span className="cinema-connected-inputs__view" aria-hidden="true">↗</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="cinema-studio-view__rail">
+          <CinemaShotsRail
+            key={cinemaNodeId}
+            cinemaNodeId={cinemaNodeId}
+            scene={scene}
+            selectedShotId={effectiveShotId}
+            onSelect={setSelectedShotId}
+            onAddShot={handleAddShot}
+            onRemoveShot={handleRemoveShot}
+            onReorder={handleReorder}
+          />
+        </div>
+
+        <div ref={panelRef} className="cinema-studio-view__panel">
+          {selectedShot ? (
+            <CinemaShotPanel
+              key={`${cinemaNodeId}:${selectedShot.id}`}
+              cinemaNodeId={cinemaNodeId}
+              scene={scene}
+              shot={selectedShot}
+              onChangeShot={handleChangeShot}
+            />
+          ) : (
+            <div className="cinema-studio-view__panel-empty">
+              Add a shot to begin storyboarding.
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

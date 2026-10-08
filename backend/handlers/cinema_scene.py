@@ -56,7 +56,7 @@ from cinema.art_direction import (
 )
 from cinema.color import transfer_to_palette
 from cinema.identity import expand_character, strength_param_for
-from cinema.look import apply_look
+from cinema.look import PRESETS, apply_look
 from models.events import ExecutionEvent, ProgressEvent
 from models.graph import GraphNode, PortValueDict
 from services.file_access import require_allowed_path
@@ -182,9 +182,18 @@ def _merge_palette(scene_palette: dict[str, Any] | None, override: dict[str, Any
 
 
 def _merge_look(scene_look: dict[str, Any] | None, override: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Resolve shot ownership before the deterministic look stage.
+
+    A known named shot preset owns its complete grade. Shared custom sliders
+    and LUTs must not become explicit overrides of that bundle. Scalar/LUT
+    values actually carried by the shot remain authoritative; partial overrides
+    without a named preset retain the shared look.
+    """
     if not scene_look and not override:
         return None
-    merged: dict[str, Any] = dict(scene_look or {})
+    named_preset = override.get("preset") if override else None
+    owns_preset = isinstance(named_preset, str) and named_preset in PRESETS
+    merged: dict[str, Any] = {} if owns_preset else dict(scene_look or {})
     if override:
         merged.update({k: v for k, v in override.items() if v is not None})
     return merged or None

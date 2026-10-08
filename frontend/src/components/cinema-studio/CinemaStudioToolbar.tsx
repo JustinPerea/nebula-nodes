@@ -6,12 +6,7 @@ interface CinemaStudioToolbarProps {
   cinemaNodeId: string;
 }
 
-/** Top toolbar: breadcrumb back to the canvas, plus generate-all and save.
- *  Mirrors RemotionEditorToolbar's role — a thin band of node-scoped actions
- *  that delegate to the graph store. "Save" is a no-op affordance because every
- *  edit already persists through graphStore.updateScene (optimistic store +
- *  cli_graph round-trip); we surface the button to match the storyboard mock
- *  and to give the user an explicit "flush" signal. */
+/** Scene-wide actions stay separate from the selected shot's controls. */
 export function CinemaStudioToolbar({ cinemaNodeId }: CinemaStudioToolbarProps) {
   const exitCinemaEditor = useUIStore((s) => s.exitCinemaEditor);
   const executeNode = useGraphStore((s) => s.executeNode);
@@ -60,7 +55,7 @@ export function CinemaStudioToolbar({ cinemaNodeId }: CinemaStudioToolbarProps) 
           if (!getCinemaUploadIssue(cinemaNodeId, undefined, true)) executeNode(cinemaNodeId);
         }}
         disabled={isExecuting || isImportingGraph || Boolean(referenceIssue)}
-        title={referenceIssue ?? 'Run the cinema-scene node — generates every shot via the existing execution pipeline'}
+        title={referenceIssue ?? 'Generate every shot using the current scene settings'}
       >
         {sceneRuns.length > 0 ? 'Generating…' : 'Generate all'}
       </button>

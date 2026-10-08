@@ -83,11 +83,11 @@ describe('Cinema reference feedback and explicit generation', () => {
     expect(executeShot).not.toHaveBeenCalled();
   });
 
-  it.each(['uploading', 'error'] as const)('blocks shot, variations and All while a shared reference is %s', (status) => {
+  it.each(['uploading', 'error'] as const)('blocks shot and variations while a shared reference is %s', (status) => {
     metadata.uploads = [upload({ status })];
     const current = scene();
     render(<CinemaShotPanel cinemaNodeId="scene" scene={current} shot={current.shots[0]} onChangeShot={vi.fn()} />);
-    for (const name of ['Generate shot', 'Generate 2', 'Generate all']) {
+    for (const name of ['Generate shot', 'Generate 2']) {
       const button = screen.getByRole('button', { name });
       expect(button).toBeDisabled();
       fireEvent.click(button);
@@ -101,7 +101,7 @@ describe('Cinema reference feedback and explicit generation', () => {
     metadata.uploads = [upload({ shotId: 'b' })];
     const current = scene();
     render(<CinemaShotPanel cinemaNodeId="scene" scene={current} shot={current.shots[0]} onChangeShot={vi.fn()} />);
-    expect(screen.getByRole('button', { name: 'Generate all' })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'Generate all' })).toBeNull();
     expect(screen.getByRole('button', { name: 'Generate shot' })).toBeEnabled();
     fireEvent.click(screen.getByRole('button', { name: 'Generate shot' }));
     expect(executeShot).toHaveBeenCalledExactlyOnceWith('scene', 'a');
@@ -116,7 +116,6 @@ describe('Cinema reference feedback and explicit generation', () => {
     metadata.uploads = [upload({ shotId: 'a' })];
     fireEvent.click(screen.getByRole('button', { name: 'Generate shot' }));
     fireEvent.click(screen.getByRole('button', { name: 'Generate 2' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Generate all' }));
     expect(executeShot).not.toHaveBeenCalled();
     expect(executeNode).not.toHaveBeenCalled();
   });
@@ -130,6 +129,7 @@ describe('Cinema reference feedback and explicit generation', () => {
     expect(screen.getByRole('status')).toHaveTextContent('Uploading…');
     expect(screen.getAllByRole('alert').map((element) => element.textContent)).toEqual(['Unsupported image bytes.', 'Attach this image again or remove it.']);
     expect(screen.queryByText('hidden.png')).toBeNull();
+    fireEvent.click(screen.getByText('Scene settings'));
     expect(screen.getByRole('button', { name: 'Attach character references' })).toBeEnabled();
     expect(screen.queryByRole('button', { name: 'Retry interrupted.png' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Retry failed.webp' }));
@@ -174,7 +174,8 @@ describe('Cinema reference feedback and explicit generation', () => {
     const original = scene();
     const change = vi.fn<(update: (current: CinemaSceneSpec) => CinemaSceneSpec) => void>();
     render(<CinemaSharedControls cinemaNodeId="scene" scene={original} onChange={change} />);
-    fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: 'nano-banana' } });
+    fireEvent.click(screen.getByText('Scene settings'));
+    fireEvent.change(screen.getByRole('combobox', { name: 'Base model' }), { target: { value: 'nano-banana' } });
     const latest = scene();
     latest.base.params = { seed: 42 };
     latest.shots[0] = { ...latest.shots[0], prompt: 'Edited while uploading', output: { status: 'done', imageUrl: '/new-result.png' },
