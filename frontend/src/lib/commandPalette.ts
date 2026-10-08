@@ -1,4 +1,5 @@
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
+import { CATEGORY_LABELS, matchesSearch, modelSearchText, providerLabel } from './modelDiscovery';
 
 export type PaletteGroup = 'Actions' | 'View' | 'Agent' | 'Canvas' | 'Nodes';
 
@@ -82,9 +83,9 @@ export function buildCommands(ctx: PaletteContext): PaletteCommand[] {
     cmds.push({
       id: `node:${def.id}`,
       title: def.displayName,
-      subtitle: `${def.category} · ${def.apiProvider}`,
+      subtitle: `${CATEGORY_LABELS[def.category]} · ${providerLabel(def.apiProvider)}`,
       group: 'Nodes',
-      keywords: `${def.category} ${def.apiProvider} add node`,
+      keywords: `${modelSearchText(def)} add node`,
       perform: () => ctx.addNodeAtCenter(def.id),
     });
   }
@@ -92,11 +93,9 @@ export function buildCommands(ctx: PaletteContext): PaletteCommand[] {
   return cmds;
 }
 
-/** Case-insensitive substring match over title + subtitle + keywords. */
+/** Shared token matching over title + subtitle + keywords. */
 export function filterCommands(commands: PaletteCommand[], query: string): PaletteCommand[] {
-  const q = query.trim().toLowerCase();
-  if (!q) return commands;
-  return commands.filter((c) =>
-    `${c.title} ${c.subtitle ?? ''} ${c.keywords ?? ''}`.toLowerCase().includes(q)
-  );
+  return commands.filter((command) => matchesSearch(
+    `${command.title} ${command.subtitle ?? ''} ${command.keywords ?? ''}`, query,
+  ));
 }

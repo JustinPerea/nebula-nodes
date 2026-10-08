@@ -1,11 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { CreateComposer } from '../../src/components/create-studio/CreateComposer';
 import { NODE_DEFINITIONS } from '../../src/constants/nodeDefinitions';
 import { useUIStore } from '../../src/store/uiStore';
 
 const initialUi = useUIStore.getState();
-afterEach(() => useUIStore.setState(initialUi, true));
+afterEach(() => { cleanup(); useUIStore.setState(initialUi, true); });
 
 function composer(params: Record<string, unknown>) {
   return <CreateComposer modelDef={NODE_DEFINITIONS['krea-image-openai-gpt-image-2']}
@@ -20,10 +20,11 @@ describe('Create Krea connection control', () => {
       kreaConnection: { status: 'needs_auth' } } });
     const element = composer({ _kreaAuth: 'mcp' });
     render(element);
-    expect(screen.getByText('Krea sign-in required.')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Open connection settings' }));
+    expect(screen.getByText('Krea sign-in required')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Connection settings for GPT Image 2 (Krea)' }));
     expect(useUIStore.getState().panels.settings.visible).toBe(true);
     expect(useUIStore.getState().viewMode).toBe('create');
+    expect(useUIStore.getState().settingsProviderTarget).toEqual({ kind: 'krea-mcp' });
     expect(element.props.params).toEqual({ _kreaAuth: 'mcp' });
     expect(element.props.onGenerate).not.toHaveBeenCalled();
   });
@@ -32,10 +33,12 @@ describe('Create Krea connection control', () => {
     useUIStore.setState({ settingsCache: { apiKeys: {}, loaded: true,
       kreaConnection: { status: 'connected' } } });
     const { rerender } = render(composer({ _kreaAuth: 'mcp' }));
-    expect(screen.queryByText('Krea sign-in required.')).not.toBeInTheDocument();
+    expect(screen.queryByText('Krea sign-in required')).not.toBeInTheDocument();
+    expect(screen.getByText('Krea signed in')).toBeInTheDocument();
     useUIStore.setState({ settingsCache: { apiKeys: {}, loaded: true,
       kreaConnection: { status: 'disconnected' } } });
     rerender(composer({}));
-    expect(screen.queryByRole('button', { name: 'Open connection settings' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Krea sign-in required')).not.toBeInTheDocument();
+    expect(screen.getByText('Setup required')).toBeInTheDocument();
   });
 });

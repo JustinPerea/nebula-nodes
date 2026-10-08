@@ -13,6 +13,12 @@ const getKreaConnectionMock = vi.fn();
 const connectKreaMock = vi.fn();
 const checkKreaConnectionMock = vi.fn();
 const disconnectKreaMock = vi.fn();
+const providerApiFetchMock = vi.fn();
+
+vi.mock('../src/lib/backend', async (original) => ({
+  ...await original<typeof import('../src/lib/backend')>(),
+  apiFetch: (...args: unknown[]) => providerApiFetchMock(...args),
+}));
 
 vi.mock('../src/lib/api', () => ({
   getSettings: (...args: unknown[]) => getSettingsMock(...args),
@@ -37,6 +43,7 @@ import { Settings } from '../src/components/panels/Settings';
 import { useUIStore } from '../src/store/uiStore';
 import { useGraphStore } from '../src/store/graphStore';
 import { useSettingsDraftStore } from '../src/store/settingsDraftStore';
+import { useProviderReadinessStore } from '../src/store/providerReadinessStore';
 
 // ---------------------------------------------------------------------------
 // Test setup
@@ -46,6 +53,8 @@ const INITIAL_UI_STATE = { ...useUIStore.getState() };
 const INITIAL_DRAFT_STATE = { ...useSettingsDraftStore.getState() };
 
 beforeEach(() => {
+  useProviderReadinessStore.getState().invalidate();
+  providerApiFetchMock.mockReset();
   useSettingsDraftStore.setState(INITIAL_DRAFT_STATE, true);
   useUIStore.setState(INITIAL_UI_STATE, true);
   useUIStore.setState((state) => ({
@@ -73,9 +82,121 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  useProviderReadinessStore.getState().invalidate();
   vi.useRealTimers();
   delete (window as Record<string, unknown>).nebulaDesktop;
   vi.restoreAllMocks();
+});
+
+describe('Settings provider discovery handoff', () => {
+  it('retries an initial settings read if a newer credential cache refresh overtakes it', async () => {
+    let finishLoad!: (value: Record<string, unknown>) => void;
+    getSettingsMock.mockReturnValueOnce(new Promise<Record<string, unknown>>((resolve) => { finishLoad = resolve; }))
+      .mockResolvedValueOnce({ apiKeys: { FAL_KEY: '***current' }, kreaConnectionMode: 'mcp' });
+    render(<Settings />);
+    act(() => useUIStore.getState().setSettingsCache({ FAL_KEY: '***current' }, 'mcp'));
+    await act(async () => finishLoad({ apiKeys: { OPENAI_API_KEY: '***outdated' } }));
+    await expandApiKeys();
+    expect(screen.getByLabelText('OpenAI API key')).toHaveValue('');
+    expect(screen.getByLabelText('fal.ai API key')).toHaveValue('***current');
+    expect(useUIStore.getState().settingsCache.apiKeys).toEqual({ FAL_KEY: '***current' });
+    expect(useUIStore.getState().settingsCache.kreaConnectionMode).toBe('mcp');
+    expect(getSettingsMock).toHaveBeenCalledTimes(2);
+    expect(providerApiFetchMock).not.toHaveBeenCalled();
+  });
+
+  it('opens and focuses the requested API-key field without changing graph, draft or checking providers', async () => {
+    getSettingsMock.mockResolvedValue({ apiKeys: { OPENAI_API_KEY: '***saved' } });
+    const graph = useGraphStore.getState();
+    act(() => useUIStore.getState().openProviderSetup({ kind: 'api-key', key: 'OPENAI_API_KEY' }));
+    render(<Settings />);
+    const key = await screen.findByRole('textbox', { name: 'Output Path' });
+    expect(key).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByLabelText('OpenAI API key')).toHaveFocus());
+    expect(screen.getByRole('button', { name: /API Keys/ })).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByLabelText('OpenAI API key')).toHaveValue('***saved');
+    expect(providerApiFetchMock).not.toHaveBeenCalled();
+    expect(updateSettingsMock).not.toHaveBeenCalled();
+    expect(useGraphStore.getState().nodes).toBe(graph.nodes);
+    expect(useGraphStore.getState().edges).toBe(graph.edges);
+    expect(useGraphStore.getState().runHistory).toBe(graph.runHistory);
+  });
+
+  it('retains unsaved provider edits when setup is opened for another provider', async () => {
+    getSettingsMock.mockResolvedValue({ apiKeys: { OPENAI_API_KEY: '***saved' } });
+    render(<Settings />);
+    await expandApiKeys();
+    fireEvent.change(screen.getByLabelText('OpenAI API key'), { target: { value: 'fixture-unsaved' } });
+    act(() => useUIStore.getState().openProviderSetup({ kind: 'api-key', key: 'FAL_KEY' }));
+    await waitFor(() => expect(screen.getByLabelText('fal.ai API key')).toHaveFocus());
+    expect(screen.getByLabelText('OpenAI API key')).toHaveValue('fixture-unsaved');
+    expect(getSettingsMock).toHaveBeenCalledOnce();
+    expect(screen.getByRole('button', { name: 'Check connections' })).toBeDisabled();
+    expect(providerApiFetchMock).not.toHaveBeenCalled();
+    expect(updateSettingsMock).not.toHaveBeenCalled();
+  });
+
+  it.each(['krea-mcp', 'nous'])('focuses %s setup without starting sign-in, checking or generating', async (kind) => {
+    getSettingsMock.mockResolvedValue({ apiKeys: {} });
+    act(() => useUIStore.getState().openProviderSetup(kind === 'krea-mcp' ? { kind } : { kind: 'external', provider: 'nous' }));
+    render(<Settings />);
+    if (kind === 'krea-mcp') await waitFor(() => expect(screen.getByRole('button', { name: 'Connect to Krea' })).toHaveFocus());
+    else {
+      await waitFor(() => expect(screen.getByRole('region', { name: 'Nous Portal setup' })).toHaveFocus());
+      expect(screen.getByText('hermes-daedalus model')).toBeInTheDocument();
+    }
+    expect(connectKreaMock).not.toHaveBeenCalled();
+    expect(checkKreaConnectionMock).not.toHaveBeenCalled();
+    expect(providerApiFetchMock).not.toHaveBeenCalled();
+    expect(updateSettingsMock).not.toHaveBeenCalled();
+  });
+
+  it('checks saved credentials only on explicit action, and shows credential proof without model claims', async () => {
+    getSettingsMock.mockResolvedValue({ apiKeys: { OPENAI_API_KEY: '***saved' } });
+    providerApiFetchMock.mockResolvedValue(new Response(JSON.stringify({ providers: {
+      OpenAI: { configured: true, status: 'valid', last_checked: new Date().toISOString() },
+    } })));
+    render(<Settings />);
+    await expandApiKeys();
+    expect(providerApiFetchMock).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Check connections' }));
+    await screen.findByText('Verified credential');
+    expect(screen.getByText('1 verified credential. Checks expire after five minutes.')).toBeInTheDocument();
+    expect(providerApiFetchMock.mock.calls).toEqual([['/api/health/providers?refresh=true']]);
+    expect(updateSettingsMock).not.toHaveBeenCalled();
+  });
+
+  it.each(['stale', 'future'])('excludes %s check timestamps from its verified credential count', async (timestamp) => {
+    getSettingsMock.mockResolvedValue({ apiKeys: { OPENAI_API_KEY: '***saved' } });
+    render(<Settings />);
+    await expandApiKeys();
+    act(() => useProviderReadinessStore.setState({ providers: { OpenAI: {
+      configured: true, status: 'valid', last_checked: new Date(Date.now() + (timestamp === 'future' ? 60_000 : -300_000)).toISOString(),
+    } }, checkedAt: Date.now() }));
+    expect(screen.getByText('0 verified credentials. Checks expire after five minutes.')).toBeInTheDocument();
+    expect(screen.queryByText('Verified credential')).not.toBeInTheDocument();
+    expect(providerApiFetchMock).not.toHaveBeenCalled();
+  });
+
+  it.each(['save', 'remove'])('invalidates a pending check at %s start before the mutation finishes', async (operation) => {
+    let finishCheck!: (value: Response) => void;
+    providerApiFetchMock.mockReturnValue(new Promise<Response>((resolve) => { finishCheck = resolve; }));
+    getSettingsMock.mockResolvedValue({ apiKeys: { OPENAI_API_KEY: '***saved' } });
+    updateSettingsMock.mockReturnValue(new Promise(() => {}));
+    deleteSettingsApiKeyMock.mockReturnValue(new Promise(() => {}));
+    render(<Settings />);
+    await expandApiKeys();
+    fireEvent.click(screen.getByRole('button', { name: 'Check connections' }));
+    if (operation === 'save') {
+      fireEvent.change(screen.getByLabelText('OpenAI API key'), { target: { value: 'fixture-new-key' } });
+      clickSave();
+    } else fireEvent.click(screen.getByRole('button', { name: 'Remove OpenAI API key' }));
+    await act(async () => finishCheck(new Response(JSON.stringify({ providers: {
+      OpenAI: { configured: true, status: 'valid', last_checked: new Date().toISOString() },
+    } }))));
+    expect(useProviderReadinessStore.getState()).toMatchObject({ providers: {}, checkedAt: null, loading: false });
+    expect(screen.queryByText('Verified credential')).not.toBeInTheDocument();
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -286,8 +407,9 @@ describe('Settings — Krea MCP connection', () => {
     useGraphStore.setState({ nodes: [saved], runHistory: [] });
     await act(async () => { render(<Settings />); });
     const select = await screen.findByRole('combobox', { name: 'Default Krea connection for new nodes' });
+    const savedDefault = useUIStore.getState().settingsCache.kreaConnectionMode;
     fireEvent.change(select, { target: { value: 'mcp' } });
-    expect(useUIStore.getState().settingsCache.kreaConnectionMode).toBeUndefined();
+    expect(useUIStore.getState().settingsCache.kreaConnectionMode).toBe(savedDefault);
     expect(updateSettingsMock).not.toHaveBeenCalled();
     getSettingsMock.mockResolvedValue({ apiKeys: {}, routing: {}, kreaConnectionMode: 'mcp' });
     clickSave();

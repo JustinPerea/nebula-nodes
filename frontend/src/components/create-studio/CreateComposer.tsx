@@ -4,9 +4,8 @@ import type { ModelNodeDefinition } from '../../types';
 import { enhancePrompt } from '../../lib/enhancePrompt';
 import { ModelPicker } from './ModelPicker';
 import { ParamPills } from './ParamPills';
-import { useUIStore } from '../../store/uiStore';
-import { isKreaGateway, kreaModeForParams } from '../../lib/kreaConnection';
 import { isCreateModel } from '../../lib/createModels';
+import { ProviderReadinessBadge } from '../ProviderReadinessBadge';
 
 interface CreateComposerProps {
   modelDef: ModelNodeDefinition | null;
@@ -37,7 +36,6 @@ export function CreateComposer({
   referencesBlocked = false, referenceStatus,
   onPromptChange, onSelectModel, onParamsChange, onGenerate, onAttach, onQuantityChange, onOpenStyles,
 }: CreateComposerProps) {
-  const kreaConnection = useUIStore((s) => s.settingsCache.kreaConnection);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [enhancing, setEnhancing] = useState(false);
   const [prevPrompt, setPrevPrompt] = useState<string | null>(null);
@@ -89,7 +87,7 @@ export function CreateComposer({
   return (
     <div className="create-composer">
       {pickerOpen && (
-        <ModelPicker value={modelDef?.id ?? null} onSelect={onSelectModel} onClose={() => setPickerOpen(false)} />
+        <ModelPicker value={modelDef?.id ?? null} selectedParams={params} onSelect={onSelectModel} onClose={() => setPickerOpen(false)} />
       )}
       {modelDef && !modelSupported && (
         <div className="create-composer__capability-note" role="note">
@@ -102,6 +100,7 @@ export function CreateComposer({
         </div>
       )}
       {referenceStatus && <div className="create-composer__capability-note" role="status">{referenceStatus}</div>}
+      {modelDef && <ProviderReadinessBadge definition={modelDef} params={params} />}
       <textarea
         ref={promptRef}
         className="create-composer__prompt"
@@ -157,13 +156,6 @@ export function CreateComposer({
           <span className="create-composer__enhance-error" role="alert">{enhanceError}</span>
         )}
         {modelDef && <ParamPills def={modelDef} params={params} onChange={onParamsChange} />}
-        {isKreaGateway(modelDef ?? undefined) && kreaModeForParams(params) === 'mcp'
-          && kreaConnection?.status !== 'connected' && (
-            <span className="create-composer__capability-note" role="status">Krea sign-in required.{' '}
-              <button type="button" className="create-composer__styles"
-                onClick={() => useUIStore.getState().setLeftDock('settings')}>Open connection settings</button>
-            </span>
-          )}
         <div className="create-composer__qty" role="group" aria-label="Number of variations">
           <button type="button" onClick={() => onQuantityChange(Math.max(1, quantity - 1))} aria-label="Fewer" disabled={quantity <= 1}>−</button>
           <span>{quantity}</span>

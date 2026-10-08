@@ -4,22 +4,26 @@ import { Search, Check } from 'lucide-react';
 import type { ModelNodeDefinition } from '../../types';
 import { getCreateModels, getFeaturedModels, searchModels } from '../../lib/createModels';
 import { usePanelFocus } from '../../hooks/usePanelFocus';
+import { CATEGORY_LABELS, providerLabel, modelInputSummary, supportedModelProviders, matchesModelProvider } from '../../lib/modelDiscovery';
+import { ProviderReadinessBadge } from '../ProviderReadinessBadge';
 
 interface ModelPickerProps {
   value: string | null;
   onSelect: (definitionId: string) => void;
   onClose: () => void;
+  selectedParams?: Record<string, unknown>;
 }
 
-export function ModelPicker({ value, onSelect, onClose }: ModelPickerProps) {
+export function ModelPicker({ value, onSelect, onClose, selectedParams }: ModelPickerProps) {
   const [query, setQuery] = useState('');
   const [provider, setProvider] = useState('');
   const panelRef = useRef<HTMLDivElement>(null);
-  const providers = useMemo(() => [...new Set(getCreateModels().map((model) => String(model.apiProvider)))].sort(), []);
+  const providers = useMemo(() => [...new Set(getCreateModels().flatMap(supportedModelProviders))]
+    .sort((left, right) => providerLabel(left).localeCompare(providerLabel(right))), []);
   usePanelFocus(true, panelRef, onClose, { initialFocus: 'input', trap: true });
 
   const groups = useMemo(() => {
-    const matchesProvider = (model: ModelNodeDefinition) => !provider || model.apiProvider === provider;
+    const matchesProvider = (model: ModelNodeDefinition) => matchesModelProvider(model, provider);
     if (query.trim()) {
       return [{ label: 'Results', models: searchModels(query).filter(matchesProvider) }];
     }
@@ -56,30 +60,39 @@ export function ModelPicker({ value, onSelect, onClose }: ModelPickerProps) {
         Provider
         <select aria-label="Model provider" value={provider} onChange={(event) => setProvider(event.target.value)}>
           <option value="">All providers</option>
-          {providers.map((item) => <option key={item} value={item}>{item === 'krea' ? 'Krea' : item}</option>)}
+          {providers.map((item) => <option key={item} value={item}>{providerLabel(item)}</option>)}
         </select>
       </label>
       <div className="model-picker__list">
-        {groups.every((group) => group.models.length === 0) && <div className="model-picker__empty" role="status">No models match this search and provider.</div>}
+        {groups.every((group) => group.models.length === 0) && <div className="model-picker__empty">
+          <p role="status">No models match this search and provider.</p>
+          <p>Try a model name, provider or task such as “animate a logo”.</p>
+          <button type="button" onClick={() => { setQuery(''); setProvider(''); }}>Clear filters</button>
+        </div>}
         {groups.filter((group) => group.models.length > 0).map((group) => (
           <div key={group.label} className="model-picker__group">
-            <div className="model-picker__group-label">{group.label}</div>
+            <div className="model-picker__group-label">{CATEGORY_LABELS[group.label as keyof typeof CATEGORY_LABELS] ?? group.label}</div>
             {group.models.map((m) => (
+              <div key={m.id} className="model-picker__entry">
               <button
-                key={m.id}
                 type="button"
                 className={`model-picker__row${value === m.id ? ' model-picker__row--active' : ''}`}
-                aria-label={`${m.displayName}, ${m.category}, ${m.apiProvider}`}
+                aria-label={`${m.displayName}, ${CATEGORY_LABELS[m.category] ?? m.category}, ${providerLabel(String(m.apiProvider))}`}
                 aria-pressed={value === m.id}
                 onClick={() => {
                   onSelect(m.id);
                   onClose();
                 }}
               >
-                <span className="model-picker__row-name">{m.displayName}</span>
-                <span className="model-picker__row-meta">{m.category} · {String(m.apiProvider)}</span>
+                <span className="model-picker__row-content">
+                  <span className="model-picker__row-name">{m.displayName}</span>
+                  <span className="model-picker__row-meta">{CATEGORY_LABELS[m.category] ?? m.category} · {providerLabel(String(m.apiProvider))}</span>
+                  <span className="model-picker__row-inputs">{modelInputSummary(m)}</span>
+                </span>
                 {value === m.id && <Check size={15} strokeWidth={2} className="model-picker__row-check" />}
               </button>
+              <ProviderReadinessBadge definition={m} params={value === m.id ? selectedParams : undefined} onSetup={onClose} />
+              </div>
             ))}
           </div>
         ))}

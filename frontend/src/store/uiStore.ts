@@ -10,6 +10,8 @@ import {
 } from '../lib/jobNotifications';
 import type { KreaConnectionMode, KreaConnectionState } from '../lib/kreaConnection';
 import type { Preset } from '../lib/createPresets';
+import type { ProviderSetupTarget } from '../lib/providerReadiness';
+import { useProviderReadinessStore } from './providerReadinessStore';
 import { useGraphStore } from './graphStore';
 
 const AGENT_LOG_ENABLED_KEY = 'nebula:agentLog:enabled';
@@ -214,6 +216,7 @@ interface UIState {
     kreaConnectionMode?: KreaConnectionMode;
     kreaConnection?: KreaConnectionState;
   };
+  settingsProviderTarget: ProviderSetupTarget | null;
   skin: SkinId;
   agentLogEnabled: boolean;
   canvasPerfMode: boolean;
@@ -279,6 +282,7 @@ interface UIState {
   showConnectionPopup: (popup: Omit<ConnectionPopupState, 'visible'>) => void;
   hideConnectionPopup: () => void;
   setSettingsCache: (apiKeys: Record<string, string>, kreaConnectionMode?: KreaConnectionMode) => void;
+  openProviderSetup: (target: ProviderSetupTarget) => void;
   setKreaConnection: (connection: KreaConnectionState) => void;
   setKreaConnectionMode: (mode: KreaConnectionMode) => void;
   setAgentLogEnabled: (enabled: boolean) => void;
@@ -338,6 +342,7 @@ export const useUIStore = create<UIState>((set, get) => ({
     handleType: 'source',
   },
   settingsCache: { apiKeys: {}, loaded: false },
+  settingsProviderTarget: null,
   skin: loadSkin(),
   agentLogEnabled: loadAgentLogEnabled(),
   canvasPerfMode: loadCanvasPref(CANVAS_PERF_MODE_KEY),
@@ -602,7 +607,7 @@ export const useUIStore = create<UIState>((set, get) => ({
             visible: leftDock === dockPanel,
           };
         }
-        return { leftDock, panels };
+        return { leftDock, panels, ...(leftDock !== 'settings' ? { settingsProviderTarget: null } : {}) };
       }
 
       const opening = !state.panels[panel].visible;
@@ -688,11 +693,18 @@ export const useUIStore = create<UIState>((set, get) => ({
       connectionPopup: { ...state.connectionPopup, visible: false },
     })),
 
-  setSettingsCache: (apiKeys, kreaConnectionMode) =>
+  setSettingsCache: (apiKeys, kreaConnectionMode) => {
+    useProviderReadinessStore.getState().invalidate();
     set((state) => ({ settingsCache: {
       ...state.settingsCache, apiKeys, loaded: true,
       ...(kreaConnectionMode ? { kreaConnectionMode } : {}),
-    } })),
+    } }));
+  },
+
+  openProviderSetup: (target) => {
+    get().setLeftDock('settings');
+    set({ settingsProviderTarget: { ...target } });
+  },
 
   setKreaConnection: (kreaConnection) =>
     set((state) => ({ settingsCache: { ...state.settingsCache, kreaConnection } })),
@@ -755,7 +767,7 @@ export const useUIStore = create<UIState>((set, get) => ({
           visible: leftDock === dockPanel,
         };
       }
-      return { leftDock, panels };
+      return { leftDock, panels, ...(leftDock !== 'settings' ? { settingsProviderTarget: null } : {}) };
     }),
 
   resetPanelLayout: () => {

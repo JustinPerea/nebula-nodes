@@ -1,5 +1,6 @@
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 import type { ModelNodeDefinition, NodeCategory } from '../types';
+import { matchesModelSearch } from './modelDiscovery';
 
 /** Categories the Create picker exposes (prompt/input -> generation). P1: static nodes only. */
 export const CREATE_MODEL_CATEGORIES: NodeCategory[] = [
@@ -47,12 +48,6 @@ export function getFeaturedModels(): ModelNodeDefinition[] {
 }
 
 export function searchModels(query: string): ModelNodeDefinition[] {
-  const q = query.trim().toLowerCase();
   const all = getCreateModels();
-  if (!q) return all;
-  return all.filter((d) =>
-    d.displayName.toLowerCase().includes(q) ||
-    String(d.apiProvider).toLowerCase().includes(q) ||
-    d.category.toLowerCase().includes(q),
-  );
+  return all.filter((definition) => matchesModelSearch(definition, query));
 }

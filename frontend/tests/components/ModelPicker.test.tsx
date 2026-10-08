@@ -4,6 +4,7 @@ import { ModelPicker } from '../../src/components/create-studio/ModelPicker';
 import { CreateComposer } from '../../src/components/create-studio/CreateComposer';
 import { NODE_DEFINITIONS } from '../../src/constants/nodeDefinitions';
 import { getCreateModels } from '../../src/lib/createModels';
+import { CATEGORY_LABELS, providerLabel } from '../../src/lib/modelDiscovery';
 
 const KREA_IMAGE = 'krea-image-openai-gpt-image-2';
 const KREA_VIDEO = 'krea-video-kling-kling-3-0';
@@ -11,7 +12,7 @@ const KREA_VIDEO = 'krea-video-kling-kling-3-0';
 function modelName(id: string) {
   const model = NODE_DEFINITIONS[id];
   expect(model, `Missing catalog model ${id}`).toBeDefined();
-  return `${model.displayName}, ${model.category}, ${model.apiProvider}`;
+  return `${model.displayName}, ${CATEGORY_LABELS[model.category]}, ${providerLabel(model.apiProvider)}`;
 }
 
 function modelRow(id: string) {
@@ -38,7 +39,8 @@ describe('Create model picker provider filter', () => {
     expect(modelRow(KREA_IMAGE)).toBeInTheDocument();
     expect(modelRow(KREA_VIDEO)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: modelName('nano-banana') })).not.toBeInTheDocument();
-    expect(screen.getAllByRole('button')).toHaveLength(getCreateModels().filter((model) => model.apiProvider === 'krea').length);
+    expect(screen.getAllByRole('button').filter((button) => button.hasAttribute('aria-pressed')))
+      .toHaveLength(getCreateModels().filter((model) => model.apiProvider === 'krea').length);
   });
 
   it('combines search with provider filtering and retains the query when switching providers', () => {
@@ -48,12 +50,12 @@ describe('Create model picker provider filter', () => {
     fireEvent.change(provider, { target: { value: 'krea' } });
     fireEvent.change(search, { target: { value: 'GPT Image' } });
     expect(modelRow(KREA_IMAGE)).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /Kling.*video-gen/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Kling.*Video Generation/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: modelName('gpt-image-1-generate') })).not.toBeInTheDocument();
     fireEvent.change(provider, { target: { value: 'openai' } });
     expect(search).toHaveValue('GPT Image');
     expect(modelRow('gpt-image-1-generate')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /\(Krea\)/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: modelName(KREA_IMAGE) })).not.toBeInTheDocument();
   });
 
   it('preserves selected gateway models and closes after choosing the exact definition', () => {
@@ -74,8 +76,10 @@ describe('Create model picker provider filter', () => {
     fireEvent.change(screen.getByRole('combobox', { name: 'Model provider' }), { target: { value: 'krea' } });
     fireEvent.change(screen.getByRole('textbox', { name: 'Search models' }), { target: { value: 'does-not-match-any-model' } });
     expect(screen.getByRole('status')).toHaveTextContent('No models match this search and provider.');
-    expect(screen.queryAllByRole('button')).toHaveLength(0);
-    expect(screen.getByRole('combobox', { name: 'Model provider' })).toHaveValue('krea');
+    expect(screen.queryAllByRole('button').filter((button) => button.hasAttribute('aria-pressed'))).toHaveLength(0);
+    fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: 'Model provider' })).toHaveValue('');
   });
 
   it('keeps Escape closing behavior while the provider control has focus', () => {
@@ -139,5 +143,19 @@ describe('Create model picker provider filter', () => {
     expect(onSelectModel).toHaveBeenCalledWith(KREA_VIDEO);
     expect(screen.queryByRole('dialog', { name: 'Choose a model' })).not.toBeInTheDocument();
     expect(onGenerate).not.toHaveBeenCalled();
+  });
+
+  it('discovers dual-route Veo and Meshy through supported provider filters without choosing or generating', () => {
+    const onSelect = vi.fn(); const onClose = vi.fn();
+    render(<ModelPicker value={null} onSelect={onSelect} onClose={onClose} />);
+    const provider = screen.getByRole('combobox', { name: 'Model provider' });
+    expect(screen.getByRole('option', { name: 'Meshy' })).toHaveValue('meshy');
+    fireEvent.change(provider, { target: { value: 'fal' } });
+    expect(modelRow('veo-3')).toBeEnabled();
+    expect(modelRow('meshy-text-to-3d')).toBeEnabled();
+    fireEvent.change(provider, { target: { value: 'meshy' } });
+    expect(modelRow('meshy-text-to-3d')).toBeEnabled();
+    expect(screen.queryByRole('button', { name: modelName('veo-3') })).not.toBeInTheDocument();
+    expect(onSelect).not.toHaveBeenCalled(); expect(onClose).not.toHaveBeenCalled();
   });
 });

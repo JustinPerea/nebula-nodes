@@ -74,6 +74,96 @@ body:not(.app-slava-restraint) .panel__close:hover { color: #ccc; }
   overflow-y: auto;
 }
 
+.node-library__filters {
+  flex: 0 0 auto;
+}
+
+.node-library__provider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 8px;
+}
+
+.node-library__provider select {
+  flex: 1;
+  min-width: 0;
+}
+
+.node-library__count {
+  margin: 0 0 10px;
+  font-size: 11px;
+}
+
+.node-library__entry {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.node-library__name,
+.node-library__metadata,
+.node-library__inputs {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.node-library__metadata,
+.node-library__inputs {
+  margin-top: 3px;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.node-library__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 2px;
+}
+
+.node-library__empty p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.node-library__suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+body.app-slava-restraint .node-library__provider {
+  color: var(--sr-ink-light);
+  font-size: 12px;
+}
+
+body.app-slava-restraint .node-library__provider select,
+body.app-slava-restraint .node-library__empty button {
+  min-height: 32px;
+  border: 1px solid var(--sr-edge);
+  border-radius: var(--sr-radius-control);
+  padding: 5px 8px;
+  background: var(--sr-surface-control);
+  color: var(--sr-ink-bold);
+  font: inherit;
+}
+
+body.app-slava-restraint .node-library__empty button {
+  cursor: pointer;
+}
+
+body.app-slava-restraint .node-library__provider select:focus-visible,
+body.app-slava-restraint .node-library__empty button:focus-visible {
+  outline: var(--sr-focus-outline);
+  outline-offset: var(--sr-focus-offset);
+}
+
+body.app-slava-restraint :is(.node-library__count, .node-library__metadata, .node-library__inputs) {
+  color: var(--sr-ink-light);
+}
+
 .inspector--embedded {
   min-height: 0;
 }
@@ -684,6 +774,53 @@ body:not(.app-slava-restraint) .settings__section-label {
   overflow-wrap: anywhere;
   font-size: 12px;
   line-height: 1.45;
+}
+
+.settings__connection-check,
+.settings__external-setup {
+  padding: 12px;
+  margin-bottom: 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.settings__connection-check-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.settings__connection-check p,
+.settings__external-setup p {
+  margin: 8px 0 0;
+}
+
+body.app-slava-restraint .settings__external-setup:focus-visible,
+body.app-slava-restraint .settings__key-row--target:focus-within {
+  outline: var(--sr-focus-outline);
+  outline-offset: var(--sr-focus-offset);
+  border-radius: 4px;
+}
+
+body:not(.app-slava-restraint) .settings__external-setup:focus-visible,
+body:not(.app-slava-restraint) .settings__key-row--target:focus-within {
+  outline: 1px solid currentColor;
+  outline-offset: 4px;
+  border-radius: 4px;
+}
+
+body.app-slava-restraint .settings__connection-check,
+body.app-slava-restraint .settings__external-setup {
+  border: 1px solid var(--sr-hairline, #444);
+}
+
+body:not(.app-slava-restraint) .settings__connection-check,
+body:not(.app-slava-restraint) .settings__external-setup {
+  border: 1px solid currentColor;
 }
 
 .settings__load-error {

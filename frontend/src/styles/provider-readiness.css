@@ -1,0 +1,31 @@
+body.app-slava-restraint .provider-readiness {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  min-width: 0;
+  padding: 4px 8px 8px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--sr-ink-meta);
+}
+
+body.app-slava-restraint .provider-readiness__label { overflow-wrap: anywhere; }
+body.app-slava-restraint .provider-readiness--warning .provider-readiness__label { color: var(--sr-accent); }
+body.app-slava-restraint .provider-readiness--success .provider-readiness__label { color: var(--sr-ink); }
+
+body.app-slava-restraint .provider-readiness__setup {
+  flex-shrink: 0;
+  border: 1px solid var(--sr-edge);
+  border-radius: 4px;
+  background: none;
+  color: var(--sr-ink);
+  padding: 2px 7px;
+  font: inherit;
+  cursor: pointer;
+}
+
+body.app-slava-restraint .provider-readiness__setup:hover { border-color: var(--sr-accent); }
+body.app-slava-restraint .provider-readiness__setup:focus-visible { outline: 2px solid var(--sr-accent); outline-offset: 2px; }
+body.app-slava-restraint .create-composer > .provider-readiness { padding: 0 0 8px; justify-content: flex-start; }

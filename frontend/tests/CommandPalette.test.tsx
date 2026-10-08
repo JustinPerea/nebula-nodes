@@ -57,4 +57,19 @@ describe('CommandPalette node insertion', () => {
     expect(screen.getByRole('textbox', { name: '' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Toggle Run History' })).toBeTruthy();
   });
+
+  it('recovers an empty search without adding or executing nodes', () => {
+    const addNode = vi.fn();
+    const executeGraph = vi.fn();
+    useGraphStore.setState({ addNode, executeGraph });
+    render(<ReactFlowProvider><CommandPalette /></ReactFlowProvider>);
+    fireEvent.keyDown(document, { key: 'k', metaKey: true });
+    const search = screen.getByRole('textbox');
+    fireEvent.change(search, { target: { value: 'unmatched-task-938475' } });
+    expect(screen.getByRole('status')).toHaveTextContent('No commands or nodes match');
+    fireEvent.click(screen.getByRole('button', { name: 'Clear search' }));
+    expect(search).toHaveValue(''); expect(search).toHaveFocus();
+    expect(screen.getByRole('button', { name: 'Toggle Run History' })).toBeInTheDocument();
+    expect(addNode).not.toHaveBeenCalled(); expect(executeGraph).not.toHaveBeenCalled();
+  });
 });

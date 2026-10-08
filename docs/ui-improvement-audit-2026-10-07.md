@@ -173,3 +173,11 @@ The original audit does not claim live provider generation, native file-dialog s
 - Corrected the renderer contract so a named shot film-look preset owns its grade instead of inheriting scene custom values/LUTs. Partial overrides continue to inherit; edits preserve earlier outputs, connections and frozen run history and never generate.
 - Final checks passed: 3,479 backend tests, 1,391 frontend tests in 144 files, lint/TypeScript/production build/budget and independent review. Native Chrome at 100%/200% verified controls, inheritance/reset, keyboard reorder and source selection with synthetic artwork and zero generation requests.
 - Acceptance and proof limits: [Cinema layout and controls](cinema-layout-controls-2026-10-08.md). Discovery/readiness (item 6) is the next slice; onboarding, full recipe comparison and shared workspace chrome remain outstanding.
+
+## Fifth repair slice — 2026-10-08
+
+- Implemented item 6: shared task/provider/category search, friendly labels, actual input/output summaries, supported-route provider filters and useful empty-state recovery across Nodes/Create/commands.
+- Added current connection feedback and separate targeted Settings setup without replacing the Create draft or changing saved recipes. Verification is explicit, sanitized, expires and rejects replies from older credential revisions; browsing and setup never generate.
+- Corrected readiness for legacy Ideogram Reframe fallback, direct-key precedence, saved Krea billing modes and keyless local/OAuth prerequisites. Models remain browsable and addable while disconnected.
+- Final gates passed: 1,475 frontend tests/148 files, lint/style guards, TypeScript/production build/budget, all 255 node contracts and independent review. Native Chrome normal/200% checks used synthetic connections, retained seven earlier nodes/six edges and sent zero generation requests.
+- Acceptance and proof limits: [Model discovery and setup](model-discovery-setup-2026-10-08.md). Onboarding (item 8), full recipe comparison (item 10) and shared workspace chrome (item 11) remain outstanding.

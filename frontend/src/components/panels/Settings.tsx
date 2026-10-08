@@ -8,6 +8,8 @@ import { KreaConnectionCard } from './KreaConnectionCard';
 import type { KreaConnectionMode } from '../../lib/kreaConnection';
 import { useDelayedUnmount } from '../../hooks/useDelayedUnmount';
 import { usePanelFocus } from '../../hooks/usePanelFocus';
+import { keyReadiness, providerCheckIsCurrent } from '../../lib/providerReadiness';
+import { useProviderReadinessStore } from '../../store/providerReadinessStore';
 import '../../styles/panels.css';
 
 interface ApiKeyField {
@@ -59,6 +61,9 @@ export function Settings() {
   const notificationPrefs = useUIStore((s) => s.notificationPrefs);
   const setNotificationPrefs = useUIStore((s) => s.setNotificationPrefs);
   const startOnboarding = useUIStore((s) => s.startOnboarding);
+  const setupTarget = useUIStore((s) => s.settingsProviderTarget);
+  const credentialCache = useUIStore((s) => s.settingsCache);
+  const providerHealth = useProviderReadinessStore();
 
   // Desktop mode: the Electron preload bridge exposes a credentials
   // namespace when running inside the desktop shell. In browser/dev mode
@@ -87,6 +92,7 @@ export function Settings() {
   const [retryLoad, setRetryLoad] = useState(0);
   const loadRequest = useRef(0);
   const loadReady = useRef(false);
+  const focusedTarget = useRef<typeof setupTarget>(null);
 
   // Editing is unavailable during the initial load. A dismissed dirty draft
   // remains volatile and is reused; a clean reopen gets a fresh baseline.
@@ -106,12 +112,23 @@ export function Settings() {
     });
     if (!retained) {
       const initialDraft = current.draft;
+      const initialCache = useUIStore.getState().settingsCache;
       getSettings().then((data) => {
         if (cancelled || request !== loadRequest.current
           || useSettingsDraftStore.getState().draft !== initialDraft) return;
+        const cache = useUIStore.getState().settingsCache;
+        if (cache.apiKeys !== initialCache.apiKeys || cache.kreaConnectionMode !== initialCache.kreaConnectionMode) {
+          setRetryLoad((value) => value + 1);
+          return;
+        }
         const loaded = readSettingsDraft(data);
         useSettingsDraftStore.setState({ draft: loaded, baseline: loaded,
           saveStatus: 'idle', error: null, removedProvider: null });
+        const sameKeys = Object.keys(cache.apiKeys).length === Object.keys(loaded.apiKeys).length
+          && Object.entries(loaded.apiKeys).every(([key, value]) => cache.apiKeys[key] === value);
+        if (!cache.loaded || !sameKeys || cache.kreaConnectionMode !== loaded.kreaConnectionMode) {
+          useUIStore.getState().setSettingsCache(loaded.apiKeys, loaded.kreaConnectionMode);
+        }
         loadReady.current = true;
         setLoadState('ready');
       }).catch(() => {
@@ -172,6 +189,7 @@ export function Settings() {
     if (!visible || !loadReady.current || loadState !== 'ready' || !state.draft || state.mutation || state.pendingRefresh) return;
     const submitted = state.draft;
     const operation: SettingsMutation = { id: uuidv4() };
+    useProviderReadinessStore.getState().invalidate();
     useSettingsDraftStore.setState({ mutation: operation, saveStatus: 'saving', error: null });
     try {
       if (isDesktopMode) {
@@ -213,6 +231,7 @@ export function Settings() {
     if (!visible || !loadReady.current || loadState !== 'ready' || isDesktopMode || !state.draft
       || state.mutation || state.pendingRefresh || !state.baseline?.apiKeys[provider]) return;
     const operation: SettingsMutation = { id: uuidv4(), provider };
+    useProviderReadinessStore.getState().invalidate();
     useSettingsDraftStore.setState({ mutation: operation, saveStatus: 'idle', error: null,
       removedProvider: null });
     try {
@@ -266,6 +285,27 @@ export function Settings() {
 
   const { shouldRender, exiting } = useDelayedUnmount(visible, 500);
   const panelRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!visible || loadState !== 'ready' || !setupTarget || focusedTarget.current === setupTarget || mutation || pendingRefresh) return;
+    let cancelled = false;
+    if (setupTarget.kind === 'api-key' && !apiKeysOpen) {
+      queueMicrotask(() => { if (!cancelled) setApiKeysOpen(true); });
+      return () => { cancelled = true; };
+    }
+    const frame = requestAnimationFrame(() => {
+      if (cancelled || !panelRef.current) return;
+      const element = setupTarget.kind === 'api-key'
+        ? Array.from(panelRef.current.querySelectorAll<HTMLInputElement>('[data-provider-key]')).find((input) => input.dataset.providerKey === setupTarget.key)
+        : panelRef.current.querySelector<HTMLElement>(setupTarget.kind === 'krea-mcp'
+          ? '[data-provider-setup="krea-mcp"] button' : '[data-provider-setup="nous"]');
+      if (element) {
+        element.focus();
+        element.scrollIntoView?.({ block: 'nearest' });
+        focusedTarget.current = setupTarget;
+      }
+    });
+    return () => { cancelled = true; cancelAnimationFrame(frame); };
+  }, [apiKeysOpen, loadState, mutation, pendingRefresh, setupTarget, visible]);
   usePanelFocus(visible && shouldRender, panelRef, () => useUIStore.getState().setLeftDock(null));
   if (!shouldRender) return null;
 
@@ -273,6 +313,9 @@ export function Settings() {
     (count, field) => count + (originalApiKeys[field.key]?.trim() ? 1 : 0),
     0,
   );
+  const readinessCache = { ...credentialCache, apiKeys: originalApiKeys, loaded: true };
+  const verifiedCount = Object.values(providerHealth.providers).filter((entry) => entry.status === 'valid'
+    && entry.configured && providerCheckIsCurrent(entry, providerHealth.checkedAt)).length;
 
   return (
     <div
@@ -323,7 +366,25 @@ export function Settings() {
             )}
 
             <div className="settings__section-label">Connections</div>
-            <KreaConnectionCard mode={kreaConnectionMode} onModeChange={(value: KreaConnectionMode) => updateDraft({ kreaConnectionMode: value })} />
+            <section className="settings__connection-check" aria-label="Saved provider connections">
+              <div className="settings__connection-check-heading">
+                <strong>Saved credentials</strong>
+                <button type="button" className="settings__secondary-button" disabled={providerHealth.loading || dirty}
+                  onClick={() => void providerHealth.checkConnections()}>{providerHealth.loading ? 'Checking connections…' : 'Check connections'}</button>
+              </div>
+              <p>Checks saved API credentials and the local Nous login without generating. Model access and credits are checked separately.</p>
+              {dirty && <p>Save or discard your edits before checking the saved connections.</p>}
+              {providerHealth.error ? <p role="alert">{providerHealth.error}</p> : <p role="status">{providerHealth.loading ? 'Checking saved connections…'
+                : providerHealth.checkedAt === null ? 'Credentials have not been checked in this session.'
+                : `${verifiedCount} verified credential${verifiedCount === 1 ? '' : 's'}. Checks expire after five minutes.`}</p>}
+            </section>
+            {setupTarget?.kind === 'external' && <section className="settings__external-setup" aria-label="Nous Portal setup"
+              data-provider-setup="nous" tabIndex={-1}>
+              <strong>Nous Portal sign-in</strong>
+              <p>On the computer running Nebula, run <code>hermes-daedalus model</code> and choose Nous Portal. This uses the local Hermes OAuth login; there is no Nous API-key field.</p>
+              <p>Then return here and use Check connections. Sign-in and checking do not start generation.</p>
+            </section>}
+            <div data-provider-setup="krea-mcp"><KreaConnectionCard mode={kreaConnectionMode} onModeChange={(value: KreaConnectionMode) => updateDraft({ kreaConnectionMode: value })} /></div>
 
             {/* API Keys Section */}
             <button
@@ -362,7 +423,7 @@ export function Settings() {
             {apiKeysOpen && (
               <div className="settings__collapsible-body">
                 {API_KEY_FIELDS.map((field) => (
-                  <div key={field.key} className="settings__key-row">
+                  <div key={field.key} className={`settings__key-row${setupTarget?.kind === 'api-key' && setupTarget.key === field.key ? ' settings__key-row--target' : ''}`}>
                     <a
                       className="inspector__label settings__key-link"
                       href={field.url}
@@ -380,6 +441,7 @@ export function Settings() {
                         }
                         placeholder={field.placeholder}
                         aria-label={`${field.label} API key`}
+                        data-provider-key={field.key}
                         autoComplete="off"
                         spellCheck={false}
                       />
@@ -399,6 +461,7 @@ export function Settings() {
                         </button>
                       )}
                     </div>
+                    <p className="settings__key-status" title={keyReadiness(field.key, readinessCache, providerHealth).detail}>{keyReadiness(field.key, readinessCache, providerHealth).label}</p>
                     {!isDesktopMode && originalApiKeys[field.key]?.trim() && !apiKeys[field.key]?.trim() && (
                       <p className="settings__key-status">This key is still configured. Use Remove to disconnect it.</p>
                     )}

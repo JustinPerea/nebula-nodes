@@ -9,26 +9,14 @@ import { useDelayedUnmount } from '../../hooks/useDelayedUnmount';
 import { getNodesByCategory } from '../../constants/nodeDefinitions';
 import { CATEGORY_COLORS } from '../../constants/ports';
 import { findAvailableNodePosition, type NodePosition } from '../../lib/nodePlacement';
+import { CATEGORY_LABELS, matchesModelProvider, matchesModelSearch, modelInputSummary, providerLabel, supportedModelProviders } from '../../lib/modelDiscovery';
+import { ProviderReadinessBadge } from '../ProviderReadinessBadge';
 import '../../styles/panels.css';
 
 // Initial collapsed state — all categories start collapsed on first render so
 // the user sees a scannable list of category headers, not a long node wall.
 const INITIAL_COLLAPSE_KEY = '__nebulaLibraryInit';
 const SLAVA_DRAG_PREVIEW_OFFSET = 14;
-
-const CATEGORY_LABELS: Record<string, string> = {
-  'image-gen': 'Image Generation',
-  'video-gen': 'Video Generation',
-  'text-gen': 'Text Generation',
-  'audio-gen': 'Audio Generation',
-  'transform': 'Transform',
-  'analyzer': 'Analyzer',
-  'utility': 'Utility',
-  'universal': 'Universal',
-  'cinematic': 'Cinematic',
-  'character': 'Character',
-  'moodboard': 'Moodboard',
-};
 
 export function NodeLibrary() {
   const visible = useUIStore((s) => s.panels.library.visible);
@@ -44,6 +32,7 @@ export function NodeLibrary() {
   const setAllLibraryCategories = useUIStore((s) => s.setAllLibraryCategories);
   const emptyDragImageRef = useRef<HTMLCanvasElement | null>(null);
   const reservedClickPositionsRef = useRef<NodePosition[]>([]);
+  const [provider, setProvider] = useState('');
   const [dragPreview, setDragPreview] = useState<{
     label: string;
     category: string;
@@ -52,6 +41,8 @@ export function NodeLibrary() {
   } | null>(null);
 
   const grouped = useMemo(() => getNodesByCategory(), []);
+  const providers = useMemo(() => [...new Set(Object.values(grouped).flat()
+    .flatMap(supportedModelProviders))].sort((left, right) => providerLabel(left).localeCompare(providerLabel(right))), [grouped]);
 
   // Once graph-sync materializes a rapidly-added node, its real position
   // replaces the temporary reservation. Until then the reservation prevents
@@ -74,15 +65,15 @@ export function NodeLibrary() {
   }, [collapsed, grouped, setAllLibraryCategories]);
 
   const filtered = useMemo(() => {
-    if (!search.trim()) return grouped;
-    const lower = search.toLowerCase();
     const result: typeof grouped = {};
     for (const [cat, defs] of Object.entries(grouped)) {
-      const matches = defs.filter((d) => d.displayName.toLowerCase().includes(lower));
+      const matches = defs.filter((definition) => matchesModelProvider(definition, provider)
+        && matchesModelSearch(definition, search));
       if (matches.length > 0) result[cat] = matches;
     }
     return result;
-  }, [grouped, search]);
+  }, [grouped, search, provider]);
+  const resultCount = Object.values(filtered).reduce((count, definitions) => count + definitions.length, 0);
 
   useEffect(() => {
     if (skin !== 'slava-restraint') {
@@ -195,40 +186,65 @@ export function NodeLibrary() {
       </div>
 
       <div className="panel__body panel__body--library">
-        <div className="node-library__browser">
+        <div className="node-library__filters">
           <input
             className="panel__search"
             type="text"
-            placeholder="Search nodes..."
+            placeholder="Search names, providers or tasks…"
+            aria-label="Search nodes"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
+          <label className="node-library__provider">Provider
+            <select aria-label="Node provider" value={provider} onChange={(event) => setProvider(event.target.value)}>
+              <option value="">All providers</option>
+              {providers.map((item) => <option key={item} value={item}>{providerLabel(item)}</option>)}
+            </select>
+          </label>
+          <p className="node-library__count">{resultCount} node{resultCount === 1 ? '' : 's'} · Browse before connecting</p>
+        </div>
+        <div className="node-library__browser">
+          {resultCount === 0 && <div className="node-library__empty">
+            <p role="status">No nodes match{search.trim() ? ` “${search.trim()}”` : ''}{provider ? ` from ${providerLabel(provider)}` : ''}.</p>
+            <button type="button" onClick={() => { setSearch(''); setProvider(''); }}>Clear filters</button>
+            <span>Try a task or media type:</span>
+            <div className="node-library__suggestions">
+              {['Animate a logo', 'Image', 'Audio', '3D'].map((suggestion) => <button key={suggestion} type="button"
+                onClick={() => { setSearch(suggestion); setProvider(''); }}>{suggestion}</button>)}
+            </div>
+          </div>}
 
           {Object.entries(filtered).map(([category, defs]) => {
-            // When searching, always expand matching categories so results are visible.
-            const isSearching = search.trim().length > 0;
+            // Active filters expand matching categories so results are visible.
+            const isSearching = search.trim().length > 0 || provider.length > 0;
             const isCollapsed = !isSearching && (collapsed[category] ?? true);
             const items = defs.map((def) => (
-              <button
-                key={def.id}
-                type="button"
-                className="panel__item"
-                draggable
-                tabIndex={isCollapsed ? -1 : 0}
-                onDragStart={(e) => onDragStart(e, def.id, def.displayName, category)}
-                onDrag={onDrag}
-                onDragEnd={onDragEnd}
-                onClick={(event) => {
-                  // A double-click dispatches two click events. The first one adds the
-                  // node; ignore the follow-up so a legacy double-click gesture does
-                  // not create an accidental duplicate.
-                  if (event.detail > 1) return;
-                  addNodeAtViewportCenter(def.id);
-                }}
-                title={`Add ${def.displayName} to the center of the canvas`}
-              >
-                {def.displayName}
-              </button>
+              <div key={def.id} className="node-library__entry">
+                <button
+                  type="button"
+                  className="panel__item"
+                  draggable
+                  tabIndex={isCollapsed ? -1 : 0}
+                  onDragStart={(e) => onDragStart(e, def.id, def.displayName, category)}
+                  onDrag={onDrag}
+                  onDragEnd={onDragEnd}
+                  onClick={(event) => {
+                    // A double-click dispatches two click events. The first one adds the
+                    // node; ignore the follow-up so a legacy double-click gesture does
+                    // not create an accidental duplicate.
+                    if (event.detail > 1) return;
+                    addNodeAtViewportCenter(def.id);
+                  }}
+                  title={`Add ${def.displayName} to the center of the canvas`}
+                  aria-label={def.displayName}
+                  aria-describedby={`node-library-${def.id}-summary`}
+                >
+                  <span className="node-library__name">{def.displayName}</span>
+                  <span className="node-library__metadata">{providerLabel(def.apiProvider)}</span>
+                  <span className="node-library__inputs" id={`node-library-${def.id}-summary`}>{modelInputSummary(def)}</span>
+                </button>
+                {!isCollapsed && <ProviderReadinessBadge definition={def} />}
+              </div>
             ));
             return (
               <div
@@ -263,7 +279,7 @@ export function NodeLibrary() {
                     className="panel__group-dot"
                     style={{ backgroundColor: CATEGORY_COLORS[category] }}
                   />
-                  <span className="panel__group-text">{CATEGORY_LABELS[category] ?? category}</span>
+                  <span className="panel__group-text">{CATEGORY_LABELS[defs[0].category]}</span>
                   <span className="panel__group-count">{defs.length}</span>
                 </button>
                 {skin === 'slava-restraint' ? (
