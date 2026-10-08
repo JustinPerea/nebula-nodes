@@ -325,7 +325,7 @@ export default function App() {
       <GraphHydrator />
       <GraphFileActions />
       <ZoomManifestRecorder />
-      {!isBrandShowcase && !isCommons && <CanvasTabs />}
+      {isCanvas && <CanvasTabs />}
       <Suspense
         fallback={(
           <div className="workspace-loading" role="status" aria-live="polite">

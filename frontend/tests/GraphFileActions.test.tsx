@@ -94,6 +94,7 @@ describe('workspace-independent graph file actions', () => {
   });
 
   it.each(['create', 'cinema-editor'] as const)('saves from %s without mounting a Canvas Toolbar', async (viewMode) => {
+    useUIStore.getState().setCanvasViewport({ x: 10, y: 20, zoom: 0.75 });
     const rendered = render(<><GraphFileActions /><CommandPalette /></>);
     act(() => useUIStore.setState({ viewMode }));
     // Simulate ReactFlow resetting its transform after Canvas unmount.
@@ -106,7 +107,17 @@ describe('workspace-independent graph file actions', () => {
     expect(useUIStore.getState().viewMode).toBe(viewMode);
   });
 
+  it('saves the live Canvas camera when disabled Commons falls back to Canvas', async () => {
+    useUIStore.setState({ viewMode: 'commons', commonsEnabled: false });
+    useUIStore.getState().setCanvasViewport({ x: -50, y: 40, zoom: 0.5 });
+    render(<GraphFileActions />);
+    await act(async () => { requestGraphSave(); });
+    expect(mocks.saveToFile).toHaveBeenCalledWith([node('existing')], [], { x: 10, y: 20, zoom: 0.75 });
+  });
+
   it.each(['create', 'cinema-editor'] as const)('loads from %s only after atomic backend confirmation', async (viewMode) => {
+    useUIStore.getState().setCanvasViewport({ x: -640, y: 380, zoom: 0.48 });
+    useUIStore.getState().setCinemaSelectedShot('existing', 'shot-2');
     useUIStore.setState({ viewMode, cinemaEditorNodeId: 'existing', editorTargetNodeId: 'old-editor',
       selectedNodeId: 'existing', selectedTrackItemId: 'old-track', isPlaying: true });
     let resolveImport!: (response: Response) => void;
@@ -125,7 +136,8 @@ describe('workspace-independent graph file actions', () => {
     expect(useGraphStore.getState().nodes[0].id).toBe('n8');
     expect(useGraphStore.getState().isImportingGraph).toBe(false);
     expect(useUIStore.getState()).toMatchObject({ cinemaEditorNodeId: null, editorTargetNodeId: null,
-      selectedNodeId: null, selectedTrackItemId: null, isPlaying: false });
+      selectedNodeId: null, selectedTrackItemId: null, isPlaying: false,
+      canvasViewport: null, cinemaSelectedShotIds: {} });
     expect(useGraphStore.getState().runHistory).toBe(initialGraph.runHistory);
   });
 
@@ -142,6 +154,28 @@ describe('workspace-independent graph file actions', () => {
     expect(useGraphStore.getState().nodes[0].id).toBe('existing');
     expect(useUIStore.getState().viewMode).toBe('create');
     expect(useGraphStore.getState().isImportingGraph).toBe(false);
+  });
+
+  it.each(['navigation', 'return', 'focus', 'replacement'] as const)('a delayed import fit yields to later %s', async (action) => {
+    vi.useFakeTimers();
+    try {
+      const view = render(<GraphFileActions />);
+      await act(async () => { requestGraphLoad(); });
+      expect(useGraphStore.getState().nodes[0].id).toBe('n8');
+      act(() => {
+        if (action === 'navigation' || action === 'return') {
+          useUIStore.getState().enterCreateView();
+          if (action === 'return') useUIStore.getState().exitCreateView();
+        }
+        else if (action === 'focus') {
+          useUIStore.getState().requestCanvasNodeFocus('n8');
+          useUIStore.getState().clearCanvasNodeFocus(useUIStore.getState().canvasFocusRequest!.requestId);
+        } else useGraphStore.getState().clearGraph();
+      });
+      await act(async () => { await vi.advanceTimersByTimeAsync(150); });
+      expect(mocks.fitView).not.toHaveBeenCalled();
+      view.unmount();
+    } finally { vi.useRealTimers(); }
   });
 
   it.each(['execution', 'preparation', 'import'] as const)('blocks file I/O during %s ownership', async (owner) => {

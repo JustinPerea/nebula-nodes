@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid';
-import { ArrowLeft } from 'lucide-react';
+import { WorkspaceHeader } from '../WorkspaceHeader';
 import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
 import { useCreateDraftStore, type CreateDraft, type CreateDraftSeed } from '../../store/createDraftStore';
@@ -302,11 +302,7 @@ export function CreateView() {
 
   return (
     <div className="create-view">
-      <header className="create-view__topbar">
-        <button type="button" className="create-view__back" onClick={exitCreateView}>
-          <ArrowLeft size={16} strokeWidth={1.75} aria-hidden="true" /> Canvas
-        </button>
-        <span className="create-view__title">Create</span>
+      <WorkspaceHeader title="Create" onBack={exitCreateView} className="create-view__topbar">
         <button type="button" className="create-view__back" onClick={handleNewDraft}>New draft</button>
         {styleSaveError && <span className="create-view__save-error" role="alert">{styleSaveError}</span>}
         {generationError && <span className="create-view__run-error" role="alert">{generationError}</span>}
@@ -326,7 +322,7 @@ export function CreateView() {
           </button>;
         })}
         <button type="button" className="create-view__back" onClick={() => { exitCreateView(); setLeftDock('history'); }}>History</button>
-      </header>
+      </WorkspaceHeader>
 
       <div
         className="create-view__stage"

@@ -1,4 +1,5 @@
 import { useUIStore } from '../../store/uiStore';
+import { WorkspaceHeader } from '../WorkspaceHeader';
 import type { SaveState } from './CharacterStudioView';
 
 interface CharacterStudioToolbarProps {
@@ -29,16 +30,8 @@ export function CharacterStudioToolbar({
   const label = SAVE_LABEL[saveState];
 
   return (
-    <div className="character-studio-toolbar">
-      <button
-        type="button"
-        className="character-studio-toolbar__back"
-        onClick={exitCharacterEditor}
-      >
-        ← Canvas
-      </button>
-      <span className="character-studio-toolbar__crumb">Character Studio</span>
-      <div className="character-studio-toolbar__spacer" />
+    <WorkspaceHeader title="Character" onBack={exitCharacterEditor}
+      className="character-studio-toolbar character-studio-view__header">
       {label && (
         <span
           className={`character-studio-toolbar__state character-studio-toolbar__state--${saveState}`}
@@ -56,6 +49,6 @@ export function CharacterStudioToolbar({
           Retry
         </button>
       )}
-    </div>
+    </WorkspaceHeader>
   );
 }

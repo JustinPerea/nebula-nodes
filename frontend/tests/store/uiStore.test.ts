@@ -3,6 +3,42 @@ import { defaultRunHistoryPosition, useUIStore } from '../../src/store/uiStore';
 import { useGraphStore } from '../../src/store/graphStore';
 
 describe('uiStore', () => {
+  it('keeps a copied session camera across studio visits and rejects invalid transforms', () => {
+    const original = useUIStore.getState();
+    try {
+      const camera = { x: -250, y: 190, zoom: 0.48 };
+      useUIStore.getState().setCanvasViewport(camera);
+      camera.x = 99;
+      useUIStore.getState().enterCreateView();
+      useUIStore.getState().exitCreateView();
+      expect(useUIStore.getState().canvasViewport).toEqual({ x: -250, y: 190, zoom: 0.48 });
+      for (const invalid of [{ x: NaN, y: 0, zoom: 1 }, { x: 0, y: Infinity, zoom: 1 }, { x: 0, y: 0, zoom: 0 }]) {
+        useUIStore.getState().setCanvasViewport(invalid);
+      }
+      expect(useUIStore.getState().canvasViewport).toEqual({ x: -250, y: 190, zoom: 0.48 });
+      const revision = useUIStore.getState().canvasViewportRevision;
+      useUIStore.getState().clearCanvasViewport();
+      expect(useUIStore.getState().canvasViewport).toBeNull();
+      expect(useUIStore.getState().canvasViewportRevision).toBe(revision + 1);
+    } finally { useUIStore.setState(original, true); }
+  });
+
+  it('retains Cinema shot selection independently per scene through workspace exits', () => {
+    const original = useUIStore.getState();
+    try {
+      useUIStore.getState().setCinemaSelectedShot('scene-a', 'shot-2');
+      useUIStore.getState().setCinemaSelectedShot('scene-b', 'shot-5');
+      useUIStore.getState().enterCinemaEditor('scene-a');
+      useUIStore.getState().exitCinemaEditor();
+      useUIStore.getState().enterCreateView();
+      useUIStore.getState().exitCreateView();
+      expect(useUIStore.getState().cinemaSelectedShotIds).toEqual({ 'scene-a': 'shot-2', 'scene-b': 'shot-5' });
+      useUIStore.getState().setCinemaSelectedShot('scene-a', null);
+      expect(useUIStore.getState().cinemaSelectedShotIds).toEqual({ 'scene-b': 'shot-5' });
+      useUIStore.getState().clearCinemaSelectedShots();
+      expect(useUIStore.getState().cinemaSelectedShotIds).toEqual({});
+    } finally { useUIStore.setState(original, true); }
+  });
   it('keeps the Run History default fully visible on narrow viewports', () => {
     expect(defaultRunHistoryPosition(390)).toEqual({ x: 98, y: 60 });
     expect(defaultRunHistoryPosition(250)).toEqual({ x: 16, y: 60 });
@@ -71,6 +107,8 @@ describe('uiStore', () => {
   it('resets transient panels for a fresh empty canvas', () => {
     useUIStore.setState((state) => ({
       selectedNodeId: 'n1',
+      canvasViewport: { x: -200, y: 90, zoom: 0.75 },
+      cinemaSelectedShotIds: { scene: 'shot-2' },
       chatResized: true,
       panels: {
         ...state.panels,
@@ -93,6 +131,8 @@ describe('uiStore', () => {
 
     const state = useUIStore.getState();
     expect(state.selectedNodeId).toBeNull();
+    expect(state.canvasViewport).toBeNull();
+    expect(state.cinemaSelectedShotIds).toEqual({});
     expect(state.chatResized).toBe(false);
     expect(state.leftDock).toBe('library');
     expect(state.panels.library.visible).toBe(true);

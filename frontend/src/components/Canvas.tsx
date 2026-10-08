@@ -12,6 +12,7 @@ import {
   type EdgeTypes,
   type OnConnectEnd,
   type OnConnectStart,
+  type Viewport,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useGraphStore } from '../store/graphStore';
@@ -274,9 +275,38 @@ export function Canvas() {
   const canvasLowDetail = useUIStore((s) => s.canvasLowDetail);
   const onboardingActive = useUIStore((s) => s.onboardingActive);
   const leftDock = useUIStore((s) => s.leftDock);
-  // Keep this mount's initial fit decision stable: consuming a handoff must
-  // not toggle fitView back on and queue a second fit of the complete graph.
-  const initialFitEnabled = useRef(useUIStore.getState().canvasFocusRequest === null).current;
+  // React Flow resets its camera when it unmounts. Restore only this mount's
+  // initial camera; later pan and explicit node-focus requests own the viewport.
+  // Consuming a handoff must not queue a second fit of the complete graph.
+  const initialCanvasState = useRef({
+    viewport: useUIStore.getState().canvasViewport,
+    viewportRevision: useUIStore.getState().canvasViewportRevision,
+    fitEnabled: useUIStore.getState().canvasFocusRequest === null
+      && useUIStore.getState().canvasViewport === null,
+  }).current;
+  const canvasMounted = useRef(false);
+  useEffect(() => {
+    canvasMounted.current = true;
+    return () => { canvasMounted.current = false; };
+  }, []);
+  const rememberViewport = useCallback((viewport: Viewport) => {
+    const ui = useUIStore.getState();
+    const canvasActive = ui.viewMode === 'canvas' || (ui.viewMode === 'commons' && !ui.commonsEnabled);
+    if (canvasMounted.current && canvasActive) ui.setCanvasViewport(viewport);
+  }, []);
+  const onViewportInitialized = useCallback((instance: { getViewport: () => Viewport }) => {
+    // React Flow schedules onInit. An import can replace the graph before that
+    // callback runs, so it must not reintroduce the previous graph's camera.
+    if (useUIStore.getState().canvasViewportRevision !== initialCanvasState.viewportRevision) return;
+    // onInit only means the pan/zoom controller exists; the first graph fit can
+    // still be waiting for node measurements. A quick studio visit must not
+    // turn that temporary origin camera into a restored, never-fitted viewport.
+    if (initialCanvasState.fitEnabled && useGraphStore.getState().nodes.length > 0) return;
+    rememberViewport(instance.getViewport());
+  }, [initialCanvasState.fitEnabled, initialCanvasState.viewportRevision, rememberViewport]);
+  const onViewportMove = useCallback((_event: MouseEvent | TouchEvent | null, viewport: Viewport) => {
+    rememberViewport(viewport);
+  }, [rememberViewport]);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const showContextMenu = useUIStore((s) => s.showContextMenu);
   const hideContextMenu = useUIStore((s) => s.hideContextMenu);
@@ -377,10 +407,14 @@ export function Canvas() {
       const focusState = useUIStore.getState();
       if (focusState.canvasFocusRequest) return;
       const scheduledRevision = focusState.canvasFocusRevision;
+      const viewportRevision = focusState.canvasViewportRevision;
       const timer = window.setTimeout(() => {
         pendingFits.delete(timer);
         const currentFocus = useUIStore.getState();
         if (currentFocus.canvasFocusRequest || currentFocus.canvasFocusRevision !== scheduledRevision) return;
+        if (currentFocus.canvasViewportRevision !== viewportRevision) return;
+        if (currentFocus.viewMode !== 'canvas'
+          && !(currentFocus.viewMode === 'commons' && !currentFocus.commonsEnabled)) return;
         const padding = computeCanvasFitPadding();
         const totalCount =
           event instanceof CustomEvent && typeof event.detail?.totalCount === 'number'
@@ -649,7 +683,10 @@ export function Canvas() {
         edgeTypes={edgeTypes}
         onNodeContextMenu={onNodeContextMenu}
         onPaneClick={onPaneClick}
-        fitView={initialFitEnabled}
+        fitView={initialCanvasState.fitEnabled}
+        defaultViewport={initialCanvasState.viewport ?? undefined}
+        onInit={onViewportInitialized}
+        onMove={onViewportMove}
         fitViewOptions={{ padding: computeCanvasFitPadding() }}
         minZoom={0.1}
         maxZoom={4}

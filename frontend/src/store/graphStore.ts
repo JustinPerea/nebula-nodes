@@ -259,6 +259,8 @@ function warnPendingCinemaUpload(issue: string): void {
 
 function clearReplacedCanvasFocus(): void {
   const ui = useUIStore.getState();
+  ui.clearCanvasViewport();
+  ui.clearCinemaSelectedShots();
   const request = ui.canvasFocusRequest;
   if (!request) return;
   ui.clearCanvasNodeFocus(request.requestId);

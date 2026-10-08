@@ -8,13 +8,14 @@ import {
   updateMoodboard,
 } from '../../lib/api';
 import { apiFetch, backendAssetUrlSync } from '../../lib/backend';
+import { WorkspaceHeader } from '../WorkspaceHeader';
+import { useAssetStudioDraft } from '../../hooks/useAssetStudioDraft';
+import { assetStudioDraftKey, resolveAssetStudioDraftKey, useAssetStudioDraftStore } from '../../store/assetStudioDraftStore';
 import { NEW_MOODBOARD_SENTINEL } from '../../lib/studioSentinels';
 import { getCurrentProject } from '../../lib/currentProject';
 import type { AssetScope } from '../../store/uiStore';
 import type { Moodboard, MoodboardAnalysis, MoodboardImage } from '../../types';
 import '../../styles/moodboard-studio.css';
-
-type SaveState = 'draft' | 'idle' | 'saving' | 'saved' | 'error';
 
 interface MoodboardDraft {
   name: string;
@@ -69,175 +70,97 @@ export function MoodboardStudioView() {
   const enterMoodboardEditor = useUIStore((s) => s.enterMoodboardEditor);
   const exitMoodboardEditor = useUIStore((s) => s.exitMoodboardEditor);
 
-  const [draft, setDraft] = useState<MoodboardDraft>(emptyDraft);
-  const [savedId, setSavedId] = useState<string | null>(null);
-  const [thumbnail, setThumbnail] = useState('');
-  const [saveState, setSaveState] = useState<SaveState>('draft');
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const studio = useAssetStudioDraft('moodboard', moodboardEditorScope, moodboardEditorId, emptyDraft);
+  const { draft, savedId, thumbnail, saveState, saveError, loadError, loaded,
+    dirty, pendingSaveId, pendingAnalysisId, key, revision, epoch, projectId, projectReady, verifyProject, setDraft, initialize, patch } = studio;
+  const loading = !loaded;
   const [uploading, setUploading] = useState(false);
-  const [analyzing, setAnalyzing] = useState(false);
+  const analyzing = Boolean(pendingAnalysisId);
   const [railScope, setRailScope] = useState<AssetScope>(moodboardEditorScope);
-
-  const skipNextAutosave = useRef(false);
-  const createInFlight = useRef(false);
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const justCreatedId = useRef<string | null>(null);
-
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  const isCurrent = useCallback(() => {
+    const ui = useUIStore.getState();
+    return mounted.current && ui.viewMode === 'moodboard-editor' && ui.moodboardEditorId === moodboardEditorId
+      && ui.moodboardEditorScope === moodboardEditorScope
+      && projectReady && (moodboardEditorScope !== 'project' || useAssetStudioDraftStore.getState().projectId === projectId)
+      && useAssetStudioDraftStore.getState().entries[key]?.epoch === epoch;
+  }, [moodboardEditorId, moodboardEditorScope, key, epoch, projectReady, projectId]);
   const isDraftId = !moodboardEditorId || moodboardEditorId === NEW_MOODBOARD_SENTINEL;
   const canSave = draft.name.trim().length > 0 && draft.images.length > 0;
 
   useEffect(() => {
-    if (moodboardEditorId && moodboardEditorId === justCreatedId.current) {
-      justCreatedId.current = null;
-      return;
-    }
-
-    let cancelled = false;
-    setLoadError(null);
-    setSaveError(null);
-    setSaveState('idle');
-
-    if (isDraftId) {
-      setRailScope(moodboardEditorScope);
-      skipNextAutosave.current = true;
-      setSavedId(null);
-      setThumbnail('');
-      setSaveState('draft');
-      if (moodboardEditorScope === 'global') {
-        setDraft(emptyDraft());
-        setLoading(false);
-        return;
-      }
-      setLoading(true);
-      void getCurrentProject()
-        .then((project) => {
-          if (!cancelled) setDraft({ ...emptyDraft(), projectId: project.id });
-        })
-        .catch((err) => {
-          if (!cancelled) setLoadError(err instanceof Error ? err.message : 'Failed to resolve project.');
-        })
-        .finally(() => {
-          if (!cancelled) setLoading(false);
-        });
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    const targetId = moodboardEditorId as string;
-    setLoading(true);
-    (async () => {
-      try {
-        const [globalBoards, projectBoards] = await Promise.all([
-          fetchMoodboards('global').catch(() => [] as Moodboard[]),
-          fetchMoodboards('project').catch(() => [] as Moodboard[]),
-        ]);
-        if (cancelled) return;
-        const found =
-          globalBoards.find((m) => m.id === targetId) ??
-          projectBoards.find((m) => m.id === targetId) ??
-          null;
-        if (!found) {
-          skipNextAutosave.current = true;
-          setDraft(emptyDraft());
-          setSavedId(null);
-          setThumbnail('');
-          setLoadError('Moodboard not found. Add images to save a new one.');
-          setSaveState('draft');
-          return;
-        }
-        skipNextAutosave.current = true;
-        setRailScope(found.projectId ? 'project' : 'global');
-        setDraft(moodboardToDraft(found));
-        setSavedId(found.id);
-        setThumbnail(found.thumbnail);
-        setSaveState('saved');
-      } catch (err) {
-        if (cancelled) return;
-        setLoadError(err instanceof Error ? err.message : 'Failed to load Moodboard.');
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-    // moodboardEditorId is the only reactive input — the loader sets
-    // draft/saved/thumbnail imperatively from the fetch result; the helpers
-    // (fetchMoodboards, *Draft, setters) are stable. Mirrors CharacterStudioView.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [moodboardEditorId, moodboardEditorScope]);
-
-  const persist = useCallback(async () => {
-    if (!canSave) {
-      setSaveState('draft');
-      return null;
-    }
-    setSaveState('saving');
-    setSaveError(null);
-
-    const body = {
-      name: draft.name.trim(),
-      images: draft.images,
-      notes: draft.notes,
-      mode: draft.mode,
-      strength: draft.strength,
-      analysis: draft.analysis,
-      ...(draft.projectId ? { projectId: draft.projectId } : {}),
-    };
-
-    try {
-      if (savedId) {
-        const updated = await updateMoodboard(savedId, body);
-        setThumbnail(updated.thumbnail);
-        setSaveState('saved');
-        return updated.id;
-      }
-      if (createInFlight.current) return null;
-      createInFlight.current = true;
-      const created = await createMoodboard(body);
-      setSavedId(created.id);
-      setThumbnail(created.thumbnail);
-      setSaveState('saved');
-      const createdScope: AssetScope = created.projectId ? 'project' : 'global';
-      setRailScope(createdScope);
-      if (moodboardEditorId !== created.id) {
-        justCreatedId.current = created.id;
-        enterMoodboardEditor(created.id, createdScope);
-      }
-      return created.id;
-    } catch (err) {
-      setSaveState('error');
-      setSaveError(err instanceof Error ? err.message : 'Save failed. Retry?');
-      return null;
-    } finally {
-      createInFlight.current = false;
-    }
-  }, [canSave, draft, savedId, moodboardEditorId, enterMoodboardEditor]);
+    setUploading(false);
+  }, [key, epoch]);
 
   useEffect(() => {
-    if (skipNextAutosave.current) {
-      skipNextAutosave.current = false;
-      return;
+    if (!projectReady || loaded) return;
+    let cancelled = false;
+    const current = () => !cancelled && isCurrent()
+      && useAssetStudioDraftStore.getState().entries[key]?.revision === revision;
+    patch({ loadError: null, saveError: null });
+    if (isDraftId) {
+      initialize(moodboardEditorScope === 'project' ? { ...emptyDraft(), projectId: projectId! } : emptyDraft());
+    } else {
+      void Promise.all([fetchMoodboards('global'), fetchMoodboards('project')]).then(([globalBoards, projectBoards]) => {
+        if (!current()) return;
+        const found = (moodboardEditorScope === 'project' ? projectBoards : globalBoards)
+          .find((candidate) => candidate.id === moodboardEditorId && (moodboardEditorScope !== 'project' || candidate.projectId === projectId));
+        if (found) {
+          setRailScope(found.projectId ? 'project' : 'global');
+          initialize(moodboardToDraft(found), found.id, found.thumbnail);
+        } else {
+          initialize(moodboardEditorScope === 'project' ? { ...emptyDraft(), projectId: projectId! } : emptyDraft(),
+            null, '', 'Moodboard not found. Add images to save a new one.');
+        }
+      }).catch((err) => {
+        if (current()) patch({ loadError: err instanceof Error ? err.message : 'Failed to load Moodboard.' });
+      });
     }
-    if (!canSave) {
-      setSaveState('draft');
-      return;
+    return () => { cancelled = true; };
+  }, [key, revision, loaded, projectReady, projectId, moodboardEditorId, moodboardEditorScope, initialize, patch, isDraftId, isCurrent]);
+
+  useEffect(() => {
+    if (isDraftId && loaded && savedId && isCurrent()) enterMoodboardEditor(savedId, moodboardEditorScope);
+  }, [isDraftId, loaded, savedId, isCurrent, moodboardEditorScope, enterMoodboardEditor]);
+
+  const persist = useCallback(async () => {
+    if (!isCurrent() || !await verifyProject() || !isCurrent()) return null;
+    const store = useAssetStudioDraftStore.getState();
+    const current = store.entries[key];
+    const currentDraft = current?.draft as MoodboardDraft | undefined;
+    if (!currentDraft || !currentDraft.name.trim() || !currentDraft.images.length) return null;
+    const attempt = store.beginSave(key);
+    if (!attempt) return null;
+    try {
+      const body = { ...currentDraft, name: currentDraft.name.trim() };
+      const result = attempt.entry.savedId
+        ? await updateMoodboard(attempt.entry.savedId, body) : await createMoodboard(body);
+      if (!store.finishSave(key, attempt.id, attempt.revision, result.id, result.thumbnail)) return null;
+      if (!attempt.entry.savedId) {
+        const createdScope: AssetScope = result.projectId ? 'project' : 'global';
+        const selectedAtCompletion = isCurrent();
+        store.copyTo(key, assetStudioDraftKey('moodboard', createdScope, result.id, result.projectId));
+        if (selectedAtCompletion) {
+          setRailScope(createdScope);
+          enterMoodboardEditor(result.id, createdScope);
+        }
+      }
+      return result.id;
+    } catch (err) {
+      store.failSave(key, attempt.id, err instanceof Error ? err.message : 'Save failed. Retry?');
+      return null;
     }
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => {
-      void persist();
-    }, 600);
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-    };
-  }, [draft, canSave, persist]);
+  }, [key, isCurrent, verifyProject, enterMoodboardEditor]);
+
+  useEffect(() => {
+    if (!loaded || !dirty || !canSave || pendingSaveId || saveState === 'error') return;
+    const timer = window.setTimeout(() => { void persist(); }, 600);
+    return () => window.clearTimeout(timer);
+  }, [loaded, dirty, canSave, pendingSaveId, saveState, draft, savedId, persist]);
 
   const addImageUrls = (urls: string[]) => {
-    if (urls.length === 0) return;
+    if (urls.length === 0 || !isCurrent()) return;
     setDraft((current) => ({
       ...current,
       analysis: null,
@@ -260,11 +183,8 @@ export function MoodboardStudioView() {
     });
     Promise.all(uploads)
       .then((urls) => addImageUrls(urls.filter(Boolean)))
-      .catch((err) => {
-        console.error('[moodboard] upload failed:', err);
-        setSaveError('Upload failed. Retry.');
-      })
-      .finally(() => setUploading(false));
+      .catch(() => { if (isCurrent()) patch({ saveError: 'Upload failed. Retry.' }); })
+      .finally(() => { if (isCurrent()) setUploading(false); });
   };
 
   const handleDrop = (event: ReactDragEvent<HTMLDivElement>) => {
@@ -290,22 +210,39 @@ export function MoodboardStudioView() {
   };
 
   const runAnalyze = async () => {
-    const id = savedId ?? await persist();
-    if (!id) return;
-    setAnalyzing(true);
-    setSaveError(null);
+    if (!isCurrent() || !await verifyProject() || !isCurrent()) return;
+    const id = dirty || !savedId ? await persist() : savedId;
+    if (!id || !mounted.current) return;
+    const ui = useUIStore.getState();
+    if (ui.viewMode !== 'moodboard-editor') return;
+    const store = useAssetStudioDraftStore.getState();
+    const targetKey = assetStudioDraftKey('moodboard', ui.moodboardEditorScope, id, store.projectId);
+    const selectedKey = resolveAssetStudioDraftKey(store, assetStudioDraftKey('moodboard', ui.moodboardEditorScope, ui.moodboardEditorId, store.projectId));
+    if (selectedKey !== targetKey) return;
+    const target = store.entries[targetKey];
+    if (!target || target.pendingSaveId || target.dirty) {
+      store.patch(targetKey, { saveError: 'Settings changed while saving. Analyze again when ready.' });
+      return;
+    }
+    const attempt = store.beginAnalysis(targetKey);
+    if (!attempt) return;
+    const ownsAnalysis = () => {
+      const selected = useUIStore.getState();
+      const latest = useAssetStudioDraftStore.getState();
+      return mounted.current && selected.viewMode === 'moodboard-editor'
+        && resolveAssetStudioDraftKey(latest, assetStudioDraftKey('moodboard', selected.moodboardEditorScope,
+          selected.moodboardEditorId, latest.projectId)) === targetKey
+        && latest.entries[targetKey]?.revision === attempt.revision
+        && latest.entries[targetKey]?.pendingAnalysisId === attempt.id;
+    };
     try {
       const updated = await analyzeMoodboard(id);
-      skipNextAutosave.current = true;
-      setDraft(moodboardToDraft(updated));
-      setSavedId(updated.id);
-      setThumbnail(updated.thumbnail);
-      setSaveState('saved');
+      if (ownsAnalysis()) store.patch(targetKey, { draft: moodboardToDraft(updated), savedId: updated.id,
+        thumbnail: updated.thumbnail, dirty: false, loaded: true, saveState: 'saved' });
     } catch (err) {
-      setSaveError(err instanceof Error ? err.message : 'Analyze failed.');
-      setSaveState('error');
+      if (ownsAnalysis()) store.patch(targetKey, { saveError: err instanceof Error ? err.message : 'Analyze failed.', saveState: 'error' });
     } finally {
-      setAnalyzing(false);
+      store.clearAnalysis(targetKey, attempt.id);
     }
   };
 
@@ -322,12 +259,7 @@ export function MoodboardStudioView() {
 
   return (
     <div className="moodboard-studio-view">
-      <header className="moodboard-studio-toolbar">
-        <button type="button" className="moodboard-studio-toolbar__button" onClick={exitMoodboardEditor}>
-          Back
-        </button>
-        <div className="moodboard-studio-toolbar__title">Moodboard Studio</div>
-        <div className="moodboard-studio-toolbar__spacer" />
+      <WorkspaceHeader title="Moodboard" onBack={exitMoodboardEditor} className="moodboard-studio-toolbar">
         <div className={`moodboard-studio-toolbar__state moodboard-studio-toolbar__state--${saveState}`}>
           {saveState === 'saving' ? 'Saving' : saveState === 'saved' ? 'Saved' : saveState === 'error' ? 'Error' : 'Draft'}
         </div>
@@ -336,7 +268,7 @@ export function MoodboardStudioView() {
             Retry
           </button>
         )}
-      </header>
+      </WorkspaceHeader>
 
       <aside className="moodboard-studio-view__rail">
         <MoodboardRail
@@ -348,15 +280,27 @@ export function MoodboardStudioView() {
             enterMoodboardEditor(id, scope);
           }}
           onNew={(scope) => {
-            setRailScope(scope);
-            enterMoodboardEditor(NEW_MOODBOARD_SENTINEL, scope);
+            void (async () => {
+              if (!isCurrent()) return;
+              const currentProject = scope === 'project' ? await getCurrentProject() : null;
+              if (!isCurrent()) return;
+              const store = useAssetStudioDraftStore.getState();
+              if (currentProject) store.setProjectId(currentProject.id);
+              store.reset(assetStudioDraftKey('moodboard', scope, NEW_MOODBOARD_SENTINEL, currentProject?.id), emptyDraft());
+              setRailScope(scope);
+              enterMoodboardEditor(NEW_MOODBOARD_SENTINEL, scope);
+            })().catch((err) => { if (isCurrent()) patch({ saveError: err instanceof Error ? err.message : 'Failed to resolve project.' }); });
           }}
         />
       </aside>
 
       <main className="moodboard-studio-view__main">
         {loading ? (
-          <div className="moodboard-studio-view__loading">Loading Moodboard...</div>
+          <div className="moodboard-studio-view__loading">
+            {loadError ? <div role="alert">{loadError}</div> : 'Loading Moodboard...'}
+            {loadError && <button type="button" className="moodboard-studio-toolbar__button"
+              onClick={() => { if (!projectReady) void verifyProject(); else patch({ loadError: null, revision: revision + 1 }); }}>Retry loading</button>}
+          </div>
         ) : (
           <>
             {loadError && <div className="moodboard-studio__notice moodboard-studio__notice--warn">{loadError}</div>}
@@ -491,7 +435,7 @@ export function MoodboardStudioView() {
                     Produces the editable creative-direction object used by nodes.
                   </span>
                 </div>
-                <button type="button" onClick={() => void runAnalyze()} disabled={!canSave || analyzing}>
+                <button type="button" onClick={() => void runAnalyze()} disabled={!canSave || analyzing || Boolean(pendingSaveId)}>
                   {analyzing ? 'Analyzing' : 'Analyze'}
                 </button>
               </div>

@@ -10,11 +10,12 @@ interface UseRemotionKeyboardOptions {
 export function useRemotionKeyboard({ remotionNodeId, currentFrame }: UseRemotionKeyboardOptions) {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      if (e.defaultPrevented) return;
       // Ignore if user is typing in an input/textarea
       const target = e.target as HTMLElement | null;
       if (
         target &&
-        (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)
+        (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable)
       ) {
         return;
       }

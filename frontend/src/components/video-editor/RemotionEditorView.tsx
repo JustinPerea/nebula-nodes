@@ -16,6 +16,7 @@ import { RemotionEditorToolbar } from './RemotionEditorToolbar';
 import { RemotionPropertiesPanel } from './RemotionPropertiesPanel';
 import { PlayerOverlay } from './PlayerOverlay';
 import { useRemotionKeyboard } from './useRemotionKeyboard';
+import { WorkspaceHeader } from '../WorkspaceHeader';
 import '../../styles/remotion-editor.css';
 
 export function RemotionEditorView() {
@@ -75,11 +76,9 @@ export function RemotionEditorView() {
   if (!targetNodeId || !node) {
     return (
       <div className="remotion-editor-view">
+        <WorkspaceHeader title="Composition" onBack={exitRemotionEditor} className="remotion-editor-view__header" />
         <div className="remotion-editor-view__empty-state">
-          No RemotionNode selected.{' '}
-          <button type="button" onClick={exitRemotionEditor}>
-            Back to canvas
-          </button>
+          Select a Composition node on Canvas to open it here.
         </div>
       </div>
     );
@@ -91,22 +90,12 @@ export function RemotionEditorView() {
 
   return (
     <div className="remotion-editor-view" data-current-frame={currentFrame}>
-      <header className="remotion-editor-view__header">
-        <button
-          type="button"
-          className="remotion-editor-view__back"
-          onClick={exitRemotionEditor}
-        >
-          ← Canvas
-        </button>
-        <span className="remotion-editor-view__title">
-          Remotion Composition · {targetNodeId}
-        </span>
+      <WorkspaceHeader title="Composition" onBack={exitRemotionEditor} className="remotion-editor-view__header">
         <RemotionEditorToolbar remotionNodeId={targetNodeId} />
         <span className="remotion-editor-view__meta">
           {manifest.timeline.length} layer{manifest.timeline.length === 1 ? '' : 's'}
         </span>
-      </header>
+      </WorkspaceHeader>
       <div className="remotion-editor-view__player" data-testid="remotion-player-slot">
         <div className="remotion-editor-view__player-frame" ref={playerFrameRef}>
           <Player

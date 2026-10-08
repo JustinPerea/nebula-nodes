@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import type { Viewport } from '@xyflow/react';
 import { v4 as uuidv4 } from 'uuid';
 import { type SkinId, loadSkin, applySkinBodyClass } from '../lib/skins';
 import {
@@ -143,6 +144,10 @@ interface ConnectionPopupState {
 
 interface UIState {
   selectedNodeId: string | null;
+  /** Session camera, kept outside React Flow's store so unmount cannot reset it. */
+  canvasViewport: Viewport | null;
+  /** Invalidates delayed initialization after an authoritative graph replacement. */
+  canvasViewportRevision: number;
   /** A volatile handoff: consumed only after Canvas can measure this node. */
   canvasFocusRequest: { nodeId: string; requestId: string } | null;
   /** Retained after consumption so delayed automatic fits can yield to a handoff. */
@@ -159,6 +164,8 @@ interface UIState {
   // Mirrors remotionEditorTargetNodeId. App.tsx mounts CinemaStudioView (Wave 5)
   // when this is set.
   cinemaEditorNodeId: string | null;
+  /** Each scene retains its inspected shot when leaving and returning to Cinema. */
+  cinemaSelectedShotIds: Record<string, string>;
   // Nebula Character editor — which Character (by id) is open for editing.
   // Mirrors cinemaEditorNodeId. App.tsx mounts CharacterStudioView when this is
   // set (viewMode 'character-editor'). The 'new' sentinel opens a fresh draft.
@@ -233,6 +240,10 @@ interface UIState {
   inspectorPinned: boolean;
 
   enterEditor: (sourceNodeId: string) => void;
+  setCanvasViewport: (viewport: Viewport) => void;
+  clearCanvasViewport: () => void;
+  setCinemaSelectedShot: (nodeId: string, shotId: string | null) => void;
+  clearCinemaSelectedShots: () => void;
   exitEditor: () => void;
   enterRemotionEditor: (remotionNodeId: string) => void;
   exitRemotionEditor: () => void;
@@ -304,6 +315,8 @@ interface UIState {
 
 export const useUIStore = create<UIState>((set, get) => ({
   selectedNodeId: null,
+  canvasViewport: null,
+  canvasViewportRevision: 0,
   canvasFocusRequest: null,
   canvasFocusRevision: 0,
   viewMode: 'canvas',
@@ -312,6 +325,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   editorTargetNodeId: null,
   remotionEditorTargetNodeId: null,
   cinemaEditorNodeId: null,
+  cinemaSelectedShotIds: {},
   characterEditorId: null,
   characterEditorScope: 'global',
   moodboardEditorId: null,
@@ -355,6 +369,26 @@ export const useUIStore = create<UIState>((set, get) => ({
   onboardingStep: 0,
   pendingPreset: null,
   inspectorPinned: false,
+
+  setCanvasViewport: (viewport) => {
+    if (![viewport.x, viewport.y, viewport.zoom].every(Number.isFinite) || viewport.zoom <= 0) return;
+    const previous = get().canvasViewport;
+    if (previous?.x === viewport.x && previous.y === viewport.y && previous.zoom === viewport.zoom) return;
+    set({ canvasViewport: { x: viewport.x, y: viewport.y, zoom: viewport.zoom } });
+  },
+
+  clearCanvasViewport: () => set((state) => ({
+    canvasViewport: null, canvasViewportRevision: state.canvasViewportRevision + 1,
+  })),
+
+  setCinemaSelectedShot: (nodeId, shotId) => set((state) => {
+    const selections = { ...state.cinemaSelectedShotIds };
+    if (shotId === null) delete selections[nodeId];
+    else selections[nodeId] = shotId;
+    return { cinemaSelectedShotIds: selections };
+  }),
+
+  clearCinemaSelectedShots: () => set({ cinemaSelectedShotIds: {} }),
 
   enterEditor: (sourceNodeId) => {
     const editNodeId = useGraphStore.getState().getOrCreateEditNodeDownstream(sourceNodeId);
@@ -802,6 +836,9 @@ export const useUIStore = create<UIState>((set, get) => ({
   resetPanelsForFreshCanvas: () => {
     set({
       selectedNodeId: null,
+      canvasViewport: null,
+      canvasViewportRevision: get().canvasViewportRevision + 1,
+      cinemaSelectedShotIds: {},
       chatResized: false,
       leftDock: 'library',
       inspectorPinned: false,

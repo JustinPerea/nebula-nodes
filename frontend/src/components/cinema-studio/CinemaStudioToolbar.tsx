@@ -1,6 +1,7 @@
 import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
 import { getCinemaUploadIssue, useCinemaUploadStore } from '../../store/cinemaUploadStore';
+import { WorkspaceHeader } from '../WorkspaceHeader';
 
 interface CinemaStudioToolbarProps {
   cinemaNodeId: string;
@@ -24,16 +25,7 @@ export function CinemaStudioToolbar({ cinemaNodeId }: CinemaStudioToolbarProps) 
   };
 
   return (
-    <div className="cinema-studio-toolbar">
-      <button
-        type="button"
-        className="cinema-studio-toolbar__back"
-        onClick={exitCinemaEditor}
-      >
-        ← Canvas
-      </button>
-      <span className="cinema-studio-toolbar__crumb">Cinema Studio</span>
-      <div className="cinema-studio-toolbar__spacer" />
+    <WorkspaceHeader title="Cinema" onBack={exitCinemaEditor} className="cinema-studio-toolbar cinema-studio-view__header">
       <button type="button" className="cinema-studio-toolbar__action" onClick={openHistory}>
         Run history
       </button>
@@ -59,6 +51,6 @@ export function CinemaStudioToolbar({ cinemaNodeId }: CinemaStudioToolbarProps) 
       >
         {sceneRuns.length > 0 ? 'Generating…' : 'Generate all'}
       </button>
-    </div>
+    </WorkspaceHeader>
   );
 }

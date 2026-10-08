@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react';
-import { useReactFlow, useStore, type Edge, type Node } from '@xyflow/react';
+import { useReactFlow, type Edge, type Node } from '@xyflow/react';
 import { useGraphStore } from '../store/graphStore';
 import { useUIStore } from '../store/uiStore';
 import { loadFromFile, saveToFile } from '../lib/graphFile';
@@ -11,19 +11,8 @@ import type { NodeData } from '../types';
 /** Mount once inside the app's ReactFlowProvider, independently of Canvas. */
 export function GraphFileActions() {
   const { fitView, getViewport } = useReactFlow();
-  const transform = useStore((state) => state.transform);
-  const viewMode = useUIStore((state) => state.viewMode);
-  const lastCanvasViewport = useRef(getViewport());
   const actionInFlight = useRef(false);
   const fitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // ReactFlow can reset its transform when Canvas unmounts. Keep the last
-  // actual canvas viewport for saves requested from a focused workspace.
-  useEffect(() => {
-    if (viewMode === 'canvas') {
-      lastCanvasViewport.current = { x: transform[0], y: transform[1], zoom: transform[2] };
-    }
-  }, [transform, viewMode]);
 
   const save = useCallback(async () => {
     const state = useGraphStore.getState();
@@ -31,8 +20,9 @@ export function GraphFileActions() {
     if (actionInFlight.current || !canSaveGraph(state)) return;
     actionInFlight.current = true;
     try {
-      const viewport = useUIStore.getState().viewMode === 'canvas'
-        ? getViewport() : lastCanvasViewport.current;
+      const ui = useUIStore.getState();
+      const canvasActive = ui.viewMode === 'canvas' || (ui.viewMode === 'commons' && !ui.commonsEnabled);
+      const viewport = canvasActive ? getViewport() : ui.canvasViewport ?? getViewport();
       await saveToFile(state.nodes, state.edges, viewport);
     } catch (error) {
       console.error('Graph save failed:', error);
@@ -91,8 +81,13 @@ export function GraphFileActions() {
         isPlaying: false, renderedPreviewUrl: null, pendingPreset: null,
       });
       if (fitTimer.current !== null) clearTimeout(fitTimer.current);
+      const focusRevision = useUIStore.getState().canvasFocusRevision;
+      const viewportRevision = useUIStore.getState().canvasViewportRevision;
       fitTimer.current = setTimeout(() => {
         fitTimer.current = null;
+        const ui = useUIStore.getState();
+        if (ui.viewMode !== 'canvas' || ui.canvasFocusRequest || ui.canvasFocusRevision !== focusRevision) return;
+        if (ui.canvasViewportRevision !== viewportRevision) return;
         void fitView({ padding: computeCanvasFitPadding(), duration: 300 });
       }, 120);
     } catch (error) {
@@ -128,8 +123,16 @@ export function GraphFileActions() {
     };
   }, [save, load]);
 
-  useEffect(() => () => {
-    if (fitTimer.current !== null) clearTimeout(fitTimer.current);
+  useEffect(() => {
+    const cancelFit = () => {
+      if (fitTimer.current !== null) clearTimeout(fitTimer.current);
+      fitTimer.current = null;
+    };
+    const unsubscribe = useUIStore.subscribe((state, previous) => {
+      // Returning before the timer expires does not restore its ownership.
+      if (state.viewMode !== previous.viewMode) cancelFit();
+    });
+    return () => { unsubscribe(); cancelFit(); };
   }, []);
 
   return null;

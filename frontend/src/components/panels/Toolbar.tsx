@@ -1,8 +1,10 @@
-import { useCallback } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import type { KeyboardEvent } from 'react';
 import { useReactFlow } from '@xyflow/react';
 import {
   FolderOpen,
-  Maximize2,
+  ChevronUp,
+  MoreHorizontal,
   Network,
   Play,
   RotateCcw,
@@ -21,6 +23,7 @@ import { computeCanvasFitPadding } from '../../lib/canvasFit';
 import type { NodeData } from '../../types';
 import type { Edge, Node } from '@xyflow/react';
 import '../../styles/panels.css';
+import '../../styles/canvas-toolbar.css';
 
 export function Toolbar() {
   const { fitView } = useReactFlow();
@@ -36,14 +39,93 @@ export function Toolbar() {
   const nodeCount = useGraphStore((s) => s.nodes.length);
   const autoLayout = useGraphStore((s) => s.autoLayout);
   const resetPanelLayout = useUIStore((s) => s.resetPanelLayout);
+  const [actionsOpen, setActionsOpen] = useState(false);
+  const actionsRoot = useRef<HTMLDivElement>(null);
+  const actionsTrigger = useRef<HTMLButtonElement>(null);
+  const mounted = useRef(true);
+  const importFitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const actionsId = useId();
+  const blockedId = useId();
+  const loadBlockedReason = isPreparing
+    ? 'Wait for generation preparation to finish.'
+    : isImportingGraph
+      ? 'Wait for the graph import to finish.'
+      : 'Wait for the active run to finish.';
+  const saveBlockedReason = !canLoad
+    ? loadBlockedReason
+    : 'Resolve the World Labs paid-start review before saving.';
+
+  const closeActions = useCallback((restoreFocus = false) => {
+    setActionsOpen(false);
+    if (restoreFocus) actionsTrigger.current?.focus();
+  }, []);
+
+  useEffect(() => {
+    mounted.current = true;
+    const clearImportFit = () => {
+      if (importFitTimer.current !== null) clearTimeout(importFitTimer.current);
+      importFitTimer.current = null;
+    };
+    // A return to Canvas must not revive an import fit scheduled before leaving.
+    const unsubscribe = useUIStore.subscribe((state, previous) => {
+      if (state.viewMode !== previous.viewMode) clearImportFit();
+    });
+    return () => {
+      mounted.current = false;
+      clearImportFit();
+      unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!actionsOpen) return;
+    const dismissOutside = (event: Event) => {
+      if (event.target instanceof window.Node && !actionsRoot.current?.contains(event.target)) closeActions();
+    };
+    document.addEventListener('pointerdown', dismissOutside);
+    document.addEventListener('focusin', dismissOutside);
+    return () => {
+      document.removeEventListener('pointerdown', dismissOutside);
+      document.removeEventListener('focusin', dismissOutside);
+    };
+  }, [actionsOpen, closeActions]);
+
+  const onActionsKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    // These controls are inside the Canvas key-event boundary. Keep graph
+    // execution and node-edit shortcuts out of a secondary action disclosure.
+    event.stopPropagation();
+    if (event.key === 'Escape' && actionsOpen) {
+      event.preventDefault();
+      closeActions(true);
+    }
+    if ((event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey) {
+      const key = event.key.toLowerCase();
+      if (key === 's' || key === 'o') {
+        event.preventDefault();
+        const permitted = key === 's' ? canSaveGraph(useGraphStore.getState()) : canLoadGraph(useGraphStore.getState());
+        if (permitted) {
+          closeActions(true);
+          if (key === 's') requestGraphSave();
+          else requestGraphLoad();
+        }
+      } else if (key === 'enter') {
+        event.preventDefault();
+      }
+    }
+  };
+
+  const runSecondaryAction = (action: () => void) => {
+    closeActions(true);
+    action();
+  };
 
   const handleClear = useCallback(async () => {
     if (!canLoadGraph(useGraphStore.getState())) return;
     const { nodes } = useGraphStore.getState();
     const msg =
       nodes.length > 0
-        ? `Clear the canvas and wipe cli_graph? ${nodes.length} node${nodes.length === 1 ? '' : 's'} will be removed. This can't be undone from here (save first if you want a copy).`
-        : `Wipe cli_graph? This removes any phantom nodes from prior sessions.`;
+        ? `Clear the canvas? ${nodes.length} node${nodes.length === 1 ? '' : 's'} will be removed, and the stored canvas used by connected tools will be reset. Save your graph first to keep a copy.`
+        : 'Reset the stored canvas used by connected tools? The visible canvas is already empty.';
     if (!window.confirm(msg)) return;
     if (!canLoadGraph(useGraphStore.getState())) return;
     // Confirm the backend clear before replacing the local graph. The backend
@@ -93,7 +175,7 @@ export function Toolbar() {
     if (!canLoadGraph(useGraphStore.getState())) return;
     try {
       const data = await fetchCLIGraph();
-      if (!canLoadGraph(useGraphStore.getState())) return;
+      if (!mounted.current || !canLoadGraph(useGraphStore.getState())) return;
       if (data.empty) {
         alert('CLI graph is empty — build one with the nebula CLI first.');
         return;
@@ -102,17 +184,29 @@ export function Toolbar() {
         data.nodes as Node<NodeData>[],
         data.edges as Edge[],
       );
-      setTimeout(() => fitView({ padding: computeCanvasFitPadding(), duration: 300 }), 50);
+      if (importFitTimer.current !== null) clearTimeout(importFitTimer.current);
+      const scheduled = useUIStore.getState();
+      const focusRevision = scheduled.canvasFocusRevision;
+      const viewportRevision = scheduled.canvasViewportRevision;
+      importFitTimer.current = setTimeout(() => {
+        importFitTimer.current = null;
+        const current = useUIStore.getState();
+        const canvasActive = current.viewMode === 'canvas' || (current.viewMode === 'commons' && !current.commonsEnabled);
+        if (!mounted.current || !canvasActive || current.canvasFocusRequest) return;
+        if (current.canvasFocusRevision !== focusRevision || current.canvasViewportRevision !== viewportRevision) return;
+        void fitView({ padding: computeCanvasFitPadding(), duration: 300 });
+      }, 50);
     } catch {
-      alert('Could not fetch CLI graph — is the backend running?');
+      if (mounted.current) alert('Could not fetch CLI graph — is the backend running?');
     }
   }, [fitView]);
 
   return (
-    <div className="toolbar">
+    <div className={`toolbar toolbar--grouped${actionsOpen ? ' toolbar--actions-open' : ''}`} role="group" aria-label="Canvas controls">
       {isExecuting ? (
         <button
-          className="toolbar__button toolbar__button--executing"
+          type="button"
+          className="toolbar__button toolbar__button--primary toolbar__button--executing"
           onClick={() => void cancelExecution()}
           disabled={isCancelling}
           aria-busy={isCancelling}
@@ -123,7 +217,8 @@ export function Toolbar() {
         </button>
       ) : (
         <button
-          className="toolbar__button"
+          type="button"
+          className="toolbar__button toolbar__button--primary"
           onClick={() => executeGraph()}
           disabled={nodeCount === 0 || isImportingGraph}
           title={isImportingGraph ? 'Wait for the graph import to finish' : 'Run graph (Ctrl+Enter)'}
@@ -132,67 +227,62 @@ export function Toolbar() {
           <span className="toolbar__label">Run</span>
         </button>
       )}
-      <div className="toolbar__divider" />
-      <button
-        className="toolbar__button"
-        onClick={requestGraphSave}
-        disabled={!canSave}
-        title={isPreparing
-          ? 'Wait for generation preparation to finish before saving'
-          : isExecuting
-          ? 'Wait for the active run to finish before saving'
-          : providerStartAmbiguities.length > 0
-            ? 'Resolve the World Labs paid-start review before saving'
-            : 'Save graph (Ctrl+S)'}
-      >
-        <ToolbarIcon name="save" />
-        <span className="toolbar__label">Save</span>
-      </button>
-      <button
-        className="toolbar__button"
-        onClick={requestGraphLoad}
-        disabled={!canLoad}
-        title={isPreparing ? 'Wait for generation preparation to finish' : isExecuting ? 'Wait for the active run to finish' : 'Load graph (Ctrl+O)'}
-      >
-        <ToolbarIcon name="load" />
-        <span className="toolbar__label">Load</span>
-      </button>
-      <button
-        className="toolbar__button"
-        onClick={handleImportCLI}
-        disabled={!canLoad}
-        title={isExecuting ? 'Wait for the active run to finish' : 'Import graph built by nebula CLI'}
-      >
-        <ToolbarIcon name="cli" />
-        <span className="toolbar__label">CLI</span>
-      </button>
-      <button
-        className="toolbar__button"
-        onClick={() => void handleClear()}
-        disabled={!canLoad}
-        title={isExecuting ? 'Wait for the active run to finish' : 'Clear canvas and backend cli_graph'}
-      >
-        <ToolbarIcon name="clear" />
-        <span className="toolbar__label">Clear</span>
-      </button>
-      <div className="toolbar__divider" />
-      <button className="toolbar__button" onClick={() => fitView({ padding: computeCanvasFitPadding(), duration: 300 })} title="Fit to screen">
-        <ToolbarIcon name="fit" />
-        <span className="toolbar__label">Fit</span>
-      </button>
-      <button
-        className="toolbar__button"
-        onClick={autoLayout}
-        title="Auto-layout — arrange nodes by dependency"
-        disabled={nodeCount === 0}
-      >
-        <ToolbarIcon name="layout" />
-        <span className="toolbar__label">Layout</span>
-      </button>
-      <button className="toolbar__button" onClick={handleResetLayout} title="Reset panel positions and sizes">
-        <ToolbarIcon name="reset" />
-        <span className="toolbar__label">Reset</span>
-      </button>
+      <div className="toolbar__divider" aria-hidden="true" />
+      <div className="toolbar__actions" ref={actionsRoot} onKeyDown={onActionsKeyDown}>
+        <button type="button" ref={actionsTrigger} className="toolbar__button toolbar__button--actions"
+          aria-expanded={actionsOpen} aria-controls={actionsId}
+          onClick={() => setActionsOpen((open) => !open)}>
+          <MoreHorizontal className="toolbar__icon" size={16} aria-hidden="true" />
+          <span className="toolbar__label">Canvas actions</span>
+          <ChevronUp className="toolbar__actions-chevron" size={12} aria-hidden="true" />
+        </button>
+        {actionsOpen && (
+          <section id={actionsId} className="toolbar__actions-panel" aria-label="Canvas actions">
+            {!canLoad && <p className="toolbar__blocked" id={blockedId} role="status">{loadBlockedReason}</p>}
+            {canLoad && !canSave && providerStartAmbiguities.length > 0 && (
+              <p className="toolbar__blocked" id={blockedId} role="status">{saveBlockedReason}</p>
+            )}
+            <div className="toolbar__action-group" role="group" aria-label="Graph files">
+              <h2 className="toolbar__action-heading">Graph</h2>
+              <button type="button" className="toolbar__action" disabled={!canSave}
+                aria-describedby={!canSave ? blockedId : undefined}
+                title={!canSave ? saveBlockedReason : 'Save graph (Ctrl+S or ⌘S)'}
+                aria-keyshortcuts="Control+s Meta+s" onClick={() => runSecondaryAction(requestGraphSave)}>
+                <ToolbarIcon name="save" /><span>Save graph</span><kbd aria-hidden="true">Ctrl / ⌘ S</kbd>
+              </button>
+              <button type="button" className="toolbar__action" disabled={!canLoad}
+                aria-describedby={!canLoad ? blockedId : undefined}
+                title={!canLoad ? loadBlockedReason : 'Load graph (Ctrl+O or ⌘O)'}
+                aria-keyshortcuts="Control+o Meta+o" onClick={() => runSecondaryAction(requestGraphLoad)}>
+                <ToolbarIcon name="load" /><span>Load graph</span><kbd aria-hidden="true">Ctrl / ⌘ O</kbd>
+              </button>
+              <button type="button" className="toolbar__action" disabled={!canLoad}
+                aria-describedby={!canLoad ? blockedId : undefined}
+                title={!canLoad ? loadBlockedReason : 'Import graph built by Nebula CLI'}
+                onClick={() => runSecondaryAction(() => void handleImportCLI())}>
+                <ToolbarIcon name="cli" /><span>Import CLI graph</span>
+              </button>
+              <button type="button" className="toolbar__action toolbar__action--danger" disabled={!canLoad}
+                aria-describedby={!canLoad ? blockedId : undefined}
+                title={!canLoad ? loadBlockedReason : 'Clear canvas — asks for confirmation'}
+                onClick={() => runSecondaryAction(() => void handleClear())}>
+                <ToolbarIcon name="clear" /><span>Clear canvas…</span>
+              </button>
+            </div>
+            <div className="toolbar__action-group" role="group" aria-label="Canvas layout">
+              <h2 className="toolbar__action-heading">Layout</h2>
+              <button type="button" className="toolbar__action" disabled={nodeCount === 0}
+                title="Arrange nodes by dependency" onClick={() => runSecondaryAction(autoLayout)}>
+                <ToolbarIcon name="layout" /><span>Arrange nodes</span>
+              </button>
+              <button type="button" className="toolbar__action" title="Reset panel positions and sizes"
+                onClick={() => runSecondaryAction(handleResetLayout)}>
+                <ToolbarIcon name="reset" /><span>Reset panels</span>
+              </button>
+            </div>
+          </section>
+        )}
+      </div>
     </div>
   );
 }
@@ -204,7 +294,6 @@ type IconName =
   | 'load'
   | 'cli'
   | 'clear'
-  | 'fit'
   | 'layout'
   | 'reset';
 
@@ -215,7 +304,6 @@ const TOOLBAR_ICONS: Record<IconName, LucideIcon> = {
   load: FolderOpen,
   cli: Terminal,
   clear: Trash2,
-  fit: Maximize2,
   layout: Network,
   reset: RotateCcw,
 };

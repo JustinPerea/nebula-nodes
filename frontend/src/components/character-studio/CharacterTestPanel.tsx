@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
 import type { CharacterDraft } from './CharacterStudioView';
+import { assetStudioDraftKey, resolveAssetStudioDraftKey, useAssetStudioDraftStore } from '../../store/assetStudioDraftStore';
 
 interface CharacterTestPanelProps {
   /** The saved Character id, or null while the draft is still unsaved. */
@@ -34,23 +35,36 @@ export function CharacterTestPanel({
   const exitCharacterEditor = useUIStore((s) => s.exitCharacterEditor);
   const [prompt, setPrompt] = useState('');
   const [pending, setPending] = useState(false);
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
 
   const handleTestOnCanvas = async () => {
     if (!characterId || !canTest || pending) return;
+    const selected = useUIStore.getState();
+    const drafts = useAssetStudioDraftStore.getState();
+    const key = resolveAssetStudioDraftKey(drafts, assetStudioDraftKey('character', selected.characterEditorScope,
+      selected.characterEditorId, drafts.projectId));
+    const epoch = drafts.entries[key]?.epoch;
     setPending(true);
     try {
-      await addCharacterNode(
+      const nodeId = await addCharacterNode(
         characterId,
         { x: 400, y: 300 },
         { name: draft.name, thumbnail },
       );
       // Hand off to the canvas so the user can wire + run the identity test
       // through the existing pipeline.
-      exitCharacterEditor();
+      const current = useUIStore.getState();
+      const currentDrafts = useAssetStudioDraftStore.getState();
+      if (nodeId && mounted.current && current.viewMode === 'character-editor'
+        && current.characterEditorId === selected.characterEditorId
+        && current.characterEditorScope === selected.characterEditorScope
+        && (current.characterEditorScope !== 'project' || currentDrafts.projectId === drafts.projectId)
+        && currentDrafts.entries[key]?.epoch === epoch) exitCharacterEditor();
     } catch (err) {
       console.error('[character] test-on-canvas drop failed:', err);
     } finally {
-      setPending(false);
+      if (mounted.current) setPending(false);
     }
   };
 

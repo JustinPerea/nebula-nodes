@@ -123,6 +123,8 @@ Evidence labels below: **Browser** means observed in the synthetic local UI; **S
 
 ### 11. Unify navigation and control hierarchy — P3, Browser + Source + Design
 
+**Implemented locally, 2026-10-08:** shared active headings and destination returns, accessible Canvas actions, preserved Canvas camera/selection, Cinema shot selection and session Character/Moodboard drafts. Acceptance and proof limits: [workspace navigation](workspace-navigation-2026-10-08.md).
+
 **Observed:** Canvas has a rail, top Canvas/Editor switch and bottom toolbar; Create and Cinema have separate headers and return/history controls. The visible studio Canvas return buttons worked. Extra Canvas/Editor controls remain mounted behind both studios and exposed in the accessibility tree; their Canvas handler only handles Editor mode. Canvas also exposes both Fit View and Fit to screen, and some tooltips contain backend terms such as `cli_graph`.
 
 **Change:** Adopt one workspace header/return pattern, remove covered controls from the active accessibility/focus order, and keep the selected object and previous viewport on return. Label the primary task action; group secondary file/layout actions under a small menu. Use product language for Clear/Import. Improve the legibility of task labels and status text while keeping decorative wordmarks quiet; measure specific contrast/size problems before broad token changes.
@@ -190,3 +192,17 @@ The original audit does not claim live provider generation, native file-dialog s
 - Added modal focus/background/shortcut ownership, opener/Help restoration and predictable navigation/reopening without graph, draft, recipe or run changes. Delayed startup hydration yields to new work, studio navigation and active/completed tours.
 - Final checks passed: 1,523 frontend tests/151 files, lint/style guards, TypeScript/production build/budget, all 255 node contracts and independent review. Native Chrome normal/200% exercised every live target, navigation/dismissal and Create draft retention. Seven synthetic nodes/six edges stayed unchanged with zero generation or connection checks.
 - Acceptance and proof limits: [Onboarding repair](onboarding-current-navigation-2026-10-08.md). Full recipe comparison (item 10) and shared workspace chrome (item 11) remain outstanding.
+
+
+## Seventh repair slice — 2026-10-08
+
+- Implemented item 10: immutable saved recipe/output context, pinned comparison and explicit draft reuse/Undo with complete connected inputs.
+- Final checks passed 1,575 frontend tests/156 files, lint/style guards, TypeScript/production build/budget and all 255 node contracts. Synthetic inspection/reuse/Undo preserved seven nodes/six edges with zero generation/check/handoff requests.
+- Acceptance and browser limitations: [Result context and comparison](result-context-comparison-2026-10-08.md).
+
+## Eighth repair slice — 2026-10-08
+
+- Implemented item 11: one active workspace heading/return pattern, covered-control removal and labeled primary execution with bounded secondary graph/layout tools.
+- Preserved Canvas camera/selection, Cinema shot identity and session Character/Moodboard drafts. Canonical asset aliases, project identity and asynchronous ownership prevent stale replies from replacing edits or redirecting navigation.
+- Final checks passed 1,680 frontend tests/163 files, lint/style guards, TypeScript/production build/budget, all 255 node contracts and independent reviews. Private browser checks preserved seven nodes/six edges with zero generation/check/handoff requests.
+- Acceptance and limits: [Workspace navigation](workspace-navigation-2026-10-08.md). All eleven original audit items now have implementation slices. The discovery, onboarding, result-comparison and navigation slices remain local pending integration; native 200% zoom proof for the last two remains open. No packaged Electron work is included.

@@ -5,7 +5,8 @@ import type { RunRecord } from '../src/lib/runHistory';
 import type { ExecutionEvent } from '../src/lib/wsClient';
 
 const boundary = vi.hoisted(() => ({ execute: vi.fn(), cancel: vi.fn(), status: vi.fn(),
-  subscribe: vi.fn(), fetch: vi.fn(), apiFetch: vi.fn() }));
+  subscribe: vi.fn(), fetch: vi.fn(), apiFetch: vi.fn(),
+  clearCanvasViewport: vi.fn(), clearCinemaSelectedShots: vi.fn() }));
 vi.mock('../src/lib/api', () => ({ executeGraph: boundary.execute, executeNode: boundary.execute,
   generateCinemaShot: vi.fn(), cancelExecution: boundary.cancel, getExecutionStatus: boundary.status,
   acknowledgeProviderStartAmbiguity: vi.fn(), deleteProviderRecovery: vi.fn(),
@@ -17,7 +18,11 @@ vi.mock('../src/lib/backend', () => ({ apiFetch: boundary.apiFetch,
   rewriteExecutionAssetUrls: <T,>(value: T) => value }));
 vi.mock('../src/lib/wsClient', () => ({ wsClient: { connect: vi.fn(), subscribe: boundary.subscribe } }));
 vi.mock('../src/lib/jobNotifications', () => ({ notifyJobComplete: vi.fn() }));
-vi.mock('../src/store/uiStore', () => ({ useUIStore: { getState: () => ({ settingsCache: { apiKeys: {}, loaded: true } }) } }));
+vi.mock('../src/store/uiStore', () => ({ useUIStore: { getState: () => ({
+  settingsCache: { apiKeys: {}, loaded: true }, canvasFocusRequest: null,
+  clearCanvasViewport: boundary.clearCanvasViewport,
+  clearCinemaSelectedShots: boundary.clearCinemaSelectedShots,
+}) } }));
 
 type Store = (typeof import('../src/store/graphStore'))['useGraphStore'];
 let store: Store;
@@ -118,6 +123,8 @@ describe('Batch preview ownership through real graph store paths', () => {
 
   it('preserves matching/empty graph sync, invalidates a changed server output and repairs Batch renderer', async () => {
     await boot([saved('saved', ['red', 'blue'], 'n2')], [preview('n2')]);
+    boundary.clearCanvasViewport.mockClear();
+    boundary.clearCinemaSelectedShots.mockClear();
     const sync = (outputs: NodeData['outputs']) => receive({ type: 'graphSync', empty: false, edges: [],
       nodes: [{ ...preview('n2'), data: { ...preview('n2').data, outputs } }] });
     sync(output('blue')); expect(live().batchOutputs).toHaveLength(2);
@@ -127,6 +134,8 @@ describe('Batch preview ownership through real graph store paths', () => {
     receive({ type: 'graphSync', empty: false, edges: [], nodes: [{ ...preview('n2'),
       data: { ...preview('n2').data, definitionId: 'batch', params: { items_text: 'red' }, outputs: {} } }] });
     expect(store.getState().nodes[0].type).toBe('batchNode');
+    expect(boundary.clearCanvasViewport).not.toHaveBeenCalled();
+    expect(boundary.clearCinemaSelectedShots).not.toHaveBeenCalled();
   });
 
   it('undo/redo preserves the newer gallery, rather than restoring one captured with older params', async () => {

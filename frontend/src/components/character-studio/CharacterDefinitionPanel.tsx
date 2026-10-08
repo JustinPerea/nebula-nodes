@@ -7,6 +7,7 @@ interface CharacterDefinitionPanelProps {
   /** Resolved thumbnail (= referenceViews[0] or the server's auto-pick). */
   thumbnail: string;
   onChange: (next: CharacterDraft) => void;
+  onAppendReferences?: (urls: string[]) => void;
 }
 
 const SUBJECT_TYPES: Array<{ id: CharacterDraft['subjectType']; label: string }> = [
@@ -29,6 +30,7 @@ export function CharacterDefinitionPanel({
   draft,
   thumbnail,
   onChange,
+  onAppendReferences,
 }: CharacterDefinitionPanelProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
@@ -36,7 +38,8 @@ export function CharacterDefinitionPanel({
 
   const addReferenceViews = (urls: string[]) => {
     if (urls.length === 0) return;
-    onChange({ ...draft, referenceViews: [...draft.referenceViews, ...urls] });
+    if (onAppendReferences) onAppendReferences(urls);
+    else onChange({ ...draft, referenceViews: [...draft.referenceViews, ...urls] });
   };
 
   const removeReferenceView = (idx: number) => {

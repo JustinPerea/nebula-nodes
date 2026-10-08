@@ -5,6 +5,7 @@ const boundary = vi.hoisted(() => ({
   executeGraph: vi.fn(), executeNode: vi.fn(), generateCinemaShot: vi.fn(),
   cancelExecution: vi.fn(), getExecutionStatus: vi.fn(), apiFetch: vi.fn(),
   connect: vi.fn(), subscribe: vi.fn(), notify: vi.fn(), fetch: vi.fn(),
+  clearCanvasViewport: vi.fn(), clearCinemaSelectedShots: vi.fn(),
 }));
 
 vi.mock('../src/lib/api', () => ({
@@ -25,7 +26,11 @@ vi.mock('../src/lib/backend', () => ({
 }));
 vi.mock('../src/lib/wsClient', () => ({ wsClient: { connect: boundary.connect, subscribe: boundary.subscribe } }));
 vi.mock('../src/lib/jobNotifications', () => ({ notifyJobComplete: boundary.notify }));
-vi.mock('../src/store/uiStore', () => ({ useUIStore: { getState: () => ({ settingsCache: { apiKeys: {}, loaded: true } }) } }));
+vi.mock('../src/store/uiStore', () => ({ useUIStore: { getState: () => ({
+  settingsCache: { apiKeys: {}, loaded: true }, canvasFocusRequest: null,
+  clearCanvasViewport: boundary.clearCanvasViewport,
+  clearCinemaSelectedShots: boundary.clearCinemaSelectedShots,
+}) } }));
 
 type Store = (typeof import('../src/store/graphStore'))['useGraphStore'];
 let storage: Storage;
@@ -146,6 +151,8 @@ describe('ordinary execution ownership after browser reload', () => {
       id: node.id, type: 'cinemaSceneNode', position: { x: 0, y: 0 },
       data: { label: 'Synthetic Cinema', definitionId: node.definitionId, params: node.params, outputs: {}, state: 'idle' },
     })), [], { allowDuringExecution: true });
+    expect(boundary.clearCanvasViewport).toHaveBeenCalledOnce();
+    expect(boundary.clearCinemaSelectedShots).toHaveBeenCalledOnce();
     await store.getState().executeShot('cinema-node', 'shot-a');
     expect(boundary.generateCinemaShot).not.toHaveBeenCalled();
     expect(store.getState().activeRuns[0].id).toBe('cinema-run');

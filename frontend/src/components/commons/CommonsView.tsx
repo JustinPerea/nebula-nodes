@@ -10,6 +10,8 @@ import { CommonsGrid } from './CommonsGrid';
 import { CommonsEvaluation } from './CommonsEvaluation';
 import { CommonsReview } from './CommonsReview';
 import { CommonsSettings } from './CommonsSettings';
+import { WorkspaceHeader } from '../WorkspaceHeader';
+import { workspaceLabel } from '../../lib/workspaceLabel';
 import '../../styles/commons.css';
 
 type Tab = 'all' | 'inbox' | 'settings' | 'labeling' | 'review';
@@ -59,6 +61,7 @@ export function StatusLine({ status, onStart, onStop }: { status: CommonsStatus 
 }
 
 export function CommonsView() {
+  const returnView = useUIStore((s) => s.commonsReturnView);
   const restoreWorkspace = useUIStore((s) => s.exitCommons);
   const exitCommons = () => {
     restoreWorkspace();
@@ -232,9 +235,7 @@ export function CommonsView() {
 
   return (
     <div className={`commons-view${selectedId && tab !== 'settings' && tab !== 'labeling' && tab !== 'review' ? ' commons-view--detail' : ''}`}>
-      <header className="commons-toolbar">
-        <button type="button" className="commons-button" disabled={labelingDirty} onClick={exitCommons}>← Back</button>
-        <span className="commons-toolbar__title">Commons</span>
+      <WorkspaceHeader title="Commons" onBack={exitCommons} backLabel={workspaceLabel(returnView)} backDisabled={labelingDirty} className="commons-toolbar">
         <div className="commons-tabs" role="tablist" aria-label="Commons sections">
           {(['all', 'inbox', 'review', 'labeling', 'settings'] as Tab[]).map((t) => (
             <button
@@ -301,7 +302,7 @@ export function CommonsView() {
           onStart={() => workerAction(commonsApi.workerStart)}
           onStop={() => workerAction(commonsApi.workerStop)}
         />
-      </header>
+      </WorkspaceHeader>
 
       {(error || notice) && (
         <div className="commons-messages">

@@ -1,4 +1,5 @@
-import { useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useLayoutEffect, useMemo, useRef } from 'react';
+import { WorkspaceHeader } from '../WorkspaceHeader';
 import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
 import { CinemaStudioToolbar } from './CinemaStudioToolbar';
@@ -39,11 +40,10 @@ export function CinemaStudioView() {
   const nodes = useGraphStore((s) => s.nodes);
   const panelRef = useRef<HTMLDivElement>(null);
 
-  const [selection, setSelection] = useState<{ nodeId: string; shotId: string } | null>(null);
-  const selectedShotId = selection?.nodeId === cinemaNodeId ? selection.shotId : null;
-  const setSelectedShotId = (shotId: string | null) => setSelection(
-    cinemaNodeId && shotId ? { nodeId: cinemaNodeId, shotId } : null,
-  );
+  const selectedShotId = useUIStore((s) => cinemaNodeId ? s.cinemaSelectedShotIds[cinemaNodeId] : null);
+  const setSelectedShotId = (shotId: string | null) => {
+    if (cinemaNodeId) useUIStore.getState().setCinemaSelectedShot(cinemaNodeId, shotId);
+  };
 
   const scene: CinemaSceneSpec =
     (node?.data as { params?: { scene?: CinemaSceneSpec } } | undefined)?.params?.scene ?? emptyScene();
@@ -71,11 +71,9 @@ export function CinemaStudioView() {
   if (!cinemaNodeId || !node || node.data.definitionId !== 'cinema-scene') {
     return (
       <div className="cinema-studio-view">
+        <WorkspaceHeader title="Cinema" onBack={exitCinemaEditor} className="cinema-studio-view__header" />
         <div className="cinema-studio-view__empty">
-          No cinema-scene node selected.{' '}
-          <button type="button" onClick={exitCinemaEditor}>
-            Back to canvas
-          </button>
+          Select a Cinema Scene node on Canvas to open it here.
         </div>
       </div>
     );
@@ -128,9 +126,7 @@ export function CinemaStudioView() {
 
   return (
     <div className="cinema-studio-view">
-      <header className="cinema-studio-view__header">
-        <CinemaStudioToolbar cinemaNodeId={cinemaNodeId} />
-      </header>
+      <CinemaStudioToolbar cinemaNodeId={cinemaNodeId} />
 
       <div className="cinema-studio-view__body">
         <div className="cinema-studio-view__shared">

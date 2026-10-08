@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ArrowLeft } from 'lucide-react';
+import { WorkspaceHeader } from '../WorkspaceHeader';
 import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
 import { EditorBreadcrumb } from './EditorBreadcrumb';
@@ -36,9 +36,10 @@ export function EditorView() {
 
   useEffect(() => {
     function handleKey(e: KeyboardEvent) {
+      if (e.defaultPrevented) return;
       // Bail out of all bindings if the user is typing in a form field.
       const target = e.target as HTMLElement | null;
-      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable)) {
         return;
       }
 
@@ -153,17 +154,15 @@ export function EditorView() {
   if (!editNode || !sourceNode || !sourceUrl) {
     return (
       <div className="editor-view editor-view--empty">
-        <p>Connect a video upstream to edit.</p>
-        <button type="button" onClick={exitEditor}>
-          <ArrowLeft className="editor-view__button-icon" aria-hidden="true" focusable="false" />
-          <span>Back to Canvas</span>
-        </button>
+        <WorkspaceHeader title="Video editor" onBack={exitEditor} />
+        <p className="editor-view__empty-message">Connect a video upstream to edit.</p>
       </div>
     );
   }
 
   return (
     <div className="editor-view">
+      <WorkspaceHeader title="Video editor" onBack={exitEditor} />
       {tooSmall && (
         <div className="editor-view__too-small">
           Best viewed at ≥ 1280px wide. Some controls may be cramped.

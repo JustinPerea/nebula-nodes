@@ -70,9 +70,10 @@ describe('Toolbar execution lifecycle', () => {
   it('blocks button and keyboard-event saves while a paid start is unsettled', () => {
     render(<><GraphFileActions /><Toolbar /></>);
 
-    const save = screen.getByRole('button', { name: 'Save' });
+    fireEvent.click(screen.getByRole('button', { name: 'Canvas actions' }));
+    const save = screen.getByRole('button', { name: 'Save graph' });
     expect(save).toBeDisabled();
-    expect(save).toHaveAttribute('title', 'Wait for the active run to finish before saving');
+    expect(save).toHaveAttribute('title', 'Wait for the active run to finish.');
     fireEvent.click(save);
     fireEvent(window, new CustomEvent('nebula:save'));
 
@@ -93,11 +94,12 @@ describe('Toolbar execution lifecycle', () => {
     });
 
     render(<><GraphFileActions /><Toolbar /></>);
-    const save = screen.getByRole('button', { name: 'Save' });
+    fireEvent.click(screen.getByRole('button', { name: 'Canvas actions' }));
+    const save = screen.getByRole('button', { name: 'Save graph' });
     expect(save).toBeDisabled();
     expect(save).toHaveAttribute(
       'title',
-      'Resolve the World Labs paid-start review before saving',
+      'Resolve the World Labs paid-start review before saving.',
     );
     fireEvent(window, new CustomEvent('nebula:save'));
 
@@ -131,7 +133,8 @@ describe('Toolbar execution lifecycle', () => {
     });
 
     render(<><GraphFileActions /><Toolbar /></>);
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Canvas actions' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save graph' }));
 
     await waitFor(() => expect(graphFileMocks.saveToFile).toHaveBeenCalledWith(
       [expect.objectContaining({

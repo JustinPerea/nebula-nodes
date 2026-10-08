@@ -1,0 +1,105 @@
+body.app-slava-restraint .workspace-header.workspace-header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  min-width: 0;
+  min-height: 48px;
+  height: auto;
+  max-height: max(56px, 35dvh);
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--sr-edge);
+  background: var(--sr-glass);
+  color: var(--sr-ink);
+  font-family: var(--sr-ui);
+}
+body.app-slava-restraint .workspace-header__identity {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+body.app-slava-restraint .workspace-header__title {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.4;
+  font-weight: 600;
+  color: var(--sr-ink);
+  overflow-wrap: anywhere;
+}
+body.app-slava-restraint .workspace-header__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+body.app-slava-restraint .workspace-header__actions > * { max-width: 100%; }
+body.app-slava-restraint .workspace-header__back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 5px 10px;
+  flex: 0 0 auto;
+  border: 1px solid var(--sr-edge);
+  border-radius: var(--sr-radius-control);
+  background: var(--sr-surface-control);
+  color: var(--sr-ink);
+  font: 500 13px/1.3 var(--sr-ui);
+  cursor: pointer;
+}
+body.app-slava-restraint .workspace-header__back:hover:not(:disabled) {
+  background: var(--sr-surface-control-hover);
+  border-color: var(--sr-edge-strong);
+}
+body.app-slava-restraint .workspace-header__back:disabled {
+  cursor: not-allowed;
+  opacity: var(--sr-disabled-opacity-strong);
+}
+body.app-slava-restraint .workspace-header__back:focus-visible,
+body.app-slava-restraint .workspace-header__title:focus-visible {
+  outline: var(--sr-focus-outline);
+  outline-offset: var(--sr-focus-offset);
+}
+body.app-slava-restraint .workspace-header.workspace-header--canvas {
+  border: 1px solid var(--sr-edge);
+  border-radius: var(--sr-radius-pill);
+  background: var(--sr-glass-raised);
+  box-shadow: var(--sr-shadow-panel-sm);
+  pointer-events: auto;
+  min-height: 40px;
+  padding: 5px 10px 5px 16px;
+}
+body.app-slava-restraint .workspace-header--canvas .workspace-header__actions { flex: 0 1 auto; }
+body.app-slava-restraint .editor-view.editor-view { padding: 12px 16px 16px; }
+body.app-slava-restraint .editor-view--empty { align-items: stretch; justify-content: flex-start; }
+body.app-slava-restraint .editor-view__empty-message {
+  display: grid;
+  place-items: center;
+  flex: 1;
+  color: var(--sr-ink-light);
+}
+body.app-slava-restraint .remotion-editor-view.remotion-editor-view { grid-template-rows: auto minmax(0, 1fr) 320px; }
+body.app-slava-restraint .commons-view.commons-view { grid-template-rows: auto auto auto minmax(0, 1fr); }
+body.app-slava-restraint .character-studio-view.character-studio-view,
+body.app-slava-restraint .moodboard-studio-view.moodboard-studio-view { grid-template-rows: auto minmax(0, 1fr); }
+body.app-slava-restraint .workspace-header .remotion-editor-toolbar,
+body.app-slava-restraint .workspace-header .remotion-editor-toolbar__group {
+  flex-wrap: wrap;
+  min-width: 0;
+  max-width: 100%;
+}
+@media (max-width: 760px) {
+  body.app-slava-restraint .moodboard-studio-view.moodboard-studio-view { grid-template-rows: auto auto minmax(0, 1fr); }
+}
+@media (max-width: 700px) {
+  body.app-slava-restraint .workspace-header__actions { justify-content: flex-start; }
+  body.app-slava-restraint .canvas-tabs-wrap { max-width: calc(100vw - 96px); }
+  body.app-slava-restraint .workspace-header.workspace-header--canvas { padding: 5px 10px; gap: 8px; }
+}

@@ -78,10 +78,16 @@ export function VideoPreview({ sourceUrl, editNode }: Props) {
   // shortcut only fires when the editor surface is mounted.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (e.key === ' ' && !e.repeat && (e.target as HTMLElement).tagName !== 'INPUT') {
-        e.preventDefault();
-        togglePlaying();
-      }
+      if (e.defaultPrevented || e.key !== ' ' || e.repeat || e.altKey || e.ctrlKey || e.metaKey) return;
+      const target = e.target;
+      // Native activation/typing owns Space on controls, including a child
+      // icon inside the shared Back button and rendered video controls.
+      if (target instanceof Element && target.closest(
+        'button, input, textarea, select, a[href], summary, [contenteditable]:not([contenteditable="false"]), '
+        + '[role="button"], [role="textbox"], [role="combobox"], [role="slider"], video[controls], audio[controls]',
+      )) return;
+      e.preventDefault();
+      togglePlaying();
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);

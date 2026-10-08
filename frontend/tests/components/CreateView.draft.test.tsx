@@ -127,7 +127,7 @@ describe('Create draft integration', () => {
     fireEvent.change(first.getByLabelText('Attach reference'), { target: { files: [image()] } });
     expect(await first.findByAltText('Reference 1')).toHaveAttribute('src', '/api/outputs/reference.png');
     const saved = structuredClone(useCreateDraftStore.getState().drafts['draft-session']);
-    fireEvent.click(first.getByRole('button', { name: 'Canvas' }));
+    fireEvent.click(first.getByRole('button', { name: 'Back to Canvas' }));
     expect(mocks.exit).toHaveBeenCalledOnce(); first.unmount();
     selectCanvasRecipe('Different selected recipe');
     const reopened = render(<CreateView />);
@@ -192,7 +192,7 @@ describe('Create draft integration', () => {
     const finish = deferredUpload(); const first = render(<CreateView />);
     fireEvent.change(first.getByRole('textbox', { name: 'Create prompt' }), { target: { value: 'Keep this while inspecting Canvas' } });
     fireEvent.change(first.getByLabelText('Attach reference'), { target: { files: [image('background.png')] } });
-    fireEvent.click(first.getByRole('button', { name: 'Canvas' })); first.unmount();
+    fireEvent.click(first.getByRole('button', { name: 'Back to Canvas' })); first.unmount();
     await act(async () => { finish(uploadResponse('/api/outputs/background.png')); });
     const reopened = render(<CreateView />);
     expect(await reopened.findByAltText('Reference 1')).toHaveAttribute('src', '/api/outputs/background.png');

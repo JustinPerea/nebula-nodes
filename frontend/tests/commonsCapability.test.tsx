@@ -58,7 +58,8 @@ describe('Commons backend capability', () => {
     expect(commons.search).not.toHaveBeenCalled();
     expect(transport.fetch.mock.calls.map(([path]) => path)).toEqual(['/api/capabilities/commons']);
   });
-  it('waits for explicit navigation after backend opt-in, then restores the workspace', async () => {
+  it.each(['canvas', 'create'] as const)('waits for explicit navigation after backend opt-in, then restores %s', async (viewMode) => {
+    useUIStore.setState({ viewMode });
     transport.fetch.mockResolvedValue(json({ enabled: true, scopedAgents: ['claude', 'codex'] }));
     render(<Shell />);
     const open = await screen.findByRole('button', { name: 'Open Commons' });
@@ -68,8 +69,9 @@ describe('Commons backend capability', () => {
     await waitFor(() => expect(commons.status).toHaveBeenCalledTimes(1));
     expect(commons.workerStart).not.toHaveBeenCalled();
     expect(commons.workerStop).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('button', { name: '← Back' }));
-    expect(useUIStore.getState().viewMode).toBe('canvas');
+    expect(screen.getAllByRole('heading', { name: 'Commons', level: 1 })).toHaveLength(1);
+    fireEvent.click(screen.getByRole('button', { name: `Back to ${viewMode === 'create' ? 'Create' : 'Canvas'}` }));
+    expect(useUIStore.getState().viewMode).toBe(viewMode);
     expect(await screen.findByRole('button', { name: 'Open Commons' })).toBeTruthy();
   });
   it('ignores a Commons hash while off and opens its route only after capability opt-in', async () => {
@@ -83,7 +85,7 @@ describe('Commons backend capability', () => {
     transport.fetch.mockResolvedValue(json({ enabled: true }));
     render(<Shell />);
     expect(await screen.findByRole('tablist', { name: 'Commons sections' })).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: '← Back' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Back to Canvas' }));
     expect(useUIStore.getState().viewMode).toBe('canvas');
     expect(location.hash).toBe('');
   });
