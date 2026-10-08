@@ -1,6 +1,6 @@
 # Shared workspace navigation and controls
 
-Implemented UI audit item 11 on isolated `codex/workspace-navigation`, above the local discovery, onboarding and result-comparison slices. No main publication was requested. Backend handlers, model definitions, dependencies, real accounts and packaged Electron are outside this change.
+Implemented UI audit item 11 on isolated `codex/workspace-navigation`, above the local discovery, onboarding and result-comparison slices. Publication was approved after local acceptance. Backend handlers, model definitions, dependencies, real accounts and packaged Electron are outside this change.
 
 ## Experience
 
@@ -28,4 +28,4 @@ Shared headers wrap in measured auto rows with bounded scrolling, including lazy
 
 The preview initially omitted the separate Moodboard root, exposing a read-only library list. No existing asset was opened or changed; the root was isolated and the preview restarted before Moodboard authoring. Final graph proof compares the fully isolated restarted fixture. Screenshots, fixtures and proof files stay outside Git.
 
-Actual native browser 200% zoom is unverified; compact viewport inspection is not a substitute for that proof. Commons navigation was checked in its unauthenticated fixture state, not against a live library. Temporary viewport overrides, tabs and servers were restored or closed after verification. This slice remains local and unmerged.
+Actual native browser 200% zoom is unverified; compact viewport inspection is not a substitute for that proof. Commons navigation was checked in its unauthenticated fixture state, not against a live library. Temporary viewport overrides, tabs and servers were restored or closed after verification. Integrated into main on 2026-10-08 with discovery, onboarding and result comparison; the verification limits above still apply.

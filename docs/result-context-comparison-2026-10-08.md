@@ -27,4 +27,4 @@ Every connected input remains inspectable, including start/end frames, structure
 
 The normal-width gallery was captured in native Dia at 2192×1776 physical pixels. Native Chrome control timed out, and native Dia input was inconsistent; final modal/reuse interaction proof used the in-app browser. Actual native browser 200% zoom remains unverified. The desktop viewport override exceeded the visible browser panel, clipping its captured pixels; that comparison capture is not full desktop visual proof. Synthetic screenshots, fixtures and proof files stay outside Git. Temporary preview tabs and servers were closed; the original native browser tabs remain intact.
 
-This slice is local and unmerged. Shared navigation/control hierarchy is the next audit item.
+Integrated into main on 2026-10-08 with discovery, onboarding and shared navigation/control hierarchy. Native browser 200% zoom remains unverified for this slice.

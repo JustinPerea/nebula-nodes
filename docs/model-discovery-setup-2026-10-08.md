@@ -28,4 +28,4 @@ Final gates: **1,475 frontend tests in 148 files passed**, lint (including style
 
 Native verification used frontend 5222/backend 8052, temporary synthetic state and execution-blocking middleware. Credential results were stubbed; no real provider, OAuth account or user settings were checked. The controlled Chrome clock differed from the host, so final synthetic check timestamps matched the observed browser clock; mismatched/future timestamps correctly remained unverified. Screenshots and proof JSON remain outside Git under the private audit folder. The owned tab/servers were closed afterward. Physical mobile devices and packaged Electron were not tested.
 
-This slice is committed locally. Onboarding (item 8), full recipe comparison (item 10), and shared workspace chrome (item 11) remain outstanding.
+Integrated into main on 2026-10-08 with the onboarding, result-comparison and shared-navigation slices. All eleven original UI audit items now have implementation slices; the verification limits above still apply.

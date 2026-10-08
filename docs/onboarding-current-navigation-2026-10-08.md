@@ -31,4 +31,4 @@ Private captures and before/after proof remain outside Git at `~/.nebula/audits/
 
 The implementation uses existing dependencies and verified primary references: [React layout measurement](https://react.dev/reference/react/useLayoutEffect), [React portals](https://react.dev/reference/react-dom/createPortal), [MDN inert](https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Global_attributes/inert), [ResizeObserver](https://developer.mozilla.org/en-US/docs/Web/API/ResizeObserver), [MutationObserver](https://developer.mozilla.org/en-US/docs/Web/API/MutationObserver) and [WAI-ARIA modal dialogs](https://www.w3.org/WAI/ARIA/apg/patterns/dialog-modal/).
 
-This slice is locally validated. Full recipe comparison (item 10) and shared workspace chrome (item 11) remain in the UI queue.
+Integrated into main on 2026-10-08 with discovery, result comparison and shared workspace navigation. All eleven original UI audit items now have implementation slices; the verification limits above still apply.
