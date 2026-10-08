@@ -1,9 +1,12 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { Node } from '@xyflow/react';
 import type { NodeData } from '../../types';
 import { galleryItemsFromSession, galleryItemsFromCanvas, firstViewableMedia, type GenerationRecord, type ViewableMedia } from '../../lib/createGallery';
 import { ResultCard } from './ResultCard';
 import { Lightbox } from './Lightbox';
+import { resultContextForNode, type ResultContext } from '../../lib/resultContext';
+import type { RunRecord } from '../../lib/runHistory';
+import { ResultComparison, type ComparisonResult } from './ResultComparison';
 
 export interface ResultsGalleryProps {
   records: GenerationRecord[];
@@ -15,6 +18,9 @@ export interface ResultsGalleryProps {
   onDelete: (nodeId: string) => void;
   onReveal?: (url: string) => void;
   onSaveToFolder?: (url: string) => Promise<{ savedPath: string }>;
+  history?: readonly RunRecord[];
+  onReuseSettings?: (context: ResultContext) => void;
+  emptyState?: ReactNode;
 }
 
 export function ResultsGallery({
@@ -27,11 +33,16 @@ export function ResultsGallery({
   onDelete,
   onReveal,
   onSaveToFolder,
+  history = [],
+  onReuseSettings,
+  emptyState,
 }: ResultsGalleryProps) {
   const [tab, setTab] = useState<'session' | 'canvas'>(defaultTab ?? 'session');
   const [layout, setLayout] = useState<'grid' | 'list'>('grid');
   const [showSelectedOnly, setShowSelectedOnly] = useState(true);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [comparison, setComparison] = useState<ComparisonResult[]>([]);
+  const [comparisonOpen, setComparisonOpen] = useState(false);
   const galleryRef = useRef<HTMLDivElement>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
   const restoreFallback = useRef(false);
@@ -78,6 +89,11 @@ export function ResultsGallery({
   const switchTab = (next: 'session' | 'canvas') => {
     setLightboxIndex(null); // viewable set changes with the tab — don't keep a stale index open
     setTab(next);
+  };
+  const toggleComparison = (result: ComparisonResult) => {
+    setComparison((current) => current.some((item) => item.key === result.key)
+      ? current.filter((item) => item.key !== result.key)
+      : current.length < 2 ? [...current, structuredClone(result)] : current);
   };
 
   const emptyMessage =
@@ -146,12 +162,31 @@ export function ResultsGallery({
         </div>
       </div>
 
+      {comparison.length > 0 && <div className="results-gallery__comparison" aria-label="Comparison selection">
+        <span>{comparison.length} of 2 selected</span>
+        {comparison.map((item, index) => <button key={item.key} type="button"
+          aria-label={`Remove result ${index + 1} from comparison`}
+          title={`${item.context.modelName} · ${item.context.prompt || 'Unrecorded prompt'}`}
+          onClick={() => setComparison((current) => current.filter((result) => result.key !== item.key))}>
+          {item.media.kind === 'image' ? <img src={item.media.url} alt="" /> : <span aria-hidden="true">Video</span>}
+          Result {index + 1} ×
+        </button>)}
+        <button type="button" disabled={comparison.length !== 2} data-result-comparison-fallback
+          onClick={() => setComparisonOpen(true)}>Compare selected</button>
+        <button type="button" onClick={() => setComparison([])}>Clear</button>
+      </div>}
+
       {items.length === 0 ? (
-        <div className="results-gallery__empty">{emptyMessage}</div>
+        <div className="results-gallery__empty">{emptyState ?? emptyMessage}</div>
       ) : (
         <div ref={resultsRef} className={`results-gallery__items results-gallery__items--${layout}`} role="region" aria-label="Create results" tabIndex={0}>
           <div className={`results-gallery__cards results-gallery__cards--${layout}`}>
-            {items.map((it) => (
+            {items.map((it) => {
+              const context = it.node ? resultContextForNode(it.node, history) : undefined;
+              const media = firstViewableMedia(it.node);
+              const candidate = context && media ? { key: context.key, nodeId: it.nodeId, context, media } : undefined;
+              const selected = candidate && comparison.some((item) => item.key === candidate.key);
+              return (
               <ResultCard
                 key={it.nodeId}
                 node={it.node}
@@ -162,8 +197,14 @@ export function ResultsGallery({
                 onReveal={onReveal}
                 onSaveToFolder={onSaveToFolder}
                 onZoom={() => openLightbox(it.nodeId)}
+                context={context}
+                onReuseSettings={context && onReuseSettings ? () => onReuseSettings(context) : undefined}
+                onCompare={candidate ? () => toggleComparison(candidate) : undefined}
+                compareSelected={!!selected}
+                compareDisabled={comparison.length === 2 && !selected}
               />
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
@@ -176,6 +217,9 @@ export function ResultsGallery({
           onIndexChange={setLightboxIndex}
         />
       )}
+      {comparisonOpen && comparison.length === 2 && <ResultComparison
+        items={comparison as [ComparisonResult, ComparisonResult]}
+        onClose={() => setComparisonOpen(false)} onReuseSettings={onReuseSettings} />}
     </div>
   );
 }

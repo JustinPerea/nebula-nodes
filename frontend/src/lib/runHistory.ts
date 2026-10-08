@@ -252,18 +252,24 @@ export function paperRunOutOfDateReasons(
   return reasons;
 }
 
-/** Retain Paper/Cinema result references alongside the exact accepted recipe.
- * Cinema may delete a live shot while its original result is still in flight. */
-export function recordPaperRunOutput(
+/** Retain each executed node's output alongside the exact accepted recipe.
+ * This includes upstream inputs and cache hits, so ordinary Create/Canvas
+ * results can recover their frozen prompt and references. Terminal records
+ * never accept late writes, and a live Canvas deletion does not erase history. */
+export function recordRunOutput(
   history: RunRecord[], runId: string, nodeId: string, outputs: Record<string, PortValue>,
 ): RunRecord[] {
-  return history.map((record) => record.id === runId && (record.paperInputs?.length
-    || record.snapshot.nodes.some((node) => node.id === nodeId && node.definitionId === 'cinema-scene'))
+  const index = history.findIndex((record) => record.id === runId && record.status === 'running'
+    && record.snapshot.nodes.some((node) => node.id === nodeId));
+  if (index < 0) return history;
+  return history.map((record, recordIndex) => recordIndex === index
     ? { ...record, resultOutputs: deepFreeze(JSON.parse(JSON.stringify({
-        ...record.resultOutputs, [nodeId]: outputs,
-      })) as Record<string, Record<string, PortValue>>) }
-    : record);
+      ...record.resultOutputs, [nodeId]: outputs,
+    })) as Record<string, Record<string, PortValue>>) } : record);
 }
+
+/** Compatibility for callers predating ordinary result provenance. */
+export const recordPaperRunOutput = recordRunOutput;
 
 /** Keep every repeated result immutable, including successful items in a run
  * that is later cancelled or fails. Batch events replace only their node's

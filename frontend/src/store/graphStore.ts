@@ -29,7 +29,7 @@ import {
   paperInputOutOfDateReasons,
   paperRecipeRevision,
   paperRunOutOfDateReasons,
-  recordPaperRunOutput,
+  recordRunOutput,
   recordRunBatchOutputs,
   sanitizeVariantScopes,
   snapshotWithLatestPaperSources,
@@ -4880,9 +4880,10 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         const batchVariants = batchOutputs
           ? sanitizeVariantScopes(event.batchVariants, batchOutputs.length) : undefined;
         const record = get().runHistory.find((candidate) => candidate.id === runId);
-        if (record && runId) {
+        if (record && runId && ownsRun(runId) && record.status === 'running'
+          && record.snapshot.nodes.some((saved) => saved.id === event.nodeId)) {
           set((state) => {
-            let runHistory = recordPaperRunOutput(state.runHistory, runId, event.nodeId, outputs);
+            let runHistory = recordRunOutput(state.runHistory, runId, event.nodeId, outputs);
             if (batchOutputs) {
               runHistory = recordRunBatchOutputs(runHistory, runId, event.nodeId,
                 batchOutputs, batchVariants);

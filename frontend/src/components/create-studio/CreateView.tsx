@@ -12,6 +12,7 @@ import { attachCreateReferences, canRetryCreateReference, retryCreateReference, 
 import { revealInFinder, saveToFolder } from '../../lib/createFiles';
 import { generationRecordsFromHistory, galleryItemsFromCanvas } from '../../lib/createGallery';
 import { composerStateFromSelection } from '../../lib/createSelection';
+import type { ResultContext } from '../../lib/resultContext';
 import { applyPresetToComposer } from '../../lib/applyPreset';
 import { createPreset, type Preset } from '../../lib/createPresets';
 import { CreateComposer } from './CreateComposer';
@@ -87,6 +88,15 @@ export function CreateView() {
   const [ask, promptElement] = usePrompt();
   const [savingStyle, setSavingStyle] = useState(false);
   const [styleSaveError, setStyleSaveError] = useState<string | null>(null);
+  const [reusedDraft, setReusedDraft] = useState<{ previous: CreateDraftSeed; fingerprint: string; removedAttachments: boolean } | null>(null);
+  const focusDraft = useRef(false);
+  const composerArea = useRef<HTMLDivElement>(null);
+  const canUndoReuse = reusedDraft?.fingerprint === JSON.stringify(draft);
+  useEffect(() => {
+    if (!focusDraft.current) return;
+    focusDraft.current = false;
+    composerArea.current?.querySelector<HTMLTextAreaElement>('textarea')?.focus({ preventScroll: true });
+  }, [draft.revision]);
   const styleSavePending = useRef(false);
   const styleName = useRef<string | null>(null);
 
@@ -175,6 +185,34 @@ export function CreateView() {
     useCreateDraftStore.getState().resetDraft(sessionId, defaultDraft());
     setGenerationError(null);
     setStyleSaveError(null);
+    setReusedDraft(null);
+  };
+
+  const handleReuseSettings = (context: ResultContext) => {
+    if (!sessionId || !context.reusableDraft) {
+      setGenerationError(context.reuseUnavailableReason ?? 'This recipe cannot be copied into Create. Open it on Canvas.');
+      return;
+    }
+    const current = useCreateDraftStore.getState().drafts[sessionId];
+    if (!current) return;
+    // Replacing a draft revokes pending uploads and stale composer callbacks.
+    // Undo retains only ready references; aborted files must be attached again.
+    const previous: CreateDraftSeed = structuredClone({ modelId: current.modelId, prompt: current.prompt,
+      params: current.params, refs: current.refs, quantity: current.quantity, uploads: [] });
+    clearCreateReferenceUploads(sessionId);
+    focusDraft.current = true;
+    useCreateDraftStore.getState().resetDraft(sessionId, structuredClone(context.reusableDraft));
+    setReusedDraft({ previous, fingerprint: JSON.stringify(useCreateDraftStore.getState().drafts[sessionId]), removedAttachments: current.uploads.length > 0 });
+    setGenerationError(null);
+    setStyleSaveError(null);
+  };
+
+  const handleUndoReuse = () => {
+    if (!sessionId || !reusedDraft || reusedDraft.fingerprint !== JSON.stringify(useCreateDraftStore.getState().drafts[sessionId])) return;
+    clearCreateReferenceUploads(sessionId);
+    focusDraft.current = true;
+    useCreateDraftStore.getState().resetDraft(sessionId, reusedDraft.previous);
+    setReusedDraft(null);
   };
 
   const handleGenerate = async () => {
@@ -298,14 +336,6 @@ export function CreateView() {
         {(() => {
           const hasSessionResults = generations.length > 0;
           const hasCanvasResults = galleryItemsFromCanvas(allNodes).length > 0;
-          if (!hasSessionResults && !hasCanvasResults) {
-            return (
-              <div className="create-view__hero">
-                <div className="create-view__hero-title">Start creating</div>
-                <div className="create-view__hero-sub">Describe an idea, pick a model, and generate. Your nodes build on the canvas as you go.</div>
-              </div>
-            );
-          }
           const defaultTab: 'session' | 'canvas' =
             selectedIds.size > 0 || (!hasSessionResults && hasCanvasResults)
               ? 'canvas'
@@ -321,6 +351,12 @@ export function CreateView() {
               onDelete={handleDelete}
               onReveal={handleReveal}
               onSaveToFolder={handleSaveToFolder}
+              history={runHistory}
+              onReuseSettings={handleReuseSettings}
+              emptyState={!hasSessionResults && !hasCanvasResults ? <div className="create-view__hero">
+                <div className="create-view__hero-title">Start creating</div>
+                <div className="create-view__hero-sub">Describe an idea, pick a model, and generate. Your nodes build on the canvas as you go.</div>
+              </div> : undefined}
             />
           );
         })()}
@@ -335,7 +371,12 @@ export function CreateView() {
           saving={savingStyle}
         />
       )}
-      <div className="create-view__composer-area">
+      <div ref={composerArea} className="create-view__composer-area">
+        {canUndoReuse && <div className="create-view__reuse-feedback">
+          <span role="status">Settings copied to draft. Generate when ready.</span>
+          {reusedDraft?.removedAttachments && <span>Unfinished attachments were removed. Reattach those files after Undo.</span>}
+          <button type="button" className="create-view__back" onClick={handleUndoReuse}>Undo</button>
+        </div>}
         <ReferenceTray refs={refs} uploads={uploads}
           onRemove={(fp) => setRefs((p) => p.filter((r) => r.filePath !== fp))}
           canRetry={(id) => Boolean(sessionId && canRetryCreateReference(sessionId, id))}

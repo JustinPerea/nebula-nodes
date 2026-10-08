@@ -5,6 +5,9 @@ import type { NodeData, PortValue } from '../../types';
 import { OutputRenderer } from './OutputRenderer';
 import { downloadTranscoded, DOWNLOAD_FORMATS } from '../../lib/createTranscode';
 import { usePanelFocus } from '../../hooks/usePanelFocus';
+import type { ResultContext } from '../../lib/resultContext';
+import { ResultDetails, ResultMetadata } from './ResultDetails';
+import { NODE_DEFINITIONS } from '../../constants/nodeDefinitions';
 
 function firstMediaUrl(outputs: Record<string, PortValue>): string | null {
   for (const t of ['Image', 'Video', 'Audio', 'Mesh', 'SVG'] as const) {
@@ -23,6 +26,11 @@ export interface ResultCardProps {
   onReveal?: (url: string) => void;
   onSaveToFolder?: (url: string) => Promise<{ savedPath: string }>;
   onZoom?: () => void;
+  context?: ResultContext;
+  onReuseSettings?: () => void;
+  onCompare?: () => void;
+  compareSelected?: boolean;
+  compareDisabled?: boolean;
 }
 
 export function ResultCard(props: ResultCardProps) {
@@ -34,7 +42,8 @@ export function ResultCard(props: ResultCardProps) {
   return <ResultCardOutput key={JSON.stringify([node.id, url])} {...props} node={node} url={url} />;
 }
 
-function ResultCardOutput({ node, prompt, url, onOpenInCanvas, onUseAsInput, onDelete, onReveal, onSaveToFolder, onZoom }: ResultCardProps & {
+function ResultCardOutput({ node, prompt, url, onOpenInCanvas, onUseAsInput, onDelete, onReveal, onSaveToFolder, onZoom,
+  context, onReuseSettings, onCompare, compareSelected, compareDisabled }: ResultCardProps & {
   node: Node<NodeData>;
   url: string | null;
 }) {
@@ -115,7 +124,7 @@ function ResultCardOutput({ node, prompt, url, onOpenInCanvas, onUseAsInput, onD
   };
 
   return (
-    <div className="result-card">
+    <div className={`result-card${compareSelected ? ' result-card--compared' : ''}`}>
       <div className="result-card__media">
         <OutputRenderer
           outputs={node.data.outputs}
@@ -147,8 +156,16 @@ function ResultCardOutput({ node, prompt, url, onOpenInCanvas, onUseAsInput, onD
         )}
       </div>
       <div className="result-card__details">
-        <div className="result-card__caption" title={node.data.label}>{node.data.label}</div>
-        {prompt && prompt !== node.data.label && <p className="result-card__prompt" title={prompt}>{prompt}</p>}
+        {(!context || node.data.label !== NODE_DEFINITIONS[node.data.definitionId]?.displayName) &&
+          <div className="result-card__caption" title={node.data.label}>{node.data.label}</div>}
+        {context && <ResultMetadata context={context} />}
+        {(context ? context.prompt : prompt) && <p className="result-card__prompt" title={context ? context.prompt : prompt}>{context ? context.prompt : prompt}</p>}
+        {context && <ResultDetails context={context} />}
+        {(onReuseSettings || onCompare) && <div className="result-card__recipe-actions">
+          {onReuseSettings && context?.reusableDraft && complete && <button type="button" onClick={onReuseSettings}>Reuse settings</button>}
+          {onCompare && <button type="button" aria-pressed={!!compareSelected} disabled={compareDisabled}
+            onClick={onCompare}>{compareSelected ? 'Selected for comparison' : 'Compare'}</button>}
+        </div>}
         <div className="result-card__actions">
           {url && isRaster ? (
             <span ref={downloadRef} className="result-card__dl">

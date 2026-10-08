@@ -111,6 +111,8 @@ Evidence labels below: **Browser** means observed in the synthetic local UI; **S
 
 ### 10. Give results context and a comparison workflow — P2, Browser + Source + Design
 
+**Implemented locally, 2026-10-08:** recorded model/time, expandable frozen recipes and connected inputs, pinned two-result comparison and explicit draft reuse/Undo. Ordinary execution now retains immutable output provenance. Tests, native-control limitations and synthetic browser evidence: [result context and comparison](result-context-comparison-2026-10-08.md).
+
 **Observed:** The gallery presents media with no model, time, prompt or recipe caption; similar images are hard to identify. Prompt/time metadata exists in gallery items but is dropped when rendering cards.
 
 **Change:** Add a compact model/time caption with expandable recipe details, side-by-side comparison and Reuse settings. Reusing should populate a draft; generating remains a separate explicit action. Earlier snapshots and run history stay immutable.
