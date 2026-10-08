@@ -5,6 +5,7 @@ import {
   BackgroundVariant,
   Panel,
   useReactFlow,
+  useInternalNode,
   useStore,
   type Connection,
   type NodeTypes,
@@ -208,6 +209,55 @@ function ZoomLodController({
   return null;
 }
 
+/** Complete cross-workspace focus only after React Flow has measured the target. */
+export function CanvasFocusController() {
+  const request = useUIStore((state) => state.canvasFocusRequest);
+  const viewMode = useUIStore((state) => state.viewMode);
+  const targetExists = useGraphStore((state) => (
+    !!request && state.nodes.some((node) => node.id === request.nodeId)
+  ));
+  const internalNode = useInternalNode(request?.nodeId ?? '');
+  const { fitView, viewportInitialized } = useReactFlow();
+  const startedRequestId = useRef<string | null>(null);
+  const clearRequest = useUIStore((state) => state.clearCanvasNodeFocus);
+
+  useEffect(() => {
+    if (!request || viewMode !== 'canvas') return;
+    const ui = useUIStore.getState();
+    if (ui.canvasFocusRequest?.requestId !== request.requestId || ui.viewMode !== 'canvas') return;
+    const graph = useGraphStore.getState();
+    if (!graph.nodes.some((node) => node.id === request.nodeId)) {
+      clearRequest(request.requestId);
+      if (ui.selectedNodeId === request.nodeId) ui.selectNode(null);
+      return;
+    }
+    if (!viewportInitialized || !internalNode?.measured.width || !internalNode.measured.height) return;
+    if (startedRequestId.current === request.requestId) return;
+    startedRequestId.current = request.requestId;
+    // Hydration/graphSync may have replaced selection while measurements were
+    // pending. Apply it to the current controlled graph before focusing.
+    graph.onNodesChange(graph.nodes.filter((node) => !!node.selected !== (node.id === request.nodeId)).map((node) => ({
+      id: node.id, type: 'select' as const, selected: node.id === request.nodeId,
+    })));
+    graph.onEdgesChange(graph.edges.filter((edge) => edge.selected).map((edge) => ({
+      id: edge.id, type: 'select' as const, selected: false,
+    })));
+    if (ui.selectedNodeId !== request.nodeId) ui.selectNode(request.nodeId);
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    void fitView({
+      nodes: [{ id: request.nodeId }],
+      padding: computeCanvasFitPadding(),
+      maxZoom: 1,
+      duration: reduceMotion ? 0 : 300,
+    }).then(
+      () => clearRequest(request.requestId),
+      () => clearRequest(request.requestId),
+    );
+  }, [request, viewMode, targetExists, viewportInitialized, internalNode, fitView, clearRequest]);
+
+  return null;
+}
+
 export function Canvas() {
   useSlavaHandleMagnetism();
 
@@ -224,6 +274,9 @@ export function Canvas() {
   const canvasLowDetail = useUIStore((s) => s.canvasLowDetail);
   const onboardingActive = useUIStore((s) => s.onboardingActive);
   const leftDock = useUIStore((s) => s.leftDock);
+  // Keep this mount's initial fit decision stable: consuming a handoff must
+  // not toggle fitView back on and queue a second fit of the complete graph.
+  const initialFitEnabled = useRef(useUIStore.getState().canvasFocusRequest === null).current;
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const showContextMenu = useUIStore((s) => s.showContextMenu);
   const hideContextMenu = useUIStore((s) => s.hideContextMenu);
@@ -312,6 +365,7 @@ export function Canvas() {
   // resized it still get a clean fit. Falls back to symmetric padding when
   // the panel is hidden.
   useEffect(() => {
+    const pendingFits = new Set<number>();
     function onNodesAdded(event: Event) {
       // Driver-side flag (DEV demo runs only) to suppress the auto-fit
       // when subsequent nodes arrive. Lets the driver own the post-first-
@@ -320,22 +374,32 @@ export function Canvas() {
         typeof window !== 'undefined' &&
         (window as unknown as { __nebulaSuppressFitView?: boolean }).__nebulaSuppressFitView;
       if (suppressed) return;
-      setTimeout(() => {
+      const focusState = useUIStore.getState();
+      if (focusState.canvasFocusRequest) return;
+      const scheduledRevision = focusState.canvasFocusRevision;
+      const timer = window.setTimeout(() => {
+        pendingFits.delete(timer);
+        const currentFocus = useUIStore.getState();
+        if (currentFocus.canvasFocusRequest || currentFocus.canvasFocusRevision !== scheduledRevision) return;
         const padding = computeCanvasFitPadding();
         const totalCount =
           event instanceof CustomEvent && typeof event.detail?.totalCount === 'number'
             ? event.detail.totalCount
-            : nodes.length;
+            : useGraphStore.getState().nodes.length;
         fitView({
           padding,
           duration: 400,
           maxZoom: totalCount <= 1 ? FIRST_NODE_FIT_MAX_ZOOM : DEFAULT_FIT_MAX_ZOOM,
         });
       }, 80);
+      pendingFits.add(timer);
     }
     window.addEventListener('nebula:graph-nodes-added', onNodesAdded);
-    return () => window.removeEventListener('nebula:graph-nodes-added', onNodesAdded);
-  }, [fitView, nodes.length]);
+    return () => {
+      window.removeEventListener('nebula:graph-nodes-added', onNodesAdded);
+      pendingFits.forEach((timer) => window.clearTimeout(timer));
+    };
+  }, [fitView]);
 
   // Track the connection being dragged so onConnectEnd knows what port it came from
   const connectStartRef = useRef<{ nodeId: string; handleId: string; handleType: 'source' | 'target' } | null>(null);
@@ -585,7 +649,7 @@ export function Canvas() {
         edgeTypes={edgeTypes}
         onNodeContextMenu={onNodeContextMenu}
         onPaneClick={onPaneClick}
-        fitView
+        fitView={initialFitEnabled}
         fitViewOptions={{ padding: computeCanvasFitPadding() }}
         minZoom={0.1}
         maxZoom={4}
@@ -604,6 +668,7 @@ export function Canvas() {
           patternClassName={isSlavaSkin ? 'slava-canvas-background__dot' : undefined}
         />
         <ZoomLodController wrapperRef={wrapperRef} threshold={0.4} enabled={canvasLowDetail} />
+        <CanvasFocusController />
         <Panel position="top-center" className="selection-toolbar-panel">
           <SelectionToolbar />
         </Panel>

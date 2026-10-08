@@ -82,7 +82,7 @@ from services.port_contracts import (
     validate_edge_contracts,
 )
 from services.file_access import ProtectedPathError, require_allowed_path, validate_file_references
-from services.output import OUTPUT_ROOT, DEFAULT_OUTPUT_ROOT, resolve_output_ref, ManifestError, find_output_record, read_manifest
+from services.output import OUTPUT_ROOT, DEFAULT_OUTPUT_ROOT, resolve_output_ref, portable_output_ref, ManifestError, find_output_record, read_manifest
 from services.image_input import is_remote_or_data_uri
 from services.cache import ExecutionCache
 from services.execution_runs import (
@@ -4381,6 +4381,144 @@ async def create_node_and_connect(body: dict[str, Any]) -> dict:
     return cli_graph.nodes[short_id]
 
 
+def _cinema_motion_image_ref(value: Any) -> str:
+    """Compare saved paths and browser previews without fetching any media."""
+    if not isinstance(value, str) or not value or value != value.strip():
+        raise ValueError("image reference must be a trimmed non-empty string")
+    if any(ord(character) < 32 or ord(character) == 127 for character in value):
+        raise ValueError("image reference contains control characters")
+    if value.startswith(("http://", "https://")):
+        parsed = urlsplit(value)
+        if not parsed.hostname or parsed.username or parsed.password:
+            raise ValueError("image reference must have a valid HTTP origin")
+        if parsed.hostname in {"localhost", "127.0.0.1", "::1"} and parsed.path.startswith("/api/outputs/"):
+            if parsed.query or parsed.fragment:
+                raise ValueError("local image reference cannot contain a query or fragment")
+            return portable_output_ref(parsed.path)
+        # Remote images are opaque identities, including signed query strings.
+        # A handoff connects existing media; it never downloads or generates it.
+        return value
+    return portable_output_ref(value)
+
+
+def _cinema_motion_source_position(node_id: str) -> dict[str, float]:
+    """Use the source's saved position or the same fallback as canvas export."""
+    positioned = {
+        node["id"]: node["position"]
+        for node in cli_graph.nodes.values()
+        if isinstance(node.get("position"), dict)
+        and "x" in node["position"] and "y" in node["position"]
+    }
+    if node_id in positioned:
+        position = {axis: float(positioned[node_id][axis]) for axis in ("x", "y")}
+        if not all(math.isfinite(value) for value in position.values()):
+            raise ValueError("Cinema source position requires finite coordinates")
+        return position
+    max_x = max((-300.0, *(float(position["x"]) for position in positioned.values())))
+    for existing_id in cli_graph.nodes:
+        if existing_id not in positioned:
+            max_x += 300.0
+            if existing_id == node_id:
+                return {"x": max_x, "y": 100.0}
+    raise ValueError("Cinema source position is unavailable")
+
+
+@app.post("/api/cinema/send-to-motion")
+async def send_cinema_shot_to_motion(body: dict[str, Any]) -> dict:
+    """Create or reuse an exact shot-to-Veo connection without running it.
+
+    Validation, candidate construction and durable adoption contain no await.
+    Overlapping requests in this server therefore see the committed edge and
+    retries after a lost acknowledgement do not produce duplicate nodes.
+    """
+    _validate_graph_ingress_complexity(body)
+    node_id = body.get("nodeId")
+    shot_id = body.get("shotId")
+    if not isinstance(node_id, str) or not node_id or not isinstance(shot_id, str) or not shot_id:
+        raise HTTPException(status_code=400, detail="nodeId and shotId must be non-empty strings")
+    try:
+        expected_image = _cinema_motion_image_ref(body.get("expectedImageUrl"))
+    except (ValueError, OSError, RuntimeError) as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid expected image: {exc}") from exc
+
+    source = cli_graph.nodes.get(node_id)
+    if source is None:
+        raise HTTPException(status_code=409, detail="The Cinema source was removed; reopen the current scene")
+    if source.get("definitionId") != "cinema-scene":
+        raise HTTPException(status_code=400, detail="The source must be a cinema-scene node")
+    scene = source.get("params", {}).get("scene")
+    shots = scene.get("shots") if isinstance(scene, dict) else None
+    matches = [shot for shot in shots if isinstance(shot, dict) and shot.get("id") == shot_id] if isinstance(shots, list) else []
+    if len(matches) != 1:
+        raise HTTPException(status_code=409, detail="The Cinema shot was removed or changed; reopen the current shot")
+    output = matches[0].get("output")
+    port_id = f"shot_{shot_id}"
+    port = source.get("outputs", {}).get(port_id)
+    if not isinstance(output, dict) or output.get("status") != "done" or not isinstance(port, dict) or port.get("type") != "Image":
+        raise HTTPException(status_code=409, detail="Wait for this shot's image to finish before sending it to motion")
+    try:
+        settled_image = _cinema_motion_image_ref(output.get("imageUrl"))
+        connected_image = _cinema_motion_image_ref(port.get("value"))
+    except (ValueError, OSError, RuntimeError) as exc:
+        raise HTTPException(status_code=409, detail="The shot's image is unavailable; refresh the current scene") from exc
+    if expected_image != settled_image or connected_image != settled_image:
+        raise HTTPException(status_code=409, detail="This shot's image changed; review the current image and send it again")
+
+    contracts = validate_edge_contracts(
+        [ContractNode(node_id=existing_id, definition_id=str(node.get("definitionId") or ""), params=node.get("params"))
+         for existing_id, node in cli_graph.nodes.items()],
+        [ContractEdge(edge_id=str(edge.get("id") or ""), source=str(edge.get("source") or ""),
+                      source_handle=edge.get("sourceHandle"), target=str(edge.get("target") or ""),
+                      target_handle=edge.get("targetHandle")) for edge in cli_graph.edges],
+        node_registry.get_all(),
+    )
+    # Graph edge order is stable across persistence/reload. Choose the first
+    # valid exact connection when a user has deliberately made several.
+    edge = next((edge for index, edge in enumerate(cli_graph.edges)
+                 if index in contracts.valid_edge_indexes
+                 and edge.get("source") == node_id and edge.get("sourceHandle") == port_id
+                 and edge.get("targetHandle") == "image"
+                 and cli_graph.nodes.get(edge.get("target"), {}).get("definitionId") == "veo-3"), None)
+    created = edge is None
+    if created:
+        definition = node_registry.get("veo-3")
+        if not definition:
+            raise HTTPException(status_code=400, detail="The Veo motion node is unavailable")
+        param_sources = ([*definition["sharedParams"], *definition.get("falParams", []), *definition.get("directParams", [])]
+                         if "sharedParams" in definition else definition.get("params", []))
+        defaults = {param["key"]: copy.deepcopy(param["default"]) for param in param_sources if "default" in param}
+        _validate_params("veo-3", defaults)
+        defaults = _coerce_params("veo-3", defaults)
+        try:
+            position = _cinema_motion_source_position(node_id)
+            candidate = cli_graph.clone()
+            target_id = candidate.add_node("veo-3", defaults, position={"x": position["x"] + 360.0, "y": position["y"]})
+            _validate_connect_handles(node_id, port_id, target_id, "image", graph=candidate)
+            edge = candidate.connect(node_id, port_id, target_id, "image")
+            # CLIGraph's sequential edge allocator can collide after deletion.
+            # Keep this new connection's identity valid before durable adoption.
+            used_edge_ids = {existing["id"] for existing in candidate.edges[:-1]}
+            edge_number = len(candidate.edges)
+            while edge["id"] in used_edge_ids:
+                edge_number += 1
+                edge["id"] = f"e{edge_number}"
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=f"Cannot connect this shot to motion: {exc}") from exc
+        # This action adds only an ordinary Veo node/edge. Existing recovery
+        # records and every other node's authoring/results remain unchanged.
+        cli_graph.replace_with(candidate)
+    assert edge is not None
+    target = cli_graph.nodes[edge["target"]]
+    response = {
+        "node": copy.deepcopy(_cli_node_to_rf(target, _cinema_motion_source_position(target["id"]), node_registry.get_all())),
+        "edge": {**copy.deepcopy(edge), "type": "typed-edge", "data": {"dataType": "Image"}},
+    }
+    if created:
+        await _broadcast_graph_sync()
+        publish_action(f"Connected Cinema {node_id}:{port_id} to Veo ({target['id']})")
+    return response
+
+
 @app.get("/api/graph")
 async def get_graph() -> dict:
     return cli_graph.get_state()
@@ -5281,7 +5419,10 @@ async def export_graph_for_frontend() -> dict:
         src_node = cli_graph.nodes.get(e["source"], {})
         src_def = all_defs.get(src_node.get("definitionId", ""), {})
         data_type = "Any"
-        for port in src_def.get("outputPorts", []):
+        src_ports = (cinema_output_ports(src_node.get("params"))
+                     if src_node.get("definitionId") == "cinema-scene"
+                     else src_def.get("outputPorts", []))
+        for port in src_ports:
             if port["id"] == e["sourceHandle"]:
                 data_type = port["dataType"]
                 break

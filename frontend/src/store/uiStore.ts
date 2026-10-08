@@ -140,6 +140,10 @@ interface ConnectionPopupState {
 
 interface UIState {
   selectedNodeId: string | null;
+  /** A volatile handoff: consumed only after Canvas can measure this node. */
+  canvasFocusRequest: { nodeId: string; requestId: string } | null;
+  /** Retained after consumption so delayed automatic fits can yield to a handoff. */
+  canvasFocusRevision: number;
 
   // Editor view state — Phase 1 video-editor pivot
   viewMode: ViewMode;
@@ -258,6 +262,8 @@ interface UIState {
   resetTimelineZoom: () => void;
 
   selectNode: (nodeId: string | null) => void;
+  requestCanvasNodeFocus: (nodeId: string) => void;
+  clearCanvasNodeFocus: (requestId: string) => void;
   setInspectorVisible: (visible: boolean) => void;
   setInspectorPinned: (pinned: boolean) => void;
   togglePanel: (panel: 'library' | 'inspector' | 'settings' | 'chat' | 'moodboard' | 'character' | 'assets' | 'history') => void;
@@ -293,6 +299,8 @@ interface UIState {
 
 export const useUIStore = create<UIState>((set, get) => ({
   selectedNodeId: null,
+  canvasFocusRequest: null,
+  canvasFocusRevision: 0,
   viewMode: 'canvas',
   commonsEnabled: false,
   commonsReturnView: 'canvas',
@@ -535,6 +543,35 @@ export const useUIStore = create<UIState>((set, get) => ({
         },
       },
     })),
+
+  requestCanvasNodeFocus: (nodeId) => {
+    const targetId = nodeId.trim();
+    if (!targetId) return;
+    const graph = useGraphStore.getState();
+    if (graph.nodes.some((node) => node.id === targetId)) {
+      graph.onNodesChange(graph.nodes.map((node) => ({
+        id: node.id,
+        type: 'select' as const,
+        selected: node.id === targetId,
+      })));
+      graph.onEdgesChange(graph.edges.filter((edge) => edge.selected).map((edge) => ({
+        id: edge.id, type: 'select' as const, selected: false,
+      })));
+    }
+    get().selectNode(targetId);
+    set((state) => ({
+      viewMode: 'canvas',
+      cinemaEditorNodeId: null,
+      canvasFocusRequest: { nodeId: targetId, requestId: uuidv4() },
+      canvasFocusRevision: state.canvasFocusRevision + 1,
+    }));
+  },
+
+  clearCanvasNodeFocus: (requestId) => set((state) => (
+    state.canvasFocusRequest?.requestId === requestId
+      ? { canvasFocusRequest: null }
+      : {}
+  )),
 
   setInspectorVisible: (visible) =>
     set((state) => ({

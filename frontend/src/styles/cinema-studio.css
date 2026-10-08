@@ -583,6 +583,7 @@ body.app-slava-restraint .cinema-shot-panel__toggle {
 
 body.app-slava-restraint .cinema-shot-panel__actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   margin-top: 4px;
 }
@@ -610,6 +611,25 @@ body.app-slava-restraint .cinema-shot-panel__action--primary {
 body.app-slava-restraint .cinema-shot-panel__action:disabled {
   opacity: var(--sr-disabled-opacity, 0.5);
   cursor: default;
+}
+
+body.app-slava-restraint .cinema-shot-panel__motion {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+body.app-slava-restraint .cinema-shot-panel__motion-feedback {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--sr-ink-meta);
+  overflow-wrap: anywhere;
+}
+
+body.app-slava-restraint .cinema-shot-panel__motion-feedback[role="alert"] {
+  color: var(--sr-danger, #c0392b);
 }
 
 /* Upload state stays outside the thumbnail row so filenames and recovery

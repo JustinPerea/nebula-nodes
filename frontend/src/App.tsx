@@ -91,6 +91,9 @@ function GraphHydrator() {
 
   useEffect(() => {
     let cancelled = false;
+    const initialFocus = useUIStore.getState();
+    const initialFocusRevision = initialFocus.canvasFocusRevision;
+    const initialFocusPending = initialFocus.canvasFocusRequest !== null;
     // A persisted running World Labs record owns the global paid-start lock
     // before the Canvas becomes interactive. Reconcile its client-owned run ID
     // independently of whether cli_graph is empty or reachable.
@@ -125,7 +128,11 @@ function GraphHydrator() {
           data.edges as Edge[],
           { allowDuringExecution: true, preserveCinemaUploads: true },
         );
-        setTimeout(() => fitView({ padding: computeCanvasFitPadding(), duration: 300 }), 50);
+        setTimeout(() => {
+          const focus = useUIStore.getState();
+          if (cancelled || initialFocusPending || focus.viewMode !== 'canvas' || focus.canvasFocusRequest || focus.canvasFocusRevision !== initialFocusRevision) return;
+          void fitView({ padding: computeCanvasFitPadding(), duration: 300 });
+        }, 50);
       } catch {
         if (cancelled) return;
         // Backend down on first load: keep the blank canvas clean. The graph

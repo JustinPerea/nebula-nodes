@@ -3,7 +3,8 @@ import { backendAssetUrlSync } from '../../lib/backend';
 import { attachCinemaReferences, removeCinemaReferenceUpload, retryCinemaReferenceUpload } from '../../lib/cinemaUploads';
 import { getCinemaUploadIssue, useCinemaUploadStore } from '../../store/cinemaUploadStore';
 import { useGraphStore } from '../../store/graphStore';
-import { shotPortId } from '../../constants/ports';
+import { sendCinemaShotToMotion, viewCinemaMotionNode } from '../../lib/cinemaMotion';
+import { useCinemaMotionStore } from '../../store/cinemaMotionStore';
 import type { CinemaSceneSpec, CinemaShot } from '../../types';
 
 interface CinemaShotPanelProps {
@@ -13,16 +14,8 @@ interface CinemaShotPanelProps {
   onChangeShot: (update: (current: CinemaShot) => CinemaShot) => void;
 }
 
-/** Motion model the "Send to motion" button targets. veo-3's first-frame input
- *  port is `image` (see nodeDefinitions). Swap to seedance/kling by changing
- *  this pair — both expose an equivalent first-frame Image input. */
-const MOTION_TARGET = { definitionId: 'veo-3', firstFramePort: 'image' };
-
-const CLI_ID_RE = /^n\d+$/;
-
 export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: CinemaShotPanelProps) {
   const refInputRef = useRef<HTMLInputElement>(null);
-  const [sentToMotion, setSentToMotion] = useState(false);
   const [variationCount, setVariationCount] = useState(2);
 
   const executeNode = useGraphStore((s) => s.executeNode);
@@ -35,9 +28,7 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
   const shotRun = activeRuns.find((run) => run.kind === 'cinema-shot' && run.nodeId === cinemaNodeId && run.shotId === shot.id);
   const overlappingGraph = activeRuns.some((run) => run.kind === 'graph' && run.nodeIds.includes(cinemaNodeId));
   const admissionBlocked = useGraphStore((state) => state.isShotAdmissionBlocked(cinemaNodeId, shot.id));
-  const addNodeAndConnect = useGraphStore((s) => s.addNodeAndConnect);
-  const addNode = useGraphStore((s) => s.addNode);
-  const onConnect = useGraphStore((s) => s.onConnect);
+  const motionHandoff = useCinemaMotionStore((state) => state.handoffs.find((item) => item.nodeId === cinemaNodeId && item.shotId === shot.id));
   const uploads = useCinemaUploadStore((state) => state.uploads);
   const shotUploads = uploads.filter((upload) => upload.nodeId === cinemaNodeId && upload.shotId === shot.id);
   const referenceIssue = getCinemaUploadIssue(cinemaNodeId, shot.id);
@@ -114,39 +105,6 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
   const handleGenerateVariations = () => {
     if (getCinemaUploadIssue(cinemaNodeId, shot.id)) return;
     executeShot(cinemaNodeId, shot.id, undefined, variationCount);
-  };
-
-  // Send to motion (spec §8): create a veo-3 node on the canvas and wire THIS
-  // shot's output port into its first-frame Image input. CLI-origin scene nodes
-  // use the atomic addNodeAndConnect path (mirrors ConnectionPopup); frontend-
-  // only UUID nodes fall back to addNode + local onConnect.
-  const handleSendToMotion = async () => {
-    const node = useGraphStore.getState().nodes.find((n) => n.id === cinemaNodeId);
-    const basePos = node?.position ?? { x: 0, y: 0 };
-    const position = { x: basePos.x + 360, y: basePos.y };
-    const sourceHandle = shotPortId(shot.id);
-
-    if (CLI_ID_RE.test(cinemaNodeId)) {
-      await addNodeAndConnect(MOTION_TARGET.definitionId, position, {
-        source: cinemaNodeId,
-        sourceHandle,
-        target: '',
-        targetHandle: MOTION_TARGET.firstFramePort,
-        newNodeIs: 'target',
-      });
-    } else {
-      const newId = await addNode(MOTION_TARGET.definitionId, position);
-      if (newId) {
-        onConnect({
-          source: cinemaNodeId,
-          sourceHandle,
-          target: newId,
-          targetHandle: MOTION_TARGET.firstFramePort,
-        });
-      }
-    }
-    setSentToMotion(true);
-    window.setTimeout(() => setSentToMotion(false), 2500);
   };
 
   return (
@@ -333,14 +291,28 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
         >
           Generate all
         </button>
-        <button
-          type="button"
-          className="cinema-shot-panel__action"
-          onClick={handleSendToMotion}
-          title="Create a Veo 3 node wired to this shot's output"
-        >
-          {sentToMotion ? 'Sent ✓' : 'Send to motion ▸'}
+      </div>
+      <div className="cinema-shot-panel__motion">
+        <button type="button" className="cinema-shot-panel__action"
+          onClick={() => motionHandoff?.status === 'ready'
+            ? viewCinemaMotionNode(cinemaNodeId, shot.id) : void sendCinemaShotToMotion(cinemaNodeId, shot.id)}
+          disabled={isImportingGraph || motionHandoff?.status === 'pending'
+            || (motionHandoff?.status !== 'ready' && (shotRunning || status !== 'done' || !previewUrl))}
+          aria-busy={motionHandoff?.status === 'pending' || undefined}>
+          {motionHandoff?.status === 'ready' ? 'View video node'
+            : motionHandoff?.status === 'pending' ? 'Connecting video node…'
+              : motionHandoff?.status === 'error' ? 'Retry connection' : 'Send to motion'}
         </button>
+        {motionHandoff?.status === 'error' ? (
+          <p className="cinema-shot-panel__motion-feedback" role="alert">{motionHandoff.error}</p>
+        ) : (
+          <p className="cinema-shot-panel__motion-feedback" role={motionHandoff ? 'status' : undefined}>
+            {motionHandoff?.status === 'ready' ? 'Video node connected. Open it to set the prompt and generate.'
+              : motionHandoff?.status === 'pending' ? 'Connecting this shot to a video node…'
+                : !previewUrl || status !== 'done' ? 'Generate a shot before sending it to motion.'
+                  : 'Connects this shot to a video node. Generate when you’re ready.'}
+          </p>
+        )}
       </div>
     </div>
   );

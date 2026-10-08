@@ -72,6 +72,7 @@ import { wsClient, type ExecutionEvent } from '../lib/wsClient';
 import { notifyJobComplete } from '../lib/jobNotifications';
 import { useUIStore } from './uiStore';
 import { getCinemaUploadIssue, useCinemaUploadStore } from './cinemaUploadStore';
+import { cinemaMotionSource, cinemaMotionTarget, useCinemaMotionStore } from './cinemaMotionStore';
 import { isKreaGateway, normalizeKreaMode, nodeKeyStatus, withNewKreaMode } from '../lib/kreaConnection';
 import { clipSpeed, type EditClip } from '../lib/editor/virtualPlayback';
 import type { KeyframeData, VideoGraphManifest, TrackItem } from '../types/video';
@@ -254,6 +255,14 @@ function pendingCinemaUploadIssue(nodes: Node<NodeData>[], selected?: { nodeId: 
 
 function warnPendingCinemaUpload(issue: string): void {
   if (typeof window !== 'undefined') window.alert(issue);
+}
+
+function clearReplacedCanvasFocus(): void {
+  const ui = useUIStore.getState();
+  const request = ui.canvasFocusRequest;
+  if (!request) return;
+  ui.clearCanvasNodeFocus(request.requestId);
+  if (ui.selectedNodeId === request.nodeId) ui.selectNode(null);
 }
 
 function markExecutionScopeQueued(
@@ -602,6 +611,7 @@ interface GraphState {
   // when the backend is unreachable (local-only fallback). A backend rejection
   // resolves to null and leaves the canvas unchanged.
   addNode: (definitionId: string, position: { x: number; y: number }) => Promise<string | null>;
+  addLocalCinemaMotionNode: (nodeId: string, shotId: string) => string | null;
   addDynamicNode: (definitionId: string, position: { x: number; y: number }) => string | null;
   addNodeAndConnect: (
     definitionId: string,
@@ -1911,6 +1921,7 @@ async function reconcilePendingNodeCreation(
 wsClient.connect();
 wsClient.subscribe((event) => {
   if (event.type === 'graphSync') {
+    useCinemaMotionStore.getState().observeGraphSync();
     // Real-time sync: MERGE cli_graph into the canvas. Key invariant: frontend-only
     // nodes (library drags, undo'd results, etc.) must survive graphSync — only
     // cli-origin nodes are authoritative from the server. Same for edges.
@@ -1937,6 +1948,8 @@ wsClient.subscribe((event) => {
       // Revoke old same-ID uploads/writes and suspended drafts before merging.
       clearCinemaScenePersistence();
       useCinemaUploadStore.getState().clear();
+      useCinemaMotionStore.getState().clear();
+      clearReplacedCanvasFocus();
     }
     useGraphStore.getState().hydrateProviderRecoveries(providerRecoveries);
     useGraphStore.getState().hydrateProviderStartAmbiguities(providerStartAmbiguities);
@@ -2084,8 +2097,14 @@ wsClient.subscribe((event) => {
     const edgeKey = (e: Edge): string =>
       `${e.source}:${e.sourceHandle ?? ''}->${e.target}:${e.targetHandle ?? ''}`;
     const cliEdgeKeys = new Set((cliEdges as Edge[]).map(edgeKey));
+    const confirmedMotion = useCinemaMotionStore.getState().handoffs.filter((item) => item.status === 'ready' && item.targetId);
     const frontendOnlyEdges = graphReplaced ? [] : state.edges.filter(
-      (e) => !cliEdgeKeys.has(edgeKey(e)) && mergedIds.has(e.source) && mergedIds.has(e.target),
+      (e) => !cliEdgeKeys.has(edgeKey(e)) && mergedIds.has(e.source) && mergedIds.has(e.target)
+        // A confirmed server-owned motion wire omitted by newer canonical
+        // state was removed. Keep other optimistic frontend edges unchanged.
+        && !confirmedMotion.some((item) => CLI_ID_RE.test(item.nodeId) && CLI_ID_RE.test(item.targetId!)
+          && e.source === item.nodeId && e.sourceHandle === shotPortId(item.shotId)
+          && e.target === item.targetId && e.targetHandle === 'image'),
     );
     const mergedEdges = [...frontendOnlyEdges, ...cliEdges];
 
@@ -2570,6 +2589,31 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     }
     if (pendingNodeCreationAttempt === attempt) pendingNodeCreationAttempt = null;
     return node.id;
+  },
+
+  addLocalCinemaMotionNode: (nodeId, shotId) => {
+    if (get().isImportingGraph || CLI_ID_RE.test(nodeId)) return null;
+    const source = cinemaMotionSource(get().nodes, nodeId, shotId);
+    if (!source || source.shot.output?.status !== 'done' || !source.shot.output.imageUrl) return null;
+    const existing = cinemaMotionTarget(get().nodes, get().edges, nodeId, shotId);
+    if (existing) return existing;
+    const definition = NODE_DEFINITIONS['veo-3'];
+    if (!definition) return null;
+    const params: Record<string, unknown> = {};
+    for (const param of definition.sharedParams
+      ? [...definition.sharedParams, ...(definition.falParams ?? []), ...(definition.directParams ?? [])] : definition.params) {
+      if (param.default !== undefined) params[param.key] = structuredClone(param.default);
+    }
+    const targetId = uuidv4();
+    const target: Node<NodeData> = { id: targetId, type: 'model-node',
+      position: { x: source.node.position.x + 360, y: source.node.position.y },
+      data: { label: definition.displayName, definitionId: 'veo-3', params, outputs: {}, state: 'idle',
+        keyStatus: nodeKeyStatus(definition, params, useUIStore.getState().settingsCache) } };
+    const edge: Edge = { id: uuidv4(), type: 'typed-edge', source: nodeId, sourceHandle: shotPortId(shotId),
+      target: targetId, targetHandle: 'image', data: { dataType: 'Image' } };
+    pushUndo(set, get);
+    set((state) => ({ nodes: [...state.nodes, target], edges: [...state.edges, edge] }));
+    return targetId;
   },
 
   addNodeAndConnect: async (definitionId, position, connect) => {
@@ -3490,6 +3534,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     if (state.isImportingGraph || state.isExecuting || state.createLaunchingIds.length > 0) return false;
     suspendCinemaScenePersistence();
     useCinemaUploadStore.getState().interrupt();
+    useCinemaMotionStore.getState().interruptPending();
     set({ isImportingGraph: true });
     return true;
   },
@@ -4492,6 +4537,8 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   loadGraph: (nodes, edges, options) => {
     if (get().isExecuting && !options?.allowDuringExecution) return;
     clearCinemaScenePersistence();
+    useCinemaMotionStore.getState().clear();
+    if (!options?.preserveCinemaUploads) clearReplacedCanvasFocus();
     if (!options?.preserveCinemaUploads) useCinemaUploadStore.getState().clear();
     // Hydration/import must never release a paid-run owner. Only terminal
     // execution events or status reconciliation may unlock the Run control.
@@ -4577,6 +4624,8 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     } = get();
     if (isExecuting || providerRecoveries.length > 0 || providerStartAmbiguities.length > 0) return;
     clearCinemaScenePersistence();
+    useCinemaMotionStore.getState().clear();
+    clearReplacedCanvasFocus();
     useCinemaUploadStore.getState().clear();
     const snapshot = createSnapshot(nodes, edges);
     const newStack = [...undoStack, snapshot];
@@ -5103,6 +5152,8 @@ export const useGraphStore = create<GraphState>((set, get) => ({
 // Removal/wrong-type replacement permanently revokes ownership. Undoing the
 // deletion may restore the graph, but cannot restore an old upload request.
 useGraphStore.subscribe((state, previous) => {
+  if (state.nodes === previous.nodes && state.edges === previous.edges) return;
+  useCinemaMotionStore.getState().reconcile(state.nodes, state.edges);
   if (state.nodes === previous.nodes) return;
   // Before authoritative hydration, an empty local graph does not mean a
   // restored interrupted-upload target was deleted from the saved graph.

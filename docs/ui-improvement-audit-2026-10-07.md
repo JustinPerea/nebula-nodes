@@ -158,3 +158,10 @@ The original audit does not claim live provider generation, native file-dialog s
 - Final integrated checks passed: 3,425 backend tests, 1,298 frontend tests in 136 files, full lint, TypeScript/production build/budget, independent review and staged whitespace/credential scans.
 - Verification and proof limits: [Cinema and Settings repair acceptance](cinema-settings-ui-repairs-2026-10-07.md). The native chooser is still unverified; no paid provider, real credential, packaged Electron or main publication was used.
 - The next correctness item is truthful Send to motion feedback (item 9); Cinema selected-shot layout/override controls and keyboard selection also remain. Discovery, onboarding, full recipe comparison and shared workspace chrome are still outstanding.
+
+## Third repair slice — 2026-10-08
+
+- Implemented item 9: dependable motion handoff feedback, confirmed typed connection, idempotent retry and View video node with Canvas selection/centering. Sending and navigation never generate.
+- Protected handoff ownership against shot switching, deletion/retyping, replacement, stale HTTP and canonical edge-only removal. Earlier results/history remain intact; local scene handoff has one undo snapshot.
+- Final checks passed: 3,465 backend tests, 1,342 frontend tests in 140 files, lint/TypeScript/production build/budget and independent review. Native Chrome verified failure/retry/connection/focused return with synthetic logos and no generation.
+- Acceptance and protocol ceiling: [Cinema motion handoff](cinema-motion-handoff-2026-10-08.md). Cinema selected-shot layout/override controls and keyboard selection are the next slice; discovery, onboarding, recipe comparison and shared workspace chrome remain.
