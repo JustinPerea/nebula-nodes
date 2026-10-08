@@ -76,14 +76,17 @@ const CommonsView = lazy(() =>
  * saves a CLI-button click every time the user refreshes during a Daedalus
  * session. Scoped to "only when the canvas is empty" so an in-progress local
  * edit isn't clobbered. Lives inside ReactFlowProvider so it can fit the
- * viewport after painting; in StrictMode the effect runs twice, but the
- * hasRunRef guard makes the second pass a no-op. */
+ * viewport after painting; cancelled effects cannot mutate state after the
+ * StrictMode cleanup. */
 /** First-run onboarding only fires when (a) it's genuinely the first run and
- * (b) the canvas resolved to empty. The guard keeps it idempotent under the
- * StrictMode double-invoke of GraphHydrator's effect. */
+ * (b) the current Canvas is still empty. Read the latest state after hydration:
+ * authoring work, studio navigation or a tour started by Help takes priority. */
 function maybeStartOnboarding() {
   const ui = useUIStore.getState();
-  if (!ui.hasOnboarded && !ui.onboardingActive) ui.startOnboarding();
+  if (ui.viewMode !== 'canvas' || useGraphStore.getState().nodes.length > 0
+    || ui.hasOnboarded || ui.onboardingActive) return;
+  ui.resetPanelsForFreshCanvas();
+  ui.startOnboarding();
 }
 
 function GraphHydrator() {
@@ -119,7 +122,6 @@ function GraphHydrator() {
         }
         if (useGraphStore.getState().nodes.length > 0) return;
         if (data.empty) {
-          useUIStore.getState().resetPanelsForFreshCanvas();
           maybeStartOnboarding();
           return;
         }
@@ -135,9 +137,8 @@ function GraphHydrator() {
         }, 50);
       } catch {
         if (cancelled) return;
-        // Backend down on first load: keep the blank canvas clean. The graph
-        // store will clear stale cli_graph state before the first manual add.
-        useUIStore.getState().resetPanelsForFreshCanvas();
+        // A backend failure can arrive after the user has already started work.
+        // Only the untouched first-run Canvas still owns automatic onboarding.
         maybeStartOnboarding();
       }
     })();

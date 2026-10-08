@@ -13,6 +13,7 @@ import type { Preset } from '../lib/createPresets';
 import type { ProviderSetupTarget } from '../lib/providerReadiness';
 import { useProviderReadinessStore } from './providerReadinessStore';
 import { useGraphStore } from './graphStore';
+import { ONBOARDING_TOUR } from '../lib/onboarding';
 
 const AGENT_LOG_ENABLED_KEY = 'nebula:agentLog:enabled';
 const CANVAS_PERF_MODE_KEY = 'nebula:canvas:perfMode';
@@ -743,9 +744,13 @@ export const useUIStore = create<UIState>((set, get) => ({
     }
   },
 
-  startOnboarding: () => set({ onboardingActive: true, onboardingStep: 0 }),
-  nextOnboardingStep: () => set((s) => ({ onboardingStep: s.onboardingStep + 1 })),
-  prevOnboardingStep: () => set((s) => ({ onboardingStep: Math.max(0, s.onboardingStep - 1) })),
+  // The tour lives on Canvas. Navigation must retain authoring and run state,
+  // including a studio's draft; it never loads an example or runs a model.
+  startOnboarding: () => set({ viewMode: 'canvas', isPlaying: false, onboardingActive: true, onboardingStep: 0 }),
+  nextOnboardingStep: () => set((s) => s.onboardingActive
+    ? { onboardingStep: Math.min(ONBOARDING_TOUR.length, s.onboardingStep + 1) } : {}),
+  prevOnboardingStep: () => set((s) => s.onboardingActive
+    ? { onboardingStep: Math.max(0, s.onboardingStep - 1) } : {}),
   finishOnboarding: () => {
     persistOnboarded(true);
     set({ hasOnboarded: true, onboardingActive: false, onboardingStep: 0 });

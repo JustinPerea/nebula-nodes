@@ -181,3 +181,10 @@ The original audit does not claim live provider generation, native file-dialog s
 - Corrected readiness for legacy Ideogram Reframe fallback, direct-key precedence, saved Krea billing modes and keyless local/OAuth prerequisites. Models remain browsable and addable while disconnected.
 - Final gates passed: 1,475 frontend tests/148 files, lint/style guards, TypeScript/production build/budget, all 255 node contracts and independent review. Native Chrome normal/200% checks used synthetic connections, retained seven earlier nodes/six edges and sent zero generation requests.
 - Acceptance and proof limits: [Model discovery and setup](model-discovery-setup-2026-10-08.md). Onboarding (item 8), full recipe comparison (item 10) and shared workspace chrome (item 11) remain outstanding.
+
+## Sixth repair slice — 2026-10-08
+
+- Implemented item 8: a current optional five-step tour, stable rail/chat targets, catalog-derived count and measured bounded placement. Safe Start browsing replaces destructive welcome sample loading.
+- Added modal focus/background/shortcut ownership, opener/Help restoration and predictable navigation/reopening without graph, draft, recipe or run changes. Delayed startup hydration yields to new work, studio navigation and active/completed tours.
+- Final checks passed: 1,523 frontend tests/151 files, lint/style guards, TypeScript/production build/budget, all 255 node contracts and independent review. Native Chrome normal/200% exercised every live target, navigation/dismissal and Create draft retention. Seven synthetic nodes/six edges stayed unchanged with zero generation or connection checks.
+- Acceptance and proof limits: [Onboarding repair](onboarding-current-navigation-2026-10-08.md). Full recipe comparison (item 10) and shared workspace chrome (item 11) remain outstanding.

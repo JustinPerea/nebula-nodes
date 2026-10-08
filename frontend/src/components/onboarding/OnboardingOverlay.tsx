@@ -1,21 +1,17 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { createPortal } from 'react-dom';
+import { ONBOARDING_HELP_SELECTOR, ONBOARDING_TOUR, placeOnboardingTooltip, type OnboardingPlacement } from '../../lib/onboarding';
 import { useUIStore } from '../../store/uiStore';
-import { useGraphStore } from '../../store/graphStore';
 import './onboarding.css';
 
-interface TourStep {
-  selector: string;
-  title: string;
-  body: string;
-}
+const FOCUSABLE = 'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
-// Targets are the always-mounted canvas panel-launcher buttons (App.tsx).
-const TOUR: TourStep[] = [
-  { selector: '.panel-launcher--nodes', title: 'Node Library', body: 'Drag any of 138 nodes onto the canvas and wire them up.' },
-  { selector: '.panel-launcher--create', title: 'Create', body: 'Prefer prompts? Generate in a prompt-first view — no wiring needed.' },
-  { selector: '.panel-launcher--chat', title: 'Agent', body: 'Or just describe what you want — the agent builds the graph for you.' },
-  { selector: '.panel-launcher--assets', title: 'Assets', body: 'Reusable characters, moodboards, and styles — drag any onto the canvas.' },
-];
+function available(element: HTMLElement): boolean {
+  const style = window.getComputedStyle(element);
+  return element.isConnected && !element.matches(':disabled')
+    && !element.closest('[inert], [hidden], [aria-hidden="true"]')
+    && style.display !== 'none' && style.visibility !== 'hidden';
+}
 
 export function OnboardingOverlay() {
   const active = useUIStore((s) => s.onboardingActive);
@@ -23,134 +19,195 @@ export function OnboardingOverlay() {
   const next = useUIStore((s) => s.nextOnboardingStep);
   const prev = useUIStore((s) => s.prevOnboardingStep);
   const finish = useUIStore((s) => s.finishOnboarding);
-  const togglePanel = useUIStore((s) => s.togglePanel);
-  const loadSampleGraph = useGraphStore((s) => s.loadSampleGraph);
-
-  const [rect, setRect] = useState<DOMRect | null>(null);
-
-  const tourIndex = step - 1;
-  const tourStep = tourIndex >= 0 && tourIndex < TOUR.length ? TOUR[tourIndex] : null;
+  const setLeftDock = useUIStore((s) => s.setLeftDock);
+  const overlayRef = useRef<HTMLDivElement>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
+  const titleId = useId();
+  const descriptionId = useId();
+  const [layout, setLayout] = useState<{ step: number; placement: OnboardingPlacement } | null>(null);
+  const tourStep = ONBOARDING_TOUR[step - 1];
+  const placement = layout?.step === step ? layout.placement : null;
 
   const advance = useCallback(() => {
-    if (tourIndex >= TOUR.length - 1) finish();
+    if (step >= ONBOARDING_TOUR.length) finish();
     else next();
-  }, [tourIndex, next, finish]);
+  }, [step, next, finish]);
 
-  // Esc to skip the whole thing.
-  useEffect(() => {
-    if (!active) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') finish();
+  useLayoutEffect(() => {
+    const overlay = overlayRef.current;
+    const card = cardRef.current;
+    if (!active || !overlay || !card) return;
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const background = new Map<Element, { inert: string | null; hidden: string | null }>();
+    // Let the card's own scroll region reveal its focused control at high zoom.
+    const focusCard = () => (card.querySelector<HTMLElement>('[data-onboarding-primary]') ?? card).focus();
+    // Move focus before hiding the opener's subtree from assistive technology.
+    focusCard();
+    const isolate = () => {
+      for (const sibling of document.body.children) {
+        if (sibling === overlay || background.has(sibling)) continue;
+        background.set(sibling, { inert: sibling.getAttribute('inert'), hidden: sibling.getAttribute('aria-hidden') });
+        sibling.setAttribute('inert', '');
+        sibling.setAttribute('aria-hidden', 'true');
+      }
     };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    isolate();
+    const observer = new MutationObserver(isolate);
+    observer.observe(document.body, { childList: true });
+    const containFocus = (event: FocusEvent) => {
+      if (event.target instanceof Node && !overlay.contains(event.target)) focusCard();
+    };
+    document.addEventListener('focusin', containFocus);
+    const containUnfocusedKey = (event: globalThis.KeyboardEvent) => {
+      if (event.target instanceof Node && overlay.contains(event.target)) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      if (event.key === 'Escape') finish();
+      else focusCard();
+    };
+    document.addEventListener('keydown', containUnfocusedKey, true);
+    return () => {
+      observer.disconnect();
+      document.removeEventListener('focusin', containFocus);
+      document.removeEventListener('keydown', containUnfocusedKey, true);
+      for (const [element, prior] of background) {
+        if (prior.inert === null) element.removeAttribute('inert');
+        else element.setAttribute('inert', prior.inert);
+        if (prior.hidden === null) element.removeAttribute('aria-hidden');
+        else element.setAttribute('aria-hidden', prior.hidden);
+      }
+      if (opener && opener !== document.body && opener !== document.documentElement && available(opener)) {
+        opener.focus({ preventScroll: true });
+        if (document.activeElement === opener) return;
+      }
+      const help = document.querySelector<HTMLElement>(ONBOARDING_HELP_SELECTOR);
+      if (help && available(help)) help.focus({ preventScroll: true });
+    };
   }, [active, finish]);
 
-  // Measure the current tour target's position (recompute on resize). If the
-  // target isn't in the DOM we fall back to a centered tooltip (no spotlight).
-  useEffect(() => {
-    // Stale rect from a prior step never renders (component returns null when
-    // inactive / on the welcome card), so there's no need to clear it here.
-    if (!active || !tourStep) return;
+  useLayoutEffect(() => {
+    if (!active) return;
+    (cardRef.current?.querySelector<HTMLElement>('[data-onboarding-primary]') ?? cardRef.current)?.focus();
+  }, [active, step]);
+
+  useLayoutEffect(() => {
+    const card = cardRef.current;
+    const overlay = overlayRef.current;
+    if (!active || !tourStep || !card || !overlay) return;
+    let target: HTMLElement | null = null;
+    let disposed = false;
+    const resizeObserver = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(() => measure()) : null;
     const measure = () => {
-      const el = document.querySelector(tourStep.selector);
-      setRect(el ? el.getBoundingClientRect() : null);
+      if (disposed) return;
+      const candidate = document.querySelector<HTMLElement>(tourStep.selector);
+      if (candidate !== target) {
+        if (target) resizeObserver?.unobserve(target);
+        target = candidate;
+        if (target) resizeObserver?.observe(target);
+      }
+      const style = target ? window.getComputedStyle(target) : null;
+      const rect = target && !target.closest('[hidden]') && style?.display !== 'none' && style?.visibility !== 'hidden'
+        ? target.getBoundingClientRect() : null;
+      const nextPlacement = placeOnboardingTooltip(rect, card.getBoundingClientRect(), {
+        width: window.innerWidth, height: window.innerHeight,
+      });
+      setLayout((previous) => previous?.step === step && JSON.stringify(previous.placement) === JSON.stringify(nextPlacement)
+        ? previous : { step, placement: nextPlacement });
     };
+    resizeObserver?.observe(card);
+    // Measure before paint, then keep ownership tied to the current selector.
     measure();
     window.addEventListener('resize', measure);
-    return () => window.removeEventListener('resize', measure);
-  }, [active, tourStep]);
+    window.addEventListener('scroll', measure, true);
+    const mutations = new MutationObserver((records) => {
+      // The card's own position updates must not start a measurement loop.
+      if (records.some((record) => !overlay.contains(record.target))) measure();
+    });
+    mutations.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['style', 'class', 'hidden', 'data-onboarding-target'] });
+    return () => {
+      disposed = true;
+      resizeObserver?.disconnect();
+      mutations.disconnect();
+      window.removeEventListener('resize', measure);
+      window.removeEventListener('scroll', measure, true);
+    };
+  }, [active, step, tourStep]);
+
+  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    // Inert prevents pointer/focus interaction; containment also stops global
+    // workspace shortcuts from executing underneath the tour.
+    event.stopPropagation();
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      finish();
+    } else if (event.key === 'Tab') {
+      event.preventDefault();
+      const controls = [...(cardRef.current?.querySelectorAll<HTMLElement>(FOCUSABLE) ?? [])].filter(available);
+      const index = controls.indexOf(document.activeElement as HTMLElement);
+      const nextIndex = event.shiftKey ? (index <= 0 ? controls.length - 1 : index - 1) : (index + 1) % controls.length;
+      (controls[nextIndex] ?? cardRef.current)?.focus();
+    }
+  };
 
   if (!active) return null;
+  const highlight = placement?.highlight;
+  const cardStyle = placement ? { top: placement.top, left: placement.left } : undefined;
 
-  // --- Welcome card (step 0) ---
-  if (step === 0) {
-    return (
-      <div className="onboarding" role="dialog" aria-modal="true" aria-label="Welcome to Nebula Nodes">
-        <div className="onboarding__backdrop" />
-        <div className="onboarding__welcome">
-          <h2 className="onboarding__title">Welcome to Nebula Nodes</h2>
-          <p className="onboarding__subtitle">
-            A multi-surface AI studio. Build by dragging nodes, prompting in Create, or asking the agent.
-          </p>
-          <div className="onboarding__actions">
-            <button className="onboarding__cta onboarding__cta--primary" onClick={next}>
-              Take the tour
-            </button>
-            <button
-              className="onboarding__cta"
-              onClick={() => {
-                loadSampleGraph();
-                finish();
-              }}
-            >
-              Load a sample graph
-            </button>
-            <button
-              className="onboarding__cta"
-              onClick={() => {
-                if (!useUIStore.getState().panels.chat.visible) togglePanel('chat');
-                finish();
-              }}
-            >
-              Describe what you want
-            </button>
-          </div>
-          <button className="onboarding__skip" onClick={finish}>
-            Skip
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // --- Spotlight tour (steps 1..N) ---
-  // Position below the target, but flip above (and clamp) when it would overflow
-  // the bottom of the viewport, so the tooltip is always on-screen.
-  const TOOLTIP_H = 170;
-  const left = rect
-    ? Math.max(12, Math.min(rect.left + rect.width / 2 - 150, window.innerWidth - 312))
-    : 0;
-  const fitsBelow = rect ? rect.bottom + 12 + TOOLTIP_H < window.innerHeight : false;
-  const top = rect ? (fitsBelow ? rect.bottom + 12 : Math.max(12, rect.top - TOOLTIP_H - 12)) : 0;
-  const tooltipStyle: React.CSSProperties = rect
-    ? { top, left }
-    : { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' };
-
-  return (
-    <div className="onboarding onboarding--tour" role="dialog" aria-modal="true">
-      {rect ? (
-        <div
-          className="onboarding__spotlight"
-          style={{ top: rect.top - 6, left: rect.left - 6, width: rect.width + 12, height: rect.height + 12 }}
-        />
-      ) : (
-        <div className="onboarding__backdrop" />
-      )}
-      {tourStep && (
-        <div className="onboarding__tooltip" style={tooltipStyle}>
-          <div className="onboarding__tooltip-title">{tourStep.title}</div>
-          <div className="onboarding__tooltip-body">{tourStep.body}</div>
-          <div className="onboarding__tooltip-row">
-            <span className="onboarding__progress">
-              {tourIndex + 1} / {TOUR.length}
-            </span>
-            <div className="onboarding__tooltip-buttons">
-              {tourIndex > 0 && (
-                <button className="onboarding__cta onboarding__cta--small" onClick={prev}>
-                  Back
-                </button>
-              )}
-              <button className="onboarding__cta onboarding__cta--small onboarding__cta--primary" onClick={advance}>
-                {tourIndex >= TOUR.length - 1 ? 'Done' : 'Next'}
-              </button>
+  return createPortal(
+    <div
+      className={`onboarding${step > 0 ? ' onboarding--tour' : ''}`}
+      ref={overlayRef}
+      onKeyDown={onKeyDown}
+      onPointerDown={(event) => {
+        if (event.target instanceof Node && !cardRef.current?.contains(event.target)) event.preventDefault();
+      }}
+    >
+      {highlight ? (
+        <div className="onboarding__spotlight" aria-hidden="true" style={{
+          top: highlight.top, left: highlight.left, width: highlight.width, height: highlight.height,
+        }} />
+      ) : <div className="onboarding__backdrop" aria-hidden="true" />}
+      <div
+        ref={cardRef}
+        className={step === 0 ? 'onboarding__welcome' : 'onboarding__tooltip'}
+        style={cardStyle}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        aria-describedby={descriptionId}
+        tabIndex={-1}
+      >
+        {step === 0 ? (
+          <>
+            <p className="onboarding__eyebrow">A quick introduction</p>
+            <h2 id={titleId} className="onboarding__title">Welcome to Nebula Nodes</h2>
+            <p id={descriptionId} className="onboarding__subtitle">
+              Find a model, connect your provider and create from a prompt or a connected canvas. Take a quick tour, or start browsing.
+            </p>
+            <div className="onboarding__actions">
+              <button className="onboarding__cta onboarding__cta--primary" data-onboarding-primary onClick={next}>Take the tour</button>
+              <button className="onboarding__cta" onClick={() => { setLeftDock('library'); finish(); }}>Start browsing</button>
             </div>
-          </div>
-          <button className="onboarding__skip onboarding__skip--small" onClick={finish}>
-            Skip tour
-          </button>
-        </div>
-      )}
-    </div>
+            <p className="onboarding__hint">Reopen the tour from Help on the canvas.</p>
+            <button className="onboarding__skip" onClick={finish}>Skip</button>
+          </>
+        ) : (
+          <>
+            <p className="onboarding__eyebrow">Getting started · {step} of {ONBOARDING_TOUR.length}</p>
+            <h2 id={titleId} className="onboarding__tooltip-title">{tourStep?.title ?? 'Ready to create'}</h2>
+            <p id={descriptionId} className="onboarding__tooltip-body">{tourStep?.body ?? 'Return to your canvas to get started.'}</p>
+            <div className="onboarding__tooltip-row">
+              <button className="onboarding__skip" onClick={finish}>Skip tour</button>
+              <div className="onboarding__tooltip-buttons">
+                <button className="onboarding__cta onboarding__cta--small" onClick={prev}>Back</button>
+                <button className="onboarding__cta onboarding__cta--small onboarding__cta--primary" data-onboarding-primary onClick={advance}>
+                  {step >= ONBOARDING_TOUR.length ? 'Done' : 'Next'}
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    </div>, document.body,
   );
 }

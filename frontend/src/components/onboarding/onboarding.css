@@ -2,149 +2,173 @@
   position: fixed;
   inset: 0;
   z-index: 1100;
-  pointer-events: none; /* children opt back in */
+  isolation: isolate;
 }
 
 .onboarding__backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(0, 0, 0, 0.55);
-  pointer-events: auto;
+  background: rgba(0, 0, 0, 0.62);
 }
 
-/* --- Welcome card --- */
-.onboarding__welcome {
+.onboarding__welcome,
+.onboarding__tooltip {
   position: absolute;
+  box-sizing: border-box;
+  max-width: calc(100vw - 24px);
+  max-height: calc(100dvh - 24px);
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 24px;
+  border-radius: 14px;
+  background: #18181b;
+  border: 1px solid var(--sr-edge-strong, rgba(255, 255, 255, 0.12));
+  color: var(--sr-ink, #eee);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.5);
+}
+
+.onboarding__welcome {
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  width: min(460px, 90vw);
-  padding: 28px;
-  border-radius: 14px;
-  background: #181818;
-  border: 1px solid #2c2c2c;
-  box-shadow: 0 28px 72px rgba(0, 0, 0, 0.6);
-  pointer-events: auto;
-  text-align: center;
+  width: 460px;
 }
+
+.onboarding__eyebrow {
+  margin: 0 0 12px;
+  color: var(--sr-ink-light, #aaa);
+  font: 11px var(--sr-mono, monospace);
+  line-height: 1.4;
+}
+
 .onboarding__title {
-  margin: 0 0 8px;
-  font-size: 20px;
-  color: #f4f4f4;
+  margin: 0 0 10px;
+  font-size: 22px;
+  line-height: 1.2;
 }
-.onboarding__subtitle {
+
+.onboarding__subtitle,
+.onboarding__tooltip-body {
   margin: 0 0 20px;
   font-size: 13px;
-  line-height: 1.5;
-  color: #9a9a9a;
+  line-height: 1.6;
+  color: var(--sr-ink-light, #aaa);
 }
+
 .onboarding__actions {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
+
 .onboarding__cta {
+  min-height: 40px;
   padding: 10px 14px;
   border-radius: 8px;
-  border: 1px solid #333;
-  background: #222;
-  color: #e6e6e6;
+  border: 1px solid var(--sr-edge-strong, rgba(255, 255, 255, 0.12));
+  background: rgba(255, 255, 255, 0.04);
+  color: inherit;
   font-size: 13px;
+  font-family: inherit;
   cursor: pointer;
 }
+
 .onboarding__cta:hover {
-  background: #2a2a2a;
+  background: rgba(255, 255, 255, 0.08);
 }
+
 .onboarding__cta--primary {
   background: var(--sr-accent, #ff5a1f);
   border-color: transparent;
-  color: #fff;
+  color: var(--sr-on-accent, #0a0a0b);
+  font-weight: 600;
 }
+
 .onboarding__cta--primary:hover {
-  filter: brightness(1.08);
+  background: var(--sr-accent-hover, #ff6b34);
 }
+
 .onboarding__cta--small {
-  padding: 6px 12px;
+  padding: 8px 12px;
   font-size: 12px;
 }
+
 .onboarding__skip {
-  margin-top: 14px;
+  min-height: 40px;
+  padding: 8px 0;
   background: none;
   border: none;
-  color: #777;
+  color: var(--sr-ink-light, #aaa);
   font-size: 12px;
   cursor: pointer;
 }
+
 .onboarding__skip:hover {
-  color: #aaa;
-}
-.onboarding__skip--small {
-  margin-top: 8px;
+  color: var(--sr-ink, #eee);
 }
 
-/* --- Spotlight tour --- */
+.onboarding__cta:focus-visible,
+.onboarding__skip:focus-visible {
+  outline: 2px solid var(--sr-accent, #ff5a1f);
+  outline-offset: 3px;
+}
+
+.onboarding__hint {
+  margin: 16px 0 0;
+  color: var(--sr-ink-light, #aaa);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
 .onboarding__spotlight {
   position: absolute;
-  border-radius: 12px;
-  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.55);
+  border-radius: 10px;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.62);
   outline: 2px solid var(--sr-accent, #ff5a1f);
   pointer-events: none;
-  transition: top 0.2s ease, left 0.2s ease, width 0.2s ease, height 0.2s ease;
 }
 
 .onboarding__tooltip {
-  position: absolute;
-  width: 300px;
-  padding: 16px;
-  border-radius: 12px;
-  background: #181818;
-  border: 1px solid #2c2c2c;
-  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.5);
-  pointer-events: auto;
+  width: 360px;
+  padding: 20px;
+  top: 50%;
+  left: 50%;
 }
+
+.onboarding__tooltip:not([style]) {
+  transform: translate(-50%, -50%);
+}
+
 .onboarding__tooltip-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: #f0f0f0;
-  margin-bottom: 4px;
+  margin: 0 0 8px;
+  font-size: 18px;
+  line-height: 1.3;
 }
-.onboarding__tooltip-body {
-  font-size: 12px;
-  line-height: 1.5;
-  color: #9a9a9a;
-  margin-bottom: 12px;
-}
+
 .onboarding__tooltip-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
 }
-.onboarding__progress {
-  font-size: 11px;
-  color: #6a6a6a;
-}
+
 .onboarding__tooltip-buttons {
   display: flex;
   gap: 6px;
 }
 
-/* --- Slava skin --- */
-body.app-slava-restraint .onboarding__welcome,
-body.app-slava-restraint .onboarding__tooltip {
-  background: var(--sr-canvas, #f4f1ea);
-  border-color: var(--sr-hairline, rgba(0, 0, 0, 0.12));
+@media (max-width: 380px), (max-height: 420px) {
+  .onboarding__welcome,
+  .onboarding__tooltip {
+    padding: 16px;
+  }
 }
-body.app-slava-restraint .onboarding__title,
-body.app-slava-restraint .onboarding__tooltip-title {
-  color: var(--sr-ink, #1a1a1a);
-}
-body.app-slava-restraint .onboarding__subtitle,
-body.app-slava-restraint .onboarding__tooltip-body {
-  color: var(--sr-mono, rgba(0, 0, 0, 0.6));
-}
-body.app-slava-restraint .onboarding__cta {
-  background: rgba(0, 0, 0, 0.05);
-  border-color: var(--sr-hairline, rgba(0, 0, 0, 0.12));
-  color: var(--sr-ink, #1a1a1a);
-  font-family: var(--sr-mono, monospace);
+
+/* Placement updates are immediate, including when reduced motion is enabled. */
+@media (prefers-reduced-motion: reduce) {
+  .onboarding,
+  .onboarding * {
+    animation: none;
+    transition: none;
+  }
 }

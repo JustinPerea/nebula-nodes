@@ -37,6 +37,7 @@ vi.mock('../src/components/panels/Toolbar', () => ({ Toolbar: () => null }));
 vi.mock('../src/components/panels/AgentLog', () => ({ AgentLog: () => null }));
 vi.mock('../src/components/panels/Settings', () => ({ Settings: () => null }));
 vi.mock('../src/components/panels/ChatPanel', () => ({ ChatPanel: () => null }));
+vi.mock('../src/components/create-studio/CreateView', () => ({ CreateView: () => null }));
 import App from '../src/App';
 import { useUIStore } from '../src/store/uiStore';
 import { useGraphStore } from '../src/store/graphStore';
@@ -49,8 +50,18 @@ function node(): Node<NodeData> {
 }
 function deferredGraph() {
   let resolve!: (value: { empty: boolean; nodes: Node<NodeData>[]; edges: [] }) => void;
-  const promise = new Promise<{ empty: boolean; nodes: Node<NodeData>[]; edges: [] }>((settle) => { resolve = settle; });
-  return { promise, resolve };
+  let reject!: (reason: Error) => void;
+  const promise = new Promise<{ empty: boolean; nodes: Node<NodeData>[]; edges: [] }>((settle, fail) => { resolve = settle; reject = fail; });
+  return { promise, resolve, reject };
+}
+
+type EmptyOutcome = 'empty response' | 'failed request';
+async function settleEmptyGraph(graph: ReturnType<typeof deferredGraph>, outcome: EmptyOutcome) {
+  await act(async () => {
+    if (outcome === 'empty response') graph.resolve({ empty: true, nodes: [], edges: [] });
+    else graph.reject(new Error('Fixture backend unavailable'));
+    await graph.promise.catch(() => {});
+  });
 }
 
 describe('initial graph hydration yields to Canvas focus', () => {
@@ -59,6 +70,7 @@ describe('initial graph hydration yields to Canvas focus', () => {
     mocks.fitView.mockReset().mockResolvedValue(true);
     mocks.fetchGraph.mockReset().mockResolvedValue({ empty: false, nodes: [node()], edges: [] });
     useUIStore.setState(initialUI, true);
+    useUIStore.setState({ viewMode: 'canvas', hasOnboarded: false, onboardingActive: false, onboardingStep: 0 });
     useGraphStore.setState({ nodes: [], edges: [], isExecuting: false,
       providerRecoveries: [], providerStartAmbiguities: [], runHistory: [] });
   });
@@ -67,6 +79,7 @@ describe('initial graph hydration yields to Canvas focus', () => {
     vi.useRealTimers();
     useUIStore.setState(initialUI, true);
     useGraphStore.setState(initialGraph, true);
+    vi.restoreAllMocks();
   });
 
   it('fits the hydrated graph when no explicit handoff occurred', async () => {
@@ -116,5 +129,110 @@ describe('initial graph hydration yields to Canvas focus', () => {
     view.unmount();
     await act(async () => { await vi.advanceTimersByTimeAsync(60); });
     expect(mocks.fitView).not.toHaveBeenCalled();
+  });
+
+  it.each<EmptyOutcome>(['empty response', 'failed request'])('starts first-run onboarding on an untouched empty Canvas after %s', async (outcome) => {
+    const graph = deferredGraph();
+    mocks.fetchGraph.mockReturnValue(graph.promise);
+    const reset = vi.spyOn(useUIStore.getState(), 'resetPanelsForFreshCanvas');
+    const start = vi.spyOn(useUIStore.getState(), 'startOnboarding');
+    await act(async () => { render(<App />); });
+    await settleEmptyGraph(graph, outcome);
+    expect(useUIStore.getState()).toMatchObject({ viewMode: 'canvas', onboardingActive: true, onboardingStep: 0, hasOnboarded: false });
+    expect(reset).toHaveBeenCalledTimes(1);
+    expect(start).toHaveBeenCalledTimes(1);
+    expect(mocks.fitView).not.toHaveBeenCalled();
+  });
+
+  it.each<EmptyOutcome>(['empty response', 'failed request'])('preserves work added while startup waits for %s', async (outcome) => {
+    const graph = deferredGraph();
+    mocks.fetchGraph.mockReturnValue(graph.promise);
+    const reset = vi.spyOn(useUIStore.getState(), 'resetPanelsForFreshCanvas');
+    const start = vi.spyOn(useUIStore.getState(), 'startOnboarding');
+    await act(async () => { render(<App />); });
+    const authored = [node()];
+    const edges = [{ id: 'retained-edge', source: 'motion', target: 'motion', sourceHandle: 'text', targetHandle: 'text' }];
+    act(() => {
+      useGraphStore.setState({ nodes: authored, edges });
+      useUIStore.getState().setLeftDock('history');
+      useUIStore.setState({ selectedNodeId: 'motion', inspectorPinned: true, chatResized: true });
+    });
+    const panels = useUIStore.getState().panels;
+    await settleEmptyGraph(graph, outcome);
+    expect(useGraphStore.getState().nodes).toBe(authored);
+    expect(useGraphStore.getState().edges).toBe(edges);
+    expect(useUIStore.getState()).toMatchObject({ viewMode: 'canvas', selectedNodeId: 'motion', leftDock: 'history', inspectorPinned: true, chatResized: true, onboardingActive: false });
+    expect(useUIStore.getState().panels).toBe(panels);
+    expect(reset).not.toHaveBeenCalled();
+    expect(start).not.toHaveBeenCalled();
+  });
+
+  it.each<EmptyOutcome>(['empty response', 'failed request'])('preserves a newly opened studio while startup waits for %s', async (outcome) => {
+    const graph = deferredGraph();
+    mocks.fetchGraph.mockReturnValue(graph.promise);
+    const reset = vi.spyOn(useUIStore.getState(), 'resetPanelsForFreshCanvas');
+    const start = vi.spyOn(useUIStore.getState(), 'startOnboarding');
+    await act(async () => { render(<App />); });
+    act(() => {
+      useUIStore.getState().setLeftDock('settings');
+      useUIStore.setState({ viewMode: 'create', createSessionId: 'unsent-create-session' });
+    });
+    const panels = useUIStore.getState().panels;
+    await settleEmptyGraph(graph, outcome);
+    expect(useUIStore.getState()).toMatchObject({ viewMode: 'create', createSessionId: 'unsent-create-session', leftDock: 'settings', onboardingActive: false });
+    expect(useUIStore.getState().panels).toBe(panels);
+    expect(reset).not.toHaveBeenCalled();
+    expect(start).not.toHaveBeenCalled();
+  });
+
+  it.each<EmptyOutcome>(['empty response', 'failed request'])('preserves an active optional tour during %s', async (outcome) => {
+    const graph = deferredGraph();
+    mocks.fetchGraph.mockReturnValue(graph.promise);
+    await act(async () => { render(<App />); });
+    act(() => {
+      useUIStore.getState().startOnboarding();
+      useUIStore.getState().nextOnboardingStep();
+      useUIStore.getState().nextOnboardingStep();
+      useUIStore.getState().setLeftDock('history');
+    });
+    const reset = vi.spyOn(useUIStore.getState(), 'resetPanelsForFreshCanvas');
+    const start = vi.spyOn(useUIStore.getState(), 'startOnboarding');
+    const panels = useUIStore.getState().panels;
+    await settleEmptyGraph(graph, outcome);
+    expect(useUIStore.getState()).toMatchObject({ viewMode: 'canvas', onboardingActive: true, onboardingStep: 2, leftDock: 'history' });
+    expect(useUIStore.getState().panels).toBe(panels);
+    expect(reset).not.toHaveBeenCalled();
+    expect(start).not.toHaveBeenCalled();
+  });
+
+  it.each<EmptyOutcome>(['empty response', 'failed request'])('preserves a completed-tour user’s empty Canvas layout after %s', async (outcome) => {
+    const graph = deferredGraph();
+    mocks.fetchGraph.mockReturnValue(graph.promise);
+    await act(async () => { render(<App />); });
+    act(() => {
+      useUIStore.setState({ hasOnboarded: true });
+      useUIStore.getState().setLeftDock('settings');
+    });
+    const reset = vi.spyOn(useUIStore.getState(), 'resetPanelsForFreshCanvas');
+    const start = vi.spyOn(useUIStore.getState(), 'startOnboarding');
+    const panels = useUIStore.getState().panels;
+    await settleEmptyGraph(graph, outcome);
+    expect(useUIStore.getState()).toMatchObject({ viewMode: 'canvas', hasOnboarded: true, onboardingActive: false, leftDock: 'settings' });
+    expect(useUIStore.getState().panels).toBe(panels);
+    expect(reset).not.toHaveBeenCalled();
+    expect(start).not.toHaveBeenCalled();
+  });
+
+  it.each<EmptyOutcome>(['empty response', 'failed request'])('ignores a stale %s after unmount', async (outcome) => {
+    const graph = deferredGraph();
+    mocks.fetchGraph.mockReturnValue(graph.promise);
+    const reset = vi.spyOn(useUIStore.getState(), 'resetPanelsForFreshCanvas');
+    const start = vi.spyOn(useUIStore.getState(), 'startOnboarding');
+    const view = render(<App />);
+    view.unmount();
+    await settleEmptyGraph(graph, outcome);
+    expect(reset).not.toHaveBeenCalled();
+    expect(start).not.toHaveBeenCalled();
+    expect(useUIStore.getState().onboardingActive).toBe(false);
   });
 });

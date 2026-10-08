@@ -11,6 +11,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { useUIStore, type LeftDock } from '../store/uiStore';
+import type { OnboardingTarget } from '../lib/onboarding';
 import '../styles/workspace-rail.css';
 
 interface RailItemProps {
@@ -20,15 +21,17 @@ interface RailItemProps {
   active?: boolean;
   primary?: boolean;
   shortcut?: string;
+  onboardingTarget?: OnboardingTarget;
 }
 
-function RailItem({ label, icon: Icon, onClick, active = false, primary = false, shortcut }: RailItemProps) {
+function RailItem({ label, icon: Icon, onClick, active = false, primary = false, shortcut, onboardingTarget }: RailItemProps) {
   const tooltip = shortcut ? `${label} · ${shortcut}` : label;
   return (
     <button
       type="button"
       className={`workspace-rail__item${primary ? ' workspace-rail__item--primary' : ''}${active ? ' workspace-rail__item--active' : ''}`}
       data-rail-item
+      data-onboarding-target={onboardingTarget}
       data-tooltip={tooltip}
       aria-label={label}
       aria-pressed={active || undefined}
@@ -87,12 +90,13 @@ export function WorkspaceRail() {
       <div className="workspace-rail__group workspace-rail__group--top">
         <RailItem
           label="Add nodes"
+          onboardingTarget="nodes"
           icon={Plus}
           primary
           active={leftDock === 'library'}
           onClick={() => toggleDock('library')}
         />
-        <RailItem label="Open Create studio" icon={Sparkles} onClick={enterCreateView} />
+        <RailItem label="Open Create studio" onboardingTarget="create" icon={Sparkles} onClick={enterCreateView} />
         {commonsEnabled && <RailItem label="Open Commons" icon={LibraryBig} onClick={enterCommons} />}
         <div className="workspace-rail__divider" aria-hidden="true" />
         <RailItem
@@ -103,6 +107,7 @@ export function WorkspaceRail() {
         />
         <RailItem
           label="Open run history"
+          onboardingTarget="history"
           icon={History}
           active={leftDock === 'history'}
           onClick={() => toggleDock('history')}
@@ -117,9 +122,10 @@ export function WorkspaceRail() {
 
       <div className="workspace-rail__group workspace-rail__group--bottom">
         <div className="workspace-rail__divider" aria-hidden="true" />
-        <RailItem label="Open help and onboarding" icon={CircleHelp} onClick={startOnboarding} />
+        <RailItem label="Open help and onboarding" onboardingTarget="help" icon={CircleHelp} onClick={startOnboarding} />
         <RailItem
           label="Open settings"
+          onboardingTarget="settings"
           icon={Settings}
           active={leftDock === 'settings'}
           onClick={() => toggleDock('settings')}

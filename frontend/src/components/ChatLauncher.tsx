@@ -9,6 +9,7 @@ export function ChatLauncher() {
     <button
       type="button"
       className={`panel-launcher panel-launcher--chat${chatVisible ? ' panel-launcher--active' : ''}`}
+      data-onboarding-target="chat"
       onClick={() => togglePanel('chat')}
       title="Toggle chat panel"
       aria-label="Toggle chat panel"

@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { WorkspaceRail } from '../src/components/WorkspaceRail';
+import { ChatLauncher } from '../src/components/ChatLauncher';
 import { useUIStore } from '../src/store/uiStore';
+import { ONBOARDING_HELP_SELECTOR, ONBOARDING_TOUR } from '../src/lib/onboarding';
 
 describe('WorkspaceRail', () => {
   beforeEach(() => {
@@ -25,6 +27,22 @@ describe('WorkspaceRail', () => {
     expect(screen.getByRole('button', { name: 'Search commands and nodes' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Open help and onboarding' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Open settings' })).toBeTruthy();
+  });
+
+  it('provides one stable, live target for every onboarding step without taking an action', () => {
+    const before = useUIStore.getState();
+    render(<><WorkspaceRail /><ChatLauncher /></>);
+    const names = ['Add nodes', 'Open settings', 'Open Create studio', 'Open run history', 'Toggle chat panel'];
+    ONBOARDING_TOUR.forEach((step, index) => {
+      const button = screen.getByRole('button', { name: names[index] });
+      expect(document.querySelectorAll(step.selector)).toHaveLength(1);
+      expect(document.querySelector(step.selector)).toBe(button);
+    });
+    expect(document.querySelector(ONBOARDING_HELP_SELECTOR)).toBe(screen.getByRole('button', { name: 'Open help and onboarding' }));
+    expect(useUIStore.getState().leftDock).toBe(before.leftDock);
+    expect(useUIStore.getState().viewMode).toBe(before.viewMode);
+    expect(useUIStore.getState().onboardingStep).toBe(before.onboardingStep);
+    expect(useUIStore.getState().panels.chat.visible).toBe(before.panels.chat.visible);
   });
 
   it('replaces the active drawer and closes it when selected again', () => {
