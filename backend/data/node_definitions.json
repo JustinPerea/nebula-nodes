@@ -20173,7 +20173,7 @@
         "required": false,
         "type": "float",
         "step": 0.01,
-        "default": 3114443573
+        "default": 1513805061
       },
       {
         "key": "steps",
@@ -20749,6 +20749,205 @@
           }
         ],
         "default": "1K"
+      }
+    ],
+    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+  },
+  "krea-image-google-nano-banana-2-1": {
+    "id": "krea-image-google-nano-banana-2-1",
+    "displayName": "Nano Banana 2.1 (Krea)",
+    "category": "image-gen",
+    "apiProvider": "krea",
+    "apiEndpoint": "/generate/image/google/nano-banana-2.1",
+    "envKeyName": "KREA_API_TOKEN",
+    "executionPattern": "async-poll",
+    "inputPorts": [
+      {
+        "id": "prompt",
+        "label": "Prompt",
+        "dataType": "Text",
+        "required": false
+      },
+      {
+        "id": "image_urls",
+        "label": "Image URLs",
+        "dataType": "Image",
+        "required": false,
+        "multiple": true
+      }
+    ],
+    "outputPorts": [
+      {
+        "id": "image",
+        "label": "Image",
+        "dataType": "Image",
+        "required": true
+      },
+      {
+        "id": "images",
+        "label": "All images",
+        "dataType": "Array",
+        "required": false
+      },
+      {
+        "id": "artifacts",
+        "label": "All artifacts",
+        "dataType": "Array",
+        "required": false
+      },
+      {
+        "id": "job",
+        "label": "Job",
+        "dataType": "Any",
+        "required": false
+      }
+    ],
+    "params": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": true,
+        "type": "textarea"
+      },
+      {
+        "key": "width",
+        "label": "Width",
+        "required": false,
+        "type": "float",
+        "step": 0.01
+      },
+      {
+        "key": "height",
+        "label": "Height",
+        "required": false,
+        "type": "float",
+        "step": 0.01
+      },
+      {
+        "key": "image_urls",
+        "label": "Image URLs (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model"
+      },
+      {
+        "key": "aspect_ratio",
+        "label": "Aspect ratio",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "4:1",
+            "value": "4:1"
+          },
+          {
+            "label": "21:9",
+            "value": "21:9"
+          },
+          {
+            "label": "1:1",
+            "value": "1:1"
+          },
+          {
+            "label": "4:3",
+            "value": "4:3"
+          },
+          {
+            "label": "3:2",
+            "value": "3:2"
+          },
+          {
+            "label": "2:3",
+            "value": "2:3"
+          },
+          {
+            "label": "5:4",
+            "value": "5:4"
+          },
+          {
+            "label": "4:5",
+            "value": "4:5"
+          },
+          {
+            "label": "3:4",
+            "value": "3:4"
+          },
+          {
+            "label": "16:9",
+            "value": "16:9"
+          },
+          {
+            "label": "9:16",
+            "value": "9:16"
+          },
+          {
+            "label": "1:4",
+            "value": "1:4"
+          },
+          {
+            "label": "1:8",
+            "value": "1:8"
+          }
+        ]
+      },
+      {
+        "key": "resolution",
+        "label": "Resolution",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "1K",
+            "value": "1K"
+          },
+          {
+            "label": "2K",
+            "value": "2K"
+          },
+          {
+            "label": "4K",
+            "value": "4K"
+          }
+        ],
+        "default": "1K"
+      },
+      {
+        "key": "thinking_level",
+        "label": "Thinking level",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "minimal",
+            "value": "minimal"
+          },
+          {
+            "label": "medium",
+            "value": "medium"
+          },
+          {
+            "label": "high",
+            "value": "high"
+          }
+        ],
+        "default": "medium"
       }
     ],
     "docUrl": "docs/model-providers/krea/krea-gateway.md"
@@ -27440,7 +27639,7 @@
         "dataType": "Video",
         "required": false,
         "multiple": true,
-        "maxConnections": 1
+        "maxConnections": 3
       }
     ],
     "outputPorts": [
@@ -30686,6 +30885,10 @@
         "type": "enum",
         "options": [
           {
+            "label": "very_low",
+            "value": "very_low"
+          },
+          {
             "label": "low",
             "value": "low"
           },
@@ -30696,10 +30899,6 @@
           {
             "label": "high",
             "value": "high"
-          },
-          {
-            "label": "very_high",
-            "value": "very_high"
           }
         ],
         "default": "high"
@@ -30812,6 +31011,413 @@
         "label": "Image URL",
         "required": true,
         "type": "string"
+      }
+    ],
+    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+  },
+  "krea-audio-bytedance-seed-audio-1-0": {
+    "id": "krea-audio-bytedance-seed-audio-1-0",
+    "displayName": "Seed Audio 1.0 (Krea)",
+    "category": "audio-gen",
+    "apiProvider": "krea",
+    "apiEndpoint": "/generate/audio/bytedance/seed-audio-1.0",
+    "envKeyName": "KREA_API_TOKEN",
+    "executionPattern": "async-poll",
+    "inputPorts": [
+      {
+        "id": "prompt",
+        "label": "Prompt",
+        "dataType": "Text",
+        "required": false
+      }
+    ],
+    "outputPorts": [
+      {
+        "id": "audio",
+        "label": "Audio",
+        "dataType": "Audio",
+        "required": true
+      },
+      {
+        "id": "audios",
+        "label": "All audios",
+        "dataType": "Array",
+        "required": false
+      },
+      {
+        "id": "artifacts",
+        "label": "All artifacts",
+        "dataType": "Array",
+        "required": false
+      },
+      {
+        "id": "job",
+        "label": "Job",
+        "dataType": "Any",
+        "required": false
+      }
+    ],
+    "params": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": true,
+        "type": "textarea"
+      }
+    ],
+    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+  },
+  "krea-audio-elevenlabs-tts": {
+    "id": "krea-audio-elevenlabs-tts",
+    "displayName": "ElevenLabs TTS (Krea)",
+    "category": "audio-gen",
+    "apiProvider": "krea",
+    "apiEndpoint": "/generate/audio/elevenlabs/tts",
+    "envKeyName": "KREA_API_TOKEN",
+    "executionPattern": "async-poll",
+    "inputPorts": [
+      {
+        "id": "prompt",
+        "label": "Prompt",
+        "dataType": "Text",
+        "required": false
+      }
+    ],
+    "outputPorts": [
+      {
+        "id": "audio",
+        "label": "Audio",
+        "dataType": "Audio",
+        "required": true
+      },
+      {
+        "id": "audios",
+        "label": "All audios",
+        "dataType": "Array",
+        "required": false
+      },
+      {
+        "id": "artifacts",
+        "label": "All artifacts",
+        "dataType": "Array",
+        "required": false
+      },
+      {
+        "id": "job",
+        "label": "Job",
+        "dataType": "Any",
+        "required": false
+      }
+    ],
+    "params": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": true,
+        "type": "textarea"
+      },
+      {
+        "key": "voice_id",
+        "label": "Voice id",
+        "required": false,
+        "type": "string",
+        "default": "hpp4J3VqNfWAUOO0d1Us"
+      },
+      {
+        "key": "model_id",
+        "label": "Model id",
+        "required": false,
+        "type": "string",
+        "default": "eleven_multilingual_v2"
+      }
+    ],
+    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+  },
+  "krea-audio-elevenlabs-music": {
+    "id": "krea-audio-elevenlabs-music",
+    "displayName": "ElevenLabs Music (Krea)",
+    "category": "audio-gen",
+    "apiProvider": "krea",
+    "apiEndpoint": "/generate/audio/elevenlabs/music",
+    "envKeyName": "KREA_API_TOKEN",
+    "executionPattern": "async-poll",
+    "inputPorts": [
+      {
+        "id": "prompt",
+        "label": "Prompt",
+        "dataType": "Text",
+        "required": false
+      }
+    ],
+    "outputPorts": [
+      {
+        "id": "audio",
+        "label": "Audio",
+        "dataType": "Audio",
+        "required": true
+      },
+      {
+        "id": "audios",
+        "label": "All audios",
+        "dataType": "Array",
+        "required": false
+      },
+      {
+        "id": "artifacts",
+        "label": "All artifacts",
+        "dataType": "Array",
+        "required": false
+      },
+      {
+        "id": "job",
+        "label": "Job",
+        "dataType": "Any",
+        "required": false
+      }
+    ],
+    "params": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": true,
+        "type": "textarea"
+      },
+      {
+        "key": "music_length_ms",
+        "label": "Music length ms",
+        "required": false,
+        "type": "integer",
+        "min": 3000,
+        "max": 600000,
+        "step": 1
+      },
+      {
+        "key": "force_instrumental",
+        "label": "Force instrumental",
+        "required": false,
+        "type": "boolean",
+        "default": false
+      }
+    ],
+    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+  },
+  "krea-audio-elevenlabs-music-v2": {
+    "id": "krea-audio-elevenlabs-music-v2",
+    "displayName": "ElevenLabs Music v2 (Krea)",
+    "category": "audio-gen",
+    "apiProvider": "krea",
+    "apiEndpoint": "/generate/audio/elevenlabs/music-v2",
+    "envKeyName": "KREA_API_TOKEN",
+    "executionPattern": "async-poll",
+    "inputPorts": [
+      {
+        "id": "prompt",
+        "label": "Prompt",
+        "dataType": "Text",
+        "required": false
+      }
+    ],
+    "outputPorts": [
+      {
+        "id": "audio",
+        "label": "Audio",
+        "dataType": "Audio",
+        "required": true
+      },
+      {
+        "id": "audios",
+        "label": "All audios",
+        "dataType": "Array",
+        "required": false
+      },
+      {
+        "id": "artifacts",
+        "label": "All artifacts",
+        "dataType": "Array",
+        "required": false
+      },
+      {
+        "id": "job",
+        "label": "Job",
+        "dataType": "Any",
+        "required": false
+      }
+    ],
+    "params": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": true,
+        "type": "textarea"
+      },
+      {
+        "key": "music_length_ms",
+        "label": "Music length ms",
+        "required": false,
+        "type": "integer",
+        "min": 3000,
+        "max": 600000,
+        "step": 1
+      },
+      {
+        "key": "force_instrumental",
+        "label": "Force instrumental",
+        "required": false,
+        "type": "boolean",
+        "default": false
+      }
+    ],
+    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+  },
+  "krea-audio-elevenlabs-music-v2-5": {
+    "id": "krea-audio-elevenlabs-music-v2-5",
+    "displayName": "ElevenLabs Music v2.5 (Krea)",
+    "category": "audio-gen",
+    "apiProvider": "krea",
+    "apiEndpoint": "/generate/audio/elevenlabs/music-v2.5",
+    "envKeyName": "KREA_API_TOKEN",
+    "executionPattern": "async-poll",
+    "inputPorts": [
+      {
+        "id": "prompt",
+        "label": "Prompt",
+        "dataType": "Text",
+        "required": false
+      }
+    ],
+    "outputPorts": [
+      {
+        "id": "audio",
+        "label": "Audio",
+        "dataType": "Audio",
+        "required": true
+      },
+      {
+        "id": "audios",
+        "label": "All audios",
+        "dataType": "Array",
+        "required": false
+      },
+      {
+        "id": "artifacts",
+        "label": "All artifacts",
+        "dataType": "Array",
+        "required": false
+      },
+      {
+        "id": "job",
+        "label": "Job",
+        "dataType": "Any",
+        "required": false
+      }
+    ],
+    "params": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": true,
+        "type": "textarea"
+      },
+      {
+        "key": "music_length_ms",
+        "label": "Music length ms",
+        "required": false,
+        "type": "integer",
+        "min": 3000,
+        "max": 600000,
+        "step": 1
+      },
+      {
+        "key": "force_instrumental",
+        "label": "Force instrumental",
+        "required": false,
+        "type": "boolean",
+        "default": false
       }
     ],
     "docUrl": "docs/model-providers/krea/krea-gateway.md"

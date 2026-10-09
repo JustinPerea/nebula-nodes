@@ -1,7 +1,7 @@
 {
   "sourceUrl": "https://api.krea.ai/openapi.json",
-  "fetchedAt": "2026-10-03",
-  "openapiSha256": "d62455db4f84a470c6a9fa34bd64b2dfdaa1c6781764218f1fa09f26e1e65064",
+  "fetchedAt": "2026-10-09",
+  "openapiSha256": "501ec170d4501d7c92b7d065efdfff05819034e89812114d0bdd414cf5010e5f",
   "models": {
     "krea-image-krea-krea-2-medium": {
       "endpoint": "/generate/image/krea/krea-2/medium",
@@ -702,7 +702,7 @@
             "maxLength": 1800
           },
           "seed": {
-            "default": 3114443573,
+            "default": 1513805061,
             "type": "number"
           },
           "steps": {
@@ -1091,6 +1091,92 @@
               "1K",
               "2K",
               "4K"
+            ]
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "additionalProperties": false
+      },
+      "mediaType": "Image",
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": false
+        },
+        {
+          "id": "image_urls",
+          "label": "Image URLs",
+          "dataType": "Image",
+          "required": false,
+          "multiple": true
+        }
+      ],
+      "jsonParams": [
+        "image_urls"
+      ]
+    },
+    "krea-image-google-nano-banana-2-1": {
+      "endpoint": "/generate/image/google/nano-banana-2.1",
+      "displayName": "Nano Banana 2.1",
+      "requestSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "minLength": 3
+          },
+          "width": {
+            "type": "number"
+          },
+          "height": {
+            "type": "number"
+          },
+          "image_urls": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 1024,
+              "format": "uri"
+            }
+          },
+          "aspect_ratio": {
+            "type": "string",
+            "enum": [
+              "4:1",
+              "21:9",
+              "1:1",
+              "4:3",
+              "3:2",
+              "2:3",
+              "5:4",
+              "4:5",
+              "3:4",
+              "16:9",
+              "9:16",
+              "1:4",
+              "1:8"
+            ]
+          },
+          "resolution": {
+            "default": "1K",
+            "type": "string",
+            "enum": [
+              "1K",
+              "2K",
+              "4K"
+            ]
+          },
+          "thinking_level": {
+            "default": "medium",
+            "type": "string",
+            "enum": [
+              "minimal",
+              "medium",
+              "high"
             ]
           }
         },
@@ -5238,7 +5324,7 @@
             }
           },
           "reference_videos": {
-            "maxItems": 1,
+            "maxItems": 3,
             "type": "array",
             "items": {
               "type": "string",
@@ -5280,7 +5366,7 @@
           "dataType": "Video",
           "required": false,
           "multiple": true,
-          "maxConnections": 1
+          "maxConnections": 3
         }
       ],
       "jsonParams": [
@@ -7312,10 +7398,10 @@
             "default": "high",
             "type": "string",
             "enum": [
+              "very_low",
               "low",
               "medium",
-              "high",
-              "very_high"
+              "high"
             ]
           },
           "image_url": {
@@ -7416,6 +7502,183 @@
           "id": "image_url",
           "label": "Image URL",
           "dataType": "Image",
+          "required": false
+        }
+      ],
+      "jsonParams": []
+    },
+    "krea-audio-bytedance-seed-audio-1-0": {
+      "endpoint": "/generate/audio/bytedance/seed-audio-1.0",
+      "displayName": "Seed Audio 1.0",
+      "requestSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "additionalProperties": false
+      },
+      "mediaType": "Audio",
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": false
+        }
+      ],
+      "jsonParams": []
+    },
+    "krea-audio-elevenlabs-tts": {
+      "endpoint": "/generate/audio/elevenlabs/tts",
+      "displayName": "ElevenLabs TTS",
+      "requestSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "voice_id": {
+            "default": "hpp4J3VqNfWAUOO0d1Us",
+            "type": "string",
+            "minLength": 1
+          },
+          "model_id": {
+            "default": "eleven_multilingual_v2",
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "additionalProperties": false
+      },
+      "mediaType": "Audio",
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": false
+        }
+      ],
+      "jsonParams": []
+    },
+    "krea-audio-elevenlabs-music": {
+      "endpoint": "/generate/audio/elevenlabs/music",
+      "displayName": "ElevenLabs Music",
+      "requestSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4100
+          },
+          "music_length_ms": {
+            "type": "integer",
+            "minimum": 3000,
+            "maximum": 600000
+          },
+          "force_instrumental": {
+            "default": false,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "additionalProperties": false
+      },
+      "mediaType": "Audio",
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": false
+        }
+      ],
+      "jsonParams": []
+    },
+    "krea-audio-elevenlabs-music-v2": {
+      "endpoint": "/generate/audio/elevenlabs/music-v2",
+      "displayName": "ElevenLabs Music v2",
+      "requestSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4100
+          },
+          "music_length_ms": {
+            "type": "integer",
+            "minimum": 3000,
+            "maximum": 600000
+          },
+          "force_instrumental": {
+            "default": false,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "additionalProperties": false
+      },
+      "mediaType": "Audio",
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": false
+        }
+      ],
+      "jsonParams": []
+    },
+    "krea-audio-elevenlabs-music-v2-5": {
+      "endpoint": "/generate/audio/elevenlabs/music-v2.5",
+      "displayName": "ElevenLabs Music v2.5",
+      "requestSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4100
+          },
+          "music_length_ms": {
+            "type": "integer",
+            "minimum": 3000,
+            "maximum": 600000
+          },
+          "force_instrumental": {
+            "default": false,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "additionalProperties": false
+      },
+      "mediaType": "Audio",
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
           "required": false
         }
       ],

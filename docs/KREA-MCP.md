@@ -17,7 +17,7 @@ Each Canvas/Create recipe saves its connection choice. Changing the default
 does not change existing nodes, saved recipes or earlier runs. Nodes saved
 before this feature keep using the API token. Change a node's **Krea connection**
 control explicitly to switch it. The six older Krea style/wrapper nodes still
-use API tokens; account generation supports the image/video gateway catalog.
+use API tokens; account generation supports the image/video/audio gateway catalog.
 
 Run a node or Create recipe explicitly to generate. Nebula discovers Krea's
 tool and model schemas, uploads connected local media, submits once, polls the

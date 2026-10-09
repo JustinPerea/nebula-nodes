@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate Nebula's explicit Krea image/video nodes from a pinned API catalog.
+"""Generate Nebula's explicit Krea image/video/audio nodes from a pinned API catalog.
 
 Default and --check are offline. --refresh fetches Krea's official public
 OpenAPI (or --openapi reads a previously fetched copy); no token or job is used.
@@ -20,6 +20,10 @@ REGISTRY = ROOT / "backend/data/node_definitions.json"
 FRONTEND = ROOT / "frontend/src/constants/nodeDefinitions.ts"
 SOURCE_URL = "https://api.krea.ai/openapi.json"
 DOC_URL = "docs/model-providers/krea/krea-gateway.md"
+# Enhance, 3D and node-app routes need different inputs and outputs; they stay out.
+MEDIA_ROUTES = {"/generate/image/": "Image", "/generate/video/": "Video",
+                "/generate/audio/": "Audio"}
+CATEGORIES = {"Image": "image-gen", "Video": "video-gen", "Audio": "audio-gen"}
 BEGIN = "  // BEGIN GENERATED KREA CATALOG (scripts/sync-krea-catalog.py)"
 END = "  // END GENERATED KREA CATALOG"
 
@@ -120,7 +124,9 @@ def refresh(raw, checked_on):
     api = json.loads(raw)
     models = {}
     for endpoint, operations in api["paths"].items():
-        if not endpoint.startswith(("/generate/image/", "/generate/video/")):
+        media_type = next((kind for prefix, kind in MEDIA_ROUTES.items()
+                           if endpoint.startswith(prefix)), None)
+        if media_type is None:
             continue
         operation = operations.get("post")
         if not operation or operation.get("deprecated"):
@@ -130,12 +136,11 @@ def refresh(raw, checked_on):
         if node_id in models:
             raise ValueError(f"Krea ID collision: {node_id}")
         _, ports, json_params = fields_for(schema)
-        media_type = "Image" if endpoint.startswith("/generate/image/") else "Video"
         models[node_id] = {"endpoint": endpoint, "displayName": operation["summary"],
                            "requestSchema": schema, "mediaType": media_type,
                            "inputPorts": ports, "jsonParams": json_params}
     if not models:
-        raise ValueError("Krea OpenAPI has no image/video generation models")
+        raise ValueError("Krea OpenAPI has no image/video/audio generation models")
     return {"sourceUrl": SOURCE_URL, "fetchedAt": checked_on,
             "openapiSha256": hashlib.sha256(raw).hexdigest(), "models": models}
 
@@ -160,7 +165,7 @@ def definitions(catalog):
             name += " Edit"
         result[node_id] = {
             "id": node_id, "displayName": name + " (Krea)",
-            "category": "image-gen" if media_type == "Image" else "video-gen",
+            "category": CATEGORIES[media_type],
             "apiProvider": "krea", "apiEndpoint": model["endpoint"],
             "envKeyName": "KREA_API_TOKEN", "executionPattern": "async-poll",
             "inputPorts": ports,
@@ -253,7 +258,7 @@ def main():
                 raise SystemExit(f"Krea catalog drift: {path.relative_to(ROOT)}; run scripts/sync-krea-catalog.py")
         else:
             path.write_text(content)
-    print(f"Krea catalog {'check passed' if args.check else 'generated'}: {len(generated)} image/video models")
+    print(f"Krea catalog {'check passed' if args.check else 'generated'}: {len(generated)} image/video/audio models")
 
 
 if __name__ == "__main__":

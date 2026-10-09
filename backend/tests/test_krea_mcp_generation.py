@@ -299,6 +299,9 @@ LIVE_TOOLS = Path(__file__).with_name('fixtures') / 'krea_mcp_tools.json'
 VIDEO_ID = 'krea-video-kling-kling-3-0'
 VIDEO_MODEL_ID = 'kling/kling-3.0'
 VIDEO_CDN = 'https://media.example.test/kling.mp4'
+MUSIC_ID = 'krea-audio-elevenlabs-music-v2-5'
+MUSIC_MODEL_ID = 'elevenlabs/music-v2.5'
+MUSIC_CDN = 'https://media.example.test/track.mp3'
 
 
 class LiveSession(Session):
@@ -308,9 +311,10 @@ class LiveSession(Session):
         self.inventory = [
             {'id': 'openai/gpt-image-2', 'category': 'image', 'name': 'ChatGPT 2'},
             {'id': VIDEO_MODEL_ID, 'category': 'video', 'name': 'Kling 3.0'},
+            {'id': MUSIC_MODEL_ID, 'category': 'audio', 'name': 'ElevenLabs Music v2.5'},
         ]
         self.schemas = {}
-        for entry, node_id in zip(self.inventory, (IMAGE_ID, VIDEO_ID)):
+        for entry, node_id in zip(self.inventory, (IMAGE_ID, VIDEO_ID, MUSIC_ID)):
             definition = gateway.catalog_models()[node_id]
             self.schemas[entry['id']] = {
                 'model': entry['id'], 'category': entry['category'], 'name': entry['name'],
@@ -331,7 +335,7 @@ class LiveSession(Session):
             return result(self.schemas[arguments['model']])
         if name == 'get_upload_url':
             return CallToolResult(content=[TextContent(type='text', text=UPLOAD)])
-        if name in {'generate_image', 'generate_video', 'generate'}:
+        if name in {'generate_image', 'generate_video', 'generate_audio', 'generate'}:
             if self.rejected:
                 return CallToolResult(content=[TextContent(type='text', text='synthetic rejection')], isError=True)
             return result({'mode': 'async', 'completed': False, 'timedOut': False,
@@ -517,3 +521,24 @@ async def test_actual_video_poll_loss_cancels_without_category_fallback(live_set
     names = [name for name, _ in session.calls]
     assert names.count('generate_video') == names.count('get_job') == names.count('cancel_job') == 1
     assert 'generate_image' not in names and 'generate' not in names
+
+
+@pytest.mark.asyncio
+async def test_account_music_binds_audio_tool_submits_once_and_saves_local_track(live_setup):
+    session, _ = live_setup
+    track = b'ID3' + bytes(64)
+    session.jobs = [{'job_id': 'job-live-fixture', 'status': 'completed', 'type': 'fixture', 'result': {'urls': [MUSIC_CDN]}}]
+    with respx.mock as router:
+        downloaded = router.get(MUSIC_CDN).respond(200, content=track, headers={'content-type': 'audio/mpeg'})
+        outputs = await gateway.handle_krea_gateway(
+            GraphNode(id='account-music', definitionId=MUSIC_ID,
+                      params={'_kreaAuth': 'mcp', 'music_length_ms': 40000, 'force_instrumental': True}),
+            {'prompt': PortValueDict(type='Text', value='quiet ambient pulse')}, {}, emit=AsyncMock())
+        assert 'authorization' not in downloaded.calls[0].request.headers
+    assert session.calls[0] == ('list_models', {'category': 'audio'})
+    assert session.calls[1] == ('get_model_schema', {'model': MUSIC_MODEL_ID})
+    submissions = [(name, args) for name, args in session.calls if name.startswith('generate')]
+    assert submissions == [('generate_audio', {'model': MUSIC_MODEL_ID, 'sync': False, 'input': {
+        'music_length_ms': 40000, 'force_instrumental': True, 'prompt': 'quiet ambient pulse'}})]
+    assert outputs['audio']['type'] == 'Audio'
+    assert Path(outputs['audio']['value']).read_bytes() == track

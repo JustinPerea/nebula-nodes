@@ -96,7 +96,7 @@ def _generation_values(tools, name, model_id, body):
 
 async def prepare_generation(tools, model, preview_body, validate):
     """Discover and validate the exact saved route, without uploading or generating."""
-    category = {'Image': 'image', 'Video': 'video'}[model['mediaType']]
+    category = {'Image': 'image', 'Video': 'video', 'Audio': 'audio'}[model['mediaType']]
     endpoint = model['endpoint'].removeprefix('/generate/')
     if not endpoint.startswith(category + '/'):
         raise RuntimeError('Krea model category does not match its saved route; no job was submitted')

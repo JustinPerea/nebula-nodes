@@ -1,4 +1,4 @@
-"""Schema-checked Krea image/video routes from the bundled public API catalog.
+"""Schema-checked Krea image/video/audio routes from the bundled public API catalog.
 
 Graphs choose a first-class definition ID, never a URL or arbitrary endpoint.
 Provider credentials are attached only to Krea requests, not artifact downloads.
@@ -44,7 +44,7 @@ MAX_POLLS = 300
 POLL_INTERVAL = 2.0
 _RUNTIME_PARAMS = {"_sourceDuration", "_sourceFps", "_sourceIsVfr", "_variant", "_kreaAuth"}
 _PLACEHOLDER_URL = "https://assets.krea.ai/validated-local-input"
-_ENDPOINT = re.compile(r"^/generate/(?:image|video)/[A-Za-z0-9_./-]+$")
+_ENDPOINT = re.compile(r"^/generate/(?:image|video|audio)/[A-Za-z0-9_./-]+$")
 _JOB_ID = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
 
 
@@ -64,7 +64,7 @@ def _model(definition_id: str) -> dict[str, Any]:
     endpoint = model.get("endpoint", "")
     if not isinstance(endpoint, str) or not _ENDPOINT.fullmatch(endpoint) or ".." in endpoint:
         raise ValueError("Invalid bundled Krea endpoint")
-    if model.get("mediaType") not in {"Image", "Video"}:
+    if model.get("mediaType") not in {"Image", "Video", "Audio"}:
         raise ValueError("Unsupported bundled Krea media type")
     return model
 
@@ -291,7 +291,7 @@ def _result_artifacts(job: dict, media_type: str) -> list[tuple[str, str]]:
             _http_url(url)
         except ValueError as exc:
             raise RuntimeError("Krea returned an invalid media URL") from exc
-        artifact_type = "Image" if hint in {"image", "preview", "preview_url", "thumbnail", "poster"} else "Video" if hint == "video" else media_type
+        artifact_type = "Image" if hint in {"image", "preview", "preview_url", "thumbnail", "poster"} else "Video" if hint == "video" else "Audio" if hint == "audio" else media_type
         artifacts.append((artifact_type, url))
     return artifacts
 
@@ -361,14 +361,14 @@ async def handle_krea_gateway(
                     image.verify()
             except (OSError, ValueError) as exc:
                 raise RuntimeError("Krea returned invalid image artwork") from exc
-        elif path.suffix.lstrip(".").lower() not in _MEDIA_EXTENSIONS["Video"]:
-            raise RuntimeError("Krea returned an image rather than the requested video")
+        elif path.suffix.lstrip(".").lower() not in _MEDIA_EXTENSIONS[artifact_type]:
+            raise RuntimeError(f"Krea returned an image rather than the requested {artifact_type.lower()}")
         artifacts.append({"type": artifact_type, "value": portable_output_ref(str(path), require_file=True)})
         if artifact_type == media_type:
             paths.append(str(path))
     if not paths:
         raise RuntimeError(f"Krea completed without a {media_type.lower()} result")
-    primary = "image" if media_type == "Image" else "video"
+    primary = media_type.lower()
     return {primary: {"type": media_type, "value": paths[0]},
             f"{primary}s": {"type": "Array", "value": [portable_output_ref(path, require_file=True) for path in paths]},
             "artifacts": {"type": "Array", "value": artifacts},

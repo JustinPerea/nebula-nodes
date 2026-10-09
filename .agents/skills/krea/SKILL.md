@@ -1,13 +1,13 @@
 ---
 name: krea
-description: Use when building or editing a Nebula graph with Krea image/video provider nodes, Krea 2, image style references, styles, moodboards, style search, or style training. Covers the schema-generated model catalog, exact node IDs and ports, direct-Krea routing, media upload, async jobs, legacy style wiring, credentials, and verification boundaries.
+description: Use when building or editing a Nebula graph with Krea image/video/audio provider nodes, Krea 2, image style references, styles, moodboards, style search, or style training. Covers the schema-generated model catalog, exact node IDs and ports, direct-Krea routing, media upload, async jobs, legacy style wiring, credentials, and verification boundaries.
 ---
 
 # Krea — Nebula Integration
 
 Use Krea direct API nodes when the user chooses Krea. FAL Krea endpoints and automatic routing through another provider are not part of this integration.
 
-Current image/video gateway contract: `docs/model-providers/krea/krea-gateway.md`. User-facing setup and recipes: `docs/api-guides/krea.md`. The older `docs/model-providers/krea/krea-2.md` describes the preserved legacy wrapper; it is not the full current provider catalog.
+Current image/video/audio gateway contract: `docs/model-providers/krea/krea-gateway.md`. User-facing setup and recipes: `docs/api-guides/krea.md`. The older `docs/model-providers/krea/krea-2.md` describes the preserved legacy wrapper; it is not the full current provider catalog.
 
 ## Account connection through MCP
 
@@ -20,9 +20,9 @@ explicit graph run. The managed agent MCP bridge exposes only `list_models`
 and `get_model_schema`; generate through Nebula GRAPH commands with
 `_kreaAuth=mcp` when the user chooses their connected Krea account.
 
-## Image and Video Model Nodes
+## Image, Video and Audio Model Nodes
 
-The public Krea OpenAPI catalog checked **2026-10-03** defines **33 image and 41 video routes** included as specific first-class Nebula nodes. Canvas supports the full catalog. Create exposes models compatible with its prompt, image attachments, and simple controls; Runway's tagged references, H3 camera trajectories, and Flux Video Edit require Canvas. The nodes have model-specific controls and connectable prompt/media ports; JSON fields hold complex parameters, not a model selection UI.
+The public Krea OpenAPI catalog checked **2026-10-09** defines **34 image, 41 video and 5 audio routes** included as specific first-class Nebula nodes. Canvas supports the full catalog. Create exposes models compatible with its prompt, image attachments, and simple controls; Runway's tagged references, H3 camera trajectories, and Flux Video Edit require Canvas. The nodes have model-specific controls and connectable prompt/media ports; JSON fields hold complex parameters, not a model selection UI.
 
 Node IDs are `krea-` plus the API path after `/generate/`, with non-alphanumeric characters replaced by hyphens. For example:
 
@@ -34,12 +34,13 @@ Node IDs are `krea-` plus the API path after `/generate/`, with non-alphanumeric
 | Kling 3.0 | `krea-video-kling-kling-3-0` | `prompt`, optional `start_image`/`end_image` |
 | Veo 3.1 | `krea-video-google-veo-3-1` | `prompt`, optional image inputs |
 | Seedance 2.0 | `krea-video-bytedance-seedance-2` | `prompt`, optional media references |
+| ElevenLabs Music v2.5 | `krea-audio-elevenlabs-music-v2-5` | `prompt`, optional `music_length_ms`/`force_instrumental` |
 
 Inspect `backend/data/node_definitions.json` for the actual ports and parameter definitions before wiring a model. `docs/MODEL_REFERENCE.md` is generated from that registry; do not edit it manually. Do not infer a route from a display name or reconstruct the API path from a sanitized node ID.
 
 Catalog source metadata and exact request schemas live in `backend/data/krea_gateway_models.json`. Use `python3 scripts/sync-krea-catalog.py --check` for an offline consistency check; the script's default mode regenerates offline, while `--refresh` fetches only the public OpenAPI. These are catalog operations, not generation runs.
 
-Image model outputs are `image` (Image), `images` (Array), and `job` (Any); video outputs are `video` (Video), `videos` (Array), and `job` (Any). Both also emit `artifacts` (Array), containing typed local records, including previews when present. Complex object/array inputs can use structured `Any` bindings, while media arrays expose their specific media type and schema-defined connection limits.
+Image model outputs are `image` (Image), `images` (Array), and `job` (Any); video outputs are `video` (Video), `videos` (Array), and `job` (Any); audio outputs are `audio` (Audio), `audios` (Array), and `job` (Any). All also emit `artifacts` (Array), containing typed local records, including previews when present. Complex object/array inputs can use structured `Any` bindings, while media arrays expose their specific media type and schema-defined connection limits.
 
 ### Gateway Graph Rules
 
@@ -50,8 +51,8 @@ Image model outputs are `image` (Image), `images` (Array), and `job` (Any); vide
 - Connect local/upstream media through its supported port so Nebula can upload it before submission. Do not put unresolved local file paths in advanced JSON.
 - Complex optional fields need canonical JSON objects/arrays. For Kling `multi_prompt`, an example is `[{"prompt":"Wide shot","duration":3},{"prompt":"Close-up","duration":2}]`. Leave optional fields empty when unnecessary.
 - Do not transfer parameters blindly across models. Duration, resolution spelling, audio, and reference limits are model-specific.
-- Catalog presence verifies a documented route/schema, not paid execution or universal workspace access. No real provider run was used to establish the 2026-10-03 catalog.
-- Enhancement, 3D/audio generation, and Krea saved node apps are outside this image/video catalog expansion.
+- Catalog presence verifies a documented route/schema, not paid execution or universal workspace access. No real provider run was used to establish the 2026-10-09 catalog.
+- Enhancement, 3D generation, and Krea saved node apps are outside this image/video/audio catalog.
 
 Generation is async: submit, retain the job ID, poll pending states, then materialize completed media locally. On Stop, unwind local work and request provider cancellation after the job ID is known; do not guarantee that remote work stopped. Keep prior completed outputs/history. Krea job errors are top-level `error` in the current schema, and output URL shapes can differ; see the gateway contract rather than assuming `result.urls[0]` always suffices.
 

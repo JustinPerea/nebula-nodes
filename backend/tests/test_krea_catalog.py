@@ -37,7 +37,8 @@ def test_each_model_has_a_valid_request_contract_and_valid_control_defaults(node
     assert definition["apiProvider"] == "krea"
     assert definition["envKeyName"] == "KREA_API_TOKEN"
     assert definition["apiEndpoint"] == model["endpoint"]
-    assert model["endpoint"].startswith(("/generate/image/", "/generate/video/"))
+    assert model["endpoint"].startswith(tuple(SYNC.MEDIA_ROUTES))
+    assert definition["category"] == SYNC.CATEGORIES[model["mediaType"]]
     assert {param["key"] for param in definition["params"]} == set(schema["properties"]) | {"_kreaAuth"}
     for param in definition["params"]:
         if param["key"] == "_kreaAuth":
@@ -96,3 +97,15 @@ def test_regeneration_preserves_unrelated_inline_registry_formatting():
     updated = SYNC.registry_source(source, {"new": {"docUrl": SYNC.DOC_URL}})
     assert source[:-3] in updated
     assert SYNC.registry_source(updated, {"new": {"docUrl": SYNC.DOC_URL}}) == updated
+
+
+def test_audio_routes_are_first_class_audio_nodes():
+    music = REGISTRY["krea-audio-elevenlabs-music-v2-5"]
+    assert music["category"] == "audio-gen"
+    assert [port["id"] for port in music["inputPorts"]] == ["prompt"]
+    assert music["outputPorts"][0] == {"id": "audio", "label": "Audio", "dataType": "Audio", "required": True}
+    assert {param["key"] for param in music["params"]} >= {"music_length_ms", "force_instrumental"}
+    audio = {node_id for node_id, model in CATALOG["models"].items() if model["mediaType"] == "Audio"}
+    assert all(CATALOG["models"][node_id]["endpoint"].startswith("/generate/audio/") for node_id in audio)
+    assert not any(model["endpoint"].startswith(("/generate/enhance/", "/generate/3d/"))
+                   for model in CATALOG["models"].values())

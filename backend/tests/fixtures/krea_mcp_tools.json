@@ -347,6 +347,138 @@
     }
   },
   {
+    "name": "generate_audio",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "model": {
+          "description": "Model ID from list_models",
+          "type": "string",
+          "minLength": 1
+        },
+        "input": {
+          "description": "Request payload validated against the matching public API model schema. For media input URL fields, pass a Krea asset URL, a publicly accessible external URL, or an uploaded asset URL returned by get_upload_url.",
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {}
+        },
+        "sync": {
+          "description": "Wait for completion before returning. Prefer async mode for MCP Apps UI progress and polling; set sync=true only when the user explicitly asks to wait for the final result in the tool response.",
+          "default": false,
+          "type": "boolean"
+        },
+        "timeoutSeconds": {
+          "description": "Timeout in seconds when sync=true. Long generations can exceed this timeout, so prefer async mode unless the user explicitly asks to wait.",
+          "default": 30,
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 300
+        }
+      },
+      "required": [
+        "model",
+        "input"
+      ]
+    },
+    "outputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "mode": {
+          "description": "Whether the call returned immediately (async) or waited for completion (sync)",
+          "type": "string",
+          "enum": [
+            "async",
+            "sync"
+          ]
+        },
+        "completed": {
+          "description": "Whether the job reached a completed status",
+          "type": "boolean"
+        },
+        "timedOut": {
+          "description": "Whether a sync call timed out before the job completed",
+          "type": "boolean"
+        },
+        "job_id": {
+          "description": "Unique job identifier",
+          "type": "string"
+        },
+        "job": {
+          "type": "object",
+          "description": "Krea generation job.",
+          "properties": {
+            "job_id": {
+              "description": "Unique job identifier",
+              "type": "string"
+            },
+            "status": {
+              "description": "Current job status",
+              "type": "string"
+            },
+            "type": {
+              "description": "Job type, for example flux or node-app",
+              "type": "string"
+            },
+            "created_at": {
+              "description": "Job creation timestamp"
+            },
+            "completed_at": {
+              "description": "Job completion timestamp, present once the job finishes"
+            },
+            "position": {
+              "description": "Queue position while the job is pending"
+            },
+            "result": {
+              "description": "Job output, present once the job completes",
+              "type": "object",
+              "properties": {
+                "urls": {
+                  "description": "Output asset URLs: an array of URLs for standard generations, or an object keyed by output name for node apps",
+                  "type": [
+                    "array",
+                    "object"
+                  ]
+                },
+                "style_id": {
+                  "description": "Style ID for completed training jobs",
+                  "type": "string"
+                }
+              }
+            },
+            "error": {
+              "description": "Failure details, present when the job fails",
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "required": [
+            "job_id",
+            "status",
+            "type"
+          ]
+        }
+      },
+      "required": [
+        "mode",
+        "completed",
+        "timedOut",
+        "job_id",
+        "job"
+      ]
+    }
+  },
+  {
     "name": "get_upload_url",
     "inputSchema": {
       "type": "object",

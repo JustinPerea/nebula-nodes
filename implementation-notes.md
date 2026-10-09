@@ -1,5 +1,15 @@
 # Implementation Notes
 
+## 2026-10-09 — Krea audio models
+
+- Added because the Krea announcement video opens on music generated through Nebula's Krea connector, and the connector could not generate audio. Built on `feat/krea-audio-models` from `main`, separate from the dirty Design-agent checkout.
+- Extended the existing generator (`scripts/sync-krea-catalog.py`) to include `/generate/audio/` routes as `audio-gen` nodes with `audio`/`audios` outputs. Enhance (18 routes), 3D (10) and node apps stay out: they need different input/output node shapes, not just another prefix.
+- The refresh came from Krea's live OpenAPI (2026-10-09), so it also brought in what Krea changed upstream since the 2026-10-03 pin: new `krea-image-google-nano-banana-2-1`; Ideogram 4.5 Precise `quality` is now `very_low…high` (no `very_high`, so a saved graph using `very_high` will fail schema validation before spend); Gemini Omni Flash 1.1 `reference_videos` max 1→3; Flux 1 Dev's published random seed default changed (Krea regenerates it per fetch — expect this churn on every refresh).
+- Account path: Krea MCP exposes `generate_audio` with the same `model`/`input`/`sync` contract as image/video (checked live with read-only `get_model_schema` for `elevenlabs/music-v2.5`, endpointPath `audio/elevenlabs/music-v2.5`). Added that tool to the captured fixture and mapped the `Audio` category.
+- Result parsing now labels a tagged `audio` URL as Audio. Before, an `audio` key on a video route would have been materialized as a Video artifact.
+- Count pins updated: gateway 74→80, registry 255→261 (`test_video_qc_nodes`). `.claude/skills/krea/SKILL.md` is the older legacy-node skill and was left alone; `.agents/skills/krea/SKILL.md` is the current one and was updated.
+- Validation: 3,489 backend, 1,684 frontend, desktop node tests, lint/style guards, production build/budget, catalog `--check`, 261 node contracts and regenerated MODEL_REFERENCE.
+
 ## 2026-10-07 — UI audit repairs
 
 - Reuse the isolated `codex/audit-web-fixes` worktree and preserve its existing functional repairs. The parent checkout and its parallel brand-system work stay untouched; packaged Electron remains outside this task.
