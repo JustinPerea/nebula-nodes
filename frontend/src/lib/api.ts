@@ -294,6 +294,37 @@ export async function fetchNousModels(): Promise<{ models: NousModel[]; count: n
   return response.json();
 }
 
+export type ChatProvider = 'claude' | 'codex';
+
+export function chatAuthUsesProviderBilling(mode: string | null): boolean {
+  return /api|bearer|bedrock|vertex|foundry/i.test(mode || '');
+}
+
+export interface ChatModelCatalog {
+  agent: ChatProvider;
+  status: 'ready' | 'not_installed' | 'not_authenticated' | 'unavailable';
+  auth: { mode: string | null; planType?: string | null };
+  catalog: { source: string; runtimeVersion: string | null; fetchedAt: string };
+  models: Array<{
+    id: string;
+    label: string;
+    description?: string;
+    resolvedModel?: string;
+    isDefault: boolean;
+    defaultEffort: string | null;
+    supportedEfforts: Array<{ id: string; label: string; description?: string }>;
+  }>;
+  error?: { code: string; message: string };
+}
+
+export async function fetchChatModels(agent: ChatProvider, refresh = false): Promise<ChatModelCatalog> {
+  const response = await apiFetch(`/api/agents/${agent}/models${refresh ? '?refresh=true' : ''}`);
+  if (!response.ok) throw new Error(response.status === 404
+    ? 'Model discovery needs the updated Nebula backend. Restart it, then retry.'
+    : 'Model discovery is unavailable. Check the Nebula backend, then retry.');
+  return response.json();
+}
+
 export interface CodexStatus {
   installed: boolean;
   loggedIn: boolean;

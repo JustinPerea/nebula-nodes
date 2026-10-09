@@ -11,7 +11,7 @@ features:
   - Canvas, Create, Cinema, Character, Moodboard, Video Editor, and Remotion workspaces
   - Paper-linked artwork with immutable snapshots and explicit recipe reruns
   - Saveable graphs, local outputs, and retained run history
-  - Optional Daedalus, Claude, and Codex agent chat
+  - Optional Claude Code and Codex chat with model and effort selection
 hero: docs/assets/banner.svg
 links:
   github: https://github.com/JustinPerea/nebula-nodes
@@ -57,7 +57,7 @@ Requires Paper Desktop running on the same computer as the Nebula backend, signe
 - **Iterate on part of a graph** with partial execution, caching, and streaming previews.
 - **Work across Canvas, Create, Cinema, Character, and Moodboard**, then assemble clips in the Video or Remotion editor.
 - **Keep your work** with saved JSON graphs, local media outputs, and run history.
-- **Build with an agent** through optional Daedalus, Claude, or Codex chat. [Daedalus setup](docs/HERMES-SETUP.md).
+- **Build with an agent** using your local Claude Code or Codex login. Choose the model and thinking effort in Chat. [Chat setup](docs/CHAT-SETUP.md).
 
 ## Quickstart
 

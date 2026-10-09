@@ -249,6 +249,7 @@ async def run_claude(
     extra_dirs: list[Path] | None = None,
     workdir: Path | None = None,
     agent_token: str | None = None,
+    catalog_validated: bool = False,
 ) -> AsyncIterator[dict[str, Any]]:
     """Run `claude -p` once and yield normalized events.
 
@@ -273,8 +274,8 @@ async def run_claude(
         system_prompt = f"{system_prompt}\n\n{COMMONS_SKILL}"
     if selection_context:
         system_prompt = f"{system_prompt}\n\n{selection_context}"
-    requested_model = normalize_claude_model(model)
-    effective_effort = normalize_effort(effort)
+    requested_model = model if catalog_validated else normalize_claude_model(model)
+    effective_effort = effort if catalog_validated else normalize_effort(effort)
     agent_cwd = workdir or agent_workspace()
     from services.agent_workspaces import workspace_deny_roots
     protected = protected_agent_dirs()
@@ -307,7 +308,9 @@ async def run_claude(
                                  deny_read_dirs=[*protected, *denied_workspaces],
                                  backend_url=backend_url, include_krea=True),
             "--output-format", "stream-json", "--verbose",
-            "--model", requested_model, "--effort", effective_effort]
+            "--model", requested_model]
+    if effective_effort is not None:
+        args.extend(["--effort", effective_effort])
     args.extend(["--append-system-prompt", system_prompt])
     if session_id:
         args.extend(["--resume", session_id])

@@ -30,7 +30,7 @@ def _flag_value(args: list[str], flag: str) -> str:
     ("", "medium"),
     ("HIGH", "high"),
     ("xhigh", "xhigh"),
-    ("max", "medium"),
+    ("max", "max"),
     ("ultra", "medium"),
 ])
 def test_normalize_effort(raw, expected):
@@ -142,6 +142,26 @@ def test_clean_mcp_servers_default_empty():
     # Static defaults admit no user servers; the explicit invocation bridge is
     # built separately by clean_mcp_servers().
     assert agent_profiles.CLEAN_MCP_SERVERS == {}
+
+
+@pytest.mark.parametrize("effort", [None, "max"])
+@pytest.mark.asyncio
+async def test_catalog_validated_claude_alias_and_effort_are_preserved(tmp_path, effort):
+    captured = []
+    proc = _claude_proc([])
+    async def create(*args, **kwargs):
+        captured.extend(args)
+        return proc
+    with patch("services.chat_session.asyncio.create_subprocess_exec", side_effect=create):
+        events = [event async for event in run_claude("fixture", "old-provider-session", "default",
+                    effort=effort, catalog_validated=True, workdir=tmp_path / "ws")]
+    assert _flag_value(captured, "--model") == "default"
+    assert _flag_value(captured, "--resume") == "old-provider-session"
+    if effort is None:
+        assert "--effort" not in captured
+    else:
+        assert _flag_value(captured, "--effort") == "max"
+    assert events[-1] == {"type": "done"}
 
 
 def test_secret_files_are_denied_by_absolute_path(tmp_path):

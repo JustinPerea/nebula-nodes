@@ -388,7 +388,7 @@ def _codex_model(model: str | None) -> str | None:
     return codex_default_model()
 
 
-def _codex_base_args(model: str | None, effort: str = DEFAULT_EFFORT,
+def _codex_base_args(model: str | None, effort: str | None = DEFAULT_EFFORT,
                      workdir: Path | None = None, backend_url: str | None = None) -> list[str]:
     workdir = workdir or agent_workspace()
     args = [
@@ -550,6 +550,7 @@ async def run_codex(
     extra_dirs: list[Path] | None = None,
     workdir: Path | None = None,
     agent_token: str | None = None,
+    catalog_validated: bool = False,
 ) -> AsyncIterator[dict[str, Any]]:
     """Run one Codex turn and yield normalized chat events."""
     # Accepted for runner signature parity. Codex auth/provider selection lives
@@ -564,8 +565,8 @@ async def run_codex(
         yield {"type": "done"}
         return
 
-    effective_effort = normalize_effort(effort)
-    effective_model = _codex_model(model)
+    effective_effort = effort if catalog_validated else normalize_effort(effort)
+    effective_model = model if catalog_validated else _codex_model(model)
     agent_cwd = workdir or agent_workspace()
     try:
         args = _codex_base_args(effective_model, effective_effort, agent_cwd, backend_url)

@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
-const apiMocks = vi.hoisted(() => ({ fetchClaudeStatus: vi.fn(), fetchCodexStatus: vi.fn(), fetchNousModels: vi.fn(), apiFetch: vi.fn() }));
+const apiMocks = vi.hoisted(() => ({ fetchClaudeStatus: vi.fn(), fetchCodexStatus: vi.fn(), fetchChatModels: vi.fn(), apiFetch: vi.fn() }));
 vi.mock('../src/lib/api', async (original) => ({
   ...await original<typeof import('../src/lib/api')>(),
-  fetchClaudeStatus: apiMocks.fetchClaudeStatus, fetchCodexStatus: apiMocks.fetchCodexStatus, fetchNousModels: apiMocks.fetchNousModels,
+  fetchClaudeStatus: apiMocks.fetchClaudeStatus, fetchCodexStatus: apiMocks.fetchCodexStatus, fetchChatModels: apiMocks.fetchChatModels,
 }));
 vi.mock('../src/lib/backend', async (original) => ({
   ...await original<typeof import('../src/lib/backend')>(), apiFetch: apiMocks.apiFetch,
@@ -33,7 +33,15 @@ beforeEach(() => {
   useUIStore.setState((state) => ({ panels: { ...state.panels, chat: { ...state.panels.chat, visible: true } } }));
   apiMocks.fetchClaudeStatus.mockResolvedValue({ installed: true, loggedIn: true });
   apiMocks.fetchCodexStatus.mockResolvedValue({ installed: true, loggedIn: true, mode: 'chatgpt' });
-  apiMocks.fetchNousModels.mockResolvedValue({ models: [], count: 0 });
+  apiMocks.fetchChatModels.mockImplementation(async (agent: string) => ({
+    agent, status: 'ready', auth: { mode: agent === 'claude' ? 'claudeai' : 'chatgpt' },
+    catalog: { source: 'test-runtime', runtimeVersion: 'test', fetchedAt: '2026-10-09T12:00:00Z' },
+    models: [{
+      id: agent === 'claude' ? 'sonnet' : 'gpt-test', label: agent === 'claude' ? 'Sonnet' : 'GPT Test',
+      isDefault: true, defaultEffort: 'medium',
+      supportedEfforts: [{ id: 'medium', label: 'Medium' }, { id: 'high', label: 'High' }],
+    }],
+  }));
 });
 afterEach(() => { cleanup(); useUIStore.setState(initialUI, true); vi.unstubAllGlobals(); });
 async function connected() {
@@ -51,14 +59,16 @@ async function sendText(text: string) {
 }
 
 describe('Commons chat integration', () => {
-  it('retains normal Daedalus/model/autonomy and sends no Commons metadata while disabled', async () => {
+  it('sends the selected chat model and effort without Commons metadata while disabled', async () => {
     const socket = await connected();
     expect(screen.queryByRole('textbox', { name: 'Chat brand' })).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'Daedalus' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Step ⏸' }));
+    expect(screen.queryByRole('button', { name: 'Daedalus' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Choose chat model' }));
+    fireEvent.click(await screen.findByRole('radio', { name: 'Medium' }));
+    fireEvent.keyDown(screen.getByRole('dialog', { name: 'Chat model settings' }), { key: 'Escape' });
     await sendText('Make a simple graph');
-    expect(socket.sent).toHaveLength(1);
-    expect(socket.sent[0]).toMatchObject({ type: 'send', agent: 'daedalus', autonomy: 'step', model: 'moonshotai/kimi-k2.6', provider: 'openrouter' });
+    await waitFor(() => expect(socket.sent).toHaveLength(1));
+    expect(socket.sent[0]).toMatchObject({ type: 'send', agent: 'claude', model: 'sonnet', effort: 'medium' });
     expect(socket.sent[0]).not.toHaveProperty('brand');
     expect(socket.sent[0]).not.toHaveProperty('commonsToken');
     expect(apiMocks.apiFetch).not.toHaveBeenCalled();
@@ -87,8 +97,8 @@ describe('Commons chat integration', () => {
   it('shows the native scope restriction and preserves a draft when human authority is missing', async () => {
     useUIStore.getState().setCommonsEnabled(true);
     const socket = await connected();
-    expect(screen.getByRole('button', { name: 'Daedalus' })).toBeDisabled();
-    expect(screen.getByText('Private reference chats: Claude or Codex.')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Daedalus' })).not.toBeInTheDocument();
+    expect(screen.getByText(/Private reference chats: Claude/)).toBeTruthy();
     const input = await sendText('Keep this unsent message');
     expect(await screen.findByText(/no UI session/)).toBeTruthy();
     expect(input).toHaveValue('Keep this unsent message');
@@ -105,6 +115,6 @@ describe('Commons chat integration', () => {
     expect(socket.sent).toHaveLength(0);
     fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
     await waitFor(() => expect(socket.sent).toHaveLength(1));
-    expect(socket.sent[0]).toMatchObject({ message: 'APPROVED: continue', sessionId: 'opaque-id', brand: 'Example', commonsToken: token });
+    expect(socket.sent[0]).toMatchObject({ message: 'APPROVED: continue', sessionId: 'opaque-id', brand: 'Example', commonsToken: token, model: 'sonnet', effort: null });
   });
 });

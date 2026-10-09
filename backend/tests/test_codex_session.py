@@ -156,6 +156,27 @@ async def test_codex_resume_uses_exec_resume_command():
     assert captured_args[idx + 2] == "-"
 
 
+@pytest.mark.parametrize("effort", [None, "max", "ultra"])
+@pytest.mark.asyncio
+async def test_catalog_validated_codex_effort_and_model_preserve_resume(effort, tmp_path):
+    captured = []
+    proc = _proc(b'')
+    async def create(*args, **kwargs):
+        if args[:3] == ("codex", "login", "status"):
+            return _chatgpt_status_proc()
+        captured.extend(args)
+        return proc
+    with patch("services.codex_session._build_prompt", return_value="fixture"), \
+         patch("services.codex_session.asyncio.create_subprocess_exec", side_effect=create):
+        events = await _collect(run_codex("fixture", "old-provider-session", "runtime-model",
+                               effort=effort, catalog_validated=True, workdir=tmp_path / "ws"))
+    assert captured[captured.index("--model") + 1] == "runtime-model"
+    assert captured[captured.index("resume") + 1] == "old-provider-session"
+    overrides = [value for value in captured if value.startswith("model_reasoning_effort=")]
+    assert overrides == ([] if effort is None else [f'model_reasoning_effort="{effort}"'])
+    assert events[-1] == {"type": "done"}
+
+
 @pytest.mark.asyncio
 async def test_run_codex_refuses_api_key_auth_before_exec():
     captured_args: list[tuple[str, ...]] = []

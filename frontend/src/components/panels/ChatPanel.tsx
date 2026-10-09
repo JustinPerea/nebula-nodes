@@ -9,13 +9,16 @@ import {
   fetchClaudeStatus,
   fetchCodexChatGPTLoginState,
   fetchCodexStatus,
-  fetchNousModels,
+  fetchChatModels,
+  chatAuthUsesProviderBilling,
   startCodexChatGPTLogin,
   type ClaudeStatus,
   type CodexChatGPTLoginState,
   type CodexStatus,
-  type NousModel,
+  type ChatModelCatalog,
+  type ChatProvider,
 } from '../../lib/api';
+import { ChatModelPicker } from './ChatModelPicker';
 import { apiFetch, backendAssetUrlSync, backendWebSocketUrl } from '../../lib/backend';
 import { commonsChatAuthority } from '../../lib/commonsChatAuthority';
 import { normalizeAgentEventSource } from '../../lib/agentEvents';
@@ -27,19 +30,28 @@ import {
   type ChatCancellationState,
 } from '../../lib/chatCancellation';
 
-type ChatAgent = 'claude' | 'codex' | 'daedalus';
+type ChatAgent = ChatProvider;
+type ModelSelection = { model: string | null; effort: string | null };
+type ChatSelection = { agent: ChatAgent; claude: ModelSelection; codex: ModelSelection };
+const CHAT_SELECTION_KEY = 'nebula:chat-selection';
 
-// Daedalus model picker — separate from Claude's `model` state because the
-// frontend chat panel reuses the same WS for both agents and we want each
-// agent to remember its own pick. localStorage-backed.
-const DAEDALUS_MODEL_KEY = 'nebula:daedalus-model';
-const DAEDALUS_PROVIDER_KEY = 'nebula:daedalus-provider';
-const DEFAULT_DAEDALUS_MODEL = 'moonshotai/kimi-k2.6';
-// Default to OpenRouter — works out-of-the-box with the user's existing
-// Hermes setup. Only flips to "nous" once the user actively picks a model
-// from the Nous catalog (which means they've authed via `hermes-daedalus
-// model`). This keeps fresh users from hitting a 401 on their first turn.
-type DaedalusProvider = 'openrouter' | 'nous';
+function loadChatSelection(): ChatSelection {
+  const empty: ChatSelection = { agent: 'claude', claude: { model: null, effort: null }, codex: { model: null, effort: null } };
+  try {
+    const saved = JSON.parse(window.localStorage.getItem(CHAT_SELECTION_KEY) || 'null');
+    if (!saved || typeof saved !== 'object') return empty;
+    const pick = (value: unknown): ModelSelection => {
+      if (!value || typeof value !== 'object') return { model: null, effort: null };
+      const row = value as Record<string, unknown>;
+      return {
+        model: typeof row.model === 'string' && row.model.length <= 256 ? row.model : null,
+        effort: typeof row.effort === 'string' && row.effort.length <= 32 ? row.effort : null,
+      };
+    };
+    return { agent: saved.agent === 'codex' ? 'codex' : 'claude', claude: pick(saved.claude), codex: pick(saved.codex) };
+  } catch { return empty; }
+}
+
 const BACKEND_START_COMMAND = 'cd backend && .venv/bin/python -m uvicorn main:app --host 127.0.0.1 --port 8000';
 const CHAT_PANEL_RESIZE_CURSORS: Record<string, string> = {
   l: 'ew-resize',
@@ -51,22 +63,6 @@ const CHAT_PANEL_RESIZE_CURSORS: Record<string, string> = {
   tr: 'nesw-resize',
   bl: 'nesw-resize',
 };
-
-function loadDaedalusModel(): string {
-  try {
-    return window.localStorage.getItem(DAEDALUS_MODEL_KEY) || DEFAULT_DAEDALUS_MODEL;
-  } catch {
-    return DEFAULT_DAEDALUS_MODEL;
-  }
-}
-function loadDaedalusProvider(): DaedalusProvider {
-  try {
-    const v = window.localStorage.getItem(DAEDALUS_PROVIDER_KEY);
-    return v === 'nous' ? 'nous' : 'openrouter';
-  } catch {
-    return 'openrouter';
-  }
-}
 
 function isBackendUnavailableError(message: string | null): boolean {
   if (!message) return false;
@@ -182,14 +178,6 @@ function parseTextWithCodeBlocks(text: string): Array<{ kind: 'prose' | 'code'; 
   if (lastIndex < text.length) segments.push({ kind: 'prose', content: text.slice(lastIndex) });
   return segments;
 }
-
-const MODEL_ALIASES: Record<string, string> = {
-  opus: 'claude-opus-4-7',
-  sonnet: 'claude-sonnet-4-6',
-  haiku: 'claude-haiku-4-5-20251001',
-};
-
-const DEFAULT_MODEL = 'claude-sonnet-4-6';
 
 function newId(): string {
   return Math.random().toString(36).slice(2, 10);
@@ -388,12 +376,28 @@ export function ChatPanel() {
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
-  const [model, setModel] = useState<string>(DEFAULT_MODEL);
-  const [agent, setAgent] = useState<ChatAgent>('claude');
+  const [selection, setSelection] = useState<ChatSelection>(loadChatSelection);
+  const agent = selection.agent;
+  const [modelCatalog, setModelCatalog] = useState<ChatModelCatalog | null>(null);
+  const [catalogLoading, setCatalogLoading] = useState(false);
+  const [catalogError, setCatalogError] = useState<string | null>(null);
+  const [catalogRefresh, setCatalogRefresh] = useState(0);
+  const activeCatalog = modelCatalog?.agent === agent ? modelCatalog : null;
+  const model = selection[agent].model ?? activeCatalog?.models.find((item) => item.isDefault)?.id ?? null;
+  const effort = selection[agent].effort;
+  const selectedModel = activeCatalog?.models.find((item) => item.id === model);
+  const selectionIssue = activeCatalog?.status !== 'ready'
+    ? 'Load the available models before sending.'
+    : !selectedModel
+      ? selection[agent].model === null
+        ? 'Choose an available model to continue.'
+        : 'Your saved model is no longer available. Choose a model to continue.'
+      : effort !== null && !selectedModel.supportedEfforts.some((item) => item.id === effort)
+        ? 'Your saved effort is unavailable for this model. Choose an effort to continue.'
+        : null;
   const [brand, setBrand] = useState('');
   const [authorizing, setAuthorizing] = useState(false);
   const authorityPendingRef = useRef(false);
-  const [autonomy, setAutonomy] = useState<'auto' | 'step'>('auto');
   const chatPanelRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   usePanelFocus(visible && shouldRender, chatPanelRef,
@@ -409,14 +413,6 @@ export function ChatPanel() {
     ta.style.height = `${Math.min(ta.scrollHeight, 200)}px`;
   }, [input]);
 
-  // Daedalus model picker state
-  const [daedalusModel, setDaedalusModel] = useState<string>(loadDaedalusModel);
-  const [daedalusProvider, setDaedalusProvider] = useState<DaedalusProvider>(loadDaedalusProvider);
-  const [daedalusModelPickerOpen, setDaedalusModelPickerOpen] = useState(false);
-  const [nousModels, setNousModels] = useState<NousModel[]>([]);
-  const [nousModelsLoading, setNousModelsLoading] = useState(false);
-  const [nousModelsError, setNousModelsError] = useState<string | null>(null);
-  const [daedalusModelSearch, setDaedalusModelSearch] = useState('');
   const [claudeStatus, setClaudeStatus] = useState<ClaudeStatus | null>(null);
   const [claudeStatusError, setClaudeStatusError] = useState<string | null>(null);
   const [codexStatus, setCodexStatus] = useState<CodexStatus | null>(null);
@@ -431,103 +427,45 @@ export function ChatPanel() {
   const [pendingImages, setPendingImages] = useState<PendingImage[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
 
-  const changeDaedalusModel = useCallback((modelId: string, fromProvider: DaedalusProvider = 'nous') => {
-    setDaedalusModel(modelId);
-    setDaedalusProvider(fromProvider);
-    try {
-      window.localStorage.setItem(DAEDALUS_MODEL_KEY, modelId);
-      window.localStorage.setItem(DAEDALUS_PROVIDER_KEY, fromProvider);
-    } catch {
-      /* localStorage may be unavailable in private contexts. */
-    }
-    setDaedalusModelPickerOpen(false);
-  }, []);
-
-  // Lazy-load Nous models on first picker open, then cache. Use a ref-flag
-  // (instead of state-derived guards) because a failed fetch leaves
-  // `loading=false` and `models.length=0`, which would otherwise re-trigger
-  // the effect on every render and create an infinite retry loop.
-  const nousModelsFetchedRef = useRef(false);
   useEffect(() => {
-    // Trigger fetch when EITHER the picker opens OR the user is sitting on
-    // a Nous-pinned Daedalus session — the latter so the smart-default
-    // validator below can run on first paint without waiting for the user
-    // to open the picker.
-    const shouldFetch =
-      daedalusModelPickerOpen || (agent === 'daedalus' && daedalusProvider === 'nous');
-    if (!shouldFetch || nousModelsFetchedRef.current) return;
-    let cancelled = false;
-    nousModelsFetchedRef.current = true;
-    queueMicrotask(() => {
-      if (cancelled) {
-        nousModelsFetchedRef.current = false;
-        return;
-      }
-      setNousModelsLoading(true);
-      setNousModelsError(null);
-      fetchNousModels()
-        .then((data) => {
-          if (!cancelled) setNousModels(data.models);
-        })
-        .catch((err: unknown) => {
-          // Reset the ref so the user can retry by closing + reopening the
-          // picker after running `hermes auth`.
-          nousModelsFetchedRef.current = false;
-          if (!cancelled) setNousModelsError(err instanceof Error ? err.message : String(err));
-        })
-        .finally(() => {
-          if (!cancelled) setNousModelsLoading(false);
-        });
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [daedalusModelPickerOpen, agent, daedalusProvider]);
+    try { window.localStorage.setItem(CHAT_SELECTION_KEY, JSON.stringify(selection)); }
+    catch { /* Browsing without persistent storage still works. */ }
+  }, [selection]);
 
-  // Daedalus is a text-out chat agent. Drop models whose only output is
-  // speech / image / something else — they'd accept a turn but return
-  // nothing the chat panel knows how to render.
-  const chatCapableNousModels = useMemo(
-    () => nousModels.filter((m) => (m.output_modalities ?? ['text']).includes('text')),
-    [nousModels],
-  );
-
-  const filteredDaedalusModels = useMemo(() => {
-    let list = chatCapableNousModels;
-    if (daedalusModelSearch.trim()) {
-      const q = daedalusModelSearch.toLowerCase();
-      list = list.filter(
-        (m) => m.id.toLowerCase().includes(q) || m.name.toLowerCase().includes(q),
-      );
-    }
-    return list.slice(0, 80);
-  }, [chatCapableNousModels, daedalusModelSearch]);
-
-  // Smart default: once the Nous catalog loads, validate the persisted
-  // daedalusModel still exists on the current provider. If the user is
-  // pinned to nous but the model is gone (e.g. retired, or a stale TTS
-  // pick), quietly swap to the first chat-capable Nous model. We only
-  // do this for Nous-pinned users — OpenRouter users keep their pick
-  // regardless because we don't have an OpenRouter catalog to validate
-  // against here.
   useEffect(() => {
-    if (daedalusProvider !== 'nous') return;
-    if (chatCapableNousModels.length === 0) return;
-    const current = chatCapableNousModels.find((m) => m.id === daedalusModel);
-    if (current) return;
-    const fallback = chatCapableNousModels[0];
+    if (!visible) return;
     let cancelled = false;
     queueMicrotask(() => {
       if (cancelled) return;
-      setDaedalusModel(fallback.id);
-      try { window.localStorage.setItem(DAEDALUS_MODEL_KEY, fallback.id); } catch {
-        /* localStorage may be unavailable in private contexts. */
-      }
+      setCatalogLoading(true);
+      setCatalogError(null);
+      fetchChatModels(agent, catalogRefresh > 0)
+        .then((catalog) => { if (!cancelled) setModelCatalog(catalog); })
+        .catch((error: unknown) => {
+          if (!cancelled) {
+            setModelCatalog(null);
+            setCatalogError(error instanceof Error ? error.message : String(error));
+          }
+        })
+        .finally(() => { if (!cancelled) setCatalogLoading(false); });
     });
-    return () => {
-      cancelled = true;
-    };
-  }, [daedalusProvider, chatCapableNousModels, daedalusModel]);
+    return () => { cancelled = true; };
+  }, [agent, visible, catalogRefresh, claudeStatus?.loggedIn, codexStatus?.loggedIn, codexStatus?.mode]);
+
+  const handleModelChange = useCallback((next: string) => {
+    if (busy || authorityPendingRef.current || !activeCatalog?.models.some((item) => item.id === next)) return;
+    const nextModel = activeCatalog.models.find((item) => item.id === next)!;
+    setSelection((current) => ({ ...current, [agent]: {
+      model: next,
+      effort: current[agent].effort !== null && nextModel.supportedEfforts.some((item) => item.id === current[agent].effort)
+        ? current[agent].effort : null,
+    } }));
+  }, [agent, activeCatalog, busy]);
+
+  const handleEffortChange = useCallback((next: string | null) => {
+    if (busy || authorityPendingRef.current || (next !== null && !selectedModel?.supportedEfforts.some((item) => item.id === next))) return;
+    setSelection((current) => ({ ...current, [agent]: { ...current[agent], effort: next } }));
+  }, [agent, selectedModel, busy]);
 
   useEffect(() => {
     if (agent !== 'claude') return;
@@ -620,7 +558,9 @@ export function ChatPanel() {
         setCodexLoginState(loginState);
         setCodexStatus(status);
         setCodexStatusError(null);
-        if (loginState.running || !status.loggedIn || status.mode !== 'chatgpt') {
+        if (!loginState.running && status.loggedIn && status.mode === 'chatgpt') {
+          setCatalogRefresh((value) => value + 1);
+        } else {
           retryTimer = window.setTimeout(poll, 1500);
         }
       } catch (err) {
@@ -643,10 +583,11 @@ export function ChatPanel() {
     if (!claudeStatus) return 'Checking Claude…';
     if (!claudeStatus.installed) return 'Claude not installed';
     if (!claudeStatus.loggedIn) return 'Claude login needed';
+    if (activeCatalog?.agent === 'claude' && chatAuthUsesProviderBilling(activeCatalog.auth.mode)) return /api|bearer/i.test(activeCatalog.auth.mode || '') ? 'Claude Code · API billing' : 'Claude Code · Provider billing';
     if (claudeStatus.subscriptionType) return `Claude · ${claudeStatus.subscriptionType}`;
     if (claudeStatus.authMethod) return `Claude · ${claudeStatus.authMethod}`;
     return 'Claude logged in';
-  }, [claudeStatus, claudeStatusError]);
+  }, [claudeStatus, claudeStatusError, activeCatalog]);
 
   const codexStatusLabel = useMemo(() => {
     if (isBackendUnavailableError(codexStatusError)) return 'Nebula backend offline';
@@ -680,7 +621,9 @@ export function ChatPanel() {
         open: needsConnection,
         title: needsConnection ? 'Connect Claude' : 'Claude connected',
         status: claudeStatusLabel,
-        detail: 'Use the local Claude Code login on this machine.',
+        detail: activeCatalog?.agent === 'claude' && chatAuthUsesProviderBilling(activeCatalog.auth.mode)
+          ? 'Claude Code is using provider billing. Check its authentication settings to use your subscription login.'
+          : 'Uses your existing Claude Code login on this machine.',
         canStartLogin: false,
         commands: [
           'claude auth login --claudeai',
@@ -726,7 +669,7 @@ export function ChatPanel() {
       };
     }
     return null;
-  }, [agent, claudeStatus, claudeStatusError, claudeStatusLabel, codexStatus, codexStatusError, codexStatusLabel]);
+  }, [agent, claudeStatus, claudeStatusError, claudeStatusLabel, codexStatus, codexStatusError, codexStatusLabel, activeCatalog]);
 
   useEffect(() => {
     if (!notice) return;
@@ -738,12 +681,13 @@ export function ChatPanel() {
   // clear sessionId on change — the next turn starts fresh on the new agent.
   const handleAgentChange = useCallback(
     (next: ChatAgent) => {
-      if (next === agent || busy || authorityPendingRef.current || (commonsEnabled && next === 'daedalus')) return;
+      if (next === agent || busy || authorityPendingRef.current) return;
 
-      setAgent(next);
+      setSelection((current) => ({ ...current, agent: next }));
       setSessionId(null);
+      setNotice(`Next message starts a new ${next === 'claude' ? 'Claude Code' : 'Codex'} conversation. Earlier messages stay here.`);
     },
-    [agent, busy, commonsEnabled],
+    [agent, busy],
   );
 
   const changeBrand = useCallback((next: string) => {
@@ -1041,6 +985,9 @@ export function ChatPanel() {
           }
           if (type === 'error') {
             const errText = String(event.message ?? 'unknown error');
+            if (['model_unsupported', 'effort_unsupported', 'model_required', 'auth_required'].includes(String(event.code))) {
+              setCatalogRefresh((value) => value + 1);
+            }
             setMessages((prev) => markThinkingCompleted(prev));
             upsertAssistant((msg) => ({
               ...msg,
@@ -1287,36 +1234,17 @@ export function ChatPanel() {
     const raw = input.trim();
     if (!raw) return;
 
-    // Client-side command interception.
+    if (busyRef.current || authorityPendingRef.current) return;
+    // Commands and selections never start a model turn.
     if (raw.startsWith('/model ')) {
-      // Preserve case for Daedalus models (some Hermes / Nous IDs are case-sensitive).
-      const rawName = raw.slice(7).trim();
-      let resolved: string;
-      if (agent === 'daedalus') {
-        resolved = rawName;
-        changeDaedalusModel(resolved);
-      } else if (agent === 'codex') {
-        resolved = 'Codex CLI config';
-      } else {
-        const lower = rawName.toLowerCase();
-        resolved = MODEL_ALIASES[lower] ?? lower;
-        setModel(resolved);
+      const name = raw.slice(7).trim().toLowerCase();
+      const match = activeCatalog?.models.find((item) => item.id.toLowerCase() === name || item.label.toLowerCase() === name);
+      if (activeCatalog?.status !== 'ready' || !match) {
+        setNotice('Choose an available model from the model picker.');
+        return;
       }
-      setMessages((prev) => [
-        ...prev,
-        { role: 'user', text: raw, id: newId() },
-        {
-          role: 'assistant',
-          id: newId(),
-          streaming: false,
-          parts: [{
-            kind: 'system',
-            text: agent === 'codex'
-              ? 'Codex uses the model configured in the Codex CLI.'
-              : `Model set to: ${resolved}`,
-          }],
-        },
-      ]);
+      handleModelChange(match.id);
+      setNotice(`Next message uses ${match.label}.`);
       setInput('');
       return;
     }
@@ -1341,10 +1269,7 @@ export function ChatPanel() {
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
     if (busyRef.current || authorityPendingRef.current) return;
-    if (commonsEnabled && agent === 'daedalus') {
-      setNotice('Commons private reference chats support Claude and Codex. Select one to continue.');
-      return;
-    }
+    if (catalogLoading || selectionIssue) { setNotice(selectionIssue || 'Models are loading.'); return; }
     let authority: Awaited<ReturnType<typeof commonsChatAuthority>> = {};
     if (commonsEnabled) {
       authorityPendingRef.current = true;
@@ -1386,27 +1311,25 @@ export function ChatPanel() {
           .map((node) => node.id),
         sessionId,
         ...authority,
-        model: agent === 'daedalus' ? daedalusModel : agent === 'codex' ? null : model,
+        model,
+        effort,
         agent,
-        autonomy,
-        // Provider is only meaningful for Daedalus turns. Backend treats
-        // null as "use default" (currently `nous`). Sending `openrouter`
-        // explicitly is the fresh-user fallback path.
-        provider: agent === 'daedalus' ? daedalusProvider : null,
+        autonomy: 'auto',
       }),
     );
   }, [
     input,
     model,
-    daedalusModel,
-    daedalusProvider,
+    effort,
+    activeCatalog,
+    catalogLoading,
+    selectionIssue,
     sessionId,
     pendingImages,
     commonsEnabled,
     brand,
     agent,
-    autonomy,
-    changeDaedalusModel,
+    handleModelChange,
     applyCancellationEvent,
   ]);
 
@@ -1417,15 +1340,15 @@ export function ChatPanel() {
   }, [send]);
 
   // Sends a new turn whose text starts with 'APPROVED:' or 'REJECTED:'.
-  // Daedalus's SKILL.md tells the agent to recognize these prefixes and
-  // either proceed with the paused plan or pivot. Mirrors the WS-send flow
+  // Continue an existing approval with the same selected runner settings.
+  // Mirrors the WS-send flow
   // in `send()` — appends user + assistant placeholder, flips busy, posts
   // the JSON envelope with agent/autonomy/sessionId/model.
   const handleApprovalResponse = useCallback(
     async (response: string) => {
       const ws = wsRef.current;
       if (!ws || ws.readyState !== WebSocket.OPEN || authorityPendingRef.current || busyRef.current) return;
-      if (commonsEnabled && agent === 'daedalus') return;
+      if (catalogLoading || selectionIssue) { setNotice(selectionIssue || 'Models are loading.'); return; }
       let authority: Awaited<ReturnType<typeof commonsChatAuthority>> = {};
       if (commonsEnabled) {
         authorityPendingRef.current = true;
@@ -1464,14 +1387,14 @@ export function ChatPanel() {
             .map((node) => node.id),
           sessionId,
           ...authority,
-          model: agent === 'daedalus' ? daedalusModel : agent === 'codex' ? null : model,
+          model,
+          effort,
           agent,
-          autonomy,
-          provider: agent === 'daedalus' ? daedalusProvider : null,
+          autonomy: 'auto',
         }),
       );
     },
-    [sessionId, model, daedalusModel, daedalusProvider, agent, autonomy, commonsEnabled, brand, applyCancellationEvent],
+    [sessionId, model, effort, agent, catalogLoading, selectionIssue, commonsEnabled, brand, applyCancellationEvent],
   );
 
   const cancel = useCallback(() => {
@@ -1605,6 +1528,7 @@ export function ChatPanel() {
           '.chat-panel__tone-toggle',
           '.chat-panel__meta',
           '.chat-panel__model-picker',
+          '.chat-model-picker',
           '.panel__close',
           'button',
           'input',
@@ -1725,48 +1649,13 @@ export function ChatPanel() {
       <div className="chat-panel__header" title="Drag to move">
         <div>
           <div className="chat-panel__title">Chat</div>
-          <div
-            className="chat-panel__agent-selector"
-            onMouseDown={(e) => e.stopPropagation()}
-          >
-            <button
-              type="button"
-              className={
-                agent === 'claude'
-                  ? 'chat-panel__agent-btn--active'
-                  : 'chat-panel__agent-btn'
-              }
-              onClick={() => handleAgentChange('claude')}
-              disabled={busy || authorizing}
-            >
-              Claude
-            </button>
-            <button
-              type="button"
-              className={
-                agent === 'codex'
-                  ? 'chat-panel__agent-btn--active'
-                  : 'chat-panel__agent-btn'
-              }
-              onClick={() => handleAgentChange('codex')}
-              disabled={busy || authorizing}
-            >
-              Codex
-            </button>
-            <button
-              type="button"
-              className={
-                agent === 'daedalus'
-                  ? 'chat-panel__agent-btn--active'
-                  : 'chat-panel__agent-btn'
-              }
-              onClick={() => handleAgentChange('daedalus')}
-              disabled={busy || authorizing || commonsEnabled}
-              title={commonsEnabled ? 'Commons private reference chats currently support Claude and Codex.' : undefined}
-            >
-              Daedalus
-            </button>
-          </div>
+          <ChatModelPicker
+            agent={agent} model={selection[agent].model} effort={effort}
+            catalog={activeCatalog} loading={catalogLoading} error={catalogError}
+            disabled={busy || authorizing}
+            onAgentChange={handleAgentChange} onModelChange={handleModelChange}
+            onEffortChange={handleEffortChange} onRetry={() => setCatalogRefresh((value) => value + 1)}
+          />
           {commonsEnabled && <label className="chat-panel__brand" onMouseDown={(event) => event.stopPropagation()}>
             Brand
             <input aria-label="Chat brand" value={brand} onChange={(event) => changeBrand(event.target.value)}
@@ -1774,73 +1663,10 @@ export function ChatPanel() {
               title="Changing brand starts a new conversation with separate reference downloads." />
           </label>}
           {commonsEnabled && <p className="chat-panel__scope-hint">Private reference chats: Claude or Codex.</p>}
-          {agent === 'daedalus' && (
-            <div
-              className="chat-panel__autonomy-toggle"
-              onMouseDown={(e) => e.stopPropagation()}
-            >
-              <button
-                type="button"
-                className={
-                  autonomy === 'auto'
-                    ? 'chat-panel__autonomy-btn--active'
-                    : 'chat-panel__autonomy-btn'
-                }
-                onClick={() => setAutonomy('auto')}
-                title="Auto-pilot: Daedalus runs the full pipeline"
-              >
-                Auto ▶
-              </button>
-              <button
-                type="button"
-                className={
-                  autonomy === 'step'
-                    ? 'chat-panel__autonomy-btn--active'
-                    : 'chat-panel__autonomy-btn'
-                }
-                onClick={() => setAutonomy('step')}
-                title="Step Approval: Daedalus pauses before expensive operations"
-              >
-                Step ⏸
-              </button>
-            </div>
-          )}
           <div className="chat-panel__meta" onMouseDown={(e) => e.stopPropagation()}>
-            {agent === 'daedalus' ? (
-              <button
-                type="button"
-                className="chat-panel__model-trigger"
-                onClick={() => setDaedalusModelPickerOpen((v) => !v)}
-                title="Switch model — fetches the live list from Nous Portal"
-              >
-                {daedalusModel} · Hermes
-                {daedalusModelPickerOpen ? (
-                  <ChevronDown
-                    className="chat-panel__model-caret"
-                    size={10}
-                    strokeWidth={2}
-                    aria-hidden="true"
-                    focusable="false"
-                  />
-                ) : (
-                  <ChevronRight
-                    className="chat-panel__model-caret"
-                    size={10}
-                    strokeWidth={2}
-                    aria-hidden="true"
-                    focusable="false"
-                  />
-                )}
-              </button>
-            ) : agent === 'codex' ? (
-              <span title={codexStatus?.message || codexStatusError || 'Checking Codex login status'}>
-                {codexStatusLabel}
-              </span>
-            ) : (
-              <span title={claudeStatus?.message || claudeStatusError || 'Checking Claude login status'}>
-                {model} · {claudeStatusLabel}
-              </span>
-            )}
+            <span title={agent === 'claude' ? claudeStatus?.message || claudeStatusError || undefined : codexStatus?.message || codexStatusError || undefined}>
+              {agent === 'claude' ? claudeStatusLabel : codexStatusLabel}
+            </span>
             <span> · {status}</span>
             {sessionId && (
               <span className="chat-panel__session" title={sessionId}>
@@ -1848,50 +1674,6 @@ export function ChatPanel() {
               </span>
             )}
           </div>
-          {agent === 'daedalus' && daedalusModelPickerOpen && (
-            <div
-              className="chat-panel__model-picker"
-              onMouseDown={(e) => e.stopPropagation()}
-            >
-              <input
-                type="text"
-                className="chat-panel__model-search"
-                placeholder={
-                  nousModelsLoading
-                    ? 'Loading models…'
-                    : nousModelsError
-                      ? 'Could not load — see error below'
-                      : `Search ${nousModels.length} models…`
-                }
-                value={daedalusModelSearch}
-                onChange={(e) => setDaedalusModelSearch(e.target.value)}
-                autoFocus
-              />
-              {nousModelsError && (
-                <div className="chat-panel__model-error">{nousModelsError}</div>
-              )}
-              <div className="chat-panel__model-list">
-                {filteredDaedalusModels.map((m) => (
-                  <button
-                    key={m.id}
-                    type="button"
-                    className={
-                      m.id === daedalusModel
-                        ? 'chat-panel__model-row chat-panel__model-row--active'
-                        : 'chat-panel__model-row'
-                    }
-                    onClick={() => changeDaedalusModel(m.id)}
-                  >
-                    <span className="chat-panel__model-row-name">{m.name}</span>
-                    <span className="chat-panel__model-row-id">{m.id}</span>
-                  </button>
-                ))}
-                {!nousModelsLoading && !nousModelsError && filteredDaedalusModels.length === 0 && nousModels.length > 0 && (
-                  <div className="chat-panel__model-empty">No matches</div>
-                )}
-              </div>
-            </div>
-          )}
         </div>
         <button
           type="button"
@@ -2276,9 +2058,9 @@ export function ChatPanel() {
               className="chat-panel__send chat-panel__send--submit"
               onClick={send}
               aria-label="Send message"
-              title="Send message"
+              title={selectionIssue || (catalogLoading ? 'Models are loading.' : 'Send message')}
               disabled={
-                !connected || authorizing ||
+                !connected || authorizing || catalogLoading || Boolean(selectionIssue) ||
                 !input.trim() ||
                 pendingImages.some((p) => p.status === 'uploading')
               }

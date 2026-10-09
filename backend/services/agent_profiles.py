@@ -36,9 +36,9 @@ from pathlib import Path
 from typing import Any
 
 
-# Effort levels offered by the chat chip. Same labels as the node-level
-# reasoning selector (Low / Medium / High / X-High).
-EFFORT_LEVELS: tuple[str, ...] = ("low", "medium", "high", "xhigh")
+# Legacy/direct runner normalization. Picker choices are validated against
+# the runtime's per-model catalog and preserve its supported effort labels.
+EFFORT_LEVELS: tuple[str, ...] = ("low", "medium", "high", "xhigh", "max")
 DEFAULT_EFFORT = "medium"
 
 # Claude model aliases. Passed verbatim to `claude --model`, which resolves
@@ -286,7 +286,7 @@ def codex_default_model(config_path: Path = CODEX_CONFIG_PATH) -> str | None:
     return str(model) if isinstance(model, str) and model.strip() else None
 
 
-def codex_profile_args(*, effort: str) -> list[str]:
+def codex_profile_args(*, effort: str | None) -> list[str]:
     """Flags that launch `codex exec` from the clean profile.
 
     `--ignore-user-config` skips ~/.codex/config.toml (its MCP servers,
@@ -294,14 +294,16 @@ def codex_profile_args(*, effort: str) -> list[str]:
     ChatGPT subscription login keeps working. Memories are also disabled
     explicitly in case a future default turns them on.
     """
-    return [
+    args = [
         "--ignore-user-config",
         "--ignore-rules",
         # Agents run from `agent_workspace`, which isn't a git repo.
         "--skip-git-repo-check",
         "--disable", "memories",
-        "-c", f'model_reasoning_effort="{effort}"',
     ]
+    if effort is not None:
+        args.extend(["-c", f'model_reasoning_effort={json.dumps(effort)}'])
+    return args
 
 
 def codex_filesystem_args(*, workdir: Path, deny_paths: list[Path]) -> list[str]:

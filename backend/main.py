@@ -2038,6 +2038,7 @@ async def chat_websocket(websocket: WebSocket) -> None:
         commonsToken: str (human UI token, required only with Commons enabled),
         brand: str|null (Commons-enabled Claude/Codex turns),
         model: str|null,
+        effort: str|null (model-specific effort, Claude/Codex),
         agent: "claude" | "daedalus" | "codex" (default "claude"),
         autonomy: "auto" | "step" (default "auto", daedalus-only)
     }
@@ -2045,6 +2046,7 @@ async def chat_websocket(websocket: WebSocket) -> None:
     """
     from services.chat_session import AGENT_RUNNERS
     from services.chat_actions import register_action_handler, unregister_action_handler
+    from services.chat_models import ChatModelSelectionError, validate_chat_model_selection
 
     await websocket.accept()
     server_host, server_port = websocket.scope.get("server") or ("127.0.0.1", 8000)
@@ -2065,12 +2067,12 @@ async def chat_websocket(websocket: WebSocket) -> None:
     async def stream_response(
         message: str,
         session_id: str | None,
-        model: str,
+        model: Any,
         agent: str,
         autonomy: str,
         provider: str | None,
         turn_selection_context: str,
-        effort: str | None,
+        effort: Any,
         brand: str | None,
         finished: asyncio.Event,
     ) -> None:
@@ -2118,6 +2120,19 @@ async def chat_websocket(websocket: WebSocket) -> None:
                 return
 
             try:
+                catalog_validated = False
+                if agent in {"claude", "codex"}:
+                    if model is not None or effort is not None:
+                        # Keep discovery in the tracked task so Stop/disconnect
+                        # can cancel it before granting turn authority.
+                        model, effort = await validate_chat_model_selection(agent, model, effort)
+                        catalog_validated = True
+                    else:
+                        # Preserve defaults for legacy clients that send no
+                        # picker choice. The picker always supplies a model ID.
+                        model = "claude-sonnet-4-6" if agent == "claude" else ""
+                else:
+                    model = str(model) if model else ""
                 runner_kwargs = {"provider": provider, "selection_context": turn_selection_context}
                 if agent in {"claude", "codex"}:
                     workspace_session = workspace_sessions.acquire(_STATE_DIR, agent, brand, session_id)
@@ -2128,7 +2143,8 @@ async def chat_websocket(websocket: WebSocket) -> None:
                         agent, [OUTPUT_ROOT, workdir], brand=workspace_session.brand, workspace=workdir)
                     if model:
                         commons_actors.agent_registry.set_model(agent_token, model)
-                    runner_kwargs.update(effort=effort, backend_url=backend_url, extra_dirs=read_grants,
+                    runner_kwargs.update(effort=effort, catalog_validated=catalog_validated,
+                                         backend_url=backend_url, extra_dirs=read_grants,
                                          workdir=workdir, agent_token=agent_token)
                     runner_session = workspace_session.provider_session_id
                 else:
@@ -2150,6 +2166,12 @@ async def chat_websocket(websocket: WebSocket) -> None:
                                     commons_actors.agent_registry.set_model(agent_token, str(event["model"]))
                                 event = {**event, "sessionId": workspace_session.id, "brand": workspace_session.brand}
                             enqueue(event)
+            except ChatModelSelectionError as exc:
+                task = asyncio.current_task()
+                if task is not None and task.cancelling():
+                    raise
+                enqueue({"type": "error", "code": exc.code, "message": str(exc)})
+                terminal_done = {"type": "done"}
             except Exception as exc:
                 task = asyncio.current_task()
                 if task is not None and task.cancelling():
@@ -2283,9 +2305,10 @@ async def chat_websocket(websocket: WebSocket) -> None:
                 await send_event({"type": "error", "message": "message must be text.", "source": "system"})
                 continue
             session_id = payload.get("sessionId") or None
-            agent = payload.get("agent") or "claude"
-            if not isinstance(agent, str):
-                await send_event({"type": "error", "message": "agent must be text.", "source": "system"})
+            agent_raw = payload.get("agent")
+            agent = "claude" if agent_raw is None else agent_raw
+            if not isinstance(agent, str) or not agent.strip():
+                await send_event({"type": "error", "code": "agent_invalid", "message": "agent must be text and a nonempty agent identifier.", "source": "system"})
                 await send_event({"type": "done", "source": "system"})
                 continue
             if commons_enabled and agent not in {"claude", "codex"}:
@@ -2293,11 +2316,6 @@ async def chat_websocket(websocket: WebSocket) -> None:
                 await send_event({"type": "done", "source": "system"})
                 continue
             model_raw = payload.get("model")
-            model = (
-                str(model_raw)
-                if model_raw
-                else ("claude-sonnet-4-6" if agent == "claude" else "")
-            )
             autonomy = payload.get("autonomy") or "auto"
             # Optional per-turn provider override (e.g. "nous" / "openrouter").
             # When omitted, the runner falls back to its default provider.
@@ -2320,17 +2338,23 @@ async def chat_websocket(websocket: WebSocket) -> None:
             if not user_message.strip():
                 continue
 
+            effort = payload.get("effort")
+            if agent in {"claude", "codex"} and provider_raw is not None:
+                await send_event({"type": "error", "code": "provider_invalid", "message": "Claude and Codex use their local official CLI provider; provider overrides are only available for Daedalus.", "source": agent})
+                await send_event({"type": "done", "source": agent})
+                continue
+
             current_finished = asyncio.Event()
             current_task = asyncio.create_task(
                 stream_response(
                     user_message,
                     session_id,
-                    model,
+                    model_raw,
                     agent,
                     autonomy,
                     provider,
                     turn_selection_context,
-                    payload.get("effort"),
+                    effort,
                     payload.get("brand") if commons_enabled else None,
                     current_finished,
                 )
@@ -2430,6 +2454,17 @@ async def get_codex_status() -> dict[str, Any]:
     from services.codex_session import codex_login_status
 
     return await codex_login_status()
+
+
+@app.get("/api/agents/{agent}/models")
+async def get_agent_models(agent: str, refresh: bool = False) -> dict[str, Any]:
+    """Read available local CLI models/efforts without starting a chat turn."""
+    from services.chat_models import ChatModelSelectionError, get_chat_models
+
+    try:
+        return await get_chat_models(agent, refresh=refresh)
+    except ChatModelSelectionError as exc:
+        raise HTTPException(status_code=400, detail={"code": exc.code, "message": str(exc)}) from exc
 
 
 @app.post("/api/agents/codex/login/chatgpt")

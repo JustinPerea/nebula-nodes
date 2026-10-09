@@ -1,0 +1,227 @@
+body.app-slava-restraint .chat-model-picker {
+  max-width: 100%;
+  min-width: 0;
+}
+
+body.app-slava-restraint .chat-model-picker__trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  min-height: var(--sr-control-h-md);
+  padding: 6px 10px;
+  border: 1px solid var(--sr-edge);
+  border-radius: var(--sr-radius-control);
+  background: var(--sr-surface-control);
+  color: var(--sr-ink);
+  font: 500 var(--sr-type-body)/var(--sr-line-body) var(--sr-ui);
+  cursor: pointer;
+}
+
+body.app-slava-restraint .chat-model-picker__selection {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  min-width: 0;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+body.app-slava-restraint .chat-model-picker__effort-label {
+  color: var(--sr-ink-meta);
+  font-size: var(--sr-type-label);
+}
+
+body.app-slava-restraint .chat-model-picker__trigger > svg {
+  flex: 0 0 auto;
+}
+
+body.app-slava-restraint .chat-model-picker__trigger:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+body.app-slava-restraint .chat-model-picker__dialog {
+  position: fixed;
+  left: var(--chat-picker-left, 8px);
+  top: var(--chat-picker-top, 8px);
+  z-index: 1100;
+  display: flex;
+  flex-direction: column;
+  width: min(360px, calc(100vw - 16px));
+  max-height: min(520px, calc(100vh - 16px));
+  box-sizing: border-box;
+  overflow: hidden;
+  border: 1px solid var(--sr-edge-strong);
+  border-radius: var(--sr-radius-panel);
+  background: var(--sr-panel-bg, #181818);
+  box-shadow: var(--sr-shadow-popover);
+  color: var(--sr-ink);
+  font: var(--sr-type-body)/var(--sr-line-body) var(--sr-ui);
+}
+
+body.app-slava-restraint .chat-model-picker__header,
+body.app-slava-restraint .chat-model-picker__providers {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+}
+
+body.app-slava-restraint .chat-model-picker__header {
+  justify-content: space-between;
+  border-bottom: 1px solid var(--sr-edge);
+}
+
+body.app-slava-restraint .chat-model-picker__dialog button {
+  min-height: 32px;
+  padding: 5px 10px;
+  border: 1px solid var(--sr-edge);
+  border-radius: var(--sr-radius-control);
+  background: var(--sr-surface-control);
+  color: var(--sr-ink-light);
+  font: inherit;
+  cursor: pointer;
+}
+
+body.app-slava-restraint .chat-model-picker__dialog .chat-model-picker__close {
+  display: grid;
+  place-items: center;
+  padding: 5px;
+  width: 32px;
+}
+
+body.app-slava-restraint .chat-model-picker__providers button {
+  flex: 1 1 0;
+}
+
+body.app-slava-restraint .chat-model-picker__providers button[aria-pressed="true"] {
+  border-color: var(--sr-edge-strong);
+  background: var(--sr-surface-control-active);
+  color: var(--sr-ink-bold);
+}
+
+body.app-slava-restraint .chat-model-picker__connection {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 0 12px 8px;
+  color: var(--sr-ink-meta);
+  font-size: var(--sr-type-label);
+  overflow-wrap: anywhere;
+}
+
+body.app-slava-restraint .chat-model-picker__connection > span {
+  display: block;
+}
+
+body.app-slava-restraint .chat-model-picker__body {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0 12px 12px;
+}
+
+body.app-slava-restraint .chat-model-picker__body p {
+  margin: 6px 0 10px;
+  overflow-wrap: anywhere;
+}
+
+body.app-slava-restraint .chat-model-picker__options {
+  min-width: 0;
+  margin: 4px 0 12px;
+  padding: 0;
+  border: 0;
+}
+
+body.app-slava-restraint .chat-model-picker__options legend {
+  padding: 0 0 6px;
+  font-weight: 600;
+}
+
+body.app-slava-restraint .chat-model-picker__models {
+  max-height: 180px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+body.app-slava-restraint .chat-model-picker__efforts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+body.app-slava-restraint .chat-model-picker__efforts .chat-model-picker__effort {
+  min-height: 30px;
+  margin: 0;
+  padding: 5px 8px;
+}
+
+body.app-slava-restraint .chat-model-picker__effort-description {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+body.app-slava-restraint .chat-model-picker__footer {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 8px 12px;
+  border-top: 1px solid var(--sr-edge);
+  color: var(--sr-ink-meta);
+  font-size: var(--sr-type-label);
+}
+
+body.app-slava-restraint .chat-model-picker__option {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-height: 38px;
+  box-sizing: border-box;
+  margin: 3px 0;
+  padding: 8px;
+  border: 1px solid transparent;
+  border-radius: var(--sr-radius-control);
+  cursor: pointer;
+}
+
+body.app-slava-restraint .chat-model-picker__option:has(input:checked) {
+  border-color: var(--sr-edge-strong);
+  background: var(--sr-surface-control-active);
+}
+
+body.app-slava-restraint .chat-model-picker__option input {
+  flex: 0 0 auto;
+  margin: 2px 0 0;
+  accent-color: var(--sr-accent);
+}
+
+body.app-slava-restraint .chat-model-picker__option > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+body.app-slava-restraint .chat-model-picker__description {
+  display: block;
+  margin-top: 2px;
+  color: var(--sr-ink-meta);
+  font-size: var(--sr-type-label);
+}
+
+body.app-slava-restraint .chat-model-picker__trigger:hover:not(:disabled),
+body.app-slava-restraint .chat-model-picker__dialog button:hover,
+body.app-slava-restraint .chat-model-picker__option:hover {
+  background: var(--sr-surface-control-hover);
+  color: var(--sr-ink-bold);
+}
+
+body.app-slava-restraint .chat-model-picker__trigger:focus-visible,
+body.app-slava-restraint .chat-model-picker__dialog button:focus-visible,
+body.app-slava-restraint .chat-model-picker__option input:focus-visible {
+  outline: var(--sr-focus-outline);
+  outline-offset: var(--sr-focus-offset);
+}
