@@ -67,7 +67,7 @@ body:not(.app-slava-restraint) .react-flow__controls button:hover {
 body.app-slava-restraint .canvas-navigation__controls {
   overflow: hidden;
   border: 1px solid var(--sr-edge);
-  border-radius: 10px;
+  border-radius: var(--sr-node-media-radius);
   box-shadow: var(--sr-shadow-panel-sm);
 }
 body.app-slava-restraint .canvas-navigation__controls button {
@@ -218,7 +218,7 @@ body.app-slava-restraint .react-flow__minimap {
   min-height: 48px;
   padding: 5px 7px 5px 14px;
   border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 16px;
+  border-radius: var(--sr-node-media-radius, 14px);
   background: rgba(20, 20, 22, 0.94);
   color: rgba(255, 255, 255, 0.82);
   box-shadow: 0 16px 42px rgba(0, 0, 0, 0.38);
@@ -253,7 +253,7 @@ body.app-slava-restraint .react-flow__minimap {
   height: 38px;
   padding: 0 10px;
   border: 0;
-  border-radius: 11px;
+  border-radius: var(--sr-radius-node, 8px);
   background: transparent;
   color: inherit;
   font: 500 12px/1 var(--sr-ui, Inter, sans-serif);

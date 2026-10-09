@@ -33,7 +33,7 @@
   z-index: -1;
   inset: 0 12px 0 0;
   border: 1px solid rgba(255, 255, 255, 0.09);
-  border-radius: 28px;
+  border-radius: var(--sr-node-media-radius, 14px);
   background: rgba(24, 24, 26, 0.92);
   box-shadow: 0 12px 36px rgba(0, 0, 0, 0.48);
   backdrop-filter: blur(22px) saturate(135%);
@@ -71,7 +71,7 @@
   place-items: center;
   padding: 0;
   border: 1px solid transparent;
-  border-radius: 999px;
+  border-radius: var(--sr-radius-node, 8px);
   background: transparent;
   color: rgba(255, 255, 255, 0.55);
   cursor: pointer;
@@ -228,7 +228,7 @@ body.app-slava-restraint .workspace-rail__item--active:not(.workspace-rail__item
   .workspace-rail { padding: 5px 3px; }
 
   .workspace-rail::before {
-    border-radius: 24px;
+    border-radius: var(--sr-node-media-radius, 14px);
   }
 
   .workspace-rail__item:focus-visible { outline-offset: -2px; }
@@ -266,7 +266,7 @@ body.app-slava-restraint .workspace-rail__item--active:not(.workspace-rail__item
     overscroll-behavior: contain;
     scrollbar-width: thin;
     border: 1px solid var(--sr-edge, rgba(255, 255, 255, 0.09));
-    border-radius: 28px;
+    border-radius: var(--sr-node-media-radius, 14px);
     background: var(--sr-glass-raised, rgba(24, 24, 26, 0.92));
     box-shadow: var(--sr-shadow-panel, 0 12px 36px rgba(0, 0, 0, 0.48));
     backdrop-filter: var(--sr-blur-panel, blur(22px) saturate(135%));

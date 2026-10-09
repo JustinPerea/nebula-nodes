@@ -69,7 +69,7 @@ body.app-slava-restraint .workspace-header__title:focus-visible {
 }
 body.app-slava-restraint .workspace-header.workspace-header--canvas {
   border: 1px solid var(--sr-edge);
-  border-radius: var(--sr-radius-pill);
+  border-radius: var(--sr-node-media-radius);
   background: var(--sr-glass-raised);
   box-shadow: var(--sr-shadow-panel-sm);
   pointer-events: auto;

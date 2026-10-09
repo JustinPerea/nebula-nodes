@@ -2340,7 +2340,7 @@ body.app-slava-restraint .settings__toggle-description {
 }
 
 /* ─────────────────────────────────────────────────────────────────────
- * Toolbar — translucent rounded pill (keeps default position)
+ * Toolbar — translucent node-radius surface (keeps default position)
  * ───────────────────────────────────────────────────────────────────── */
 body.app-slava-restraint .toolbar {
   z-index: var(--sr-layer-panel);
@@ -2349,7 +2349,7 @@ body.app-slava-restraint .toolbar {
   backdrop-filter: var(--sr-blur-panel);
   -webkit-backdrop-filter: var(--sr-blur-panel);
   border: 1px solid var(--sr-edge);
-  border-radius: var(--sr-radius-pill);
+  border-radius: var(--sr-node-media-radius);
   font-family: var(--sr-ui);
   box-shadow: var(--sr-shadow-panel-sm);
 }
@@ -2383,7 +2383,7 @@ body.app-slava-restraint .toolbar__button {
   font-weight: 500;
   min-height: var(--sr-control-h-sm);
   padding: 6px var(--sr-control-pad-x);
-  border-radius: var(--sr-radius-control);
+  border-radius: var(--sr-radius-node);
   letter-spacing: 0;
   /* On RELEASE: scale back to 1 via back-ease that briefly overshoots —
    * gives a "pop" feel without explicitly keyframing past 1.0. The
@@ -2406,7 +2406,7 @@ body.app-slava-restraint .toolbar__button::after {
   position: absolute;
   inset: 3px;
   z-index: 0;
-  border-radius: calc(var(--sr-radius-control) - 2px);
+  border-radius: calc(var(--sr-radius-node) - 2px);
   background-image: radial-gradient(
     circle,
     rgba(255, 255, 255, 0.34) 0 1px,
@@ -4145,7 +4145,7 @@ body.app-slava-restraint .canvas-tabs__wordmark {
 body.app-slava-restraint .canvas-tabs {
   padding: 4px;
   border: 1px solid var(--sr-edge);
-  border-radius: var(--sr-radius-pill);
+  border-radius: var(--sr-node-media-radius);
   background: var(--sr-glass-raised);
   box-shadow: var(--sr-shadow-panel-sm);
   backdrop-filter: var(--sr-blur-panel);
@@ -4159,7 +4159,7 @@ body.app-slava-restraint .canvas-tabs__btn {
   overflow: hidden;
   padding: 6px 14px;
   border: 1px solid transparent;
-  border-radius: var(--sr-radius-pill);
+  border-radius: var(--sr-radius-node);
   color: var(--sr-ink-light);
   font-family: var(--sr-ui);
   font-size: var(--sr-type-body);
@@ -4179,7 +4179,7 @@ body.app-slava-restraint .canvas-tabs__btn::after {
   position: absolute;
   inset: 3px;
   z-index: 0;
-  border-radius: var(--sr-radius-pill);
+  border-radius: calc(var(--sr-radius-node) - 2px);
   background-image: radial-gradient(
     circle,
     rgba(255, 255, 255, 0.34) 0 1px,
