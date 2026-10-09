@@ -1,8 +1,8 @@
-import { useMemo, useRef, useEffect, useState } from 'react';
+import { useMemo, useRef, useEffect, useLayoutEffect, useState } from 'react';
 import type { CSSProperties, DragEvent as ReactDragEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { useReactFlow } from '@xyflow/react';
-import { ChevronDown, ChevronRight, X } from 'lucide-react';
+import { ArrowLeft, AudioLines, Box, ChevronDown, ChevronRight, Image as ImageIcon, Import, Search, Type, Video, Workflow, Wrench, X } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
 import { useDelayedUnmount } from '../../hooks/useDelayedUnmount';
@@ -10,14 +10,20 @@ import { getNodesByCategory } from '../../constants/nodeDefinitions';
 import { CATEGORY_COLORS } from '../../constants/ports';
 import { findAvailableNodePosition, type NodePosition } from '../../lib/nodePlacement';
 import { CATEGORY_LABELS, matchesModelProvider, matchesModelSearch, modelInputSummary, providerLabel, supportedModelProviders } from '../../lib/modelDiscovery';
+import { matchesNodeBrowseType, NODE_BROWSE_TYPES, type NodeBrowseType } from '../../lib/nodeBrowsing';
 import { ProviderReadinessBadge } from '../ProviderReadinessBadge';
 import { ScrollFade } from '../ScrollFade';
 import '../../styles/panels.css';
+import '../../styles/node-library.css';
 
 // Initial collapsed state — all categories start collapsed on first render so
 // the user sees a scannable list of category headers, not a long node wall.
 const INITIAL_COLLAPSE_KEY = '__nebulaLibraryInit';
 const SLAVA_DRAG_PREVIEW_OFFSET = 14;
+const BROWSE_ICONS = { image: ImageIcon, video: Video, audio: AudioLines, text: Type, import: Import, '3d': Box, workflow: Workflow, tools: Wrench };
+const PRIMARY_CATEGORIES: Partial<Record<NodeBrowseType, string>> = {
+  image: 'image-gen', video: 'video-gen', audio: 'audio-gen', text: 'text-gen', '3d': '3d-gen',
+};
 
 export function NodeLibrary() {
   const visible = useUIStore((s) => s.panels.library.visible);
@@ -34,6 +40,14 @@ export function NodeLibrary() {
   const emptyDragImageRef = useRef<HTMLCanvasElement | null>(null);
   const reservedClickPositionsRef = useRef<NodePosition[]>([]);
   const [provider, setProvider] = useState('');
+  const [browseType, setBrowseType] = useState<NodeBrowseType | null>(null);
+  const [browseAll, setBrowseAll] = useState(false);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const backRef = useRef<HTMLButtonElement>(null);
+  const browseButtonsRef = useRef<Partial<Record<NodeBrowseType | 'all', HTMLButtonElement | null>>>({});
+  const lastBrowseRef = useRef<NodeBrowseType | 'all' | null>(null);
+  const focusDestinationRef = useRef<'back' | 'home' | null>(null);
+  const [filteredCollapse, setFilteredCollapse] = useState<{ context: string; categories: Record<string, boolean> }>({ context: '', categories: {} });
   const [dragPreview, setDragPreview] = useState<{
     label: string;
     category: string;
@@ -44,6 +58,23 @@ export function NodeLibrary() {
   const grouped = useMemo(() => getNodesByCategory(), []);
   const providers = useMemo(() => [...new Set(Object.values(grouped).flat()
     .flatMap(supportedModelProviders))].sort((left, right) => providerLabel(left).localeCompare(providerLabel(right))), [grouped]);
+  const isHome = !browseType && !browseAll && !search.trim() && !provider;
+  const selectedBrowseType = NODE_BROWSE_TYPES.find((item) => item.id === browseType);
+  const catalogCount = Object.values(grouped).reduce((count, definitions) => count + definitions.length, 0);
+  const filterContext = `${browseType ?? 'all'}:${search.trim()}:${provider}`;
+  const hasActiveFilters = !!browseType || !!search.trim() || !!provider;
+
+  useLayoutEffect(() => {
+    if (!visible || !focusDestinationRef.current) return;
+    if (focusDestinationRef.current === 'back' && !isHome) {
+      backRef.current?.focus();
+      focusDestinationRef.current = null;
+    } else if (focusDestinationRef.current === 'home' && isHome) {
+      const opener = lastBrowseRef.current ? browseButtonsRef.current[lastBrowseRef.current] : null;
+      (opener ?? searchRef.current)?.focus();
+      focusDestinationRef.current = null;
+    }
+  }, [visible, isHome, browseType]);
 
   // Once graph-sync materializes a rapidly-added node, its real position
   // replaces the temporary reservation. Until then the reservation prevents
@@ -68,12 +99,19 @@ export function NodeLibrary() {
   const filtered = useMemo(() => {
     const result: typeof grouped = {};
     for (const [cat, defs] of Object.entries(grouped)) {
-      const matches = defs.filter((definition) => matchesModelProvider(definition, provider)
+      const matches = defs.filter((definition) => (!browseType || matchesNodeBrowseType(definition, browseType))
+        && matchesModelProvider(definition, provider)
         && matchesModelSearch(definition, search));
       if (matches.length > 0) result[cat] = matches;
     }
+    // A media choice starts with models, followed by its editing/helper nodes.
+    // The complete catalog keeps the user's familiar category ordering.
+    const primaryCategory = browseType ? PRIMARY_CATEGORIES[browseType] : null;
+    if (primaryCategory && result[primaryCategory]) {
+      return { [primaryCategory]: result[primaryCategory], ...result };
+    }
     return result;
-  }, [grouped, search, provider]);
+  }, [grouped, search, provider, browseType]);
   const resultCount = Object.values(filtered).reduce((count, definitions) => count + definitions.length, 0);
 
   useEffect(() => {
@@ -105,6 +143,30 @@ export function NodeLibrary() {
 
   const { shouldRender, exiting } = useDelayedUnmount(visible, 500);
   if (!shouldRender) return null;
+
+  function browseNodes(type: NodeBrowseType) {
+    lastBrowseRef.current = type;
+    focusDestinationRef.current = 'back';
+    setBrowseType(type);
+    setBrowseAll(false);
+    setSearch('');
+    setProvider('');
+  }
+
+  function searchAllModels() {
+    lastBrowseRef.current = 'all';
+    setBrowseType(null);
+    setBrowseAll(true);
+    searchRef.current?.focus();
+  }
+
+  function backToTypes() {
+    focusDestinationRef.current = 'home';
+    setBrowseType(null);
+    setBrowseAll(false);
+    setSearch('');
+    setProvider('');
+  }
 
   function getEmptyDragImage() {
     if (!emptyDragImageRef.current) {
@@ -165,7 +227,14 @@ export function NodeLibrary() {
 
   return (
     <div
-      className={`panel panel--library workspace-dock-panel${exiting ? ' panel--exiting' : ''}`}
+      className={`panel panel--library workspace-dock-panel${isHome ? ' node-library--home' : ''}${exiting ? ' panel--exiting' : ''}`}
+      onKeyDown={(event) => {
+        if (event.key === 'Escape' && !isHome && !event.defaultPrevented) {
+          event.preventDefault();
+          event.stopPropagation();
+          backToTypes();
+        }
+      }}
     >
       <div className="panel__header">
         <span className="panel__title">Nodes</span>
@@ -186,39 +255,72 @@ export function NodeLibrary() {
         </button>
       </div>
 
-      <div className="panel__body panel__body--library">
+      <ScrollFade className="panel__body panel__body--library">
         <div className="node-library__filters">
+          {!isHome && <div className="node-library__navigation">
+            <button type="button" ref={backRef} className="node-library__back" aria-label="Back to node types" onClick={backToTypes}>
+              <ArrowLeft size={14} aria-hidden="true" /> Types
+            </button>
+            <h3 className="node-library__scope">{selectedBrowseType ? `${selectedBrowseType.label} nodes` : 'All nodes'}</h3>
+            {browseType && <button type="button" className="node-library__all-link" aria-label="Search all models" onClick={searchAllModels}>
+              <Search size={13} aria-hidden="true" /> All models
+            </button>}
+          </div>}
           <input
+            ref={searchRef}
             className="panel__search"
             type="text"
-            placeholder="Search names, providers or tasks…"
+            placeholder={selectedBrowseType ? `Search ${selectedBrowseType.label.toLowerCase()} nodes…` : 'Search all models and tools…'}
             aria-label="Search nodes"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
-          <label className="node-library__provider">Provider
+          {!isHome && <label className="node-library__provider">Provider
             <select aria-label="Node provider" value={provider} onChange={(event) => setProvider(event.target.value)}>
               <option value="">All providers</option>
               {providers.map((item) => <option key={item} value={item}>{providerLabel(item)}</option>)}
             </select>
-          </label>
-          <p className="node-library__count">{resultCount} node{resultCount === 1 ? '' : 's'} · Browse before connecting</p>
+          </label>}
+          {!isHome && <p className="node-library__count" aria-live="polite">{resultCount} node{resultCount === 1 ? '' : 's'} · Choose a node to add</p>}
         </div>
-        <ScrollFade className="node-library__browser">
+        <ScrollFade className="node-library__browser" key={isHome ? 'types' : (browseType ?? 'all')}>
+          {isHome ? <div className="node-library__home">
+            <p className="node-library__intro">What would you like to add?</p>
+            <div className="node-library__types">
+              {NODE_BROWSE_TYPES.map((item) => {
+                const Icon = BROWSE_ICONS[item.id];
+                return <button key={item.id} type="button"
+                  ref={(button) => { browseButtonsRef.current[item.id] = button; }}
+                  className={`node-library__type${item.id === 'workflow' || item.id === 'tools' ? ' node-library__type--secondary' : ''}`}
+                  aria-label={`Browse ${item.label} nodes`} onClick={() => browseNodes(item.id)}>
+                  <Icon className="node-library__type-icon" size={18} strokeWidth={1.6} aria-hidden="true" />
+                  <span className="node-library__type-label">{item.label}</span>
+                  <span className="node-library__type-description">{item.description}</span>
+                </button>;
+              })}
+            </div>
+            <button type="button" className="node-library__all" ref={(button) => { browseButtonsRef.current.all = button; }}
+              aria-label="Search all models" onClick={searchAllModels}>
+              <Search size={16} aria-hidden="true" />
+              <span>Search all models <small>{catalogCount} nodes and tools</small></span>
+              <ChevronRight size={15} aria-hidden="true" />
+            </button>
+          </div> : <>
           {resultCount === 0 && <div className="node-library__empty">
             <p role="status">No nodes match{search.trim() ? ` “${search.trim()}”` : ''}{provider ? ` from ${providerLabel(provider)}` : ''}.</p>
-            <button type="button" onClick={() => { setSearch(''); setProvider(''); }}>Clear filters</button>
+            <button type="button" onClick={() => { searchRef.current?.focus(); setSearch(''); setProvider(''); }}>Clear filters</button>
             <span>Try a task or media type:</span>
             <div className="node-library__suggestions">
               {['Animate a logo', 'Image', 'Audio', '3D'].map((suggestion) => <button key={suggestion} type="button"
-                onClick={() => { setSearch(suggestion); setProvider(''); }}>{suggestion}</button>)}
+                onClick={() => { searchRef.current?.focus(); setBrowseType(null); setBrowseAll(true); setSearch(suggestion); setProvider(''); }}>{suggestion}</button>)}
             </div>
           </div>}
 
           {Object.entries(filtered).map(([category, defs]) => {
             // Active filters expand matching categories so results are visible.
-            const isSearching = search.trim().length > 0 || provider.length > 0;
-            const isCollapsed = !isSearching && (collapsed[category] ?? true);
+            const isCollapsed = hasActiveFilters
+              ? filteredCollapse.context === filterContext && !!filteredCollapse.categories[category]
+              : (collapsed[category] ?? true);
             const items = defs.map((def) => (
               <div key={def.id} className="node-library__entry">
                 <button
@@ -255,7 +357,13 @@ export function NodeLibrary() {
               >
                 <button
                   className="panel__group-label panel__group-label--button"
-                  onClick={() => toggleCategory(category)}
+                  onClick={() => {
+                    if (!hasActiveFilters) { toggleCategory(category); return; }
+                    setFilteredCollapse((current) => ({
+                      context: filterContext,
+                      categories: { ...(current.context === filterContext ? current.categories : {}), [category]: !isCollapsed },
+                    }));
+                  }}
                   type="button"
                   aria-expanded={!isCollapsed}
                 >
@@ -298,8 +406,9 @@ export function NodeLibrary() {
               </div>
             );
           })}
+          </>}
         </ScrollFade>
-      </div>
+      </ScrollFade>
       {skin === 'slava-restraint' && dragPreview && dragPreviewStyle && createPortal(
         <div className="slava-library-drag-preview" style={dragPreviewStyle}>
           <span className="slava-library-drag-preview__dot" />

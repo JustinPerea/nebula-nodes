@@ -668,7 +668,7 @@ export const useUIStore = create<UIState>((set, get) => ({
     set((state) => ({
       libraryCollapsed: {
         ...state.libraryCollapsed,
-        [category]: !state.libraryCollapsed[category],
+        [category]: !(state.libraryCollapsed[category] ?? true),
       },
     })),
 
