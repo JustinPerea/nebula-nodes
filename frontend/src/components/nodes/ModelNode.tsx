@@ -1,9 +1,11 @@
 import { memo, useCallback, useMemo, useState } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
-import { Download, Repeat2, Sparkles } from 'lucide-react';
+import { Download, Repeat2, Sparkles, Plus } from 'lucide-react';
 import type { NodeData } from '../../types';
 import type { PaperSourceRecord } from '../../lib/paperSource';
 import { NODE_DEFINITIONS } from '../../constants/nodeDefinitions';
+import { currentMediaSource } from '../../lib/canvasNextSteps';
+import '../../styles/canvas-next-steps.css';
 import { PORT_COLORS } from '../../lib/portCompatibility';
 import { findStructuredRepresentation } from '../../lib/representationViewerRegistry';
 import { getReferenceRole } from '../../lib/referenceRoles';
@@ -260,6 +262,8 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
   const inlineTextValue = inlineTextParamKey ? String(nodeData.params[inlineTextParamKey] ?? '') : '';
   const inlineTextPlaceholder = inlineTextParam?.placeholder ?? 'Enter text...';
   const isNodeSelected = selected || selectedNodeId === id;
+  const nextStepSource = currentMediaSource(definition, nodeData, previewOutputs);
+  const hasMediaPreview = Boolean(imageOutput || videoOutput);
   const latestPaperSourceReady = nodeData.outputFreshness?.paperInputs.every((input) => {
     const source = nodes.find((node) => node.id === input.nodeId)?.data.params._paperSource as PaperSourceRecord | undefined;
     return source?.state === 'current' && Boolean(source.snapshot);
@@ -280,6 +284,22 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
       {isNodeSelected && (
         <div className="model-node__settings-bar">
           <span className="model-node__settings-model">{definition.displayName}</span>
+          {hasMediaPreview && <button type="button"
+            className="model-node__next-step nodrag"
+            data-next-step-anchor={id}
+            disabled={!nextStepSource || isExecuting || !/^n\d+$/.test(id)}
+            title={!/^n\d+$/.test(id) ? 'Wait for this result to sync with the backend' : nextStepSource ? 'Prepare a connected next step using this result' : 'Show the current completed result to add a next step'}
+            onMouseDown={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.stopPropagation();
+              if (!nextStepSource) return;
+              const bounds = event.currentTarget.getBoundingClientRect();
+              useUIStore.getState().showConnectionPopup({
+                position: { x: bounds.left, y: bounds.bottom + 8 },
+                nodeId: id, handleId: nextStepSource.handleId, handleType: 'source',
+                nextStep: { sourceValue: nextStepSource.value, sourceLabel: nodeData.label, sourceDefinitionId: nodeData.definitionId },
+              });
+            }}><Plus size={12} aria-hidden="true" />Add next step</button>}
           <button
             type="button"
             className="model-node__settings-edit nodrag"

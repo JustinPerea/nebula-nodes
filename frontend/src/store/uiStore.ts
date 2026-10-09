@@ -140,6 +140,7 @@ interface ConnectionPopupState {
   nodeId: string;
   handleId: string;
   handleType: 'source' | 'target';
+  nextStep?: { sourceValue: string; sourceLabel: string; sourceDefinitionId?: string };
 }
 
 interface UIState {

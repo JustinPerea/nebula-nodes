@@ -180,6 +180,10 @@ body.app-slava-restraint :is(.node-library__count, .node-library__metadata, .nod
   max-width: calc(100vw - 32px);
 }
 
+.node-inspector-popover[hidden] {
+  display: none;
+}
+
 .node-inspector-popover--pinned {
   resize: both;
   overflow: hidden;

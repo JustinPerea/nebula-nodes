@@ -79,6 +79,7 @@ import type { KeyframeData, VideoGraphManifest, TrackItem } from '../types/video
 import { createEmptyManifest, DEFAULT_FPS } from '../types/video';
 import { validateManifest } from '../lib/video/manifestValidator';
 import { componentTypeToCanvasDefId, pruneTrackItemsForDeletedNode } from '../lib/video/mirroring';
+import { isPortCompatible } from '../lib/portCompatibility';
 
 export type TrackItemOrderAction = 'send-to-back' | 'send-backward' | 'bring-forward' | 'bring-to-front';
 
@@ -1825,6 +1826,17 @@ type NodeCreationAttempt = {
 };
 
 let pendingNodeCreationAttempt: NodeCreationAttempt | null = null;
+type ConnectedNodeCreationAttempt = NodeCreationAttempt & {
+  params: Record<string, unknown>;
+  originId: string;
+  originDefinitionId: string;
+  connect: {
+    source: string; sourceHandle: string; target: string; targetHandle: string;
+    newNodeIs: 'source' | 'target';
+  };
+};
+let pendingConnectedNodeCreationAttempt: ConnectedNodeCreationAttempt | null = null;
+let canvasReplacementRevision = 0;
 
 function nodeMatchesCreationAttempt(
   node: Node<NodeData>,
@@ -1844,6 +1856,23 @@ function observePendingNodeCreation(nodes: Node<NodeData>[]): string | null {
   if (matches.length !== 1) return null;
   attempt.observedNodeId = matches[0].id;
   return matches[0].id;
+}
+
+function observePendingConnectedNodeCreation(nodes: Node<NodeData>[], edges: Edge[]): void {
+  const attempt = pendingConnectedNodeCreationAttempt;
+  if (!attempt) return;
+  const origin = nodes.find((node) => node.id === attempt.originId
+    && node.data.definitionId === attempt.originDefinitionId);
+  const matches = origin ? nodes.filter((node) => nodeMatchesCreationAttempt(node, attempt)
+    && Object.entries(attempt.params).every(([key, value]) => JSON.stringify(node.data.params[key]) === JSON.stringify(value))
+    && edges.some((edge) => typeof edge.id === 'string' && edge.id && edge.type === 'typed-edge'
+      && edge.source === (attempt.connect.newNodeIs === 'source' ? node.id : attempt.originId)
+      && edge.target === (attempt.connect.newNodeIs === 'target' ? node.id : attempt.originId)
+      && edge.sourceHandle === attempt.connect.sourceHandle && edge.targetHandle === attempt.connect.targetHandle)) : [];
+  attempt.observedNodeId = matches.length === 1 ? matches[0].id : undefined;
+  // An unrelated sync or a standalone node cannot resolve a potentially
+  // committed pair. A sending request remains locked until its HTTP settles.
+  if (attempt.phase === 'uncertain' && attempt.observedNodeId) pendingConnectedNodeCreationAttempt = null;
 }
 
 function reportNodeCreationFailure(displayName: string, reason: string): null {
@@ -1946,6 +1975,8 @@ wsClient.subscribe((event) => {
       executionStatuses?: ExecutionStatusResult[];
     };
     if (graphReplaced) {
+      canvasReplacementRevision += 1;
+      pendingConnectedNodeCreationAttempt = null;
       // The committed import can arrive before, or instead of, its HTTP ack.
       // Revoke old same-ID uploads/writes and suspended drafts before merging.
       clearCinemaScenePersistence();
@@ -1977,6 +2008,7 @@ wsClient.subscribe((event) => {
       } } } };
     });
     const observedPendingNodeId = observePendingNodeCreation(cliNodes as Node<NodeData>[]);
+    observePendingConnectedNodeCreation(cliNodes as Node<NodeData>[], cliEdges as Edge[]);
 
     const state = useGraphStore.getState();
 
@@ -2619,35 +2651,127 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   },
 
   addNodeAndConnect: async (definitionId, position, connect) => {
-    // Like addNode but also wires the new node to an existing one atomically
-    // on the backend. Used by ConnectionPopup, which otherwise races with
-    // graphSync to find the new node's short id before connecting.
     const definition = NODE_DEFINITIONS[definitionId];
-    if (!definition) return null;
+    const fail = (reason: string) => reportNodeCreationFailure(definition?.displayName ?? definitionId, reason);
+    if (!definition) return fail('This node is no longer available.');
+    const before = get();
+    if (before.isExecuting || before.isImportingGraph) return fail('Wait for the current run or graph import to finish.');
+    if (pendingConnectedNodeCreationAttempt || pendingNodeCreationAttempt) return fail('Another node-create request is still unresolved. Wait for the exact connected pair to sync, or reload the canvas before trying again.');
+    if (connect.newNodeIs !== 'source' && connect.newNodeIs !== 'target') return fail('The connection direction is invalid.');
+    if (!Number.isFinite(position.x) || !Number.isFinite(position.y)) return fail('The canvas position is invalid.');
+
+    const originId = connect.newNodeIs === 'target' ? connect.source : connect.target;
+    const origin = before.nodes.find((node) => node.id === originId);
+    if (!origin || !CLI_ID_RE.test(originId)) return fail('The original node is no longer available on the backend.');
+    const originDefinition = NODE_DEFINITIONS[origin.data.definitionId];
+    const originData = origin.data as DynamicNodeData;
+    const sourcePorts = connect.newNodeIs === 'source' ? definition.outputPorts
+      : originData.dynamicOutputPorts ?? originDefinition?.outputPorts;
+    const targetPorts = connect.newNodeIs === 'target' ? definition.inputPorts
+      : originData.dynamicInputPorts ?? originDefinition?.inputPorts;
+    const sourcePort = sourcePorts?.find((port) => port.id === connect.sourceHandle);
+    const targetPort = targetPorts?.find((port) => port.id === connect.targetHandle);
+    if (!sourcePort || !targetPort || !isPortCompatible(sourcePort.dataType, targetPort.dataType)) {
+      return fail('These ports cannot be connected. Choose a compatible node.');
+    }
+
+    // Capture before dispatch: the backend broadcasts the committed graph
+    // before returning its HTTP acknowledgement, so a later snapshot would
+    // contain the very node/edge this undo step must remove.
+    const undoSnapshot = createSnapshot(before.nodes, before.edges);
+    const knownIds = new Set(before.nodes.map((node) => node.id));
+    const replacementRevision = canvasReplacementRevision;
+    let originRevoked = false;
 
     const defaults: Record<string, unknown> = {};
     const allParamSources = definition.sharedParams
       ? [...definition.sharedParams, ...(definition.falParams ?? []), ...(definition.directParams ?? [])]
       : definition.params;
     for (const param of allParamSources) {
-      if (param.default !== undefined) defaults[param.key] = param.default;
+      if (param.default !== undefined) defaults[param.key] = structuredClone(param.default);
     }
     if (isKreaGateway(definition)) {
       defaults._kreaAuth = normalizeKreaMode(useUIStore.getState().settingsCache.kreaConnectionMode);
     }
 
+    const unsubscribe = useGraphStore.subscribe((state) => {
+      if (!state.nodes.some((node) => node.id === originId && node.data.definitionId === origin.data.definitionId)) {
+        originRevoked = true;
+      }
+    });
+    const attempt: ConnectedNodeCreationAttempt = {
+      definitionId, displayName: definition.displayName, position: { ...position },
+      knownCliNodeIds: knownIds, params: structuredClone(defaults), originId,
+      originDefinitionId: origin.data.definitionId, connect: { ...connect }, phase: 'sending',
+    };
+    pendingConnectedNodeCreationAttempt = attempt;
+    let definiteOutcome = false;
     try {
       const res = await apiFetch('/api/graph/node-and-connect', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ definitionId, params: defaults, position, connect }),
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const node = (await res.json()) as { id?: string };
-      return node.id ?? null;
+      if (!res.ok) {
+        definiteOutcome = res.status >= 400 && res.status < 500;
+        return fail(await backendRejectionReason(res, 'Backend rejected the connection'));
+      }
+      const node = (await res.json()) as { id?: unknown; definitionId?: unknown; params?: Record<string, unknown>;
+        connected?: boolean; edge?: Edge };
+      if (typeof node.id !== 'string' || !CLI_ID_RE.test(node.id) || knownIds.has(node.id)
+        || (node.definitionId !== undefined && node.definitionId !== definitionId)) {
+        return fail('The backend returned an invalid node acknowledgement. The request may have committed; check canvas sync before trying again.');
+      }
+      if (originRevoked || replacementRevision !== canvasReplacementRevision) {
+        return fail('The canvas changed while this request was pending. Check the current graph before trying again.');
+      }
+
+      const nodeId = node.id;
+      const expectedSource = connect.newNodeIs === 'source' ? nodeId : connect.source;
+      const expectedTarget = connect.newNodeIs === 'target' ? nodeId : connect.target;
+      const edge = node.edge;
+      if (node.connected !== true || !edge || typeof edge.id !== 'string' || !edge.id
+        || edge.source !== expectedSource || edge.sourceHandle !== connect.sourceHandle
+        || edge.target !== expectedTarget || edge.targetHandle !== connect.targetHandle) {
+        return fail('The backend did not confirm the requested connection. Check canvas sync before trying again.');
+      }
+      const params = node.params && typeof node.params === 'object' && !Array.isArray(node.params) ? node.params : defaults;
+      const nodeTypes: Record<string, string> = {
+        batch: 'batchNode', 'paper-source': 'paperSourceNode', reroute: 'reroute-node',
+        'video-edit': 'editNode', 'remotion-node': 'remotionNode', 'cinema-scene': 'cinemaSceneNode',
+        character: 'characterNode', 'camera-rig': 'cameraRigNode', 'reference-set': 'referenceSetNode',
+        'nebula-moodboard': 'moodboardNode',
+      };
+      const dynamic = isDynamicDefinition(definitionId);
+      const data: NodeData = { label: definition.displayName, definitionId, params, state: 'idle', outputs: {},
+        keyStatus: nodeKeyStatus(definition, params, useUIStore.getState().settingsCache),
+        ...(dynamic ? { isDynamic: true, providerType: dynamicProviderFor(definitionId),
+          dynamicInputPorts: definition.inputPorts.map(toDynamicPort), dynamicOutputPorts: definition.outputPorts.map(toDynamicPort),
+          dynamicParams: [], providerMeta: {} } : {}),
+      };
+      const newNode: Node<NodeData> = { id: nodeId,
+        type: nodeTypes[definitionId] ?? (dynamic ? 'dynamic-node' : definitionId.startsWith('qc-') ? 'videoQcNode' : 'model-node'),
+        position: { ...position }, data };
+      // A fast graphSync may already contain either item. Keep its canonical
+      // data, outputs and edge ID; otherwise expose the acknowledged pair now.
+      set((state) => ({
+        nodes: state.nodes.some((item) => item.id === nodeId) ? state.nodes : [...state.nodes, newNode],
+        edges: state.edges.some((item) => item.source === edge.source && item.sourceHandle === edge.sourceHandle
+          && item.target === edge.target && item.targetHandle === edge.targetHandle) ? state.edges : [...state.edges, edge],
+        undoStack: [...state.undoStack, undoSnapshot].slice(-UNDO_CAP),
+        redoStack: [],
+      }));
+      definiteOutcome = true;
+      return nodeId;
     } catch (err) {
       console.warn('[nebula] addNodeAndConnect backend push failed:', err);
-      return null;
+      return fail('The backend response was lost or invalid. This request may have committed; check canvas sync before trying again.');
+    } finally {
+      if (pendingConnectedNodeCreationAttempt === attempt) {
+        if (definiteOutcome || attempt.observedNodeId) pendingConnectedNodeCreationAttempt = null;
+        else attempt.phase = 'uncertain';
+      }
+      unsubscribe();
     }
   },
 
@@ -4538,6 +4662,8 @@ export const useGraphStore = create<GraphState>((set, get) => ({
 
   loadGraph: (nodes, edges, options) => {
     if (get().isExecuting && !options?.allowDuringExecution) return;
+    canvasReplacementRevision += 1;
+    pendingConnectedNodeCreationAttempt = null;
     clearCinemaScenePersistence();
     useCinemaMotionStore.getState().clear();
     if (!options?.preserveCinemaUploads) clearReplacedCanvasFocus();

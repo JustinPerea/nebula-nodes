@@ -51,7 +51,12 @@ describe('Krea authoring and saved billing choice', () => {
   });
 
   it('posts the chosen mode when creating a connected Canvas node', async () => {
-    apiFetchMock.mockResolvedValue({ ok: true, json: async () => ({ id: 'n2' }) });
+    useGraphStore.setState({ nodes: [{ id: 'n1', type: 'model-node', position: { x: 0, y: 0 },
+      data: { definitionId: 'nano-banana', label: 'Logo', params: {}, state: 'complete',
+        outputs: { image: { type: 'Image', value: '/outputs/logo.png' } } } }] });
+    apiFetchMock.mockResolvedValue({ ok: true, json: async () => ({ id: 'n2', definitionId: modelId, connected: true,
+      edge: { id: 'e1', source: 'n1', sourceHandle: 'image', target: 'n2', targetHandle: 'image_urls',
+        type: 'typed-edge', data: { dataType: 'Image' } } }) });
     await useGraphStore.getState().addNodeAndConnect(modelId, { x: 2, y: 3 }, {
       source: 'n1', target: '', sourceHandle: 'image', targetHandle: 'image_urls', newNodeIs: 'target',
     });

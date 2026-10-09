@@ -4318,6 +4318,20 @@ async def create_node_and_connect(body: dict[str, Any]) -> dict:
     if not isinstance(params, dict):
         raise HTTPException(status_code=400, detail="params must be an object")
     position = body.get("position")
+    if position is not None and not isinstance(position, dict):
+        raise HTTPException(status_code=400, detail="position must be an object")
+    connect_spec = body.get("connect")
+    if connect_spec is None:
+        connect_spec = {}
+    if not isinstance(connect_spec, dict):
+        raise HTTPException(status_code=400, detail="connect must be an object")
+    if connect_spec:
+        if connect_spec.get("newNodeIs") not in ("source", "target"):
+            raise HTTPException(status_code=400, detail="connect.newNodeIs must be 'source' or 'target'")
+        existing_side = "source" if connect_spec["newNodeIs"] == "target" else "target"
+        for key in (existing_side, "sourceHandle", "targetHandle"):
+            if not isinstance(connect_spec.get(key), str) or not connect_spec[key]:
+                raise HTTPException(status_code=400, detail=f"connect.{key} must be a non-empty string")
     _validate_params(definition_id, params)
     params = _coerce_params(definition_id, params)
     carries_recovery = bool(
@@ -4332,14 +4346,19 @@ async def create_node_and_connect(body: dict[str, Any]) -> dict:
     )
     with mutation:
         candidate = cli_graph.clone()
-        short_id = candidate.add_node(definition_id, params, position=position)
+        try:
+            short_id = candidate.add_node(definition_id, params, position=position)
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=f"Cannot create this node: {exc}") from exc
 
-        connect_spec = body.get("connect") or {}
+        edge = None
         if connect_spec:
             is_target = connect_spec.get("newNodeIs") == "target"
             src = connect_spec.get("source") if is_target else short_id
             dst = short_id if is_target else connect_spec.get("target")
             try:
+                if src not in candidate.nodes or dst not in candidate.nodes:
+                    raise HTTPException(status_code=400, detail="connect references an unknown source or target node")
                 _validate_connect_handles(
                     src,
                     connect_spec.get("sourceHandle", ""),
@@ -4347,23 +4366,23 @@ async def create_node_and_connect(body: dict[str, Any]) -> dict:
                     connect_spec.get("targetHandle", ""),
                     graph=candidate,
                 )
-                candidate.connect(
+                edge = candidate.connect(
                     src,
                     connect_spec.get("sourceHandle", ""),
                     dst,
                     connect_spec.get("targetHandle", ""),
                 )
-                connected = True
-            except HTTPException:
-                # The candidate is persistence-free, so discarding it rolls
-                # back both the new node and its tentative connection.
-                raise
-            except ValueError:
-                # Connection failed (e.g. unknown node id in connect_spec) but
-                # preserve the existing API behavior: keep the standalone node.
-                connected = False
-        else:
-            connected = False
+                # Deleting an earlier edge can leave the len+1 allocator at an
+                # existing id. The confirmed pair needs a unique edge identity.
+                used_edge_ids = {existing["id"] for existing in candidate.edges[:-1]}
+                edge_number = len(candidate.edges)
+                while edge["id"] in used_edge_ids:
+                    edge_number += 1
+                    edge["id"] = f"e{edge_number}"
+            except ValueError as exc:
+                # Discard the persistence-free candidate on every connection
+                # failure; the caller requested a pair, not a standalone node.
+                raise HTTPException(status_code=400, detail=f"Cannot connect this node: {exc}") from exc
 
         _commit_graph_candidate_with_recoveries(
             candidate,
@@ -4371,14 +4390,27 @@ async def create_node_and_connect(body: dict[str, Any]) -> dict:
             source="create-connect",
         )
 
+    rf_edge = None
+    if edge is not None:
+        source_node = candidate.nodes[src]
+        source_def = node_registry.get(source_node["definitionId"]) or {}
+        source_ports = (cinema_output_ports(source_node.get("params"))
+                        if source_node["definitionId"] == "cinema-scene"
+                        else source_def.get("outputPorts", []))
+        data_type = next((port["dataType"] for port in source_ports
+                          if port["id"] == edge["sourceHandle"]), "Any")
+        rf_edge = {**copy.deepcopy(edge), "type": "typed-edge", "data": {"dataType": data_type}}
+    # Preserve the raw top-level node contract for existing CLI callers while
+    # letting the canvas adopt only a connection explicitly confirmed by us.
+    response = {**copy.deepcopy(candidate.nodes[short_id]), "connected": edge is not None, "edge": rf_edge}
     await _broadcast_graph_sync()
     publish_action(f"Added {definition_id} ({short_id})")
-    if connected:
+    if edge is not None:
         publish_action(
             f"Wired {src}:{connect_spec.get('sourceHandle', '')} → "
             f"{dst}:{connect_spec.get('targetHandle', '')}"
         )
-    return cli_graph.nodes[short_id]
+    return response
 
 
 def _cinema_motion_image_ref(value: Any) -> str:

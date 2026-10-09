@@ -13,7 +13,8 @@ const POPOVER_MIN_HEIGHT = 220;
 const PINNED_WIDTH = 300;
 const PINNED_MIN_WIDTH = 260;
 const PINNED_MAX_HEIGHT = 440;
-const PINNED_MIN_HEIGHT = 320;
+const PINNED_RESIZE_MIN_WIDTH = 240;
+const PINNED_RESIZE_MIN_HEIGHT = 260;
 const PINNED_GAP = 12;
 const VIEWPORT_GUTTER = 16;
 const BOTTOM_GUTTER = 80;
@@ -21,8 +22,11 @@ const BOTTOM_GUTTER = 80;
 type PopoverFrame = {
   nodeId: string;
   placement: 'left' | 'right' | 'top' | 'bottom' | 'pinned-left';
+  suspended?: boolean;
   style: CSSProperties;
 };
+
+type PinnedPreference = { left: number; top: number; width: number; height: number };
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
@@ -34,12 +38,16 @@ function getInspectorAnchor(nodeId: string) {
 }
 
 function frameEquals(a: PopoverFrame | null, b: PopoverFrame) {
-  if (!a || a.nodeId !== b.nodeId || a.placement !== b.placement) return false;
+  if (!a || a.nodeId !== b.nodeId || a.placement !== b.placement || a.suspended !== b.suspended) return false;
   return (
     a.style.left === b.style.left &&
     a.style.top === b.style.top &&
     a.style.width === b.style.width &&
-    a.style.height === b.style.height
+    a.style.height === b.style.height &&
+    a.style.minWidth === b.style.minWidth &&
+    a.style.maxWidth === b.style.maxWidth &&
+    a.style.minHeight === b.style.minHeight &&
+    a.style.maxHeight === b.style.maxHeight
   );
 }
 
@@ -98,46 +106,54 @@ function measurePopoverFrame(nodeId: string, anchor: HTMLElement): PopoverFrame 
   };
 }
 
-function measurePinnedFrame(nodeId: string): PopoverFrame {
+function measurePinnedFrame(nodeId: string, preference: PinnedPreference | null): PopoverFrame {
   const viewportWidth = window.innerWidth;
   const viewportHeight = window.innerHeight;
-  const library = document.querySelector('.panel--library') as HTMLElement | null;
-  const libraryRect = library?.getBoundingClientRect();
-  const libraryVisible = Boolean(libraryRect && libraryRect.width > 0 && libraryRect.height > 0);
-  const viewportAvailableHeight = Math.max(
-    PINNED_MIN_HEIGHT,
-    viewportHeight - VIEWPORT_GUTTER - BOTTOM_GUTTER,
-  );
-  let left = VIEWPORT_GUTTER;
-  let top = Math.max(VIEWPORT_GUTTER, viewportHeight - BOTTOM_GUTTER - Math.min(PINNED_MAX_HEIGHT, viewportAvailableHeight));
-  let width = Math.min(PINNED_WIDTH, viewportWidth - VIEWPORT_GUTTER * 2);
-  let height = Math.min(PINNED_MAX_HEIGHT, viewportAvailableHeight);
+  const railRect = document.querySelector('.workspace-rail')?.getBoundingClientRect();
+  const railRight = railRect && railRect.width > 0 && railRect.height > 0 ? railRect.right : 0;
+  const railLeft = Math.max(VIEWPORT_GUTTER, railRight + PINNED_GAP);
+  let leftBound = railLeft;
 
-  if (libraryRect && libraryVisible) {
-    const belowSpace = viewportHeight - libraryRect.bottom - PINNED_GAP - BOTTOM_GUTTER;
-    const rightSpace = viewportWidth - libraryRect.right - PINNED_GAP - VIEWPORT_GUTTER;
-
-    if (belowSpace >= PINNED_MIN_HEIGHT) {
-      left = clamp(libraryRect.left, VIEWPORT_GUTTER, viewportWidth - width - VIEWPORT_GUTTER);
-      top = libraryRect.bottom + PINNED_GAP;
-      width = clamp(libraryRect.width, PINNED_MIN_WIDTH, Math.min(PINNED_WIDTH, viewportWidth - left - VIEWPORT_GUTTER));
-      height = Math.min(PINNED_MAX_HEIGHT, belowSpace);
-    } else if (rightSpace >= PINNED_MIN_WIDTH) {
-      left = libraryRect.right + PINNED_GAP;
-      top = clamp(libraryRect.top, VIEWPORT_GUTTER, viewportHeight - PINNED_MIN_HEIGHT - VIEWPORT_GUTTER);
-      width = Math.min(PINNED_WIDTH, rightSpace);
-      height = Math.min(PINNED_MAX_HEIGHT, Math.max(PINNED_MIN_HEIGHT, viewportHeight - top - BOTTOM_GUTTER));
-    }
+  // Every dock drawer shares this footprint. Measure it live so opening Assets,
+  // History, or Settings cannot leave a pinned Inspector over navigation.
+  for (const drawer of document.querySelectorAll('.workspace-dock-panel')) {
+    const rect = drawer.getBoundingClientRect();
+    if (rect.width > 0 && rect.height > 0) leftBound = Math.max(leftBound, rect.right + PINNED_GAP);
   }
+  const rightBound = viewportWidth - VIEWPORT_GUTTER;
+  const suspended = leftBound > railLeft && rightBound - leftBound < PINNED_MIN_WIDTH;
+  // Compact drawers cover the canvas. Keep the Inspector mounted but hidden
+  // until they close, preserving its fields, selection, and user's pin position.
+  if (suspended) leftBound = railLeft;
+
+  const availableWidth = Math.max(0, rightBound - leftBound);
+  const bottomGutter = Math.min(
+    BOTTOM_GUTTER,
+    Math.max(VIEWPORT_GUTTER, viewportHeight - VIEWPORT_GUTTER - PINNED_RESIZE_MIN_HEIGHT),
+  );
+  const bottomBound = viewportHeight - bottomGutter;
+  const availableHeight = Math.max(0, bottomBound - VIEWPORT_GUTTER);
+  const minWidth = Math.min(PINNED_RESIZE_MIN_WIDTH, availableWidth);
+  const minHeight = Math.min(PINNED_RESIZE_MIN_HEIGHT, availableHeight);
+  const maxWidth = Math.min(520, availableWidth);
+  const width = clamp(preference?.width ?? PINNED_WIDTH, minWidth, maxWidth);
+  const height = clamp(preference?.height ?? PINNED_MAX_HEIGHT, minHeight, availableHeight);
+  const left = clamp(preference?.left ?? leftBound, leftBound, rightBound - width);
+  const top = clamp(preference?.top ?? bottomBound - height, VIEWPORT_GUTTER, bottomBound - height);
 
   return {
     nodeId,
     placement: 'pinned-left',
+    suspended,
     style: {
       left,
       top,
       width,
       height,
+      minWidth,
+      maxWidth,
+      minHeight,
+      maxHeight: availableHeight,
     },
   };
 }
@@ -150,9 +166,12 @@ export function NodeInspectorPopover() {
   const setInspectorPinned = useUIStore((s) => s.setInspectorPinned);
   const [frame, setFrame] = useState<PopoverFrame | null>(null);
   const frameRef = useRef<PopoverFrame | null>(null);
+  const popoverRef = useRef<HTMLDivElement | null>(null);
+  const pinnedPreferenceRef = useRef<PinnedPreference | null>(null);
   const dragRef = useRef<{ startX: number; startY: number; left: number; top: number } | null>(null);
 
   useLayoutEffect(() => {
+    if (!pinned) pinnedPreferenceRef.current = null;
     if (!visible || !selectedNodeId) return;
 
     let raf = 0;
@@ -160,26 +179,35 @@ export function NodeInspectorPopover() {
 
     const tick = () => {
       if (pinned) {
-        const nextFrame = frameRef.current?.placement === 'pinned-left'
-          ? { ...frameRef.current, nodeId: selectedNodeId }
-          : measurePinnedFrame(selectedNodeId);
+        const currentFrame = frameRef.current;
+        const element = popoverRef.current;
+        if (currentFrame?.placement === 'pinned-left' && !currentFrame.suspended && element) {
+          const width = parseFloat(element.style.width);
+          const height = parseFloat(element.style.height);
+          // Native CSS resize changes inline dimensions without a React event.
+          if (width !== currentFrame.style.width || height !== currentFrame.style.height) {
+            pinnedPreferenceRef.current = {
+              left: Number(currentFrame.style.left), top: Number(currentFrame.style.top), width, height,
+            };
+          }
+        }
+        const nextFrame = measurePinnedFrame(selectedNodeId, pinnedPreferenceRef.current);
         if (!frameEquals(frameRef.current, nextFrame)) {
           frameRef.current = nextFrame;
           setFrame(nextFrame);
         }
-        return;
-      }
-
-      const anchor = getInspectorAnchor(selectedNodeId);
-      if (anchor) {
-        const nextFrame = measurePopoverFrame(selectedNodeId, anchor);
-        if (!frameEquals(frameRef.current, nextFrame)) {
-          frameRef.current = nextFrame;
-          setFrame(nextFrame);
+      } else {
+        const anchor = getInspectorAnchor(selectedNodeId);
+        if (anchor) {
+          const nextFrame = measurePopoverFrame(selectedNodeId, anchor);
+          if (!frameEquals(frameRef.current, nextFrame)) {
+            frameRef.current = nextFrame;
+            setFrame(nextFrame);
+          }
+        } else if (frameRef.current !== null) {
+          frameRef.current = null;
+          setFrame(null);
         }
-      } else if (frameRef.current !== null) {
-        frameRef.current = null;
-        setFrame(null);
       }
 
       if (!stopped) {
@@ -201,25 +229,14 @@ export function NodeInspectorPopover() {
       const nextFrame = frameRef.current;
       if (!nextFrame) return;
       const width = Number(nextFrame.style.width ?? PINNED_WIDTH);
-      const height = Number(nextFrame.style.height ?? PINNED_MIN_HEIGHT);
-      const nextLeft = clamp(
-        dragRef.current.left + e.clientX - dragRef.current.startX,
-        -width + 48,
-        window.innerWidth - 48,
-      );
-      const nextTop = clamp(
-        dragRef.current.top + e.clientY - dragRef.current.startY,
-        VIEWPORT_GUTTER,
-        window.innerHeight - 48,
-      );
-      const updatedFrame = {
-        ...nextFrame,
-        style: {
-          ...nextFrame.style,
-          left: nextLeft,
-          top: Math.min(nextTop, window.innerHeight - Math.min(height, window.innerHeight) + 48),
-        },
+      const height = Number(nextFrame.style.height ?? PINNED_MAX_HEIGHT);
+      pinnedPreferenceRef.current = {
+        left: dragRef.current.left + e.clientX - dragRef.current.startX,
+        top: dragRef.current.top + e.clientY - dragRef.current.startY,
+        width,
+        height,
       };
+      const updatedFrame = measurePinnedFrame(nextFrame.nodeId, pinnedPreferenceRef.current);
       frameRef.current = updatedFrame;
       setFrame(updatedFrame);
     }
@@ -236,18 +253,32 @@ export function NodeInspectorPopover() {
     };
   }, []);
 
+  // A confirmed next-step picker unmounts its focused choice. Resume keyboard
+  // work in the Inspector only when focus was lost; preserve an active control.
+  const hasFrame = Boolean(frame);
+  useLayoutEffect(() => {
+    if (!visible || !selectedNodeId || !hasFrame || frame?.suspended
+      || document.activeElement !== document.body) return;
+    popoverRef.current?.querySelector<HTMLElement>(
+      '.node-inspector-popover__body input:not(:disabled), .node-inspector-popover__body textarea:not(:disabled), .node-inspector-popover__body select:not(:disabled)',
+    )?.focus();
+  }, [visible, selectedNodeId, hasFrame, frame?.suspended]);
+
   if (!visible || !selectedNodeId || !frame) return null;
 
   return createPortal(
     <div
+      ref={popoverRef}
       className={`node-inspector-popover${pinned ? ' node-inspector-popover--pinned' : ''}`}
       data-placement={frame.placement}
+      hidden={Boolean(frame.suspended)}
+      inert={Boolean(frame.suspended)}
       style={frame.style}
     >
       <div
         className="node-inspector-popover__header"
         onMouseDown={(e) => {
-          if (!pinned) return;
+          if (!pinned || e.button !== 0) return;
           const left = Number(frame.style.left ?? 0);
           const top = Number(frame.style.top ?? 0);
           dragRef.current = {
