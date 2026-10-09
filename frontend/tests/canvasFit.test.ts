@@ -1,4 +1,5 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { getViewportForBounds } from '@xyflow/react';
 import { computeCanvasFitPadding } from '../src/lib/canvasFit';
 
 function addChrome(className: string, rect: Partial<DOMRect>) {
@@ -22,6 +23,7 @@ function addChrome(className: string, rect: Partial<DOMRect>) {
 describe('computeCanvasFitPadding', () => {
   afterEach(() => {
     document.querySelectorAll('.workspace-rail, .workspace-dock-panel, .chat-panel, .canvas-tabs, .toolbar').forEach((node) => node.remove());
+    vi.unstubAllGlobals();
   });
 
   it('reserves the furthest active left chrome without double counting rail and drawer', () => {
@@ -36,6 +38,24 @@ describe('computeCanvasFitPadding', () => {
     addChrome('toolbar', { left: 300, right: 700, top: window.innerHeight - 64, bottom: window.innerHeight - 16, width: 400, height: 48 });
     expect(computeCanvasFitPadding().top).toBe('108px');
     expect(computeCanvasFitPadding().bottom).toBe('88px');
+  });
+
+  it('fits inside a compact viewport when its covering drawer is dismissed', () => {
+    vi.stubGlobal('innerWidth', 623);
+    vi.stubGlobal('innerHeight', 792);
+    addChrome('workspace-rail', { left: 8, right: 56, top: 8, bottom: 402, width: 48, height: 394 });
+    addChrome('workspace-dock-panel', { left: 64, right: 615, top: 8, bottom: 652, width: 551, height: 644 });
+
+    const padding = computeCanvasFitPadding();
+    const bounds = { x: -360, y: 0, width: 1350, height: 990 };
+    const viewport = getViewportForBounds(bounds, 623, 792, 0.1, 4, padding);
+    const left = viewport.x + bounds.x * viewport.zoom;
+    const right = left + bounds.width * viewport.zoom;
+
+    expect(padding.left).toBe('80px');
+    expect(623 - parseFloat(padding.left) - parseFloat(padding.right)).toBeGreaterThan(0);
+    expect(left).toBeGreaterThanOrEqual(80);
+    expect(right).toBeLessThanOrEqual(623 - 40);
   });
 
   it('reserves an independent right chat panel while keeping base vertical padding', () => {

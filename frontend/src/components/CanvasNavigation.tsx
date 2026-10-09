@@ -1,5 +1,5 @@
-import { Controls, MiniMap, Panel } from '@xyflow/react';
-import { Map, Minimize2 } from 'lucide-react';
+import { ControlButton, Controls, MiniMap, Panel, useReactFlow } from '@xyflow/react';
+import { Map, Maximize, Minimize2 } from 'lucide-react';
 import { useUIStore } from '../store/uiStore';
 import { computeCanvasFitPadding } from '../lib/canvasFit';
 
@@ -8,13 +8,19 @@ export function CanvasNavigation({ nodeCount }: { nodeCount: number }) {
   const showMinimap = useUIStore((s) => s.canvasPerfMode);
   const collapsed = useUIStore((s) => s.minimapCollapsed);
   const setCollapsed = useUIStore((s) => s.setMinimapCollapsed);
+  const { fitView } = useReactFlow();
 
   return (
     <Panel position="bottom-right" className="canvas-navigation">
       <div className="canvas-navigation__header">
         <span className="canvas-node-count">{nodeCount} {nodeCount === 1 ? 'node' : 'nodes'}</span>
-        <Controls orientation="horizontal" showInteractive={false}
-          className="canvas-navigation__controls" fitViewOptions={{ padding: computeCanvasFitPadding() }} />
+        <Controls orientation="horizontal" showInteractive={false} showFitView={false}
+          className="canvas-navigation__controls">
+          <ControlButton type="button" title="Fit view" aria-label="Fit view"
+            onClick={() => void fitView({ padding: computeCanvasFitPadding() })}>
+            <Maximize size={14} aria-hidden="true" />
+          </ControlButton>
+        </Controls>
       </div>
       {showMinimap && (
         <div className={`canvas-minimap-panel${collapsed ? ' canvas-minimap-panel--collapsed' : ''}`}>

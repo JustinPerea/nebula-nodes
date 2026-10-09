@@ -12,13 +12,14 @@
   position: fixed;
   z-index: 12;
   top: var(--workspace-rail-top);
-  bottom: var(--workspace-rail-bottom);
   left: var(--workspace-rail-left);
   display: flex;
   width: var(--workspace-rail-width);
   flex-direction: column;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
+  gap: 4px;
+  max-height: calc(100dvh - var(--workspace-rail-top) - var(--workspace-rail-bottom));
   padding: 7px 6px;
   border: 1px solid rgba(255, 255, 255, 0.09);
   border-radius: 28px;
@@ -30,6 +31,7 @@
 
 .workspace-rail__group {
   display: flex;
+  flex: 0 0 auto;
   width: 100%;
   flex-direction: column;
   align-items: center;
@@ -203,6 +205,43 @@ body.app-slava-restraint .workspace-rail__item--active:not(.workspace-rail__item
     min-width: 0 !important;
     max-width: var(--workspace-dock-width) !important;
   }
+}
+
+@media (max-height: 450px) {
+  :root {
+    --workspace-rail-top: 8px;
+    --workspace-rail-bottom: 8px;
+  }
+
+  .workspace-rail {
+    gap: 2px;
+    padding: 4px 3px;
+  }
+
+  .workspace-rail__group { gap: 2px; }
+
+  .workspace-rail__item {
+    width: 40px;
+    height: 40px;
+    flex-basis: 40px;
+  }
+
+  .workspace-rail__divider { margin: 3px 0; }
+}
+
+@media (max-height: 378px) {
+  :root { --workspace-rail-width: 56px; }
+
+  .workspace-rail {
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+  }
+
+  /* Native titles and accessible names remain available when scrolling would
+     clip the custom labels outside the rail. Focus scrolls each action into view. */
+  .workspace-rail__item::after { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {

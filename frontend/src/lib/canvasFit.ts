@@ -13,7 +13,7 @@ function px(value: number): `${number}px` {
  * Reserve canvas space for every piece of floating workspace chrome that is
  * currently visible. React Flow's numeric padding uses a viewport-relative
  * formula, so explicit pixels are required to guarantee nodes clear the rail,
- * dock drawer, chat, and inspector at both desktop and compact widths.
+ * dock drawer, chat, and inspector when those controls leave canvas space.
  */
 export function computeCanvasFitPadding(): PixelPadding {
   const base: PixelPadding = { top: '40px', right: '40px', bottom: '40px', left: '40px' };
@@ -22,6 +22,8 @@ export function computeCanvasFitPadding(): PixelPadding {
   const viewportWidth = window.innerWidth;
   const viewportHeight = window.innerHeight;
   const intrusion = { top: 0, right: 0, bottom: 0, left: 0 };
+  let railIntrusion = 0;
+  let dockIntrusion = 0;
   const safety = 24;
   const chrome = [
     { selector: '.workspace-rail', side: 'left' as const },
@@ -38,6 +40,8 @@ export function computeCanvasFitPadding(): PixelPadding {
     if (!element) continue;
     const rect = element.getBoundingClientRect();
     if (rect.width === 0 || rect.height === 0) continue;
+    if (selector === '.workspace-rail') railIntrusion = rect.right;
+    if (selector === '.workspace-dock-panel') dockIntrusion = rect.right;
 
     const distances = {
       left: rect.left,
@@ -60,10 +64,17 @@ export function computeCanvasFitPadding(): PixelPadding {
     else intrusion.bottom = Math.max(intrusion.bottom, viewportHeight - rect.top);
   }
 
+  const rightPadding = Math.max(40, intrusion.right + safety);
+  const dockConsumesCanvas = dockIntrusion > 0
+    && Math.max(40, dockIntrusion + safety) + rightPadding >= viewportWidth;
+  // A compact drawer intentionally covers the canvas. Fit underneath it rather
+  // than beyond the viewport, so dismissing it reveals the fitted graph.
+  const leftPadding = Math.max(40, (dockConsumesCanvas ? railIntrusion : intrusion.left) + safety);
+
   return {
     top: px(Math.max(40, intrusion.top + safety)),
-    right: px(Math.max(40, intrusion.right + safety)),
+    right: px(rightPadding),
     bottom: px(Math.max(40, intrusion.bottom + safety)),
-    left: px(Math.max(40, intrusion.left + safety)),
+    left: px(leftPadding),
   };
 }
