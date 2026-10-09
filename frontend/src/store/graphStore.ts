@@ -71,6 +71,7 @@ import {
 import { wsClient, type ExecutionEvent } from '../lib/wsClient';
 import { notifyJobComplete } from '../lib/jobNotifications';
 import { useUIStore } from './uiStore';
+import { useCreateDraftStore } from './createDraftStore';
 import { getCinemaUploadIssue, useCinemaUploadStore } from './cinemaUploadStore';
 import { cinemaMotionSource, cinemaMotionTarget, useCinemaMotionStore } from './cinemaMotionStore';
 import { isKreaGateway, normalizeKreaMode, nodeKeyStatus, withNewKreaMode } from '../lib/kreaConnection';
@@ -80,6 +81,7 @@ import { createEmptyManifest, DEFAULT_FPS } from '../types/video';
 import { validateManifest } from '../lib/video/manifestValidator';
 import { componentTypeToCanvasDefId, pruneTrackItemsForDeletedNode } from '../lib/video/mirroring';
 import { isPortCompatible } from '../lib/portCompatibility';
+import { getProjectContext } from '../lib/projectContext';
 
 export type TrackItemOrderAction = 'send-to-back' | 'send-backward' | 'bring-forward' | 'bring-to-front';
 
@@ -466,6 +468,9 @@ const cancelledCreateLaunches = new Set<string>();
 // Terminal correlation survives history clearing and prevents delayed events
 // from overwriting the next owner of the same node.
 const terminalRunIds = new Set<string>();
+// A terminal recovery can arrive after leaving its project. Its accepted job
+// stays in that project's journal/history instead of touching reused node IDs.
+const retiredProjectRunIds = new Set<string>();
 const settledCinemaRuns = new Map<string, 'complete' | 'failed' | 'cancelled'>();
 const cancelledRunIds = new Set<string>();
 const pendingStartRunIds = new Set<string>();
@@ -584,7 +589,7 @@ interface GraphState {
   /** Import owns graph replacement without creating an execution/history record. */
   isImportingGraph: boolean;
   reserveGraphImport: () => boolean;
-  releaseGraphImport: () => void;
+  releaseGraphImport: (options?: { discardSuspended?: boolean }) => void;
   providerRecoveryWarning: string | null;
   providerRecoveries: ProviderRecoveryCheckpoint[];
   uncertainWorldLabsRunId: string | null;
@@ -723,6 +728,10 @@ interface GraphState {
     edges: Edge[],
     options?: { allowDuringExecution?: boolean; preserveCinemaUploads?: boolean },
   ) => void;
+  /** A project replacement never cancels a paid run or drops unresolved authoring. */
+  canSwitchProject: () => boolean;
+  loadProjectGraph: (nodes: Node<NodeData>[], edges: Edge[], history: RunRecord[],
+    options?: { bootstrap?: boolean }) => boolean;
   loadSampleGraph: () => void;
   autoLayout: () => void;
   runHistory: RunRecord[];
@@ -935,6 +944,30 @@ function applyShotVariationPromotion(
 // so one node's typing never stalls another node's flush.
 const paramPushTimers: Record<string, number> = {};
 const PARAM_PUSH_DEBOUNCE_MS = 250;
+let pendingGraphMutationCount = 0;
+
+async function trackGraphMutation<T>(operation: () => Promise<T>): Promise<T> {
+  pendingGraphMutationCount += 1;
+  try { return await operation(); }
+  finally { pendingGraphMutationCount -= 1; }
+}
+
+function withGraphMutationLifetime<Args extends unknown[], Result>(operation: (...args: Args) => Promise<Result>) {
+  return (...args: Args): Promise<Result> => trackGraphMutation(() => operation(...args));
+}
+
+/** Even fire-and-forget layout/edge/param writes hold project navigation until
+ * their backend request settles. Admission happens before invoking fetch. */
+function graphMutationFetch(path: string, init?: RequestInit): Promise<Response> {
+  return trackGraphMutation(() => apiFetch(path, init));
+}
+
+function clearAllParamPushTimers(): void {
+  for (const id of Object.keys(paramPushTimers)) {
+    window.clearTimeout(paramPushTimers[id]);
+    delete paramPushTimers[id];
+  }
+}
 
 interface CinemaScenePersistence {
   authoredScene: CinemaSceneSpec;
@@ -1061,7 +1094,7 @@ async function flushCinemaScenePersistence(nodeId: string, entry: CinemaScenePer
   entry.inFlight = controller;
   let failed = false;
   try {
-    const response = await apiFetch(`/api/graph/node/${nodeId}`, {
+    const response = await graphMutationFetch(`/api/graph/node/${nodeId}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' }, signal: controller.signal,
       body: JSON.stringify({ params: { ...node.data.params, scene: sentScene } }),
     });
@@ -1147,7 +1180,7 @@ function persistNodePositions(positions: Record<string, { x: number; y: number }
   );
   if (Object.keys(persisted).length === 0) return;
 
-  apiFetch('/api/graph/layout', {
+  graphMutationFetch('/api/graph/layout', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ positions: persisted }),
@@ -1220,7 +1253,7 @@ function applyCanvasNodeChanges(
 }
 
 async function deleteCLIOriginNode(nodeId: string): Promise<void> {
-  const response = await apiFetch(`/api/graph/node/${nodeId}`, { method: 'DELETE' });
+  const response = await graphMutationFetch(`/api/graph/node/${nodeId}`, { method: 'DELETE' });
   if (response.ok) return;
   let detail = '';
   try {
@@ -1790,7 +1823,7 @@ async function ensureBackendFreshForLocalCanvas(
   if (exported.empty === false) {
     let clearRes: Response;
     try {
-      clearRes = await apiFetch('/api/graph', { method: 'DELETE' });
+      clearRes = await graphMutationFetch('/api/graph', { method: 'DELETE' });
     } catch {
       set({ backendFreshStartPending: true });
       throw new Error(
@@ -1951,6 +1984,9 @@ async function reconcilePendingNodeCreation(
 
 wsClient.connect();
 wsClient.subscribe((event) => {
+  const revision = (event as ExecutionEvent & { workspaceRevision?: string }).workspaceRevision;
+  const context = getProjectContext();
+  if (revision !== undefined && revision !== context?.revision) return;
   if (event.type === 'graphSync') {
     useCinemaMotionStore.getState().observeGraphSync();
     // Real-time sync: MERGE cli_graph into the canvas. Key invariant: frontend-only
@@ -2480,6 +2516,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   // ---------------------------------------------------------------------------
 
   addNode: async (definitionId, position) => {
+    if (get().isImportingGraph) return null;
     if (isDynamicDefinition(definitionId)) {
       return get().addDynamicNode(definitionId, position);
     }
@@ -2589,7 +2626,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
 
     let res: Response;
     try {
-      res = await apiFetch('/api/graph/node', {
+      res = await graphMutationFetch('/api/graph/node', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ definitionId, params: defaults, position }),
@@ -2707,7 +2744,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     pendingConnectedNodeCreationAttempt = attempt;
     let definiteOutcome = false;
     try {
-      const res = await apiFetch('/api/graph/node-and-connect', {
+      const res = await graphMutationFetch('/api/graph/node-and-connect', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ definitionId, params: defaults, position, connect }),
@@ -2776,6 +2813,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   },
 
   addDynamicNode: (definitionId, position) => {
+    if (get().isImportingGraph) return null;
     const definition = NODE_DEFINITIONS[definitionId];
     if (!definition) return null;
 
@@ -2827,10 +2865,11 @@ export const useGraphStore = create<GraphState>((set, get) => ({
 
     // Fire-and-forget push to cli_graph. When it returns, swap the UUID for
     // the short id so subsequent edits flow through the usual cli path.
+    pendingGraphMutationCount += 1;
     ensureBackendFreshForLocalCanvas(localCanvasWasEmpty, set, get)
       .then((backendFresh) => {
         if (!backendFresh) throw new Error('Backend fresh-start guard failed');
-        return apiFetch('/api/graph/node', {
+        return graphMutationFetch('/api/graph/node', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ definitionId, params: defaults, position }),
@@ -2853,7 +2892,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       })
       .catch((err) => {
         console.warn('[nebula] addDynamicNode backend push failed — staying frontend-only:', err);
-      });
+      }).finally(() => { pendingGraphMutationCount -= 1; });
 
     return tempId;
   },
@@ -2905,7 +2944,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         const edge = currentEdges.find((e) => e.id === id);
         if (!edge) continue;
         if (CLI_ID_RE.test(edge.source) && CLI_ID_RE.test(edge.target)) {
-          apiFetch('/api/graph/edge', {
+          graphMutationFetch('/api/graph/edge', {
             method: 'DELETE',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -3019,7 +3058,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       (async () => {
         for (const edge of edgesToReplace) {
           if (!CLI_ID_RE.test(edge.source) || !CLI_ID_RE.test(edge.target)) continue;
-          await apiFetch('/api/graph/edge', {
+          await graphMutationFetch('/api/graph/edge', {
             method: 'DELETE',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -3030,7 +3069,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
             }),
           });
         }
-        await apiFetch('/api/graph/connect', {
+        await graphMutationFetch('/api/graph/connect', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -3156,7 +3195,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         delete paramPushTimers[nodeId];
         const node = useGraphStore.getState().nodes.find((n) => n.id === nodeId);
         if (!node) return;
-        apiFetch(`/api/graph/node/${nodeId}`, {
+        graphMutationFetch(`/api/graph/node/${nodeId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ params: node.data.params }),
@@ -3664,9 +3703,15 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     set({ isImportingGraph: true });
     return true;
   },
-  releaseGraphImport: () => {
+  releaseGraphImport: (options) => {
+    if (options?.discardSuspended) {
+      // A successful project activation changed the backend owner already.
+      // Old same-ID drafts must never be resumed against the new workspace.
+      clearAllParamPushTimers();
+      clearCinemaScenePersistence();
+    }
     set({ isImportingGraph: false });
-    resumeCinemaScenePersistence();
+    if (!options?.discardSuspended) resumeCinemaScenePersistence();
   },
 
   resetExecution: () => {
@@ -4218,7 +4263,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     let rfNodes: Node<NodeData>[] = [];
     let rfEdges: Edge[] = [];
     try {
-      const res = await apiFetch('/api/graph/cluster', {
+      const res = await graphMutationFetch('/api/graph/cluster', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ nodes: specNodes, edges: specEdges }),
       });
@@ -4513,7 +4558,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     for (const edge of get().edges) {
       if (edge.source !== nodeId || edge.sourceHandle !== deadPortId) continue;
       if (CLI_ID_RE.test(edge.source) && CLI_ID_RE.test(edge.target)) {
-        apiFetch('/api/graph/edge', {
+        graphMutationFetch('/api/graph/edge', {
           method: 'DELETE',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -4545,7 +4590,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       if (edge.source !== nodeId || !edge.sourceHandle?.startsWith('shot_')) continue;
       if (validPortIds.has(edge.sourceHandle)) continue;
       if (CLI_ID_RE.test(edge.source) && CLI_ID_RE.test(edge.target)) {
-        apiFetch('/api/graph/edge', {
+        graphMutationFetch('/api/graph/edge', {
           method: 'DELETE',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -4569,6 +4614,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   // _validate_params on the /api/graph/node persist path (same mechanism as
   // _previewUrl) without polluting the Inspector.
   addCharacterNode: async (characterId, position, meta) => {
+    if (get().isImportingGraph) return null;
     const definition = NODE_DEFINITIONS['character'];
     if (!definition) return null;
 
@@ -4590,7 +4636,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       const backendFresh = await ensureBackendFreshForLocalCanvas(localCanvasWasEmpty, set, get);
       if (!backendFresh) throw new Error('Backend fresh-start guard failed');
 
-      const res = await apiFetch('/api/graph/node', {
+      const res = await graphMutationFetch('/api/graph/node', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ definitionId: 'character', params, position }),
@@ -4616,6 +4662,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   // saved Moodboard asset. The canvas card uses denormalized fields for instant
   // rendering; execution resolves the canonical resource from MoodboardStore.
   addMoodboardNode: async (moodboardId, position, meta) => {
+    if (get().isImportingGraph) return null;
     const definition = NODE_DEFINITIONS['nebula-moodboard'];
     if (!definition) return null;
 
@@ -4638,7 +4685,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       const backendFresh = await ensureBackendFreshForLocalCanvas(localCanvasWasEmpty, set, get);
       if (!backendFresh) throw new Error('Backend fresh-start guard failed');
 
-      const res = await apiFetch('/api/graph/node', {
+      const res = await graphMutationFetch('/api/graph/node', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ definitionId: 'nebula-moodboard', params, position }),
@@ -4678,6 +4725,95 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       backendFreshStartPending: false,
     });
     useCinemaUploadStore.getState().reconcileTargets(get().nodes);
+  },
+
+  canSwitchProject: () => {
+    const state = get();
+    const session = useUIStore.getState().createSessionId;
+    const createUploads = session ? useCreateDraftStore.getState().drafts[session]?.uploads ?? [] : [];
+    const referencesUploading = createUploads.some((upload) => upload.status === 'uploading')
+      || useCinemaUploadStore.getState().uploads.some((upload) => upload.status === 'uploading');
+    return !state.isExecuting && !state.isImportingGraph && state.createLaunchingIds.length === 0
+      && state.providerStartAmbiguities.length === 0 && state.uncertainWorldLabsRunId === null
+      && activeRunOwners.size === 0 && createLaunchOwners.size === 0
+      && !pendingNodeCreationAttempt && !pendingConnectedNodeCreationAttempt
+      && !referencesUploading && pendingGraphMutationCount === 0 && Object.keys(paramPushTimers).length === 0;
+  },
+
+  loadProjectGraph: (nodes, edges, history, options) => {
+    // Validate before revoking any current owner or draft. Corrupt project data
+    // must never turn a previously protected paid run into an unowned one.
+    let restoredHistory: RunRecord[];
+    try {
+      const payload = JSON.stringify({ version: 1, records: history });
+      restoredHistory = loadRunHistory({ getItem: () => payload, setItem: () => {}, removeItem: () => {} });
+    } catch { return false; }
+    const historyIds = new Set(restoredHistory.filter((record) => record.status === 'running').map((record) => record.id));
+    // Reload may already have registered this exact saved project's owners on
+    // module initialization. Rebuilding them must not call resetExecution or
+    // falsely write terminal cancellation records.
+    const bootstrapSameOwners = options?.bootstrap === true && !get().isImportingGraph
+      && get().createLaunchingIds.length === 0 && createLaunchOwners.size === 0
+      && !pendingNodeCreationAttempt && !pendingConnectedNodeCreationAttempt
+      && pendingGraphMutationCount === 0
+      && [...activeRunOwners.keys()].every((id) => historyIds.has(id));
+    if (!get().canSwitchProject() && !bootstrapSameOwners) return false;
+
+    canvasReplacementRevision += 1;
+    pendingNodeCreationAttempt = null;
+    pendingConnectedNodeCreationAttempt = null;
+    clearAllParamPushTimers();
+    clearCinemaScenePersistence();
+    useCinemaUploadStore.getState().clear();
+    useCinemaMotionStore.getState().clear();
+    clearReplacedCanvasFocus();
+    for (const timer of statusReconciliationTimers.values()) clearTimeout(timer);
+    statusReconciliationTimers.clear();
+    activeRunOwners.clear();
+    runErrors.clear();
+    runShareableInputs.clear();
+    createLaunchOwners.clear();
+    cancelledCreateLaunches.clear();
+    const nextHistoryIds = new Set(restoredHistory.map((record) => record.id));
+    for (const record of get().runHistory) {
+      if (!nextHistoryIds.has(record.id)) retiredProjectRunIds.add(record.id);
+    }
+    for (const id of nextHistoryIds) retiredProjectRunIds.delete(id);
+    while (retiredProjectRunIds.size > 1000) retiredProjectRunIds.delete(retiredProjectRunIds.values().next().value!);
+    settledCinemaRuns.clear();
+    pendingStartRunIds.clear();
+    cancellationRequestedRunIds.clear();
+    currentRunId = null;
+    lastUndoPush = 0;
+    lastUndoNodeId = '';
+
+    for (const record of restoredHistory) {
+      if (record.status !== 'running') continue;
+      registerRun(record.id, record.snapshot, record.targetNodeId, record.cinemaShot?.shotId);
+      terminalRunIds.delete(record.id);
+      cancelledRunIds.delete(record.id);
+      activeRunOwners.get(record.id)!.status = 'uncertain';
+    }
+    currentRunId = restoredHistory.find((record) => record.status === 'running'
+      && !record.createOrigin && !record.cinemaShot)?.id ?? null;
+    useUIStore.setState({
+      selectedNodeId: null, inspectorPinned: false, canvasFocusRequest: null,
+      editorTargetNodeId: null, remotionEditorTargetNodeId: null, cinemaEditorNodeId: null,
+      characterEditorId: null, moodboardEditorId: null, selectedClipId: null,
+      selectedTrackItemId: null, selectedTrackItemIds: [], isKeyframeRecording: false,
+      isPlaying: false, renderedPreviewUrl: null, playheadOutputTime: 0, timelineZoom: 1,
+      pendingPreset: null, createSessionId: null, onboardingActive: false,
+      contextMenu: { visible: false, position: { x: 0, y: 0 }, nodeId: null },
+      connectionPopup: { visible: false, position: { x: 0, y: 0 }, nodeId: '', handleId: '', handleType: 'source' },
+    });
+    set({
+      nodes, edges, runHistory: persistedRunHistory(restoredHistory),
+      ...ownershipState(), createLaunchingIds: [], createCancelledLaunchIds: [],
+      clipboard: null, undoStack: [], redoStack: [], backendFreshStartPending: false,
+      providerRecoveryWarning: null, providerRecoveries: [], providerStartAmbiguities: [],
+      uncertainWorldLabsRunId: null,
+    });
+    return true;
   },
 
   loadSampleGraph: () => {
@@ -4905,6 +5041,9 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   },
 
   handleExecutionEvent: (event) => {
+    const revision = (event as ExecutionEvent & { workspaceRevision?: string }).workspaceRevision;
+    if (revision !== undefined && revision !== getProjectContext()?.revision) return;
+    if (event.runId && retiredProjectRunIds.has(event.runId)) return;
     // Recovery IDs can arrive while cancellation is settling. They must be
     // applied before graphCancelled so a paid provider job is never stranded.
     if (
@@ -5277,6 +5416,18 @@ export const useGraphStore = create<GraphState>((set, get) => ({
 
   dismissProviderRecoveryWarning: () => set({ providerRecoveryWarning: null }),
 }));
+
+// Hold navigation through response parsing and local authoring callbacks too.
+const projectMutationMethods = useGraphStore.getState();
+useGraphStore.setState({
+  addNode: withGraphMutationLifetime(projectMutationMethods.addNode),
+  addNodeAndConnect: withGraphMutationLifetime(projectMutationMethods.addNodeAndConnect),
+  addCharacterNode: withGraphMutationLifetime(projectMutationMethods.addCharacterNode),
+  addMoodboardNode: withGraphMutationLifetime(projectMutationMethods.addMoodboardNode),
+  authorGenerationCluster: withGraphMutationLifetime(projectMutationMethods.authorGenerationCluster),
+  fetchReplicateSchemaAndConfigure: withGraphMutationLifetime(projectMutationMethods.fetchReplicateSchemaAndConfigure),
+  promoteShotVariation: withGraphMutationLifetime(projectMutationMethods.promoteShotVariation),
+});
 
 // Removal/wrong-type replacement permanently revokes ownership. Undoing the
 // deletion may restore the graph, but cannot restore an old upload request.

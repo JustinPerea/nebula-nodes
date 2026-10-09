@@ -24,6 +24,8 @@ import tempfile
 import unicodedata
 import zipfile
 from contextlib import aclosing, contextmanager, nullcontext
+from contextvars import ContextVar
+from functools import wraps
 from pathlib import Path
 from pathlib import PurePosixPath
 from typing import Any, BinaryIO
@@ -75,6 +77,11 @@ from services.settings import (
 )
 from services.node_registry import NodeRegistry
 from services.cli_graph import CLIGraph
+from services.project_store import (
+    MAX_PROJECT_BYTES, ProjectLimitError, ProjectStore, ProjectStoreError, empty_snapshot,
+    make_project, metadata as project_metadata, now as project_now,
+    project_name, public_project, refresh_metadata, validate_project_id,
+)
 from services.port_contracts import (
     ContractEdge,
     ContractNode,
@@ -164,6 +171,10 @@ else:
     _STATE_PATH = _STATE_DIR / "state.json"
 
 cli_graph = CLIGraph(persist_path=_STATE_PATH)
+project_store = ProjectStore(_STATE_DIR / "projects")
+_request_workspace_revision: ContextVar[str | None] = ContextVar("workspace_revision", default=None)
+_execution_workspace_context: ContextVar[dict[str, Any] | None] = ContextVar("execution_workspace", default=None)
+_synchronous_workspace_runs: set[str] = set()
 if _STATE_PATH is not None and _STATE_PATH.exists():
     try:
         cli_graph.load(_STATE_PATH)
@@ -210,6 +221,7 @@ def _reject_graph_replacement_during_paid_start(action: str) -> None:
 def _paid_graph_mutation(action: str):
     """Hold the cross-process paid lifecycle fence through a graph commit."""
     global _graph_recovery_bootstrap_error
+    _check_workspace_revision()
     try:
         with provider_start_guard.exclusive_lifecycle():
             # A worker may have booted while another worker owned the lifecycle
@@ -365,6 +377,64 @@ if _bootstrap_checkpoints:
             flush=True,
         )
 app = FastAPI(title="Nebula Node Backend", version="0.1.0")
+
+
+@app.exception_handler(ProjectStoreError)
+async def project_storage_error(request, exc: ProjectStoreError):
+    return JSONResponse(status_code=413 if isinstance(exc, ProjectLimitError) else 507, content={"detail": str(exc)})
+
+
+def _workspace_context() -> dict[str, Any]:
+    catalog = project_store.read()
+    return {"activeProjectId": catalog["activeProjectId"], "workspaceRevision": catalog["workspaceRevision"]}
+
+
+def _check_workspace_revision(revision: str | None = None) -> None:
+    supplied = revision if revision is not None else _request_workspace_revision.get()
+    if supplied is not None and supplied != _workspace_context()["workspaceRevision"]:
+        raise HTTPException(status_code=409, detail="This canvas is out of date. Open the current project before editing or running it.")
+
+
+def _capture_execution_workspace() -> None:
+    # asyncio tasks inherit this immutable admission identity; late events
+    # never borrow whichever project happens to be active when broadcast.
+    _execution_workspace_context.set(_workspace_context())
+
+
+def _track_synchronous_project_run(handler):
+    """Fence project replacement for CLI and quick runs that own HTTP tasks."""
+    @wraps(handler)
+    async def tracked(*args, **kwargs):
+        _check_workspace_revision()
+        identity = uuid4().hex
+        _synchronous_workspace_runs.add(identity)
+        try:
+            return await handler(*args, **kwargs)
+        finally:
+            _synchronous_workspace_runs.discard(identity)
+    return tracked
+
+
+@app.middleware("http")
+async def project_workspace_fence(request: Request, call_next):
+    path = request.url.path
+    guarded = request.method not in {"GET", "HEAD", "OPTIONS"} and path.startswith((
+        "/api/graph", "/api/execute", "/api/cinema", "/api/quick",
+    ))
+    supplied = request.headers.get("x-nebula-workspace-revision") if guarded else None
+    token = _request_workspace_revision.set(supplied)
+    execution_token = _execution_workspace_context.set(None)
+    try:
+        try:
+            _check_workspace_revision()
+        except HTTPException as exc:
+            return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+        except ProjectStoreError as exc:
+            return JSONResponse(status_code=507, content={"detail": str(exc)})
+        return await call_next(request)
+    finally:
+        _execution_workspace_context.reset(execution_token)
+        _request_workspace_revision.reset(token)
 
 
 @app.exception_handler(ProtectedPathError)
@@ -1889,6 +1959,7 @@ class ConnectionManager:
 
     async def broadcast(self, event: ExecutionEvent) -> None:
         data = _event_to_camel(event)
+        data.update(_execution_workspace_context.get() or _workspace_context())
         await self.broadcast_raw(data)
 
     async def broadcast_raw(self, data: dict[str, Any]) -> None:
@@ -1944,6 +2015,7 @@ def _publish_terminal_execution_status(run_id: str, status: str) -> None:
             await _broadcast_graph_sync()
         await manager.broadcast_raw(
             {
+                **(_execution_workspace_context.get() or _workspace_context()),
                 "type": "executionStatus",
                 "runId": run_id,
                 "status": status,
@@ -2916,6 +2988,8 @@ def _watch_for_cross_process_stop(
 
 @app.post("/api/execute")
 async def execute(request: ExecuteRequest) -> dict:
+    _check_workspace_revision()
+    _capture_execution_workspace()
     run_id = request.run_id or str(uuid4())
     _assert_execution_admissible(run_id)
     if execution_runs.get(run_id) is not None:
@@ -3036,6 +3110,8 @@ async def execute(request: ExecuteRequest) -> dict:
 @app.post("/api/execute-node")
 async def execute_node(request: ExecuteNodeRequest) -> dict:
     """Execute only the subgraph feeding into a specific target node."""
+    _check_workspace_revision()
+    _capture_execution_workspace()
     run_id = request.run_id or str(uuid4())
     _assert_execution_admissible(run_id)
     if execution_runs.get(run_id) is not None:
@@ -3530,6 +3606,7 @@ async def _promote_shot_variation(
 async def promote_cinema_shot_variation(
     request: PromoteShotVariationRequest,
 ) -> dict[str, Any]:
+    _check_workspace_revision()
     result = await _promote_shot_variation(
         request.node_id,
         request.shot_id,
@@ -3547,6 +3624,8 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
     scene, then merges that one result back into the canonical node so sibling
     shots' outputs/ports are untouched. Upstream character/image inputs resolve
     via the same subgraph mechanism as /api/execute-node."""
+    _check_workspace_revision()
+    _capture_execution_workspace()
     run_id = request.run_id or f"cinema-shot-{uuid4().hex}"
     _assert_execution_admissible(run_id)
     if execution_runs.get(run_id) is not None:
@@ -4280,6 +4359,7 @@ def _validate_params(definition_id: str, params: dict[str, Any]) -> None:
 
 @app.post("/api/graph/node")
 async def create_graph_node(body: dict[str, Any]) -> dict:
+    _check_workspace_revision()
     _validate_graph_ingress_complexity(body)
     definition_id = body.get("definitionId", "")
     raw_params = body.get("params", {})
@@ -4314,6 +4394,7 @@ async def create_graph_node(body: dict[str, Any]) -> dict:
 
 @app.post("/api/graph/connect")
 async def connect_graph_nodes(body: dict[str, Any]) -> dict:
+    _check_workspace_revision()
     _validate_connect_handles(
         body.get("source", ""),
         body.get("sourceHandle", ""),
@@ -4346,6 +4427,7 @@ async def create_node_and_connect(body: dict[str, Any]) -> dict:
     field tells us which port on the `connect` spec should be filled in with
     the new node's id (the other side is the existing node).
     """
+    _check_workspace_revision()
     _validate_graph_ingress_complexity(body)
     definition_id = body.get("definitionId", "")
     raw_params = body.get("params", {})
@@ -4498,6 +4580,7 @@ async def send_cinema_shot_to_motion(body: dict[str, Any]) -> dict:
     Overlapping requests in this server therefore see the committed edge and
     retries after a lost acknowledgement do not produce duplicate nodes.
     """
+    _check_workspace_revision()
     _validate_graph_ingress_complexity(body)
     node_id = body.get("nodeId")
     shot_id = body.get("shotId")
@@ -4593,6 +4676,7 @@ async def get_graph() -> dict:
 
 @app.put("/api/graph/node/{node_id}")
 async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]) -> dict:
+    _check_workspace_revision()
     _validate_graph_ingress_complexity(body)
     with _paid_graph_mutation("update graph node parameters"):
         node = cli_graph.nodes.get(node_id)
@@ -4709,6 +4793,7 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
 @app.put("/api/graph/layout")
 async def update_graph_layout(body: dict[str, Any]) -> dict:
     """Persist a complete or partial Canvas layout in one atomic mutation."""
+    _check_workspace_revision()
     raw_positions = body.get("positions")
     if not isinstance(raw_positions, dict) or not raw_positions:
         raise HTTPException(status_code=400, detail="positions must be a non-empty object")
@@ -4748,6 +4833,7 @@ async def clear_graph() -> dict:
     # Clear Canvas is not consent to forget paid-provider state. Resolve each
     # recovery/ambiguity through its exact endpoint first; otherwise recreating
     # a node with the same identity could silently duplicate provider spend.
+    _check_workspace_revision()
     with _paid_graph_mutation("clear the canvas"):
         _reject_graph_replacement_during_paid_start("clear the canvas")
         cli_graph.clear()
@@ -4869,6 +4955,7 @@ async def acknowledge_provider_start_ambiguity(
 @app.delete("/api/graph/node/{node_id}")
 async def delete_graph_node(node_id: str) -> dict:
     """Remove a node and any edges touching it from cli_graph."""
+    _check_workspace_revision()
     with _paid_graph_mutation("delete a graph node"):
         node = cli_graph.nodes.get(node_id)
         if node is None:
@@ -4980,6 +5067,7 @@ def _url_to_output_path(value: str) -> Path | None:
 @app.delete("/api/graph/edge")
 async def delete_graph_edge(body: dict[str, Any]) -> dict:
     """Remove the edge matching source/sourceHandle/target/targetHandle."""
+    _check_workspace_revision()
     removed = cli_graph.remove_edge(
         body.get("source", ""),
         body.get("sourceHandle", ""),
@@ -5006,6 +5094,7 @@ def _graph_ingress_items(body: dict[str, Any], key: str) -> list[dict[str, Any]]
 
 def _validate_graph_ingress_complexity(value: Any) -> None:
     """Bound and reject non-finite values on every mutable graph ingress."""
+    _check_workspace_revision()
     stack: list[tuple[Any, int]] = [(value, 0)]
     value_count = 0
     while stack:
@@ -5195,6 +5284,7 @@ async def import_graph(body: dict[str, Any]) -> dict:
     short IDs so the rest of the system treats the loaded graph like any other
     CLI-created graph — including Claude's `nebula graph` view.
     """
+    _check_workspace_revision()
     _validate_graph_ingress_complexity(body)
     candidate = CLIGraph()
     raw_nodes = _graph_ingress_items(body, "nodes")
@@ -5208,7 +5298,7 @@ async def import_graph(body: dict[str, Any]) -> dict:
     _stage_graph_edges(candidate, raw_edges, id_map)
     with _paid_graph_mutation("replace the graph"):
         _reject_graph_replacement_during_paid_start("replace the graph")
-        if execution_runs.has_active():
+        if execution_runs.has_active() or _synchronous_workspace_runs:
             raise HTTPException(
                 status_code=409,
                 detail=(
@@ -5248,6 +5338,7 @@ async def add_graph_cluster(body: dict[str, Any]) -> dict:
     Body: {nodes: [{tempId, definitionId, params, position?}], edges: [{source, sourceHandle, target, targetHandle}]}
     where edge source/target reference tempIds.
     """
+    _check_workspace_revision()
     _validate_graph_ingress_complexity(body)
     raw_nodes = _graph_ingress_items(body, "nodes")
     raw_edges = _graph_ingress_items(body, "edges")
@@ -5430,6 +5521,355 @@ def _cli_node_to_rf(n: dict[str, Any], position: dict[str, float], all_defs: dic
     }
 
 
+def _project_id_or_404(project_id: str, catalog: dict[str, Any]) -> dict[str, Any]:
+    try:
+        validate_project_id(project_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    project = catalog["projects"].get(project_id)
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return project
+
+
+def _project_revision(body: dict[str, Any], catalog: dict[str, Any], *, required: bool = False) -> None:
+    revision = body.get("workspaceRevision")
+    if (required and revision is None) or (revision is not None and revision != catalog["workspaceRevision"]):
+        raise HTTPException(status_code=409, detail="This project view is out of date. Reload projects before saving or switching.")
+
+
+def _stage_project_snapshot(snapshot: Any, *, historical: dict[str, str] | None = None) -> tuple[dict[str, Any], CLIGraph]:
+    """Validate a saved RF graph with canonical definitions, retaining its IDs.
+
+    A removed definition can still be viewed when it was already in this
+    project's history or live canvas. It cannot acquire execution authority
+    from a frontend-supplied definition object.
+    """
+    if not isinstance(snapshot, dict):
+        raise HTTPException(status_code=400, detail="Project snapshot must be an object")
+    _validate_graph_ingress_complexity(snapshot)
+    if len(json.dumps(snapshot, allow_nan=False, ensure_ascii=False).encode("utf-8")) > MAX_PROJECT_BYTES:
+        raise HTTPException(status_code=413, detail="Project snapshot exceeds the 16 MiB limit")
+    nodes = _graph_ingress_items(snapshot, "nodes")
+    edges = _graph_ingress_items(snapshot, "edges")
+    if len(nodes) > RESTORE_MAX_GRAPH_NODES or len(edges) > RESTORE_MAX_GRAPH_EDGES:
+        raise HTTPException(status_code=413, detail="Project contains too many nodes or connections")
+    history = snapshot.get("runHistory", [])
+    if not isinstance(history, list) or len(history) > 500:
+        raise HTTPException(status_code=400, detail="Project run history must be an array of at most 500 records")
+    history_ids: set[str] = set()
+    for record in history:
+        if not isinstance(record, dict) or not isinstance(record.get("id"), str) or not 0 < len(record["id"]) <= 256:
+            raise HTTPException(status_code=400, detail="Project history requires bounded run IDs")
+        if record["id"] in history_ids or record.get("status") not in {"running", "complete", "failed", "cancelled"}:
+            raise HTTPException(status_code=400, detail="Project history contains a duplicate run ID or invalid status")
+        history_ids.add(record["id"])
+        recipe = record.get("snapshot")
+        if not isinstance(recipe, dict) or not isinstance(recipe.get("nodes"), list) or not isinstance(recipe.get("edges"), list):
+            raise HTTPException(status_code=400, detail="Project history requires immutable graph snapshots")
+    viewport = snapshot.get("viewport")
+    if viewport is not None:
+        if not isinstance(viewport, dict) or any(
+            not isinstance(viewport.get(key), (int, float)) or isinstance(viewport[key], bool)
+            or not math.isfinite(float(viewport[key])) for key in ("x", "y", "zoom")
+        ) or viewport["zoom"] <= 0:
+            raise HTTPException(status_code=400, detail="Project viewport requires finite x/y and positive zoom")
+    session_id = snapshot.get("createSessionId")
+    if session_id is not None and (not isinstance(session_id, str) or not 0 < len(session_id) <= 128):
+        raise HTTPException(status_code=400, detail="Invalid Creator Studio session ID")
+    if snapshot.get("createDraft") is not None and not isinstance(snapshot["createDraft"], dict):
+        raise HTTPException(status_code=400, detail="Creator Studio draft must be an object")
+
+    result = copy.deepcopy(snapshot)
+    result.update({"runHistory": copy.deepcopy(history), "viewport": copy.deepcopy(viewport), "createSessionId": session_id})
+    candidate = CLIGraph()
+    known: set[str] = set()
+    for index, node in enumerate(nodes):
+        node_id = node.get("id")
+        if not isinstance(node_id, str) or not 0 < len(node_id) <= 256 or node_id in candidate.nodes:
+            raise HTTPException(status_code=400, detail=f"nodes[{index}] has an invalid or duplicate ID")
+        data = node.get("data")
+        if not isinstance(data, dict):
+            raise HTTPException(status_code=400, detail=f"nodes[{index}].data must be an object")
+        definition_id = data.get("definitionId")
+        if not isinstance(definition_id, str) or not 0 < len(definition_id) <= 256:
+            raise HTTPException(status_code=400, detail=f"nodes[{index}] has an invalid definition ID")
+        params = data.get("params", {})
+        outputs = data.get("outputs", {})
+        if not isinstance(params, dict) or not isinstance(outputs, dict):
+            raise HTTPException(status_code=400, detail=f"nodes[{index}] params and outputs must be objects")
+        position = node.get("position")
+        if not isinstance(position, dict) or any(
+            not isinstance(position.get(key), (int, float)) or isinstance(position[key], bool)
+            or not math.isfinite(float(position[key])) for key in ("x", "y")
+        ):
+            raise HTTPException(status_code=400, detail=f"nodes[{index}] requires a finite position")
+        isolated = CLIGraph()
+        if node_registry.get(definition_id) is not None:
+            staged = _stage_graph_nodes(isolated, [{
+                "id": node_id, "definitionId": definition_id, "params": params,
+                "outputs": outputs, "position": position,
+            }], reference_key="id", include_outputs=True, normalize_image_inputs=False)
+            staged_node = isolated.nodes[staged[node_id]]
+            known.add(node_id)
+        elif (historical or {}).get(node_id) == definition_id:
+            if any(not isinstance(port, dict) or not isinstance(port.get("type"), str) for port in outputs.values()):
+                raise HTTPException(status_code=400, detail="Historical outputs must be typed port objects")
+            staged_node = {"id": node_id, "definitionId": definition_id, "params": copy.deepcopy(params), "outputs": copy.deepcopy(outputs), "position": copy.deepcopy(position)}
+        else:
+            raise HTTPException(status_code=400, detail=f"Unknown node definition '{definition_id}'")
+        staged_node["id"] = node_id
+        candidate.nodes[node_id] = staged_node
+        result["nodes"][index]["data"]["params"] = copy.deepcopy(staged_node["params"])
+        result["nodes"][index]["data"]["outputs"] = _rewrite_output_paths(staged_node["outputs"])
+        if match := re.fullmatch(r"n(\d+)", node_id):
+            candidate._counter = max(candidate._counter, int(match.group(1)))
+
+    edge_ids: set[str] = set()
+    signatures: set[tuple[str, str, str, str]] = set()
+    for index, edge in enumerate(edges):
+        edge_id = edge.get("id")
+        if not isinstance(edge_id, str) or not 0 < len(edge_id) <= 256 or edge_id in edge_ids:
+            raise HTTPException(status_code=400, detail=f"edges[{index}] has an invalid or duplicate ID")
+        edge_ids.add(edge_id)
+        values = [edge.get(key) for key in ("source", "sourceHandle", "target", "targetHandle")]
+        if any(not isinstance(value, str) or not value or len(value) > 256 for value in values):
+            raise HTTPException(status_code=400, detail=f"edges[{index}] requires valid endpoints and handles")
+        source, source_handle, target, target_handle = values
+        if source not in candidate.nodes or target not in candidate.nodes:
+            raise HTTPException(status_code=400, detail=f"edges[{index}] references a missing node")
+        signature = (source, source_handle, target, target_handle)
+        if signature in signatures:
+            raise HTTPException(status_code=400, detail="Duplicate project connection")
+        signatures.add(signature)
+        if source in known and target in known:
+            _validate_connect_handles(source, source_handle, target, target_handle, graph=candidate)
+        candidate.edges.append({"id": edge_id, "source": source, "sourceHandle": source_handle, "target": target, "targetHandle": target_handle})
+    try:
+        graph_nodes, graph_edges = candidate.to_execute_format()
+        topological_sort([GraphNode.model_validate(node) for node in graph_nodes], [GraphEdge.model_validate(edge) for edge in graph_edges])
+    except CycleError as exc:
+        raise HTTPException(status_code=400, detail=f"Project contains a cycle: {exc}") from exc
+    return result, candidate
+
+
+def _overlay_live_project(project: dict[str, Any], exported: dict[str, Any]) -> bool:
+    """Overlay CLI changes while retaining frontend-only data and run recipes."""
+    previous = project["snapshot"]
+    old_nodes = {node["id"]: node for node in previous["nodes"]}
+    live_ids = {node["id"] for node in exported["nodes"]}
+    backend_ids = set(project.get("_backendNodeIds", old_nodes))
+    merged_nodes = []
+    for node in exported["nodes"]:
+        old = old_nodes.get(node["id"], {})
+        merged_nodes.append({**old, **node, "data": {**old.get("data", {}), **node["data"]}})
+    merged_nodes.extend(node for node in previous["nodes"] if node["id"] not in live_ids and node["id"] not in backend_ids)
+    retained_ids = {node["id"] for node in merged_nodes}
+    old_edges = {edge["id"]: edge for edge in previous["edges"]}
+    live_edge_ids = {edge["id"] for edge in exported["edges"]}
+    backend_edge_ids = set(project.get("_backendEdgeIds", old_edges))
+    merged_edges = [{**old_edges.get(edge["id"], {}), **edge, "data": {**old_edges.get(edge["id"], {}).get("data", {}), **edge.get("data", {})}} for edge in exported["edges"]]
+    merged_edges.extend(edge for edge in previous["edges"] if edge["id"] not in live_edge_ids and edge["id"] not in backend_edge_ids and edge["source"] in retained_ids and edge["target"] in retained_ids)
+    updated = {**previous, "nodes": merged_nodes, "edges": merged_edges}
+    changed = updated != previous
+    project["snapshot"] = updated
+    project["_backendNodeIds"] = sorted(live_ids)
+    project["_backendEdgeIds"] = sorted(live_edge_ids)
+    project["_nodeCounter"] = cli_graph._counter
+    if changed:
+        refresh_metadata(project)
+    return changed
+
+
+async def _projects_live_export() -> dict[str, Any]:
+    return await export_graph_for_frontend()
+
+
+def _project_replacement_guard() -> None:
+    _reject_graph_replacement_during_paid_start("switch projects")
+    if execution_runs.has_active() or _synchronous_workspace_runs:
+        raise HTTPException(status_code=409, detail="Cannot switch projects while a run is active. Wait for the run to finish or stop it first.")
+
+
+def _commit_project_workspace(catalog: dict[str, Any], candidate: CLIGraph) -> None:
+    """Prepare both disk writes before adopting any new live graph in memory."""
+    previous = cli_graph.clone()
+    temporary = project_store.prepare(catalog)
+    additions = []
+    graph_written = False
+    try:
+        additions = _seed_shared_graph_recoveries_for_api(list(candidate.nodes.values()), source="project-open")
+        if cli_graph._persist_path is not None:
+            candidate.save(cli_graph._persist_path)
+            graph_written = True
+        project_store.commit_prepared(temporary)
+    except Exception as exc:
+        try:
+            if graph_written and cli_graph._persist_path is not None:
+                previous.save(cli_graph._persist_path)
+            provider_recovery_store.delete_many_exact(additions)
+        except Exception as rollback_error:
+            raise HTTPException(status_code=507, detail="Project switch failed and storage rollback could not finish. The live canvas was preserved; resolve storage before restarting.") from rollback_error
+        if isinstance(exc, HTTPException):
+            raise
+        raise ProjectStoreError("Project switch could not be saved; the live canvas was preserved") from exc
+    finally:
+        temporary.unlink(missing_ok=True)
+    cli_graph.nodes = copy.deepcopy(candidate.nodes)
+    cli_graph.edges = copy.deepcopy(candidate.edges)
+    cli_graph._counter = candidate._counter
+
+
+@app.get("/api/projects")
+async def list_projects() -> dict[str, Any]:
+    exported = await _projects_live_export()
+    with project_store.transaction() as catalog:
+        changed = False
+        if not catalog["projects"] and cli_graph.nodes:
+            snapshot = {**empty_snapshot(), "nodes": exported["nodes"], "edges": exported["edges"]}
+            project = make_project("Recovered canvas", snapshot)
+            _overlay_live_project(project, exported)
+            catalog["projects"][project["id"]] = project
+            catalog["activeProjectId"] = project["id"]
+            catalog["workspaceRevision"] = uuid4().hex
+            catalog["migratedProjectId"] = project["id"]
+            changed = True
+        elif active := catalog["activeProjectId"]:
+            changed = _overlay_live_project(catalog["projects"][active], exported)
+        if changed:
+            project_store.commit(catalog)
+        return {
+            "projects": sorted((project_metadata(project) for project in catalog["projects"].values()), key=lambda project: project["updatedAt"], reverse=True),
+            "activeProjectId": catalog["activeProjectId"], "workspaceRevision": catalog["workspaceRevision"],
+            **({"migratedProjectId": catalog["migratedProjectId"]} if catalog.get("migratedProjectId") else {}),
+        }
+
+
+@app.get("/api/projects/{project_id}")
+async def get_saved_project(project_id: str) -> dict[str, Any]:
+    exported = await _projects_live_export()
+    with project_store.transaction() as catalog:
+        project = _project_id_or_404(project_id, catalog)
+        if catalog["activeProjectId"] == project_id and _overlay_live_project(project, exported):
+            project_store.commit(catalog)
+        return public_project(project)
+
+
+@app.post("/api/projects/recover")
+async def recover_project_copy(body: dict[str, Any]) -> dict[str, Any]:
+    """Save a stale tab as an inactive copy without replacing current work.
+
+    The caller supplies one stable recoveryId per snapshot so an unknown
+    acknowledgement can be retried without making duplicate projects.
+    """
+    recovery_id = body.get("recoveryId")
+    try:
+        validate_project_id(recovery_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Recovery requires a UUID hex recoveryId") from exc
+    with project_store.transaction() as catalog:
+        source = _project_id_or_404(body.get("sourceProjectId"), catalog)
+        # Hash the submitted JSON, before canonical coercion. A retry of the
+        # same request remains idempotent even if source metadata changes.
+        _validate_graph_ingress_complexity(body)
+        fingerprint = hashlib.sha256(json.dumps({"sourceProjectId": source["id"], "snapshot": body.get("snapshot"), "name": body.get("name")}, sort_keys=True, allow_nan=False, ensure_ascii=False).encode("utf-8")).hexdigest()
+        if existing := catalog["projects"].get(recovery_id):
+            if existing.get("_recoveryFingerprint") != fingerprint:
+                raise HTTPException(status_code=409, detail="Recovery ID already belongs to a different snapshot")
+            return {"project": public_project(existing), "workspaceRevision": catalog["workspaceRevision"]}
+        historical = {node["id"]: node.get("data", {}).get("definitionId") for node in source["snapshot"]["nodes"]}
+        snapshot, candidate = _stage_project_snapshot(body.get("snapshot"), historical=historical)
+        try:
+            project = make_project(body.get("name", f"{source['name'][:100]} (recovered)"), snapshot)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        project.update({
+            "id": recovery_id, "lastOpenedAt": None, "_recoveryFingerprint": fingerprint,
+            "_recoverySourceId": source["id"], "_nodeCounter": max(candidate._counter, source.get("_nodeCounter", 0)),
+            "_backendNodeIds": [], "_backendEdgeIds": [],
+        })
+        catalog["projects"][recovery_id] = project
+        project_store.commit(catalog)
+        return {"project": public_project(project), "workspaceRevision": catalog["workspaceRevision"]}
+
+
+@app.post("/api/projects")
+async def create_saved_project(body: dict[str, Any] | None = None) -> dict[str, Any]:
+    body = body or {}
+    exported = await _projects_live_export()
+    with project_store.transaction() as catalog, _paid_graph_mutation("create a project"):
+        _project_revision(body, catalog)
+        _project_replacement_guard()
+        # API callers need not visit the menu first. Never erase a legacy
+        # live canvas merely because no catalog migration request preceded it.
+        if not catalog["projects"] and cli_graph.nodes:
+            recovered = make_project("Recovered canvas", {**empty_snapshot(), "nodes": exported["nodes"], "edges": exported["edges"]})
+            _overlay_live_project(recovered, exported)
+            catalog["projects"][recovered["id"]] = recovered
+            catalog["activeProjectId"] = recovered["id"]
+            catalog["migratedProjectId"] = recovered["id"]
+        if active := catalog["activeProjectId"]:
+            _overlay_live_project(catalog["projects"][active], exported)
+        try:
+            project = make_project(body.get("name", "Untitled project"))
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        catalog["projects"][project["id"]] = project
+        catalog["activeProjectId"] = project["id"]
+        catalog["workspaceRevision"] = uuid4().hex
+        _commit_project_workspace(catalog, CLIGraph())
+        revision = catalog["workspaceRevision"]
+    await _broadcast_graph_sync(graph_replaced=True)
+    return {"project": public_project(project), "workspaceRevision": revision}
+
+
+@app.post("/api/projects/{project_id}/open")
+async def open_saved_project(project_id: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
+    exported = await _projects_live_export()
+    with project_store.transaction() as catalog, _paid_graph_mutation("open a project"):
+        _project_revision(body or {}, catalog)
+        _project_replacement_guard()
+        project = _project_id_or_404(project_id, catalog)
+        if active := catalog["activeProjectId"]:
+            _overlay_live_project(catalog["projects"][active], exported)
+        historical = {node["id"]: node.get("data", {}).get("definitionId") for node in project["snapshot"]["nodes"]}
+        project["snapshot"], candidate = _stage_project_snapshot(project["snapshot"], historical=historical)
+        candidate._counter = max(candidate._counter, project.get("_nodeCounter", 0))
+        project["lastOpenedAt"] = project_now()
+        catalog["activeProjectId"] = project_id
+        catalog["workspaceRevision"] = uuid4().hex
+        _commit_project_workspace(catalog, candidate)
+        revision = catalog["workspaceRevision"]
+    await _broadcast_graph_sync(graph_replaced=True)
+    return {"project": public_project(project), "workspaceRevision": revision}
+
+
+@app.put("/api/projects/{project_id}")
+async def save_project(project_id: str, body: dict[str, Any]) -> dict[str, Any]:
+    with project_store.transaction() as catalog:
+        project = _project_id_or_404(project_id, catalog)
+        _project_revision(body, catalog, required="snapshot" in body)
+        if "snapshot" in body:
+            if catalog["activeProjectId"] != project_id:
+                raise HTTPException(status_code=409, detail="Only the currently open project can autosave its canvas")
+            historical = {node["id"]: node.get("data", {}).get("definitionId") for node in project["snapshot"]["nodes"]}
+            historical.update({node_id: node["definitionId"] for node_id, node in cli_graph.nodes.items()})
+            project["snapshot"], _ = _stage_project_snapshot(body["snapshot"], historical=historical)
+            project["_backendNodeIds"] = sorted(set(cli_graph.nodes) & {node["id"] for node in project["snapshot"]["nodes"]})
+            project["_backendEdgeIds"] = sorted({edge["id"] for edge in cli_graph.edges} & {edge["id"] for edge in project["snapshot"]["edges"]})
+            project["_nodeCounter"] = cli_graph._counter
+            if catalog.get("migratedProjectId") == project_id:
+                catalog.pop("migratedProjectId", None)
+        if "name" in body:
+            try:
+                project["name"] = project_name(body["name"])
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+        refresh_metadata(project)
+        project_store.commit(catalog)
+        return {"project": public_project(project), "workspaceRevision": catalog["workspaceRevision"]}
+
+
 @app.get("/api/graph/export")
 async def export_graph_for_frontend() -> dict:
     """Export CLI graph in React Flow format for the frontend canvas."""
@@ -5441,6 +5881,7 @@ async def export_graph_for_frontend() -> dict:
     state = cli_graph.get_state()
     if not state["nodes"]:
         return {
+            **_workspace_context(),
             "nodes": [],
             "edges": [],
             "empty": True,
@@ -5505,6 +5946,7 @@ async def export_graph_for_frontend() -> dict:
         })
 
     return {
+        **_workspace_context(),
         "nodes": rf_nodes,
         "edges": rf_edges,
         "empty": False,
@@ -5521,6 +5963,7 @@ async def export_graph_for_frontend() -> dict:
 # ---------- CLI: Synchronous execution ----------
 
 @app.post("/api/graph/run")
+@_track_synchronous_project_run
 async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dict:
     """Execute the CLI graph synchronously and return results.
 
@@ -5530,6 +5973,8 @@ async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dic
     same node in place overwrites the craft log we want on the canvas. The
     header gate lets humans (frontend Run button, curl, tests) keep the
     rerun-in-place affordance; only the agent is disciplined here."""
+    _check_workspace_revision()
+    _capture_execution_workspace()
     if not cli_graph.nodes:
         raise HTTPException(status_code=400, detail="Graph is empty")
 
@@ -5737,8 +6182,11 @@ async def _quick_multi_image_input_handler(
 
 
 @app.post("/api/quick")
+@_track_synchronous_project_run
 async def quick_execute(body: dict[str, Any]) -> dict:
     """One-shot: create a temp node, execute, return output."""
+    _check_workspace_revision()
+    _capture_execution_workspace()
     definition_id = body.get("definitionId", "")
     if not quick_execution_allowed(definition_id):
         raise HTTPException(

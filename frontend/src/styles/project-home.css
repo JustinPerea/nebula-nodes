@@ -1,0 +1,103 @@
+body.app-slava-restraint .project-home {
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  overscroll-behavior: contain;
+  background: var(--sr-canvas);
+  color: var(--sr-ink);
+  font-family: var(--sr-ui);
+}
+body.app-slava-restraint .project-home__header {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  min-height: 72px;
+  padding: 16px clamp(24px, 5vw, 72px);
+  border-bottom: 1px solid var(--sr-edge);
+}
+body.app-slava-restraint .project-home__brand { display: flex; align-items: center; gap: 9px; font-size: 15px; font-weight: 600; letter-spacing: -0.03em; }
+body.app-slava-restraint .project-home__location { padding-left: 24px; border-left: 1px solid var(--sr-edge-strong); color: var(--sr-ink-light); font-size: 13px; }
+body.app-slava-restraint .project-home__main { width: min(100%, 1248px); margin: 0 auto; padding: 72px clamp(24px, 5vw, 64px) 64px; }
+body.app-slava-restraint .project-home__welcome { display: flex; align-items: center; justify-content: space-between; gap: 32px; margin-bottom: 56px; }
+body.app-slava-restraint .project-home__eyebrow { margin-bottom: 12px; font-size: 11px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: var(--sr-ink-meta); }
+body.app-slava-restraint .project-home h1 { font-size: clamp(27px, 3vw, 36px); font-weight: 500; line-height: 1.16; letter-spacing: -0.045em; }
+body.app-slava-restraint .project-home__intro { margin-top: 14px; color: var(--sr-ink-light); font-size: 14px; line-height: 1.6; }
+body.app-slava-restraint .project-home button { font-family: var(--sr-ui); cursor: pointer; }
+body.app-slava-restraint .project-home button:disabled { opacity: var(--sr-disabled-opacity); cursor: default; }
+body.app-slava-restraint .project-home button:focus-visible,
+body.app-slava-restraint .project-home input:focus-visible { outline: 2px solid var(--sr-accent); outline-offset: 4px; }
+body.app-slava-restraint .project-home__new { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; gap: 8px; min-height: 44px; padding: 0 18px; border: 1px solid var(--sr-ink); border-radius: var(--sr-node-media-radius); background: var(--sr-ink); color: var(--sr-canvas); font-size: 13px; font-weight: 600; transition: background var(--sr-motion-fast), border-color var(--sr-motion-fast); }
+body.app-slava-restraint .project-home__new:hover:not(:disabled) { background: var(--sr-ink-bold); border-color: var(--sr-ink-bold); }
+body.app-slava-restraint .project-home__new svg,
+body.app-slava-restraint .project-home__secondary svg { width: 16px; height: 16px; stroke-width: var(--sr-icon-stroke); }
+body.app-slava-restraint .project-home__section-header { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-bottom: 24px; }
+body.app-slava-restraint .project-home h2 { display: flex; align-items: center; gap: 10px; font-size: 16px; font-weight: 500; letter-spacing: -0.02em; }
+body.app-slava-restraint .project-home__count { color: var(--sr-ink-meta); font: 11px var(--sr-mono); }
+body.app-slava-restraint .project-home__search { display: flex; align-items: center; gap: 8px; width: min(100%, 236px); min-height: 38px; padding: 0 12px; border: 1px solid var(--sr-edge-strong); border-radius: var(--sr-radius-control); background: var(--sr-surface-control); }
+body.app-slava-restraint .project-home__search svg { width: 15px; height: 15px; flex-shrink: 0; color: var(--sr-ink-meta); }
+body.app-slava-restraint .project-home__search input { width: 100%; min-width: 0; padding: 9px 0; border: 0; background: transparent; color: var(--sr-ink); font: 12px var(--sr-ui); }
+body.app-slava-restraint .project-home__search input::placeholder { color: var(--sr-ink-meta); }
+body.app-slava-restraint .project-home__grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 28px 24px; }
+body.app-slava-restraint .project-home__card { min-width: 0; border: 1px solid var(--sr-edge); border-radius: var(--sr-node-media-radius); background: var(--sr-canvas-elevated); transition: border-color var(--sr-motion-fast), background var(--sr-motion-fast); }
+body.app-slava-restraint .project-home__card:hover { border-color: var(--sr-edge-strong); }
+body.app-slava-restraint .project-home__open { display: block; width: 100%; overflow: hidden; border: 0; border-radius: var(--sr-node-media-radius); background: transparent; text-align: left; color: inherit; }
+body.app-slava-restraint .project-home__preview { position: relative; display: grid; place-items: center; aspect-ratio: 16 / 10; margin: 8px; overflow: hidden; border-radius: calc(var(--sr-node-media-radius) - 5px); background-color: var(--sr-node-media-bg); background-image: radial-gradient(circle at 1px 1px, var(--sr-canvas-dot-color-soft) 1px, transparent 0); background-size: 16px 16px; }
+body.app-slava-restraint .project-home__preview--image { background-image: none; }
+body.app-slava-restraint .project-home__preview img { display: block; width: 100%; height: 100%; object-fit: cover; }
+body.app-slava-restraint .project-home__preview-open { position: absolute; top: 10px; right: 10px; display: grid; place-items: center; width: 28px; height: 28px; border: 1px solid var(--sr-edge-strong); border-radius: var(--sr-radius-control); background: var(--sr-node-pill-bg); color: var(--sr-ink); opacity: 0; transform: translateY(3px); transition: opacity var(--sr-motion-fast), transform var(--sr-motion-fast); }
+body.app-slava-restraint .project-home__preview-open svg { width: 14px; height: 14px; }
+body.app-slava-restraint .project-home__open:hover .project-home__preview-open,
+body.app-slava-restraint .project-home__open:focus-visible .project-home__preview-open { opacity: 1; transform: translateY(0); }
+body.app-slava-restraint .project-home__graph { width: 100%; max-width: 320px; height: auto; }
+body.app-slava-restraint .project-home__graph-node { fill: var(--sr-glass-raised); stroke: var(--sr-edge-strong); stroke-width: 1.2; }
+body.app-slava-restraint .project-home__graph-edge { fill: none; stroke: var(--sr-ink-faint); stroke-width: 1.2; }
+body.app-slava-restraint .project-home__graph-detail { fill: none; stroke: var(--sr-ink-faint); stroke-width: 2; stroke-linecap: round; }
+body.app-slava-restraint .project-home__graph-port { fill: var(--sr-ink-light); }
+body.app-slava-restraint .project-home__card-name { display: block; margin: 18px 16px 6px; overflow-wrap: anywhere; font-size: 14px; font-weight: 500; line-height: 1.4; letter-spacing: -0.015em; }
+body.app-slava-restraint .project-home__card-date { display: block; margin: 0 16px; color: var(--sr-ink-meta); font-size: 11px; line-height: 1.5; }
+body.app-slava-restraint .project-home__card-footer { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 10px 10px 10px 16px; color: var(--sr-ink-light); font-size: 11px; line-height: 1.5; }
+body.app-slava-restraint .project-home__rename { display: grid; place-items: center; flex-shrink: 0; width: 32px; height: 32px; border: 1px solid transparent; border-radius: var(--sr-radius-control); background: transparent; color: var(--sr-ink-meta); }
+body.app-slava-restraint .project-home__rename:hover:not(:disabled) { border-color: var(--sr-edge); background: var(--sr-surface-control-hover); color: var(--sr-ink); }
+body.app-slava-restraint .project-home__rename svg { width: 14px; height: 14px; }
+body.app-slava-restraint .project-home__rename-form { display: flex; gap: 6px; padding: 0 10px 12px; }
+body.app-slava-restraint .project-home__rename-form input { min-width: 0; width: 100%; min-height: 34px; padding: 6px 9px; border: 1px solid var(--sr-edge-strong); border-radius: var(--sr-radius-control); background: var(--sr-surface-control); color: var(--sr-ink); font: 12px var(--sr-ui); }
+body.app-slava-restraint .project-home__rename-form button { display: grid; place-items: center; width: 34px; min-height: 34px; flex-shrink: 0; border: 1px solid var(--sr-edge-strong); border-radius: var(--sr-radius-control); background: var(--sr-surface-control); color: var(--sr-ink-light); }
+body.app-slava-restraint .project-home__rename-form button svg { width: 15px; height: 15px; }
+body.app-slava-restraint .project-home__rename-form button:hover:not(:disabled) { background: var(--sr-surface-control-hover); color: var(--sr-ink); }
+body.app-slava-restraint .project-home__empty { display: grid; justify-items: center; align-content: center; min-height: 344px; padding: 36px 24px; border: 1px dashed var(--sr-edge-strong); border-radius: var(--sr-node-media-radius); text-align: center; }
+body.app-slava-restraint .project-home__empty-graph { width: 200px; margin-bottom: 12px; opacity: 0.8; }
+body.app-slava-restraint .project-home h3 { max-width: 100%; overflow-wrap: anywhere; font-size: 17px; font-weight: 500; letter-spacing: -0.02em; line-height: 1.4; }
+body.app-slava-restraint .project-home__empty p { margin-top: 10px; color: var(--sr-ink-light); font-size: 13px; line-height: 1.6; }
+body.app-slava-restraint .project-home__secondary { display: inline-flex; justify-content: center; align-items: center; gap: 7px; min-height: 40px; margin-top: 24px; padding: 0 14px; border: 1px solid var(--sr-edge-strong); border-radius: var(--sr-radius-control); background: var(--sr-surface-control); color: var(--sr-ink); font-size: 12px; }
+body.app-slava-restraint .project-home__secondary:hover:not(:disabled) { background: var(--sr-surface-control-hover); }
+body.app-slava-restraint .project-home__empty-search { width: 28px; height: 28px; margin-bottom: 20px; color: var(--sr-ink-meta); }
+body.app-slava-restraint .project-home__loading { display: flex; align-items: center; gap: 10px; min-height: 140px; color: var(--sr-ink-light); font-size: 13px; }
+body.app-slava-restraint .project-home__loading-dot { width: 6px; height: 6px; border-radius: var(--sr-radius-pill); background: var(--sr-ink-light); }
+body.app-slava-restraint .project-home__error { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 16px; margin-bottom: 28px; border: 1px solid var(--sr-error-border); border-radius: var(--sr-node-media-radius); background: var(--sr-error-soft); color: var(--sr-ink); font-size: 13px; line-height: 1.5; }
+body.app-slava-restraint .project-home__error > span { overflow-wrap: anywhere; }
+body.app-slava-restraint .project-home__error button { flex-shrink: 0; min-height: 34px; padding: 0 10px; border: 1px solid var(--sr-edge-strong); border-radius: var(--sr-radius-control); background: var(--sr-surface-control); color: var(--sr-ink); font-size: 12px; }
+body.app-slava-restraint .project-home__sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+@media (max-width: 1000px) {
+  body.app-slava-restraint .project-home__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 600px) {
+  body.app-slava-restraint .project-home__header { min-height: 64px; padding: 12px 20px; gap: 16px; }
+  body.app-slava-restraint .project-home__location { padding-left: 16px; }
+  body.app-slava-restraint .project-home__main { padding: 40px 20px; }
+  body.app-slava-restraint .project-home__welcome { align-items: flex-start; flex-direction: column; gap: 24px; margin-bottom: 40px; }
+  body.app-slava-restraint .project-home__section-header { align-items: stretch; flex-direction: column; gap: 16px; }
+  body.app-slava-restraint .project-home__search { width: 100%; }
+  body.app-slava-restraint .project-home__grid { grid-template-columns: minmax(0, 1fr); gap: 20px; }
+  body.app-slava-restraint .project-home__rename { width: 44px; height: 44px; }
+  body.app-slava-restraint .project-home__rename-form button { width: 44px; min-height: 44px; }
+  body.app-slava-restraint .project-home__error { align-items: flex-start; flex-direction: column; }
+}
+@media (hover: none) {
+  body.app-slava-restraint .project-home__preview-open { opacity: 1; transform: none; }
+  body.app-slava-restraint .project-home__rename { width: 44px; height: 44px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  body.app-slava-restraint .project-home__new,
+  body.app-slava-restraint .project-home__card,
+  body.app-slava-restraint .project-home__preview-open { transition: none; }
+}

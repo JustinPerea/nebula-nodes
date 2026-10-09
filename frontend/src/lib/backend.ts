@@ -1,3 +1,5 @@
+import { getProjectContext } from './projectContext';
+
 const DEFAULT_BACKEND_PORT = 8000;
 const DEFAULT_BACKEND_PORTS = [8000, 8001, 8002, 8003, 8004, 8005, 8006, 8007, 8008, 8009, 8010];
 const DISCOVERY_TIMEOUT_MS = 650;
@@ -228,17 +230,24 @@ function shouldRetryWithDiscovery(baseUrl: string, response?: Response): boolean
 }
 
 export async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
+  // Capture at admission, before discovery can await a later project switch.
+  const project = getProjectContext();
+  const method = String(init?.method ?? 'GET').toUpperCase();
   const baseUrl = await getBackendBaseUrl();
   const requestUrl = joinBackendPath(baseUrl, path);
   let requestInit = init;
-  const connectorSession = window.nebulaDesktop?.connectorSession;
-  if (getInjectedApiBaseUrl() && connectorSession && path.startsWith('/api/krea/')) {
+  if (project && method !== 'GET' && method !== 'HEAD') {
     const headers = new Headers(init?.headers);
-    headers.set('X-Nebula-Connector-Session', connectorSession);
+    headers.set('X-Nebula-Workspace-Revision', project.revision);
     requestInit = { ...init, headers };
   }
+  const connectorSession = window.nebulaDesktop?.connectorSession;
+  if (getInjectedApiBaseUrl() && connectorSession && path.startsWith('/api/krea/')) {
+    const headers = new Headers(requestInit?.headers);
+    headers.set('X-Nebula-Connector-Session', connectorSession);
+    requestInit = { ...requestInit, headers };
+  }
   const send = (url: string) => (requestInit === undefined ? fetch(url) : fetch(url, requestInit));
-  const method = String(init?.method ?? 'GET').toUpperCase();
   // Replaying a mutation against another discovered backend is not a retry: it
   // is a second side effect in a different process. This is especially
   // dangerous for paid provider starts, whose public APIs have no idempotency

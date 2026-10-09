@@ -55,6 +55,8 @@ export type ExecutionEvent = (
       empty: boolean;
       /** Explicit committed graph import; ordinary updates remain merges. */
       graphReplaced?: boolean;
+      activeProjectId?: string | null;
+      workspaceRevision?: string;
       providerRecoveries?: ProviderRecoveryCheckpoint[];
       providerStartAmbiguities?: ProviderStartAmbiguity[];
       executionStatuses?: ExecutionStatusResult[];

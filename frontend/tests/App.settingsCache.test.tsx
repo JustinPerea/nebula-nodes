@@ -16,6 +16,7 @@ vi.mock('../src/lib/kreaConnection', async (original) => ({
   getKreaConnection: vi.fn().mockResolvedValue({ status: 'disconnected' }),
 }));
 vi.mock('../src/hooks/useZoomManifest', () => ({ useZoomManifest: vi.fn() }));
+vi.mock('../src/components/projects/ProjectCoordinator', () => ({ ProjectCoordinator: () => null }));
 vi.mock('../src/components/Canvas', () => ({ Canvas: () => <div>Current canvas</div> }));
 vi.mock('../src/components/CanvasTabs', () => ({ CanvasTabs: () => null }));
 vi.mock('../src/components/GraphFileActions', () => ({ GraphFileActions: () => null }));
@@ -45,9 +46,11 @@ vi.mock('../src/components/commons/CommonsView', async () => {
 import App from '../src/App';
 import { useUIStore } from '../src/store/uiStore';
 import { getSettings } from '../src/lib/api';
+import { useProjectStore } from '../src/store/projectStore';
 const initialUI = useUIStore.getState();
-beforeEach(() => { vi.mocked(getSettings).mockReset(); useUIStore.setState(initialUI, true); api.fetch.mockResolvedValue(new Response(JSON.stringify({ enabled: true }), { headers: { 'content-type': 'application/json' } })); });
-afterEach(() => { cleanup(); useUIStore.setState(initialUI, true); });
+const initialProjects = useProjectStore.getState();
+beforeEach(() => { vi.mocked(getSettings).mockReset(); useUIStore.setState(initialUI, true); useProjectStore.setState({ ...initialProjects, screen: 'workspace', initialized: true, loading: false }, true); api.fetch.mockResolvedValue(new Response(JSON.stringify({ enabled: true }), { headers: { 'content-type': 'application/json' } })); });
+afterEach(() => { cleanup(); useUIStore.setState(initialUI, true); useProjectStore.setState(initialProjects, true); });
 
 function deferred<T>() {
   let resolve!: (value: T) => void;

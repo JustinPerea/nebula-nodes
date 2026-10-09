@@ -1,6 +1,5 @@
 import { lazy, Suspense, useEffect, useRef } from 'react';
-import { ReactFlowProvider, useReactFlow } from '@xyflow/react';
-import type { Node, Edge } from '@xyflow/react';
+import { ReactFlowProvider } from '@xyflow/react';
 import { Canvas } from './components/Canvas';
 import { CanvasTabs } from './components/CanvasTabs';
 import { NodeLibrary } from './components/panels/NodeLibrary';
@@ -19,15 +18,16 @@ import { OnboardingOverlay } from './components/onboarding/OnboardingOverlay';
 import { BackendConnectionStatus } from './components/BackendConnectionStatus';
 import { ProviderRecoveryStatus } from './components/ProviderRecoveryStatus';
 import { startWorkingBadge } from './lib/jobNotifications';
-import { getSettings, fetchCLIGraph } from './lib/api';
+import { getSettings } from './lib/api';
 import { getKreaConnection, normalizeKreaMode, nodeKeyStatus } from './lib/kreaConnection';
 import { useUIStore } from './store/uiStore';
 import { useGraphStore } from './store/graphStore';
 import { useCommonsCapability } from './hooks/useCommonsCapability';
 import { useZoomManifest } from './hooks/useZoomManifest';
 import { NODE_DEFINITIONS } from './constants/nodeDefinitions';
-import { computeCanvasFitPadding } from './lib/canvasFit';
-import type { NodeData } from './types';
+import { ProjectCoordinator } from './components/projects/ProjectCoordinator';
+import { ProjectHome } from './components/projects/ProjectHome';
+import { useProjectStore } from './store/projectStore';
 import './App.css';
 import './styles/layouts.css';
 // The single supported appearance is available to every workspace.
@@ -71,85 +71,6 @@ const BrandShowcaseView = lazy(() =>
 const CommonsView = lazy(() =>
   import('./components/commons/CommonsView').then((module) => ({ default: module.CommonsView })),
 );
-
-/** Pull the backend's in-memory cli_graph onto the canvas on first mount —
- * saves a CLI-button click every time the user refreshes during a Daedalus
- * session. Scoped to "only when the canvas is empty" so an in-progress local
- * edit isn't clobbered. Lives inside ReactFlowProvider so it can fit the
- * viewport after painting; cancelled effects cannot mutate state after the
- * StrictMode cleanup. */
-/** First-run onboarding only fires when (a) it's genuinely the first run and
- * (b) the current Canvas is still empty. Read the latest state after hydration:
- * authoring work, studio navigation or a tour started by Help takes priority. */
-function maybeStartOnboarding() {
-  const ui = useUIStore.getState();
-  if (ui.viewMode !== 'canvas' || useGraphStore.getState().nodes.length > 0
-    || ui.hasOnboarded || ui.onboardingActive) return;
-  ui.resetPanelsForFreshCanvas();
-  ui.startOnboarding();
-}
-
-function GraphHydrator() {
-  const { fitView } = useReactFlow();
-
-  useEffect(() => {
-    let cancelled = false;
-    const initialFocus = useUIStore.getState();
-    const initialFocusRevision = initialFocus.canvasFocusRevision;
-    const initialFocusPending = initialFocus.canvasFocusRequest !== null;
-    // A persisted running World Labs record owns the global paid-start lock
-    // before the Canvas becomes interactive. Reconcile its client-owned run ID
-    // independently of whether cli_graph is empty or reachable.
-    void useGraphStore.getState().reconcilePersistedWorldLabsRun();
-    (async () => {
-      try {
-        const data = await fetchCLIGraph();
-        // Re-check after the await: in React StrictMode dev the effect runs
-        // twice with a cleanup between, so the first run's cancelled flag is
-        // always set before its fetch resolves. The store-state check lets a
-        // mount-2 fetch successfully load, while mount-1's stale fetch sees
-        // the populated store and bails.
-        if (cancelled) return;
-        // Paid-provider recovery is independent of cli_graph. Hydrate the
-        // exact persisted run snapshot even when the backend graph is empty
-        // or this browser has no live copy of a frontend-only UUID node.
-        useGraphStore.getState().hydrateProviderRecoveries(data.providerRecoveries ?? []);
-        useGraphStore.getState().hydrateProviderStartAmbiguities(
-          data.providerStartAmbiguities ?? [],
-        );
-        if (data.executionStatuses !== undefined) {
-          useGraphStore.getState().hydrateExecutionStatuses(data.executionStatuses);
-        }
-        if (useGraphStore.getState().nodes.length > 0) return;
-        if (data.empty) {
-          maybeStartOnboarding();
-          return;
-        }
-        useGraphStore.getState().loadGraph(
-          data.nodes as Node<NodeData>[],
-          data.edges as Edge[],
-          { allowDuringExecution: true, preserveCinemaUploads: true },
-        );
-        setTimeout(() => {
-          const focus = useUIStore.getState();
-          if (cancelled || initialFocusPending || focus.viewMode !== 'canvas' || focus.canvasFocusRequest || focus.canvasFocusRevision !== initialFocusRevision) return;
-          void fitView({ padding: computeCanvasFitPadding(), duration: 300 });
-        }, 50);
-      } catch {
-        if (cancelled) return;
-        // A backend failure can arrive after the user has already started work.
-        // Only the untouched first-run Canvas still owns automatic onboarding.
-        maybeStartOnboarding();
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [fitView]);
-
-  return null;
-}
 
 /** Headless component that wires the zoom-manifest recorder. Lives inside
  * ReactFlowProvider because the hook uses `useReactFlow` for node lookups. */
@@ -284,12 +205,14 @@ export default function App() {
     };
   }, []);
 
+  const projects = useProjectStore();
   const viewMode = useUIStore((s) => s.viewMode);
   const assetsPanelVisible = useUIStore((s) => s.panels.assets.visible);
 
   const commonsEnabled = useUIStore((s) => s.commonsEnabled);
-  const isCommons = viewMode === 'commons' && commonsEnabled;
-  const isCanvas = viewMode === 'canvas' || (viewMode === 'commons' && !commonsEnabled);
+  const isHome = projects.screen === 'home' && viewMode !== 'brand-showcase';
+  const isCommons = !isHome && viewMode === 'commons' && commonsEnabled;
+  const isCanvas = !isHome && (viewMode === 'canvas' || (viewMode === 'commons' && !commonsEnabled));
   const isRemotion = viewMode === 'remotion-editor';
   const isCinema = viewMode === 'cinema-editor';
   const isCharacter = viewMode === 'character-editor';
@@ -298,7 +221,12 @@ export default function App() {
   const isBrandShowcase = viewMode === 'brand-showcase';
 
   let mainView;
-  if (isCanvas) {
+  if (isHome) {
+    mainView = <ProjectHome projects={projects.projects} loading={projects.loading} busy={projects.busy}
+      error={projects.error} onCreate={(name) => void projects.createProject(name)}
+      onOpen={(id) => void projects.open(id)} onRename={(id, name) => void projects.rename(id, name)}
+      onRetry={() => void projects.retry()} />;
+  } else if (isCanvas) {
     mainView = <Canvas />;
   } else if (isCommons) {
     mainView = <CommonsView />;
@@ -322,9 +250,9 @@ export default function App() {
     <ReactFlowProvider>
       <BackendConnectionStatus />
       <ProviderRecoveryStatus />
-      <GraphHydrator />
-      <GraphFileActions />
-      <ZoomManifestRecorder />
+      <ProjectCoordinator />
+      {!isHome && <GraphFileActions />}
+      {!isHome && <ZoomManifestRecorder />}
       {isCanvas && <CanvasTabs />}
       <Suspense
         fallback={(
@@ -340,7 +268,7 @@ export default function App() {
       {isCanvas && assetsPanelVisible && <AssetsPanel />}
       {isCanvas && <RunHistoryPanel />}
       {isCanvas && <NodeInspectorPopover />}
-      {!isBrandShowcase && (
+      {!isHome && !isBrandShowcase && (
         <div className={`workspace-overlays${isCanvas ? '' : ' workspace-overlays--studio'}${isCommons ? ' workspace-overlays--hidden' : ''}`} inert={isCommons}>
           <Settings />
           <ChatPanel />
@@ -350,7 +278,7 @@ export default function App() {
       {isCanvas && <ChatLauncher />}
       {isCanvas && <Toolbar />}
       {isCanvas && <AgentLog />}
-      {!isBrandShowcase && !isCommons && <CommandPalette />}
+      {!isHome && !isBrandShowcase && !isCommons && <CommandPalette />}
       {isCanvas && <OnboardingOverlay />}
     </ReactFlowProvider>
   );

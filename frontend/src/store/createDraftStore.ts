@@ -56,7 +56,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function readDraft(value: unknown): CreateDraft | null {
+export function readDraft(value: unknown): CreateDraft | null {
   if (!isRecord(value)
     || typeof value.revision !== 'string' || !value.revision
     || (value.modelId !== null && typeof value.modelId !== 'string')

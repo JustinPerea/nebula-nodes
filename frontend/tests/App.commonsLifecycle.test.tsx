@@ -16,6 +16,7 @@ vi.mock('../src/lib/kreaConnection', async (original) => ({
   getKreaConnection: vi.fn().mockResolvedValue({ status: 'disconnected' }),
 }));
 vi.mock('../src/hooks/useZoomManifest', () => ({ useZoomManifest: vi.fn() }));
+vi.mock('../src/components/projects/ProjectCoordinator', () => ({ ProjectCoordinator: () => null }));
 vi.mock('../src/components/Canvas', () => ({ Canvas: () => <div>Current canvas</div> }));
 vi.mock('../src/components/CanvasTabs', () => ({ CanvasTabs: () => null }));
 vi.mock('../src/components/GraphFileActions', () => ({ GraphFileActions: () => null }));
@@ -44,9 +45,11 @@ vi.mock('../src/components/commons/CommonsView', async () => {
 });
 import App from '../src/App';
 import { useUIStore } from '../src/store/uiStore';
+import { useProjectStore } from '../src/store/projectStore';
 const initialUI = useUIStore.getState();
-beforeEach(() => { useUIStore.setState(initialUI, true); api.fetch.mockResolvedValue(new Response(JSON.stringify({ enabled: true }), { headers: { 'content-type': 'application/json' } })); });
-afterEach(() => { cleanup(); useUIStore.setState(initialUI, true); });
+const initialProjects = useProjectStore.getState();
+beforeEach(() => { useUIStore.setState(initialUI, true); useProjectStore.setState({ ...initialProjects, screen: 'workspace', initialized: true, loading: false }, true); api.fetch.mockResolvedValue(new Response(JSON.stringify({ enabled: true }), { headers: { 'content-type': 'application/json' } })); });
+afterEach(() => { cleanup(); useUIStore.setState(initialUI, true); useProjectStore.setState(initialProjects, true); });
 
 it('lazy navigation retains the shared chat instance and inerts its hidden controls until returning', async () => {
   const { container } = render(<App />);

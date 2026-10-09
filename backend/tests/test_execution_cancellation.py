@@ -117,6 +117,7 @@ async def test_registry_marks_event_only_engine_failure_as_failed(monkeypatch) -
         {"runId": "event-failure", "status": "failed"}
     ]
     assert {
+        **main_module._workspace_context(),
         "type": "executionStatus",
         "runId": "event-failure",
         "status": "failed",
@@ -391,6 +392,7 @@ async def test_unknown_uuid_recovery_survives_in_export_without_graph_insertion(
     assert main_module.cli_graph.get_state() == {"nodes": [], "edges": []}
     exported = await main_module.export_graph_for_frontend()
     assert exported == {
+        **main_module._workspace_context(),
         "nodes": [],
         "edges": [],
         "empty": True,

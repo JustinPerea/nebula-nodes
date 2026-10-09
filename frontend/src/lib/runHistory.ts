@@ -1,5 +1,6 @@
 import type { PaperRunInput, PortValue, VariantScope } from '../types';
 import type { PaperSourceRecord } from './paperSource';
+import { getProjectContext } from './projectContext';
 
 /** Persistent run-history records for the Run History panel. Records contain the
  * exact JSON graph sent to the backend so a later replay never reads mutable
@@ -554,6 +555,13 @@ export const MAX_RUN_HISTORY = 100;
 export const RUN_HISTORY_STORAGE_KEY = 'nebula:run-history:v1';
 const RUN_HISTORY_STORAGE_VERSION = 1;
 
+/** Explicit storage injection keeps legacy test/export semantics. Browser history
+ * belongs to the open project; no context means pre-project migration history. */
+function historyStorageKey(storageInjected: boolean): string {
+  const project = storageInjected ? null : getProjectContext();
+  return project ? `${RUN_HISTORY_STORAGE_KEY}:project:${encodeURIComponent(project.id)}` : RUN_HISTORY_STORAGE_KEY;
+}
+
 interface StoredRunHistory {
   version: typeof RUN_HISTORY_STORAGE_VERSION;
   records: RunRecord[];
@@ -788,15 +796,17 @@ function isCinemaShotRun(value: unknown): value is CinemaShotRun {
  * failures are deliberately non-fatal. */
 export function persistRunHistory(
   history: RunRecord[],
-  storage: RunHistoryStorage | null = browserStorage(),
+  storage?: RunHistoryStorage | null,
 ): void {
+  const key = historyStorageKey(storage !== undefined);
+  storage = storage === undefined ? browserStorage() : storage;
   if (!storage) return;
   const payload: StoredRunHistory = {
     version: RUN_HISTORY_STORAGE_VERSION,
     records: cappedRunHistory(history),
   };
   try {
-    storage.setItem(RUN_HISTORY_STORAGE_KEY, JSON.stringify(payload));
+    storage.setItem(key, JSON.stringify(payload));
   } catch {
     /* History persistence is best-effort and must never block execution. */
   }
@@ -805,11 +815,13 @@ export function persistRunHistory(
 /** Load immutable history. Running records retain their client-owned IDs so
  * browser reload can reconcile the backend task instead of inventing a stop. */
 export function loadRunHistory(
-  storage: RunHistoryStorage | null = browserStorage(),
+  storage?: RunHistoryStorage | null,
 ): RunRecord[] {
+  const key = historyStorageKey(storage !== undefined);
+  storage = storage === undefined ? browserStorage() : storage;
   if (!storage) return [];
   try {
-    const raw = storage.getItem(RUN_HISTORY_STORAGE_KEY);
+    const raw = storage.getItem(key);
     if (!raw) return [];
     const parsed = JSON.parse(raw) as unknown;
     if (!isObject(parsed)
@@ -858,12 +870,15 @@ export function loadRunHistory(
         record.status !== recovered[index].status
           || record.statusNote !== recovered[index].statusNote
       ))) {
-      persistRunHistory(recovered, storage);
+      // Keep the selected project key even though normalization uses a local
+      // storage object internally.
+      try { storage.setItem(key, JSON.stringify({ version: RUN_HISTORY_STORAGE_VERSION, records: recovered })); }
+      catch { /* Normalization must not discard history when storage is full. */ }
     }
     return cappedRunHistory(recovered);
   } catch {
     try {
-      storage.removeItem(RUN_HISTORY_STORAGE_KEY);
+      storage.removeItem(key);
     } catch {
       /* Ignore unavailable-storage failures during recovery too. */
     }
@@ -872,11 +887,13 @@ export function loadRunHistory(
 }
 
 export function clearPersistedRunHistory(
-  storage: RunHistoryStorage | null = browserStorage(),
+  storage?: RunHistoryStorage | null,
 ): void {
+  const key = historyStorageKey(storage !== undefined);
+  storage = storage === undefined ? browserStorage() : storage;
   if (!storage) return;
   try {
-    storage.removeItem(RUN_HISTORY_STORAGE_KEY);
+    storage.removeItem(key);
   } catch {
     /* Clearing UI state still succeeds when storage is unavailable. */
   }

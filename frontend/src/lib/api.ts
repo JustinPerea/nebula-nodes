@@ -415,6 +415,8 @@ export async function fetchCLIGraph(): Promise<{
   nodes: unknown[];
   edges: unknown[];
   empty: boolean;
+  activeProjectId?: string | null;
+  workspaceRevision?: string;
   providerRecoveries?: ProviderRecoveryCheckpoint[];
   providerStartAmbiguities?: ProviderStartAmbiguity[];
   executionStatuses?: ExecutionStatusResult[];

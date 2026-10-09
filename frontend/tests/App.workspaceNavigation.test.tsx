@@ -17,6 +17,7 @@ vi.mock('../src/lib/kreaConnection', async (original) => ({
 }));
 vi.mock('../src/hooks/useCommonsCapability', () => ({ useCommonsCapability: vi.fn() }));
 vi.mock('../src/hooks/useZoomManifest', () => ({ useZoomManifest: vi.fn() }));
+vi.mock('../src/components/projects/ProjectCoordinator', () => ({ ProjectCoordinator: () => null }));
 vi.mock('../src/components/Canvas', () => ({ Canvas: () => <div data-testid="canvas">Canvas contents</div> }));
 vi.mock('../src/components/GraphFileActions', () => ({ GraphFileActions: () => null }));
 vi.mock('../src/components/BackendConnectionStatus', () => ({ BackendConnectionStatus: () => null }));
@@ -48,14 +49,17 @@ vi.mock('../src/components/commons/CommonsView', () => ({ CommonsView: () => <di
 import App from '../src/App';
 import { useUIStore } from '../src/store/uiStore';
 import { useGraphStore } from '../src/store/graphStore';
+import { useProjectStore } from '../src/store/projectStore';
 
 const initialUI = useUIStore.getState();
 const initialGraph = useGraphStore.getState();
+const initialProjects = useProjectStore.getState();
 beforeEach(() => {
   useUIStore.setState({ ...initialUI, commonsEnabled: true, hasOnboarded: true }, true);
   useGraphStore.setState({ nodes: [], edges: [], runHistory: [], activeRuns: [] });
+  useProjectStore.setState({ ...initialProjects, screen: 'workspace', initialized: true, loading: false }, true);
 });
-afterEach(() => { cleanup(); useUIStore.setState(initialUI, true); useGraphStore.setState(initialGraph, true); });
+afterEach(() => { cleanup(); useUIStore.setState(initialUI, true); useGraphStore.setState(initialGraph, true); useProjectStore.setState(initialProjects, true); });
 
 it.each<ViewMode>(['create', 'cinema-editor', 'character-editor', 'moodboard-editor', 'remotion-editor', 'editor', 'commons'])('removes covered Canvas controls from the DOM in %s and restores them on return', async (viewMode) => {
   render(<App />);
