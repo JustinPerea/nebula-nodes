@@ -1,4 +1,4 @@
-"""Schema-checked Krea image/video/audio routes from the bundled public API catalog.
+"""Schema-checked Krea generation routes from the bundled public API catalog.
 
 Graphs choose a first-class definition ID, never a URL or arbitrary endpoint.
 Provider credentials are attached only to Krea requests, not artifact downloads.
@@ -44,7 +44,8 @@ MAX_POLLS = 300
 POLL_INTERVAL = 2.0
 _RUNTIME_PARAMS = {"_sourceDuration", "_sourceFps", "_sourceIsVfr", "_variant", "_kreaAuth"}
 _PLACEHOLDER_URL = "https://assets.krea.ai/validated-local-input"
-_ENDPOINT = re.compile(r"^/generate/(?:image|video|audio)/[A-Za-z0-9_./-]+$")
+_ENDPOINT = re.compile(r"^/generate/(?:image|video|audio|enhance|3d)/[A-Za-z0-9_./-]+$")
+_PLURALS = {"Image": "images", "Video": "videos", "Audio": "audios", "Mesh": "meshes"}
 _JOB_ID = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
 
 
@@ -64,7 +65,7 @@ def _model(definition_id: str) -> dict[str, Any]:
     endpoint = model.get("endpoint", "")
     if not isinstance(endpoint, str) or not _ENDPOINT.fullmatch(endpoint) or ".." in endpoint:
         raise ValueError("Invalid bundled Krea endpoint")
-    if model.get("mediaType") not in {"Image", "Video", "Audio"}:
+    if model.get("mediaType") not in _PLURALS:
         raise ValueError("Unsupported bundled Krea media type")
     return model
 
@@ -370,6 +371,6 @@ async def handle_krea_gateway(
         raise RuntimeError(f"Krea completed without a {media_type.lower()} result")
     primary = media_type.lower()
     return {primary: {"type": media_type, "value": paths[0]},
-            f"{primary}s": {"type": "Array", "value": [portable_output_ref(path, require_file=True) for path in paths]},
+            _PLURALS[media_type]: {"type": "Array", "value": [portable_output_ref(path, require_file=True) for path in paths]},
             "artifacts": {"type": "Array", "value": artifacts},
             "job": {"type": "Any", "value": job}}

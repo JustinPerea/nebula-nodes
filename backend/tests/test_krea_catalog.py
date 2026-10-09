@@ -38,7 +38,7 @@ def test_each_model_has_a_valid_request_contract_and_valid_control_defaults(node
     assert definition["envKeyName"] == "KREA_API_TOKEN"
     assert definition["apiEndpoint"] == model["endpoint"]
     assert model["endpoint"].startswith(tuple(SYNC.MEDIA_ROUTES))
-    assert definition["category"] == SYNC.CATEGORIES[model["mediaType"]]
+    assert definition["category"] == SYNC.category_for(model["endpoint"], model["mediaType"])
     assert {param["key"] for param in definition["params"]} == set(schema["properties"]) | {"_kreaAuth"}
     for param in definition["params"]:
         if param["key"] == "_kreaAuth":
@@ -107,5 +107,18 @@ def test_audio_routes_are_first_class_audio_nodes():
     assert {param["key"] for param in music["params"]} >= {"music_length_ms", "force_instrumental"}
     audio = {node_id for node_id, model in CATALOG["models"].items() if model["mediaType"] == "Audio"}
     assert all(CATALOG["models"][node_id]["endpoint"].startswith("/generate/audio/") for node_id in audio)
-    assert not any(model["endpoint"].startswith(("/generate/enhance/", "/generate/3d/"))
-                   for model in CATALOG["models"].values())
+
+
+
+def test_enhance_routes_output_the_media_they_upscale_and_3d_routes_output_meshes():
+    image = REGISTRY["krea-enhance-magnific-creative-enhance"]
+    video = REGISTRY["krea-enhance-topaz-video-upscale"]
+    mesh = REGISTRY["krea-3d-microsoft-trellis-2"]
+    assert image["category"] == video["category"] == "transform"
+    assert image["outputPorts"][0]["dataType"] == "Image"
+    assert video["outputPorts"][0]["dataType"] == "Video"
+    assert {port["id"]: port["dataType"] for port in video["inputPorts"]}["video_url"] == "Video"
+    assert mesh["category"] == "3d-gen"
+    assert [port["id"] for port in mesh["outputPorts"]] == ["mesh", "meshes", "artifacts", "job"]
+    families = {SYNC.route_family(model["endpoint"]) for model in CATALOG["models"].values()}
+    assert families == {"image", "video", "audio", "enhance", "3d"}

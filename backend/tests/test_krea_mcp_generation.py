@@ -392,9 +392,12 @@ class LiveSession(Session):
             {'id': 'openai/gpt-image-2', 'category': 'image', 'name': 'ChatGPT 2'},
             {'id': VIDEO_MODEL_ID, 'category': 'video', 'name': 'Kling 3.0'},
             {'id': MUSIC_MODEL_ID, 'category': 'audio', 'name': 'ElevenLabs Music v2.5'},
+            {'id': 'magnific/precise-enhance', 'category': 'enhance', 'name': 'Magnific Precise'},
+            {'id': 'microsoft/trellis-2', 'category': '3d', 'name': 'TRELLIS 2'},
         ]
         self.schemas = {}
-        for entry, node_id in zip(self.inventory, (IMAGE_ID, VIDEO_ID, MUSIC_ID)):
+        for entry, node_id in zip(self.inventory, (IMAGE_ID, VIDEO_ID, MUSIC_ID,
+                                                   'krea-enhance-magnific-precise-enhance', 'krea-3d-microsoft-trellis-2')):
             definition = gateway.catalog_models()[node_id]
             self.schemas[entry['id']] = {
                 'model': entry['id'], 'category': entry['category'], 'name': entry['name'],
@@ -415,7 +418,7 @@ class LiveSession(Session):
             return result(self.schemas[arguments['model']])
         if name == 'get_upload_url':
             return CallToolResult(content=[TextContent(type='text', text=UPLOAD)])
-        if name in {'generate_image', 'generate_video', 'generate_audio', 'generate'}:
+        if name in {'generate_image', 'generate_video', 'generate_audio', 'enhance_image', 'generate_3d', 'generate'}:
             if self.rejected:
                 return CallToolResult(content=[TextContent(type='text', text='synthetic rejection')], isError=True)
             return result({'mode': 'async', 'completed': False, 'timedOut': False,
@@ -622,3 +625,28 @@ async def test_account_music_binds_audio_tool_submits_once_and_saves_local_track
         'music_length_ms': 40000, 'force_instrumental': True, 'prompt': 'quiet ambient pulse'}})]
     assert outputs['audio']['type'] == 'Audio'
     assert Path(outputs['audio']['value']).read_bytes() == track
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('node_id,category,tool_name,model_id,params', [
+    ('krea-enhance-magnific-precise-enhance', 'enhance', 'enhance_image', 'magnific/precise-enhance',
+     {'width': 2048, 'height': 2048, 'image_url': 'https://assets.example.test/source.png'}),
+    ('krea-3d-microsoft-trellis-2', '3d', 'generate_3d', 'microsoft/trellis-2',
+     {'prompt': 'a ceramic fox', 'input_mode': 'text'}),
+])
+async def test_account_enhance_and_3d_use_their_own_krea_tools(live_setup, node_id, category, tool_name, model_id, params):
+    session, _ = live_setup
+    url = CDN if category == 'enhance' else 'https://media.example.test/model.glb'
+    body = png() if category == 'enhance' else b'glTF' + bytes(32)
+    mime = 'image/png' if category == 'enhance' else 'model/gltf-binary'
+    session.jobs = [{'job_id': 'job-live-fixture', 'status': 'completed', 'type': 'fixture', 'result': {'urls': [url]}}]
+    with respx.mock as router:
+        router.get(url).respond(200, content=body, headers={'content-type': mime})
+        outputs = await gateway.handle_krea_gateway(
+            GraphNode(id='account-' + category, definitionId=node_id, params={'_kreaAuth': 'mcp', **params}),
+            {}, {}, emit=AsyncMock())
+    assert session.calls[0] == ('list_models', {'category': category})
+    submissions = [name for name, _ in session.calls if name.startswith(('generate', 'enhance'))]
+    assert submissions == [tool_name]
+    primary = 'image' if category == 'enhance' else 'mesh'
+    assert Path(outputs[primary]['value']).read_bytes() == body

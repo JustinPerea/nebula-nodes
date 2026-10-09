@@ -94,6 +94,10 @@ class KreaTools:
         return tool_value(await self.session.call_tool(name, self.arguments(name, values)))
 
 
+# Krea's MCP names the enhance tool after images, but it serves every enhance
+# model, including the video upscalers.
+CATEGORY_TOOLS = {'image': 'generate_image', 'video': 'generate_video', 'audio': 'generate_audio',
+                  'enhance': 'enhance_image', '3d': 'generate_3d'}
 MODEL_KEYS = ('model', 'model_id', 'modelId')
 INPUT_KEYS = ('input', 'inputs', 'params', 'parameters', 'data')
 JOB_KEYS = ('jobId', 'job_id', 'id')
@@ -127,11 +131,11 @@ def _generation_values(tools, name, model_id, body):
 
 async def prepare_generation(tools, model, preview_body, validate):
     """Discover and validate the exact saved route, without uploading or generating."""
-    category = {'Image': 'image', 'Video': 'video', 'Audio': 'audio'}[model['mediaType']]
     endpoint = model['endpoint'].removeprefix('/generate/')
-    if not endpoint.startswith(category + '/'):
+    category = endpoint.split('/', 1)[0]
+    if category not in CATEGORY_TOOLS:
         raise RuntimeError('Krea model category does not match its saved route; no job was submitted')
-    category_tool = f'generate_{category}'
+    category_tool = CATEGORY_TOOLS[category]
     name = category_tool if category_tool in tools.tools else 'generate'
     if name not in tools.tools:
         raise RuntimeError(f'Krea server does not expose {category_tool} or generate; no job was submitted')

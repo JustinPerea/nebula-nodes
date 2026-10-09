@@ -16175,6 +16175,1979 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     ],
     "docUrl": "docs/model-providers/krea/krea-gateway.md"
   },
+  'krea-enhance-krea-enhance': {
+    "id": "krea-enhance-krea-enhance",
+    "displayName": "Krea Enhance (Krea)",
+    "category": "transform",
+    "apiProvider": "krea",
+    "apiEndpoint": "/generate/enhance/krea/enhance",
+    "envKeyName": "KREA_API_TOKEN",
+    "executionPattern": "async-poll",
+    "inputPorts": [
+      {
+        "id": "prompt",
+        "label": "Prompt",
+        "dataType": "Text",
+        "required": false
+      },
+      {
+        "id": "image_url",
+        "label": "Image URL",
+        "dataType": "Image",
+        "required": false
+      }
+    ],
+    "outputPorts": [
+      {
+        "id": "image",
+        "label": "Image",
+        "dataType": "Image",
+        "required": true
+      },
+      {
+        "id": "images",
+        "label": "All images",
+        "dataType": "Array",
+        "required": false
+      },
+      {
+        "id": "artifacts",
+        "label": "All artifacts",
+        "dataType": "Array",
+        "required": false
+      },
+      {
+        "id": "job",
+        "label": "Job",
+        "dataType": "Any",
+        "required": false
+      }
+    ],
+    "params": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": false,
+        "type": "textarea",
+        "default": ""
+      },
+      {
+        "key": "image_url",
+        "label": "Image URL",
+        "required": true,
+        "type": "string"
+      },
+      {
+        "key": "image_scaling_factor",
+        "label": "Image scaling factor",
+        "required": false,
+        "type": "float",
+        "min": 0.1,
+        "step": 0.01,
+        "default": 2
+      },
+      {
+        "key": "rescale_color",
+        "label": "Rescale color",
+        "required": false,
+        "type": "boolean",
+        "default": false
+      },
+      {
+        "key": "seed",
+        "label": "Seed",
+        "required": false,
+        "type": "float",
+        "step": 0.01
+      },
+      {
+        "key": "ai_strength",
+        "label": "Ai strength",
+        "required": false,
+        "type": "float",
+        "min": 0.1,
+        "max": 1,
+        "step": 0.01,
+        "default": 0.4
+      },
+      {
+        "key": "clarity_strength",
+        "label": "Clarity strength",
+        "required": false,
+        "type": "float",
+        "min": 1,
+        "max": 12,
+        "step": 0.01,
+        "default": 4
+      },
+      {
+        "key": "resemblance_strength",
+        "label": "Resemblance strength",
+        "required": false,
+        "type": "float",
+        "min": 0,
+        "max": 2.5,
+        "step": 0.01,
+        "default": 1
+      },
+      {
+        "key": "sharpness",
+        "label": "Sharpness",
+        "required": false,
+        "type": "float",
+        "min": 0.1,
+        "max": 1.5,
+        "step": 0.01,
+        "default": 0.5
+      }
+    ],
+    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+  },
+  'krea-enhance-krea-legacy-enhance': {
+    "id": "krea-enhance-krea-legacy-enhance",
+    "displayName": "Krea Enhance Legacy (Krea)",
+    "category": "transform",
+    "apiProvider": "krea",
+    "apiEndpoint": "/generate/enhance/krea/legacy-enhance",
+    "envKeyName": "KREA_API_TOKEN",
+    "executionPattern": "async-poll",
+    "inputPorts": [
+      {
+        "id": "prompt",
+        "label": "Prompt",
+        "dataType": "Text",
+        "required": false
+      },
+      {
+        "id": "image_url",
+        "label": "Image URL",
+        "dataType": "Image",
+        "required": false
+      }
+    ],
+    "outputPorts": [
+      {
+        "id": "image",
+        "label": "Image",
+        "dataType": "Image",
+        "required": true
+      },
+      {
+        "id": "images",
+        "label": "All images",
+        "dataType": "Array",
+        "required": false
+      },
+      {
+        "id": "artifacts",
+        "label": "All artifacts",
+        "dataType": "Array",
+        "required": false
+      },
+      {
+        "id": "job",
+        "label": "Job",
+        "dataType": "Any",
+        "required": false
+      }
+    ],
+    "params": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": false,
+        "type": "textarea",
+        "default": ""
+      },
+      {
+        "key": "image_url",
+        "label": "Image URL",
+        "required": true,
+        "type": "string"
+      },
+      {
+        "key": "image_scaling_factor",
+        "label": "Image scaling factor",
+        "required": false,
+        "type": "float",
+        "min": 0.1,
+        "step": 0.01,
+        "default": 2
+      },
+      {
+        "key": "rescale_color",
+        "label": "Rescale color",
+        "required": false,
+        "type": "boolean",
+        "default": false
+      },
+      {
+        "key": "upscaling_activated",
+        "label": "Upscaling activated",
+        "required": false,
+        "type": "boolean",
+        "default": true
+      },
+      {
+        "key": "ai_strength",
+        "label": "Ai strength",
+        "required": false,
+        "type": "float",
+        "min": 0.1,
+        "max": 1,
+        "step": 0.01,
+        "default": 0.6
+      },
+      {
+        "key": "clarity_strength",
+        "label": "Clarity strength",
+        "required": false,
+        "type": "float",
+        "min": 1,
+        "max": 12,
+        "step": 0.01,
+        "default": 2.5
+      },
+      {
+        "key": "resemblance_strength",
+        "label": "Resemblance strength",
+        "required": false,
+        "type": "float",
+        "min": 0,
+        "max": 2.5,
+        "step": 0.01,
+        "default": 1
+      },
+      {
+        "key": "scene_transfer",
+        "label": "Scene transfer",
+        "required": false,
+        "type": "boolean",
+        "default": false
+      },
+      {
+        "key": "scene_image_url",
+        "label": "Scene image URL (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model",
+        "default": "\"\""
+      },
+      {
+        "key": "scene_prompt",
+        "label": "Scene prompt",
+        "required": false,
+        "type": "string",
+        "default": ""
+      },
+      {
+        "key": "scene_strength",
+        "label": "Scene strength",
+        "required": false,
+        "type": "float",
+        "min": 0.5,
+        "max": 1,
+        "step": 0.01,
+        "default": 0.85
+      },
+      {
+        "key": "switch_background",
+        "label": "Switch background",
+        "required": false,
+        "type": "boolean",
+        "default": false
+      }
+    ],
+    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+  },
+  'krea-enhance-topaz-generative-enhance': {
+    "id": "krea-enhance-topaz-generative-enhance",
+    "displayName": "Topaz Image Upscale (Krea)",
+    "category": "transform",
+    "apiProvider": "krea",
+    "apiEndpoint": "/generate/enhance/topaz/generative-enhance",
+    "envKeyName": "KREA_API_TOKEN",
+    "executionPattern": "async-poll",
+    "inputPorts": [
+      {
+        "id": "prompt",
+        "label": "Prompt",
+        "dataType": "Text",
+        "required": false
+      },
+      {
+        "id": "image_url",
+        "label": "Image URL",
+        "dataType": "Image",
+        "required": false
+      }
+    ],
+    "outputPorts": [
+      {
+        "id": "image",
+        "label": "Image",
+        "dataType": "Image",
+        "required": true
+      },
+      {
+        "id": "images",
+        "label": "All images",
+        "dataType": "Array",
+        "required": false
+      },
+      {
+        "id": "artifacts",
+        "label": "All artifacts",
+        "dataType": "Array",
+        "required": false
+      },
+      {
+        "id": "job",
+        "label": "Job",
+        "dataType": "Any",
+        "required": false
+      }
+    ],
+    "params": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": false,
+        "type": "textarea",
+        "default": ""
+      },
+      {
+        "key": "width",
+        "label": "Width",
+        "required": true,
+        "type": "float",
+        "min": 1,
+        "max": 32000,
+        "step": 0.01
+      },
+      {
+        "key": "height",
+        "label": "Height",
+        "required": true,
+        "type": "float",
+        "min": 1,
+        "max": 32000,
+        "step": 0.01
+      },
+      {
+        "key": "seed",
+        "label": "Seed",
+        "required": false,
+        "type": "float",
+        "step": 0.01,
+        "default": 1337
+      },
+      {
+        "key": "image_url",
+        "label": "Image URL",
+        "required": true,
+        "type": "string"
+      },
+      {
+        "key": "model",
+        "label": "Model",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "Redefine",
+            "value": "Redefine"
+          },
+          {
+            "label": "Recovery",
+            "value": "Recovery"
+          },
+          {
+            "label": "Recovery V2",
+            "value": "Recovery V2"
+          },
+          {
+            "label": "Reimagine",
+            "value": "Reimagine"
+          },
+          {
+            "label": "Wonder 3",
+            "value": "Wonder 3"
+          },
+          {
+            "label": "Standard MAX",
+            "value": "Standard MAX"
+          },
+          {
+            "label": "Recover 3",
+            "value": "Recover 3"
+          },
+          {
+            "label": "Detail",
+            "value": "Detail"
+          }
+        ],
+        "default": "Redefine"
+      },
+      {
+        "key": "output_format",
+        "label": "Output format",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "png",
+            "value": "png"
+          },
+          {
+            "label": "jpg",
+            "value": "jpg"
+          },
+          {
+            "label": "webp",
+            "value": "webp"
+          }
+        ],
+        "default": "jpg"
+      },
+      {
+        "key": "subject_detection",
+        "label": "Subject detection",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "All",
+            "value": "All"
+          },
+          {
+            "label": "Foreground",
+            "value": "Foreground"
+          },
+          {
+            "label": "Background",
+            "value": "Background"
+          }
+        ],
+        "default": "All"
+      },
+      {
+        "key": "face_enhancement",
+        "label": "Face enhancement",
+        "required": false,
+        "type": "boolean",
+        "default": false
+      },
+      {
+        "key": "face_enhancement_creativity",
+        "label": "Face enhancement creativity",
+        "required": false,
+        "type": "float",
+        "min": 0,
+        "max": 1,
+        "step": 0.01,
+        "default": 0.5
+      },
+      {
+        "key": "face_enhancement_strength",
+        "label": "Face enhancement strength",
+        "required": false,
+        "type": "float",
+        "min": 0,
+        "max": 1,
+        "step": 0.01,
+        "default": 0.5
+      },
+      {
+        "key": "crop_to_fill",
+        "label": "Crop to fill",
+        "required": false,
+        "type": "boolean",
+        "default": false
+      },
+      {
+        "key": "upscaling_activated",
+        "label": "Upscaling activated",
+        "required": false,
+        "type": "boolean",
+        "default": false
+      },
+      {
+        "key": "image_scaling_factor",
+        "label": "Image scaling factor",
+        "required": false,
+        "type": "float",
+        "min": 1,
+        "max": 32,
+        "step": 0.01,
+        "default": 1
+      },
+      {
+        "key": "creativity",
+        "label": "Creativity",
+        "required": false,
+        "type": "integer",
+        "min": 1,
+        "max": 6,
+        "step": 1,
+        "default": 3
+      },
+      {
+        "key": "texture",
+        "label": "Texture",
+        "required": false,
+        "type": "integer",
+        "min": 1,
+        "max": 5,
+        "step": 1,
+        "default": 3
+      },
+      {
+        "key": "sharpen",
+        "label": "Sharpen",
+        "required": false,
+        "type": "float",
+        "min": 0,
+        "max": 1,
+        "step": 0.01,
+        "default": 0.5
+      },
+      {
+        "key": "denoise",
+        "label": "Denoise",
+        "required": false,
+        "type": "float",
+        "min": 0,
+        "max": 1,
+        "step": 0.01,
+        "default": 0.5
+      },
+      {
+        "key": "detail",
+        "label": "Detail",
+        "required": false,
+        "type": "float",
+        "min": 0,
+        "max": 1,
+        "step": 0.01,
+        "default": 0.5
+      }
+    ],
+    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+  },
+  'krea-enhance-topaz-standard-enhance': {
+    "id": "krea-enhance-topaz-standard-enhance",
+    "displayName": "Topaz Standard (Krea)",
+    "category": "transform",
+    "apiProvider": "krea",
+    "apiEndpoint": "/generate/enhance/topaz/standard-enhance",
+    "envKeyName": "KREA_API_TOKEN",
+    "executionPattern": "async-poll",
+    "inputPorts": [
+      {
+        "id": "prompt",
+        "label": "Prompt",
+        "dataType": "Text",
+        "required": false
+      },
+      {
+        "id": "image_url",
+        "label": "Image URL",
+        "dataType": "Image",
+        "required": false
+      }
+    ],
+    "outputPorts": [
+      {
+        "id": "image",
+        "label": "Image",
+        "dataType": "Image",
+        "required": true
+      },
+      {
+        "id": "images",
+        "label": "All images",
+        "dataType": "Array",
+        "required": false
+      },
+      {
+        "id": "artifacts",
+        "label": "All artifacts",
+        "dataType": "Array",
+        "required": false
+      },
+      {
+        "id": "job",
+        "label": "Job",
+        "dataType": "Any",
+        "required": false
+      }
+    ],
+    "params": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": false,
+        "type": "textarea",
+        "default": ""
+      },
+      {
+        "key": "width",
+        "label": "Width",
+        "required": true,
+        "type": "float",
+        "min": 1,
+        "max": 32000,
+        "step": 0.01
+      },
+      {
+        "key": "height",
+        "label": "Height",
+        "required": true,
+        "type": "float",
+        "min": 1,
+        "max": 32000,
+        "step": 0.01
+      },
+      {
+        "key": "seed",
+        "label": "Seed",
+        "required": false,
+        "type": "float",
+        "step": 0.01,
+        "default": 1337
+      },
+      {
+        "key": "image_url",
+        "label": "Image URL",
+        "required": true,
+        "type": "string"
+      },
+      {
+        "key": "model",
+        "label": "Model",
+        "required": true,
+        "type": "enum",
+        "options": [
+          {
+            "label": "Standard V2",
+            "value": "Standard V2"
+          },
+          {
+            "label": "Low Resolution V2",
+            "value": "Low Resolution V2"
+          },
+          {
+            "label": "CGI",
+            "value": "CGI"
+          },
+          {
+            "label": "High Fidelity V2",
+            "value": "High Fidelity V2"
+          },
+          {
+            "label": "Upscale High Fidelity V3",
+            "value": "Upscale High Fidelity V3"
+          },
+          {
+            "label": "Text Refine",
+            "value": "Text Refine"
+          }
+        ]
+      },
+      {
+        "key": "output_format",
+        "label": "Output format",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "png",
+            "value": "png"
+          },
+          {
+            "label": "jpg",
+            "value": "jpg"
+          },
+          {
+            "label": "webp",
+            "value": "webp"
+          }
+        ],
+        "default": "jpg"
+      },
+      {
+        "key": "subject_detection",
+        "label": "Subject detection",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "All",
+            "value": "All"
+          },
+          {
+            "label": "Foreground",
+            "value": "Foreground"
+          },
+          {
+            "label": "Background",
+            "value": "Background"
+          }
+        ],
+        "default": "All"
+      },
+      {
+        "key": "face_enhancement",
+        "label": "Face enhancement",
+        "required": false,
+        "type": "boolean",
+        "default": false
+      },
+      {
+        "key": "face_enhancement_creativity",
+        "label": "Face enhancement creativity",
+        "required": false,
+        "type": "float",
+        "min": 0,
+        "max": 1,
+        "step": 0.01,
+        "default": 0.5
+      },
+      {
+        "key": "face_enhancement_strength",
+        "label": "Face enhancement strength",
+        "required": false,
+        "type": "float",
+        "min": 0,
+        "max": 1,
+        "step": 0.01,
+        "default": 0.5
+      },
+      {
+        "key": "crop_to_fill",
+        "label": "Crop to fill",
+        "required": false,
+        "type": "boolean",
+        "default": false
+      },
+      {
+        "key": "upscaling_activated",
+        "label": "Upscaling activated",
+        "required": false,
+        "type": "boolean",
+        "default": false
+      },
+      {
+        "key": "image_scaling_factor",
+        "label": "Image scaling factor",
+        "required": false,
+        "type": "float",
+        "min": 1,
+        "max": 32,
+        "step": 0.01,
+        "default": 1
+      },
+      {
+        "key": "sharpen",
+        "label": "Sharpen",
+        "required": false,
+        "type": "float",
+        "min": 0,
+        "max": 1,
+        "step": 0.01,
+        "default": 0.5
+      },
+      {
+        "key": "denoise",
+        "label": "Denoise",
+        "required": false,
+        "type": "float",
+        "min": 0,
+        "max": 1,
+        "step": 0.01,
+        "default": 0.5
+      },
+      {
+        "key": "fix_compression",
+        "label": "Fix compression",
+        "required": false,
+        "type": "float",
+        "min": 0,
+        "max": 1,
+        "step": 0.01,
+        "default": 0.5
+      },
+      {
+        "key": "strength",
+        "label": "Strength",
+        "required": false,
+        "type": "float",
+        "min": 0.01,
+        "max": 1,
+        "step": 0.01,
+        "default": 0.5
+      }
+    ],
+    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+  },
+  'krea-enhance-topaz-bloom-enhance': {
+    "id": "krea-enhance-topaz-bloom-enhance",
+    "displayName": "Topaz Bloom (Krea)",
+    "category": "transform",
+    "apiProvider": "krea",
+    "apiEndpoint": "/generate/enhance/topaz/bloom-enhance",
+    "envKeyName": "KREA_API_TOKEN",
+    "executionPattern": "async-poll",
+    "inputPorts": [
+      {
+        "id": "prompt",
+        "label": "Prompt",
+        "dataType": "Text",
+        "required": false
+      },
+      {
+        "id": "image_url",
+        "label": "Image URL",
+        "dataType": "Image",
+        "required": false
+      }
+    ],
+    "outputPorts": [
+      {
+        "id": "image",
+        "label": "Image",
+        "dataType": "Image",
+        "required": true
+      },
+      {
+        "id": "images",
+        "label": "All images",
+        "dataType": "Array",
+        "required": false
+      },
+      {
+        "id": "artifacts",
+        "label": "All artifacts",
+        "dataType": "Array",
+        "required": false
+      },
+      {
+        "id": "job",
+        "label": "Job",
+        "dataType": "Any",
+        "required": false
+      }
+    ],
+    "params": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": false,
+        "type": "textarea",
+        "default": ""
+      },
+      {
+        "key": "width",
+        "label": "Width",
+        "required": true,
+        "type": "float",
+        "min": 1,
+        "max": 10000,
+        "step": 0.01
+      },
+      {
+        "key": "height",
+        "label": "Height",
+        "required": true,
+        "type": "float",
+        "min": 1,
+        "max": 10000,
+        "step": 0.01
+      },
+      {
+        "key": "seed",
+        "label": "Seed",
+        "required": false,
+        "type": "float",
+        "step": 0.01,
+        "default": 1337
+      },
+      {
+        "key": "image_url",
+        "label": "Image URL",
+        "required": true,
+        "type": "string"
+      },
+      {
+        "key": "output_format",
+        "label": "Output format",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "png",
+            "value": "png"
+          },
+          {
+            "label": "jpg",
+            "value": "jpg"
+          },
+          {
+            "label": "webp",
+            "value": "webp"
+          }
+        ],
+        "default": "jpg"
+      },
+      {
+        "key": "crop_to_fill",
+        "label": "Crop to fill",
+        "required": false,
+        "type": "boolean",
+        "default": false
+      },
+      {
+        "key": "creativity",
+        "label": "Creativity",
+        "required": false,
+        "type": "integer",
+        "min": 1,
+        "max": 9,
+        "step": 1,
+        "default": 3
+      },
+      {
+        "key": "face_preservation",
+        "label": "Face preservation",
+        "required": false,
+        "type": "boolean",
+        "default": false
+      },
+      {
+        "key": "color_preservation",
+        "label": "Color preservation",
+        "required": false,
+        "type": "boolean",
+        "default": false
+      },
+      {
+        "key": "upscaling_activated",
+        "label": "Upscaling activated",
+        "required": false,
+        "type": "boolean",
+        "default": false
+      },
+      {
+        "key": "image_scaling_factor",
+        "label": "Image scaling factor",
+        "required": false,
+        "type": "float",
+        "min": 1,
+        "max": 32,
+        "step": 0.01,
+        "default": 1
+      }
+    ],
+    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+  },
+  'krea-enhance-topaz-bloom-2-enhance': {
+    "id": "krea-enhance-topaz-bloom-2-enhance",
+    "displayName": "Topaz Bloom 2 (Krea)",
+    "category": "transform",
+    "apiProvider": "krea",
+    "apiEndpoint": "/generate/enhance/topaz/bloom-2-enhance",
+    "envKeyName": "KREA_API_TOKEN",
+    "executionPattern": "async-poll",
+    "inputPorts": [
+      {
+        "id": "prompt",
+        "label": "Prompt",
+        "dataType": "Text",
+        "required": false
+      },
+      {
+        "id": "image_url",
+        "label": "Image URL",
+        "dataType": "Image",
+        "required": false
+      },
+      {
+        "id": "reference_uri",
+        "label": "Reference uri",
+        "dataType": "Image",
+        "required": false
+      }
+    ],
+    "outputPorts": [
+      {
+        "id": "image",
+        "label": "Image",
+        "dataType": "Image",
+        "required": true
+      },
+      {
+        "id": "images",
+        "label": "All images",
+        "dataType": "Array",
+        "required": false
+      },
+      {
+        "id": "artifacts",
+        "label": "All artifacts",
+        "dataType": "Array",
+        "required": false
+      },
+      {
+        "id": "job",
+        "label": "Job",
+        "dataType": "Any",
+        "required": false
+      }
+    ],
+    "params": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": false,
+        "type": "textarea",
+        "default": ""
+      },
+      {
+        "key": "width",
+        "label": "Width",
+        "required": true,
+        "type": "float",
+        "min": 1,
+        "max": 10000,
+        "step": 0.01
+      },
+      {
+        "key": "height",
+        "label": "Height",
+        "required": true,
+        "type": "float",
+        "min": 1,
+        "max": 10000,
+        "step": 0.01
+      },
+      {
+        "key": "seed",
+        "label": "Seed",
+        "required": false,
+        "type": "float",
+        "step": 0.01,
+        "default": 1337
+      },
+      {
+        "key": "image_url",
+        "label": "Image URL",
+        "required": true,
+        "type": "string"
+      },
+      {
+        "key": "output_format",
+        "label": "Output format",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "png",
+            "value": "png"
+          },
+          {
+            "label": "jpg",
+            "value": "jpg"
+          },
+          {
+            "label": "webp",
+            "value": "webp"
+          }
+        ],
+        "default": "jpg"
+      },
+      {
+        "key": "crop_to_fill",
+        "label": "Crop to fill",
+        "required": false,
+        "type": "boolean",
+        "default": false
+      },
+      {
+        "key": "creativity",
+        "label": "Creativity",
+        "required": false,
+        "type": "integer",
+        "min": 1,
+        "max": 9,
+        "step": 1,
+        "default": 3
+      },
+      {
+        "key": "autoprompt",
+        "label": "Autoprompt",
+        "required": false,
+        "type": "boolean",
+        "default": true
+      },
+      {
+        "key": "face_preservation",
+        "label": "Face preservation",
+        "required": false,
+        "type": "boolean",
+        "default": false
+      },
+      {
+        "key": "color_preservation",
+        "label": "Color preservation",
+        "required": false,
+        "type": "boolean",
+        "default": true
+      },
+      {
+        "key": "grain",
+        "label": "Grain",
+        "required": false,
+        "type": "boolean",
+        "default": false
+      },
+      {
+        "key": "grain_model",
+        "label": "Grain model",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "silver",
+            "value": "silver"
+          },
+          {
+            "label": "gaussian",
+            "value": "gaussian"
+          },
+          {
+            "label": "grey",
+            "value": "grey"
+          }
+        ],
+        "default": "silver"
+      },
+      {
+        "key": "grain_density",
+        "label": "Grain density",
+        "required": false,
+        "type": "float",
+        "min": 0,
+        "max": 1,
+        "step": 0.01,
+        "default": 0.5
+      },
+      {
+        "key": "grain_strength",
+        "label": "Grain strength",
+        "required": false,
+        "type": "float",
+        "min": 0,
+        "max": 1,
+        "step": 0.01,
+        "default": 0.5
+      },
+      {
+        "key": "grain_size",
+        "label": "Grain size",
+        "required": false,
+        "type": "float",
+        "min": 1,
+        "max": 5,
+        "step": 0.01,
+        "default": 1
+      },
+      {
+        "key": "reference_uri",
+        "label": "Reference uri",
+        "required": false,
+        "type": "string"
+      },
+      {
+        "key": "upscaling_activated",
+        "label": "Upscaling activated",
+        "required": false,
+        "type": "boolean",
+        "default": false
+      },
+      {
+        "key": "image_scaling_factor",
+        "label": "Image scaling factor",
+        "required": false,
+        "type": "float",
+        "min": 1,
+        "max": 32,
+        "step": 0.01,
+        "default": 1
+      }
+    ],
+    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+  },
+  'krea-enhance-topaz-wonder-35-enhance': {
+    "id": "krea-enhance-topaz-wonder-35-enhance",
+    "displayName": "Topaz Wonder 3.5 (Krea)",
+    "category": "transform",
+    "apiProvider": "krea",
+    "apiEndpoint": "/generate/enhance/topaz/wonder-35-enhance",
+    "envKeyName": "KREA_API_TOKEN",
+    "executionPattern": "async-poll",
+    "inputPorts": [
+      {
+        "id": "image_url",
+        "label": "Image URL",
+        "dataType": "Image",
+        "required": false
+      }
+    ],
+    "outputPorts": [
+      {
+        "id": "image",
+        "label": "Image",
+        "dataType": "Image",
+        "required": true
+      },
+      {
+        "id": "images",
+        "label": "All images",
+        "dataType": "Array",
+        "required": false
+      },
+      {
+        "id": "artifacts",
+        "label": "All artifacts",
+        "dataType": "Array",
+        "required": false
+      },
+      {
+        "id": "job",
+        "label": "Job",
+        "dataType": "Any",
+        "required": false
+      }
+    ],
+    "params": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "width",
+        "label": "Width",
+        "required": true,
+        "type": "float",
+        "min": 1,
+        "max": 16000,
+        "step": 0.01
+      },
+      {
+        "key": "height",
+        "label": "Height",
+        "required": true,
+        "type": "float",
+        "min": 1,
+        "max": 16000,
+        "step": 0.01
+      },
+      {
+        "key": "seed",
+        "label": "Seed",
+        "required": false,
+        "type": "float",
+        "step": 0.01,
+        "default": 1337
+      },
+      {
+        "key": "image_url",
+        "label": "Image URL",
+        "required": true,
+        "type": "string"
+      },
+      {
+        "key": "output_format",
+        "label": "Output format",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "png",
+            "value": "png"
+          },
+          {
+            "label": "jpg",
+            "value": "jpg"
+          },
+          {
+            "label": "webp",
+            "value": "webp"
+          }
+        ],
+        "default": "jpg"
+      },
+      {
+        "key": "crop_to_fill",
+        "label": "Crop to fill",
+        "required": false,
+        "type": "boolean",
+        "default": false
+      },
+      {
+        "key": "enhancement_strength",
+        "label": "Enhancement strength",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "low",
+            "value": "low"
+          },
+          {
+            "label": "medium",
+            "value": "medium"
+          },
+          {
+            "label": "high",
+            "value": "high"
+          }
+        ],
+        "default": "high"
+      },
+      {
+        "key": "grain",
+        "label": "Grain",
+        "required": false,
+        "type": "boolean",
+        "default": false
+      },
+      {
+        "key": "grain_model",
+        "label": "Grain model",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "silver",
+            "value": "silver"
+          },
+          {
+            "label": "gaussian",
+            "value": "gaussian"
+          },
+          {
+            "label": "grey",
+            "value": "grey"
+          }
+        ],
+        "default": "silver"
+      },
+      {
+        "key": "grain_density",
+        "label": "Grain density",
+        "required": false,
+        "type": "float",
+        "min": 0,
+        "max": 1,
+        "step": 0.01,
+        "default": 0.5
+      },
+      {
+        "key": "grain_strength",
+        "label": "Grain strength",
+        "required": false,
+        "type": "float",
+        "min": 0,
+        "max": 1,
+        "step": 0.01,
+        "default": 0.5
+      },
+      {
+        "key": "grain_size",
+        "label": "Grain size",
+        "required": false,
+        "type": "float",
+        "min": 1,
+        "max": 5,
+        "step": 0.01,
+        "default": 1
+      },
+      {
+        "key": "upscaling_activated",
+        "label": "Upscaling activated",
+        "required": false,
+        "type": "boolean",
+        "default": false
+      },
+      {
+        "key": "image_scaling_factor",
+        "label": "Image scaling factor",
+        "required": false,
+        "type": "float",
+        "min": 1,
+        "max": 32,
+        "step": 0.01,
+        "default": 1
+      }
+    ],
+    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+  },
+  'krea-enhance-magnific-creative-enhance': {
+    "id": "krea-enhance-magnific-creative-enhance",
+    "displayName": "Magnific Creative (Krea)",
+    "category": "transform",
+    "apiProvider": "krea",
+    "apiEndpoint": "/generate/enhance/magnific/creative-enhance",
+    "envKeyName": "KREA_API_TOKEN",
+    "executionPattern": "async-poll",
+    "inputPorts": [
+      {
+        "id": "prompt",
+        "label": "Prompt",
+        "dataType": "Text",
+        "required": false
+      },
+      {
+        "id": "image_url",
+        "label": "Image URL",
+        "dataType": "Image",
+        "required": false
+      }
+    ],
+    "outputPorts": [
+      {
+        "id": "image",
+        "label": "Image",
+        "dataType": "Image",
+        "required": true
+      },
+      {
+        "id": "images",
+        "label": "All images",
+        "dataType": "Array",
+        "required": false
+      },
+      {
+        "id": "artifacts",
+        "label": "All artifacts",
+        "dataType": "Array",
+        "required": false
+      },
+      {
+        "id": "job",
+        "label": "Job",
+        "dataType": "Any",
+        "required": false
+      }
+    ],
+    "params": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": false,
+        "type": "textarea",
+        "default": ""
+      },
+      {
+        "key": "width",
+        "label": "Width",
+        "required": true,
+        "type": "float",
+        "min": 1,
+        "max": 10000,
+        "step": 0.01
+      },
+      {
+        "key": "height",
+        "label": "Height",
+        "required": true,
+        "type": "float",
+        "min": 1,
+        "max": 10000,
+        "step": 0.01
+      },
+      {
+        "key": "seed",
+        "label": "Seed",
+        "required": false,
+        "type": "float",
+        "step": 0.01,
+        "default": 1337
+      },
+      {
+        "key": "image_url",
+        "label": "Image URL",
+        "required": true,
+        "type": "string"
+      },
+      {
+        "key": "output_format",
+        "label": "Output format",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "png",
+            "value": "png"
+          },
+          {
+            "label": "jpg",
+            "value": "jpg"
+          },
+          {
+            "label": "webp",
+            "value": "webp"
+          }
+        ],
+        "default": "png"
+      },
+      {
+        "key": "optimized_for",
+        "label": "Optimized for",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "standard",
+            "value": "standard"
+          },
+          {
+            "label": "soft_portraits",
+            "value": "soft_portraits"
+          },
+          {
+            "label": "hard_portraits",
+            "value": "hard_portraits"
+          },
+          {
+            "label": "art_n_illustration",
+            "value": "art_n_illustration"
+          },
+          {
+            "label": "videogame_assets",
+            "value": "videogame_assets"
+          },
+          {
+            "label": "nature_n_landscapes",
+            "value": "nature_n_landscapes"
+          },
+          {
+            "label": "films_n_photography",
+            "value": "films_n_photography"
+          },
+          {
+            "label": "3d_renders",
+            "value": "3d_renders"
+          },
+          {
+            "label": "science_fiction_n_horror",
+            "value": "science_fiction_n_horror"
+          }
+        ],
+        "default": "standard"
+      },
+      {
+        "key": "creativity",
+        "label": "Creativity",
+        "required": false,
+        "type": "integer",
+        "min": -10,
+        "max": 10,
+        "step": 1,
+        "default": 0
+      },
+      {
+        "key": "hdr",
+        "label": "Hdr",
+        "required": false,
+        "type": "integer",
+        "min": -10,
+        "max": 10,
+        "step": 1,
+        "default": 0
+      },
+      {
+        "key": "resemblance",
+        "label": "Resemblance",
+        "required": false,
+        "type": "integer",
+        "min": -10,
+        "max": 10,
+        "step": 1,
+        "default": 0
+      },
+      {
+        "key": "fractality",
+        "label": "Fractality",
+        "required": false,
+        "type": "integer",
+        "min": -10,
+        "max": 10,
+        "step": 1,
+        "default": 0
+      },
+      {
+        "key": "engine",
+        "label": "Engine",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "automatic",
+            "value": "automatic"
+          },
+          {
+            "label": "magnific_illusio",
+            "value": "magnific_illusio"
+          },
+          {
+            "label": "magnific_sharpy",
+            "value": "magnific_sharpy"
+          },
+          {
+            "label": "magnific_sparkle",
+            "value": "magnific_sparkle"
+          }
+        ],
+        "default": "automatic"
+      },
+      {
+        "key": "upscaling_activated",
+        "label": "Upscaling activated",
+        "required": false,
+        "type": "boolean",
+        "default": true
+      },
+      {
+        "key": "image_scaling_factor",
+        "label": "Image scaling factor",
+        "required": false,
+        "type": "float",
+        "min": 2,
+        "max": 16,
+        "step": 0.01,
+        "default": 2
+      }
+    ],
+    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+  },
+  'krea-enhance-magnific-precise-enhance': {
+    "id": "krea-enhance-magnific-precise-enhance",
+    "displayName": "Magnific Precise (Krea)",
+    "category": "transform",
+    "apiProvider": "krea",
+    "apiEndpoint": "/generate/enhance/magnific/precise-enhance",
+    "envKeyName": "KREA_API_TOKEN",
+    "executionPattern": "async-poll",
+    "inputPorts": [
+      {
+        "id": "image_url",
+        "label": "Image URL",
+        "dataType": "Image",
+        "required": false
+      }
+    ],
+    "outputPorts": [
+      {
+        "id": "image",
+        "label": "Image",
+        "dataType": "Image",
+        "required": true
+      },
+      {
+        "id": "images",
+        "label": "All images",
+        "dataType": "Array",
+        "required": false
+      },
+      {
+        "id": "artifacts",
+        "label": "All artifacts",
+        "dataType": "Array",
+        "required": false
+      },
+      {
+        "id": "job",
+        "label": "Job",
+        "dataType": "Any",
+        "required": false
+      }
+    ],
+    "params": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "width",
+        "label": "Width",
+        "required": true,
+        "type": "float",
+        "min": 1,
+        "max": 10000,
+        "step": 0.01
+      },
+      {
+        "key": "height",
+        "label": "Height",
+        "required": true,
+        "type": "float",
+        "min": 1,
+        "max": 10000,
+        "step": 0.01
+      },
+      {
+        "key": "seed",
+        "label": "Seed",
+        "required": false,
+        "type": "float",
+        "step": 0.01,
+        "default": 1337
+      },
+      {
+        "key": "image_url",
+        "label": "Image URL",
+        "required": true,
+        "type": "string"
+      },
+      {
+        "key": "output_format",
+        "label": "Output format",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "png",
+            "value": "png"
+          },
+          {
+            "label": "jpg",
+            "value": "jpg"
+          },
+          {
+            "label": "webp",
+            "value": "webp"
+          }
+        ],
+        "default": "png"
+      },
+      {
+        "key": "sharpen",
+        "label": "Sharpen",
+        "required": false,
+        "type": "integer",
+        "min": 0,
+        "max": 100,
+        "step": 1,
+        "default": 7
+      },
+      {
+        "key": "smart_grain",
+        "label": "Smart grain",
+        "required": false,
+        "type": "integer",
+        "min": 0,
+        "max": 100,
+        "step": 1,
+        "default": 7
+      },
+      {
+        "key": "ultra_detail",
+        "label": "Ultra detail",
+        "required": false,
+        "type": "integer",
+        "min": 0,
+        "max": 100,
+        "step": 1,
+        "default": 30
+      },
+      {
+        "key": "flavor",
+        "label": "Flavor",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "sublime",
+            "value": "sublime"
+          },
+          {
+            "label": "photo",
+            "value": "photo"
+          },
+          {
+            "label": "photo_denoiser",
+            "value": "photo_denoiser"
+          }
+        ]
+      },
+      {
+        "key": "upscaling_activated",
+        "label": "Upscaling activated",
+        "required": false,
+        "type": "boolean",
+        "default": true
+      },
+      {
+        "key": "image_scaling_factor",
+        "label": "Image scaling factor",
+        "required": false,
+        "type": "float",
+        "min": 2,
+        "max": 16,
+        "step": 0.01,
+        "default": 2
+      }
+    ],
+    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+  },
   'krea-video-kling-kling-2-5': {
     "id": "krea-video-kling-kling-2-5",
     "displayName": "Kling 2.5 (Krea)",
@@ -22892,6 +24865,3265 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "label": "Start video",
         "required": true,
         "type": "string"
+      }
+    ],
+    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+  },
+  'krea-enhance-topaz-video-upscale': {
+    "id": "krea-enhance-topaz-video-upscale",
+    "displayName": "Topaz Video Upscale (Krea)",
+    "category": "transform",
+    "apiProvider": "krea",
+    "apiEndpoint": "/generate/enhance/topaz/video-upscale",
+    "envKeyName": "KREA_API_TOKEN",
+    "executionPattern": "async-poll",
+    "inputPorts": [
+      {
+        "id": "video_url",
+        "label": "Video URL",
+        "dataType": "Video",
+        "required": false
+      }
+    ],
+    "outputPorts": [
+      {
+        "id": "video",
+        "label": "Video",
+        "dataType": "Video",
+        "required": true
+      },
+      {
+        "id": "videos",
+        "label": "All videos",
+        "dataType": "Array",
+        "required": false
+      },
+      {
+        "id": "artifacts",
+        "label": "All artifacts",
+        "dataType": "Array",
+        "required": false
+      },
+      {
+        "id": "job",
+        "label": "Job",
+        "dataType": "Any",
+        "required": false
+      }
+    ],
+    "params": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "target_width",
+        "label": "Target width",
+        "required": false,
+        "type": "float",
+        "min": 1,
+        "max": 8000,
+        "step": 0.01
+      },
+      {
+        "key": "target_height",
+        "label": "Target height",
+        "required": false,
+        "type": "float",
+        "min": 1,
+        "max": 8000,
+        "step": 0.01
+      },
+      {
+        "key": "crop_to_fit",
+        "label": "Crop to fit",
+        "required": false,
+        "type": "boolean",
+        "default": false
+      },
+      {
+        "key": "video_url",
+        "label": "Video URL",
+        "required": true,
+        "type": "string"
+      },
+      {
+        "key": "enhancement",
+        "label": "Enhancement",
+        "required": false,
+        "type": "boolean",
+        "default": true
+      },
+      {
+        "key": "enhancement_video_type",
+        "label": "Enhancement video type",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "Progressive",
+            "value": "Progressive"
+          },
+          {
+            "label": "Interlaced",
+            "value": "Interlaced"
+          },
+          {
+            "label": "ProgressiveInterlaced",
+            "value": "ProgressiveInterlaced"
+          }
+        ],
+        "default": "Progressive"
+      },
+      {
+        "key": "enhancement_model",
+        "label": "Enhancement model",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "aaa-9",
+            "value": "aaa-9"
+          },
+          {
+            "label": "ahq-12",
+            "value": "ahq-12"
+          },
+          {
+            "label": "alq-13",
+            "value": "alq-13"
+          },
+          {
+            "label": "alqs-2",
+            "value": "alqs-2"
+          },
+          {
+            "label": "amq-13",
+            "value": "amq-13"
+          },
+          {
+            "label": "amqs-2",
+            "value": "amqs-2"
+          },
+          {
+            "label": "ddv-3",
+            "value": "ddv-3"
+          },
+          {
+            "label": "dtd-4",
+            "value": "dtd-4"
+          },
+          {
+            "label": "dtds-2",
+            "value": "dtds-2"
+          },
+          {
+            "label": "dtv-4",
+            "value": "dtv-4"
+          },
+          {
+            "label": "dtvs-2",
+            "value": "dtvs-2"
+          },
+          {
+            "label": "gcg-5",
+            "value": "gcg-5"
+          },
+          {
+            "label": "ghq-5",
+            "value": "ghq-5"
+          },
+          {
+            "label": "iris-2",
+            "value": "iris-2"
+          },
+          {
+            "label": "iris-3",
+            "value": "iris-3"
+          },
+          {
+            "label": "nxf-1",
+            "value": "nxf-1"
+          },
+          {
+            "label": "nyx-3",
+            "value": "nyx-3"
+          },
+          {
+            "label": "prob-4",
+            "value": "prob-4"
+          },
+          {
+            "label": "rhea-1",
+            "value": "rhea-1"
+          },
+          {
+            "label": "sl-1",
+            "value": "sl-1"
+          },
+          {
+            "label": "thd-3",
+            "value": "thd-3"
+          },
+          {
+            "label": "thf-4",
+            "value": "thf-4"
+          },
+          {
+            "label": "thm-2",
+            "value": "thm-2"
+          }
+        ],
+        "default": "prob-4"
+      },
+      {
+        "key": "enhancement_focus_fix",
+        "label": "Enhancement focus fix",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "None",
+            "value": "None"
+          },
+          {
+            "label": "Normal",
+            "value": "Normal"
+          },
+          {
+            "label": "Strong",
+            "value": "Strong"
+          }
+        ],
+        "default": "None"
+      },
+      {
+        "key": "enhancement_parameters",
+        "label": "Enhancement parameters",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "Auto",
+            "value": "Auto"
+          },
+          {
+            "label": "Manual",
+            "value": "Manual"
+          }
+        ],
+        "default": "Auto"
+      },
+      {
+        "key": "enhancement_compression",
+        "label": "Enhancement compression",
+        "required": false,
+        "type": "float",
+        "min": -1,
+        "max": 1,
+        "step": 0.01,
+        "default": 0.1
+      },
+      {
+        "key": "enhancement_recover_details",
+        "label": "Enhancement recover details",
+        "required": false,
+        "type": "float",
+        "min": 0,
+        "max": 1,
+        "step": 0.01,
+        "default": 0.7
+      },
+      {
+        "key": "enhancement_sharpen",
+        "label": "Enhancement sharpen",
+        "required": false,
+        "type": "float",
+        "min": -1,
+        "max": 1,
+        "step": 0.01,
+        "default": 0.2
+      },
+      {
+        "key": "enhancement_reduce_noise",
+        "label": "Enhancement reduce noise",
+        "required": false,
+        "type": "float",
+        "min": -1,
+        "max": 1,
+        "step": 0.01,
+        "default": 0.3
+      },
+      {
+        "key": "enhancement_reduce_halo",
+        "label": "Enhancement reduce halo",
+        "required": false,
+        "type": "float",
+        "min": -1,
+        "max": 1,
+        "step": 0.01,
+        "default": 0.4
+      },
+      {
+        "key": "enhancement_preblur",
+        "label": "Enhancement preblur",
+        "required": false,
+        "type": "float",
+        "min": -1,
+        "max": 1,
+        "step": 0.01,
+        "default": 0.5
+      },
+      {
+        "key": "frame_interpolation",
+        "label": "Frame interpolation",
+        "required": false,
+        "type": "boolean",
+        "default": true
+      },
+      {
+        "key": "frame_interpolation_fps",
+        "label": "Frame interpolation fps",
+        "required": false,
+        "type": "integer",
+        "min": 15,
+        "max": 240,
+        "step": 1,
+        "default": 60
+      },
+      {
+        "key": "frame_interpolation_model",
+        "label": "Frame interpolation model",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "apo-8",
+            "value": "apo-8"
+          },
+          {
+            "label": "apf-2",
+            "value": "apf-2"
+          },
+          {
+            "label": "chr-2",
+            "value": "chr-2"
+          },
+          {
+            "label": "chf-3",
+            "value": "chf-3"
+          }
+        ],
+        "default": "apo-8"
+      },
+      {
+        "key": "frame_interpolation_slowmo",
+        "label": "Frame interpolation slowmo",
+        "required": false,
+        "type": "integer",
+        "min": 1,
+        "max": 16,
+        "step": 1,
+        "default": 1
+      },
+      {
+        "key": "frame_interpolation_fix_duplicate_frames",
+        "label": "Frame interpolation fix duplicate frames",
+        "required": false,
+        "type": "boolean",
+        "default": true
+      },
+      {
+        "key": "frame_interpolation_duplicate_sensitivity",
+        "label": "Frame interpolation duplicate sensitivity",
+        "required": false,
+        "type": "float",
+        "min": 0.001,
+        "max": 0.1,
+        "step": 0.01,
+        "default": 0.01
+      },
+      {
+        "key": "grain",
+        "label": "Grain",
+        "required": false,
+        "type": "boolean",
+        "default": false
+      },
+      {
+        "key": "grain_strength",
+        "label": "Grain strength",
+        "required": false,
+        "type": "float",
+        "min": 0,
+        "max": 0.1,
+        "step": 0.01,
+        "default": 0.02
+      },
+      {
+        "key": "grain_size",
+        "label": "Grain size",
+        "required": false,
+        "type": "float",
+        "min": 0,
+        "max": 5,
+        "step": 0.01,
+        "default": 1
+      },
+      {
+        "key": "video_output_preset",
+        "label": "Video output preset",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "h264-high",
+            "value": "h264-high"
+          },
+          {
+            "label": "h265-main",
+            "value": "h265-main"
+          },
+          {
+            "label": "h265-main10",
+            "value": "h265-main10"
+          },
+          {
+            "label": "prores-422-proxy",
+            "value": "prores-422-proxy"
+          },
+          {
+            "label": "prores-422-lt",
+            "value": "prores-422-lt"
+          },
+          {
+            "label": "prores-422-std",
+            "value": "prores-422-std"
+          },
+          {
+            "label": "prores-422-hq",
+            "value": "prores-422-hq"
+          },
+          {
+            "label": "av1-8-bit",
+            "value": "av1-8-bit"
+          },
+          {
+            "label": "av1-10-bit",
+            "value": "av1-10-bit"
+          },
+          {
+            "label": "vp9-good",
+            "value": "vp9-good"
+          },
+          {
+            "label": "vp9-best",
+            "value": "vp9-best"
+          }
+        ],
+        "default": "h265-main"
+      }
+    ],
+    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+  },
+  'krea-enhance-topaz-starlight-precise': {
+    "id": "krea-enhance-topaz-starlight-precise",
+    "displayName": "Topaz Starlight Precise (Krea)",
+    "category": "transform",
+    "apiProvider": "krea",
+    "apiEndpoint": "/generate/enhance/topaz/starlight-precise",
+    "envKeyName": "KREA_API_TOKEN",
+    "executionPattern": "async-poll",
+    "inputPorts": [
+      {
+        "id": "video_url",
+        "label": "Video URL",
+        "dataType": "Video",
+        "required": false
+      }
+    ],
+    "outputPorts": [
+      {
+        "id": "video",
+        "label": "Video",
+        "dataType": "Video",
+        "required": true
+      },
+      {
+        "id": "videos",
+        "label": "All videos",
+        "dataType": "Array",
+        "required": false
+      },
+      {
+        "id": "artifacts",
+        "label": "All artifacts",
+        "dataType": "Array",
+        "required": false
+      },
+      {
+        "id": "job",
+        "label": "Job",
+        "dataType": "Any",
+        "required": false
+      }
+    ],
+    "params": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "target_width",
+        "label": "Target width",
+        "required": false,
+        "type": "float",
+        "min": 1,
+        "max": 8000,
+        "step": 0.01
+      },
+      {
+        "key": "target_height",
+        "label": "Target height",
+        "required": false,
+        "type": "float",
+        "min": 1,
+        "max": 8000,
+        "step": 0.01
+      },
+      {
+        "key": "crop_to_fit",
+        "label": "Crop to fit",
+        "required": false,
+        "type": "boolean",
+        "default": false
+      },
+      {
+        "key": "video_url",
+        "label": "Video URL",
+        "required": true,
+        "type": "string"
+      },
+      {
+        "key": "frame_interpolation",
+        "label": "Frame interpolation",
+        "required": false,
+        "type": "boolean",
+        "default": false
+      },
+      {
+        "key": "frame_interpolation_fps",
+        "label": "Frame interpolation fps",
+        "required": false,
+        "type": "integer",
+        "min": 15,
+        "max": 240,
+        "step": 1,
+        "default": 60
+      },
+      {
+        "key": "frame_interpolation_model",
+        "label": "Frame interpolation model",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "apo-8",
+            "value": "apo-8"
+          },
+          {
+            "label": "apf-2",
+            "value": "apf-2"
+          },
+          {
+            "label": "chr-2",
+            "value": "chr-2"
+          },
+          {
+            "label": "chf-3",
+            "value": "chf-3"
+          }
+        ],
+        "default": "apo-8"
+      },
+      {
+        "key": "frame_interpolation_slowmo",
+        "label": "Frame interpolation slowmo",
+        "required": false,
+        "type": "integer",
+        "min": 1,
+        "max": 16,
+        "step": 1,
+        "default": 1
+      },
+      {
+        "key": "frame_interpolation_fix_duplicate_frames",
+        "label": "Frame interpolation fix duplicate frames",
+        "required": false,
+        "type": "boolean",
+        "default": true
+      },
+      {
+        "key": "frame_interpolation_duplicate_sensitivity",
+        "label": "Frame interpolation duplicate sensitivity",
+        "required": false,
+        "type": "float",
+        "min": 0.001,
+        "max": 0.1,
+        "step": 0.01,
+        "default": 0.01
+      },
+      {
+        "key": "video_output_preset",
+        "label": "Video output preset",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "h264-high",
+            "value": "h264-high"
+          },
+          {
+            "label": "h265-main",
+            "value": "h265-main"
+          },
+          {
+            "label": "h265-main10",
+            "value": "h265-main10"
+          },
+          {
+            "label": "prores-422-proxy",
+            "value": "prores-422-proxy"
+          },
+          {
+            "label": "prores-422-lt",
+            "value": "prores-422-lt"
+          },
+          {
+            "label": "prores-422-std",
+            "value": "prores-422-std"
+          },
+          {
+            "label": "prores-422-hq",
+            "value": "prores-422-hq"
+          },
+          {
+            "label": "av1-8-bit",
+            "value": "av1-8-bit"
+          },
+          {
+            "label": "av1-10-bit",
+            "value": "av1-10-bit"
+          },
+          {
+            "label": "vp9-good",
+            "value": "vp9-good"
+          },
+          {
+            "label": "vp9-best",
+            "value": "vp9-best"
+          }
+        ],
+        "default": "h265-main"
+      }
+    ],
+    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+  },
+  'krea-enhance-topaz-starlight-precise-25': {
+    "id": "krea-enhance-topaz-starlight-precise-25",
+    "displayName": "Topaz Starlight Precise 2.5 (Krea)",
+    "category": "transform",
+    "apiProvider": "krea",
+    "apiEndpoint": "/generate/enhance/topaz/starlight-precise-25",
+    "envKeyName": "KREA_API_TOKEN",
+    "executionPattern": "async-poll",
+    "inputPorts": [
+      {
+        "id": "video_url",
+        "label": "Video URL",
+        "dataType": "Video",
+        "required": false
+      }
+    ],
+    "outputPorts": [
+      {
+        "id": "video",
+        "label": "Video",
+        "dataType": "Video",
+        "required": true
+      },
+      {
+        "id": "videos",
+        "label": "All videos",
+        "dataType": "Array",
+        "required": false
+      },
+      {
+        "id": "artifacts",
+        "label": "All artifacts",
+        "dataType": "Array",
+        "required": false
+      },
+      {
+        "id": "job",
+        "label": "Job",
+        "dataType": "Any",
+        "required": false
+      }
+    ],
+    "params": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "target_width",
+        "label": "Target width",
+        "required": false,
+        "type": "float",
+        "min": 1,
+        "max": 8000,
+        "step": 0.01
+      },
+      {
+        "key": "target_height",
+        "label": "Target height",
+        "required": false,
+        "type": "float",
+        "min": 1,
+        "max": 8000,
+        "step": 0.01
+      },
+      {
+        "key": "crop_to_fit",
+        "label": "Crop to fit",
+        "required": false,
+        "type": "boolean",
+        "default": false
+      },
+      {
+        "key": "video_url",
+        "label": "Video URL",
+        "required": true,
+        "type": "string"
+      },
+      {
+        "key": "frame_interpolation",
+        "label": "Frame interpolation",
+        "required": false,
+        "type": "boolean",
+        "default": false
+      },
+      {
+        "key": "frame_interpolation_fps",
+        "label": "Frame interpolation fps",
+        "required": false,
+        "type": "integer",
+        "min": 15,
+        "max": 240,
+        "step": 1,
+        "default": 60
+      },
+      {
+        "key": "frame_interpolation_model",
+        "label": "Frame interpolation model",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "apo-8",
+            "value": "apo-8"
+          },
+          {
+            "label": "apf-2",
+            "value": "apf-2"
+          },
+          {
+            "label": "chr-2",
+            "value": "chr-2"
+          },
+          {
+            "label": "chf-3",
+            "value": "chf-3"
+          }
+        ],
+        "default": "apo-8"
+      },
+      {
+        "key": "frame_interpolation_slowmo",
+        "label": "Frame interpolation slowmo",
+        "required": false,
+        "type": "integer",
+        "min": 1,
+        "max": 16,
+        "step": 1,
+        "default": 1
+      },
+      {
+        "key": "frame_interpolation_fix_duplicate_frames",
+        "label": "Frame interpolation fix duplicate frames",
+        "required": false,
+        "type": "boolean",
+        "default": true
+      },
+      {
+        "key": "frame_interpolation_duplicate_sensitivity",
+        "label": "Frame interpolation duplicate sensitivity",
+        "required": false,
+        "type": "float",
+        "min": 0.001,
+        "max": 0.1,
+        "step": 0.01,
+        "default": 0.01
+      },
+      {
+        "key": "video_output_preset",
+        "label": "Video output preset",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "h264-high",
+            "value": "h264-high"
+          },
+          {
+            "label": "h265-main",
+            "value": "h265-main"
+          },
+          {
+            "label": "h265-main10",
+            "value": "h265-main10"
+          },
+          {
+            "label": "prores-422-proxy",
+            "value": "prores-422-proxy"
+          },
+          {
+            "label": "prores-422-lt",
+            "value": "prores-422-lt"
+          },
+          {
+            "label": "prores-422-std",
+            "value": "prores-422-std"
+          },
+          {
+            "label": "prores-422-hq",
+            "value": "prores-422-hq"
+          },
+          {
+            "label": "av1-8-bit",
+            "value": "av1-8-bit"
+          },
+          {
+            "label": "av1-10-bit",
+            "value": "av1-10-bit"
+          },
+          {
+            "label": "vp9-good",
+            "value": "vp9-good"
+          },
+          {
+            "label": "vp9-best",
+            "value": "vp9-best"
+          }
+        ],
+        "default": "h265-main"
+      }
+    ],
+    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+  },
+  'krea-enhance-topaz-astra': {
+    "id": "krea-enhance-topaz-astra",
+    "displayName": "Topaz Astra (Krea)",
+    "category": "transform",
+    "apiProvider": "krea",
+    "apiEndpoint": "/generate/enhance/topaz/astra",
+    "envKeyName": "KREA_API_TOKEN",
+    "executionPattern": "async-poll",
+    "inputPorts": [
+      {
+        "id": "video_url",
+        "label": "Video URL",
+        "dataType": "Video",
+        "required": false
+      }
+    ],
+    "outputPorts": [
+      {
+        "id": "video",
+        "label": "Video",
+        "dataType": "Video",
+        "required": true
+      },
+      {
+        "id": "videos",
+        "label": "All videos",
+        "dataType": "Array",
+        "required": false
+      },
+      {
+        "id": "artifacts",
+        "label": "All artifacts",
+        "dataType": "Array",
+        "required": false
+      },
+      {
+        "id": "job",
+        "label": "Job",
+        "dataType": "Any",
+        "required": false
+      }
+    ],
+    "params": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "target_width",
+        "label": "Target width",
+        "required": false,
+        "type": "float",
+        "min": 1,
+        "max": 8000,
+        "step": 0.01
+      },
+      {
+        "key": "target_height",
+        "label": "Target height",
+        "required": false,
+        "type": "float",
+        "min": 1,
+        "max": 8000,
+        "step": 0.01
+      },
+      {
+        "key": "crop_to_fit",
+        "label": "Crop to fit",
+        "required": false,
+        "type": "boolean",
+        "default": false
+      },
+      {
+        "key": "creativity",
+        "label": "Creativity",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "low",
+            "value": "low"
+          },
+          {
+            "label": "high",
+            "value": "high"
+          }
+        ],
+        "default": "low"
+      },
+      {
+        "key": "video_url",
+        "label": "Video URL",
+        "required": true,
+        "type": "string"
+      },
+      {
+        "key": "frame_interpolation",
+        "label": "Frame interpolation",
+        "required": false,
+        "type": "boolean",
+        "default": false
+      },
+      {
+        "key": "frame_interpolation_fps",
+        "label": "Frame interpolation fps",
+        "required": false,
+        "type": "integer",
+        "min": 15,
+        "max": 240,
+        "step": 1,
+        "default": 60
+      },
+      {
+        "key": "frame_interpolation_model",
+        "label": "Frame interpolation model",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "apo-8",
+            "value": "apo-8"
+          },
+          {
+            "label": "apf-2",
+            "value": "apf-2"
+          },
+          {
+            "label": "chr-2",
+            "value": "chr-2"
+          },
+          {
+            "label": "chf-3",
+            "value": "chf-3"
+          }
+        ],
+        "default": "apo-8"
+      },
+      {
+        "key": "frame_interpolation_slowmo",
+        "label": "Frame interpolation slowmo",
+        "required": false,
+        "type": "integer",
+        "min": 1,
+        "max": 16,
+        "step": 1,
+        "default": 1
+      },
+      {
+        "key": "frame_interpolation_fix_duplicate_frames",
+        "label": "Frame interpolation fix duplicate frames",
+        "required": false,
+        "type": "boolean",
+        "default": true
+      },
+      {
+        "key": "frame_interpolation_duplicate_sensitivity",
+        "label": "Frame interpolation duplicate sensitivity",
+        "required": false,
+        "type": "float",
+        "min": 0.001,
+        "max": 0.1,
+        "step": 0.01,
+        "default": 0.01
+      },
+      {
+        "key": "video_output_preset",
+        "label": "Video output preset",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "h264-high",
+            "value": "h264-high"
+          },
+          {
+            "label": "h265-main",
+            "value": "h265-main"
+          },
+          {
+            "label": "h265-main10",
+            "value": "h265-main10"
+          },
+          {
+            "label": "prores-422-proxy",
+            "value": "prores-422-proxy"
+          },
+          {
+            "label": "prores-422-lt",
+            "value": "prores-422-lt"
+          },
+          {
+            "label": "prores-422-std",
+            "value": "prores-422-std"
+          },
+          {
+            "label": "prores-422-hq",
+            "value": "prores-422-hq"
+          },
+          {
+            "label": "av1-8-bit",
+            "value": "av1-8-bit"
+          },
+          {
+            "label": "av1-10-bit",
+            "value": "av1-10-bit"
+          },
+          {
+            "label": "vp9-good",
+            "value": "vp9-good"
+          },
+          {
+            "label": "vp9-best",
+            "value": "vp9-best"
+          }
+        ],
+        "default": "h265-main"
+      }
+    ],
+    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+  },
+  'krea-enhance-topaz-astra-2': {
+    "id": "krea-enhance-topaz-astra-2",
+    "displayName": "Topaz Astra 2 (Krea)",
+    "category": "transform",
+    "apiProvider": "krea",
+    "apiEndpoint": "/generate/enhance/topaz/astra-2",
+    "envKeyName": "KREA_API_TOKEN",
+    "executionPattern": "async-poll",
+    "inputPorts": [
+      {
+        "id": "video_url",
+        "label": "Video URL",
+        "dataType": "Video",
+        "required": false
+      },
+      {
+        "id": "prompt",
+        "label": "Prompt",
+        "dataType": "Text",
+        "required": false
+      }
+    ],
+    "outputPorts": [
+      {
+        "id": "video",
+        "label": "Video",
+        "dataType": "Video",
+        "required": true
+      },
+      {
+        "id": "videos",
+        "label": "All videos",
+        "dataType": "Array",
+        "required": false
+      },
+      {
+        "id": "artifacts",
+        "label": "All artifacts",
+        "dataType": "Array",
+        "required": false
+      },
+      {
+        "id": "job",
+        "label": "Job",
+        "dataType": "Any",
+        "required": false
+      }
+    ],
+    "params": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "target_width",
+        "label": "Target width",
+        "required": false,
+        "type": "float",
+        "min": 1,
+        "max": 8000,
+        "step": 0.01
+      },
+      {
+        "key": "target_height",
+        "label": "Target height",
+        "required": false,
+        "type": "float",
+        "min": 1,
+        "max": 8000,
+        "step": 0.01
+      },
+      {
+        "key": "crop_to_fit",
+        "label": "Crop to fit",
+        "required": false,
+        "type": "boolean",
+        "default": false
+      },
+      {
+        "key": "creativity",
+        "label": "Creativity",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "low",
+            "value": "low"
+          },
+          {
+            "label": "middle",
+            "value": "middle"
+          },
+          {
+            "label": "high",
+            "value": "high"
+          }
+        ],
+        "default": "middle"
+      },
+      {
+        "key": "sharp",
+        "label": "Sharp",
+        "required": false,
+        "type": "float",
+        "min": 0,
+        "max": 1,
+        "step": 0.01,
+        "default": 0.5
+      },
+      {
+        "key": "realism",
+        "label": "Realism",
+        "required": false,
+        "type": "float",
+        "min": 0,
+        "max": 1,
+        "step": 0.01
+      },
+      {
+        "key": "video_url",
+        "label": "Video URL",
+        "required": true,
+        "type": "string"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": false,
+        "type": "textarea"
+      },
+      {
+        "key": "frame_interpolation",
+        "label": "Frame interpolation",
+        "required": false,
+        "type": "boolean",
+        "default": false
+      },
+      {
+        "key": "frame_interpolation_fps",
+        "label": "Frame interpolation fps",
+        "required": false,
+        "type": "integer",
+        "min": 15,
+        "max": 240,
+        "step": 1,
+        "default": 60
+      },
+      {
+        "key": "frame_interpolation_model",
+        "label": "Frame interpolation model",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "apo-8",
+            "value": "apo-8"
+          },
+          {
+            "label": "apf-2",
+            "value": "apf-2"
+          },
+          {
+            "label": "chr-2",
+            "value": "chr-2"
+          },
+          {
+            "label": "chf-3",
+            "value": "chf-3"
+          }
+        ],
+        "default": "apo-8"
+      },
+      {
+        "key": "frame_interpolation_slowmo",
+        "label": "Frame interpolation slowmo",
+        "required": false,
+        "type": "integer",
+        "min": 1,
+        "max": 16,
+        "step": 1,
+        "default": 1
+      },
+      {
+        "key": "frame_interpolation_fix_duplicate_frames",
+        "label": "Frame interpolation fix duplicate frames",
+        "required": false,
+        "type": "boolean",
+        "default": true
+      },
+      {
+        "key": "frame_interpolation_duplicate_sensitivity",
+        "label": "Frame interpolation duplicate sensitivity",
+        "required": false,
+        "type": "float",
+        "min": 0.001,
+        "max": 0.1,
+        "step": 0.01,
+        "default": 0.01
+      },
+      {
+        "key": "video_output_preset",
+        "label": "Video output preset",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "h264-high",
+            "value": "h264-high"
+          },
+          {
+            "label": "h265-main",
+            "value": "h265-main"
+          },
+          {
+            "label": "h265-main10",
+            "value": "h265-main10"
+          },
+          {
+            "label": "prores-422-proxy",
+            "value": "prores-422-proxy"
+          },
+          {
+            "label": "prores-422-lt",
+            "value": "prores-422-lt"
+          },
+          {
+            "label": "prores-422-std",
+            "value": "prores-422-std"
+          },
+          {
+            "label": "prores-422-hq",
+            "value": "prores-422-hq"
+          },
+          {
+            "label": "av1-8-bit",
+            "value": "av1-8-bit"
+          },
+          {
+            "label": "av1-10-bit",
+            "value": "av1-10-bit"
+          },
+          {
+            "label": "vp9-good",
+            "value": "vp9-good"
+          },
+          {
+            "label": "vp9-best",
+            "value": "vp9-best"
+          }
+        ],
+        "default": "h265-main"
+      }
+    ],
+    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+  },
+  'krea-enhance-topaz-hyperion': {
+    "id": "krea-enhance-topaz-hyperion",
+    "displayName": "Topaz Hyperion 2.5 (Krea)",
+    "category": "transform",
+    "apiProvider": "krea",
+    "apiEndpoint": "/generate/enhance/topaz/hyperion",
+    "envKeyName": "KREA_API_TOKEN",
+    "executionPattern": "async-poll",
+    "inputPorts": [
+      {
+        "id": "video_url",
+        "label": "Video URL",
+        "dataType": "Video",
+        "required": false
+      }
+    ],
+    "outputPorts": [
+      {
+        "id": "video",
+        "label": "Video",
+        "dataType": "Video",
+        "required": true
+      },
+      {
+        "id": "videos",
+        "label": "All videos",
+        "dataType": "Array",
+        "required": false
+      },
+      {
+        "id": "artifacts",
+        "label": "All artifacts",
+        "dataType": "Array",
+        "required": false
+      },
+      {
+        "id": "job",
+        "label": "Job",
+        "dataType": "Any",
+        "required": false
+      }
+    ],
+    "params": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "target_width",
+        "label": "Target width",
+        "required": false,
+        "type": "float",
+        "min": 1,
+        "max": 8000,
+        "step": 0.01
+      },
+      {
+        "key": "target_height",
+        "label": "Target height",
+        "required": false,
+        "type": "float",
+        "min": 1,
+        "max": 8000,
+        "step": 0.01
+      },
+      {
+        "key": "crop_to_fit",
+        "label": "Crop to fit",
+        "required": false,
+        "type": "boolean",
+        "default": false
+      },
+      {
+        "key": "video_url",
+        "label": "Video URL",
+        "required": true,
+        "type": "string"
+      },
+      {
+        "key": "frame_interpolation",
+        "label": "Frame interpolation",
+        "required": false,
+        "type": "boolean",
+        "default": false
+      },
+      {
+        "key": "frame_interpolation_fps",
+        "label": "Frame interpolation fps",
+        "required": false,
+        "type": "integer",
+        "min": 15,
+        "max": 240,
+        "step": 1,
+        "default": 60
+      },
+      {
+        "key": "frame_interpolation_model",
+        "label": "Frame interpolation model",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "apo-8",
+            "value": "apo-8"
+          },
+          {
+            "label": "apf-2",
+            "value": "apf-2"
+          },
+          {
+            "label": "chr-2",
+            "value": "chr-2"
+          },
+          {
+            "label": "chf-3",
+            "value": "chf-3"
+          }
+        ],
+        "default": "apo-8"
+      },
+      {
+        "key": "frame_interpolation_slowmo",
+        "label": "Frame interpolation slowmo",
+        "required": false,
+        "type": "integer",
+        "min": 1,
+        "max": 16,
+        "step": 1,
+        "default": 1
+      },
+      {
+        "key": "frame_interpolation_fix_duplicate_frames",
+        "label": "Frame interpolation fix duplicate frames",
+        "required": false,
+        "type": "boolean",
+        "default": true
+      },
+      {
+        "key": "frame_interpolation_duplicate_sensitivity",
+        "label": "Frame interpolation duplicate sensitivity",
+        "required": false,
+        "type": "float",
+        "min": 0.001,
+        "max": 0.1,
+        "step": 0.01,
+        "default": 0.01
+      },
+      {
+        "key": "video_output_preset",
+        "label": "Video output preset",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "h264-high",
+            "value": "h264-high"
+          },
+          {
+            "label": "h265-main",
+            "value": "h265-main"
+          },
+          {
+            "label": "h265-main10",
+            "value": "h265-main10"
+          },
+          {
+            "label": "prores-422-proxy",
+            "value": "prores-422-proxy"
+          },
+          {
+            "label": "prores-422-lt",
+            "value": "prores-422-lt"
+          },
+          {
+            "label": "prores-422-std",
+            "value": "prores-422-std"
+          },
+          {
+            "label": "prores-422-hq",
+            "value": "prores-422-hq"
+          },
+          {
+            "label": "av1-8-bit",
+            "value": "av1-8-bit"
+          },
+          {
+            "label": "av1-10-bit",
+            "value": "av1-10-bit"
+          },
+          {
+            "label": "vp9-good",
+            "value": "vp9-good"
+          },
+          {
+            "label": "vp9-best",
+            "value": "vp9-best"
+          }
+        ],
+        "default": "h265-main10"
+      }
+    ],
+    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+  },
+  'krea-enhance-bytedance-seedvr-2': {
+    "id": "krea-enhance-bytedance-seedvr-2",
+    "displayName": "SeedVR 2 (Krea)",
+    "category": "transform",
+    "apiProvider": "krea",
+    "apiEndpoint": "/generate/enhance/bytedance/seedvr-2",
+    "envKeyName": "KREA_API_TOKEN",
+    "executionPattern": "async-poll",
+    "inputPorts": [
+      {
+        "id": "video_url",
+        "label": "Video URL",
+        "dataType": "Video",
+        "required": false
+      }
+    ],
+    "outputPorts": [
+      {
+        "id": "video",
+        "label": "Video",
+        "dataType": "Video",
+        "required": true
+      },
+      {
+        "id": "videos",
+        "label": "All videos",
+        "dataType": "Array",
+        "required": false
+      },
+      {
+        "id": "artifacts",
+        "label": "All artifacts",
+        "dataType": "Array",
+        "required": false
+      },
+      {
+        "id": "job",
+        "label": "Job",
+        "dataType": "Any",
+        "required": false
+      }
+    ],
+    "params": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "target_width",
+        "label": "Target width",
+        "required": false,
+        "type": "float",
+        "min": 1,
+        "max": 3840,
+        "step": 0.01
+      },
+      {
+        "key": "target_height",
+        "label": "Target height",
+        "required": false,
+        "type": "float",
+        "min": 1,
+        "max": 3840,
+        "step": 0.01
+      },
+      {
+        "key": "noise_scale",
+        "label": "Noise scale",
+        "required": false,
+        "type": "float",
+        "min": 0,
+        "max": 1,
+        "step": 0.01,
+        "default": 0.1
+      },
+      {
+        "key": "video_url",
+        "label": "Video URL",
+        "required": true,
+        "type": "string"
+      }
+    ],
+    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+  },
+  'krea-enhance-black-forest-labs-flux-video-upscale': {
+    "id": "krea-enhance-black-forest-labs-flux-video-upscale",
+    "displayName": "Flux Video Upscale (Krea)",
+    "category": "transform",
+    "apiProvider": "krea",
+    "apiEndpoint": "/generate/enhance/black-forest-labs/flux-video-upscale",
+    "envKeyName": "KREA_API_TOKEN",
+    "executionPattern": "async-poll",
+    "inputPorts": [
+      {
+        "id": "prompt",
+        "label": "Prompt",
+        "dataType": "Text",
+        "required": false
+      },
+      {
+        "id": "video_url",
+        "label": "Video URL",
+        "dataType": "Video",
+        "required": false
+      }
+    ],
+    "outputPorts": [
+      {
+        "id": "video",
+        "label": "Video",
+        "dataType": "Video",
+        "required": true
+      },
+      {
+        "id": "videos",
+        "label": "All videos",
+        "dataType": "Array",
+        "required": false
+      },
+      {
+        "id": "artifacts",
+        "label": "All artifacts",
+        "dataType": "Array",
+        "required": false
+      },
+      {
+        "id": "job",
+        "label": "Job",
+        "dataType": "Any",
+        "required": false
+      }
+    ],
+    "params": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "creativity",
+        "label": "Creativity",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "precise",
+            "value": "precise"
+          },
+          {
+            "label": "creative",
+            "value": "creative"
+          }
+        ],
+        "default": "creative"
+      },
+      {
+        "key": "upscale_factor",
+        "label": "Upscale factor",
+        "required": false,
+        "type": "float",
+        "min": 1.5,
+        "max": 3,
+        "step": 0.01,
+        "default": 2
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": false,
+        "type": "textarea"
+      },
+      {
+        "key": "video_url",
+        "label": "Video URL",
+        "required": true,
+        "type": "string"
+      }
+    ],
+    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+  },
+  'krea-enhance-runway-ruby': {
+    "id": "krea-enhance-runway-ruby",
+    "displayName": "Runway Ruby (Krea)",
+    "category": "transform",
+    "apiProvider": "krea",
+    "apiEndpoint": "/generate/enhance/runway/ruby",
+    "envKeyName": "KREA_API_TOKEN",
+    "executionPattern": "async-poll",
+    "inputPorts": [
+      {
+        "id": "video_url",
+        "label": "Video URL",
+        "dataType": "Video",
+        "required": false
+      }
+    ],
+    "outputPorts": [
+      {
+        "id": "video",
+        "label": "Video",
+        "dataType": "Video",
+        "required": true
+      },
+      {
+        "id": "videos",
+        "label": "All videos",
+        "dataType": "Array",
+        "required": false
+      },
+      {
+        "id": "artifacts",
+        "label": "All artifacts",
+        "dataType": "Array",
+        "required": false
+      },
+      {
+        "id": "job",
+        "label": "Job",
+        "dataType": "Any",
+        "required": false
+      }
+    ],
+    "params": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "output_format",
+        "label": "Output format",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "hdr10",
+            "value": "hdr10"
+          },
+          {
+            "label": "hlg",
+            "value": "hlg"
+          },
+          {
+            "label": "hdr_prores",
+            "value": "hdr_prores"
+          }
+        ],
+        "default": "hdr10"
+      },
+      {
+        "key": "video_url",
+        "label": "Video URL",
+        "required": true,
+        "type": "string"
+      },
+      {
+        "key": "prores_profile",
+        "label": "Prores profile",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "422",
+            "value": "422"
+          },
+          {
+            "label": "4444",
+            "value": "4444"
+          },
+          {
+            "label": "422 HQ",
+            "value": "422 HQ"
+          }
+        ]
+      }
+    ],
+    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+  },
+  'krea-3d-tencent-hunyuan3d-3-1-pro': {
+    "id": "krea-3d-tencent-hunyuan3d-3-1-pro",
+    "displayName": "Hunyuan3D 3.1 Pro (Krea)",
+    "category": "3d-gen",
+    "apiProvider": "krea",
+    "apiEndpoint": "/generate/3d/tencent/hunyuan3d-3.1-pro",
+    "envKeyName": "KREA_API_TOKEN",
+    "executionPattern": "async-poll",
+    "inputPorts": [
+      {
+        "id": "prompt",
+        "label": "Prompt",
+        "dataType": "Text",
+        "required": false
+      },
+      {
+        "id": "back_image_url",
+        "label": "Back image URL",
+        "dataType": "Image",
+        "required": false
+      },
+      {
+        "id": "left_image_url",
+        "label": "Left image URL",
+        "dataType": "Image",
+        "required": false
+      },
+      {
+        "id": "right_image_url",
+        "label": "Right image URL",
+        "dataType": "Image",
+        "required": false
+      },
+      {
+        "id": "top_image_url",
+        "label": "Top image URL",
+        "dataType": "Image",
+        "required": false
+      },
+      {
+        "id": "bottom_image_url",
+        "label": "Bottom image URL",
+        "dataType": "Image",
+        "required": false
+      },
+      {
+        "id": "left_front_image_url",
+        "label": "Left front image URL",
+        "dataType": "Image",
+        "required": false
+      },
+      {
+        "id": "right_front_image_url",
+        "label": "Right front image URL",
+        "dataType": "Image",
+        "required": false
+      },
+      {
+        "id": "image_urls",
+        "label": "Image URLs",
+        "dataType": "Image",
+        "required": false,
+        "multiple": true
+      }
+    ],
+    "outputPorts": [
+      {
+        "id": "mesh",
+        "label": "Mesh",
+        "dataType": "Mesh",
+        "required": true
+      },
+      {
+        "id": "meshes",
+        "label": "All meshes",
+        "dataType": "Array",
+        "required": false
+      },
+      {
+        "id": "artifacts",
+        "label": "All artifacts",
+        "dataType": "Array",
+        "required": false
+      },
+      {
+        "id": "job",
+        "label": "Job",
+        "dataType": "Any",
+        "required": false
+      }
+    ],
+    "params": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": false,
+        "type": "textarea"
+      },
+      {
+        "key": "seed",
+        "label": "Seed",
+        "required": false,
+        "type": "float",
+        "step": 0.01
+      },
+      {
+        "key": "input_mode",
+        "label": "Input mode",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "image",
+            "value": "image"
+          },
+          {
+            "label": "text",
+            "value": "text"
+          }
+        ],
+        "default": "image"
+      },
+      {
+        "key": "generate_texture",
+        "label": "Generate texture",
+        "required": false,
+        "type": "boolean",
+        "default": true
+      },
+      {
+        "key": "enable_pbr",
+        "label": "Enable pbr",
+        "required": false,
+        "type": "boolean"
+      },
+      {
+        "key": "face_count",
+        "label": "Face count",
+        "required": false,
+        "type": "float",
+        "min": 40000,
+        "max": 1500000,
+        "step": 0.01
+      },
+      {
+        "key": "back_image_url",
+        "label": "Back image URL",
+        "required": false,
+        "type": "string"
+      },
+      {
+        "key": "left_image_url",
+        "label": "Left image URL",
+        "required": false,
+        "type": "string"
+      },
+      {
+        "key": "right_image_url",
+        "label": "Right image URL",
+        "required": false,
+        "type": "string"
+      },
+      {
+        "key": "top_image_url",
+        "label": "Top image URL",
+        "required": false,
+        "type": "string"
+      },
+      {
+        "key": "bottom_image_url",
+        "label": "Bottom image URL",
+        "required": false,
+        "type": "string"
+      },
+      {
+        "key": "left_front_image_url",
+        "label": "Left front image URL",
+        "required": false,
+        "type": "string"
+      },
+      {
+        "key": "right_front_image_url",
+        "label": "Right front image URL",
+        "required": false,
+        "type": "string"
+      },
+      {
+        "key": "image_urls",
+        "label": "Image URLs (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model",
+        "default": "[]"
+      }
+    ],
+    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+  },
+  'krea-3d-microsoft-trellis-2': {
+    "id": "krea-3d-microsoft-trellis-2",
+    "displayName": "TRELLIS 2 (Krea)",
+    "category": "3d-gen",
+    "apiProvider": "krea",
+    "apiEndpoint": "/generate/3d/microsoft/trellis-2",
+    "envKeyName": "KREA_API_TOKEN",
+    "executionPattern": "async-poll",
+    "inputPorts": [
+      {
+        "id": "prompt",
+        "label": "Prompt",
+        "dataType": "Text",
+        "required": false
+      },
+      {
+        "id": "image_urls",
+        "label": "Image URLs",
+        "dataType": "Image",
+        "required": false,
+        "multiple": true
+      }
+    ],
+    "outputPorts": [
+      {
+        "id": "mesh",
+        "label": "Mesh",
+        "dataType": "Mesh",
+        "required": true
+      },
+      {
+        "id": "meshes",
+        "label": "All meshes",
+        "dataType": "Array",
+        "required": false
+      },
+      {
+        "id": "artifacts",
+        "label": "All artifacts",
+        "dataType": "Array",
+        "required": false
+      },
+      {
+        "id": "job",
+        "label": "Job",
+        "dataType": "Any",
+        "required": false
+      }
+    ],
+    "params": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": false,
+        "type": "textarea"
+      },
+      {
+        "key": "seed",
+        "label": "Seed",
+        "required": false,
+        "type": "float",
+        "step": 0.01
+      },
+      {
+        "key": "input_mode",
+        "label": "Input mode",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "image",
+            "value": "image"
+          },
+          {
+            "label": "text",
+            "value": "text"
+          }
+        ],
+        "default": "image"
+      },
+      {
+        "key": "generate_texture",
+        "label": "Generate texture",
+        "required": false,
+        "type": "boolean",
+        "default": true
+      },
+      {
+        "key": "resolution",
+        "label": "Resolution",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "512",
+            "value": "512"
+          },
+          {
+            "label": "1024",
+            "value": "1024"
+          },
+          {
+            "label": "1536",
+            "value": "1536"
+          }
+        ]
+      },
+      {
+        "key": "texture_size",
+        "label": "Texture size",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "1024",
+            "value": "1024"
+          },
+          {
+            "label": "2048",
+            "value": "2048"
+          },
+          {
+            "label": "4096",
+            "value": "4096"
+          }
+        ]
+      },
+      {
+        "key": "decimation_target",
+        "label": "Decimation target",
+        "required": false,
+        "type": "float",
+        "min": 100000,
+        "max": 2000000,
+        "step": 0.01
+      },
+      {
+        "key": "image_urls",
+        "label": "Image URLs (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model",
+        "default": "[]"
+      }
+    ],
+    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+  },
+  'krea-3d-tencent-hunyuan3d-2-1': {
+    "id": "krea-3d-tencent-hunyuan3d-2-1",
+    "displayName": "Hunyuan3D-2.1 (Krea)",
+    "category": "3d-gen",
+    "apiProvider": "krea",
+    "apiEndpoint": "/generate/3d/tencent/hunyuan3d-2.1",
+    "envKeyName": "KREA_API_TOKEN",
+    "executionPattern": "async-poll",
+    "inputPorts": [
+      {
+        "id": "prompt",
+        "label": "Prompt",
+        "dataType": "Text",
+        "required": false
+      },
+      {
+        "id": "image_urls",
+        "label": "Image URLs",
+        "dataType": "Image",
+        "required": false,
+        "multiple": true
+      }
+    ],
+    "outputPorts": [
+      {
+        "id": "mesh",
+        "label": "Mesh",
+        "dataType": "Mesh",
+        "required": true
+      },
+      {
+        "id": "meshes",
+        "label": "All meshes",
+        "dataType": "Array",
+        "required": false
+      },
+      {
+        "id": "artifacts",
+        "label": "All artifacts",
+        "dataType": "Array",
+        "required": false
+      },
+      {
+        "id": "job",
+        "label": "Job",
+        "dataType": "Any",
+        "required": false
+      }
+    ],
+    "params": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": false,
+        "type": "textarea"
+      },
+      {
+        "key": "seed",
+        "label": "Seed",
+        "required": false,
+        "type": "float",
+        "step": 0.01,
+        "default": 1337
+      },
+      {
+        "key": "input_mode",
+        "label": "Input mode",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "image",
+            "value": "image"
+          },
+          {
+            "label": "text",
+            "value": "text"
+          }
+        ],
+        "default": "image"
+      },
+      {
+        "key": "generate_texture",
+        "label": "Generate texture",
+        "required": false,
+        "type": "boolean",
+        "default": true
+      },
+      {
+        "key": "image_urls",
+        "label": "Image URLs (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model",
+        "default": "[]"
+      }
+    ],
+    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+  },
+  'krea-3d-tripo-tripo': {
+    "id": "krea-3d-tripo-tripo",
+    "displayName": "Tripo (Krea)",
+    "category": "3d-gen",
+    "apiProvider": "krea",
+    "apiEndpoint": "/generate/3d/tripo/tripo",
+    "envKeyName": "KREA_API_TOKEN",
+    "executionPattern": "async-poll",
+    "inputPorts": [
+      {
+        "id": "prompt",
+        "label": "Prompt",
+        "dataType": "Text",
+        "required": false
+      },
+      {
+        "id": "image_urls",
+        "label": "Image URLs",
+        "dataType": "Image",
+        "required": false,
+        "multiple": true
+      }
+    ],
+    "outputPorts": [
+      {
+        "id": "mesh",
+        "label": "Mesh",
+        "dataType": "Mesh",
+        "required": true
+      },
+      {
+        "id": "meshes",
+        "label": "All meshes",
+        "dataType": "Array",
+        "required": false
+      },
+      {
+        "id": "artifacts",
+        "label": "All artifacts",
+        "dataType": "Array",
+        "required": false
+      },
+      {
+        "id": "job",
+        "label": "Job",
+        "dataType": "Any",
+        "required": false
+      }
+    ],
+    "params": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": false,
+        "type": "textarea"
+      },
+      {
+        "key": "seed",
+        "label": "Seed",
+        "required": false,
+        "type": "float",
+        "step": 0.01
+      },
+      {
+        "key": "input_mode",
+        "label": "Input mode",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "image",
+            "value": "image"
+          },
+          {
+            "label": "text",
+            "value": "text"
+          }
+        ],
+        "default": "image"
+      },
+      {
+        "key": "generate_texture",
+        "label": "Generate texture",
+        "required": false,
+        "type": "boolean",
+        "default": true
+      },
+      {
+        "key": "image_urls",
+        "label": "Image URLs (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model",
+        "default": "[]"
+      }
+    ],
+    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+  },
+  'krea-3d-tripo-h3-1': {
+    "id": "krea-3d-tripo-h3-1",
+    "displayName": "Tripo H3.1 (Krea)",
+    "category": "3d-gen",
+    "apiProvider": "krea",
+    "apiEndpoint": "/generate/3d/tripo/h3.1",
+    "envKeyName": "KREA_API_TOKEN",
+    "executionPattern": "async-poll",
+    "inputPorts": [
+      {
+        "id": "prompt",
+        "label": "Prompt",
+        "dataType": "Text",
+        "required": false
+      },
+      {
+        "id": "image_urls",
+        "label": "Image URLs",
+        "dataType": "Image",
+        "required": false,
+        "multiple": true
+      }
+    ],
+    "outputPorts": [
+      {
+        "id": "mesh",
+        "label": "Mesh",
+        "dataType": "Mesh",
+        "required": true
+      },
+      {
+        "id": "meshes",
+        "label": "All meshes",
+        "dataType": "Array",
+        "required": false
+      },
+      {
+        "id": "artifacts",
+        "label": "All artifacts",
+        "dataType": "Array",
+        "required": false
+      },
+      {
+        "id": "job",
+        "label": "Job",
+        "dataType": "Any",
+        "required": false
+      }
+    ],
+    "params": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": false,
+        "type": "textarea"
+      },
+      {
+        "key": "seed",
+        "label": "Seed",
+        "required": false,
+        "type": "float",
+        "step": 0.01
+      },
+      {
+        "key": "input_mode",
+        "label": "Input mode",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "image",
+            "value": "image"
+          },
+          {
+            "label": "text",
+            "value": "text"
+          }
+        ],
+        "default": "image"
+      },
+      {
+        "key": "generate_texture",
+        "label": "Generate texture",
+        "required": false,
+        "type": "boolean",
+        "default": true
+      },
+      {
+        "key": "face_limit",
+        "label": "Face limit",
+        "required": false,
+        "type": "float",
+        "min": 1000,
+        "max": 2000000,
+        "step": 0.01
+      },
+      {
+        "key": "image_urls",
+        "label": "Image URLs (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model",
+        "default": "[]"
+      }
+    ],
+    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+  },
+  'krea-3d-hyper3d-rodin-2-5': {
+    "id": "krea-3d-hyper3d-rodin-2-5",
+    "displayName": "Rodin V2.5 (Krea)",
+    "category": "3d-gen",
+    "apiProvider": "krea",
+    "apiEndpoint": "/generate/3d/hyper3d/rodin-2.5",
+    "envKeyName": "KREA_API_TOKEN",
+    "executionPattern": "async-poll",
+    "inputPorts": [
+      {
+        "id": "prompt",
+        "label": "Prompt",
+        "dataType": "Text",
+        "required": false
+      },
+      {
+        "id": "image_urls",
+        "label": "Image URLs",
+        "dataType": "Image",
+        "required": false,
+        "multiple": true,
+        "maxConnections": 5
+      }
+    ],
+    "outputPorts": [
+      {
+        "id": "mesh",
+        "label": "Mesh",
+        "dataType": "Mesh",
+        "required": true
+      },
+      {
+        "id": "meshes",
+        "label": "All meshes",
+        "dataType": "Array",
+        "required": false
+      },
+      {
+        "id": "artifacts",
+        "label": "All artifacts",
+        "dataType": "Array",
+        "required": false
+      },
+      {
+        "id": "job",
+        "label": "Job",
+        "dataType": "Any",
+        "required": false
+      }
+    ],
+    "params": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": false,
+        "type": "textarea"
+      },
+      {
+        "key": "seed",
+        "label": "Seed",
+        "required": false,
+        "type": "float",
+        "step": 0.01
+      },
+      {
+        "key": "input_mode",
+        "label": "Input mode",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "image",
+            "value": "image"
+          },
+          {
+            "label": "text",
+            "value": "text"
+          }
+        ],
+        "default": "image"
+      },
+      {
+        "key": "generate_texture",
+        "label": "Generate texture",
+        "required": false,
+        "type": "boolean",
+        "default": true
+      },
+      {
+        "key": "image_urls",
+        "label": "Image URLs (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model",
+        "default": "[]"
+      }
+    ],
+    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+  },
+  'krea-3d-hyper3d-rodin-2-5-fast': {
+    "id": "krea-3d-hyper3d-rodin-2-5-fast",
+    "displayName": "Rodin V2.5 Fast (Krea)",
+    "category": "3d-gen",
+    "apiProvider": "krea",
+    "apiEndpoint": "/generate/3d/hyper3d/rodin-2.5-fast",
+    "envKeyName": "KREA_API_TOKEN",
+    "executionPattern": "async-poll",
+    "inputPorts": [
+      {
+        "id": "prompt",
+        "label": "Prompt",
+        "dataType": "Text",
+        "required": false
+      },
+      {
+        "id": "image_urls",
+        "label": "Image URLs",
+        "dataType": "Image",
+        "required": false,
+        "multiple": true,
+        "maxConnections": 5
+      }
+    ],
+    "outputPorts": [
+      {
+        "id": "mesh",
+        "label": "Mesh",
+        "dataType": "Mesh",
+        "required": true
+      },
+      {
+        "id": "meshes",
+        "label": "All meshes",
+        "dataType": "Array",
+        "required": false
+      },
+      {
+        "id": "artifacts",
+        "label": "All artifacts",
+        "dataType": "Array",
+        "required": false
+      },
+      {
+        "id": "job",
+        "label": "Job",
+        "dataType": "Any",
+        "required": false
+      }
+    ],
+    "params": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": false,
+        "type": "textarea"
+      },
+      {
+        "key": "seed",
+        "label": "Seed",
+        "required": false,
+        "type": "float",
+        "step": 0.01
+      },
+      {
+        "key": "input_mode",
+        "label": "Input mode",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "image",
+            "value": "image"
+          },
+          {
+            "label": "text",
+            "value": "text"
+          }
+        ],
+        "default": "image"
+      },
+      {
+        "key": "generate_texture",
+        "label": "Generate texture",
+        "required": false,
+        "type": "boolean",
+        "default": true
+      },
+      {
+        "key": "image_urls",
+        "label": "Image URLs (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model",
+        "default": "[]"
+      }
+    ],
+    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+  },
+  'krea-3d-tencent-hunyuan3d-3-1-rapid': {
+    "id": "krea-3d-tencent-hunyuan3d-3-1-rapid",
+    "displayName": "Hunyuan3D 3.1 Rapid (Krea)",
+    "category": "3d-gen",
+    "apiProvider": "krea",
+    "apiEndpoint": "/generate/3d/tencent/hunyuan3d-3.1-rapid",
+    "envKeyName": "KREA_API_TOKEN",
+    "executionPattern": "async-poll",
+    "inputPorts": [
+      {
+        "id": "prompt",
+        "label": "Prompt",
+        "dataType": "Text",
+        "required": false
+      },
+      {
+        "id": "image_urls",
+        "label": "Image URLs",
+        "dataType": "Image",
+        "required": false,
+        "multiple": true
+      }
+    ],
+    "outputPorts": [
+      {
+        "id": "mesh",
+        "label": "Mesh",
+        "dataType": "Mesh",
+        "required": true
+      },
+      {
+        "id": "meshes",
+        "label": "All meshes",
+        "dataType": "Array",
+        "required": false
+      },
+      {
+        "id": "artifacts",
+        "label": "All artifacts",
+        "dataType": "Array",
+        "required": false
+      },
+      {
+        "id": "job",
+        "label": "Job",
+        "dataType": "Any",
+        "required": false
+      }
+    ],
+    "params": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": false,
+        "type": "textarea"
+      },
+      {
+        "key": "input_mode",
+        "label": "Input mode",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "image",
+            "value": "image"
+          },
+          {
+            "label": "text",
+            "value": "text"
+          }
+        ],
+        "default": "image"
+      },
+      {
+        "key": "generate_texture",
+        "label": "Generate texture",
+        "required": false,
+        "type": "boolean",
+        "default": true
+      },
+      {
+        "key": "image_urls",
+        "label": "Image URLs (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model",
+        "default": "[]"
+      }
+    ],
+    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+  },
+  'krea-3d-meshy-meshy-7': {
+    "id": "krea-3d-meshy-meshy-7",
+    "displayName": "Meshy V7 (Krea)",
+    "category": "3d-gen",
+    "apiProvider": "krea",
+    "apiEndpoint": "/generate/3d/meshy/meshy-7",
+    "envKeyName": "KREA_API_TOKEN",
+    "executionPattern": "async-poll",
+    "inputPorts": [
+      {
+        "id": "prompt",
+        "label": "Prompt",
+        "dataType": "Text",
+        "required": false
+      },
+      {
+        "id": "image_urls",
+        "label": "Image URLs",
+        "dataType": "Image",
+        "required": false,
+        "multiple": true
+      }
+    ],
+    "outputPorts": [
+      {
+        "id": "mesh",
+        "label": "Mesh",
+        "dataType": "Mesh",
+        "required": true
+      },
+      {
+        "id": "meshes",
+        "label": "All meshes",
+        "dataType": "Array",
+        "required": false
+      },
+      {
+        "id": "artifacts",
+        "label": "All artifacts",
+        "dataType": "Array",
+        "required": false
+      },
+      {
+        "id": "job",
+        "label": "Job",
+        "dataType": "Any",
+        "required": false
+      }
+    ],
+    "params": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": false,
+        "type": "textarea"
+      },
+      {
+        "key": "seed",
+        "label": "Seed",
+        "required": false,
+        "type": "float",
+        "step": 0.01
+      },
+      {
+        "key": "input_mode",
+        "label": "Input mode",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "image",
+            "value": "image"
+          },
+          {
+            "label": "text",
+            "value": "text"
+          }
+        ],
+        "default": "image"
+      },
+      {
+        "key": "generate_texture",
+        "label": "Generate texture",
+        "required": false,
+        "type": "boolean",
+        "default": true
+      },
+      {
+        "key": "target_polycount",
+        "label": "Target polycount",
+        "required": false,
+        "type": "float",
+        "min": 100,
+        "max": 300000,
+        "step": 0.01
+      },
+      {
+        "key": "enable_pbr",
+        "label": "Enable pbr",
+        "required": false,
+        "type": "boolean"
+      },
+      {
+        "key": "image_urls",
+        "label": "Image URLs (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model",
+        "default": "[]"
+      }
+    ],
+    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+  },
+  'krea-3d-microsoft-trellis': {
+    "id": "krea-3d-microsoft-trellis",
+    "displayName": "TRELLIS (Krea)",
+    "category": "3d-gen",
+    "apiProvider": "krea",
+    "apiEndpoint": "/generate/3d/microsoft/trellis",
+    "envKeyName": "KREA_API_TOKEN",
+    "executionPattern": "async-poll",
+    "inputPorts": [
+      {
+        "id": "prompt",
+        "label": "Prompt",
+        "dataType": "Text",
+        "required": false
+      },
+      {
+        "id": "image_urls",
+        "label": "Image URLs",
+        "dataType": "Image",
+        "required": false,
+        "multiple": true
+      }
+    ],
+    "outputPorts": [
+      {
+        "id": "mesh",
+        "label": "Mesh",
+        "dataType": "Mesh",
+        "required": true
+      },
+      {
+        "id": "meshes",
+        "label": "All meshes",
+        "dataType": "Array",
+        "required": false
+      },
+      {
+        "id": "artifacts",
+        "label": "All artifacts",
+        "dataType": "Array",
+        "required": false
+      },
+      {
+        "id": "job",
+        "label": "Job",
+        "dataType": "Any",
+        "required": false
+      }
+    ],
+    "params": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": false,
+        "type": "textarea"
+      },
+      {
+        "key": "seed",
+        "label": "Seed",
+        "required": false,
+        "type": "float",
+        "step": 0.01
+      },
+      {
+        "key": "input_mode",
+        "label": "Input mode",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "image",
+            "value": "image"
+          },
+          {
+            "label": "text",
+            "value": "text"
+          }
+        ],
+        "default": "image"
+      },
+      {
+        "key": "generate_texture",
+        "label": "Generate texture",
+        "required": false,
+        "type": "boolean",
+        "default": true
+      },
+      {
+        "key": "texture_size",
+        "label": "Texture size",
+        "required": false,
+        "type": "float",
+        "step": 0.01
+      },
+      {
+        "key": "image_urls",
+        "label": "Image URLs (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model",
+        "default": "[]"
       }
     ],
     "docUrl": "docs/model-providers/krea/krea-gateway.md"
