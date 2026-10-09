@@ -36,6 +36,37 @@ def tool_value(result) -> Any:
     raise RuntimeError('Krea MCP returned no usable structured result')
 
 
+def _upload_asset_url(response: httpx.Response) -> str:
+    """Decode the MCP upload's raw URL or the legacy JSON asset object."""
+    from handlers.krea_gateway import _http_url
+
+    content_type = response.headers.get('content-type', '').split(';', 1)[0].strip().lower()
+    text = response.text.strip()
+    error = 'Krea asset upload returned no usable asset URL; no job was submitted'
+    if content_type == 'application/json' or (not content_type and text.startswith('{')):
+        try:
+            answer = response.json()
+        except ValueError:
+            raise RuntimeError(error) from None
+        if not isinstance(answer, dict):
+            raise RuntimeError(error)
+        asset_url = answer.get('image_url') or answer.get('asset_url') or answer.get('url')
+    elif content_type in {'', 'text/plain'}:
+        # get_upload_url promises an asset URL in the response body. The
+        # current signed upload returns that URL without a Content-Type.
+        asset_url = text
+    else:
+        raise RuntimeError(error)
+    try:
+        parsed = _http_url(asset_url)
+        if parsed.username is not None or parsed.password is not None:
+            raise ValueError('Asset URLs cannot contain userinfo')
+    except ValueError:
+        # Never surface a signed URL or provider response body in the error.
+        raise RuntimeError(error) from None
+    return asset_url
+
+
 class KreaTools:
     def __init__(self, session, tools):
         self.session = session
@@ -180,15 +211,15 @@ async def generate(node, body, model, assets, map_body, validate, emit, *, max_p
                             parsed = urlsplit(upload_url)
                         except (ValueError, TypeError, httpx.InvalidURL) as exc:
                             raise RuntimeError('Krea returned an invalid upload URL') from exc
-                        if url.scheme != 'https' or url.host != 'api.krea.ai' or parsed.username or parsed.password or url.port not in (None, 443) or not url.path.startswith('/public-api/assets/presigned/'):
+                        # The current MCP contract signs this exact route; retain
+                        # the older path-token route without allowing lookalikes.
+                        upload_path_allowed = (parsed.path == '/assets/presigned'
+                                               or parsed.path.startswith('/public-api/assets/presigned/'))
+                        if url.scheme != 'https' or url.host != 'api.krea.ai' or parsed.username is not None or parsed.password is not None or url.port not in (None, 443) or not upload_path_allowed:
                             raise RuntimeError('Krea returned an unexpected upload destination')
                         response = await client.post(upload_url, files={'file': asset})
                         _raise_for_krea_response(response, 'MCP asset upload')
-                        answer = response.json()
-                        from handlers.krea_gateway import _http_url
-                        asset_url = answer.get('image_url') or answer.get('asset_url') or answer.get('url')
-                        _http_url(asset_url)
-                        uploaded[value] = asset_url
+                        uploaded[value] = _upload_asset_url(response)
                     return uploaded[value]
                 body = await map_body(body, model, upload)
             validate(body, model['requestSchema'])

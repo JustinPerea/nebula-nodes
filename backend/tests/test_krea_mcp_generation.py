@@ -27,6 +27,7 @@ IMAGE_ID = 'krea-image-openai-gpt-image-2'
 MODEL_ID = 'image/openai/gpt-image-2'
 CDN = 'https://media.example.test/output.png'
 UPLOAD = 'https://api.krea.ai/public-api/assets/presigned/fixture'
+CURRENT_UPLOAD = 'https://api.krea.ai/assets/presigned?workspaceId=fixture-workspace&userId=fixture-user&sig=fixture-signature&exp=9999999999'
 
 
 def png():
@@ -47,6 +48,7 @@ def tool(name, properties=None, required=None):
 class Session:
     def __init__(self, jobs=None):
         self.calls = []
+        self.upload_url = UPLOAD
         self.jobs = jobs or [{'job_id': 'job-fixture', 'status': 'completed', 'result': {'urls': [CDN]}}]
         self.definitions = [
             tool('get_model_schema', {'model': {'type': 'string'}}, ['model']),
@@ -75,7 +77,7 @@ class Session:
                            'endpointPath': definition['endpoint'].removeprefix('/generate/'),
                            'inputSchema': definition['requestSchema'], 'outputSchemas': {}})
         if name == 'get_upload_url':
-            return result({'url': UPLOAD})
+            return result({'url': self.upload_url})
         if name == 'generate':
             return result({'job_id': 'job-fixture', 'job': {'status': 'queued'}})
         if name == 'get_job':
@@ -112,16 +114,26 @@ async def run(inputs=None, auth='mcp'):
 
 
 @pytest.mark.asyncio
-async def test_account_generation_uploads_local_artwork_and_saves_real_outputs(setup):
+@pytest.mark.parametrize('upload_url', [UPLOAD, CURRENT_UPLOAD])
+@pytest.mark.parametrize('upload_body,content_type', [
+    (b'{"image_url":"https://assets.krea.ai/source.png"}', 'application/json'),
+    (b'{"image_url":"https://assets.krea.ai/source.png"}', None),
+    (b'https://assets.krea.ai/source.png', None),
+    (b'https://assets.krea.ai/source.png\n', 'text/plain; charset=utf-8'),
+])
+async def test_account_generation_uploads_local_artwork_and_saves_real_outputs(setup, upload_url, upload_body, content_type):
     session, root = setup
+    session.upload_url = upload_url
     source = root / 'source.png'
     source.write_bytes(png())
     with respx.mock as router:
-        upload = router.post(UPLOAD).respond(200, json={'image_url': 'https://assets.krea.ai/source.png'})
+        upload = router.post(upload_url).respond(200, content=upload_body,
+                                                headers={'content-type': content_type} if content_type else {})
         download = router.get(CDN).respond(200, content=png(), headers={'content-type': 'image/png'})
         outputs = await run({'prompt': PortValueDict(type='Text', value='test artwork'),
                              'image_urls': PortValueDict(type='Image', value=str(source))})
         assert upload.call_count == download.call_count == 1
+        assert source.read_bytes() in upload.calls[0].request.content
         assert 'authorization' not in upload.calls[0].request.headers
         assert 'authorization' not in download.calls[0].request.headers
     calls = dict(session.calls)
@@ -192,20 +204,88 @@ async def test_cancellation_never_uses_a_reconnected_workspace(setup, monkeypatc
 
 
 @pytest.mark.asyncio
-async def test_malformed_upload_destination_never_receives_local_file(setup):
+@pytest.mark.parametrize('upload_url', [
+    'https://evil.test/upload',
+    'http://api.krea.ai/assets/presigned',
+    'https://api.krea.ai.evil.test/assets/presigned',
+    'https://api.krea.ai:8443/assets/presigned',
+    'https://fixture@api.krea.ai/assets/presigned',
+    'https://fixture:fixture@api.krea.ai/assets/presigned',
+    'https://@api.krea.ai/assets/presigned',
+    'https://:@api.krea.ai/assets/presigned',
+    'https://api.krea.ai/assets/presigned/fixture',
+    'https://api.krea.ai/assets/presigned-extra',
+    'https://api.krea.ai/other/assets/presigned',
+    'https://api.krea.ai/assets/%70resigned',
+])
+async def test_malformed_upload_destination_never_receives_local_file(setup, upload_url):
     session, root = setup
+    session.upload_url = upload_url
     source = root / 'source.png'
     source.write_bytes(png())
-    original = session.call_tool
-    async def malicious(name, arguments):
-        if name == 'get_upload_url':
-            return result({'url': 'https://evil.test/upload'})
-        return await original(name, arguments)
-    session.call_tool = malicious
-    with respx.mock:
+    with respx.mock as router:
         with pytest.raises(RuntimeError, match='upload destination'):
             await run({'prompt': PortValueDict(type='Text', value='fixture'),
                        'image_urls': PortValueDict(type='Image', value=str(source))})
+        assert not router.calls
+    assert not any(name == 'generate' for name, _ in session.calls)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('status', [302, 307, 308])
+async def test_upload_redirect_never_forwards_local_file_or_submits_job(setup, status):
+    session, root = setup
+    session.upload_url = CURRENT_UPLOAD
+    source = root / 'source.png'
+    source.write_bytes(png())
+    with respx.mock as router:
+        upload = router.post(CURRENT_UPLOAD).respond(status, headers={'location': 'https://evil.test/upload'})
+        redirect = router.route(host='evil.test').respond(200)
+        with pytest.raises(RuntimeError, match=f'MCP asset upload failed \\({status}\\)'):
+            await run({'prompt': PortValueDict(type='Text', value='fixture'),
+                       'image_urls': PortValueDict(type='Image', value=str(source))})
+        assert upload.call_count == 1
+        assert not redirect.calls
+    assert not any(name == 'generate' for name, _ in session.calls)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('status,content_type,body', [
+    (200, None, b''),
+    (204, None, b''),
+    (200, None, b'<html>private-provider-body</html>'),
+    (200, 'text/plain', b'<html>private-provider-body</html>'),
+    (200, 'text/html', b'https://assets.krea.ai/source.png'),
+    (200, 'application/json', b'https://assets.krea.ai/source.png?sig=private-provider-body'),
+    (200, 'application/json', b'{private-provider-body'),
+    (200, 'application/json', b'[]'),
+    (200, 'application/json', b'null'),
+    (200, 'application/json', b'{"message":"private-provider-body"}'),
+    (200, 'application/json', b'{"image_url":"javascript:private-provider-body"}'),
+    (200, None, b'https://assets.krea.ai/one.png\nhttps://assets.krea.ai/two.png'),
+    (200, 'text/plain', b'Uploaded: https://assets.krea.ai/source.png'),
+    (200, None, b'https://private-provider-body:private-provider-body@app-uploads.krea.ai/source.png'),
+    (200, None, b'https://private-provider-body@app-uploads.krea.ai/source.png'),
+    (200, None, b'https://:private-provider-body@app-uploads.krea.ai/source.png'),
+    (200, None, b'https://@app-uploads.krea.ai/source.png'),
+    (200, 'application/json', b'{"image_url":"https://private-provider-body:private-provider-body@app-uploads.krea.ai/source.png"}'),
+    (200, 'application/json', b'{"image_url":"https://private-provider-body@app-uploads.krea.ai/source.png"}'),
+    (200, 'application/json', b'{"image_url":"https://:private-provider-body@app-uploads.krea.ai/source.png"}'),
+    (200, 'application/json', b'{"image_url":"https://@app-uploads.krea.ai/source.png"}'),
+])
+async def test_unusable_upload_response_never_submits_or_exposes_body(setup, status, content_type, body):
+    session, root = setup
+    session.upload_url = CURRENT_UPLOAD
+    source = root / 'source.png'
+    source.write_bytes(png())
+    with respx.mock as router:
+        upload = router.post(CURRENT_UPLOAD).respond(status, content=body,
+            headers={'content-type': content_type} if content_type else {})
+        with pytest.raises(RuntimeError, match='no usable asset URL') as failure:
+            await run({'prompt': PortValueDict(type='Text', value='fixture'),
+                       'image_urls': PortValueDict(type='Image', value=str(source))})
+        assert upload.call_count == len(router.calls) == 1
+        assert 'private-provider-body' not in str(failure.value)
     assert not any(name == 'generate' for name, _ in session.calls)
 
 
