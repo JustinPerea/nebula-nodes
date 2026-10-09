@@ -1,5 +1,5 @@
 :root {
-  --workspace-rail-left: 16px;
+  --workspace-rail-left: 0px;
   --workspace-rail-top: 16px;
   --workspace-rail-bottom: 16px;
   --workspace-rail-width: 56px;
@@ -31,7 +31,7 @@
   content: '';
   position: absolute;
   z-index: -1;
-  inset: 0 6px;
+  inset: 0 12px 0 0;
   border: 1px solid rgba(255, 255, 255, 0.09);
   border-radius: 28px;
   background: rgba(24, 24, 26, 0.92);
@@ -53,6 +53,12 @@
   flex-direction: column;
   align-items: center;
   gap: 4px;
+  translate: -6px 0;
+  transition: translate 180ms ease;
+}
+
+.workspace-rail:is(:hover, :focus-within) .workspace-rail__group {
+  translate: 0;
 }
 
 .workspace-rail__item {
@@ -211,7 +217,7 @@ body.app-slava-restraint .workspace-rail__item--active:not(.workspace-rail__item
 
 @media (max-width: 700px) {
   :root {
-    --workspace-rail-left: 8px;
+    --workspace-rail-left: 0px;
     --workspace-rail-top: 8px;
     --workspace-rail-bottom: 8px;
     --workspace-rail-width: 48px;
@@ -224,6 +230,8 @@ body.app-slava-restraint .workspace-rail__item--active:not(.workspace-rail__item
   .workspace-rail::before {
     border-radius: 24px;
   }
+
+  .workspace-rail__item:focus-visible { outline-offset: -2px; }
 
   body .workspace-dock-panel.panel {
     top: 8px !important;
@@ -267,6 +275,7 @@ body.app-slava-restraint .workspace-rail__item--active:not(.workspace-rail__item
 
   /* A scrolling toolbar uses a full shell painted on the scroller itself. */
   .workspace-rail::before { display: none; }
+  .workspace-rail .workspace-rail__group { translate: none; }
   .workspace-rail__item:focus-visible { outline-offset: -2px; }
 
   /* Native titles and accessible names remain available when scrolling would
@@ -278,6 +287,7 @@ body.app-slava-restraint .workspace-rail__item--active:not(.workspace-rail__item
 @media (hover: none), (pointer: coarse) {
   .workspace-rail { padding-inline: 2px; }
   .workspace-rail::before { inset-inline: 0; }
+  .workspace-rail .workspace-rail__group { translate: none; }
   .workspace-rail .workspace-rail__item {
     width: 44px;
     height: 44px;
@@ -288,6 +298,7 @@ body.app-slava-restraint .workspace-rail__item--active:not(.workspace-rail__item
 
 @media (prefers-reduced-motion: reduce) {
   .workspace-rail::before,
+  .workspace-rail__group,
   .workspace-rail__icon,
   .workspace-rail__item,
   .workspace-rail__item::after {
