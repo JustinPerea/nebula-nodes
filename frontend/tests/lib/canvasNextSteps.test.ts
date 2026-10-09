@@ -34,12 +34,19 @@ describe('currentMediaSource', () => {
   it('rejects missing, empty, structured, and mismatched media output values', () => {
     const def = definition('image-result', 'image-gen', [], [port('image', 'Image')]);
     for (const outputs of [ {}, { image: { type: 'Image' as const, value: '' } },
+      { image: { type: 'Image' as const, value: '  \n ' } },
       { image: { type: 'Image' as const, value: { url: '/outputs/result.png' } } },
       { image: { type: 'Video' as const, value: '/outputs/result.mp4' } } ]) {
       expect(currentMediaSource(def, data(outputs))).toBeNull();
     }
     const text = definition('text-result', 'text-gen', [], [port('text', 'Text')]);
     expect(currentMediaSource(text, data({ text: { type: 'Text', value: 'A prompt' } }))).toBeNull();
+  });
+
+  it('rejects a displayed port type that no longer matches its canonical output', () => {
+    const def = definition('video-result', 'video-gen', [], [port('video', 'Video')]);
+    const live = data({ video: { type: 'Video', value: '/outputs/latest.mp4' } });
+    expect(currentMediaSource(def, live, { video: { type: 'Image', value: '/outputs/latest.mp4' } })).toBeNull();
   });
 });
 

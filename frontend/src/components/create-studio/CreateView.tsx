@@ -1,6 +1,7 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { WorkspaceHeader } from '../WorkspaceHeader';
+import { WorkspaceModeNavigation } from '../CanvasTabs';
 import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
 import { useCreateDraftStore, type CreateDraft, type CreateDraftSeed } from '../../store/createDraftStore';
@@ -302,7 +303,8 @@ export function CreateView() {
 
   return (
     <div className="create-view">
-      <WorkspaceHeader title="Create" onBack={exitCreateView} className="create-view__topbar">
+      <WorkspaceHeader title="Creator Studio" onBack={exitCreateView} className="create-view__topbar"
+        navigation={<WorkspaceModeNavigation />}>
         <button type="button" className="create-view__back" onClick={handleNewDraft}>New draft</button>
         {styleSaveError && <span className="create-view__save-error" role="alert">{styleSaveError}</span>}
         {generationError && <span className="create-view__run-error" role="alert">{generationError}</span>}

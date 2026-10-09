@@ -31,6 +31,7 @@ vi.mock('../../src/lib/backend', () => ({
 }));
 vi.mock('../../src/store/uiStore', () => {
   const state = {
+    viewMode: 'create', commonsEnabled: true,
     createSessionId: 'draft-session', settingsCache: { apiKeys: {}, kreaConnectionMode: 'api-token' },
     exitCreateView: mocks.exit, setLeftDock: mocks.dock,
     consumePendingPreset: () => { const preset = mocks.pendingPreset; mocks.pendingPreset = null; return preset; },
@@ -119,6 +120,9 @@ describe('Create draft integration', () => {
   it('resumes prompt, model, parameters, variations and ready references instead of replacing them with a later Canvas selection', async () => {
     selectCanvasRecipe('First Canvas recipe');
     const first = render(<CreateView />);
+    expect(first.getByRole('heading', { name: 'Creator Studio', level: 1 })).toBeInTheDocument();
+    expect(first.getAllByRole('navigation', { name: 'Workspace views' })).toHaveLength(1);
+    expect(first.getByRole('button', { name: 'Creator Studio', exact: true })).toHaveAttribute('aria-current', 'page');
     expect(first.getByRole('textbox', { name: 'Create prompt' })).toHaveValue('First Canvas recipe');
     fireEvent.change(first.getByLabelText('Create model'), { target: { value: 'gpt-image-2-generate' } });
     fireEvent.change(first.getByRole('textbox', { name: 'Create prompt' }), { target: { value: 'My unfinished logo study' } });

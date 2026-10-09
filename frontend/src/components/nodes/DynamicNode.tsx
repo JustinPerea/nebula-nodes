@@ -13,6 +13,7 @@ import { BatchCarousel } from './BatchCarousel';
 import { MeshPreview } from './MeshPreview';
 import { RepresentationViewer } from './RepresentationViewer';
 import { NodeError } from './NodeError';
+import { VideoEditAction } from './VideoEditAction';
 import '../../styles/nodes.css';
 
 function isDynamicData(data: NodeData): data is DynamicNodeData {
@@ -100,6 +101,7 @@ function DynamicNodeComponent({ id, data, selected }: NodeProps) {
           <span className="model-node__settings-model">
             {definition?.displayName ?? nodeData.label}
           </span>
+          <VideoEditAction id={id} data={nodeData} displayedOutputs={previewOutputs} />
           <button
             type="button"
             className="model-node__settings-edit nodrag"

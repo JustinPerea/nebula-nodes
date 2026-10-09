@@ -1,109 +1,135 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Node } from '@xyflow/react';
-import { CanvasTabs } from '../../src/components/CanvasTabs';
+import { CanvasTabs, WorkspaceModeNavigation } from '../../src/components/CanvasTabs';
+import { useCreateDraftStore } from '../../src/store/createDraftStore';
 import { useGraphStore } from '../../src/store/graphStore';
-import { useUIStore } from '../../src/store/uiStore';
+import { useUIStore, type ViewMode } from '../../src/store/uiStore';
 import type { NodeData } from '../../src/types';
 
 vi.mock('../../src/lib/wsClient', () => ({ wsClient: { connect: vi.fn(), subscribe: vi.fn() } }));
 const INITIAL_UI = useUIStore.getState();
 const INITIAL_GRAPH = useGraphStore.getState();
+const INITIAL_DRAFTS = useCreateDraftStore.getState();
 const execute = vi.fn();
+const author = vi.fn();
+const cancel = vi.fn();
 
-function source(outputs: NodeData['outputs'] = { video: { type: 'Video', value: '/api/outputs/synthetic.mp4' } }): Node<NodeData> {
+function source(): Node<NodeData> {
   return { id: 'selected-video', type: 'modelNode', position: { x: 10, y: 20 }, selected: true,
-    data: { label: 'Synthetic video', definitionId: 'runway-video', params: {}, state: 'complete', outputs } };
+    data: { label: 'Synthetic video', definitionId: 'runway-video', params: {}, state: 'complete',
+      outputs: { video: { type: 'Video', value: '/api/outputs/synthetic.mp4' } } } };
 }
 
 beforeEach(() => {
   vi.clearAllMocks();
-  useUIStore.setState({ ...INITIAL_UI, viewMode: 'canvas', selectedNodeId: 'selected-video', commonsEnabled: true }, true);
+  window.localStorage.clear();
+  useUIStore.setState({ ...INITIAL_UI, viewMode: 'canvas', selectedNodeId: 'selected-video',
+    createSessionId: null, commonsEnabled: true }, true);
   useGraphStore.setState({ ...INITIAL_GRAPH, nodes: [source()], edges: [], isImportingGraph: false,
-    activeRuns: [], isExecuting: false, executeGraph: execute }, true);
+    activeRuns: [], isExecuting: false, executeGraph: execute, authorGenerationCluster: author,
+    cancelRun: cancel, cancelCreateGeneration: cancel }, true);
+  useCreateDraftStore.setState({ drafts: {} });
 });
-afterEach(() => { cleanup(); useUIStore.setState(INITIAL_UI, true); useGraphStore.setState(INITIAL_GRAPH, true); });
+afterEach(() => {
+  cleanup();
+  useUIStore.setState(INITIAL_UI, true);
+  useGraphStore.setState(INITIAL_GRAPH, true);
+  useCreateDraftStore.setState(INITIAL_DRAFTS, true);
+});
 
-describe('Canvas video editing action', () => {
-  it('opens an editor for the exact selected video only after explicit activation, retaining history', () => {
-    const history = useGraphStore.getState().runHistory;
+describe('Canvas and Creator Studio navigation', () => {
+  it('shows one current Canvas heading and the two workspace choices without global video editing', () => {
     render(<CanvasTabs />);
-    const edit = screen.getByRole('button', { name: 'Edit selected video' });
-    expect(edit).toBeEnabled();
-    expect(useGraphStore.getState().nodes).toHaveLength(1);
+    expect(screen.getAllByRole('heading', { name: 'Canvas', level: 1 })).toHaveLength(1);
+    expect(screen.getAllByRole('navigation', { name: 'Workspace views' })).toHaveLength(1);
+    expect(screen.getByRole('button', { name: 'Canvas', exact: true })).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByRole('button', { name: 'Creator Studio', exact: true })).not.toHaveAttribute('aria-current');
+    expect(screen.queryByText('Edit video')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Edit selected video' })).not.toBeInTheDocument();
+  });
+
+  it('switches both ways while preserving the saved draft, graph, selection, running jobs and history', () => {
+    useUIStore.setState({ createSessionId: 'kept-session' });
+    useGraphStore.setState({
+      activeRuns: [{ id: 'accepted-job', kind: 'graph', nodeIds: ['selected-video'], status: 'running' }],
+      createLaunchingIds: ['preparing-job'],
+      runHistory: [{ id: 'accepted-job', trigger: 'cluster', startedAt: 1, status: 'running',
+        snapshot: { nodes: [], edges: [] }, createOrigin: { sessionId: 'kept-session', genId: 'generation',
+          prompt: 'Earlier saved recipe', ts: 1, modelNodeIds: ['selected-video'], allNodeIds: ['selected-video'] } }],
+    });
+    const draft = useCreateDraftStore.getState().getOrCreateDraft('kept-session', {
+      modelId: 'nano-banana', prompt: 'Unfinished logo recipe', params: { seed: 42 }, quantity: 2,
+      refs: [{ filePath: '/api/outputs/reference.png', previewUrl: '/api/outputs/reference.png' }],
+    });
+    const graphBefore = useGraphStore.getState();
+    render(<WorkspaceModeNavigation />);
+    fireEvent.click(screen.getByRole('button', { name: 'Creator Studio', exact: true }));
+    expect(useUIStore.getState()).toMatchObject({ viewMode: 'create', createSessionId: 'kept-session', selectedNodeId: 'selected-video' });
+    expect(screen.getByRole('button', { name: 'Creator Studio', exact: true })).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByRole('button', { name: 'Canvas', exact: true })).not.toHaveAttribute('aria-current');
+    fireEvent.click(screen.getByRole('button', { name: 'Canvas', exact: true }));
+    expect(useUIStore.getState()).toMatchObject({ viewMode: 'canvas', createSessionId: 'kept-session', selectedNodeId: 'selected-video' });
+    expect(useCreateDraftStore.getState().drafts['kept-session']).toBe(draft);
+    const graphAfter = useGraphStore.getState();
+    for (const key of ['nodes', 'edges', 'runHistory', 'activeRuns', 'createLaunchingIds'] as const) {
+      expect(graphAfter[key]).toBe(graphBefore[key]);
+    }
+    expect(execute).not.toHaveBeenCalled();
+    expect(author).not.toHaveBeenCalled();
+    expect(cancel).not.toHaveBeenCalled();
+  });
+
+  it('does nothing when activating the current mode', () => {
+    render(<WorkspaceModeNavigation />);
+    fireEvent.click(screen.getByRole('button', { name: 'Canvas', exact: true }));
+    expect(useUIStore.getState().createSessionId).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Creator Studio', exact: true }));
+    const sessionId = useUIStore.getState().createSessionId;
+    expect(sessionId).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Creator Studio', exact: true }));
+    expect(useUIStore.getState().createSessionId).toBe(sessionId);
+    expect(execute).not.toHaveBeenCalled();
+    expect(author).not.toHaveBeenCalled();
+  });
+
+  it('preserves the same navigation semantics during graph replacement without creating nodes', () => {
+    useGraphStore.setState({ isImportingGraph: true });
+    const before = useGraphStore.getState().nodes;
+    render(<WorkspaceModeNavigation />);
+    fireEvent.click(screen.getByRole('button', { name: 'Creator Studio', exact: true }));
+    fireEvent.click(screen.getByRole('button', { name: 'Canvas', exact: true }));
     expect(useUIStore.getState().viewMode).toBe('canvas');
-    fireEvent.click(edit);
-    const graph = useGraphStore.getState();
-    expect(useUIStore.getState().viewMode).toBe('editor');
-    expect(graph.nodes).toHaveLength(2);
-    expect(graph.edges).toEqual([expect.objectContaining({ source: 'selected-video', sourceHandle: 'video',
-      target: useUIStore.getState().editorTargetNodeId, targetHandle: 'video_in' })]);
-    expect(graph.runHistory).toBe(history);
+    expect(useGraphStore.getState().nodes).toBe(before);
+    expect(useGraphStore.getState().isImportingGraph).toBe(true);
+    expect(author).not.toHaveBeenCalled();
     expect(execute).not.toHaveBeenCalled();
   });
 
-  it.each([
-    {},
-    { video: { type: 'Video', value: '' } },
-    { video: { type: 'Video', value: '  \n ' } },
-    { video: { type: 'Image', value: '/wrong-type.png' } },
-    { video: { type: 'Video', value: 12 } },
-    { video: { type: 'Video', value: ['/multiple.mp4'] } },
-    { unrelated: { type: 'Video', value: '/unconnected.mp4' } },
-  ] as NodeData['outputs'][])('requires the declared port to contain one real nonblank Video URL: %j', (outputs) => {
-    useGraphStore.setState({ nodes: [source(outputs)] });
-    render(<CanvasTabs />);
-    const edit = screen.getByRole('button', { name: 'Edit selected video' });
-    expect(edit).toBeDisabled();
-    expect(edit).toHaveAttribute('title', 'The selected node has no video result to edit');
-    fireEvent.click(edit);
-    expect(useUIStore.getState().viewMode).toBe('canvas');
-    expect(useGraphStore.getState().nodes).toHaveLength(1);
+  it('rechecks current workspace before acting on a stale activation', () => {
+    render(<WorkspaceModeNavigation />);
+    const create = screen.getByRole('button', { name: 'Creator Studio', exact: true });
+    create.addEventListener('click', () => useUIStore.setState({ viewMode: 'editor' }), { capture: true, once: true });
+    fireEvent.click(create);
+    expect(useUIStore.getState().viewMode).toBe('editor');
+    expect(useUIStore.getState().createSessionId).toBeNull();
+    expect(author).not.toHaveBeenCalled();
   });
 
-  it.each(['idle', 'executing', 'error'] as const)('keeps incomplete video sources unavailable: %s', (state) => {
-    const pending = source(); pending.data.state = state;
-    useGraphStore.setState({ nodes: [pending] });
-    render(<CanvasTabs />);
-    expect(screen.getByRole('button', { name: 'Edit selected video' })).toBeDisabled();
-  });
-
-  it('disables editing during graph replacement and resumes when replacement ownership is released', () => {
-    render(<CanvasTabs />);
-    act(() => useGraphStore.setState({ isImportingGraph: true }));
-    const edit = screen.getByRole('button', { name: 'Edit selected video' });
-    expect(edit).toBeDisabled();
-    expect(edit).toHaveAttribute('title', 'Wait for the graph import to finish');
-    fireEvent.click(edit);
-    expect(useGraphStore.getState().nodes).toHaveLength(1);
-    act(() => useGraphStore.setState({ isImportingGraph: false }));
-    expect(edit).toBeEnabled();
-  });
-
-  it.each(['selection', 'source', 'output', 'ownership', 'navigation'] as const)(
-    'rechecks current %s during activation before creating an edit node', (change) => {
-      render(<CanvasTabs />);
-      const edit = screen.getByRole('button', { name: 'Edit selected video' });
-      edit.addEventListener('click', () => {
-        if (change === 'selection') useUIStore.setState({ selectedNodeId: null });
-        else if (change === 'source') useGraphStore.setState({ nodes: [] });
-        else if (change === 'output') useGraphStore.setState({ nodes: [source({})] });
-        else if (change === 'ownership') useGraphStore.setState({ isImportingGraph: true });
-        else useUIStore.setState({ viewMode: 'create' });
-      }, { capture: true, once: true });
-      fireEvent.click(edit);
-      expect(useUIStore.getState().editorTargetNodeId).toBeNull();
-      expect(useUIStore.getState().viewMode).toBe(change === 'navigation' ? 'create' : 'canvas');
-      expect(useGraphStore.getState().nodes.some((node) => node.data.definitionId === 'video-edit')).toBe(false);
-      expect(execute).not.toHaveBeenCalled();
-    },
-  );
-
-  it('uses disabled Commons as the visible Canvas fallback and reacts when Commons becomes available', () => {
+  it('uses disabled Commons as Canvas and reacts when Commons becomes available', () => {
     useUIStore.setState({ viewMode: 'commons', commonsEnabled: false });
     render(<CanvasTabs />);
     expect(screen.getByRole('heading', { name: 'Canvas' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Canvas', exact: true })).toHaveAttribute('aria-current', 'page');
     act(() => useUIStore.setState({ commonsEnabled: true }));
-    expect(screen.queryByRole('button', { name: 'Edit selected video' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: 'Workspace views' })).not.toBeInTheDocument();
   });
+
+  it.each<ViewMode>(['editor', 'remotion-editor', 'cinema-editor', 'character-editor', 'moodboard-editor', 'commons', 'brand-showcase'])(
+    'keeps workspace navigation outside the %s editor', (viewMode) => {
+      useUIStore.setState({ viewMode });
+      render(<WorkspaceModeNavigation />);
+      expect(screen.queryByRole('navigation', { name: 'Workspace views' })).not.toBeInTheDocument();
+    },
+  );
 });

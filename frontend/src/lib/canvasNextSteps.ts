@@ -5,14 +5,14 @@ export type NextStepIntent = 'all' | 'edit-image' | 'image-to-video';
 export interface CompatibleStep { definition: ModelNodeDefinition; matchingPortId: string; matchingPortLabel: string }
 
 /** A graph edge reads the canonical output, never a batch preview's alternate. */
-export function currentMediaSource(definition: ModelNodeDefinition, data: NodeData,
+export function currentMediaSource(definition: Pick<ModelNodeDefinition, 'outputPorts'>, data: NodeData,
   displayedOutputs = data.outputs) {
   if (data.state !== 'complete') return null;
   for (const port of definition.outputPorts) {
     if (port.dataType !== 'Image' && port.dataType !== 'Video') continue;
     const output = data.outputs[port.id];
-    if (output?.type === port.dataType && typeof output.value === 'string' && output.value
-      && displayedOutputs[port.id]?.value === output.value) {
+    if (output?.type === port.dataType && typeof output.value === 'string' && output.value.trim()
+      && displayedOutputs[port.id]?.type === port.dataType && displayedOutputs[port.id]?.value === output.value) {
       return { handleId: port.id, dataType: port.dataType, value: output.value };
     }
   }

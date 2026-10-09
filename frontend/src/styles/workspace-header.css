@@ -30,6 +30,19 @@ body.app-slava-restraint .workspace-header__title {
   color: var(--sr-ink);
   overflow-wrap: anywhere;
 }
+/* The current navigation label supplies the visible identity; retain one
+   focusable page heading for workspace transitions and assistive technology. */
+body.app-slava-restraint .workspace-header__navigation-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
 body.app-slava-restraint .workspace-header__actions {
   display: flex;
   align-items: center;
@@ -57,6 +70,11 @@ body.app-slava-restraint .workspace-header__back {
 body.app-slava-restraint .workspace-header__back:hover:not(:disabled) {
   background: var(--sr-surface-control-hover);
   border-color: var(--sr-edge-strong);
+}
+body.app-slava-restraint .workspace-header__back--navigation {
+  justify-content: center;
+  width: 32px;
+  padding: 5px;
 }
 body.app-slava-restraint .workspace-header__back:disabled {
   cursor: not-allowed;

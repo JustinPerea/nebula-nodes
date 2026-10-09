@@ -19,6 +19,7 @@ import { BatchCarousel } from './BatchCarousel';
 import { MeshPreview } from './MeshPreview';
 import { RepresentationViewer } from './RepresentationViewer';
 import { NodeError } from './NodeError';
+import { VideoEditAction } from './VideoEditAction';
 import { BeforeAfterSlider } from './BeforeAfterSlider';
 import { downloadWorldAsset } from '../../lib/worldDownload';
 import '../../styles/nodes.css';
@@ -284,6 +285,7 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
       {isNodeSelected && (
         <div className="model-node__settings-bar">
           <span className="model-node__settings-model">{definition.displayName}</span>
+          <VideoEditAction id={id} data={nodeData} displayedOutputs={previewOutputs} />
           {hasMediaPreview && <button type="button"
             className="model-node__next-step nodrag"
             data-next-step-anchor={id}

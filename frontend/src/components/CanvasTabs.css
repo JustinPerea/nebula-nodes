@@ -23,6 +23,17 @@
   pointer-events: auto;
 }
 
+.canvas-tabs__views {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+body.app-slava-restraint .workspace-header.workspace-header--canvas:has(.canvas-tabs__views) {
+  padding: 4px;
+}
+
 .canvas-tabs__btn {
   display: flex;
   align-items: center;

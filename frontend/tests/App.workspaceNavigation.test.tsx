@@ -33,7 +33,12 @@ vi.mock('../src/components/panels/Toolbar', () => ({ Toolbar: () => <button>Canv
 vi.mock('../src/components/panels/AgentLog', () => ({ AgentLog: () => null }));
 vi.mock('../src/components/panels/Settings', () => ({ Settings: () => null }));
 vi.mock('../src/components/panels/ChatPanel', () => ({ ChatPanel: () => null }));
-vi.mock('../src/components/create-studio/CreateView', () => ({ CreateView: () => <div data-testid="studio">Create fixture</div> }));
+vi.mock('../src/components/create-studio/CreateView', async () => {
+  const { WorkspaceHeader } = await import('../src/components/WorkspaceHeader');
+  const { WorkspaceModeNavigation } = await import('../src/components/CanvasTabs');
+  return { CreateView: () => <div data-testid="studio"><WorkspaceHeader title="Creator Studio"
+    navigation={<WorkspaceModeNavigation />} />Create fixture</div> };
+});
 vi.mock('../src/components/cinema-studio/CinemaStudioView', () => ({ CinemaStudioView: () => <div data-testid="studio">Cinema fixture</div> }));
 vi.mock('../src/components/character-studio/CharacterStudioView', () => ({ CharacterStudioView: () => <div data-testid="studio">Character fixture</div> }));
 vi.mock('../src/components/moodboard-studio/MoodboardStudioView', () => ({ MoodboardStudioView: () => <div data-testid="studio">Moodboard fixture</div> }));
@@ -55,11 +60,19 @@ afterEach(() => { cleanup(); useUIStore.setState(initialUI, true); useGraphStore
 it.each<ViewMode>(['create', 'cinema-editor', 'character-editor', 'moodboard-editor', 'remotion-editor', 'editor', 'commons'])('removes covered Canvas controls from the DOM in %s and restores them on return', async (viewMode) => {
   render(<App />);
   expect(screen.getByRole('heading', { name: 'Canvas', level: 1 })).toBeTruthy();
-  expect(screen.getByRole('button', { name: 'Edit selected video' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Canvas', exact: true })).toHaveAttribute('aria-current', 'page');
+  expect(screen.getByRole('button', { name: 'Creator Studio', exact: true })).toBeEnabled();
+  expect(screen.queryByRole('button', { name: 'Edit selected video' })).toBeNull();
   act(() => useUIStore.setState({ viewMode }));
   await screen.findByTestId('studio');
   expect(screen.queryByRole('heading', { name: 'Canvas' })).toBeNull();
   expect(screen.queryByRole('button', { name: 'Edit selected video' })).toBeNull();
+  if (viewMode === 'create') {
+    expect(screen.getByRole('heading', { name: 'Creator Studio', level: 1 })).toBeTruthy();
+    expect(screen.getAllByRole('navigation', { name: 'Workspace views' })).toHaveLength(1);
+    expect(screen.getByRole('button', { name: 'Creator Studio', exact: true })).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByRole('button', { name: 'Canvas', exact: true })).toBeEnabled();
+  } else expect(screen.queryByRole('navigation', { name: 'Workspace views' })).toBeNull();
   expect(screen.queryByRole('button', { name: 'Canvas run fixture' })).toBeNull();
   expect(screen.queryByRole('button', { name: 'Canvas dock fixture' })).toBeNull();
   act(() => useUIStore.setState({ viewMode: 'canvas' }));

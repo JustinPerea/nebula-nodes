@@ -70,7 +70,7 @@ describe('Commons backend capability', () => {
     expect(commons.workerStart).not.toHaveBeenCalled();
     expect(commons.workerStop).not.toHaveBeenCalled();
     expect(screen.getAllByRole('heading', { name: 'Commons', level: 1 })).toHaveLength(1);
-    fireEvent.click(screen.getByRole('button', { name: `Back to ${viewMode === 'create' ? 'Create' : 'Canvas'}` }));
+    fireEvent.click(screen.getByRole('button', { name: `Back to ${viewMode === 'create' ? 'Creator Studio' : 'Canvas'}` }));
     expect(useUIStore.getState().viewMode).toBe(viewMode);
     expect(await screen.findByRole('button', { name: 'Open Commons' })).toBeTruthy();
   });
