@@ -11,7 +11,7 @@
 .workspace-rail {
   position: fixed;
   z-index: 12;
-  top: var(--workspace-rail-top);
+  top: 50dvh;
   left: var(--workspace-rail-left);
   display: flex;
   width: var(--workspace-rail-width);
@@ -21,12 +21,29 @@
   gap: 4px;
   max-height: calc(100dvh - var(--workspace-rail-top) - var(--workspace-rail-bottom));
   padding: 7px 6px;
+  transform: translateY(-50%);
+  isolation: isolate;
+}
+
+/* Keep the full navigation footprint reserved for drawers and pinned inspectors.
+   Only its visible shell expands, so rows and adjacent panels stay in place. */
+.workspace-rail::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset: 0 6px;
   border: 1px solid rgba(255, 255, 255, 0.09);
   border-radius: 28px;
   background: rgba(24, 24, 26, 0.92);
   box-shadow: 0 12px 36px rgba(0, 0, 0, 0.48);
   backdrop-filter: blur(22px) saturate(135%);
   -webkit-backdrop-filter: blur(22px) saturate(135%);
+  transition: inset 180ms ease;
+  pointer-events: none;
+}
+
+.workspace-rail:is(:hover, :focus-within)::before {
+  inset-inline: 0;
 }
 
 .workspace-rail__group {
@@ -41,9 +58,10 @@
 .workspace-rail__item {
   position: relative;
   display: inline-grid;
-  width: 44px;
-  height: 44px;
-  flex: 0 0 44px;
+  width: 36px;
+  max-width: 100%;
+  height: 36px;
+  flex: 0 0 36px;
   place-items: center;
   padding: 0;
   border: 1px solid transparent;
@@ -51,7 +69,20 @@
   background: transparent;
   color: rgba(255, 255, 255, 0.55);
   cursor: pointer;
-  transition: color 120ms ease, background-color 120ms ease, border-color 120ms ease, transform 80ms ease;
+  transition: width 180ms ease, color 120ms ease, background-color 120ms ease, border-color 120ms ease, transform 80ms ease;
+}
+
+.workspace-rail:is(:hover, :focus-within) .workspace-rail__item {
+  width: 44px;
+}
+
+.workspace-rail__icon {
+  transform: scale(0.9);
+  transition: transform 180ms ease;
+}
+
+.workspace-rail:is(:hover, :focus-within) .workspace-rail__icon {
+  transform: scale(1);
 }
 
 .workspace-rail__item:hover,
@@ -147,7 +178,7 @@ body .workspace-dock-panel .panel__header {
   cursor: default;
 }
 
-body.app-slava-restraint .workspace-rail {
+body.app-slava-restraint .workspace-rail::before {
   border-color: var(--sr-edge, rgba(255, 255, 255, 0.09));
   background: var(--sr-glass-raised, rgba(28, 28, 31, 0.78));
   box-shadow: var(--sr-shadow-panel, 0 12px 36px rgba(0, 0, 0, 0.55));
@@ -188,15 +219,10 @@ body.app-slava-restraint .workspace-rail__item--active:not(.workspace-rail__item
     --workspace-dock-width: calc(100vw - var(--workspace-dock-left) - 8px);
   }
 
-  .workspace-rail {
-    padding: 5px 3px;
-    border-radius: 24px;
-  }
+  .workspace-rail { padding: 5px 3px; }
 
-  .workspace-rail__item {
-    width: 40px;
-    height: 40px;
-    flex-basis: 40px;
+  .workspace-rail::before {
+    border-radius: 24px;
   }
 
   body .workspace-dock-panel.panel {
@@ -220,16 +246,10 @@ body.app-slava-restraint .workspace-rail__item--active:not(.workspace-rail__item
 
   .workspace-rail__group { gap: 2px; }
 
-  .workspace-rail__item {
-    width: 40px;
-    height: 40px;
-    flex-basis: 40px;
-  }
-
   .workspace-rail__divider { margin: 3px 0; }
 }
 
-@media (max-height: 378px) {
+@media (max-height: 378px), (hover: none) and (max-height: 450px), (pointer: coarse) and (max-height: 450px) {
   :root { --workspace-rail-width: 56px; }
 
   .workspace-rail {
@@ -237,14 +257,38 @@ body.app-slava-restraint .workspace-rail__item--active:not(.workspace-rail__item
     overflow-y: auto;
     overscroll-behavior: contain;
     scrollbar-width: thin;
+    border: 1px solid var(--sr-edge, rgba(255, 255, 255, 0.09));
+    border-radius: 28px;
+    background: var(--sr-glass-raised, rgba(24, 24, 26, 0.92));
+    box-shadow: var(--sr-shadow-panel, 0 12px 36px rgba(0, 0, 0, 0.48));
+    backdrop-filter: var(--sr-blur-panel, blur(22px) saturate(135%));
+    -webkit-backdrop-filter: var(--sr-blur-panel, blur(22px) saturate(135%));
   }
+
+  /* A scrolling toolbar uses a full shell painted on the scroller itself. */
+  .workspace-rail::before { display: none; }
+  .workspace-rail__item:focus-visible { outline-offset: -2px; }
 
   /* Native titles and accessible names remain available when scrolling would
      clip the custom labels outside the rail. Focus scrolls each action into view. */
   .workspace-rail__item::after { display: none; }
 }
 
+/* Touch has no hover affordance. Keep the shell open and targets large. */
+@media (hover: none), (pointer: coarse) {
+  .workspace-rail { padding-inline: 2px; }
+  .workspace-rail::before { inset-inline: 0; }
+  .workspace-rail .workspace-rail__item {
+    width: 44px;
+    height: 44px;
+    flex-basis: 44px;
+  }
+  .workspace-rail__icon { transform: none; }
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .workspace-rail::before,
+  .workspace-rail__icon,
   .workspace-rail__item,
   .workspace-rail__item::after {
     transition: none;
