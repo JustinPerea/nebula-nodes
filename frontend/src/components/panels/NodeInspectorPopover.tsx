@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom';
 import { Pin, X } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import { Inspector } from './Inspector';
+import { ScrollFade } from '../ScrollFade';
 
 const POPOVER_GAP = 10;
 const POPOVER_WIDTH = 260;
@@ -326,9 +327,9 @@ export function NodeInspectorPopover() {
           </button>
         </div>
       </div>
-      <div className="node-inspector-popover__body">
+      <ScrollFade className="node-inspector-popover__body">
         <Inspector embedded />
-      </div>
+      </ScrollFade>
     </div>,
     document.body,
   );

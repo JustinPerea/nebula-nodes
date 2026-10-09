@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Activity, ChevronUp } from 'lucide-react';
 import { useGraphStore } from '../../store/graphStore';
 import { useUIStore } from '../../store/uiStore';
+import { ScrollFade } from '../ScrollFade';
 import {
   normalizeAgentEventSource,
   type AgentEventSource,
@@ -368,7 +369,7 @@ export function AgentLog() {
         </button>
       </div>
       {open && (
-        <div className="agent-log__body">
+        <ScrollFade className="agent-log__body">
           {entries.length === 0 ? (
             <div className="agent-log__empty">
               <span className="agent-log__empty-grid" aria-hidden="true" />
@@ -393,7 +394,7 @@ export function AgentLog() {
               ))}
             </ul>
           )}
-        </div>
+        </ScrollFade>
       )}
     </div>
   );

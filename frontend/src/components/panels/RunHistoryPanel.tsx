@@ -5,6 +5,7 @@ import { useGraphStore } from '../../store/graphStore';
 import { useDelayedUnmount } from '../../hooks/useDelayedUnmount';
 import { PaperRunInspection } from './PaperRunInspection';
 import { BatchRunInspection } from './BatchRunInspection';
+import { ScrollFade } from '../ScrollFade';
 import type { PaperSourceRecord } from '../../lib/paperSource';
 import {
   formatRunAge,
@@ -128,7 +129,7 @@ export function RunHistoryPanel() {
         </div>
       </div>
 
-      <div className="panel__body panel__body--history">
+      <ScrollFade className="panel__body panel__body--history">
         {providerRecoveries.length > 0 && (
           <section className="run-history__safeguards" aria-label="World Labs recovery safeguards">
             <div className="run-history__safeguards-title">World Labs recovery safeguards</div>
@@ -168,7 +169,7 @@ export function RunHistoryPanel() {
         {runHistory.length === 0 ? (
           <div className="run-history__empty">No saved runs yet.</div>
         ) : (
-          <ul className="run-history__list">
+          <ScrollFade as="ul" className="run-history__list">
             {runHistory.map((r) => {
               // Fanout executes downstream nodes repeatedly. The engine count
               // measures execution steps, rather than distinct canvas nodes.
@@ -264,9 +265,9 @@ export function RunHistoryPanel() {
               </li>
               );
             })}
-          </ul>
+          </ScrollFade>
         )}
-      </div>
+      </ScrollFade>
     </div>
   );
 }

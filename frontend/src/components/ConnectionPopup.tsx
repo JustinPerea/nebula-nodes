@@ -13,6 +13,7 @@ import { readSettingsDraft } from '../store/settingsDraftStore';
 import { getKreaConnection } from '../lib/kreaConnection';
 import { matchesModelSearch } from '../lib/modelDiscovery';
 import { ProviderReadinessBadge } from './ProviderReadinessBadge';
+import { ScrollFade } from './ScrollFade';
 import '../styles/canvas-next-steps.css';
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -280,7 +281,7 @@ export function ConnectionPopup() {
       </div>}
       {pending && <div className="next-step-status" role="status">Adding connected step…</div>}
       {error && <div className="next-step-error" role="alert">{error}</div>}
-      <div className="connection-popup__list">
+      <ScrollFade className="connection-popup__list">
         {totalCount === 0 && (
           <div className="connection-popup__empty">No compatible nodes found</div>
         )}
@@ -339,7 +340,7 @@ export function ConnectionPopup() {
             </div>
           );
         })}
-      </div>
+      </ScrollFade>
     </div>
   );
 }

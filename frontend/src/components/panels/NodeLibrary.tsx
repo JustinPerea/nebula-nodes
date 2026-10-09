@@ -11,6 +11,7 @@ import { CATEGORY_COLORS } from '../../constants/ports';
 import { findAvailableNodePosition, type NodePosition } from '../../lib/nodePlacement';
 import { CATEGORY_LABELS, matchesModelProvider, matchesModelSearch, modelInputSummary, providerLabel, supportedModelProviders } from '../../lib/modelDiscovery';
 import { ProviderReadinessBadge } from '../ProviderReadinessBadge';
+import { ScrollFade } from '../ScrollFade';
 import '../../styles/panels.css';
 
 // Initial collapsed state — all categories start collapsed on first render so
@@ -203,7 +204,7 @@ export function NodeLibrary() {
           </label>
           <p className="node-library__count">{resultCount} node{resultCount === 1 ? '' : 's'} · Browse before connecting</p>
         </div>
-        <div className="node-library__browser">
+        <ScrollFade className="node-library__browser">
           {resultCount === 0 && <div className="node-library__empty">
             <p role="status">No nodes match{search.trim() ? ` “${search.trim()}”` : ''}{provider ? ` from ${providerLabel(provider)}` : ''}.</p>
             <button type="button" onClick={() => { setSearch(''); setProvider(''); }}>Clear filters</button>
@@ -297,7 +298,7 @@ export function NodeLibrary() {
               </div>
             );
           })}
-        </div>
+        </ScrollFade>
       </div>
       {skin === 'slava-restraint' && dragPreview && dragPreviewStyle && createPortal(
         <div className="slava-library-drag-preview" style={dragPreviewStyle}>

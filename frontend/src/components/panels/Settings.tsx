@@ -10,6 +10,7 @@ import { useDelayedUnmount } from '../../hooks/useDelayedUnmount';
 import { usePanelFocus } from '../../hooks/usePanelFocus';
 import { keyReadiness, providerCheckIsCurrent } from '../../lib/providerReadiness';
 import { useProviderReadinessStore } from '../../store/providerReadinessStore';
+import { ScrollFade } from '../ScrollFade';
 import '../../styles/panels.css';
 
 interface ApiKeyField {
@@ -344,7 +345,7 @@ export function Settings() {
         </button>
       </div>
 
-      <div className="panel__body">
+      <ScrollFade className="panel__body">
         {loadState === 'idle' || loadState === 'loading' ? (
           <div className="settings__loading" role="status">Loading settings…</div>
         ) : loadState === 'error' ? (
@@ -421,7 +422,7 @@ export function Settings() {
               )}
             </button>
             {apiKeysOpen && (
-              <div className="settings__collapsible-body">
+              <ScrollFade className="settings__collapsible-body">
                 {API_KEY_FIELDS.map((field) => (
                   <div key={field.key} className={`settings__key-row${setupTarget?.kind === 'api-key' && setupTarget.key === field.key ? ' settings__key-row--target' : ''}`}>
                     <a
@@ -470,7 +471,7 @@ export function Settings() {
                     )}
                   </div>
                 ))}
-              </div>
+              </ScrollFade>
             )}
 
             {/* Routing Section */}
@@ -631,7 +632,7 @@ export function Settings() {
 
           </fieldset>
         )}
-      </div>
+      </ScrollFade>
 
       {loadState === 'ready' && (
         <div className="settings__footer">

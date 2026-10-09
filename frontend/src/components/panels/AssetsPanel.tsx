@@ -9,6 +9,7 @@ import { backendAssetUrlSync } from '../../lib/backend';
 import { CHARACTER_DRAG_MIME, MOODBOARD_DRAG_MIME } from '../../lib/dragMime';
 import { NEW_CHARACTER_SENTINEL, NEW_MOODBOARD_SENTINEL } from '../../lib/studioSentinels';
 import type { Character, Moodboard } from '../../types';
+import { ScrollFade } from '../ScrollFade';
 import '../../styles/panels.css';
 import '../../styles/character-studio.css';
 import '../../styles/moodboard-studio.css';
@@ -122,7 +123,7 @@ export function AssetsPanel() {
         </button>
       </div>
 
-      <div className="panel__body panel__body--assets">
+      <ScrollFade className="panel__body panel__body--assets">
         <div className="assets-panel__tabs" role="tablist" aria-label="Asset type">
           {TABS.map((t) => (
             <button
@@ -172,7 +173,7 @@ export function AssetsPanel() {
           </button>
         )}
 
-        <div className="character-palette__list">
+        <ScrollFade className="character-palette__list">
           {loading && <div className="character-palette__empty">Loading…</div>}
           {error && !loading && (
             <div className="character-palette__empty character-palette__empty--error">{error}</div>
@@ -259,8 +260,8 @@ export function AssetsPanel() {
               ))
             )
           )}
-        </div>
-      </div>
+        </ScrollFade>
+      </ScrollFade>
     </div>
   );
 }

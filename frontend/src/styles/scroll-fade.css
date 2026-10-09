@@ -1,0 +1,12 @@
+/* Mask the viewport contents without adding an overlay or intercepting input.
+   The narrow second mask keeps the scrollbar fully visible. */
+body.app-slava-restraint .panel-scroll-fade[data-scroll-more="true"] {
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent), linear-gradient(#000, #000);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent), linear-gradient(#000, #000);
+  -webkit-mask-size: calc(100% - 8px) 100%, 8px 100%;
+  mask-size: calc(100% - 8px) 100%, 8px 100%;
+  -webkit-mask-position: 0 0, 100% 0;
+  mask-position: 0 0, 100% 0;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+}
