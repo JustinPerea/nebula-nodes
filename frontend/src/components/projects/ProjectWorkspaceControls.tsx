@@ -22,7 +22,8 @@ export function ProjectWorkspaceControls() {
       {status === 'error'
         ? <button type="button" className="project-workspace-controls__retry" title={error ?? 'Retry saving'}
             onClick={() => void useProjectStore.getState().retry()}>Save failed · Retry</button>
-        : <span className="project-workspace-controls__status" role="status">{label}</span>}
+        : <span className={`project-workspace-controls__status${status === 'saved' ? ' project-workspace-controls__status--settled' : ''}`}
+            role="status">{label}</span>}
       <span className="project-workspace-controls__count">{nodeCount} {nodeCount === 1 ? 'node' : 'nodes'}</span>
     </div>
   );

@@ -41,6 +41,42 @@ body.app-slava-restraint .toolbar__actions {
   position: static;
 }
 
+/* What Run will spend: a quiet count of nodes that call paid providers. The
+   full list is in the tooltip and the button's accessible description. */
+body.app-slava-restraint .toolbar__run-paid {
+  padding: 1px 6px;
+  border: 1px solid var(--sr-edge-strong);
+  border-radius: var(--sr-radius-pill);
+  color: var(--sr-ink-light);
+  font-family: var(--sr-mono);
+  font-size: 10px;
+  font-weight: 400;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+/* Sits on the accent-filled Run, so it takes the button's ink, not grey. */
+body.app-slava-restraint .selection-toolbar__paid {
+  padding: 0 5px;
+  border: 1px solid color-mix(in srgb, currentColor 45%, transparent);
+  border-radius: var(--sr-radius-pill);
+  color: inherit;
+  font-family: var(--sr-mono);
+  font-size: 10px;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.toolbar__sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 /* Zoom shares the bar so every bottom control sits on one baseline. */
 body.app-slava-restraint .toolbar__zoom {
   display: flex;

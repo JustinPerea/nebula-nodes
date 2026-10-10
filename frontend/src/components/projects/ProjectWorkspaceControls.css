@@ -27,7 +27,28 @@ body.app-slava-restraint .project-workspace-controls__name {
   color: var(--sr-ink);
   font: 500 12px/1.4 var(--sr-ui);
 }
-body.app-slava-restraint .project-workspace-controls__status { color: var(--sr-ink-light); font: 11px/1.4 var(--sr-ui); }
+body.app-slava-restraint .project-workspace-controls__status {
+  display: inline-block;
+  max-width: 120px;
+  overflow: hidden;
+  color: var(--sr-ink-light);
+  font: 11px/1.4 var(--sr-ui);
+  white-space: nowrap;
+}
+/* "Saved" is only news right after a save: it holds, fades, then folds away
+   (taking its flex gap with it). Saving, unsaved and failed states stay put.
+   It stays in the DOM, so the status region still announces it. */
+body.app-slava-restraint .project-workspace-controls__status--settled {
+  animation: project-save-settle 2.6s ease forwards;
+}
+@keyframes project-save-settle {
+  0%, 70% { opacity: 1; }
+  85% { opacity: 0; max-width: 120px; margin-right: 0; }
+  100% { opacity: 0; max-width: 0; margin-right: -9px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  body.app-slava-restraint .project-workspace-controls__status--settled { animation-timing-function: steps(1, end); }
+}
 body.app-slava-restraint .project-workspace-controls__count {
   color: var(--sr-ink-meta);
   font: 11px/1.4 var(--sr-mono);

@@ -35,6 +35,7 @@ export function WorkspaceModeNavigation() {
         type="button"
         className={`canvas-tabs__btn${createActive ? ' canvas-tabs__btn--active' : ''}`}
         aria-current={createActive ? 'page' : undefined}
+        data-onboarding-target="create"
         onClick={() => navigate('create')}
       >
         <Sparkles className="canvas-tabs__icon" aria-hidden="true" focusable="false" />

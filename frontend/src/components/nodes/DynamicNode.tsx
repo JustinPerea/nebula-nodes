@@ -14,6 +14,7 @@ import { MeshPreview } from './MeshPreview';
 import { RepresentationViewer } from './RepresentationViewer';
 import { NodeError } from './NodeError';
 import { VideoEditAction } from './VideoEditAction';
+import { NodeTypeIcon } from './NodeTypeIcon';
 import '../../styles/nodes.css';
 
 function isDynamicData(data: NodeData): data is DynamicNodeData {
@@ -29,6 +30,7 @@ function DynamicNodeComponent({ id, data, selected }: NodeProps) {
   const selectedNodeId = useUIStore((s) => s.selectedNodeId);
   const inspectorVisible = useUIStore((s) => s.panels.inspector.visible);
   const setInspectorVisible = useUIStore((s) => s.setInspectorVisible);
+  const isSlavaSkin = useUIStore((s) => s.skin === 'slava-restraint');
   const entranceClass = useSlavaNodeEntranceClass();
   const [videoLoop, setVideoLoop] = useState<boolean>(true);
 
@@ -92,9 +94,6 @@ function DynamicNodeComponent({ id, data, selected }: NodeProps) {
       onClick={() => selectNode(id)}
       style={{ ['--node-category-color' as string]: categoryColor }}
     >
-      {/* Type label — floats above the card; hidden in default + Hermes skins. */}
-      <div className="model-node__type-label">{definition?.category ?? 'universal'}</div>
-
       {/* Settings bar — floats above the card when selected. */}
       {isNodeSelected && (
         <div className="model-node__settings-bar">
@@ -120,7 +119,9 @@ function DynamicNodeComponent({ id, data, selected }: NodeProps) {
       {/* Card — visible content surface, only target of skin background/border. */}
       <div className="model-node__card">
       <div className="model-node__header">
-        <span className="model-node__category-dot" style={{ backgroundColor: categoryColor }} />
+        {isSlavaSkin
+          ? <NodeTypeIcon definition={definition} />
+          : <span className="model-node__category-dot" style={{ backgroundColor: categoryColor }} />}
         <span className="model-node__label">{nodeData.label}</span>
         {batchPreview.label && <span className="batch-carousel__active-label" title={batchPreview.lineage}>[{batchPreview.label}]</span>}
         {nodeData.keyStatus === 'missing' && <span className="model-node__badge model-node__badge--warning" title="API Key Missing">&#x26A0;</span>}

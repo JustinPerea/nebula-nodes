@@ -63,7 +63,7 @@ describe('SelectionToolbar', () => {
 
     expect(screen.getByRole('toolbar')).toHaveAttribute('data-selected-count', '2');
     expect(screen.getByText('2 selected')).toBeInTheDocument();
-    expect(screen.getByTitle('Run selected nodes')).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Run selected nodes' })).toBeEnabled();
     expect(screen.getByTitle('Arrange selected nodes')).toBeEnabled();
     expect(screen.getByLabelText('Download selected outputs')).toBeDisabled();
   });
@@ -105,7 +105,7 @@ describe('SelectionToolbar', () => {
     });
     render(<SelectionToolbar />);
 
-    fireEvent.click(screen.getByTitle('Run selected nodes'));
+    fireEvent.click(screen.getByRole('button', { name: 'Run selected nodes' }));
 
     expect(executeNode).toHaveBeenCalledOnce();
     expect(executeNode).toHaveBeenCalledWith('world');
@@ -122,7 +122,7 @@ describe('SelectionToolbar', () => {
     });
     render(<SelectionToolbar />);
 
-    fireEvent.click(screen.getByTitle('Run selected nodes'));
+    fireEvent.click(screen.getByRole('button', { name: 'Run selected nodes' }));
 
     expect(executeCluster).toHaveBeenCalledOnce();
     expect(executeCluster).toHaveBeenCalledWith(['n1', 'n2']);

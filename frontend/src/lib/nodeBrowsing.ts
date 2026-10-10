@@ -46,7 +46,7 @@ const MEDIA_UTILITY_IDS = new Set([
   'mask-painter', 'cinema-color', 'cinema-look',
 ]);
 
-function nodeBrowseType(definition: ModelNodeDefinition): NodeBrowseType {
+export function nodeBrowseType(definition: ModelNodeDefinition): NodeBrowseType {
   if (IMPORT_IDS.has(definition.id)) return 'import';
   if (WORKFLOW_IDS.has(definition.id)) return 'workflow';
 
@@ -78,4 +78,8 @@ export function matchesNodeBrowseType(
   type: NodeBrowseType,
 ): boolean {
   return nodeBrowseType(definition) === type;
+}
+
+export function nodeBrowseTypeLabel(type: NodeBrowseType): string {
+  return NODE_BROWSE_TYPES.find((item) => item.id === type)?.label ?? 'Tools';
 }

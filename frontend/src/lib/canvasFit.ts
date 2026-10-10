@@ -5,6 +5,10 @@ export type PixelPadding = {
   left: `${number}px`;
 };
 
+/** Shared by the bottom bar's zoom buttons and the canvas zoom shortcuts. */
+export const CANVAS_ZOOM_DURATION = 200;
+export const CANVAS_FIT_DURATION = 300;
+
 function px(value: number): `${number}px` {
   return `${value}px`;
 }

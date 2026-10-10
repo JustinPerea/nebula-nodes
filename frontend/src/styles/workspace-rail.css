@@ -6,8 +6,9 @@
   --workspace-rail-pad: 6px;
   /* Buttons, inset and the shell's 1px border on each side. */
   --workspace-rail-width: calc(var(--workspace-rail-button) + 2 * var(--workspace-rail-pad) + 2px);
-  /* Resting size as a fraction of the open rail: 40px buttons rest at 28px. */
-  --workspace-rail-rest-scale: 0.7;
+  /* Resting size as a fraction of the open rail: 40px buttons rest at 34px, so
+     the bloom is a nudge (the + moves ~19px, half what it did at 0.7). */
+  --workspace-rail-rest-scale: 0.85;
   --workspace-dock-gap: 8px;
   --workspace-dock-top: 16px;
   --workspace-dock-left: calc(var(--workspace-rail-left) + var(--workspace-rail-width) + var(--workspace-dock-gap));
@@ -187,10 +188,11 @@ body .workspace-dock-panel .panel__header {
 }
 
 /* Grow out of the rail button that opened the drawer. WorkspaceRail publishes
-   that button's center as --workspace-dock-origin-y. This needs the theme's
-   specificity, or the generic .panel origin (center center) wins. */
+   that button's center as --workspace-dock-origin-y; a drawer that moves its
+   own top (the Nodes menu) sets --workspace-dock-panel-top. This needs the
+   theme's specificity, or the generic .panel origin (center center) wins. */
 body.app-slava-restraint .workspace-dock-panel.panel {
-  transform-origin: 0 calc(var(--workspace-dock-origin-y, 50dvh) - var(--workspace-dock-top));
+  transform-origin: 0 calc(var(--workspace-dock-origin-y, 50dvh) - var(--workspace-dock-panel-top, var(--workspace-dock-top)));
   animation: workspace-dock-enter var(--workspace-dock-spring) backwards;
 }
 

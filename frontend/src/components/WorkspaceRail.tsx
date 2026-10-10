@@ -7,7 +7,6 @@ import {
   Plus,
   Search,
   Settings,
-  Sparkles,
   type LucideIcon,
 } from 'lucide-react';
 import { useUIStore, type LeftDock } from '../store/uiStore';
@@ -47,7 +46,6 @@ export function WorkspaceRail() {
   const navRef = useRef<HTMLElement | null>(null);
   const leftDock = useUIStore((s) => s.leftDock);
   const setLeftDock = useUIStore((s) => s.setLeftDock);
-  const enterCreateView = useUIStore((s) => s.enterCreateView);
   const commonsEnabled = useUIStore((s) => s.commonsEnabled);
   const enterCommons = useUIStore((s) => s.enterCommons);
   const startOnboarding = useUIStore((s) => s.startOnboarding);
@@ -66,8 +64,14 @@ export function WorkspaceRail() {
     const shell = nav?.querySelector<HTMLElement>('.workspace-rail__shell');
     const button = shell?.querySelector<HTMLElement>('.workspace-rail__item--active');
     if (!nav || !shell || !button) return;
-    const center = nav.getBoundingClientRect().top + shell.offsetTop + shell.clientTop + button.offsetTop + button.offsetHeight / 2;
-    document.documentElement.style.setProperty('--workspace-dock-origin-y', `${Math.round(center)}px`);
+    const publish = () => {
+      const center = nav.getBoundingClientRect().top + shell.offsetTop + shell.clientTop + button.offsetTop + button.offsetHeight / 2;
+      document.documentElement.style.setProperty('--workspace-dock-origin-y', `${Math.round(center)}px`);
+    };
+    publish();
+    // The rail is centered in the window, so a resize moves the button.
+    window.addEventListener('resize', publish);
+    return () => window.removeEventListener('resize', publish);
   }, [leftDock]);
 
   useEffect(() => {
@@ -111,7 +115,6 @@ export function WorkspaceRail() {
             active={leftDock === 'library'}
             onClick={() => toggleDock('library')}
           />
-          <RailItem label="Open Create studio" onboardingTarget="create" icon={Sparkles} onClick={enterCreateView} />
           {commonsEnabled && <RailItem label="Open Commons" icon={LibraryBig} onClick={enterCommons} />}
           <div className="workspace-rail__divider" aria-hidden="true" />
           <RailItem

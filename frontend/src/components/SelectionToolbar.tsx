@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
 import {
   Copy,
   Download,
@@ -13,6 +13,7 @@ import { useGraphStore } from '../store/graphStore';
 import { useUIStore } from '../store/uiStore';
 import { useCanvasPinsStore } from '../store/canvasPinsStore';
 import { isBackendNodeId } from '../lib/canvasPins';
+import { describeRunScope, summarizeRunScope } from '../lib/runScope';
 import {
   collectDownloadableOutputs,
   downloadSelectedOutputs,
@@ -22,6 +23,7 @@ import {
 
 export function SelectionToolbar() {
   const nodes = useGraphStore((state) => state.nodes);
+  const edges = useGraphStore((state) => state.edges);
   const isExecuting = useGraphStore((state) => state.isExecuting);
   const executeNode = useGraphStore((state) => state.executeNode);
   const executeCluster = useGraphStore((state) => state.executeCluster);
@@ -41,6 +43,11 @@ export function SelectionToolbar() {
     () => collectDownloadableOutputs(selectedNodes).length,
     [selectedNodes],
   );
+  // Same scopes as runSelection: one node runs with everything feeding it;
+  // several run as an explicit cluster.
+  const runScope = useMemo(() => summarizeRunScope(nodes, edges ?? [],
+    ids.length === 1 ? { kind: 'node', nodeId: ids[0] } : { kind: 'cluster', nodeIds: ids }), [nodes, edges, ids]);
+  const runScopeId = useId();
   if (ids.length === 0) return null;
 
   function openAgent() {
@@ -113,11 +120,17 @@ export function SelectionToolbar() {
         className="selection-toolbar__button selection-toolbar__button--primary"
         onClick={runSelection}
         disabled={isExecuting}
-        title="Run selected nodes"
+        aria-label="Run selected nodes"
+        aria-describedby={runScopeId}
+        title={`Run selected nodes. ${describeRunScope(runScope)}`}
       >
         <Play size={17} fill="currentColor" aria-hidden="true" />
         <span>Run</span>
+        {runScope.paid.length > 0 && (
+          <span className="selection-toolbar__paid" aria-hidden="true">{runScope.paid.length} paid</span>
+        )}
       </button>
+      <span id={runScopeId} className="toolbar__sr-only">{describeRunScope(runScope)}</span>
       <button type="button" className="selection-toolbar__button" onClick={copySelected} title="Copy selected nodes">
         <Copy size={17} aria-hidden="true" />
         <span className="selection-toolbar__label--compact">Copy</span>

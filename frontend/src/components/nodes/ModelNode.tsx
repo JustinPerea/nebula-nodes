@@ -20,6 +20,7 @@ import { MeshPreview } from './MeshPreview';
 import { RepresentationViewer } from './RepresentationViewer';
 import { NodeError } from './NodeError';
 import { VideoEditAction } from './VideoEditAction';
+import { NodeTypeIcon } from './NodeTypeIcon';
 import { BeforeAfterSlider } from './BeforeAfterSlider';
 import { downloadWorldAsset } from '../../lib/worldDownload';
 import '../../styles/nodes.css';
@@ -276,10 +277,6 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
       onClick={() => selectNode(id)}
       style={{ ['--node-category-color' as string]: categoryColor }}
     >
-      {/* Type label — floats above the card; small and quiet (Slava Restraint
-       * style). Default + Hermes skins hide it via display:none in their CSS. */}
-      <div className="model-node__type-label">{definition.category}</div>
-
       {/* Settings bar — floats above the card when selected; renders model
        * name + an "Edit" affordance that opens the node panel settings. */}
       {isNodeSelected && (
@@ -323,7 +320,9 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
        * and settings bar can float above the card cleanly. */}
       <div className="model-node__card">
       <div className="model-node__header">
-        <span className="model-node__category-dot" style={{ backgroundColor: categoryColor }} />
+        {isSlavaSkin
+          ? <NodeTypeIcon definition={definition} />
+          : <span className="model-node__category-dot" style={{ backgroundColor: categoryColor }} />}
         <span className="model-node__label">{nodeData.label}</span>
         {batchPreview.label && <span className="batch-carousel__active-label" title={batchPreview.lineage}>[{batchPreview.label}]</span>}
         {nodeData.keyStatus === 'missing' && <span className="model-node__badge model-node__badge--warning"

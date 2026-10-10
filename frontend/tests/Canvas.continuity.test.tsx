@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, render } from '@testing-library/react';
+import { act, cleanup, fireEvent, render } from '@testing-library/react';
 import type { Node, Viewport } from '@xyflow/react';
 import type { NodeData } from '../src/types';
 import type { RunRecord } from '../src/lib/runHistory';
@@ -14,6 +14,7 @@ type CanvasCallbacks = {
 const flow = vi.hoisted(() => ({
   props: null as CanvasCallbacks | null,
   fitView: vi.fn(),
+  zoomIn: vi.fn(), zoomOut: vi.fn(), zoomTo: vi.fn(),
   initialized: false,
   internalNodes: new Map<string, { measured: { width: number; height: number } }>(),
   onSync: null as ((event: ExecutionEvent) => void) | null,
@@ -29,6 +30,7 @@ vi.mock('@xyflow/react', async (importOriginal) => ({
   Background: () => null,
   Panel: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   useReactFlow: () => ({ fitView: flow.fitView, viewportInitialized: flow.initialized,
+    zoomIn: flow.zoomIn, zoomOut: flow.zoomOut, zoomTo: flow.zoomTo,
     screenToFlowPosition: (point: unknown) => point }),
   useInternalNode: (id: string) => flow.internalNodes.get(id),
   useStore: () => 1,
@@ -65,6 +67,7 @@ const history: RunRecord[] = [{ id: 'saved-run', trigger: 'graph', status: 'comp
 beforeEach(() => {
   vi.useFakeTimers();
   flow.fitView.mockReset().mockResolvedValue(true);
+  for (const zoom of [flow.zoomIn, flow.zoomOut, flow.zoomTo]) zoom.mockReset().mockResolvedValue(true);
   flow.internalNodes.clear();
   flow.initialized = false;
   flow.props = null;
@@ -225,5 +228,28 @@ describe('Canvas workspace continuity', () => {
     act(() => { useGraphStore.getState().clearGraph(); });
     await act(async () => { await vi.advanceTimersByTimeAsync(100); });
     expect(flow.fitView).not.toHaveBeenCalled();
+  });
+
+  it('zooms with Ctrl/⌘ = and −, fits with Shift+1 and resets with Shift+0', () => {
+    const { container } = render(<Canvas />);
+    const canvas = container.querySelector('.canvas-wrapper')!;
+    fireEvent.keyDown(canvas, { key: '=', metaKey: true });
+    fireEvent.keyDown(canvas, { key: '-', ctrlKey: true });
+    fireEvent.keyDown(canvas, { key: '!', code: 'Digit1', shiftKey: true });
+    fireEvent.keyDown(canvas, { key: ')', code: 'Digit0', shiftKey: true });
+    expect(flow.zoomIn).toHaveBeenCalledTimes(1);
+    expect(flow.zoomOut).toHaveBeenCalledTimes(1);
+    expect(flow.fitView).toHaveBeenCalledWith(expect.objectContaining({ duration: 300 }));
+    expect(flow.zoomTo).toHaveBeenCalledWith(1, expect.objectContaining({ duration: 200 }));
+  });
+
+  it('leaves zoom keys alone while typing', () => {
+    const { container } = render(<Canvas />);
+    const field = document.createElement('textarea');
+    container.querySelector('.canvas-wrapper')!.appendChild(field);
+    fireEvent.keyDown(field, { key: '!', code: 'Digit1', shiftKey: true });
+    fireEvent.keyDown(field, { key: '=', metaKey: true });
+    expect(flow.fitView).not.toHaveBeenCalled();
+    expect(flow.zoomIn).not.toHaveBeenCalled();
   });
 });

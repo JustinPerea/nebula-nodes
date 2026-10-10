@@ -1,5 +1,69 @@
 # Implementation Notes
 
+## 2026-10-10 — Ten UX fixes: run scope, node chrome, quieter chrome
+
+Justin approved all ten from a UX pass. Not committed yet.
+
+1. **Run says what it will do.**
+   - `src/lib/runScope.ts` mirrors the stores' scopes:
+     - graph: everything;
+     - one node: the node plus every node feeding it (what `executeNode` runs);
+     - several nodes: exactly those (what `executeCluster` runs).
+   - "Paid" means the definition's `apiProvider` is anything but `utility`.
+   - Both Run buttons show an "N paid" chip when it's above 0. The tooltip and an `aria-describedby` line read "Runs 2 nodes · 1 calls a paid provider: GPT Image 2.5".
+   - **No "Run selected" on the bottom bar.** The selection toolbar already has Run with the right scope, so a second one would duplicate it. The bar's Run is titled "Run graph." and the selection's "Run selected nodes.", so the two read differently.
+   - The selection Run now has `aria-label="Run selected nodes"`. Its title used to be its only name. Tests query by role now.
+   - On the orange selection button the chip inherits the button's ink. Grey was unreadable there.
+2. **No raw category slugs.**
+   - The floating `image-gen` / `utility` label above each card is deleted, not hidden. It only ever rendered in this theme.
+   - The header now leads with `NodeTypeIcon`: the Nodes panel's own icon and words, labelled "Image node". The panel and the nodes share `nodeBrowseType` (now exported) and `NODE_BROWSE_ICONS` (`src/lib/nodeBrowseIcons.ts`).
+   - Other skins keep their category dot.
+3. **One node chrome.**
+   - Text and image surfaces share one title: 13px/500, light ink. The text node was 15px/600 white, the image node 13px/500 grey.
+   - The empty bordered square on image headers is gone. Its "glyph" var was `none`, so it read as a checkbox. Its four unused `--sr-node-image-icon-*` vars are gone too.
+   - The id chip and header actions show on hover, focus or selection on every node, not just image surfaces. Revealed actions keep their 0.62 resting dim, and hovering the action itself lights it.
+4. **One way into Creator Studio.**
+   - The rail's sparkle button is gone. The header's "Creator Studio" tab stays.
+   - Onboarding's "create" step now targets that tab (`data-onboarding-target="create"`). Only one `WorkspaceModeNavigation` renders at a time, so the selector stays unique.
+5. **"Saved" settles.**
+   - CSS only: when the status is `saved` it holds, fades, then folds its width and flex gap away (2.6s).
+   - Saving, unsaved and failed states stay put.
+   - It stays in the DOM, so the `role="status"` region still announces it.
+   - Reduced motion steps instead of fading.
+6. **Zoom shortcuts** on the canvas, same handler as ⌘Z:
+   - ⌘/Ctrl = and − zoom (`preventDefault`, so the page doesn't zoom).
+   - ⇧1 fits, ⇧0 goes to 100%. These match `event.code`, because Shift turns 1 and 0 into ! and ).
+   - The bar's tooltips show the keys, with `aria-keyshortcuts`.
+   - Durations live in `canvasFit.ts` (`CANVAS_ZOOM_DURATION` 200, `CANVAS_FIT_DURATION` 300), shared by the bar and the keys.
+   - The typing guard now also skips contenteditable.
+7. **Wordmark removed.** Gone: `NEBULA(NODES)` above the bar and its narrow-width override. DESIGN.md open question 4 is marked resolved.
+8. **The Nodes menu opens beside the +.**
+   - The content-sized home menu's top lines up with the open rail's top edge, clamped so it stays on screen.
+   - `NodeLibrary` publishes the menu's height (`--node-library-home-height`, via ResizeObserver) for that clamp.
+   - The drawer's `transform-origin` now subtracts `--workspace-dock-panel-top`, so it still grows out of the +.
+   - Browsing models still uses the full-height dock, so the panel moves up when you pick a type. That's accepted: the content swaps entirely anyway.
+   - **Found while doing it:** the origin was only measured when a drawer opened, so resizing the window left it stale. It now re-measures on `resize`.
+9. **Smaller bloom.** Rest scale is 0.85 instead of 0.7, so buttons rest at 34px. Measured: the + moves 19px vertically and 4px sideways, about half of before.
+10. **Port names on hover.**
+    - Text-input and image-surface handles had no labels.
+    - The name now appears as a small pill outside the node, on the handle's side, while you hover the handle or drag a wire from or onto it. That uses `:has()` with React Flow's `connectingfrom` / `connectingto` classes.
+
+- **Checked live at 1280×820, 1280×760 and 1280×680:**
+  - the paid chip and wording on both Run buttons;
+  - header icons ("Text node", "Image node");
+  - hover reveals `n1`, Enhance and download;
+  - the "Prompt" chip on hover;
+  - "Saved" at opacity 0 after settling;
+  - no wordmark (`::before` content `none`);
+  - menu top equal to shell top (258px) with an 8px gap, an origin of 27px (the + center), clamped to 126px at 680px tall and 206px at 760px;
+  - the + travels 19px.
+- **Not checked live:** a real ⌘= press in the pane (unit-tested on the canvas handler instead), and the "Saving…" state mid-save.
+- **Tests:** 2,032 pass. New tests:
+  - `tests/lib/runScope.test.ts`;
+  - zoom shortcuts, plus a typing guard, in `Canvas.continuity.test.tsx`;
+  - Create-tab onboarding in `WorkspaceRail.test.tsx`.
+  The Toolbar `canvasFit` mock gained the duration constants.
+
 ## 2026-10-10 — Zoom in the bottom bar, and one radius system
 
 - **Zoom moved into the bottom bar:** `[Run | Canvas actions | − 100% + ⛶]`.
@@ -44,7 +108,7 @@ Supersedes the 2026-10-09 "Flush-left toolbar" placement and the rail part of "M
   - At rest it's exactly that at 0.7: 36px wide with 28px buttons.
 - **Concentric on every frame.** The white + looked wrong because its 28px button sat 4px from the shell's sides but 11px from its top, and the radii didn't nest. A uniform scale keeps inset and radius in proportion all through the animation. The shell radius is button radius + inset + border.
 - **Stable measurements.** The `nav` is the open rail's footprint, never scaled. Canvas fit and pinned inspectors measure a box that doesn't change with hover. The nav takes no pointer events; the shell does, so the hover zone is exactly what's visible. The old `::before` shell, group `translate` and per-button size transitions are gone.
-- **Known trade-off.** Buttons far from the vertical center travel when the rail blooms: the + moves up about 40px. You aim after it opens, but a fast click at the resting spot can miss. Ask Justin if it bothers him in use; a smaller bloom (resting scale nearer 1) shrinks the travel.
+- **Known trade-off.** Buttons far from the vertical center travel when the rail blooms: the + moves up about 40px. You aim after it opens, but a fast click at the resting spot can miss. Ask Justin if it bothers him in use; a smaller bloom (resting scale nearer 1) shrinks the travel. *(Done the same day: rest scale is now 0.85, see "Ten UX fixes".)*
 - **Drawer attached to the rail:**
   - The rail stays open while a drawer it opened is showing (`.workspace-rail--open`).
   - The drawer sits 8px from the open shell.

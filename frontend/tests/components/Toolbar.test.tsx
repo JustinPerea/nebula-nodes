@@ -59,7 +59,7 @@ vi.mock('../../src/store/uiStore', async () => {
 });
 vi.mock('../../src/lib/backend', () => ({ apiFetch: (...args: unknown[]) => mocks.fetch(...args) }));
 vi.mock('../../src/lib/api', () => ({ fetchCLIGraph: () => mocks.cli() }));
-vi.mock('../../src/lib/canvasFit', () => ({ computeCanvasFitPadding: () => 0.2 }));
+vi.mock('../../src/lib/canvasFit', () => ({ CANVAS_ZOOM_DURATION: 200, CANVAS_FIT_DURATION: 300, computeCanvasFitPadding: () => 0.2 }));
 
 const INITIAL_GRAPH = { ...mocks.graph!.getState() };
 const INITIAL_UI = { ...mocks.ui!.getState() };

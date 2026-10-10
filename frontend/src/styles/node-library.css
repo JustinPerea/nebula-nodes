@@ -1,5 +1,15 @@
-/* The entry menu fits its contents; model browsing retains the dock's height. */
+/* The entry menu fits its contents and sits beside the + that opened it: its
+   top lines up with the open rail's top edge (the + center, less half a button,
+   the inset and the border), clamped so the whole menu stays on screen.
+   NodeLibrary publishes the menu's height. Model browsing keeps the dock's
+   full height. */
 body.app-slava-restraint .workspace-dock-panel.panel.panel--library.node-library--home {
+  --workspace-dock-panel-top: clamp(
+    var(--workspace-dock-top),
+    calc(var(--workspace-dock-origin-y, 50dvh) - var(--workspace-rail-button) / 2 - var(--workspace-rail-pad) - 1px),
+    calc(100dvh - var(--workspace-dock-top) - var(--node-library-home-height, 100dvh))
+  );
+  top: var(--workspace-dock-panel-top) !important;
   bottom: auto !important;
   max-height: calc(100dvh - 32px) !important;
 }

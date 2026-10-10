@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { WorkspaceRail } from '../src/components/WorkspaceRail';
 import { ChatLauncher } from '../src/components/ChatLauncher';
+import { WorkspaceModeNavigation } from '../src/components/CanvasTabs';
 import { useUIStore } from '../src/store/uiStore';
 import { ONBOARDING_HELP_SELECTOR, ONBOARDING_TOUR } from '../src/lib/onboarding';
 
@@ -21,7 +22,8 @@ describe('WorkspaceRail', () => {
 
     expect(screen.getByRole('navigation', { name: 'Workspace navigation' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Add nodes' }).getAttribute('aria-pressed')).toBe('true');
-    expect(screen.getByRole('button', { name: 'Open Create studio' })).toBeTruthy();
+    // Creator Studio lives in the header tabs only; the rail doesn't duplicate it.
+    expect(screen.queryByRole('button', { name: 'Open Create studio' })).toBeNull();
     expect(screen.getByRole('button', { name: 'Open assets' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Open run history' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Search commands and nodes' })).toBeTruthy();
@@ -31,8 +33,8 @@ describe('WorkspaceRail', () => {
 
   it('provides one stable, live target for every onboarding step without taking an action', () => {
     const before = useUIStore.getState();
-    render(<><WorkspaceRail /><ChatLauncher /></>);
-    const names = ['Add nodes', 'Open settings', 'Open Create studio', 'Open run history', 'Toggle chat panel'];
+    render(<><WorkspaceModeNavigation /><WorkspaceRail /><ChatLauncher /></>);
+    const names = ['Add nodes', 'Open settings', 'Creator Studio', 'Open run history', 'Toggle chat panel'];
     ONBOARDING_TOUR.forEach((step, index) => {
       const button = screen.getByRole('button', { name: names[index] });
       expect(document.querySelectorAll(step.selector)).toHaveLength(1);
@@ -92,11 +94,11 @@ describe('WorkspaceRail', () => {
   it('supports vertical keyboard movement and Escape drawer dismissal', () => {
     render(<WorkspaceRail />);
     const add = screen.getByRole('button', { name: 'Add nodes' });
-    const create = screen.getByRole('button', { name: 'Open Create studio' });
+    const assets = screen.getByRole('button', { name: 'Open assets' });
 
     add.focus();
     fireEvent.keyDown(add, { key: 'ArrowDown' });
-    expect(document.activeElement).toBe(create);
+    expect(document.activeElement).toBe(assets);
 
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(useUIStore.getState().leftDock).toBeNull();

@@ -2,7 +2,8 @@ import { useMemo, useRef, useEffect, useLayoutEffect, useState } from 'react';
 import type { CSSProperties, DragEvent as ReactDragEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { useReactFlow } from '@xyflow/react';
-import { ArrowLeft, AudioLines, Box, ChevronDown, ChevronRight, Image as ImageIcon, Import, Search, Type, Video, Workflow, Wrench, X } from 'lucide-react';
+import { ArrowLeft, ChevronDown, ChevronRight, Search, X } from 'lucide-react';
+import { NODE_BROWSE_ICONS } from '../../lib/nodeBrowseIcons';
 import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
 import { useDelayedUnmount } from '../../hooks/useDelayedUnmount';
@@ -20,7 +21,6 @@ import '../../styles/node-library.css';
 // the user sees a scannable list of category headers, not a long node wall.
 const INITIAL_COLLAPSE_KEY = '__nebulaLibraryInit';
 const SLAVA_DRAG_PREVIEW_OFFSET = 14;
-const BROWSE_ICONS = { image: ImageIcon, video: Video, audio: AudioLines, text: Type, import: Import, '3d': Box, workflow: Workflow, tools: Wrench };
 const PRIMARY_CATEGORIES: Partial<Record<NodeBrowseType, string>> = {
   image: 'image-gen', video: 'video-gen', audio: 'audio-gen', text: 'text-gen', '3d': '3d-gen',
 };
@@ -142,6 +142,19 @@ export function NodeLibrary() {
   }, [skin]);
 
   const { shouldRender, exiting } = useDelayedUnmount(visible, 500);
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  // The type menu sits beside the + that opened it. CSS clamps it into the
+  // viewport, which needs the menu's own height.
+  useLayoutEffect(() => {
+    const panel = panelRef.current;
+    if (!shouldRender || !isHome || !panel) return;
+    const publish = () => panel.style.setProperty('--node-library-home-height', `${panel.offsetHeight}px`);
+    publish();
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(publish);
+    observer.observe(panel);
+    return () => observer.disconnect();
+  }, [shouldRender, isHome]);
   if (!shouldRender) return null;
 
   function browseNodes(type: NodeBrowseType) {
@@ -227,6 +240,7 @@ export function NodeLibrary() {
 
   return (
     <div
+      ref={panelRef}
       className={`panel panel--library workspace-dock-panel${isHome ? ' node-library--home' : ''}${exiting ? ' panel--exiting' : ''}`}
       onKeyDown={(event) => {
         if (event.key === 'Escape' && !isHome && !event.defaultPrevented) {
@@ -288,7 +302,7 @@ export function NodeLibrary() {
             <p className="node-library__intro">What would you like to add?</p>
             <div className="node-library__types">
               {NODE_BROWSE_TYPES.map((item) => {
-                const Icon = BROWSE_ICONS[item.id];
+                const Icon = NODE_BROWSE_ICONS[item.id];
                 return <button key={item.id} type="button"
                   ref={(button) => { browseButtonsRef.current[item.id] = button; }}
                   className={`node-library__type${item.id === 'workflow' || item.id === 'tools' ? ' node-library__type--secondary' : ''}`}

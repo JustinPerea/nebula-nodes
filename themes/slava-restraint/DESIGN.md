@@ -109,7 +109,7 @@ All new Slava styling should consume the `--sr-*` tokens below. If a value is re
 | `--sr-ui` | `Inter`, `Helvetica Neue`, Helvetica, Arial, sans-serif | UI/body/control text |
 | `--sr-mono` | `JetBrains Mono`, `IBM Plex Mono`, `SF Mono`, Menlo, monospace | Wordmark, IDs, metrics, model IDs |
 | `--sr-type-micro` | `9px` | Tiny IDs/carets/chip labels |
-| `--sr-type-meta` | `10px` | Metadata, wordmark, loading labels |
+| `--sr-type-meta` | `10px` | Metadata, port-name chips, loading labels |
 | `--sr-type-label` | `11px` | Field labels, inspector/settings labels |
 | `--sr-type-body` | `12px` | Compact body/chrome text |
 | `--sr-type-control` | `13px` | Inputs, primary controls, active rows |
@@ -350,12 +350,13 @@ The composer is one visual input well, not a text area next to a separate button
 ### Node Card
 
 - The preview/content is the card.
-- Title/category chrome should float or overlay quietly.
+- Title/category chrome should float or overlay quietly. The header leads with the node's kind as the Nodes panel's own icon (hover: "Image node"), never a raw category slug. Text and image surfaces share one quiet 13px/500 title.
+- The id chip and header actions (download, Enhance) show only on hover, keyboard focus or selection.
 - Category color may appear as a subtle edge/glow, never a filled card ground.
 - Selected state may use category color and `--sr-accent` logic, but must not change layout dimensions.
 - Image nodes may become surface-first: media owns the space, toolbar appears on hover/selection.
 - Text nodes are also surface-first: textarea/text preview fills the card, and secondary text actions such as Enhance move into header actions.
-- Text-input port labels may be suppressed when the single text handle is visually obvious; do not spend card height on footer labels.
+- Text-input and image-surface handles carry no permanent labels; do not spend card height on footer labels. The port name appears as a small chip outside the node, on the handle's side, while the handle is hovered or a wire is dragged from or onto it.
 - Sticky Note uses the same Slava text-surface editor on canvas, backed by its `content` param; its Inspector remains the detailed editor for color and secondary params.
 
 ### Handle
@@ -519,5 +520,5 @@ These should not stay inline:
 1. Should Slava keep Inter as the primary UI font, or switch to a more distinctive grotesk before becoming default?
 2. Should orange continue to do both primary and error work, or should error get a separate semantic token?
 3. Should image-surface nodes become the canonical node style for all visual outputs?
-4. Should the toolbar wordmark remain once Slava is default, or move into a quieter app-level identity surface?
+4. ~~Should the toolbar wordmark remain once Slava is default?~~ Resolved 2026-10-10: removed. It sat between the canvas and the bottom bar and competed with Run.
 5. Should Default/Hermes remain selectable skins after Slava becomes default, or should Slava become the base CSS and the others become legacy themes?

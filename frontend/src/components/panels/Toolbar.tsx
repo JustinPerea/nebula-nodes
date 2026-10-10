@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { useReactFlow, useStore } from '@xyflow/react';
 import {
@@ -22,13 +22,13 @@ import { useGraphStore } from '../../store/graphStore';
 import { canLoadGraph, canSaveGraph, requestGraphLoad, requestGraphSave } from '../../lib/graphFileActions';
 import { fetchCLIGraph } from '../../lib/api';
 import { apiFetch } from '../../lib/backend';
-import { computeCanvasFitPadding } from '../../lib/canvasFit';
+import { CANVAS_FIT_DURATION, CANVAS_ZOOM_DURATION, computeCanvasFitPadding } from '../../lib/canvasFit';
+import { describeRunScope, summarizeRunScope } from '../../lib/runScope';
 import type { NodeData } from '../../types';
 import type { Edge, Node } from '@xyflow/react';
 import '../../styles/panels.css';
 import '../../styles/canvas-toolbar.css';
 
-const ZOOM_DURATION = 200;
 
 export function Toolbar() {
   const { fitView, zoomIn, zoomOut, zoomTo } = useReactFlow();
@@ -46,6 +46,13 @@ export function Toolbar() {
   const isPreparing = useGraphStore((s) => s.createLaunchingIds.length > 0);
   const providerStartAmbiguities = useGraphStore((s) => s.providerStartAmbiguities);
   const nodeCount = useGraphStore((s) => s.nodes.length);
+  const graphNodes = useGraphStore((s) => s.nodes);
+  const graphEdges = useGraphStore((s) => s.edges);
+  const runScope = useMemo(
+    () => summarizeRunScope(graphNodes ?? [], graphEdges ?? [], { kind: 'graph' }),
+    [graphNodes, graphEdges],
+  );
+  const runScopeId = useId();
   const autoLayout = useGraphStore((s) => s.autoLayout);
   const resetPanelLayout = useUIStore((s) => s.resetPanelLayout);
   const [actionsOpen, setActionsOpen] = useState(false);
@@ -203,7 +210,7 @@ export function Toolbar() {
         const canvasActive = current.viewMode === 'canvas' || (current.viewMode === 'commons' && !current.commonsEnabled);
         if (!mounted.current || !canvasActive || current.canvasFocusRequest) return;
         if (current.canvasFocusRevision !== focusRevision || current.canvasViewportRevision !== viewportRevision) return;
-        void fitView({ padding: computeCanvasFitPadding(), duration: 300 });
+        void fitView({ padding: computeCanvasFitPadding(), duration: CANVAS_FIT_DURATION });
       }, 50);
     } catch {
       if (mounted.current) alert('Could not fetch CLI graph — is the backend running?');
@@ -230,12 +237,17 @@ export function Toolbar() {
           className="toolbar__button toolbar__button--primary"
           onClick={() => executeGraph()}
           disabled={nodeCount === 0 || isImportingGraph}
-          title={isImportingGraph ? 'Wait for the graph import to finish' : 'Run graph (Ctrl+Enter)'}
+          aria-describedby={nodeCount > 0 ? runScopeId : undefined}
+          title={isImportingGraph ? 'Wait for the graph import to finish' : `Run graph. ${describeRunScope(runScope)} (Ctrl+Enter)`}
         >
           <ToolbarIcon name="run" />
           <span className="toolbar__label">Run</span>
+          {runScope.paid.length > 0 && (
+            <span className="toolbar__run-paid" aria-hidden="true">{runScope.paid.length} paid</span>
+          )}
         </button>
       )}
+      <span id={runScopeId} className="toolbar__sr-only">{describeRunScope(runScope)}</span>
       <div className="toolbar__divider" aria-hidden="true" />
       <div className="toolbar__actions" ref={actionsRoot} onKeyDown={onActionsKeyDown}>
         <button type="button" ref={actionsTrigger} className="toolbar__button toolbar__button--actions"
@@ -295,23 +307,24 @@ export function Toolbar() {
       <div className="toolbar__divider toolbar__divider--zoom" aria-hidden="true" />
       <div className="toolbar__zoom" role="group" aria-label="Zoom">
         <button type="button" className="toolbar__button toolbar__button--icon toolbar__zoom-step"
-          aria-label="Zoom out" title="Zoom out" disabled={zoom <= minZoom + 0.001}
-          onClick={() => void zoomOut({ duration: ZOOM_DURATION })}>
+          aria-label="Zoom out" title="Zoom out (⌘−)" aria-keyshortcuts="Meta+- Control+-" disabled={zoom <= minZoom + 0.001}
+          onClick={() => void zoomOut({ duration: CANVAS_ZOOM_DURATION })}>
           <Minus className="toolbar__icon" size={14} strokeWidth={1.6} aria-hidden="true" />
         </button>
         <button type="button" className="toolbar__button toolbar__zoom-level"
-          aria-label={`Zoom ${zoomPercent}%, reset to 100%`} title="Reset zoom to 100%"
-          onClick={() => void zoomTo(1, { duration: ZOOM_DURATION })}>
+          aria-label={`Zoom ${zoomPercent}%, reset to 100%`} title="Reset zoom to 100% (⇧0)"
+          aria-keyshortcuts="Shift+0"
+          onClick={() => void zoomTo(1, { duration: CANVAS_ZOOM_DURATION })}>
           {zoomPercent}%
         </button>
         <button type="button" className="toolbar__button toolbar__button--icon toolbar__zoom-step"
-          aria-label="Zoom in" title="Zoom in" disabled={zoom >= maxZoom - 0.001}
-          onClick={() => void zoomIn({ duration: ZOOM_DURATION })}>
+          aria-label="Zoom in" title="Zoom in (⌘=)" aria-keyshortcuts="Meta+= Control+=" disabled={zoom >= maxZoom - 0.001}
+          onClick={() => void zoomIn({ duration: CANVAS_ZOOM_DURATION })}>
           <Plus className="toolbar__icon" size={14} strokeWidth={1.6} aria-hidden="true" />
         </button>
         <button type="button" className="toolbar__button toolbar__button--icon"
-          aria-label="Fit view" title="Fit view"
-          onClick={() => void fitView({ padding: computeCanvasFitPadding(), duration: 300 })}>
+          aria-label="Fit view" title="Fit view (⇧1)" aria-keyshortcuts="Shift+1"
+          onClick={() => void fitView({ padding: computeCanvasFitPadding(), duration: CANVAS_FIT_DURATION })}>
           <Maximize className="toolbar__icon" size={14} strokeWidth={1.6} aria-hidden="true" />
         </button>
       </div>

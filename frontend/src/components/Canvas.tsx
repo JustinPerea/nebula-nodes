@@ -46,7 +46,7 @@ import { CrabMarkAnimated } from './brand/CrabMarkAnimated';
 import { CHARACTER_DRAG_MIME, MOODBOARD_DRAG_MIME } from '../lib/dragMime';
 import { apiFetch } from '../lib/backend';
 import { CANVAS_INTERACTION_PROPS } from '../lib/canvasNavigation';
-import { computeCanvasFitPadding } from '../lib/canvasFit';
+import { CANVAS_FIT_DURATION, CANVAS_ZOOM_DURATION, computeCanvasFitPadding } from '../lib/canvasFit';
 import { publishCanvasSelection, selectedNodeIds } from '../lib/canvasSelection';
 import '../styles/canvas.css';
 
@@ -349,7 +349,7 @@ export function Canvas() {
   }, [liveSelectionKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const reactFlow = useReactFlow();
-  const { fitView, screenToFlowPosition } = reactFlow;
+  const { fitView, screenToFlowPosition, zoomIn, zoomOut, zoomTo } = reactFlow;
 
   // Dev-only window bridge for the Puppeteer driver. Exposes React Flow
   // viewport controls (setViewport / getViewport) so demo runs can zoom out
@@ -600,14 +600,33 @@ export function Canvas() {
     [showContextMenu, screenToFlowPosition]
   );
 
-  // Keyboard shortcuts: Ctrl+Enter, Ctrl+S, Ctrl+O, Ctrl+A, Ctrl+D, Ctrl+Z, Ctrl+Shift+Z, Ctrl+C, Ctrl+V
+  // Keyboard shortcuts: Ctrl+Enter, Ctrl+S, Ctrl+O, Ctrl+A, Ctrl+D, Ctrl+Z, Ctrl+Shift+Z, Ctrl+C, Ctrl+V,
+  // and zoom: Ctrl/⌘ = and −, Shift+1 to fit, Shift+0 for 100%.
   const onKeyDown = useCallback(
     (event: React.KeyboardEvent) => {
       const isCtrlOrCmd = event.ctrlKey || event.metaKey;
 
       // Don't capture shortcuts when user is typing in an input/textarea/select
-      const tag = (event.target as HTMLElement).tagName;
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      const target = event.target as HTMLElement;
+      const tag = target.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target.isContentEditable) return;
+
+      // Ctrl/⌘ = and Ctrl/⌘ − zoom the canvas instead of the page.
+      if (isCtrlOrCmd && !event.altKey && (event.key === '=' || event.key === '+' || event.key === '-' || event.key === '_')) {
+        event.preventDefault();
+        if (event.key === '=' || event.key === '+') void zoomIn({ duration: CANVAS_ZOOM_DURATION });
+        else void zoomOut({ duration: CANVAS_ZOOM_DURATION });
+        return;
+      }
+
+      // Shift+1 fits the graph, Shift+0 resets to 100%. Matched by physical key,
+      // because Shift turns 1 and 0 into ! and ) on most layouts.
+      if (event.shiftKey && !isCtrlOrCmd && !event.altKey && (event.code === 'Digit1' || event.code === 'Digit0')) {
+        event.preventDefault();
+        if (event.code === 'Digit1') void fitView({ padding: computeCanvasFitPadding(), duration: CANVAS_FIT_DURATION });
+        else void zoomTo(1, { duration: CANVAS_ZOOM_DURATION });
+        return;
+      }
 
       // Ctrl+Enter — Run graph
       if (isCtrlOrCmd && event.key === 'Enter' && !isExecuting) {
@@ -673,7 +692,7 @@ export function Canvas() {
         return;
       }
     },
-    [executeGraph, isExecuting]
+    [executeGraph, fitView, isExecuting, zoomIn, zoomOut, zoomTo]
   );
 
   return (

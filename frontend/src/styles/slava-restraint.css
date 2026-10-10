@@ -184,7 +184,6 @@ body.app-slava-restraint {
     0 10px 30px rgba(0, 0, 0, 0.62);
 
   --sr-node-pad-top: 38px;
-  --sr-node-type-label-top: 14px;
   --sr-node-card-border-mix: 20%;
   --sr-node-category-fallback: rgba(255, 255, 255, 0.40);
   --sr-node-card-selected-border-width: 1.5px;
@@ -240,10 +239,6 @@ body.app-slava-restraint {
   --sr-node-image-header-offset: -28px;
   --sr-node-image-header-min-height: 22px;
   --sr-node-image-header-padding: 0 2px;
-  --sr-node-image-icon-size: 14px;
-  --sr-node-image-icon-radius: 3px;
-  --sr-node-image-icon-opacity: 0.82;
-  --sr-node-image-icon-glyph: none;
   --sr-node-mesh-height: 172px;
   --sr-node-mesh-grid-color: rgba(201, 202, 200, 0.20);
   --sr-node-mesh-grid-soft: rgba(201, 202, 200, 0.10);
@@ -2356,23 +2351,6 @@ body.app-slava-restraint .toolbar {
   box-shadow: var(--sr-shadow-panel-sm);
 }
 
-/* Wordmark — the ONE place dot-matrix-style display shows up. Sits
- * quietly above the toolbar. Tabular numerics in mono carry the same DNA. */
-body.app-slava-restraint .toolbar::before {
-  content: 'NEBULA(NODES)';
-  position: absolute;
-  top: -22px;
-  left: 50%;
-  transform: translateX(-50%);
-  font-family: var(--sr-mono);
-  font-weight: 500;
-  font-size: var(--sr-type-meta);
-  letter-spacing: 0.30em;
-  color: var(--sr-ink-faint);
-  pointer-events: none;
-  white-space: nowrap;
-}
-
 body.app-slava-restraint .toolbar__button {
   position: relative;
   isolation: isolate;
@@ -2606,11 +2584,6 @@ body.app-slava-restraint .panel-launcher:active {
 
   body.app-slava-restraint .toolbar__divider {
     margin: 0 1px !important;
-  }
-
-  body.app-slava-restraint .toolbar::before {
-    font-size: 9px;
-    letter-spacing: 0.22em;
   }
 }
 
@@ -3095,7 +3068,7 @@ body.app-slava-restraint .react-flow__node {
 }
 
 /* Outer node wrapper — transparent. The visible card is .model-node__card.
- * The type-label and settings-bar float ABOVE the card; positioning them
+ * The settings-bar floats ABOVE the card; positioning them
  * outside the card requires the wrapper itself to NOT clip overflow. */
 body.app-slava-restraint .model-node {
   position: relative;
@@ -3106,25 +3079,9 @@ body.app-slava-restraint .model-node {
   color: var(--sr-ink);
   font-family: var(--sr-ui);
   overflow: visible;
-  /* Top padding leaves room for the floating settings-bar + type-label
+  /* Top padding leaves room for the floating settings-bar
    * to sit above the card without being clipped or overlapping it. */
   padding-top: var(--sr-node-pad-top);
-}
-
-/* Type label — small, quiet, sits in the upper-left ABOVE the card.
- * Identifies the category in plain text ("text-gen", "image-gen", etc.). */
-body.app-slava-restraint .model-node__type-label {
-  display: block;
-  position: absolute;
-  top: var(--sr-node-type-label-top);
-  left: var(--sr-space-1);
-  font-family: var(--sr-ui);
-  font-weight: 400;
-  font-size: var(--sr-type-meta);
-  letter-spacing: 0.04em;
-  text-transform: lowercase;
-  color: var(--sr-ink-light);
-  pointer-events: none;
 }
 
 /* Settings bar — floating dark-glass pill above the card, ONLY when selected.
@@ -3342,6 +3299,16 @@ body.app-slava-restraint .model-node__header {
  * category. No extra decorative element. */
 body.app-slava-restraint .model-node__category-dot {
   display: none;
+}
+
+/* Type icon — the node's kind in the Nodes panel's own icon and words
+ * (hover for "Image node"). Replaces the raw category slug that used to float
+ * above the card and the empty square on image nodes. */
+body.app-slava-restraint .model-node__type-icon {
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  color: var(--sr-ink-light);
 }
 
 /* Title — small, quiet. Sits in the upper-left of the overlay strip.
@@ -3780,10 +3747,6 @@ body.app-slava-restraint .model-node--text-surface .model-node__header {
   border-radius: var(--sr-radius-panel) var(--sr-radius-panel) 0 0;
 }
 
-body.app-slava-restraint .model-node--text-surface .model-node__label {
-  font-size: var(--sr-type-title);
-  font-weight: 600;
-}
 
 body.app-slava-restraint .model-node--text-surface .model-node__inline-textarea {
   display: flex;
@@ -3886,9 +3849,6 @@ body.app-slava-restraint .model-node--text-input .model-node__ports--output .mod
   right: 0;
 }
 
-body.app-slava-restraint .model-node--text-input .model-node__port-label {
-  display: none;
-}
 
 body.app-slava-restraint .model-node--text-input .react-flow__handle {
   pointer-events: auto;
@@ -3901,9 +3861,6 @@ body.app-slava-restraint .model-node--image-surface {
   padding-top: var(--sr-node-image-pad-top);
 }
 
-body.app-slava-restraint .model-node--image-surface .model-node__type-label {
-  display: none;
-}
 /* settings-bar stays visible on image-surface nodes — it's the only UI
  * entry point for the Inspector popover, and hiding it leaves the node
  * uneditable. Lives in the 70px image-padding zone above the image. */
@@ -3942,22 +3899,9 @@ body.app-slava-restraint .model-node--image-surface .model-node__header {
   pointer-events: auto;
 }
 
-body.app-slava-restraint .model-node--image-surface .model-node__header::before {
-  content: '';
-  width: var(--sr-node-image-icon-size);
-  height: var(--sr-node-image-icon-size);
-  flex: 0 0 var(--sr-node-image-icon-size);
-  border: var(--sr-node-card-selected-border-width) solid var(--sr-ink-light);
-  border-radius: var(--sr-node-image-icon-radius);
-  background: var(--sr-node-image-icon-glyph);
-  opacity: var(--sr-node-image-icon-opacity);
-}
-
-body.app-slava-restraint .model-node--image-input .model-node__header::before {
-  display: none;
-}
-
-body.app-slava-restraint .model-node--image-surface .model-node__label {
+/* Text and image surfaces share one quiet title: the name is chrome, and the
+ * prompt or picture under it is the content. */
+body.app-slava-restraint :is(.model-node--text-surface, .model-node--image-surface) .model-node__label {
   color: var(--sr-ink-light);
   font-size: var(--sr-type-control);
   font-weight: 500;
@@ -3966,20 +3910,25 @@ body.app-slava-restraint .model-node--image-surface .model-node__label {
 
 body.app-slava-restraint .model-node--image-surface .model-node__id-chip {
   color: var(--sr-ink-meta);
+}
+
+/* The id chip and header actions are for the node you're working with: they
+ * show on hover, keyboard focus or selection, so idle nodes read as one title. */
+body.app-slava-restraint :is(.model-node__id-chip, .model-node__header-action) {
   opacity: 0;
   transition: opacity var(--sr-motion-ui), color var(--sr-motion-ui);
 }
 
-body.app-slava-restraint .model-node--image-surface .model-node__header-action {
-  opacity: 0;
+body.app-slava-restraint .model-node:is(:hover, :focus-within, .model-node--selected) .model-node__id-chip {
+  opacity: 1;
 }
 
-body.app-slava-restraint .model-node--image-surface:hover .model-node__id-chip,
-body.app-slava-restraint .model-node--image-surface:focus-within .model-node__id-chip,
-body.app-slava-restraint .model-node--image-surface.model-node--selected .model-node__id-chip,
-body.app-slava-restraint .model-node--image-surface:hover .model-node__header-action,
-body.app-slava-restraint .model-node--image-surface:focus-within .model-node__header-action,
-body.app-slava-restraint .model-node--image-surface.model-node--selected .model-node__header-action {
+/* Revealed actions keep their resting dim; hovering the action itself lights it. */
+body.app-slava-restraint .model-node:is(:hover, :focus-within, .model-node--selected) .model-node__header-action {
+  opacity: 0.62;
+}
+
+body.app-slava-restraint .model-node .model-node__header-action:is(:hover, :focus-visible) {
   opacity: 1;
 }
 
@@ -4103,8 +4052,43 @@ body.app-slava-restraint .model-node--image-surface .model-node__ports--output .
   right: 0;
 }
 
-body.app-slava-restraint .model-node--image-surface .model-node__port-label {
-  display: none;
+/* Surfaces have bare handles, so a port names itself on demand: hovering the
+ * handle, or while a wire is being dragged from or onto it. The name sits
+ * outside the node, on the handle's side, so it never covers the content. */
+body.app-slava-restraint :is(.model-node--text-input, .model-node--image-surface) .model-node__port-label {
+  position: absolute;
+  top: 50%;
+  z-index: var(--sr-layer-node-floating);
+  padding: 2px 7px;
+  border: 1px solid var(--sr-edge);
+  border-radius: var(--sr-radius-pill);
+  background: var(--sr-glass-raised);
+  box-shadow: var(--sr-shadow-panel-sm);
+  color: var(--sr-ink);
+  font-size: var(--sr-type-meta);
+  line-height: var(--sr-line-compact);
+  white-space: nowrap;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity var(--sr-motion-fast), transform var(--sr-motion-fast), visibility 0s linear 120ms;
+}
+
+body.app-slava-restraint :is(.model-node--text-input, .model-node--image-surface) .model-node__ports--input .model-node__port-label {
+  right: 18px;
+  transform: translate(4px, -50%);
+}
+
+body.app-slava-restraint :is(.model-node--text-input, .model-node--image-surface) .model-node__ports--output .model-node__port-label {
+  left: 18px;
+  transform: translate(-4px, -50%);
+}
+
+body.app-slava-restraint :is(.model-node--text-input, .model-node--image-surface) .model-node__port-row:has(.react-flow__handle:is(:hover, .connectingfrom, .connectingto)) .model-node__port-label {
+  opacity: 1;
+  visibility: visible;
+  transform: translate(0, -50%);
+  transition: opacity var(--sr-motion-fast), transform var(--sr-motion-fast), visibility 0s;
 }
 
 body.app-slava-restraint .model-node--image-surface .react-flow__handle {
@@ -4112,8 +4096,7 @@ body.app-slava-restraint .model-node--image-surface .react-flow__handle {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  body.app-slava-restraint .model-node__header-action,
-  body.app-slava-restraint .model-node--image-surface .model-node__id-chip {
+  body.app-slava-restraint :is(.model-node__id-chip, .model-node__header-action) {
     transition: none;
   }
 }
