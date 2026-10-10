@@ -14,10 +14,13 @@ vi.mock('../src/lib/projects', async (original) => ({
   ...await original<typeof import('../src/lib/projects')>(),
   listProjects: vi.fn(), getProject: vi.fn(), saveProject: vi.fn(),
   openProject: vi.fn(), createProject: vi.fn(), renameProject: vi.fn(), recoverProject: vi.fn(),
-  deleteProject: vi.fn(),
+  deleteProject: vi.fn(), restoreProject: vi.fn(), purgeTrashedProject: vi.fn(), emptyProjectTrash: vi.fn(),
 }));
 
 const initial = useProjectStore.getState();
+const trashed = (id: string) => ({ id, name: id, createdAt: '2026-10-09T10:00:00Z', updatedAt: '2026-10-09T10:00:00Z',
+  lastOpenedAt: null, nodeCount: 1, edgeCount: 0, thumbnail: null,
+  deletedAt: '2026-10-10T10:00:00Z', purgeAt: '2026-11-09T10:00:00Z' });
 function project(id = 'alpha'): SavedProject {
   return {
     id, name: id, createdAt: '2026-10-09T10:00:00Z', updatedAt: '2026-10-09T10:00:00Z',
@@ -100,11 +103,13 @@ describe('saved project coordinator', () => {
   });
   it('deletes another project without touching or saving the open canvas', async () => {
     vi.mocked(projects.listProjects).mockResolvedValue({ projects: [project(), project('beta')], activeProjectId: 'alpha', workspaceRevision: 'rev-a' });
-    vi.mocked(projects.deleteProject).mockResolvedValue({ deletedProjectId: 'beta', activeProjectId: 'alpha', workspaceRevision: 'rev-a' });
+    vi.mocked(projects.deleteProject).mockResolvedValue({ deletedProjectId: 'beta', trashedProject: trashed('beta'), activeProjectId: 'alpha', workspaceRevision: 'rev-a' });
     await useProjectStore.getState().initialize();
     await useProjectStore.getState().remove('beta');
     expect(projects.deleteProject).toHaveBeenCalledWith('beta', 'rev-a');
     expect(useProjectStore.getState().projects.map((p) => p.id)).toEqual(['alpha']);
+    expect(useProjectStore.getState().trash.map((p) => p.id)).toEqual(['beta']);
+    expect(useProjectStore.getState().lastDeleted).toEqual({ id: 'beta', name: 'beta' });
     expect(useProjectStore.getState().activeProject?.id).toBe('alpha');
     expect(useGraphStore.getState().nodes[0].data.params.value).toBe('alpha');
     expect(getProjectContext()).toEqual({ id: 'alpha', revision: 'rev-a' });
@@ -112,7 +117,7 @@ describe('saved project coordinator', () => {
   });
   it('deleting the open project empties the canvas without saving it first', async () => {
     vi.mocked(projects.listProjects).mockResolvedValue({ projects: [project(), project('beta')], activeProjectId: 'alpha', workspaceRevision: 'rev-a' });
-    vi.mocked(projects.deleteProject).mockResolvedValue({ deletedProjectId: 'alpha', activeProjectId: null, workspaceRevision: 'rev-gone' });
+    vi.mocked(projects.deleteProject).mockResolvedValue({ deletedProjectId: 'alpha', trashedProject: trashed('alpha'), activeProjectId: null, workspaceRevision: 'rev-gone' });
     await useProjectStore.getState().initialize();
     unsubscribe = subscribeProjectAutosave();
     useCreateDraftStore.setState({ drafts: { 'project:alpha:create': { prompt: 'old draft' } as never } });
@@ -132,6 +137,44 @@ describe('saved project coordinator', () => {
     // Opening another project afterwards uses the new revision.
     await useProjectStore.getState().open('beta');
     expect(projects.openProject).toHaveBeenCalledWith('beta', 'rev-gone');
+  });
+  it('restores from the trash into the list, closed, and clears the Undo offer', async () => {
+    vi.mocked(projects.listProjects).mockResolvedValue({ projects: [project()], trash: [trashed('beta')], activeProjectId: 'alpha', workspaceRevision: 'rev-a' });
+    vi.mocked(projects.restoreProject).mockResolvedValue({ ...trashed('beta'), updatedAt: '2026-10-10T09:00:00Z' });
+    await useProjectStore.getState().initialize();
+    expect(useProjectStore.getState().trash.map((p) => p.id)).toEqual(['beta']);
+    useProjectStore.setState({ lastDeleted: { id: 'beta', name: 'beta' } });
+    await useProjectStore.getState().restore('beta');
+    const state = useProjectStore.getState();
+    expect(state.projects.map((p) => p.id)).toEqual(['beta', 'alpha']);
+    expect(state.trash).toEqual([]);
+    expect(state.lastDeleted).toBeNull();
+    expect(state.activeProject?.id).toBe('alpha');
+    expect(projects.openProject).not.toHaveBeenCalled();
+  });
+  it('drops a trash entry that expired elsewhere when restore 404s', async () => {
+    vi.mocked(projects.listProjects).mockResolvedValue({ projects: [project()], trash: [trashed('beta')], activeProjectId: 'alpha', workspaceRevision: 'rev-a' });
+    vi.mocked(projects.restoreProject).mockRejectedValue(new projects.ProjectRequestError('That project is no longer in Recently deleted', 404));
+    await useProjectStore.getState().initialize();
+    useProjectStore.setState({ lastDeleted: { id: 'beta', name: 'beta' } });
+    await useProjectStore.getState().restore('beta');
+    expect(useProjectStore.getState().trash).toEqual([]);
+    expect(useProjectStore.getState().lastDeleted).toBeNull();
+    expect(useProjectStore.getState().error).toBe('That project is no longer in Recently deleted');
+  });
+  it('purges one trashed project or empties the trash', async () => {
+    vi.mocked(projects.listProjects).mockResolvedValue({ projects: [project()], trash: [trashed('beta'), trashed('gamma')], activeProjectId: 'alpha', workspaceRevision: 'rev-a' });
+    vi.mocked(projects.purgeTrashedProject).mockResolvedValue([trashed('gamma')]);
+    vi.mocked(projects.emptyProjectTrash).mockResolvedValue([]);
+    await useProjectStore.getState().initialize();
+    useProjectStore.setState({ lastDeleted: { id: 'beta', name: 'beta' } });
+    await useProjectStore.getState().purge('beta');
+    expect(projects.purgeTrashedProject).toHaveBeenCalledWith('beta');
+    expect(useProjectStore.getState().trash.map((p) => p.id)).toEqual(['gamma']);
+    expect(useProjectStore.getState().lastDeleted).toBeNull();
+    await useProjectStore.getState().emptyTrash();
+    expect(useProjectStore.getState().trash).toEqual([]);
+    expect(useProjectStore.getState().projects.map((p) => p.id)).toEqual(['alpha']);
   });
   it('keeps the open project when its delete is refused or a run is active', async () => {
     await useProjectStore.getState().initialize();

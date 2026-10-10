@@ -65,15 +65,42 @@ body.app-slava-restraint .project-home__rename-form button { display: grid; plac
 body.app-slava-restraint .project-home__rename-form button svg { width: 15px; height: 15px; }
 body.app-slava-restraint .project-home__rename-form button:hover:not(:disabled) { background: var(--sr-surface-control-hover); color: var(--sr-ink); }
 body.app-slava-restraint .project-home__card-actions { display: flex; flex-shrink: 0; gap: 2px; }
-body.app-slava-restraint .project-home__delete:hover:not(:disabled),
-body.app-slava-restraint .project-home__delete[aria-expanded='true'] { border-color: var(--sr-danger-border); background: var(--sr-danger-soft); color: var(--sr-danger); }
-body.app-slava-restraint .project-home__delete-confirm { display: grid; gap: 10px; margin: 0 10px 12px; padding: 12px; border: 1px solid var(--sr-danger-border); border-radius: var(--sr-radius-control); background: var(--sr-danger-soft); }
-body.app-slava-restraint .project-home__delete-confirm p { color: var(--sr-ink); font-size: 12px; line-height: 1.5; }
-body.app-slava-restraint .project-home__delete-actions { display: flex; justify-content: flex-end; gap: 6px; }
-body.app-slava-restraint .project-home__delete-actions button { min-height: 34px; padding: 0 12px; border: 1px solid var(--sr-edge-strong); border-radius: var(--sr-radius-control); background: var(--sr-surface-control); color: var(--sr-ink); font-size: 12px; transition: background var(--sr-motion-fast), border-color var(--sr-motion-fast); }
-body.app-slava-restraint .project-home__delete-actions button:hover:not(:disabled) { background: var(--sr-surface-control-hover); }
-body.app-slava-restraint .project-home__delete-actions .project-home__delete-confirm-button { border-color: var(--sr-danger); background: var(--sr-danger); color: #fff; font-weight: 600; }
-body.app-slava-restraint .project-home__delete-actions .project-home__delete-confirm-button:hover:not(:disabled) { border-color: var(--sr-danger); background: var(--sr-danger); filter: brightness(1.08); }
+body.app-slava-restraint .project-home__delete:hover:not(:disabled) { border-color: var(--sr-danger-border); background: var(--sr-danger-soft); color: var(--sr-danger); }
+body.app-slava-restraint .project-home__trash { margin-top: 48px; padding-top: 24px; border-top: 1px solid var(--sr-edge); }
+body.app-slava-restraint .project-home__trash-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+body.app-slava-restraint .project-home__trash-toggle { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 8px 0 4px; border: 0; border-radius: var(--sr-radius-control); background: transparent; color: var(--sr-ink); font: inherit; }
+body.app-slava-restraint .project-home__trash-toggle:hover { background: var(--sr-surface-control-hover); }
+body.app-slava-restraint .project-home__trash-toggle svg { width: 15px; height: 15px; color: var(--sr-ink-meta); transition: transform var(--sr-motion-handle); }
+body.app-slava-restraint .project-home__trash-toggle[aria-expanded='true'] svg { transform: rotate(90deg); }
+body.app-slava-restraint .project-home__trash-note { margin: 8px 0 14px 4px; color: var(--sr-ink-meta); font-size: 12px; line-height: 1.5; }
+body.app-slava-restraint .project-home__trash-list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+body.app-slava-restraint .project-home__trash-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 2px 16px; padding: 10px 10px 10px 14px; border: 1px solid var(--sr-edge); border-radius: var(--sr-radius-control); background: var(--sr-canvas-elevated); }
+body.app-slava-restraint .project-home__trash-name { min-width: 0; overflow: hidden; color: var(--sr-ink); font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+body.app-slava-restraint .project-home__trash-meta { grid-row: 2; color: var(--sr-ink-meta); font-size: 11px; }
+body.app-slava-restraint .project-home__trash-actions { grid-row: 1 / span 2; grid-column: 2; display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 6px; }
+body.app-slava-restraint .project-home__trash-actions button,
+body.app-slava-restraint .project-home__trash-empty,
+body.app-slava-restraint .project-home__confirm button { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 10px; border: 1px solid var(--sr-edge-strong); border-radius: var(--sr-radius-control); background: var(--sr-surface-control); color: var(--sr-ink); font-size: 12px; transition: background var(--sr-motion-fast), border-color var(--sr-motion-fast); }
+body.app-slava-restraint .project-home__trash-actions button svg { width: 13px; height: 13px; }
+body.app-slava-restraint .project-home__trash-actions button:hover:not(:disabled),
+body.app-slava-restraint .project-home__trash-empty:hover:not(:disabled),
+body.app-slava-restraint .project-home__confirm button:hover:not(:disabled) { background: var(--sr-surface-control-hover); }
+body.app-slava-restraint .project-home__confirm { display: inline-flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px; }
+body.app-slava-restraint .project-home__confirm-prompt { color: var(--sr-ink-light); font-size: 12px; }
+body.app-slava-restraint .project-home__confirm .project-home__danger { border-color: var(--sr-danger); background: var(--sr-danger); color: #fff; font-weight: 600; }
+body.app-slava-restraint .project-home__confirm .project-home__danger:hover:not(:disabled) { border-color: var(--sr-danger); background: var(--sr-danger); filter: brightness(1.08); }
+/* Critically damped-ish spring (k 380, c 30, m 1): ~2% overshoot, settles in 420ms. */
+body.app-slava-restraint .project-home__toast { --project-home-spring: linear(0, 0.049, 0.163, 0.305, 0.452, 0.588, 0.705, 0.801, 0.876, 0.931, 0.97, 0.995, 1.011, 1.019, 1.022, 1.022, 1.02, 1.017, 1.014, 1.011, 1.008, 1.005, 1.003, 1.002, 1); position: fixed; z-index: 40; left: 50%; bottom: 24px; display: flex; align-items: center; gap: 4px; max-width: calc(100vw - 32px); padding: 6px 6px 6px 16px; border: 1px solid var(--sr-edge-strong); border-radius: var(--sr-node-media-radius); background: var(--sr-canvas-elevated); color: var(--sr-ink); font-size: 13px; box-shadow: 0 12px 32px rgb(0 0 0 / 0.35); transform: translateX(-50%); animation: project-home-toast-in 420ms var(--project-home-spring) both; }
+body.app-slava-restraint .project-home__toast-text { min-width: 0; margin-right: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+body.app-slava-restraint .project-home__toast-undo { flex-shrink: 0; min-height: 32px; padding: 0 12px; border: 1px solid var(--sr-ink); border-radius: var(--sr-radius-control); background: var(--sr-ink); color: var(--sr-canvas); font-size: 12px; font-weight: 600; }
+body.app-slava-restraint .project-home__toast-close { display: grid; place-items: center; flex-shrink: 0; width: 32px; height: 32px; border: 0; border-radius: var(--sr-radius-control); background: transparent; color: var(--sr-ink-meta); }
+body.app-slava-restraint .project-home__toast-close:hover { background: var(--sr-surface-control-hover); color: var(--sr-ink); }
+body.app-slava-restraint .project-home__toast-close svg { width: 14px; height: 14px; }
+@keyframes project-home-toast-in {
+  from { opacity: 0; transform: translate(-50%, 16px) scale(0.96); }
+  30% { opacity: 1; }
+  to { opacity: 1; transform: translate(-50%, 0) scale(1); }
+}
 body.app-slava-restraint .project-home__empty { display: grid; justify-items: center; align-content: center; min-height: 344px; padding: 36px 24px; border: 1px dashed var(--sr-edge-strong); border-radius: var(--sr-node-media-radius); text-align: center; }
 body.app-slava-restraint .project-home__empty-graph { width: 200px; margin-bottom: 12px; opacity: 0.8; }
 body.app-slava-restraint .project-home h3 { max-width: 100%; overflow-wrap: anywhere; font-size: 17px; font-weight: 500; letter-spacing: -0.02em; line-height: 1.4; }
@@ -100,7 +127,10 @@ body.app-slava-restraint .project-home__sr-only { position: absolute; width: 1px
   body.app-slava-restraint .project-home__grid { grid-template-columns: minmax(0, 1fr); gap: 20px; }
   body.app-slava-restraint .project-home__rename { width: 44px; height: 44px; }
   body.app-slava-restraint .project-home__rename-form button { width: 44px; min-height: 44px; }
-  body.app-slava-restraint .project-home__delete-actions button { min-height: 44px; }
+  body.app-slava-restraint .project-home__trash-row { grid-template-columns: minmax(0, 1fr); }
+  body.app-slava-restraint .project-home__trash-actions { grid-row: auto; grid-column: 1; justify-content: flex-start; margin-top: 8px; }
+  body.app-slava-restraint .project-home__trash-actions button, body.app-slava-restraint .project-home__confirm button, body.app-slava-restraint .project-home__toast-undo, body.app-slava-restraint .project-home__toast-close { min-height: 44px; }
+  body.app-slava-restraint .project-home__toast-close { width: 44px; }
   body.app-slava-restraint .project-home__error { align-items: flex-start; flex-direction: column; }
 }
 @media (hover: none) {
@@ -111,5 +141,7 @@ body.app-slava-restraint .project-home__sr-only { position: absolute; width: 1px
   body.app-slava-restraint .project-home__new,
   body.app-slava-restraint .project-home__card,
   body.app-slava-restraint .project-home__preview-open,
-  body.app-slava-restraint .project-home__delete-actions button { transition: none; }
+  body.app-slava-restraint .project-home__trash-toggle svg,
+  body.app-slava-restraint .project-home__trash-actions button { transition: none; }
+  body.app-slava-restraint .project-home__toast { animation: none; }
 }

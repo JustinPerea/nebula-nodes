@@ -15,12 +15,16 @@ export interface ProjectSnapshot {
   createDraft?: CreateDraft | null;
 }
 export interface SavedProject extends ProjectSummary { snapshot: ProjectSnapshot }
+export interface TrashedProject extends ProjectSummary { deletedAt: string; purgeAt: string }
 export interface ProjectList {
-  projects: ProjectSummary[]; activeProjectId: string | null;
+  projects: ProjectSummary[]; trash?: TrashedProject[]; activeProjectId: string | null;
   workspaceRevision: string; migratedProjectId?: string | null;
 }
 export interface ProjectActivation { project: SavedProject; workspaceRevision: string }
-export interface ProjectDeletion { deletedProjectId: string; activeProjectId: string | null; workspaceRevision: string }
+export interface ProjectDeletion {
+  deletedProjectId: string; trashedProject: TrashedProject;
+  activeProjectId: string | null; workspaceRevision: string;
+}
 
 export class ProjectRequestError extends Error {
   readonly status: number;
@@ -53,5 +57,11 @@ export const renameProject = (id: string, name: string) =>
   request<ProjectActivation>(`/api/projects/${encodeURIComponent(id)}`, json('PUT', { name })).then((result) => result.project);
 export const deleteProject = (id: string, workspaceRevision: string) =>
   request<ProjectDeletion>(`/api/projects/${encodeURIComponent(id)}`, json('DELETE', { workspaceRevision }));
+export const restoreProject = (id: string) =>
+  request<{ project: ProjectSummary; workspaceRevision: string }>(`/api/projects/${encodeURIComponent(id)}/restore`, { method: 'POST' }).then((result) => result.project);
+export const purgeTrashedProject = (id: string) =>
+  request<{ trash: TrashedProject[] }>(`/api/projects/trash/${encodeURIComponent(id)}`, { method: 'DELETE' }).then((result) => result.trash);
+export const emptyProjectTrash = () =>
+  request<{ trash: TrashedProject[] }>('/api/projects/trash/empty', { method: 'POST' }).then((result) => result.trash);
 export const recoverProject = (sourceProjectId: string, snapshot: ProjectSnapshot, recoveryId: string) =>
   request<ProjectActivation>('/api/projects/recover', json('POST', { sourceProjectId, snapshot, recoveryId })).then((result) => result.project);

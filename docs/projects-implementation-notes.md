@@ -18,9 +18,18 @@
 
 ## 2026-10-10 — Deleting projects
 
-- Each card has a trash button beside rename. It opens an inline confirm (Cancel focused, Escape backs out); rename and delete never show at once.
+- Each card has a trash button beside rename. (Superseded the same day: see Recently deleted below.)
 - `DELETE /api/projects/{id}` requires the current `workspaceRevision`, so a stale view can't delete anything. Generated media stays in the output store; only the catalog entry goes.
 - Deleting an inactive project leaves the live canvas and revision untouched and broadcasts nothing.
 - Deleting the open project carries the same run and paid-start fences as switching. It empties the live graph (so `GET /api/projects` won't re-adopt it as a Recovered canvas), clears `activeProjectId`, issues a new revision and broadcasts `canvas.replaced` with reason `project-delete`. The browser skips the outgoing save (it's being thrown away), waits for any in-flight save, and drops that project's Creator draft.
 - Recovery no longer needs the source project to exist. A tab with unsaved edits to a project deleted in another window saves them as "Deleted project (recovered)" instead of failing on every retry.
+
+## 2026-10-10 — Recently deleted (trash and undo)
+
+- Delete is now a soft delete. `move_to_trash` moves the whole project record, pins included, from `catalog["projects"]` to `catalog["trash"]` with a `deletedAt`, in the same atomic catalog commit. Restoring moves it back unchanged. It comes back closed, even if it was open when deleted.
+- Trash lives in `catalog.json` beside projects, so it counts toward the 128 MiB catalog limit and survives restarts. Entries older than 30 days (`TRASH_RETENTION`) are swept on `GET /api/projects` and before any restore, so an expired entry can't be restored even before a sweep.
+- Routes: `POST /api/projects/{id}/restore`, `DELETE /api/projects/trash/{id}` and `POST /api/projects/trash/empty`. None of them touch the live canvas, so unlike delete they don't take a workspace revision; a missing entry is a 404. Restore still honours the 500-project limit (413).
+- `GET /api/projects` now returns `trash` (newest first, each with `deletedAt` and `purgeAt`). A corrupt trash entry fails the catalog read (507), the same as a corrupt project, instead of being dropped.
+- UI: the trash button deletes in one click (it's reversible now) and shows an Undo toast for 8 s, held while the toast is hovered or focused. A collapsed **Recently deleted** section below the grid lists entries with Restore and a two-step Delete forever, plus Empty. The toast enters on a computed spring (`linear()` from k 380, c 30, m 1) and is static under reduced motion.
+- Recovery of a stale tab's edits now names the copy after the trashed project when the source is still in the trash.
 

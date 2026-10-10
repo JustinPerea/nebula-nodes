@@ -82,6 +82,7 @@ from services.project_store import (
     MAX_PROJECT_BYTES, ProjectLimitError, ProjectStore, ProjectStoreError, empty_snapshot,
     make_project, metadata as project_metadata, now as project_now,
     project_name, public_project, refresh_metadata, validate_project_id,
+    move_to_trash, purge_expired_trash, restore_from_trash, trash_metadata,
 )
 from services.port_contracts import (
     ContractEdge,
@@ -6867,10 +6868,12 @@ async def list_projects() -> dict[str, Any]:
             changed = True
         elif active := catalog["activeProjectId"]:
             changed = _overlay_live_project(catalog["projects"][active], exported)
+        changed = purge_expired_trash(catalog) or changed
         if changed:
             project_store.commit(catalog)
         return {
             "projects": sorted((project_metadata(project) for project in catalog["projects"].values()), key=lambda project: project["updatedAt"], reverse=True),
+            "trash": _trash_listing(catalog),
             "activeProjectId": catalog["activeProjectId"], "workspaceRevision": catalog["workspaceRevision"],
             **({"migratedProjectId": catalog["migratedProjectId"]} if catalog.get("migratedProjectId") else {}),
         }
@@ -6906,7 +6909,7 @@ async def recover_project_copy(body: dict[str, Any]) -> dict[str, Any]:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         # The source may have been deleted in another window while this tab
         # held unsaved edits to it. Those edits still deserve a copy.
-        source = catalog["projects"].get(source_id) or {
+        source = catalog["projects"].get(source_id) or (catalog.get("trash") or {}).get(source_id) or {
             "id": source_id, "name": "Deleted project", "snapshot": empty_snapshot(),
         }
         # Hash the submitted JSON, before canonical coercion. A retry of the
@@ -7012,10 +7015,11 @@ async def save_project(project_id: str, body: dict[str, Any]) -> dict[str, Any]:
 
 @app.delete("/api/projects/{project_id}")
 async def delete_saved_project(project_id: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
-    """Remove a project from the catalog. Generated media stays on disk.
+    """Move a project to Recently deleted. Generated media stays on disk.
 
     Deleting the open project also empties the live canvas, so it carries
-    the same run and paid-start fences as switching projects.
+    the same run and paid-start fences as switching projects. The project
+    itself, pins included, can be restored until the trash expires.
     """
     body = body or {}
     with project_store.transaction() as catalog, ExitStack() as fences:
@@ -7025,9 +7029,7 @@ async def delete_saved_project(project_id: str, body: dict[str, Any] | None = No
         if deleting_active:
             fences.enter_context(_paid_graph_mutation("delete the open project"))
             _project_replacement_guard("delete the open project")
-        del catalog["projects"][project_id]
-        if catalog.get("migratedProjectId") == project_id:
-            catalog.pop("migratedProjectId", None)
+        trashed = move_to_trash(catalog, project_id)
         if deleting_active:
             catalog["activeProjectId"] = None
             catalog["workspaceRevision"] = uuid4().hex
@@ -7036,12 +7038,59 @@ async def delete_saved_project(project_id: str, body: dict[str, Any] | None = No
             project_store.commit(catalog)
         result = {
             "deletedProjectId": project_id,
+            "trashedProject": trash_metadata(trashed),
             "activeProjectId": catalog["activeProjectId"],
             "workspaceRevision": catalog["workspaceRevision"],
         }
     if deleting_active:
         await _broadcast_graph_sync(graph_replaced=True, reason="project-delete")
     return result
+
+
+def _trash_listing(catalog: dict[str, Any]) -> list[dict[str, Any]]:
+    entries = (catalog.get("trash") or {}).values()
+    return sorted((trash_metadata(entry) for entry in entries), key=lambda entry: entry["deletedAt"], reverse=True)
+
+
+def _trashed_or_404(project_id: str, catalog: dict[str, Any]) -> dict[str, Any]:
+    try:
+        validate_project_id(project_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    entry = (catalog.get("trash") or {}).get(project_id)
+    if entry is None:
+        raise HTTPException(status_code=404, detail="That project is no longer in Recently deleted")
+    return entry
+
+
+# Trash routes never touch the live canvas, so unlike delete they don't
+# need the workspace revision: a gone entry is a plain 404.
+@app.post("/api/projects/{project_id}/restore")
+async def restore_saved_project(project_id: str) -> dict[str, Any]:
+    with project_store.transaction() as catalog:
+        purge_expired_trash(catalog)
+        _trashed_or_404(project_id, catalog)
+        project = restore_from_trash(catalog, project_id)
+        project_store.commit(catalog)
+        return {"project": project_metadata(project), "workspaceRevision": catalog["workspaceRevision"]}
+
+
+@app.delete("/api/projects/trash/{project_id}")
+async def purge_trashed_project(project_id: str) -> dict[str, Any]:
+    with project_store.transaction() as catalog:
+        _trashed_or_404(project_id, catalog)
+        del catalog["trash"][project_id]
+        project_store.commit(catalog)
+        return {"trash": _trash_listing(catalog)}
+
+
+@app.post("/api/projects/trash/empty")
+async def empty_project_trash() -> dict[str, Any]:
+    with project_store.transaction() as catalog:
+        if catalog.get("trash"):
+            catalog["trash"] = {}
+            project_store.commit(catalog)
+        return {"trash": []}
 
 
 def _display_positions(

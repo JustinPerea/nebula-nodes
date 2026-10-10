@@ -1,5 +1,5 @@
-import { useMemo, useRef, useState } from 'react';
-import { ArrowUpRight, Check, Pencil, Plus, Search, Trash2, X } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { ArrowUpRight, Check, ChevronRight, Pencil, Plus, RotateCcw, Search, Trash2, X } from 'lucide-react';
 import { backendAssetUrlSync } from '../../lib/backend';
 import { CrabMark } from '../brand/CrabMark';
 import '../../styles/project-home.css';
@@ -15,6 +15,11 @@ export interface ProjectSummary {
   thumbnail: string | null;
 }
 
+export interface TrashedProject extends ProjectSummary {
+  deletedAt: string;
+  purgeAt: string;
+}
+
 export interface ProjectHomeProps {
   projects: ProjectSummary[];
   loading: boolean;
@@ -25,7 +30,15 @@ export interface ProjectHomeProps {
   onRename: (id: string, name: string) => void;
   onDelete: (id: string) => void;
   onRetry: () => void;
+  trash?: TrashedProject[];
+  lastDeleted?: { id: string; name: string } | null;
+  onRestore?: (id: string) => void;
+  onPurge?: (id: string) => void;
+  onEmptyTrash?: () => void;
+  onDismissUndo?: () => void;
 }
+
+const UNDO_VISIBLE_MS = 8000;
 
 const monochromeMark = [
   { t: 0, rgb: [235, 236, 235] as [number, number, number] },
@@ -74,16 +87,9 @@ function recentTimestamp(project: ProjectSummary) {
 
 function ProjectCard({ project, busy, onOpen, onRename, onDelete }: Pick<ProjectHomeProps, 'busy' | 'onOpen' | 'onRename' | 'onDelete'> & { project: ProjectSummary }) {
   const [editing, setEditing] = useState(false);
-  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [name, setName] = useState(project.name);
   const renameButton = useRef<HTMLButtonElement>(null);
-  const deleteButton = useRef<HTMLButtonElement>(null);
   const trimmed = name.trim();
-
-  const closeDeleteConfirm = () => {
-    setConfirmingDelete(false);
-    requestAnimationFrame(() => deleteButton.current?.focus());
-  };
 
   const finishRename = () => {
     setEditing(false);
@@ -92,7 +98,7 @@ function ProjectCard({ project, busy, onOpen, onRename, onDelete }: Pick<Project
 
   return (
     <article className="project-home__card" aria-label={project.name}>
-      <button type="button" className="project-home__open" disabled={busy || editing || confirmingDelete} onClick={() => onOpen(project.id)} aria-label={`Open ${project.name}`}>
+      <button type="button" className="project-home__open" disabled={busy || editing} onClick={() => onOpen(project.id)} aria-label={`Open ${project.name}`}>
         <ProjectPreview key={project.thumbnail ?? 'placeholder'} thumbnail={project.thumbnail} />
         <span className="project-home__card-name">{project.name}</span>
         <span className="project-home__card-date">{editedDate(project.updatedAt)}</span>
@@ -102,28 +108,12 @@ function ProjectCard({ project, busy, onOpen, onRename, onDelete }: Pick<Project
         <span className="project-home__card-actions">
           <button type="button" className="project-home__rename" ref={renameButton} aria-label={`Rename ${project.name}`} aria-expanded={editing} disabled={busy} onClick={() => {
             if (editing) finishRename();
-            else { setConfirmingDelete(false); setName(project.name); setEditing(true); }
+            else { setName(project.name); setEditing(true); }
           }}><Pencil aria-hidden="true" /></button>
-          <button type="button" className="project-home__rename project-home__delete" ref={deleteButton} aria-label={`Delete ${project.name}`} aria-expanded={confirmingDelete} disabled={busy} onClick={() => {
-            if (confirmingDelete) closeDeleteConfirm();
-            else { setEditing(false); setConfirmingDelete(true); }
-          }}><Trash2 aria-hidden="true" /></button>
+          <button type="button" className="project-home__rename project-home__delete" aria-label={`Delete ${project.name}`}
+            title="Move to Recently deleted" disabled={busy || editing} onClick={() => onDelete(project.id)}><Trash2 aria-hidden="true" /></button>
         </span>
       </div>
-      {confirmingDelete && (
-        <div className="project-home__delete-confirm" role="group" aria-label={`Delete ${project.name}`} onKeyDown={(event) => {
-          if (event.key === 'Escape' && !busy) { event.preventDefault(); closeDeleteConfirm(); }
-        }}>
-          <p>Delete this project? Its canvas can’t be restored. Generated files stay in your outputs folder.</p>
-          <div className="project-home__delete-actions">
-            <button type="button" autoFocus disabled={busy} onClick={closeDeleteConfirm}>Cancel</button>
-            <button type="button" className="project-home__delete-confirm-button" disabled={busy} onClick={() => {
-              setConfirmingDelete(false);
-              onDelete(project.id);
-            }}>Delete project</button>
-          </div>
-        </div>
-      )}
       {editing && (
         <form className="project-home__rename-form" aria-label={`Rename ${project.name}`} onSubmit={(event) => {
           event.preventDefault();
@@ -143,7 +133,112 @@ function ProjectCard({ project, busy, onOpen, onRename, onDelete }: Pick<Project
   );
 }
 
-export function ProjectHome({ projects, loading, busy, error, onCreate, onOpen, onRename, onDelete, onRetry }: ProjectHomeProps) {
+function daysLeft(purgeAt: string, now: number): number {
+  const remaining = Date.parse(purgeAt) - now;
+  return Number.isFinite(remaining) ? Math.max(0, Math.ceil(remaining / 86_400_000)) : 0;
+}
+
+function removalNote(purgeAt: string, now: number): string {
+  const days = daysLeft(purgeAt, now);
+  return days <= 1 ? 'Removed for good within a day' : `Removed for good in ${days} days`;
+}
+
+function deletedDate(value: string): string {
+  const date = new Date(value);
+  return Number.isFinite(date.getTime())
+    ? `Deleted ${new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(date)}`
+    : 'Deleted';
+}
+
+/** Two-step button for the irreversible actions: first press arms, second confirms. */
+function ConfirmInline({ label, confirmLabel, prompt, busy, onConfirm, className }: {
+  label: string; confirmLabel: string; prompt: string; busy: boolean; onConfirm: () => void; className?: string;
+}) {
+  const [armed, setArmed] = useState(false);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const disarm = () => { setArmed(false); requestAnimationFrame(() => trigger.current?.focus()); };
+  if (!armed) {
+    return <button type="button" ref={trigger} className={className} disabled={busy} onClick={() => setArmed(true)}>{label}</button>;
+  }
+  return (
+    <span className="project-home__confirm" role="group" aria-label={prompt} onKeyDown={(event) => {
+      if (event.key === 'Escape') { event.preventDefault(); disarm(); }
+    }}>
+      <span className="project-home__confirm-prompt">{prompt}</span>
+      <button type="button" autoFocus disabled={busy} onClick={disarm}>Cancel</button>
+      <button type="button" className="project-home__danger" disabled={busy} onClick={() => { setArmed(false); onConfirm(); }}>{confirmLabel}</button>
+    </span>
+  );
+}
+
+function RecentlyDeleted({ trash, busy, onRestore, onPurge, onEmptyTrash }: {
+  trash: TrashedProject[]; busy: boolean;
+  onRestore: (id: string) => void; onPurge: (id: string) => void; onEmptyTrash: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  // Read the clock when the list opens, not on every render.
+  const [now, setNow] = useState(() => Date.now());
+  return (
+    <section className="project-home__trash" aria-labelledby="recently-deleted-title">
+      <div className="project-home__trash-header">
+        <h2 id="recently-deleted-title">
+          <button type="button" className="project-home__trash-toggle" aria-expanded={open} aria-controls="recently-deleted-list" onClick={() => {
+            if (!open) setNow(Date.now());
+            setOpen(!open);
+          }}>
+            <ChevronRight aria-hidden="true" />Recently deleted<span className="project-home__count" aria-hidden="true">{trash.length}</span>
+            <span className="project-home__sr-only">, {trash.length} {trash.length === 1 ? 'project' : 'projects'}</span>
+          </button>
+        </h2>
+        {open && <ConfirmInline label="Empty" confirmLabel="Delete all" prompt={`Delete ${trash.length === 1 ? 'this project' : `all ${trash.length} projects`} for good?`}
+          busy={busy} onConfirm={onEmptyTrash} className="project-home__trash-empty" />}
+      </div>
+      {open && (
+        <div id="recently-deleted-list">
+          <p className="project-home__trash-note">Deleted projects stay here for 30 days. Generated files stay in your outputs folder either way.</p>
+          <ul className="project-home__trash-list">
+            {trash.map((entry) => (
+              <li key={entry.id} className="project-home__trash-row" aria-label={entry.name}>
+                <span className="project-home__trash-name">{entry.name}</span>
+                <span className="project-home__trash-meta">{deletedDate(entry.deletedAt)} · {removalNote(entry.purgeAt, now)}</span>
+                <span className="project-home__trash-actions">
+                  <button type="button" disabled={busy} aria-label={`Restore ${entry.name}`} onClick={() => onRestore(entry.id)}><RotateCcw aria-hidden="true" />Restore</button>
+                  <ConfirmInline label="Delete forever" confirmLabel="Delete forever" prompt="This can’t be undone." busy={busy}
+                    onConfirm={() => onPurge(entry.id)} />
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function UndoToast({ project, busy, onUndo, onDismiss }: {
+  project: { id: string; name: string }; busy: boolean; onUndo: () => void; onDismiss: () => void;
+}) {
+  const [paused, setPaused] = useState(false);
+  useEffect(() => {
+    if (paused) return;
+    const timer = window.setTimeout(onDismiss, UNDO_VISIBLE_MS);
+    return () => window.clearTimeout(timer);
+  }, [paused, onDismiss, project.id]);
+  return (
+    <div className="project-home__toast" role="status" aria-live="polite"
+      onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}
+      onFocus={() => setPaused(true)} onBlur={() => setPaused(false)}>
+      <span className="project-home__toast-text">Moved “{project.name}” to Recently deleted</span>
+      <button type="button" className="project-home__toast-undo" disabled={busy} onClick={onUndo}>Undo</button>
+      <button type="button" className="project-home__toast-close" aria-label="Dismiss" onClick={onDismiss}><X aria-hidden="true" /></button>
+    </div>
+  );
+}
+
+const noop = () => {};
+
+export function ProjectHome({ projects, loading, busy, error, onCreate, onOpen, onRename, onDelete, onRetry,
+  trash = [], lastDeleted = null, onRestore = noop, onPurge = noop, onEmptyTrash = noop, onDismissUndo = noop }: ProjectHomeProps) {
   const [query, setQuery] = useState('');
   const visibleProjects = useMemo(() => projects
     .filter((project) => project.name.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()))
@@ -173,7 +268,10 @@ export function ProjectHome({ projects, loading, busy, error, onCreate, onOpen, 
               : projects.length > 0 ? <div className="project-home__empty" role="status"><Search className="project-home__empty-search" aria-hidden="true" /><h3>No projects match “{query.trim()}”</h3><p>Try another name or clear your search.</p><button type="button" className="project-home__secondary" onClick={() => setQuery('')}>Clear search</button></div>
                 : !error && <div className="project-home__empty"><div className="project-home__empty-graph"><NodeGraphPlaceholder /></div><h3>Your first project starts here.</h3><p>Connect ideas, models and media on a canvas of your own.</p><button type="button" className="project-home__secondary" disabled={busy} onClick={() => onCreate()}><Plus aria-hidden="true" />Create your first project</button></div>}
         </section>
+        {!loading && trash.length > 0 && <RecentlyDeleted trash={trash} busy={busy} onRestore={onRestore} onPurge={onPurge} onEmptyTrash={onEmptyTrash} />}
       </main>
+      {lastDeleted && <UndoToast key={lastDeleted.id} project={lastDeleted} busy={busy}
+        onUndo={() => onRestore(lastDeleted.id)} onDismiss={onDismissUndo} />}
     </div>
   );
 }

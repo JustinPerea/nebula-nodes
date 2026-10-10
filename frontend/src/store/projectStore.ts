@@ -9,12 +9,16 @@ import { getProjectContext, setProjectContext } from '../lib/projectContext';
 import { clearPersistedRunHistory, loadRunHistory } from '../lib/runHistory';
 import * as api from '../lib/projects';
 import { wsClient } from '../lib/wsClient';
-import type { ProjectSnapshot, ProjectSummary, SavedProject } from '../lib/projects';
+import type { ProjectSnapshot, ProjectSummary, SavedProject, TrashedProject } from '../lib/projects';
 
 interface ProjectState {
   screen: 'home' | 'workspace';
   initialized: boolean; loading: boolean; busy: boolean;
   projects: ProjectSummary[]; activeProject: ProjectSummary | null;
+  /** Recently deleted, newest first. Restorable until each entry's purgeAt. */
+  trash: TrashedProject[];
+  /** The project the Undo toast offers to bring back. */
+  lastDeleted: { id: string; name: string } | null;
   workspaceRevision: string; error: string | null;
   saveStatus: 'saved' | 'saving' | 'unsaved' | 'error'; dirty: boolean;
   initialize: () => Promise<void>;
@@ -22,6 +26,10 @@ interface ProjectState {
   createProject: (name?: string) => Promise<void>;
   rename: (id: string, name: string) => Promise<void>;
   remove: (id: string) => Promise<void>;
+  restore: (id: string) => Promise<void>;
+  purge: (id: string) => Promise<void>;
+  emptyTrash: () => Promise<void>;
+  dismissUndo: () => void;
   goHome: () => Promise<void>;
   flush: () => Promise<void>;
   retry: () => Promise<void>;
@@ -69,11 +77,12 @@ function summary(project: SavedProject): ProjectSummary {
   void _snapshot;
   return metadata;
 }
+function byRecentEdit(a: ProjectSummary, b: ProjectSummary): number { return b.updatedAt.localeCompare(a.updatedAt); }
 function updateSummary(project: SavedProject): void {
   const metadata = summary(project);
   useProjectStore.setState((state) => ({
     projects: [...state.projects.filter((item) => item.id !== project.id), metadata]
-      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
+      .sort(byRecentEdit),
     ...(state.activeProject?.id === project.id ? { activeProject: metadata } : {}),
   }));
 }
@@ -172,7 +181,7 @@ async function activate(action: () => Promise<api.ProjectActivation>): Promise<v
 
 export const useProjectStore = create<ProjectState>((set, get) => ({
   screen: 'home', initialized: false, loading: true, busy: false,
-  projects: [], activeProject: null, workspaceRevision: '', error: null,
+  projects: [], activeProject: null, trash: [], lastDeleted: null, workspaceRevision: '', error: null,
   saveStatus: 'saved', dirty: false,
 
   initialize: async () => {
@@ -189,7 +198,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
           if (pendingRecovery === recovery) pendingRecovery = null;
         }
         const list = await api.listProjects();
-        set({ projects: list.projects, workspaceRevision: list.workspaceRevision });
+        set({ projects: list.projects, trash: list.trash ?? [], workspaceRevision: list.workspaceRevision });
         if (list.activeProjectId) {
           let project = await api.getProject(list.activeProjectId);
           // Adopt browser-only legacy run records exactly once during migration.
@@ -287,6 +296,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       }
       set((current) => ({
         projects: current.projects.filter((project) => project.id !== id),
+        trash: [result.trashedProject, ...current.trash.filter((entry) => entry.id !== id)],
+        lastDeleted: { id, name: result.trashedProject.name },
         workspaceRevision: result.workspaceRevision,
       }));
     } catch (error) {
@@ -301,6 +312,44 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       markDirty();
     }
   },
+  restore: async (id) => {
+    if (get().busy) return;
+    set({ busy: true, error: null });
+    try {
+      const project = await api.restoreProject(id);
+      set((current) => ({
+        projects: [...current.projects.filter((item) => item.id !== id), project].sort(byRecentEdit),
+        trash: current.trash.filter((entry) => entry.id !== id),
+        lastDeleted: current.lastDeleted?.id === id ? null : current.lastDeleted,
+      }));
+    } catch (error) {
+      // A 404 means it expired or was purged elsewhere: stop offering it.
+      if (error instanceof api.ProjectRequestError && error.status === 404) {
+        set((current) => ({ trash: current.trash.filter((entry) => entry.id !== id),
+          lastDeleted: current.lastDeleted?.id === id ? null : current.lastDeleted }));
+      }
+      showError(error);
+    } finally { set({ busy: false }); }
+  },
+  purge: async (id) => {
+    if (get().busy) return;
+    set({ busy: true, error: null });
+    try {
+      const trash = await api.purgeTrashedProject(id);
+      set((current) => ({ trash, lastDeleted: current.lastDeleted?.id === id ? null : current.lastDeleted }));
+    } catch (error) { showError(error); }
+    finally { set({ busy: false }); }
+  },
+  emptyTrash: async () => {
+    if (get().busy) return;
+    set({ busy: true, error: null });
+    try {
+      const trash = await api.emptyProjectTrash();
+      set({ trash, lastDeleted: null });
+    } catch (error) { showError(error); }
+    finally { set({ busy: false }); }
+  },
+  dismissUndo: () => set({ lastDeleted: null }),
   goHome: async () => {
     if (get().busy) return;
     set({ screen: 'home', error: null });
@@ -344,7 +393,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       try {
         await get().flush();
         const list = await api.listProjects();
-        set({ projects: list.projects, ...(!get().activeProject ? { workspaceRevision: list.workspaceRevision } : {}) });
+        set({ projects: list.projects, trash: list.trash ?? [], ...(!get().activeProject ? { workspaceRevision: list.workspaceRevision } : {}) });
       } catch (error) { showError(error); }
     }
   },

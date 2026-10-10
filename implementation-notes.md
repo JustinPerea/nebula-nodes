@@ -1,5 +1,17 @@
 # Implementation Notes
 
+## 2026-10-10 — Recently deleted (trash + undo)
+
+- **Both, as one mechanism.** Undo is just "restore the thing you trashed a moment ago", so the toast and the trash share `POST /api/projects/{id}/restore`.
+- **Trash inside `catalog.json`**, not a separate file. Moving a project between `projects` and `trash` is then one atomic commit, with no window where it's in both places or neither. Cost: trashed projects count toward the 128 MiB catalog cap.
+- **30-day lazy expiry.** Swept on list and before restore, with no background timer. An entry past 30 days that hasn't been swept yet still can't be restored.
+- **Dropped the confirm on delete.** It's reversible now, so a confirm would be friction. Confirms remain on Delete forever and Empty.
+- **Restore brings it back closed**, even if it was open when deleted. Reopening it is one click and avoids replacing whatever is open now.
+- **Trash routes skip the workspace revision.** They never touch the live canvas, and a stale view just gets a 404 for something already gone.
+- **First real spring easing in the app.** The toast uses a CSS `linear()` curve computed from a damped spring (k 380, c 30, m 1: about 2% overshoot, 420 ms). The motion tokens were all cubic-beziers until now.
+- Live check: delete, toast timeout, restore from the section, Undo from the toast, and two-step Delete forever (gone from `catalog.json`). Ended with Sticker maker open again.
+- Small catch: the section heading's accessible name read "Recently deleted1". The count is now `aria-hidden`, with screen-reader text ", 1 project".
+
 ## 2026-10-10 — Delete project
 
 - **No delete existed.** The scratch project had to be removed from the catalog by hand (via the store's locked commit), which prompted this.
@@ -7,7 +19,7 @@
 - **Deleting the open project is allowed**, not refused. It's the common case (you just finished with it). It reuses `_paid_graph_mutation` and `_project_replacement_guard` (now takes an action name for the message), empties the live graph and clears the active project. The fences only apply when it's the open one; tidying other projects works mid-run.
 - **No outgoing save.** The browser cancels the autosave timer and waits for an in-flight save rather than flushing, so it never writes a project that's about to vanish (a late PUT would 404 and show an error).
 - **Recovery fallback.** `/api/projects/recover` used to 404 when its source was gone, which would have stuck a stale tab in a retry loop now that projects can disappear. It falls back to an empty source named "Deleted project".
-- **Not done:** no undo or trash bin, and other open windows' Home lists aren't pushed the deletion (opening a deleted card there shows "Project not found"). Media files are kept on purpose.
+- **Not done (at the time):** no undo or trash bin (added later the same day, above), and other open windows' Home lists aren't pushed the deletion (opening a deleted card there shows "Project not found"). Media files are kept on purpose.
 - Live check: deleted an open throwaway (canvas emptied, no project active, list re-read cleanly) and an inactive one while Sticker maker stayed open with its 2 nodes.
 
 ## 2026-10-10 — Agent collaboration: watch, pins, proposals

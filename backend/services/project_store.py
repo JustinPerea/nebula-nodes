@@ -11,7 +11,7 @@ import json
 import os
 import re
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterator
 from uuid import uuid4
@@ -19,6 +19,8 @@ from uuid import uuid4
 MAX_PROJECT_BYTES = 16 * 1024 * 1024
 MAX_CATALOG_BYTES = 128 * 1024 * 1024
 MAX_PROJECTS = 500
+# Deleted projects wait this long in Recently deleted before they go for good.
+TRASH_RETENTION = timedelta(days=30)
 _ID = re.compile(r"^[a-f0-9]{32}$")
 
 
@@ -80,6 +82,44 @@ def refresh_metadata(project: dict[str, Any], *, touch: bool = True) -> None:
         project["updatedAt"] = now()
 
 
+def purge_at(entry: dict[str, Any]) -> str:
+    deleted = datetime.fromisoformat(entry["deletedAt"])
+    return (deleted + TRASH_RETENTION).isoformat()
+
+
+def trash_metadata(entry: dict[str, Any]) -> dict[str, Any]:
+    return {**metadata(entry), "deletedAt": entry["deletedAt"], "purgeAt": purge_at(entry)}
+
+
+def move_to_trash(catalog: dict[str, Any], project_id: str) -> dict[str, Any]:
+    """Move a project, pins and all, out of the list and into the trash."""
+    entry = catalog["projects"].pop(project_id)
+    entry["deletedAt"] = now()
+    catalog.setdefault("trash", {})[project_id] = entry
+    if catalog.get("migratedProjectId") == project_id:
+        catalog.pop("migratedProjectId", None)
+    return entry
+
+
+def restore_from_trash(catalog: dict[str, Any], project_id: str) -> dict[str, Any]:
+    """Put a trashed project back in the list. It comes back closed."""
+    entry = catalog["trash"].pop(project_id)
+    entry.pop("deletedAt", None)
+    catalog["projects"][project_id] = entry
+    return entry
+
+
+def purge_expired_trash(catalog: dict[str, Any], *, at: datetime | None = None) -> bool:
+    """Drop trash older than TRASH_RETENTION. Returns whether anything went."""
+    moment = at or datetime.now(timezone.utc)
+    trash = catalog.get("trash") or {}
+    expired = [project_id for project_id, entry in trash.items()
+               if datetime.fromisoformat(entry["deletedAt"]) + TRASH_RETENTION <= moment]
+    for project_id in expired:
+        del trash[project_id]
+    return bool(expired)
+
+
 def make_project(name: str, snapshot: dict[str, Any] | None = None) -> dict[str, Any]:
     timestamp = now()
     project = {
@@ -117,6 +157,17 @@ class ProjectStore:
                 validate_project_id(project_id)
                 if not isinstance(project, dict) or project.get("id") != project_id or not isinstance(project.get("snapshot"), dict):
                     raise ValueError("Invalid project document")
+            trash = result.setdefault("trash", {})
+            if not isinstance(trash, dict):
+                raise ValueError("Invalid trash")
+            for project_id, entry in trash.items():
+                validate_project_id(project_id)
+                if (not isinstance(entry, dict) or entry.get("id") != project_id
+                        or not isinstance(entry.get("snapshot"), dict) or project_id in result["projects"]):
+                    raise ValueError("Invalid trashed project")
+                deleted_at = entry.get("deletedAt")
+                if not isinstance(deleted_at, str) or datetime.fromisoformat(deleted_at).tzinfo is None:
+                    raise ValueError("Invalid trashed project")
             active = result.get("activeProjectId")
             if active is not None and active not in result["projects"]:
                 raise ValueError("Invalid active project")

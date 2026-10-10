@@ -392,11 +392,14 @@ def test_deleting_an_inactive_project_leaves_the_open_canvas_alone(workspace):
     deleted = client.request("DELETE", f"/api/projects/{first['project']['id']}",
                              json={"workspaceRevision": second["workspaceRevision"]})
     assert deleted.status_code == 200, deleted.text
-    assert deleted.json() == {"deletedProjectId": first["project"]["id"],
-                              "activeProjectId": second["project"]["id"],
-                              "workspaceRevision": second["workspaceRevision"]}
+    result = deleted.json()
+    assert result["deletedProjectId"] == first["project"]["id"]
+    assert result["activeProjectId"] == second["project"]["id"]
+    assert result["workspaceRevision"] == second["workspaceRevision"]
+    assert result["trashedProject"]["name"] == "Old idea"
     catalog = store.read()
     assert list(catalog["projects"]) == [second["project"]["id"]]
+    assert list(catalog["trash"]) == [first["project"]["id"]]
     assert catalog["workspaceRevision"] == second["workspaceRevision"]
     assert graph.get_state() == graph_before
     broadcast.assert_not_awaited()
@@ -472,6 +475,124 @@ def test_unsaved_edits_to_a_project_deleted_elsewhere_can_still_be_recovered(wor
     body = {"sourceProjectId": first["project"]["id"], "recoveryId": uuid4().hex, "snapshot": snapshot}
     recovered = client.post("/api/projects/recover", json=body)
     assert recovered.status_code == 200, recovered.text
-    assert recovered.json()["project"]["name"] == "Deleted project (recovered)"
+    # Still in the trash, so the copy keeps its real name.
+    assert recovered.json()["project"]["name"] == "Deleted elsewhere (recovered)"
     assert recovered.json()["project"]["snapshot"] == snapshot
     assert client.post("/api/projects/recover", json=body).json() == recovered.json()
+    # Gone for good: the copy is still made, under a generic name.
+    assert client.request("DELETE", f"/api/projects/trash/{first['project']['id']}").status_code == 200
+    body["recoveryId"] = uuid4().hex
+    gone = client.post("/api/projects/recover", json=body)
+    assert gone.status_code == 200, gone.text
+    assert gone.json()["project"]["name"] == "Deleted project (recovered)"
+
+
+def _trash(client, project_id, revision):
+    response = client.request("DELETE", f"/api/projects/{project_id}", json={"workspaceRevision": revision})
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def test_a_deleted_project_waits_in_the_trash_and_restores_whole(workspace):
+    client, graph, store, _ = workspace
+    first = create(client, "Moodboard")
+    project_id = first["project"]["id"]
+    saved = client.put(f"/api/projects/{project_id}", json={"workspaceRevision": first["workspaceRevision"], "snapshot": {**saved_snapshot(), "edges": []}})
+    assert saved.status_code == 200, saved.text
+    store_catalog = store.read()
+    store_catalog["projects"][project_id]["pins"] = [{"id": "p1", "status": "open", "text": "keep me"}]
+    store.commit(store_catalog)
+    before = store.read()["projects"][project_id]
+    second = create(client, "Current", first["workspaceRevision"])
+    trashed = _trash(client, project_id, second["workspaceRevision"])["trashedProject"]
+    listing = client.get("/api/projects").json()
+    assert [project["name"] for project in listing["projects"]] == ["Current"]
+    assert [entry["id"] for entry in listing["trash"]] == [project_id]
+    assert listing["trash"][0]["deletedAt"] == trashed["deletedAt"]
+    assert listing["trash"][0]["purgeAt"] > trashed["deletedAt"]
+    # A trashed project can't be opened or saved over.
+    assert client.post(f"/api/projects/{project_id}/open", json={"workspaceRevision": second["workspaceRevision"]}).status_code == 404
+    restored = client.post(f"/api/projects/{project_id}/restore")
+    assert restored.status_code == 200, restored.text
+    assert restored.json()["project"]["name"] == "Moodboard"
+    catalog = store.read()
+    assert catalog["trash"] == {}
+    assert catalog["activeProjectId"] == second["project"]["id"]
+    assert catalog["projects"][project_id] == before
+    assert client.post(f"/api/projects/{project_id}/restore").status_code == 404
+
+
+def test_restoring_the_project_that_was_open_brings_it_back_closed(workspace):
+    client, graph, store, _ = workspace
+    first = create(client, "Was open")
+    graph.add_node("text-input", {"value": "live"})
+    result = _trash(client, first["project"]["id"], first["workspaceRevision"])
+    assert graph.nodes == {}
+    restored = client.post(f"/api/projects/{first['project']['id']}/restore")
+    assert restored.status_code == 200
+    assert restored.json()["workspaceRevision"] == result["workspaceRevision"]
+    assert store.read()["activeProjectId"] is None
+    assert graph.nodes == {}
+    opened = client.post(f"/api/projects/{first['project']['id']}/open", json={"workspaceRevision": result["workspaceRevision"]})
+    assert opened.status_code == 200, opened.text
+
+
+def test_trash_can_be_purged_one_at_a_time_or_emptied(workspace):
+    client, graph, store, _ = workspace
+    a = create(client, "A")
+    b = create(client, "B", a["workspaceRevision"])
+    c = create(client, "C", b["workspaceRevision"])
+    _trash(client, a["project"]["id"], c["workspaceRevision"])
+    _trash(client, b["project"]["id"], c["workspaceRevision"])
+    purged = client.request("DELETE", f"/api/projects/trash/{a['project']['id']}")
+    assert purged.status_code == 200
+    assert [entry["id"] for entry in purged.json()["trash"]] == [b["project"]["id"]]
+    assert client.request("DELETE", f"/api/projects/trash/{a['project']['id']}").status_code == 404
+    # Purging only reaches the trash, never a live project.
+    assert client.request("DELETE", f"/api/projects/trash/{c['project']['id']}").status_code == 404
+    assert client.request("DELETE", "/api/projects/trash/not-an-id").status_code == 400
+    assert client.post("/api/projects/trash/empty").json() == {"trash": []}
+    catalog = store.read()
+    assert catalog["trash"] == {}
+    assert list(catalog["projects"]) == [c["project"]["id"]]
+
+
+def test_trash_expires_after_thirty_days(workspace):
+    from datetime import datetime, timedelta, timezone
+    client, graph, store, _ = workspace
+    old = create(client, "Old")
+    recent = create(client, "Recent", old["workspaceRevision"])
+    keep = create(client, "Keep", recent["workspaceRevision"])
+    _trash(client, old["project"]["id"], keep["workspaceRevision"])
+    _trash(client, recent["project"]["id"], keep["workspaceRevision"])
+    catalog = store.read()
+    now = datetime.now(timezone.utc)
+    catalog["trash"][old["project"]["id"]]["deletedAt"] = (now - timedelta(days=30, minutes=1)).isoformat()
+    catalog["trash"][recent["project"]["id"]]["deletedAt"] = (now - timedelta(days=29)).isoformat()
+    store.commit(catalog)
+    # An expired entry can't be restored even before a listing sweeps it.
+    assert client.post(f"/api/projects/{old['project']['id']}/restore").status_code == 404
+    listing = client.get("/api/projects").json()
+    assert [entry["name"] for entry in listing["trash"]] == ["Recent"]
+    assert set(store.read()["trash"]) == {recent["project"]["id"]}
+
+
+def test_restore_respects_the_project_limit(workspace, monkeypatch):
+    client, graph, store, _ = workspace
+    a = create(client, "A")
+    b = create(client, "B", a["workspaceRevision"])
+    _trash(client, a["project"]["id"], b["workspaceRevision"])
+    monkeypatch.setattr("services.project_store.MAX_PROJECTS", 1)
+    assert client.post(f"/api/projects/{a['project']['id']}/restore").status_code == 413
+    assert a["project"]["id"] in store.read()["trash"]
+
+
+def test_a_corrupt_trash_entry_is_reported_not_silently_dropped(workspace):
+    client, graph, store, _ = workspace
+    create(client, "A")
+    raw = json.loads(store.path.read_text())
+    raw["trash"] = {"0" * 32: {"id": "0" * 32, "snapshot": {}, "deletedAt": "not a date"}}
+    store.path.write_text(json.dumps(raw))
+    before = store.path.read_bytes()
+    assert client.get("/api/projects").status_code == 507
+    assert store.path.read_bytes() == before

@@ -11,7 +11,8 @@ const project = (overrides: Partial<ProjectSummary> = {}): ProjectSummary => ({
 
 const props = (overrides: Partial<ProjectHomeProps> = {}): ProjectHomeProps => ({
   projects: [project()], loading: false, busy: false, error: null,
-  onCreate: vi.fn(), onOpen: vi.fn(), onRename: vi.fn(), onDelete: vi.fn(), onRetry: vi.fn(), ...overrides,
+  onCreate: vi.fn(), onOpen: vi.fn(), onRename: vi.fn(), onDelete: vi.fn(), onRetry: vi.fn(),
+  onRestore: vi.fn(), onPurge: vi.fn(), onEmptyTrash: vi.fn(), onDismissUndo: vi.fn(), ...overrides,
 });
 
 describe('ProjectHome', () => {
@@ -70,34 +71,64 @@ describe('ProjectHome', () => {
     expect(actions.onRename).toHaveBeenCalledTimes(1);
   });
 
-  it('asks before deleting, focuses Cancel, and can back out with Escape', () => {
+  it('moves a project to Recently deleted in one click and offers Undo', () => {
+    vi.useFakeTimers();
     const actions = props();
-    render(<ProjectHome {...actions} />);
+    const { rerender } = render(<ProjectHome {...actions} />);
     fireEvent.click(screen.getByRole('button', { name: 'Delete Glass campaign' }));
-    const confirm = screen.getByRole('group', { name: 'Delete Glass campaign' });
-    expect(confirm.textContent).toContain('outputs folder');
-    expect(document.activeElement).toBe(within(confirm).getByRole('button', { name: 'Cancel' }));
-    expect(screen.getByRole('button', { name: 'Open Glass campaign' }).hasAttribute('disabled')).toBe(true);
-    fireEvent.keyDown(confirm, { key: 'Escape' });
-    expect(screen.queryByRole('group', { name: 'Delete Glass campaign' })).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'Delete Glass campaign' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-    expect(actions.onDelete).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('button', { name: 'Delete Glass campaign' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Delete project' }));
     expect(actions.onDelete).toHaveBeenCalledWith('glass');
-    expect(screen.queryByRole('group', { name: 'Delete Glass campaign' })).toBeNull();
+    rerender(<ProjectHome {...props({ ...actions, projects: [], lastDeleted: { id: 'glass', name: 'Glass campaign' } })} />);
+    const toast = screen.getByRole('status');
+    expect(toast.textContent).toContain('Moved “Glass campaign” to Recently deleted');
+    fireEvent.click(within(toast).getByRole('button', { name: 'Undo' }));
+    expect(actions.onRestore).toHaveBeenCalledWith('glass');
+    // Hovering holds the toast; leaving lets it time out.
+    fireEvent.mouseEnter(toast);
+    vi.advanceTimersByTime(20_000);
+    expect(actions.onDismissUndo).not.toHaveBeenCalled();
+    fireEvent.mouseLeave(toast);
+    vi.advanceTimersByTime(8000);
+    expect(actions.onDismissUndo).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
+  });
+
+  it('lists recently deleted projects with restore and a two-step permanent delete', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-10T12:00:00Z'));
+    const trashed = { ...project({ id: 'old', name: 'Old sketch' }), deletedAt: '2026-10-10T11:00:00Z', purgeAt: '2026-11-09T11:00:00Z' };
+    const actions = props({ trash: [trashed] });
+    render(<ProjectHome {...actions} />);
+    const toggle = screen.getByRole('button', { name: 'Recently deleted, 1 project' });
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByRole('button', { name: 'Restore Old sketch' })).toBeNull();
+    fireEvent.click(toggle);
+    const row = screen.getByRole('listitem', { name: 'Old sketch' });
+    expect(row.textContent).toContain('Removed for good in 30 days');
+    fireEvent.click(within(row).getByRole('button', { name: 'Restore Old sketch' }));
+    expect(actions.onRestore).toHaveBeenCalledWith('old');
+    fireEvent.click(within(row).getByRole('button', { name: 'Delete forever' }));
+    const confirm = within(row).getByRole('group', { name: 'This can’t be undone.' });
+    expect(document.activeElement).toBe(within(confirm).getByRole('button', { name: 'Cancel' }));
+    fireEvent.keyDown(confirm, { key: 'Escape' });
+    expect(actions.onPurge).not.toHaveBeenCalled();
+    fireEvent.click(within(row).getByRole('button', { name: 'Delete forever' }));
+    fireEvent.click(within(row).getAllByRole('button', { name: 'Delete forever' })[0]);
+    expect(actions.onPurge).toHaveBeenCalledWith('old');
+    fireEvent.click(screen.getByRole('button', { name: 'Empty' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Delete all' }));
+    expect(actions.onEmptyTrash).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
+  });
+
+  it('hides Recently deleted when the trash is empty', () => {
+    render(<ProjectHome {...props({ trash: [] })} />);
+    expect(screen.queryByRole('button', { name: /Recently deleted/ })).toBeNull();
   });
 
   it('shows only one of rename or delete at a time', () => {
     render(<ProjectHome {...props()} />);
     fireEvent.click(screen.getByRole('button', { name: 'Rename Glass campaign' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Delete Glass campaign' }));
-    expect(screen.queryByRole('textbox', { name: 'Project name' })).toBeNull();
-    expect(screen.getByRole('group', { name: 'Delete Glass campaign' })).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Rename Glass campaign' }));
-    expect(screen.queryByRole('group', { name: 'Delete Glass campaign' })).toBeNull();
-    expect(screen.getByRole('textbox', { name: 'Project name' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Delete Glass campaign' }).hasAttribute('disabled')).toBe(true);
   });
 
   it('loads actual backend thumbnails and replaces a broken image with a graph placeholder', () => {
