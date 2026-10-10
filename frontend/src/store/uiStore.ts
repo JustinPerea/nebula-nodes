@@ -19,7 +19,7 @@ import { ONBOARDING_TOUR } from '../lib/onboarding';
 const AGENT_LOG_ENABLED_KEY = 'nebula:agentLog:enabled';
 const CANVAS_PERF_MODE_KEY = 'nebula:canvas:perfMode';
 const CANVAS_LOW_DETAIL_KEY = 'nebula:canvas:lowDetail';
-const MINIMAP_COLLAPSED_KEY = 'nebula:canvas:minimapCollapsed';
+const CANVAS_MINIMAP_ENABLED_KEY = 'nebula:canvas:minimapEnabled';
 const ONBOARDED_KEY = 'nebula:onboarded';
 const CREATE_SESSION_KEY = 'nebula:create:sessionId';
 const PANEL_EDGE_MARGIN = 16;
@@ -107,8 +107,7 @@ function persistAgentLogEnabled(enabled: boolean): void {
   window.localStorage.setItem(AGENT_LOG_ENABLED_KEY, enabled ? '1' : '0');
 }
 
-// Canvas performance prefs default ON (perf win with negligible visual cost for
-// render-culling; the minimap/controls chrome and zoom LOD are the visible part).
+// Render culling and zoom LOD default on; optional canvas chrome defaults off.
 function loadCanvasPref(key: string, defaultValue = true): boolean {
   if (typeof window === 'undefined') return defaultValue;
   const raw = window.localStorage.getItem(key);
@@ -230,7 +229,7 @@ interface UIState {
   agentLogEnabled: boolean;
   canvasPerfMode: boolean;
   canvasLowDetail: boolean;
-  minimapCollapsed: boolean;
+  canvasMinimapEnabled: boolean;
   notificationPrefs: NotificationPrefs;
   hasOnboarded: boolean;
   onboardingActive: boolean;
@@ -301,7 +300,7 @@ interface UIState {
   setAgentLogEnabled: (enabled: boolean) => void;
   setCanvasPerfMode: (enabled: boolean) => void;
   setCanvasLowDetail: (enabled: boolean) => void;
-  setMinimapCollapsed: (collapsed: boolean) => void;
+  setCanvasMinimapEnabled: (enabled: boolean) => void;
   setNotificationPrefs: (partial: Partial<NotificationPrefs>) => void;
   startOnboarding: () => void;
   nextOnboardingStep: () => void;
@@ -363,7 +362,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   agentLogEnabled: loadAgentLogEnabled(),
   canvasPerfMode: loadCanvasPref(CANVAS_PERF_MODE_KEY),
   canvasLowDetail: loadCanvasPref(CANVAS_LOW_DETAIL_KEY),
-  minimapCollapsed: loadCanvasPref(MINIMAP_COLLAPSED_KEY, false),
+  canvasMinimapEnabled: loadCanvasPref(CANVAS_MINIMAP_ENABLED_KEY, false),
   notificationPrefs: getNotificationPrefs(),
   hasOnboarded: loadOnboarded(),
   onboardingActive: false,
@@ -763,9 +762,9 @@ export const useUIStore = create<UIState>((set, get) => ({
     set({ canvasLowDetail: enabled });
   },
 
-  setMinimapCollapsed: (collapsed) => {
-    persistCanvasPref(MINIMAP_COLLAPSED_KEY, collapsed);
-    set({ minimapCollapsed: collapsed });
+  setCanvasMinimapEnabled: (enabled) => {
+    persistCanvasPref(CANVAS_MINIMAP_ENABLED_KEY, enabled);
+    set({ canvasMinimapEnabled: enabled });
   },
 
   setNotificationPrefs: (partial) => {

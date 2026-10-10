@@ -95,12 +95,6 @@ body.app-slava-restraint .canvas-navigation__controls button:focus-visible {
   width: 100%;
   height: 150px;
 }
-.canvas-minimap-panel--collapsed {
-  align-self: flex-end;
-  width: 44px;
-  height: 44px;
-}
-
 .canvas-minimap-panel .react-flow__minimap {
   position: static;
   width: 100%;
@@ -117,70 +111,6 @@ body.app-slava-restraint .canvas-navigation__controls button:focus-visible {
    and temporarily tuck away the map without changing its saved preference. */
 @media (max-width: 700px) {
   .canvas-wrapper[data-dock-open="true"] .canvas-minimap-panel { display: none; }
-}
-
-.canvas-minimap-toggle {
-  display: grid;
-  place-items: center;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: 8px;
-  background: rgba(20, 20, 20, 0.92);
-  color: rgba(255, 255, 255, 0.72);
-  cursor: pointer;
-  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
-}
-
-.canvas-minimap-toggle:hover {
-  background: rgba(38, 38, 38, 0.96);
-  border-color: rgba(255, 255, 255, 0.28);
-  color: #fff;
-}
-
-.canvas-minimap-toggle:focus-visible {
-  outline: 2px solid var(--sr-accent, #ff5a1f);
-  outline-offset: 2px;
-}
-
-.canvas-minimap-toggle--collapse {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  z-index: 2;
-  width: 30px;
-  height: 30px;
-}
-
-.canvas-minimap-toggle--restore {
-  width: 44px;
-  height: 44px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
-}
-
-body.app-slava-restraint .canvas-minimap-toggle {
-  border-color: var(--sr-edge);
-  background: var(--sr-glass-raised);
-  color: var(--sr-ink-light);
-}
-body.app-slava-restraint .canvas-minimap-toggle:hover {
-  border-color: var(--sr-edge-strong);
-  background: var(--sr-surface-control-hover);
-  color: var(--sr-ink-bold);
-}
-
-body.app-slava-restraint .canvas-minimap-toggle--restore {
-  border-color: var(--sr-edge, rgba(255, 255, 255, 0.1));
-  border-radius: var(--sr-radius-pill, 999px);
-  background: var(--sr-glass-raised, rgba(20, 20, 20, 0.88));
-  color: var(--sr-ink-light, rgba(255, 255, 255, 0.62));
-  box-shadow: var(--sr-shadow-panel-sm, 0 8px 24px rgba(0, 0, 0, 0.42));
-  backdrop-filter: var(--sr-blur-pill, blur(20px));
-  -webkit-backdrop-filter: var(--sr-blur-pill, blur(20px));
-}
-
-body.app-slava-restraint .canvas-minimap-toggle--restore:hover {
-  border-color: var(--sr-edge-strong, rgba(255, 255, 255, 0.18));
-  background: var(--sr-surface-control-hover, rgba(255, 255, 255, 0.05));
-  color: var(--sr-ink-bold, #fff);
 }
 
 body:not(.app-slava-restraint) .react-flow__minimap {

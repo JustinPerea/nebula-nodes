@@ -60,6 +60,8 @@ export function Settings() {
   const setCanvasPerfMode = useUIStore((s) => s.setCanvasPerfMode);
   const canvasLowDetail = useUIStore((s) => s.canvasLowDetail);
   const setCanvasLowDetail = useUIStore((s) => s.setCanvasLowDetail);
+  const canvasMinimapEnabled = useUIStore((s) => s.canvasMinimapEnabled);
+  const setCanvasMinimapEnabled = useUIStore((s) => s.setCanvasMinimapEnabled);
   const notificationPrefs = useUIStore((s) => s.notificationPrefs);
   const setNotificationPrefs = useUIStore((s) => s.setNotificationPrefs);
   const startOnboarding = useUIStore((s) => s.startOnboarding);
@@ -531,7 +533,21 @@ export function Settings() {
               <span className="settings__toggle-copy">
                 <span className="settings__toggle-title">Performance mode</span>
                 <span className="settings__toggle-description">
-                  Only render on-screen nodes; show minimap. Recommended for large graphs.
+                  Only render on-screen nodes. Recommended for large graphs.
+                </span>
+              </span>
+            </label>
+            <label className="settings__toggle-row">
+              <input
+                className="settings__toggle-input"
+                type="checkbox"
+                checked={canvasMinimapEnabled}
+                onChange={(e) => setCanvasMinimapEnabled(e.target.checked)}
+              />
+              <span className="settings__toggle-copy">
+                <span className="settings__toggle-title">Canvas minimap</span>
+                <span className="settings__toggle-description">
+                  Show an overview of your nodes in the bottom-right corner.
                 </span>
               </span>
             </label>

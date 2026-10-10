@@ -44,14 +44,24 @@ describe('uiStore', () => {
     expect(defaultRunHistoryPosition(250)).toEqual({ x: 16, y: 60 });
   });
 
-  it('persists the minimap collapsed state', () => {
-    useUIStore.getState().setMinimapCollapsed(true);
-    expect(useUIStore.getState().minimapCollapsed).toBe(true);
-    expect(window.localStorage.getItem('nebula:canvas:minimapCollapsed')).toBe('1');
-
-    useUIStore.getState().setMinimapCollapsed(false);
-    expect(useUIStore.getState().minimapCollapsed).toBe(false);
-    expect(window.localStorage.getItem('nebula:canvas:minimapCollapsed')).toBe('0');
+  it('defaults the minimap off despite legacy preferences and retains an explicit choice on reload', async () => {
+    const key = 'nebula:canvas:minimapEnabled';
+    const legacyKey = 'nebula:canvas:minimapCollapsed';
+    for (const legacy of ['0', '1']) {
+      localStorage.removeItem(key);
+      localStorage.setItem(legacyKey, legacy);
+      vi.resetModules();
+      const { useUIStore: reloaded } = await import('../../src/store/uiStore');
+      expect(reloaded.getState().canvasMinimapEnabled).toBe(false);
+    }
+    useUIStore.getState().setCanvasMinimapEnabled(true);
+    vi.resetModules();
+    const { useUIStore: reloaded } = await import('../../src/store/uiStore');
+    expect(reloaded.getState().canvasMinimapEnabled).toBe(true);
+    reloaded.getState().setCanvasMinimapEnabled(false);
+    expect(localStorage.getItem(key)).toBe('0');
+    useUIStore.getState().setCanvasMinimapEnabled(false);
+    localStorage.removeItem(legacyKey);
   });
 
   it('gives the workspace rail one authoritative left dock', () => {

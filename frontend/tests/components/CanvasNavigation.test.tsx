@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { ReactFlowProvider } from '@xyflow/react';
 import { CanvasNavigation } from '../../src/components/CanvasNavigation';
 import { useUIStore } from '../../src/store/uiStore';
@@ -19,26 +19,30 @@ describe('Canvas navigation', () => {
   });
   afterEach(() => document.querySelectorAll('.workspace-dock-panel').forEach((node) => node.remove()));
 
-  it('keeps zoom, fit and the count available with performance mode disabled', () => {
-    useUIStore.setState({ canvasPerfMode: false });
-    render(<ReactFlowProvider><CanvasNavigation nodeCount={3} /></ReactFlowProvider>);
+  it('hides the map by default while retaining zoom, fit and the count', () => {
+    useUIStore.setState({ canvasPerfMode: true });
+    const { container } = render(<ReactFlowProvider><CanvasNavigation nodeCount={3} /></ReactFlowProvider>);
     expect(screen.getByText('3 nodes')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /zoom in/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /zoom out/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /fit view/i })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /canvas minimap/i })).not.toBeInTheDocument();
+    expect(container.querySelector('.react-flow__minimap')).toBeNull();
   });
 
-  it('collapses and restores the map without removing viewport controls or count', () => {
-    useUIStore.setState({ canvasPerfMode: true, minimapCollapsed: false });
-    render(<ReactFlowProvider><CanvasNavigation nodeCount={1} /></ReactFlowProvider>);
-    fireEvent.click(screen.getByRole('button', { name: 'Minimize canvas minimap' }));
-    expect(useUIStore.getState().minimapCollapsed).toBe(true);
+  it('shows and hides the map from its preference independently of performance mode', () => {
+    useUIStore.setState({ canvasPerfMode: false });
+    const { container } = render(<ReactFlowProvider><CanvasNavigation nodeCount={1} /></ReactFlowProvider>);
+    act(() => useUIStore.getState().setCanvasMinimapEnabled(true));
+    expect(container.querySelector('.react-flow__minimap')).toBeInTheDocument();
+    expect(useUIStore.getState().canvasPerfMode).toBe(false);
+    act(() => useUIStore.getState().setCanvasMinimapEnabled(false));
+    expect(container.querySelector('.react-flow__minimap')).toBeNull();
     expect(screen.getByText('1 node')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /zoom in/i })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Show canvas minimap' }));
-    expect(useUIStore.getState().minimapCollapsed).toBe(false);
-    expect(screen.getByRole('button', { name: 'Minimize canvas minimap' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /zoom out/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /fit view/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /canvas minimap/i })).not.toBeInTheDocument();
   });
 
   it('measures the drawer at each Fit click without capturing earlier geometry', () => {

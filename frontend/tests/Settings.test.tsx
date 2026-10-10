@@ -280,8 +280,27 @@ describe('Settings — browser mode (no desktop bridge)', () => {
     expect(screen.getByText('Connections')).toBeInTheDocument();
     expect(screen.queryByText('Skin')).not.toBeInTheDocument();
     expect(screen.queryByRole('radio')).not.toBeInTheDocument();
-    expect(screen.getByText('Only render on-screen nodes; show minimap. Recommended for large graphs.')).toBeInTheDocument();
+    expect(screen.getByText('Only render on-screen nodes. Recommended for large graphs.')).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: /Canvas minimap/ })).not.toBeChecked();
     expect(screen.getByRole('button', { name: 'Close settings panel' })).toHaveFocus();
+  });
+
+  it('applies the minimap preference immediately without saving or changing performance mode', async () => {
+    getSettingsMock.mockResolvedValue({ apiKeys: {}, routing: {}, outputPath: '' });
+    useUIStore.setState({ canvasPerfMode: false, canvasMinimapEnabled: false });
+    render(<Settings />);
+    const toggle = await screen.findByRole('checkbox', { name: /Canvas minimap/ });
+    fireEvent.click(toggle);
+    expect(toggle).toBeChecked();
+    expect(useUIStore.getState().canvasMinimapEnabled).toBe(true);
+    expect(localStorage.getItem('nebula:canvas:minimapEnabled')).toBe('1');
+    expect(useUIStore.getState().canvasPerfMode).toBe(false);
+    fireEvent.click(toggle);
+    expect(toggle).not.toBeChecked();
+    expect(useUIStore.getState().canvasMinimapEnabled).toBe(false);
+    expect(localStorage.getItem('nebula:canvas:minimapEnabled')).toBe('0');
+    expect(updateSettingsMock).not.toHaveBeenCalled();
+    expect(providerApiFetchMock).not.toHaveBeenCalled();
   });
 
   it('closes from focused settings controls with Escape and restores the opener', async () => {
