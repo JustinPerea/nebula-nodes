@@ -18,10 +18,11 @@ any REST response, journal event, snapshot or CLI/MCP output. ``view()``
 leaves it out by construction. See ``services/person_gate.py`` and
 ``docs/MCP-SETUP.md`` for the full layering and the remaining risk.
 
-Cost: Nebula has no price list (``node_definitions.json`` has no price or
-credit fields), so no amount is ever shown. Each node is ``free`` (a local
-utility node) or ``paid`` (a provider call, labelled with the provider), and
-``estimate`` is always None.
+Cost: each node is ``free`` (a local utility node) or ``paid`` (a provider
+call, labelled with the provider). ``estimate`` adds up list prices from
+``data/model_pricing.json`` (see ``services/model_pricing.py``) for the nodes
+that have one; it is None when none do, and ``open`` when some paid node has
+no list price, so the real total can be higher.
 
 Memory-only: open and recently decided proposals are lost on restart.
 """
@@ -64,7 +65,8 @@ _ALLOWED_KEYS = frozenset({"note", "nodes", "edges", "params", "run"})
 OPEN = "open"
 CLOSED_STATUSES = frozenset({"accepted", "rejected", "withdrawn", "expired", "invalidated"})
 
-COST_NOTE = "Nebula has no price list, so no amount is shown. Paid runs bill your provider account."
+COST_NOTE = ("Amounts are list prices from each vendor's pricing page, not a quote. "
+             "Paid runs bill your provider account.")
 
 
 class ProposalError(Exception):
@@ -289,14 +291,31 @@ def cost_for(definition: Mapping[str, Any] | None) -> dict[str, Any]:
     return {"kind": "paid", "provider": provider, "label": f"paid · {provider or 'provider'}"}
 
 
-def summarize_cost(entries: list[dict[str, Any]], *, up_to: bool) -> dict[str, Any]:
-    """The proposal's run set: each entry is {ref, nodeId, kind, provider, label}."""
+def summarize_cost(
+    entries: list[dict[str, Any]], *, up_to: bool, estimate: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """The proposal's run set: each entry is {ref, nodeId, kind, provider, label, price}.
+
+    ``estimate`` is ``model_pricing.estimate_run`` output keyed by the same
+    refs; it becomes {currency, low, high, open, unpriced, plan, plus}, or
+    None when no node in the run has a list price."""
     paid = sum(1 for entry in entries if entry.get("kind") == "paid")
     providers = sorted({str(entry["provider"]) for entry in entries if entry.get("kind") == "paid" and entry.get("provider")})
+    summary_estimate = None
+    if estimate and estimate.get("high") is not None:
+        summary_estimate = {
+            "currency": estimate.get("currency", "usd"),
+            "low": estimate["low"],
+            "high": estimate["high"],
+            "open": bool(estimate.get("unpriced") or estimate.get("plus")),
+            "unpriced": list(estimate.get("unpriced") or []),
+            "plan": list(estimate.get("plan") or []),
+            "plus": list(estimate.get("plus") or []),
+        }
     return {
         "paidRuns": paid,
         "freeRuns": len(entries) - paid,
-        "estimate": None,
+        "estimate": summary_estimate,
         "upTo": up_to,
         "providers": providers,
         "nodes": entries,

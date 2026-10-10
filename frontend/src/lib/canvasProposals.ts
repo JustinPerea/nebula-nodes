@@ -1,6 +1,7 @@
 import type { Edge, InternalNode, Node } from '@xyflow/react';
 import type { NodeData } from '../types';
 import { apiFetch } from './backend';
+import { formatUsd, formatUsdRange } from './pricing';
 import { resolveAnchor, type Point } from './agentCursorMotion';
 import type { ProposalPersonValues, ProposalView } from './wsClient';
 
@@ -163,6 +164,8 @@ export function proposalSummary(view: ProposalView): string {
     if (paidRuns > 0) {
       const who = providers.length ? ` (${providers.join(', ')})` : '';
       parts.push(`runs ${upTo ? 'up to ' : ''}${plural(paidRuns, 'paid model')}${who}`);
+      const amount = proposalEstimateLabel(view);
+      if (amount) parts.push(amount);
     } else {
       parts.push(`runs ${upTo ? 'up to ' : ''}${plural(freeRuns, 'free node')}`);
     }
@@ -171,6 +174,16 @@ export function proposalSummary(view: ProposalView): string {
   }
   const text = parts.join(' · ');
   return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+/** "~$0.07", "$0.0047–0.43", "$0.07+" when part of the run has no list price. */
+export function proposalEstimateLabel(view: ProposalView): string | null {
+  const estimate = view.cost.estimate;
+  if (!estimate || view.run.length === 0) return null;
+  const exact = formatUsd(estimate.low) === formatUsd(estimate.high);
+  const amount = exact ? formatUsd(estimate.high) : formatUsdRange(estimate.low, estimate.high);
+  if (estimate.open) return `${amount}+`;
+  return exact ? `~${amount}` : amount;
 }
 
 /** The primary button's words. */

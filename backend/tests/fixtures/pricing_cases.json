@@ -1,0 +1,403 @@
+{
+  "about": "Shared by backend/tests/test_model_pricing.py and frontend/tests/lib/pricing.test.ts so the two estimators agree.",
+  "definitions": {
+    "img": {
+      "id": "img",
+      "apiProvider": "openai",
+      "params": [
+        {
+          "key": "quality",
+          "default": "auto",
+          "options": [
+            {
+              "value": "auto"
+            },
+            {
+              "value": "low"
+            },
+            {
+              "value": "high"
+            }
+          ]
+        },
+        {
+          "key": "size",
+          "default": "1024x1024",
+          "options": [
+            {
+              "value": "1024x1024"
+            },
+            {
+              "value": "1536x1024"
+            }
+          ]
+        },
+        {
+          "key": "n",
+          "default": 1
+        },
+        {
+          "key": "web_search",
+          "default": false
+        }
+      ]
+    },
+    "vid": {
+      "id": "vid",
+      "apiProvider": "google",
+      "params": [
+        {
+          "key": "model",
+          "default": "fast",
+          "options": [
+            {
+              "value": "fast"
+            },
+            {
+              "value": "full"
+            }
+          ]
+        },
+        {
+          "key": "audio",
+          "default": false
+        }
+      ]
+    },
+    "cu": {
+      "id": "cu",
+      "apiProvider": "krea",
+      "params": [
+        {
+          "key": "resolution",
+          "default": "1K",
+          "options": [
+            {
+              "value": "1K"
+            },
+            {
+              "value": "4K"
+            }
+          ]
+        }
+      ]
+    },
+    "dual": {
+      "id": "dual",
+      "apiProvider": "google",
+      "envKeyName": [
+        "GOOGLE_API_KEY",
+        "FAL_KEY"
+      ],
+      "params": []
+    },
+    "edit": {
+      "id": "edit",
+      "apiProvider": "openai",
+      "params": []
+    }
+  },
+  "pricing": {
+    "currencies": {
+      "krea_cu": {
+        "label": "Krea compute units"
+      }
+    },
+    "nodes": {
+      "img": {
+        "currency": "usd",
+        "per": "image",
+        "multiplyBy": [
+          "n"
+        ],
+        "rows": [
+          {
+            "match": {
+              "quality": "low",
+              "size": "1024x1024"
+            },
+            "price": 0.011
+          },
+          {
+            "match": {
+              "quality": "high",
+              "size": "1024x1024"
+            },
+            "price": 0.167
+          },
+          {
+            "match": {
+              "quality": "auto",
+              "size": "1024x1024"
+            },
+            "price": [
+              0.011,
+              0.167
+            ]
+          }
+        ],
+        "sources": [
+          {
+            "url": "https://example.com/pricing",
+            "quote": "fixture"
+          }
+        ],
+        "checked": "2026-10-10",
+        "extras": [
+          {
+            "match": {
+              "web_search": true
+            },
+            "price": 0.015
+          }
+        ]
+      },
+      "vid": {
+        "currency": "usd",
+        "per": "second",
+        "multiplyBy": [
+          "duration"
+        ],
+        "defaults": {
+          "duration": 8
+        },
+        "rows": [
+          {
+            "match": {
+              "model": "fast",
+              "audio": true
+            },
+            "price": 0.15
+          },
+          {
+            "match": {
+              "model": "fast"
+            },
+            "price": 0.1
+          },
+          {
+            "match": {
+              "model": "full"
+            },
+            "price": 0.4
+          }
+        ],
+        "sources": [
+          {
+            "url": "https://example.com/pricing",
+            "quote": "fixture"
+          }
+        ],
+        "checked": "2026-10-10"
+      },
+      "cu": {
+        "currency": "krea_cu",
+        "per": "image",
+        "rows": [
+          {
+            "match": {
+              "resolution": "1K"
+            },
+            "price": 24
+          }
+        ],
+        "sources": [
+          {
+            "url": "https://example.com/pricing",
+            "quote": "fixture"
+          }
+        ],
+        "checked": "2026-10-10"
+      },
+      "dual": {
+        "currency": "usd",
+        "per": "video",
+        "provider": "google",
+        "rows": [
+          {
+            "match": {},
+            "price": 3.2
+          }
+        ],
+        "sources": [
+          {
+            "url": "https://example.com/pricing",
+            "quote": "fixture"
+          }
+        ],
+        "checked": "2026-10-10"
+      },
+      "edit": {
+        "currency": "usd",
+        "per": "image",
+        "plus": "input images",
+        "rows": [
+          {
+            "match": {},
+            "price": 0.05
+          }
+        ],
+        "sources": [
+          {
+            "url": "https://example.com/pricing",
+            "quote": "fixture"
+          }
+        ],
+        "checked": "2026-10-10"
+      }
+    }
+  },
+  "cases": [
+    {
+      "name": "defaults resolve auto quality to a range",
+      "nodeId": "img",
+      "params": {},
+      "expected": {
+        "currency": "usd",
+        "low": 0.011,
+        "high": 0.167
+      }
+    },
+    {
+      "name": "explicit quality",
+      "nodeId": "img",
+      "params": {
+        "quality": "low"
+      },
+      "expected": {
+        "currency": "usd",
+        "low": 0.011,
+        "high": 0.011
+      }
+    },
+    {
+      "name": "count multiplies",
+      "nodeId": "img",
+      "params": {
+        "quality": "high",
+        "n": 3
+      },
+      "expected": {
+        "currency": "usd",
+        "low": 0.501,
+        "high": 0.501
+      }
+    },
+    {
+      "name": "numeric strings multiply",
+      "nodeId": "img",
+      "params": {
+        "quality": "high",
+        "n": "2"
+      },
+      "expected": {
+        "currency": "usd",
+        "low": 0.334,
+        "high": 0.334
+      }
+    },
+    {
+      "name": "settings with no row are unpriced",
+      "nodeId": "img",
+      "params": {
+        "size": "1536x1024"
+      },
+      "expected": null
+    },
+    {
+      "name": "handler default duration",
+      "nodeId": "vid",
+      "params": {},
+      "expected": {
+        "currency": "usd",
+        "low": 0.8,
+        "high": 0.8
+      }
+    },
+    {
+      "name": "first matching row wins",
+      "nodeId": "vid",
+      "params": {
+        "audio": true,
+        "duration": 4
+      },
+      "expected": {
+        "currency": "usd",
+        "low": 0.6,
+        "high": 0.6
+      }
+    },
+    {
+      "name": "blank params fall back to defaults",
+      "nodeId": "vid",
+      "params": {
+        "model": "",
+        "duration": null
+      },
+      "expected": {
+        "currency": "usd",
+        "low": 0.8,
+        "high": 0.8
+      }
+    },
+    {
+      "name": "other currencies pass through",
+      "nodeId": "cu",
+      "params": {},
+      "expected": {
+        "currency": "krea_cu",
+        "low": 24,
+        "high": 24
+      }
+    },
+    {
+      "name": "no entry is unpriced",
+      "nodeId": "missing",
+      "params": {},
+      "expected": null
+    },
+    {
+      "name": "extras add per unit before the count",
+      "nodeId": "img",
+      "params": {
+        "quality": "low",
+        "web_search": true,
+        "n": 2
+      },
+      "expected": {
+        "currency": "usd",
+        "low": 0.052,
+        "high": 0.052
+      }
+    },
+    {
+      "name": "the priced route",
+      "nodeId": "dual",
+      "params": {},
+      "routeProvider": "google",
+      "expected": {
+        "currency": "usd",
+        "low": 3.2,
+        "high": 3.2
+      }
+    },
+    {
+      "name": "another route is unpriced",
+      "nodeId": "dual",
+      "params": {},
+      "routeProvider": "fal",
+      "expected": null
+    },
+    {
+      "name": "unpublished extra cost is named",
+      "nodeId": "edit",
+      "params": {},
+      "expected": {
+        "currency": "usd",
+        "low": 0.05,
+        "high": 0.05,
+        "plus": "input images"
+      }
+    }
+  ]
+}

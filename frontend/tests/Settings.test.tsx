@@ -303,6 +303,22 @@ describe('Settings — browser mode (no desktop bridge)', () => {
     expect(providerApiFetchMock).not.toHaveBeenCalled();
   });
 
+  it('applies the run-cost threshold immediately and can turn the question off', async () => {
+    getSettingsMock.mockResolvedValue({ apiKeys: {}, routing: {}, outputPath: '' });
+    useUIStore.setState({ runCostConfirmUsd: 1 });
+    render(<Settings />);
+    const select = await screen.findByRole('combobox', { name: 'Ask before costly runs' });
+    expect(select).toHaveValue('1');
+    fireEvent.change(select, { target: { value: '5' } });
+    expect(useUIStore.getState().runCostConfirmUsd).toBe(5);
+    expect(localStorage.getItem('nebula:run:costConfirmUsd')).toBe('5');
+    fireEvent.change(select, { target: { value: 'off' } });
+    expect(useUIStore.getState().runCostConfirmUsd).toBeNull();
+    expect(localStorage.getItem('nebula:run:costConfirmUsd')).toBe('off');
+    expect(updateSettingsMock).not.toHaveBeenCalled();
+    useUIStore.getState().setRunCostConfirmUsd(1);
+  });
+
   it('closes from focused settings controls with Escape and restores the opener', async () => {
     getSettingsMock.mockResolvedValue({ apiKeys: {}, routing: {}, outputPath: '' });
     const opener = document.createElement('button');

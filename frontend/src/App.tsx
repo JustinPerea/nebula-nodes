@@ -22,6 +22,7 @@ import { startWorkingBadge } from './lib/jobNotifications';
 import { getSettings } from './lib/api';
 import { getKreaConnection, normalizeKreaMode, nodeKeyStatus } from './lib/kreaConnection';
 import { useUIStore } from './store/uiStore';
+import { usePricingStore } from './store/pricingStore';
 import { useGraphStore } from './store/graphStore';
 import { useCommonsCapability } from './hooks/useCommonsCapability';
 import { useZoomManifest } from './hooks/useZoomManifest';
@@ -86,6 +87,9 @@ export default function App() {
   const settingsVisible = useUIStore((s) => s.panels.settings.visible
     && (s.viewMode === 'canvas' || s.viewMode === 'create'));
   const settingsCacheRequest = useRef(0);
+  // List prices for the Run estimate and the cost confirm, fetched once.
+  useEffect(() => { void usePricingStore.getState().load(); }, []);
+
   // Fetch settings on mount to populate the API key cache used for warning badges
   useEffect(() => {
     let cancelled = false;

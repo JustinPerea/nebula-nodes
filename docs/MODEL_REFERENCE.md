@@ -892,7 +892,7 @@ Nodes: 303 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |-----------|------|---------|---------------|
 | Krea connection | enum | api-token | API token · API balance, Krea account · workspace compute |
 | Prompt | textarea | — | — |
-| Seed | float | 1513805061 | — |
+| Seed | float | 764245906 | — |
 | Steps | int | 25 | 1–100 |
 | Width | float | 1024 | 512–2368 |
 | Height | float | 1024 | 512–2368 |

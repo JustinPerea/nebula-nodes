@@ -1,5 +1,35 @@
 # Implementation Notes
 
+## 2026-10-10 — Run cost from a curated price table
+
+Justin chose option (a): a curated price table, each price checked against the vendor's page, then a cost chip on Run and a confirm above a threshold. Not committed yet.
+
+**The table** (`backend/data/model_pricing.json`, 56 nodes):
+- Every entry has `sources` (https URL plus the quoted price line) and a `checked` date. `validate_pricing` refuses entries without them, values that aren't real node options, utility nodes, and dual-route nodes that don't say whose price it is.
+- 47 Krea entries are **generated** by `scripts/sync-krea-catalog.py` from `x-krea-pricing` in Krea's OpenAPI spec (exact USD per request for API-token runs). They carry `generatedBy` and the sync script owns them: it rewrites only those and errors if one collides with a curated entry. 20 Krea models stay unpriced because their price depends on things a node param doesn't capture (reference image count, video reference, billing tier). The script prints why for each.
+- 9 entries are **hand-curated**: GPT Image 2 / 2.5 generate and edit (OpenAI calculator rows), Nano Banana (Google), Veo 3.1 direct (Google, per second), Nano Banana via fal (generate and edit), Kling v3 (fal, per second).
+- Not priced on purpose: Gemini Omni Flash (per-second rate known, clip length isn't), Imagen 4 (shut down), Veo 3.0/2.0 (shut down), every Krea account run (compute units with no published rate).
+
+**Decisions:**
+- **One estimator, two implementations, one test file.** `services/model_pricing.py` and `frontend/src/lib/pricing.ts` both run `backend/tests/fixtures/pricing_cases.json`, so they can't drift. The frontend fetches the table once from `GET /api/pricing` (`store/pricingStore.ts`, loaded in `App.tsx`).
+- **Ranges, not guesses.** `auto` quality/size on OpenAI resolves at run time, so those rows are `[low, high]` over the node's own options (GPT Image 2.5 auto/auto is about $0.0047–0.43). Wide, but true.
+- **"+" means part of the run has no price.** Edit nodes have `plus: "input images"` (OpenAI bills input image tokens by size), and unpriced paid nodes also open the total. The chip shows "$0.16+", and the tooltip names what's missing.
+- **Route-aware.** Dual-route nodes (Veo 3, Ideogram, Meshy) bill whichever key is set. An entry names its `provider`, and the run is unpriced when it routes elsewhere (Veo via fal has no entry yet). Backend `route_provider` mirrors frontend `runRouteProvider`.
+- **Batches multiply.** Below a Batch a node runs once per item; below an Iterator up to its cap (the array isn't known until run time). The nearest fan-out above a node decides, matching the engine's rules (it rejects independent joins and caps nested expansion). A cluster run only counts fan-out inside the cluster, since that's all the engine receives.
+- **Krea account runs are "billed to your Krea plan"**, not unpriced, and add nothing to the dollar total.
+- **The confirm lives in the store**, in `executeGraph` / `executeNode` / `executeCluster`, so every Run path is covered (toolbar, selection bar, ⌘↵, palette, context menu, Inspector, Cinema, accepted proposals). It asks when the *high* estimate reaches the threshold. If the table didn't load, it never asks. Unpriced nodes don't trigger it but are named in the message.
+- **Threshold** is a per-browser preference (`nebula:run:costConfirmUsd`, default $1, choices $0.50/$1/$5/$20/Never) in Settings › Interface, next to the other immediate preferences. It isn't a saved backend setting.
+- **Proposals got real numbers too.** `cost.estimate` was always `null`. It's now `{currency, low, high, open, unpriced, plan, plus}` (or `null` when nothing is priced), and each node entry has `price`. The proposal bar summary adds "~$0.07", the CLI prints "— $0.07 at list prices", and the MCP docstring and `docs/MCP-SETUP.md` say so.
+
+**Surprises worth knowing:**
+- Krea's spec gave MiniMax H3 Max 6,864 price points. Storing all points bloated the pinned catalog to 2.1 MB, so pricing is stored only for models whose dimensions all map onto request fields (353 KB).
+- Krea lists Veo durations 5 and 7 in pricing that its own request schema rejects. The generator drops unreachable points rather than shipping rows the validator would flag.
+- Gemini 3 Pro Image renders a 512 request at 1K (`allowed_sizes` in `handlers/google_gemini.py`), so the 512 row carries the 1K price.
+- Refreshing the Krea spec changed one random seed default in `node_definitions.json` (Krea's spec ships a random example seed). `MODEL_REFERENCE.md` was regenerated for it. Pinning seed defaults in the sync script would stop that churn. Left as a follow-up.
+- Lifecycle findings while checking Google's pages: Imagen 4 models shut down 2026-08-17 (our `imagen-4-generate` node calls them); Veo 3.0/3.0 Fast/2.0 shut down 2026-06-30; the Veo 3.1 previews and `gemini-omni-flash-preview` shut down 2026-10-22 (replacement `gemini-omni-1.1-flash`). These are reported separately, not fixed here.
+
+**Keeping prices current:** curated entries need a fresh source and `checked` date when a vendor changes prices. Run `python scripts/sync-krea-catalog.py --refresh` for Krea. `backend/tests/test_model_pricing.py` fails if any entry stops validating against the node catalog.
+
 ## 2026-10-10 — Eight more UX fixes: one bar, shortcuts, renaming, live run status
 
 Justin approved eight from a second UX pass. Seven are done; #5 (cost estimate) is blocked on a pricing source (see below). Not committed yet.
@@ -15,7 +45,7 @@ Justin approved eight from a second UX pass. Seven are done; #5 (cost estimate) 
    - Ctrl+S/O were removed from the canvas handler; `GraphFileActions` already owns them globally.
    - Copy defers to the browser when there's a text selection.
 4. **Image inputs fan out.** Several input handles on a text or image surface used to stack at 50%. Each row gets `--port-index` / `--port-count` and sits `--sr-node-surface-port-gap` (28px) apart around the middle.
-5. **Cost estimate: blocked, not built.** There's no price data we can trust. Node definitions carry none, and the only prices in the app are OpenRouter/Nous per-token rates and Quiver credits. Most nodes (OpenAI images, fal, Runway, Kling…) have none, and real cost depends on params (quality, size, duration). Inventing a table would show wrong numbers with confidence. Options are in the report to Justin; the "N paid" chip stays as it is.
+5. **Cost estimate: blocked, not built.** (Now built from a curated price table; see the next section up.) There's no price data we can trust. Node definitions carry none, and the only prices in the app are OpenRouter/Nous per-token rates and Quiver credits. Most nodes (OpenAI images, fal, Runway, Kling…) have none, and real cost depends on params (quality, size, duration). Inventing a table would show wrong numbers with confidence. Options are in the report to Justin; the "N paid" chip stays as it is.
 6. **`?` opens a shortcut sheet.**
    - `src/lib/keyboardShortcuts.ts` is the one list (also used for tooltips via `displayKey`, so ⌘ vs Ctrl is right per platform).
    - `KeyboardShortcuts.tsx` is a modal: Esc or `?` closes, focus returns where it was. It's also in ⌘K as "Keyboard shortcuts".

@@ -13954,7 +13954,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "required": false,
         "type": "float",
         "step": 0.01,
-        "default": 1513805061
+        "default": 764245906
       },
       {
         "key": "steps",

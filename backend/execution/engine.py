@@ -395,11 +395,6 @@ NODE_DEFS: dict[str, dict[str, Any]] = {
         "outputPorts": [{"id": "text"}],
         "envKeyName": "GOOGLE_API_KEY",
     },
-    "imagen-4-generate": {
-        "inputPorts": [{"id": "prompt", "required": True}],
-        "outputPorts": [{"id": "image"}],
-        "envKeyName": "GOOGLE_API_KEY",
-    },
     "kling-v2-1": {
         "inputPorts": [
             {"id": "image", "required": True},

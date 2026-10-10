@@ -24,7 +24,8 @@ import { fetchCLIGraph } from '../../lib/api';
 import { apiFetch } from '../../lib/backend';
 import { CANVAS_FIT_DURATION, CANVAS_ZOOM_DURATION, computeCanvasFitPadding } from '../../lib/canvasFit';
 import { displayKey } from '../../lib/keyboardShortcuts';
-import { describeRunScope, summarizeRunScope } from '../../lib/runScope';
+import { describeRunScope, runChipLabel, summarizeRunScope } from '../../lib/runScope';
+import { usePricingStore } from '../../store/pricingStore';
 import type { NodeData } from '../../types';
 import type { Edge, Node } from '@xyflow/react';
 import '../../styles/panels.css';
@@ -49,10 +50,13 @@ export function Toolbar() {
   const nodeCount = useGraphStore((s) => s.nodes.length);
   const graphNodes = useGraphStore((s) => s.nodes);
   const graphEdges = useGraphStore((s) => s.edges);
+  const pricing = usePricingStore((s) => s.table);
+  const apiKeys = useUIStore((s) => s.settingsCache.apiKeys);
   const runScope = useMemo(
-    () => summarizeRunScope(graphNodes ?? [], graphEdges ?? [], { kind: 'graph' }),
-    [graphNodes, graphEdges],
+    () => summarizeRunScope(graphNodes ?? [], graphEdges ?? [], { kind: 'graph' }, { pricing, apiKeys }),
+    [graphNodes, graphEdges, pricing, apiKeys],
   );
+  const runChip = runChipLabel(runScope);
   const runScopeId = useId();
   const autoLayout = useGraphStore((s) => s.autoLayout);
   const resetPanelLayout = useUIStore((s) => s.resetPanelLayout);
@@ -243,8 +247,8 @@ export function Toolbar() {
         >
           <ToolbarIcon name="run" />
           <span className="toolbar__label">Run</span>
-          {runScope.paid.length > 0 && (
-            <span className="toolbar__run-paid" aria-hidden="true">{runScope.paid.length} paid</span>
+          {runChip && (
+            <span className="toolbar__run-paid" aria-hidden="true">{runChip}</span>
           )}
         </button>
       )}

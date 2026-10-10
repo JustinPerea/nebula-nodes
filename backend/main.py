@@ -77,7 +77,9 @@ from services.settings import (
     update_injected_keys,
 )
 from services.node_registry import NodeRegistry
+from services import model_pricing
 from services.cli_graph import CLIGraph
+from services.retired_nodes import migrate_node, retired_message
 from services.project_store import (
     MAX_PROJECT_BYTES, ProjectLimitError, ProjectStore, ProjectStoreError, empty_snapshot,
     make_project, metadata as project_metadata, now as project_now,
@@ -3062,8 +3064,9 @@ def _outputs_available(outputs: Any) -> bool:
 def _proposal_cost(candidate: CLIGraph, id_map: dict[str, str], run_ids: list[str]) -> dict[str, Any]:
     """Which nodes a run after acceptance may start: the targets plus ancestors without outputs.
 
-    Never a number: each node is free (utility) or paid (a provider call).
-    "Up to" when ancestors are counted, because the execution cache may skip them.
+    Each node is free (utility) or paid (a provider call), with its list
+    price when model_pricing.json has one. "Up to" when ancestors are counted,
+    because the execution cache may skip them.
     """
     ref_for = {new_id: ref for ref, new_id in id_map.items()}
     definitions = node_registry.get_all()
@@ -3084,14 +3087,52 @@ def _proposal_cost(candidate: CLIGraph, id_map: dict[str, str], run_ids: list[st
                         continue
                     up_to = True
                 chosen.append(node.id)
+        items = [
+            {
+                "id": node_id,
+                "definitionId": str(candidate.nodes[node_id].get("definitionId") or ""),
+                "params": candidate.nodes[node_id].get("params") or {},
+            }
+            for node_id in chosen
+        ]
+        estimate = _estimate_proposal_run(items, graph_nodes, graph_edges, definitions)
         for node_id in chosen:
             definition = definitions.get(str(candidate.nodes[node_id].get("definitionId") or ""), {})
+            price = (estimate or {}).get("priced", {}).get(node_id)
             entries.append({
                 "ref": ref_for.get(node_id, node_id),
                 "nodeId": None if node_id in ref_for else node_id,
                 **cost_for(definition),
+                "price": price,
             })
+        if estimate:
+            estimate = {
+                **estimate,
+                "unpriced": [ref_for.get(i, i) for i in estimate["unpriced"]],
+                "plan": [ref_for.get(i, i) for i in estimate["plan"]],
+            }
+        return summarize_cost(entries, up_to=up_to, estimate=estimate)
     return summarize_cost(entries, up_to=up_to)
+
+
+def _estimate_proposal_run(
+    items: list[dict[str, Any]],
+    graph_nodes: list[dict[str, Any]],
+    graph_edges: list[dict[str, Any]],
+    definitions: dict[str, Any],
+) -> dict[str, Any] | None:
+    """List-price estimate for a proposal's run; None when the table can't load."""
+    try:
+        pricing = model_pricing.load_pricing()
+    except (OSError, ValueError):
+        return None
+    api_keys = load_settings().get("apiKeys", {}) or {}
+    multipliers = model_pricing.run_multipliers(
+        [{"id": n.get("id"), "definitionId": n.get("definitionId"), "params": n.get("params") or {}}
+         for n in graph_nodes],
+        [(str(e.get("source")), str(e.get("target"))) for e in graph_edges],
+    )
+    return model_pricing.estimate_run(items, pricing, definitions, api_keys, multipliers)
 
 
 def _node_order(node_id: str) -> tuple[int, str]:
@@ -4790,6 +4831,17 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
 
 # ---------- CLI: Node discovery ----------
 
+@app.get("/api/pricing")
+async def get_pricing() -> dict:
+    """The curated price table for the Run button's estimate. Read per request,
+    so a price update needs no restart. Nodes absent here are unpriced."""
+    try:
+        data = model_pricing.load_pricing()
+    except (OSError, ValueError) as exc:
+        raise HTTPException(status_code=500, detail=f"Pricing table unavailable: {exc}") from exc
+    return {"currencies": data.get("currencies") or {}, "nodes": data.get("nodes") or {}}
+
+
 @app.get("/api/nodes")
 async def list_nodes() -> dict:
     all_nodes = node_registry.get_all()
@@ -5425,6 +5477,8 @@ async def create_graph_node(body: dict[str, Any]) -> dict:
     _check_workspace_revision()
     _validate_graph_ingress_complexity(body)
     definition_id = body.get("definitionId", "")
+    if message := retired_message(str(definition_id)):
+        raise HTTPException(status_code=400, detail=message)
     raw_params = body.get("params", {})
     params = {} if raw_params is None else raw_params
     if not isinstance(params, dict):
@@ -5502,6 +5556,8 @@ async def create_node_and_connect(body: dict[str, Any]) -> dict:
     _check_workspace_revision()
     _validate_graph_ingress_complexity(body)
     definition_id = body.get("definitionId", "")
+    if message := retired_message(str(definition_id)):
+        raise HTTPException(status_code=400, detail=message)
     raw_params = body.get("params", {})
     params = {} if raw_params is None else raw_params
     if not isinstance(params, dict):
@@ -6314,17 +6370,20 @@ def _stage_graph_nodes(
                 status_code=400,
                 detail=f"nodes[{index}].definitionId must be a non-empty string",
             )
-        if node_registry.get(definition_id) is None:
-            raise HTTPException(
-                status_code=400,
-                detail=f"unknown node definition '{definition_id}'",
-            )
         raw_params = raw.get("params", {})
         params = {} if raw_params is None else raw_params
         if not isinstance(params, dict):
             raise HTTPException(
                 status_code=400,
                 detail=f"nodes[{index}].params must be an object",
+            )
+        # A retired definition (its provider shut the model down) becomes its
+        # replacement, so saved graphs and exports still load.
+        definition_id, params, retired_label = migrate_node(definition_id, params)
+        if node_registry.get(definition_id) is None:
+            raise HTTPException(
+                status_code=400,
+                detail=f"unknown node definition '{definition_id}'",
             )
         _validate_params(definition_id, params)
         params = _coerce_params(definition_id, params)
@@ -6385,7 +6444,7 @@ def _stage_graph_nodes(
                 status_code=400,
                 detail=f"invalid node '{reference}': {exc}",
             ) from exc
-        if label := _custom_node_label(raw.get("label"), definition_id):
+        if label := _custom_node_label(raw.get("label"), definition_id) or retired_label:
             candidate.nodes[new_id]["label"] = label
         id_map[reference] = new_id
     return id_map
@@ -6786,7 +6845,7 @@ def _stage_project_snapshot(snapshot: Any, *, historical: dict[str, str] | None 
         ):
             raise HTTPException(status_code=400, detail=f"nodes[{index}] requires a finite position")
         isolated = CLIGraph()
-        if node_registry.get(definition_id) is not None:
+        if node_registry.get(migrate_node(definition_id, params)[0]) is not None:
             staged = _stage_graph_nodes(isolated, [{
                 "id": node_id, "definitionId": definition_id, "params": params,
                 "outputs": outputs, "position": position, "label": data.get("label"),
@@ -6800,9 +6859,13 @@ def _stage_project_snapshot(snapshot: Any, *, historical: dict[str, str] | None 
             if isinstance(data.get("label"), str) and data["label"].strip():
                 staged_node["label"] = " ".join(data["label"].split())[:MAX_NODE_LABEL_LENGTH]
         else:
-            raise HTTPException(status_code=400, detail=f"Unknown node definition '{definition_id}'")
+            raise HTTPException(status_code=400, detail=retired_message(definition_id) or f"Unknown node definition '{definition_id}'")
         staged_node["id"] = node_id
         candidate.nodes[node_id] = staged_node
+        if staged_node["definitionId"] != definition_id:
+            # Migrated from a retired definition: the canvas shows the replacement.
+            result["nodes"][index]["data"]["definitionId"] = staged_node["definitionId"]
+            result["nodes"][index]["data"]["label"] = staged_node.get("label")
         result["nodes"][index]["data"]["params"] = copy.deepcopy(staged_node["params"])
         result["nodes"][index]["data"]["outputs"] = _rewrite_output_paths(staged_node["outputs"])
         if match := re.fullmatch(r"n(\d+)", node_id):
@@ -7480,6 +7543,8 @@ async def quick_execute(body: dict[str, Any]) -> dict:
     _check_workspace_revision()
     _capture_execution_workspace()
     definition_id = body.get("definitionId", "")
+    if message := retired_message(str(definition_id)):
+        raise HTTPException(status_code=400, detail=message)
     if not quick_execution_allowed(definition_id):
         raise HTTPException(
             status_code=409,

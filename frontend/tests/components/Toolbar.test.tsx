@@ -21,6 +21,7 @@ interface ToolbarGraph {
 
 interface ToolbarUI {
   resetPanelLayout: () => void;
+  settingsCache: { apiKeys: Record<string, string>; loaded: boolean };
   viewMode: 'canvas' | 'create' | 'editor' | 'commons';
   commonsEnabled: boolean;
   canvasFocusRequest: unknown | null;
@@ -54,8 +55,14 @@ vi.mock('../../src/store/graphStore', async () => {
 vi.mock('../../src/store/uiStore', async () => {
   const { create } = await import('zustand');
   mocks.ui = create<ToolbarUI>(() => ({ resetPanelLayout: mocks.reset, viewMode: 'canvas', commonsEnabled: false,
-    canvasFocusRequest: null, canvasFocusRevision: 0, canvasViewportRevision: 0 }));
+    canvasFocusRequest: null, canvasFocusRevision: 0, canvasViewportRevision: 0,
+    settingsCache: { apiKeys: {}, loaded: true } }));
   return { useUIStore: mocks.ui };
+});
+// The price table has its own tests; here it stays unloaded so Run reads "N paid".
+vi.mock('../../src/store/pricingStore', async () => {
+  const { create } = await import('zustand');
+  return { usePricingStore: create(() => ({ table: null, loading: false, load: async () => {} })) };
 });
 vi.mock('../../src/lib/backend', () => ({ apiFetch: (...args: unknown[]) => mocks.fetch(...args) }));
 vi.mock('../../src/lib/api', () => ({ fetchCLIGraph: () => mocks.cli() }));

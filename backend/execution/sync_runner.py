@@ -12,7 +12,7 @@ from models.events import ExecutionEvent
 from cinema.color import _parse_recraft_color
 from handlers.openai_image import handle_openai_image_generate
 from handlers.openai_image_edit import handle_openai_image_edit
-from handlers.google_gemini import handle_imagen4, handle_nano_banana, handle_lyria3, handle_gemini_tts, handle_gemini_embeddings
+from handlers.google_gemini import handle_nano_banana, handle_lyria3, handle_gemini_tts, handle_gemini_embeddings
 from handlers.elevenlabs import handle_elevenlabs_tts, handle_elevenlabs_sfx, handle_elevenlabs_sts, handle_elevenlabs_isolation, handle_elevenlabs_dubbing, handle_elevenlabs_stt
 from handlers.openai_audio import handle_openai_stt, handle_openai_translate, handle_openai_tts
 from handlers.krea import (
@@ -35,7 +35,6 @@ SYNC_HANDLERS: dict[
     "paper-source": handle_paper_source,
     "gpt-image-1-generate": handle_openai_image_generate,
     "gpt-image-1-edit": handle_openai_image_edit,
-    "imagen-4-generate": handle_imagen4,
     "nano-banana": handle_nano_banana,
     "elevenlabs-tts": handle_elevenlabs_tts,
     "elevenlabs-sfx": handle_elevenlabs_sfx,

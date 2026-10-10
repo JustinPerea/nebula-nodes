@@ -261,8 +261,9 @@ def propose_change(
     - `run`: refs or node ids to run after acceptance (≤6).
 
     Returns {"proposal": {...}} with `id`, `status`, and `cost`: nodes are
-    "free" (run locally) or "paid · <provider>"; Nebula has no price list, so
-    there is never an amount. Then call get_proposal(id, wait_seconds=...).
+    "free" (run locally) or "paid · <provider>", and `cost.estimate` sums
+    list prices in USD where Nebula has them (null when none do; `open` when
+    some paid node has none). Then call get_proposal(id, wait_seconds=...).
     """
     body: dict[str, Any] = {"note": note}
     if nodes:
