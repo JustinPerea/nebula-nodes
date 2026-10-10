@@ -1,5 +1,17 @@
 # Implementation Notes
 
+## 2026-10-10 — GPT Image 2.5 nodes
+
+- Two new nodes, `gpt-image-2-5-generate` and `gpt-image-2-5-edit`, instead of adding a model choice to the GPT Image 2 nodes. Saved graphs keep their exact behaviour, and the 2.5-only params (background, xhigh/max quality) never show on a node that would send them to a model that rejects them.
+- One node per operation with a `model` choice of Flare (`gpt-image-2.5-flare`, fast, default) and Sunburst (`gpt-image-2.5-sunburst`, most precise). Unpinned aliases, so the nodes follow OpenAI's updates; the `-2026-09-08` snapshots exist if a pinned run is ever needed.
+- Handler: `build_25_body` wraps the GPT Image 2 body builder and adds model, the larger quality set and `background`. The generate/edit handlers take a `build_body` argument, so both models share one SSE path and one org-verification check. That check now names the model that was refused.
+- Refused before any request: an unknown model, an unknown quality, and `background: transparent` with `jpeg` output (OpenAI requires png or webp for transparency).
+- Sizes: GPT Image 2's list plus `2560x1440`. The 4K options stay but are labelled experimental, because OpenAI calls anything above 2560x1440 experimental. No free-form size field: custom sizes have several rules (multiples of 16, 1:3–3:1, pixel range), and a fixed list can't break them.
+- Pricing is the same per token as GPT Image 2 ($5/M text in, $8/M image in, $30/M image out per OpenAI's model pages); xhigh/max cost more only because they produce more output tokens.
+- Not verified live (no paid run yet): that 2.5 streams the same SSE event names as GPT Image 2, and that `/v1/images/edits` takes `background` for 2.5. Both come from the docs; the tests use the GPT Image 2 SSE fixture.
+- Sources: https://developers.openai.com/api/docs/models/gpt-image-2.5-flare , https://developers.openai.com/api/docs/models/gpt-image-2.5-sunburst , https://developers.openai.com/api/docs/changelog (2026-09-08 entry).
+- Count pins: registry 301→303 (`test_video_qc_nodes`, AGENTS.md). MODEL_REFERENCE regenerated. No Flora gap entry existed for it.
+
 ## 2026-10-09 — Krea workspace nodes, plans and usage (phases 5–7, 9–12)
 
 - Eight nodes in `handlers/krea_workspace.py`: Job History, Node App, Krea Files, Save to Krea Files, Krea Nodes Workflow, Krea Agent, Desktop Apps, Usage. They share one doc (`docs/model-providers/krea/krea-workspace.md`) with a docUrl different from the gateway's, so the catalog sync leaves them alone.

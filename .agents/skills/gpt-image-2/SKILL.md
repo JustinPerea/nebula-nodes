@@ -18,6 +18,8 @@ OpenAI's `gpt-image-2` (released 2026-04-21, snapshot `gpt-image-2-2026-04-21`) 
 
 All four use `executionPattern: "stream"`. Partial previews render in the canvas as they arrive.
 
+**Newer model:** GPT Image 2.5 (2026-09-08) has its own OpenAI-direct nodes, `gpt-image-2-5-generate` and `gpt-image-2-5-edit`, with a Flare/Sunburst `model` choice, `xhigh`/`max` quality and transparent backgrounds. Their params are in `.agents/skills/openai/SKILL.md`; the prompting advice here applies to both.
+
 ## OpenAI-direct params (generate + edit)
 
 | Param | Values | Default | Notes |

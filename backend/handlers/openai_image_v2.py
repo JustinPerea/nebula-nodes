@@ -14,6 +14,11 @@ OPENAI_GENERATIONS_URL = "https://api.openai.com/v1/images/generations"
 OPENAI_EDITS_URL = "https://api.openai.com/v1/images/edits"
 DEFAULT_PARTIAL_IMAGES = 0  # Node def no longer exposes this; small/fast jobs never emit partials anyway.
 
+# GPT Image 2.5 (2026-09-08): Flare is the fast default, Sunburst the most
+# precise. Both add xhigh/max quality and transparent backgrounds.
+GPT_IMAGE_25_MODELS = ("gpt-image-2.5-flare", "gpt-image-2.5-sunburst")
+GPT_IMAGE_25_QUALITIES = {"auto", "low", "medium", "high", "xhigh", "max"}
+
 
 def _guess_mime(path: Path) -> str:
     guessed, _ = mimetypes.guess_type(path.name)
@@ -26,17 +31,17 @@ def _is_org_verification_error(body: str) -> bool:
     return "organization_must_be_verified" in body or "must be verified" in body.lower()
 
 
-def _raise_org_verification_error() -> None:
+def _raise_org_verification_error(model: str = "gpt-image-2") -> None:
     raise RuntimeError(
-        "Your OpenAI org isn't verified for gpt-image-2. "
+        f"Your OpenAI org isn't verified for {model}. "
         "Visit https://platform.openai.com/settings/organization/general to verify."
     )
 
 
-def build_generate_body(node: GraphNode, prompt_text: str) -> dict[str, Any]:
+def build_generate_body(node: GraphNode, prompt_text: str, model: str = "gpt-image-2") -> dict[str, Any]:
     params = node.params or {}
     body: dict[str, Any] = {
-        "model": "gpt-image-2",
+        "model": model,
         "prompt": prompt_text,
         "stream": True,
         "partial_images": int(params.get("partial_images", DEFAULT_PARTIAL_IMAGES)),
@@ -59,12 +64,39 @@ def build_generate_body(node: GraphNode, prompt_text: str) -> dict[str, Any]:
     return body
 
 
+def gpt_image_25_model(node: GraphNode) -> str:
+    model = (node.params or {}).get("model") or GPT_IMAGE_25_MODELS[0]
+    if model not in GPT_IMAGE_25_MODELS:
+        raise ValueError(f"GPT Image 2.5 model must be Flare or Sunburst, not {model}")
+    return model
+
+
+def build_25_body(node: GraphNode, prompt_text: str) -> dict[str, Any]:
+    """GPT Image 2 body plus the 2.5 additions; refuses what OpenAI would reject before any request."""
+    params = node.params or {}
+    model = gpt_image_25_model(node)
+    quality = params.get("quality") or "auto"
+    if quality not in GPT_IMAGE_25_QUALITIES:
+        raise ValueError(f"GPT Image 2.5 quality must be one of {', '.join(sorted(GPT_IMAGE_25_QUALITIES))}")
+    body = build_generate_body(node, prompt_text, model=model)
+    background = params.get("background") or "auto"
+    if background not in {"auto", "opaque", "transparent"}:
+        raise ValueError("Background must be auto, opaque or transparent")
+    if background == "transparent" and body.get("output_format", "png") not in {"png", "webp"}:
+        raise ValueError("A transparent background needs PNG or WebP output, not JPEG")
+    if background != "auto":
+        body["background"] = background
+    return body
+
+
 async def handle_gpt_image_2_generate(
     node: GraphNode,
     inputs: dict[str, PortValueDict],
     api_keys: dict[str, str],
     emit: Callable[[ExecutionEvent], Awaitable[None]] | None,
     run_dir: Path | None = None,
+    *,
+    build_body: Callable[[GraphNode, str], dict[str, Any]] = build_generate_body,
 ) -> dict[str, Any]:
     prompt_input = inputs.get("prompt")
     if not prompt_input or not prompt_input.value:
@@ -73,7 +105,7 @@ async def handle_gpt_image_2_generate(
     if not api_key:
         raise ValueError("OPENAI_API_KEY is required")
 
-    body = build_generate_body(node, prompt_text=str(prompt_input.value))
+    body = build_body(node, str(prompt_input.value))
     config = StreamConfig(
         url=OPENAI_GENERATIONS_URL,
         headers={
@@ -100,7 +132,7 @@ async def handle_gpt_image_2_generate(
     except RuntimeError as exc:
         msg = str(exc)
         if _is_org_verification_error(msg):
-            _raise_org_verification_error()
+            _raise_org_verification_error(body["model"])
         raise
 
     return {"image": {"type": "Image", "value": final_path}}
@@ -123,6 +155,8 @@ async def handle_gpt_image_2_edit(
     api_keys: dict[str, str],
     emit: Callable[[ExecutionEvent], Awaitable[None]] | None,
     run_dir: Path | None = None,
+    *,
+    build_body: Callable[[GraphNode, str], dict[str, Any]] = build_generate_body,
 ) -> dict[str, Any]:
     image_input = inputs.get("images")
     if not image_input or not image_input.value:
@@ -137,12 +171,12 @@ async def handle_gpt_image_2_edit(
     image_paths = _normalize_image_input(image_input.value)
     if len(image_paths) > MAX_EDIT_IMAGES:
         raise ValueError(
-            f"gpt-image-2 edit accepts up to {MAX_EDIT_IMAGES} input images; got {len(image_paths)}"
+            f"GPT Image edit accepts up to {MAX_EDIT_IMAGES} input images; got {len(image_paths)}"
         )
     if len(image_paths) == 0:
         raise ValueError("Image input is required but was not provided")
 
-    body = build_generate_body(node, prompt_text=str(prompt_input.value))
+    body = build_body(node, str(prompt_input.value))
     # Edits POST is multipart, not JSON — build separately.
     effective_run_dir = run_dir or get_run_dir()
 
@@ -157,7 +191,7 @@ async def handle_gpt_image_2_edit(
         files.append(("mask", (mp.name, require_allowed_path(mp).read_bytes(), "image/png")))
 
     form: dict[str, str] = {}
-    for key in ("model", "prompt", "size", "quality", "moderation", "output_format"):
+    for key in ("model", "prompt", "size", "quality", "moderation", "output_format", "background"):
         if key in body:
             form[key] = str(body[key])
     if "output_compression" in body:
@@ -196,7 +230,7 @@ async def handle_gpt_image_2_edit(
                 async for chunk in response.aiter_text():
                     error_body += chunk
                 if _is_org_verification_error(error_body):
-                    _raise_org_verification_error()
+                    _raise_org_verification_error(body["model"])
                 raise RuntimeError(f"Image edit failed ({response.status_code}): {error_body}")
             async for line in response.aiter_lines():
                 line = line.strip()
@@ -250,3 +284,11 @@ async def handle_gpt_image_2_edit(
             diag += f"; unrecognized: {seen_data_snippets[:5]}"
         raise RuntimeError(f"Image edit stream ended without a final image event. {diag}")
     return {"image": {"type": "Image", "value": str(final_path)}}
+
+
+async def handle_gpt_image_25_generate(node, inputs, api_keys, emit, run_dir=None):
+    return await handle_gpt_image_2_generate(node, inputs, api_keys, emit, run_dir, build_body=build_25_body)
+
+
+async def handle_gpt_image_25_edit(node, inputs, api_keys, emit, run_dir=None):
+    return await handle_gpt_image_2_edit(node, inputs, api_keys, emit, run_dir, build_body=build_25_body)

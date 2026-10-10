@@ -1273,7 +1273,9 @@ def get_handler_registry(
             node.params.setdefault("endpoint_id", "fal-ai/gpt-image-1.5/edit")
             return await handle_fal_universal(node, inputs, api_keys, emit=emit)
 
-        from handlers.openai_image_v2 import handle_gpt_image_2_generate, handle_gpt_image_2_edit
+        from handlers.openai_image_v2 import (
+            handle_gpt_image_2_edit, handle_gpt_image_2_generate, handle_gpt_image_25_edit, handle_gpt_image_25_generate,
+        )
         from services.output import get_run_dir
 
         async def _openai_image_2_generate_handler(node, inputs, api_keys):
@@ -1285,6 +1287,12 @@ def get_handler_registry(
             return await handle_gpt_image_2_edit(
                 node, inputs, api_keys, emit=emit, run_dir=get_run_dir(),
             )
+
+        async def _openai_image_25_generate_handler(node, inputs, api_keys):
+            return await handle_gpt_image_25_generate(node, inputs, api_keys, emit=emit, run_dir=get_run_dir())
+
+        async def _openai_image_25_edit_handler(node, inputs, api_keys):
+            return await handle_gpt_image_25_edit(node, inputs, api_keys, emit=emit, run_dir=get_run_dir())
 
         async def _seedvr2_upscale_handler(node, inputs, api_keys):
             node.params.setdefault("endpoint_id", "fal-ai/seedvr/upscale/image")
@@ -1583,6 +1591,8 @@ def get_handler_registry(
 
         registry["gpt-image-2-generate"] = _openai_image_2_generate_handler
         registry["gpt-image-2-edit"] = _openai_image_2_edit_handler
+        registry["gpt-image-2-5-generate"] = _openai_image_25_generate_handler
+        registry["gpt-image-2-5-edit"] = _openai_image_25_edit_handler
         registry["gpt-image-2-fal-generate"] = _gpt_image_2_fal_generate_handler
         registry["gpt-image-2-fal-edit"] = _gpt_image_2_fal_edit_handler
         registry["seedvr2-upscale"] = _seedvr2_upscale_handler

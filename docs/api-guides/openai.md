@@ -4,21 +4,23 @@
 
 ## What you can make
 
-- **Images (text → image)** — Generate pictures from a prompt with GPT Image 1 or GPT Image 2 (up to 4K). Pick size, quality, format, and (on v1) transparent backgrounds.
-- **Image edits & inpainting (image → image)** — Edit an existing image from a prompt, optionally with a mask to change only part of it. GPT Image 2 Edit takes up to 10 reference images at once.
+- **Images (text → image)** — Generate pictures from a prompt with GPT Image 1, GPT Image 2 (up to 4K) or GPT Image 2.5 (Flare for speed, Sunburst for precision). Pick size, quality, format, and (on v1 and 2.5) transparent backgrounds.
+- **Image edits & inpainting (image → image)** — Edit an existing image from a prompt, optionally with a mask to change only part of it. GPT Image 2 Edit and GPT Image 2.5 Edit take up to 10 reference images at once.
 - **Speech (text → audio)** — Read any text aloud with 13 voices, 6 audio formats, adjustable speed, and free-text "voice instructions" (tone/accent) on the newest model.
 - **Transcription (audio → text)** — Turn speech into text with Whisper or the GPT-4o transcribe models. Output plain text, JSON, or SRT/VTT subtitle files.
 - **Translation (audio → English text)** — Take spoken audio in any language and get English text back.
 - **Text & vision chat (text + images → text)** — Run OpenAI chat (GPT-5.5 / GPT-5.4, plus legacy GPT-4o / GPT-4.1): summarize, rewrite, reason, or describe images you pipe in. Optional JSON-object output.
 
-## Nodes available in Nebula (8) (updated 2026-06-10)
+## Nodes available in Nebula (10) (updated 2026-10-10)
 
 | Node (as shown in app) | Node ID | Type | Key inputs | Notable params | Use it for |
 |---|---|---|---|---|---|
 | GPT Image 1 | `gpt-image-1-generate` | image-gen | `prompt` (Text) | `model` (gpt-image-1 / gpt-image-1.5 / gpt-image-1-mini), `size`, `quality`, `output_format`, `background` | Text→image with transparent-background support |
 | GPT Image 2 | `gpt-image-2-generate` | image-gen | `prompt` (Text) | `size` (up to `3840x2160` 4K), `quality`, `output_format`, `output_compression`, `moderation` | Highest-detail text→image with streaming previews |
+| GPT Image 2.5 | `gpt-image-2-5-generate` | image-gen | `prompt` (Text) | `model` (Flare / Sunburst), `size` (to 4K, >2560x1440 experimental), `quality` (adds xhigh / max), `background` (transparent needs png/webp), `output_format`, `output_compression`, `moderation` | Newest OpenAI image model, with transparent backgrounds |
 | GPT Image 1 Edit | `gpt-image-1-edit` | image-gen | `image` (Image), `prompt` (Text), `mask` (Mask) | `model`, `n` (1–10), `size`, `quality`, `output_format`, `background` | Edit / inpaint a single image, optional mask |
 | GPT Image 2 Edit | `gpt-image-2-edit` | image-gen | `images` (Image, multiple ≤10), `prompt` (Text), `mask` (Mask) | `size`, `quality`, `output_format`, `output_compression`, `moderation` | Edit / compose from up to 10 reference images |
+| GPT Image 2.5 Edit | `gpt-image-2-5-edit` | image-gen | `images` (Image, multiple ≤10), `prompt` (Text), `mask` (Mask) | same as GPT Image 2.5 | Edit / compose with GPT Image 2.5 |
 | OpenAI TTS | `openai-tts` | audio-gen | `text` (Text) | `model` (tts-1 / tts-1-hd / gpt-4o-mini-tts), `voice` (13), `speed`, `response_format`, `instructions` | Read text aloud in a chosen voice |
 | OpenAI Whisper STT | `openai-stt` | audio-gen | `audio` (Audio) | `model` (whisper-1 / gpt-4o-transcribe / gpt-4o-mini-transcribe), `language`, `response_format` (text/json/srt/vtt), `temperature`, `prompt` | Transcribe speech to text or subtitles |
 | OpenAI Audio Translate | `openai-translate` | audio-gen | `audio` (Audio) | `response_format` (text/json/srt/vtt), `temperature`, `prompt` | Translate spoken audio into English text |
@@ -28,10 +30,10 @@
 
 ## How to use it in Nebula
 
-**Where the nodes appear.** Open the node palette and look under the media-type groups: the four image nodes are in **image-gen**, the three audio nodes (TTS, STT, Translate) are in **audio-gen**, and OpenAI Chat is in **text-gen**. Drag a node onto the canvas, wire a Text node (or another node's output) into its input port, and run.
+**Where the nodes appear.** Open the node palette and look under the media-type groups: the six image nodes are in **image-gen**, the three audio nodes (TTS, STT, Translate) are in **audio-gen**, and OpenAI Chat is in **text-gen**. Drag a node onto the canvas, wire a Text node (or another node's output) into its input port, and run.
 
-**API-key setup.** All eight nodes use your own OpenAI key (BYOK). Open Nebula **Settings**, paste it into the **OpenAI** field (`OPENAI_API_KEY`), and choose **Save Settings**. Nebula stores it under `apiKeys.OPENAI_API_KEY` in the project-root `settings.json`; no restart is required. One key covers every OpenAI node. Two things to know:
-- **GPT Image 2 requires Organization Verification.** If a `gpt-image-2-*` run fails with an "org isn't verified" error, verify at https://platform.openai.com/settings/organization/general. (GPT Image 1 doesn't need this.)
+**API-key setup.** All ten nodes use your own OpenAI key (BYOK). Open Nebula **Settings**, paste it into the **OpenAI** field (`OPENAI_API_KEY`), and choose **Save Settings**. Nebula stores it under `apiKeys.OPENAI_API_KEY` in the project-root `settings.json`; no restart is required. One key covers every OpenAI node. Two things to know:
+- **GPT Image 2 and 2.5 require Organization Verification.** If a `gpt-image-2-*` or `gpt-image-2-5-*` run fails with an "org isn't verified" error, verify at https://platform.openai.com/settings/organization/general. (GPT Image 1 doesn't need this.)
 - **Translate is English-only output** and always runs on `whisper-1` under the hood — the model isn't selectable on that node.
 
 **Example pipelines.**
@@ -45,12 +47,12 @@
 
 | Capability / Endpoint | In the API | In Nebula | Notes |
 |---|---|---|---|
-| Image generation `/v1/images/generations` | yes | full | gpt-image-1, gpt-image-1.5 (via model enum), gpt-image-1-mini, gpt-image-2 all reachable |
+| Image generation `/v1/images/generations` | yes | full | gpt-image-1, gpt-image-1.5 (via model enum), gpt-image-1-mini, gpt-image-2, gpt-image-2.5-flare, gpt-image-2.5-sunburst all reachable |
 | Image edit / inpaint `/v1/images/edits` | yes | full | Single image (v1) and up to 10 images (v2), with optional mask |
 | Image variations `/v1/images/variations` (dall-e-2) | yes | none | No variations node; largely moot since OpenAI retired dall-e-2/3 on 2026-05-12 |
-| Image `background: transparent` | yes (GPT image v1) | partial | Exposed on GPT Image 1 / Edit; **not** on gpt-image-2 (API doesn't support it there) |
-| Image `n > 1` (multiple per call) | yes | partial | Exposed on GPT Image 1 Edit (Count 1–10); dropped on gpt-image-2 nodes (they stream, and OpenAI rejects `n>1` while streaming) |
-| Image streaming previews (`partial_images`) | yes (0–3) | partial | gpt-image-2 nodes stream partials to the canvas internally, but the count isn't a user param (fixed at 0) |
+| Image `background: transparent` | yes (GPT image v1, 2.5) | partial | Exposed on GPT Image 1 / Edit and GPT Image 2.5 / Edit (png/webp only); **not** on gpt-image-2 (API doesn't support it there) |
+| Image `n > 1` (multiple per call) | yes | partial | Exposed on GPT Image 1 Edit (Count 1–10); dropped on gpt-image-2 / 2.5 nodes (they stream, and OpenAI rejects `n>1` while streaming) |
+| Image streaming previews (`partial_images`) | yes (0–3) | partial | gpt-image-2 / 2.5 nodes stream partials to the canvas internally, but the count isn't a user param (fixed at 0) |
 | Image `input_fidelity` (edit) | yes | none | Not forwarded; gpt-image-2 always processes inputs at high fidelity |
 | Text-to-speech `/v1/audio/speech` | yes | full | tts-1, tts-1-hd, gpt-4o-mini-tts; 13 voices, 6 formats, speed, instructions |
 | TTS streaming (`stream_format: sse`) | yes (gpt-4o-mini-tts) | none | Node writes the whole audio file; no live audio streaming |
@@ -73,10 +75,10 @@ Notable unused capabilities: image **variations** (dall-e-2 only; moot since the
 
 ## Agent skill coverage
 
-**A complete skill exists** at **`.claude/skills/openai/SKILL.md`** (new 2026-06-04, updated 2026-06-10). It is a broad OpenAI-direct skill that supersedes the earlier gpt-image-2-only coverage and documents all **8** OpenAI-direct nodes. It gives an agent the node IDs and ports, exact params, handler gotchas, and the cross-node chaining recipes, so an agent can assemble any OpenAI pipeline without reading the handlers. (For gpt-image-2 prompting craft and the FAL-routed `gpt-image-2-fal-*` nodes, it cross-links to **`.claude/skills/gpt-image-2/SKILL.md`**, which still exists.)
+**A complete skill exists** at **`.claude/skills/openai/SKILL.md`** (new 2026-06-04, updated 2026-06-10). It is a broad OpenAI-direct skill that supersedes the earlier gpt-image-2-only coverage and documents all **10** OpenAI-direct nodes (GPT Image 2.5 added 2026-10-10). It gives an agent the node IDs and ports, exact params, handler gotchas, and the cross-node chaining recipes, so an agent can assemble any OpenAI pipeline without reading the handlers. (For gpt-image-2 prompting craft and the FAL-routed `gpt-image-2-fal-*` nodes, it cross-links to **`.claude/skills/gpt-image-2/SKILL.md`**, which still exists.)
 
 What it covers:
-- **Images** — `gpt-image-1-generate`, `gpt-image-1-edit`, `gpt-image-2-generate`, `gpt-image-2-edit`: the full param matrices, the v1-only `background: transparent` and `n` (Count) params, the org-verification gotcha, and the `input_fidelity` / `n>1` exclusions on the v2 nodes.
+- **Images** — `gpt-image-1-generate`, `gpt-image-1-edit`, `gpt-image-2-generate`, `gpt-image-2-edit`, `gpt-image-2-5-generate`, `gpt-image-2-5-edit`: the full param matrices, the `background: transparent` param (v1 and 2.5) and `n` (Count) params, the org-verification gotcha, and the `input_fidelity` / `n>1` exclusions on the v2 nodes.
 - **Audio** — `openai-tts` (voices/formats/instructions), `openai-stt` (model + `response_format`, incl. SRT/VTT), and `openai-translate` (English-only, fixed-`whisper-1`).
 - **Chat** — `gpt-4o-chat` ("OpenAI Chat"): the GPT-5.x + legacy model enum, the gpt-5.x-only `reasoning_effort` param, the sampler-param drop on gpt-5.x, the vision `images` port (URL / data URI / local path), and `response_format: json_object`.
 - **Capability boundaries** — what's not wired (variations, streaming TTS, tools/function calling, strict JSON-schema, Realtime/Responses), so an agent doesn't over-promise.
@@ -93,3 +95,4 @@ What it covers:
 - Chat Completions reference — https://platform.openai.com/docs/api-reference/chat
 - Realtime and audio guide — https://developers.openai.com/api/docs/guides/realtime
 - Introducing image generation in the API — https://openai.com/index/image-generation-api/
+- GPT Image 2.5 model pages and changelog (2026-09-08) — https://developers.openai.com/api/docs/models/gpt-image-2.5-flare , https://developers.openai.com/api/docs/models/gpt-image-2.5-sunburst , https://developers.openai.com/api/docs/changelog
