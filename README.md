@@ -34,9 +34,9 @@ Drop nodes, connect their inputs and outputs, and run a creative pipeline using 
 
 ## Recently added
 
-### Krea image, video and audio models
+### Krea models and workspace
 
-Connect your Krea account in Settings or use a Krea API token for **34 image, 41 video and 5 audio models**, including GPT Image 2, Nano Banana, Veo, Kling, Seedance, and ElevenLabs Music. Choose **Krea** in Create's provider filter or search the node library. Saved recipes keep their account/API-token choice. [Connect Krea with MCP](docs/KREA-MCP.md) · [Model workflows](docs/api-guides/krea.md).
+Connect your Krea account in Settings or use a Krea API token for **108 Krea models: 34 image, 41 video, 5 audio, 18 enhance and 10 3D**, including GPT Image 2, Nano Banana, Veo, Kling, Seedance, ElevenLabs Music, Topaz and Magnific. Choose **Krea** in Create's provider filter or search the node library. Saved recipes keep their account/API-token choice. Workspace nodes cover the rest of Krea: styles and moodboards, 3D export, job history, node apps, Krea Files, Krea Nodes, the Krea Agent, desktop apps and usage ([what each supports](docs/model-providers/krea/krea-workspace.md)). [Connect Krea with MCP](docs/KREA-MCP.md) · [Model workflows](docs/api-guides/krea.md).
 
 ### Paper Source
 

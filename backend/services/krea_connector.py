@@ -439,6 +439,19 @@ class KreaConnector:
             result = await session.call_tool(name, arguments)
             return result.model_dump(mode="json")
 
+    async def call_billing(self, name):
+        """Run Krea's plan or trial tool. Neither charges anything: both answer
+        with a page the user opens and completes in their browser."""
+        from services.krea_mcp_generation import tool_value
+        from services.krea_plans import BILLING_TOOLS
+        if name not in BILLING_TOOLS:
+            raise ConnectorError("Only Krea plan and trial tools may be called here")
+        async with self.session() as session:
+            tools = await self.list_tools(session)
+            if not any(tool.name == name for tool in tools):
+                raise ConnectorError("Krea plans are unavailable on this connection")
+            return tool_value(await session.call_tool(name, {}))
+
     async def disconnect(self):
         async with self._lock:
             await self._close_pending()

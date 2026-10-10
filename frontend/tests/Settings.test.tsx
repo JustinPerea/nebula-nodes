@@ -13,6 +13,8 @@ const getKreaConnectionMock = vi.fn();
 const connectKreaMock = vi.fn();
 const checkKreaConnectionMock = vi.fn();
 const disconnectKreaMock = vi.fn();
+const getKreaPlansMock = vi.fn();
+const startKreaTrialMock = vi.fn();
 const providerApiFetchMock = vi.fn();
 
 vi.mock('../src/lib/backend', async (original) => ({
@@ -33,6 +35,8 @@ vi.mock('../src/lib/kreaConnection', async (importOriginal) => ({
   connectKrea: (...args: unknown[]) => connectKreaMock(...args),
   checkKreaConnection: (...args: unknown[]) => checkKreaConnectionMock(...args),
   disconnectKrea: (...args: unknown[]) => disconnectKreaMock(...args),
+  getKreaPlans: (...args: unknown[]) => getKreaPlansMock(...args),
+  startKreaTrial: (...args: unknown[]) => startKreaTrialMock(...args),
 }));
 
 // ---------------------------------------------------------------------------
@@ -75,6 +79,8 @@ beforeEach(() => {
     authorizationUrl: 'https://www.krea.ai/auth/v1/oauth/authorize?state=test' });
   checkKreaConnectionMock.mockReset().mockResolvedValue({ status: 'connected', tools: ['list_models'] });
   disconnectKreaMock.mockReset().mockResolvedValue({ status: 'disconnected' });
+  getKreaPlansMock.mockReset();
+  startKreaTrialMock.mockReset();
   vi.spyOn(window, 'open').mockReturnValue(null);
 
   // Clean window.nebulaDesktop between tests
@@ -397,6 +403,35 @@ describe('Settings — Krea MCP connection', () => {
     expect(screen.getByText('Not connected')).toBeInTheDocument();
     expect(screen.getByRole('combobox', { name: 'Default Krea connection for new nodes' })).toHaveValue('api-token');
     expect(updateSettingsMock).not.toHaveBeenCalled();
+  });
+
+  it('shows Krea plans on request when connected and opens checkout only from a link', async () => {
+    getKreaConnectionMock.mockResolvedValue({ status: 'connected', tools: ['show_plans'] });
+    getKreaPlansMock.mockResolvedValue({ trialAvailable: true, annualSavingsPct: 40,
+      manageUrl: 'https://www.krea.ai/pricing', plans: [{ id: 'creator_pro', name: 'Pro', prominent: false,
+        units: 20000, price: 35, annualPrice: 21, examples: [], features: [],
+        checkoutUrl: 'https://www.krea.ai/pricing?plan=creator_pro', annualCheckoutUrl: null }] });
+    startKreaTrialMock.mockResolvedValue('https://checkout.stripe.com/c/pay/cs_1');
+    render(<Settings />);
+    await screen.findByText('Connected');
+    expect(getKreaPlansMock).not.toHaveBeenCalled();
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Show Krea plans' })); });
+    expect(screen.getByText('$35/mo · $21/mo yearly')).toBeInTheDocument();
+    expect(screen.getByText('20,000 compute units')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'View on Krea' })).toHaveAttribute('href', 'https://www.krea.ai/pricing?plan=creator_pro');
+    expect(startKreaTrialMock).not.toHaveBeenCalled();
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Start a free Pro trial' })); });
+    const checkout = screen.getByRole('link', { name: 'Open trial checkout' });
+    expect(checkout).toHaveAttribute('href', 'https://checkout.stripe.com/c/pay/cs_1');
+    expect(checkout).toHaveAttribute('target', '_blank');
+    expect(window.open).not.toHaveBeenCalled();
+    expect(updateSettingsMock).not.toHaveBeenCalled();
+  });
+
+  it('hides plans until Krea is connected', async () => {
+    render(<Settings />);
+    await screen.findByText('Not connected');
+    expect(screen.queryByRole('button', { name: 'Show Krea plans' })).not.toBeInTheDocument();
   });
 
   it('saves the future-node default explicitly and does not rewrite existing nodes', async () => {

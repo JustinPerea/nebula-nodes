@@ -8500,6 +8500,1031 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     docUrl: 'docs/model-providers/krea/krea-gateway.md#3d-export',
   },
 
+  'krea-job-history': {
+    id: 'krea-job-history',
+    displayName: 'Krea Job History',
+    category: 'analyzer',
+    apiProvider: 'krea',
+    apiEndpoint: '/jobs',
+    envKeyName: 'KREA_API_TOKEN',
+    executionPattern: 'sync',
+    inputPorts: [
+      {
+        id: 'job',
+        label: 'Job',
+        dataType: 'Any',
+        required: false,
+      },
+    ],
+    outputPorts: [
+      {
+        id: 'jobs',
+        label: 'Jobs',
+        dataType: 'Array',
+        required: false,
+      },
+      {
+        id: 'job',
+        label: 'Job',
+        dataType: 'Any',
+        required: false,
+      },
+      {
+        id: 'media',
+        label: 'Media',
+        dataType: 'Array',
+        required: false,
+      },
+      {
+        id: 'image',
+        label: 'Image',
+        dataType: 'Image',
+        required: false,
+      },
+      {
+        id: 'video',
+        label: 'Video',
+        dataType: 'Video',
+        required: false,
+      },
+      {
+        id: 'audio',
+        label: 'Audio',
+        dataType: 'Audio',
+        required: false,
+      },
+      {
+        id: 'mesh',
+        label: 'Mesh',
+        dataType: 'Mesh',
+        required: false,
+      },
+      {
+        id: 'text',
+        label: 'Summary',
+        dataType: 'Text',
+        required: false,
+      },
+    ],
+    params: [
+      {
+        key: '_kreaAuth',
+        label: 'Krea connection',
+        type: 'enum',
+        required: false,
+        options: [
+          {
+            value: 'api-token',
+            label: 'API token · API balance',
+          },
+          {
+            value: 'mcp',
+            label: 'Krea account · workspace compute',
+          },
+        ],
+        default: 'api-token',
+      },
+      {
+        key: 'job_id',
+        label: 'Job ID',
+        type: 'string',
+        required: false,
+        placeholder: 'Blank lists recent jobs (API token)',
+      },
+      {
+        key: 'status',
+        label: 'Status',
+        type: 'enum',
+        required: false,
+        default: 'any',
+        options: [
+          {
+            label: 'Any',
+            value: 'any',
+          },
+          {
+            label: 'Completed',
+            value: 'completed',
+          },
+          {
+            label: 'Failed',
+            value: 'failed',
+          },
+          {
+            label: 'Cancelled',
+            value: 'cancelled',
+          },
+          {
+            label: 'Processing',
+            value: 'processing',
+          },
+          {
+            label: 'Queued',
+            value: 'queued',
+          },
+        ],
+      },
+      {
+        key: 'types',
+        label: 'Job types',
+        type: 'string',
+        required: false,
+        placeholder: 'e.g. flux,k1,externalImage',
+      },
+      {
+        key: 'limit',
+        label: 'Limit',
+        type: 'integer',
+        required: false,
+        default: 20,
+        min: 1,
+        max: 1000,
+      },
+      {
+        key: 'cursor',
+        label: 'Before',
+        type: 'string',
+        required: false,
+        placeholder: 'ISO time cursor',
+      },
+      {
+        key: 'download',
+        label: 'Save media',
+        type: 'boolean',
+        required: false,
+        default: false,
+      },
+      {
+        key: 'download_limit',
+        label: 'Save up to (jobs)',
+        type: 'integer',
+        required: false,
+        default: 10,
+        min: 1,
+        max: 100,
+        visibleWhen: {
+          download: [
+            true,
+          ],
+        },
+      },
+    ],
+    docUrl: 'docs/model-providers/krea/krea-workspace.md',
+  },
+
+  'krea-node-app': {
+    id: 'krea-node-app',
+    displayName: 'Krea Node App',
+    category: 'universal',
+    apiProvider: 'krea',
+    apiEndpoint: '/node-apps/{id}/execute',
+    envKeyName: 'KREA_API_TOKEN',
+    executionPattern: 'async-poll',
+    inputPorts: [
+      {
+        id: 'images',
+        label: 'Images',
+        dataType: 'Image',
+        required: false,
+        multiple: true,
+      },
+      {
+        id: 'text',
+        label: 'Text',
+        dataType: 'Text',
+        required: false,
+      },
+      {
+        id: 'inputs',
+        label: 'Inputs',
+        dataType: 'Any',
+        required: false,
+      },
+    ],
+    outputPorts: [
+      {
+        id: 'outputs',
+        label: 'Outputs',
+        dataType: 'Any',
+        required: false,
+      },
+      {
+        id: 'media',
+        label: 'Media',
+        dataType: 'Array',
+        required: false,
+      },
+      {
+        id: 'image',
+        label: 'Image',
+        dataType: 'Image',
+        required: false,
+      },
+      {
+        id: 'video',
+        label: 'Video',
+        dataType: 'Video',
+        required: false,
+      },
+      {
+        id: 'audio',
+        label: 'Audio',
+        dataType: 'Audio',
+        required: false,
+      },
+      {
+        id: 'mesh',
+        label: 'Mesh',
+        dataType: 'Mesh',
+        required: false,
+      },
+      {
+        id: 'jobs',
+        label: 'Jobs',
+        dataType: 'Array',
+        required: false,
+      },
+    ],
+    params: [
+      {
+        key: '_kreaAuth',
+        label: 'Krea connection',
+        type: 'enum',
+        required: false,
+        options: [
+          {
+            value: 'api-token',
+            label: 'API token · API balance',
+          },
+          {
+            value: 'mcp',
+            label: 'Krea account · workspace compute',
+          },
+        ],
+        default: 'api-token',
+      },
+      {
+        key: 'node_app_version_id',
+        label: 'Node app version ID',
+        type: 'string',
+        required: true,
+        placeholder: 'From Krea or the agent\'s get_node_apps',
+      },
+      {
+        key: 'input',
+        label: 'Input (JSON)',
+        type: 'textarea',
+        required: false,
+        placeholder: '{"idea": "..."}',
+      },
+    ],
+    docUrl: 'docs/model-providers/krea/krea-workspace.md',
+  },
+
+  'krea-files': {
+    id: 'krea-files',
+    displayName: 'Krea Files',
+    category: 'analyzer',
+    apiProvider: 'krea',
+    apiEndpoint: 'mcp:list_files',
+    envKeyName: [],
+    executionPattern: 'sync',
+    inputPorts: [],
+    outputPorts: [
+      {
+        id: 'files',
+        label: 'Files',
+        dataType: 'Array',
+        required: false,
+      },
+      {
+        id: 'media',
+        label: 'Media',
+        dataType: 'Array',
+        required: false,
+      },
+      {
+        id: 'image',
+        label: 'Image',
+        dataType: 'Image',
+        required: false,
+      },
+      {
+        id: 'video',
+        label: 'Video',
+        dataType: 'Video',
+        required: false,
+      },
+      {
+        id: 'audio',
+        label: 'Audio',
+        dataType: 'Audio',
+        required: false,
+      },
+      {
+        id: 'mesh',
+        label: 'Mesh',
+        dataType: 'Mesh',
+        required: false,
+      },
+      {
+        id: 'text',
+        label: 'Text',
+        dataType: 'Text',
+        required: false,
+      },
+      {
+        id: 'summary',
+        label: 'Summary',
+        dataType: 'Text',
+        required: false,
+      },
+    ],
+    params: [
+      {
+        key: '_kreaAuth',
+        label: 'Krea connection',
+        type: 'enum',
+        required: false,
+        options: [
+          {
+            value: 'mcp',
+            label: 'Krea account · workspace compute',
+          },
+        ],
+        default: 'mcp',
+      },
+      {
+        key: 'scope',
+        label: 'Scope',
+        type: 'enum',
+        required: false,
+        default: 'user',
+        options: [
+          {
+            label: 'My files',
+            value: 'user',
+          },
+          {
+            label: 'Workspace',
+            value: 'workspace',
+          },
+        ],
+      },
+      {
+        key: 'file_type',
+        label: 'Type',
+        type: 'enum',
+        required: false,
+        default: 'file',
+        options: [
+          {
+            label: 'Files',
+            value: 'file',
+          },
+          {
+            label: 'Assets',
+            value: 'asset',
+          },
+          {
+            label: 'Folders',
+            value: 'folder',
+          },
+          {
+            label: 'Moodboards',
+            value: 'moodboard',
+          },
+          {
+            label: 'Styles',
+            value: 'style',
+          },
+          {
+            label: 'Sessions',
+            value: 'session',
+          },
+          {
+            label: 'Collections',
+            value: 'collection',
+          },
+          {
+            label: 'Anything',
+            value: 'any',
+          },
+        ],
+      },
+      {
+        key: 'filename',
+        label: 'Name contains',
+        type: 'string',
+        required: false,
+      },
+      {
+        key: 'tags',
+        label: 'Tags (all of)',
+        type: 'string',
+        required: false,
+        placeholder: 'comma,separated',
+      },
+      {
+        key: 'folder_uri',
+        label: 'Folder',
+        type: 'string',
+        required: false,
+        placeholder: 'folder:<uuid>',
+      },
+      {
+        key: 'limit',
+        label: 'Limit',
+        type: 'integer',
+        required: false,
+        default: 25,
+        min: 1,
+        max: 200,
+      },
+      {
+        key: 'download',
+        label: 'Bring contents in',
+        type: 'boolean',
+        required: false,
+        default: true,
+      },
+    ],
+    docUrl: 'docs/model-providers/krea/krea-workspace.md',
+  },
+
+  'krea-files-save': {
+    id: 'krea-files-save',
+    displayName: 'Save to Krea Files',
+    category: 'analyzer',
+    apiProvider: 'krea',
+    apiEndpoint: 'mcp:write_files_upload',
+    envKeyName: [],
+    executionPattern: 'sync',
+    inputPorts: [
+      {
+        id: 'media',
+        label: 'Media',
+        dataType: 'Any',
+        required: false,
+        multiple: true,
+      },
+      {
+        id: 'text',
+        label: 'Text',
+        dataType: 'Text',
+        required: false,
+      },
+    ],
+    outputPorts: [
+      {
+        id: 'uris',
+        label: 'Krea Files',
+        dataType: 'Array',
+        required: false,
+      },
+      {
+        id: 'text',
+        label: 'Summary',
+        dataType: 'Text',
+        required: false,
+      },
+    ],
+    params: [
+      {
+        key: '_kreaAuth',
+        label: 'Krea connection',
+        type: 'enum',
+        required: false,
+        options: [
+          {
+            value: 'mcp',
+            label: 'Krea account · workspace compute',
+          },
+        ],
+        default: 'mcp',
+      },
+      {
+        key: 'name',
+        label: 'Name',
+        type: 'string',
+        required: false,
+        placeholder: 'Keeps the file name when blank',
+      },
+      {
+        key: 'folder',
+        label: 'Folder',
+        type: 'string',
+        required: false,
+        placeholder: 'Created if missing',
+      },
+      {
+        key: 'scope',
+        label: 'Scope',
+        type: 'enum',
+        required: false,
+        default: 'user',
+        options: [
+          {
+            label: 'My files',
+            value: 'user',
+          },
+          {
+            label: 'Workspace',
+            value: 'workspace',
+          },
+        ],
+      },
+      {
+        key: 'tags',
+        label: 'Tags',
+        type: 'string',
+        required: false,
+        placeholder: 'comma,separated',
+      },
+    ],
+    docUrl: 'docs/model-providers/krea/krea-workspace.md',
+  },
+
+  'krea-nodes-workflow': {
+    id: 'krea-nodes-workflow',
+    displayName: 'Krea Nodes Workflow',
+    category: 'analyzer',
+    apiProvider: 'krea',
+    apiEndpoint: 'mcp:create_node_workflow',
+    envKeyName: [],
+    executionPattern: 'sync',
+    inputPorts: [
+      {
+        id: 'workflow',
+        label: 'Workflow spec',
+        dataType: 'Any',
+        required: false,
+      },
+    ],
+    outputPorts: [
+      {
+        id: 'workflow',
+        label: 'Workflow',
+        dataType: 'Any',
+        required: false,
+      },
+      {
+        id: 'url',
+        label: 'Link',
+        dataType: 'Text',
+        required: false,
+      },
+      {
+        id: 'text',
+        label: 'Summary',
+        dataType: 'Text',
+        required: false,
+      },
+    ],
+    params: [
+      {
+        key: '_kreaAuth',
+        label: 'Krea connection',
+        type: 'enum',
+        required: false,
+        options: [
+          {
+            value: 'mcp',
+            label: 'Krea account · workspace compute',
+          },
+        ],
+        default: 'mcp',
+      },
+      {
+        key: 'action',
+        label: 'Action',
+        type: 'enum',
+        required: true,
+        default: 'create',
+        options: [
+          {
+            label: 'Create in Krea Nodes',
+            value: 'create',
+          },
+          {
+            label: 'Read a workflow',
+            value: 'read',
+          },
+          {
+            label: 'Edit a workflow',
+            value: 'update',
+          },
+        ],
+      },
+      {
+        key: 'name',
+        label: 'Name',
+        type: 'string',
+        required: false,
+        visibleWhen: {
+          action: [
+            'create',
+          ],
+        },
+      },
+      {
+        key: 'spec',
+        label: 'Nodes and edges (JSON)',
+        type: 'textarea',
+        required: false,
+        placeholder: '{"nodes": [...], "edges": [...]}',
+        visibleWhen: {
+          action: [
+            'create',
+          ],
+        },
+      },
+      {
+        key: 'workflow_id',
+        label: 'Workflow ID or link',
+        type: 'string',
+        required: false,
+        visibleWhen: {
+          action: [
+            'read',
+            'update',
+          ],
+        },
+      },
+      {
+        key: 'read_mode',
+        label: 'Detail',
+        type: 'enum',
+        required: false,
+        default: 'list',
+        options: [
+          {
+            label: 'Summary',
+            value: 'summary',
+          },
+          {
+            label: 'Nodes',
+            value: 'list',
+          },
+          {
+            label: 'Full',
+            value: 'detail',
+          },
+        ],
+        visibleWhen: {
+          action: [
+            'read',
+          ],
+        },
+      },
+      {
+        key: 'operations',
+        label: 'Operations (JSON)',
+        type: 'textarea',
+        required: false,
+        visibleWhen: {
+          action: [
+            'update',
+          ],
+        },
+      },
+    ],
+    docUrl: 'docs/model-providers/krea/krea-workspace.md',
+  },
+
+  'krea-agent': {
+    id: 'krea-agent',
+    displayName: 'Krea Agent',
+    category: 'universal',
+    apiProvider: 'krea',
+    apiEndpoint: 'mcp:send_agent_message',
+    envKeyName: [],
+    executionPattern: 'async-poll',
+    inputPorts: [
+      {
+        id: 'prompt',
+        label: 'Prompt',
+        dataType: 'Text',
+        required: false,
+      },
+      {
+        id: 'attachments',
+        label: 'Attachments',
+        dataType: 'Image',
+        required: false,
+        multiple: true,
+        maxConnections: 20,
+      },
+      {
+        id: 'session',
+        label: 'Continue session',
+        dataType: 'Any',
+        required: false,
+      },
+    ],
+    outputPorts: [
+      {
+        id: 'media',
+        label: 'Media',
+        dataType: 'Array',
+        required: false,
+      },
+      {
+        id: 'image',
+        label: 'Image',
+        dataType: 'Image',
+        required: false,
+      },
+      {
+        id: 'video',
+        label: 'Video',
+        dataType: 'Video',
+        required: false,
+      },
+      {
+        id: 'audio',
+        label: 'Audio',
+        dataType: 'Audio',
+        required: false,
+      },
+      {
+        id: 'mesh',
+        label: 'Mesh',
+        dataType: 'Mesh',
+        required: false,
+      },
+      {
+        id: 'text',
+        label: 'Reply',
+        dataType: 'Text',
+        required: false,
+      },
+      {
+        id: 'session',
+        label: 'Session',
+        dataType: 'Any',
+        required: false,
+      },
+      {
+        id: 'url',
+        label: 'Session link',
+        dataType: 'Text',
+        required: false,
+      },
+    ],
+    params: [
+      {
+        key: '_kreaAuth',
+        label: 'Krea connection',
+        type: 'enum',
+        required: false,
+        options: [
+          {
+            value: 'mcp',
+            label: 'Krea account · workspace compute',
+          },
+        ],
+        default: 'mcp',
+      },
+      {
+        key: 'prompt',
+        label: 'Prompt',
+        type: 'textarea',
+        required: false,
+      },
+      {
+        key: 'name',
+        label: 'Session name',
+        type: 'string',
+        required: false,
+      },
+      {
+        key: 'session_id',
+        label: 'Session ID',
+        type: 'string',
+        required: false,
+        placeholder: 'Continue an existing session',
+      },
+      {
+        key: 'effort',
+        label: 'Effort',
+        type: 'enum',
+        required: false,
+        default: 'auto',
+        options: [
+          {
+            label: 'Auto',
+            value: 'auto',
+          },
+          {
+            label: 'Fast',
+            value: 'fast',
+          },
+          {
+            label: 'Default',
+            value: 'default',
+          },
+          {
+            label: 'High',
+            value: 'high',
+          },
+          {
+            label: 'Extra high',
+            value: 'xhigh',
+          },
+        ],
+      },
+      {
+        key: 'model',
+        label: 'Model',
+        type: 'string',
+        required: false,
+        placeholder: 'Auto; must be in your plan',
+      },
+      {
+        key: 'wait_seconds',
+        label: 'Wait up to (s)',
+        type: 'integer',
+        required: false,
+        default: 900,
+        min: 30,
+        max: 3600,
+      },
+    ],
+    docUrl: 'docs/model-providers/krea/krea-workspace.md',
+  },
+
+  'krea-desktop': {
+    id: 'krea-desktop',
+    displayName: 'Krea Desktop Apps',
+    category: 'analyzer',
+    apiProvider: 'krea',
+    apiEndpoint: 'mcp:call_desktop_tool',
+    envKeyName: [],
+    executionPattern: 'sync',
+    inputPorts: [
+      {
+        id: 'job',
+        label: 'Krea job',
+        dataType: 'Any',
+        required: false,
+      },
+    ],
+    outputPorts: [
+      {
+        id: 'result',
+        label: 'Result',
+        dataType: 'Any',
+        required: false,
+      },
+      {
+        id: 'image',
+        label: 'Frame',
+        dataType: 'Image',
+        required: false,
+      },
+      {
+        id: 'text',
+        label: 'Summary',
+        dataType: 'Text',
+        required: false,
+      },
+    ],
+    params: [
+      {
+        key: '_kreaAuth',
+        label: 'Krea connection',
+        type: 'enum',
+        required: false,
+        options: [
+          {
+            value: 'mcp',
+            label: 'Krea account · workspace compute',
+          },
+        ],
+        default: 'mcp',
+      },
+      {
+        key: 'action',
+        label: 'Action',
+        type: 'enum',
+        required: true,
+        default: 'list-apps',
+        options: [
+          {
+            label: 'List connected apps',
+            value: 'list-apps',
+          },
+          {
+            label: 'List an app\'s tools',
+            value: 'list-tools',
+          },
+          {
+            label: 'Run a tool',
+            value: 'call-tool',
+          },
+        ],
+      },
+      {
+        key: 'app_id',
+        label: 'App ID',
+        type: 'string',
+        required: false,
+        visibleWhen: {
+          action: [
+            'list-tools',
+            'call-tool',
+          ],
+        },
+      },
+      {
+        key: 'tool',
+        label: 'Tool',
+        type: 'string',
+        required: false,
+        placeholder: 'e.g. ae.addLayer',
+        visibleWhen: {
+          action: [
+            'call-tool',
+          ],
+        },
+      },
+      {
+        key: 'input',
+        label: 'Tool input (JSON)',
+        type: 'textarea',
+        required: false,
+        visibleWhen: {
+          action: [
+            'call-tool',
+          ],
+        },
+      },
+      {
+        key: 'output_index',
+        label: 'Job output index',
+        type: 'integer',
+        required: false,
+        default: 0,
+        min: 0,
+        visibleWhen: {
+          action: [
+            'call-tool',
+          ],
+        },
+      },
+    ],
+    docUrl: 'docs/model-providers/krea/krea-workspace.md',
+  },
+
+  'krea-usage': {
+    id: 'krea-usage',
+    displayName: 'Krea Usage',
+    category: 'analyzer',
+    apiProvider: 'krea',
+    apiEndpoint: '/usage',
+    envKeyName: 'KREA_USAGE_KEY',
+    executionPattern: 'sync',
+    inputPorts: [],
+    outputPorts: [
+      {
+        id: 'jobs',
+        label: 'Jobs',
+        dataType: 'Array',
+        required: false,
+      },
+      {
+        id: 'total',
+        label: 'Compute units',
+        dataType: 'Text',
+        required: false,
+      },
+      {
+        id: 'text',
+        label: 'Summary',
+        dataType: 'Text',
+        required: false,
+      },
+    ],
+    params: [
+      {
+        key: 'start_date',
+        label: 'From',
+        type: 'string',
+        required: false,
+        placeholder: '2026-10-01 (default: 7 days ago)',
+      },
+      {
+        key: 'end_date',
+        label: 'To',
+        type: 'string',
+        required: false,
+        placeholder: 'Default: now',
+      },
+    ],
+    docUrl: 'docs/model-providers/krea/krea-workspace.md',
+  },
+
   'clarity-upscaler': {
     id: 'clarity-upscaler',
     displayName: 'Clarity Upscaler',

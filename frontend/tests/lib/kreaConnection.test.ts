@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NODE_DEFINITIONS } from '../../src/constants/nodeDefinitions';
 import {
-  checkKreaConnection, connectKrea, disconnectKrea, getKreaConnection,
-  isKreaAuthorizationUrl, kreaModeFor, nodeKeyStatus, supportsKreaAccount,
+  checkKreaConnection, connectKrea, disconnectKrea, getKreaConnection, getKreaPlans,
+  isKreaAuthorizationUrl, isSafeKreaBillingUrl, startKreaTrial, kreaModeFor, nodeKeyStatus, supportsKreaAccount,
   usesKreaAccount, withNewKreaMode,
 } from '../../src/lib/kreaConnection';
 
@@ -79,5 +79,31 @@ describe('Krea connection contract', () => {
     await expect(checkKreaConnection()).rejects.toThrow('Could not update the Krea connection.');
     apiFetchMock.mockResolvedValueOnce({ ok: true, json: async () => { throw new Error('token=fixture'); } });
     await expect(getKreaConnection()).rejects.toThrow('Could not update the Krea connection.');
+  });
+
+  it('loads plans and starts the trial only through the fixed plan routes', async () => {
+    apiFetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({
+      plans: [{ id: 'creator_pro', name: 'Pro', checkoutUrl: 'https://www.krea.ai/pricing?plan=creator_pro',
+        annualCheckoutUrl: 'https://evil.test/pay' }],
+      trialAvailable: true, annualSavingsPct: 40, manageUrl: 'http://www.krea.ai/pricing' }) });
+    const plans = await getKreaPlans();
+    expect(plans.plans[0].checkoutUrl).toBe('https://www.krea.ai/pricing?plan=creator_pro');
+    expect(plans.plans[0].annualCheckoutUrl).toBeNull();
+    expect(plans.manageUrl).toBeNull();
+    apiFetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ url: 'https://checkout.stripe.com/c/pay/cs_1' }) });
+    await expect(startKreaTrial()).resolves.toBe('https://checkout.stripe.com/c/pay/cs_1');
+    expect(apiFetchMock.mock.calls).toEqual([['/api/krea/plans'], ['/api/krea/trial', { method: 'POST' }]]);
+    apiFetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ url: 'https://stripe.evil.test/pay' }) });
+    await expect(startKreaTrial()).rejects.toThrow('unexpected trial link');
+  });
+
+  it('accepts billing links only on Krea, or Stripe checkout for the trial', () => {
+    expect(isSafeKreaBillingUrl('https://www.krea.ai/pricing')).toBe(true);
+    expect(isSafeKreaBillingUrl('https://checkout.stripe.com/c/pay')).toBe(false);
+    expect(isSafeKreaBillingUrl('https://checkout.stripe.com/c/pay', true)).toBe(true);
+    for (const bad of ['http://www.krea.ai/', 'https://u:p@www.krea.ai/', 'https://www.krea.ai:8443/',
+      'javascript:alert(1)', 'https://krea.ai.evil.test/', 42]) {
+      expect(isSafeKreaBillingUrl(bad, true), String(bad)).toBe(false);
+    }
   });
 });

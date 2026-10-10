@@ -94,3 +94,72 @@ export const getKreaConnection = () => requestConnection('GET');
 export const connectKrea = () => requestConnection('POST', '/connect');
 export const checkKreaConnection = () => requestConnection('POST', '/check');
 export const disconnectKrea = () => requestConnection('DELETE');
+
+export interface KreaPlan {
+  id: string | null;
+  name: string;
+  prominent: boolean;
+  units: number | null;
+  price: number | null;
+  annualPrice: number | null;
+  examples: string[];
+  features: { text: string; included: boolean; isNew: boolean }[];
+  checkoutUrl: string | null;
+  annualCheckoutUrl: string | null;
+}
+
+export interface KreaPlans {
+  plans: KreaPlan[];
+  trialAvailable: boolean;
+  annualSavingsPct: number | null;
+  manageUrl: string | null;
+}
+
+const PLAN_HOSTS = new Set(['www.krea.ai', 'krea.ai']);
+const TRIAL_HOSTS = new Set([...PLAN_HOSTS, 'checkout.stripe.com']);
+
+/** Same rule as the backend: https, no credentials, default port, known host. */
+export function isSafeKreaBillingUrl(value: unknown, trial = false): value is string {
+  if (typeof value !== 'string') return false;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' && !url.username && !url.password && !url.port
+      && (trial ? TRIAL_HOSTS : PLAN_HOSTS).has(url.hostname);
+  } catch {
+    return false;
+  }
+}
+
+export async function getKreaPlans(): Promise<KreaPlans> {
+  let body: KreaPlans;
+  try {
+    const response = await apiFetch('/api/krea/plans');
+    if (!response.ok) throw new Error('Plans request failed');
+    body = await response.json();
+  } catch {
+    throw new Error('Could not load Krea plans. Check the Krea connection and try again.');
+  }
+  const link = (value: unknown) => (isSafeKreaBillingUrl(value) ? value : null);
+  return {
+    plans: (Array.isArray(body.plans) ? body.plans : []).map((plan) => ({
+      ...plan, checkoutUrl: link(plan.checkoutUrl), annualCheckoutUrl: link(plan.annualCheckoutUrl),
+    })),
+    trialAvailable: body.trialAvailable === true,
+    annualSavingsPct: typeof body.annualSavingsPct === 'number' ? body.annualSavingsPct : null,
+    manageUrl: link(body.manageUrl),
+  };
+}
+
+/** Starts Krea's trial checkout; payment details are entered on that page, never in Nebula. */
+export async function startKreaTrial(): Promise<string> {
+  let url: unknown;
+  try {
+    const response = await apiFetch('/api/krea/trial', { method: 'POST' });
+    if (!response.ok) throw new Error('Trial request failed');
+    url = (await response.json()).url;
+  } catch {
+    throw new Error('Could not start the Krea trial. Check the Krea connection and try again.');
+  }
+  if (!isSafeKreaBillingUrl(url, true)) throw new Error('Krea returned an unexpected trial link.');
+  return url;
+}

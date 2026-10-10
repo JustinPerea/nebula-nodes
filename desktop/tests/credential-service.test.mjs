@@ -166,8 +166,8 @@ function createNoSenderEvent() {
 // ---------------------------------------------------------------------------
 
 describe('Published constants', () => {
-  test('ALLOWED_PROVIDERS has exactly 16 entries', () => {
-    assert.equal(ALLOWED_PROVIDERS.length, 16);
+  test('ALLOWED_PROVIDERS has exactly 17 entries', () => {
+    assert.equal(ALLOWED_PROVIDERS.length, 17);
   });
 
   test('ALLOWED_PROVIDERS is frozen', () => {
@@ -192,6 +192,7 @@ describe('Published constants', () => {
       'RUNWAY_API_KEY',
       'XAI_API_KEY',
       'WORLDLABS_API_KEY',
+      'KREA_USAGE_KEY',
     ];
     assert.deepEqual([...ALLOWED_PROVIDERS].sort(), expected.sort());
   });

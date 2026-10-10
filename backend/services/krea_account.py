@@ -85,21 +85,34 @@ async def account_tools() -> AsyncIterator[AccountTools]:
 async def run_job(account: AccountTools, tool: str, arguments: dict[str, Any], node_id: str, emit, *,
                   max_polls: int = 300, poll_interval: float = 2.0) -> dict[str, Any]:
     """Submit one job-returning tool call and poll it; cancel if we stop early."""
+    jobs = await run_jobs(account, tool, arguments, node_id, emit, max_polls=max_polls, poll_interval=poll_interval)
+    if len(jobs) != 1:
+        raise RuntimeError(f"Krea {tool} returned {len(jobs)} jobs where one was expected")
+    return jobs[0]
+
+
+def _submitted_jobs(value: Any) -> list[dict[str, Any]]:
+    if isinstance(value, dict) and isinstance(value.get("jobs"), list):
+        value = value["jobs"]
+    return [_job(item) for item in value] if isinstance(value, list) else [_job(value)]
+
+
+async def run_jobs(account: AccountTools, tool: str, arguments: dict[str, Any], node_id: str, emit, *,
+                   max_polls: int = 300, poll_interval: float = 2.0) -> list[dict[str, Any]]:
+    """Submit once, poll every job it started, and cancel any still running if we stop."""
     from handlers.krea_gateway import _JOB_ID
-    job = _job(await account.call(tool, arguments))
-    job_id = str(job.get("job_id") or job.get("id") or "")
-    if not _JOB_ID.fullmatch(job_id):
+    jobs = _submitted_jobs(await account.call(tool, arguments))
+    ids = [str(job.get("job_id") or job.get("id") or "") for job in jobs]
+    if not ids or not all(_JOB_ID.fullmatch(job_id) for job_id in ids):
         raise RuntimeError(f"Krea {tool} returned no valid job id; it was not retried")
-    settled = False
-
-    def done():
-        nonlocal settled
-        settled = True
-
+    pending = set(ids)
+    revision = account.revision
     try:
-        return await poll_job(account.tools, job, node_id, emit, max_polls=max_polls,
-                              poll_interval=poll_interval, on_completed=done)
+        finished = []
+        for job, job_id in zip(jobs, ids):
+            finished.append(await poll_job(account.tools, job, node_id, emit, max_polls=max_polls,
+                                           poll_interval=poll_interval, on_completed=lambda j=job_id: pending.discard(j)))
+        return finished
     finally:
-        if not settled:
-            revision = account.revision
-            schedule_detached_cancel(lambda: _cancel(job_id, revision))
+        for job_id in pending:
+            schedule_detached_cancel(lambda j=job_id: _cancel(j, revision))

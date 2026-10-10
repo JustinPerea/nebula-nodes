@@ -26,6 +26,18 @@ moodboard), the run stops before any request and says which connection to use.
 The value-only helpers (Krea Style, Krea Moodboard, Image Style Reference)
 never call Krea and have no connection choice.
 
+The workspace nodes reach the rest of Krea: Job History, Node App, Krea Files,
+Save to Krea Files, Krea Nodes Workflow, Krea Agent, Desktop Apps and Usage.
+Which billing path each one supports, and what it refuses, is listed in
+[`model-providers/krea/krea-workspace.md`](model-providers/krea/krea-workspace.md).
+Usage takes a separate enterprise workspace service key (`KREA_USAGE_KEY`),
+because Krea refuses personal API tokens there.
+
+Once connected, the card's **Show Krea plans** lists Krea's plans with links to
+krea.ai. When Krea offers the account a trial, **Start a free Pro trial** asks
+Krea for a checkout link that you open yourself; payment details go on Krea's or
+Stripe's page, never into Nebula.
+
 Run a node or Create recipe explicitly to generate. Nebula discovers Krea's
 tool and model schemas, uploads connected local media, submits once, polls the
 job, and saves the actual results in the normal run directory. Stop requests

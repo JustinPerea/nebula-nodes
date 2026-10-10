@@ -2531,7 +2531,7 @@ async def update_settings(body: dict[str, Any]) -> dict:
     return {"status": "saved"}
 
 
-# The 16-key allowlist for credential updates (must match environment.md).
+# The credential-update allowlist (17 keys; desktop/credentials.mjs mirrors it).
 _CREDENTIAL_PROVIDER_ALLOWLIST = frozenset({
     "ANTHROPIC_API_KEY",
     "ELEVENLABS_API_KEY",
@@ -2540,6 +2540,7 @@ _CREDENTIAL_PROVIDER_ALLOWLIST = frozenset({
     "HIGGSFIELD_API_KEY",
     "IDEOGRAM_API_KEY",
     "KREA_API_TOKEN",
+    "KREA_USAGE_KEY",
     "MESHY_API_KEY",
     "MINIMAX_API_KEY",
     "OPENAI_API_KEY",

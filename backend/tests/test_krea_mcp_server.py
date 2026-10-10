@@ -165,7 +165,9 @@ async def test_bridge_offers_krea_read_only_discovery_and_nothing_that_writes_or
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
         tools = {tool.name for tool in await KreaDiscoveryBridge("http://127.0.0.1:8033", client).list_tools()}
-    assert tools == {"list_models", "get_model_schema", "list_styles", "list_moodboards", "get_prompting_guide"}
+    assert tools == {"list_models", "get_model_schema", "list_styles", "list_moodboards", "get_prompting_guide",
+                     "get_node_apps", "get_node_app_versions", "list_node_types"}
+    assert tools == set(KREA_READONLY_TOOLS)
     for name in KREA_READONLY_TOOLS:
         assert name.startswith(("list_", "get_")), name
         assert name in KREA_MCP_PRIMER

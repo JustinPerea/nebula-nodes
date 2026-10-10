@@ -34,7 +34,7 @@ export const PROVIDER_KEY_LABELS: Readonly<Record<string, string>> = {
   OPENROUTER_API_KEY: 'OpenRouter', REPLICATE_API_TOKEN: 'Replicate', FAL_KEY: 'FAL',
   MESHY_API_KEY: 'Meshy', RUNWAY_API_KEY: 'Runway', ELEVENLABS_API_KEY: 'ElevenLabs',
   MINIMAX_API_KEY: 'MiniMax', XAI_API_KEY: 'xAI', HIGGSFIELD_API_KEY: 'Higgsfield',
-  QUIVER_API_KEY: 'QuiverAI', KREA_API_TOKEN: 'Krea', IDEOGRAM_API_KEY: 'Ideogram',
+  QUIVER_API_KEY: 'QuiverAI', KREA_API_TOKEN: 'Krea', KREA_USAGE_KEY: 'Krea usage', IDEOGRAM_API_KEY: 'Ideogram',
   WORLDLABS_API_KEY: 'World Labs',
 };
 

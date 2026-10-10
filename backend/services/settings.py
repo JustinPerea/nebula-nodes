@@ -234,6 +234,13 @@ PROVIDER_CHECKS: dict[str, ProviderCheck] = {
         "https://api.krea.ai/styles",
         lambda key: {"Authorization": f"Bearer {key}"},
     ),
+    # Read-only list of the workspace's metered jobs (default: last 7 days).
+    # Krea refuses personal API tokens here, so a 2xx proves a service key.
+    "Krea usage": ProviderCheck(
+        ("KREA_USAGE_KEY",),
+        "https://api.krea.ai/usage",
+        lambda key: {"Authorization": f"Bearer {key}"},
+    ),
     "Higgsfield": ProviderCheck(
         ("HIGGSFIELD_API_KEY",),
         "",

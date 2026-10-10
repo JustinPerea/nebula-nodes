@@ -48,6 +48,7 @@ PROVIDER_KEYS = {
     "MiniMax": "MINIMAX_API_KEY",
     "QuiverAI": "QUIVER_API_KEY",
     "Krea": "KREA_API_TOKEN",
+    "Krea usage": "KREA_USAGE_KEY",
     "Higgsfield": "HIGGSFIELD_API_KEY",
     "World Labs": "WORLDLABS_API_KEY",
     # Nous has no settings.json key — it resolves an OAuth credential from

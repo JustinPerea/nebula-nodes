@@ -15,7 +15,8 @@
     "REPLICATE_API_TOKEN": "",
     "RUNWAY_API_KEY": "",
     "XAI_API_KEY": "",
-    "WORLDLABS_API_KEY": ""
+    "WORLDLABS_API_KEY": "",
+    "KREA_USAGE_KEY": ""
   },
   "routing": {},
   "outputPath": null,

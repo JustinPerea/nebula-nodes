@@ -75,6 +75,14 @@ Generation is async: submit, retain the job ID, poll pending states, then materi
 | `krea-moodboard-create` | Krea account only: create and analyze a moodboard from images; outputs the moodboard |
 | `krea-library-manage` | Rename or delete a style or moodboard. Deletes take only a typed `item_id` (never a wired one) and need `confirm_delete` set to that same ID; an API token can only rename styles |
 | `krea-3d-export` | API token only: export a Krea 3D job to OBJ/FBX/STL/PLY and unpack it |
+| `krea-job-history` | List past jobs (API token) or fetch one job by ID (either path); optionally save completed media into the run |
+| `krea-node-app` | Run one node app version with schema-checked inputs; wired images fill image fields in order, wired text the first text field. Account path: public and workspace-shared apps only |
+| `krea-files` | Krea account only: list Krea Files by scope, type, tags or folder and bring media, SVG or text into the run |
+| `krea-files-save` | Krea account only: save local Nebula media (raw-byte upload) or text into Krea Files, optionally in a folder and with tags |
+| `krea-nodes-workflow` | Krea account only: create a Krea Nodes workflow (returns an Open in Krea Nodes link), or read/edit one by typed workflow ID |
+| `krea-agent` | Krea account only: send one Krea Agent turn and wait for its deliverables. Bills the workspace; Stop only stops waiting |
+| `krea-desktop` | Krea account only: list connected desktop apps and tools, or run one tool with a typed app ID. Changes the open project immediately |
+| `krea-usage` | Workspace usage (compute units per job) with an enterprise service key `KREA_USAGE_KEY`; personal tokens are refused |
 
 The original six Krea nodes are preserved alongside the new catalog; `nebula-moodboard` is a separate provider-neutral node. Use `krea-2-generate` for the established wrapper-node style/moodboard adaptation below. New Krea 2 route nodes expose the canonical API fields, including Turbo, image-to-image strength, `3:4`, and generative sliders; their defaults and raw JSON shapes do not alter the legacy wrapper contract.
 
