@@ -11,7 +11,7 @@ const project = (overrides: Partial<ProjectSummary> = {}): ProjectSummary => ({
 
 const props = (overrides: Partial<ProjectHomeProps> = {}): ProjectHomeProps => ({
   projects: [project()], loading: false, busy: false, error: null,
-  onCreate: vi.fn(), onOpen: vi.fn(), onRename: vi.fn(), onRetry: vi.fn(), ...overrides,
+  onCreate: vi.fn(), onOpen: vi.fn(), onRename: vi.fn(), onDelete: vi.fn(), onRetry: vi.fn(), ...overrides,
 });
 
 describe('ProjectHome', () => {
@@ -70,6 +70,36 @@ describe('ProjectHome', () => {
     expect(actions.onRename).toHaveBeenCalledTimes(1);
   });
 
+  it('asks before deleting, focuses Cancel, and can back out with Escape', () => {
+    const actions = props();
+    render(<ProjectHome {...actions} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Glass campaign' }));
+    const confirm = screen.getByRole('group', { name: 'Delete Glass campaign' });
+    expect(confirm.textContent).toContain('outputs folder');
+    expect(document.activeElement).toBe(within(confirm).getByRole('button', { name: 'Cancel' }));
+    expect(screen.getByRole('button', { name: 'Open Glass campaign' }).hasAttribute('disabled')).toBe(true);
+    fireEvent.keyDown(confirm, { key: 'Escape' });
+    expect(screen.queryByRole('group', { name: 'Delete Glass campaign' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Glass campaign' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(actions.onDelete).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Glass campaign' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Delete project' }));
+    expect(actions.onDelete).toHaveBeenCalledWith('glass');
+    expect(screen.queryByRole('group', { name: 'Delete Glass campaign' })).toBeNull();
+  });
+
+  it('shows only one of rename or delete at a time', () => {
+    render(<ProjectHome {...props()} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Rename Glass campaign' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Glass campaign' }));
+    expect(screen.queryByRole('textbox', { name: 'Project name' })).toBeNull();
+    expect(screen.getByRole('group', { name: 'Delete Glass campaign' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Rename Glass campaign' }));
+    expect(screen.queryByRole('group', { name: 'Delete Glass campaign' })).toBeNull();
+    expect(screen.getByRole('textbox', { name: 'Project name' })).toBeTruthy();
+  });
+
   it('loads actual backend thumbnails and replaces a broken image with a graph placeholder', () => {
     render(<ProjectHome {...props({ projects: [project({ thumbnail: '/api/outputs/project/image.png' })] })} />);
     const card = screen.getByRole('article');
@@ -92,7 +122,7 @@ describe('ProjectHome', () => {
 
   it('disables mutating actions while busy and exposes loading before a project list arrives', () => {
     const { rerender } = render(<ProjectHome {...props({ busy: true, error: 'Please retry.' })} />);
-    for (const name of ['New project', 'Open Glass campaign', 'Rename Glass campaign', 'Try again']) {
+    for (const name of ['New project', 'Open Glass campaign', 'Rename Glass campaign', 'Delete Glass campaign', 'Try again']) {
       expect(screen.getByRole('button', { name }).hasAttribute('disabled')).toBe(true);
     }
     rerender(<ProjectHome {...props({ projects: [], loading: true })} />);

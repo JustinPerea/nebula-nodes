@@ -23,7 +23,7 @@ import stat
 import tempfile
 import unicodedata
 import zipfile
-from contextlib import aclosing, contextmanager, nullcontext
+from contextlib import ExitStack, aclosing, contextmanager, nullcontext
 from contextvars import ContextVar
 from functools import wraps
 from pathlib import Path
@@ -4813,7 +4813,7 @@ async def get_node(node_id: str) -> dict:
 
 # ---------- CLI: Graph management ----------
 
-_REPLACE_REASONS = ("import", "project-open", "project-create")
+_REPLACE_REASONS = ("import", "project-open", "project-create", "project-delete")
 
 
 async def _broadcast_graph_sync(*, graph_replaced: bool = False, reason: str = "import") -> dict[str, Any]:
@@ -6816,10 +6816,10 @@ async def _projects_live_export() -> dict[str, Any]:
     return await export_graph_for_frontend()
 
 
-def _project_replacement_guard() -> None:
-    _reject_graph_replacement_during_paid_start("switch projects")
+def _project_replacement_guard(action: str = "switch projects") -> None:
+    _reject_graph_replacement_during_paid_start(action)
     if execution_runs.has_active() or _synchronous_workspace_runs:
-        raise HTTPException(status_code=409, detail="Cannot switch projects while a run is active. Wait for the run to finish or stop it first.")
+        raise HTTPException(status_code=409, detail=f"Cannot {action} while a run is active. Wait for the run to finish or stop it first.")
 
 
 def _commit_project_workspace(catalog: dict[str, Any], candidate: CLIGraph) -> None:
@@ -6899,7 +6899,16 @@ async def recover_project_copy(body: dict[str, Any]) -> dict[str, Any]:
     except ValueError as exc:
         raise HTTPException(status_code=400, detail="Recovery requires a UUID hex recoveryId") from exc
     with project_store.transaction() as catalog:
-        source = _project_id_or_404(body.get("sourceProjectId"), catalog)
+        source_id = body.get("sourceProjectId")
+        try:
+            validate_project_id(source_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        # The source may have been deleted in another window while this tab
+        # held unsaved edits to it. Those edits still deserve a copy.
+        source = catalog["projects"].get(source_id) or {
+            "id": source_id, "name": "Deleted project", "snapshot": empty_snapshot(),
+        }
         # Hash the submitted JSON, before canonical coercion. A retry of the
         # same request remains idempotent even if source metadata changes.
         _validate_graph_ingress_complexity(body)
@@ -6999,6 +7008,40 @@ async def save_project(project_id: str, body: dict[str, Any]) -> dict[str, Any]:
         refresh_metadata(project)
         project_store.commit(catalog)
         return {"project": public_project(project), "workspaceRevision": catalog["workspaceRevision"]}
+
+
+@app.delete("/api/projects/{project_id}")
+async def delete_saved_project(project_id: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Remove a project from the catalog. Generated media stays on disk.
+
+    Deleting the open project also empties the live canvas, so it carries
+    the same run and paid-start fences as switching projects.
+    """
+    body = body or {}
+    with project_store.transaction() as catalog, ExitStack() as fences:
+        _project_id_or_404(project_id, catalog)
+        _project_revision(body, catalog, required=True)
+        deleting_active = catalog["activeProjectId"] == project_id
+        if deleting_active:
+            fences.enter_context(_paid_graph_mutation("delete the open project"))
+            _project_replacement_guard("delete the open project")
+        del catalog["projects"][project_id]
+        if catalog.get("migratedProjectId") == project_id:
+            catalog.pop("migratedProjectId", None)
+        if deleting_active:
+            catalog["activeProjectId"] = None
+            catalog["workspaceRevision"] = uuid4().hex
+            _commit_project_workspace(catalog, CLIGraph())
+        else:
+            project_store.commit(catalog)
+        result = {
+            "deletedProjectId": project_id,
+            "activeProjectId": catalog["activeProjectId"],
+            "workspaceRevision": catalog["workspaceRevision"],
+        }
+    if deleting_active:
+        await _broadcast_graph_sync(graph_replaced=True, reason="project-delete")
+    return result
 
 
 def _display_positions(

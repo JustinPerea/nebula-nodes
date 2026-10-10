@@ -15,3 +15,12 @@
 
 - Merge preparation: preserve the newer Krea audio/enhance/3D/workspace and media-fetch protections from main alongside the previously reviewed UI stack. Resolve the duplicate Krea upload patch in favor of main's shared, validated upload helper; retain both README feature entries and both workstreams' implementation notes. Verify the combined tree before advancing main.
 - Combined-tree validation: all 1,961 frontend tests and 695 backend regression tests passed, including project switching/execution fences, Chat discovery and Krea generation/workspace/media-fetch protections. Lint, TypeScript, production build and bundle budget passed; the 301-definition contract check passed. The live local backend responds to health and project listing without generation. The entire change from origin/main was scanned for credential-shaped additions and sensitive file paths, with no findings.
+
+## 2026-10-10 — Deleting projects
+
+- Each card has a trash button beside rename. It opens an inline confirm (Cancel focused, Escape backs out); rename and delete never show at once.
+- `DELETE /api/projects/{id}` requires the current `workspaceRevision`, so a stale view can't delete anything. Generated media stays in the output store; only the catalog entry goes.
+- Deleting an inactive project leaves the live canvas and revision untouched and broadcasts nothing.
+- Deleting the open project carries the same run and paid-start fences as switching. It empties the live graph (so `GET /api/projects` won't re-adopt it as a Recovered canvas), clears `activeProjectId`, issues a new revision and broadcasts `canvas.replaced` with reason `project-delete`. The browser skips the outgoing save (it's being thrown away), waits for any in-flight save, and drops that project's Creator draft.
+- Recovery no longer needs the source project to exist. A tab with unsaved edits to a project deleted in another window saves them as "Deleted project (recovered)" instead of failing on every retry.
+

@@ -14,6 +14,7 @@ vi.mock('../src/lib/projects', async (original) => ({
   ...await original<typeof import('../src/lib/projects')>(),
   listProjects: vi.fn(), getProject: vi.fn(), saveProject: vi.fn(),
   openProject: vi.fn(), createProject: vi.fn(), renameProject: vi.fn(), recoverProject: vi.fn(),
+  deleteProject: vi.fn(),
 }));
 
 const initial = useProjectStore.getState();
@@ -96,6 +97,55 @@ describe('saved project coordinator', () => {
     expect(useGraphStore.getState().runHistory).toEqual([]);
     expect(useProjectStore.getState().projects.map((p) => p.id)).toEqual(expect.arrayContaining(['alpha', 'beta']));
     expect(execution.executeGraph).not.toHaveBeenCalled();
+  });
+  it('deletes another project without touching or saving the open canvas', async () => {
+    vi.mocked(projects.listProjects).mockResolvedValue({ projects: [project(), project('beta')], activeProjectId: 'alpha', workspaceRevision: 'rev-a' });
+    vi.mocked(projects.deleteProject).mockResolvedValue({ deletedProjectId: 'beta', activeProjectId: 'alpha', workspaceRevision: 'rev-a' });
+    await useProjectStore.getState().initialize();
+    await useProjectStore.getState().remove('beta');
+    expect(projects.deleteProject).toHaveBeenCalledWith('beta', 'rev-a');
+    expect(useProjectStore.getState().projects.map((p) => p.id)).toEqual(['alpha']);
+    expect(useProjectStore.getState().activeProject?.id).toBe('alpha');
+    expect(useGraphStore.getState().nodes[0].data.params.value).toBe('alpha');
+    expect(getProjectContext()).toEqual({ id: 'alpha', revision: 'rev-a' });
+    expect(useProjectStore.getState().busy).toBe(false);
+  });
+  it('deleting the open project empties the canvas without saving it first', async () => {
+    vi.mocked(projects.listProjects).mockResolvedValue({ projects: [project(), project('beta')], activeProjectId: 'alpha', workspaceRevision: 'rev-a' });
+    vi.mocked(projects.deleteProject).mockResolvedValue({ deletedProjectId: 'alpha', activeProjectId: null, workspaceRevision: 'rev-gone' });
+    await useProjectStore.getState().initialize();
+    unsubscribe = subscribeProjectAutosave();
+    useCreateDraftStore.setState({ drafts: { 'project:alpha:create': { prompt: 'old draft' } as never } });
+    useGraphStore.setState({ nodes: [{ ...project().snapshot.nodes[0], id: 'unsaved' }] });
+    await useProjectStore.getState().remove('alpha');
+    expect(projects.saveProject).not.toHaveBeenCalled();
+    expect(projects.deleteProject).toHaveBeenCalledWith('alpha', 'rev-a');
+    expect(useGraphStore.getState().nodes).toEqual([]);
+    expect(getProjectContext()).toBeNull();
+    const state = useProjectStore.getState();
+    expect(state.activeProject).toBeNull();
+    expect(state.projects.map((p) => p.id)).toEqual(['beta']);
+    expect(state.workspaceRevision).toBe('rev-gone');
+    expect(state.dirty).toBe(false);
+    expect(state.error).toBeNull();
+    expect(useCreateDraftStore.getState().drafts['project:alpha:create']).toBeUndefined();
+    // Opening another project afterwards uses the new revision.
+    await useProjectStore.getState().open('beta');
+    expect(projects.openProject).toHaveBeenCalledWith('beta', 'rev-gone');
+  });
+  it('keeps the open project when its delete is refused or a run is active', async () => {
+    await useProjectStore.getState().initialize();
+    vi.mocked(projects.deleteProject).mockRejectedValueOnce(new projects.ProjectRequestError('This project view is out of date.', 409));
+    await useProjectStore.getState().remove('alpha');
+    expect(useProjectStore.getState().activeProject?.id).toBe('alpha');
+    expect(useGraphStore.getState().nodes[0].data.params.value).toBe('alpha');
+    expect(useGraphStore.getState().isImportingGraph).toBe(false);
+    expect(useProjectStore.getState().error).toBe('This project view is out of date.');
+    vi.mocked(projects.deleteProject).mockClear();
+    useGraphStore.setState({ isExecuting: true });
+    await useProjectStore.getState().remove('alpha');
+    expect(projects.deleteProject).not.toHaveBeenCalled();
+    expect(useProjectStore.getState().error).toContain('before deleting the open project');
   });
   it('can return Home and resume the active canvas during a run, but rejects changing projects', async () => {
     await useProjectStore.getState().initialize();

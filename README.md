@@ -36,7 +36,7 @@ Drop nodes, connect their inputs and outputs, and run a creative pipeline using 
 
 ### Projects home
 
-Start at **Projects** to create a blank canvas or reopen recent work. Projects autosave their canvas, outputs, run history and Creator Studio draft locally. Use the home button in any workspace to return to the project list. Existing canvases are preserved as **Recovered canvas**.
+Start at **Projects** to create a blank canvas or reopen recent work. Projects autosave their canvas, outputs, run history and Creator Studio draft locally. Use the home button in any workspace to return to the project list. Rename or delete a project from its card; deleting asks first and leaves generated files in your outputs folder. Existing canvases are preserved as **Recovered canvas**.
 
 ### Krea models and workspace
 

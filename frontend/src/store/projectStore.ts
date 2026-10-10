@@ -21,6 +21,7 @@ interface ProjectState {
   open: (id: string) => Promise<void>;
   createProject: (name?: string) => Promise<void>;
   rename: (id: string, name: string) => Promise<void>;
+  remove: (id: string) => Promise<void>;
   goHome: () => Promise<void>;
   flush: () => Promise<void>;
   retry: () => Promise<void>;
@@ -242,6 +243,63 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       updateSummary(await api.renameProject(id, name));
     } catch (error) { showError(error); }
     finally { set({ busy: false }); markDirty(); }
+  },
+  remove: async (id) => {
+    const state = get();
+    if (!state.initialized || state.busy) return;
+    const deletingActive = state.activeProject?.id === id;
+    if (deletingActive && !useGraphStore.getState().canSwitchProject()) {
+      showError(new Error('Finish or stop the current run before deleting the open project.'));
+      return;
+    }
+    set({ busy: true, error: null });
+    let reserved = false;
+    try {
+      if (deletingActive) {
+        // The open canvas is being thrown away, so don't save it first. Let any
+        // save already in flight land, then hold the canvas so nothing else
+        // writes to a project that is about to disappear.
+        if (saveTimer !== null) clearTimeout(saveTimer);
+        saveTimer = null;
+        await saveQueue.catch(() => {});
+        reserved = useGraphStore.getState().reserveGraphImport();
+        if (!reserved) throw new Error('The canvas became busy. Try again when its run finishes.');
+      }
+      const result = await api.deleteProject(id, get().workspaceRevision);
+      if (deletingActive) {
+        useGraphStore.getState().releaseGraphImport({ discardSuspended: true });
+        reserved = false;
+        const sessionId = useUIStore.getState().createSessionId;
+        applying = true;
+        try {
+          setProjectContext(null);
+          useGraphStore.getState().loadProjectGraph([], [], []);
+          useUIStore.getState().resetPanelsForFreshCanvas();
+          useUIStore.setState({ createSessionId: null, canvasViewport: null });
+        } finally { applying = false; }
+        lastSaved = '';
+        if (sessionId) useCreateDraftStore.setState((drafts) => {
+          const { [sessionId]: _removed, ...rest } = drafts.drafts;
+          void _removed;
+          return { drafts: rest };
+        });
+        set({ activeProject: null, dirty: false, saveStatus: 'saved' });
+      }
+      set((current) => ({
+        projects: current.projects.filter((project) => project.id !== id),
+        workspaceRevision: result.workspaceRevision,
+      }));
+    } catch (error) {
+      // As with switching: an unknown reply after the canvas was held may
+      // follow a successful delete, so re-read instead of guessing.
+      if (reserved && !(error instanceof api.ProjectRequestError && error.status < 500)) {
+        preserveWorkspaceConflict('Could not confirm the project was deleted. Try again to reload saved projects safely.');
+      } else showError(error);
+    } finally {
+      if (reserved) useGraphStore.getState().releaseGraphImport();
+      set({ busy: false });
+      markDirty();
+    }
   },
   goHome: async () => {
     if (get().busy) return;

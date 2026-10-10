@@ -20,6 +20,7 @@ export interface ProjectList {
   workspaceRevision: string; migratedProjectId?: string | null;
 }
 export interface ProjectActivation { project: SavedProject; workspaceRevision: string }
+export interface ProjectDeletion { deletedProjectId: string; activeProjectId: string | null; workspaceRevision: string }
 
 export class ProjectRequestError extends Error {
   readonly status: number;
@@ -50,5 +51,7 @@ export const saveProject = (id: string, snapshot: ProjectSnapshot, workspaceRevi
   request<ProjectActivation>(`/api/projects/${encodeURIComponent(id)}`, json('PUT', { snapshot, workspaceRevision })).then((result) => result.project);
 export const renameProject = (id: string, name: string) =>
   request<ProjectActivation>(`/api/projects/${encodeURIComponent(id)}`, json('PUT', { name })).then((result) => result.project);
+export const deleteProject = (id: string, workspaceRevision: string) =>
+  request<ProjectDeletion>(`/api/projects/${encodeURIComponent(id)}`, json('DELETE', { workspaceRevision }));
 export const recoverProject = (sourceProjectId: string, snapshot: ProjectSnapshot, recoveryId: string) =>
   request<ProjectActivation>('/api/projects/recover', json('POST', { sourceProjectId, snapshot, recoveryId })).then((result) => result.project);

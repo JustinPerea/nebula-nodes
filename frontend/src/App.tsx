@@ -225,6 +225,7 @@ export default function App() {
     mainView = <ProjectHome projects={projects.projects} loading={projects.loading} busy={projects.busy}
       error={projects.error} onCreate={(name) => void projects.createProject(name)}
       onOpen={(id) => void projects.open(id)} onRename={(id, name) => void projects.rename(id, name)}
+      onDelete={(id) => void projects.remove(id)}
       onRetry={() => void projects.retry()} />;
   } else if (isCanvas) {
     mainView = <Canvas />;

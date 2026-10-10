@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
-import { ArrowUpRight, Check, Pencil, Plus, Search, X } from 'lucide-react';
+import { ArrowUpRight, Check, Pencil, Plus, Search, Trash2, X } from 'lucide-react';
 import { backendAssetUrlSync } from '../../lib/backend';
 import { CrabMark } from '../brand/CrabMark';
 import '../../styles/project-home.css';
@@ -23,6 +23,7 @@ export interface ProjectHomeProps {
   onCreate: (name?: string) => void;
   onOpen: (id: string) => void;
   onRename: (id: string, name: string) => void;
+  onDelete: (id: string) => void;
   onRetry: () => void;
 }
 
@@ -71,11 +72,18 @@ function recentTimestamp(project: ProjectSummary) {
   return Number.isFinite(updated) ? updated : 0;
 }
 
-function ProjectCard({ project, busy, onOpen, onRename }: Pick<ProjectHomeProps, 'busy' | 'onOpen' | 'onRename'> & { project: ProjectSummary }) {
+function ProjectCard({ project, busy, onOpen, onRename, onDelete }: Pick<ProjectHomeProps, 'busy' | 'onOpen' | 'onRename' | 'onDelete'> & { project: ProjectSummary }) {
   const [editing, setEditing] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [name, setName] = useState(project.name);
   const renameButton = useRef<HTMLButtonElement>(null);
+  const deleteButton = useRef<HTMLButtonElement>(null);
   const trimmed = name.trim();
+
+  const closeDeleteConfirm = () => {
+    setConfirmingDelete(false);
+    requestAnimationFrame(() => deleteButton.current?.focus());
+  };
 
   const finishRename = () => {
     setEditing(false);
@@ -84,18 +92,38 @@ function ProjectCard({ project, busy, onOpen, onRename }: Pick<ProjectHomeProps,
 
   return (
     <article className="project-home__card" aria-label={project.name}>
-      <button type="button" className="project-home__open" disabled={busy || editing} onClick={() => onOpen(project.id)} aria-label={`Open ${project.name}`}>
+      <button type="button" className="project-home__open" disabled={busy || editing || confirmingDelete} onClick={() => onOpen(project.id)} aria-label={`Open ${project.name}`}>
         <ProjectPreview key={project.thumbnail ?? 'placeholder'} thumbnail={project.thumbnail} />
         <span className="project-home__card-name">{project.name}</span>
         <span className="project-home__card-date">{editedDate(project.updatedAt)}</span>
       </button>
       <div className="project-home__card-footer">
         <span><span>{project.nodeCount} {project.nodeCount === 1 ? 'node' : 'nodes'}</span><span aria-hidden="true"> · </span><span>{project.edgeCount} {project.edgeCount === 1 ? 'connection' : 'connections'}</span></span>
-        <button type="button" className="project-home__rename" ref={renameButton} aria-label={`Rename ${project.name}`} aria-expanded={editing} disabled={busy} onClick={() => {
-          if (editing) finishRename();
-          else { setName(project.name); setEditing(true); }
-        }}><Pencil aria-hidden="true" /></button>
+        <span className="project-home__card-actions">
+          <button type="button" className="project-home__rename" ref={renameButton} aria-label={`Rename ${project.name}`} aria-expanded={editing} disabled={busy} onClick={() => {
+            if (editing) finishRename();
+            else { setConfirmingDelete(false); setName(project.name); setEditing(true); }
+          }}><Pencil aria-hidden="true" /></button>
+          <button type="button" className="project-home__rename project-home__delete" ref={deleteButton} aria-label={`Delete ${project.name}`} aria-expanded={confirmingDelete} disabled={busy} onClick={() => {
+            if (confirmingDelete) closeDeleteConfirm();
+            else { setEditing(false); setConfirmingDelete(true); }
+          }}><Trash2 aria-hidden="true" /></button>
+        </span>
       </div>
+      {confirmingDelete && (
+        <div className="project-home__delete-confirm" role="group" aria-label={`Delete ${project.name}`} onKeyDown={(event) => {
+          if (event.key === 'Escape' && !busy) { event.preventDefault(); closeDeleteConfirm(); }
+        }}>
+          <p>Delete this project? Its canvas can’t be restored. Generated files stay in your outputs folder.</p>
+          <div className="project-home__delete-actions">
+            <button type="button" autoFocus disabled={busy} onClick={closeDeleteConfirm}>Cancel</button>
+            <button type="button" className="project-home__delete-confirm-button" disabled={busy} onClick={() => {
+              setConfirmingDelete(false);
+              onDelete(project.id);
+            }}>Delete project</button>
+          </div>
+        </div>
+      )}
       {editing && (
         <form className="project-home__rename-form" aria-label={`Rename ${project.name}`} onSubmit={(event) => {
           event.preventDefault();
@@ -115,7 +143,7 @@ function ProjectCard({ project, busy, onOpen, onRename }: Pick<ProjectHomeProps,
   );
 }
 
-export function ProjectHome({ projects, loading, busy, error, onCreate, onOpen, onRename, onRetry }: ProjectHomeProps) {
+export function ProjectHome({ projects, loading, busy, error, onCreate, onOpen, onRename, onDelete, onRetry }: ProjectHomeProps) {
   const [query, setQuery] = useState('');
   const visibleProjects = useMemo(() => projects
     .filter((project) => project.name.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()))
@@ -141,7 +169,7 @@ export function ProjectHome({ projects, loading, busy, error, onCreate, onOpen, 
             {projects.length > 0 && <div className="project-home__search"><Search aria-hidden="true" /><label className="project-home__sr-only" htmlFor="project-home-search">Search projects</label><input id="project-home-search" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search projects" /></div>}
           </div>
           {loading ? <div className="project-home__loading" role="status"><span className="project-home__loading-dot" />Loading your projects…</div>
-            : visibleProjects.length > 0 ? <div className="project-home__grid">{visibleProjects.map((project) => <ProjectCard key={project.id} project={project} busy={busy} onOpen={onOpen} onRename={onRename} />)}</div>
+            : visibleProjects.length > 0 ? <div className="project-home__grid">{visibleProjects.map((project) => <ProjectCard key={project.id} project={project} busy={busy} onOpen={onOpen} onRename={onRename} onDelete={onDelete} />)}</div>
               : projects.length > 0 ? <div className="project-home__empty" role="status"><Search className="project-home__empty-search" aria-hidden="true" /><h3>No projects match “{query.trim()}”</h3><p>Try another name or clear your search.</p><button type="button" className="project-home__secondary" onClick={() => setQuery('')}>Clear search</button></div>
                 : !error && <div className="project-home__empty"><div className="project-home__empty-graph"><NodeGraphPlaceholder /></div><h3>Your first project starts here.</h3><p>Connect ideas, models and media on a canvas of your own.</p><button type="button" className="project-home__secondary" disabled={busy} onClick={() => onCreate()}><Plus aria-hidden="true" />Create your first project</button></div>}
         </section>

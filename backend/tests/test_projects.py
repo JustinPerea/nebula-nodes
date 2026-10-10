@@ -380,3 +380,98 @@ def test_stale_snapshot_recovery_is_inactive_atomic_and_idempotent(workspace, mo
     assert client.post("/api/projects/recover", json=body).status_code == 507
     assert store.path.read_bytes() == before
     assert graph.get_state() == graph_before
+
+
+def test_deleting_an_inactive_project_leaves_the_open_canvas_alone(workspace):
+    client, graph, store, broadcast = workspace
+    first = create(client, "Old idea")
+    second = create(client, "Current", first["workspaceRevision"])
+    graph.add_node("text-input", {"value": "live work"})
+    graph_before = copy.deepcopy(graph.get_state())
+    broadcast.reset_mock()
+    deleted = client.request("DELETE", f"/api/projects/{first['project']['id']}",
+                             json={"workspaceRevision": second["workspaceRevision"]})
+    assert deleted.status_code == 200, deleted.text
+    assert deleted.json() == {"deletedProjectId": first["project"]["id"],
+                              "activeProjectId": second["project"]["id"],
+                              "workspaceRevision": second["workspaceRevision"]}
+    catalog = store.read()
+    assert list(catalog["projects"]) == [second["project"]["id"]]
+    assert catalog["workspaceRevision"] == second["workspaceRevision"]
+    assert graph.get_state() == graph_before
+    broadcast.assert_not_awaited()
+    assert client.get(f"/api/projects/{first['project']['id']}").status_code == 404
+    assert client.request("DELETE", f"/api/projects/{first['project']['id']}",
+                          json={"workspaceRevision": second["workspaceRevision"]}).status_code == 404
+
+
+def test_deleting_the_open_project_empties_the_canvas_and_retires_the_revision(workspace):
+    client, graph, store, broadcast = workspace
+    keep = create(client, "Keep")
+    doomed = create(client, "Scratch", keep["workspaceRevision"])
+    graph.add_node("text-input", {"value": "throwaway"})
+    broadcast.reset_mock()
+    deleted = client.request("DELETE", f"/api/projects/{doomed['project']['id']}",
+                             json={"workspaceRevision": doomed["workspaceRevision"]})
+    assert deleted.status_code == 200, deleted.text
+    result = deleted.json()
+    assert result["activeProjectId"] is None
+    assert result["workspaceRevision"] != doomed["workspaceRevision"]
+    assert graph.nodes == {}
+    assert json.loads((store.root.parent / "state.json").read_text())["nodes"] == []
+    catalog = store.read()
+    assert list(catalog["projects"]) == [keep["project"]["id"]]
+    assert catalog["activeProjectId"] is None
+    replacement = next(call.args[0] for call in broadcast.await_args_list if call.args[0]["type"] == "graphSync")
+    assert replacement["graphReplaced"] is True
+    assert replacement["workspaceRevision"] == result["workspaceRevision"]
+    # An emptied live canvas must not be re-adopted as a "Recovered canvas".
+    listing = client.get("/api/projects").json()
+    assert [project["name"] for project in listing["projects"]] == ["Keep"]
+    # The old revision is retired: the deleted project's tab can't save over anything.
+    assert client.put(f"/api/projects/{keep['project']['id']}", json={
+        "workspaceRevision": doomed["workspaceRevision"], "snapshot": saved_snapshot()}).status_code == 409
+
+
+def test_delete_requires_a_current_view(workspace):
+    client, graph, store, _ = workspace
+    first = create(client, "First")
+    second = create(client, "Second", first["workspaceRevision"])
+    path = f"/api/projects/{first['project']['id']}"
+    assert client.request("DELETE", path).status_code == 409
+    assert client.request("DELETE", path, json={"workspaceRevision": first["workspaceRevision"]}).status_code == 409
+    assert set(store.read()["projects"]) == {first["project"]["id"], second["project"]["id"]}
+
+
+def test_deleting_the_open_project_is_blocked_during_a_run(workspace, monkeypatch):
+    client, graph, store, _ = workspace
+    other = create(client, "Other")
+    running = create(client, "Running", other["workspaceRevision"])
+    graph.add_node("text-input", {"value": "mid-run"})
+    before = copy.deepcopy(graph.get_state())
+    monkeypatch.setattr(main_module.execution_runs, "has_active", lambda: True)
+    blocked = client.request("DELETE", f"/api/projects/{running['project']['id']}",
+                             json={"workspaceRevision": running["workspaceRevision"]})
+    assert blocked.status_code == 409
+    assert "delete the open project" in blocked.json()["detail"]
+    assert graph.get_state() == before
+    assert running["project"]["id"] in store.read()["projects"]
+    # A run on the open canvas does not stop tidying up other projects.
+    assert client.request("DELETE", f"/api/projects/{other['project']['id']}",
+                          json={"workspaceRevision": running["workspaceRevision"]}).status_code == 200
+
+
+def test_unsaved_edits_to_a_project_deleted_elsewhere_can_still_be_recovered(workspace):
+    from uuid import uuid4
+    client, graph, store, _ = workspace
+    first = create(client, "Deleted elsewhere")
+    second = create(client, "Survivor", first["workspaceRevision"])
+    assert client.request("DELETE", f"/api/projects/{first['project']['id']}",
+                          json={"workspaceRevision": second["workspaceRevision"]}).status_code == 200
+    snapshot = {**saved_snapshot(), "edges": []}
+    body = {"sourceProjectId": first["project"]["id"], "recoveryId": uuid4().hex, "snapshot": snapshot}
+    recovered = client.post("/api/projects/recover", json=body)
+    assert recovered.status_code == 200, recovered.text
+    assert recovered.json()["project"]["name"] == "Deleted project (recovered)"
+    assert recovered.json()["project"]["snapshot"] == snapshot
+    assert client.post("/api/projects/recover", json=body).json() == recovered.json()

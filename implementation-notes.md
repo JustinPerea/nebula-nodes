@@ -1,5 +1,15 @@
 # Implementation Notes
 
+## 2026-10-10 — Delete project
+
+- **No delete existed.** The scratch project had to be removed from the catalog by hand (via the store's locked commit), which prompted this.
+- **Revision required.** `DELETE /api/projects/{id}` refuses a missing or stale `workspaceRevision`, unlike rename. Destructive, so a stale tab shouldn't be able to do it.
+- **Deleting the open project is allowed**, not refused. It's the common case (you just finished with it). It reuses `_paid_graph_mutation` and `_project_replacement_guard` (now takes an action name for the message), empties the live graph and clears the active project. The fences only apply when it's the open one; tidying other projects works mid-run.
+- **No outgoing save.** The browser cancels the autosave timer and waits for an in-flight save rather than flushing, so it never writes a project that's about to vanish (a late PUT would 404 and show an error).
+- **Recovery fallback.** `/api/projects/recover` used to 404 when its source was gone, which would have stuck a stale tab in a retry loop now that projects can disappear. It falls back to an empty source named "Deleted project".
+- **Not done:** no undo or trash bin, and other open windows' Home lists aren't pushed the deletion (opening a deleted card there shows "Project not found"). Media files are kept on purpose.
+- Live check: deleted an open throwaway (canvas emptied, no project active, list re-read cleanly) and an inactive one while Sticker maker stayed open with its 2 nodes.
+
 ## 2026-10-10 — Agent collaboration: watch, pins, proposals
 
 ### Watch (`nebula watch`, `GET /api/canvas/events`)
