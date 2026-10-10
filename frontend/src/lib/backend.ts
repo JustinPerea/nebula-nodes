@@ -229,6 +229,15 @@ function shouldRetryWithDiscovery(baseUrl: string, response?: Response): boolean
   return baseUrl === '' && TRANSIENT_PROXY_STATUSES.has(response.status);
 }
 
+// Routes that need proof the request came from the person's canvas. In the
+// packaged app the renderer's Origin can be `null`, so the per-launch
+// connector session stands in for it (pins and proposals: person-only).
+const CONNECTOR_SESSION_PREFIXES = ['/api/krea/', '/api/canvas/pins', '/api/canvas/proposals'];
+
+function needsConnectorSession(path: string): boolean {
+  return CONNECTOR_SESSION_PREFIXES.some((prefix) => path.startsWith(prefix));
+}
+
 export async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
   // Capture at admission, before discovery can await a later project switch.
   const project = getProjectContext();
@@ -242,7 +251,7 @@ export async function apiFetch(path: string, init?: RequestInit): Promise<Respon
     requestInit = { ...init, headers };
   }
   const connectorSession = window.nebulaDesktop?.connectorSession;
-  if (getInjectedApiBaseUrl() && connectorSession && path.startsWith('/api/krea/')) {
+  if (getInjectedApiBaseUrl() && connectorSession && needsConnectorSession(path)) {
     const headers = new Headers(requestInit?.headers);
     headers.set('X-Nebula-Connector-Session', connectorSession);
     requestInit = { ...requestInit, headers };
@@ -280,7 +289,14 @@ export async function backendWebSocketUrl(
   // that reconnect constructs the byte-identical injected URL.
   const injectedWs = getInjectedWsBaseUrl();
   if (injectedWs) {
-    return joinBackendPath(injectedWs, path);
+    const url = joinBackendPath(injectedWs, path);
+    // The canvas socket proves it is the person's renderer with the launch
+    // session (its handshake Origin may be `null`), so browser-only messages
+    // reach it. Other sockets don't need it.
+    const session = window.nebulaDesktop?.connectorSession;
+    return path === '/ws' && typeof session === 'string' && session
+      ? `${url}?connectorSession=${encodeURIComponent(session)}`
+      : url;
   }
 
   const baseUrl = await getBackendBaseUrl({ force: options.forceDiscovery });

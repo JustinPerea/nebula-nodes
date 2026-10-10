@@ -30,6 +30,10 @@ vi.mock('../src/components/SelectionToolbar', () => ({ SelectionToolbar: () => n
 vi.mock('../src/components/CanvasNavigation', () => ({ CanvasNavigation: () => null }));
 vi.mock('../src/components/canvas/CanvasViewReporter', () => ({ CanvasViewReporter: () => null }));
 vi.mock('../src/components/canvas/AgentCursorLayer', () => ({ AgentCursorLayer: () => null }));
+vi.mock('../src/components/canvas/PinLayer', () => ({ PinLayer: () => null }));
+vi.mock('../src/components/canvas/PinComposer', () => ({ PinComposer: () => null }));
+vi.mock('../src/components/canvas/ProposalLayer', () => ({ ProposalLayer: () => null }));
+vi.mock('../src/components/canvas/ProposalBar', () => ({ ProposalBar: () => null }));
 vi.mock('../src/components/ContextMenu', () => ({ ContextMenu: () => null }));
 vi.mock('../src/components/ConnectionPopup', () => ({ ConnectionPopup: () => null }));
 vi.mock('../src/lib/canvasSelection', () => ({

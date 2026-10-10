@@ -23,6 +23,11 @@ HERMES_SYSTEM_MANAGED_DIR = Path("/etc/hermes")
 CONNECTOR_SECRET_ENV_KEYS = (
     "NEBULA_CONNECTOR_ENCRYPTION_KEY",
     "NEBULA_INJECTED_KEYS",
+    # The desktop launch nonce marks a request as coming from the person's
+    # canvas (services/person_gate.py). An agent holding it could accept its
+    # own proposals or write pins as the person. The backend reads it from its
+    # own environment, so agent children never need it.
+    "NEBULA_CONNECTOR_SESSION",
 )
 # Read-only Krea MCP tools Nebula's agents may call. None of them generates,
 # uploads, writes, deletes or spends; everything else stays behind graph nodes.

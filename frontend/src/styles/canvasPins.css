@@ -1,0 +1,178 @@
+/* Pins: the person's notes for agents, drawn in flow coordinates inside React
+   Flow's viewport and counter-scaled (1/zoom) by PinLayer so they stay a
+   constant size. Position and the pop-in come from JS; CSS only fades. */
+
+.canvas-pin-layer {
+  --pin-color: #e8a33d;
+  --pin-ink: #1a1408;
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1000; /* one below agent cursors, above nodes and edges */
+}
+
+.canvas-pin {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
+  will-change: transform;
+  pointer-events: auto;
+  opacity: 0;
+  transition: opacity 160ms ease-out;
+}
+
+.canvas-pin[data-placed='true'] {
+  opacity: 1;
+}
+
+.canvas-pin--expanded {
+  z-index: 1;
+}
+
+.canvas-pin__badge {
+  position: absolute;
+  left: -11px;
+  top: -11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1.5px solid rgb(255 255 255 / 0.85);
+  border-radius: 50%;
+  background: var(--pin-color);
+  color: var(--pin-ink);
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.45);
+  cursor: pointer;
+}
+
+.canvas-pin--resolved .canvas-pin__badge {
+  background: var(--agent-color, #5b9dff);
+  color: #fff;
+}
+
+.canvas-pin__badge:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+.canvas-pin__card {
+  position: absolute;
+  left: 16px;
+  top: -11px;
+  width: 220px;
+  padding: 8px 10px;
+  border: 1px solid #333;
+  border-left: 3px solid var(--pin-color);
+  border-radius: 6px;
+  background: #1a1a1a;
+  box-shadow: 0 4px 20px rgb(0 0 0 / 0.5);
+  color: #ddd;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 12px;
+  line-height: 1.4;
+  cursor: default;
+  animation: canvas-pin-fade 140ms ease-out;
+}
+
+.canvas-pin[data-side='left'] .canvas-pin__card {
+  left: auto;
+  right: 16px;
+}
+
+.canvas-pin--resolved .canvas-pin__card {
+  border-left-color: var(--agent-color, #5b9dff);
+}
+
+.canvas-pin__text {
+  margin: 0;
+  color: #f2f2f2;
+  overflow-wrap: anywhere;
+}
+
+.canvas-pin__meta {
+  margin: 4px 0 0;
+  color: #777;
+  font-size: 11px;
+}
+
+.canvas-pin__reply {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 8px 0 0;
+  padding-top: 6px;
+  border-top: 1px solid #2a2a2a;
+  overflow-wrap: anywhere;
+}
+
+.canvas-pin__agent {
+  color: var(--agent-color, #5b9dff);
+  font-weight: 600;
+  font-size: 11px;
+}
+
+.canvas-pin__delete {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 8px;
+  padding: 3px 6px;
+  border: none;
+  border-radius: 4px;
+  background: none;
+  color: #999;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.canvas-pin__delete:hover,
+.canvas-pin__delete:focus-visible {
+  background: rgb(244 67 54 / 0.15);
+  color: #f44336;
+}
+
+/* Shown when a note couldn't be saved or deleted. */
+.canvas-pin-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(420px, calc(100vw - 32px));
+  padding: 8px 10px 8px 12px;
+  border: 1px solid #5a2a26;
+  border-radius: 6px;
+  background: #1a1a1a;
+  box-shadow: 0 4px 20px rgb(0 0 0 / 0.5);
+  color: #f2b8b2;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 12px;
+  transform: translateX(-50%);
+}
+
+.canvas-pin-toast button {
+  border: none;
+  background: none;
+  color: #999;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+@keyframes canvas-pin-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .canvas-pin,
+  .canvas-pin__card {
+    transition: none;
+    animation: none;
+  }
+}

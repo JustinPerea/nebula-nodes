@@ -57,6 +57,7 @@ from models import (
 from models.events import (
     ExecutionEvent,
     ExecutedEvent,
+    ExecutingEvent,
     ErrorEvent,
     GraphCancelledEvent,
     GraphCompleteEvent,
@@ -114,6 +115,31 @@ from services.agent_presence import (
     identify as identify_agent,
     parse_target,
 )
+from services.canvas_events import (
+    MOVE_THRESHOLD_PX,
+    TooManyWaiters,
+    actor_for_headers,
+    actor_label,
+    canvas_events,
+    param_changes,
+    parse_kinds,
+)
+from services.canvas_pins import CanvasPins, PinError, pin_summary
+from services.person_gate import PersonGateError, desktop_session_matches, is_browser_request, require_person
+from services.canvas_proposals import (
+    MAX_REASON,
+    Proposal,
+    ProposalError,
+    ProposalSpec,
+    canvas_proposals,
+    clean_note,
+    clean_positions,
+    cost_for,
+    parse_spec,
+    place_new_nodes,
+    summarize_cost,
+)
+from services.local_guard import origin_allowed
 from services.zoom_manifest import init_manifest, append_entry
 from services.project_context import get_current_project
 from routes.openrouter_proxy import router as openrouter_router
@@ -128,7 +154,7 @@ from routes.commons import router as commons_router
 from commons import actors as commons_actors
 from services.ffmpeg import ffprobe_video
 from services.preset_store import preset_store
-from services.selection_context import SelectionContextStore, selection_prompt_context
+from services.selection_context import SelectionContextStore, _safe_value as _journal_safe_value, selection_prompt_context
 from services.provider_recovery import (
     ProviderRecoveryCapacityError,
     ProviderRecoveryConflictError,
@@ -180,6 +206,8 @@ else:
 
 cli_graph = CLIGraph(persist_path=_STATE_PATH)
 project_store = ProjectStore(_STATE_DIR / "projects")
+# Pins follow `main.project_store` through the getter (tests swap the store).
+canvas_pins = CanvasPins(lambda: project_store)
 _request_workspace_revision: ContextVar[str | None] = ContextVar("workspace_revision", default=None)
 _execution_workspace_context: ContextVar[dict[str, Any] | None] = ContextVar("execution_workspace", default=None)
 _synchronous_workspace_runs: set[str] = set()
@@ -1955,17 +1983,41 @@ async def convert_to_glb(path: str) -> Any:
 
 # ---------- WebSocket connection manager ----------
 
+def _websocket_is_browser(websocket: WebSocket) -> bool:
+    """True for the person's canvas: an allowed browser Origin, or the desktop session.
+
+    Browsers always send Origin on a WebSocket handshake; the CLI and MCP
+    don't. The packaged desktop renderer may send `Origin: null`, so in
+    desktop mode the per-launch connector session (query param) counts too.
+    Browser-only messages (proposal accept keys) go only to these sockets.
+    """
+    try:
+        if desktop_session_matches(websocket.query_params.get("connectorSession")):
+            return True
+        origin = websocket.headers.get("origin")
+    except Exception:  # noqa: BLE001 - a malformed handshake is simply not a browser
+        return False
+    return origin is not None and origin_allowed(origin)
+
+
 class ConnectionManager:
     def __init__(self) -> None:
         self.active_connections: list[WebSocket] = []
+        self.browser_connections: set[WebSocket] = set()
 
     async def connect(self, websocket: WebSocket) -> None:
         await websocket.accept()
         self.active_connections.append(websocket)
+        if _websocket_is_browser(websocket):
+            self.browser_connections.add(websocket)
+
+    def is_browser(self, websocket: WebSocket) -> bool:
+        return websocket in self.browser_connections
 
     def disconnect(self, websocket: WebSocket) -> None:
         if websocket in self.active_connections:
             self.active_connections.remove(websocket)
+        self.browser_connections.discard(websocket)
 
     async def broadcast(self, event: ExecutionEvent) -> None:
         data = _event_to_camel(event)
@@ -1976,6 +2028,18 @@ class ConnectionManager:
         message = json.dumps(data)
         disconnected: list[WebSocket] = []
         for connection in self.active_connections:
+            try:
+                await connection.send_text(message)
+            except Exception:
+                disconnected.append(connection)
+        for conn in disconnected:
+            self.disconnect(conn)
+
+    async def broadcast_browser(self, data: dict[str, Any]) -> None:
+        """Send only to the person's canvas sockets (never to CLI/MCP listeners)."""
+        message = json.dumps(data)
+        disconnected: list[WebSocket] = []
+        for connection in list(self.browser_connections):
             try:
                 await connection.send_text(message)
             except Exception:
@@ -2002,6 +2066,7 @@ def _try_compact_execution_cancellation(run_id: str) -> bool:
 
 def _publish_terminal_execution_status(run_id: str, status: str) -> None:
     """Push authoritative terminal state after the task done callback settles."""
+    canvas_events.forget_run(run_id)
     try:
         loop = asyncio.get_running_loop()
     except RuntimeError:
@@ -2101,6 +2166,17 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
         # safety journal, and retained execution-status snapshot.
         export = await export_graph_for_frontend()
         await websocket.send_text(json.dumps({"type": "graphSync", **export}))
+        await websocket.send_text(json.dumps(_pins_message()))
+        if manager.is_browser(websocket):
+            # Accept keys travel only to the person's canvas sockets.
+            await websocket.send_text(json.dumps({
+                "type": "proposalSync",
+                "proposals": [
+                    {**_proposal_view(p), "acceptKey": p.accept_key,
+                     "personValues": canvas_proposals.person_values(p)}
+                    for p in canvas_proposals.open_list()
+                ],
+            }))
         while True:
             await websocket.receive_text()
     except WebSocketDisconnect:
@@ -2498,11 +2574,21 @@ async def set_canvas_selection(body: dict[str, Any]) -> dict[str, Any]:
         raise HTTPException(status_code=422, detail="nodeIds must be an array")
     if len(node_ids) > 200:
         raise HTTPException(status_code=422, detail="nodeIds supports at most 200 entries")
-    return selection_context.snapshot(
+    before = set(selection_context.current())
+    snapshot = selection_context.snapshot(
         cli_graph,
         node_registry,
         requested_ids=node_ids,
     )
+    after = selection_context.current()
+    if set(after) != before:
+        live = [node_id for node_id in after if node_id in cli_graph.nodes]
+        _journal(
+            "selection.changed",
+            data={"nodeIds": live[:50], "count": len(live)},
+            summary=f"selected {_listed(live)}" if live else "cleared the selection",
+        )
+    return snapshot
 
 
 async def _show_agent(
@@ -2524,6 +2610,78 @@ async def _show_agent(
         event = agent_presence.point(identity, target=target, origin=origin, action=action, say=say)
         await manager.broadcast_raw(event)
     except Exception:  # noqa: BLE001 - decoration must not break graph edits
+        pass
+
+
+def _journal(
+    kind: str,
+    *,
+    node_id: str | None = None,
+    data: dict[str, Any] | None = None,
+    summary: str = "",
+    actor: dict[str, Any] | None = None,
+) -> None:
+    """Record a canvas change for `nebula watch`; never fails the route that called it.
+
+    The actor defaults to whoever sent the current request (agent, person or
+    anonymous). Like presence, the journal is decoration on top of an edit
+    that already succeeded.
+    """
+    try:
+        if not canvas_events.project_known:
+            canvas_events.set_project(_workspace_context()["activeProjectId"])
+        canvas_events.publish(
+            kind,
+            actor=actor or actor_for_headers(current_request_headers()),
+            node_id=node_id,
+            data=data,
+            summary=summary,
+        )
+    except Exception:  # noqa: BLE001 - the journal is decoration, like presence
+        pass
+
+
+def _edge_data(edge: dict[str, Any]) -> dict[str, Any]:
+    return {key: edge.get(key) for key in ("source", "sourceHandle", "target", "targetHandle")}
+
+
+def _listed(ids: list[str], limit: int = 6) -> str:
+    shown = ", ".join(ids[:limit])
+    return shown + (f" and {len(ids) - limit} more" if len(ids) > limit else "")
+
+
+_RUN_EVENT_KINDS: dict[type, str] = {
+    ExecutingEvent: "run.started",
+    ExecutedEvent: "run.finished",
+    ErrorEvent: "run.failed",
+}
+_RUN_EVENT_VERBS = {"run.started": "started", "run.finished": "finished", "run.failed": "failed"}
+
+
+def _journal_execution_event(event: Any, run_id: str | None) -> None:
+    """Journal one node's run start/finish/failure, attributed to whoever started the run."""
+    try:
+        kind = _RUN_EVENT_KINDS.get(type(event))
+        if kind is None:
+            return
+        node_id = getattr(event, "node_id", None)
+        # Skip /api/quick's temporary nodes and anything no longer on the canvas.
+        if not isinstance(node_id, str) or node_id not in cli_graph.nodes:
+            return
+        if not canvas_events.first_run_event(run_id, node_id, kind):
+            return
+        data: dict[str, Any] = {"runId": run_id}
+        if isinstance(event, ErrorEvent):
+            error = event.friendly or event.error or ""
+            data["error"] = str(_journal_safe_value(error, key="error"))[:200]
+        _journal(
+            kind,
+            node_id=node_id,
+            data=data,
+            summary=f"{_node_label(node_id)} ({node_id}) {_RUN_EVENT_VERBS[kind]}",
+            actor=canvas_events.run_actor(run_id),
+        )
+    except Exception:  # noqa: BLE001 - never break execution for the journal
         pass
 
 
@@ -2576,7 +2734,694 @@ async def report_canvas_view(body: dict[str, Any]) -> dict[str, Any]:
 async def get_canvas_snapshot() -> dict[str, Any]:
     """Read the canvas as data: what's on screen, node states, wires, selection, agent cursors."""
     selected = selection_context.snapshot(cli_graph, node_registry).get("selectedNodeIds", [])
-    return agent_presence.snapshot(cli_graph, node_registry, selected_ids=selected)
+    snapshot = agent_presence.snapshot(cli_graph, node_registry, selected_ids=selected)
+    # `nebula look` then `nebula watch --since <cursor>` leaves no gap.
+    snapshot["events"] = {"journal": canvas_events.journal_id, "cursor": canvas_events.latest}
+    # The person's notes for agents: open pins first, plus recent replies.
+    try:
+        snapshot["pins"] = canvas_pins.for_agents()["pins"]
+    except (PinError, ProjectStoreError):
+        snapshot["pins"] = []
+    # Proposals waiting for the person (one line each; never their accept keys).
+    await _sweep_proposals()
+    snapshot["proposals"] = [canvas_proposals.brief(p) for p in canvas_proposals.open_list()]
+    return snapshot
+
+
+def _query_number(raw: str | None, name: str, *, integer: bool, low: float, high: float | None) -> float | None:
+    if raw is None or raw == "":
+        return None
+    try:
+        value = int(raw) if integer else float(raw)
+    except ValueError:
+        raise HTTPException(status_code=422, detail=f"{name} must be a number") from None
+    if not math.isfinite(value) or value < low or (high is not None and value > high):
+        bound = f"between {low:g} and {high:g}" if high is not None else f"at least {low:g}"
+        raise HTTPException(status_code=422, detail=f"{name} must be {bound}")
+    return value
+
+
+@app.get("/api/canvas/events")
+async def get_canvas_events(request: Request) -> dict[str, Any]:
+    """Long-poll the canvas change journal (see services/canvas_events.py).
+
+    Query: after (seq; default "from now"), journal (id from a previous
+    response), wait (seconds, capped at 25), limit (1-100), kinds (comma
+    list of groups or exact kinds), self=1 to include the caller's own
+    events. Resume with after=<cursor>.
+    """
+    query = request.query_params
+    known = {"after", "journal", "wait", "limit", "kinds", "self"}
+    await _sweep_proposals()
+    unknown = sorted(set(query) - known)
+    if unknown:
+        raise HTTPException(status_code=422, detail=f"unknown query parameter '{unknown[0][:40]}'")
+    after = _query_number(query.get("after"), "after", integer=True, low=0, high=None)
+    wait = _query_number(query.get("wait"), "wait", integer=False, low=0, high=None) or 0.0
+    limit = _query_number(query.get("limit"), "limit", integer=True, low=1, high=100)
+    journal = query.get("journal") or None
+    if journal is not None and not re.fullmatch(r"[0-9a-f]{1,32}", journal):
+        raise HTTPException(status_code=422, detail="journal must be the id from a previous response")
+    try:
+        kinds = parse_kinds(query.get("kinds"))
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    include_self = (query.get("self") or "0").lower()
+    if include_self not in {"0", "1", "true", "false"}:
+        raise HTTPException(status_code=422, detail="self must be 1 or 0")
+    identity = identify_agent(current_request_headers())
+    exclude = identity.id if identity is not None and include_self in {"0", "false"} else None
+    try:
+        return await canvas_events.wait(
+            after=int(after) if after is not None else None,
+            journal=journal,
+            wait=wait,
+            limit=int(limit) if limit is not None else 50,
+            kinds=kinds,
+            exclude_actor_id=exclude,
+        )
+    except TooManyWaiters as exc:
+        raise HTTPException(status_code=429, detail=str(exc)) from exc
+
+
+# ---------- Pins: the person's notes for agents ----------
+
+def _pins_message() -> dict[str, Any]:
+    """The `canvasPins` WebSocket message for the active project (empty when unreadable)."""
+    try:
+        listing = canvas_pins.list()
+    except (PinError, ProjectStoreError):
+        listing = {"projectId": None, "pins": []}
+    return {"type": "canvasPins", **listing}
+
+
+async def _broadcast_pins() -> None:
+    try:
+        await manager.broadcast_raw(_pins_message())
+    except Exception:  # noqa: BLE001 - pins are already saved; a failed push heals on reconnect
+        pass
+
+
+async def _journal_detached_pins(pins: list[dict[str, Any]], reason: str) -> None:
+    """Broadcast and journal pins that just lost their node."""
+    if not pins:
+        return
+    await _broadcast_pins()
+    for pin in pins[:50]:
+        node_id = pin.get("detachedFrom")
+        _journal(
+            "pin.detached",
+            node_id=node_id if isinstance(node_id, str) else None,
+            data={"pinId": pin.get("id"), "text": pin.get("text"), "anchor": pin.get("anchor"), "reason": reason},
+            summary=f"note {pin.get('id')} lost its node {node_id} ({reason}); it stays where the node was",
+        )
+
+
+def _pin_http_error(exc: PinError | PersonGateError) -> HTTPException:
+    return HTTPException(status_code=exc.status, detail=exc.detail)
+
+
+@app.get("/api/canvas/pins")
+async def list_canvas_pins() -> dict[str, Any]:
+    """Notes the person pinned for agents in the open project (open first, newest first)."""
+    try:
+        return canvas_pins.list()
+    except PinError as exc:
+        raise _pin_http_error(exc) from exc
+
+
+@app.post("/api/canvas/pins", status_code=201)
+async def create_canvas_pin(body: dict[str, Any]) -> dict[str, Any]:
+    """Pin a short note to a node or a canvas spot. Only the person can do this.
+
+    Body: {text, nodeId} or {text, position: {x, y}}.
+    """
+    try:
+        require_person(current_request_headers())
+        pin = canvas_pins.add(
+            body.get("text"),
+            node_id=body.get("nodeId"),
+            position=body.get("position"),
+            graph_nodes=cli_graph.nodes,
+        )
+    except (PersonGateError, PinError) as exc:
+        raise _pin_http_error(exc) from exc
+    await _broadcast_pins()
+    anchor = pin.get("anchor") or {}
+    _journal(
+        "pin.added",
+        node_id=anchor.get("nodeId"),
+        data={"pinId": pin["id"], "text": pin["text"], "anchor": anchor},
+        summary=pin_summary(pin),
+    )
+    return {"pin": pin}
+
+
+@app.delete("/api/canvas/pins/{pin_id}")
+async def delete_canvas_pin(pin_id: str) -> dict[str, Any]:
+    """Delete a note. Only the person can do this."""
+    try:
+        require_person(current_request_headers())
+        pin = canvas_pins.remove(pin_id)
+    except (PersonGateError, PinError) as exc:
+        raise _pin_http_error(exc) from exc
+    await _broadcast_pins()
+    _journal(
+        "pin.removed",
+        node_id=(pin.get("anchor") or {}).get("nodeId"),
+        data={"pinId": pin_id, "text": pin.get("text")},
+        summary=f"deleted the note {pin_id}",
+    )
+    return {"status": "deleted"}
+
+
+@app.post("/api/canvas/pins/{pin_id}/resolve")
+async def resolve_canvas_pin(pin_id: str, body: dict[str, Any]) -> dict[str, Any]:
+    """An agent answers a note in one line, which resolves it and moves its cursor there."""
+    identity = identify_agent(current_request_headers())
+    if identity is None:
+        raise HTTPException(status_code=400, detail="Name yourself with NEBULA_AGENT_NAME or --as")
+    try:
+        pin = canvas_pins.resolve(pin_id, body.get("reply"), identity)
+    except PinError as exc:
+        raise _pin_http_error(exc) from exc
+    await _broadcast_pins()
+    reply = (pin.get("reply") or {}).get("text", "")
+    anchor = pin.get("anchor") or {}
+    _journal(
+        "pin.resolved",
+        node_id=anchor.get("nodeId"),
+        data={"pinId": pin_id, "text": pin.get("text"), "reply": reply},
+        summary=f'answered the note {pin_id} ("{str(pin.get("text"))[:40]}"): {reply}',
+    )
+    try:
+        target = anchor if anchor.get("nodeId") in cli_graph.nodes else (
+            pin.get("position") or {"x": anchor.get("x", 0.0), "y": anchor.get("y", 0.0)}
+        )
+        target = {"nodeId": target["nodeId"]} if "nodeId" in target else {"x": target["x"], "y": target["y"]}
+        await manager.broadcast_raw(agent_presence.point(identity, target=target, action="click", say=reply))
+    except Exception:  # noqa: BLE001 - the cursor is decoration on a saved reply
+        pass
+    return {"pin": pin}
+
+
+# ---------- Proposals: agents propose, the person approves ----------
+
+_PROPOSAL_KEY_HEADER = "x-nebula-proposal-key"
+_SYSTEM_ACTOR: dict[str, Any] = {"kind": "system"}
+_PERSON_ACTOR: dict[str, Any] = {"kind": "person"}
+
+
+def _proposal_http_error(exc: ProposalError | PersonGateError) -> HTTPException:
+    return HTTPException(status_code=exc.status, detail=exc.detail)
+
+
+def _proposal_closed_message(proposal: Proposal) -> dict[str, Any]:
+    message: dict[str, Any] = {
+        "type": "proposalClosed",
+        "proposalId": proposal.id,
+        "status": proposal.status,
+        "reason": proposal.reason,
+    }
+    if proposal.id_map:
+        message["idMap"] = dict(proposal.id_map)
+    return message
+
+
+async def _announce_closed_proposals(
+    proposals: list[Proposal],
+    *,
+    actor: dict[str, Any] | None = None,
+) -> None:
+    """Journal and broadcast proposals that just closed (expired, invalidated, ...)."""
+    for proposal in proposals:
+        kind = f"proposal.{proposal.status}"
+        reason = f": {proposal.reason}" if proposal.reason else ""
+        _journal(
+            kind,
+            node_id=next(iter(sorted(proposal.references)), None),
+            data={"proposalId": proposal.id, "agentId": proposal.agent.id,
+                  "note": proposal.spec.note, "reason": proposal.reason},
+            summary=f"{proposal.status} {proposal.agent.name}'s proposal {proposal.id}{reason}",
+            actor=actor,
+        )
+        try:
+            await manager.broadcast_raw(_proposal_closed_message(proposal))
+        except Exception:  # noqa: BLE001 - the canvas also hides expired proposals locally
+            pass
+
+
+async def _sweep_proposals() -> None:
+    """Expire overdue proposals; called before every proposal read and decision."""
+    try:
+        expired = canvas_proposals.sweep()
+    except Exception:  # noqa: BLE001 - never fail a read over housekeeping
+        return
+    await _announce_closed_proposals(expired, actor=dict(_SYSTEM_ACTOR))
+
+
+def _proposal_view(proposal: Proposal) -> dict[str, Any]:
+    return canvas_proposals.view(proposal, registry=node_registry)
+
+
+def _stage_proposal(
+    spec: ProposalSpec,
+    *,
+    positions: dict[str, dict[str, float]] | None = None,
+) -> tuple[CLIGraph, dict[str, str], list[str], list[str]]:
+    """Stage a proposal on a clone of the live graph with the cluster validators.
+
+    Returns (candidate, id_map ref→new id, new edge ids, run node ids). Raises
+    HTTPException from the same validators create/connect/update use, so a
+    proposal that would fail as direct edits fails here, before anything is
+    committed. Missing referenced nodes raise 409 (the canvas moved on).
+    """
+    candidate = cli_graph.clone()
+    for node_id in sorted(spec.references):
+        if node_id not in candidate.nodes:
+            raise HTTPException(status_code=409, detail=f"{node_id} is no longer on the canvas")
+    # Existing nodes first: their ports can depend on their params.
+    for change in spec.params:
+        node = candidate.nodes[change.node_id]
+        definition_id = str(node.get("definitionId") or "")
+        if definition_id == "cinema-scene" and "scene" in change.params:
+            raise HTTPException(status_code=400, detail="Cinema scenes can't be changed by a proposal; edit them in Cinema")
+        if uses_durable_recovery(definition_id, provider="worldlabs"):
+            raise HTTPException(status_code=400, detail="World Labs nodes can't be changed by a proposal; propose a new node instead")
+        _validate_params(definition_id, change.params)
+        candidate.update_params(change.node_id, _coerce_params(definition_id, change.params))
+    raw_nodes = [
+        {
+            "tempId": node.ref,
+            "definitionId": node.definition_id,
+            "params": copy.deepcopy(node.params),
+            "position": (positions or {}).get(node.ref) or node.position,
+        }
+        for node in spec.nodes
+    ]
+    id_map = _stage_graph_nodes(candidate, raw_nodes, reference_key="tempId", include_outputs=False)
+    new_ids = set(id_map.values())
+    refs: dict[str, str] = {node_id: node_id for node_id in candidate.nodes if node_id not in new_ids}
+    refs.update(id_map)
+    edge_ids = _stage_graph_edges(candidate, [edge.as_dict() for edge in spec.edges], refs)
+    run_ids: list[str] = []
+    for item in spec.run:
+        if item not in refs:
+            raise HTTPException(status_code=400, detail=f"run names '{item[:30]}', which is not on the canvas or in the proposal")
+        run_ids.append(refs[item])
+    return candidate, id_map, edge_ids, run_ids
+
+
+def _outputs_available(outputs: Any) -> bool:
+    if not isinstance(outputs, dict):
+        return False
+    return any(bool(value.get("value") if isinstance(value, dict) else value) for value in outputs.values())
+
+
+def _proposal_cost(candidate: CLIGraph, id_map: dict[str, str], run_ids: list[str]) -> dict[str, Any]:
+    """Which nodes a run after acceptance may start: the targets plus ancestors without outputs.
+
+    Never a number: each node is free (utility) or paid (a provider call).
+    "Up to" when ancestors are counted, because the execution cache may skip them.
+    """
+    ref_for = {new_id: ref for ref, new_id in id_map.items()}
+    definitions = node_registry.get_all()
+    entries: list[dict[str, Any]] = []
+    up_to = False
+    if run_ids:
+        graph_nodes, graph_edges = candidate.to_execute_format()
+        nodes = [GraphNode.model_validate(node) for node in graph_nodes]
+        edges = [GraphEdge.model_validate(edge) for edge in graph_edges]
+        chosen: list[str] = []
+        for target in run_ids:
+            sub_nodes, _ = get_subgraph(nodes, edges, target)
+            for node in sorted(sub_nodes, key=lambda n: _node_order(n.id)):
+                if node.id in chosen:
+                    continue
+                if node.id not in run_ids:
+                    if _outputs_available((candidate.nodes.get(node.id) or {}).get("outputs")):
+                        continue
+                    up_to = True
+                chosen.append(node.id)
+        for node_id in chosen:
+            definition = definitions.get(str(candidate.nodes[node_id].get("definitionId") or ""), {})
+            entries.append({
+                "ref": ref_for.get(node_id, node_id),
+                "nodeId": None if node_id in ref_for else node_id,
+                **cost_for(definition),
+            })
+    return summarize_cost(entries, up_to=up_to)
+
+
+def _node_order(node_id: str) -> tuple[int, str]:
+    digits = node_id[1:]
+    return (int(digits) if digits.isdigit() else 0, node_id)
+
+
+def _proposal_layout_hints() -> tuple[dict[str, dict[str, Any]], dict[str, float] | None]:
+    """Where existing nodes are (browser report first, else stored) and what's on screen."""
+    try:
+        snapshot = agent_presence.snapshot(cli_graph, node_registry)
+    except Exception:  # noqa: BLE001 - placement falls back to (0, 0)
+        return {}, None
+    known: dict[str, dict[str, Any]] = {}
+    for node in snapshot.get("nodes") or []:
+        position = node.get("position")
+        if isinstance(position, dict):
+            known[node["id"]] = {
+                "x": float(position.get("x", 0.0)),
+                "y": float(position.get("y", 0.0)),
+                "width": float((node.get("size") or {}).get("width") or 0.0),
+                "height": float((node.get("size") or {}).get("height") or 0.0),
+            }
+    return known, (snapshot.get("view") or {}).get("visibleArea")
+
+
+@app.post("/api/canvas/proposals", status_code=201)
+async def create_canvas_proposal(body: dict[str, Any]) -> dict[str, Any]:
+    """An agent proposes a change; the person sees ghosts and accepts or rejects it.
+
+    Body: {note, nodes?: [{ref: "+up", definitionId, params?, position?}],
+    edges?: [{source, sourceHandle, target, targetHandle}] (refs or node ids),
+    params?: [{nodeId, params}], run?: [ref or node id]}. Nothing changes on
+    the canvas until the person accepts in Nebula.
+    """
+    headers = current_request_headers()
+    identity = identify_agent(headers)
+    if identity is None:
+        if is_browser_request(headers):
+            raise HTTPException(status_code=403, detail="The person doesn't need to propose; edit directly")
+        raise HTTPException(status_code=400, detail="Name yourself with NEBULA_AGENT_NAME or --as")
+    await _sweep_proposals()
+    _validate_graph_ingress_complexity(body)
+    try:
+        spec = parse_spec(body)
+    except ProposalError as exc:
+        raise _proposal_http_error(exc) from exc
+    try:
+        candidate, id_map, _edge_ids, run_ids = _stage_proposal(spec)
+    except HTTPException as exc:
+        # A missing node is a bad proposal here (the agent's view is stale), not a conflict.
+        raise HTTPException(status_code=400 if exc.status_code == 409 else exc.status_code,
+                            detail=exc.detail) from exc
+    known, visible_area = _proposal_layout_hints()
+    positions = place_new_nodes(spec, known, visible_area)
+    cost = _proposal_cost(candidate, id_map, run_ids)
+    existing = {
+        node_id: {
+            "name": f"{_node_label(node_id)} ({node_id})",
+            "params": copy.deepcopy((cli_graph.nodes.get(node_id) or {}).get("params") or {}),
+        }
+        for node_id in spec.references
+    }
+    try:
+        proposal = canvas_proposals.create(
+            agent=identity,
+            project_id=_workspace_context()["activeProjectId"],
+            spec=spec,
+            positions=positions,
+            cost=cost,
+            existing=existing,
+        )
+    except ProposalError as exc:
+        raise _proposal_http_error(exc) from exc
+    view = _proposal_view(proposal)
+    first_reference = next(iter(sorted(proposal.references, key=_node_order)), None)
+    _journal(
+        "proposal.created",
+        node_id=first_reference,
+        data={
+            "proposalId": proposal.id,
+            "note": spec.note,
+            "adds": len(spec.nodes),
+            "wires": len(spec.edges),
+            "sets": len(spec.params),
+            "runs": len(spec.run),
+            "paidRuns": cost["paidRuns"],
+        },
+        summary=f'proposed {proposal.id}: "{spec.note}"',
+    )
+    # The accept key goes only to the person's canvas sockets.
+    try:
+        await manager.broadcast_browser({
+            "type": "proposalOpened",
+            "proposal": view,
+            "acceptKey": proposal.accept_key,
+            # Exactly what Accept will write, for the person's decision bar.
+            "personValues": canvas_proposals.person_values(proposal),
+        })
+    except Exception:  # noqa: BLE001 - a browser that missed it gets proposalSync on reconnect
+        pass
+    if first_reference is not None:
+        target: dict[str, Any] = {"nodeId": first_reference}
+    elif spec.nodes:
+        spot = positions[spec.nodes[0].ref]
+        target = {"x": spot["x"] + 120.0, "y": spot["y"] + 40.0}
+    else:
+        target = None
+    if target is not None:
+        await _show_agent(target, action="click", say=spec.note)
+    return {"proposal": view}
+
+
+@app.get("/api/canvas/proposals")
+async def list_canvas_proposals() -> dict[str, Any]:
+    """Open proposals waiting for the person (never their accept keys)."""
+    await _sweep_proposals()
+    return {"proposals": [_proposal_view(p) for p in canvas_proposals.open_list()]}
+
+
+@app.get("/api/canvas/proposals/{proposal_id}")
+async def get_canvas_proposal(proposal_id: str, request: Request) -> dict[str, Any]:
+    """One proposal; with ?wait=<seconds> (≤25) wait for the person to decide."""
+    wait = _query_number(request.query_params.get("wait"), "wait", integer=False, low=0, high=None) or 0.0
+    wait = min(wait, 25.0)
+    await _sweep_proposals()
+    proposal = canvas_proposals.get(proposal_id)
+    if proposal is None:
+        raise HTTPException(status_code=404, detail=f"No proposal {proposal_id[:20]} (decided proposals are kept for 30 minutes)")
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + wait
+    cursor = canvas_events.latest
+    while proposal.is_open:
+        # Expiry is only noticed by a sweep, so never sleep past it.
+        remaining = min(deadline - loop.time(), proposal.expires_at - canvas_proposals.now() + 0.05)
+        if remaining <= 0:
+            break
+        try:
+            result = await canvas_events.wait(after=cursor, journal=canvas_events.journal_id,
+                                              wait=remaining, kinds={"proposal"})
+        except TooManyWaiters as exc:
+            raise HTTPException(status_code=429, detail=str(exc)) from exc
+        cursor = result.get("cursor", cursor)
+        await _sweep_proposals()
+        if result.get("timedOut") and deadline - loop.time() <= 0:
+            break
+    return {"proposal": _proposal_view(proposal)}
+
+
+@app.delete("/api/canvas/proposals/{proposal_id}")
+async def withdraw_canvas_proposal(proposal_id: str) -> dict[str, Any]:
+    """The proposing agent takes its proposal back."""
+    identity = identify_agent(current_request_headers())
+    if identity is None:
+        raise HTTPException(status_code=400, detail="Name yourself with NEBULA_AGENT_NAME or --as")
+    await _sweep_proposals()
+    proposal = canvas_proposals.get(proposal_id)
+    if proposal is None:
+        raise HTTPException(status_code=404, detail=f"No proposal {proposal_id[:20]}")
+    if proposal.agent.id != identity.id:
+        raise HTTPException(status_code=403, detail="Only the agent that proposed this can withdraw it")
+    try:
+        canvas_proposals.close(proposal_id, "withdrawn", reason="withdrawn by the agent")
+    except ProposalError as exc:
+        raise _proposal_http_error(exc) from exc
+    await _announce_closed_proposals([proposal])
+    return {"proposal": _proposal_view(proposal)}
+
+
+async def _decidable_proposal(proposal_id: str) -> Proposal:
+    """The person-only checks shared by accept and reject, in order.
+
+    1. No agent markers and a browser (or the desktop session).
+    2. The per-proposal accept key, which only browser sockets ever received.
+    3. Still open, and for the project that is open now.
+    """
+    headers = current_request_headers()
+    try:
+        require_person(headers)
+    except PersonGateError as exc:
+        raise _proposal_http_error(exc) from exc
+    lower = {k.lower(): v for k, v in (headers or {}).items()}
+    supplied = lower.get(_PROPOSAL_KEY_HEADER) or ""
+    proposal = canvas_proposals.get(proposal_id)
+    if proposal is None:
+        raise HTTPException(status_code=404, detail="This proposal is no longer available")
+    if not supplied or not secrets.compare_digest(supplied.encode(), proposal.accept_key.encode()):
+        raise HTTPException(status_code=403, detail="This proposal can only be accepted from the Nebula canvas.")
+    await _sweep_proposals()
+    _ensure_still_decidable(proposal)
+    return proposal
+
+
+def _refuse_overwriting_later_edits(proposal: Proposal) -> None:
+    """409 when a param the proposal sets has changed since it was proposed.
+
+    The person saw "from -> to" against the value at proposal time. If that
+    value has since changed (the person edited it, say), accepting would
+    silently overwrite the newer edit, so the proposal no longer fits.
+    """
+    stale: list[str] = []
+    for change in proposal.spec.params:
+        if change.node_id not in cli_graph.nodes:
+            continue  # staging reports a deleted node in its own words
+        before = (proposal.existing.get(change.node_id) or {}).get("params") or {}
+        now = cli_graph.nodes[change.node_id].get("params") or {}
+        stale.extend(f"{change.node_id}.{key}" for key in change.params if now.get(key) != before.get(key))
+    if stale:
+        raise HTTPException(status_code=409, detail=f"{_listed(stale, 4)} changed after it was proposed")
+
+
+def _ensure_still_decidable(proposal: Proposal) -> None:
+    """Re-check after an await: still open and still for the open project."""
+    if not proposal.is_open:
+        raise HTTPException(status_code=409, detail=f"This proposal is already {proposal.status}")
+    if proposal.project_id != _workspace_context()["activeProjectId"]:
+        raise HTTPException(status_code=409, detail="This proposal belongs to another project")
+
+
+async def _proposal_body(request: Request) -> dict[str, Any]:
+    raw = await request.body()
+    if not raw:
+        return {}
+    try:
+        body = json.loads(raw)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="body must be JSON") from exc
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=422, detail="body must be a JSON object")
+    return body
+
+
+@app.post("/api/canvas/proposals/{proposal_id}/accept")
+async def accept_canvas_proposal(proposal_id: str, request: Request) -> dict[str, Any]:
+    """The person accepts: apply every node, wire and param change at once, or nothing.
+
+    Body: {positions?: {"+up": {x, y}}} for ghosts the person dragged.
+    The backend never starts a run here. The canvas runs `runNodeIds`
+    itself after this returns, through its normal guarded run path; the
+    Accept click is the person's approval for those runs.
+    """
+    proposal = await _decidable_proposal(proposal_id)
+    _check_workspace_revision()
+    body = await _proposal_body(request)
+    # Reading the body can yield to the event loop, and in that gap the agent
+    # may withdraw, the sweep may expire it, or a second tab may accept it.
+    # Check again here. From this line to close() below nothing awaits, so no
+    # other request can decide this proposal while it is being applied.
+    _ensure_still_decidable(proposal)
+    try:
+        dragged = clean_positions(body.get("positions"), proposal.spec.refs)
+    except ProposalError as exc:
+        raise _proposal_http_error(exc) from exc
+    positions = {**proposal.positions, **dragged}
+    staging_error: HTTPException | None = None
+    with _paid_graph_mutation("accept a proposal"):
+        try:
+            _refuse_overwriting_later_edits(proposal)
+            candidate, id_map, edge_ids, run_ids = _stage_proposal(proposal.spec, positions=positions)
+        except HTTPException as exc:
+            # cli_graph is only replaced at commit, so nothing changed.
+            staging_error = exc
+        else:
+            touched = sorted(set(id_map.values()) | {change.node_id for change in proposal.spec.params})
+            _commit_graph_candidate_with_recoveries(
+                candidate,
+                [candidate.nodes[node_id] for node_id in touched],
+                source="proposal",
+            )
+    if staging_error is not None:
+        detail = str(staging_error.detail)
+        try:
+            canvas_proposals.close(proposal.id, "invalidated", reason=detail[:200])
+        except ProposalError:
+            pass
+        await _announce_closed_proposals([proposal], actor=dict(_PERSON_ACTOR))
+        raise HTTPException(status_code=409, detail=f"This proposal no longer fits the canvas: {detail}")
+
+    try:
+        canvas_proposals.close(proposal.id, "accepted", id_map=id_map, run_node_ids=run_ids)
+    except ProposalError:
+        # Unreachable while the stretch above stays await-free. If it ever
+        # happens the graph is already committed, so still sync the canvas.
+        pass
+    await _broadcast_graph_sync()
+    publish_action(f"Accepted {proposal.agent.name}'s proposal ({len(id_map)} nodes)")
+    person = dict(_PERSON_ACTOR)
+    _journal(
+        "proposal.accepted",
+        node_id=next(iter(id_map.values()), None) or next(iter(sorted(proposal.references)), None),
+        data={"proposalId": proposal.id, "agentId": proposal.agent.id, "note": proposal.spec.note,
+              "idMap": id_map, "runNodeIds": run_ids},
+        summary=f"accepted {proposal.agent.name}'s proposal {proposal.id}"
+        + (f"; will run {_listed(run_ids)}" if run_ids else ""),
+        actor=person,
+    )
+    note = f" (accepted from {proposal.agent.name})"
+    _journal_cluster(list(id_map.values()), edge_ids, actor=person, note=note)
+    for change in proposal.spec.params:
+        before = (proposal.existing.get(change.node_id) or {}).get("params") or {}
+        changes = param_changes(before, (cli_graph.nodes.get(change.node_id) or {}).get("params") or {})
+        if changes:
+            _journal(
+                "node.params",
+                node_id=change.node_id,
+                data=changes,
+                summary=f"set {_listed(changes['keys'], 4)} on {_node_label(change.node_id)} ({change.node_id}){note}",
+                actor=person,
+            )
+    try:
+        await manager.broadcast_raw(_proposal_closed_message(proposal))
+    except Exception:  # noqa: BLE001
+        pass
+    focus = next(iter(id_map.values()), None) or next(iter(sorted(proposal.references, key=_node_order)), None)
+    if focus is not None:
+        try:
+            event = agent_presence.point(proposal.agent, target={"nodeId": focus}, action="click", say="Accepted")
+            await manager.broadcast_raw(event)
+        except Exception:  # noqa: BLE001 - the cursor is decoration on a committed change
+            pass
+    all_defs = node_registry.get_all()
+    updated = [
+        _cli_node_to_rf(cli_graph.nodes[node_id], cli_graph.nodes[node_id].get("position") or {"x": 0.0, "y": 0.0}, all_defs)
+        for node_id in [change.node_id for change in proposal.spec.params]
+        if node_id in cli_graph.nodes
+    ]
+    return {
+        "status": "accepted",
+        "proposalId": proposal.id,
+        "idMap": id_map,
+        "runNodeIds": run_ids,
+        **_rf_created(list(id_map.values()), edge_ids),
+        "updatedNodes": updated,
+    }
+
+
+@app.post("/api/canvas/proposals/{proposal_id}/reject")
+async def reject_canvas_proposal(proposal_id: str, request: Request) -> dict[str, Any]:
+    """The person says no. Body: {reason?} (one short line the agent will read)."""
+    proposal = await _decidable_proposal(proposal_id)
+    body = await _proposal_body(request)
+    _ensure_still_decidable(proposal)
+    reason: str | None = None
+    if body.get("reason") not in (None, ""):
+        try:
+            reason = clean_note(body.get("reason"), limit=MAX_REASON, label="reason")
+        except ProposalError as exc:
+            raise _proposal_http_error(exc) from exc
+    canvas_proposals.close(proposal.id, "rejected", reason=reason)
+    await _announce_closed_proposals([proposal], actor=dict(_PERSON_ACTOR))
+    return {"status": "rejected", "proposalId": proposal.id}
 
 
 @app.get("/api/project")
@@ -2807,6 +3652,12 @@ async def _finalize_cancelled_execution(
     if not preserve_graph_params and _sync_params_to_cli_graph(nodes):
         await _broadcast_graph_sync()
     await manager.broadcast(GraphCancelledEvent(run_id=run_id))
+    _journal(
+        "run.cancelled",
+        data={"runId": run_id},
+        summary="run stopped",
+        actor=canvas_events.run_actor(run_id),
+    )
 
 
 def _fresh_paid_worldlabs_claims(
@@ -3079,6 +3930,7 @@ async def execute(request: ExecuteRequest) -> dict:
     _assert_execution_admissible(run_id)
     if execution_runs.get(run_id) is not None:
         raise HTTPException(status_code=409, detail=f"run '{run_id}' already exists")
+    canvas_events.note_run(run_id, actor_for_headers(current_request_headers()))
     settings = load_settings()
     api_keys = settings.get("apiKeys", {})
     nodes = _normalize_execute_nodes(request.nodes)
@@ -3201,6 +4053,7 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
     _assert_execution_admissible(run_id)
     if execution_runs.get(run_id) is not None:
         raise HTTPException(status_code=409, detail=f"run '{run_id}' already exists")
+    canvas_events.note_run(run_id, actor_for_headers(current_request_headers()))
     settings = load_settings()
     api_keys = settings.get("apiKeys", {})
     nodes = _normalize_execute_nodes(request.nodes)
@@ -3715,6 +4568,7 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
     _assert_execution_admissible(run_id)
     if execution_runs.get(run_id) is not None:
         raise HTTPException(status_code=409, detail=f"run '{run_id}' already exists")
+    canvas_events.note_run(run_id, actor_for_headers(current_request_headers()))
     settings = load_settings()
     api_keys = settings.get("apiKeys", {})
     nodes = _normalize_execute_nodes(request.nodes)
@@ -3959,13 +4813,47 @@ async def get_node(node_id: str) -> dict:
 
 # ---------- CLI: Graph management ----------
 
-async def _broadcast_graph_sync(*, graph_replaced: bool = False) -> dict[str, Any]:
-    """Push the current CLI graph to all connected frontends via WebSocket."""
+_REPLACE_REASONS = ("import", "project-open", "project-create")
+
+
+async def _broadcast_graph_sync(*, graph_replaced: bool = False, reason: str = "import") -> dict[str, Any]:
+    """Push the current CLI graph to all connected frontends via WebSocket.
+
+    `reason` (import, project-open, project-create) only matters when the
+    graph was replaced: watchers are told node ids restarted, and why.
+    """
     export = await export_graph_for_frontend()
     if graph_replaced:
         agent_presence.forget_graph()
     await manager.broadcast_raw({"type": "graphSync", **export,
                                  **({"graphReplaced": True} if graph_replaced else {})})
+    if graph_replaced:
+        # Tag, don't reset: seq stays monotonic, and the new project id rides
+        # on this event and every one after it.
+        try:
+            canvas_events.set_project(_workspace_context()["activeProjectId"])
+        except Exception:  # noqa: BLE001 - the journal must not break a project switch
+            pass
+        safe_reason = reason if reason in _REPLACE_REASONS else "import"
+        _journal(
+            "canvas.replaced",
+            data={"reason": safe_reason},
+            summary=f"replaced the canvas ({safe_reason})",
+        )
+        # Pins belong to the project record. A project open or create brings
+        # that project's pins; an import into the same project detaches pins
+        # whose nodes did not survive.
+        canvas_pins.forget_cache()
+        detached: list[dict[str, Any]] = []
+        if safe_reason == "import":
+            try:
+                detached = canvas_pins.reanchor_missing(set(cli_graph.nodes))
+            except (PinError, ProjectStoreError):
+                detached = []
+        await _broadcast_pins()
+        await _journal_detached_pins(detached, "the canvas was replaced")
+        # Proposals point at node ids that just restarted: none of them still fit.
+        await _announce_closed_proposals(canvas_proposals.invalidate_all("the canvas was replaced"))
     return export
 
 
@@ -4095,6 +4983,7 @@ async def _emit_and_sync(event: ExecutionEvent) -> None:
     record = execution_runs.get(run_id) if run_id else None
     if record is not None and record.status in {"cancelling", "cancelled"}:
         return
+    _journal_execution_event(event, run_id)
     if isinstance(event, ErrorEvent) and run_id is not None:
         # The engine reports per-node failures as events and then returns
         # normally after GraphComplete. Preserve that semantic failure in the
@@ -4444,6 +5333,72 @@ def _validate_params(definition_id: str, params: dict[str, Any]) -> None:
         )
 
 
+def _journal_node_added(node_id: str, *, actor: dict[str, Any] | None = None, note: str = "") -> None:
+    node = cli_graph.nodes.get(node_id) or {}
+    data: dict[str, Any] = {
+        "definitionId": str(node.get("definitionId") or ""),
+        "name": _node_label(node_id),
+    }
+    if isinstance(node.get("position"), dict):
+        data["position"] = node["position"]
+    _journal(
+        "node.added",
+        node_id=node_id,
+        data=data,
+        summary=f"added {data['name']} ({node_id}){note}",
+        actor=actor,
+    )
+
+
+def _journal_edge(kind: str, edge: dict[str, Any], *, actor: dict[str, Any] | None = None, note: str = "") -> None:
+    data = _edge_data(edge)
+    verb = "wired" if kind == "edge.added" else "unwired"
+    _journal(
+        kind,
+        node_id=str(data.get("target") or "") or None,
+        data=data,
+        summary=(
+            f"{verb} {data['source']}.{data['sourceHandle']} → "
+            f"{data['target']}.{data['targetHandle']}{note}"
+        ),
+        actor=actor,
+    )
+
+
+def _journal_cluster(
+    node_ids: list[str],
+    edge_ids: list[str],
+    *,
+    actor: dict[str, Any] | None = None,
+    note: str = "",
+) -> None:
+    """One node.added per node and edge.added per wire, each capped at 50."""
+    for node_id in node_ids[:50]:
+        _journal_node_added(node_id, actor=actor, note=note)
+    if len(node_ids) > 50:
+        rest = node_ids[50:]
+        _journal(
+            "node.added",
+            data={"count": len(rest), "nodeIds": rest[:50]},
+            summary=f"added {len(rest)} more nodes{note}",
+            actor=actor,
+        )
+    wanted = set(edge_ids)
+    for edge in [edge for edge in cli_graph.edges if edge.get("id") in wanted][:50]:
+        _journal_edge("edge.added", edge, actor=actor, note=note)
+
+
+def _moved_far_enough(before: Any, after: dict[str, float]) -> bool:
+    if not isinstance(before, dict):
+        return False
+    try:
+        dx = float(after["x"]) - float(before.get("x", 0.0))
+        dy = float(after["y"]) - float(before.get("y", 0.0))
+    except (TypeError, ValueError):
+        return False
+    return math.hypot(dx, dy) >= MOVE_THRESHOLD_PX
+
+
 @app.post("/api/graph/node")
 async def create_graph_node(body: dict[str, Any]) -> dict:
     _check_workspace_revision()
@@ -4476,6 +5431,7 @@ async def create_graph_node(body: dict[str, Any]) -> dict:
         )
     await _broadcast_graph_sync()
     publish_action(f"Added {definition_id} ({short_id})")
+    _journal_node_added(short_id)
     await _show_agent({"nodeId": short_id}, say=f"Added {_node_label(short_id)}")
     return cli_graph.nodes[short_id]
 
@@ -4501,6 +5457,7 @@ async def connect_graph_nodes(body: dict[str, Any]) -> dict:
         f"Wired {edge['source']}:{edge['sourceHandle']} → "
         f"{edge['target']}:{edge['targetHandle']}"
     )
+    _journal_edge("edge.added", edge)
     await _show_agent(
         {"nodeId": edge["target"], "handle": edge["targetHandle"]},
         origin={"nodeId": edge["source"], "handle": edge["sourceHandle"]},
@@ -4616,7 +5573,9 @@ async def create_node_and_connect(body: dict[str, Any]) -> dict:
     response = {**copy.deepcopy(candidate.nodes[short_id]), "connected": edge is not None, "edge": rf_edge}
     await _broadcast_graph_sync()
     publish_action(f"Added {definition_id} ({short_id})")
+    _journal_node_added(short_id)
     if edge is not None:
+        _journal_edge("edge.added", edge)
         publish_action(
             f"Wired {src}:{connect_spec.get('sourceHandle', '')} → "
             f"{dst}:{connect_spec.get('targetHandle', '')}"
@@ -4784,6 +5743,7 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
         node = cli_graph.nodes.get(node_id)
         if not node:
             raise HTTPException(status_code=404, detail=f"Node '{node_id}' not found")
+        params_before = copy.deepcopy(node.get("params") or {})
 
         # §1.5 guard (mirrors /api/graph/run): when called BY Daedalus, refuse to
         # mutate params on a node that already has outputs. Without this, Daedalus
@@ -4889,6 +5849,14 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
                 raise HTTPException(status_code=404, detail=f"Node '{node_id}' not found")
     await _broadcast_graph_sync()
     publish_action(f"Updated {node_id} params")
+    changes = param_changes(params_before, (cli_graph.nodes.get(node_id) or {}).get("params") or {})
+    if changes:
+        _journal(
+            "node.params",
+            node_id=node_id,
+            data=changes,
+            summary=f"set {_listed(changes['keys'], 4)} on {_node_label(node_id)} ({node_id})",
+        )
     changed = ", ".join(sorted(str(key) for key in params)[:4])
     await _show_agent({"nodeId": node_id}, say=f"Set {changed}" if changed else f"Updated {node_id}")
     return cli_graph.nodes[node_id]
@@ -4923,12 +5891,30 @@ async def update_graph_layout(body: dict[str, Any]) -> dict:
             )
         normalized[node_id] = {"x": x, "y": y}
 
+    # Agent-created nodes have no stored position until first moved; compare
+    # against where the canvas drew them, or the first drag would go unseen.
+    shown = _display_positions(list(cli_graph.nodes.values()))
+    previous = {node_id: shown.get(node_id) for node_id in normalized}
     try:
         cli_graph.update_positions(normalized)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
     await _broadcast_graph_sync()
     publish_action(f"Updated layout for {len(normalized)} node(s)")
+    # This route is the authoritative move signal (drag end, auto-layout,
+    # paste).
+    moved = [
+        node_id
+        for node_id, position in normalized.items()
+        if _moved_far_enough(previous.get(node_id), position)
+    ]
+    if moved:
+        _journal(
+            "node.moved",
+            node_id=moved[0] if len(moved) == 1 else None,
+            data={"nodeIds": moved[:50], "count": len(moved)},
+            summary=f"moved {_listed(moved)}",
+        )
     return {"status": "updated", "count": len(normalized)}
 
 
@@ -4944,6 +5930,13 @@ async def clear_graph() -> dict:
     agent_presence.forget_graph()
     await _broadcast_graph_sync()
     publish_action("Cleared the canvas")
+    _journal("canvas.cleared", summary="cleared the canvas")
+    try:
+        detached = canvas_pins.reanchor_missing(set())
+    except (PinError, ProjectStoreError):
+        detached = []
+    await _journal_detached_pins(detached, "the canvas was cleared")
+    await _announce_closed_proposals(canvas_proposals.invalidate_all("the canvas was cleared"))
     return {"status": "cleared"}
 
 
@@ -5090,12 +6083,28 @@ async def delete_graph_node(node_id: str) -> dict:
                 ),
             )
         label = _node_label(node_id)
+        removed_definition = str(node.get("definitionId") or "")
+        removed_position = copy.deepcopy(node.get("position"))
         try:
             cli_graph.remove_node(node_id)
         except ValueError:
             raise HTTPException(status_code=404, detail=f"Node '{node_id}' not found")
     await _broadcast_graph_sync()
     publish_action(f"Removed {node_id}")
+    _journal(
+        "node.removed",
+        node_id=node_id,
+        data={"name": label, "definitionId": removed_definition},
+        summary=f"removed {label} ({node_id})",
+    )
+    try:
+        detached = canvas_pins.detach_node(node_id, removed_position)
+    except (PinError, ProjectStoreError):
+        detached = []
+    await _journal_detached_pins(detached, f"{label} was deleted")
+    await _announce_closed_proposals(
+        canvas_proposals.invalidate_referencing(node_id, f"{label} ({node_id}) was deleted")
+    )
     last_point = agent_presence.last_point(node_id)
     agent_presence.forget_node(node_id)
     if last_point is not None:
@@ -5186,6 +6195,7 @@ async def delete_graph_edge(body: dict[str, Any]) -> dict:
     )
     if removed:
         await _broadcast_graph_sync()
+        _journal_edge("edge.removed", body)
         publish_action(
             f"Unwired {body.get('source', '')}:{body.get('sourceHandle', '')} → "
             f"{body.get('target', '')}:{body.get('targetHandle', '')}"
@@ -5442,6 +6452,51 @@ async def import_graph(body: dict[str, Any]) -> dict:
     }
 
 
+def _rf_created(node_ids: list[str], edge_ids: list[str]) -> dict[str, list[dict[str, Any]]]:
+    """React Flow nodes and edges for just-committed ids (cluster and accepted proposals).
+
+    Built directly from the nodes and edges a request created. Constructing
+    the React Flow shape from cli_graph.nodes (keyed by the new ids) avoids a
+    full graph re-export whose filtering step is sensitive to unrelated
+    global state and export-time normalization of OTHER nodes. This also
+    keeps the route correct when test fixtures (or production code) replace
+    the module-level cli_graph reference.
+    """
+    all_defs = node_registry.get_all()
+    rf_nodes = []
+    for new_id in node_ids:
+        node = cli_graph.nodes.get(new_id)
+        if node is None:
+            continue
+        # A simple default position; the client and graphSync broadcast apply
+        # the real layout. Nodes with a stored position keep it.
+        pos = node.get("position") or {"x": 0.0, "y": 0.0}
+        rf_nodes.append(_cli_node_to_rf(node, pos, all_defs))
+
+    wanted = set(edge_ids)
+    rf_edges = []
+    for e in cli_graph.edges:
+        if e["id"] not in wanted:
+            continue
+        src_node = cli_graph.nodes.get(e["source"], {})
+        src_def = all_defs.get(src_node.get("definitionId", ""), {})
+        data_type = "Any"
+        for port in src_def.get("outputPorts", []):
+            if port["id"] == e["sourceHandle"]:
+                data_type = port["dataType"]
+                break
+        rf_edges.append({
+            "id": e["id"],
+            "source": e["source"],
+            "sourceHandle": e["sourceHandle"],
+            "target": e["target"],
+            "targetHandle": e["targetHandle"],
+            "type": "typed-edge",
+            "data": {"dataType": data_type},
+        })
+    return {"nodes": rf_nodes, "edges": rf_edges}
+
+
 @app.post("/api/graph/cluster")
 async def add_graph_cluster(body: dict[str, Any]) -> dict:
     """Additively add a node cluster (e.g. authored from the Create view) to the
@@ -5473,48 +6528,9 @@ async def add_graph_cluster(body: dict[str, Any]) -> dict:
         )
     await _broadcast_graph_sync()
     publish_action(f"Created cluster ({len(id_map)} nodes)")
+    _journal_cluster(list(id_map.values()), created_edge_ids)
 
-    # Build the response directly from the nodes and edges we just created.
-    # Constructing the React Flow shape from cli_graph.nodes (keyed by the
-    # id_map values) avoids a full graph re-export whose filtering step is
-    # sensitive to unrelated global state and export-time normalization of
-    # OTHER nodes. This also makes the route correct even when test fixtures
-    # (or production code) replace the module-level cli_graph reference.
-    all_defs = node_registry.get_all()
-    rf_nodes = []
-    for new_id in id_map.values():
-        node = cli_graph.nodes.get(new_id)
-        if node is None:
-            continue
-        # Assign a simple default position; the client and graphSync broadcast
-        # will apply the real layout.  Nodes with a stored position keep it.
-        pos = node.get("position") or {"x": 0.0, "y": 0.0}
-        rf_nodes.append(_cli_node_to_rf(node, pos, all_defs))
-
-    # Build rf_edges for only the edges created in this request.
-    created_edge_id_set = set(created_edge_ids)
-    rf_edges = []
-    for e in cli_graph.edges:
-        if e["id"] not in created_edge_id_set:
-            continue
-        src_node = cli_graph.nodes.get(e["source"], {})
-        src_def = all_defs.get(src_node.get("definitionId", ""), {})
-        data_type = "Any"
-        for port in src_def.get("outputPorts", []):
-            if port["id"] == e["sourceHandle"]:
-                data_type = port["dataType"]
-                break
-        rf_edges.append({
-            "id": e["id"],
-            "source": e["source"],
-            "sourceHandle": e["sourceHandle"],
-            "target": e["target"],
-            "targetHandle": e["targetHandle"],
-            "type": "typed-edge",
-            "data": {"dataType": data_type},
-        })
-
-    return {"idMap": id_map, "nodes": rf_nodes, "edges": rf_edges}
+    return {"idMap": id_map, **_rf_created(list(id_map.values()), created_edge_ids)}
 
 
 def _rewrite_output_paths(outputs: dict[str, Any]) -> dict[str, Any]:
@@ -5934,7 +6950,7 @@ async def create_saved_project(body: dict[str, Any] | None = None) -> dict[str, 
         catalog["workspaceRevision"] = uuid4().hex
         _commit_project_workspace(catalog, CLIGraph())
         revision = catalog["workspaceRevision"]
-    await _broadcast_graph_sync(graph_replaced=True)
+    await _broadcast_graph_sync(graph_replaced=True, reason="project-create")
     return {"project": public_project(project), "workspaceRevision": revision}
 
 
@@ -5955,7 +6971,7 @@ async def open_saved_project(project_id: str, body: dict[str, Any] | None = None
         catalog["workspaceRevision"] = uuid4().hex
         _commit_project_workspace(catalog, candidate)
         revision = catalog["workspaceRevision"]
-    await _broadcast_graph_sync(graph_replaced=True)
+    await _broadcast_graph_sync(graph_replaced=True, reason="project-open")
     return {"project": public_project(project), "workspaceRevision": revision}
 
 
@@ -5983,6 +6999,35 @@ async def save_project(project_id: str, body: dict[str, Any]) -> dict[str, Any]:
         refresh_metadata(project)
         project_store.commit(catalog)
         return {"project": public_project(project), "workspaceRevision": catalog["workspaceRevision"]}
+
+
+def _display_positions(
+    nodes: list[dict[str, Any]], *, y_offset: float = 100.0
+) -> dict[str, dict[str, float]]:
+    """Where the canvas draws each node.
+
+    Nodes with a stored position (imported, or moved by the person) keep it.
+    Nodes without one (created through `nebula create`) are placed to the
+    right of any positioned node so new additions don't pile on top of
+    existing work. The layout route uses this too, so the person's first drag
+    of an agent-created node is measured from where they actually saw it.
+    """
+    stored_positions: dict[str, dict[str, float]] = {}
+    max_x: float = -300.0
+    for n in nodes:
+        pos = n.get("position")
+        if isinstance(pos, dict) and "x" in pos and "y" in pos:
+            stored_positions[n["id"]] = {"x": float(pos["x"]), "y": float(pos["y"])}
+            if pos["x"] > max_x:
+                max_x = float(pos["x"])
+    computed_positions: dict[str, dict[str, float]] = {}
+    for n in nodes:
+        if n["id"] in stored_positions:
+            computed_positions[n["id"]] = stored_positions[n["id"]]
+        else:
+            max_x += 300.0
+            computed_positions[n["id"]] = {"x": max_x, "y": y_offset}
+    return computed_positions
 
 
 @app.get("/api/graph/export")
@@ -6013,25 +7058,7 @@ async def export_graph_for_frontend() -> dict:
     rf_nodes = []
     y_offset = 100
 
-    # Pre-compute positions. Nodes with a stored position (imported from a
-    # saved file) keep it. Nodes without one (created through `nebula create`)
-    # get placed to the right of any positioned node so Claude's new additions
-    # don't pile on top of existing work.
-    stored_positions: dict[str, dict[str, float]] = {}
-    max_x: float = -300.0
-    for n in state["nodes"]:
-        pos = n.get("position")
-        if isinstance(pos, dict) and "x" in pos and "y" in pos:
-            stored_positions[n["id"]] = {"x": float(pos["x"]), "y": float(pos["y"])}
-            if pos["x"] > max_x:
-                max_x = float(pos["x"])
-    computed_positions: dict[str, dict[str, float]] = {}
-    for n in state["nodes"]:
-        if n["id"] in stored_positions:
-            computed_positions[n["id"]] = stored_positions[n["id"]]
-        else:
-            max_x += 300.0
-            computed_positions[n["id"]] = {"x": max_x, "y": float(y_offset)}
+    computed_positions = _display_positions(state["nodes"], y_offset=float(y_offset))
 
     for n in state["nodes"]:
         rf_nodes.append(_cli_node_to_rf(n, computed_positions[n["id"]], all_defs))
@@ -6132,10 +7159,14 @@ async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dic
     results: dict[str, Any] = {}
     errors: dict[str, str] = {}
     run_id = str(uuid4())
+    canvas_events.note_run(run_id, actor_for_headers(current_request_headers()))
 
     import time
 
     async def collect_events(event: ExecutionEvent) -> None:
+        # This path keeps per-node events to itself (it returns results in
+        # the response), so journal them here for watchers.
+        _journal_execution_event(event, run_id)
         if isinstance(event, (ProviderRecoveryEvent, ProviderStartAmbiguousEvent)):
             await _emit_and_sync(event)
         elif isinstance(event, ExecutedEvent):
@@ -6165,6 +7196,7 @@ async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dic
         )
     finally:
         await _release_paid_worldlabs_starts(run_id)
+        canvas_events.forget_run(run_id)
     duration = time.time() - start
 
     # Update CLI graph node outputs

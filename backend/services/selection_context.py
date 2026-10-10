@@ -85,6 +85,10 @@ class SelectionContextStore:
         self._node_ids: list[str] = []
         self._updated_at = _utc_now()
 
+    def current(self) -> list[str]:
+        """The stored IDs as last published, without resolving them against the graph."""
+        return list(self._node_ids)
+
     def set(self, node_ids: Iterable[Any]) -> list[str]:
         normalized: list[str] = []
         seen: set[str] = set()

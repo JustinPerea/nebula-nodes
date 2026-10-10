@@ -40,6 +40,17 @@ def test_child_environment_keeps_agent_auth_and_removes_connector_secrets():
     assert all(key not in child for key in config.CONNECTOR_SECRET_ENV_KEYS)
 
 
+def test_child_environment_drops_the_desktop_canvas_session():
+    # The launch nonce is what lets a request count as the person's canvas
+    # (person_gate). An agent that inherited it could accept its own proposals.
+    child = config.agent_child_env({
+        "NEBULA_DESKTOP_MODE": "1",
+        "NEBULA_CONNECTOR_SESSION": "launch-nonce-fixture",
+    })
+    assert "NEBULA_CONNECTOR_SESSION" not in child
+    assert child["NEBULA_DESKTOP_MODE"] == "1"
+
+
 def test_scoped_cli_configs_contain_only_bridge_executable_path_and_origin(monkeypatch):
     monkeypatch.setenv("NEBULA_URL", "http://127.0.0.1:8033")
     monkeypatch.setenv("NEBULA_CONNECTOR_ENCRYPTION_KEY", "vault-fixture")

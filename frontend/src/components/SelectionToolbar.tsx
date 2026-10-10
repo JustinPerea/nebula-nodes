@@ -6,10 +6,13 @@ import {
   LayoutGrid,
   MessageCircle,
   Play,
+  StickyNote,
   Trash2,
 } from 'lucide-react';
 import { useGraphStore } from '../store/graphStore';
 import { useUIStore } from '../store/uiStore';
+import { useCanvasPinsStore } from '../store/canvasPinsStore';
+import { isBackendNodeId } from '../lib/canvasPins';
 import {
   collectDownloadableOutputs,
   downloadSelectedOutputs,
@@ -28,6 +31,7 @@ export function SelectionToolbar() {
   const deleteSelected = useGraphStore((state) => state.deleteSelected);
   const chatVisible = useUIStore((state) => state.panels.chat.visible);
   const togglePanel = useUIStore((state) => state.togglePanel);
+  const composeNote = useCanvasPinsStore((state) => state.compose);
   const [downloading, setDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState<string | null>(null);
 
@@ -92,6 +96,18 @@ export function SelectionToolbar() {
         <MessageCircle size={17} aria-hidden="true" />
         <span>Ask</span>
       </button>
+      {ids.length === 1 && isBackendNodeId(ids[0]) && (
+        <button
+          type="button"
+          className="selection-toolbar__button"
+          onClick={() => composeNote({ nodeId: ids[0] })}
+          title="Note for agents"
+          aria-label="Note for agents"
+        >
+          <StickyNote size={17} aria-hidden="true" />
+          <span className="selection-toolbar__label--compact">Note</span>
+        </button>
+      )}
       <button
         type="button"
         className="selection-toolbar__button selection-toolbar__button--primary"

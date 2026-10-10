@@ -216,6 +216,8 @@ interface UIState {
     visible: boolean;
     position: { x: number; y: number };
     nodeId: string | null;
+    /** Flow-space point under a pane right-click (where a canvas note would go). */
+    flowPosition: { x: number; y: number } | null;
   };
   connectionPopup: ConnectionPopupState;
   settingsCache: {
@@ -289,7 +291,11 @@ interface UIState {
   setChatWidth: (width: number) => void;
   setChatHeight: (height: number) => void;
   setChatPosition: (left: number, top: number) => void;
-  showContextMenu: (position: { x: number; y: number }, nodeId: string | null) => void;
+  showContextMenu: (
+    position: { x: number; y: number },
+    nodeId: string | null,
+    flowPosition?: { x: number; y: number } | null,
+  ) => void;
   hideContextMenu: () => void;
   showConnectionPopup: (popup: Omit<ConnectionPopupState, 'visible'>) => void;
   hideConnectionPopup: () => void;
@@ -348,6 +354,7 @@ export const useUIStore = create<UIState>((set, get) => ({
     visible: false,
     position: { x: 0, y: 0 },
     nodeId: null,
+    flowPosition: null,
   },
   connectionPopup: {
     visible: false,
@@ -708,14 +715,14 @@ export const useUIStore = create<UIState>((set, get) => ({
       };
     }),
 
-  showContextMenu: (position, nodeId) =>
+  showContextMenu: (position, nodeId, flowPosition = null) =>
     set({
-      contextMenu: { visible: true, position, nodeId },
+      contextMenu: { visible: true, position, nodeId, flowPosition },
     }),
 
   hideContextMenu: () =>
     set({
-      contextMenu: { visible: false, position: { x: 0, y: 0 }, nodeId: null },
+      contextMenu: { visible: false, position: { x: 0, y: 0 }, nodeId: null, flowPosition: null },
     }),
 
   showConnectionPopup: (popup) =>
@@ -844,7 +851,7 @@ export const useUIStore = create<UIState>((set, get) => ({
       inspectorPinned: false,
       pendingPreset: null,
       panels: createDefaultPanels(),
-      contextMenu: { visible: false, position: { x: 0, y: 0 }, nodeId: null },
+      contextMenu: { visible: false, position: { x: 0, y: 0 }, nodeId: null, flowPosition: null },
       connectionPopup: {
         visible: false,
         position: { x: 0, y: 0 },

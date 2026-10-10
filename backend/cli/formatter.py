@@ -303,6 +303,28 @@ def format_snapshot(snapshot: dict[str, Any]) -> str:
     selection = snapshot.get("selection") or []
     lines.append(f"SELECTED: {', '.join(selection) if selection else 'nothing'}")
 
+    pins = [pin for pin in snapshot.get("pins") or [] if isinstance(pin, dict)]
+    if pins:
+        # Before NODES: the person's requests are the first thing an agent should read.
+        open_count = sum(1 for pin in pins if pin.get("status") == "open")
+        lines.append("")
+        lines.append(f"PINS ({open_count} open) — notes from the person:")
+        for pin in pins:
+            lines.append(f"  {format_pin(pin)}")
+        if open_count:
+            lines.append('  (act on a note, then: nebula pin resolve <id> --say "...")')
+
+    proposals = [p for p in snapshot.get("proposals") or [] if isinstance(p, dict)]
+    if proposals:
+        lines.append("")
+        lines.append(f"PROPOSALS ({len(proposals)} waiting for the person):")
+        for proposal in proposals:
+            left = proposal.get("expiresInSeconds")
+            expires = f" (expires in {_minutes(left)})" if isinstance(left, (int, float)) else ""
+            note = json.dumps(str(proposal.get("note") or ""), ensure_ascii=False)
+            lines.append(f"  {proposal.get('id', '?')} by {proposal.get('agent') or 'an agent'}: {note}{expires}")
+        lines.append("  (nebula proposal <id> --wait to hear the decision)")
+
     nodes = snapshot.get("nodes") or []
     total = snapshot.get("nodeCount", len(nodes))
     truncated = " (truncated)" if snapshot.get("truncated") else ""
@@ -347,4 +369,190 @@ def format_snapshot(snapshot: dict[str, Any]) -> str:
                 at = f"({target.get('x', 0):.0f},{target.get('y', 0):.0f})"
             say = f' "{agent["say"]}"' if agent.get("say") else ""
             lines.append(f"  {agent.get('name')} at {at}{say} ({agent.get('secondsAgo')}s ago)")
+
+    events = snapshot.get("events")
+    if isinstance(events, dict) and events.get("cursor") is not None:
+        lines.append("")
+        lines.append(f"EVENTS: cursor {events['cursor']} (nebula watch --since {events['cursor']})")
     return "\n".join(lines)
+
+
+def _ago(iso: Any, now: float | None = None) -> str:
+    from datetime import datetime
+    import time as _time
+
+    if not isinstance(iso, str):
+        return ""
+    try:
+        seconds = max(0, int((now if now is not None else _time.time()) - datetime.fromisoformat(iso).timestamp()))
+    except ValueError:
+        return ""
+    if seconds < 60:
+        return "just now"
+    if seconds < 3600:
+        return f"{seconds // 60}m ago"
+    if seconds < 86400:
+        return f"{seconds // 3600}h ago"
+    return f"{seconds // 86400}d ago"
+
+
+def format_pin(pin: dict[str, Any], now: float | None = None) -> str:
+    """One pin as `pin_8c41d2aa on n4: "warmer" (12m ago)`."""
+    anchor = pin.get("anchor") or {}
+    if "nodeId" in anchor:
+        where = f"on {anchor['nodeId']}"
+    else:
+        try:
+            where = f"at ({float(anchor.get('x', 0)):.0f},{float(anchor.get('y', 0)):.0f})"
+        except (TypeError, ValueError):
+            where = "on the canvas"
+        if pin.get("detached") and pin.get("detachedFrom"):
+            where += f" (its node {pin['detachedFrom']} was removed)"
+    text = json.dumps(str(pin.get("text") or ""), ensure_ascii=False)
+    reply = pin.get("reply") or {}
+    if pin.get("status") == "resolved" and reply:
+        agent = (reply.get("agent") or {}).get("name") or "an agent"
+        answer = json.dumps(str(reply.get("text") or ""), ensure_ascii=False)
+        return f"{pin.get('id', '?')} {where}: {text} — resolved by {agent}: {answer}"
+    ago = _ago(pin.get("createdAt"), now)
+    return f"{pin.get('id', '?')} {where}: {text}" + (f" ({ago})" if ago else "")
+
+
+def _actor_label(actor: dict[str, Any] | None) -> str:
+    actor = actor or {}
+    if actor.get("kind") == "agent":
+        return str(actor.get("name") or "Agent")
+    if actor.get("kind") == "person":
+        return "Person"
+    if actor.get("kind") == "system":  # Nebula itself, e.g. a proposal expiring
+        return "Nebula"
+    return "Unnamed client"
+
+
+def format_event(event: dict[str, Any]) -> str:
+    """One journal event as `[57] 14:03:08  Person  moved n3, n4`."""
+    import time as _time
+
+    at = event.get("at")
+    clock = _time.strftime("%H:%M:%S", _time.localtime(at / 1000)) if isinstance(at, (int, float)) else "--:--:--"
+    kind = str(event.get("kind") or "")
+    data = event.get("data") or {}
+    summary = str(event.get("summary") or kind)
+    if kind == "canvas.replaced":
+        summary = f"Canvas replaced ({data.get('reason') or 'import'}) — node ids restarted; run nebula look"
+    elif kind == "canvas.cleared":
+        summary = "Cleared the canvas — run nebula look"
+    elif kind == "node.params" and data.get("values"):
+        shown = ", ".join(
+            f"{key}={_brief(json.dumps(value, ensure_ascii=False) if isinstance(value, str) else value, 40)}"
+            for key, value in list(data["values"].items())[:3]
+        )
+        summary = f"{summary}: {shown}"
+    elif kind == "run.failed" and data.get("error"):
+        summary = f"{summary}: {_brief(data['error'], 100)}"
+    elif kind == "pin.added" and data.get("pinId"):
+        summary = f"{summary} — nebula pin resolve {data['pinId']} --say \"...\" when done"
+    elif kind == "pin.resolved" and data.get("pinId"):
+        summary = f"answered note {data['pinId']}: {_brief(data.get('reply') or '', 100)}"
+    elif kind == "pin.removed" and data.get("pinId"):
+        summary = f"deleted note {data['pinId']}"
+    elif kind == "proposal.created" and data.get("proposalId"):
+        summary = f"{summary} — waiting for the person (nebula proposal {data['proposalId']} --wait)"
+    elif kind == "proposal.accepted" and data.get("proposalId"):
+        mapped = ", ".join(f"{ref} → {node_id}" for ref, node_id in (data.get("idMap") or {}).items())
+        runs = data.get("runNodeIds") or []
+        summary = f"accepted proposal {data['proposalId']}" + (f": {mapped}" if mapped else "")
+        if runs:
+            summary += f"; the canvas will run {', '.join(runs)}"
+    elif kind == "proposal.rejected" and data.get("proposalId"):
+        reason = f': "{_brief(data["reason"], 100)}"' if data.get("reason") else ""
+        summary = f"rejected proposal {data['proposalId']}{reason}"
+    return f"[{event.get('seq', '?')}] {clock}  {_actor_label(event.get('actor'))}  {summary}"
+
+
+def format_events(response: dict[str, Any]) -> str:
+    return "\n".join(format_event(event) for event in response.get("events") or [])
+
+
+def _minutes(seconds: Any) -> str:
+    try:
+        seconds = max(0, int(seconds))
+    except (TypeError, ValueError):
+        return "?"
+    if seconds < 60:
+        return f"{seconds}s"
+    return f"{round(seconds / 60)} min"
+
+
+def _cost_line(cost: dict[str, Any]) -> str:
+    paid = int(cost.get("paidRuns") or 0)
+    free = int(cost.get("freeRuns") or 0)
+    up_to = "up to " if cost.get("upTo") else ""
+    if paid == 0:
+        return f"{up_to}{free} free run{'s' if free != 1 else ''} (runs locally)"
+    providers = ", ".join(cost.get("providers") or [])
+    line = f"{up_to}{paid} paid run{'s' if paid != 1 else ''}" + (f" ({providers})" if providers else "")
+    if free:
+        line += f" and {free} free"
+    return line + " — Nebula has no price list"
+
+
+def format_proposal(view: dict[str, Any], *, created: bool = False, now_ms: float | None = None) -> str:
+    """A proposal as the person will see it: what it adds, wires, sets and runs."""
+    import time as _time
+
+    proposal_id = view.get("id", "?")
+    status = view.get("status") or "open"
+    now = now_ms if now_ms is not None else _time.time() * 1000
+    left = (float(view.get("expiresAt") or 0) - now) / 1000
+    if created:
+        head = f"Proposal {proposal_id} is on the canvas for the person (expires in {_minutes(left)})."
+    else:
+        agent = (view.get("agent") or {}).get("name") or "an agent"
+        when = f", expires in {_minutes(left)}" if status == "open" else ""
+        reason = f" — {view['reason']}" if view.get("reason") and status != "open" else ""
+        note = json.dumps(str(view.get("note") or ""), ensure_ascii=False)
+        head = f"{proposal_id} by {agent} [{status}{when}]{reason}: {note}"
+    lines = [head]
+    for node in view.get("nodes") or []:
+        cost = (node.get("cost") or {}).get("label") or "?"
+        pos = node.get("position") or {}
+        try:
+            where = f"  @({float(pos.get('x', 0)):.0f},{float(pos.get('y', 0)):.0f})"
+        except (TypeError, ValueError):
+            where = ""
+        lines.append(f"  adds   {node.get('ref')}  {node.get('name') or node.get('definitionId')}  [{cost}]{where}")
+    for edge in view.get("edges") or []:
+        lines.append(f"  wires  {edge.get('source')}.{edge.get('sourceHandle')} → {edge.get('target')}.{edge.get('targetHandle')}")
+    for change in view.get("params") or []:
+        keys = ", ".join((change.get("changes") or {}).keys())
+        lines.append(f"  sets   {change.get('nodeId')}: {keys}")
+    run = view.get("run") or []
+    if run:
+        lines.append(f"  runs   {', '.join(run)} — {_cost_line(view.get('cost') or {})}")
+    else:
+        lines.append("  runs   nothing until the person chooses")
+    if created:
+        lines.append(f"Check the outcome: nebula proposal {proposal_id} --wait")
+    return "\n".join(lines)
+
+
+def format_proposal_outcome(view: dict[str, Any]) -> str:
+    """The person's decision in one line, for `--wait`."""
+    status = view.get("status")
+    if status == "accepted":
+        mapped = ", ".join(f"{ref} → {node_id}" for ref, node_id in (view.get("idMap") or {}).items())
+        line = "Accepted by the person" + (f": {mapped}." if mapped else ".")
+        runs = view.get("runNodeIds") or []
+        if runs:
+            line += f" They will run {', '.join(runs)} from the canvas."
+        return line
+    if status == "rejected":
+        return f'Rejected: "{view["reason"]}"' if view.get("reason") else "Rejected (no reason given)."
+    if status == "invalidated":
+        return f"Invalidated: {view.get('reason') or 'the canvas changed'}"
+    if status == "expired":
+        return "Expired: the person didn't decide within 15 minutes."
+    if status == "withdrawn":
+        return "Withdrawn."
+    return f"Still open ({view.get('id')})."

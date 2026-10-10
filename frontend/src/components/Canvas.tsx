@@ -37,6 +37,10 @@ import { ConnectionPopup } from './ConnectionPopup';
 import { SelectionToolbar } from './SelectionToolbar';
 import { CanvasNavigation } from './CanvasNavigation';
 import { AgentCursorLayer } from './canvas/AgentCursorLayer';
+import { PinLayer } from './canvas/PinLayer';
+import { PinComposer } from './canvas/PinComposer';
+import { ProposalLayer } from './canvas/ProposalLayer';
+import { ProposalBar } from './canvas/ProposalBar';
 import { CanvasViewReporter } from './canvas/CanvasViewReporter';
 import { CrabMarkAnimated } from './brand/CrabMarkAnimated';
 import { CHARACTER_DRAG_MIME, MOODBOARD_DRAG_MIME } from '../lib/dragMime';
@@ -586,6 +590,16 @@ export function Canvas() {
     hideContextMenu();
   }, [hideContextMenu]);
 
+  // Right-click on empty canvas offers "Leave a note for agents here…".
+  const onPaneContextMenu = useCallback(
+    (event: React.MouseEvent | MouseEvent) => {
+      event.preventDefault();
+      const client = { x: event.clientX, y: event.clientY };
+      showContextMenu(client, null, screenToFlowPosition(client));
+    },
+    [showContextMenu, screenToFlowPosition]
+  );
+
   // Keyboard shortcuts: Ctrl+Enter, Ctrl+S, Ctrl+O, Ctrl+A, Ctrl+D, Ctrl+Z, Ctrl+Shift+Z, Ctrl+C, Ctrl+V
   const onKeyDown = useCallback(
     (event: React.KeyboardEvent) => {
@@ -685,6 +699,7 @@ export function Canvas() {
         edgeTypes={edgeTypes}
         onNodeContextMenu={onNodeContextMenu}
         onPaneClick={onPaneClick}
+        onPaneContextMenu={onPaneContextMenu}
         fitView={initialCanvasState.fitEnabled}
         defaultViewport={initialCanvasState.viewport ?? undefined}
         onInit={onViewportInitialized}
@@ -714,6 +729,9 @@ export function Canvas() {
         <CanvasNavigation nodeCount={nodes.length} />
         <CanvasViewReporter />
         <AgentCursorLayer />
+        <PinLayer />
+        <ProposalLayer />
+        <ProposalBar />
       </ReactFlow>
       {isSlavaSkin && nodes.length === 0 && !onboardingActive ? (
         <div className="nn-splash" aria-hidden="true">
@@ -736,6 +754,7 @@ export function Canvas() {
       ) : null}
       <ContextMenu />
       <ConnectionPopup />
+      <PinComposer />
     </div>
   );
 }

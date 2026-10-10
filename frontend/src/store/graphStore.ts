@@ -720,6 +720,12 @@ interface GraphState {
   executeCluster: (nodeIds: string[]) => Promise<void>;
   executeClusterConcurrent: (nodeIds: string[], createOrigin?: CreateRunOrigin) => Promise<void>;
   authorGenerationCluster: (request: GenerationRequest) => Promise<{ modelNodeIds: string[]; allNodeIds: string[] }>;
+  /** Merge what the backend committed for an accepted agent proposal (new nodes, wires, param changes). */
+  adoptAcceptedProposal: (result: {
+    nodes: Node<NodeData>[];
+    edges: Edge[];
+    updatedNodes: Node<NodeData>[];
+  }) => void;
   deleteGeneration: (modelNodeIds: string[]) => void;
   duplicateNode: (nodeId: string) => void;
   deleteNode: (nodeId: string) => void;
@@ -4304,6 +4310,28 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     return { modelNodeIds, allNodeIds };
   },
 
+  adoptAcceptedProposal: ({ nodes: incoming, edges: incomingEdges, updatedNodes }) => {
+    // The backend already committed these (and broadcast a graphSync); adding
+    // them here too means the nodes exist locally before the canvas runs them.
+    // Like authorGenerationCluster's merge: one undo step, ids never duplicated.
+    pushUndo(set, get);
+    set((state) => {
+      const updates = new Map(updatedNodes.map((node) => [node.id, node]));
+      const merged = state.nodes.map((node) => {
+        const update = updates.get(node.id);
+        return update
+          ? { ...node, data: { ...node.data, params: { ...node.data.params, ...update.data.params } } }
+          : node;
+      });
+      const existingIds = new Set(state.nodes.map((node) => node.id));
+      const existingEdgeIds = new Set(state.edges.map((edge) => edge.id));
+      return {
+        nodes: [...merged, ...incoming.filter((node) => !existingIds.has(node.id))],
+        edges: [...state.edges, ...incomingEdges.filter((edge) => !existingEdgeIds.has(edge.id))],
+      };
+    });
+  },
+
   deleteGeneration: (modelNodeIds) => {
     const { nodes, edges, isExecuting } = get();
     if (isExecuting) return;
@@ -4801,7 +4829,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       selectedTrackItemId: null, selectedTrackItemIds: [], isKeyframeRecording: false,
       isPlaying: false, renderedPreviewUrl: null, playheadOutputTime: 0, timelineZoom: 1,
       pendingPreset: null, createSessionId: null, onboardingActive: false,
-      contextMenu: { visible: false, position: { x: 0, y: 0 }, nodeId: null },
+      contextMenu: { visible: false, position: { x: 0, y: 0 }, nodeId: null, flowPosition: null },
       connectionPopup: { visible: false, position: { x: 0, y: 0 }, nodeId: '', handleId: '', handleType: 'source' },
     });
     set({

@@ -1,6 +1,8 @@
 import { useEffect, useRef } from 'react';
 import { useUIStore } from '../store/uiStore';
 import { useGraphStore } from '../store/graphStore';
+import { useCanvasPinsStore } from '../store/canvasPinsStore';
+import { isBackendNodeId } from '../lib/canvasPins';
 import '../styles/panels.css';
 
 interface MenuItem {
@@ -12,7 +14,8 @@ interface MenuItem {
 }
 
 export function ContextMenu() {
-  const { visible, position, nodeId } = useUIStore((s) => s.contextMenu);
+  const { visible, position, nodeId, flowPosition } = useUIStore((s) => s.contextMenu);
+  const composeNote = useCanvasPinsStore((s) => s.compose);
   const hideContextMenu = useUIStore((s) => s.hideContextMenu);
   const executeNode = useGraphStore((s) => s.executeNode);
   const duplicateNode = useGraphStore((s) => s.duplicateNode);
@@ -49,7 +52,24 @@ export function ContextMenu() {
     };
   }, [visible, hideContextMenu]);
 
-  if (!visible || !nodeId) return null;
+  if (!visible) return null;
+  if (!nodeId) {
+    // Right-click on the empty canvas: the only thing to do here is leave a note.
+    if (!flowPosition) return null;
+    return (
+      <div ref={menuRef} className="context-menu" style={{ left: position.x, top: position.y }}>
+        <button
+          className="context-menu__item"
+          onClick={() => {
+            composeNote({ position: flowPosition });
+            hideContextMenu();
+          }}
+        >
+          <span>Leave a note for agents here…</span>
+        </button>
+      </div>
+    );
+  }
 
   const items: MenuItem[] = [
     {
@@ -57,6 +77,15 @@ export function ContextMenu() {
       disabled: isExecuting,
       action: () => {
         executeNode(nodeId);
+        hideContextMenu();
+      },
+    },
+    {
+      label: 'Leave a note for agents…',
+      // Agents only see nodes the backend knows (ids like n4).
+      disabled: !isBackendNodeId(nodeId),
+      action: () => {
+        composeNote({ nodeId });
         hideContextMenu();
       },
     },

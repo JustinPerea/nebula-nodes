@@ -33,6 +33,121 @@ export interface AgentPresenceEvent {
   at: number;
 }
 
+/** A short note the person pinned for agents (backend services/canvas_pins.py). */
+export interface Pin {
+  id: string;
+  text: string;
+  anchor: { nodeId: string } | { x: number; y: number };
+  /** Last known flow position (the node's, or the spot). */
+  position: { x: number; y: number } | null;
+  status: 'open' | 'resolved';
+  /** ISO timestamp. */
+  createdAt: string;
+  /** True once the node it was pinned to was removed; it stays where the node was. */
+  detached: boolean;
+  detachedFrom?: string;
+  reply: {
+    agent: { id: string; name: string; color: string; verified: boolean };
+    text: string;
+    at: string;
+  } | null;
+}
+
+/** The active project's pins, sent after graphSync and on every pin change. */
+export interface CanvasPinsEvent {
+  type: 'canvasPins';
+  projectId: string | null;
+  pins: Pin[];
+}
+
+export type ProposalStatus = 'open' | 'accepted' | 'rejected' | 'withdrawn' | 'expired' | 'invalidated';
+
+/** One node's run cost. Nebula has no price list, so it is only free or paid. */
+export interface ProposalCost {
+  kind: 'free' | 'paid';
+  provider: string | null;
+  label: string;
+}
+
+export interface ProposalPort {
+  id: string;
+  label: string;
+  dataType: string;
+}
+
+/** An agent's proposed change (backend services/canvas_proposals.ProposalBook.view). */
+export interface ProposalView {
+  id: string;
+  status: ProposalStatus;
+  agent: { id: string; name: string; color: string; verified: boolean };
+  note: string;
+  projectId: string | null;
+  /** Backend wall-clock milliseconds. */
+  createdAt: number;
+  expiresAt: number;
+  nodes: Array<{
+    ref: string;
+    definitionId: string;
+    name: string;
+    category: string;
+    params: Record<string, unknown>;
+    position: { x: number; y: number };
+    cost: ProposalCost;
+    runs: boolean;
+    willRun: boolean;
+    ports: { inputs: ProposalPort[]; outputs: ProposalPort[] };
+  }>;
+  edges: Array<{ source: string; sourceHandle: string; target: string; targetHandle: string }>;
+  params: Array<{ nodeId: string; name: string; changes: Record<string, { from: unknown; to: unknown }> }>;
+  run: string[];
+  cost: {
+    paidRuns: number;
+    freeRuns: number;
+    estimate: null;
+    upTo: boolean;
+    providers: string[];
+    nodes: Array<ProposalCost & { ref: string; nodeId: string | null }>;
+    note: string;
+  };
+  references: string[];
+  reason: string | null;
+  idMap: Record<string, string> | null;
+  runNodeIds: string[] | null;
+}
+
+/**
+ * Browser sockets only: exactly what Accept will write (canvas_proposals.person_values).
+ * The view's values are cut for agents; these are what the person approves.
+ */
+export interface ProposalPersonValues {
+  /** New node ref -> its proposed params. */
+  nodes: Record<string, Record<string, unknown>>;
+  /** Existing node id -> param key -> {from, to}. */
+  params: Record<string, Record<string, { from: unknown; to: unknown }>>;
+}
+
+/** Browser sockets only: a new proposal plus the key that lets this canvas decide it. */
+export interface ProposalOpenedEvent {
+  type: 'proposalOpened';
+  proposal: ProposalView;
+  acceptKey: string;
+  personValues?: ProposalPersonValues;
+}
+
+/** Browser sockets only, after graphSync: every open proposal with its key. */
+export interface ProposalSyncEvent {
+  type: 'proposalSync';
+  proposals: Array<ProposalView & { acceptKey: string; personValues?: ProposalPersonValues }>;
+}
+
+export interface ProposalClosedEvent {
+  type: 'proposalClosed';
+  proposalId: string;
+  status: Exclude<ProposalStatus, 'open'>;
+  reason?: string | null;
+  idMap?: Record<string, string>;
+}
+
 export type ExecutionEvent = (
   | { type: 'queued'; nodeId: string }
   | { type: 'executing'; nodeId: string; variant?: VariantScope | null }
@@ -78,6 +193,10 @@ export type ExecutionEvent = (
       executionStatuses?: ExecutionStatusResult[];
     }
   | AgentPresenceEvent
+  | CanvasPinsEvent
+  | ProposalOpenedEvent
+  | ProposalSyncEvent
+  | ProposalClosedEvent
 ) & { runId?: string };
 
 type EventHandler = (event: ExecutionEvent) => void;

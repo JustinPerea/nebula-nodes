@@ -115,7 +115,10 @@ def test_preserves_ids_outputs_recipe_and_creator_state_on_switch(workspace):
     assert graph.add_node("text-input", {"value": "new"}) == "n91"
     persisted = ProjectStore(store.root).read()["projects"][project_id]
     assert persisted["snapshot"]["runHistory"] == snapshot["runHistory"]
-    replacement = broadcast.await_args.args[0]
+    # The opened project's pins (canvasPins) follow the graph replacement.
+    replacement = next(call.args[0] for call in reversed(broadcast.await_args_list)
+                       if call.args[0]["type"] == "graphSync")
+    assert broadcast.await_args.args[0]["type"] == "canvasPins"
     assert replacement["graphReplaced"] is True
     assert replacement["workspaceRevision"] == opened.json()["workspaceRevision"]
     assert replacement["activeProjectId"] == project_id

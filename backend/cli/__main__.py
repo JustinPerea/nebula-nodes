@@ -67,6 +67,74 @@ def build_parser() -> argparse.ArgumentParser:
     point_p.add_argument("--as", dest="agent_name",
                          help="Cursor name (default: $NEBULA_AGENT_NAME; in-app agents are named automatically)")
 
+    watch_p = sub.add_parser("watch", help="Wait for canvas changes and print what changed and who did it")
+    watch_p.add_argument("--once", action="store_true",
+                         help="Block until the next batch of changes, print it, and exit")
+    watch_p.add_argument("--timeout", type=float, default=None,
+                         help="Give up after this many seconds (default: 600 with --once, none otherwise)")
+    watch_p.add_argument("--json", action="store_true",
+                         help="JSON Lines (one event per line); with --once, the whole response")
+    watch_p.add_argument("--since", type=int, default=None,
+                         help="Start after this event cursor (from `nebula look` or a previous watch)")
+    watch_p.add_argument("--journal", default=None, help="Journal id the --since cursor belongs to")
+    watch_p.add_argument("--kinds", default=None,
+                         help="Only these kinds, e.g. node,pin,proposal or node.params")
+    watch_p.add_argument("--include-self", dest="include_self", action="store_true",
+                         help="Also show changes you made yourself")
+    watch_p.add_argument("--as", dest="agent_name",
+                         help="Your agent name, used to skip your own changes (default: $NEBULA_AGENT_NAME)")
+
+    sub.add_parser("pins", help="List the notes the person pinned on the canvas for agents")
+
+    pin_p = sub.add_parser("pin", help="Answer a note the person pinned for agents")
+    pin_sub = pin_p.add_subparsers(dest="pin_cmd", required=True)
+    resolve_p = pin_sub.add_parser("resolve", help="Reply in one line and mark the note done")
+    resolve_p.add_argument("pin_id", help="Pin id from `nebula look` or `nebula pins` (e.g. pin_8c41d2aa)")
+    resolve_p.add_argument("--say", required=True, help="Your one-line reply (280 characters max)")
+    resolve_p.add_argument("--as", dest="agent_name",
+                           help="Your agent name (default: $NEBULA_AGENT_NAME; in-app agents are named automatically)")
+
+    propose_p = sub.add_parser(
+        "propose",
+        help="Propose a change for the person to accept or reject on the canvas (use before paid runs)",
+        description=(
+            "Builder: nebula propose --note \"Widen the take and upscale it\" --add +up=topaz-image-upscale "
+            "--param +up.upscale_factor=2 --wire n4:image +up:image --set n4.aspect_ratio=16:9 --run +up "
+            "--wait --timeout 100. "
+            "New nodes use refs like +up; existing nodes use their ids (n4). Or pass --file plan.json "
+            "with {note, nodes, edges, params, run}."
+        ),
+    )
+    propose_p.add_argument("--file", help="JSON file with {note, nodes, edges, params, run}")
+    propose_p.add_argument("--note", help="One line the person reads (160 characters max)")
+    propose_p.add_argument("--add", action="append", default=[], metavar="+ref=definitionId",
+                           help="A new node, e.g. --add +up=topaz-image-upscale (repeatable)")
+    propose_p.add_argument("--param", action="append", nargs="*", default=[], metavar="+ref.key=value",
+                           help="A param on a new node, e.g. --param +up.upscale_factor=2 (repeatable)")
+    propose_p.add_argument("--set", dest="set_params", action="append", default=[], metavar="nX.key=value",
+                           help="Change a param on an existing node, e.g. --set n4.aspect_ratio=16:9 (repeatable)")
+    propose_p.add_argument("--wire", action="append", nargs=2, default=[], metavar=("SRC:port", "DST:port"),
+                           help="A wire, e.g. --wire n4:image +up:image (repeatable)")
+    propose_p.add_argument("--run", action="append", default=[], metavar="REF",
+                           help="Run this node after the person accepts (repeatable)")
+    propose_p.add_argument("--at", action="append", default=[], metavar="+ref=x,y",
+                           help="Where a new node goes, e.g. --at +up=820,140")
+    propose_p.add_argument("--wait", action="store_true", help="Wait for the person to accept or reject")
+    propose_p.add_argument("--timeout", type=float, default=600.0, help="With --wait, give up after this many seconds")
+    propose_p.add_argument("--json", action="store_true", help="Print the raw proposal JSON")
+    propose_p.add_argument("--as", dest="agent_name",
+                           help="Your agent name (default: $NEBULA_AGENT_NAME; in-app agents are named automatically)")
+
+    proposal_p = sub.add_parser("proposal", help="Check (or withdraw) one of your proposals")
+    proposal_p.add_argument("id_or_action", help="A proposal id (p_9a1c3e02), or 'withdraw'")
+    proposal_p.add_argument("proposal_id", nargs="?", help="With 'withdraw': the proposal id")
+    proposal_p.add_argument("--wait", action="store_true", help="Wait for the person to accept or reject")
+    proposal_p.add_argument("--timeout", type=float, default=600.0, help="With --wait, give up after this many seconds")
+    proposal_p.add_argument("--json", action="store_true", help="Print the raw proposal JSON")
+    proposal_p.add_argument("--as", dest="agent_name", help="Your agent name (needed to withdraw)")
+
+    sub.add_parser("proposals", help="List proposals waiting for the person")
+
     save_p = sub.add_parser("save", help="Save graph to file")
     save_p.add_argument("file", help="Output file path (JSON)")
 
@@ -166,7 +234,7 @@ def main() -> None:
 
     client = NebulaClient(args.url)
 
-    from .commands import canvas, commons, context, nodes, keys, graph, execute, quick, path, selection
+    from .commands import canvas, commons, context, nodes, keys, graph, execute, quick, path, pins, proposals, selection
 
     dispatch = {
         "commons": lambda: commons.run(client, args),
@@ -182,6 +250,16 @@ def main() -> None:
         "look": lambda: canvas.run_look(client, as_json=args.json),
         "point": lambda: canvas.run_point(client, args.target, say=args.say, origin=args.origin,
                                           action=args.action, agent_name=args.agent_name),
+        "watch": lambda: canvas.run_watch(
+            client, once=args.once, timeout=args.timeout, as_json=args.json, since=args.since,
+            journal=args.journal, kinds=args.kinds, include_self=args.include_self,
+            agent_name=args.agent_name,
+        ),
+        "pins": lambda: pins.run_list(client),
+        "pin": lambda: pins.run_pin(client, args),
+        "propose": lambda: proposals.run_propose(client, args),
+        "proposal": lambda: proposals.run_proposal(client, args),
+        "proposals": lambda: proposals.run_list(client),
         "save": lambda: graph.run_save(client, args.file),
         "load": lambda: graph.run_load(client, args.file),
         "clear": lambda: graph.run_clear(client),
@@ -207,7 +285,10 @@ def main() -> None:
             from services.agent_workspaces import workspace_scope
             scope = workspace_scope(Path(workspace))
         with scope:
-            handler()
+            code = handler()
+        # Handlers that return an exit code (watch, proposals) end the process with it.
+        if isinstance(code, int) and not isinstance(code, bool) and code:
+            sys.exit(code)
     else:
         parser.print_help()
 

@@ -9,7 +9,12 @@ export interface PromptRequest {
 }
 
 /** Shared text-entry dialog for browser and desktop workflows. */
-export function PromptDialog({ request, onDone }: { request: PromptRequest; onDone: (value: string | null) => void }) {
+export function PromptDialog({ request, onDone, maxLength }: {
+  request: PromptRequest;
+  onDone: (value: string | null) => void;
+  /** Optional cap passed to the input (e.g. 280 for notes to agents). */
+  maxLength?: number;
+}) {
   const [value, setValue] = useState(request.initial);
   const input = useRef<HTMLInputElement>(null);
   const form = useRef<HTMLFormElement>(null);
@@ -48,7 +53,7 @@ export function PromptDialog({ request, onDone }: { request: PromptRequest; onDo
       }}>
         <label className="prompt-dialog__field">
           {request.label}
-          <input ref={input} value={value} onChange={(event) => setValue(event.target.value)} />
+          <input ref={input} value={value} maxLength={maxLength} onChange={(event) => setValue(event.target.value)} />
         </label>
         <div className="prompt-dialog__actions">
           <button type="button" onClick={() => onDone(null)}>Cancel</button>

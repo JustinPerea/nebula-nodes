@@ -49,8 +49,10 @@ def test_only_committed_import_broadcasts_explicit_graph_replacement(monkeypatch
 
     imported = client.post("/api/graph/import", json={"nodes": replacement_nodes, "edges": []})
     assert imported.status_code == 200
-    broadcast.assert_awaited_once()
-    replacement = broadcast.await_args.args[0]
+    # One graph replacement, then the active project's pins (canvasPins).
+    messages = [call.args[0] for call in broadcast.await_args_list]
+    assert [message["type"] for message in messages] == ["graphSync", "canvasPins"]
+    replacement = messages[0]
     assert replacement["type"] == "graphSync"
     assert replacement["graphReplaced"] is True
     assert replacement["nodes"] == imported.json()["nodes"]

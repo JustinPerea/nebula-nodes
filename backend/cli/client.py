@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import sys
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 
@@ -98,6 +99,43 @@ class NebulaClient:
 
     def get_canvas_snapshot(self) -> dict[str, Any]:
         return self._request("GET", "/api/canvas/snapshot")
+
+    def get_canvas_events(
+        self,
+        params: dict[str, Any],
+        timeout: float = 300.0,
+        agent_name: str | None = None,
+    ) -> dict[str, Any]:
+        """Long-poll GET /api/canvas/events; `timeout` must exceed the server-side wait."""
+        headers = {"X-Nebula-Agent": agent_name} if agent_name else None
+        return self._request("GET", "/api/canvas/events", params=params, timeout=timeout, headers=headers)
+
+    def list_pins(self) -> dict[str, Any]:
+        return self._request("GET", "/api/canvas/pins")
+
+    def resolve_pin(self, pin_id: str, reply: str, agent_name: str | None = None) -> dict[str, Any]:
+        headers = {"X-Nebula-Agent": agent_name} if agent_name else None
+        return self._request("POST", f"/api/canvas/pins/{quote(pin_id, safe='')}/resolve",
+                             json={"reply": reply}, headers=headers)
+
+    # -- Proposals (agents propose; only the person accepts, in Nebula) --
+    def propose(self, body: dict[str, Any], agent_name: str | None = None) -> dict[str, Any]:
+        headers = {"X-Nebula-Agent": agent_name} if agent_name else None
+        return self._request("POST", "/api/canvas/proposals", json=body, headers=headers)
+
+    def get_proposal(self, proposal_id: str, wait: float = 0.0, agent_name: str | None = None) -> dict[str, Any]:
+        """GET one proposal; `wait` (≤25 s) blocks until the person decides."""
+        headers = {"X-Nebula-Agent": agent_name} if agent_name else None
+        params = {"wait": round(wait, 1)} if wait > 0 else None
+        return self._request("GET", f"/api/canvas/proposals/{quote(proposal_id, safe='')}",
+                             params=params, headers=headers, timeout=wait + 15)
+
+    def withdraw_proposal(self, proposal_id: str, agent_name: str | None = None) -> dict[str, Any]:
+        headers = {"X-Nebula-Agent": agent_name} if agent_name else None
+        return self._request("DELETE", f"/api/canvas/proposals/{quote(proposal_id, safe='')}", headers=headers)
+
+    def list_proposals(self) -> dict[str, Any]:
+        return self._request("GET", "/api/canvas/proposals")
 
     def point_cursor(self, body: dict[str, Any], agent_name: str | None = None) -> dict[str, Any]:
         headers = {"X-Nebula-Agent": agent_name} if agent_name else None

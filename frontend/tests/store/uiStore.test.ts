@@ -127,7 +127,7 @@ describe('uiStore', () => {
         settings: { visible: true, position: { x: 300, y: 320 } },
         chat: { visible: true, position: { x: 400, y: 420 }, width: 640, height: 500, left: 500, top: 40 },
       },
-      contextMenu: { visible: true, position: { x: 9, y: 9 }, nodeId: 'n1' },
+      contextMenu: { visible: true, position: { x: 9, y: 9 }, nodeId: 'n1', flowPosition: null },
       connectionPopup: {
         visible: true,
         position: { x: 8, y: 8 },

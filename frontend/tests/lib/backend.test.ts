@@ -177,6 +177,19 @@ describe('backendWebSocketUrl with injected endpoint (VAL-TRANSPORT-005)', () =>
     expect(fetchSpy.mock.calls[1]).toEqual(['http://127.0.0.1:56789/api/settings']);
   });
 
+  it('sends the desktop nonce to person-only canvas routes and the canvas socket', async () => {
+    const backend = await importWithBridge({ apiBaseUrl: 'http://127.0.0.1:56789',
+      wsBaseUrl: 'ws://127.0.0.1:56789', connectorSession: 'synthetic desktop nonce' });
+    fetchSpy.mockResolvedValue({ ok: true, status: 201 });
+    await backend.apiFetch('/api/canvas/pins', { method: 'POST', body: '{}' });
+    await backend.apiFetch('/api/canvas/proposals/p_1/accept', { method: 'POST', body: '{}' });
+    expect(fetchSpy.mock.calls[0][1].headers.get('X-Nebula-Connector-Session')).toBe('synthetic desktop nonce');
+    expect(fetchSpy.mock.calls[1][1].headers.get('X-Nebula-Connector-Session')).toBe('synthetic desktop nonce');
+    await expect(backend.backendWebSocketUrl('/ws'))
+      .resolves.toBe('ws://127.0.0.1:56789/ws?connectorSession=synthetic%20desktop%20nonce');
+    await expect(backend.backendWebSocketUrl('/ws/chat')).resolves.toBe('ws://127.0.0.1:56789/ws/chat');
+  });
+
   afterEach(() => {
     delete (window as Record<string, unknown>).nebulaDesktop;
     vi.unstubAllGlobals();

@@ -5,6 +5,7 @@ import type { NodeData } from '../src/types';
 import { SelectionToolbar } from '../src/components/SelectionToolbar';
 import { useGraphStore } from '../src/store/graphStore';
 import { useUIStore } from '../src/store/uiStore';
+import { useCanvasPinsStore } from '../src/store/canvasPinsStore';
 
 
 const originalExecuteNode = useGraphStore.getState().executeNode;
@@ -143,5 +144,23 @@ describe('SelectionToolbar', () => {
     expect(useGraphStore.getState().nodes).toHaveLength(2);
     await waitFor(() => expect(useGraphStore.getState().nodes).toHaveLength(0));
     expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('offers a note for agents on exactly one saved node, and opens the composer', () => {
+    useCanvasPinsStore.setState({ composer: null, error: null });
+    useGraphStore.setState({ nodes: [selectedNode('n4')] });
+    render(<SelectionToolbar />);
+    fireEvent.click(screen.getByRole('button', { name: 'Note for agents' }));
+    expect(useCanvasPinsStore.getState().composer).toEqual({ nodeId: 'n4' });
+  });
+
+  it('hides the note button for several nodes or a node the backend has not saved yet', () => {
+    useGraphStore.setState({ nodes: [selectedNode('n1'), selectedNode('n2')] });
+    const { unmount } = render(<SelectionToolbar />);
+    expect(screen.queryByRole('button', { name: 'Note for agents' })).not.toBeInTheDocument();
+    unmount();
+    useGraphStore.setState({ nodes: [selectedNode('3f1c2a4e-1d2b-4c5d-8e9f-0a1b2c3d4e5f')] });
+    render(<SelectionToolbar />);
+    expect(screen.queryByRole('button', { name: 'Note for agents' })).not.toBeInTheDocument();
   });
 });
