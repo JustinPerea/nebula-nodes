@@ -58,6 +58,24 @@ describe('WorkspaceRail', () => {
     expect(useUIStore.getState().panels.assets.visible).toBe(false);
   });
 
+  it('stays expanded while its drawer is open and anchors the drawer to the button that opened it', () => {
+    render(<WorkspaceRail />);
+    const rail = screen.getByRole('navigation', { name: 'Workspace navigation' });
+    const assets = screen.getByRole('button', { name: 'Open assets' });
+    // The origin comes from layout (rail top + the button's offset in the
+    // unscaled shell), so a shell still scaling open can't skew it.
+    vi.spyOn(rail, 'getBoundingClientRect').mockReturnValue(DOMRect.fromRect({ x: 8, y: 200, width: 52, height: 360 }));
+    Object.defineProperty(assets, 'offsetTop', { configurable: true, value: 100 });
+    Object.defineProperty(assets, 'offsetHeight', { configurable: true, value: 40 });
+    expect(rail.classList.contains('workspace-rail--open')).toBe(true);
+
+    fireEvent.click(assets);
+    expect(document.documentElement.style.getPropertyValue('--workspace-dock-origin-y')).toBe('320px');
+
+    fireEvent.click(assets);
+    expect(rail.classList.contains('workspace-rail--open')).toBe(false);
+  });
+
   it('opens search through the palette event and starts help in place', () => {
     const openPalette = vi.fn();
     window.addEventListener('nebula:command-palette-open', openPalette);

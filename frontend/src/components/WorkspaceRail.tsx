@@ -1,4 +1,4 @@
-import { useEffect, useRef, type KeyboardEvent as ReactKeyboardEvent } from 'react';
+import { useEffect, useLayoutEffect, useRef, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import {
   CircleHelp,
   FolderHeart,
@@ -56,6 +56,20 @@ export function WorkspaceRail() {
     setLeftDock(leftDock === dock ? null : dock);
   };
 
+  // Drawers grow out of the button that opened them. Publish that button's
+  // center before the drawer mounts so its transform-origin points at the rail.
+  useLayoutEffect(() => {
+    if (!leftDock) return;
+    // Measured from layout, not the button's on-screen box: the shell may still be
+    // scaling open, and the drawer should point at where the button settles.
+    const nav = navRef.current;
+    const shell = nav?.querySelector<HTMLElement>('.workspace-rail__shell');
+    const button = shell?.querySelector<HTMLElement>('.workspace-rail__item--active');
+    if (!nav || !shell || !button) return;
+    const center = nav.getBoundingClientRect().top + shell.offsetTop + shell.clientTop + button.offsetTop + button.offsetHeight / 2;
+    document.documentElement.style.setProperty('--workspace-dock-origin-y', `${Math.round(center)}px`);
+  }, [leftDock]);
+
   useEffect(() => {
     function onEscape(event: KeyboardEvent) {
       if (event.key !== 'Escape' || event.defaultPrevented || !useUIStore.getState().leftDock) return;
@@ -83,53 +97,55 @@ export function WorkspaceRail() {
   return (
     <nav
       ref={navRef}
-      className="workspace-rail"
+      className={`workspace-rail${leftDock ? ' workspace-rail--open' : ''}`}
       aria-label="Workspace navigation"
       onKeyDown={onRailKeyDown}
     >
-      <div className="workspace-rail__group workspace-rail__group--top">
-        <RailItem
-          label="Add nodes"
-          onboardingTarget="nodes"
-          icon={Plus}
-          primary
-          active={leftDock === 'library'}
-          onClick={() => toggleDock('library')}
-        />
-        <RailItem label="Open Create studio" onboardingTarget="create" icon={Sparkles} onClick={enterCreateView} />
-        {commonsEnabled && <RailItem label="Open Commons" icon={LibraryBig} onClick={enterCommons} />}
-        <div className="workspace-rail__divider" aria-hidden="true" />
-        <RailItem
-          label="Open assets"
-          icon={FolderHeart}
-          active={leftDock === 'assets'}
-          onClick={() => toggleDock('assets')}
-        />
-        <RailItem
-          label="Open run history"
-          onboardingTarget="history"
-          icon={History}
-          active={leftDock === 'history'}
-          onClick={() => toggleDock('history')}
-        />
-        <RailItem
-          label="Search commands and nodes"
-          icon={Search}
-          shortcut="⌘K"
-          onClick={() => window.dispatchEvent(new CustomEvent('nebula:command-palette-open'))}
-        />
-      </div>
+      <div className="workspace-rail__shell">
+        <div className="workspace-rail__group workspace-rail__group--top">
+          <RailItem
+            label="Add nodes"
+            onboardingTarget="nodes"
+            icon={Plus}
+            primary
+            active={leftDock === 'library'}
+            onClick={() => toggleDock('library')}
+          />
+          <RailItem label="Open Create studio" onboardingTarget="create" icon={Sparkles} onClick={enterCreateView} />
+          {commonsEnabled && <RailItem label="Open Commons" icon={LibraryBig} onClick={enterCommons} />}
+          <div className="workspace-rail__divider" aria-hidden="true" />
+          <RailItem
+            label="Open assets"
+            icon={FolderHeart}
+            active={leftDock === 'assets'}
+            onClick={() => toggleDock('assets')}
+          />
+          <RailItem
+            label="Open run history"
+            onboardingTarget="history"
+            icon={History}
+            active={leftDock === 'history'}
+            onClick={() => toggleDock('history')}
+          />
+          <RailItem
+            label="Search commands and nodes"
+            icon={Search}
+            shortcut="⌘K"
+            onClick={() => window.dispatchEvent(new CustomEvent('nebula:command-palette-open'))}
+          />
+        </div>
 
-      <div className="workspace-rail__group workspace-rail__group--bottom">
-        <div className="workspace-rail__divider" aria-hidden="true" />
-        <RailItem label="Open help and onboarding" onboardingTarget="help" icon={CircleHelp} onClick={startOnboarding} />
-        <RailItem
-          label="Open settings"
-          onboardingTarget="settings"
-          icon={Settings}
-          active={leftDock === 'settings'}
-          onClick={() => toggleDock('settings')}
-        />
+        <div className="workspace-rail__group workspace-rail__group--bottom">
+          <div className="workspace-rail__divider" aria-hidden="true" />
+          <RailItem label="Open help and onboarding" onboardingTarget="help" icon={CircleHelp} onClick={startOnboarding} />
+          <RailItem
+            label="Open settings"
+            onboardingTarget="settings"
+            icon={Settings}
+            active={leftDock === 'settings'}
+            onClick={() => toggleDock('settings')}
+          />
+        </div>
       </div>
     </nav>
   );

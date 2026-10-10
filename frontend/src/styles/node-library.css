@@ -2,7 +2,6 @@
 body.app-slava-restraint .workspace-dock-panel.panel.panel--library.node-library--home {
   bottom: auto !important;
   max-height: calc(100dvh - 32px) !important;
-  transform-origin: left top;
 }
 
 body.app-slava-restraint .node-library__home {

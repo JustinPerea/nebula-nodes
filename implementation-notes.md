@@ -1,5 +1,42 @@
 # Implementation Notes
 
+## 2026-10-10 — Floating rail and attached drawers
+
+Supersedes the 2026-10-09 "Flush-left toolbar" placement and the rail part of "Match toolbar and node radii".
+
+- **What Justin asked for:** a small gap between the page edge and the rail, and on hover a radial bloom out to the right. Two rejected versions on the way there:
+  - left edge pinned, only the width growing, which read as stretching right;
+  - growing from the center, which moved the left edge away from the page edge.
+- **How it blooms.** The shell is laid out at its open size and rests at `scale(0.7)` from the middle of its left edge. On hover, focus or an open drawer, it scales to 1. The left edge stays 8px off the page while the rail grows up, down and to the right.
+  - Open: 40px buttons, a 6px inset plus the 1px border, 15px shell radius.
+  - At rest it's exactly that at 0.7: 36px wide with 28px buttons.
+- **Concentric on every frame.** The white + looked wrong because its 28px button sat 4px from the shell's sides but 11px from its top, and the radii didn't nest. A uniform scale keeps inset and radius in proportion all through the animation. The shell radius is button radius + inset + border.
+- **Stable measurements.** The `nav` is the open rail's footprint, never scaled. Canvas fit and pinned inspectors measure a box that doesn't change with hover. The nav takes no pointer events; the shell does, so the hover zone is exactly what's visible. The old `::before` shell, group `translate` and per-button size transitions are gone.
+- **Known trade-off.** Buttons far from the vertical center travel when the rail blooms: the + moves up about 40px. You aim after it opens, but a fast click at the resting spot can miss. Ask Justin if it bothers him in use; a smaller bloom (resting scale nearer 1) shrinks the travel.
+- **Drawer attached to the rail:**
+  - The rail stays open while a drawer it opened is showing (`.workspace-rail--open`).
+  - The drawer sits 8px from the open shell.
+  - The drawer springs sideways out of the button that opened it. `WorkspaceRail` publishes that button's center as `--workspace-dock-origin-y`, measured from layout (`offsetTop`), so a shell still scaling open can't skew it. The drawer mounts a microtask later, so the value is already set.
+- **Found while doing it:** the drawer's `transform-origin: left center` had never applied. The theme's generic `.panel` rule has the same specificity and loads later, so drawers grew from their own center. The origin now lives in a theme-scoped rule.
+- **Also fixed:**
+  - Under the theme, hovering the white + turned it dark, because the generic item hover outranked the primary style.
+  - The active button's tooltip is hidden. It used to cover the attached drawer, and the drawer's title already names it.
+- **Short windows, touch and phones** never scale; they always show the open rail.
+  - Touch uses 44px buttons.
+  - Phones use a 4px inset and a 6px gutter.
+  - Short windows scroll inside the shell.
+- **Motion:**
+  - Rail: spring (k 500, c 36: about 1% overshoot, 320ms).
+  - Drawer: enters on the toast's spring (420ms) and exits in 220ms, inside the 500ms unmount delay.
+  - Reduced motion: no scaling transition, no drawer entrance, and a 120ms fade on exit.
+- **Checked live:**
+  - rest: 36px wide with 28px buttons, 8px off the edge;
+  - open: 54×348 from 36×244, left edge still at 8px;
+  - insets of 7px on both axes, 15px radius;
+  - drawer 8px from the shell, origin `0px 229px` (+ center minus 16px);
+  - 375px touch: 44px buttons, 6px gutter, drawer at 66px.
+  Test in `tests/WorkspaceRail.test.tsx`.
+
 ## 2026-10-10 — Recently deleted (trash + undo)
 
 - **Both, as one mechanism.** Undo is just "restore the thing you trashed a moment ago", so the toast and the trash share `POST /api/projects/{id}/restore`.

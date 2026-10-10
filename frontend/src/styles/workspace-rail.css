@@ -1,49 +1,67 @@
 :root {
-  --workspace-rail-left: 0px;
+  --workspace-rail-left: 8px;
   --workspace-rail-top: 16px;
   --workspace-rail-bottom: 16px;
-  --workspace-rail-width: 56px;
-  --workspace-dock-gap: 12px;
+  --workspace-rail-button: 40px;
+  --workspace-rail-pad: 6px;
+  /* Buttons, inset and the shell's 1px border on each side. */
+  --workspace-rail-width: calc(var(--workspace-rail-button) + 2 * var(--workspace-rail-pad) + 2px);
+  /* Resting size as a fraction of the open rail: 40px buttons rest at 28px. */
+  --workspace-rail-rest-scale: 0.7;
+  --workspace-dock-gap: 8px;
+  --workspace-dock-top: 16px;
   --workspace-dock-left: calc(var(--workspace-rail-left) + var(--workspace-rail-width) + var(--workspace-dock-gap));
   --workspace-dock-width: clamp(280px, 24vw, 360px);
+  /* Springs sampled as linear() easings. Rail: k 500, c 36 (~1% overshoot, 320ms).
+     Dock: k 380, c 30 (~2% overshoot, 420ms), the same spring as the project toast. */
+  --workspace-rail-spring: 320ms linear(0, 0.079, 0.247, 0.434, 0.606, 0.744, 0.847, 0.919, 0.965, 0.992, 1.006, 1.013, 1.014, 1.012, 1.01, 1.007, 1);
+  --workspace-dock-spring: 420ms linear(0, 0.049, 0.163, 0.305, 0.452, 0.588, 0.705, 0.801, 0.876, 0.931, 0.97, 0.995, 1.011, 1.019, 1.022, 1.022, 1.02, 1.017, 1.014, 1.011, 1.008, 1.005, 1.003, 1.002, 1);
 }
 
+/* The nav is the open rail's footprint, laid out at full size and never
+   transformed past its centering, so drawers, pinned inspectors and canvas fit
+   measure a stable box. It takes no pointer events itself; the visible shell
+   does, so the hover zone is exactly what you can see. */
 .workspace-rail {
+  --workspace-rail-button-radius: var(--sr-radius-node, 8px);
   position: fixed;
   z-index: 12;
   top: 50dvh;
   left: var(--workspace-rail-left);
-  display: flex;
   width: var(--workspace-rail-width);
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 4px;
-  max-height: calc(100dvh - var(--workspace-rail-top) - var(--workspace-rail-bottom));
-  padding: 7px 6px;
   transform: translateY(-50%);
-  isolation: isolate;
+  pointer-events: none;
 }
 
-/* Keep the full navigation footprint reserved for drawers and pinned inspectors.
-   Only its visible shell expands, so rows and adjacent panels stay in place. */
-.workspace-rail::before {
-  content: '';
-  position: absolute;
-  z-index: -1;
-  inset: 0 20px 0 0;
+/* The shell is laid out at its open size (40px buttons, 6px inset, 15px
+   radius: button radius + inset + border, so the corners nest) and rests scaled down
+   from the middle of its left edge. It blooms up, down and to the right while
+   the left edge holds its small gap, and the corners stay concentric on every
+   frame because the whole thing scales together. */
+.workspace-rail__shell {
+  position: relative;
+  display: flex;
+  max-height: calc(100dvh - var(--workspace-rail-top) - var(--workspace-rail-bottom));
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: var(--workspace-rail-pad);
   border: 1px solid rgba(255, 255, 255, 0.09);
-  border-radius: var(--sr-node-media-radius, 14px);
+  border-radius: calc(var(--workspace-rail-button-radius) + var(--workspace-rail-pad) + 1px);
   background: rgba(24, 24, 26, 0.92);
   box-shadow: 0 12px 36px rgba(0, 0, 0, 0.48);
   backdrop-filter: blur(22px) saturate(135%);
   -webkit-backdrop-filter: blur(22px) saturate(135%);
-  transition: inset 180ms ease;
-  pointer-events: none;
+  transform: scale(var(--workspace-rail-rest-scale));
+  transform-origin: left center;
+  transition: transform var(--workspace-rail-spring);
+  pointer-events: auto;
 }
 
-.workspace-rail:is(:hover, :focus-within)::before {
-  inset-inline: 0;
+/* Hover, keyboard focus, or an open drawer: the rail stays out while the
+   drawer it launched is attached to it. */
+.workspace-rail:is(:hover, :focus-within, .workspace-rail--open) .workspace-rail__shell {
+  transform: scale(1);
 }
 
 .workspace-rail__group {
@@ -53,48 +71,22 @@
   flex-direction: column;
   align-items: center;
   gap: 4px;
-  translate: -10px 0;
-  transition: translate 180ms ease;
-}
-
-.workspace-rail:is(:hover, :focus-within) .workspace-rail__group {
-  translate: 0;
 }
 
 .workspace-rail__item {
   position: relative;
   display: inline-grid;
-  width: 28px;
-  max-width: 100%;
-  height: 28px;
-  flex: 0 0 28px;
-  margin-block: 4px;
+  width: var(--workspace-rail-button);
+  height: var(--workspace-rail-button);
+  flex: 0 0 var(--workspace-rail-button);
   place-items: center;
   padding: 0;
   border: 1px solid transparent;
-  border-radius: var(--sr-radius-node, 8px);
+  border-radius: var(--workspace-rail-button-radius);
   background: transparent;
   color: rgba(255, 255, 255, 0.55);
   cursor: pointer;
-  transition: width 180ms ease, height 180ms ease, flex-basis 180ms ease, margin-block 180ms ease, color 120ms ease, background-color 120ms ease, border-color 120ms ease, transform 80ms ease;
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .workspace-rail:is(:hover, :focus-within) .workspace-rail__item {
-    width: 44px;
-    height: 36px;
-    flex-basis: 36px;
-    margin-block: 0;
-  }
-}
-
-.workspace-rail__icon {
-  transform: scale(0.8);
-  transition: transform 180ms ease;
-}
-
-.workspace-rail:is(:hover, :focus-within) .workspace-rail__icon {
-  transform: scale(1);
+  transition: color 120ms ease, background-color 120ms ease, border-color 120ms ease, transform 80ms ease;
 }
 
 .workspace-rail__item:hover,
@@ -123,7 +115,7 @@
   border-color: rgba(255, 255, 255, 0.9);
   background: rgba(255, 255, 255, 0.96);
   color: #111;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.28);
 }
 
 .workspace-rail__item--primary:hover,
@@ -156,6 +148,11 @@
   white-space: nowrap;
 }
 
+/* The open drawer already names the active button. */
+.workspace-rail__item--active::after {
+  display: none;
+}
+
 .workspace-rail__item:hover::after,
 .workspace-rail__item:focus-visible::after {
   opacity: 1;
@@ -171,7 +168,7 @@
 
 body .workspace-dock-panel.panel {
   position: fixed !important;
-  top: 16px !important;
+  top: var(--workspace-dock-top) !important;
   right: auto !important;
   bottom: 16px !important;
   left: var(--workspace-dock-left) !important;
@@ -183,14 +180,39 @@ body .workspace-dock-panel.panel {
   max-height: none !important;
   resize: none !important;
   overflow: hidden;
-  transform-origin: left center;
 }
 
 body .workspace-dock-panel .panel__header {
   cursor: default;
 }
 
-body.app-slava-restraint .workspace-rail::before {
+/* Grow out of the rail button that opened the drawer. WorkspaceRail publishes
+   that button's center as --workspace-dock-origin-y. This needs the theme's
+   specificity, or the generic .panel origin (center center) wins. */
+body.app-slava-restraint .workspace-dock-panel.panel {
+  transform-origin: 0 calc(var(--workspace-dock-origin-y, 50dvh) - var(--workspace-dock-top));
+  animation: workspace-dock-enter var(--workspace-dock-spring) backwards;
+}
+
+body.app-slava-restraint .workspace-dock-panel.panel.panel--exiting {
+  animation: workspace-dock-exit var(--sr-motion-handle, 220ms cubic-bezier(0.32, 0.72, 0, 1)) forwards;
+}
+
+@keyframes workspace-dock-enter {
+  from {
+    opacity: 0;
+    transform: translateX(-12px) scale(0.96);
+  }
+}
+
+@keyframes workspace-dock-exit {
+  to {
+    opacity: 0;
+    transform: translateX(-12px) scale(0.96);
+  }
+}
+
+body.app-slava-restraint .workspace-rail__shell {
   border-color: var(--sr-edge, rgba(255, 255, 255, 0.09));
   background: var(--sr-glass-raised, rgba(28, 28, 31, 0.78));
   box-shadow: var(--sr-shadow-panel, 0 12px 36px rgba(0, 0, 0, 0.55));
@@ -208,8 +230,14 @@ body.app-slava-restraint .workspace-rail__item--primary {
   color: #111;
 }
 
-body.app-slava-restraint .workspace-rail__item:hover,
-body.app-slava-restraint .workspace-rail__item:focus-visible {
+body.app-slava-restraint .workspace-rail__item--primary:is(:hover, :focus-visible, .workspace-rail__item--active) {
+  border-color: #fff;
+  background: #fff;
+  color: #000;
+}
+
+body.app-slava-restraint .workspace-rail__item:not(.workspace-rail__item--primary):hover,
+body.app-slava-restraint .workspace-rail__item:not(.workspace-rail__item--primary):focus-visible {
   border-color: var(--sr-edge-strong, rgba(255, 255, 255, 0.14));
   background: var(--sr-surface-control-hover, rgba(255, 255, 255, 0.05));
   color: var(--sr-ink-bold, #fff);
@@ -223,24 +251,18 @@ body.app-slava-restraint .workspace-rail__item--active:not(.workspace-rail__item
 
 @media (max-width: 700px) {
   :root {
-    --workspace-rail-left: 0px;
+    --workspace-rail-left: 6px;
     --workspace-rail-top: 8px;
     --workspace-rail-bottom: 8px;
-    --workspace-rail-width: 48px;
+    --workspace-rail-pad: 4px;
     --workspace-dock-gap: 8px;
+    --workspace-dock-top: 8px;
     --workspace-dock-width: calc(100vw - var(--workspace-dock-left) - 8px);
-  }
-
-  .workspace-rail { padding: 5px 3px; }
-
-  .workspace-rail::before {
-    border-radius: var(--sr-node-media-radius, 14px);
   }
 
   .workspace-rail__item:focus-visible { outline-offset: -2px; }
 
   body .workspace-dock-panel.panel {
-    top: 8px !important;
     bottom: 140px !important;
     min-width: 0 !important;
     max-width: var(--workspace-dock-width) !important;
@@ -251,12 +273,10 @@ body.app-slava-restraint .workspace-rail__item--active:not(.workspace-rail__item
   :root {
     --workspace-rail-top: 8px;
     --workspace-rail-bottom: 8px;
+    --workspace-rail-pad: 4px;
   }
 
-  .workspace-rail {
-    gap: 2px;
-    padding: 4px 3px;
-  }
+  .workspace-rail__shell { gap: 2px; }
 
   .workspace-rail__group { gap: 2px; }
 
@@ -264,31 +284,14 @@ body.app-slava-restraint .workspace-rail__item--active:not(.workspace-rail__item
 }
 
 @media (max-height: 378px), (hover: none) and (max-height: 450px), (pointer: coarse) and (max-height: 450px) {
-  :root { --workspace-rail-width: 56px; }
-
-  .workspace-rail {
+  /* Too short to fit: the shell stays open and scrolls. */
+  .workspace-rail .workspace-rail__shell {
     overflow-x: hidden;
     overflow-y: auto;
     overscroll-behavior: contain;
     scrollbar-width: thin;
-    border: 1px solid var(--sr-edge, rgba(255, 255, 255, 0.09));
-    border-radius: var(--sr-node-media-radius, 14px);
-    background: var(--sr-glass-raised, rgba(24, 24, 26, 0.92));
-    box-shadow: var(--sr-shadow-panel, 0 12px 36px rgba(0, 0, 0, 0.48));
-    backdrop-filter: var(--sr-blur-panel, blur(22px) saturate(135%));
-    -webkit-backdrop-filter: var(--sr-blur-panel, blur(22px) saturate(135%));
+    transform: none;
   }
-
-  /* A scrolling toolbar uses a full shell painted on the scroller itself. */
-  .workspace-rail::before { display: none; }
-  .workspace-rail .workspace-rail__group { translate: none; }
-  .workspace-rail .workspace-rail__item {
-    width: 44px;
-    height: 36px;
-    flex-basis: 36px;
-    margin-block: 0;
-  }
-  .workspace-rail__icon { transform: none; }
   .workspace-rail__item:focus-visible { outline-offset: -2px; }
 
   /* Native titles and accessible names remain available when scrolling would
@@ -298,24 +301,25 @@ body.app-slava-restraint .workspace-rail__item--active:not(.workspace-rail__item
 
 /* Touch has no hover affordance. Keep the shell open and targets large. */
 @media (hover: none), (pointer: coarse) {
-  .workspace-rail { padding-inline: 2px; }
-  .workspace-rail::before { inset-inline: 0; }
-  .workspace-rail .workspace-rail__group { translate: none; }
-  .workspace-rail .workspace-rail__item {
-    width: 44px;
-    height: 44px;
-    flex-basis: 44px;
-    margin-block: 0;
-  }
-  .workspace-rail__icon { transform: none; }
+  :root { --workspace-rail-button: 44px; }
+  .workspace-rail .workspace-rail__shell { transform: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .workspace-rail::before,
-  .workspace-rail__group,
-  .workspace-rail__icon,
+  .workspace-rail__shell,
   .workspace-rail__item,
   .workspace-rail__item::after {
     transition: none;
   }
+
+  body.app-slava-restraint .workspace-dock-panel.panel { animation: none; }
+
+  /* Fade out instead of holding a frozen drawer until it unmounts. */
+  body.app-slava-restraint .workspace-dock-panel.panel.panel--exiting {
+    animation: workspace-dock-fade-out 120ms ease forwards;
+  }
+}
+
+@keyframes workspace-dock-fade-out {
+  to { opacity: 0; }
 }
