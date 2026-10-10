@@ -19,7 +19,7 @@
   - Pills only for tiny icon chips.
   - Done by raising `--sr-radius-panel` from 12 to 14, which text nodes, drawers and menus already used. The base node card and header moved from `--sr-radius-node` (8) to the panel token, so other node types match image nodes. `--sr-radius-node` stays 8 because buttons use it too.
   - The header home button went 14 → 8: it was a near-circle bulging inside the 14px header.
-- **Left as is:** the chat button stays round. Justin's call; a round chat launcher is a common convention.
+- **Chat button: a rounded square, follow-up the same day.** Justin asked for it. It's now 48×48 with a 14px corner, exactly the bar's height and baseline (both 712–760px live). Its dotted press layer sits 4px in at 10px. It needs `.panel-launcher.panel-launcher--chat` specificity, because the base launcher rules come later in the file. On a 375px phone it sits 7px from the bar and shares its top and bottom edges.
 - **Gone:** React Flow's `<Controls>` and its unthemed `#eee` button borders (the bright dividers).
 - **Checked live:**
   - zoom in → 116%, the percentage resets to 100%, Fit fits;

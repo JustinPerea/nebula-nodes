@@ -2506,9 +2506,17 @@ body.app-slava-restraint .panel-launcher {
     transform 220ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
-/* Center chat on the bottom bar's line (bar: 48px tall, --sr-space-6 up). */
-body.app-slava-restraint .panel-launcher--chat {
-  bottom: calc(var(--sr-space-6) + (48px - 42px) / 2);
+/* Chat matches the bottom bar: same 48px height, same baseline, same 14px
+   floating-surface corner (its dotted press layer sits 4px in at 10px). */
+body.app-slava-restraint .panel-launcher.panel-launcher--chat {
+  bottom: var(--sr-space-6);
+  width: 48px;
+  height: 48px;
+  border-radius: var(--sr-radius-panel);
+}
+
+body.app-slava-restraint .panel-launcher.panel-launcher--chat::after {
+  border-radius: calc(var(--sr-radius-panel) - 4px);
 }
 
 body.app-slava-restraint .panel-launcher::after {
