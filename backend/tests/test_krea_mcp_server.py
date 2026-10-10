@@ -157,7 +157,7 @@ async def test_bridge_offers_krea_read_only_discovery_and_nothing_that_writes_or
     live = json.loads((Path(__file__).with_name("fixtures") / "krea_mcp_tools.json").read_text())
     names = ["list_styles", "list_moodboards", "get_prompting_guide", "create_style", "delete_moodboard",
              "update_style", "execute_node_app", "send_agent_message", "call_desktop_tool", "write_files_upload",
-             "create_api_token", "show_plans", "start_free_trial"]
+             "create_api_token", "show_plans", "start_free_trial", "list_files", "list_file_tags", "read_files"]
     offered = [{"name": name, "inputSchema": {"type": "object"}} for name in names]
 
     def respond(request):

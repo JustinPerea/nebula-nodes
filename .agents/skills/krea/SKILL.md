@@ -18,8 +18,8 @@ Never change that billing source implicitly or fall back to another connection.
 Connect/check/refresh only authenticate or discover; generation requires an
 explicit graph run. The managed agent MCP bridge exposes only read-only
 discovery: `list_models`, `get_model_schema`, `get_prompting_guide`,
-`list_styles`, `list_moodboards`, `get_node_apps`, `get_node_app_versions`,
-`list_node_types`, `list_files` and `list_file_tags`. Generate, train, create
+`list_styles`, `list_moodboards`, `get_node_apps`, `get_node_app_versions`
+and `list_node_types`. Krea Files are not on the bridge. Generate, train, create
 or delete through Nebula GRAPH commands, with `_kreaAuth=mcp` when the user
 chooses their connected Krea account. Krea Moodboards and Krea Moodboard
 Create only offer `mcp`; Krea 3D Export only works with an API token.

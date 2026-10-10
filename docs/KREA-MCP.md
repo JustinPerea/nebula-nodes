@@ -39,8 +39,9 @@ installation, so other people cloning the repo connect their own accounts.
 
 Nebula's Claude and Codex agents receive a local MCP bridge for read-only
 discovery: models (`list_models`, `get_model_schema`), Krea's prompting guide,
-the account's styles and moodboards, node apps and node types, and Krea Files
-listings. Nothing on the bridge generates, uploads, writes, deletes or spends.
+the account's styles and moodboards, and node apps and node types. Krea Files
+listings stay off the bridge because they include private and workspace-shared
+file names. Nothing on the bridge generates, uploads, writes, deletes or spends.
 Media requests continue through the canvas graph; the bridge cannot bypass run
 history by directly calling `generate`. Hermes uses
 a temporary managed MCP overlay when no administrator-managed overlay is
