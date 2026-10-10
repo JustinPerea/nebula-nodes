@@ -55,6 +55,18 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("graph", help="Show current graph state")
     sub.add_parser("selection", help="Show nodes currently selected on the canvas")
 
+    look_p = sub.add_parser("look", help="Read the canvas as data: what's on screen, states, wires, agent cursors")
+    look_p.add_argument("--json", action="store_true", help="Print the raw snapshot JSON")
+
+    point_p = sub.add_parser("point", help="Move your cursor on the canvas so the user sees where you are working")
+    point_p.add_argument("target", help="Node (n2), port (n2.prompt) or flow coordinates (120,-40)")
+    point_p.add_argument("--say", default="", help="Short line shown next to your cursor")
+    point_p.add_argument("--from", dest="origin", help="Start of a drag gesture (same forms as target)")
+    point_p.add_argument("--action", choices=["move", "click", "drag", "look"], default=None,
+                         help="Gesture to show (default: move, or drag with --from)")
+    point_p.add_argument("--as", dest="agent_name",
+                         help="Cursor name (default: $NEBULA_AGENT_NAME; in-app agents are named automatically)")
+
     save_p = sub.add_parser("save", help="Save graph to file")
     save_p.add_argument("file", help="Output file path (JSON)")
 
@@ -154,7 +166,7 @@ def main() -> None:
 
     client = NebulaClient(args.url)
 
-    from .commands import commons, context, nodes, keys, graph, execute, quick, path, selection
+    from .commands import canvas, commons, context, nodes, keys, graph, execute, quick, path, selection
 
     dispatch = {
         "commons": lambda: commons.run(client, args),
@@ -167,6 +179,9 @@ def main() -> None:
         "set": lambda: graph.run_set(client, args.node_ref, parse_kv_list(args.params)),
         "graph": lambda: graph.run_show(client),
         "selection": lambda: selection.run(client),
+        "look": lambda: canvas.run_look(client, as_json=args.json),
+        "point": lambda: canvas.run_point(client, args.target, say=args.say, origin=args.origin,
+                                          action=args.action, agent_name=args.agent_name),
         "save": lambda: graph.run_save(client, args.file),
         "load": lambda: graph.run_load(client, args.file),
         "clear": lambda: graph.run_clear(client),

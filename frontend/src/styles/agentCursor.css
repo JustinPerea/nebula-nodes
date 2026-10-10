@@ -1,0 +1,144 @@
+/* Agent cursors: drawn in flow coordinates inside React Flow's viewport and
+   counter-scaled (1/zoom) by AgentCursorLayer so they stay a constant size.
+   Position comes from a spring in JS; CSS only handles fades and the ripple. */
+
+.agent-cursor-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1001; /* above nodes and edges, below React Flow panels */
+}
+
+.agent-cursor__wire-layer {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1px;
+  height: 1px;
+  overflow: visible;
+}
+
+.agent-cursor__wire {
+  stroke-linecap: round;
+  stroke-dasharray: 6 5;
+  opacity: 0;
+  transition: opacity 180ms ease-out;
+}
+
+.agent-cursor {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
+  will-change: transform;
+  opacity: 0;
+  transition: opacity 160ms ease-out;
+}
+
+.agent-cursor[data-placed='true'] {
+  opacity: 1;
+}
+
+.agent-cursor--idle[data-placed='true'] {
+  opacity: 0.45;
+  transition-duration: 600ms;
+}
+
+.agent-cursor__pointer {
+  display: block;
+  overflow: visible;
+  filter: drop-shadow(0 1px 2px rgb(0 0 0 / 0.45));
+}
+
+.agent-cursor__pointer path {
+  fill: var(--agent-color);
+  stroke: #fff;
+  stroke-width: 1.4;
+  stroke-linejoin: round;
+}
+
+.agent-cursor__label {
+  position: absolute;
+  left: 15px;
+  top: 17px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  white-space: nowrap;
+  font-family: var(--sr-ui, 'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif);
+}
+
+.agent-cursor__name {
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--agent-color);
+  color: #0b0b0c;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 16px;
+  letter-spacing: 0.01em;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.35);
+}
+
+.agent-cursor__say {
+  /* The label shrinks to fit (it is absolutely positioned), so give the
+     bubble its own width or it wraps every couple of words. */
+  width: max-content;
+  max-width: 260px;
+  padding: 5px 9px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--agent-color) 45%, transparent);
+  background: rgb(14 14 16 / 0.92);
+  color: #ececee;
+  font-size: 12px;
+  line-height: 16px;
+  white-space: normal;
+  box-shadow: 0 4px 14px rgb(0 0 0 / 0.4);
+  animation: agent-cursor-say-in 220ms cubic-bezier(0.2, 0.9, 0.3, 1.2);
+  transform-origin: 0 0;
+}
+
+.agent-cursor__ripple {
+  position: absolute;
+  left: -14px;
+  top: -14px;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 2px solid var(--agent-color);
+  opacity: 0;
+  animation: agent-cursor-ripple 520ms cubic-bezier(0.2, 0.7, 0.3, 1) 1;
+}
+
+@keyframes agent-cursor-ripple {
+  from {
+    opacity: 0.9;
+    transform: scale(0.3);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.4);
+  }
+}
+
+@keyframes agent-cursor-say-in {
+  from {
+    opacity: 0;
+    transform: translateY(-3px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-cursor,
+  .agent-cursor__wire {
+    transition: none;
+  }
+  .agent-cursor__say {
+    animation: none;
+  }
+}

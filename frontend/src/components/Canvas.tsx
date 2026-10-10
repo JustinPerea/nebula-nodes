@@ -36,6 +36,8 @@ import { ContextMenu } from './ContextMenu';
 import { ConnectionPopup } from './ConnectionPopup';
 import { SelectionToolbar } from './SelectionToolbar';
 import { CanvasNavigation } from './CanvasNavigation';
+import { AgentCursorLayer } from './canvas/AgentCursorLayer';
+import { CanvasViewReporter } from './canvas/CanvasViewReporter';
 import { CrabMarkAnimated } from './brand/CrabMarkAnimated';
 import { CHARACTER_DRAG_MIME, MOODBOARD_DRAG_MIME } from '../lib/dragMime';
 import { apiFetch } from '../lib/backend';
@@ -710,6 +712,8 @@ export function Canvas() {
           <SelectionToolbar />
         </Panel>
         <CanvasNavigation nodeCount={nodes.length} />
+        <CanvasViewReporter />
+        <AgentCursorLayer />
       </ReactFlow>
       {isSlavaSkin && nodes.length === 0 && !onboardingActive ? (
         <div className="nn-splash" aria-hidden="true">

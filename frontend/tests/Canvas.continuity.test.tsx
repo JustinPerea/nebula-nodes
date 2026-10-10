@@ -35,6 +35,8 @@ vi.mock('@xyflow/react', async (importOriginal) => ({
 }));
 vi.mock('../src/components/SelectionToolbar', () => ({ SelectionToolbar: () => null }));
 vi.mock('../src/components/CanvasNavigation', () => ({ CanvasNavigation: () => null }));
+vi.mock('../src/components/canvas/CanvasViewReporter', () => ({ CanvasViewReporter: () => null }));
+vi.mock('../src/components/canvas/AgentCursorLayer', () => ({ AgentCursorLayer: () => null }));
 vi.mock('../src/components/ContextMenu', () => ({ ContextMenu: () => null }));
 vi.mock('../src/components/ConnectionPopup', () => ({ ConnectionPopup: () => null }));
 vi.mock('../src/lib/canvasSelection', () => ({

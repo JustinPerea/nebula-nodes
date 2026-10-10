@@ -273,3 +273,78 @@ def format_run_results(results: dict[str, Any], node_defs: dict[str, dict[str, A
 
     lines.append(f"\nCompleted in {duration}s")
     return "\n".join(lines)
+
+
+def _brief(value: Any, limit: int = 70) -> str:
+    text = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False)
+    text = " ".join(str(text).split())
+    return text if len(text) <= limit else text[: limit - 1] + "…"
+
+
+def format_snapshot(snapshot: dict[str, Any]) -> str:
+    """Render GET /api/canvas/snapshot as a compact picture of the canvas."""
+    lines: list[str] = []
+    view = snapshot.get("view") or {}
+    viewport = view.get("viewport")
+    area = view.get("visibleArea")
+    if not view.get("reported"):
+        lines.append("VIEW: no browser has reported the canvas yet (positions/states unknown)")
+    else:
+        age = view.get("secondsAgo")
+        stale = " — STALE, the canvas may be closed" if view.get("stale") else ""
+        zoom = f"zoom {viewport['zoom']:.2f}" if viewport else "zoom ?"
+        if area:
+            span = (f"showing x {area['x']:.0f}…{area['x'] + area['width']:.0f}, "
+                    f"y {area['y']:.0f}…{area['y'] + area['height']:.0f}")
+        else:
+            span = "visible area unknown"
+        lines.append(f"VIEW: {zoom}, {span} (reported {age}s ago{stale})")
+
+    selection = snapshot.get("selection") or []
+    lines.append(f"SELECTED: {', '.join(selection) if selection else 'nothing'}")
+
+    nodes = snapshot.get("nodes") or []
+    total = snapshot.get("nodeCount", len(nodes))
+    truncated = " (truncated)" if snapshot.get("truncated") else ""
+    lines.append("")
+    lines.append(f"NODES ({total}){truncated}:")
+    if not nodes:
+        lines.append("  (canvas is empty)")
+    for node in nodes:
+        pos = node.get("position")
+        size = node.get("size")
+        where = f"@({pos['x']:.0f},{pos['y']:.0f})" if pos else "@(?)"
+        if size:
+            where += f" {size['width']}×{size['height']}"
+        screen = ""
+        if node.get("onScreen") is False:
+            screen = " off-screen"
+        lines.append(f"  {node.get('id', '?'):<6}{node.get('name', '?')} [{node.get('state', '?')}] {where}{screen}")
+        params = {k: v for k, v in (node.get("params") or {}).items() if v not in (None, "", {}, [])}
+        if params:
+            lines.append(f"        params: {_brief(params, 110)}")
+        ready = [f"{port} ({info.get('type') or '?'})" for port, info in (node.get("outputs") or {}).items()
+                 if isinstance(info, dict) and info.get("available")]
+        if ready:
+            lines.append(f"        outputs ready: {', '.join(ready)}  (nebula path {node.get('id')} for the file)")
+
+    edges = snapshot.get("edges") or []
+    if edges:
+        lines.append("")
+        lines.append("WIRES:")
+        for edge in edges:
+            lines.append(f"  {edge.get('source')}.{edge.get('sourceHandle')} → {edge.get('target')}.{edge.get('targetHandle')}")
+
+    agents = snapshot.get("agents") or []
+    if agents:
+        lines.append("")
+        lines.append("AGENT CURSORS:")
+        for agent in agents:
+            target = agent.get("target") or {}
+            if "nodeId" in target:
+                at = target["nodeId"] + (f".{target['handle']}" if target.get("handle") else "")
+            else:
+                at = f"({target.get('x', 0):.0f},{target.get('y', 0):.0f})"
+            say = f' "{agent["say"]}"' if agent.get("say") else ""
+            lines.append(f"  {agent.get('name')} at {at}{say} ({agent.get('secondsAgo')}s ago)")
+    return "\n".join(lines)

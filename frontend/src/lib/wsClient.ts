@@ -17,6 +17,22 @@ export type ErrorCategory =
   | 'invalid_input'
   | 'unknown';
 
+/** Where an agent cursor points: a node, one of its ports, or a flow-space spot. */
+export type AgentCursorAnchor =
+  | { nodeId: string; handle?: string }
+  | { x: number; y: number };
+
+export interface AgentPresenceEvent {
+  type: 'agentPresence';
+  agent: { id: string; name: string; color: string; verified: boolean };
+  target: AgentCursorAnchor;
+  from?: AgentCursorAnchor;
+  action: 'move' | 'click' | 'drag' | 'look';
+  say: string;
+  /** Backend wall-clock milliseconds. */
+  at: number;
+}
+
 export type ExecutionEvent = (
   | { type: 'queued'; nodeId: string }
   | { type: 'executing'; nodeId: string; variant?: VariantScope | null }
@@ -61,6 +77,7 @@ export type ExecutionEvent = (
       providerStartAmbiguities?: ProviderStartAmbiguity[];
       executionStatuses?: ExecutionStatusResult[];
     }
+  | AgentPresenceEvent
 ) & { runId?: string };
 
 type EventHandler = (event: ExecutionEvent) => void;

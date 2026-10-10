@@ -25,6 +25,11 @@ class NebulaClient:
         # /api/graph/run) can distinguish agent callers from human callers.
         if os.environ.get("DAEDALUS_APPROVAL"):
             headers.setdefault("X-Daedalus-Caller", "1")
+        # A display name for this agent's cursor on the canvas. A verified
+        # agent token, when present, takes precedence on the backend.
+        agent_name = os.environ.get("NEBULA_AGENT_NAME")
+        if agent_name:
+            headers.setdefault("X-Nebula-Agent", agent_name)
         token = os.environ.get("NEBULA_AGENT_TOKEN")
         if token:
             headers = {key: value for key, value in headers.items() if key.lower() != "authorization"}
@@ -90,6 +95,13 @@ class NebulaClient:
 
     def get_selection(self) -> dict[str, Any]:
         return self._request("GET", "/api/canvas/selection")
+
+    def get_canvas_snapshot(self) -> dict[str, Any]:
+        return self._request("GET", "/api/canvas/snapshot")
+
+    def point_cursor(self, body: dict[str, Any], agent_name: str | None = None) -> dict[str, Any]:
+        headers = {"X-Nebula-Agent": agent_name} if agent_name else None
+        return self._request("POST", "/api/canvas/cursor", json=body, headers=headers)
 
     def update_node(self, node_id: str, params: dict[str, Any]) -> dict[str, Any]:
         return self._request("PUT", f"/api/graph/node/{node_id}", json={"params": params})

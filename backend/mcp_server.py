@@ -27,7 +27,9 @@ mcp = FastMCP(
     instructions=(
         "Read the active Nebula canvas selection before interpreting vague references "
         "such as 'these nodes' or 'the selected images'. Selection is ephemeral and "
-        "resolved against the live graph on every call."
+        "resolved against the live graph on every call. Use look_at_canvas to see the "
+        "canvas as data (no screenshot needed) and point_at to show the user where you "
+        "are working."
         + "\n\n" + COMMONS_SKILL
     ),
 )
@@ -57,6 +59,87 @@ def get_selected_nodes() -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise RuntimeError("Nebula selection endpoint returned an invalid response")
     return payload
+
+
+# -- canvas presence ------------------------------------------------------------
+
+def _cursor_name(ctx: Context | None) -> str:
+    """$NEBULA_AGENT_NAME, else the MCP client's own name ("claude-code" → "Claude Code")."""
+    name = os.environ.get("NEBULA_AGENT_NAME")
+    if name:
+        return name
+    client = _client_name(ctx)
+    return "MCP agent" if client == "unknown" else client.replace("-", " ").replace("_", " ").title()
+
+
+def _canvas_call(method: str, path: str, ctx: Context | None, **kwargs: Any) -> dict[str, Any]:
+    headers = {"X-Nebula-Agent": _cursor_name(ctx)}
+    token = os.environ.get("NEBULA_AGENT_TOKEN")
+    if token:
+        headers["Authorization"] = f"Agent {token}"
+    try:
+        response = httpx.request(method, f"{_base_url}{path}", headers=headers, timeout=10.0, **kwargs)
+    except httpx.ConnectError as exc:
+        raise RuntimeError(f"Nebula isn't running at {_base_url}. Start Nebula, then retry.") from exc
+    except httpx.HTTPError as exc:
+        raise RuntimeError(f"canvas request failed: {exc}") from exc
+    if response.status_code >= 400:
+        try:
+            detail = response.json().get("detail", response.text)
+        except ValueError:
+            detail = response.text
+        raise RuntimeError(f"canvas {response.status_code}: {detail}")
+    payload = response.json()
+    if not isinstance(payload, dict):
+        raise RuntimeError("Nebula canvas endpoint returned an invalid response")
+    return payload
+
+
+@mcp.tool()
+def look_at_canvas(ctx: Context | None = None) -> dict[str, Any]:
+    """Read the Nebula canvas as data instead of taking a screenshot.
+
+    Returns the browser's viewport and visible area (flow coordinates), every
+    node with its name, run state (idle/queued/executing/complete/error),
+    position, size, whether it is on screen, redacted params and outputs, the
+    wires, the user's selection, and other agents' cursors. `view.stale` is
+    true when no browser has reported recently (the canvas may be closed).
+    """
+    return _canvas_call("GET", "/api/canvas/snapshot", ctx)
+
+
+@mcp.tool()
+def point_at(
+    node_id: str | None = None,
+    port: str | None = None,
+    x: float | None = None,
+    y: float | None = None,
+    say: str = "",
+    from_node_id: str | None = None,
+    from_port: str | None = None,
+    action: str = "move",
+    ctx: Context | None = None,
+) -> dict[str, Any]:
+    """Move your cursor on the Nebula canvas so the user can see where you are working.
+
+    Point at a node (`node_id`), one of its ports (`node_id` + `port`), or a
+    spot in flow coordinates (`x`, `y`). `say` shows a short line beside the
+    cursor. Give `from_node_id` (and `from_port`) with action "drag" to show a
+    wire being pulled. Graph edits made through Nebula's API move your cursor
+    on their own; use this to narrate, to point while explaining, or to show
+    what you are about to change.
+    """
+    def anchor(node: str | None, handle: str | None, px: float | None, py: float | None) -> dict[str, Any]:
+        if node:
+            return {"nodeId": node, **({"handle": handle} if handle else {})}
+        if px is not None and py is not None:
+            return {"x": px, "y": py}
+        raise ValueError("point_at needs node_id, or x and y")
+
+    body: dict[str, Any] = {"target": anchor(node_id, port, x, y), "say": say, "action": action}
+    if from_node_id:
+        body["from"] = anchor(from_node_id, from_port, None, None)
+    return _canvas_call("POST", "/api/canvas/cursor", ctx, json=body)
 
 
 # -- commons (smart moodboard) ------------------------------------------------

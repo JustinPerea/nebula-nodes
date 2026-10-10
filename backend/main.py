@@ -106,6 +106,14 @@ from services.agent_profiles import (
 from services.local_guard import LocalRequestGuard
 from services.agent_workspaces import AgentWorkspaceContext, WorkspaceSessions, WorkspaceSessionError, workspace_scope
 from services.chat_actions import publish_action
+from services.agent_presence import (
+    PresenceError,
+    RequestHeadersContext,
+    agent_presence,
+    current_request_headers,
+    identify as identify_agent,
+    parse_target,
+)
 from services.zoom_manifest import init_manifest, append_entry
 from services.project_context import get_current_project
 from routes.openrouter_proxy import router as openrouter_router
@@ -460,6 +468,8 @@ app.add_middleware(
 # Added after CORS so it runs first (Starlette wraps later middleware around
 # earlier ones): foreign Hosts and Origins never reach CORS or the routes.
 app.add_middleware(AgentWorkspaceContext)
+# Lets graph routes see who is calling, so agent edits move that agent's cursor.
+app.add_middleware(RequestHeadersContext)
 app.add_middleware(LocalRequestGuard)
 
 
@@ -2495,6 +2505,80 @@ async def set_canvas_selection(body: dict[str, Any]) -> dict[str, Any]:
     )
 
 
+async def _show_agent(
+    target: dict[str, Any],
+    *,
+    action: str = "click",
+    say: str = "",
+    origin: dict[str, Any] | None = None,
+) -> None:
+    """Move the calling agent's cursor; a no-op for the browser's own requests.
+
+    Never fails the route that called it: presence is decoration on top of
+    an edit that already succeeded.
+    """
+    identity = identify_agent(current_request_headers())
+    if identity is None:
+        return
+    try:
+        event = agent_presence.point(identity, target=target, origin=origin, action=action, say=say)
+        await manager.broadcast_raw(event)
+    except Exception:  # noqa: BLE001 - decoration must not break graph edits
+        pass
+
+
+def _node_label(node_id: str) -> str:
+    node = cli_graph.nodes.get(node_id) or {}
+    definition = node_registry.get_all().get(str(node.get("definitionId", "")), {})
+    return str(definition.get("displayName") or node.get("definitionId") or node_id)
+
+
+@app.post("/api/canvas/cursor")
+async def point_agent_cursor(body: dict[str, Any]) -> dict[str, Any]:
+    """Point the calling agent's cursor at a node, a port, or a canvas spot.
+
+    Body: {target: {nodeId, handle?} | {x, y}, from?: same shape,
+    action?: move|click|drag|look, say?: text}. The caller must identify
+    itself (agent token, Daedalus header, or X-Nebula-Agent).
+    """
+    identity = identify_agent(current_request_headers())
+    if identity is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Identify the agent with an X-Nebula-Agent header (e.g. 'Claude Code') or an agent token",
+        )
+    try:
+        target = parse_target(body.get("target"), cli_graph.nodes)
+        origin = parse_target(body["from"], cli_graph.nodes, "from") if body.get("from") is not None else None
+        event = agent_presence.point(
+            identity,
+            target=target,
+            origin=origin,
+            action=body.get("action") or "move",
+            say=body.get("say"),
+        )
+    except PresenceError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    await manager.broadcast_raw(event)
+    return {"agent": identity.as_dict(), "target": target, "action": event["action"], "say": event["say"]}
+
+
+@app.post("/api/canvas/view")
+async def report_canvas_view(body: dict[str, Any]) -> dict[str, Any]:
+    """The browser's latest viewport, node bounds and run states (never persisted)."""
+    try:
+        return agent_presence.report_view(body)
+    except PresenceError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.get("/api/canvas/snapshot")
+async def get_canvas_snapshot() -> dict[str, Any]:
+    """Read the canvas as data: what's on screen, node states, wires, selection, agent cursors."""
+    selected = selection_context.snapshot(cli_graph, node_registry).get("selectedNodeIds", [])
+    return agent_presence.snapshot(cli_graph, node_registry, selected_ids=selected)
+
+
 @app.get("/api/project")
 async def current_project() -> dict[str, str]:
     """Identity for the single local project served by this backend."""
@@ -3878,6 +3962,8 @@ async def get_node(node_id: str) -> dict:
 async def _broadcast_graph_sync(*, graph_replaced: bool = False) -> dict[str, Any]:
     """Push the current CLI graph to all connected frontends via WebSocket."""
     export = await export_graph_for_frontend()
+    if graph_replaced:
+        agent_presence.forget_graph()
     await manager.broadcast_raw({"type": "graphSync", **export,
                                  **({"graphReplaced": True} if graph_replaced else {})})
     return export
@@ -4390,6 +4476,7 @@ async def create_graph_node(body: dict[str, Any]) -> dict:
         )
     await _broadcast_graph_sync()
     publish_action(f"Added {definition_id} ({short_id})")
+    await _show_agent({"nodeId": short_id}, say=f"Added {_node_label(short_id)}")
     return cli_graph.nodes[short_id]
 
 
@@ -4413,6 +4500,12 @@ async def connect_graph_nodes(body: dict[str, Any]) -> dict:
     publish_action(
         f"Wired {edge['source']}:{edge['sourceHandle']} → "
         f"{edge['target']}:{edge['targetHandle']}"
+    )
+    await _show_agent(
+        {"nodeId": edge["target"], "handle": edge["targetHandle"]},
+        origin={"nodeId": edge["source"], "handle": edge["sourceHandle"]},
+        action="drag",
+        say=f"Wiring {edge['source']} → {edge['target']}",
     )
     return {"connection": f"{edge['source']}:{edge['sourceHandle']} -> {edge['target']}:{edge['targetHandle']}"}
 
@@ -4528,6 +4621,14 @@ async def create_node_and_connect(body: dict[str, Any]) -> dict:
             f"Wired {src}:{connect_spec.get('sourceHandle', '')} → "
             f"{dst}:{connect_spec.get('targetHandle', '')}"
         )
+        await _show_agent(
+            {"nodeId": dst, "handle": connect_spec.get("targetHandle", "")},
+            origin={"nodeId": src, "handle": connect_spec.get("sourceHandle", "")},
+            action="drag",
+            say=f"Added {_node_label(short_id)} and wired it",
+        )
+    else:
+        await _show_agent({"nodeId": short_id}, say=f"Added {_node_label(short_id)}")
     return response
 
 
@@ -4788,6 +4889,8 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
                 raise HTTPException(status_code=404, detail=f"Node '{node_id}' not found")
     await _broadcast_graph_sync()
     publish_action(f"Updated {node_id} params")
+    changed = ", ".join(sorted(str(key) for key in params)[:4])
+    await _show_agent({"nodeId": node_id}, say=f"Set {changed}" if changed else f"Updated {node_id}")
     return cli_graph.nodes[node_id]
 
 
@@ -4838,6 +4941,7 @@ async def clear_graph() -> dict:
     with _paid_graph_mutation("clear the canvas"):
         _reject_graph_replacement_during_paid_start("clear the canvas")
         cli_graph.clear()
+    agent_presence.forget_graph()
     await _broadcast_graph_sync()
     publish_action("Cleared the canvas")
     return {"status": "cleared"}
@@ -4985,12 +5089,17 @@ async def delete_graph_node(node_id: str) -> dict:
                     "first."
                 ),
             )
+        label = _node_label(node_id)
         try:
             cli_graph.remove_node(node_id)
         except ValueError:
             raise HTTPException(status_code=404, detail=f"Node '{node_id}' not found")
     await _broadcast_graph_sync()
     publish_action(f"Removed {node_id}")
+    last_point = agent_presence.last_point(node_id)
+    agent_presence.forget_node(node_id)
+    if last_point is not None:
+        await _show_agent(last_point, say=f"Removed {label}")
     return {"status": "deleted", "id": node_id}
 
 
@@ -5081,6 +5190,11 @@ async def delete_graph_edge(body: dict[str, Any]) -> dict:
             f"Unwired {body.get('source', '')}:{body.get('sourceHandle', '')} → "
             f"{body.get('target', '')}:{body.get('targetHandle', '')}"
         )
+        if body.get("target") in cli_graph.nodes:
+            await _show_agent(
+                {"nodeId": body["target"]},
+                say=f"Unwired {body.get('source', '')} → {body.get('target', '')}",
+            )
     return {"status": "deleted" if removed else "not_found"}
 
 
@@ -6034,6 +6148,8 @@ async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dic
     publish_action(
         f"Running {target}..." if target else f"Running {len(sub_nodes)} node(s)..."
     )
+    if target:
+        await _show_agent({"nodeId": target}, say=f"Running {_node_label(target)}")
 
     start = time.time()
     _claim_fresh_paid_worldlabs_starts(run_id=run_id, nodes=sub_nodes)
