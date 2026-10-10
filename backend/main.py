@@ -2686,8 +2686,28 @@ def _journal_execution_event(event: Any, run_id: str | None) -> None:
         pass
 
 
+MAX_NODE_LABEL_LENGTH = 80
+
+
+def _custom_node_label(raw: Any, definition_id: str) -> str | None:
+    """A user's name for a node, or None when it is blank or just the model name.
+
+    Only custom names are stored, so a node without one keeps following its
+    definition's display name.
+    """
+    if not isinstance(raw, str):
+        return None
+    label = " ".join(raw.split())[:MAX_NODE_LABEL_LENGTH]
+    definition = node_registry.get(definition_id) or {}
+    if not label or label == definition.get("displayName"):
+        return None
+    return label
+
+
 def _node_label(node_id: str) -> str:
     node = cli_graph.nodes.get(node_id) or {}
+    if isinstance(node.get("label"), str) and node["label"]:
+        return node["label"]
     definition = node_registry.get_all().get(str(node.get("definitionId", "")), {})
     return str(definition.get("displayName") or node.get("definitionId") or node_id)
 
@@ -5863,6 +5883,33 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
     return cli_graph.nodes[node_id]
 
 
+@app.put("/api/graph/node/{node_id}/label")
+async def rename_graph_node(node_id: str, body: dict[str, Any]) -> dict:
+    """Rename a node on the canvas. A blank name, or the model's own name,
+    clears the custom name. Names don't affect execution, so this stays out of
+    the paid-mutation fence, like layout."""
+    _check_workspace_revision()
+    node = cli_graph.nodes.get(node_id)
+    if not node:
+        raise HTTPException(status_code=404, detail=f"Node '{node_id}' not found")
+    raw = body.get("label")
+    if not isinstance(raw, str):
+        raise HTTPException(status_code=400, detail="label must be a string")
+    previous = _node_label(node_id)
+    cli_graph.set_label(node_id, _custom_node_label(raw, str(node.get("definitionId", ""))))
+    current = _node_label(node_id)
+    await _broadcast_graph_sync()
+    if current != previous:
+        publish_action(f"Renamed {node_id}")
+        _journal(
+            "node.renamed",
+            node_id=node_id,
+            data={"from": previous, "to": current},
+            summary=f"renamed {previous} ({node_id}) to {current}",
+        )
+    return {"id": node_id, "label": current}
+
+
 @app.put("/api/graph/layout")
 async def update_graph_layout(body: dict[str, Any]) -> dict:
     """Persist a complete or partial Canvas layout in one atomic mutation."""
@@ -6338,6 +6385,8 @@ def _stage_graph_nodes(
                 status_code=400,
                 detail=f"invalid node '{reference}': {exc}",
             ) from exc
+        if label := _custom_node_label(raw.get("label"), definition_id):
+            candidate.nodes[new_id]["label"] = label
         id_map[reference] = new_id
     return id_map
 
@@ -6617,7 +6666,7 @@ def _cli_node_to_rf(n: dict[str, Any], position: dict[str, float], all_defs: dic
         params = _normalize_image_input_params(params)
 
     data: dict[str, Any] = {
-        "label": defn.get("displayName", definition_id),
+        "label": n.get("label") or defn.get("displayName", definition_id),
         "definitionId": definition_id,
         "params": params,
         "state": node_state,
@@ -6740,7 +6789,7 @@ def _stage_project_snapshot(snapshot: Any, *, historical: dict[str, str] | None 
         if node_registry.get(definition_id) is not None:
             staged = _stage_graph_nodes(isolated, [{
                 "id": node_id, "definitionId": definition_id, "params": params,
-                "outputs": outputs, "position": position,
+                "outputs": outputs, "position": position, "label": data.get("label"),
             }], reference_key="id", include_outputs=True, normalize_image_inputs=False)
             staged_node = isolated.nodes[staged[node_id]]
             known.add(node_id)
@@ -6748,6 +6797,8 @@ def _stage_project_snapshot(snapshot: Any, *, historical: dict[str, str] | None 
             if any(not isinstance(port, dict) or not isinstance(port.get("type"), str) for port in outputs.values()):
                 raise HTTPException(status_code=400, detail="Historical outputs must be typed port objects")
             staged_node = {"id": node_id, "definitionId": definition_id, "params": copy.deepcopy(params), "outputs": copy.deepcopy(outputs), "position": copy.deepcopy(position)}
+            if isinstance(data.get("label"), str) and data["label"].strip():
+                staged_node["label"] = " ".join(data["label"].split())[:MAX_NODE_LABEL_LENGTH]
         else:
             raise HTTPException(status_code=400, detail=f"Unknown node definition '{definition_id}'")
         staged_node["id"] = node_id

@@ -119,6 +119,7 @@ your own edits; `--as NAME` sets your name for that filtering.
 | `node.added` / `node.removed` | create, cluster, connect-and-create / delete | definition, name |
 | `node.params` | a param changed (only keys whose value changed) | `keys`, redacted `values` |
 | `node.moved` | a drag ended, auto-layout or paste moved nodes 8 px or more | `nodeIds`, `count` |
+| `node.renamed` | a node got a new name on the canvas (or went back to its model name) | `from`, `to` |
 | `edge.added` / `edge.removed` | wired / unwired | source, target and handles |
 | `selection.changed` | the selected set changed | `nodeIds`, `count` |
 | `run.started` / `run.finished` / `run.failed` / `run.cancelled` | per node, attributed to whoever started the run | `runId`, `error` |

@@ -1,6 +1,7 @@
 import { memo, useCallback, useMemo, useState } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
-import { Download, Repeat2, Sparkles, Plus } from 'lucide-react';
+import { Download, Repeat2, Sparkles, Plus, SlidersHorizontal } from 'lucide-react';
+import { createPortal } from 'react-dom';
 import type { NodeData } from '../../types';
 import type { PaperSourceRecord } from '../../lib/paperSource';
 import { NODE_DEFINITIONS } from '../../constants/nodeDefinitions';
@@ -21,9 +22,12 @@ import { RepresentationViewer } from './RepresentationViewer';
 import { NodeError } from './NodeError';
 import { VideoEditAction } from './VideoEditAction';
 import { NodeTypeIcon } from './NodeTypeIcon';
+import { useSelectionActionSlot } from '../../lib/selectionActionSlot';
 import { BeforeAfterSlider } from './BeforeAfterSlider';
 import { downloadWorldAsset } from '../../lib/worldDownload';
 import '../../styles/nodes.css';
+import { NodeLabel } from './NodeLabel';
+import { NodeRunStatus } from './NodeRunStatus';
 
 // Trigger a browser download for a URL produced by the backend. We fetch the
 // blob ourselves so the `download` attribute is honoured even across localhost
@@ -53,6 +57,7 @@ function filenameFor(nodeLabel: string, nodeId: string, url: string, fallbackExt
 function ModelNodeComponent({ id, data, selected }: NodeProps) {
   const nodeData = data as unknown as NodeData;
   const batchPreview = useBatchPreview(id, nodeData);
+  const actionSlot = useSelectionActionSlot(id);
   const previewOutputs = batchPreview.outputs;
   const previewComplete = nodeData.state === 'complete' || batchPreview.browsing;
   const definition = NODE_DEFINITIONS[nodeData.definitionId];
@@ -271,6 +276,48 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
     return source?.state === 'current' && Boolean(source.snapshot);
   });
 
+  const nextStepTitle = !/^n\d+$/.test(id) ? 'Wait for this result to sync with the backend'
+    : nextStepSource ? 'Prepare a connected next step using this result' : 'Show the current completed result to add a next step';
+  const renderNodeActions = (variant: 'pill' | 'toolbar') => {
+    const inToolbar = variant === 'toolbar';
+    return (
+      <>
+        <VideoEditAction id={id} data={nodeData} displayedOutputs={previewOutputs}
+          className={inToolbar ? 'selection-toolbar__button' : 'model-node__next-step'} />
+        {hasMediaPreview && <button type="button"
+          className={inToolbar ? 'selection-toolbar__button nodrag' : 'model-node__next-step nodrag'}
+          data-next-step-anchor={id}
+          disabled={!nextStepSource || isExecuting || !/^n\d+$/.test(id)}
+          title={nextStepTitle}
+          onMouseDown={(event) => event.stopPropagation()}
+          onClick={(event) => {
+            event.stopPropagation();
+            if (!nextStepSource) return;
+            const bounds = event.currentTarget.getBoundingClientRect();
+            useUIStore.getState().showConnectionPopup({
+              position: { x: bounds.left, y: bounds.bottom + 8 },
+              nodeId: id, handleId: nextStepSource.handleId, handleType: 'source',
+              nextStep: { sourceValue: nextStepSource.value, sourceLabel: nodeData.label, sourceDefinitionId: nodeData.definitionId },
+            });
+          }}><Plus size={inToolbar ? 17 : 12} aria-hidden="true" /><span>{inToolbar ? 'Next step' : 'Add next step'}</span></button>}
+        <button
+          type="button"
+          className={inToolbar ? 'selection-toolbar__button nodrag' : 'model-node__settings-edit nodrag'}
+          aria-haspopup="dialog"
+          aria-expanded={inspectorVisible && selectedNodeId === id}
+          aria-label="Show node settings"
+          onClick={handleInspectorButtonClick}
+          onMouseDown={(e) => e.stopPropagation()}
+          title="Show node settings"
+        >
+          {inToolbar
+            ? <><SlidersHorizontal size={17} aria-hidden="true" /><span className="selection-toolbar__label--compact">Settings</span></>
+            : '…'}
+        </button>
+      </>
+    );
+  };
+
   return (
     <div
       className={`model-node ${stateClass}${isImageSurface ? ' model-node--image-surface' : ''}${isWorldSurface ? ' model-node--world-surface' : ''}${shouldRenderSpatial ? ' model-node--spatial-surface' : ''}${isTextSurface ? ' model-node--text-surface' : ''}${isInlineTextNode ? ' model-node--inline-text' : ''}${isTextInput ? ' model-node--text-input' : ''}${isImageInput ? ' model-node--image-input' : ''}${isStickyNote ? ' model-node--sticky-note' : ''} ${isNodeSelected ? 'model-node--selected' : ''}${entranceClass}`}
@@ -278,52 +325,27 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
       style={{ ['--node-category-color' as string]: categoryColor }}
     >
       {/* Settings bar — floats above the card when selected; renders model
-       * name + an "Edit" affordance that opens the node panel settings. */}
-      {isNodeSelected && (
+       * name + an "Edit" affordance that opens the node panel settings. When
+       * this is the only selected node, the same actions move into the
+       * selection toolbar instead, so there is one bar, not two. */}
+      {isNodeSelected && !actionSlot && (
         <div className="model-node__settings-bar">
           <span className="model-node__settings-model">{definition.displayName}</span>
-          <VideoEditAction id={id} data={nodeData} displayedOutputs={previewOutputs} />
-          {hasMediaPreview && <button type="button"
-            className="model-node__next-step nodrag"
-            data-next-step-anchor={id}
-            disabled={!nextStepSource || isExecuting || !/^n\d+$/.test(id)}
-            title={!/^n\d+$/.test(id) ? 'Wait for this result to sync with the backend' : nextStepSource ? 'Prepare a connected next step using this result' : 'Show the current completed result to add a next step'}
-            onMouseDown={(event) => event.stopPropagation()}
-            onClick={(event) => {
-              event.stopPropagation();
-              if (!nextStepSource) return;
-              const bounds = event.currentTarget.getBoundingClientRect();
-              useUIStore.getState().showConnectionPopup({
-                position: { x: bounds.left, y: bounds.bottom + 8 },
-                nodeId: id, handleId: nextStepSource.handleId, handleType: 'source',
-                nextStep: { sourceValue: nextStepSource.value, sourceLabel: nodeData.label, sourceDefinitionId: nodeData.definitionId },
-              });
-            }}><Plus size={12} aria-hidden="true" />Add next step</button>}
-          <button
-            type="button"
-            className="model-node__settings-edit nodrag"
-            data-node-inspector-anchor={id}
-            aria-haspopup="dialog"
-            aria-expanded={inspectorVisible && selectedNodeId === id}
-            onClick={handleInspectorButtonClick}
-            onMouseDown={(e) => e.stopPropagation()}
-            title="Show node settings"
-          >
-            …
-          </button>
+          {renderNodeActions('pill')}
         </div>
       )}
+      {actionSlot && createPortal(renderNodeActions('toolbar'), actionSlot)}
 
       {/* Card — the visible content surface. Default + Hermes skins style
        * .model-node directly (this wrapper inherits transparency); Slava
        * Restraint skin moves the dark-glass surface here so the type label
        * and settings bar can float above the card cleanly. */}
-      <div className="model-node__card">
+      <div className="model-node__card" data-node-inspector-anchor={id}>
       <div className="model-node__header">
         {isSlavaSkin
           ? <NodeTypeIcon definition={definition} />
           : <span className="model-node__category-dot" style={{ backgroundColor: categoryColor }} />}
-        <span className="model-node__label">{nodeData.label}</span>
+        <NodeLabel nodeId={id} label={nodeData.label} displayName={definition.displayName} />
         {batchPreview.label && <span className="batch-carousel__active-label" title={batchPreview.lineage}>[{batchPreview.label}]</span>}
         {nodeData.keyStatus === 'missing' && <span className="model-node__badge model-node__badge--warning"
           title={usesKreaAccount(definition, nodeData.params) ? 'Krea sign-in required' : 'API Key Missing'}>&#x26A0;</span>}
@@ -404,14 +426,14 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
       )}
 
       {definition.inputPorts.length > 0 && (
-        <div className="model-node__ports model-node__ports--input">
-          {definition.inputPorts.map((port) => {
+        <div className="model-node__ports model-node__ports--input" style={{ ['--port-count' as string]: definition.inputPorts.length }}>
+          {definition.inputPorts.map((port, portIndex) => {
             // Semantic reference role badge (see referenceRoles.ts). Role is
             // advisory metadata — ports without a role render exactly as
             // before: no badge, no extra DOM.
             const roleDef = port.role ? getReferenceRole(port.role) : undefined;
             return (
-              <div key={port.id} className="model-node__port-row">
+              <div key={port.id} className="model-node__port-row" style={{ ['--port-index' as string]: portIndex }}>
                 <Handle type="target" position={Position.Left} id={port.id} className="model-node__handle" style={{ backgroundColor: PORT_COLORS[port.dataType] }} />
                 <span className="model-node__port-label">
                   {port.label}{port.multiple ? ' +' : ''}
@@ -503,23 +525,7 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
         </div>
       )}
 
-      {(nodeData.state === 'queued' || nodeData.state === 'executing') && (
-        <div className="model-node__loading">
-          <div className="model-node__loading-spinner" />
-          <span className="model-node__loading-text">
-            {nodeData.state === 'queued'
-              ? 'Queued...'
-              : nodeData.progress !== undefined
-                ? `${Math.round(nodeData.progress * 100)}%`
-                : 'Starting...'}
-          </span>
-          {nodeData.state === 'executing' && nodeData.progress !== undefined && (
-            <div className="model-node__progress">
-              <div className="model-node__progress-bar" style={{ width: `${Math.round(nodeData.progress * 100)}%` }} />
-            </div>
-          )}
-        </div>
-      )}
+      <NodeRunStatus data={nodeData} definition={definition} />
 
       {showCompare && compareBefore && compareAfter && (
         <div className="model-node__preview">
@@ -746,9 +752,9 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
       <BatchCarousel preview={batchPreview} />
 
       {definition.outputPorts.length > 0 && (
-        <div className="model-node__ports model-node__ports--output">
-          {definition.outputPorts.map((port) => (
-            <div key={port.id} className="model-node__port-row model-node__port-row--output">
+        <div className="model-node__ports model-node__ports--output" style={{ ['--port-count' as string]: definition.outputPorts.length }}>
+          {definition.outputPorts.map((port, portIndex) => (
+            <div key={port.id} className="model-node__port-row model-node__port-row--output" style={{ ['--port-index' as string]: portIndex }}>
               <span className="model-node__port-label">{port.label}</span>
               <Handle type="source" position={Position.Right} id={port.id} className="model-node__handle" style={{ backgroundColor: PORT_COLORS[port.dataType] }} />
             </div>

@@ -377,6 +377,7 @@ function createSnapshot(nodes: Node<NodeData>[], edges: Edge[]): UndoSnapshot {
         batchRunId: undefined,
         error: undefined,
         progress: undefined,
+        runStartedAt: undefined,
         streamingText: undefined,
         streamingPartials: undefined,
       },
@@ -636,6 +637,8 @@ interface GraphState {
   onEdgesChange: (changes: EdgeChange[]) => void;
   onConnect: (connection: Connection, options?: { skipUndo?: boolean }) => void;
   updateNodeData: (nodeId: string, data: Partial<NodeData>) => void;
+  /** Give a node a custom name. Blank, or the model's own name, restores the default. */
+  renameNode: (nodeId: string, label: string) => void;
   applyPaperSource: (nodeId: string, source: PaperSourceRecord) => void;
   updateRemotionManifest: (nodeId: string, patch: Partial<VideoGraphManifest>) => void;
   addTrackItemWithCanvasMirror: (
@@ -787,6 +790,7 @@ interface GraphState {
 // nodes use UUIDs. This regex lets graphSync distinguish them so we can preserve
 // frontend-only work when cli_graph changes.
 const CLI_ID_RE = /^n\d+$/;
+const MAX_NODE_LABEL_LENGTH = 80;
 const DYNAMIC_NODE_IDS = [
   'openrouter-universal',
   'nous-portal-universal',
@@ -3210,6 +3214,31 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     }
   },
 
+  renameNode: (nodeId, label) => {
+    const node = get().nodes.find((candidate) => candidate.id === nodeId);
+    if (!node) return;
+    const displayName = NODE_DEFINITIONS[node.data.definitionId]?.displayName ?? node.data.label;
+    // Same rules as the backend: collapse whitespace, cap at 80 characters.
+    const next = label.replace(/\s+/g, ' ').trim().slice(0, MAX_NODE_LABEL_LENGTH).trim() || displayName;
+    if (next === node.data.label) return;
+    const previous = node.data.label;
+    get().updateNodeData(nodeId, { label: next });
+    // Local-only nodes keep the name in the frontend graph; backend nodes
+    // store it so graphSync, project restore and agents all see it.
+    if (!CLI_ID_RE.test(nodeId)) return;
+    graphMutationFetch(`/api/graph/node/${nodeId}/label`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ label: next }),
+    }).then((response) => {
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    }).catch((err) => {
+      console.warn(`[nebula] Rename of ${nodeId} failed:`, err);
+      const current = get().nodes.find((candidate) => candidate.id === nodeId);
+      if (current?.data.label === next) get().updateNodeData(nodeId, { label: previous });
+    });
+  },
+
   updateRemotionManifest: (nodeId, patch) => {
     const state = get();
     const node = state.nodes.find((n) => n.id === nodeId);
@@ -5156,7 +5185,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       case 'executing': {
         const runId = event.runId ?? currentRunId ?? undefined;
         const live = get().nodes.find((node) => node.id === event.nodeId);
-        get().updateNodeData(event.nodeId, { state: 'executing', progress: 0, streamingText: undefined,
+        get().updateNodeData(event.nodeId, { state: 'executing', progress: 0, runStartedAt: Date.now(), streamingText: undefined,
           streamingPartials: undefined, streamingSvg: undefined,
           ...(live?.data.batchRunId !== runId ? clearBatchPreview(runId) : {}),
         });

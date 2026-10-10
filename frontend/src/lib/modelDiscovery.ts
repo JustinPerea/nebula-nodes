@@ -49,6 +49,24 @@ export function supportedModelProviders(definition: ModelNodeDefinition): APIPro
   return [...providers];
 }
 
+/** The provider a run actually goes through, for "OpenAI · 6s" on a running
+ * node. Mirrors the backend: a dual-route node uses its own API when that key
+ * is set and falls back to the other configured route (FAL) otherwise. Local
+ * tools have no provider. */
+export function runRouteProvider(
+  definition: ModelNodeDefinition,
+  apiKeys: Readonly<Record<string, string>>,
+): APIProvider | null {
+  if (definition.apiProvider === 'utility') return null;
+  const keys = (Array.isArray(definition.envKeyName) ? definition.envKeyName : [definition.envKeyName]).filter(Boolean);
+  if (keys.length < 2) return definition.apiProvider;
+  const configured = (key: string) => Boolean(apiKeys[key]);
+  const direct = definition.directKeyName;
+  const routeKey = direct && configured(direct) ? direct : keys.find((key) => key !== direct && configured(key));
+  const provider = routeKey && Object.hasOwn(CREDENTIAL_PROVIDER_IDS, routeKey) ? CREDENTIAL_PROVIDER_IDS[routeKey] : undefined;
+  return provider ?? definition.apiProvider;
+}
+
 export function matchesModelProvider(definition: ModelNodeDefinition, provider: string): boolean {
   return !provider || supportedModelProviders(definition).includes(provider as APIProvider);
 }

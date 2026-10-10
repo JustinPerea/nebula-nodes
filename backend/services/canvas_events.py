@@ -54,6 +54,7 @@ EVENT_KINDS = frozenset({
     "node.removed",
     "node.params",
     "node.moved",
+    "node.renamed",
     "edge.added",
     "edge.removed",
     "selection.changed",

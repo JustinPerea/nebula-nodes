@@ -183,12 +183,13 @@ def wait_for_canvas_change(
     """Wait until the person (or another agent) changes the Nebula canvas, then say what changed.
 
     Returns `events`, each with `kind` (node.added, node.params, node.moved,
-    edge.added, selection.changed, run.finished, canvas.replaced, ...), the
-    `actor` who did it (`person`, an `agent`, or `anonymous`), `nodeId`,
-    `data` and a one-line `summary`. Your own edits are skipped unless
-    `include_self`; that only covers your `nebula` CLI calls too when
-    NEBULA_AGENT_NAME is set, because without it the CLI sends no name and
-    its edits arrive as `anonymous` (the result then carries a `note`).
+    node.renamed, edge.added, selection.changed, run.finished,
+    canvas.replaced, ...), the `actor` who did it (`person`, an `agent`,
+    or `anonymous`), `nodeId`, `data` and a one-line `summary`. Your own
+    edits are skipped unless `include_self`; that only covers your
+    `nebula` CLI calls too when NEBULA_AGENT_NAME is set, because without
+    it the CLI sends no name and its edits arrive as `anonymous` (the
+    result then carries a `note`).
     Pass the returned `cursor` back as `since` next time so
     nothing is missed; `look_at_canvas` also returns `events.cursor`.
     `kinds` filters by group or exact kind, e.g. ["node", "run.failed"].

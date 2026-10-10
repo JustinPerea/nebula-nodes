@@ -357,6 +357,10 @@ The composer is one visual input well, not a text area next to a separate button
 - Image nodes may become surface-first: media owns the space, toolbar appears on hover/selection.
 - Text nodes are also surface-first: textarea/text preview fills the card, and secondary text actions such as Enhance move into header actions.
 - Text-input and image-surface handles carry no permanent labels; do not spend card height on footer labels. The port name appears as a small chip outside the node, on the handle's side, while the handle is hovered or a wire is dragged from or onto it.
+- With exactly one node selected, its actions (Next step, Edit video, Settings) live in the selection toolbar, not in a pill above the card. One bar, not two. With several selected, only the shared selection actions show.
+- Titles rename in place (double-click or F2): the title becomes a field of the same type size with a faint accent ring, so the header doesn't shift. The model's own name stays in the tooltip.
+- A running node shows who it's waiting on and for how long ("OpenAI · 6s"), adding a percentage and bar only once the provider reports progress. Never a bare "0%".
+- Several input handles on a text or image surface fan out around the vertical middle, `--sr-node-surface-port-gap` apart, instead of stacking.
 - Sticky Note uses the same Slava text-surface editor on canvas, backed by its `content` param; its Inspector remains the detailed editor for color and secondary params.
 
 ### Handle

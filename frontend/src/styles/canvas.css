@@ -91,6 +91,11 @@ body.app-slava-restraint .react-flow__minimap {
   pointer-events: none;
 }
 
+/* A node's own actions portal in here; they lay out as toolbar buttons. */
+.selection-toolbar__node-actions {
+  display: contents;
+}
+
 .selection-toolbar {
   display: flex;
   align-items: center;
@@ -138,6 +143,7 @@ body.app-slava-restraint .react-flow__minimap {
   background: transparent;
   color: inherit;
   font: 500 12px/1 var(--sr-ui, Inter, sans-serif);
+  white-space: nowrap;
   cursor: pointer;
   transition: background 120ms ease, color 120ms ease, opacity 120ms ease;
 }

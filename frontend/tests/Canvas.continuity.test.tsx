@@ -252,4 +252,31 @@ describe('Canvas workspace continuity', () => {
     expect(flow.fitView).not.toHaveBeenCalled();
     expect(flow.zoomIn).not.toHaveBeenCalled();
   });
+
+  it('keeps canvas shortcuts working after a click on the bottom bar, but not in other panels', () => {
+    render(<Canvas />);
+    const bar = document.createElement('div');
+    bar.className = 'toolbar';
+    const run = document.createElement('button');
+    bar.appendChild(run);
+    const chat = document.createElement('aside');
+    const transcript = document.createElement('p');
+    chat.appendChild(transcript);
+    document.body.append(bar, chat);
+    const undo = vi.spyOn(useGraphStore.getState(), 'undo');
+    const selectAll = vi.spyOn(useGraphStore.getState(), 'selectAll');
+    fireEvent.keyDown(run, { key: 'z', metaKey: true });
+    fireEvent.keyDown(transcript, { key: 'a', metaKey: true });
+    expect(undo).toHaveBeenCalledTimes(1);
+    expect(selectAll).not.toHaveBeenCalled();
+    bar.remove();
+    chat.remove();
+  });
+
+  it('ignores canvas shortcuts while another workspace is showing', () => {
+    useUIStore.setState({ viewMode: 'create' });
+    render(<Canvas />);
+    fireEvent.keyDown(document.body, { key: '!', code: 'Digit1', shiftKey: true });
+    expect(flow.fitView).not.toHaveBeenCalled();
+  });
 });

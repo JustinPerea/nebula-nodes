@@ -1,5 +1,47 @@
 # Implementation Notes
 
+## 2026-10-10 — Eight more UX fixes: one bar, shortcuts, renaming, live run status
+
+Justin approved eight from a second UX pass. Seven are done; #5 (cost estimate) is blocked on a pricing source (see below). Not committed yet.
+
+1. **One bar for one node.**
+   - With one node selected, the per-node pill ("Add next step / …") no longer floats above it. Its actions (Next step, Edit video, Settings) render inside the selection toolbar.
+   - They're portaled, not moved: "Add next step" reads node-local batch-preview state (`displayedOutputs`), so the node keeps the logic. `src/lib/selectionActionSlot.ts` is a tiny store: the toolbar registers a `<span data-node-id>` slot, and the node with that id portals into it.
+   - The slot is keyed by node id so a new selection gets a fresh slot. With several nodes selected there is no slot and nodes render nothing extra.
+   - `data-node-inspector-anchor` moved to the card, since the pill that used to carry it is gone in this mode.
+2. **The Nodes panel doesn't jump.** The top clamp that kept the home menu beside the + now applies to the browse view too, so picking a type grows the panel downward from the same top.
+3. **Shortcuts work wherever the canvas owns focus.**
+   - The canvas key handler moved from the wrapper's `onKeyDown` to `document`, scoped by `isCanvasShortcutTarget` (`src/lib/canvasShortcutScope.ts`): the body, the canvas, the bottom bar, the rail and the header count; inputs, editables, dialogs and side panels don't.
+   - Ctrl+S/O were removed from the canvas handler; `GraphFileActions` already owns them globally.
+   - Copy defers to the browser when there's a text selection.
+4. **Image inputs fan out.** Several input handles on a text or image surface used to stack at 50%. Each row gets `--port-index` / `--port-count` and sits `--sr-node-surface-port-gap` (28px) apart around the middle.
+5. **Cost estimate: blocked, not built.** There's no price data we can trust. Node definitions carry none, and the only prices in the app are OpenRouter/Nous per-token rates and Quiver credits. Most nodes (OpenAI images, fal, Runway, Kling…) have none, and real cost depends on params (quality, size, duration). Inventing a table would show wrong numbers with confidence. Options are in the report to Justin; the "N paid" chip stays as it is.
+6. **`?` opens a shortcut sheet.**
+   - `src/lib/keyboardShortcuts.ts` is the one list (also used for tooltips via `displayKey`, so ⌘ vs Ctrl is right per platform).
+   - `KeyboardShortcuts.tsx` is a modal: Esc or `?` closes, focus returns where it was. It's also in ⌘K as "Keyboard shortcuts".
+   - ⌘K's old "Creator Studio" command is retitled "Open Creator Studio" so the two read differently.
+7. **Rename in place.**
+   - Node titles: double-click, or F2 with one node selected. Enter or clicking away saves, Esc cancels. Blank or the model's own name goes back to the default. The model name stays in the tooltip once renamed.
+   - Names live in the backend graph (`CLIGraph.set_label`, `PUT /api/graph/node/{id}/label`), because graphSync overwrites `data.label` from the backend export. A frontend-only rename would revert on the next sync. They're carried through project snapshots and graph-file import too.
+   - Rules match on both sides: collapse whitespace, cap at 80 characters (`MAX_NODE_LABEL_LENGTH`).
+   - The route sits outside the paid-mutation fence like layout, since names don't affect execution. It journals `node.renamed` (`from`, `to`) for `nebula watch`; renaming to the same name journals nothing.
+   - The frontend renames optimistically and rolls back if the PUT fails and nobody renamed it again meanwhile. Local-only nodes (non-`n#` ids) stay frontend-only.
+   - Renames aren't undoable yet: undo snapshots only cover params and structure. That's a reasonable follow-up.
+   - Project name: double-click it in the header (or Enter/F2 on it) for the same inline field; it calls the existing `projectStore.rename`.
+8. **The node says what it's waiting on.**
+   - Running nodes show "OpenAI · 6s", then "· 42%" once the provider reports progress, and "Queued" while waiting. Before, they showed "0%" from the moment they started, because the store sets `progress: 0` on start.
+   - `runRouteProvider` mirrors the backend's dual-route rule (Ideogram, Meshy, Veo): the model's own key wins when set, else the FAL route. Local tools show no provider.
+   - The store stamps `runStartedAt` when a node starts executing; a node that mounts mid-run counts from mount. Undo snapshots clear it with the other run state.
+
+Verification:
+- Backend: `tests/test_node_rename.py` (store/broadcast/clear, journal, 404/400, length cap, import) and the full suite, 4134 passed.
+- Frontend: new tests for shortcut scope, the shortcut sheet, `renameNode`, `NodeLabel`, project rename and `NodeRunStatus`. The full suite passes (2052), as do tsc and lint.
+- Live at 1280×820:
+  - The one-node toolbar carries Next step and Settings with no pill.
+  - ⇧1 and ⌘− work with focus on the bottom bar.
+  - A rename stored `label` on the backend and survived a reload and a project switch; F2 and project-name editing work. The test name was cleared afterward.
+  - Faked run states (store only, no provider call) showed "OpenAI · 17s" ticking and "Queued".
+
 ## 2026-10-10 — Ten UX fixes: run scope, node chrome, quieter chrome
 
 Justin approved all ten from a UX pass. Not committed yet.

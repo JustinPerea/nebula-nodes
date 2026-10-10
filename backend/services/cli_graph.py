@@ -107,6 +107,16 @@ class CLIGraph:
         self.nodes[node_id]["params"].update(params)
         self._maybe_persist()
 
+    def set_label(self, node_id: str, label: str | None) -> None:
+        """Give a node a custom name, or clear it (None) to show the model's name."""
+        if node_id not in self.nodes:
+            raise ValueError(f"Node '{node_id}' not found")
+        if label is None:
+            self.nodes[node_id].pop("label", None)
+        else:
+            self.nodes[node_id]["label"] = label
+        self._maybe_persist()
+
     def update_positions(self, positions: dict[str, dict[str, float]]) -> None:
         """Atomically replace stored positions for existing nodes.
 

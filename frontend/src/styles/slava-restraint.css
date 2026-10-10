@@ -155,6 +155,8 @@ body.app-slava-restraint {
   --sr-control-h-md: 34px;
   --sr-control-h-lg: 42px;
   --sr-control-pad-x: 10px;
+  --sr-node-label-input-pad: 4px;
+  --sr-node-label-input-radius: 4px;
   --sr-control-pad-y: 7px;
 
   --sr-surface-control: rgba(0, 0, 0, 0.30);
@@ -193,6 +195,7 @@ body.app-slava-restraint {
   --sr-node-header-gradient: linear-gradient(to bottom, rgba(0, 0, 0, 0.45) 0%, rgba(0, 0, 0, 0) 100%);
   --sr-node-port-padding: 6px 0 10px;
   --sr-node-port-row-padding: 3px 14px;
+  --sr-node-surface-port-gap: 28px;
   --sr-node-preview-bg: rgba(0, 0, 0, 0.55);
   --sr-node-preview-overlap: -32px;
   --sr-node-media-radius: 14px;
@@ -3323,6 +3326,21 @@ body.app-slava-restraint .model-node__label {
   letter-spacing: -0.005em;
 }
 
+/* Renaming: the title becomes a field in place, same type, so the header
+ * doesn't shift. */
+body.app-slava-restraint .model-node__label-input {
+  margin-left: calc(-1 * var(--sr-node-label-input-pad));
+  padding: 0 var(--sr-node-label-input-pad);
+  border-radius: var(--sr-node-label-input-radius);
+  color: var(--sr-ink-bold);
+  background: var(--sr-surface-control-focus);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--sr-accent) 55%, transparent);
+}
+
+body.app-slava-restraint .model-node__label-input::placeholder {
+  color: var(--sr-ink-meta);
+}
+
 body.app-slava-restraint .model-node__badge--warning {
   color: var(--sr-warning);
 }
@@ -3833,7 +3851,9 @@ body.app-slava-restraint .model-node--text-input .model-node__ports {
 
 body.app-slava-restraint .model-node--text-input .model-node__port-row {
   position: absolute;
-  top: 50%;
+  /* Several ports on one side fan out 28px apart around the middle instead
+   * of stacking on one spot. */
+  top: calc(50% + (var(--port-index, 0) - (var(--port-count, 1) - 1) / 2) * var(--sr-node-surface-port-gap));
   width: 0;
   height: 0;
   padding: 0;
@@ -4036,7 +4056,9 @@ body.app-slava-restraint .model-node--image-surface .model-node__ports {
 
 body.app-slava-restraint .model-node--image-surface .model-node__port-row {
   position: absolute;
-  top: 50%;
+  /* Several ports on one side fan out 28px apart around the middle instead
+   * of stacking on one spot. */
+  top: calc(50% + (var(--port-index, 0) - (var(--port-count, 1) - 1) / 2) * var(--sr-node-surface-port-gap));
   width: 0;
   height: 0;
   padding: 0;

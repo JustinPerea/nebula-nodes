@@ -129,7 +129,7 @@ describe('workspace-independent graph file actions', () => {
     expect(useUIStore.getState().viewMode).toBe(viewMode);
     const [url, request] = mocks.apiFetch.mock.calls[0];
     expect(url).toBe('/api/graph/import');
-    expect(JSON.parse(request.body)).toEqual({ nodes: [{ id: 'saved-source', definitionId: 'nano-banana',
+    expect(JSON.parse(request.body)).toEqual({ nodes: [{ id: 'saved-source', definitionId: 'nano-banana', label: 'saved-source',
       params: { seed: 7 }, outputs: node('saved-source').data.outputs, position: { x: 15, y: 25 } }], edges: [] });
     await act(async () => { resolveImport(new Response(JSON.stringify({ nodes: [node('n8')], edges: [] }), { status: 200 })); });
     await waitFor(() => expect(useUIStore.getState().viewMode).toBe('canvas'));

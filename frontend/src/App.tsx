@@ -15,6 +15,7 @@ import { ChatPanel } from './components/panels/ChatPanel';
 import { AgentLog } from './components/panels/AgentLog';
 import { CommandPalette } from './components/CommandPalette';
 import { OnboardingOverlay } from './components/onboarding/OnboardingOverlay';
+import { KeyboardShortcuts } from './components/KeyboardShortcuts';
 import { BackendConnectionStatus } from './components/BackendConnectionStatus';
 import { ProviderRecoveryStatus } from './components/ProviderRecoveryStatus';
 import { startWorkingBadge } from './lib/jobNotifications';
@@ -283,6 +284,7 @@ export default function App() {
       {isCanvas && <AgentLog />}
       {!isHome && !isBrandShowcase && !isCommons && <CommandPalette />}
       {isCanvas && <OnboardingOverlay />}
+      {isCanvas && <KeyboardShortcuts />}
     </ReactFlowProvider>
   );
 }

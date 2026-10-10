@@ -50,7 +50,7 @@ export function GraphFileActions() {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           nodes: result.nodes.map((node) => ({
-            id: node.id, definitionId: node.data.definitionId,
+            id: node.id, definitionId: node.data.definitionId, label: node.data.label,
             params: node.data.params ?? {}, outputs: node.data.outputs ?? {},
             position: { x: node.position.x, y: node.position.y },
           })),

@@ -47,6 +47,8 @@ import { CHARACTER_DRAG_MIME, MOODBOARD_DRAG_MIME } from '../lib/dragMime';
 import { apiFetch } from '../lib/backend';
 import { CANVAS_INTERACTION_PROPS } from '../lib/canvasNavigation';
 import { CANVAS_FIT_DURATION, CANVAS_ZOOM_DURATION, computeCanvasFitPadding } from '../lib/canvasFit';
+import { isCanvasShortcutTarget } from '../lib/canvasShortcutScope';
+import { NODE_RENAME_EVENT } from '../lib/keyboardShortcuts';
 import { publishCanvasSelection, selectedNodeIds } from '../lib/canvasSelection';
 import '../styles/canvas.css';
 
@@ -600,16 +602,20 @@ export function Canvas() {
     [showContextMenu, screenToFlowPosition]
   );
 
-  // Keyboard shortcuts: Ctrl+Enter, Ctrl+S, Ctrl+O, Ctrl+A, Ctrl+D, Ctrl+Z, Ctrl+Shift+Z, Ctrl+C, Ctrl+V,
-  // and zoom: Ctrl/⌘ = and −, Shift+1 to fit, Shift+0 for 100%.
+  // Keyboard shortcuts: Ctrl+Enter, Ctrl+A, Ctrl+D, Ctrl+Z, Ctrl+Shift+Z, Ctrl+C, Ctrl+V,
+  // and zoom: Ctrl/⌘ = and −, Shift+1 to fit, Shift+0 for 100%. Ctrl+S and
+  // Ctrl+O belong to GraphFileActions, which listens app-wide.
+  // On the document, not the wrapper, so they still work after a click on the
+  // bottom bar, rail or header; isCanvasShortcutTarget keeps them out of text
+  // fields, dialogs and other panels.
   const onKeyDown = useCallback(
-    (event: React.KeyboardEvent) => {
+    (event: KeyboardEvent) => {
+      if (event.defaultPrevented || !isCanvasShortcutTarget(event.target)) return;
+      const ui = useUIStore.getState();
+      if (ui.viewMode !== 'canvas' && !(ui.viewMode === 'commons' && !ui.commonsEnabled)) return;
       const isCtrlOrCmd = event.ctrlKey || event.metaKey;
-
-      // Don't capture shortcuts when user is typing in an input/textarea/select
-      const target = event.target as HTMLElement;
-      const tag = target.tagName;
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target.isContentEditable) return;
+      // Shift turns letters uppercase on some platforms (Ctrl+Shift+Z → 'Z').
+      const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
 
       // Ctrl/⌘ = and Ctrl/⌘ − zoom the canvas instead of the page.
       if (isCtrlOrCmd && !event.altKey && (event.key === '=' || event.key === '+' || event.key === '-' || event.key === '_')) {
@@ -635,58 +641,53 @@ export function Canvas() {
         return;
       }
 
-      // Ctrl+S — Save graph
-      if (isCtrlOrCmd && event.key === 's') {
-        event.preventDefault();
-        // The persistent GraphFileActions controller handles this request.
-        window.dispatchEvent(new CustomEvent('nebula:save'));
-        return;
-      }
-
-      // Ctrl+O — Load graph
-      if (isCtrlOrCmd && event.key === 'o') {
-        event.preventDefault();
-        window.dispatchEvent(new CustomEvent('nebula:load'));
+      // F2 — Rename the one selected node (double-clicking its title does too)
+      if (event.key === 'F2' && !isCtrlOrCmd) {
+        const selected = useGraphStore.getState().nodes.filter((node) => node.selected);
+        if (selected.length === 1) {
+          event.preventDefault();
+          window.dispatchEvent(new CustomEvent(NODE_RENAME_EVENT, { detail: { nodeId: selected[0].id } }));
+        }
         return;
       }
 
       // Ctrl+A — Select all nodes
-      if (isCtrlOrCmd && event.key === 'a') {
+      if (isCtrlOrCmd && key === 'a') {
         event.preventDefault();
         useGraphStore.getState().selectAll();
         return;
       }
 
       // Ctrl+D — Duplicate selected nodes
-      if (isCtrlOrCmd && event.key === 'd') {
+      if (isCtrlOrCmd && key === 'd') {
         event.preventDefault();
         useGraphStore.getState().duplicateSelected();
         return;
       }
 
       // Ctrl+Z — Undo (must check before Ctrl+Shift+Z to avoid conflict)
-      if (isCtrlOrCmd && !event.shiftKey && event.key === 'z') {
+      if (isCtrlOrCmd && !event.shiftKey && key === 'z') {
         event.preventDefault();
         useGraphStore.getState().undo();
         return;
       }
 
       // Ctrl+Shift+Z — Redo
-      if (isCtrlOrCmd && event.shiftKey && event.key === 'z') {
+      if (isCtrlOrCmd && event.shiftKey && key === 'z') {
         event.preventDefault();
         useGraphStore.getState().redo();
         return;
       }
 
-      // Ctrl+C — Copy selected nodes
-      if (isCtrlOrCmd && event.key === 'c') {
+      // Ctrl+C — Copy selected nodes, unless text is selected (copy that instead)
+      if (isCtrlOrCmd && key === 'c' && !window.getSelection()?.toString()) {
         event.preventDefault();
         useGraphStore.getState().copySelected();
         return;
       }
 
       // Ctrl+V — Paste
-      if (isCtrlOrCmd && event.key === 'v') {
+      if (isCtrlOrCmd && key === 'v') {
         event.preventDefault();
         useGraphStore.getState().pasteClipboard();
         return;
@@ -695,12 +696,16 @@ export function Canvas() {
     [executeGraph, fitView, isExecuting, zoomIn, zoomOut, zoomTo]
   );
 
+  useEffect(() => {
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [onKeyDown]);
+
   return (
     <div
       ref={wrapperRef}
       className={`canvas-wrapper${isSlavaSkin ? ' canvas-wrapper--slava' : ''}${isSlavaSkin && nodes.length === 0 ? ' canvas-wrapper--slava-empty' : ''}`}
       data-dock-open={leftDock !== null}
-      onKeyDown={onKeyDown}
       tabIndex={0}
       onDrop={onDrop}
       onDragOver={onDragOver}

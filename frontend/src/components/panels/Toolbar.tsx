@@ -23,6 +23,7 @@ import { canLoadGraph, canSaveGraph, requestGraphLoad, requestGraphSave } from '
 import { fetchCLIGraph } from '../../lib/api';
 import { apiFetch } from '../../lib/backend';
 import { CANVAS_FIT_DURATION, CANVAS_ZOOM_DURATION, computeCanvasFitPadding } from '../../lib/canvasFit';
+import { displayKey } from '../../lib/keyboardShortcuts';
 import { describeRunScope, summarizeRunScope } from '../../lib/runScope';
 import type { NodeData } from '../../types';
 import type { Edge, Node } from '@xyflow/react';
@@ -238,7 +239,7 @@ export function Toolbar() {
           onClick={() => executeGraph()}
           disabled={nodeCount === 0 || isImportingGraph}
           aria-describedby={nodeCount > 0 ? runScopeId : undefined}
-          title={isImportingGraph ? 'Wait for the graph import to finish' : `Run graph. ${describeRunScope(runScope)} (Ctrl+Enter)`}
+          title={isImportingGraph ? 'Wait for the graph import to finish' : `Run graph. ${describeRunScope(runScope)} (${displayKey('Mod')}${displayKey('Enter')})`}
         >
           <ToolbarIcon name="run" />
           <span className="toolbar__label">Run</span>
@@ -307,23 +308,23 @@ export function Toolbar() {
       <div className="toolbar__divider toolbar__divider--zoom" aria-hidden="true" />
       <div className="toolbar__zoom" role="group" aria-label="Zoom">
         <button type="button" className="toolbar__button toolbar__button--icon toolbar__zoom-step"
-          aria-label="Zoom out" title="Zoom out (⌘−)" aria-keyshortcuts="Meta+- Control+-" disabled={zoom <= minZoom + 0.001}
+          aria-label="Zoom out" title={`Zoom out (${displayKey('Mod')}−)`} aria-keyshortcuts="Meta+- Control+-" disabled={zoom <= minZoom + 0.001}
           onClick={() => void zoomOut({ duration: CANVAS_ZOOM_DURATION })}>
           <Minus className="toolbar__icon" size={14} strokeWidth={1.6} aria-hidden="true" />
         </button>
         <button type="button" className="toolbar__button toolbar__zoom-level"
-          aria-label={`Zoom ${zoomPercent}%, reset to 100%`} title="Reset zoom to 100% (⇧0)"
+          aria-label={`Zoom ${zoomPercent}%, reset to 100%`} title={`Reset zoom to 100% (${displayKey('Shift')}0)`}
           aria-keyshortcuts="Shift+0"
           onClick={() => void zoomTo(1, { duration: CANVAS_ZOOM_DURATION })}>
           {zoomPercent}%
         </button>
         <button type="button" className="toolbar__button toolbar__button--icon toolbar__zoom-step"
-          aria-label="Zoom in" title="Zoom in (⌘=)" aria-keyshortcuts="Meta+= Control+=" disabled={zoom >= maxZoom - 0.001}
+          aria-label="Zoom in" title={`Zoom in (${displayKey('Mod')}=)`} aria-keyshortcuts="Meta+= Control+=" disabled={zoom >= maxZoom - 0.001}
           onClick={() => void zoomIn({ duration: CANVAS_ZOOM_DURATION })}>
           <Plus className="toolbar__icon" size={14} strokeWidth={1.6} aria-hidden="true" />
         </button>
         <button type="button" className="toolbar__button toolbar__button--icon"
-          aria-label="Fit view" title="Fit view (⇧1)" aria-keyshortcuts="Shift+1"
+          aria-label="Fit view" title={`Fit view (${displayKey('Shift')}1)`} aria-keyshortcuts="Shift+1"
           onClick={() => void fitView({ padding: computeCanvasFitPadding(), duration: CANVAS_FIT_DURATION })}>
           <Maximize className="toolbar__icon" size={14} strokeWidth={1.6} aria-hidden="true" />
         </button>

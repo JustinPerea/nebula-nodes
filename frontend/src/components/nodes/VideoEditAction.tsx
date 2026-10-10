@@ -18,10 +18,12 @@ function videoSource(data: NodeData, displayedOutputs: NodeData['outputs']) {
 }
 
 /** Editing belongs to the video result, rather than the global workspace tabs. */
-export function VideoEditAction({ id, data, displayedOutputs }: {
+export function VideoEditAction({ id, data, displayedOutputs, className = 'model-node__next-step' }: {
   id: string;
   data: NodeData;
   displayedOutputs: NodeData['outputs'];
+  /** The floating node pill or the selection toolbar's button style. */
+  className?: string;
 }) {
   const isImportingGraph = useGraphStore((state) => state.isImportingGraph);
   const viewMode = useUIStore((state) => state.viewMode);
@@ -32,7 +34,7 @@ export function VideoEditAction({ id, data, displayedOutputs }: {
 
   return (
     <button type="button"
-      className="model-node__next-step model-node__video-edit nodrag nopan"
+      className={`${className} model-node__video-edit nodrag nopan`}
       disabled={isImportingGraph || !canvasActive}
       title={isImportingGraph ? 'Wait for the graph import to finish' : 'Edit this video result'}
       onPointerDown={(event) => event.stopPropagation()}

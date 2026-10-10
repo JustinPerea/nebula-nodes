@@ -1,0 +1,109 @@
+.keyboard-shortcuts {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgb(0 0 0 / 45%);
+  color: var(--sr-ink, #f0f0f0);
+  font-family: var(--sr-ui, sans-serif);
+}
+
+.keyboard-shortcuts__card {
+  width: min(640px, 100%);
+  max-height: calc(100dvh - 32px);
+  overflow: auto;
+  box-sizing: border-box;
+  padding: 16px 18px 18px;
+  border: 1px solid var(--sr-edge-strong, #555);
+  border-radius: var(--sr-radius-panel, 14px);
+  background: var(--sr-canvas-elevated, #202020);
+  box-shadow: var(--sr-shadow-panel, 0 12px 36px rgb(0 0 0 / 30%));
+  animation: keyboard-shortcuts-enter var(--workspace-dock-spring, 240ms ease) backwards;
+}
+
+@keyframes keyboard-shortcuts-enter {
+  from { opacity: 0; transform: translateY(6px) scale(0.98); }
+}
+
+.keyboard-shortcuts__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.keyboard-shortcuts__header h2 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.keyboard-shortcuts__close {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid transparent;
+  border-radius: var(--sr-radius-control, 8px);
+  background: transparent;
+  color: var(--sr-ink-light, #aaa);
+  cursor: pointer;
+}
+
+.keyboard-shortcuts__close:hover { background: var(--sr-surface-control-hover, rgb(255 255 255 / 5%)); color: var(--sr-ink, #fff); }
+
+.keyboard-shortcuts__close:focus-visible {
+  outline: var(--sr-focus-outline, 2px solid #9ab8ff);
+  outline-offset: var(--sr-focus-offset, 2px);
+}
+
+.keyboard-shortcuts__groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 18px 24px;
+}
+
+.keyboard-shortcuts__group h3 {
+  margin: 0 0 8px;
+  color: var(--sr-ink-meta, #888);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.keyboard-shortcuts__group dl { margin: 0; }
+
+.keyboard-shortcuts__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 5px 0;
+  font-size: 12px;
+}
+
+.keyboard-shortcuts__row dt { color: var(--sr-ink-light, #bbb); }
+
+.keyboard-shortcuts__row dd {
+  display: flex;
+  gap: 3px;
+  margin: 0;
+}
+
+.keyboard-shortcuts__row kbd {
+  min-width: 20px;
+  padding: 2px 5px;
+  border: 1px solid var(--sr-edge-strong, #555);
+  border-radius: 5px;
+  background: var(--sr-surface-control, rgb(0 0 0 / 30%));
+  color: var(--sr-ink, #fff);
+  font: 500 11px/1.3 var(--sr-mono, ui-monospace, monospace);
+  text-align: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .keyboard-shortcuts__card { animation: none; }
+}

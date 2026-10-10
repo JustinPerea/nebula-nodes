@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Home } from 'lucide-react';
 import { useProjectStore } from '../../store/projectStore';
 import { useGraphStore } from '../../store/graphStore';
@@ -10,7 +11,13 @@ export function ProjectWorkspaceControls() {
   const busy = useProjectStore((state) => state.busy);
   const error = useProjectStore((state) => state.error);
   const nodeCount = useGraphStore((state) => state.nodes.length);
+  const [draft, setDraft] = useState<string | null>(null);
   if (!project || screen !== 'workspace') return null;
+  const finishRename = (save: boolean) => {
+    const name = draft?.trim() ?? '';
+    if (save && name && name !== project.name) void useProjectStore.getState().rename(project.id, name);
+    setDraft(null);
+  };
   const label = status === 'saving' ? 'Saving…' : status === 'error' ? 'Save failed' : status === 'unsaved' ? 'Unsaved changes' : 'Saved';
   return (
     <div className="project-workspace-controls">
@@ -18,7 +25,20 @@ export function ProjectWorkspaceControls() {
         title="Projects" disabled={busy} onClick={() => void useProjectStore.getState().goHome()}>
         <Home size={16} aria-hidden="true" />
       </button>
-      <span className="project-workspace-controls__name" title={project.name}>{project.name}</span>
+      {draft !== null
+        ? <input className="project-workspace-controls__name project-workspace-controls__name-input" aria-label="Project name"
+            autoFocus maxLength={120} value={draft} onFocus={(event) => event.target.select()}
+            onChange={(event) => setDraft(event.target.value)} onBlur={() => finishRename(true)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') { event.preventDefault(); finishRename(true); }
+              else if (event.key === 'Escape') { event.preventDefault(); finishRename(false); }
+            }} />
+        : <button type="button" className="project-workspace-controls__name" title={`${project.name} · double-click to rename`}
+            aria-label={`Rename project ${project.name}`} disabled={busy}
+            onDoubleClick={() => setDraft(project.name)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === 'F2') { event.preventDefault(); setDraft(project.name); }
+            }}>{project.name}</button>}
       {status === 'error'
         ? <button type="button" className="project-workspace-controls__retry" title={error ?? 'Retry saving'}
             onClick={() => void useProjectStore.getState().retry()}>Save failed · Retry</button>

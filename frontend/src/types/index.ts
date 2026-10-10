@@ -384,6 +384,8 @@ export interface NodeData {
   params: Record<string, unknown>;
   state: NodeState;
   progress?: number;
+  /** UI-only: when this node's current run started (ms since epoch). */
+  runStartedAt?: number;
   outputs: Record<string, PortValue>;
   /** UI-only cumulative previews; excluded from recipe and graph-file data. */
   batchOutputs?: Array<Record<string, PortValue>>;

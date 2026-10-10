@@ -14,6 +14,7 @@ import { useUIStore } from '../store/uiStore';
 import { useCanvasPinsStore } from '../store/canvasPinsStore';
 import { isBackendNodeId } from '../lib/canvasPins';
 import { describeRunScope, summarizeRunScope } from '../lib/runScope';
+import { setSelectionActionSlot } from '../lib/selectionActionSlot';
 import {
   collectDownloadableOutputs,
   downloadSelectedOutputs,
@@ -131,6 +132,11 @@ export function SelectionToolbar() {
         )}
       </button>
       <span id={runScopeId} className="toolbar__sr-only">{describeRunScope(runScope)}</span>
+      {/* One node selected: it portals its own actions (Next step, Edit video,
+          Settings) here. Keyed by node so a new selection gets a fresh slot. */}
+      {ids.length === 1 && (
+        <span key={ids[0]} ref={setSelectionActionSlot} className="selection-toolbar__node-actions" data-node-id={ids[0]} />
+      )}
       <button type="button" className="selection-toolbar__button" onClick={copySelected} title="Copy selected nodes">
         <Copy size={17} aria-hidden="true" />
         <span className="selection-toolbar__label--compact">Copy</span>

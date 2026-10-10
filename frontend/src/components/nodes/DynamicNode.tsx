@@ -1,6 +1,7 @@
 import { memo, useCallback, useState } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
-import { Repeat2 } from 'lucide-react';
+import { Repeat2, SlidersHorizontal } from 'lucide-react';
+import { createPortal } from 'react-dom';
 import type { NodeData, DynamicNodeData, PortDataType } from '../../types';
 import { NODE_DEFINITIONS } from '../../constants/nodeDefinitions';
 import { PORT_COLORS } from '../../lib/portCompatibility';
@@ -15,7 +16,10 @@ import { RepresentationViewer } from './RepresentationViewer';
 import { NodeError } from './NodeError';
 import { VideoEditAction } from './VideoEditAction';
 import { NodeTypeIcon } from './NodeTypeIcon';
+import { useSelectionActionSlot } from '../../lib/selectionActionSlot';
 import '../../styles/nodes.css';
+import { NodeLabel } from './NodeLabel';
+import { NodeRunStatus } from './NodeRunStatus';
 
 function isDynamicData(data: NodeData): data is DynamicNodeData {
   return 'isDynamic' in data && (data as DynamicNodeData).isDynamic === true;
@@ -31,6 +35,7 @@ function DynamicNodeComponent({ id, data, selected }: NodeProps) {
   const inspectorVisible = useUIStore((s) => s.panels.inspector.visible);
   const setInspectorVisible = useUIStore((s) => s.setInspectorVisible);
   const isSlavaSkin = useUIStore((s) => s.skin === 'slava-restraint');
+  const actionSlot = useSelectionActionSlot(id);
   const entranceClass = useSlavaNodeEntranceClass();
   const [videoLoop, setVideoLoop] = useState<boolean>(true);
 
@@ -88,41 +93,55 @@ function DynamicNodeComponent({ id, data, selected }: NodeProps) {
     [id, inspectorVisible, selectNode, selectedNodeId, setInspectorVisible],
   );
 
+  const renderNodeActions = (variant: 'pill' | 'toolbar') => {
+    const inToolbar = variant === 'toolbar';
+    return (
+      <>
+        <VideoEditAction id={id} data={nodeData} displayedOutputs={previewOutputs}
+          className={inToolbar ? 'selection-toolbar__button' : 'model-node__next-step'} />
+        <button
+          type="button"
+          className={inToolbar ? 'selection-toolbar__button nodrag' : 'model-node__settings-edit nodrag'}
+          aria-haspopup="dialog"
+          aria-expanded={inspectorVisible && selectedNodeId === id}
+          aria-label="Show node settings"
+          onClick={handleInspectorButtonClick}
+          onMouseDown={(e) => e.stopPropagation()}
+          title="Show node settings"
+        >
+          {inToolbar
+            ? <><SlidersHorizontal size={17} aria-hidden="true" /><span className="selection-toolbar__label--compact">Settings</span></>
+            : '…'}
+        </button>
+      </>
+    );
+  };
+
   return (
     <div
       className={`model-node ${stateClass}${isImageSurface ? ' model-node--image-surface' : ''}${isWorldSurface ? ' model-node--world-surface' : ''}${shouldRenderSpatial ? ' model-node--spatial-surface' : ''}${isTextSurface ? ' model-node--text-surface' : ''} ${isNodeSelected ? 'model-node--selected' : ''}${entranceClass}`}
       onClick={() => selectNode(id)}
       style={{ ['--node-category-color' as string]: categoryColor }}
     >
-      {/* Settings bar — floats above the card when selected. */}
-      {isNodeSelected && (
+      {/* Settings bar — floats above the card when selected, or moves into
+       * the selection toolbar when this is the only selected node. */}
+      {isNodeSelected && !actionSlot && (
         <div className="model-node__settings-bar">
           <span className="model-node__settings-model">
             {definition?.displayName ?? nodeData.label}
           </span>
-          <VideoEditAction id={id} data={nodeData} displayedOutputs={previewOutputs} />
-          <button
-            type="button"
-            className="model-node__settings-edit nodrag"
-            data-node-inspector-anchor={id}
-            aria-haspopup="dialog"
-            aria-expanded={inspectorVisible && selectedNodeId === id}
-            onClick={handleInspectorButtonClick}
-            onMouseDown={(e) => e.stopPropagation()}
-            title="Show node settings"
-          >
-            …
-          </button>
+          {renderNodeActions('pill')}
         </div>
       )}
+      {actionSlot && createPortal(renderNodeActions('toolbar'), actionSlot)}
 
       {/* Card — visible content surface, only target of skin background/border. */}
-      <div className="model-node__card">
+      <div className="model-node__card" data-node-inspector-anchor={id}>
       <div className="model-node__header">
         {isSlavaSkin
           ? <NodeTypeIcon definition={definition} />
           : <span className="model-node__category-dot" style={{ backgroundColor: categoryColor }} />}
-        <span className="model-node__label">{nodeData.label}</span>
+        <NodeLabel nodeId={id} label={nodeData.label} displayName={definition?.displayName} />
         {batchPreview.label && <span className="batch-carousel__active-label" title={batchPreview.lineage}>[{batchPreview.label}]</span>}
         {nodeData.keyStatus === 'missing' && <span className="model-node__badge model-node__badge--warning" title="API Key Missing">&#x26A0;</span>}
       </div>
@@ -135,9 +154,9 @@ function DynamicNodeComponent({ id, data, selected }: NodeProps) {
       )}
 
       {inputPorts.length > 0 && (
-        <div className="model-node__ports model-node__ports--input">
-          {inputPorts.map((port) => (
-            <div key={port.id} className="model-node__port-row">
+        <div className="model-node__ports model-node__ports--input" style={{ ['--port-count' as string]: inputPorts.length }}>
+          {inputPorts.map((port, portIndex) => (
+            <div key={port.id} className="model-node__port-row" style={{ ['--port-index' as string]: portIndex }}>
               <Handle
                 type="target"
                 position={Position.Left}
@@ -153,23 +172,7 @@ function DynamicNodeComponent({ id, data, selected }: NodeProps) {
         </div>
       )}
 
-      {(nodeData.state === 'queued' || nodeData.state === 'executing') && (
-        <div className="model-node__loading">
-          <div className="model-node__loading-spinner" />
-          <span className="model-node__loading-text">
-            {nodeData.state === 'queued'
-              ? 'Queued...'
-              : nodeData.progress !== undefined
-                ? `${Math.round(nodeData.progress * 100)}%`
-                : 'Starting...'}
-          </span>
-          {nodeData.state === 'executing' && nodeData.progress !== undefined && (
-            <div className="model-node__progress">
-              <div className="model-node__progress-bar" style={{ width: `${Math.round(nodeData.progress * 100)}%` }} />
-            </div>
-          )}
-        </div>
-      )}
+      <NodeRunStatus data={nodeData} definition={definition} />
 
       {previewComplete && worldOutput && (
         <div className="model-node__preview model-node__preview--world">
@@ -258,9 +261,9 @@ function DynamicNodeComponent({ id, data, selected }: NodeProps) {
       <BatchCarousel preview={batchPreview} />
 
       {outputPorts.length > 0 && (
-        <div className="model-node__ports model-node__ports--output">
-          {outputPorts.map((port) => (
-            <div key={port.id} className="model-node__port-row model-node__port-row--output">
+        <div className="model-node__ports model-node__ports--output" style={{ ['--port-count' as string]: outputPorts.length }}>
+          {outputPorts.map((port, portIndex) => (
+            <div key={port.id} className="model-node__port-row model-node__port-row--output" style={{ ['--port-index' as string]: portIndex }}>
               <span className="model-node__port-label">{port.label}</span>
               <Handle
                 type="source"
