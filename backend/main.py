@@ -6374,6 +6374,14 @@ async def output_meta(rel: str):
 # Dynamic catch-all replaces the old StaticFiles mount so the serve root can
 # change without restarting. Also falls back to DEFAULT_OUTPUT_ROOT so outputs
 # created before a relocation remain accessible. MUST be last — it is a catch-all.
+# Outputs that a browser would run as a document. Provider SVGs (Quiver, fal,
+# Replicate, Krea Files) can carry script, and this origin is Nebula's API, so
+# they are served sandboxed: no script, no requests, inline styles and data
+# images only. <img> rendering is unaffected.
+_ACTIVE_OUTPUT_SUFFIXES = {".svg", ".svgz", ".html", ".htm", ".xhtml", ".xml"}
+_ACTIVE_OUTPUT_CSP = "default-src 'none'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; sandbox"
+
+
 @app.get("/api/outputs/{rel:path}")
 async def serve_output(rel: str):
     roots = [OUTPUT_ROOT] + ([DEFAULT_OUTPUT_ROOT] if DEFAULT_OUTPUT_ROOT != OUTPUT_ROOT else [])
@@ -6384,7 +6392,10 @@ async def serve_output(rel: str):
         except (ValueError, OSError):
             continue
         if candidate.is_file():
-            return FileResponse(candidate)
+            headers = {"X-Content-Type-Options": "nosniff"}
+            if candidate.suffix.lower() in _ACTIVE_OUTPUT_SUFFIXES:
+                headers["Content-Security-Policy"] = _ACTIVE_OUTPUT_CSP
+            return FileResponse(candidate, headers=headers)
     raise HTTPException(status_code=404, detail="output not found")
 
 # Seed starter presets on first boot. seed_presets_if_empty() is defined above

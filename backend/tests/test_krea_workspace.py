@@ -21,7 +21,9 @@ from PIL import Image
 from handlers import krea as legacy
 from handlers import krea_workspace as workspace
 from models.graph import GraphNode, PortValueDict
-from services import krea_account, output
+import ipaddress
+
+from services import krea_account, output, public_url
 
 TOOLS = Path(__file__).with_name("fixtures") / "krea_mcp_tools.json"
 UPLOAD = "https://api.krea.ai/assets/presigned?sig=fixture"
@@ -90,6 +92,11 @@ def session(monkeypatch, tmp_path):
     async def no_wait(_seconds, *args, **kwargs):
         await real_sleep(0)
 
+    async def resolve(hostname, _port):
+        # Every fixture media host is public except the one standing in for a private network.
+        return {ipaddress.ip_address("10.0.0.7" if hostname == "internal.example.test" else "93.184.216.34")}
+
+    monkeypatch.setattr(public_url, "resolve_host", resolve)
     active.cancelled = []
     monkeypatch.setattr(krea_connector, "get_connector", Connector)
     monkeypatch.setattr(krea_connector, "connection_revision", lambda: "fixture-workspace")
@@ -408,6 +415,18 @@ async def test_agent_sends_waits_through_timeouts_and_saves_deliverables(session
 
 
 @pytest.mark.asyncio
+async def test_agent_deliverables_on_private_hosts_are_never_fetched(session):
+    session.answers["send_agent_message"] = {"sessionId": SESSION}
+    session.answers["wait_for_agent_session"] = {"finished": True, "deliverables": [
+        {"name": "x", "url": "https://internal.example.test/admin", "contentType": "image/png"}]}
+    with respx.mock(assert_all_called=False) as router:
+        internal = router.route(host="internal.example.test").respond(200, content=png())
+        with pytest.raises(RuntimeError, match="will not fetch"):
+            await workspace.handle_krea_agent(node("krea-agent", prompt="Make an image"), {}, {})
+        assert not internal.called
+
+
+@pytest.mark.asyncio
 async def test_agent_reports_a_turn_that_outlives_the_wait(session):
     session.answers["send_agent_message"] = {"sessionId": SESSION, "url": "https://www.krea.ai/agent/x"}
     session.answers["wait_for_agent_session"] = {"timedOut": True, "finished": False}
@@ -459,6 +478,17 @@ async def test_desktop_refusals_never_touch_the_project(session, params, match):
     with pytest.raises(ValueError, match=match):
         await workspace.handle_krea_desktop(node("krea-desktop", action="call-tool", **params), {}, {})
     assert "call_desktop_tool" not in session.names()
+
+
+@pytest.mark.asyncio
+async def test_desktop_frames_are_saved_only_as_known_image_types(session):
+    session.answers["get_desktop_tools"] = DESKTOP_TOOLS
+    session.answers["call_desktop_tool"] = CallToolResult(content=[ImageContent(
+        type="image", data=base64.b64encode(b"<script>alert(1)</script>").decode(), mimeType="text/html")])
+    result = await workspace.handle_krea_desktop(
+        node("krea-desktop", action="call-tool", app_id=APP, tool="import_krea_job", input={"jobId": JOB}), {}, {})
+    assert result["image"]["value"] is None
+    assert not list(session.root.glob("krea-desktop-*"))
 
 
 @pytest.mark.asyncio

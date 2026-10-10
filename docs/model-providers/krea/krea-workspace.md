@@ -47,6 +47,13 @@ then open yourself. Links are kept only when they point at krea.ai (plans) or
 Stripe checkout (trial). Card details are entered on Krea's or Stripe's page,
 never in Nebula, and Nebula never completes a purchase.
 
+## Fetching results
+
+Media Krea points to (job results, Files, Agent deliverables) is downloaded
+only from public https hosts, with every redirect re-checked, no credentials
+sent and a 1 GB cap. SVGs and other document-like outputs are served with a
+sandboxing content-security policy, so a script inside one cannot run.
+
 ## Agent access
 
 Nebula's agents may call only read-only Krea discovery tools (see

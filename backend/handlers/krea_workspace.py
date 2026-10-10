@@ -30,7 +30,8 @@ from handlers.krea_gateway import _JOB_ID, _asset_data, _http_url
 from models.events import ExecutionEvent
 from models.graph import GraphNode, PortValueDict
 from services.cancellation import schedule_detached_cancel
-from services.output import _MEDIA_EXTENSIONS, get_run_dir, materialize_media_value, portable_output_ref
+from services.output import _MEDIA_EXTENSIONS, get_run_dir, portable_output_ref, write_media_bytes
+from services.public_url import fetch_public_media
 
 Emit = Callable[[ExecutionEvent], Awaitable[None]] | None
 _ID = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
@@ -39,6 +40,9 @@ _PRIMARY = {"Image": "image", "Video": "video", "Audio": "audio", "Mesh": "mesh"
 _MIME_MAJOR = {"image": "Image", "video": "Video", "audio": "Audio", "model": "Mesh"}
 DIRECT_UPLOAD_LIMIT = 20_000_000
 MAX_SAVE_BYTES = 2_000_000_000
+MAX_MEDIA_BYTES = 1_000_000_000
+# Image types a desktop app may return as a frame, with fixed extensions.
+_FRAME_EXTENSIONS = {"image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp", "image/gif": ".gif"}
 
 
 # ---------------------------------------------------------------------------
@@ -106,14 +110,18 @@ def job_urls(job: dict[str, Any]) -> list[tuple[str, str]]:
 
 
 async def save_media(items: list[tuple[str, str, str | None]]) -> list[dict[str, Any]]:
-    """Copy (key, url, mime) media into the run directory as typed records."""
+    """Copy (key, url, mime) media into the run directory as typed records.
+
+    URLs come from Krea answers that other people or the Krea Agent can shape,
+    so they are fetched only from public https hosts, redirects included."""
     run_dir = get_run_dir()
     saved = []
     for key, url, mime in items:
         kind = media_type_for(url, mime)
         if kind is None:
             continue
-        path = await materialize_media_value(url, kind, run_dir)
+        payload, content_type = await fetch_public_media(url, label="Krea", max_bytes=MAX_MEDIA_BYTES)
+        path = await write_media_bytes(payload, content_type, kind, run_dir, url)
         saved.append({"key": key, "type": kind, "value": portable_output_ref(str(path), require_file=True),
                       "path": str(path)})
     return saved
@@ -680,8 +688,8 @@ async def handle_krea_desktop(node: GraphNode, inputs: dict[str, PortValueDict],
         raise RuntimeError(f"{tool_name} failed in the desktop app; inspect the project before retrying")
     frame = None
     for block in raw.content:
-        if getattr(block, "type", None) == "image" and frame is None:
-            suffix = mimetypes.guess_extension(block.mimeType or "image/png") or ".png"
+        suffix = _FRAME_EXTENSIONS.get(str(getattr(block, "mimeType", "")).split(";", 1)[0].strip().lower())
+        if getattr(block, "type", None) == "image" and frame is None and suffix:
             path = get_run_dir() / f"krea-desktop-{uuid4().hex[:8]}{suffix}"
             path.write_bytes(base64.b64decode(block.data))
             frame = str(path)
