@@ -11,6 +11,7 @@ import { fetchOpenRouterModels, fetchNousModels, fetchQuiverModels, getSettings,
 import { apiFetch, backendAssetUrlSync } from '../../lib/backend';
 import { useDelayedUnmount } from '../../hooks/useDelayedUnmount';
 import { MaskPainterModal } from './MaskPainterModal';
+import { configuredDirectKey } from '../../lib/directRoute';
 import '../../styles/panels.css';
 import '../../styles/mask-painter.css';
 
@@ -221,9 +222,8 @@ export function Inspector({ embedded = false }: InspectorProps) {
   const resolvedParams: ParamDefinition[] = useMemo(() => {
     if (!definition) return [];
     if (definition.sharedParams) {
-      const useDirectRoute = definition.directKeyName
-        && settingsCache.loaded
-        && Boolean(settingsCache.apiKeys[definition.directKeyName]);
+      const useDirectRoute = settingsCache.loaded
+        && Boolean(configuredDirectKey(definition, settingsCache.apiKeys));
       const routeParams = useDirectRoute
         ? (definition.directParams ?? [])
         : (definition.falParams ?? []);

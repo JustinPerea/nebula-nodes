@@ -37,13 +37,14 @@ Golden request/response bytes for cross-platform parity. **Web pytest is the ora
 | `handlers/google/gemini-embeddings-request.json` | `test_google_request_body_matches_fixture` |
 | `handlers/google/gemini-omni-flash-submit-request.json` | `test_google_request_body_matches_fixture` |
 | `handlers/google/gemini-tts-generate-request.json` | `test_google_request_body_matches_fixture` |
-| `handlers/google/imagen-4-generate-request.json` | `test_google_request_body_matches_fixture` |
 | `handlers/google/lyria-3-generate-request.json` | `test_google_request_body_matches_fixture` |
 | `handlers/google/nano-banana-generate-request.json` | `test_google_request_body_matches_fixture`, `test_nano_banana_aspect_ratio_uses_image_config` |
 | `handlers/google/nano-banana-edit-request.json` | `test_google_request_body_matches_fixture` |
+| `handlers/google/nano-banana-2-1-generate-request.json` | `test_google_request_body_matches_fixture` |
 | `handlers/google/style-reference-auto-request.json` | `test_google_request_body_matches_fixture` |
 | `handlers/google/veo-3-text-to-video-request.json` | `test_google_request_body_matches_fixture` |
 | `handlers/google/veo-3-fal-request.json` | `test_google_request_body_matches_fixture` |
+| `handlers/google/veo-3-vertex-request.json` | `test_google_request_body_matches_fixture` |
 
 **OpenAI parity suite:** `backend/tests/test_openai_contract_fixtures.py` (JSON) + `backend/tests/test_openai_contract_sse_fixtures.py` (SSE).
 

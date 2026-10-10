@@ -21,7 +21,7 @@ export const CREATE_MODEL_EXCLUDED_IDS = new Set([
 
 /** Curated shortlist shown under "Featured". Unknown ids are silently dropped. */
 export const FEATURED_MODEL_IDS: string[] = [
-  'nano-banana', 'flux-1-1-ultra', 'imagen-4-generate', 'gpt-image-1-generate',
+  'nano-banana', 'flux-1-1-ultra', 'gpt-image-1-generate',
   'veo-3', 'kling-v2-1', 'sora-2', 'claude-chat', 'elevenlabs-tts', 'meshy-text-to-3d',
 ];
 

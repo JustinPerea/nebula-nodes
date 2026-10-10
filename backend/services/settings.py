@@ -155,6 +155,26 @@ class ProviderCheck:
     key_names: tuple[str, ...]
     url: str
     auth_headers: Callable[[str], dict[str, str]]
+    # Optional offline check for credentials that cannot be probed with a
+    # single authenticated GET. Returns an error detail (never echoing the
+    # secret) or None when the credential is well-formed.
+    local_validator: Callable[[str], str | None] | None = None
+
+
+def validate_google_service_account_json(raw: str) -> str | None:
+    """Offline shape check for a Google Cloud service-account JSON key.
+
+    A real check needs an OAuth token exchange, so health only confirms the
+    pasted value parses and carries the fields the Vertex handler needs.
+    Error details never include any part of the credential.
+    """
+    from services.google_vertex import VertexCredentialsError, parse_service_account
+
+    try:
+        parse_service_account(raw)
+    except VertexCredentialsError as exc:
+        return str(exc)
+    return None
 
 
 PROVIDER_CHECKS: dict[str, ProviderCheck] = {
@@ -241,6 +261,14 @@ PROVIDER_CHECKS: dict[str, ProviderCheck] = {
         "https://api.krea.ai/usage",
         lambda key: {"Authorization": f"Bearer {key}"},
     ),
+    # Veo 3.1 on Vertex AI. Validating for real needs a JWT -> OAuth token
+    # exchange, so health checks the service-account JSON offline only.
+    "Google Vertex": ProviderCheck(
+        ("GOOGLE_VERTEX_CREDENTIALS",),
+        "",
+        lambda key: {},
+        local_validator=validate_google_service_account_json,
+    ),
     "Higgsfield": ProviderCheck(
         ("HIGGSFIELD_API_KEY",),
         "",
@@ -309,6 +337,20 @@ def _resolve_check(name: str, check: ProviderCheck) -> _ResolvedCheck | None:
         key = get_api_key(list(check.key_names))
         if not key:
             return None
+        if check.local_validator is not None:
+            error = check.local_validator(key)
+            return _ResolvedCheck(
+                url="",
+                headers={},
+                preflight_status=(
+                    PROVIDER_STATUS_INVALID
+                    if error
+                    else PROVIDER_STATUS_CONFIGURED_UNVERIFIED
+                ),
+                preflight_configured=True,
+                preflight_detail=error
+                or "credential is well-formed; not verified with the provider",
+            )
         return _ResolvedCheck(url=check.url, headers=check.auth_headers(key))
 
     if name == "Nous":

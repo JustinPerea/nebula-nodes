@@ -68,6 +68,20 @@ def test_route_provider_prefers_the_direct_key_then_falls_back():
     assert model_pricing.route_provider(veo, {"GOOGLE_API_KEY": "set", "FAL_KEY": "set"}) == "google"
     assert model_pricing.route_provider(veo, {"FAL_KEY": "set"}) == "fal"
     assert model_pricing.route_provider(veo, {}) == veo["apiProvider"]
+    # Vertex is a direct route too and bills Google's listed amounts.
+    assert model_pricing.route_provider(veo, {"GOOGLE_VERTEX_CREDENTIALS": "{}", "FAL_KEY": "set"}) == "google"
+
+
+def test_real_table_prices_veo_by_model_and_resolution():
+    veo = NodeRegistry().get_all()["veo-3"]
+    entry = model_pricing.load_pricing()["nodes"]["veo-3"]
+    default = model_pricing.estimate_node(entry, veo, {}, "google")
+    assert default == {"currency": "usd", "low": 3.2, "high": 3.2}, "8 s at 720p on Veo 3.1"
+    fast_4k = model_pricing.estimate_node(
+        entry, veo, {"model": "veo-3.1-fast-generate-preview", "resolution": "4k", "duration": "4"}, "google",
+    )
+    assert fast_4k["low"] == pytest.approx(1.2)
+    assert model_pricing.estimate_node(entry, veo, {}, "fal") is None
 
 
 def test_run_multipliers_follow_the_nearest_batch_or_iterator():

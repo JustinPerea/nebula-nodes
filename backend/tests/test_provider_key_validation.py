@@ -49,6 +49,7 @@ PROVIDER_KEYS = {
     "QuiverAI": "QUIVER_API_KEY",
     "Krea": "KREA_API_TOKEN",
     "Krea usage": "KREA_USAGE_KEY",
+    "Google Vertex": "GOOGLE_VERTEX_CREDENTIALS",
     "Higgsfield": "HIGGSFIELD_API_KEY",
     "World Labs": "WORLDLABS_API_KEY",
     # Nous has no settings.json key — it resolves an OAuth credential from
@@ -56,6 +57,8 @@ PROVIDER_KEYS = {
 }
 
 ALL_PROVIDERS = list(PROVIDER_KEYS) + ["Nous"]
+# Providers health never probes over HTTP (presence-only or offline-validated).
+NO_HTTP_PROBE = {"Higgsfield", "Google Vertex"}
 
 ALLOWED_STATUSES = {
     "not_configured",
@@ -183,7 +186,7 @@ async def test_all_providers_not_configured_without_keys(monkeypatch):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "provider", [name for name in PROVIDER_KEYS if name not in {"Higgsfield", "World Labs"}]
+    "provider", [name for name in PROVIDER_KEYS if name not in NO_HTTP_PROBE | {"World Labs"}]
 )
 async def test_valid_key_reports_valid(monkeypatch, provider):
     _set_keys(monkeypatch, {PROVIDER_KEYS[provider]: "test-key"})
@@ -244,6 +247,39 @@ async def test_world_labs_credits_probe_classifies_credentials_and_availability(
             "headers": {"WLT-Api-Key": "world-labs-test-key"},
         }
     ]
+
+
+_VALID_SERVICE_ACCOUNT = (
+    '{"type": "service_account", "project_id": "demo-project",'
+    ' "private_key": "-----BEGIN PRIVATE KEY-----\\nSECRETBODY\\n-----END PRIVATE KEY-----\\n",'
+    ' "client_email": "veo@demo-project.iam.gserviceaccount.com"}'
+)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("raw", "expected_status", "detail_fragment"),
+    [
+        (_VALID_SERVICE_ACCOUNT, "configured_unverified", "well-formed"),
+        ("not json", "invalid", "not valid JSON"),
+        ('{"type": "authorized_user"}', "invalid", "service_account"),
+        ('{"type": "service_account", "project_id": "p"}', "invalid", "client_email, private_key"),
+    ],
+)
+async def test_google_vertex_validates_service_account_json_offline(
+    monkeypatch, raw, expected_status, detail_fragment
+):
+    _set_keys(monkeypatch, {"GOOGLE_VERTEX_CREDENTIALS": raw})
+    log = _install_client(monkeypatch, lambda url, headers: _FakeResponse(200))
+
+    result = await settings_service.validate_provider_keys()
+
+    vertex = result["Google Vertex"]
+    assert vertex["configured"] is True
+    assert vertex["status"] == expected_status
+    assert detail_fragment in vertex["detail"]
+    assert "SECRETBODY" not in vertex["detail"]
+    assert log == []
 
 
 @pytest.mark.asyncio
@@ -361,7 +397,7 @@ async def test_unchanged_nous_credential_reuses_health_cache(monkeypatch):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "provider", [name for name in PROVIDER_KEYS if name not in {"Higgsfield", "World Labs"}]
+    "provider", [name for name in PROVIDER_KEYS if name not in NO_HTTP_PROBE | {"World Labs"}]
 )
 async def test_rejected_key_reports_invalid(monkeypatch, provider):
     _set_keys(monkeypatch, {PROVIDER_KEYS[provider]: "bad-key"})
@@ -437,7 +473,7 @@ async def test_each_provider_uses_its_own_endpoint_and_auth(monkeypatch):
 
     # Higgsfield remains presence-only because it has no safe, non-billable
     # probe. World Labs uses its authenticated credit-balance read.
-    assert len(log) == len(ALL_PROVIDERS) - 1
+    assert len(log) == len(ALL_PROVIDERS) - len(NO_HTTP_PROBE)
     by_url = {req["url"]: req["headers"] for req in log}
 
     fal = by_url["https://api.fal.ai/v1/models?limit=1"]
@@ -509,7 +545,10 @@ def test_provider_checks_cover_every_catalog_credential():
         for check in settings_service.PROVIDER_CHECKS.values()
         for key in check.key_names
     }
-    assert health_keys == catalog_keys
+    # GOOGLE_VERTEX_CREDENTIALS is a Settings credential that may be read by
+    # a handler as an alternate route without being a node's envKeyName.
+    optional = {"GOOGLE_VERTEX_CREDENTIALS"}
+    assert health_keys - optional == catalog_keys - optional
 
 
 # ---------------------------------------------------------------------------

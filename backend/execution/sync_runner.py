@@ -508,12 +508,15 @@ def get_handler_registry(
             inputs: dict[str, PortValueDict],
             api_keys: dict[str, str],
         ) -> dict[str, Any]:
-            # Prefer direct Google API, fall back to FAL
-            if api_keys.get("GOOGLE_API_KEY"):
-                from handlers.veo import handle_veo
+            # Google first (Vertex, then the Gemini API), fal as the fallback.
+            from handlers.veo import fal_veo_route, handle_veo, with_vertex_hint
+            if api_keys.get("GOOGLE_VERTEX_CREDENTIALS") or api_keys.get("GOOGLE_API_KEY"):
                 return await handle_veo(node, inputs, api_keys, emit=emit)
-            routed_node = _fal_wrapper_node(node, "fal-ai/veo3", internal_params=("model",))
-            return await handle_fal_universal(routed_node, inputs, api_keys, emit=emit)
+            routed_node, routed_inputs = fal_veo_route(node, inputs)
+            try:
+                return await handle_fal_universal(routed_node, routed_inputs, api_keys, emit=emit)
+            except RuntimeError as exc:
+                raise RuntimeError(with_vertex_hint(str(exc))) from exc
 
         async def _gemini_omni_flash_handler(
             node: GraphNode,
@@ -958,6 +961,10 @@ def get_handler_registry(
             # strip them from inputs to prevent the universal handler from
             # double-mapping to image_url/end_image_url.
             from handlers.fal_universal import _to_fal_url
+            from handlers.veo import handle_veo_flf_vertex, with_vertex_hint
+
+            if api_keys.get("GOOGLE_VERTEX_CREDENTIALS"):
+                return await handle_veo_flf_vertex(node, inputs, api_keys, emit=emit)
 
             params = dict(node.params)
             params["endpoint_id"] = "fal-ai/veo3.1/first-last-frame-to-video"
@@ -977,7 +984,10 @@ def get_handler_registry(
             }
 
             routed_node = node.model_copy(update={"params": params})
-            return await handle_fal_universal(routed_node, modified_inputs, api_keys, emit=emit)
+            try:
+                return await handle_fal_universal(routed_node, modified_inputs, api_keys, emit=emit)
+            except RuntimeError as exc:
+                raise RuntimeError(with_vertex_hint(str(exc))) from exc
 
         async def _ltx_23_handler(
             node: GraphNode,

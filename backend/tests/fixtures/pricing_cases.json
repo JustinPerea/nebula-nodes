@@ -95,6 +95,43 @@
       "id": "edit",
       "apiProvider": "openai",
       "params": []
+    },
+    "shared": {
+      "id": "shared",
+      "apiProvider": "google",
+      "params": [],
+      "sharedParams": [
+        {
+          "key": "duration",
+          "default": "6"
+        },
+        {
+          "key": "resolution",
+          "default": "720p",
+          "options": [
+            {
+              "value": "720p"
+            },
+            {
+              "value": "1080p"
+            }
+          ]
+        }
+      ],
+      "directParams": [
+        {
+          "key": "model",
+          "default": "std",
+          "options": [
+            {
+              "value": "std"
+            },
+            {
+              "value": "fast"
+            }
+          ]
+        }
+      ]
     }
   },
   "pricing": {
@@ -241,6 +278,36 @@
           {
             "url": "https://example.com/pricing",
             "quote": "fixture"
+          }
+        ],
+        "checked": "2026-10-10"
+      },
+      "shared": {
+        "currency": "usd",
+        "per": "second",
+        "multiplyBy": [
+          "duration"
+        ],
+        "rows": [
+          {
+            "match": {
+              "model": "std",
+              "resolution": "720p"
+            },
+            "price": 0.4
+          },
+          {
+            "match": {
+              "model": "fast",
+              "resolution": "1080p"
+            },
+            "price": 0.12
+          }
+        ],
+        "sources": [
+          {
+            "url": "https://example.com/pricing",
+            "quote": "example"
           }
         ],
         "checked": "2026-10-10"
@@ -397,6 +464,30 @@
         "low": 0.05,
         "high": 0.05,
         "plus": "input images"
+      }
+    },
+    {
+      "name": "shared params supply defaults",
+      "nodeId": "shared",
+      "params": {},
+      "expected": {
+        "currency": "usd",
+        "low": 2.4,
+        "high": 2.4
+      }
+    },
+    {
+      "name": "shared and direct params pick the row",
+      "nodeId": "shared",
+      "params": {
+        "model": "fast",
+        "resolution": "1080p",
+        "duration": "8"
+      },
+      "expected": {
+        "currency": "usd",
+        "low": 0.96,
+        "high": 0.96
       }
     }
   ]

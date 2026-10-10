@@ -22,7 +22,6 @@ from handlers.google_gemini import (
     handle_gemini_chat,
     handle_gemini_embeddings,
     handle_gemini_tts,
-    handle_imagen4,
     handle_lyria3,
     handle_nano_banana,
 )
@@ -114,6 +113,28 @@ class _VeoMock:
         })
 
 
+
+class _VertexVeoMock:
+    """predictLongRunning submit, then a fetchPredictOperation poll with inline bytes."""
+
+    def __init__(self) -> None:
+        self.posts: list[dict[str, Any]] = []
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        return False
+
+    async def post(self, url, json=None, headers=None):
+        self.posts.append({"url": url, "json": json, "headers": headers})
+        if url.endswith(":fetchPredictOperation"):
+            return _MagicPostResponse({"done": True, "response": {"videos": [
+                {"bytesBase64Encoded": base64.b64encode(b"FAKEMP4").decode(), "mimeType": "video/mp4"},
+            ]}})
+        return _MagicPostResponse({"name": "projects/proj/locations/us-central1/operations/op1"})
+
+
 async def _capture_google_body(fixture_name: str) -> dict[str, Any]:
     """Run the handler scenario pinned to fixture_name and return the request JSON."""
     if fixture_name == "gemini-chat-generate-request.json":
@@ -134,16 +155,18 @@ async def _capture_google_body(fixture_name: str) -> dict[str, Any]:
             )
             return mock_client.stream.call_args.kwargs.get("json") or mock_client.stream.call_args[1].get("json")
 
-    if fixture_name == "imagen-4-generate-request.json":
-        payload = {"predictions": [{"bytesBase64Encoded": RED_PIXEL_B64, "mimeType": "image/png"}]}
+    if fixture_name == "nano-banana-2-1-generate-request.json":
+        payload = {"steps": [{"type": "model_output", "content": [
+            {"type": "image", "mime_type": "image/png", "data": RED_PIXEL_B64},
+        ]}]}
         with patch("handlers.google_gemini.httpx.AsyncClient") as MockClient:
             inst = _mock_http_client(payload)
             MockClient.return_value = inst
-            await handle_imagen4(
+            await handle_nano_banana(
                 GraphNode(
-                    id="fixture-imagen",
-                    definitionId="imagen-4-generate",
-                    params={"model": "imagen-4.0-generate-001", "aspectRatio": "1:1", "numberOfImages": 1},
+                    id="fixture-nano-21",
+                    definitionId="nano-banana",
+                    params={"model": "gemini-nano-banana-2.1", "aspect_ratio": "16:9", "imageSize": "2K"},
                 ),
                 {"prompt": PortValueDict(type="Text", value="a red pixel")},
                 {"GOOGLE_API_KEY": "test-key"},
@@ -272,6 +295,32 @@ async def _capture_google_body(fixture_name: str) -> dict[str, Any]:
             )
         return mock.posts[0]
 
+    if fixture_name == "veo-3-vertex-request.json":
+        mock = _VertexVeoMock()
+        run_dir = Path("/tmp/nebula-veo-vertex-fixture-run")
+        run_dir.mkdir(parents=True, exist_ok=True)
+        with patch("handlers.veo.httpx.AsyncClient", return_value=mock), patch(
+            "handlers.veo.asyncio.sleep", new=AsyncMock()
+        ), patch("handlers.veo.get_run_dir", return_value=run_dir), patch(
+            "handlers.veo.access_token", new=AsyncMock(return_value=("tok", "proj"))
+        ):
+            await handle_veo(
+                GraphNode(
+                    id="fixture-veo-vertex",
+                    definitionId="veo-3",
+                    params={
+                        "model": "veo-3.1-fast-generate-preview", "aspectRatio": "9:16",
+                        "duration": "6", "resolution": "1080p", "personGeneration": "allow_adult",
+                    },
+                ),
+                {"prompt": PortValueDict(type="Text", value="a sunset")},
+                {"GOOGLE_VERTEX_CREDENTIALS": "{}", "GOOGLE_API_KEY": "ignored"},
+            )
+        assert mock.posts[0]["url"].endswith(
+            "/projects/proj/locations/us-central1/publishers/google/models/veo-3.1-fast-generate-001:predictLongRunning"
+        )
+        return mock.posts[0]["json"]
+
     if fixture_name == "gemini-omni-flash-submit-request.json":
         completed = {
             "id": "v1_abc",
@@ -305,7 +354,7 @@ async def _capture_google_body(fixture_name: str) -> dict[str, Any]:
         registry = get_handler_registry(emit=emit)
         handler = registry["veo-3"]
         mock_submit = MagicMock(status_code=200)
-        mock_submit.json.return_value = {"request_id": "req-test", "response_url": "https://queue.fal.run/fal-ai/veo3/requests/req-test"}
+        mock_submit.json.return_value = {"request_id": "req-test", "response_url": "https://queue.fal.run/fal-ai/veo3.1/requests/req-test"}
         run_dir = Path("/tmp/nebula-veo-fal-fixture-run")
         run_dir.mkdir(parents=True, exist_ok=True)
 
@@ -346,6 +395,8 @@ async def _capture_google_body(fixture_name: str) -> dict[str, Any]:
                         {"prompt": PortValueDict(type="Text", value="a sunset over mountains")},
                         {"FAL_KEY": "fal_test"},
                     )
+            submit_url = inst.post.call_args.args[0] if inst.post.call_args.args else inst.post.call_args.kwargs["url"]
+            assert submit_url.endswith("/fal-ai/veo3.1"), submit_url
             return inst.post.call_args.kwargs.get("json") or inst.post.call_args[1].get("json")
 
     if fixture_name == "style-reference-auto-request.json":

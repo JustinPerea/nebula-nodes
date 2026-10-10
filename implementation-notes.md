@@ -1,5 +1,34 @@
 # Implementation Notes
 
+## 2026-10-10 — Retire shut-down Google models; Veo on Vertex AI
+
+Google shut down or is about to shut down several models our nodes call (https://ai.google.dev/gemini-api/docs/deprecations, checked 2026-10-10). Branch `retire-google-models`, not merged.
+
+**What changed:**
+- **Imagen 4 is gone** (shut down 2026-08-17). `imagen-4-generate` is removed from both catalogs and the handlers. A saved node loads as Nano Banana on 2.1 (Google's named replacement) with its aspect ratio and 1K/2K size carried over, titled "Nano Banana (was Imagen 4)" unless the person renamed it. `services/retired_nodes.py` runs on boot restore, project snapshots, graph-file import and `CLIGraph.load`. Creating a new one returns a 400 naming the replacement. The onboarding sample graph and Create's Featured list use Nano Banana instead.
+- **Nano Banana 2.1** (`gemini-nano-banana-2.1`) is a model on `nano-banana`: 1K/2K/4K, all 14 aspect ratios. Google documents it only on the Interactions API, so it has its own branch in `handlers/google_gemini.py`. Image URLs go to Google as `{"type": "image", "uri"}` rather than being fetched here. A saved 512 renders at 1K.
+- **Gemini Omni** calls `gemini-omni-1.1-flash`. The preview ends 2026-10-22.
+- **Veo 3.0, 3.0 Fast and 2.0 options are gone** (shut down 2026-06-30). Saved nodes move to the matching 3.1 model (`RETIRED_PARAMS` in `retired_nodes.py`). Veo 2's 5 s becomes 6 s, the nearest length that doesn't cut the clip short. The 4 s option and seed are now always visible; 4K stays Standard/Fast only.
+- **Veo routes, in order:** Vertex AI (`GOOGLE_VERTEX_CREDENTIALS`), then the Gemini API (`GOOGLE_API_KEY`), then fal (`FAL_KEY`).
+  - `directKeyName` can now be a list. `frontend/src/lib/directRoute.ts` resolves it for the Inspector, Create, readiness and route display; `model_pricing.route_provider` does the same on the backend. With nothing set, setup points at Vertex.
+  - **Vertex:** `services/google_vertex.py` signs an RS256 JWT with the service-account key (via `cryptography`, already a dependency, so no Google SDK) and exchanges it at the fixed `oauth2.googleapis.com/token`. It never uses the key file's `token_uri`. Tokens are cached until 5 minutes before expiry. Express-mode API keys don't cover Veo, which is why this needs a service account. Calls go to `us-central1`, with the project taken from the key.
+  - **Vertex models:** the preview model values map to `veo-3.1-generate-001` / `veo-3.1-fast-generate-001` (GA, retiring "Nov 17 2026 or later") and `veo-3.1-lite-generate-001` (preview, text-to-video only, so frames are refused).
+  - **Vertex requests and output:** every request sends `generateAudio: true` and `sampleCount: 1`. No `storageUri` is sent, so videos come back inline. A `gcsUri` answer is downloaded with the same token.
+  - **Vertex extension:** it extends from bytes, so a Vertex run's Source URI is the saved file. A Gemini `files/` URI is refused with an explanation.
+  - **`veo-3-flf`** also runs on Vertex when the key is set. It maps its fal-shaped params: `auto` aspect ratio is omitted, `"6s"` becomes 6, and `negative_prompt` becomes `negativePrompt`.
+  - **fal** moved off the deprecated `fal-ai/veo3` to `fal-ai/veo3.1` and `/fast`. It adds `/image-to-video` when a first frame is wired and `/first-last-frame-to-video` when both frames are. The old fal route sent Google's param names (`aspectRatio`, `"8"`), which fal doesn't read. They're now `aspect_ratio` and `"8s"`. Lite isn't on fal and runs as Fast. Extension isn't offered on fal, so it fails with a pointer to the Google routes.
+  - **From 2026-10-22,** a failed Gemini API or fal Veo run appends "add a Vertex key" (`with_vertex_hint`). Nothing is blocked ahead of time, in case either keeps working.
+- **Settings:** new "Google Vertex AI (service-account JSON, for Veo)" field. The key is on the credential allowlists (backend and desktop bridge). The health check validates the JSON offline (`configured_unverified`), since a real check needs a token exchange.
+- **Image fetches for Veo frames** now go through `fetch_public_media` (public https only, every redirect re-checked). Before, any URL a graph supplied was fetched server-side.
+- **Pricing:**
+  - `veo-3` rows are model × resolution from Google's per-second with-audio table. The old note claimed the node sends no duration or resolution; it does, through `sharedParams`. The estimators didn't read `sharedParams`, and now both do (`_definition_params`, `definitionParams`), with a shared fixture case.
+  - Vertex is priced with the same rows. Vertex lists identical amounts per "count" without saying what a count is; they're read as per second, the higher reading. Unconfirmed.
+  - Nano Banana 2.1 rows: $0.0336 / $0.0504 / $0.113 for 1K / 2K / 4K.
+
+**Not verified live:** no paid generations were run. That covers the Vertex request and response shapes (built from Google's model reference), extension from bytes on Vertex, the fal 3.1 endpoints' param names (from fal's model pages), and Nano Banana 2.1 on the Interactions API.
+
+**Left for later:** Gemini Omni's `_load_bytes` still fetches arbitrary URLs server-side, the same SSRF shape fixed for Veo here.
+
 ## 2026-10-10 — Run cost from a curated price table
 
 Justin chose option (a): a curated price table, each price checked against the vendor's page, then a cost chip on Run and a confirm above a threshold. Not committed yet.
@@ -26,7 +55,7 @@ Justin chose option (a): a curated price table, each price checked against the v
 - Krea lists Veo durations 5 and 7 in pricing that its own request schema rejects. The generator drops unreachable points rather than shipping rows the validator would flag.
 - Gemini 3 Pro Image renders a 512 request at 1K (`allowed_sizes` in `handlers/google_gemini.py`), so the 512 row carries the 1K price.
 - Refreshing the Krea spec changed one random seed default in `node_definitions.json` (Krea's spec ships a random example seed). `MODEL_REFERENCE.md` was regenerated for it. Pinning seed defaults in the sync script would stop that churn. Left as a follow-up.
-- Lifecycle findings while checking Google's pages: Imagen 4 models shut down 2026-08-17 (our `imagen-4-generate` node calls them); Veo 3.0/3.0 Fast/2.0 shut down 2026-06-30; the Veo 3.1 previews and `gemini-omni-flash-preview` shut down 2026-10-22 (replacement `gemini-omni-1.1-flash`). These are reported separately, not fixed here.
+- Lifecycle findings while checking Google's pages: Imagen 4 models shut down 2026-08-17 (our `imagen-4-generate` node calls them); Veo 3.0/3.0 Fast/2.0 shut down 2026-06-30; the Veo 3.1 previews and `gemini-omni-flash-preview` shut down 2026-10-22 (replacement `gemini-omni-1.1-flash`). These are fixed in the entry above.
 
 **Keeping prices current:** curated entries need a fresh source and `checked` date when a vendor changes prices. Run `python scripts/sync-krea-catalog.py --refresh` for Krea. `backend/tests/test_model_pricing.py` fails if any entry stops validating against the node catalog.
 

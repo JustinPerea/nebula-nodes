@@ -10,7 +10,6 @@ import pytest
 
 from handlers.google_gemini import (
     handle_gemini_chat,
-    handle_imagen4,
     handle_nano_banana,
     handle_lyria3,
     handle_gemini_tts,
@@ -101,14 +100,6 @@ async def test_gemini_chat_data_uri_image_preserved() -> None:
     inline = [p for p in body["contents"][0]["parts"] if "inline_data" in p]
     assert len(inline) == 1
     assert inline[0]["inline_data"] == {"mime_type": "image/png", "data": "QUJD"}
-
-
-def _make_imagen_node(params=None):
-    return GraphNode(
-        id="test-imagen-1",
-        definitionId="imagen-4-generate",
-        params=params or {"model": "imagen-4.0-generate-001", "aspectRatio": "1:1", "numberOfImages": 1},
-    )
 
 
 class FakeStreamResponse:
@@ -240,81 +231,6 @@ async def test_gemini_request_body_structure():
     assert body["generationConfig"]["maxOutputTokens"] == 2048
 
 
-# --- Imagen 4 tests ---
-
-@pytest.mark.asyncio
-async def test_imagen4_generates_image_and_saves_file():
-    mock_resp = MagicMock()
-    mock_resp.status_code = 200
-    mock_resp.json.return_value = {
-        "predictions": [
-            {"bytesBase64Encoded": RED_PIXEL_B64, "mimeType": "image/png"}
-        ]
-    }
-
-    with patch("handlers.google_gemini.httpx.AsyncClient") as MockClient:
-        mock_client_instance = AsyncMock()
-        mock_client_instance.post.return_value = mock_resp
-        mock_client_instance.__aenter__ = AsyncMock(return_value=mock_client_instance)
-        mock_client_instance.__aexit__ = AsyncMock(return_value=False)
-        MockClient.return_value = mock_client_instance
-
-        result = await handle_imagen4(
-            _make_imagen_node(),
-            {"prompt": PortValueDict(type="Text", value="a red pixel")},
-            {"GOOGLE_API_KEY": "test-google-key"},
-        )
-
-    assert "image" in result
-    assert result["image"]["type"] == "Image"
-    file_path = Path(result["image"]["value"])
-    assert file_path.suffix == ".png"
-
-    call_kwargs = mock_client_instance.post.call_args
-    url = call_kwargs.args[0] if call_kwargs.args else call_kwargs.kwargs.get("url", "")
-    assert ":predict" in url
-    # Auth is via x-goog-api-key header, not query param
-    headers = call_kwargs.kwargs.get("headers", {})
-    assert headers.get("x-goog-api-key") == "test-google-key"
-
-
-@pytest.mark.asyncio
-async def test_imagen4_missing_prompt_raises():
-    with pytest.raises(ValueError, match="[Pp]rompt.*required"):
-        await handle_imagen4(_make_imagen_node(), {}, {"GOOGLE_API_KEY": "key"})
-
-
-@pytest.mark.asyncio
-async def test_imagen4_missing_api_key_raises():
-    with pytest.raises(ValueError, match="GOOGLE_API_KEY"):
-        await handle_imagen4(
-            _make_imagen_node(),
-            {"prompt": PortValueDict(type="Text", value="test")},
-            {},
-        )
-
-
-@pytest.mark.asyncio
-async def test_imagen4_api_error_propagates():
-    mock_resp = MagicMock()
-    mock_resp.status_code = 403
-    mock_resp.text = "Forbidden"
-
-    with patch("handlers.google_gemini.httpx.AsyncClient") as MockClient:
-        mock_client_instance = AsyncMock()
-        mock_client_instance.post.return_value = mock_resp
-        mock_client_instance.__aenter__ = AsyncMock(return_value=mock_client_instance)
-        mock_client_instance.__aexit__ = AsyncMock(return_value=False)
-        MockClient.return_value = mock_client_instance
-
-        with pytest.raises(RuntimeError, match="Imagen 4 API error 403"):
-            await handle_imagen4(
-                _make_imagen_node(),
-                {"prompt": PortValueDict(type="Text", value="test")},
-                {"GOOGLE_API_KEY": "bad-key"},
-            )
-
-
 # --- Nano Banana tests (generationConfig.imageConfig) ---
 
 def _make_nano_node(params=None):
@@ -405,6 +321,78 @@ async def test_nano_banana_normalizes_hidden_stale_model_params():
 
 
 # --- Lyria 3 tests (responseMimeType → responseFormat.audio fix) ---
+
+def _interaction_client(payload):
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = payload
+    client = AsyncMock()
+    client.post.return_value = mock_resp
+    client.__aenter__ = AsyncMock(return_value=client)
+    client.__aexit__ = AsyncMock(return_value=False)
+    return client
+
+
+@pytest.mark.asyncio
+async def test_nano_banana_21_uses_interactions_api():
+    """Nano Banana 2.1 is documented only on the Interactions API."""
+    client = _interaction_client({
+        "steps": [{"type": "model_output", "content": [
+            {"type": "image", "mime_type": "image/png", "data": RED_PIXEL_B64},
+            {"type": "text", "text": "here you go"},
+        ]}],
+    })
+    with patch("handlers.google_gemini.httpx.AsyncClient", return_value=client):
+        result = await handle_nano_banana(
+            _make_nano_node({"model": "gemini-nano-banana-2.1", "aspect_ratio": "8:1", "imageSize": "4K"}),
+            {
+                "prompt": PortValueDict(type="Text", value="a long banner"),
+                "images": PortValueDict(type="Image", value=[
+                    "https://example.com/ref.png", "data:image/png;base64,QUJD",
+                ]),
+            },
+            {"GOOGLE_API_KEY": "test-key"},
+        )
+
+    url = client.post.call_args.args[0]
+    body = client.post.call_args.kwargs["json"]
+    assert url.endswith("/v1beta/interactions")
+    assert body["model"] == "gemini-nano-banana-2.1"
+    assert body["store"] is False
+    assert body["response_format"] == {"type": "image", "aspect_ratio": "8:1", "image_size": "4K"}
+    # URLs go to Google as-is; the backend never fetches them.
+    assert body["input"][1] == {"type": "image", "uri": "https://example.com/ref.png"}
+    assert body["input"][2] == {"type": "image", "mime_type": "image/png", "data": "QUJD"}
+    assert Path(result["image"]["value"]).suffix == ".png"
+    assert result["text"]["value"] == "here you go"
+
+
+@pytest.mark.asyncio
+async def test_nano_banana_21_renders_unsupported_size_at_1k_and_text_only_input():
+    client = _interaction_client({"output_image": {"mime_type": "image/png", "data": RED_PIXEL_B64}})
+    with patch("handlers.google_gemini.httpx.AsyncClient", return_value=client):
+        result = await handle_nano_banana(
+            _make_nano_node({"model": "gemini-nano-banana-2.1", "imageSize": "512"}),
+            {"prompt": PortValueDict(type="Text", value="a cat")},
+            {"GOOGLE_API_KEY": "test-key"},
+        )
+    body = client.post.call_args.kwargs["json"]
+    assert body["input"] == "a cat"
+    assert body["response_format"]["image_size"] == "1K"
+    assert "image" in result
+
+
+@pytest.mark.asyncio
+async def test_nano_banana_21_without_image_raises():
+    client = _interaction_client({"steps": []})
+    with patch("handlers.google_gemini.httpx.AsyncClient", return_value=client):
+        with pytest.raises(RuntimeError, match="no image"):
+            await handle_nano_banana(
+                _make_nano_node({"model": "gemini-nano-banana-2.1"}),
+                {"prompt": PortValueDict(type="Text", value="a cat")},
+                {"GOOGLE_API_KEY": "test-key"},
+            )
+
 
 def _make_lyria_node(params=None):
     return GraphNode(

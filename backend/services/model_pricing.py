@@ -76,7 +76,7 @@ def _price_bounds(price: Any) -> tuple[float, float] | None:
 
 def _definition_params(definition: Mapping[str, Any]) -> list[Mapping[str, Any]]:
     params: list[Mapping[str, Any]] = []
-    for key in ("params", "directParams", "falParams"):
+    for key in ("params", "sharedParams", "directParams", "falParams"):
         value = definition.get(key)
         if isinstance(value, list):
             params.extend(p for p in value if isinstance(p, Mapping))
@@ -241,6 +241,8 @@ CREDENTIAL_PROVIDERS: dict[str, str] = {
     "MINIMAX_API_KEY": "minimax", "XAI_API_KEY": "xai", "HIGGSFIELD_API_KEY": "higgsfield",
     "QUIVER_API_KEY": "quiver", "KREA_API_TOKEN": "krea", "IDEOGRAM_API_KEY": "ideogram",
     "WORLDLABS_API_KEY": "worldlabs",
+    # Vertex bills Veo at the same listed amounts as the Gemini API.
+    "GOOGLE_VERTEX_CREDENTIALS": "google",
 }
 FANOUT_IDS = frozenset({"batch", "iterator-image", "iterator-text"})
 
@@ -255,11 +257,11 @@ def route_provider(definition: Mapping[str, Any], api_keys: Mapping[str, Any]) -
     keys = [k for k in (env if isinstance(env, list) else [env]) if k]
     if len(keys) < 2:
         return provider
-    direct = definition.get("directKeyName")
-    if direct and api_keys.get(direct):
-        route_key = direct
-    else:
-        route_key = next((k for k in keys if k != direct and api_keys.get(k)), None)
+    raw_direct = definition.get("directKeyName")
+    direct = [k for k in (raw_direct if isinstance(raw_direct, list) else [raw_direct]) if k]
+    route_key = next((k for k in direct if api_keys.get(k)), None) or next(
+        (k for k in keys if k not in direct and api_keys.get(k)), None
+    )
     return CREDENTIAL_PROVIDERS.get(route_key or "", provider)
 
 

@@ -20,13 +20,13 @@ function defaultsFor(definitionId: string): Record<string, unknown> {
 
 /**
  * A minimal, working starter pipeline for first-run onboarding: a Text Input
- * feeding a prompt into Imagen 4. Returns fresh UUIDs each call (loadable via
+ * feeding a prompt into Nano Banana. Returns fresh UUIDs each call (loadable via
  * graphStore.loadSampleGraph). Node shape matches addNode's local fallback so
  * both render through ModelNode ('model-node').
  */
 export function buildSampleGraph(): { nodes: Node<NodeData>[]; edges: Edge[] } {
   const textId = uuidv4();
-  const imagenId = uuidv4();
+  const imageId = uuidv4();
 
   const nodes: Node<NodeData>[] = [
     {
@@ -42,13 +42,13 @@ export function buildSampleGraph(): { nodes: Node<NodeData>[]; edges: Edge[] } {
       },
     },
     {
-      id: imagenId,
+      id: imageId,
       type: 'model-node',
       position: { x: 420, y: 0 },
       data: {
-        label: NODE_DEFINITIONS['imagen-4-generate']?.displayName ?? 'Imagen 4',
-        definitionId: 'imagen-4-generate',
-        params: defaultsFor('imagen-4-generate'),
+        label: NODE_DEFINITIONS['nano-banana']?.displayName ?? 'Nano Banana',
+        definitionId: 'nano-banana',
+        params: defaultsFor('nano-banana'),
         state: 'idle',
         outputs: {},
       },
@@ -57,10 +57,10 @@ export function buildSampleGraph(): { nodes: Node<NodeData>[]; edges: Edge[] } {
 
   const edges: Edge[] = [
     {
-      id: `e-${textId}-${imagenId}`,
+      id: `e-${textId}-${imageId}`,
       source: textId,
       sourceHandle: 'text',
-      target: imagenId,
+      target: imageId,
       targetHandle: 'prompt',
       type: 'typed-edge',
     },

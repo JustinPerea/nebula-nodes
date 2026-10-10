@@ -3,7 +3,9 @@ from __future__ import annotations
 import asyncio
 import base64
 import sys
+from datetime import date
 from pathlib import Path
+from urllib.parse import quote
 from typing import Any, Awaitable, Callable
 from uuid import uuid4
 
@@ -13,9 +15,40 @@ from models.graph import GraphNode, PortValueDict
 from models.events import ExecutionEvent, ProgressEvent
 from services.file_access import require_allowed_path
 from services.cancellation import schedule_detached_cancel
+from services.google_vertex import VERTEX_REGION, access_token, model_url
 from services.output import get_run_dir
+from services.public_url import fetch_public_media
 
 VEO_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
+
+# Google retires the Veo 3.1 previews on the Gemini API (and fal's Veo 3.1,
+# which runs on them) on 2026-10-22
+# (https://ai.google.dev/gemini-api/docs/deprecations, checked 2026-10-10).
+# Vertex AI serves the GA models: veo-3.1-generate-001 and
+# veo-3.1-fast-generate-001 retire "Nov 17 2026 or later"; Lite is a preview.
+GEMINI_PREVIEWS_END = date(2026, 10, 22)
+VERTEX_MODELS = {
+    "veo-3.1-generate-preview": "veo-3.1-generate-001",
+    "veo-3.1-fast-generate-preview": "veo-3.1-fast-generate-001",
+    "veo-3.1-lite-generate-preview": "veo-3.1-lite-generate-001",
+}
+VERTEX_DEFAULT_MODEL = "veo-3.1-generate-001"
+LITE_MODEL = "veo-3.1-lite-generate-preview"
+MAX_FRAME_BYTES = 20_000_000
+
+
+def previews_retired(today: date | None = None) -> bool:
+    return (today or date.today()) >= GEMINI_PREVIEWS_END
+
+
+def with_vertex_hint(message: str, today: date | None = None) -> str:
+    """After the previews end, point a failed Gemini API or fal run at Vertex."""
+    if not previews_retired(today):
+        return message
+    return (
+        f"{message} — Google retired the Veo 3.1 previews on 2026-10-22. Add a Google Vertex AI "
+        "service-account key (GOOGLE_VERTEX_CREDENTIALS) in Settings to run Veo 3.1 on Vertex."
+    )
 
 
 def _log(msg: str) -> None:
@@ -38,13 +71,16 @@ async def _cancel_veo_operation(op_name: str, api_key: str) -> None:
 
 
 async def _image_to_veo_payload(img_str: str) -> dict[str, Any]:
-    """Convert an image path/URL/data URI to Veo's inline data format."""
+    """Convert an image path/URL/data URI to Veo's inline data format.
+
+    A URL is fetched only from a public https host, so a graph can't make the
+    backend read from this machine or a private network."""
     if img_str.startswith(("http://", "https://")):
-        async with httpx.AsyncClient(timeout=60.0) as dl_client:
-            resp = await dl_client.get(img_str)
-            resp.raise_for_status()
-            b64_data = base64.b64encode(resp.content).decode("ascii")
-            return {"bytesBase64Encoded": b64_data, "mimeType": "image/png"}
+        content, content_type = await fetch_public_media(img_str, label="Veo frame", max_bytes=MAX_FRAME_BYTES)
+        mime_type = content_type.split(";")[0].strip()
+        if mime_type not in {"image/png", "image/jpeg", "image/webp"}:
+            mime_type = "image/png"
+        return {"bytesBase64Encoded": base64.b64encode(content).decode("ascii"), "mimeType": mime_type}
     elif img_str.startswith("data:"):
         header, b64_data = img_str.split(",", 1)
         mime_type = header.split(":")[1].split(";")[0]
@@ -60,7 +96,7 @@ async def _image_to_veo_payload(img_str: str) -> dict[str, Any]:
 
 
 # Veo video extension (https://ai.google.dev/gemini-api/docs/video) continues an existing
-# Veo-generated clip. Works on the 3.0/3.1 generate + fast models (NOT veo-2.0, NOT 3.1-lite).
+# Veo-generated clip. Works on the 3.1 generate + fast models (NOT 3.1-lite).
 # NOTE: Veo's reference-image ("ingredients to video") mode is documented but the live Gemini
 # API rejects it ("Your use case is currently not supported") on BOTH veo-3.1-generate-preview
 # and veo-3.1-fast-generate-preview with an AI Studio GOOGLE_API_KEY (verified live 2026-06-08),
@@ -69,8 +105,6 @@ async def _image_to_veo_payload(img_str: str) -> dict[str, Any]:
 VEO_EXTEND_MODELS = {
     "veo-3.1-generate-preview",
     "veo-3.1-fast-generate-preview",
-    "veo-3.0-generate-001",
-    "veo-3.0-fast-generate-001",
 }
 
 
@@ -80,9 +114,10 @@ async def handle_veo(
     api_keys: dict[str, str],
     emit: Callable[[ExecutionEvent], Awaitable[None]] | None = None,
 ) -> dict[str, Any]:
+    vertex_credentials = api_keys.get("GOOGLE_VERTEX_CREDENTIALS")
     api_key = api_keys.get("GOOGLE_API_KEY")
-    if not api_key:
-        raise ValueError("GOOGLE_API_KEY is required")
+    if not vertex_credentials and not api_key:
+        raise ValueError("Veo needs GOOGLE_VERTEX_CREDENTIALS (Vertex AI) or GOOGLE_API_KEY")
 
     prompt_input = inputs.get("prompt")
     prompt_text = str(prompt_input.value) if prompt_input and prompt_input.value else ""
@@ -101,7 +136,14 @@ async def handle_veo(
                 "Veo video extension cannot be combined with a first or last frame"
             )
         if model not in VEO_EXTEND_MODELS:
-            raise ValueError(f"Video extension requires a Veo 3.0/3.1 model (got '{model}')")
+            raise ValueError(f"Video extension requires Veo 3.1 or 3.1 Fast (got '{model}')")
+
+    if vertex_credentials:
+        return await _handle_veo_vertex(
+            node, inputs, vertex_credentials, model, prompt_text,
+            has_image=has_image, has_last=has_last, has_video=has_video, emit=emit,
+        )
+    assert api_key is not None
 
     instance: dict[str, Any] = {}
     if prompt_text:
@@ -131,22 +173,7 @@ async def handle_veo(
                 "rejects re-uploaded or external video files."
             )
 
-    parameters: dict[str, Any] = {}
-    aspect_ratio = node.params.get("aspectRatio")
-    if aspect_ratio:
-        parameters["aspectRatio"] = str(aspect_ratio)
-    duration = node.params.get("duration")
-    if duration:
-        parameters["durationSeconds"] = int(str(duration).replace("s", ""))
-    resolution = node.params.get("resolution")
-    if resolution:
-        parameters["resolution"] = str(resolution)
-    person_gen = node.params.get("personGeneration")
-    if person_gen:
-        parameters["personGeneration"] = str(person_gen)
-    seed = node.params.get("seed")
-    if seed is not None and seed != "":
-        parameters["seed"] = int(seed)
+    parameters = _veo_parameters(node.params)
 
     # Veo extension output is locked to 720p by the API — override any higher request.
     if has_video:
@@ -174,7 +201,7 @@ async def handle_veo(
         resp = await client.post(url, json=request_body, headers=auth_headers)
         _log(f"submit response: {resp.status_code}")
         if resp.status_code != 200:
-            raise RuntimeError(f"Veo submit failed ({resp.status_code}): {resp.text}")
+            raise RuntimeError(with_vertex_hint(f"Veo submit failed ({resp.status_code}): {resp.text}"))
 
         op_data = resp.json()
         op_name = op_data.get("name")
@@ -214,7 +241,7 @@ async def _poll_veo_operation(
         poll_resp = await client.get(poll_url, headers={"x-goog-api-key": api_key})
         if poll_resp.status_code != 200:
             _log(f"poll FAILED: {poll_resp.status_code}")
-            raise RuntimeError(f"Veo poll failed ({poll_resp.status_code}): {poll_resp.text}")
+            raise RuntimeError(with_vertex_hint(f"Veo poll failed ({poll_resp.status_code}): {poll_resp.text}"))
 
         poll_data = poll_resp.json()
         done = poll_data.get("done", False)
@@ -268,3 +295,259 @@ async def _poll_veo_operation(
 
     _log("TIMED OUT")
     raise RuntimeError(f"Veo timed out after {max_polls} polls")
+
+
+# -- Vertex AI ---------------------------------------------------------------
+# predictLongRunning + fetchPredictOperation on us-central1
+# (https://cloud.google.com/vertex-ai/generative-ai/docs/model-reference/veo-video-generation,
+# checked 2026-10-10). No storageUri is sent, so videos come back inline.
+
+
+async def _cancel_vertex_operation(op_name: str, credentials: str) -> None:
+    try:
+        token, _project = await access_token(credentials)
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            await client.post(
+                f"https://{VERTEX_REGION}-aiplatform.googleapis.com/v1/{op_name}:cancel",
+                headers={"Authorization": f"Bearer {token}"},
+                json={},
+            )
+        _log(f"requested upstream cancel for {op_name}")
+    except Exception:
+        pass
+
+
+async def _vertex_video_payload(value: str) -> dict[str, Any]:
+    """A clip to extend: a gs:// URI, or the file a Vertex run saved here."""
+    if value.startswith("gs://"):
+        return {"gcsUri": value, "mimeType": "video/mp4"}
+    if "generativelanguage.googleapis.com" in value:
+        raise ValueError(
+            "This clip came from the Gemini API, which Vertex can't read. Extend it with a clip "
+            "generated on Vertex (wire that Veo node's 'Source URI' into 'Extend Video')."
+        )
+    if value.startswith(("http://", "https://", "data:")):
+        raise ValueError("Veo on Vertex extends a clip Veo generated: wire the upstream Veo node's 'Source URI'.")
+    path = Path(value)
+    if not path.exists():
+        raise ValueError(f"Video not found: {value}")
+    data = require_allowed_path(path).read_bytes()
+    return {"bytesBase64Encoded": base64.b64encode(data).decode("ascii"), "mimeType": "video/mp4"}
+
+
+async def run_vertex_veo(
+    node: GraphNode,
+    credentials: str,
+    model: str,
+    instance: dict[str, Any],
+    parameters: dict[str, Any],
+    emit: Callable[[ExecutionEvent], Awaitable[None]] | None = None,
+) -> dict[str, Any]:
+    """Submit one Veo request to Vertex, wait for it, and save the video."""
+    async def noop_emit(event: ExecutionEvent) -> None:
+        pass
+
+    _emit = emit or noop_emit
+    token, project_id = await access_token(credentials)
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    body = {"instances": [instance], "parameters": {**parameters, "sampleCount": 1}}
+    _log(f"submitting to Vertex {model}")
+    async with httpx.AsyncClient(timeout=120.0) as client:
+        resp = await client.post(model_url(project_id, model, "predictLongRunning"), json=body, headers=headers)
+        if resp.status_code != 200:
+            raise RuntimeError(f"Veo (Vertex) submit failed ({resp.status_code}): {resp.text}")
+        op_name = resp.json().get("name")
+        if not op_name:
+            raise RuntimeError(f"Veo (Vertex) did not return an operation name: {resp.text[:300]}")
+        try:
+            return await _poll_vertex_operation(
+                client, node, project_id, model, op_name, headers, _emit,
+            )
+        except asyncio.CancelledError:
+            schedule_detached_cancel(lambda: _cancel_vertex_operation(op_name, credentials))
+            raise
+
+
+async def _poll_vertex_operation(
+    client: httpx.AsyncClient,
+    node: GraphNode,
+    project_id: str,
+    model: str,
+    op_name: str,
+    headers: dict[str, str],
+    _emit: Callable[[ExecutionEvent], Awaitable[None]],
+    max_polls: int = 300,
+    poll_interval: float = 3.0,
+) -> dict[str, Any]:
+    poll_url = model_url(project_id, model, "fetchPredictOperation")
+    for poll_num in range(1, max_polls + 1):
+        await asyncio.sleep(poll_interval)
+        poll_resp = await client.post(poll_url, json={"operationName": op_name}, headers=headers)
+        if poll_resp.status_code != 200:
+            raise RuntimeError(f"Veo (Vertex) poll failed ({poll_resp.status_code}): {poll_resp.text}")
+        data = poll_resp.json()
+        await _emit(ProgressEvent(node_id=node.id, value=min(poll_num / max_polls, 0.99)))
+        if not data.get("done"):
+            continue
+        if data.get("error"):
+            raise RuntimeError(f"Veo (Vertex) failed: {data['error']}")
+        response = data.get("response") or {}
+        videos = response.get("videos") or []
+        if not videos:
+            filtered = response.get("raiMediaFilteredReasons") or []
+            if filtered:
+                raise RuntimeError(f"Veo (Vertex) filtered the video: {'; '.join(map(str, filtered))}")
+            raise RuntimeError(f"Veo (Vertex) completed but returned no video: {list(response.keys())}")
+        video = videos[0]
+        file_path = get_run_dir() / f"{uuid4().hex[:12]}.mp4"
+        gcs_uri = video.get("gcsUri")
+        if video.get("bytesBase64Encoded"):
+            file_path.write_bytes(base64.b64decode(video["bytesBase64Encoded"]))
+        elif isinstance(gcs_uri, str) and gcs_uri.startswith("gs://"):
+            bucket, _, obj = gcs_uri[len("gs://"):].partition("/")
+            dl = await client.get(
+                f"https://storage.googleapis.com/storage/v1/b/{quote(bucket, safe='')}/o/{quote(obj, safe='')}?alt=media",
+                headers={"Authorization": headers["Authorization"]},
+                timeout=180.0,
+            )
+            dl.raise_for_status()
+            file_path.write_bytes(dl.content)
+        else:
+            raise RuntimeError("Veo (Vertex) returned a video with no data")
+        _log(f"saved to {file_path}")
+        # Vertex can extend a clip from its bytes, so the saved file is the
+        # source to wire into a downstream Veo node's "Extend Video".
+        return {
+            "video": {"type": "Video", "value": str(file_path)},
+            "source_uri": {"type": "Video", "value": gcs_uri or str(file_path)},
+        }
+    raise RuntimeError(f"Veo (Vertex) timed out after {max_polls} polls")
+
+
+def _veo_parameters(params: dict[str, Any]) -> dict[str, Any]:
+    parameters: dict[str, Any] = {}
+    if params.get("aspectRatio"):
+        parameters["aspectRatio"] = str(params["aspectRatio"])
+    if params.get("duration"):
+        parameters["durationSeconds"] = int(str(params["duration"]).replace("s", ""))
+    if params.get("resolution"):
+        parameters["resolution"] = str(params["resolution"])
+    if params.get("personGeneration"):
+        parameters["personGeneration"] = str(params["personGeneration"])
+    seed = params.get("seed")
+    if seed is not None and seed != "":
+        parameters["seed"] = int(seed)
+    return parameters
+
+
+async def _handle_veo_vertex(
+    node: GraphNode,
+    inputs: dict[str, PortValueDict],
+    credentials: str,
+    model: str,
+    prompt_text: str,
+    *,
+    has_image: bool,
+    has_last: bool,
+    has_video: bool,
+    emit: Callable[[ExecutionEvent], Awaitable[None]] | None,
+) -> dict[str, Any]:
+    vertex_model = VERTEX_MODELS.get(model)
+    if vertex_model is None:
+        raise ValueError(f"'{model}' isn't a Veo 3.1 model")
+    # Lite on Vertex is a text-to-video preview: no image input.
+    if model == LITE_MODEL and (has_image or has_last):
+        raise ValueError("Veo 3.1 Lite on Vertex is text-to-video only; pick Veo 3.1 or Fast for frames")
+    instance: dict[str, Any] = {}
+    if prompt_text:
+        instance["prompt"] = prompt_text
+    if has_image:
+        instance["image"] = await _image_to_veo_payload(str(inputs["image"].value))
+    if has_last:
+        instance["lastFrame"] = await _image_to_veo_payload(str(inputs["last_frame"].value))
+    if has_video:
+        instance["video"] = await _vertex_video_payload(str(inputs["video"].value))
+    parameters = _veo_parameters(node.params)
+    parameters["generateAudio"] = True
+    if has_video:
+        parameters["resolution"] = "720p"
+    return await run_vertex_veo(node, credentials, vertex_model, instance, parameters, emit)
+
+
+async def handle_veo_flf_vertex(
+    node: GraphNode,
+    inputs: dict[str, PortValueDict],
+    api_keys: dict[str, str],
+    emit: Callable[[ExecutionEvent], Awaitable[None]] | None = None,
+) -> dict[str, Any]:
+    """Veo 3.1 First-Last Frame on Vertex. The node's params are fal-shaped
+    (``aspect_ratio``, ``"8s"``, ``generate_audio``), so they're mapped here."""
+    credentials = api_keys.get("GOOGLE_VERTEX_CREDENTIALS")
+    if not credentials:
+        raise ValueError("GOOGLE_VERTEX_CREDENTIALS is required")
+    first, last = inputs.get("image"), inputs.get("end_image")
+    if not (first and first.value and last and last.value):
+        raise ValueError("Veo First-Last Frame needs both a first and a last frame")
+    prompt = inputs.get("prompt")
+    instance: dict[str, Any] = {
+        "image": await _image_to_veo_payload(str(first.value)),
+        "lastFrame": await _image_to_veo_payload(str(last.value)),
+    }
+    if prompt and prompt.value:
+        instance["prompt"] = str(prompt.value)
+    params = node.params
+    parameters = _veo_parameters({
+        "aspectRatio": params.get("aspect_ratio") if params.get("aspect_ratio") != "auto" else None,
+        "duration": params.get("duration"),
+        "resolution": params.get("resolution"),
+        "seed": params.get("seed"),
+    })
+    parameters["generateAudio"] = params.get("generate_audio") is not False
+    if params.get("negative_prompt"):
+        parameters["negativePrompt"] = str(params["negative_prompt"])
+    return await run_vertex_veo(node, credentials, VERTEX_DEFAULT_MODEL, instance, parameters, emit)
+
+
+# -- fal ---------------------------------------------------------------------
+
+FAL_VEO_PARAMS = ("negative_prompt", "seed", "safety_tolerance")
+
+
+def fal_veo_route(
+    node: GraphNode, inputs: dict[str, PortValueDict],
+) -> tuple[GraphNode, dict[str, PortValueDict]]:
+    """The fal-ai/veo3.1 endpoint, params and inputs for a veo-3 node.
+
+    fal names params differently from Google (``aspect_ratio``, ``"8s"``) and
+    splits Veo 3.1 into text-, image- and first-last-frame endpoints. Lite
+    isn't on fal, so it runs as Fast, the nearest price."""
+    if inputs.get("video") and inputs["video"].value:
+        raise ValueError("Extending a clip needs the Google route: add a Vertex or Gemini API key in Settings")
+    params = node.params
+    fast = params.get("model") in ("veo-3.1-fast-generate-preview", LITE_MODEL)
+    base = "fal-ai/veo3.1/fast" if fast else "fal-ai/veo3.1"
+    fal_params: dict[str, Any] = {k: params[k] for k in FAL_VEO_PARAMS if params.get(k) not in (None, "")}
+    if params.get("aspectRatio"):
+        fal_params["aspect_ratio"] = str(params["aspectRatio"])
+    if params.get("duration"):
+        fal_params["duration"] = f"{int(str(params['duration']).replace('s', ''))}s"
+    if params.get("resolution"):
+        fal_params["resolution"] = str(params["resolution"])
+
+    from handlers.fal_universal import _to_fal_url
+
+    image, last = inputs.get("image"), inputs.get("last_frame")
+    routed_inputs = {k: v for k, v in inputs.items() if k not in ("image", "last_frame")}
+    if image and image.value and last and last.value:
+        endpoint = f"{base}/first-last-frame-to-video"
+        fal_params["first_frame_url"] = _to_fal_url(str(image.value))
+        fal_params["last_frame_url"] = _to_fal_url(str(last.value))
+    elif last and last.value:
+        raise ValueError("A last frame needs a first frame too")
+    elif image and image.value:
+        endpoint = f"{base}/image-to-video"
+        fal_params["image_url"] = _to_fal_url(str(image.value))
+    else:
+        endpoint = base
+    fal_params["endpoint_id"] = endpoint
+    return node.model_copy(update={"params": fal_params}), routed_inputs

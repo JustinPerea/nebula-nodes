@@ -4272,150 +4272,6 @@
       }
     ]
   },
-  "imagen-4-generate": {
-    "id": "imagen-4-generate",
-    "displayName": "Imagen 4",
-    "category": "image-gen",
-    "apiProvider": "google",
-    "apiEndpoint": "/v1beta/models/{model}:predict",
-    "envKeyName": "GOOGLE_API_KEY",
-    "executionPattern": "sync",
-    "inputPorts": [
-      {
-        "id": "prompt",
-        "label": "Prompt",
-        "dataType": "Text",
-        "required": true
-      }
-    ],
-    "outputPorts": [
-      {
-        "id": "image",
-        "label": "Image",
-        "dataType": "Image",
-        "required": false
-      }
-    ],
-    "params": [
-      {
-        "key": "model",
-        "label": "Model",
-        "type": "enum",
-        "required": true,
-        "default": "imagen-4.0-generate-001",
-        "options": [
-          {
-            "label": "Imagen 4",
-            "value": "imagen-4.0-generate-001"
-          },
-          {
-            "label": "Imagen 4 Ultra",
-            "value": "imagen-4.0-ultra-generate-001"
-          },
-          {
-            "label": "Imagen 4 Fast",
-            "value": "imagen-4.0-fast-generate-001"
-          }
-        ]
-      },
-      {
-        "key": "aspectRatio",
-        "label": "Aspect Ratio",
-        "type": "enum",
-        "required": false,
-        "default": "1:1",
-        "options": [
-          {
-            "label": "1:1",
-            "value": "1:1"
-          },
-          {
-            "label": "4:3",
-            "value": "4:3"
-          },
-          {
-            "label": "3:4",
-            "value": "3:4"
-          },
-          {
-            "label": "16:9",
-            "value": "16:9"
-          },
-          {
-            "label": "9:16",
-            "value": "9:16"
-          }
-        ]
-      },
-      {
-        "key": "numberOfImages",
-        "label": "Count",
-        "type": "integer",
-        "required": false,
-        "default": 1,
-        "min": 1,
-        "max": 4
-      },
-      {
-        "key": "seed",
-        "label": "Seed",
-        "type": "integer",
-        "required": false,
-        "placeholder": "Random"
-      },
-      {
-        "key": "enhancePrompt",
-        "label": "Enhance Prompt",
-        "type": "boolean",
-        "required": false,
-        "default": false
-      },
-      {
-        "key": "imageSize",
-        "label": "Image Size",
-        "type": "enum",
-        "required": false,
-        "default": "1K",
-        "visibleWhen": {
-          "model": [
-            "imagen-4.0-generate-001",
-            "imagen-4.0-ultra-generate-001"
-          ]
-        },
-        "options": [
-          {
-            "label": "1K",
-            "value": "1K"
-          },
-          {
-            "label": "2K",
-            "value": "2K"
-          }
-        ]
-      },
-      {
-        "key": "personGeneration",
-        "label": "Person Generation",
-        "type": "enum",
-        "required": false,
-        "default": "allow_adult",
-        "options": [
-          {
-            "label": "Allow All",
-            "value": "allow_all"
-          },
-          {
-            "label": "Allow Adult",
-            "value": "allow_adult"
-          },
-          {
-            "label": "Don't Allow",
-            "value": "dont_allow"
-          }
-        ]
-      }
-    ]
-  },
   "kling-v2-1": {
     "id": "kling-v2-1",
     "displayName": "Kling v2.1",
@@ -4627,6 +4483,10 @@
         "default": "gemini-3.1-flash-image",
         "options": [
           {
+            "label": "Nano Banana 2.1",
+            "value": "gemini-nano-banana-2.1"
+          },
+          {
             "label": "Nano Banana 2 (3.1 Flash)",
             "value": "gemini-3.1-flash-image"
           },
@@ -4696,6 +4556,7 @@
             "value": "1:4",
             "visibleWhen": {
               "model": [
+                "gemini-nano-banana-2.1",
                 "gemini-3.1-flash-image"
               ]
             }
@@ -4705,6 +4566,7 @@
             "value": "4:1",
             "visibleWhen": {
               "model": [
+                "gemini-nano-banana-2.1",
                 "gemini-3.1-flash-image"
               ]
             }
@@ -4714,6 +4576,7 @@
             "value": "1:8",
             "visibleWhen": {
               "model": [
+                "gemini-nano-banana-2.1",
                 "gemini-3.1-flash-image"
               ]
             }
@@ -4723,6 +4586,7 @@
             "value": "8:1",
             "visibleWhen": {
               "model": [
+                "gemini-nano-banana-2.1",
                 "gemini-3.1-flash-image"
               ]
             }
@@ -4737,6 +4601,7 @@
         "default": "1K",
         "visibleWhen": {
           "model": [
+            "gemini-nano-banana-2.1",
             "gemini-3.1-flash-image",
             "gemini-3.1-flash-lite-image",
             "gemini-3-pro-image"
@@ -4761,6 +4626,7 @@
             "value": "2K",
             "visibleWhen": {
               "model": [
+                "gemini-nano-banana-2.1",
                 "gemini-3.1-flash-image",
                 "gemini-3-pro-image"
               ]
@@ -4771,6 +4637,7 @@
             "value": "4K",
             "visibleWhen": {
               "model": [
+                "gemini-nano-banana-2.1",
                 "gemini-3.1-flash-image",
                 "gemini-3-pro-image"
               ]
@@ -5687,7 +5554,7 @@
     "displayName": "Gemini Omni Flash",
     "category": "video-gen",
     "apiProvider": "google",
-    "apiEndpoint": "gemini-omni-flash-preview",
+    "apiEndpoint": "gemini-omni-1.1-flash",
     "envKeyName": "GOOGLE_API_KEY",
     "executionPattern": "async-poll",
     "capabilityNote": "Stateful prompts edit the existing clip in place. Gemini Omni cannot extend duration; use Veo 3.1 for video extension.",
@@ -5815,11 +5682,15 @@
     "apiProvider": "google",
     "apiEndpoint": "veo-3.1-generate-preview",
     "envKeyName": [
+      "GOOGLE_VERTEX_CREDENTIALS",
       "GOOGLE_API_KEY",
       "FAL_KEY"
     ],
     "executionPattern": "async-poll",
-    "directKeyName": "GOOGLE_API_KEY",
+    "directKeyName": [
+      "GOOGLE_VERTEX_CREDENTIALS",
+      "GOOGLE_API_KEY"
+    ],
     "inputPorts": [
       {
         "id": "prompt",
@@ -5845,7 +5716,7 @@
         "label": "Extend Video",
         "dataType": "Video",
         "required": false,
-        "_note": "Veo video extension — continue an existing clip. Wire the upstream Veo node's 'Source URI' output here (Veo only accepts its own files/... URI, not external/re-uploaded video). veo-3.0/3.1 (not lite/veo-2.0); output locked to 720p; URI valid ~2 days."
+        "_note": "Veo video extension — continue an existing clip. Wire the upstream Veo node's 'Source URI' output here (Veo only accepts its own clips, not external/re-uploaded video). Veo 3.1 and 3.1 Fast (not Lite); output locked to 720p; a Gemini API URI is valid ~2 days."
       }
     ],
     "outputPorts": [
@@ -5891,25 +5762,7 @@
         "options": [
           {
             "label": "4 seconds",
-            "value": "4",
-            "visibleWhen": {
-              "model": [
-                "veo-3.1-generate-preview",
-                "veo-3.1-fast-generate-preview",
-                "veo-3.1-lite-generate-preview",
-                "veo-3.0-generate-001",
-                "veo-3.0-fast-generate-001"
-              ]
-            }
-          },
-          {
-            "label": "5 seconds",
-            "value": "5",
-            "visibleWhen": {
-              "model": [
-                "veo-2.0-generate-001"
-              ]
-            }
+            "value": "4"
           },
           {
             "label": "6 seconds",
@@ -5927,15 +5780,6 @@
         "type": "enum",
         "required": false,
         "default": "720p",
-        "visibleWhen": {
-          "model": [
-            "veo-3.1-generate-preview",
-            "veo-3.1-fast-generate-preview",
-            "veo-3.1-lite-generate-preview",
-            "veo-3.0-generate-001",
-            "veo-3.0-fast-generate-001"
-          ]
-        },
         "options": [
           {
             "label": "720p",
@@ -5951,9 +5795,7 @@
             "visibleWhen": {
               "model": [
                 "veo-3.1-generate-preview",
-                "veo-3.1-fast-generate-preview",
-                "veo-3.0-generate-001",
-                "veo-3.0-fast-generate-001"
+                "veo-3.1-fast-generate-preview"
               ]
             }
           }
@@ -6000,18 +5842,6 @@
           {
             "label": "Veo 3.1 Lite",
             "value": "veo-3.1-lite-generate-preview"
-          },
-          {
-            "label": "Veo 3",
-            "value": "veo-3.0-generate-001"
-          },
-          {
-            "label": "Veo 3 Fast",
-            "value": "veo-3.0-fast-generate-001"
-          },
-          {
-            "label": "Veo 2",
-            "value": "veo-2.0-generate-001"
           }
         ]
       },
@@ -6020,16 +5850,7 @@
         "label": "Seed",
         "type": "integer",
         "required": false,
-        "placeholder": "Random",
-        "visibleWhen": {
-          "model": [
-            "veo-3.1-generate-preview",
-            "veo-3.1-fast-generate-preview",
-            "veo-3.1-lite-generate-preview",
-            "veo-3.0-generate-001",
-            "veo-3.0-fast-generate-001"
-          ]
-        }
+        "placeholder": "Random"
       }
     ],
     "falParams": [
@@ -18481,8 +18302,12 @@
     "category": "video-gen",
     "apiProvider": "fal",
     "apiEndpoint": "fal-ai/veo3.1/first-last-frame-to-video",
-    "envKeyName": "FAL_KEY",
+    "envKeyName": [
+      "GOOGLE_VERTEX_CREDENTIALS",
+      "FAL_KEY"
+    ],
     "executionPattern": "async-poll",
+    "directKeyName": "GOOGLE_VERTEX_CREDENTIALS",
     "inputPorts": [
       {
         "id": "prompt",

@@ -18,7 +18,9 @@ from services.provider_capabilities import enforce_gemini_omni_capabilities
 
 INTERACTIONS_URL = "https://generativelanguage.googleapis.com/v1beta/interactions"
 FILES_URL = "https://generativelanguage.googleapis.com/v1beta/files"
-MODEL_ID = "gemini-omni-flash-preview"
+# gemini-omni-flash-preview shuts down 2026-10-22; Google names 1.1 as its replacement
+# (https://ai.google.dev/gemini-api/docs/deprecations, checked 2026-10-10).
+MODEL_ID = "gemini-omni-1.1-flash"
 
 
 def _log(msg: str) -> None:

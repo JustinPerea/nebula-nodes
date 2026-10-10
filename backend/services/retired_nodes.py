@@ -9,6 +9,10 @@ the node's title says what happened, so the change is visible on the canvas.
 Imagen 4 (all three models) was shut down by Google on 2026-08-17; Google
 names Nano Banana 2.1 as the replacement
 (https://ai.google.dev/gemini-api/docs/deprecations, checked 2026-10-10).
+
+Some nodes stay but lose a model option: Veo 3.0, 3.0 Fast and 2.0 were shut
+down on 2026-06-30, so a saved ``veo-3`` node on one of them moves to the
+matching Veo 3.1 model (``RETIRED_PARAMS``).
 """
 from __future__ import annotations
 
@@ -45,6 +49,28 @@ RETIRED: dict[str, dict[str, Any]] = {
 }
 
 
+# Veo 2 offered 5 s, which 3.1 doesn't; 6 s is the nearest without cutting the clip short.
+_VEO_MODELS = {
+    "veo-3.0-generate-001": "veo-3.1-generate-preview",
+    "veo-3.0-fast-generate-001": "veo-3.1-fast-generate-preview",
+    "veo-2.0-generate-001": "veo-3.1-generate-preview",
+}
+
+
+def _veo_params(params: dict[str, Any]) -> dict[str, Any]:
+    if params.get("model") not in _VEO_MODELS:
+        return params
+    migrated = {**params, "model": _VEO_MODELS[params["model"]]}
+    if str(migrated.get("duration")) == "5":
+        migrated["duration"] = "6"
+    return migrated
+
+
+RETIRED_PARAMS: dict[str, Any] = {
+    "veo-3": _veo_params,
+}
+
+
 def migrate_node(
     definition_id: str, params: dict[str, Any] | None, label: str | None = None,
 ) -> tuple[str, dict[str, Any], str | None]:
@@ -54,7 +80,8 @@ def migrate_node(
     retirement title, so the canvas says what changed."""
     retired = RETIRED.get(definition_id)
     if retired is None:
-        return definition_id, dict(params or {}), label
+        fix = RETIRED_PARAMS.get(definition_id)
+        return definition_id, fix(dict(params or {})) if fix else dict(params or {}), label
     custom = label if isinstance(label, str) and label.strip() and label.strip() != retired["displayName"] else None
     return retired["replacement"], retired["params"](dict(params or {})), custom or retired["label"]
 

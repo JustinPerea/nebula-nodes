@@ -75,7 +75,7 @@ async def test_gemini_omni_text_to_video_submits_interaction():
             )
 
     body = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
-    assert body["model"] == "gemini-omni-flash-preview"
+    assert body["model"] == "gemini-omni-1.1-flash"
     assert body["input"] == "a marble rolling"
     assert body["background"] is False
     assert body["response_format"]["aspect_ratio"] == "9:16"

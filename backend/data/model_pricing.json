@@ -6485,6 +6485,34 @@
       "rows": [
         {
           "match": {
+            "model": "gemini-nano-banana-2.1",
+            "imageSize": "512"
+          },
+          "price": 0.0336
+        },
+        {
+          "match": {
+            "model": "gemini-nano-banana-2.1",
+            "imageSize": "1K"
+          },
+          "price": 0.0336
+        },
+        {
+          "match": {
+            "model": "gemini-nano-banana-2.1",
+            "imageSize": "2K"
+          },
+          "price": 0.0504
+        },
+        {
+          "match": {
+            "model": "gemini-nano-banana-2.1",
+            "imageSize": "4K"
+          },
+          "price": 0.113
+        },
+        {
+          "match": {
             "model": "gemini-3.1-flash-image",
             "imageSize": "512"
           },
@@ -6552,8 +6580,12 @@
           "price": 0.039
         }
       ],
-      "notes": "Gemini API standard (paid tier) output-image prices. The handler renders 512 on 3 Pro as 1K, Flash-Lite always at 1K, and sends no size for 2.5 Flash. Input text and reference images add well under $0.01. Ignores Batch/Flex/Priority rates.",
+      "notes": "Gemini API standard (paid tier) output-image prices. Nano Banana 2.1 (Interactions API) has 1K/2K/4K only and renders a saved 512 at 1K. The handler renders 512 on 3 Pro as 1K, Flash-Lite always at 1K, and sends no size for 2.5 Flash. Input text and reference images add well under $0.01. Ignores Batch/Flex/Priority rates.",
       "sources": [
+        {
+          "url": "https://ai.google.dev/gemini-api/docs/pricing",
+          "quote": "Equivalent to $0.0336 per 1K image * , $0.0504 per 2K image * , and $0.113 per 4K image *"
+        },
         {
           "url": "https://ai.google.dev/gemini-api/docs/pricing",
           "quote": "Equivalent to $0.045 per 0.5K image, $0.067 per 1K image, $0.101 per 2K image, and $0.151 per 4K image"
@@ -6870,51 +6902,87 @@
       "per": "second",
       "provider": "google",
       "priceParams": [
-        "model"
+        "model",
+        "resolution"
       ],
       "rows": [
         {
           "match": {
-            "model": "veo-3.1-generate-preview"
+            "model": "veo-3.1-generate-preview",
+            "resolution": "720p"
           },
           "price": 0.4
         },
         {
           "match": {
-            "model": "veo-3.1-fast-generate-preview"
+            "model": "veo-3.1-generate-preview",
+            "resolution": "1080p"
+          },
+          "price": 0.4
+        },
+        {
+          "match": {
+            "model": "veo-3.1-generate-preview",
+            "resolution": "4k"
+          },
+          "price": 0.6
+        },
+        {
+          "match": {
+            "model": "veo-3.1-fast-generate-preview",
+            "resolution": "720p"
           },
           "price": 0.1
         },
         {
           "match": {
-            "model": "veo-3.1-lite-generate-preview"
+            "model": "veo-3.1-fast-generate-preview",
+            "resolution": "1080p"
+          },
+          "price": 0.12
+        },
+        {
+          "match": {
+            "model": "veo-3.1-fast-generate-preview",
+            "resolution": "4k"
+          },
+          "price": 0.3
+        },
+        {
+          "match": {
+            "model": "veo-3.1-lite-generate-preview",
+            "resolution": "720p"
           },
           "price": 0.05
+        },
+        {
+          "match": {
+            "model": "veo-3.1-lite-generate-preview",
+            "resolution": "1080p"
+          },
+          "price": 0.08
         }
       ],
       "multiplyBy": [
         "duration"
       ],
-      "defaults": {
-        "duration": 8
-      },
-      "notes": "Direct Gemini API route only (with GOOGLE_API_KEY); the FAL fallback route is unpriced. The node sends no duration, resolution or audio flag, so Veo's defaults apply: an 8-second 720p clip with audio (8 s matches past Veo outputs). Veo 3.0 and 2.0 are shut down and have no price. Billed only when the video generates.",
+      "notes": "Google routes only (Vertex service-account key or GOOGLE_API_KEY); the fal fallback is unpriced. Per second of the node's duration and resolution (defaults 8 s, 720p); audio is always generated, so these are the with-audio prices. Vertex lists the same amounts per \"count\" without saying what a count is; they are read as per second here, the higher reading. An extension renders at 720p whatever the setting. Lite has no 4K. Billed only when the video generates.",
       "sources": [
         {
           "url": "https://ai.google.dev/gemini-api/docs/pricing",
-          "quote": "Veo 3.1 Standard video with audio price (default) ... $0.40 (720p and 1080p)"
+          "quote": "Veo 3.1 Standard video with audio price (default) ... $0.40 (720p and 1080p) $0.60 (4k)"
         },
         {
           "url": "https://ai.google.dev/gemini-api/docs/pricing",
-          "quote": "Veo 3.1 Fast video with audio price (default) ... $0.10 (720p)"
+          "quote": "Veo 3.1 Fast video with audio price (default) ... $0.10 (720p) $0.12 (1080p) $0.30 (4k)"
         },
         {
           "url": "https://ai.google.dev/gemini-api/docs/pricing",
-          "quote": "Veo 3.1 Lite video with audio price (default) ... $0.05 (720p)"
+          "quote": "Veo 3.1 Lite video with audio price (default) ... $0.05 (720p) $0.08 (1080p) (4k output not supported)"
         },
         {
-          "url": "https://ai.google.dev/gemini-api/docs/veo",
-          "quote": "Veo 3.1 is a model for generating 8-second videos (720p, 1080p, or 4k) with natively generated audio."
+          "url": "https://ai.google.dev/gemini-api/docs/pricing",
+          "quote": "Free Tier Paid Tier, per second in USD"
         }
       ],
       "checked": "2026-10-10"

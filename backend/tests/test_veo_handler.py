@@ -119,10 +119,10 @@ async def test_extension_with_non_uri_video_raises(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_extension_rejected_on_veo2():
+async def test_extension_rejected_on_lite():
     with pytest.raises(ValueError, match="[Ee]xtension|[Vv]ideo"):
         await handle_veo(
-            _make_node({"model": "veo-2.0-generate-001"}),
+            _make_node({"model": "veo-3.1-lite-generate-preview"}),
             {
                 "prompt": PortValueDict(type="Text", value="x"),
                 "video": PortValueDict(type="Video", value=FILES_URI),
@@ -257,3 +257,215 @@ async def test_cancel_helper_posts_operation_cancel():
 
     assert posted["url"].endswith("operations/abc:cancel")
     assert posted["headers"]["x-goog-api-key"] == "test-key"
+
+
+# ----------------------------- Vertex AI -----------------------------
+
+class _VertexMock:
+    def __init__(self, video=None):
+        self.posts = []
+        self._video = video or {"bytesBase64Encoded": "RkFLRU1QNA==", "mimeType": "video/mp4"}
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        return False
+
+    async def post(self, url, json=None, headers=None):
+        self.posts.append({"url": url, "json": json, "headers": headers})
+        if url.endswith(":fetchPredictOperation"):
+            return _Resp(200, {"done": True, "response": {"videos": [self._video]}})
+        return _Resp(200, {"name": "projects/p/locations/us-central1/publishers/google/models/m/operations/op1"})
+
+
+def _vertex_patches(mock, tmp_path):
+    return (
+        patch("handlers.veo.httpx.AsyncClient", return_value=mock),
+        patch("handlers.veo.asyncio.sleep", new=AsyncMock()),
+        patch("handlers.veo.get_run_dir", return_value=tmp_path),
+        patch("handlers.veo.access_token", new=AsyncMock(return_value=("tok", "my-proj"))),
+    )
+
+
+@pytest.mark.asyncio
+async def test_vertex_route_wins_and_maps_to_ga_model(tmp_path):
+    mock = _VertexMock()
+    a, b, c, d = _vertex_patches(mock, tmp_path)
+    with a, b, c, d:
+        result = await handle_veo(
+            _make_node({"model": "veo-3.1-generate-preview", "duration": "4", "seed": "7"}),
+            {
+                "prompt": PortValueDict(type="Text", value="a fox"),
+                "image": PortValueDict(type="Image", value=PNG_DATA_URI),
+                "last_frame": PortValueDict(type="Image", value=PNG_DATA_URI),
+            },
+            {"GOOGLE_VERTEX_CREDENTIALS": "{}", "GOOGLE_API_KEY": "k"},
+        )
+    submit, poll = mock.posts
+    assert submit["url"] == (
+        "https://us-central1-aiplatform.googleapis.com/v1/projects/my-proj/locations/us-central1"
+        "/publishers/google/models/veo-3.1-generate-001:predictLongRunning"
+    )
+    assert submit["headers"]["Authorization"] == "Bearer tok"
+    instance = submit["json"]["instances"][0]
+    assert instance["image"] == {"bytesBase64Encoded": PNG_B64, "mimeType": "image/png"}
+    assert instance["lastFrame"] == {"bytesBase64Encoded": PNG_B64, "mimeType": "image/png"}
+    params = submit["json"]["parameters"]
+    assert params["durationSeconds"] == 4 and params["seed"] == 7
+    assert params["generateAudio"] is True and params["sampleCount"] == 1
+    assert poll["url"].endswith("veo-3.1-generate-001:fetchPredictOperation")
+    assert poll["json"] == {"operationName": "projects/p/locations/us-central1/publishers/google/models/m/operations/op1"}
+    saved = result["video"]["value"]
+    assert open(saved, "rb").read() == b"FAKEMP4"
+    assert result["source_uri"]["value"] == saved, "Vertex extends from the saved bytes"
+
+
+@pytest.mark.asyncio
+async def test_vertex_extension_sends_saved_clip_bytes(tmp_path):
+    clip = tmp_path / "clip.mp4"
+    clip.write_bytes(b"CLIP")
+    mock = _VertexMock()
+    a, b, c, d = _vertex_patches(mock, tmp_path)
+    with a, b, c, d, patch("handlers.veo.require_allowed_path", side_effect=lambda p: p):
+        await handle_veo(
+            _make_node({"model": "veo-3.1-fast-generate-preview", "resolution": "1080p"}),
+            {"prompt": PortValueDict(type="Text", value="go on"), "video": PortValueDict(type="Video", value=str(clip))},
+            {"GOOGLE_VERTEX_CREDENTIALS": "{}"},
+        )
+    body = mock.posts[0]["json"]
+    assert mock.posts[0]["url"].endswith("veo-3.1-fast-generate-001:predictLongRunning")
+    assert body["instances"][0]["video"] == {"bytesBase64Encoded": "Q0xJUA==", "mimeType": "video/mp4"}
+    assert body["parameters"]["resolution"] == "720p"
+
+
+@pytest.mark.asyncio
+async def test_vertex_rejects_gemini_files_uri_for_extension(tmp_path):
+    mock = _VertexMock()
+    a, b, c, d = _vertex_patches(mock, tmp_path)
+    with a, b, c, d, pytest.raises(ValueError, match="Gemini API"):
+        await handle_veo(
+            _make_node(),
+            {"prompt": PortValueDict(type="Text", value="x"), "video": PortValueDict(type="Video", value=FILES_URI)},
+            {"GOOGLE_VERTEX_CREDENTIALS": "{}"},
+        )
+    assert mock.posts == []
+
+
+@pytest.mark.asyncio
+async def test_vertex_lite_is_text_only(tmp_path):
+    with pytest.raises(ValueError, match="Lite"):
+        await handle_veo(
+            _make_node({"model": "veo-3.1-lite-generate-preview"}),
+            {"prompt": PortValueDict(type="Text", value="x"), "image": PortValueDict(type="Image", value=PNG_DATA_URI)},
+            {"GOOGLE_VERTEX_CREDENTIALS": "{}"},
+        )
+
+
+@pytest.mark.asyncio
+async def test_vertex_filtered_video_reports_reason(tmp_path):
+    class _Filtered(_VertexMock):
+        async def post(self, url, json=None, headers=None):
+            if url.endswith(":fetchPredictOperation"):
+                return _Resp(200, {"done": True, "response": {"raiMediaFilteredReasons": ["unsafe"]}})
+            return await super().post(url, json, headers)
+
+    mock = _Filtered()
+    a, b, c, d = _vertex_patches(mock, tmp_path)
+    with a, b, c, d, pytest.raises(RuntimeError, match="filtered.*unsafe"):
+        await handle_veo(_make_node(), {"prompt": PortValueDict(type="Text", value="x")}, {"GOOGLE_VERTEX_CREDENTIALS": "{}"})
+
+
+@pytest.mark.asyncio
+async def test_veo_flf_on_vertex_maps_fal_shaped_params(tmp_path):
+    from handlers.veo import handle_veo_flf_vertex
+
+    mock = _VertexMock()
+    a, b, c, d = _vertex_patches(mock, tmp_path)
+    with a, b, c, d:
+        await handle_veo_flf_vertex(
+            GraphNode(id="flf", definitionId="veo-3-flf", params={
+                "aspect_ratio": "auto", "duration": "6s", "resolution": "1080p",
+                "generate_audio": False, "negative_prompt": "blur", "safety_tolerance": "2",
+            }),
+            {
+                "prompt": PortValueDict(type="Text", value="morph"),
+                "image": PortValueDict(type="Image", value=PNG_DATA_URI),
+                "end_image": PortValueDict(type="Image", value=PNG_DATA_URI),
+            },
+            {"GOOGLE_VERTEX_CREDENTIALS": "{}"},
+        )
+    body = mock.posts[0]["json"]
+    assert mock.posts[0]["url"].endswith("veo-3.1-generate-001:predictLongRunning")
+    assert set(body["instances"][0]) == {"prompt", "image", "lastFrame"}
+    assert body["parameters"] == {
+        "durationSeconds": 6, "resolution": "1080p", "generateAudio": False,
+        "negativePrompt": "blur", "sampleCount": 1,
+    }
+
+
+# ----------------------------- fal route + retirement -----------------------------
+
+def test_fal_route_picks_endpoint_and_renames_params():
+    from handlers.veo import fal_veo_route
+
+    node = _make_node({
+        "model": "veo-3.1-fast-generate-preview", "aspectRatio": "9:16", "duration": "6",
+        "resolution": "1080p", "personGeneration": "allow_all", "seed": 3,
+    })
+    routed, inputs = fal_veo_route(node, {
+        "prompt": PortValueDict(type="Text", value="x"),
+        "image": PortValueDict(type="Image", value="https://example.com/a.png"),
+    })
+    assert routed.params == {
+        "seed": 3, "aspect_ratio": "9:16", "duration": "6s", "resolution": "1080p",
+        "image_url": "https://example.com/a.png", "endpoint_id": "fal-ai/veo3.1/fast/image-to-video",
+    }
+    assert set(inputs) == {"prompt"}
+    assert node.params["model"] == "veo-3.1-fast-generate-preview", "the saved node is not mutated"
+
+    routed, _ = fal_veo_route(_make_node({"model": "veo-3.1-generate-preview"}), {
+        "image": PortValueDict(type="Image", value="https://example.com/a.png"),
+        "last_frame": PortValueDict(type="Image", value="https://example.com/b.png"),
+    })
+    assert routed.params["endpoint_id"] == "fal-ai/veo3.1/first-last-frame-to-video"
+    assert routed.params["last_frame_url"] == "https://example.com/b.png"
+
+    routed, _ = fal_veo_route(_make_node({"model": "veo-3.1-generate-preview"}), {})
+    assert routed.params["endpoint_id"] == "fal-ai/veo3.1"
+
+
+def test_fal_route_refuses_extension():
+    from handlers.veo import fal_veo_route
+
+    with pytest.raises(ValueError, match="Google route"):
+        fal_veo_route(_make_node(), {"video": PortValueDict(type="Video", value=FILES_URI)})
+
+
+def test_vertex_hint_only_after_previews_end():
+    from datetime import date
+
+    from handlers.veo import with_vertex_hint
+
+    assert with_vertex_hint("boom", date(2026, 10, 21)) == "boom"
+    hinted = with_vertex_hint("boom", date(2026, 10, 22))
+    assert hinted.startswith("boom") and "GOOGLE_VERTEX_CREDENTIALS" in hinted
+
+
+@pytest.mark.asyncio
+async def test_gemini_submit_error_points_at_vertex_after_previews_end(tmp_path):
+    class _Failing(_VeoMock):
+        async def post(self, url, json=None, headers=None):
+            return _Resp(404, {"error": "model not found"})
+
+    mock = _Failing()
+    p_httpx, p_sleep, p_dir = _patches(mock, tmp_path)
+    with p_httpx, p_sleep, p_dir, patch("handlers.veo.previews_retired", return_value=True):
+        with pytest.raises(RuntimeError, match="Vertex"):
+            await handle_veo(_make_node(), {"prompt": PortValueDict(type="Text", value="x")}, {"GOOGLE_API_KEY": "k"})
+
+
+@pytest.mark.asyncio
+async def test_missing_any_google_credential_names_both():
+    with pytest.raises(ValueError, match="GOOGLE_VERTEX_CREDENTIALS.*GOOGLE_API_KEY"):
+        await handle_veo(_make_node(), {"prompt": PortValueDict(type="Text", value="x")}, {})

@@ -63,8 +63,8 @@ def test_get_all_key_names(registry):
 
 
 def test_search_by_name(registry):
-    results = registry.search("imagen")
-    assert any("imagen" in n["id"] for n in results)
+    results = registry.search("banana")
+    assert any("nano-banana" in n["id"] for n in results)
 
 
 def test_search_case_insensitive(registry):

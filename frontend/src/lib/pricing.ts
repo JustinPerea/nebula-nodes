@@ -51,7 +51,7 @@ function asMatchValue(value: unknown): string {
 
 function definitionParams(definition: Partial<ModelNodeDefinition>) {
   const record = definition as Record<string, unknown>;
-  return ['params', 'directParams', 'falParams'].flatMap((key) =>
+  return ['params', 'sharedParams', 'directParams', 'falParams'].flatMap((key) =>
     Array.isArray(record[key]) ? (record[key] as Array<{ key?: string; default?: unknown }>) : []);
 }
 

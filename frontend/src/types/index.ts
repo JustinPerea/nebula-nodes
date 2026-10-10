@@ -142,8 +142,9 @@ export interface ModelNodeDefinition {
   falParams?: ParamDefinition[];
   directParams?: ParamDefinition[];
   /** Which env key name selects the "direct" route (vs FAL). Used by Inspector
-   *  to decide which param set to show. e.g. 'MESHY_API_KEY' or 'GOOGLE_API_KEY'. */
-  directKeyName?: string;
+   *  to decide which param set to show. e.g. 'MESHY_API_KEY' or 'GOOGLE_API_KEY'.
+   *  A list means any of them, tried in order (Veo: Vertex, then Gemini API). */
+  directKeyName?: string | string[];
   docUrl?: string;
 }
 

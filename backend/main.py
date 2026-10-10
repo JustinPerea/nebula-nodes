@@ -3629,12 +3629,13 @@ async def update_settings(body: dict[str, Any]) -> dict:
     return {"status": "saved"}
 
 
-# The credential-update allowlist (17 keys; desktop/credentials.mjs mirrors it).
+# The credential-update allowlist (18 keys; desktop/credentials.mjs mirrors it).
 _CREDENTIAL_PROVIDER_ALLOWLIST = frozenset({
     "ANTHROPIC_API_KEY",
     "ELEVENLABS_API_KEY",
     "FAL_KEY",
     "GOOGLE_API_KEY",
+    "GOOGLE_VERTEX_CREDENTIALS",
     "HIGGSFIELD_API_KEY",
     "IDEOGRAM_API_KEY",
     "KREA_API_TOKEN",

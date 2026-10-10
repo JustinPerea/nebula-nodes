@@ -1,0 +1,11 @@
+{
+  "_comment": "Oracle: backend/tests/test_google_contract_fixtures.py::test_google_request_body_matches_fixture[nano-banana-2-1-generate-request.json]. Endpoint (not in body): POST /v1beta/interactions. Nano Banana 2.1 is documented only on the Interactions API.",
+  "model": "gemini-nano-banana-2.1",
+  "input": "a red pixel",
+  "response_format": {
+    "type": "image",
+    "aspect_ratio": "16:9",
+    "image_size": "2K"
+  },
+  "store": false
+}

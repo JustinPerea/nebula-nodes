@@ -1,6 +1,7 @@
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 import type { ModelNodeDefinition } from '../types';
 import { supportsKreaAccount, usesKreaAccount, type CredentialReadiness } from './kreaConnection';
+import { configuredDirectKey, directKeyNames } from './directRoute';
 
 export type ProviderSetupTarget =
   | { kind: 'api-key'; key: string }
@@ -31,6 +32,7 @@ export interface ModelReadiness {
 export const PROVIDER_HEALTH_TTL_MS = 5 * 60 * 1000;
 export const PROVIDER_KEY_LABELS: Readonly<Record<string, string>> = {
   OPENAI_API_KEY: 'OpenAI', ANTHROPIC_API_KEY: 'Anthropic', GOOGLE_API_KEY: 'Google',
+  GOOGLE_VERTEX_CREDENTIALS: 'Google Vertex',
   OPENROUTER_API_KEY: 'OpenRouter', REPLICATE_API_TOKEN: 'Replicate', FAL_KEY: 'FAL',
   MESHY_API_KEY: 'Meshy', RUNWAY_API_KEY: 'Runway', ELEVENLABS_API_KEY: 'ElevenLabs',
   MINIMAX_API_KEY: 'MiniMax', XAI_API_KEY: 'xAI', HIGGSFIELD_API_KEY: 'Higgsfield',
@@ -126,8 +128,8 @@ export function modelReadiness(def: ModelNodeDefinition, params: Record<string, 
     detail: 'This node has no API-key requirement. Its inputs and local tools may still need setup.' };
   // Runtime selects a configured direct route first. A valid alternate must not mask a rejected direct key.
   const needsFalReframe = def.id === 'ideogram-reframe' && !params.resolution;
-  const key = needsFalReframe ? 'FAL_KEY' : def.directKeyName && cache.apiKeys[def.directKeyName]?.trim() ? def.directKeyName
-    : keys.find((candidate) => cache.apiKeys[candidate]?.trim()) ?? def.directKeyName ?? keys[0];
+  const key = needsFalReframe ? 'FAL_KEY' : configuredDirectKey(def, cache.apiKeys)
+    ?? keys.find((candidate) => cache.apiKeys[candidate]?.trim()) ?? directKeyNames(def)[0] ?? keys[0];
   const ready = keyReadiness(key, cache, health);
   return { ...ready, connectionLabel: key === 'KREA_API_TOKEN' ? 'Krea API token' : `${key === 'FAL_KEY' ? 'fal.ai' : PROVIDER_KEY_LABELS[key] ?? key} API`,
     detail: `${PROVIDER_KEY_LABELS[key] ?? key}${supportsKreaAccount(def) ? ' API token · API balance' : keys.length > 1 ? ' route' : ''}.${needsFalReframe ? ' This saved recipe has no direct resolution, so it uses FAL.' : ''} ${ready.detail}` };

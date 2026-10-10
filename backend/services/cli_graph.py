@@ -304,7 +304,8 @@ def _migrate_retired(node: dict[str, Any]) -> dict[str, Any]:
         str(node.get("definitionId", "")), node.get("params"), node.get("label"),
     )
     if definition_id == node.get("definitionId"):
-        return node
+        # Same node, maybe on a retired model option (Veo 3.0 → 3.1).
+        return node if params == (node.get("params") or {}) else {**node, "params": params}
     migrated = {**node, "definitionId": definition_id, "params": params}
     if label:
         migrated["label"] = label
