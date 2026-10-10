@@ -14,9 +14,13 @@ vi.mock('@xyflow/react', async (importOriginal) => {
     ...actual,
     useReactFlow: () => ({
       fitView: vi.fn(),
+      zoomIn: vi.fn(),
+      zoomOut: vi.fn(),
+      zoomTo: vi.fn(),
       getViewport: vi.fn(() => ({ x: 0, y: 0, zoom: 1 })),
     }),
-    useStore: () => [0, 0, 1],
+    useStore: <T,>(selector: (state: { transform: number[]; minZoom: number; maxZoom: number }) => T) =>
+      selector({ transform: [0, 0, 1], minZoom: 0.1, maxZoom: 4 }),
   };
 });
 

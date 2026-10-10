@@ -726,7 +726,7 @@ export function Canvas() {
         <Panel position="top-center" className="selection-toolbar-panel">
           <SelectionToolbar />
         </Panel>
-        <CanvasNavigation nodeCount={nodes.length} />
+        <CanvasNavigation />
         <CanvasViewReporter />
         <AgentCursorLayer />
         <PinLayer />

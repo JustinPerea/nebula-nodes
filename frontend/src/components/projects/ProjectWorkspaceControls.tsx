@@ -1,5 +1,6 @@
 import { Home } from 'lucide-react';
 import { useProjectStore } from '../../store/projectStore';
+import { useGraphStore } from '../../store/graphStore';
 import './ProjectWorkspaceControls.css';
 
 export function ProjectWorkspaceControls() {
@@ -8,6 +9,7 @@ export function ProjectWorkspaceControls() {
   const status = useProjectStore((state) => state.saveStatus);
   const busy = useProjectStore((state) => state.busy);
   const error = useProjectStore((state) => state.error);
+  const nodeCount = useGraphStore((state) => state.nodes.length);
   if (!project || screen !== 'workspace') return null;
   const label = status === 'saving' ? 'Saving…' : status === 'error' ? 'Save failed' : status === 'unsaved' ? 'Unsaved changes' : 'Saved';
   return (
@@ -21,6 +23,7 @@ export function ProjectWorkspaceControls() {
         ? <button type="button" className="project-workspace-controls__retry" title={error ?? 'Retry saving'}
             onClick={() => void useProjectStore.getState().retry()}>Save failed · Retry</button>
         : <span className="project-workspace-controls__status" role="status">{label}</span>}
+      <span className="project-workspace-controls__count">{nodeCount} {nodeCount === 1 ? 'node' : 'nodes'}</span>
     </div>
   );
 }

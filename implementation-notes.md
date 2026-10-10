@@ -1,5 +1,37 @@
 # Implementation Notes
 
+## 2026-10-10 — Zoom in the bottom bar, and one radius system
+
+- **Zoom moved into the bottom bar:** `[Run | Canvas actions | − 100% + ⛶]`.
+  - The floating zoom pill was 32px tall, the bar 48px and the chat button 42px, and none of them lined up.
+  - The percentage is new: the canvas never showed its zoom before. Clicking it resets to 100%.
+  - Steps and reset use 200ms animations; Fit uses 300ms (same as the import fit) and the same chrome-aware padding as before.
+  - − and + disable at the canvas limits (0.1 and 4).
+  - Kept it a plain reset rather than a Fit/100%/50% menu. A menu adds a popover and keyboard handling for little gain, since Fit has its own button.
+- **What moved where:**
+  - The node count went to the header ("Saved · 2 nodes", mono, meta ink). It hides under 650px along with the save status.
+  - `CanvasNavigation` now renders only the optional minimap (still bottom-right). The minimap's corners went from 8 to 14.
+  - The chat button is centered on the bar's line: it was 11px low.
+- **Phones (≤520px) drop the zoom group.** The longer bar ran 9px under the chat button. Pinch zooms, and Fit view is still in the command palette (rail Search).
+- **Radius system: three tiers.**
+  - 8 for controls.
+  - 14 for anything that floats (bars, panels, drawers, menus, every node card).
+  - Pills only for tiny icon chips.
+  - Done by raising `--sr-radius-panel` from 12 to 14, which text nodes, drawers and menus already used. The base node card and header moved from `--sr-radius-node` (8) to the panel token, so other node types match image nodes. `--sr-radius-node` stays 8 because buttons use it too.
+  - The header home button went 14 → 8: it was a near-circle bulging inside the 14px header.
+- **Left as is:** the chat button stays round. Justin's call; a round chat launcher is a common convention.
+- **Gone:** React Flow's `<Controls>` and its unthemed `#eee` button borders (the bright dividers).
+- **Checked live:**
+  - zoom in → 116%, the percentage resets to 100%, Fit fits;
+  - bar and chat centers both at 736px; drawer, text node, image node and header all 14px;
+  - 375px: bar ends 13px before the chat button, centers aligned.
+  - Not checked visually: node types other than text and image (none in the open project). They now use the 14px card by token.
+- **Tests:**
+  - `Toolbar.test.tsx` has zoom tests: steps, the percentage reset, Fit, and the limits.
+  - The old assertion that Fit is *not* on the bar now asserts it is.
+  - `CanvasNavigation.test.tsx` is reduced to the minimap.
+  - `NodeLibrary` "keeps explicit all-model browsing" failed once under full-suite load and passed 3/3 alone. Flaky, and unrelated.
+
 ## 2026-10-10 — Floating rail and attached drawers
 
 Supersedes the 2026-10-09 "Flush-left toolbar" placement and the rail part of "Match toolbar and node radii".

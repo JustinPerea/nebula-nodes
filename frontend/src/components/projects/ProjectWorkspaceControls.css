@@ -13,7 +13,7 @@ body.app-slava-restraint .project-workspace-controls__home {
   width: 30px;
   height: 30px;
   border: 0;
-  border-radius: var(--sr-node-media-radius);
+  border-radius: var(--sr-radius-control);
   background: transparent;
   color: var(--sr-ink-light);
   cursor: pointer;
@@ -28,6 +28,16 @@ body.app-slava-restraint .project-workspace-controls__name {
   font: 500 12px/1.4 var(--sr-ui);
 }
 body.app-slava-restraint .project-workspace-controls__status { color: var(--sr-ink-light); font: 11px/1.4 var(--sr-ui); }
+body.app-slava-restraint .project-workspace-controls__count {
+  color: var(--sr-ink-meta);
+  font: 11px/1.4 var(--sr-mono);
+  white-space: nowrap;
+}
+body.app-slava-restraint .project-workspace-controls__count::before {
+  content: '·';
+  margin-right: 9px;
+  color: var(--sr-ink-faint);
+}
 body.app-slava-restraint .project-workspace-controls__retry {
   border: 0;
   background: transparent;
@@ -40,6 +50,6 @@ body.app-slava-restraint .project-workspace-controls button:focus-visible {
   outline-offset: var(--sr-focus-offset);
 }
 @media (max-width: 650px) {
-  body.app-slava-restraint .project-workspace-controls__status { display: none; }
+  body.app-slava-restraint :is(.project-workspace-controls__status, .project-workspace-controls__count) { display: none; }
   body.app-slava-restraint .project-workspace-controls__name { max-width: 100px; }
 }

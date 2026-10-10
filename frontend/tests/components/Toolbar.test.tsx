@@ -33,9 +33,14 @@ const mocks = vi.hoisted(() => ({
   ui: null as UseBoundStore<StoreApi<ToolbarUI>> | null,
   execute: vi.fn(), cancel: vi.fn(), layout: vi.fn(), clear: vi.fn(), load: vi.fn(),
   reset: vi.fn(), fit: vi.fn(), fetch: vi.fn(), cli: vi.fn(),
+  zoomIn: vi.fn(), zoomOut: vi.fn(), zoomTo: vi.fn(),
+  flow: { transform: [0, 0, 1] as [number, number, number], minZoom: 0.1, maxZoom: 4 },
 }));
 
-vi.mock('@xyflow/react', () => ({ useReactFlow: () => ({ fitView: mocks.fit }) }));
+vi.mock('@xyflow/react', () => ({
+  useReactFlow: () => ({ fitView: mocks.fit, zoomIn: mocks.zoomIn, zoomOut: mocks.zoomOut, zoomTo: mocks.zoomTo }),
+  useStore: <T,>(selector: (state: typeof mocks.flow) => T) => selector(mocks.flow),
+}));
 vi.mock('../../src/store/graphStore', async () => {
   const { create } = await import('zustand');
   mocks.graph = create<ToolbarGraph>(() => ({
@@ -80,12 +85,39 @@ describe('Canvas toolbar hierarchy', () => {
     vi.useRealTimers();
   });
 
+  it('keeps zoom on the bar: steps, a live percentage that resets to 100%, and fit', () => {
+    mocks.flow.transform = [0, 0, 0.87];
+    render(<Toolbar />);
+    const zoom = screen.getByRole('group', { name: 'Zoom' });
+    fireEvent.click(within(zoom).getByRole('button', { name: 'Zoom in' }));
+    fireEvent.click(within(zoom).getByRole('button', { name: 'Zoom out' }));
+    expect(mocks.zoomIn).toHaveBeenCalledWith({ duration: 200 });
+    expect(mocks.zoomOut).toHaveBeenCalledWith({ duration: 200 });
+    fireEvent.click(within(zoom).getByRole('button', { name: 'Zoom 87%, reset to 100%' }));
+    expect(mocks.zoomTo).toHaveBeenCalledWith(1, { duration: 200 });
+    fireEvent.click(within(zoom).getByRole('button', { name: 'Fit view' }));
+    expect(mocks.fit).toHaveBeenCalledWith(expect.objectContaining({ duration: 300 }));
+    mocks.flow.transform = [0, 0, 1];
+  });
+
+  it('disables zoom steps at the canvas limits', () => {
+    mocks.flow.transform = [0, 0, 4];
+    const { unmount } = render(<Toolbar />);
+    expect(screen.getByRole('button', { name: 'Zoom in' }).hasAttribute('disabled')).toBe(true);
+    expect(screen.getByRole('button', { name: 'Zoom out' }).hasAttribute('disabled')).toBe(false);
+    unmount();
+    mocks.flow.transform = [0, 0, 0.1];
+    render(<Toolbar />);
+    expect(screen.getByRole('button', { name: 'Zoom out' }).hasAttribute('disabled')).toBe(true);
+    mocks.flow.transform = [0, 0, 1];
+  });
+
   it('keeps Run and Canvas actions named, and defers secondary controls without executing', () => {
     render(<Toolbar />);
     expect(screen.getByRole('button', { name: 'Run' })).toBeEnabled();
     expect(screen.getByRole('button', { name: 'Canvas actions' })).toHaveAttribute('aria-expanded', 'false');
     expect(screen.queryByRole('button', { name: 'Save graph' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /fit/i })).not.toBeInTheDocument();
+    expect(within(screen.getByRole('group', { name: 'Zoom' })).getByRole('button', { name: 'Fit view' })).toBeInTheDocument();
     const { trigger, panel } = openActions();
     expect(trigger).toHaveAttribute('aria-controls', panel.id);
     expect(trigger).toHaveAttribute('aria-expanded', 'true');

@@ -141,8 +141,10 @@ body.app-slava-restraint {
   --sr-space-5: 20px;
   --sr-space-6: 24px;
 
-  /* Soft-glass corner radii — Nothing's signature gentle rounding. */
-  --sr-radius-panel: 12px;
+  /* Soft-glass corner radii — Nothing's signature gentle rounding.
+     Three tiers: 8 for controls, 14 for anything that floats (bars, panels,
+     nodes; 8 + a 6px inset), and pills only for tiny icon chips. */
+  --sr-radius-panel: 14px;
   --sr-radius-node: 8px;
   --sr-radius-control: 8px;
   --sr-radius-control-lg: 10px;
@@ -2504,6 +2506,11 @@ body.app-slava-restraint .panel-launcher {
     transform 220ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
+/* Center chat on the bottom bar's line (bar: 48px tall, --sr-space-6 up). */
+body.app-slava-restraint .panel-launcher--chat {
+  bottom: calc(var(--sr-space-6) + (48px - 42px) / 2);
+}
+
 body.app-slava-restraint .panel-launcher::after {
   content: '';
   position: absolute;
@@ -3204,7 +3211,7 @@ body.app-slava-restraint .model-node__card {
   backdrop-filter: var(--sr-blur-node);
   -webkit-backdrop-filter: var(--sr-blur-node);
   border: 1px solid color-mix(in srgb, var(--node-category-color, var(--sr-node-category-fallback)) var(--sr-node-card-border-mix), transparent);
-  border-radius: var(--sr-radius-node);
+  border-radius: var(--sr-radius-panel);
   /* Soft inner highlight (1px white at 6% inset) — Flora's quiet halo. */
   box-shadow: var(--sr-shadow-node);
   overflow: visible;  /* let handles escape; preview clips itself */
@@ -3314,7 +3321,7 @@ body.app-slava-restraint .model-node__header {
   z-index: var(--sr-layer-node-header);
   padding: var(--sr-node-header-padding);
   border-bottom: none;
-  border-radius: var(--sr-radius-node) var(--sr-radius-node) 0 0;
+  border-radius: var(--sr-radius-panel) var(--sr-radius-panel) 0 0;
   background: transparent;
   align-items: center;
   gap: var(--sr-node-header-gap);

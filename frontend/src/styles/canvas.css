@@ -38,7 +38,8 @@ body:not(.app-slava-restraint) .react-flow__controls button:hover {
 /* --- Large-graph performance affordances (P0.1) --- */
 
 .react-flow__minimap {
-  border-radius: 8px;
+  overflow: hidden;
+  border-radius: var(--sr-node-media-radius, 14px);
 }
 
 .canvas-navigation.react-flow__panel {
@@ -49,45 +50,6 @@ body:not(.app-slava-restraint) .react-flow__controls button:hover {
   display: flex;
   flex-direction: column;
   gap: 8px;
-}
-
-.canvas-navigation__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.canvas-navigation__controls.react-flow__panel {
-  position: static;
-  margin: 0;
-  flex-shrink: 0;
-}
-
-body.app-slava-restraint .canvas-navigation__controls {
-  overflow: hidden;
-  border: 1px solid var(--sr-edge);
-  border-radius: var(--sr-node-media-radius);
-  box-shadow: var(--sr-shadow-panel-sm);
-}
-body.app-slava-restraint .canvas-navigation__controls button {
-  width: 30px;
-  height: 30px;
-  padding: 7px;
-  border: 0;
-  border-right: 1px solid var(--sr-edge);
-  background: var(--sr-glass-raised);
-  color: var(--sr-ink-light);
-  fill: currentColor;
-}
-body.app-slava-restraint .canvas-navigation__controls button:last-child { border-right: 0; }
-body.app-slava-restraint .canvas-navigation__controls button:hover {
-  background: var(--sr-surface-control-hover);
-  color: var(--sr-ink-bold);
-}
-body.app-slava-restraint .canvas-navigation__controls button:focus-visible {
-  outline: 2px solid var(--sr-accent);
-  outline-offset: -2px;
 }
 
 .canvas-minimap-panel {
@@ -120,17 +82,6 @@ body:not(.app-slava-restraint) .react-flow__minimap {
 body.app-slava-restraint .react-flow__minimap {
   background: var(--sr-canvas, #090909);
   border: 1px solid var(--sr-edge);
-}
-
-.canvas-node-count {
-  font-size: 11px;
-  letter-spacing: 0.04em;
-  padding: 3px 8px;
-  border-radius: 6px;
-  background: rgba(0, 0, 0, 0.45);
-  color: rgba(255, 255, 255, 0.6);
-  pointer-events: none;
-  user-select: none;
 }
 
 /* Contextual actions for the current canvas selection. This intentionally
@@ -263,14 +214,6 @@ body.app-slava-restraint .react-flow__minimap {
     padding-inline: 7px;
   }
 }
-body.app-slava-restraint .canvas-node-count {
-  padding: 0;
-  background: transparent;
-  color: var(--sr-ink-meta);
-  font-family: var(--sr-font-mono, monospace);
-  white-space: nowrap;
-}
-
 /* Zoom level-of-detail: when zoomed out past the threshold, hide the heavy
    per-node media/labels so panning a large graph stays cheap. Handles, edges,
    header and the node box stay visible so topology remains readable. */

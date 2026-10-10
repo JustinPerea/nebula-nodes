@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
-import { useReactFlow } from '@xyflow/react';
+import { useReactFlow, useStore } from '@xyflow/react';
 import {
   FolderOpen,
   ChevronUp,
+  Maximize,
+  Minus,
   MoreHorizontal,
   Network,
   Play,
+  Plus,
   RotateCcw,
   Save,
   Square,
@@ -25,8 +28,14 @@ import type { Edge, Node } from '@xyflow/react';
 import '../../styles/panels.css';
 import '../../styles/canvas-toolbar.css';
 
+const ZOOM_DURATION = 200;
+
 export function Toolbar() {
-  const { fitView } = useReactFlow();
+  const { fitView, zoomIn, zoomOut, zoomTo } = useReactFlow();
+  const zoom = useStore((s) => s.transform[2]);
+  const minZoom = useStore((s) => s.minZoom);
+  const maxZoom = useStore((s) => s.maxZoom);
+  const zoomPercent = Math.round(zoom * 100);
   const executeGraph = useGraphStore((s) => s.executeGraph);
   const cancelExecution = useGraphStore((s) => s.cancelExecution);
   const isExecuting = useGraphStore((s) => s.isExecuting);
@@ -282,6 +291,29 @@ export function Toolbar() {
             </div>
           </section>
         )}
+      </div>
+      <div className="toolbar__divider toolbar__divider--zoom" aria-hidden="true" />
+      <div className="toolbar__zoom" role="group" aria-label="Zoom">
+        <button type="button" className="toolbar__button toolbar__button--icon toolbar__zoom-step"
+          aria-label="Zoom out" title="Zoom out" disabled={zoom <= minZoom + 0.001}
+          onClick={() => void zoomOut({ duration: ZOOM_DURATION })}>
+          <Minus className="toolbar__icon" size={14} strokeWidth={1.6} aria-hidden="true" />
+        </button>
+        <button type="button" className="toolbar__button toolbar__zoom-level"
+          aria-label={`Zoom ${zoomPercent}%, reset to 100%`} title="Reset zoom to 100%"
+          onClick={() => void zoomTo(1, { duration: ZOOM_DURATION })}>
+          {zoomPercent}%
+        </button>
+        <button type="button" className="toolbar__button toolbar__button--icon toolbar__zoom-step"
+          aria-label="Zoom in" title="Zoom in" disabled={zoom >= maxZoom - 0.001}
+          onClick={() => void zoomIn({ duration: ZOOM_DURATION })}>
+          <Plus className="toolbar__icon" size={14} strokeWidth={1.6} aria-hidden="true" />
+        </button>
+        <button type="button" className="toolbar__button toolbar__button--icon"
+          aria-label="Fit view" title="Fit view"
+          onClick={() => void fitView({ padding: computeCanvasFitPadding(), duration: 300 })}>
+          <Maximize className="toolbar__icon" size={14} strokeWidth={1.6} aria-hidden="true" />
+        </button>
       </div>
     </div>
   );
