@@ -14,8 +14,8 @@ Sorted by node count (desc). **API coverage** = share of the provider's publishe
 | [Ideogram](./ideogram.md) | 14 | ~80% | complete | Raw structured `json_prompt` generation input and general dataset/model management |
 | [OpenAI](./openai.md) | 8 | ~60% | complete | Image variations endpoint (dall-e-2) — no node; moot since OpenAI retired dall-e-2/3 on 2026-05-12 |
 | [Meshy](./meshy.md) | 8 | ~35% | complete | Creative Lab product line (Keychain, Fridge Magnet, Figure, Lamp) — entirely unused |
-| [Google (Gemini / Imagen / Veo / Lyria)](./google.md) | 8 | ~50% | complete | Veo extension now wired (`source_uri`→`Extend Video`, 2026-06-08); Veo reference images unavailable (live API: "use case not supported"); Imagen edit/upscale still unused |
 | [Runway](./runway.md) | 8 | ~65% | complete | Sound-effect generation (POST /v1/sound_effect) — no node |
+| [Google (Gemini / Imagen / Veo / Lyria)](./google.md) | 7 | ~50% | complete | Imagen 4 retired (node removed 2026-10-10; saved nodes migrate to Nano Banana 2.1); Veo 3.1 runs on Vertex AI, the Gemini API (previews end 2026-10-22) or fal; Veo reference images unavailable (live API: "use case not supported") |
 | [ElevenLabs](./elevenlabs.md) | 6 | ~33% | complete | Music generation (prompt-to-music + stems) — no node |
 | [MiniMax (Hailuo)](./minimax.md) | 3 | ~12% | complete | Entire audio stack: TTS (40+ languages), voice cloning, voice design |
 | [Krea](./krea.md) | 3 | ~10% | complete | Video generation entirely unused (Veo, Kling, Runway, Hailuo, Seedance, Wan, Ray 2, LTX, Grok — 30+ models) |

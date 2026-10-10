@@ -1,6 +1,6 @@
 # Gemini Model IDs
 
-Sourced from https://ai.google.dev/gemini-api/docs/models (fetched 2026-04-16). This list moves. When in doubt, fetch the live page.
+Sourced from https://ai.google.dev/gemini-api/docs/models (fetched 2026-04-16; image, video and Omni rows updated 2026-10-10). This list moves. When in doubt, fetch the live page.
 
 ## Text + multimodal reasoning
 
@@ -17,10 +17,10 @@ Sourced from https://ai.google.dev/gemini-api/docs/models (fetched 2026-04-16). 
 
 | ID | Friendly name | Role |
 |---|---|---|
+| `gemini-nano-banana-2.1` | Nano Banana 2.1 | Interactions API; 1K/2K/4K; replaces Imagen 4 |
 | `gemini-3.1-flash-image` | Nano Banana 2 | High-volume, 512/1K/2K/4K, image-search grounding, thinking_level |
 | `gemini-3-pro-image` | Nano Banana Pro | Studio-quality, text rendering, 1K/2K/4K, reasoning |
 | `gemini-2.5-flash-image` | Nano Banana | Lowest latency, simple generation |
-| `imagen-4` | Imagen | Dedicated text-to-image, up to 2K |
 
 ## Video generation
 
@@ -29,9 +29,12 @@ Sourced from https://ai.google.dev/gemini-api/docs/models (fetched 2026-04-16). 
 | `veo-3.1-generate-preview` | ✅ | ✅ | up to 3 | ✅ | ✅ |
 | `veo-3.1-fast-generate-preview` | ✅ | | up to 3 | ✅ | ✅ |
 | `veo-3.1-lite-generate-preview` | ✅ | | | | ✅ |
-| `veo-3.0-generate-001` | ✅ | | | | |
-| `veo-3.0-fast-generate-001` | ✅ | | | | |
-| `veo-2.0-generate-001` | | | | | |
+
+The Gemini API preview ids above retire on 2026-10-22. On **Vertex AI** the GA ids are `veo-3.1-generate-001` and `veo-3.1-fast-generate-001` (retire "Nov 17 2026 or later"); `veo-3.1-lite-generate-001` is a text-to-video-only preview there.
+
+| ID | Family | Role |
+|---|---|---|
+| `gemini-omni-1.1-flash` | Gemini Omni | Video generation and conversational video edits (Interactions API); replaced `gemini-omni-flash-preview`, which shuts down 2026-10-22 |
 
 ## Live / realtime
 
@@ -75,6 +78,9 @@ Sourced from https://ai.google.dev/gemini-api/docs/models (fetched 2026-04-16). 
 - `gemini-2.0-flash` — deprecated
 - `gemini-2.0-flash-lite` — deprecated
 - `gemini-3-pro-preview` — shut down 2026-03-09 (note: different from the `-image-preview` variant which is active)
+- `imagen-4.0-*` (Imagen 4, all variants) — shut down 2026-08-17; replacement is Nano Banana 2.1
+- `veo-3.0-generate-001`, `veo-3.0-fast-generate-001`, `veo-2.0-generate-001` — shut down 2026-06-30
+- `gemini-omni-flash-preview` — shuts down 2026-10-22
 
 ## Version semantics
 

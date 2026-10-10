@@ -45,7 +45,7 @@ Platform-neutral contract documentation for Nebula Nodes. Used so **iPad**, **br
   - [examples/nano-banana.md](./examples/nano-banana.md) — Gemini image sync
 - **Google family (all direct nodes):**
   - [examples/gemini-chat.md](./examples/gemini-chat.md)
-  - [examples/imagen-4-generate.md](./examples/imagen-4-generate.md)
+  - [examples/imagen-4-generate.md](./examples/imagen-4-generate.md) — retired (Imagen 4 shut down; migrates to Nano Banana 2.1)
   - [examples/lyria-3.md](./examples/lyria-3.md)
   - [examples/gemini-tts.md](./examples/gemini-tts.md)
   - [examples/gemini-embeddings.md](./examples/gemini-embeddings.md)

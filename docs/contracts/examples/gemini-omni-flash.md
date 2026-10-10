@@ -23,7 +23,7 @@ oracle:
 
 Template for porting agents. Conversational video via the **Interactions API**, using synchronous creation for URI delivery and background polling for inline delivery. This is not Veo's `predictLongRunning` flow.
 
-Shipped 2026-06-30. Model id pinned: `gemini-omni-flash-preview`.
+Shipped 2026-06-30. Model id pinned: `gemini-omni-1.1-flash` (moved off `gemini-omni-flash-preview`, which shuts down 2026-10-22, on 2026-10-10).
 
 **In scope:** single node `gemini-omni-flash` (T2V, I2V, reference-to-video, edit chain).
 
@@ -86,7 +86,7 @@ Re-check official links when `pricing_verified` is older than `stale_after_days`
 | `displayName` | Gemini Omni Flash |
 | `category` | `video-gen` |
 | `apiProvider` | `google` |
-| `apiEndpoint` | `gemini-omni-flash-preview` |
+| `apiEndpoint` | `gemini-omni-1.1-flash` |
 | `envKeyName` | `GOOGLE_API_KEY` |
 | `executionPattern` | `async-poll` |
 
@@ -118,7 +118,7 @@ Re-check official links when `pricing_verified` is older than `stale_after_days`
 
 | Field | Value |
 |-------|-------|
-| `model` | Always `gemini-omni-flash-preview` |
+| `model` | Always `gemini-omni-1.1-flash` |
 | `background` | `false` for `delivery: uri`; `true` for `delivery: inline` |
 | `response_format.type` | Always `"video"` |
 
@@ -166,7 +166,7 @@ Content-Type: application/json
 
 ```json
 {
-  "model": "gemini-omni-flash-preview",
+  "model": "gemini-omni-1.1-flash",
   "input": "A marble rolling on a track",
   "background": false,
   "response_format": {
@@ -197,7 +197,7 @@ Content-Type: application/json
 
 ```json
 {
-  "model": "gemini-omni-flash-preview",
+  "model": "gemini-omni-1.1-flash",
   "previous_interaction_id": "v1_…",
   "input": "Make the sky purple",
   "background": false,
@@ -265,7 +265,7 @@ Wire `interaction_id` → downstream `previous_interaction_id` param for convers
 
 Assertions on fixture body:
 
-- `model == "gemini-omni-flash-preview"`
+- `model == "gemini-omni-1.1-flash"`
 - `background == false` for the default URI fixture
 - `generation_config.video_config.task == "text_to_video"`
 - `response_format.aspect_ratio == "9:16"`
@@ -326,7 +326,7 @@ Edit chain: wire `n2.interaction_id` → `n3.previous_interaction_id` with new p
 
 | Parameter | Official Interactions API | Nebula |
 |-----------|---------------------------|--------|
-| `model` | ✓ | pinned `gemini-omni-flash-preview` |
+| `model` | ✓ | pinned `gemini-omni-1.1-flash` |
 | `input` | ✓ | ports → string or parts array |
 | `background` | ✓ | derived from delivery: URI `false`, inline `true` |
 | `response_format` | ✓ | `aspect_ratio`, `delivery` params |
@@ -362,3 +362,4 @@ Official reference: [Omni](https://ai.google.dev/gemini-api/docs/omni).
 | 2026-06-30 | Node shipped |
 | 2026-07-01 | Initial exemplar (partial) |
 | 2026-07-01 | Gold upgrade — full Vol 1–4, pricing, parameter matrix |
+| 2026-10-10 | Model id moved to `gemini-omni-1.1-flash` (preview shuts down 2026-10-22) |

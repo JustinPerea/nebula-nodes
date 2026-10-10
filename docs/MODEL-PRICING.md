@@ -32,7 +32,8 @@ without a sourced price is shown as unpriced, never guessed.
 ## What counts
 
 - **Batches multiply.** A node below a Batch runs once per item. Below an Iterator it runs up to the iterator's cap.
-- **Dual-route nodes are priced on the route that bills.** For example, Veo 3 uses the Google key when it's set and fal otherwise.
+- **Dual-route nodes are priced on the route that bills.** For example, Veo 3.1 (`veo-3`) runs on Vertex AI when a Vertex service-account key is set, then on the Gemini API key, and on fal otherwise. Both Google routes use the same per-second rows (model × resolution, times the node's duration: 8 s at 720p by default). The fal route is unpriced.
+- **Defaults come from the node definition.** The estimate reads each param's default from `params`, `sharedParams`, `directParams` and `falParams`. So an untouched Veo node is priced at 8 s, 720p.
 - **Krea account runs** are listed as billed to your Krea plan. They add nothing to the dollar total.
 - **Costs the vendor doesn't fix up front** (`plus`) are named but not added. For example, OpenAI bills input images on edit nodes by size.
 

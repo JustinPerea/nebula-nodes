@@ -1,19 +1,16 @@
 # Veo — Video Generation
 
-Sourced from https://ai.google.dev/gemini-api/docs/video (fetched 2026-04-16).
+Sourced from https://ai.google.dev/gemini-api/docs/video (fetched 2026-04-16). Model list and Nebula routes updated 2026-10-10.
 
 ## Model map
 
-| Model ID | Audio | 4K | Refs | Extension | First/Last Frame | Portrait |
-|---|---|---|---|---|---|---|
-| `veo-3.1-generate-preview` | ✅ | ✅ | up to 3 | ✅ | ✅ | ✅ |
-| `veo-3.1-fast-generate-preview` | ✅ | — | up to 3 | ✅ | ✅ | ✅ |
-| `veo-3.1-lite-generate-preview` | ✅ | — | — | — | ✅ | ✅ |
-| `veo-3.0-generate-001` | ✅ | — | — | — | — | — |
-| `veo-3.0-fast-generate-001` | ✅ | — | — | — | — | — |
-| `veo-2.0-generate-001` | ❌ | — | — | — | — | — |
+| Model ID (Gemini API) | Vertex AI ID | Audio | 4K | Refs | Extension | First/Last Frame | Portrait |
+|---|---|---|---|---|---|---|---|
+| `veo-3.1-generate-preview` | `veo-3.1-generate-001` (GA) | ✅ | ✅ | up to 3 | ✅ | ✅ | ✅ |
+| `veo-3.1-fast-generate-preview` | `veo-3.1-fast-generate-001` (GA) | ✅ | ✅ | up to 3 | ✅ | ✅ | ✅ |
+| `veo-3.1-lite-generate-preview` | `veo-3.1-lite-generate-001` (preview, text-to-video only) | ✅ | — | — | — | ✅ (Gemini API) | ✅ |
 
-Pick `veo-3.1-generate-preview` unless you're budgeting (`-fast` / `-lite`) or need to stay on a stable track (`-3.0-generate-001`). Veo 2 is silent and should only be used for legacy or budget.
+Pick Veo 3.1 unless you're budgeting (Fast / Lite). Veo 3.0, 3.0 Fast and 2.0 shut down on 2026-06-30. The Gemini API preview ids retire on **2026-10-22**; the Vertex GA ids retire "Nov 17 2026 or later".
 
 ## Prompt structure
 
@@ -65,18 +62,17 @@ Full audio-rich example:
 ## Technical specs
 
 ### Duration
-- Veo 3.x: 4, 6, or 8 seconds
-- Veo 2: 5, 6, or 8 seconds
+- 4, 6, or 8 seconds
 - **8 seconds is required** for: 1080p, 4K, reference images, extension
 
 ### Aspect ratio
-- `"16:9"` (default, all models)
-- `"9:16"` — Veo 3.x only
+- `"16:9"` (default)
+- `"9:16"`
 
 ### Resolution
-- `"720p"` (default, all)
-- `"1080p"` — Veo 3.x
-- `"4k"` — **Veo 3.1 main only** (not fast/lite/3.0)
+- `"720p"` (default)
+- `"1080p"`
+- `"4k"` — Veo 3.1 and 3.1 Fast (not Lite)
 - Extension is locked to 720p regardless of original
 - 1080p and 4K are locked to 8s
 
@@ -185,8 +181,7 @@ Expect 11 seconds minimum, up to 6 minutes during peak. In nebula this is alread
 
 ## Regional restrictions (EU, UK, CH, MENA)
 
-- Veo 3.x: `personGeneration="allow_adult"` only
-- Veo 2: defaults to `"dont_allow"`, override to `"allow_adult"` when needed
+- Veo 3.1: `personGeneration="allow_adult"` only
 
 ## Known limitations
 
@@ -197,7 +192,12 @@ Expect 11 seconds minimum, up to 6 minutes during peak. In nebula this is alread
 
 ## Nebula-specific notes
 
-- Nebula nodes for Veo are `veo-3`, `veo-3.1` etc. Check `nebula graph` for the exact definition ids available.
-- Pair Veo with an `image-input` node to do image-to-video (wire image-input.image → veo.startingFrame or whatever port name the node definition uses).
-- **Extension (wired 2026-06-08):** wire the upstream `veo-3` node's **`source_uri`** output → the downstream `veo-3` node's **`Extend Video`** input. Veo only accepts its OWN generated `files/...` URI — wiring the regular `video` output (a downloaded local file) is rejected with a `ValueError`. Extension is `veo-3.0`/`3.1` generate+fast only (not lite/veo-2.0), output is locked to **720p**, and the source URI is valid ~2 days.
+- Nodes: `veo-3` (displayed "Veo 3.1"; models Veo 3.1 / 3.1 Fast / 3.1 Lite) and `veo-3-flf` (First-Last Frame). Check `nebula graph` for the exact definition ids.
+- **Routes, in order** (checked 2026-10-10):
+  1. **Vertex AI** when `GOOGLE_VERTEX_CREDENTIALS` (a Google Cloud service-account JSON key, Settings → "Google Vertex AI (service-account JSON, for Veo)") is set. `us-central1`, project from the key, GA `-001` models; Lite is text-to-video only there. Audio is always on.
+  2. **Gemini API** with `GOOGLE_API_KEY` on the preview ids (until 2026-10-22).
+  3. **fal** with `FAL_KEY`: `fal-ai/veo3.1` / `fal-ai/veo3.1/fast` (Lite runs as Fast), image-to-video or first-last-frame endpoint when frames are wired. No extension; adds `negative_prompt` and `safety_tolerance`.
+  After 2026-10-22, failed Gemini API or fal runs suggest adding a Vertex key. `veo-3-flf` uses Vertex when the key is set, else fal.
+- Pair Veo with an `image-input` node to do image-to-video (wire image-input.image → `veo-3`'s First Frame `image` port).
+- **Extension:** wire the upstream `veo-3` node's **`source_uri`** output → the downstream `veo-3` node's **`Extend Video`** input. On the Gemini API that's Veo's own `files/...` URI (valid ~2 days); wiring the regular `video` output is rejected. On Vertex, `source_uri` is the saved file of a previous Vertex run (or pass a `gs://` URI); Gemini `files/` URIs are rejected. Veo 3.1 and 3.1 Fast only, output locked to **720p**.
 - Nebula backs `/api/graph/run` on this with the Veo handler that polls and downloads — you'll see `[veo] poll #N: done=False` in backend logs. Expect 1–6 minutes per 8s clip.
