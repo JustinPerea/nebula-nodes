@@ -2,8 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NODE_DEFINITIONS } from '../../src/constants/nodeDefinitions';
 import {
   checkKreaConnection, connectKrea, disconnectKrea, getKreaConnection,
-  isKreaAuthorizationUrl, isKreaGateway, kreaModeForParams, nodeKeyStatus,
-  withNewKreaMode,
+  isKreaAuthorizationUrl, kreaModeFor, nodeKeyStatus, supportsKreaAccount,
+  usesKreaAccount, withNewKreaMode,
 } from '../../src/lib/kreaConnection';
 
 const apiFetchMock = vi.hoisted(() => vi.fn());
@@ -15,20 +15,24 @@ const video = NODE_DEFINITIONS['krea-video-kling-kling-3-0'];
 describe('Krea connection contract', () => {
   beforeEach(() => apiFetchMock.mockReset());
 
-  it('limits OAuth choices to gateway image and video models', () => {
-    expect(isKreaGateway(image)).toBe(true);
-    expect(isKreaGateway(video)).toBe(true);
-    expect(isKreaGateway(NODE_DEFINITIONS['krea-image-style-reference'])).toBe(false);
-    expect(isKreaGateway(NODE_DEFINITIONS['krea-2'])).toBe(false);
-    expect(isKreaGateway(NODE_DEFINITIONS['nano-banana'])).toBe(false);
+  it('offers account billing to every Krea node that declares it', () => {
+    for (const id of ['krea-image-openai-gpt-image-2', 'krea-video-kling-kling-3-0',
+      'krea-audio-elevenlabs-music-v2-5', 'krea-enhance-magnific-creative-enhance', 'krea-3d-microsoft-trellis-2']) {
+      expect(supportsKreaAccount(NODE_DEFINITIONS[id]), id).toBe(true);
+    }
+    // Value-only nodes never call Krea, and other providers never see the choice.
+    expect(supportsKreaAccount(NODE_DEFINITIONS['krea-image-style-reference'])).toBe(false);
+    expect(supportsKreaAccount(NODE_DEFINITIONS['nano-banana'])).toBe(false);
   });
 
-  it('applies the selected mode only to new gateway params and preserves old API recipes', () => {
+  it('applies the selected mode only to new account-capable params and preserves old API recipes', () => {
     const old = { prompt: 'a cat' };
     expect(withNewKreaMode(image, old, 'mcp')).toEqual({ ...old, _kreaAuth: 'mcp' });
     expect(old).toEqual({ prompt: 'a cat' });
-    expect(kreaModeForParams(old)).toBe('api-token');
-    expect(kreaModeForParams({ _kreaAuth: 'mcp' })).toBe('mcp');
+    expect(kreaModeFor(image, old)).toBe('api-token');
+    expect(kreaModeFor(image, { _kreaAuth: 'mcp' })).toBe('mcp');
+    expect(usesKreaAccount(image, { _kreaAuth: 'mcp' })).toBe(true);
+    expect(usesKreaAccount(NODE_DEFINITIONS['nano-banana'], { _kreaAuth: 'mcp' })).toBe(false);
     expect(withNewKreaMode(NODE_DEFINITIONS['nano-banana'], old, 'mcp')).toBe(old);
   });
 

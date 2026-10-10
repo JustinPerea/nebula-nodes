@@ -309,6 +309,15 @@ async def handle_krea_gateway(
         raise ValueError("Unknown Krea connection; choose API token or Krea account")
     api_key = _api_key(api_keys) if auth_mode == "api-token" else None
     body = await _request_body(node, inputs, model)
+    return await run_gateway(node, model, body, auth_mode, api_key, emit)
+
+
+async def run_gateway(node: GraphNode, model: dict, body: dict, auth_mode: str, api_key: str | None,
+                      emit: Callable[[ExecutionEvent], Awaitable[None]] | None = None) -> dict[str, Any]:
+    """Submit one prepared request body for a catalog route and save its media.
+
+    Media values in ``body`` may still be local files or owned output refs; they
+    are uploaded through the chosen billing path after the body validates."""
     assets: dict[str, tuple[str, bytes, str] | None] = {}
 
     async def preview(value):

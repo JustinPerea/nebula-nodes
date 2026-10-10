@@ -9,7 +9,7 @@ import { findStructuredRepresentation } from '../../lib/representationViewerRegi
 import { getReferenceRole } from '../../lib/referenceRoles';
 import { CATEGORY_COLORS } from '../../constants/ports';
 import { useUIStore } from '../../store/uiStore';
-import { isKreaGateway, kreaModeForParams } from '../../lib/kreaConnection';
+import { usesKreaAccount } from '../../lib/kreaConnection';
 import { useGraphStore } from '../../store/graphStore';
 import { useSlavaNodeEntranceClass } from '../../hooks/useSlavaNodeEntrance';
 import { useBatchPreview } from '../../hooks/useBatchPreview';
@@ -305,7 +305,7 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
         <span className="model-node__label">{nodeData.label}</span>
         {batchPreview.label && <span className="batch-carousel__active-label" title={batchPreview.lineage}>[{batchPreview.label}]</span>}
         {nodeData.keyStatus === 'missing' && <span className="model-node__badge model-node__badge--warning"
-          title={isKreaGateway(definition) && kreaModeForParams(nodeData.params) === 'mcp' ? 'Krea sign-in required' : 'API Key Missing'}>&#x26A0;</span>}
+          title={usesKreaAccount(definition, nodeData.params) ? 'Krea sign-in required' : 'API Key Missing'}>&#x26A0;</span>}
         <span
           className="model-node__id-chip nodrag"
           title="Drag into the chat panel to reference this node"

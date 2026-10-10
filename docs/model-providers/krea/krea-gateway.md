@@ -85,16 +85,20 @@ Media input fields accept public HTTPS URLs, base64 data URIs, or uploaded asset
 ## Submit, poll, cancel, materialize
 
 1. Resolve/upload connected inputs and validate the chosen model's payload.
-2. `POST` JSON to its exact `/generate/image/...` or `/generate/video/...` path with bearer authentication. Retain the returned `job_id`.
+2. `POST` JSON to its exact `/generate/{image|video|audio|enhance|3d}/...` path with bearer authentication. Retain the returned `job_id`.
 3. Poll `GET /jobs/{id}` while status is `backlogged`, `queued`, `scheduled`, `processing`, `sampling`, or `intermediate-complete`. Krea recommends a 2–5 second polling interval with backoff for long jobs.
 4. Stop at `completed`, `failed`, or `cancelled`. Preserve the raw job alongside normalized media outputs.
-5. Materialize completed image/video/audio bytes into the bound local run directory before exposing successful outputs, so later graph steps and history do not depend solely on provider URLs.
+5. Materialize completed image/video/audio/mesh bytes into the bound local run directory before exposing successful outputs, so later graph steps and history do not depend solely on provider URLs.
 
 The canonical job schema puts failure details in top-level `error: { code, message? }`; narrative lifecycle documentation has older `result.error` wording. Normalize both where needed. `result.urls` can be a string array, an array of `{ type: "model" | "preview", url }`, or a dictionary of URLs. Preserve media identity while selecting the relevant output. [Job response schema](https://www.krea.ai/docs/api-reference/general/get-a-job-by-id)
 
 `DELETE /jobs/{id}` requests deletion/cancellation. Krea's lifecycle documentation limits cancellation to queued or processing jobs, so cancellation may race completion and is not a guarantee that remote work stopped. Cancellation should unwind local polling and retain completed earlier runs. [Job lifecycle](https://www.krea.ai/docs/developers/job-lifecycle)
 
 Krea also supports a generation `X-Webhook-URL` header. Nebula uses polling; no public callback server is required for these nodes. Backlog is a normal pending state. Handle HTTP 429 without treating backlog or polling as a failed completed run. [Webhooks](https://www.krea.ai/docs/developers/webhooks), [rate limits](https://www.krea.ai/docs/developers/rate-limits)
+
+## 3D export
+
+`POST /export/3d` with `{job_id, file_format: obj|fbx|stl|ply, node_app_key?}` converts a completed 3D job and returns `{url}` to a ZIP. It is API-token only (no MCP tool). The **Krea 3D Export** node (`krea-3d-export`) takes a 3D node's `job` output or a typed job ID, downloads the ZIP without credentials, and unpacks it into the run directory, refusing absolute/parent paths, backslashes, symlinks, more than 500 entries or more than 1.5 GB unpacked. OBJ/FBX/STL come out on the `mesh` port; PLY is saved (`file`, `files`) but not previewed. A job made on the Krea account can only be exported if the API token belongs to the same Krea user.
 
 ## Minimal REST examples
 

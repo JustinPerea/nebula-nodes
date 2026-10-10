@@ -4,7 +4,7 @@ import type { ModelNodeDefinition, NodeData, PortValue } from '../types';
 import type { CreateDraftSeed } from '../store/createDraftStore';
 import { backendAssetUrlSync } from './backend';
 import { isCreateModel } from './createModels';
-import { isKreaGateway, kreaModeForParams } from './kreaConnection';
+import { kreaModeFor, supportsKreaAccount } from './kreaConnection';
 import type { RunRecord, RunSnapshotNode } from './runHistory';
 
 export interface ResultContext {
@@ -56,7 +56,7 @@ function authorParams(params: Record<string, unknown>, definition?: ModelNodeDef
   const authored = structuredClone(Object.fromEntries(Object.entries(params)
     .filter(([key]) => !key.startsWith('_') || key === '_kreaAuth')));
   // Old gateway recipes used API billing even when their mode was not written.
-  if (isKreaGateway(definition)) authored._kreaAuth = kreaModeForParams(params);
+  if (supportsKreaAccount(definition)) authored._kreaAuth = kreaModeFor(definition, params);
   return authored;
 }
 

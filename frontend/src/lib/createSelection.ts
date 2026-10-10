@@ -1,7 +1,7 @@
 import type { Node, Edge } from '@xyflow/react';
 import type { NodeData } from '../types';
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
-import { isKreaGateway, kreaModeForParams } from './kreaConnection';
+import { kreaModeFor, supportsKreaAccount } from './kreaConnection';
 
 const RAW_INPUT_TYPES = ['text-input', 'image-input', 'reroute'];
 
@@ -55,8 +55,8 @@ export function composerStateFromSelection(
   for (const [k, v] of Object.entries(modelNode.data.params ?? {})) {
     if (!k.startsWith('_') || k === '_kreaAuth') params[k] = v;
   }
-  if (isKreaGateway(NODE_DEFINITIONS[modelNode.data.definitionId])) {
-    params._kreaAuth = kreaModeForParams(modelNode.data.params);
+  if (supportsKreaAccount(NODE_DEFINITIONS[modelNode.data.definitionId])) {
+    params._kreaAuth = kreaModeFor(NODE_DEFINITIONS[modelNode.data.definitionId], modelNode.data.params);
   }
 
   // Trace upstream text-input: find an edge whose target is this node and

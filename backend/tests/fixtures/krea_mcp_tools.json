@@ -862,5 +862,174 @@
         "type"
       ]
     }
+  },
+  {
+    "name": "list_styles",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "cursor": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Pagination cursor from a previous list_styles response"
+        }
+      }
+    }
+  },
+  {
+    "name": "create_style",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "images": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        },
+        "model": {
+          "type": "string",
+          "enum": [
+            "k2",
+            "k2-large",
+            "k1",
+            "flux_dev",
+            "wan",
+            "wan22",
+            "ltx-23-22b",
+            "qwen",
+            "z-image",
+            "flux_schnell"
+          ]
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "train_type": {
+          "type": "string",
+          "enum": [
+            "Style",
+            "Object",
+            "Character"
+          ],
+          "default": "Style"
+        },
+        "trigger_word": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "images",
+        "model"
+      ]
+    }
+  },
+  {
+    "name": "update_style",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "id",
+        "title"
+      ]
+    }
+  },
+  {
+    "name": "delete_style",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "id"
+      ]
+    }
+  },
+  {
+    "name": "list_moodboards",
+    "inputSchema": {
+      "type": "object",
+      "properties": {}
+    }
+  },
+  {
+    "name": "create_moodboard",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "images": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "images"
+      ]
+    }
+  },
+  {
+    "name": "update_moodboard",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ]
+    }
+  },
+  {
+    "name": "delete_moodboard",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "id"
+      ]
+    }
   }
 ]

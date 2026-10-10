@@ -12948,6 +12948,23 @@
     ],
     "params": [
       {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
         "key": "variant",
         "label": "Variant",
         "type": "enum",
@@ -13251,6 +13268,23 @@
     ],
     "params": [
       {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
         "key": "filter",
         "label": "Filter",
         "type": "enum",
@@ -13371,6 +13405,23 @@
     ],
     "params": [
       {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
         "key": "name",
         "label": "Name",
         "type": "string",
@@ -13407,6 +13458,22 @@
           {
             "label": "Z-Image",
             "value": "z-image"
+          },
+          {
+            "label": "Krea 2",
+            "value": "k2"
+          },
+          {
+            "label": "Krea 2 Large",
+            "value": "k2-large"
+          },
+          {
+            "label": "Krea 1 (Krea account)",
+            "value": "k1"
+          },
+          {
+            "label": "LTX 2.3 22B (Krea account)",
+            "value": "ltx-23-22b"
           }
         ]
       },
@@ -13497,6 +13564,345 @@
       }
     ],
     "docUrl": "docs/model-providers/krea/krea-2.md"
+  },
+  "krea-moodboard-search": {
+    "id": "krea-moodboard-search",
+    "displayName": "Krea Moodboards",
+    "category": "analyzer",
+    "apiProvider": "krea",
+    "apiEndpoint": "mcp:list_moodboards",
+    "envKeyName": [],
+    "executionPattern": "sync",
+    "inputPorts": [],
+    "outputPorts": [
+      {
+        "id": "moodboard",
+        "label": "Moodboard",
+        "dataType": "Any",
+        "required": false
+      },
+      {
+        "id": "moodboard_id",
+        "label": "Moodboard ID",
+        "dataType": "Text",
+        "required": false
+      },
+      {
+        "id": "moodboards",
+        "label": "Moodboards",
+        "dataType": "Array",
+        "required": false
+      },
+      {
+        "id": "text",
+        "label": "Summary",
+        "dataType": "Text",
+        "required": false
+      }
+    ],
+    "params": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "mcp"
+      },
+      {
+        "key": "name",
+        "label": "Name contains",
+        "type": "string",
+        "required": false,
+        "placeholder": "Any moodboard"
+      },
+      {
+        "key": "strength",
+        "label": "Strength",
+        "type": "float",
+        "required": false,
+        "default": 0.23,
+        "min": 0,
+        "max": 1,
+        "step": 0.01
+      }
+    ],
+    "docUrl": "docs/model-providers/krea/krea-2.md"
+  },
+  "krea-moodboard-create": {
+    "id": "krea-moodboard-create",
+    "displayName": "Krea Moodboard Create",
+    "category": "analyzer",
+    "apiProvider": "krea",
+    "apiEndpoint": "mcp:create_moodboard",
+    "envKeyName": [],
+    "executionPattern": "async-poll",
+    "inputPorts": [
+      {
+        "id": "images",
+        "label": "Images",
+        "dataType": "Image",
+        "required": true,
+        "multiple": true
+      }
+    ],
+    "outputPorts": [
+      {
+        "id": "moodboard",
+        "label": "Moodboard",
+        "dataType": "Any",
+        "required": false
+      },
+      {
+        "id": "moodboard_id",
+        "label": "Moodboard ID",
+        "dataType": "Text",
+        "required": false
+      },
+      {
+        "id": "job",
+        "label": "Job",
+        "dataType": "Any",
+        "required": false
+      }
+    ],
+    "params": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "mcp"
+      },
+      {
+        "key": "name",
+        "label": "Name",
+        "type": "string",
+        "required": false,
+        "placeholder": "Moodboard name"
+      },
+      {
+        "key": "strength",
+        "label": "Strength",
+        "type": "float",
+        "required": false,
+        "default": 0.23,
+        "min": 0,
+        "max": 1,
+        "step": 0.01
+      }
+    ],
+    "docUrl": "docs/model-providers/krea/krea-2.md"
+  },
+  "krea-library-manage": {
+    "id": "krea-library-manage",
+    "displayName": "Krea Library Manage",
+    "category": "analyzer",
+    "apiProvider": "krea",
+    "apiEndpoint": "/styles/{id}",
+    "envKeyName": "KREA_API_TOKEN",
+    "executionPattern": "sync",
+    "inputPorts": [
+      {
+        "id": "id",
+        "label": "Style or Moodboard",
+        "dataType": "Any",
+        "required": false
+      }
+    ],
+    "outputPorts": [
+      {
+        "id": "id",
+        "label": "ID",
+        "dataType": "Text",
+        "required": false
+      },
+      {
+        "id": "result",
+        "label": "Result",
+        "dataType": "Any",
+        "required": false
+      },
+      {
+        "id": "text",
+        "label": "Summary",
+        "dataType": "Text",
+        "required": false
+      }
+    ],
+    "params": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "action",
+        "label": "Action",
+        "type": "enum",
+        "required": true,
+        "default": "rename-style",
+        "options": [
+          {
+            "label": "Rename style",
+            "value": "rename-style"
+          },
+          {
+            "label": "Delete style",
+            "value": "delete-style"
+          },
+          {
+            "label": "Rename moodboard",
+            "value": "rename-moodboard"
+          },
+          {
+            "label": "Delete moodboard",
+            "value": "delete-moodboard"
+          }
+        ]
+      },
+      {
+        "key": "item_id",
+        "label": "ID",
+        "type": "string",
+        "required": false,
+        "placeholder": "Or wire a style / moodboard"
+      },
+      {
+        "key": "new_name",
+        "label": "New name",
+        "type": "string",
+        "required": false,
+        "visibleWhen": {
+          "action": [
+            "rename-style",
+            "rename-moodboard"
+          ]
+        }
+      },
+      {
+        "key": "confirm_delete",
+        "label": "Confirm delete",
+        "type": "boolean",
+        "required": false,
+        "default": false,
+        "visibleWhen": {
+          "action": [
+            "delete-style",
+            "delete-moodboard"
+          ]
+        }
+      }
+    ],
+    "docUrl": "docs/model-providers/krea/krea-2.md"
+  },
+  "krea-3d-export": {
+    "id": "krea-3d-export",
+    "displayName": "Krea 3D Export",
+    "category": "transform",
+    "apiProvider": "krea",
+    "apiEndpoint": "/export/3d",
+    "envKeyName": "KREA_API_TOKEN",
+    "executionPattern": "sync",
+    "inputPorts": [
+      {
+        "id": "job",
+        "label": "Krea 3D Job",
+        "dataType": "Any",
+        "required": false
+      }
+    ],
+    "outputPorts": [
+      {
+        "id": "mesh",
+        "label": "Mesh",
+        "dataType": "Mesh",
+        "required": false
+      },
+      {
+        "id": "file",
+        "label": "Model File",
+        "dataType": "Text",
+        "required": false
+      },
+      {
+        "id": "files",
+        "label": "Files",
+        "dataType": "Array",
+        "required": false
+      },
+      {
+        "id": "archive",
+        "label": "ZIP",
+        "dataType": "Text",
+        "required": false
+      }
+    ],
+    "params": [
+      {
+        "key": "file_format",
+        "label": "Format",
+        "type": "enum",
+        "required": true,
+        "default": "obj",
+        "options": [
+          {
+            "label": "OBJ",
+            "value": "obj"
+          },
+          {
+            "label": "FBX",
+            "value": "fbx"
+          },
+          {
+            "label": "STL",
+            "value": "stl"
+          },
+          {
+            "label": "PLY",
+            "value": "ply"
+          }
+        ]
+      },
+      {
+        "key": "job_id",
+        "label": "Job ID",
+        "type": "string",
+        "required": false,
+        "placeholder": "Or wire a Krea 3D job"
+      },
+      {
+        "key": "node_app_key",
+        "label": "Node app output key",
+        "type": "string",
+        "required": false,
+        "placeholder": "Only for node app jobs"
+      }
+    ],
+    "docUrl": "docs/model-providers/krea/krea-gateway.md#3d-export"
   },
   "clarity-upscaler": {
     "id": "clarity-upscaler",

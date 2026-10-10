@@ -1,6 +1,6 @@
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 import type { ModelNodeDefinition } from '../types';
-import { isKreaGateway, kreaModeForParams, type CredentialReadiness } from './kreaConnection';
+import { supportsKreaAccount, usesKreaAccount, type CredentialReadiness } from './kreaConnection';
 
 export type ProviderSetupTarget =
   | { kind: 'api-key'; key: string }
@@ -86,7 +86,7 @@ export function keyReadiness(key: string, cache: CredentialReadiness, health: Pr
 }
 
 export function modelReadiness(def: ModelNodeDefinition, params: Record<string, unknown>, cache: CredentialReadiness, health: ProviderHealthState): ModelReadiness {
-  if (isKreaGateway(def) && kreaModeForParams(params) === 'mcp') {
+  if (usesKreaAccount(def, params)) {
     const setupTarget: ProviderSetupTarget = { kind: 'krea-mcp' };
     const status = cache.kreaConnection?.status;
     if (!status) return { label: 'Connection not loaded', tone: 'neutral', setupTarget, connectionLabel: 'Krea sign-in',
@@ -130,5 +130,5 @@ export function modelReadiness(def: ModelNodeDefinition, params: Record<string, 
     : keys.find((candidate) => cache.apiKeys[candidate]?.trim()) ?? def.directKeyName ?? keys[0];
   const ready = keyReadiness(key, cache, health);
   return { ...ready, connectionLabel: key === 'KREA_API_TOKEN' ? 'Krea API token' : `${key === 'FAL_KEY' ? 'fal.ai' : PROVIDER_KEY_LABELS[key] ?? key} API`,
-    detail: `${PROVIDER_KEY_LABELS[key] ?? key}${isKreaGateway(def) ? ' API token · API balance' : keys.length > 1 ? ' route' : ''}.${needsFalReframe ? ' This saved recipe has no direct resolution, so it uses FAL.' : ''} ${ready.detail}` };
+    detail: `${PROVIDER_KEY_LABELS[key] ?? key}${supportsKreaAccount(def) ? ' API token · API balance' : keys.length > 1 ? ' route' : ''}.${needsFalReframe ? ' This saved recipe has no direct resolution, so it uses FAL.' : ''} ${ready.detail}` };
 }

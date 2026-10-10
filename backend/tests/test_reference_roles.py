@@ -90,6 +90,25 @@ APPROVED_PORT_LABEL_CHANGES = {
 APPROVED_OPTION_FIELD_ADDITIONS = {
     "seedream-4-5": {"image_size": {"auto_3K": {"visibleWhen": {"model": ["5.0-lite"]}}}},
 }
+# Krea account billing (2026-10-09): the three original Krea nodes that call
+# Krea gained the same `_kreaAuth` choice as the gateway catalog, prepended,
+# and Style Train gained the training models Krea added since the baseline.
+_KREA_AUTH_PARAM = {"key": "_kreaAuth", "label": "Krea connection", "type": "enum", "required": False,
+                    "options": [{"value": "api-token", "label": "API token · API balance"},
+                                {"value": "mcp", "label": "Krea account · workspace compute"}],
+                    "default": "api-token"}
+APPROVED_LEADING_PARAM_ADDITIONS = {
+    "krea-2-generate": _KREA_AUTH_PARAM,
+    "krea-style-search": _KREA_AUTH_PARAM,
+    "krea-style-train": _KREA_AUTH_PARAM,
+}
+APPROVED_APPENDED_OPTIONS = {
+    "krea-style-train": {"model": [
+        {"label": "Krea 2", "value": "k2"}, {"label": "Krea 2 Large", "value": "k2-large"},
+        {"label": "Krea 1 (Krea account)", "value": "k1"},
+        {"label": "LTX 2.3 22B (Krea account)", "value": "ltx-23-22b"},
+    ]},
+}
 
 # The 7 standard roles — mirrors REFERENCE_ROLE_IDS in referenceRoles.ts.
 STANDARD_ROLES = {
@@ -196,6 +215,14 @@ def _without_role_additions(node_id: str, node: dict[str, Any]) -> dict[str, Any
         port = _sole_entry(normalized["inputPorts"], "id", port_id)
         assert port["label"] == current_label, f"unapproved label: {node_id}.{port_id}"
         port["label"] = baseline_label
+    leading_param = APPROVED_LEADING_PARAM_ADDITIONS.get(node_id)
+    if leading_param is not None:
+        assert normalized["params"][0] == leading_param, f"unapproved leading param: {node_id}"
+        normalized["params"].pop(0)
+    for param_key, appended in APPROVED_APPENDED_OPTIONS.get(node_id, {}).items():
+        param = _sole_entry(normalized["params"], "key", param_key)
+        assert param["options"][-len(appended):] == appended, f"unapproved options: {node_id}.{param_key}"
+        del param["options"][-len(appended):]
     for param_key, options in APPROVED_OPTION_FIELD_ADDITIONS.get(node_id, {}).items():
         param = _sole_entry(normalized["params"], "key", param_key)
         for option_value, additions in options.items():

@@ -2,7 +2,7 @@ import { useRef, useEffect, useState, useMemo } from 'react';
 import { Brush, Copy, Info, Play, Plus, RefreshCw, Star, Trash2, Upload, X } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
-import { isKreaGateway, kreaModeForParams } from '../../lib/kreaConnection';
+import { usesKreaAccount } from '../../lib/kreaConnection';
 import { NODE_DEFINITIONS } from '../../constants/nodeDefinitions';
 import { CATEGORY_COLORS } from '../../constants/ports';
 import { PORT_COLORS } from '../../lib/portCompatibility';
@@ -421,7 +421,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
       ? definition.envKeyName
       : [definition.envKeyName]
     : [];
-  const usesKreaMcp = isKreaGateway(definition) && kreaModeForParams(activeNodeData.params) === 'mcp';
+  const usesKreaMcp = usesKreaAccount(definition, activeNodeData.params);
   const missingApiKeys = activeNodeData.keyStatus === 'missing' && !usesKreaMcp
     ? requiredKeys.filter(Boolean)
     : [];

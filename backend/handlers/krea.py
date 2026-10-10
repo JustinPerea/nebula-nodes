@@ -31,7 +31,9 @@ KREA_VARIANTS = {"medium", "large"}
 KREA_ASPECT_RATIOS = {"1:1", "4:3", "3:2", "16:9", "2.35:1", "4:5", "2:3", "9:16"}
 KREA_CREATIVITY = {"raw", "low", "medium", "high"}
 KREA_STYLE_TRAINING_MODELS_WITH_FULL_KNOBS = {"flux_dev", "flux_schnell", "wan", "wan22"}
-KREA_STYLE_TRAINING_MODELS_SIMPLE = {"qwen", "z-image"}
+KREA_STYLE_TRAINING_MODELS_SIMPLE = {"qwen", "z-image", "k2", "k2-large"}
+# Krea trains these only for a signed-in account (MCP create_style).
+KREA_STYLE_TRAINING_MODELS_ACCOUNT_ONLY = {"k1", "ltx-23-22b"}
 
 _OUTPUTS_URL_PREFIX = "/api/outputs/"
 _DATA_URI_RE = re.compile(r"^data:(?P<mime>[^;,]+);base64,(?P<data>.*)$", re.DOTALL)
@@ -68,6 +70,27 @@ def _port_values(port: PortValueDict | None) -> list[Any]:
 
 def _clean_str(value: Any) -> str:
     return str(value or "").strip()
+
+
+def _auth_mode(node: GraphNode) -> str:
+    """Saved billing choice; nodes saved before the choice existed keep the API token."""
+    mode = node.params.get("_kreaAuth", "api-token")
+    if mode not in {"api-token", "mcp"}:
+        raise ValueError("Unknown Krea connection; choose API token or Krea account")
+    return mode
+
+
+async def _account_reference(value: Any, description: str | None = None) -> str:
+    """Keep a media reference as-is; the account path uploads local files itself."""
+    if isinstance(value, dict):
+        value = value.get("url") or value.get("image_url") or value.get("image") or value.get("value")
+    raw = _clean_str(value)
+    if not raw:
+        raise ValueError("Krea image reference is empty")
+    return raw
+
+
+UrlResolver = Callable[..., Awaitable[str]]
 
 
 def _float_value(value: Any, default: float, min_value: float, max_value: float) -> float:
@@ -297,8 +320,7 @@ def _resource_kind(item: Any) -> str:
 
 
 async def _collect_image_style_references(
-    client: httpx.AsyncClient,
-    api_key: str,
+    to_url: UrlResolver,
     node: GraphNode,
     inputs: dict[str, PortValueDict],
 ) -> list[dict[str, Any]]:
@@ -307,29 +329,24 @@ async def _collect_image_style_references(
     default_strength = _float_value(node.params.get("style_reference_strength"), 0.5, 0.0, 1.0)
     for value in _port_values(inputs.get("style_images")):
         refs.append({
-            "url": await _image_value_to_url(client, api_key, value, description="Nebula Krea style reference"),
+            "url": await to_url(value, description="Nebula Krea style reference"),
             "strength": default_strength,
         })
 
     for item in _port_values(inputs.get("image_style_references")):
         if isinstance(item, dict) and _resource_kind(item) == "krea_image_style_reference":
             refs.append({
-                "url": await _image_value_to_url(
-                    client,
-                    api_key,
-                    item.get("url") or item.get("image"),
-                    description="Nebula Krea style reference",
-                ),
+                "url": await to_url(item.get("url") or item.get("image"), description="Nebula Krea style reference"),
                 "strength": _float_value(item.get("strength"), default_strength, 0.0, 1.0),
             })
         elif isinstance(item, dict) and (item.get("url") or item.get("image_url")):
             refs.append({
-                "url": await _image_value_to_url(client, api_key, item, description="Nebula Krea style reference"),
+                "url": await to_url(item, description="Nebula Krea style reference"),
                 "strength": _float_value(item.get("strength"), default_strength, 0.0, 1.0),
             })
         elif item:
             refs.append({
-                "url": await _image_value_to_url(client, api_key, item, description="Nebula Krea style reference"),
+                "url": await to_url(item, description="Nebula Krea style reference"),
                 "strength": default_strength,
             })
 
@@ -347,8 +364,7 @@ def _native_moodboard_values(inputs: dict[str, PortValueDict]) -> list[dict[str,
 
 
 async def _collect_native_moodboard_style_references(
-    client: httpx.AsyncClient,
-    api_key: str,
+    to_url: UrlResolver,
     inputs: dict[str, PortValueDict],
     *,
     remaining_slots: int,
@@ -381,12 +397,7 @@ async def _collect_native_moodboard_style_references(
                 continue
             seen.add(url_key)
             refs.append({
-                "url": await _image_value_to_url(
-                    client,
-                    api_key,
-                    raw,
-                    description="Nebula native moodboard reference",
-                ),
+                "url": await to_url(raw, description="Nebula native moodboard reference"),
                 "strength": _float_value(strength * image_weights.get(url_key, 1.0), strength, 0.0, 1.0),
             })
             if len(refs) >= remaining_slots:
@@ -460,7 +471,8 @@ async def handle_krea_generate(
     if not prompt_input or not prompt_input.value:
         raise ValueError("Prompt input is required")
 
-    api_key = _api_key(api_keys)
+    mode = _auth_mode(node)
+    api_key = _api_key(api_keys) if mode == "api-token" else None
     variant = str(node.params.get("variant", "medium")).lower()
     if variant not in KREA_VARIANTS:
         raise ValueError(f"Unknown Krea 2 variant: {variant}")
@@ -478,6 +490,10 @@ async def handle_krea_generate(
         raise ValueError(f"Invalid Krea creativity: {creativity}")
 
     async with httpx.AsyncClient(timeout=120.0) as client:
+        async def api_url(value: Any, description: str | None = None) -> str:
+            return await _image_value_to_url(client, api_key, value, description=description)
+
+        to_url = api_url if mode == "api-token" else _account_reference
         body: dict[str, Any] = {
             "prompt": str(prompt_input.value),
             "aspect_ratio": aspect_ratio,
@@ -489,10 +505,9 @@ async def handle_krea_generate(
         if seed is not None and seed != "":
             body["seed"] = _int_value(seed, 0)
 
-        image_refs = await _collect_image_style_references(client, api_key, node, inputs)
+        image_refs = await _collect_image_style_references(to_url, node, inputs)
         native_refs = await _collect_native_moodboard_style_references(
-            client,
-            api_key,
+            to_url,
             inputs,
             remaining_slots=max(0, 10 - len(image_refs)),
         )
@@ -511,6 +526,13 @@ async def handle_krea_generate(
         moodboards = _collect_moodboards(node, inputs)
         if moodboards:
             body["moodboards"] = moodboards
+
+        if mode == "mcp":
+            # The gateway owns the account path: schema checks, uploads of
+            # local references, the exact Krea 2 route, polling and cancel.
+            from handlers.krea_gateway import _model, run_gateway
+            result = await run_gateway(node, _model(f"krea-image-krea-krea-2-{variant}"), body, "mcp", None, emit)
+            return {"image": result["image"], "job": result["job"]}
 
         response = await client.post(
             f"{KREA_BASE_URL}/generate/image/krea/krea-2/{variant}",
@@ -606,6 +628,8 @@ async def handle_krea_style_search(
     api_keys: dict[str, str],
     emit: Callable[[ExecutionEvent], Awaitable[None]] | None = None,
 ) -> dict[str, Any]:
+    if _auth_mode(node) == "mcp":
+        return await _account_style_search(node)
     api_key = _api_key(api_keys)
     params: dict[str, Any] = {}
     for key in ("cursor", "ids", "user", "model", "filter"):
@@ -629,6 +653,10 @@ async def handle_krea_style_search(
         payload = response.json()
 
     items = payload.get("items") if isinstance(payload, dict) else []
+    return _style_search_outputs(items)
+
+
+def _style_search_outputs(items: Any) -> dict[str, Any]:
     if not isinstance(items, list):
         items = []
     lines = []
@@ -661,8 +689,13 @@ async def handle_krea_style_train(
         raise ValueError("Krea style training requires a name")
 
     model = _clean_str(node.params.get("model")) or "flux_dev"
-    if model not in KREA_STYLE_TRAINING_MODELS_WITH_FULL_KNOBS | KREA_STYLE_TRAINING_MODELS_SIMPLE:
+    if model not in (KREA_STYLE_TRAINING_MODELS_WITH_FULL_KNOBS | KREA_STYLE_TRAINING_MODELS_SIMPLE
+                     | KREA_STYLE_TRAINING_MODELS_ACCOUNT_ONLY):
         raise ValueError(f"Unknown Krea style training model: {model}")
+    if _auth_mode(node) == "mcp":
+        return await _account_style_train(node, name, model, image_values, emit)
+    if model in KREA_STYLE_TRAINING_MODELS_ACCOUNT_ONLY:
+        raise ValueError(f"Krea trains {model} styles only on a connected Krea account; nothing was sent")
 
     api_key = _api_key(api_keys)
     async with httpx.AsyncClient(timeout=120.0) as client:
@@ -726,4 +759,202 @@ async def handle_krea_style_train(
         "style": {"type": "Any", "value": style_value},
         "style_id": {"type": "Text", "value": style_id},
         "job": {"type": "Any", "value": job},
+    }
+
+
+# ---------------------------------------------------------------------------
+# Krea account (MCP) paths. Each validates every saved control before the
+# first request so a choice the account path cannot honor never half-runs.
+# ---------------------------------------------------------------------------
+
+def _set(value: Any) -> bool:
+    return value is not None and value != "" and value is not False
+
+
+def _style_value(node: GraphNode, style_id: str) -> dict[str, Any]:
+    strength = _float_value(node.params.get("generation_strength"), 1.0, -2.0, 2.0)
+    return {"kind": "krea_style", "id": style_id, "strength": strength}
+
+
+def _moodboard_value(moodboard_id: str, strength: Any = None) -> dict[str, Any]:
+    return {"kind": "krea_moodboard", "id": moodboard_id, "strength": _float_value(strength, 0.23, 0.0, 1.0)}
+
+
+def _job_result_id(job: dict[str, Any], *keys: str) -> str:
+    result = job.get("result") if isinstance(job.get("result"), dict) else {}
+    for source in (result, job):
+        for key in keys:
+            value = _clean_str(source.get(key))
+            if value:
+                return value
+    return ""
+
+
+async def _account_style_search(node: GraphNode) -> dict[str, Any]:
+    from services.krea_account import account_tools
+    unsupported = [label for key, label in (("user", "User"), ("liked", "Liked only")) if _set(node.params.get(key))]
+    if _clean_str(node.params.get("filter")) not in {"", "all"}:
+        unsupported.append("Filter")
+    if unsupported:
+        raise ValueError(f"{', '.join(unsupported)} needs a Krea API token; the Krea account lists the styles available to you. Nothing was sent")
+    ids = {part.strip() for part in _clean_str(node.params.get("ids")).split(",") if part.strip()}
+    model = _clean_str(node.params.get("model"))
+    limit = _int_value(node.params.get("limit"), 25, 1, 1000)
+    cursor = _clean_str(node.params.get("cursor"))
+    items: list[Any] = []
+    async with account_tools() as account:
+        for _page in range(50):
+            payload = await account.call("list_styles", {"cursor": cursor} if cursor else {})
+            page = payload.get("styles") if isinstance(payload, dict) else None
+            if not isinstance(page, list):
+                raise RuntimeError("Krea list_styles returned no style list")
+            items.extend(item for item in page if isinstance(item, dict)
+                         and (not ids or str(item.get("id")) in ids)
+                         and (not model or model in (item.get("models") or [item.get("model")])))
+            cursor = _clean_str(payload.get("next_cursor"))
+            if len(items) >= limit or not cursor:
+                break
+    return _style_search_outputs(items[:limit])
+
+
+async def _account_style_train(node, name, model, image_values, emit) -> dict[str, Any]:
+    from services.krea_account import account_tools, run_job
+    training_type = _clean_str(node.params.get("training_type")) or "Style"
+    unsupported = [label for key, label in (("max_train_steps", "Max steps"), ("learning_rate", "Learning rate"),
+                                            ("batch_size", "Batch size"), ("share_with_workspace", "Share workspace"))
+                   if _set(node.params.get(key))]
+    if training_type == "Default":
+        unsupported.append("Type: Default")
+    if unsupported:
+        raise ValueError(f"{', '.join(unsupported)} needs a Krea API token; the Krea account trains with Krea's defaults. Nothing was sent")
+    arguments: dict[str, Any] = {"name": name, "model": model, "train_type": training_type, "images": []}
+    trigger_word = _clean_str(node.params.get("trigger_word"))
+    if trigger_word:
+        arguments["trigger_word"] = trigger_word
+    async with account_tools() as account:
+        account.check("create_style", {**arguments, "images": ["https://assets.krea.ai/validated-local-input"]})
+        async with httpx.AsyncClient(timeout=120.0, follow_redirects=False) as client:
+            arguments["images"] = [await account.upload(client, value) for value in image_values]
+        job = await run_job(account, "create_style", arguments, node.id, emit, poll_interval=5.0)
+    style_id = _job_result_id(job, "style_id", "id")
+    if not style_id:
+        raise RuntimeError("Krea style training completed but returned no style id")
+    return {
+        "style": {"type": "Any", "value": _style_value(node, style_id)},
+        "style_id": {"type": "Text", "value": style_id},
+        "job": {"type": "Any", "value": job},
+    }
+
+
+async def handle_krea_moodboard_search(
+    node: GraphNode,
+    inputs: dict[str, PortValueDict],
+    api_keys: dict[str, str],
+    emit: Callable[[ExecutionEvent], Awaitable[None]] | None = None,
+) -> dict[str, Any]:
+    """List the account's moodboards (Krea's API has no moodboard endpoints)."""
+    from services.krea_account import account_tools
+    query = _clean_str(node.params.get("name")).lower()
+    async with account_tools() as account:
+        payload = await account.call("list_moodboards")
+    boards = payload.get("moodboards") if isinstance(payload, dict) else None
+    if not isinstance(boards, list):
+        raise RuntimeError("Krea list_moodboards returned no moodboard list")
+    boards = [board for board in boards if isinstance(board, dict) and board.get("id")
+              and (not query or query in str(board.get("name", "")).lower())]
+    first = boards[0] if boards else None
+    lines = [f"{board.get('name') or '(untitled)'} — {board['id']}" + (f" [{board['kind']}]" if board.get("kind") else "")
+             for board in boards]
+    return {
+        "moodboards": {"type": "Array", "value": boards},
+        "moodboard": {"type": "Any", "value": _moodboard_value(str(first["id"]), node.params.get("strength")) if first else None},
+        "moodboard_id": {"type": "Text", "value": str(first["id"]) if first else ""},
+        "text": {"type": "Text", "value": "\n".join(lines)},
+    }
+
+
+async def handle_krea_moodboard_create(
+    node: GraphNode,
+    inputs: dict[str, PortValueDict],
+    api_keys: dict[str, str],
+    emit: Callable[[ExecutionEvent], Awaitable[None]] | None = None,
+) -> dict[str, Any]:
+    """Create and analyze a moodboard on the Krea account."""
+    from services.krea_account import account_tools, run_job
+    image_values = _port_values(inputs.get("images"))
+    if not image_values:
+        raise ValueError("A Krea moodboard needs at least one image")
+    arguments: dict[str, Any] = {"images": []}
+    name = _clean_str(node.params.get("name"))
+    if name:
+        arguments["name"] = name
+    async with account_tools() as account:
+        account.check("create_moodboard", {**arguments, "images": ["https://assets.krea.ai/validated-local-input"]})
+        async with httpx.AsyncClient(timeout=120.0, follow_redirects=False) as client:
+            arguments["images"] = [await account.upload(client, value) for value in image_values]
+        job = await run_job(account, "create_moodboard", arguments, node.id, emit, poll_interval=3.0)
+    moodboard_id = _job_result_id(job, "moodboard_id", "id")
+    if not moodboard_id:
+        raise RuntimeError("Krea moodboard analysis completed but returned no moodboard id")
+    return {
+        "moodboard": {"type": "Any", "value": _moodboard_value(moodboard_id, node.params.get("strength"))},
+        "moodboard_id": {"type": "Text", "value": moodboard_id},
+        "job": {"type": "Any", "value": job},
+    }
+
+
+_LIBRARY_ID = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
+KREA_LIBRARY_ACTIONS = {
+    "rename-style": ("update_style", "title"),
+    "delete-style": ("delete_style", None),
+    "rename-moodboard": ("update_moodboard", "name"),
+    "delete-moodboard": ("delete_moodboard", None),
+}
+
+
+async def handle_krea_library_manage(
+    node: GraphNode,
+    inputs: dict[str, PortValueDict],
+    api_keys: dict[str, str],
+    emit: Callable[[ExecutionEvent], Awaitable[None]] | None = None,
+) -> dict[str, Any]:
+    """Rename or delete one of the user's own styles or moodboards.
+
+    Deleting needs the explicit Confirm delete switch, so a copied recipe can
+    never remove library items by accident."""
+    action = _clean_str(node.params.get("action"))
+    if action not in KREA_LIBRARY_ACTIONS:
+        raise ValueError(f"Unknown Krea library action: {action or '(none)'}")
+    wired = inputs["id"].value if inputs.get("id") else None
+    item_id = _clean_str(wired.get("id") if isinstance(wired, dict) else wired or node.params.get("item_id"))
+    if not _LIBRARY_ID.fullmatch(item_id):
+        raise ValueError("Choose a valid Krea style or moodboard ID to change")
+    tool, name_key = KREA_LIBRARY_ACTIONS[action]
+    arguments: dict[str, Any] = {"id": item_id}
+    if name_key:
+        new_name = _clean_str(node.params.get("new_name"))
+        if not new_name:
+            raise ValueError("Enter the new name")
+        arguments[name_key] = new_name
+    elif node.params.get("confirm_delete") is not True:
+        raise ValueError("Turn on Confirm delete to remove this Krea item; nothing was deleted")
+
+    if _auth_mode(node) == "api-token":
+        if action != "rename-style":
+            raise ValueError("Only renaming a style works with a Krea API token; use the Krea account for moodboards and deletes. Nothing was sent")
+        api_key = _api_key(api_keys)
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            response = await client.patch(f"{KREA_BASE_URL}/styles/{item_id}", headers=_json_headers(api_key),
+                                          json={"title": arguments["title"]})
+            _raise_for_krea_response(response, "style rename")
+            result = response.json()
+    else:
+        from services.krea_account import account_tools
+        async with account_tools() as account:
+            result = await account.call(tool, arguments)
+    summary = f"{'Renamed' if name_key else 'Deleted'} Krea {action.split('-', 1)[1]} {item_id}"
+    return {
+        "id": {"type": "Text", "value": item_id},
+        "result": {"type": "Any", "value": result},
+        "text": {"type": "Text", "value": summary},
     }

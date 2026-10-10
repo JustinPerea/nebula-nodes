@@ -1,5 +1,23 @@
 # Implementation Notes
 
+## 2026-10-09 — Krea full coverage: enhance, 3D, account mode for styles and moodboards
+
+- Scope changed after the audio work: the user asked to connect every Krea capability except API token admin. The phase table lives in `docs/model-providers/krea/krea-full-coverage.md`; this entry covers phases 1, 2 and 4.
+- Enhance (18) and 3D (10) came in through the same generator. Enhance outputs Video when the route takes `video_url`, otherwise Image, and is categorized `transform`. Krea's MCP serves every enhance model, including video upscalers, through `enhance_image`. Krea tags every route's primary output `type: model`, so result parsing ignores that tag and uses the route's media type (an earlier mapping of `model`→Mesh broke video outputs).
+- The frontend decided "Krea account capable" from an id/endpoint regex limited to image/video, so audio/enhance/3D nodes silently missed the default-mode and sign-in checks. It now reads the definition's `_kreaAuth` param (`supportsKreaAccount`, `usesKreaAccount`, `isKreaAccountOnly`). The engine's credential check and the cache-key revision did the same thing via `catalog_models()`; both now use `services/krea_account.uses_account`.
+- `services/krea_account.py` holds the account plumbing for non-generation tools: exact-argument calls validated against the live tool schema, local-media upload, and a run-job helper that cancels on early exit. `krea_mcp_generation.py` was split into reusable `upload_asset` / `poll_job` helpers for this.
+- Krea 2 Generate on the account path builds the same body as before, keeps local references as paths, and hands it to the gateway's new `run_gateway` for the matching `krea-image-krea-krea-2-{variant}` route. That reuses discovery, live-schema binding, uploads, polling and cancellation instead of a second Krea 2 implementation. The API-token path is unchanged.
+- Account paths refuse controls they cannot honor before any request, rather than dropping them: Style Train (learning rate, batch size, steps, `Default` type, workspace share), Style Search (`filter`, `user`, `liked`). The API path refuses account-only training models (`k1`, `ltx-23-22b`).
+- New nodes: Krea Moodboards and Moodboard Create are account-only (`_kreaAuth` with a single `mcp` option, `envKeyName: []`), because Krea's API has no moodboard endpoints. Library Manage renames/deletes styles and moodboards; deletes need an explicit Confirm delete switch so a copied recipe cannot remove library items, and IDs are restricted to `[A-Za-z0-9_-]` because the API rename puts the ID in the URL path.
+- Tool schemas for list/create/update/delete style and moodboard were copied from the live MCP `tools/list` into `tests/fixtures/krea_mcp_tools.json`. Live read-only checks: `list_styles` → `{styles: [], next_cursor: null}`, `list_moodboards` → 11 presets.
+- Changed a frontend test that pinned the old rule "legacy Krea nodes stay API-only even when signed in"; it now pins that they follow the saved choice and that old recipes without the param keep the API token.
+- 3D export (phase 3, `handlers/krea_export.py`): API-token only because Krea has no MCP export tool. The ZIP is downloaded without credentials and unpacked with explicit checks (no absolute/parent paths, backslashes or symlinks; ≤500 entries, ≤500 MB download, ≤1.5 GB unpacked) instead of `extractall`. PLY is not in Nebula's Mesh allowlist, so a PLY export fills `file`/`files` and leaves `mesh` empty rather than widening the viewer's formats.
+- The export node's docUrl is `krea-gateway.md#3d-export`, not the bare gateway doc: `sync-krea-catalog.py` treats every node whose docUrl equals the gateway doc as generated and would delete it on the next refresh.
+- Library Manage is categorized `analyzer`, not `utility`: `utility` is reserved for local nodes covered by `docs/utility-node-test-manifest.json`.
+- `tests/test_reference_roles.py` fingerprints the original node contracts. Added exact approvals for the prepended `_kreaAuth` param on the three original Krea nodes and the four appended training models, in the same style as the existing approvals, rather than refreshing the baseline.
+- Krea `/usage` needs an enterprise workspace service key and refuses personal API keys; that shapes phase 11.
+- Count pins: registry 289→293.
+
 ## 2026-10-09 — Krea audio models
 
 - Added because the Krea announcement video opens on music generated through Nebula's Krea connector, and the connector could not generate audio. Built on `feat/krea-audio-models` from `main`, separate from the dirty Design-agent checkout.

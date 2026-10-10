@@ -16,8 +16,15 @@ Choose the default connection for new Krea models, then save Settings:
 Each Canvas/Create recipe saves its connection choice. Changing the default
 does not change existing nodes, saved recipes or earlier runs. Nodes saved
 before this feature keep using the API token. Change a node's **Krea connection**
-control explicitly to switch it. The six older Krea style/wrapper nodes still
-use API tokens; account generation supports the image/video/audio gateway catalog.
+control explicitly to switch it. Every Krea node that calls Krea offers the
+choice: the whole gateway catalog (image, video, audio, enhance, 3D), Krea 2
+Generate, Style Search, Style Train and Library Manage. Krea Moodboards and
+Krea Moodboard Create are account-only because Krea's API has no moodboard
+endpoints. Where one path cannot honor a saved control (for example the
+account path has no style learning rate, and an API token cannot delete a
+moodboard), the run stops before any request and says which connection to use.
+The value-only helpers (Krea Style, Krea Moodboard, Image Style Reference)
+never call Krea and have no connection choice.
 
 Run a node or Create recipe explicitly to generate. Nebula discovers Krea's
 tool and model schemas, uploads connected local media, submits once, polls the

@@ -337,6 +337,14 @@ def get_handler_registry(
     from handlers.krea_gateway import catalog_models, handle_krea_gateway
     for definition_id in catalog_models():
         registry[definition_id] = partial(handle_krea_gateway, emit=emit)
+    from handlers.krea import (
+        handle_krea_library_manage, handle_krea_moodboard_create, handle_krea_moodboard_search,
+    )
+    registry["krea-moodboard-search"] = partial(handle_krea_moodboard_search, emit=emit)
+    registry["krea-moodboard-create"] = partial(handle_krea_moodboard_create, emit=emit)
+    registry["krea-library-manage"] = partial(handle_krea_library_manage, emit=emit)
+    from handlers.krea_export import handle_krea_3d_export
+    registry["krea-3d-export"] = partial(handle_krea_3d_export, emit=emit)
 
     if emit is not None:
         from handlers.runway import handle_runway_video

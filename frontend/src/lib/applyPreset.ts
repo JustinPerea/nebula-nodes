@@ -1,7 +1,7 @@
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 import { buildDefaultParamsForUi } from './createParams';
 import type { Preset } from './createPresets';
-import { isKreaGateway, kreaModeForParams, type KreaConnectionMode } from './kreaConnection';
+import { kreaModeFor, supportsKreaAccount, type KreaConnectionMode } from './kreaConnection';
 
 export interface ComposerState {
   modelId: string | null;
@@ -29,8 +29,8 @@ export function applyPresetToComposer(
     modelId = preset.modelId;
     baseParams = buildDefaultParamsForUi(NODE_DEFINITIONS[preset.modelId], apiKeys, kreaConnectionMode);
     // A saved Krea preset is an existing recipe. Missing old modes retain API billing.
-    if (isKreaGateway(NODE_DEFINITIONS[preset.modelId])) {
-      baseParams._kreaAuth = kreaModeForParams(preset.params);
+    if (supportsKreaAccount(NODE_DEFINITIONS[preset.modelId])) {
+      baseParams._kreaAuth = kreaModeFor(NODE_DEFINITIONS[preset.modelId], preset.params);
     }
   }
 
