@@ -355,10 +355,18 @@ async def materialize_media_value(value: str, media_type: str, run_dir: Path) ->
     else:
         return require_allowed_path(value)
 
+    return await write_media_bytes(payload, content_type, media_type, run_dir, value)
+
+
+async def write_media_bytes(payload: bytes, content_type: str, media_type: str, run_dir: Path, source: str = "") -> Path:
+    """Write already-fetched media into the run directory. The extension comes
+    only from the media type's allowlist, never from the provider's filename."""
+    if media_type not in _MEDIA_EXTENSIONS:
+        raise ValueError(f"unsupported media output type: {media_type}")
     if not payload:
         raise RuntimeError("provider returned an empty media artifact")
 
-    extension = _media_extension(media_type, content_type, value)
+    extension = _media_extension(media_type, content_type, source)
     path = require_allowed_path(Path(run_dir) / f"{uuid4().hex[:12]}.{extension}")
     path.write_bytes(payload)
 

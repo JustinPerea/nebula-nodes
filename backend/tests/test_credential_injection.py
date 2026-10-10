@@ -26,7 +26,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-# The 16-key allowlist (must match architecture.md / environment.md).
+# The credential allowlist (17 keys; mirrors backend/main.py).
 ALLOWED_PROVIDERS = {
     "ANTHROPIC_API_KEY",
     "ELEVENLABS_API_KEY",
@@ -44,6 +44,7 @@ ALLOWED_PROVIDERS = {
     "RUNWAY_API_KEY",
     "XAI_API_KEY",
     "WORLDLABS_API_KEY",
+    "KREA_USAGE_KEY",
 }
 
 
@@ -499,7 +500,7 @@ class TestCredentialUpdateEndpoint:
 
     def test_post_credentials_update_rejects_unknown_provider(self, monkeypatch):
         """POST /api/credentials/update rejects a provider not in the
-        16-key allowlist."""
+        credential allowlist."""
         from fastapi.testclient import TestClient
         import services.settings as settings_mod
         import main as main_mod

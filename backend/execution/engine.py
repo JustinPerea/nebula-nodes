@@ -788,8 +788,8 @@ def validate_graph(
         else:
             key_names = []
 
-        from handlers.krea_gateway import catalog_models
-        krea_account = node.definition_id in catalog_models() and node.params.get("_kreaAuth", "api-token") == "mcp"
+        from services.krea_account import uses_account
+        krea_account = uses_account(node, node_def)
         if krea_account:
             from services.krea_connector import is_krea_connected
             if not is_krea_connected():
@@ -1072,11 +1072,10 @@ async def _execute_graph(
                     for k, v in resolved_inputs.items()
                 }
                 cache_params = dict(node.params)
-                if node.params.get("_kreaAuth") == "mcp":
-                    from handlers.krea_gateway import catalog_models
-                    if node.definition_id in catalog_models():
-                        from services.krea_connector import connection_revision
-                        cache_params["_kreaConnectionRevision"] = connection_revision()
+                from services.krea_account import uses_account
+                if uses_account(node, definition_metadata):
+                    from services.krea_connector import connection_revision
+                    cache_params["_kreaConnectionRevision"] = connection_revision()
                 cache_key = ExecutionCache.get_key(
                     node.definition_id, cache_params, inputs_for_key, node_id=node.id,
                     batch_context=context if any(

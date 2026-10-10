@@ -215,8 +215,8 @@ async def test_vision_advisory_is_coerced_and_provider_is_recorded(
 def test_definitions_and_frontend_mirror_match_contract() -> None:
     repo = Path(__file__).resolve().parents[2]
     definitions = json.loads((repo / "backend/data/node_definitions.json").read_text())
-    # The local Batch source extends the current 254-node catalog.
-    assert len(definitions) == 255
+    # The local Batch source extends the current 288-node catalog (Krea gateway now covers every generation route).
+    assert len(definitions) == 301
     frontend = (repo / "frontend/src/constants/nodeDefinitions.ts").read_text()
     for definition_id in QC_IDS:
         definition = definitions[definition_id]

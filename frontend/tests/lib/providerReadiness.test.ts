@@ -205,12 +205,19 @@ describe('provider readiness without generation', () => {
     });
   });
 
-  it.each(['krea-2-generate', 'krea-style-search', 'krea-style-train'])('keeps original %s tools API-only even with MCP params and sign-in', (id) => {
-    expect(modelReadiness(NODE_DEFINITIONS[id], freeze({ _kreaAuth: 'mcp' }), credentials({
-      kreaConnection: { status: 'connected' },
-    }), health())).toMatchObject({
+  it.each(['krea-2-generate', 'krea-style-search', 'krea-style-train', 'krea-library-manage'])('follows the saved billing choice on %s', (id) => {
+    const signedIn = credentials({ kreaConnection: { status: 'connected' } });
+    expect(modelReadiness(NODE_DEFINITIONS[id], freeze({ _kreaAuth: 'mcp' }), signedIn, health()))
+      .toMatchObject({ label: 'Krea signed in', setupTarget: { kind: 'krea-mcp' } });
+    // Recipes saved before the choice existed keep the API token.
+    expect(modelReadiness(NODE_DEFINITIONS[id], freeze({}), signedIn, health())).toMatchObject({
       label: 'Setup required', connectionLabel: 'Krea API token', setupTarget: { kind: 'api-key', key: 'KREA_API_TOKEN' },
     });
+  });
+
+  it.each(['krea-moodboard-search', 'krea-moodboard-create'])('always needs Krea sign-in for account-only %s', (id) => {
+    expect(modelReadiness(NODE_DEFINITIONS[id], freeze({}), credentials({ kreaConnection: { status: 'needs_auth' } }), health()))
+      .toMatchObject({ label: 'Krea sign-in required', setupTarget: { kind: 'krea-mcp' } });
   });
 
   it('keeps the local Krea style-reference helper independent of token and MCP credentials', () => {

@@ -149,3 +149,25 @@ async def test_stdio_bridge_process_connects_to_only_local_discovery_routes():
         thread.join(timeout=2)
     assert {path for _method, path in requests} == {"/api/krea/tools", "/api/krea/tools/call"}
     assert sum(method == "POST" for method, _path in requests) == 1
+
+
+@pytest.mark.asyncio
+async def test_bridge_offers_krea_read_only_discovery_and_nothing_that_writes_or_spends():
+    from services.krea_agent_mcp import KREA_MCP_PRIMER, KREA_READONLY_TOOLS
+    live = json.loads((Path(__file__).with_name("fixtures") / "krea_mcp_tools.json").read_text())
+    names = ["list_styles", "list_moodboards", "get_prompting_guide", "create_style", "delete_moodboard",
+             "update_style", "execute_node_app", "send_agent_message", "call_desktop_tool", "write_files_upload",
+             "create_api_token", "show_plans", "start_free_trial", "list_files", "list_file_tags", "read_files"]
+    offered = [{"name": name, "inputSchema": {"type": "object"}} for name in names]
+
+    def respond(request):
+        return httpx.Response(200, json={"tools": offered + live})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
+        tools = {tool.name for tool in await KreaDiscoveryBridge("http://127.0.0.1:8033", client).list_tools()}
+    assert tools == {"list_models", "get_model_schema", "list_styles", "list_moodboards", "get_prompting_guide",
+                     "get_node_apps", "get_node_app_versions", "list_node_types"}
+    assert tools == set(KREA_READONLY_TOOLS)
+    for name in KREA_READONLY_TOOLS:
+        assert name.startswith(("list_", "get_")), name
+        assert name in KREA_MCP_PRIMER

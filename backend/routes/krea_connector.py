@@ -1,4 +1,4 @@
-"""Same-machine connection controls and read-only Krea MCP discovery."""
+"""Same-machine connection controls, read-only Krea MCP discovery, and plan links."""
 import ipaddress
 import os
 import secrets
@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 
 from services.krea_connector import ConnectorError, get_connector
+from services.krea_plans import sanitize_plans, trial_link
 
 
 def local_origin(request: Request):
@@ -85,3 +86,25 @@ async def call(body: DiscoveryCall):
         raise HTTPException(400, str(exc)) from exc
     except Exception as exc:
         raise HTTPException(502, "Krea discovery could not be completed") from exc
+
+
+@router.get("/plans")
+async def plans():
+    try:
+        return sanitize_plans(await get_connector().call_billing("show_plans"))
+    except ConnectorError as exc:
+        raise HTTPException(503, str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(502, "Krea plans could not be loaded") from exc
+
+
+@router.post("/trial")
+async def trial():
+    """Start Krea's free-trial checkout. Only a user click calls this; the
+    returned page asks for payment details in the browser, never in Nebula."""
+    try:
+        return {"url": trial_link(await get_connector().call_billing("start_free_trial"))}
+    except ConnectorError as exc:
+        raise HTTPException(503, str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(502, "Krea trial could not be started") from exc

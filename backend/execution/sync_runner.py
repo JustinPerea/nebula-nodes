@@ -337,6 +337,26 @@ def get_handler_registry(
     from handlers.krea_gateway import catalog_models, handle_krea_gateway
     for definition_id in catalog_models():
         registry[definition_id] = partial(handle_krea_gateway, emit=emit)
+    from handlers.krea import (
+        handle_krea_library_manage, handle_krea_moodboard_create, handle_krea_moodboard_search,
+    )
+    registry["krea-moodboard-search"] = partial(handle_krea_moodboard_search, emit=emit)
+    registry["krea-moodboard-create"] = partial(handle_krea_moodboard_create, emit=emit)
+    registry["krea-library-manage"] = partial(handle_krea_library_manage, emit=emit)
+    from handlers.krea_export import handle_krea_3d_export
+    registry["krea-3d-export"] = partial(handle_krea_3d_export, emit=emit)
+    from handlers import krea_workspace
+    for definition_id, handler in {
+        "krea-job-history": krea_workspace.handle_krea_job_history,
+        "krea-node-app": krea_workspace.handle_krea_node_app,
+        "krea-files": krea_workspace.handle_krea_files,
+        "krea-files-save": krea_workspace.handle_krea_files_save,
+        "krea-nodes-workflow": krea_workspace.handle_krea_nodes_workflow,
+        "krea-agent": krea_workspace.handle_krea_agent,
+        "krea-desktop": krea_workspace.handle_krea_desktop,
+        "krea-usage": krea_workspace.handle_krea_usage,
+    }.items():
+        registry[definition_id] = partial(handler, emit=emit)
 
     if emit is not None:
         from handlers.runway import handle_runway_video

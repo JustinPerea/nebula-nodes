@@ -38,9 +38,9 @@ Drop nodes, connect their inputs and outputs, and run a creative pipeline using 
 
 Start at **Projects** to create a blank canvas or reopen recent work. Projects autosave their canvas, outputs, run history and Creator Studio draft locally. Use the home button in any workspace to return to the project list. Existing canvases are preserved as **Recovered canvas**.
 
-### Krea image and video models
+### Krea models and workspace
 
-Connect your Krea account in Settings or use a Krea API token for **33 image and 41 video models**, including GPT Image 2, Nano Banana, Veo, Kling, and Seedance. Choose **Krea** in Create's provider filter or search the node library. Saved recipes keep their account/API-token choice. [Connect Krea with MCP](docs/KREA-MCP.md) · [Model workflows](docs/api-guides/krea.md).
+Connect your Krea account in Settings or use a Krea API token for **108 Krea models: 34 image, 41 video, 5 audio, 18 enhance and 10 3D**, including GPT Image 2, Nano Banana, Veo, Kling, Seedance, ElevenLabs Music, Topaz and Magnific. Choose **Krea** in Create's provider filter or search the node library. Saved recipes keep their account/API-token choice. Workspace nodes cover the rest of Krea: styles and moodboards, 3D export, job history, node apps, Krea Files, Krea Nodes, the Krea Agent, desktop apps and usage ([what each supports](docs/model-providers/krea/krea-workspace.md)). [Connect Krea with MCP](docs/KREA-MCP.md) · [Model workflows](docs/api-guides/krea.md).
 
 ### Paper Source
 

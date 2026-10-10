@@ -94,6 +94,10 @@ class KreaTools:
         return tool_value(await self.session.call_tool(name, self.arguments(name, values)))
 
 
+# Krea's MCP names the enhance tool after images, but it serves every enhance
+# model, including the video upscalers.
+CATEGORY_TOOLS = {'image': 'generate_image', 'video': 'generate_video', 'audio': 'generate_audio',
+                  'enhance': 'enhance_image', '3d': 'generate_3d'}
 MODEL_KEYS = ('model', 'model_id', 'modelId')
 INPUT_KEYS = ('input', 'inputs', 'params', 'parameters', 'data')
 JOB_KEYS = ('jobId', 'job_id', 'id')
@@ -127,11 +131,11 @@ def _generation_values(tools, name, model_id, body):
 
 async def prepare_generation(tools, model, preview_body, validate):
     """Discover and validate the exact saved route, without uploading or generating."""
-    category = {'Image': 'image', 'Video': 'video'}[model['mediaType']]
     endpoint = model['endpoint'].removeprefix('/generate/')
-    if not endpoint.startswith(category + '/'):
+    category = endpoint.split('/', 1)[0]
+    if category not in CATEGORY_TOOLS:
         raise RuntimeError('Krea model category does not match its saved route; no job was submitted')
-    category_tool = f'generate_{category}'
+    category_tool = CATEGORY_TOOLS[category]
     name = category_tool if category_tool in tools.tools else 'generate'
     if name not in tools.tools:
         raise RuntimeError(f'Krea server does not expose {category_tool} or generate; no job was submitted')
@@ -181,13 +185,68 @@ async def _cancel(job_id, revision):
         pass
 
 
+def _checked_upload_url(answer) -> str:
+    upload_url = answer if isinstance(answer, str) else next((answer.get(key) for key in ('upload_url', 'uploadUrl', 'url') if answer.get(key)), None) if isinstance(answer, dict) else None
+    try:
+        url = httpx.URL(upload_url)
+        parsed = urlsplit(upload_url)
+    except (ValueError, TypeError, httpx.InvalidURL) as exc:
+        raise RuntimeError('Krea returned an invalid upload URL') from exc
+    # The current MCP contract signs this exact route; retain
+    # the older path-token route without allowing lookalikes.
+    upload_path_allowed = (parsed.path == '/assets/presigned'
+                           or parsed.path.startswith('/public-api/assets/presigned/'))
+    if url.scheme != 'https' or url.host != 'api.krea.ai' or parsed.username is not None or parsed.password is not None or url.port not in (None, 443) or not upload_path_allowed:
+        raise RuntimeError('Krea returned an unexpected upload destination')
+    return upload_url
+
+
+async def upload_asset(tools, client, asset) -> str:
+    """Upload one local file through Krea's presigned MCP route; return its asset URL."""
+    from handlers.krea import _raise_for_krea_response
+    upload_url = _checked_upload_url(await tools.call('get_upload_url'))
+    response = await client.post(upload_url, files={'file': asset})
+    _raise_for_krea_response(response, 'MCP asset upload')
+    return _upload_asset_url(response)
+
+
+async def poll_job(tools, job, node_id, emit, *, max_polls, poll_interval, on_completed=None):
+    """Poll an accepted account job to a terminal state. ``on_completed`` runs
+    before returning so callers can mark the job settled for cancellation."""
+    from handlers.krea import KREA_STATUS_PENDING
+    job_id = str(job.get('job_id') or job.get('id') or '')
+    for index in range(max_polls + 1):
+        status = str(job.get('status', '')).lower()
+        if status == 'completed':
+            if on_completed:
+                on_completed()
+            return job
+        if status in ('failed', 'cancelled', 'canceled'):
+            if on_completed:
+                on_completed()
+            raise RuntimeError(f'Krea job {status}; inspect the saved run before retrying')
+        if status not in KREA_STATUS_PENDING:
+            raise RuntimeError(f'Krea job returned unknown status: {status}')
+        if index == max_polls:
+            raise RuntimeError('Krea MCP job timed out; cancellation requested')
+        await asyncio.sleep(poll_interval)
+        job = _job(await tools.call('get_job', [(JOB_KEYS, job_id)]))
+        if emit:
+            await emit(ProgressEvent(node_id=node_id, value=min((index + 1) / max_polls, 0.99)))
+    raise RuntimeError('Krea MCP job timed out; cancellation requested')
+
+
 async def generate(node, body, model, assets, map_body, validate, emit, *, max_polls, poll_interval):
     from services.krea_connector import get_connector, connection_revision
-    from handlers.krea import KREA_STATUS_PENDING, _raise_for_krea_response
 
     job_id = None
     revision = connection_revision()
     completed = False
+
+    def settled():
+        nonlocal completed
+        completed = True
+
     try:
         async with get_connector().session(expected_revision=revision) as session:
             tools = KreaTools(session, await get_connector().list_tools(session))
@@ -204,22 +263,7 @@ async def generate(node, body, model, assets, map_body, validate, emit, *, max_p
                     if asset is None:
                         return value
                     if value not in uploaded:
-                        answer = await tools.call('get_upload_url')
-                        upload_url = answer if isinstance(answer, str) else next((answer.get(key) for key in ('upload_url', 'uploadUrl', 'url') if answer.get(key)), None) if isinstance(answer, dict) else None
-                        try:
-                            url = httpx.URL(upload_url)
-                            parsed = urlsplit(upload_url)
-                        except (ValueError, TypeError, httpx.InvalidURL) as exc:
-                            raise RuntimeError('Krea returned an invalid upload URL') from exc
-                        # The current MCP contract signs this exact route; retain
-                        # the older path-token route without allowing lookalikes.
-                        upload_path_allowed = (parsed.path == '/assets/presigned'
-                                               or parsed.path.startswith('/public-api/assets/presigned/'))
-                        if url.scheme != 'https' or url.host != 'api.krea.ai' or parsed.username is not None or parsed.password is not None or url.port not in (None, 443) or not upload_path_allowed:
-                            raise RuntimeError('Krea returned an unexpected upload destination')
-                        response = await client.post(upload_url, files={'file': asset})
-                        _raise_for_krea_response(response, 'MCP asset upload')
-                        uploaded[value] = _upload_asset_url(response)
+                        uploaded[value] = await upload_asset(tools, client, asset)
                     return uploaded[value]
                 body = await map_body(body, model, upload)
             validate(body, model['requestSchema'])
@@ -229,22 +273,8 @@ async def generate(node, body, model, assets, map_body, validate, emit, *, max_p
             job_id = str(job.get('job_id') or job.get('id') or '')
             if not _JOB_ID.fullmatch(job_id):
                 raise RuntimeError('Krea MCP submit returned no valid job_id; submission was not retried')
-            for index in range(max_polls + 1):
-                status = str(job.get('status', '')).lower()
-                if status == 'completed':
-                    completed = True
-                    return job
-                if status in ('failed', 'cancelled', 'canceled'):
-                    completed = True
-                    raise RuntimeError(f'Krea job {status}; inspect the saved run before retrying')
-                if status not in KREA_STATUS_PENDING:
-                    raise RuntimeError(f'Krea job returned unknown status: {status}')
-                if index == max_polls:
-                    raise RuntimeError('Krea MCP job timed out; cancellation requested')
-                await asyncio.sleep(poll_interval)
-                job = _job(await tools.call('get_job', [(JOB_KEYS, job_id)]))
-                if emit:
-                    await emit(ProgressEvent(node_id=node.id, value=min((index + 1) / max_polls, 0.99)))
+            return await poll_job(tools, job, node.id, emit, max_polls=max_polls,
+                                  poll_interval=poll_interval, on_completed=settled)
     finally:
         if job_id and not completed:
             schedule_detached_cancel(lambda: _cancel(job_id, revision))

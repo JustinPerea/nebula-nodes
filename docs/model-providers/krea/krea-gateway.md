@@ -1,7 +1,7 @@
 ---
 provider: krea
 model: krea-image-*,krea-video-*
-verified: 2026-10-03
+verified: 2026-10-09
 stale_after_days: 14
 sources:
   - https://api.krea.ai/openapi.json
@@ -12,7 +12,7 @@ sources:
   - https://www.krea.ai/docs/api-reference/assets/upload-an-asset
 ---
 
-# Krea image and video gateway
+# Krea image, video and audio gateway
 
 Gateway nodes persist `_kreaAuth`: `api-token` (also the behavior when absent)
 or `mcp`. Account recipes use Krea's hosted MCP tools and share schema checking
@@ -21,13 +21,13 @@ This control is Nebula recipe metadata, never a field sent inside Krea's model
 inputs. Workspace reconnection changes the account cache identity; ordinary
 credential refresh preserves it.
 
-Nebula uses the direct Krea REST API at `https://api.krea.ai`. The catalog is generated from Krea's public [OpenAPI 3.1.0 document](https://api.krea.ai/openapi.json), checked **2026-10-03**, with one first-class node per image/video generation route: **33 image and 41 video nodes**. These are static Nebula definitions, selected through its existing model pickers; there is no generic JSON model picker or automatic provider substitution.
+Nebula uses the direct Krea REST API at `https://api.krea.ai`. The catalog is generated from Krea's public [OpenAPI 3.1.0 document](https://api.krea.ai/openapi.json), checked **2026-10-09**, with one first-class node per image/video/audio generation route: **34 image, 41 video and 5 audio nodes**. These are static Nebula definitions, selected through its existing model pickers; there is no generic JSON model picker or automatic provider substitution.
 
-The six legacy Krea 2/style/resource nodes retain their established contracts. The older [Krea 2 wrapper reference](krea-2.md) describes that wrapper's scope; use this document and the current OpenAPI for the new route-specific nodes. Enhancement, 3D, audio generation, and Krea node-app execution are not included in this expansion.
+The six legacy Krea 2/style/resource nodes retain their established contracts. The older [Krea 2 wrapper reference](krea-2.md) describes that wrapper's scope; use this document and the current OpenAPI for the new route-specific nodes. Enhancement, 3D, and Krea node-app execution are not included; their inputs and outputs need their own node shapes.
 
 ## Catalog and IDs
 
-Include public OpenAPI operations whose paths start with `/generate/image/` or `/generate/video/`. Derive the Nebula ID by removing `/generate/`, replacing non-alphanumeric characters with hyphens, and prefixing `krea-`. Preserve the exact API path separately; a sanitized node ID must never be reconstructed into a request URL.
+Include public OpenAPI operations whose paths start with `/generate/image/`, `/generate/video/` or `/generate/audio/`. Derive the Nebula ID by removing `/generate/`, replacing non-alphanumeric characters with hyphens, and prefixing `krea-`. Preserve the exact API path separately; a sanitized node ID must never be reconstructed into a request URL.
 
 | API path | Nebula node ID |
 |---|---|
@@ -39,6 +39,7 @@ Include public OpenAPI operations whose paths start with `/generate/image/` or `
 | `/generate/video/kling/kling-3.0` | `krea-video-kling-kling-3-0` |
 | `/generate/video/google/veo-3.1` | `krea-video-google-veo-3-1` |
 | `/generate/video/bytedance/seedance-2` | `krea-video-bytedance-seedance-2` |
+| `/generate/audio/elevenlabs/music-v2.5` | `krea-audio-elevenlabs-music-v2-5` |
 
 The public REST spec does not expose a model-list endpoint. Krea separately documents MCP `list_models` and `get_model_schema`; Nebula's direct REST catalog does not require an MCP connection. Do not infer API availability from Krea's web-app model list or marketing examples. See [MCP discovery](https://www.krea.ai/docs/developers/mcp) and the generated [Nebula model reference](../../MODEL_REFERENCE.md).
 
@@ -84,16 +85,20 @@ Media input fields accept public HTTPS URLs, base64 data URIs, or uploaded asset
 ## Submit, poll, cancel, materialize
 
 1. Resolve/upload connected inputs and validate the chosen model's payload.
-2. `POST` JSON to its exact `/generate/image/...` or `/generate/video/...` path with bearer authentication. Retain the returned `job_id`.
+2. `POST` JSON to its exact `/generate/{image|video|audio|enhance|3d}/...` path with bearer authentication. Retain the returned `job_id`.
 3. Poll `GET /jobs/{id}` while status is `backlogged`, `queued`, `scheduled`, `processing`, `sampling`, or `intermediate-complete`. Krea recommends a 2–5 second polling interval with backoff for long jobs.
 4. Stop at `completed`, `failed`, or `cancelled`. Preserve the raw job alongside normalized media outputs.
-5. Materialize completed image/video bytes into the bound local run directory before exposing successful outputs, so later graph steps and history do not depend solely on provider URLs.
+5. Materialize completed image/video/audio/mesh bytes into the bound local run directory before exposing successful outputs, so later graph steps and history do not depend solely on provider URLs.
 
 The canonical job schema puts failure details in top-level `error: { code, message? }`; narrative lifecycle documentation has older `result.error` wording. Normalize both where needed. `result.urls` can be a string array, an array of `{ type: "model" | "preview", url }`, or a dictionary of URLs. Preserve media identity while selecting the relevant output. [Job response schema](https://www.krea.ai/docs/api-reference/general/get-a-job-by-id)
 
 `DELETE /jobs/{id}` requests deletion/cancellation. Krea's lifecycle documentation limits cancellation to queued or processing jobs, so cancellation may race completion and is not a guarantee that remote work stopped. Cancellation should unwind local polling and retain completed earlier runs. [Job lifecycle](https://www.krea.ai/docs/developers/job-lifecycle)
 
 Krea also supports a generation `X-Webhook-URL` header. Nebula uses polling; no public callback server is required for these nodes. Backlog is a normal pending state. Handle HTTP 429 without treating backlog or polling as a failed completed run. [Webhooks](https://www.krea.ai/docs/developers/webhooks), [rate limits](https://www.krea.ai/docs/developers/rate-limits)
+
+## 3D export
+
+`POST /export/3d` with `{job_id, file_format: obj|fbx|stl|ply, node_app_key?}` converts a completed 3D job and returns `{url}` to a ZIP. It is API-token only (no MCP tool). The **Krea 3D Export** node (`krea-3d-export`) takes a 3D node's `job` output or a typed job ID, downloads the ZIP without credentials, and unpacks it into the run directory, refusing absolute/parent paths, backslashes, symlinks, more than 500 entries or more than 1.5 GB unpacked. OBJ/FBX/STL come out on the `mesh` port; PLY is saved (`file`, `files`) but not previewed. A job made on the Krea account can only be exported if the API token belongs to the same Krea user.
 
 ## Minimal REST examples
 
@@ -125,4 +130,4 @@ Seedance reference limits and resolution choices come from its own schema, not K
 
 ## Verification boundary
 
-The catalog and schema statements above were checked against public official Krea sources on **2026-10-03**. They do not establish workspace permissions, remaining balance, every model's runtime availability, or a successful paid generation. Deterministic handler/media tests and any separately recorded live receipts are distinct evidence. Do not publish credentials, user outputs, or unverified price/availability estimates in this reference.
+The catalog and schema statements above were checked against public official Krea sources on **2026-10-09**. They do not establish workspace permissions, remaining balance, every model's runtime availability, or a successful paid generation. Deterministic handler/media tests and any separately recorded live receipts are distinct evidence. Do not publish credentials, user outputs, or unverified price/availability estimates in this reference.

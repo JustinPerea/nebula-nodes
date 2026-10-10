@@ -16,8 +16,27 @@ Choose the default connection for new Krea models, then save Settings:
 Each Canvas/Create recipe saves its connection choice. Changing the default
 does not change existing nodes, saved recipes or earlier runs. Nodes saved
 before this feature keep using the API token. Change a node's **Krea connection**
-control explicitly to switch it. The six older Krea style/wrapper nodes still
-use API tokens; account generation supports the image/video gateway catalog.
+control explicitly to switch it. Every Krea node that calls Krea offers the
+choice: the whole gateway catalog (image, video, audio, enhance, 3D), Krea 2
+Generate, Style Search, Style Train and Library Manage. Krea Moodboards and
+Krea Moodboard Create are account-only because Krea's API has no moodboard
+endpoints. Where one path cannot honor a saved control (for example the
+account path has no style learning rate, and an API token cannot delete a
+moodboard), the run stops before any request and says which connection to use.
+The value-only helpers (Krea Style, Krea Moodboard, Image Style Reference)
+never call Krea and have no connection choice.
+
+The workspace nodes reach the rest of Krea: Job History, Node App, Krea Files,
+Save to Krea Files, Krea Nodes Workflow, Krea Agent, Desktop Apps and Usage.
+Which billing path each one supports, and what it refuses, is listed in
+[`model-providers/krea/krea-workspace.md`](model-providers/krea/krea-workspace.md).
+Usage takes a separate enterprise workspace service key (`KREA_USAGE_KEY`),
+because Krea refuses personal API tokens there.
+
+Once connected, the card's **Show Krea plans** lists Krea's plans with links to
+krea.ai. When Krea offers the account a trial, **Start a free Pro trial** asks
+Krea for a checkout link that you open yourself; payment details go on Krea's or
+Stripe's page, never into Nebula.
 
 Run a node or Create recipe explicitly to generate. Nebula discovers Krea's
 tool and model schemas, uploads connected local media, submits once, polls the
@@ -30,9 +49,13 @@ on Krea's consent screen. Expired credentials refresh when possible; rejected
 credentials require a new sign-in. OAuth credentials are local to this Nebula
 installation, so other people cloning the repo connect their own accounts.
 
-Nebula's Claude and Codex agents receive a local MCP bridge for `list_models`
-and `get_model_schema`. Media requests continue through the canvas graph; the
-bridge cannot bypass run history by directly calling `generate`. Hermes uses
+Nebula's Claude and Codex agents receive a local MCP bridge for read-only
+discovery: models (`list_models`, `get_model_schema`), Krea's prompting guide,
+the account's styles and moodboards, and node apps and node types. Krea Files
+listings stay off the bridge because they include private and workspace-shared
+file names. Nothing on the bridge generates, uploads, writes, deletes or spends.
+Media requests continue through the canvas graph; the bridge cannot bypass run
+history by directly calling `generate`. Hermes uses
 a temporary managed MCP overlay when no administrator-managed overlay is
 already present. Existing managed policy is preserved and takes precedence.
 An already-running/resumed agent may need a new turn to see the connection.

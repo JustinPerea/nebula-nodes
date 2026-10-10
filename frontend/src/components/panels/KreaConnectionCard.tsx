@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  getKreaConnection, connectKrea, checkKreaConnection, disconnectKrea,
-  isKreaAuthorizationUrl, type KreaConnectionMode, type KreaConnectionState,
+  getKreaConnection, connectKrea, checkKreaConnection, disconnectKrea, getKreaPlans, startKreaTrial,
+  isKreaAuthorizationUrl, type KreaConnectionMode, type KreaConnectionState, type KreaPlans,
 } from '../../lib/kreaConnection';
 import { useUIStore } from '../../store/uiStore';
 import '../../styles/krea-connection.css';
@@ -10,6 +10,53 @@ const LABELS: Record<KreaConnectionState['status'], string> = {
   disconnected: 'Not connected', connecting: 'Waiting for Krea sign-in…',
   connected: 'Connected', needs_auth: 'Sign-in needed', error: 'Connection unavailable',
 };
+
+const number = new Intl.NumberFormat('en-US');
+
+/** Krea's plans, loaded on request. Links open Krea's own pricing or checkout
+ * pages in the browser; nothing here charges or changes the subscription. */
+function KreaPlansSection() {
+  const [plans, setPlans] = useState<KreaPlans | null>(null);
+  const [trialUrl, setTrialUrl] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function run(action: () => Promise<void>) {
+    setBusy(true);
+    setError(null);
+    try { await action(); }
+    catch (value) { setError(value instanceof Error ? value.message : 'Krea plans are unavailable.'); }
+    finally { setBusy(false); }
+  }
+
+  return (
+    <div className="krea-connection__plans" aria-label="Krea plans">
+      <div className="krea-connection__actions">
+        <button type="button" disabled={busy} onClick={() => void run(async () => setPlans(await getKreaPlans()))}>
+          {busy && !plans ? 'Loading plans…' : plans ? 'Refresh plans' : 'Show Krea plans'}
+        </button>
+        {plans?.manageUrl && <a href={plans.manageUrl} target="_blank" rel="noopener noreferrer">Manage plan</a>}
+      </div>
+      {plans && <ul className="krea-connection__plan-list">
+        {plans.plans.map((plan) => (
+          <li key={plan.id ?? plan.name} data-prominent={plan.prominent || undefined}>
+            <span className="krea-connection__plan-name">{plan.name}</span>
+            <span>{plan.price != null ? `$${plan.price}/mo` : ''}
+              {plan.annualPrice != null ? ` · $${plan.annualPrice}/mo yearly` : ''}</span>
+            <span>{plan.units != null ? `${number.format(plan.units)} compute units` : ''}</span>
+            {plan.checkoutUrl && <a href={plan.checkoutUrl} target="_blank" rel="noopener noreferrer">View on Krea</a>}
+          </li>
+        ))}
+      </ul>}
+      {plans?.trialAvailable && !trialUrl && <button type="button" disabled={busy}
+        onClick={() => void run(async () => setTrialUrl(await startKreaTrial()))}>Start a free Pro trial</button>}
+      {trialUrl && <a className="krea-connection__sign-in" href={trialUrl} target="_blank" rel="noopener noreferrer">
+        Open trial checkout</a>}
+      {trialUrl && <p>Krea asks for a card on its checkout page. The trial converts to Pro unless you cancel.</p>}
+      {error && <p className="krea-connection__error" role="alert">{error}</p>}
+    </div>
+  );
+}
 
 export function KreaConnectionCard({ mode, onModeChange }: {
   mode: KreaConnectionMode;
@@ -136,6 +183,7 @@ export function KreaConnectionCard({ mode, onModeChange }: {
       }}>Open Krea sign-in</a>}
       {connection?.status === 'connecting' && launchError && <p className="krea-connection__error" role="alert">{launchError}</p>}
       {(error || connection?.error) && <p className="krea-connection__error" role="alert">{error || connection?.error}</p>}
+      {connection?.status === 'connected' && <KreaPlansSection />}
       <p>To change workspaces, disconnect and sign in again. Connecting never changes existing nodes or starts generation.</p>
       <label className="krea-connection__default">New Krea model nodes
         <select aria-label="Default Krea connection for new nodes" value={mode}
@@ -144,7 +192,7 @@ export function KreaConnectionCard({ mode, onModeChange }: {
           <option value="mcp">Krea sign-in · workspace compute</option>
         </select>
       </label>
-      <p>Save Settings to apply this default to future catalog nodes. Each node keeps its chosen connection for reruns. The original Krea tools use API tokens.</p>
+      <p>Save Settings to apply this default to future catalog nodes. Each node keeps its chosen connection for reruns. Older saved nodes keep using the API token until you switch them.</p>
     </section>
   );
 }

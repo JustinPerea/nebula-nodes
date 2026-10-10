@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""Generate Nebula's explicit Krea image/video nodes from a pinned API catalog.
+"""Generate Nebula's explicit Krea generation nodes from a pinned API catalog.
+
+Covers image, video, audio, enhance (upscale) and 3D routes.
 
 Default and --check are offline. --refresh fetches Krea's official public
 OpenAPI (or --openapi reads a previously fetched copy); no token or job is used.
@@ -20,6 +22,22 @@ REGISTRY = ROOT / "backend/data/node_definitions.json"
 FRONTEND = ROOT / "frontend/src/constants/nodeDefinitions.ts"
 SOURCE_URL = "https://api.krea.ai/openapi.json"
 DOC_URL = "docs/model-providers/krea/krea-gateway.md"
+# Route family -> output media type. Enhance outputs whatever it was given:
+# routes with a video_url input upscale video, the rest upscale images.
+MEDIA_ROUTES = {"/generate/image/": "Image", "/generate/video/": "Video",
+                "/generate/audio/": "Audio", "/generate/enhance/": "Enhance",
+                "/generate/3d/": "Mesh"}
+CATEGORIES = {"Image": "image-gen", "Video": "video-gen", "Audio": "audio-gen",
+              "Mesh": "3d-gen"}
+PLURALS = {"Image": "images", "Video": "videos", "Audio": "audios", "Mesh": "meshes"}
+
+
+def route_family(endpoint):
+    return endpoint[len("/generate/"):].split("/", 1)[0]
+
+
+def category_for(endpoint, media_type):
+    return "transform" if route_family(endpoint) == "enhance" else CATEGORIES[media_type]
 BEGIN = "  // BEGIN GENERATED KREA CATALOG (scripts/sync-krea-catalog.py)"
 END = "  // END GENERATED KREA CATALOG"
 
@@ -120,22 +138,25 @@ def refresh(raw, checked_on):
     api = json.loads(raw)
     models = {}
     for endpoint, operations in api["paths"].items():
-        if not endpoint.startswith(("/generate/image/", "/generate/video/")):
+        media_type = next((kind for prefix, kind in MEDIA_ROUTES.items()
+                           if endpoint.startswith(prefix)), None)
+        if media_type is None:
             continue
         operation = operations.get("post")
         if not operation or operation.get("deprecated"):
             continue
         schema = compact_schema(operation["requestBody"]["content"]["application/json"]["schema"])
+        if media_type == "Enhance":
+            media_type = "Video" if "video_url" in schema.get("properties", {}) else "Image"
         node_id = "krea-" + re.sub(r"[^a-z0-9]+", "-", endpoint[len("/generate/"):].lower()).strip("-")
         if node_id in models:
             raise ValueError(f"Krea ID collision: {node_id}")
         _, ports, json_params = fields_for(schema)
-        media_type = "Image" if endpoint.startswith("/generate/image/") else "Video"
         models[node_id] = {"endpoint": endpoint, "displayName": operation["summary"],
                            "requestSchema": schema, "mediaType": media_type,
                            "inputPorts": ports, "jsonParams": json_params}
     if not models:
-        raise ValueError("Krea OpenAPI has no image/video generation models")
+        raise ValueError("Krea OpenAPI has no generation models")
     return {"sourceUrl": SOURCE_URL, "fetchedAt": checked_on,
             "openapiSha256": hashlib.sha256(raw).hexdigest(), "models": models}
 
@@ -153,6 +174,7 @@ def definitions(catalog):
         if ports != model["inputPorts"] or json_params != model["jsonParams"]:
             raise ValueError(f"Catalog mapping drift: {node_id}; refresh the catalog")
         singular = media_type.lower()
+        plural = PLURALS[media_type]
         name = model["displayName"]
         if model["endpoint"] == "/generate/image/openai/gpt-image-2":
             name = "GPT Image 2"
@@ -160,13 +182,13 @@ def definitions(catalog):
             name += " Edit"
         result[node_id] = {
             "id": node_id, "displayName": name + " (Krea)",
-            "category": "image-gen" if media_type == "Image" else "video-gen",
+            "category": category_for(model["endpoint"], media_type),
             "apiProvider": "krea", "apiEndpoint": model["endpoint"],
             "envKeyName": "KREA_API_TOKEN", "executionPattern": "async-poll",
             "inputPorts": ports,
             "outputPorts": [
                 {"id": singular, "label": media_type, "dataType": media_type, "required": True},
-                {"id": singular + "s", "label": "All " + singular + "s", "dataType": "Array", "required": False},
+                {"id": plural, "label": "All " + plural, "dataType": "Array", "required": False},
                 {"id": "artifacts", "label": "All artifacts", "dataType": "Array", "required": False},
                 {"id": "job", "label": "Job", "dataType": "Any", "required": False},
             ],
@@ -253,7 +275,7 @@ def main():
                 raise SystemExit(f"Krea catalog drift: {path.relative_to(ROOT)}; run scripts/sync-krea-catalog.py")
         else:
             path.write_text(content)
-    print(f"Krea catalog {'check passed' if args.check else 'generated'}: {len(generated)} image/video models")
+    print(f"Krea catalog {'check passed' if args.check else 'generated'}: {len(generated)} generation models")
 
 
 if __name__ == "__main__":

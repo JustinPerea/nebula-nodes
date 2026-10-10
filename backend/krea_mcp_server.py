@@ -10,10 +10,10 @@ from mcp import types
 from mcp.server.lowlevel import Server
 from mcp.server.stdio import stdio_server
 
-from services.krea_agent_mcp import KREA_MCP_PRIMER, loopback_backend_url, resolve_nebula_url
+from services.krea_agent_mcp import KREA_MCP_PRIMER, KREA_READONLY_TOOLS, loopback_backend_url, resolve_nebula_url
 
 
-ALLOWED_TOOLS = frozenset({"list_models", "get_model_schema"})
+ALLOWED_TOOLS = KREA_READONLY_TOOLS
 
 
 class KreaDiscoveryBridge:
@@ -38,7 +38,7 @@ class KreaDiscoveryBridge:
 
     async def call_tool(self, name: str, arguments: dict[str, Any]) -> types.CallToolResult:
         if name not in ALLOWED_TOOLS:
-            return self._error("Only read-only list_models and get_model_schema are available")
+            return self._error("Only read-only Krea discovery tools are available")
         try:
             response = await self.client.post(
                 f"{self.url}/api/krea/tools/call",

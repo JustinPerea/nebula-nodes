@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NODE_DEFINITIONS } from '../../src/constants/nodeDefinitions';
 import {
-  checkKreaConnection, connectKrea, disconnectKrea, getKreaConnection,
-  isKreaAuthorizationUrl, isKreaGateway, kreaModeForParams, nodeKeyStatus,
-  withNewKreaMode,
+  checkKreaConnection, connectKrea, disconnectKrea, getKreaConnection, getKreaPlans,
+  isKreaAuthorizationUrl, isSafeKreaBillingUrl, startKreaTrial, kreaModeFor, nodeKeyStatus, supportsKreaAccount,
+  usesKreaAccount, withNewKreaMode,
 } from '../../src/lib/kreaConnection';
 
 const apiFetchMock = vi.hoisted(() => vi.fn());
@@ -15,20 +15,24 @@ const video = NODE_DEFINITIONS['krea-video-kling-kling-3-0'];
 describe('Krea connection contract', () => {
   beforeEach(() => apiFetchMock.mockReset());
 
-  it('limits OAuth choices to gateway image and video models', () => {
-    expect(isKreaGateway(image)).toBe(true);
-    expect(isKreaGateway(video)).toBe(true);
-    expect(isKreaGateway(NODE_DEFINITIONS['krea-image-style-reference'])).toBe(false);
-    expect(isKreaGateway(NODE_DEFINITIONS['krea-2'])).toBe(false);
-    expect(isKreaGateway(NODE_DEFINITIONS['nano-banana'])).toBe(false);
+  it('offers account billing to every Krea node that declares it', () => {
+    for (const id of ['krea-image-openai-gpt-image-2', 'krea-video-kling-kling-3-0',
+      'krea-audio-elevenlabs-music-v2-5', 'krea-enhance-magnific-creative-enhance', 'krea-3d-microsoft-trellis-2']) {
+      expect(supportsKreaAccount(NODE_DEFINITIONS[id]), id).toBe(true);
+    }
+    // Value-only nodes never call Krea, and other providers never see the choice.
+    expect(supportsKreaAccount(NODE_DEFINITIONS['krea-image-style-reference'])).toBe(false);
+    expect(supportsKreaAccount(NODE_DEFINITIONS['nano-banana'])).toBe(false);
   });
 
-  it('applies the selected mode only to new gateway params and preserves old API recipes', () => {
+  it('applies the selected mode only to new account-capable params and preserves old API recipes', () => {
     const old = { prompt: 'a cat' };
     expect(withNewKreaMode(image, old, 'mcp')).toEqual({ ...old, _kreaAuth: 'mcp' });
     expect(old).toEqual({ prompt: 'a cat' });
-    expect(kreaModeForParams(old)).toBe('api-token');
-    expect(kreaModeForParams({ _kreaAuth: 'mcp' })).toBe('mcp');
+    expect(kreaModeFor(image, old)).toBe('api-token');
+    expect(kreaModeFor(image, { _kreaAuth: 'mcp' })).toBe('mcp');
+    expect(usesKreaAccount(image, { _kreaAuth: 'mcp' })).toBe(true);
+    expect(usesKreaAccount(NODE_DEFINITIONS['nano-banana'], { _kreaAuth: 'mcp' })).toBe(false);
     expect(withNewKreaMode(NODE_DEFINITIONS['nano-banana'], old, 'mcp')).toBe(old);
   });
 
@@ -75,5 +79,31 @@ describe('Krea connection contract', () => {
     await expect(checkKreaConnection()).rejects.toThrow('Could not update the Krea connection.');
     apiFetchMock.mockResolvedValueOnce({ ok: true, json: async () => { throw new Error('token=fixture'); } });
     await expect(getKreaConnection()).rejects.toThrow('Could not update the Krea connection.');
+  });
+
+  it('loads plans and starts the trial only through the fixed plan routes', async () => {
+    apiFetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({
+      plans: [{ id: 'creator_pro', name: 'Pro', checkoutUrl: 'https://www.krea.ai/pricing?plan=creator_pro',
+        annualCheckoutUrl: 'https://evil.test/pay' }],
+      trialAvailable: true, annualSavingsPct: 40, manageUrl: 'http://www.krea.ai/pricing' }) });
+    const plans = await getKreaPlans();
+    expect(plans.plans[0].checkoutUrl).toBe('https://www.krea.ai/pricing?plan=creator_pro');
+    expect(plans.plans[0].annualCheckoutUrl).toBeNull();
+    expect(plans.manageUrl).toBeNull();
+    apiFetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ url: 'https://checkout.stripe.com/c/pay/cs_1' }) });
+    await expect(startKreaTrial()).resolves.toBe('https://checkout.stripe.com/c/pay/cs_1');
+    expect(apiFetchMock.mock.calls).toEqual([['/api/krea/plans'], ['/api/krea/trial', { method: 'POST' }]]);
+    apiFetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ url: 'https://stripe.evil.test/pay' }) });
+    await expect(startKreaTrial()).rejects.toThrow('unexpected trial link');
+  });
+
+  it('accepts billing links only on Krea, or Stripe checkout for the trial', () => {
+    expect(isSafeKreaBillingUrl('https://www.krea.ai/pricing')).toBe(true);
+    expect(isSafeKreaBillingUrl('https://checkout.stripe.com/c/pay')).toBe(false);
+    expect(isSafeKreaBillingUrl('https://checkout.stripe.com/c/pay', true)).toBe(true);
+    for (const bad of ['http://www.krea.ai/', 'https://u:p@www.krea.ai/', 'https://www.krea.ai:8443/',
+      'javascript:alert(1)', 'https://krea.ai.evil.test/', 42]) {
+      expect(isSafeKreaBillingUrl(bad, true), String(bad)).toBe(false);
+    }
   });
 });

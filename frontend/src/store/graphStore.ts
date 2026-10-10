@@ -74,7 +74,7 @@ import { useUIStore } from './uiStore';
 import { useCreateDraftStore } from './createDraftStore';
 import { getCinemaUploadIssue, useCinemaUploadStore } from './cinemaUploadStore';
 import { cinemaMotionSource, cinemaMotionTarget, useCinemaMotionStore } from './cinemaMotionStore';
-import { isKreaGateway, normalizeKreaMode, nodeKeyStatus, withNewKreaMode } from '../lib/kreaConnection';
+import { nodeKeyStatus, withNewKreaMode } from '../lib/kreaConnection';
 import { clipSpeed, type EditClip } from '../lib/editor/virtualPlayback';
 import type { KeyframeData, VideoGraphManifest, TrackItem } from '../types/video';
 import { createEmptyManifest, DEFAULT_FPS } from '../types/video';
@@ -2552,9 +2552,8 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     for (const param of allParamSources) {
       if (param.default !== undefined) defaults[param.key] = param.default;
     }
-    if (isKreaGateway(definition)) {
-      defaults._kreaAuth = normalizeKreaMode(useUIStore.getState().settingsCache.kreaConnectionMode);
-    }
+    Object.assign(defaults, withNewKreaMode(definition, {},
+      useUIStore.getState().settingsCache.kreaConnectionMode));
 
     const localCanvasWasEmpty = get().nodes.length === 0 && get().edges.length === 0;
 
@@ -2727,9 +2726,8 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     for (const param of allParamSources) {
       if (param.default !== undefined) defaults[param.key] = structuredClone(param.default);
     }
-    if (isKreaGateway(definition)) {
-      defaults._kreaAuth = normalizeKreaMode(useUIStore.getState().settingsCache.kreaConnectionMode);
-    }
+    Object.assign(defaults, withNewKreaMode(definition, {},
+      useUIStore.getState().settingsCache.kreaConnectionMode));
 
     const unsubscribe = useGraphStore.subscribe((state) => {
       if (!state.nodes.some((node) => node.id === originId && node.data.definitionId === origin.data.definitionId)) {
@@ -4246,7 +4244,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       modelTemps.push(t);
       const params = {
         ...withNewKreaMode(def, buildDefaultParams(def),
-          normalizeKreaMode(useUIStore.getState().settingsCache.kreaConnectionMode)),
+          useUIStore.getState().settingsCache.kreaConnectionMode),
         ...request.params,
       };
       if (hasSeed) {

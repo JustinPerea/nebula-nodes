@@ -54,6 +54,14 @@ describe('createModels', () => {
     expect(searchModels('kling').some((model) => model.id === 'krea-video-kling-kling-3-0')).toBe(true);
   });
 
+  it('includes Krea gateway audio models in Create discovery', () => {
+    const music = getCreateModels().find((model) => model.id === 'krea-audio-elevenlabs-music-v2-5');
+    expect(music?.apiProvider).toBe('krea');
+    expect(music?.category).toBe('audio-gen');
+    expect(music?.outputPorts[0]?.dataType).toBe('Audio');
+    expect(searchModels('music').some((model) => model.id === 'krea-audio-elevenlabs-music-v2-5')).toBe(true);
+  });
+
   it('keeps Krea routes requiring structured or video inputs on Canvas', () => {
     const createIds = new Set(getCreateModels().map((model) => model.id));
     const searchIds = new Set(searchModels('Krea').map((model) => model.id));

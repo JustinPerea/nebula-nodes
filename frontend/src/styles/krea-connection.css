@@ -29,3 +29,9 @@ body.app-slava-restraint .krea-connection__error { color: #f0a5a5; }
 .krea-connection button:focus-visible,
 .krea-connection select:focus-visible,
 .krea-connection a:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+.krea-connection__plans { display: grid; gap: 8px; }
+.krea-connection__plans a { font-weight: 600; text-decoration: underline; text-underline-offset: 3px; align-self: center; }
+.krea-connection__plan-list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.krea-connection__plan-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 8px; padding: 6px 8px; border: 1px solid currentColor; border-radius: 5px; border-color: color-mix(in srgb, currentColor 25%, transparent); }
+.krea-connection__plan-list li[data-prominent] { border-color: currentColor; }
+.krea-connection__plan-name { font-weight: 600; }

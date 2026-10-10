@@ -44,6 +44,7 @@ export const ALLOWED_PROVIDERS = Object.freeze([
   'RUNWAY_API_KEY',
   'XAI_API_KEY',
   'WORLDLABS_API_KEY',
+  'KREA_USAGE_KEY',
 ]);
 
 /** Prefix for the encrypted-blob wire format. */

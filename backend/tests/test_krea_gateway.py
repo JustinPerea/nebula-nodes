@@ -30,6 +30,10 @@ from services import output as output_service
 IMAGE_ID = "krea-image-openai-gpt-image-2"
 VIDEO_ID = "krea-video-google-veo-3-1"
 SEEDANCE_ID = "krea-video-bytedance-seedance-2"
+MUSIC_ID = "krea-audio-elevenlabs-music-v2-5"
+UPSCALE_ID = "krea-enhance-magnific-precise-enhance"
+VIDEO_UPSCALE_ID = "krea-enhance-topaz-astra"
+MESH_ID = "krea-3d-microsoft-trellis-2"
 IMAGE_URL = "https://cdn.example.test/artwork.png"
 API_KEY = "synthetic-krea-token"
 
@@ -98,7 +102,7 @@ async def drain_cancellations():
 def test_all_bundled_routes_have_valid_schemas_and_registered_handlers():
     from execution.sync_runner import get_handler_registry
     models = gateway.catalog_models()
-    assert len(models) == 74
+    assert len(models) == 108
     handlers = get_handler_registry()
     for definition_id, model in models.items():
         Draft202012Validator.check_schema(model["requestSchema"])
@@ -127,6 +131,37 @@ async def test_image_job_preserves_every_result_and_never_sends_token_to_cdn():
     assert all(path.startswith("/api/outputs/") and local_output(path).read_bytes() == png() for path in result["images"]["value"])
     assert result["job"]["value"] == completed(urls)
     assert all("authorization" not in route.calls[0].request.headers for route in downloads)
+
+
+@pytest.mark.asyncio
+async def test_music_job_returns_local_audio_and_never_sends_token_to_cdn():
+    url = "https://cdn.example.test/track.mp3"
+    track = b"ID3" + bytes(64)
+    with respx.mock as router:
+        posted = submit(router, MUSIC_ID, completed([url]))
+        fetched = download(router, url, track, "audio/mpeg")
+        result = await gateway.handle_krea_gateway(node(MUSIC_ID, {"music_length_ms": 40000, "force_instrumental": True}),
+            {"prompt": port("Quiet ambient pulse")}, {"KREA_API_TOKEN": API_KEY})
+    assert json.loads(posted.calls[0].request.content) == {
+        "music_length_ms": 40000, "force_instrumental": True, "prompt": "Quiet ambient pulse"}
+    assert result["audio"]["type"] == "Audio"
+    assert Path(result["audio"]["value"]).suffix == ".mp3"
+    assert Path(result["audio"]["value"]).read_bytes() == track
+    assert result["audios"]["value"] == [output_service.portable_output_ref(result["audio"]["value"], require_file=True)]
+    assert result["artifacts"]["value"][0]["type"] == "Audio"
+    assert "authorization" not in fetched.calls[0].request.headers
+
+
+@pytest.mark.asyncio
+async def test_tagged_audio_result_on_video_route_is_not_mislabeled_as_video(tiny_video):
+    urls = {"video": "https://cdn.example.test/movie.mp4", "audio": "https://cdn.example.test/score.mp3"}
+    with respx.mock as router:
+        submit(router, VIDEO_ID, completed(urls))
+        download(router, urls["video"], tiny_video, "video/mp4")
+        download(router, urls["audio"], b"ID3" + bytes(64), "audio/mpeg")
+        result = await gateway.handle_krea_gateway(node(VIDEO_ID, {"prompt": "animate"}), {}, {"KREA_API_TOKEN": API_KEY})
+    assert [artifact["type"] for artifact in result["artifacts"]["value"]] == ["Video", "Audio"]
+    assert len(result["videos"]["value"]) == 1
 
 
 @pytest.mark.asyncio
@@ -719,3 +754,46 @@ async def test_executor_cache_hit_rebinds_all_artifacts_and_preserves_portable_a
         assert ports["job"] == first[node_id]["job"]
     manifest = output_service.read_manifest(next(iter(second_paths)).parent)
     assert {record["output_path"] for record in manifest["outputs"]} == {path.name for path in second_paths}
+
+
+@pytest.mark.asyncio
+async def test_image_enhance_uploads_source_and_returns_image():
+    with respx.mock as router:
+        posted = submit(router, UPSCALE_ID, completed([IMAGE_URL]))
+        download(router)
+        result = await gateway.handle_krea_gateway(node(UPSCALE_ID, {"width": 2048, "height": 2048}),
+            {"image_url": port("https://assets.example.test/source.png", "Image")}, {"KREA_API_TOKEN": API_KEY})
+    assert json.loads(posted.calls[0].request.content) == {
+        "width": 2048, "height": 2048, "image_url": "https://assets.example.test/source.png"}
+    assert result["image"]["type"] == "Image"
+    assert len(result["images"]["value"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_video_enhance_returns_video(tiny_video):
+    url = "https://cdn.example.test/upscaled.mp4"
+    with respx.mock as router:
+        submit(router, VIDEO_UPSCALE_ID, completed([url]))
+        download(router, url, tiny_video, "video/mp4")
+        result = await gateway.handle_krea_gateway(node(VIDEO_UPSCALE_ID),
+            {"video_url": port("https://assets.example.test/clip.mp4", "Video")}, {"KREA_API_TOKEN": API_KEY})
+    assert result["video"]["type"] == "Video"
+    assert local_output(result["videos"]["value"][0]).read_bytes() == tiny_video
+
+
+@pytest.mark.asyncio
+async def test_3d_job_returns_local_mesh_and_keeps_preview_artifact():
+    mesh_url = "https://cdn.example.test/model.glb"
+    glb = b"glTF" + bytes(32)
+    urls = [{"type": "model", "url": mesh_url}, {"type": "preview", "url": IMAGE_URL}]
+    with respx.mock as router:
+        submit(router, MESH_ID, completed(urls))
+        download(router, mesh_url, glb, "model/gltf-binary")
+        download(router)
+        result = await gateway.handle_krea_gateway(node(MESH_ID, {"prompt": "a ceramic fox", "input_mode": "text"}),
+            {}, {"KREA_API_TOKEN": API_KEY})
+    assert result["mesh"]["type"] == "Mesh"
+    assert Path(result["mesh"]["value"]).suffix == ".glb"
+    assert Path(result["mesh"]["value"]).read_bytes() == glb
+    assert len(result["meshes"]["value"]) == 1
+    assert [artifact["type"] for artifact in result["artifacts"]["value"]] == ["Mesh", "Image"]

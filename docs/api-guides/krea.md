@@ -5,7 +5,7 @@ Gateway models save a choice between **Krea account · workspace compute** and
 **API token · API balance**. Old graphs and the legacy style tools retain API
 tokens. Connecting or checking the account never generates media.
 
-Use Krea as a direct provider for image and video models, including Krea 2, Nano Banana, GPT Image, Flux, Kling, Veo, Seedance, Hailuo, and Runway. Each model has its own node and model-specific controls. The catalog is generated from Krea's public OpenAPI document, checked **2026-10-03**: **33 image routes and 41 video routes**.
+Use Krea as a direct provider for image, video and audio models, including Krea 2, Nano Banana, GPT Image, Flux, Kling, Veo, Seedance, Hailuo, Runway, and ElevenLabs Music. Each model has its own node and model-specific controls. The catalog is generated from Krea's public OpenAPI document, checked **2026-10-09**: **34 image routes, 41 video routes and 5 audio routes**.
 
 Choose a specific Krea model in the model picker. Canvas supports the full catalog and its advanced inputs. Create exposes models that work with its prompt, image attachments, and simple controls; use Canvas for Runway's tagged references, H3 camera trajectories, and Flux Video Edit's source video. Krea is the provider used for that run, even when the underlying model comes from another company. Nebula does not switch to another provider or use another provider's key automatically.
 
@@ -29,12 +29,14 @@ The new nodes have stable IDs derived from the API route. For example:
 | Kling 3.0 | `krea-video-kling-kling-3-0` | `prompt`; optional `start_image` and `end_image` |
 | Veo 3.1 | `krea-video-google-veo-3-1` | `prompt`; optional image inputs |
 | Seedance 2.0 | `krea-video-bytedance-seedance-2` | `prompt`; optional image/video/audio references |
+| ElevenLabs Music v2.5 | `krea-audio-elevenlabs-music-v2-5` | `prompt`; optional `music_length_ms`, `force_instrumental` |
+| ElevenLabs TTS | `krea-audio-elevenlabs-tts` | `prompt` (the text to speak); optional `voice_id`, `model_id` |
 
 Connect a text source to `prompt` or enter the prompt in the node's control. Supply supported media through connections or media URL fields, set the model's normal controls, then explicitly run the node. Required request fields can be filled by either connections or controls and are checked before submission. Reference inputs, aspect ratios, resolution, duration, audio, and other options differ by model; a control on one Krea node is not a promise that another model supports it.
 
 Create attachments feed the model's first image input. Use Canvas to assign separate start/end frames or different reference roles.
 
-Image nodes emit `image`, an `images` array, and the raw `job`. Video nodes emit `video`, a `videos` array, and `job`. Both also emit `artifacts` (Array), containing typed local records, including previews when present. Connect the singular media output to a downstream node when you need one result, or use the array when the model returns multiple results.
+Image nodes emit `image`, an `images` array, and the raw `job`. Video nodes emit `video`, a `videos` array, and `job`. Audio nodes emit `audio`, an `audios` array, and `job`. All also emit `artifacts` (Array), containing typed local records, including previews when present. Connect the singular media output to a downstream node when you need one result, or use the array when the model returns multiple results.
 
 Local uploads and upstream Nebula media are uploaded to Krea before submission. Krea also accepts public media URLs. A file path on your Mac is not a public URL: connect it through a media input instead of pasting the path into an advanced JSON field.
 
