@@ -37,9 +37,12 @@ on Krea's consent screen. Expired credentials refresh when possible; rejected
 credentials require a new sign-in. OAuth credentials are local to this Nebula
 installation, so other people cloning the repo connect their own accounts.
 
-Nebula's Claude and Codex agents receive a local MCP bridge for `list_models`
-and `get_model_schema`. Media requests continue through the canvas graph; the
-bridge cannot bypass run history by directly calling `generate`. Hermes uses
+Nebula's Claude and Codex agents receive a local MCP bridge for read-only
+discovery: models (`list_models`, `get_model_schema`), Krea's prompting guide,
+the account's styles and moodboards, node apps and node types, and Krea Files
+listings. Nothing on the bridge generates, uploads, writes, deletes or spends.
+Media requests continue through the canvas graph; the bridge cannot bypass run
+history by directly calling `generate`. Hermes uses
 a temporary managed MCP overlay when no administrator-managed overlay is
 already present. Existing managed policy is preserved and takes precedence.
 An already-running/resumed agent may need a new turn to see the connection.

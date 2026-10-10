@@ -1,28 +1,32 @@
 ---
 name: krea
-description: Use when building or editing a Nebula graph with Krea image/video/audio provider nodes, Krea 2, image style references, styles, moodboards, style search, or style training. Covers the schema-generated model catalog, exact node IDs and ports, direct-Krea routing, media upload, async jobs, legacy style wiring, credentials, and verification boundaries.
+description: Use when building or editing a Nebula graph with Krea image/video/audio/enhance/3D provider nodes, Krea 2, image style references, styles, moodboards, style search or training, library management, or 3D export. Covers the schema-generated model catalog, exact node IDs and ports, direct-Krea routing, media upload, async jobs, legacy style wiring, credentials, and verification boundaries.
 ---
 
 # Krea — Nebula Integration
 
 Use Krea direct API nodes when the user chooses Krea. FAL Krea endpoints and automatic routing through another provider are not part of this integration.
 
-Current image/video/audio gateway contract: `docs/model-providers/krea/krea-gateway.md`. User-facing setup and recipes: `docs/api-guides/krea.md`. The older `docs/model-providers/krea/krea-2.md` describes the preserved legacy wrapper; it is not the full current provider catalog.
+Current gateway contract (image, video, audio, enhance, 3D): `docs/model-providers/krea/krea-gateway.md`. User-facing setup and recipes: `docs/api-guides/krea.md`. The older `docs/model-providers/krea/krea-2.md` describes the preserved legacy wrapper; it is not the full current provider catalog.
 
 ## Account connection through MCP
 
-Setup: `docs/KREA-MCP.md`. The gateway nodes persist `_kreaAuth` as `api-token`
+Setup: `docs/KREA-MCP.md`. Every Krea node that calls Krea persists `_kreaAuth` as `api-token`
 or `mcp`. Missing values on old graphs mean `api-token`. Account/MCP runs use
 the consent-selected workspace's compute; API-token runs use API balance.
 Never change that billing source implicitly or fall back to another connection.
 Connect/check/refresh only authenticate or discover; generation requires an
-explicit graph run. The managed agent MCP bridge exposes only `list_models`
-and `get_model_schema`; generate through Nebula GRAPH commands with
-`_kreaAuth=mcp` when the user chooses their connected Krea account.
+explicit graph run. The managed agent MCP bridge exposes only read-only
+discovery: `list_models`, `get_model_schema`, `get_prompting_guide`,
+`list_styles`, `list_moodboards`, `get_node_apps`, `get_node_app_versions`,
+`list_node_types`, `list_files` and `list_file_tags`. Generate, train, create
+or delete through Nebula GRAPH commands, with `_kreaAuth=mcp` when the user
+chooses their connected Krea account. Krea Moodboards and Krea Moodboard
+Create only offer `mcp`; Krea 3D Export only works with an API token.
 
-## Image, Video and Audio Model Nodes
+## Gateway Model Nodes
 
-The public Krea OpenAPI catalog checked **2026-10-09** defines **34 image, 41 video and 5 audio routes** included as specific first-class Nebula nodes. Canvas supports the full catalog. Create exposes models compatible with its prompt, image attachments, and simple controls; Runway's tagged references, H3 camera trajectories, and Flux Video Edit require Canvas. The nodes have model-specific controls and connectable prompt/media ports; JSON fields hold complex parameters, not a model selection UI.
+The public Krea OpenAPI catalog checked **2026-10-09** defines **34 image, 41 video, 5 audio, 18 enhance and 10 3D routes** (108) included as specific first-class Nebula nodes. Canvas supports the full catalog. Create exposes models compatible with its prompt, image attachments, and simple controls; Runway's tagged references, H3 camera trajectories, and Flux Video Edit require Canvas. The nodes have model-specific controls and connectable prompt/media ports; JSON fields hold complex parameters, not a model selection UI.
 
 Node IDs are `krea-` plus the API path after `/generate/`, with non-alphanumeric characters replaced by hyphens. For example:
 
@@ -40,7 +44,7 @@ Inspect `backend/data/node_definitions.json` for the actual ports and parameter 
 
 Catalog source metadata and exact request schemas live in `backend/data/krea_gateway_models.json`. Use `python3 scripts/sync-krea-catalog.py --check` for an offline consistency check; the script's default mode regenerates offline, while `--refresh` fetches only the public OpenAPI. These are catalog operations, not generation runs.
 
-Image model outputs are `image` (Image), `images` (Array), and `job` (Any); video outputs are `video` (Video), `videos` (Array), and `job` (Any); audio outputs are `audio` (Audio), `audios` (Array), and `job` (Any). All also emit `artifacts` (Array), containing typed local records, including previews when present. Complex object/array inputs can use structured `Any` bindings, while media arrays expose their specific media type and schema-defined connection limits.
+Image model outputs are `image` (Image), `images` (Array), and `job` (Any); video outputs are `video` (Video), `videos` (Array), and `job` (Any); audio outputs are `audio` (Audio), `audios` (Array), and `job` (Any); enhance outputs Image or Video (whichever it upscales) the same way; 3D outputs are `mesh` (Mesh), `meshes` (Array), and `job` (Any). All also emit `artifacts` (Array), containing typed local records, including previews when present. Complex object/array inputs can use structured `Any` bindings, while media arrays expose their specific media type and schema-defined connection limits.
 
 ### Gateway Graph Rules
 
@@ -52,7 +56,7 @@ Image model outputs are `image` (Image), `images` (Array), and `job` (Any); vide
 - Complex optional fields need canonical JSON objects/arrays. For Kling `multi_prompt`, an example is `[{"prompt":"Wide shot","duration":3},{"prompt":"Close-up","duration":2}]`. Leave optional fields empty when unnecessary.
 - Do not transfer parameters blindly across models. Duration, resolution spelling, audio, and reference limits are model-specific.
 - Catalog presence verifies a documented route/schema, not paid execution or universal workspace access. No real provider run was used to establish the 2026-10-09 catalog.
-- Enhancement, 3D generation, and Krea saved node apps are outside this image/video/audio catalog.
+- Krea saved node apps are outside this catalog. To convert a 3D result to OBJ/FBX/STL/PLY, wire its `job` output into `krea-3d-export` (API token).
 
 Generation is async: submit, retain the job ID, poll pending states, then materialize completed media locally. On Stop, unwind local work and request provider cancellation after the job ID is known; do not guarantee that remote work stopped. Keep prior completed outputs/history. Krea job errors are top-level `error` in the current schema, and output URL shapes can differ; see the gateway contract rather than assuming `result.urls[0]` always suffices.
 
@@ -66,9 +70,13 @@ Generation is async: submit, retain the job ID, poll pending states, then materi
 | `krea-moodboard` | Wrap an existing Krea moodboard ID with strength `0..1` |
 | `nebula-moodboard` | Nebula-native provider-neutral moodboard; Krea consumes it as style image references plus a style-brief prompt suffix |
 | `krea-style-search` | List/search Krea styles from the authenticated API workspace/public filters |
-| `krea-style-train` | Train a Krea style from image inputs and emit a style object plus style ID |
+| `krea-style-train` | Train a Krea style from image inputs and emit a style object plus style ID. `k1` and `ltx-23-22b` train only on the Krea account; learning rate, batch size, steps, `Default` type and workspace share only with an API token |
+| `krea-moodboard-search` | Krea account only: list the account's moodboards (incl. Krea presets); outputs the first name match as a wireable moodboard |
+| `krea-moodboard-create` | Krea account only: create and analyze a moodboard from images; outputs the moodboard |
+| `krea-library-manage` | Rename or delete a style or moodboard. Deletes take only a typed `item_id` (never a wired one) and need `confirm_delete` set to that same ID; an API token can only rename styles |
+| `krea-3d-export` | API token only: export a Krea 3D job to OBJ/FBX/STL/PLY and unpack it |
 
-These six Krea nodes are preserved alongside the new catalog; `nebula-moodboard` is a separate provider-neutral node. Use `krea-2-generate` for the established wrapper-node style/moodboard adaptation below. New Krea 2 route nodes expose the canonical API fields, including Turbo, image-to-image strength, `3:4`, and generative sliders; their defaults and raw JSON shapes do not alter the legacy wrapper contract.
+The original six Krea nodes are preserved alongside the new catalog; `nebula-moodboard` is a separate provider-neutral node. Use `krea-2-generate` for the established wrapper-node style/moodboard adaptation below. New Krea 2 route nodes expose the canonical API fields, including Turbo, image-to-image strength, `3:4`, and generative sliders; their defaults and raw JSON shapes do not alter the legacy wrapper contract.
 
 ## Auth
 

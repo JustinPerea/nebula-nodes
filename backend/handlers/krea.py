@@ -920,8 +920,10 @@ async def handle_krea_library_manage(
 ) -> dict[str, Any]:
     """Rename or delete one of the user's own styles or moodboards.
 
-    Deleting needs the explicit Confirm delete switch, so a copied recipe can
-    never remove library items by accident."""
+    A delete takes only a typed ID, never a wired one, and Confirm delete must
+    repeat that exact ID. A shared or imported recipe therefore cannot delete
+    anything unless it already contains the user's private IDs, and cannot
+    chain a Krea Moodboards/Style Search result into a delete."""
     action = _clean_str(node.params.get("action"))
     if action not in KREA_LIBRARY_ACTIONS:
         raise ValueError(f"Unknown Krea library action: {action or '(none)'}")
@@ -936,8 +938,11 @@ async def handle_krea_library_manage(
         if not new_name:
             raise ValueError("Enter the new name")
         arguments[name_key] = new_name
-    elif node.params.get("confirm_delete") is not True:
-        raise ValueError("Turn on Confirm delete to remove this Krea item; nothing was deleted")
+    else:
+        if wired is not None:
+            raise ValueError("Deletes need the ID typed into the node, not wired in; nothing was deleted")
+        if _clean_str(node.params.get("confirm_delete")) != item_id:
+            raise ValueError("Type the same ID into Confirm delete to remove this Krea item; nothing was deleted")
 
     if _auth_mode(node) == "api-token":
         if action != "rename-style":

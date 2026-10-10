@@ -6140,7 +6140,7 @@ Nodes: 293 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | Action | enum | rename-style | Rename style, Delete style, Rename moodboard, Delete moodboard |
 | ID | string | — | — |
 | New name | string | — | — |
-| Confirm delete | bool | false | — |
+| Confirm delete | string | — | — |
 
 ---
 

@@ -21,6 +21,8 @@ from jsonschema import Draft202012Validator
 from mcp import ClientSession
 from mcp.client.streamable_http import streamable_http_client
 
+from services.krea_agent_mcp import KREA_READONLY_TOOLS as READONLY_TOOLS
+
 SERVER = "https://api.krea.ai/mcp"
 ISSUER = "https://www.krea.ai"
 RESOURCE_METADATA = ISSUER + "/.well-known/oauth-protected-resource"
@@ -28,7 +30,6 @@ OAUTH_METADATA = ISSUER + "/.well-known/oauth-authorization-server"
 AUTHORIZE = ISSUER + "/auth/v1/oauth/authorize"
 TOKEN = ISSUER + "/auth/v1/oauth/token"
 REGISTER = ISSUER + "/auth/v1/oauth/clients/register"
-READONLY_TOOLS = frozenset({"list_models", "get_model_schema"})
 CONSENT_TTL = 300
 
 
@@ -427,7 +428,7 @@ class KreaConnector:
 
     async def call_readonly(self, name, arguments):
         if name not in READONLY_TOOLS:
-            raise ConnectorError("Only Krea model discovery tools may be called here")
+            raise ConnectorError("Only read-only Krea discovery tools may be called here")
         async with self.session() as session:
             tools = await self.list_tools(session)
             tool = next((tool for tool in tools if tool.name == name), None)

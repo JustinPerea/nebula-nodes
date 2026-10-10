@@ -57,6 +57,6 @@ Krea's API has no moodboard endpoints, so these nodes are account-only:
 
 - **Krea Moodboards** (`krea-moodboard-search`): MCP `list_moodboards` → `{moodboards: [{id, name, kind, description}]}`, including Krea's presets. Outputs the first match as a wireable moodboard value.
 - **Krea Moodboard Create** (`krea-moodboard-create`): uploads local images, calls `create_moodboard`, polls the analysis job and outputs `result.moodboard_id`.
-- **Krea Library Manage** (`krea-library-manage`): rename or delete a style or moodboard. Deletes require the **Confirm delete** switch. An API token can only rename styles.
+- **Krea Library Manage** (`krea-library-manage`): rename or delete a style or moodboard. A delete takes only a typed ID (never a wired one), and **Confirm delete** must repeat that exact ID, so a shared recipe cannot delete your items. An API token can only rename styles.
 
 The **Krea Moodboard** helper still wraps a known ID for Krea 2 Generate.

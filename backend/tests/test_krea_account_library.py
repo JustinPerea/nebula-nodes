@@ -233,7 +233,7 @@ async def test_library_rename_and_confirmed_delete_call_the_exact_tool(session):
         node("krea-library-manage", _kreaAuth="mcp", action="rename-moodboard", new_name="Launch v2"),
         {"id": PortValueDict(type="Any", value={"kind": "krea_moodboard", "id": MOODBOARD})}, {})
     await legacy.handle_krea_library_manage(
-        node("krea-library-manage", _kreaAuth="mcp", action="delete-style", item_id="style-a", confirm_delete=True), {}, {})
+        node("krea-library-manage", _kreaAuth="mcp", action="delete-style", item_id="style-a", confirm_delete="style-a"), {}, {})
     assert session.calls == [("update_moodboard", {"id": MOODBOARD, "name": "Launch v2"}),
                              ("delete_style", {"id": "style-a"})]
 
@@ -241,6 +241,8 @@ async def test_library_rename_and_confirmed_delete_call_the_exact_tool(session):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("params,match", [
     ({"action": "delete-style", "item_id": "style-a"}, "Confirm delete"),
+    ({"action": "delete-style", "item_id": "style-a", "confirm_delete": True}, "Confirm delete"),
+    ({"action": "delete-style", "item_id": "style-a", "confirm_delete": "style-b"}, "Confirm delete"),
     ({"action": "rename-style", "item_id": "../usage", "new_name": "x"}, "valid Krea"),
     ({"action": "rename-style", "item_id": "style-a"}, "new name"),
 ])
@@ -259,5 +261,15 @@ async def test_api_token_library_renames_styles_only(session):
         assert json.loads(patch.calls[0].request.content) == {"title": "Ink 2"}
     with pytest.raises(ValueError, match="Only renaming a style"):
         await legacy.handle_krea_library_manage(
-            node("krea-library-manage", action="delete-moodboard", item_id=MOODBOARD, confirm_delete=True), {}, {"KREA_API_TOKEN": "fixture"})
+            node("krea-library-manage", action="delete-moodboard", item_id=MOODBOARD, confirm_delete=MOODBOARD), {}, {"KREA_API_TOKEN": "fixture"})
+    assert session.calls == []
+
+
+@pytest.mark.asyncio
+async def test_a_wired_id_can_never_be_deleted_even_with_a_matching_confirmation(session):
+    """A shared recipe could chain Krea Moodboards into a delete; that must not run."""
+    with pytest.raises(ValueError, match="typed into the node"):
+        await legacy.handle_krea_library_manage(
+            node("krea-library-manage", _kreaAuth="mcp", action="delete-moodboard", confirm_delete=MOODBOARD),
+            {"id": PortValueDict(type="Any", value={"kind": "krea_moodboard", "id": MOODBOARD})}, {})
     assert session.calls == []

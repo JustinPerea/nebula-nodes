@@ -8400,9 +8400,9 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       {
         key: 'confirm_delete',
         label: 'Confirm delete',
-        type: 'boolean',
+        type: 'string',
         required: false,
-        default: false,
+        placeholder: 'Type the ID again',
         visibleWhen: {
           action: [
             'delete-style',
