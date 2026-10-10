@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -17,9 +18,55 @@ from services.cancellation import schedule_detached_cancel
 from models.events import ProgressEvent
 
 
+def _balance_reason(value) -> str | None:
+    """Krea answers an empty workspace with status 402 / INSUFFICIENT_BALANCE
+    and the units still available; say that plainly and what to do."""
+    if not isinstance(value, dict):
+        return None
+    response = value.get('response') if isinstance(value.get('response'), dict) else {}
+    if value.get('status') != 402 and response.get('message') != 'INSUFFICIENT_BALANCE':
+        return None
+    units = value.get('availableUnits')
+    left = f' ({units:g} compute units left)' if isinstance(units, (int, float)) and not isinstance(units, bool) else ''
+    return (f'the connected Krea workspace is out of compute{left}. Add compute or change plan on krea.ai '
+            '(Settings → Krea MCP → Show Krea plans), or switch this node to the API token. Nothing was generated')
+
+
+def rejection_detail(result) -> str:
+    """Krea's own reason for refusing a tool call, with links and anything
+    token-like removed and the length capped. Krea sends either plain text or
+    a JSON object with a ``message`` field (plus admin emails, not shown)."""
+    balance = _balance_reason(result.structuredContent)
+    if balance:
+        return balance
+    message = ''
+    for block in result.content:
+        text = getattr(block, 'text', None) if getattr(block, 'type', None) == 'text' else None
+        if not isinstance(text, str) or not text.strip():
+            continue
+        try:
+            value = json.loads(text)
+        except (ValueError, TypeError):
+            message = message or text
+            continue
+        if _balance_reason(value):
+            return _balance_reason(value)
+        if isinstance(value, dict):
+            found = value.get('message') or value.get('error')
+            found = found.get('message') if isinstance(found, dict) else found
+            if isinstance(found, str) and found.strip():
+                message = found
+                break
+    message = re.sub(r'\S+://\S+', '[link]', message)
+    message = re.sub(r'[A-Za-z0-9_\-.=+/]{32,}', '[redacted]', message)
+    return ' '.join(message.split())[:240]
+
+
 def tool_value(result) -> Any:
     if result.isError:
-        raise RuntimeError('Krea MCP tool rejected the request; check your connection, model inputs and workspace compute')
+        detail = rejection_detail(result)
+        raise RuntimeError(f'Krea MCP tool rejected the request: {detail}' if detail else
+                           'Krea MCP tool rejected the request; check your connection, model inputs and workspace compute')
     if result.structuredContent is not None:
         return result.structuredContent
     texts = [block.text for block in result.content if getattr(block, 'type', None) == 'text']

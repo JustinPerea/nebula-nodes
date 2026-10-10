@@ -297,8 +297,28 @@ def test_mcp_structured_and_text_responses_and_errors():
     with pytest.raises(RuntimeError, match='no usable'):
         adapter.tool_value(CallToolResult(content=[TextContent(type='text', text='{"job_id":"job-1"}'),
                           TextContent(type='text', text='{"job_id":"job-2"}')]))
-    with pytest.raises(RuntimeError, match='rejected'):
-        adapter.tool_value(CallToolResult(isError=True, content=[TextContent(type='text', text='sensitive provider error')]))
+    with pytest.raises(RuntimeError, match='rejected the request; check'):
+        adapter.tool_value(CallToolResult(isError=True, content=[]))
+    # Krea's own reason is shown, minus links and anything token-like.
+    signed = 'https://cdn.example.test/a.png?sig=abc'
+    secret = 'sk' + 'x' * 40
+    with pytest.raises(RuntimeError) as raised:
+        adapter.tool_value(CallToolResult(isError=True, content=[TextContent(type='text', text=json.dumps({
+            'message': f'Insufficient balance for {signed} using {secret}', 'adminEmails': ['admin@example.test']}))]))
+    assert str(raised.value) == 'Krea MCP tool rejected the request: Insufficient balance for [link] using [redacted]'
+    with pytest.raises(RuntimeError, match='request: Plan does not include this model'):
+        adapter.tool_value(CallToolResult(isError=True, content=[TextContent(type='text', text='Plan does not include\n this model')]))
+    # Krea's live answer for an empty workspace (2026-10-09).
+    empty = {'error': 'Generation request failed for elevenlabs/music-v2.5', 'status': 402, 'category': 'audio',
+             'model': 'elevenlabs/music-v2.5', 'response': {'message': 'INSUFFICIENT_BALANCE'}, 'availableMs': 0,
+             'availableUnits': 0}
+    for answer in (CallToolResult(isError=True, structuredContent=empty, content=[]),
+                   CallToolResult(isError=True, content=[TextContent(type='text', text=json.dumps(empty))])):
+        with pytest.raises(RuntimeError, match=r'out of compute \(0 compute units left\).*Nothing was generated'):
+            adapter.tool_value(answer)
+    with pytest.raises(RuntimeError) as raised:
+        adapter.tool_value(CallToolResult(isError=True, content=[TextContent(type='text', text='x ' * 400)]))
+    assert len(str(raised.value)) < 300
 
 
 def test_graph_validation_requires_selected_connection_and_legacy_wrappers_keep_api(setup, monkeypatch):
