@@ -8,7 +8,8 @@
 - Refused before any request: an unknown model, an unknown quality, and `background: transparent` with `jpeg` output (OpenAI requires png or webp for transparency).
 - Sizes: GPT Image 2's list plus `2560x1440`. The 4K options stay but are labelled experimental, because OpenAI calls anything above 2560x1440 experimental. No free-form size field: custom sizes have several rules (multiples of 16, 1:3–3:1, pixel range), and a fixed list can't break them.
 - Pricing is the same per token as GPT Image 2 ($5/M text in, $8/M image in, $30/M image out per OpenAI's model pages); xhigh/max cost more only because they produce more output tokens.
-- Not verified live (no paid run yet): that 2.5 streams the same SSE event names as GPT Image 2, and that `/v1/images/edits` takes `background` for 2.5. Both come from the docs; the tests use the GPT Image 2 SSE fixture.
+- Live check 2026-10-10: one Flare generate (1024x1024, low, transparent, png) through `handle_gpt_image_25_generate` finished in 8.8 s and returned an RGBA PNG with real transparency (67% of pixels fully transparent), so the GPT Image 2 SSE event names parse for 2.5 and `background` works on generations.
+- Still not verified live: that `/v1/images/edits` takes `background` for 2.5. It comes from the docs.
 - Sources: https://developers.openai.com/api/docs/models/gpt-image-2.5-flare , https://developers.openai.com/api/docs/models/gpt-image-2.5-sunburst , https://developers.openai.com/api/docs/changelog (2026-09-08 entry).
 - Count pins: registry 301→303 (`test_video_qc_nodes`, AGENTS.md). MODEL_REFERENCE regenerated. No Flora gap entry existed for it.
 
