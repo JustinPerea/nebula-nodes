@@ -27,7 +27,18 @@ Google shut down or is about to shut down several models our nodes call (https:/
 
 **Not verified live:** no paid generations were run. That covers the Vertex request and response shapes (built from Google's model reference), extension from bytes on Vertex, the fal 3.1 endpoints' param names (from fal's model pages), and Nano Banana 2.1 on the Interactions API.
 
-**Left for later:** Gemini Omni's `_load_bytes` still fetches arbitrary URLs server-side, the same SSRF shape fixed for Veo here.
+**Follow-up checks (2026-10-11), against the providers' current docs, still no paid runs:**
+- **fal:** the `fal-ai/veo3.1` endpoint schemas (OpenAPI) match what we send: `aspect_ratio`, `"8s"`, string `safety_tolerance`, `image_url`, `first_frame_url`/`last_frame_url`. `/fast` has a first-last-frame endpoint too.
+- **Nano Banana 2.1:** the Interactions request matches Google's examples and API reference: `response_format` with `type`/`aspect_ratio`/`image_size`, image blocks with `data`+`mime_type` or `uri`, and `store`. Whether any public https image URL is accepted as `uri` isn't spelled out.
+- **Vertex request and response:** `predictLongRunning`, `fetchPredictOperation` and `response.videos[]` (inline bytes when no `storageUri`) all match. Google now brands Vertex AI as "Gemini Enterprise Agent Platform"; hosts and paths are unchanged.
+- **Vertex fixes:**
+  - Fast and Lite stop at 1080p on Vertex (only Standard renders 4K), so 4K with Fast or Lite is refused up front.
+  - Frames must be JPEG/PNG, so other formats are converted to PNG.
+  - Vertex extends with Lite too, doesn't lock the output to 720p, and accepts any 1–30 s, 24 fps MP4. So Extend Video on Vertex now takes a saved file, a public https URL (≤100 MB) or `gs://`.
+- **Lite frames:** Lite's model card says image input "Not supported" while its capability list says image-to-video, so Lite frames stay refused on Vertex.
+- **IAM:** the role is "Gemini Enterprise Agent Platform User" (`roles/aiplatform.user`, formerly Vertex AI User).
+- **Gemini Omni:** inputs are now fetched through `fetch_public_media` (public https only, ≤100 MB), closing the same SSRF shape fixed for Veo.
+- **Deprecations:** Google's page names `gemini-omni-1.1-flash` as the Gemini API replacement for the Veo 3.1 previews, alongside the GA models on the Agent Platform.
 
 ## 2026-10-10 — Run cost from a curated price table
 

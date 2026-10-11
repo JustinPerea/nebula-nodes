@@ -336,7 +336,7 @@ async def test_vertex_extension_sends_saved_clip_bytes(tmp_path):
     body = mock.posts[0]["json"]
     assert mock.posts[0]["url"].endswith("veo-3.1-fast-generate-001:predictLongRunning")
     assert body["instances"][0]["video"] == {"bytesBase64Encoded": "Q0xJUA==", "mimeType": "video/mp4"}
-    assert body["parameters"]["resolution"] == "720p"
+    assert body["parameters"]["resolution"] == "1080p", "Vertex doesn't lock extensions to 720p"
 
 
 @pytest.mark.asyncio
@@ -469,3 +469,65 @@ async def test_gemini_submit_error_points_at_vertex_after_previews_end(tmp_path)
 async def test_missing_any_google_credential_names_both():
     with pytest.raises(ValueError, match="GOOGLE_VERTEX_CREDENTIALS.*GOOGLE_API_KEY"):
         await handle_veo(_make_node(), {"prompt": PortValueDict(type="Text", value="x")}, {})
+
+
+@pytest.mark.asyncio
+async def test_vertex_extends_with_lite(tmp_path):
+    clip = tmp_path / "clip.mp4"
+    clip.write_bytes(b"CLIP")
+    mock = _VertexMock()
+    a, b, c, d = _vertex_patches(mock, tmp_path)
+    with a, b, c, d, patch("handlers.veo.require_allowed_path", side_effect=lambda p: p):
+        await handle_veo(
+            _make_node({"model": "veo-3.1-lite-generate-preview"}),
+            {"prompt": PortValueDict(type="Text", value="go on"), "video": PortValueDict(type="Video", value=str(clip))},
+            {"GOOGLE_VERTEX_CREDENTIALS": "{}"},
+        )
+    assert mock.posts[0]["url"].endswith("veo-3.1-lite-generate-001:predictLongRunning")
+
+
+@pytest.mark.asyncio
+async def test_vertex_refuses_4k_on_fast(tmp_path):
+    mock = _VertexMock()
+    a, b, c, d = _vertex_patches(mock, tmp_path)
+    with a, b, c, d, pytest.raises(ValueError, match="4K"):
+        await handle_veo(
+            _make_node({"model": "veo-3.1-fast-generate-preview", "resolution": "4k"}),
+            {"prompt": PortValueDict(type="Text", value="x")},
+            {"GOOGLE_VERTEX_CREDENTIALS": "{}"},
+        )
+    assert mock.posts == []
+
+
+@pytest.mark.asyncio
+async def test_vertex_converts_webp_frames_to_png(tmp_path):
+    import base64 as _b64
+    import io as _io
+
+    from PIL import Image
+
+    buf = _io.BytesIO()
+    Image.new("RGB", (4, 4), "red").save(buf, format="WEBP")
+    webp_uri = "data:image/webp;base64," + _b64.b64encode(buf.getvalue()).decode()
+    mock = _VertexMock()
+    a, b, c, d = _vertex_patches(mock, tmp_path)
+    with a, b, c, d:
+        await handle_veo(
+            _make_node(),
+            {"prompt": PortValueDict(type="Text", value="x"), "image": PortValueDict(type="Image", value=webp_uri)},
+            {"GOOGLE_VERTEX_CREDENTIALS": "{}"},
+        )
+    frame = mock.posts[0]["json"]["instances"][0]["image"]
+    assert frame["mimeType"] == "image/png"
+    assert _b64.b64decode(frame["bytesBase64Encoded"]).startswith(b"\x89PNG")
+
+
+@pytest.mark.asyncio
+async def test_frame_urls_must_be_public(tmp_path):
+    with pytest.raises(RuntimeError, match="will not fetch"):
+        await handle_veo(
+            _make_node(),
+            {"prompt": PortValueDict(type="Text", value="x"),
+             "image": PortValueDict(type="Image", value="http://127.0.0.1:8000/secret.png")},
+            {"GOOGLE_API_KEY": "k"},
+        )

@@ -6,13 +6,15 @@ handler_family: google
 handler_pattern: async-poll
 nodes:
   - veo-3
-verified: 2026-10-10
+verified: 2026-10-11
 pricing_verified: 2026-10-10
 stale_after_days: 14
 sources:
   - https://ai.google.dev/gemini-api/docs/video
   - https://ai.google.dev/gemini-api/docs/pricing
   - https://cloud.google.com/vertex-ai/generative-ai/docs/model-reference/veo-video-generation
+  - https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/veo/3-1-generate
+  - https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/video/extend-videos
 oracle:
   handler: backend/handlers/veo.py::handle_veo
   tests: backend/tests/test_veo_handler.py
@@ -60,7 +62,7 @@ Rates from [official pricing](https://ai.google.dev/gemini-api/docs/pricing) as 
 | Model | 720p | 1080p | 4K |
 |-------|------|-------|----|
 | Veo 3.1 (`veo-3.1-generate-preview` / Vertex `veo-3.1-generate-001`) | $0.40 | $0.40 | $0.60 |
-| Veo 3.1 Fast (`veo-3.1-fast-generate-preview` / `veo-3.1-fast-generate-001`) | $0.10 | $0.12 | $0.30 |
+| Veo 3.1 Fast (`veo-3.1-fast-generate-preview` / `veo-3.1-fast-generate-001`) | $0.10 | $0.12 | $0.30 (Gemini API only; no 4K on Vertex) |
 | Veo 3.1 Lite (`veo-3.1-lite-generate-preview` / `veo-3.1-lite-generate-001`) | $0.05 | $0.08 | — |
 
 **Nebula params that move the bill**
@@ -70,7 +72,7 @@ Rates from [official pricing](https://ai.google.dev/gemini-api/docs/pricing) as 
 | `model` | Switches rate card |
 | `duration` | `durationSeconds` — multiplies the per-second rate (default 8) |
 | `resolution` | `720p` / `1080p` / `4k` (default 720p) |
-| Extension mode | Output locked to **720p** regardless of param |
+| Extension mode | Gemini API: output locked to **720p** regardless of param. Vertex: keeps `resolution` |
 
 ---
 
@@ -113,7 +115,7 @@ Rates from [official pricing](https://ai.google.dev/gemini-api/docs/pricing) as 
 | `id` | `dataType` | Notes |
 |------|------------|-------|
 | `video` | `Video` | Local `.mp4` path |
-| `source_uri` | `Video` | Gemini API: `files/...` URI (~2 days). Vertex: the saved clip (Vertex extends from its bytes) |
+| `source_uri` | `Video` | Gemini API: `files/...` URI (~2 days). Vertex: the saved clip (Vertex extends from its bytes; any node's `Video` output works too) |
 
 **Params (Google routes)**
 
@@ -130,7 +132,7 @@ Rates from [official pricing](https://ai.google.dev/gemini-api/docs/pricing) as 
 | `model` | enum | `veo-3.1-generate-preview` | `veo-3.1-generate-preview`, `veo-3.1-fast-generate-preview`, `veo-3.1-lite-generate-preview` (Vertex maps these to `veo-3.1-generate-001`, `veo-3.1-fast-generate-001`, `veo-3.1-lite-generate-001`) |
 | `aspectRatio` | enum | `16:9` | `16:9`, `9:16` |
 | `duration` | enum | `8` | `4`, `6`, `8` seconds |
-| `resolution` | enum | `720p` | `720p`, `1080p`, `4k` (Standard and Fast only) |
+| `resolution` | enum | `720p` | `720p`, `1080p`, `4k` (Standard and Fast on the Gemini API and fal; Standard only on Vertex) |
 | `personGeneration` | enum | `allow_adult` | `allow_all`, `allow_adult`, `dont_allow` |
 | `seed` | integer | random | |
 
@@ -138,10 +140,12 @@ Rates from [official pricing](https://ai.google.dev/gemini-api/docs/pricing) as 
 
 | Field | Value |
 |-------|-------|
-| Extension resolution | Forced `720p` when `video` port connected |
-| Extension models | `VEO_EXTEND_MODELS` — 3.1 generate/fast only |
+| Extension resolution | Gemini API: forced `720p` when `video` port connected. Vertex: not overridden |
+| Extension models | Gemini API: `VEO_EXTEND_MODELS` — 3.1 generate/fast only. Vertex: `VERTEX_EXTEND_MODELS` — adds Lite |
+| Vertex 4K | `VERTEX_4K_MODELS` — Standard only; 4K + Fast/Lite → `ValueError` |
+| Vertex frames | JPEG/PNG pass through; other types (e.g. WebP) converted to PNG (`veo-3` and `veo-3-flf`) |
 | Vertex `generateAudio` | Always `true`; `sampleCount: 1` |
-| Vertex Lite | Text-to-video only (frames → `ValueError`) |
+| Vertex Lite | Text-to-video (and extension) only; frames → `ValueError` (the model card lists image input as not supported) |
 | Reference-image mode | **Not exposed** — live API rejects (verified 2026-06) |
 
 ---
@@ -204,10 +208,10 @@ Content-Type: application/json
 | `prompt` port | `instances[0].prompt` when non-empty |
 | `image` port | `instances[0].image` — `{ bytesBase64Encoded, mimeType }` |
 | `last_frame` port | `instances[0].lastFrame` — same payload shape |
-| `video` port (extension) | Gemini API: `instances[0].video.uri` — must be a Gemini `files/...` URI. Vertex: the saved clip's bytes, or a `gs://` URI; `files/` URIs are rejected |
+| `video` port (extension) | Gemini API: `instances[0].video.uri` — must be a Veo-generated Gemini `files/...` URI. Vertex: any MP4 (1–30 s, 24 fps, 720p/1080p/4K, 16:9 or 9:16) as bytes from a saved file or a public https URL (≤100 MB), or a `gs://` URI; `files/` URIs are rejected |
 | `aspectRatio` param | `parameters.aspectRatio` |
 | `duration` param | `parameters.durationSeconds` (strips trailing `s`) |
-| `resolution` param | `parameters.resolution` — overridden to `720p` on extension |
+| `resolution` param | `parameters.resolution` — overridden to `720p` on Gemini API extension |
 | `personGeneration` param | `parameters.personGeneration` |
 | `seed` param | `parameters.seed` when set |
 
@@ -239,7 +243,7 @@ Final port output:
 }
 ```
 
-Wire `source_uri` → downstream `video` port for extension (not the downloaded file path).
+Wire `source_uri` → downstream `video` port for extension (on the Gemini API, not the downloaded file path; on Vertex any saved MP4 works).
 
 ---
 
@@ -249,10 +253,12 @@ Wire `source_uri` → downstream `video` port for extension (not the downloaded 
 |-----------|----------|
 | No Vertex key and no `GOOGLE_API_KEY` (Google route) | `ValueError("Veo needs GOOGLE_VERTEX_CREDENTIALS (Vertex AI) or GOOGLE_API_KEY")` |
 | Extension + `image` or `last_frame` | `ValueError("Veo video extension cannot be combined with a first or last frame")` |
-| Extension on Lite | `ValueError("Video extension requires Veo 3.1 or 3.1 Fast …")` |
+| Extension on Lite (Gemini API) | `ValueError("Video extension requires Veo 3.1 or 3.1 Fast …")` |
 | Extension on fal | `ValueError("Extending a clip needs the Google route …")` |
 | Vertex Lite with a frame | `ValueError("Veo 3.1 Lite on Vertex is text-to-video only …")` |
-| Extension without `files/...` URI | `ValueError` with wiring hint for `source_uri` |
+| Vertex 4K with Fast or Lite | `ValueError("On Vertex only Veo 3.1 (Standard) renders 4K; pick 1080p or Veo 3.1")` |
+| Vertex extension with a Gemini `files/` URI | `ValueError("Vertex can't read a Gemini API file URI …")` |
+| Extension without `files/...` URI (Gemini API) | `ValueError` with wiring hint for `source_uri` |
 | Poll timeout | `RuntimeError("Veo timed out after 300 polls")` |
 | Operation error | `RuntimeError(f"Veo failed: {error}")` |
 | Reference images (“ingredients”) | Not exposed — API rejects |
@@ -377,3 +383,4 @@ Official reference: [Video generation](https://ai.google.dev/gemini-api/docs/vid
 | 2026-07-01 | Initial exemplar (partial) |
 | 2026-07-01 | Gold upgrade — full Vol 1–4, pricing, parameter matrix |
 | 2026-10-10 | Veo 3.0/3.0 Fast/2.0 removed; Vertex AI route added; fal moved to `fal-ai/veo3.1`; pricing by model × resolution |
+| 2026-10-11 | Vertex rules re-checked (Vertex is now branded Gemini Enterprise Agent Platform): 4K is Standard-only, extension adds Lite, keeps resolution and takes any MP4; non-JPEG/PNG frames converted to PNG |

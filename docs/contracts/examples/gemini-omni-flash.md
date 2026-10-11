@@ -187,7 +187,7 @@ Content-Type: application/json
 | `prompt` only | `input` as plain string |
 | `images` / `video` ports | `input` as array of typed parts |
 | Gemini `files/...` video URI | `{ "type": "document", "uri": "…" }` |
-| Local / HTTP media | `{ "type": "image"|"video", "mime_type", "data": base64 }` |
+| Local / HTTP media | `{ "type": "image"|"video", "mime_type", "data": base64 }` — URLs are fetched only from public https hosts (≤100 MB) |
 | `task` param | `generation_config.video_config.task` when non-empty |
 | `aspect_ratio` param | `response_format.aspect_ratio` |
 | `delivery` param | `response_format.delivery` |

@@ -198,10 +198,10 @@ Outputs: `embedding` (Text — JSON array), `dimensions` (Text — integer strin
 
 | Param | Values | Default | Notes |
 |---|---|---|---|
-| `model` | `veo-3.1-generate-preview`, `veo-3.1-fast-generate-preview`, `veo-3.1-lite-generate-preview` | `veo-3.1-generate-preview` | Veo 3.0, 3.0 Fast and 2.0 removed (shut down 2026-06-30); saved nodes migrate to the matching 3.1 model. On Vertex these map to `veo-3.1-generate-001`, `veo-3.1-fast-generate-001`, `veo-3.1-lite-generate-001` (Lite: text-to-video only). |
+| `model` | `veo-3.1-generate-preview`, `veo-3.1-fast-generate-preview`, `veo-3.1-lite-generate-preview` | `veo-3.1-generate-preview` | Veo 3.0, 3.0 Fast and 2.0 removed (shut down 2026-06-30); saved nodes migrate to the matching 3.1 model. On Vertex these map to `veo-3.1-generate-001`, `veo-3.1-fast-generate-001`, `veo-3.1-lite-generate-001` (Lite: text-to-video and extension only). |
 | `aspectRatio` | `16:9`, `9:16` | `16:9` | |
 | `duration` | `4`, `6`, `8` | `8` | Sent as `parameters.durationSeconds`. |
-| `resolution` | `720p`, `1080p`, `4k` | `720p` | 4K on 3.1 and 3.1 Fast, not Lite. |
+| `resolution` | `720p`, `1080p`, `4k` | `720p` | 4K on 3.1 and 3.1 Fast, not Lite. On Vertex only 3.1 (Standard) renders 4K; 4K with Fast or Lite is refused. Gemini API extension forces 720p; Vertex extension keeps the chosen resolution. |
 | `personGeneration` | `allow_all`, `allow_adult`, `dont_allow` | `allow_adult` | |
 | `seed` | integer | random | |
 
@@ -213,7 +213,7 @@ Outputs: `embedding` (Text — JSON array), `dimensions` (Text — integer strin
 4. Video URI: `response.generateVideoResponse.generatedSamples[0].video.uri`.
 5. Download with `x-goog-api-key` header, save as `.mp4`.
 
-Vertex AI (used first when `GOOGLE_VERTEX_CREDENTIALS` is set, checked 2026-10-10): same verb at `https://us-central1-aiplatform.googleapis.com/v1/projects/{project}/locations/us-central1/publishers/google/models/{model}:predictLongRunning`, `Authorization: Bearer` from a service-account JWT exchanged for an OAuth token, `generateAudio: true` always. The Gemini API preview ids retire 2026-10-22; the Vertex GA ids retire "Nov 17 2026 or later".
+Vertex AI (used first when `GOOGLE_VERTEX_CREDENTIALS` is set, checked 2026-10-10): same verb at `https://us-central1-aiplatform.googleapis.com/v1/projects/{project}/locations/us-central1/publishers/google/models/{model}:predictLongRunning`, `Authorization: Bearer` from a service-account JWT exchanged for an OAuth token, `generateAudio: true` always (Vertex is now branded Gemini Enterprise Agent Platform; hosts unchanged, rules re-checked 2026-10-11). Frames that aren't JPEG or PNG are converted to PNG. Extension works on all three Vertex models and takes any MP4 (saved file, public https URL up to 100 MB, or `gs://` URI), not only Veo clips; Gemini `files/` URIs are refused. The Gemini API preview ids retire 2026-10-22; the Vertex GA ids retire "Nov 17 2026 or later".
 
 Inputs: `prompt` (Text, required), `image` (Image, optional — first frame), `last_frame` (Image, optional — interpolation), `video` (Video, optional — extension).
 Outputs: `video` (Video), `source_uri` (Video — wire into a downstream `video` to extend).

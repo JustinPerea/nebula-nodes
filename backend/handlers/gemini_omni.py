@@ -14,6 +14,7 @@ from models.graph import GraphNode, PortValueDict
 from services.file_access import require_allowed_path
 from services.cancellation import schedule_detached_cancel
 from services.output import get_run_dir
+from services.public_url import fetch_public_media
 from services.provider_capabilities import enforce_gemini_omni_capabilities
 
 INTERACTIONS_URL = "https://generativelanguage.googleapis.com/v1beta/interactions"
@@ -21,6 +22,7 @@ FILES_URL = "https://generativelanguage.googleapis.com/v1beta/files"
 # gemini-omni-flash-preview shuts down 2026-10-22; Google names 1.1 as its replacement
 # (https://ai.google.dev/gemini-api/docs/deprecations, checked 2026-10-10).
 MODEL_ID = "gemini-omni-1.1-flash"
+MAX_INPUT_BYTES = 100_000_000
 
 
 def _log(msg: str) -> None:
@@ -59,12 +61,11 @@ def _mime_for_path(path: Path) -> str:
 
 
 async def _load_bytes(value: str) -> tuple[bytes, str]:
+    # Only public https hosts, so a graph can't make the backend read from
+    # this machine or a private network.
     if value.startswith(("http://", "https://")):
-        async with httpx.AsyncClient(timeout=120.0) as client:
-            resp = await client.get(value)
-            resp.raise_for_status()
-            mime = resp.headers.get("content-type", "application/octet-stream").split(";")[0]
-            return resp.content, mime
+        content, content_type = await fetch_public_media(value, label="Gemini Omni input", max_bytes=MAX_INPUT_BYTES)
+        return content, (content_type.split(";")[0].strip() or "application/octet-stream")
     if value.startswith("data:"):
         header, b64_data = value.split(",", 1)
         mime = header.split(":")[1].split(";")[0]

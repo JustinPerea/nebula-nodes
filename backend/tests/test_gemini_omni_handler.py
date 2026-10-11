@@ -262,3 +262,13 @@ async def test_gemini_omni_uri_delivery_uses_initial_response(tmp_path):
     assert mock_client.get.call_args_list[0].args[0].endswith("/files/file-123")
     assert result["interaction_id"]["value"] == "v1_uri"
     assert (tmp_path / result["video"]["value"].split("/")[-1]).read_bytes() == b"fake-video"
+
+
+@pytest.mark.asyncio
+async def test_omni_refuses_private_input_urls():
+    """Input URLs are fetched from public https hosts only."""
+    from handlers.gemini_omni import _load_bytes
+
+    for url in ("http://127.0.0.1:8000/api/settings", "https://localhost/x.png", "https://10.0.0.5/x.png"):
+        with pytest.raises(RuntimeError, match="will not fetch"):
+            await _load_bytes(url)

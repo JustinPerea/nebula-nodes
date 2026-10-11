@@ -1700,7 +1700,7 @@ Nodes: 302 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **Execution** | sync |
 | **Inputs** | Prompt (Text)*, Images (Image ×n) |
 | **Outputs** | Image (Image), Text (Text) |
-| **Audited** | 2026-07-22 |
+| **Audited** | 2026-10-10 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -1721,7 +1721,7 @@ Nodes: 302 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text)* |
 | **Outputs** | Image (Image) |
-| **Audited** | 2026-07-22 |
+| **Audited** | 2026-10-10 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -1747,7 +1747,7 @@ Nodes: 302 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text)*, Reference Images (Image ×n)* |
 | **Outputs** | Image (Image) |
-| **Audited** | 2026-07-22 |
+| **Audited** | 2026-10-10 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -1916,7 +1916,7 @@ Nodes: 302 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text)*, Reference Images (Image ×n), Video (Video), Previous Interaction (Text) |
 | **Outputs** | Video (Video), Interaction ID (Text) |
-| **Audited** | 2026-07-22 |
+| **Audited** | 2026-10-10 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -3815,7 +3815,7 @@ Nodes: 302 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text)*, First Frame (Image)*, Last Frame (Image)* |
 | **Outputs** | Video (Video) |
-| **Audited** | — |
+| **Audited** | 2026-10-10 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -3996,7 +3996,7 @@ Nodes: 302 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **Execution** | stream |
 | **Inputs** | Messages (Text)*, Images (Image ×n) |
 | **Outputs** | Text (Text) |
-| **Audited** | 2026-07-22 |
+| **Audited** | 2026-10-10 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -4273,7 +4273,7 @@ Nodes: 302 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **Execution** | sync |
 | **Inputs** | Text (Text)* |
 | **Outputs** | Audio (Audio) |
-| **Audited** | 2026-07-22 |
+| **Audited** | 2026-10-10 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -4422,7 +4422,7 @@ Nodes: 302 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **Execution** | sync |
 | **Inputs** | Prompt (Text)*, Images (Image ×n) |
 | **Outputs** | Audio (Audio), Lyrics (Text) |
-| **Audited** | 2026-07-22 |
+| **Audited** | 2026-10-10 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -6924,7 +6924,7 @@ Nodes: 302 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **Execution** | sync |
 | **Inputs** | Text (Text)* |
 | **Outputs** | Embedding (Text), Dimensions (Text) |
-| **Audited** | 2026-07-22 |
+| **Audited** | 2026-10-10 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|

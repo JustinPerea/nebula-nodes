@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import io
 import sys
 from datetime import date
 from pathlib import Path
@@ -35,6 +36,7 @@ VERTEX_MODELS = {
 VERTEX_DEFAULT_MODEL = "veo-3.1-generate-001"
 LITE_MODEL = "veo-3.1-lite-generate-preview"
 MAX_FRAME_BYTES = 20_000_000
+MAX_CLIP_BYTES = 100_000_000
 
 
 def previews_retired(today: date | None = None) -> bool:
@@ -106,6 +108,16 @@ VEO_EXTEND_MODELS = {
     "veo-3.1-generate-preview",
     "veo-3.1-fast-generate-preview",
 }
+# Vertex also extends with Lite, and doesn't lock the output to 720p
+# (https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/video/extend-videos,
+# checked 2026-10-11).
+VERTEX_EXTEND_MODELS = VEO_EXTEND_MODELS | {LITE_MODEL}
+# Only Standard renders 4K on Vertex; Fast and Lite stop at 1080p
+# (https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/veo/3-1-generate,
+# checked 2026-10-11). The Gemini API also renders Fast at 4K.
+VERTEX_4K_MODELS = {"veo-3.1-generate-preview"}
+# Vertex frames must be JPEG or PNG (VideoGenerationModelInstance.Image).
+VERTEX_FRAME_TYPES = {"image/jpeg", "image/png"}
 
 
 async def handle_veo(
@@ -135,7 +147,8 @@ async def handle_veo(
             raise ValueError(
                 "Veo video extension cannot be combined with a first or last frame"
             )
-        if model not in VEO_EXTEND_MODELS:
+        allowed = VERTEX_EXTEND_MODELS if vertex_credentials else VEO_EXTEND_MODELS
+        if model not in allowed:
             raise ValueError(f"Video extension requires Veo 3.1 or 3.1 Fast (got '{model}')")
 
     if vertex_credentials:
@@ -317,21 +330,41 @@ async def _cancel_vertex_operation(op_name: str, credentials: str) -> None:
         pass
 
 
+def _vertex_frame(payload: dict[str, Any]) -> dict[str, Any]:
+    """A frame Vertex accepts: JPEG and PNG pass through, anything else becomes PNG."""
+    if payload.get("mimeType") in VERTEX_FRAME_TYPES:
+        return payload
+    from PIL import Image, UnidentifiedImageError
+
+    try:
+        with Image.open(io.BytesIO(base64.b64decode(payload["bytesBase64Encoded"]))) as image:
+            out = io.BytesIO()
+            image.convert("RGBA" if image.mode in ("RGBA", "LA", "P") else "RGB").save(out, format="PNG")
+    except (UnidentifiedImageError, ValueError, OSError):
+        raise ValueError(f"Vertex needs a JPEG or PNG frame and couldn't convert a {payload.get('mimeType')} image") from None
+    return {"bytesBase64Encoded": base64.b64encode(out.getvalue()).decode("ascii"), "mimeType": "image/png"}
+
+
 async def _vertex_video_payload(value: str) -> dict[str, Any]:
-    """A clip to extend: a gs:// URI, or the file a Vertex run saved here."""
+    """A clip to extend: a gs:// URI, a public https MP4, or a file saved here.
+
+    Vertex extends any 1–30 s, 24 fps MP4, not only clips Veo made."""
     if value.startswith("gs://"):
         return {"gcsUri": value, "mimeType": "video/mp4"}
     if "generativelanguage.googleapis.com" in value:
         raise ValueError(
-            "This clip came from the Gemini API, which Vertex can't read. Extend it with a clip "
-            "generated on Vertex (wire that Veo node's 'Source URI' into 'Extend Video')."
+            "Vertex can't read a Gemini API file URI. Wire the upstream node's 'Video' output "
+            "(the saved clip) into 'Extend Video' instead."
         )
-    if value.startswith(("http://", "https://", "data:")):
-        raise ValueError("Veo on Vertex extends a clip Veo generated: wire the upstream Veo node's 'Source URI'.")
-    path = Path(value)
-    if not path.exists():
-        raise ValueError(f"Video not found: {value}")
-    data = require_allowed_path(path).read_bytes()
+    if value.startswith(("http://", "https://")):
+        data, _type = await fetch_public_media(value, label="Veo clip", max_bytes=MAX_CLIP_BYTES)
+    elif value.startswith("data:"):
+        raise ValueError("Extend Video needs a file, a gs:// URI or an https URL")
+    else:
+        path = Path(value)
+        if not path.exists():
+            raise ValueError(f"Video not found: {value}")
+        data = require_allowed_path(path).read_bytes()
     return {"bytesBase64Encoded": base64.b64encode(data).decode("ascii"), "mimeType": "video/mp4"}
 
 
@@ -455,22 +488,23 @@ async def _handle_veo_vertex(
     vertex_model = VERTEX_MODELS.get(model)
     if vertex_model is None:
         raise ValueError(f"'{model}' isn't a Veo 3.1 model")
-    # Lite on Vertex is a text-to-video preview: no image input.
+    # Lite on Vertex is a preview whose model card lists image input as not
+    # supported (its capability list says otherwise), so frames are refused.
     if model == LITE_MODEL and (has_image or has_last):
         raise ValueError("Veo 3.1 Lite on Vertex is text-to-video only; pick Veo 3.1 or Fast for frames")
+    if str(node.params.get("resolution")) == "4k" and model not in VERTEX_4K_MODELS:
+        raise ValueError("On Vertex only Veo 3.1 (Standard) renders 4K; pick 1080p or Veo 3.1")
     instance: dict[str, Any] = {}
     if prompt_text:
         instance["prompt"] = prompt_text
     if has_image:
-        instance["image"] = await _image_to_veo_payload(str(inputs["image"].value))
+        instance["image"] = _vertex_frame(await _image_to_veo_payload(str(inputs["image"].value)))
     if has_last:
-        instance["lastFrame"] = await _image_to_veo_payload(str(inputs["last_frame"].value))
+        instance["lastFrame"] = _vertex_frame(await _image_to_veo_payload(str(inputs["last_frame"].value)))
     if has_video:
         instance["video"] = await _vertex_video_payload(str(inputs["video"].value))
     parameters = _veo_parameters(node.params)
     parameters["generateAudio"] = True
-    if has_video:
-        parameters["resolution"] = "720p"
     return await run_vertex_veo(node, credentials, vertex_model, instance, parameters, emit)
 
 
@@ -490,8 +524,8 @@ async def handle_veo_flf_vertex(
         raise ValueError("Veo First-Last Frame needs both a first and a last frame")
     prompt = inputs.get("prompt")
     instance: dict[str, Any] = {
-        "image": await _image_to_veo_payload(str(first.value)),
-        "lastFrame": await _image_to_veo_payload(str(last.value)),
+        "image": _vertex_frame(await _image_to_veo_payload(str(first.value))),
+        "lastFrame": _vertex_frame(await _image_to_veo_payload(str(last.value))),
     }
     if prompt and prompt.value:
         instance["prompt"] = str(prompt.value)
