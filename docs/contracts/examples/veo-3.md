@@ -145,7 +145,7 @@ Rates from [official pricing](https://ai.google.dev/gemini-api/docs/pricing) as 
 | Vertex 4K | `VERTEX_4K_MODELS` — Standard only; 4K + Fast/Lite → `ValueError` |
 | Vertex frames | JPEG/PNG pass through; other types (e.g. WebP) converted to PNG (`veo-3` and `veo-3-flf`) |
 | Vertex `generateAudio` | Always `true`; `sampleCount: 1` |
-| Vertex Lite | Text-to-video (and extension) only; frames → `ValueError` (the model card lists image input as not supported) |
+| Vertex Lite | Frames are sent as-is; Google's model card is contradictory (modalities: no image input; capabilities: image-to-video), so Vertex decides |
 | Reference-image mode | **Not exposed** — live API rejects (verified 2026-06) |
 
 ---
@@ -255,7 +255,6 @@ Wire `source_uri` → downstream `video` port for extension (on the Gemini API, 
 | Extension + `image` or `last_frame` | `ValueError("Veo video extension cannot be combined with a first or last frame")` |
 | Extension on Lite (Gemini API) | `ValueError("Video extension requires Veo 3.1 or 3.1 Fast …")` |
 | Extension on fal | `ValueError("Extending a clip needs the Google route …")` |
-| Vertex Lite with a frame | `ValueError("Veo 3.1 Lite on Vertex is text-to-video only …")` |
 | Vertex 4K with Fast or Lite | `ValueError("On Vertex only Veo 3.1 (Standard) renders 4K; pick 1080p or Veo 3.1")` |
 | Vertex extension with a Gemini `files/` URI | `ValueError("Vertex can't read a Gemini API file URI …")` |
 | Extension without `files/...` URI (Gemini API) | `ValueError` with wiring hint for `source_uri` |

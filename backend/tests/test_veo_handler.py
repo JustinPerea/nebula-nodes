@@ -353,13 +353,18 @@ async def test_vertex_rejects_gemini_files_uri_for_extension(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_vertex_lite_is_text_only(tmp_path):
-    with pytest.raises(ValueError, match="Lite"):
+async def test_vertex_lite_sends_frames(tmp_path):
+    """Google's Lite card contradicts itself on frames, so Nebula sends them and lets Vertex decide."""
+    mock = _VertexMock()
+    a, b, c, d = _vertex_patches(mock, tmp_path)
+    with a, b, c, d:
         await handle_veo(
             _make_node({"model": "veo-3.1-lite-generate-preview"}),
             {"prompt": PortValueDict(type="Text", value="x"), "image": PortValueDict(type="Image", value=PNG_DATA_URI)},
             {"GOOGLE_VERTEX_CREDENTIALS": "{}"},
         )
+    assert mock.posts[0]["url"].endswith("veo-3.1-lite-generate-001:predictLongRunning")
+    assert "image" in mock.posts[0]["json"]["instances"][0]
 
 
 @pytest.mark.asyncio

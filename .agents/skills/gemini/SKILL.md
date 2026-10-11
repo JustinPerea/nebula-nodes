@@ -20,7 +20,7 @@ description: Best practices for prompting Google's Gemini-family APIs — Gemini
 | Studio asset, precise text in image, complex layout | `gemini-3-pro-image` (Nano Banana Pro) | Reasoning + high-fidelity text rendering |
 | Simple, cheapest image gen | `gemini-2.5-flash-image` (Nano Banana) | Lowest latency |
 | Cinematic video with audio | Veo 3.1 (`veo-3.1-generate-preview`; Vertex `veo-3.1-generate-001`) | Audio + 4K + extension + first/last frame |
-| Cheaper video | Veo 3.1 Fast / Lite | Fast keeps extension, and 4K on the Gemini API / fal (not Vertex); Lite has no 4K, extends only on Vertex, and is text-to-video only there |
+| Cheaper video | Veo 3.1 Fast / Lite | Fast keeps extension, and 4K on the Gemini API / fal (not Vertex); Lite has no 4K, and extends only on Vertex |
 | Advanced text reasoning | `gemini-3.1-pro-preview` | Best for complex/agentic tasks |
 | Everyday text at scale | `gemini-3-flash-preview` | Frontier cost/perf |
 | High-volume cheap text | `gemini-3.1-flash-lite-preview` | Budget tier |

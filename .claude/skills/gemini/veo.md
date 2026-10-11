@@ -8,7 +8,7 @@ Sourced from https://ai.google.dev/gemini-api/docs/video (fetched 2026-04-16). M
 |---|---|---|---|---|---|---|---|
 | `veo-3.1-generate-preview` | `veo-3.1-generate-001` (GA) | ✅ | ✅ | up to 3 | ✅ | ✅ | ✅ |
 | `veo-3.1-fast-generate-preview` | `veo-3.1-fast-generate-001` (GA) | ✅ | ✅ (Gemini API/fal; not Vertex) | up to 3 | ✅ | ✅ | ✅ |
-| `veo-3.1-lite-generate-preview` | `veo-3.1-lite-generate-001` (preview, text-to-video only) | ✅ | — | — | ✅ (Vertex only) | ✅ (Gemini API) | ✅ |
+| `veo-3.1-lite-generate-preview` | `veo-3.1-lite-generate-001` (preview) | ✅ | — | — | ✅ (Vertex only) | ✅ (Gemini API) | ✅ |
 
 Pick Veo 3.1 unless you're budgeting (Fast / Lite). Veo 3.0, 3.0 Fast and 2.0 shut down on 2026-06-30. The Gemini API preview ids retire on **2026-10-22**; the Vertex GA ids retire "Nov 17 2026 or later".
 
@@ -196,7 +196,7 @@ Expect 11 seconds minimum, up to 6 minutes during peak. In nebula this is alread
 
 - Nodes: `veo-3` (displayed "Veo 3.1"; models Veo 3.1 / 3.1 Fast / 3.1 Lite) and `veo-3-flf` (First-Last Frame). Check `nebula graph` for the exact definition ids.
 - **Routes, in order** (checked 2026-10-11):
-  1. **Vertex AI** when `GOOGLE_VERTEX_CREDENTIALS` (a Google Cloud service-account JSON key, Settings → "Google Vertex AI (service-account JSON, for Veo)") is set. `us-central1`, project from the key, GA `-001` models; only Veo 3.1 (Standard) renders 4K there (4K + Fast/Lite is refused), Lite is text-to-video only, and frames that aren't JPEG/PNG are converted to PNG. Audio is always on. (Vertex AI is now branded Gemini Enterprise Agent Platform; hosts unchanged.)
+  1. **Vertex AI** when `GOOGLE_VERTEX_CREDENTIALS` (a Google Cloud service-account JSON key, Settings → "Google Vertex AI (service-account JSON, for Veo)") is set. `us-central1`, project from the key, GA `-001` models; only Veo 3.1 (Standard) renders 4K there (4K + Fast/Lite is refused), Lite's frame support is unclear in Google's docs (Nebula sends frames and lets Vertex decide), and frames that aren't JPEG/PNG are converted to PNG. Audio is always on. (Vertex AI is now branded Gemini Enterprise Agent Platform; hosts unchanged.)
   2. **Gemini API** with `GOOGLE_API_KEY` on the preview ids (until 2026-10-22).
   3. **fal** with `FAL_KEY`: `fal-ai/veo3.1` / `fal-ai/veo3.1/fast` (Lite runs as Fast), image-to-video or first-last-frame endpoint when frames are wired. No extension; adds `negative_prompt` and `safety_tolerance`.
   After 2026-10-22, failed Gemini API or fal runs suggest adding a Vertex key (Google names `gemini-omni-1.1-flash` as the Gemini API replacement for the Veo previews). `veo-3-flf` uses Vertex when the key is set, else fal.

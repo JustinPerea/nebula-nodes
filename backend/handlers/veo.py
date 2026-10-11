@@ -488,10 +488,8 @@ async def _handle_veo_vertex(
     vertex_model = VERTEX_MODELS.get(model)
     if vertex_model is None:
         raise ValueError(f"'{model}' isn't a Veo 3.1 model")
-    # Lite on Vertex is a preview whose model card lists image input as not
-    # supported (its capability list says otherwise), so frames are refused.
-    if model == LITE_MODEL and (has_image or has_last):
-        raise ValueError("Veo 3.1 Lite on Vertex is text-to-video only; pick Veo 3.1 or Fast for frames")
+    # Lite's model card is contradictory about frames (modalities say no image
+    # input, capabilities list image-to-video), so they're sent and Google decides.
     if str(node.params.get("resolution")) == "4k" and model not in VERTEX_4K_MODELS:
         raise ValueError("On Vertex only Veo 3.1 (Standard) renders 4K; pick 1080p or Veo 3.1")
     instance: dict[str, Any] = {}

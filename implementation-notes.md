@@ -12,7 +12,7 @@ Google shut down or is about to shut down several models our nodes call (https:/
 - **Veo routes, in order:** Vertex AI (`GOOGLE_VERTEX_CREDENTIALS`), then the Gemini API (`GOOGLE_API_KEY`), then fal (`FAL_KEY`).
   - `directKeyName` can now be a list. `frontend/src/lib/directRoute.ts` resolves it for the Inspector, Create, readiness and route display; `model_pricing.route_provider` does the same on the backend. With nothing set, setup points at Vertex.
   - **Vertex:** `services/google_vertex.py` signs an RS256 JWT with the service-account key (via `cryptography`, already a dependency, so no Google SDK) and exchanges it at the fixed `oauth2.googleapis.com/token`. It never uses the key file's `token_uri`. Tokens are cached until 5 minutes before expiry. Express-mode API keys don't cover Veo, which is why this needs a service account. Calls go to `us-central1`, with the project taken from the key.
-  - **Vertex models:** the preview model values map to `veo-3.1-generate-001` / `veo-3.1-fast-generate-001` (GA, retiring "Nov 17 2026 or later") and `veo-3.1-lite-generate-001` (preview, text-to-video only, so frames are refused).
+  - **Vertex models:** the preview model values map to `veo-3.1-generate-001` / `veo-3.1-fast-generate-001` (GA, retiring "Nov 17 2026 or later") and `veo-3.1-lite-generate-001` (preview).
   - **Vertex requests and output:** every request sends `generateAudio: true` and `sampleCount: 1`. No `storageUri` is sent, so videos come back inline. A `gcsUri` answer is downloaded with the same token.
   - **Vertex extension:** it extends from bytes, so a Vertex run's Source URI is the saved file. A Gemini `files/` URI is refused with an explanation.
   - **`veo-3-flf`** also runs on Vertex when the key is set. It maps its fal-shaped params: `auto` aspect ratio is omitted, `"6s"` becomes 6, and `negative_prompt` becomes `negativePrompt`.
@@ -35,7 +35,7 @@ Google shut down or is about to shut down several models our nodes call (https:/
   - Fast and Lite stop at 1080p on Vertex (only Standard renders 4K), so 4K with Fast or Lite is refused up front.
   - Frames must be JPEG/PNG, so other formats are converted to PNG.
   - Vertex extends with Lite too, doesn't lock the output to 720p, and accepts any 1–30 s, 24 fps MP4. So Extend Video on Vertex now takes a saved file, a public https URL (≤100 MB) or `gs://`.
-- **Lite frames:** Lite's model card says image input "Not supported" while its capability list says image-to-video, so Lite frames stay refused on Vertex.
+- **Lite frames:** Lite's model card says image input "Not supported" while its capability list says image-to-video. Frames are sent and Vertex decides, since a request it rejects should fail clearly at no cost, and the Gemini API route already sends them.
 - **IAM:** the role is "Gemini Enterprise Agent Platform User" (`roles/aiplatform.user`, formerly Vertex AI User).
 - **Gemini Omni:** inputs are now fetched through `fetch_public_media` (public https only, ≤100 MB), closing the same SSRF shape fixed for Veo.
 - **Deprecations:** Google's page names `gemini-omni-1.1-flash` as the Gemini API replacement for the Veo 3.1 previews, alongside the GA models on the Agent Platform.
