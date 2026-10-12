@@ -88,7 +88,7 @@ npm --prefix frontend ci
 npm --prefix frontend run dev -- --host 127.0.0.1 --port 5173
 ```
 
-Open **[127.0.0.1:5173](http://127.0.0.1:5173)**, then add the provider keys you need in **Settings**. Provider usage is billed to your accounts. Browser mode stores keys in the gitignored, plaintext `settings.json`; the macOS desktop app uses Keychain encryption.
+Open **[127.0.0.1:5173](http://127.0.0.1:5173)**, then add the provider keys you need in **Settings** (the gear at the top right of Projects, or the bottom of the left rail inside a project). Provider usage is billed to your accounts. Browser mode stores keys in the gitignored, plaintext `settings.json`; the macOS desktop app uses Keychain encryption.
 
 Try a **Text Input → GPT Image 2 → Preview** graph and hit **Run**. Generated files go to `output/` by default; change the location in Settings.
 

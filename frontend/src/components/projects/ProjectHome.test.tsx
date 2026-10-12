@@ -168,4 +168,19 @@ describe('ProjectHome', () => {
     expect(screen.getByText('Saved project')).toBeTruthy();
     expect(screen.getByText('1 node')).toBeTruthy();
   });
+  it('opens Settings from the header and reflects whether it is open', () => {
+    const onToggleSettings = vi.fn();
+    const { rerender } = render(<ProjectHome {...props({ onToggleSettings })} />);
+    const button = screen.getByRole('button', { name: 'Settings' });
+    expect(button.getAttribute('aria-expanded')).toBe('false');
+    fireEvent.click(button);
+    expect(onToggleSettings).toHaveBeenCalledTimes(1);
+    rerender(<ProjectHome {...props({ onToggleSettings, settingsOpen: true })} />);
+    expect(screen.getByRole('button', { name: 'Settings' }).getAttribute('aria-expanded')).toBe('true');
+  });
+
+  it('hides the Settings button when nothing handles it', () => {
+    render(<ProjectHome {...props()} />);
+    expect(screen.queryByRole('button', { name: 'Settings' })).toBeNull();
+  });
 });

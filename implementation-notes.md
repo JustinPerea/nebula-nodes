@@ -1,5 +1,15 @@
 # Implementation Notes
 
+## 2026-10-12 — Settings from the Projects home
+
+Justin asked for API keys to be reachable from the home page. Before, Settings only rendered inside a project, so a first run had to create a project just to add keys.
+
+- **Same panel, not a copy.** Home renders the shared `<Settings />` dock in `.workspace-overlays--home`; a gear at the right of the home header toggles it (`aria-expanded`, `aria-haspopup="dialog"`). Escape and the close button work as in the workspace, and focus returns to the gear (`usePanelFocus`).
+- **Placement.** Home has no rail, so the drawer hangs from the gear (top right, under the header) with the dock's spring, entering downward instead of sliding out of the rail. Reduced motion skips the entrance and fades the exit, like the workspace docks.
+- **Dock state across home ↔ project** (`useHomeSettingsDock`). Settings is a left dock, and nothing reset docks on project open. Arriving home closes an open Settings; leaving home restores the drawer the workspace had (usually the Nodes menu) when the dock is still Settings or closed. So Settings opened from home doesn't follow you into the project, and a drawer picked meanwhile is kept.
+- **Test change.** `App.canvasFocus.test.tsx` asserted home renders no workspace chrome, including Settings. It now expects Settings (closed) and still checks chat, import, commands and run are absent.
+- Checked live at 1280×820: the drawer lines up with the header's right edge, Escape returns focus to the gear, and opening a project with Settings open lands on the canvas with the Nodes menu, not Settings.
+
 ## 2026-10-10 — Eight more UX fixes: one bar, shortcuts, renaming, live run status
 
 Justin approved eight from a second UX pass. Seven are done; #5 (cost estimate) is blocked on a pricing source (see below). Not committed yet.

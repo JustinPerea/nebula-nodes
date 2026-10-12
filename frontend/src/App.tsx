@@ -28,6 +28,7 @@ import { useZoomManifest } from './hooks/useZoomManifest';
 import { NODE_DEFINITIONS } from './constants/nodeDefinitions';
 import { ProjectCoordinator } from './components/projects/ProjectCoordinator';
 import { ProjectHome } from './components/projects/ProjectHome';
+import { useHomeSettingsDock } from './components/projects/useHomeSettingsDock';
 import { useProjectStore } from './store/projectStore';
 import './App.css';
 import './styles/layouts.css';
@@ -220,6 +221,7 @@ export default function App() {
   const isMoodboard = viewMode === 'moodboard-editor';
   const isCreate = viewMode === 'create';
   const isBrandShowcase = viewMode === 'brand-showcase';
+  const homeSettings = useHomeSettingsDock(isHome);
 
   let mainView;
   if (isHome) {
@@ -229,7 +231,7 @@ export default function App() {
       onDelete={(id) => void projects.remove(id)} trash={projects.trash} lastDeleted={projects.lastDeleted}
       onRestore={(id) => void projects.restore(id)} onPurge={(id) => void projects.purge(id)}
       onEmptyTrash={() => void projects.emptyTrash()} onDismissUndo={projects.dismissUndo}
-      onRetry={() => void projects.retry()} />;
+      onRetry={() => void projects.retry()} settingsOpen={homeSettings.open} onToggleSettings={homeSettings.toggle} />;
   } else if (isCanvas) {
     mainView = <Canvas />;
   } else if (isCommons) {
@@ -278,6 +280,7 @@ export default function App() {
           <ChatPanel />
         </div>
       )}
+      {isHome && <div className="workspace-overlays workspace-overlays--home"><Settings /></div>}
       {isCanvas && <WorkspaceRail />}
       {isCanvas && <ChatLauncher />}
       {isCanvas && <Toolbar />}
