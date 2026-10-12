@@ -336,12 +336,20 @@ How it works (`backend/services/agent_spend.py`):
 - The cost is the upper estimate at list prices over every node the run
   includes, batches counted. Nebula can't know in advance what the cache will
   skip, so the estimate never undercounts.
-- A run counts against the session when it starts, at that estimate. Two
-  cases give the count back, because they can't have cost anything: a node
-  that stops at its own key check before any provider request (its handler
-  raises `MissingCredentialError`), and a request refused after the check
-  but before the run started. The limit is still checked on the whole
-  estimate first, since which key a handler finds is only known by running it. Only
+- A run counts against the session when it starts, at that estimate. Nodes
+  that made no provider request get their share back, because they can't
+  have cost anything:
+  - a node that stops at its own key check before any provider request (its
+    handler raises `MissingCredentialError`);
+  - a node that never reached its handler: answered from the cache, held
+    back by an upstream failure, or the run stopped first. This is settled
+    when the run ends (`execution/provider_calls.py`);
+  - every node of a request refused after the check but before the run
+    started.
+
+  A node whose handler was called stays counted, even if it failed. The
+  limit is still checked on the whole estimate first, since which key a
+  handler finds and what the cache skips are only known by running. Only
   the in-app Claude and Codex chats get their own session budget, from the
   agent token Nebula mints for each chat. Everything else (Hermes, outside
   agents, scripts) shares one budget until the backend restarts, because a

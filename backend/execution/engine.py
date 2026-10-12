@@ -57,6 +57,7 @@ from models.events import (
     execution_run_id,
     execution_variant,
 )
+from execution import provider_calls
 from execution.missing_credential import MissingCredentialError
 
 CycleError = _GraphlibCycleError
@@ -870,6 +871,8 @@ async def execute_graph(
         raise ValueError(iterator_errors[0].message)
     manifest_run_id = run_id or str(uuid4())
     run_dir = create_run_dir(manifest_run_id)
+    if run_id is not None:
+        provider_calls.begin(run_id)
     token = execution_run_id.set(run_id)
     variant_token = execution_variant.set(None)
     run_dir_token = execution_run_dir.set(run_dir)
@@ -1356,6 +1359,9 @@ async def _execute_graph(
                 else:
                     raise RuntimeError(f"No handler registered for '{node.definition_id}'")
             else:
+                # The only provider entry point: the spending limits count a
+                # node only if its run got here (execution/provider_calls.py).
+                provider_calls.mark(execution_run_id.get(), nid)
                 node_outputs = await handler(node, resolved_inputs, api_keys)
 
             validate_file_references(node_outputs)

@@ -435,3 +435,92 @@ def test_a_keyless_run_over_the_limit_is_still_asked_about(client):
     price(5.0)
     node_id = add_paid_node(client)
     assert client.post("/api/graph/run", json={"targetNodeId": node_id}).status_code == 403
+
+
+# -- nodes that never reach their provider ------------------------------------------
+
+EDIT = "gpt-image-1-edit"
+
+
+@pytest.fixture
+def fake_providers(client, monkeypatch):
+    """The real engine, with the two OpenAI handlers replaced by fakes that count calls."""
+    import main
+    from execution.engine import execute_graph
+
+    calls: list[str] = []
+    fail: set[str] = set()
+    real_registry = main.get_handler_registry
+
+    def registry(**kwargs):
+        handlers = real_registry(**kwargs)
+
+        def fake(definition_id):
+            async def handler(node, inputs, api_keys):
+                calls.append(node.id)
+                if node.id in fail:
+                    raise RuntimeError("HTTP 500 from provider")
+                return {"image": {"type": "Text", "value": f"made by {node.id}"}}
+            return handler
+
+        handlers[PAID] = fake(PAID)
+        handlers[EDIT] = fake(EDIT)
+        return handlers
+
+    monkeypatch.setattr(main, "execute_graph", execute_graph)
+    monkeypatch.setattr(main, "get_handler_registry", registry)
+    PRICES["nodes"] = {PAID: {"currency": "usd", "rows": [{"match": {}, "price": 0.4}]},
+                       EDIT: {"currency": "usd", "rows": [{"match": {}, "price": 0.3}]}}
+    main.execution_cache.clear()
+    yield calls, fail
+    main.execution_cache.clear()
+
+
+def _chain(client) -> tuple[str, str]:
+    """A text prompt into the paid generator, whose image feeds the paid editor."""
+    prompt = client.post("/api/graph/node", json={"definitionId": FREE, "params": {"value": "a cat"}}).json()["id"]
+    first = add_paid_node(client)
+    second = client.post("/api/graph/node", json={"definitionId": EDIT, "params": {}}).json()["id"]
+    for source, port, target, handle in ((prompt, "text", first, "prompt"), (prompt, "text", second, "prompt"),
+                                         (first, "image", second, "image")):
+        wired = client.post("/api/graph/connect", json={"source": source, "sourceHandle": port,
+                                                        "target": target, "targetHandle": handle})
+        assert wired.status_code == 200, wired.text
+    return first, second
+
+
+def test_a_cache_hit_gives_its_count_back(client, fake_providers):
+    calls, _ = fake_providers
+    first, _second = _chain(client)
+    client.post("/api/graph/run", json={"targetNodeId": first})
+    assert calls == [first] and spent(client) == pytest.approx(0.4)
+    client.post("/api/graph/run", json={"targetNodeId": first})  # answered from the cache
+    assert calls == [first] and spent(client) == pytest.approx(0.4)
+
+
+def test_a_node_after_a_failed_one_gives_its_count_back(client, fake_providers):
+    calls, fail = fake_providers
+    first, second = _chain(client)
+    fail.add(first)
+    result = client.post("/api/graph/run", json={"targetNodeId": second}).json()
+    assert "HTTP 500" in result["errors"][first]
+    assert calls == [first]  # the editor never ran
+    assert spent(client) == pytest.approx(0.4)  # the failed call still counts, the editor's 0.3 doesn't
+
+
+def test_every_node_that_ran_still_counts(client, fake_providers):
+    calls, _ = fake_providers
+    _first, second = _chain(client)
+    client.post("/api/graph/run", json={"targetNodeId": second})
+    assert len(calls) == 2 and spent(client) == pytest.approx(0.7)
+
+
+def test_runs_the_engine_did_not_track_keep_their_whole_count():
+    from execution import provider_calls
+
+    provider_calls.mark("never-begun", "n1")  # marks alone don't make a run tracked by begin
+    provider_calls.begin("tracked")
+    provider_calls.mark("tracked", "n1")
+    assert provider_calls.take("tracked") == {"n1"}
+    assert provider_calls.take("tracked") is None
+    assert provider_calls.take("unknown") is None

@@ -27,16 +27,22 @@ Rules, with any limit set:
 Runs billed to a signed-in Krea plan (``plan``) aren't per-call charges and
 are neither limited nor counted, as on the canvas.
 
-A node that fails at its own key check, before any provider request
-(``execution.missing_credential``), gets its share of the count back when
-the run reports it: it can't have cost anything. The limit itself is still
-checked up front on the whole estimate, because which key a handler will
-find can only be known by running it.
+Nodes that made no provider request get their share of the count back, since
+they can't have cost anything:
 
-Estimates cover every node the run includes, the same set the canvas prices.
-Nodes whose outputs are cached may not run again, so this is an upper bound;
-the cache can't be predicted before the run, because its keys depend on
-upstream outputs, and it is lost on restart.
+- a node that fails at its own key check (``execution.missing_credential``),
+  given back when the run reports it;
+- a node that never reached its handler (answered from the cache, held back
+  by an upstream failure, or the run stopped first), given back when the run
+  ends (``execution.provider_calls``, ``main._settle_hold``).
+
+A node whose handler was called stays counted, even if it then failed or was
+stopped: a request may already have gone out.
+
+The limits themselves are still checked up front on the whole estimate.
+Which key a handler finds, and what the cache will skip, can only be known
+by running: cache keys depend on upstream outputs, and the cache is lost on
+restart.
 """
 from __future__ import annotations
 

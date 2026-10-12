@@ -69,6 +69,7 @@ from models.events import (
 )
 from execution.engine import execute_graph, validate_graph, topological_sort, get_subgraph, CycleError
 from execution.sync_runner import get_handler_registry
+from execution import provider_calls
 from services.settings import (
     load_settings,
     save_settings,
@@ -1719,6 +1720,26 @@ def _return_hold(run_id: str) -> None:
         agent_spend_ledger.refund(key, by_model)
     except Exception:  # noqa: BLE001 - bookkeeping must not mask the refusal
         pass
+
+
+def _settle_hold(run_id: str) -> None:
+    """At the end of a run, give back the share of every counted node that
+    never reached its handler (cache hit, upstream failure, stopped first):
+    it made no provider request. Untracked runs keep their whole count."""
+    hold = _spend_holds.pop(run_id, None)
+    called = provider_calls.take(run_id)
+    if hold is None or called is None:
+        return
+    key, per_node = hold
+    by_model: dict[str, float] = {}
+    for node_id, (definition_id, amount) in per_node.items():
+        if node_id not in called:
+            by_model[definition_id] = by_model.get(definition_id, 0.0) + amount
+    if by_model:
+        try:
+            agent_spend_ledger.refund(key, by_model)
+        except Exception:  # noqa: BLE001 - bookkeeping must not break a run
+            pass
 
 
 def _require_run_spend_approval(run_id: str, nodes: list[GraphNode], edges: list[GraphEdge], **kwargs: Any) -> None:
@@ -4395,6 +4416,7 @@ async def execute(request: ExecuteRequest) -> dict:
             # settles. The lease therefore belongs to the task, not the HTTP
             # acknowledgement, and releases only after the task is terminal.
             await _release_paid_worldlabs_starts(run_id)
+            _settle_hold(run_id)
 
     task: asyncio.Task[None] | None = None
     run_coroutine = _run()
@@ -4525,6 +4547,7 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
             raise
         finally:
             await _release_paid_worldlabs_starts(run_id)
+            _settle_hold(run_id)
 
     try:
         task = asyncio.create_task(_run())
@@ -5130,6 +5153,7 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
                 await _broadcast_graph_sync()
             finally:
                 await _release_paid_worldlabs_starts(run_id)
+                _settle_hold(run_id)
 
     task: asyncio.Task[None] | None = None
     run_coroutine = _run()
@@ -8063,6 +8087,7 @@ async def _execute_cli_run(
         raise
     finally:
         await _release_paid_worldlabs_starts(run_id)
+        _settle_hold(run_id)
         canvas_events.forget_run(run_id)
     duration = _time_module.time() - start
 
@@ -8381,14 +8406,18 @@ async def quick_execute(body: dict[str, Any]) -> dict:
 
     import time
     start = time.time()
-    await execute_graph(
-        nodes=temp_nodes,
-        edges=temp_edges,
-        api_keys=api_keys,
-        handler_registry=handler_registry,
-        emit=collect_events,
-        cache=execution_cache,
-    )
+    try:
+        await execute_graph(
+            nodes=temp_nodes,
+            edges=temp_edges,
+            api_keys=api_keys,
+            handler_registry=handler_registry,
+            emit=collect_events,
+            cache=execution_cache,
+            run_id=quick_run,
+        )
+    finally:
+        _settle_hold(quick_run)
     duration = time.time() - start
 
     if "_quick_main" in errors:
