@@ -771,3 +771,14 @@ def test_mcp_propose_and_wait_send_named_requests(monkeypatch):
     assert all(call["timeout"] >= call["params"]["wait"] for call in gets)
     assert not any(name in dir(mcp_server) for name in ("accept_proposal", "reject_proposal"))
     assert "agents cannot accept" in mcp_server.mcp.instructions
+
+
+def test_a_cinema_scene_is_paid_by_its_base_model():
+    from services.canvas_proposals import cost_for
+
+    definitions = {"nano-banana": {"id": "nano-banana", "apiProvider": "google"}}
+    scene = {"id": "cinema-scene", "apiProvider": "utility"}
+    params = {"scene": {"base": {"model": "nano-banana"}, "shots": [{"id": "a"}]}}
+    assert cost_for(scene, params, definitions) == {
+        "kind": "paid", "provider": "google", "label": "paid · google, per shot"}
+    assert cost_for(scene, {"scene": "unreadable"}, definitions)["kind"] == "paid"

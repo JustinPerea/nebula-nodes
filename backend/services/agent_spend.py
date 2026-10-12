@@ -27,6 +27,12 @@ Rules, with any limit set:
 Runs billed to a signed-in Krea plan (``plan``) aren't per-call charges and
 are neither limited nor counted, as on the canvas.
 
+A cinema scene is a local node that calls its base image model once per
+shot, so it is priced, limited and counted as that model, times its shots
+(``model_pricing.cinema_scene_base``). A shot request with variations runs
+the whole subgraph once per variation with the cache off, so it is counted
+once per variation (``passes``).
+
 Nodes that made no provider request get their share of the count back, since
 they can't have cost anything:
 
@@ -247,13 +253,17 @@ def decide(
     definitions: Mapping[str, Mapping[str, Any]],
     spent: Spent,
     how_to_ask: str,
+    passes: int = 1,
 ) -> Decision:
     """Whether an agent may start this run itself, and what it would cost.
 
     ``items`` are the nodes the run includes, each {id, definitionId, params};
     ``edges`` are (source, target) pairs between them; ``spent`` is what this
     agent's session has already been charged. ``how_to_ask`` is the sentence
-    that tells the agent what to do instead."""
+    that tells the agent what to do instead. ``passes`` is how many times the
+    request runs these nodes, uncached (a cinema shot's variations)."""
+    if isinstance(passes, bool) or not isinstance(passes, int) or passes < 1:
+        raise ValueError("passes must be a positive whole number")
     threshold = threshold_from_settings(settings)
     caps = caps_from_settings(settings)
     model_caps: Mapping[str, Mapping[str, float | None]] = caps["models"]
@@ -265,10 +275,14 @@ def decide(
 
     by_model: dict[str, float] = {}
     per_node: dict[str, tuple[str, float]] = {}
+    billed_as: dict[str, str] = {}
     for node_id, line in estimate["priced"].items():
-        def_id = definition_of.get(node_id, "")
-        by_model[def_id] = by_model.get(def_id, 0.0) + line["high"]
-        per_node[str(node_id)] = (def_id, line["high"])
+        # Counted against the model billed: a cinema scene's shots are its base model's.
+        def_id = line.get("model") or definition_of.get(node_id, "")
+        billed_as[str(node_id)] = def_id
+        amount = line["high"] * passes
+        by_model[def_id] = by_model.get(def_id, 0.0) + amount
+        per_node[str(node_id)] = (def_id, amount)
 
     def refuse(reason: str) -> Decision:
         return Decision(f"Needs the person's approval: {reason} {how_to_ask}", by_model, per_node)
@@ -292,7 +306,7 @@ def decide(
     general = sum(amount for def_id, amount in by_model.items() if (model_caps.get(def_id) or {}).get("perRunUsd") is None)
     if threshold is not None and general > 0 and general >= threshold:
         priced = sorted((node_id for node_id in estimate["priced"]
-                         if (model_caps.get(definition_of.get(node_id, "")) or {}).get("perRunUsd") is None),
+                         if (model_caps.get(billed_as.get(str(node_id), "")) or {}).get("perRunUsd") is None),
                         key=lambda node_id: -estimate["priced"][node_id]["high"])
         return refuse(f"this run could cost up to {_usd(general)} (mostly {_names(priced[:2], labels)}), "
                       f"at or over the {_usd(threshold)} per-run limit set in Nebula Settings.")

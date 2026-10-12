@@ -336,6 +336,11 @@ How it works (`backend/services/agent_spend.py`):
 - The cost is the upper estimate at list prices over every node the run
   includes, batches counted. Nebula can't know in advance what the cache will
   skip, so the estimate never undercounts.
+- A cinema scene counts as its base image model (`scene.base.model`, default
+  `seedream-4-5`), once per shot, and falls under that model's own limits. A
+  base without a list price means the run must be proposed. A shot request
+  with `variations` counts once per variation, because each one runs again
+  with the cache off.
 - A run counts against the session when it starts, at that estimate. Nodes
   that made no provider request get their share back, because they can't
   have cost anything:

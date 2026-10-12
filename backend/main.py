@@ -1709,6 +1709,7 @@ def _release_unspent_hold(event: Any, run_id: str | None) -> None:
 def _return_hold(run_id: str) -> None:
     """Give back everything a run was counted at, for a request refused after
     the spend check but before the run started (it can't have cost anything)."""
+    provider_calls.take(run_id)
     hold = _spend_holds.pop(run_id, None)
     if hold is None:
         return
@@ -1753,7 +1754,7 @@ def _require_run_spend_approval(run_id: str, nodes: list[GraphNode], edges: list
 
 def _require_spend_approval(
     nodes: list[GraphNode], edges: list[GraphEdge], *, how_to_ask: str | None = None,
-    run_ids: list[str] | None = None, run_id: str | None = None,
+    run_ids: list[str] | None = None, run_id: str | None = None, passes: int = 1,
 ) -> None:
     """Refuse a run that isn't the person's when it breaks a spending limit, and
     count it against the caller's session when it doesn't.
@@ -1776,15 +1777,25 @@ def _require_spend_approval(
         [{"id": n.id, "definitionId": n.definition_id, "params": n.params} for n in nodes],
         [(e.source, e.target) for e in edges],
         settings=settings, pricing=pricing, definitions=node_registry.get_all(),
-        spent=agent_spend_ledger.spent(key), how_to_ask=ask,
+        spent=agent_spend_ledger.spent(key), how_to_ask=ask, passes=passes,
     )
     if decision.refusal:
         raise HTTPException(status_code=403, detail=decision.refusal)
     agent_spend_ledger.record(key, label, decision.charge)
     if run_id is not None and decision.per_node:
-        _spend_holds[run_id] = (key, dict(decision.per_node))
-        while len(_spend_holds) > _MAX_SPEND_HOLDS:
-            _spend_holds.popitem(last=False)
+        _place_hold(run_id, key, dict(decision.per_node))
+
+
+def _place_hold(run_id: str, key: str, per_node: dict[str, tuple[str, float]]) -> None:
+    """Remember what a run was counted at, per node, and start recording which
+    nodes call their provider. A hold dropped to keep the table bounded takes
+    its record with it, so that run keeps its whole count."""
+    _spend_holds[run_id] = (key, per_node)
+    _spend_holds.move_to_end(run_id)
+    while len(_spend_holds) > _MAX_SPEND_HOLDS:
+        dropped, _ = _spend_holds.popitem(last=False)
+        provider_calls.take(dropped)
+    provider_calls.begin(run_id)
 
 
 @app.post("/api/outputs/archive")
@@ -2728,6 +2739,21 @@ def _short(text: Any, limit: int = 140) -> str:
     return flat if len(flat) <= limit else flat[: limit - 1] + "…"
 
 
+def _cinema_price_note() -> str:
+    from handlers.cinema_scene import _COMMERCIAL_OK_DEFAULT_BASES, _DEFAULT_BASE_MODEL
+
+    try:
+        priced = model_pricing.load_pricing().get("nodes") or {}
+    except (OSError, ValueError):
+        priced = {}
+    unpriced = sorted(base for base in _COMMERCIAL_OK_DEFAULT_BASES if base not in priced)
+    note = (f"Calls its base model (scene.base.model, default {_DEFAULT_BASE_MODEL}) once per shot, and is "
+            "priced and limited as that model: shots x its list price.")
+    if unpriced:
+        note += f" {', '.join(unpriced)} have no list price, so agent runs with them must be proposed (propose_change)."
+    return note
+
+
 @app.get("/api/agent/nodes")
 async def agent_find_nodes(query: str = "", category: str = "", ready_only: bool = True, limit: int = 20) -> dict[str, Any]:
     """Node types an agent can use, best matches first: whether each can run
@@ -2765,7 +2791,9 @@ async def agent_find_nodes(query: str = "", category: str = "", ready_only: bool
             row["description"] = _short(definition["description"])
         if access is None:
             row["missing"] = node_readiness.missing(definition, krea_signed_in)
-        if definition.get("apiProvider") == "utility":
+        if definition["id"] == model_pricing.CINEMA_SCENE:
+            row["price"] = None  # its base model's price, once per shot (describe_node)
+        elif definition.get("apiProvider") == "utility":
             row["price"] = "free"
         else:
             estimate = model_pricing.estimate_node(
@@ -2843,7 +2871,10 @@ async def agent_describe_node(definition_id: str) -> dict[str, Any]:
         result["kreaModes"] = modes
         if len(modes) > 1:
             result["kreaNote"] = 'Set params {"_kreaAuth": "mcp"} to bill the signed-in Krea account instead of the API token.'
-    if definition.get("apiProvider") == "utility":
+    if definition["id"] == model_pricing.CINEMA_SCENE:
+        result["price"] = None
+        result["priceNote"] = _cinema_price_note()
+    elif definition.get("apiProvider") == "utility":
         result["price"] = "free"
     else:
         try:
@@ -3425,12 +3456,12 @@ def _proposal_cost(candidate: CLIGraph, id_map: dict[str, str], run_ids: list[st
         estimate = _estimate_proposal_run(items, graph_nodes, graph_edges, definitions)
         for node_id in chosen:
             definition = definitions.get(str(candidate.nodes[node_id].get("definitionId") or ""), {})
-            price = (estimate or {}).get("priced", {}).get(node_id)
+            line = (estimate or {}).get("priced", {}).get(node_id)
             entries.append({
                 "ref": ref_for.get(node_id, node_id),
                 "nodeId": None if node_id in ref_for else node_id,
-                **cost_for(definition),
-                "price": price,
+                **cost_for(definition, candidate.nodes[node_id].get("params") or {}, definitions),
+                "price": {"low": line["low"], "high": line["high"]} if line else None,
             })
         if estimate:
             estimate = {
@@ -5062,13 +5093,15 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
         )
         return {"status": "cycle_error"}
 
-    # Priced as the whole scene: an upper bound for one shot. Checked after
-    # validation, so a request that can't run doesn't count.
-    spend_nodes, spend_edges = get_subgraph(request.nodes, request.edges, request.node_id)
-    _require_run_spend_approval(run_id, spend_nodes, spend_edges, run_ids=[request.node_id])
-
     shot_port = f"shot_{request.shot_id}"
     count = request.variations or 1
+
+    # Priced as the whole scene: an upper bound for one shot. Variations run
+    # the whole subgraph again with the cache off, once per variation, so
+    # each one counts in full. Checked after validation, so a request that
+    # can't run doesn't count.
+    spend_nodes, spend_edges = get_subgraph(request.nodes, request.edges, request.node_id)
+    _require_run_spend_approval(run_id, spend_nodes, spend_edges, run_ids=[request.node_id], passes=count)
 
     # A per-shot run does not acquire the frontend's Canvas-wide ``isExecuting``
     # gate, so sibling work remains available. It does register its background

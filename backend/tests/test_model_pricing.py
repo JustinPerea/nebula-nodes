@@ -118,7 +118,7 @@ def test_estimate_run_sums_priced_nodes_and_names_the_rest():
     ]
     result = model_pricing.estimate_run(items, pricing, definitions, {}, {"a": (2, 2)})
     assert result["low"] == pytest.approx(0.11) and result["high"] == pytest.approx(0.3)
-    assert result["priced"]["a"] == {"low": pytest.approx(0.1), "high": pytest.approx(0.1)}
+    assert result["priced"]["a"] == {"low": pytest.approx(0.1), "high": pytest.approx(0.1), "model": "nano-banana"}
     assert result["unpriced"] == ["c"] and result["plan"] == ["k"] and result["plus"] == ["input images"]
     nothing = model_pricing.estimate_run([items[2]], pricing, definitions, {})
     assert nothing["low"] is None and nothing["high"] is None and nothing["unpriced"] == ["c"]

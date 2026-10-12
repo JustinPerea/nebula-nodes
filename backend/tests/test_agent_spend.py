@@ -169,12 +169,20 @@ def test_the_ledger_keeps_sessions_apart_and_survives_a_restart(tmp_path):
 
 # -- the endpoints ---------------------------------------------------------------
 
+async def every_node_calls_its_provider(*, nodes, run_id=None, **kwargs):
+    """A stand-in engine: each node reaches its handler, so the whole count stays."""
+    from execution import provider_calls
+
+    for node in nodes:
+        provider_calls.mark(run_id, node.id)
+
+
 @pytest.fixture
 def client(monkeypatch):
     import main
 
     monkeypatch.setattr(main.model_pricing, "load_pricing", lambda path=None: PRICES)
-    monkeypatch.setattr(main, "execute_graph", AsyncMock())
+    monkeypatch.setattr(main, "execute_graph", AsyncMock(side_effect=every_node_calls_its_provider))
     monkeypatch.setattr(main, "agent_spend_ledger", agent_spend.SpendLedger(None))
     test_client = TestClient(main.app)
     test_client.delete("/api/graph")
@@ -395,6 +403,7 @@ def test_a_provider_failure_still_counts(client, monkeypatch):
     from models.events import ErrorEvent
 
     async def provider_said_no(*, nodes, emit, run_id, **kwargs):
+        await every_node_calls_its_provider(nodes=nodes, run_id=run_id)
         await emit(ErrorEvent(node_id=nodes[0].id, error="HTTP 500 from provider", run_id=run_id))
 
     monkeypatch.setattr(main, "execute_graph", provider_said_no)
@@ -410,6 +419,7 @@ def test_only_the_keyless_node_of_a_run_is_given_back(client, monkeypatch):
 
     async def one_of_each(*, nodes, emit, run_id, **kwargs):
         first, second = nodes
+        await every_node_calls_its_provider(nodes=nodes, run_id=run_id)
         await emit(ExecutedEvent(node_id=first.id, outputs={}, run_id=run_id))
         await emit(ErrorEvent(node_id=second.id, error="OPENAI_API_KEY is required", run_id=run_id,
                               missing_credential=True))
@@ -515,12 +525,125 @@ def test_every_node_that_ran_still_counts(client, fake_providers):
     assert len(calls) == 2 and spent(client) == pytest.approx(0.7)
 
 
-def test_runs_the_engine_did_not_track_keep_their_whole_count():
+def test_only_a_trustworthy_record_gives_anything_back(monkeypatch):
     from execution import provider_calls
 
-    provider_calls.mark("never-begun", "n1")  # marks alone don't make a run tracked by begin
+    provider_calls.mark("never-begun", "n1")  # a mark never creates a record
+    assert provider_calls.take("never-begun") is None
+
     provider_calls.begin("tracked")
     provider_calls.mark("tracked", "n1")
     assert provider_calls.take("tracked") == {"n1"}
     assert provider_calls.take("tracked") is None
-    assert provider_calls.take("unknown") is None
+    provider_calls.mark("tracked", "n2")  # after its record is taken, nothing comes back
+    assert provider_calls.take("tracked") is None
+
+    provider_calls.begin("reused")
+    provider_calls.mark("reused", "n1")
+    provider_calls.begin("reused")  # the same run id again: the record can't be trusted
+    provider_calls.mark("reused", "n2")
+    assert provider_calls.take("reused") is None
+
+    monkeypatch.setattr(provider_calls, "MAX_RUNS", 1)
+    provider_calls.begin("first")
+    provider_calls.begin("second")  # full: not recorded, so it keeps its whole count
+    assert provider_calls.take("second") is None
+    assert provider_calls.take("first") == set()
+
+
+def test_a_dropped_hold_takes_its_record_with_it(monkeypatch):
+    import main
+    from execution import provider_calls
+
+    monkeypatch.setattr(main, "_spend_holds", type(main._spend_holds)())
+    monkeypatch.setattr(main, "_MAX_SPEND_HOLDS", 1)
+    main._place_hold("old", "agent", {"n1": (PAID, 0.4)})
+    provider_calls.mark("old", "n1")
+    main._place_hold("new", "agent", {"n1": (PAID, 0.4)})
+    assert "old" not in main._spend_holds
+    provider_calls.mark("old", "n2")  # the old run is still going
+    assert provider_calls.take("old") is None
+    assert provider_calls.take("new") == set()
+
+
+# -- cinema shot variations ---------------------------------------------------------
+
+def test_each_pass_counts_in_full():
+    once = decide(ONE_PAID, amount=0.3)
+    three = agent_spend.decide(ONE_PAID, [], settings={}, pricing=pricing(0.3), definitions=DEFINITIONS,
+                               spent=agent_spend.Spent(), how_to_ask="ASK.", passes=3)
+    assert once.charge == {"paid": pytest.approx(0.3)}
+    assert three.charge == {"paid": pytest.approx(0.9)} and three.per_node == {"n1": ("paid", pytest.approx(0.9))}
+    for bad in (0, -1, 1.5, True):
+        with pytest.raises(ValueError):
+            agent_spend.decide(
+                ONE_PAID, [], settings={}, pricing=pricing(0.3), definitions=DEFINITIONS,
+                spent=agent_spend.Spent(), how_to_ask="ASK.", passes=bad)
+
+
+def _scene_node(base: str | None = "nano-banana", shots: int = 1) -> dict:
+    scene = {"version": 1, "aspectRatio": "16:9",
+             "shots": [{"id": chr(97 + i), "prompt": "a lighthouse at dusk"} for i in range(shots)]}
+    if base:
+        scene["base"] = {"model": base}
+    return {"id": "c1", "definitionId": "cinema-scene", "params": {"scene": scene}, "outputs": {}}
+
+
+def _shot_request(variations: int, base: str | None = "nano-banana") -> dict:
+    return {"nodes": [_scene_node(base)], "edges": [], "nodeId": "c1", "shotId": "a", "variations": variations}
+
+
+def _price_base(amount: float) -> None:
+    PRICES["nodes"] = {"nano-banana": {"currency": "usd", "rows": [{"match": {}, "price": amount}]}}
+
+
+@pytest.mark.parametrize(("variations", "allowed"), [(1, True), (3, True), (4, False)])
+def test_shot_variations_are_counted_per_variation(client, variations, allowed):
+    _price_base(0.3)
+    response = client.post("/api/cinema/generate-shot", json=_shot_request(variations))
+    if allowed:
+        assert response.status_code == 200, response.text
+        assert spent(client) == pytest.approx(0.3 * variations)
+    else:
+        assert response.status_code == 403
+        assert "$1.20" in response.json()["detail"]
+        assert spent(client) == 0
+
+
+def test_a_scene_on_a_base_without_a_list_price_needs_a_proposal(client):
+    # cinema-scene itself is a utility node; it used to pass the check as free.
+    _price_base(0.3)
+    for base in (None, "seedream-4-5"):  # None: the handler's default base
+        response = client.post("/api/cinema/generate-shot", json=_shot_request(1, base=base))
+        assert response.status_code == 403
+        assert "no list price for c1 (Cinema Scene)" in response.json()["detail"]
+    assert spent(client) == 0
+
+
+def test_a_scene_counts_as_its_base_model_once_per_shot():
+    from services import model_pricing
+
+    definitions = {"cinema-scene": {"id": "cinema-scene", "apiProvider": "utility"},
+                   "nano-banana": {"id": "nano-banana", "apiProvider": "google"}}
+    pricing_table = {"nodes": {"nano-banana": {"currency": "usd", "rows": [{"match": {}, "price": 0.25}]}}}
+
+    def run(node):
+        return model_pricing.estimate_run([node], pricing_table, definitions, {})
+
+    three = run(_scene_node(shots=3))
+    assert three["priced"]["c1"] == {"low": pytest.approx(0.75), "high": pytest.approx(0.75), "model": "nano-banana"}
+    assert run(_scene_node(shots=0))["priced"]["c1"]["high"] == 0
+    assert run(_scene_node(base="seedream-4-5"))["unpriced"] == ["c1"]
+    assert run(_scene_node(base="world-labs-anything"))["unpriced"] == ["c1"]  # the handler refuses it
+    broken = _scene_node()
+    broken["params"] = {"scene": "not a scene"}
+    assert run(broken)["unpriced"] == ["c1"]
+
+
+def test_a_scenes_shots_fall_under_its_base_models_own_limit(client):
+    _price_base(0.3)
+    limits = {"agentSpend": {"sessionUsd": None, "models": {"nano-banana": {"perRunUsd": 0.5, "sessionUsd": None}}}}
+    assert client.put("/api/settings", json=limits, headers=PERSON).status_code == 200
+    response = client.post("/api/cinema/generate-shot", json=_shot_request(2))
+    assert response.status_code == 403
+    assert "per-run limit for" in response.json()["detail"]

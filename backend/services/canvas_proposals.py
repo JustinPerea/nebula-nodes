@@ -286,8 +286,22 @@ def clean_positions(raw: Any, refs: Iterable[str]) -> dict[str, dict[str, float]
 
 # -- cost (never a number) ----------------------------------------------------
 
-def cost_for(definition: Mapping[str, Any] | None) -> dict[str, Any]:
-    """`free` for local utility nodes, else `paid` with the provider. No prices exist."""
+def cost_for(
+    definition: Mapping[str, Any] | None,
+    params: Mapping[str, Any] | None = None,
+    definitions: Mapping[str, Mapping[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """`free` for local utility nodes, else `paid` with the provider. No prices exist.
+
+    A cinema scene is a utility node that calls its base image model once per
+    shot, so it is paid, by that model's provider."""
+    from services import model_pricing
+
+    if (definition or {}).get("id") == model_pricing.CINEMA_SCENE:
+        nested = model_pricing.cinema_scene_base(params or {})
+        base = (definitions or {}).get(nested[0]) if nested else None
+        provider = str((base or {}).get("apiProvider") or "") or None
+        return {"kind": "paid", "provider": provider, "label": f"paid · {provider or 'provider'}, per shot"}
     provider = str((definition or {}).get("apiProvider") or "") or None
     if provider == "utility":
         return {"kind": "free", "provider": None, "label": "free · runs locally"}
@@ -584,7 +598,7 @@ class ProposalBook:
                 "category": str(definition.get("category") or ""),
                 "params": safe_value(node.params, key="params"),
                 "position": dict(proposal.positions.get(node.ref) or node.position or {"x": 0.0, "y": 0.0}),
-                "cost": cost_for(definition),
+                "cost": cost_for(definition, node.params, definitions if isinstance(definitions, dict) else None),
                 "runs": node.ref in spec.run,
                 "willRun": node.ref in node_costs,
                 "ports": _ports_for(node.ref, definition, spec.edges),

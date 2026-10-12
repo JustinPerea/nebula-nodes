@@ -871,8 +871,6 @@ async def execute_graph(
         raise ValueError(iterator_errors[0].message)
     manifest_run_id = run_id or str(uuid4())
     run_dir = create_run_dir(manifest_run_id)
-    if run_id is not None:
-        provider_calls.begin(run_id)
     token = execution_run_id.set(run_id)
     variant_token = execution_variant.set(None)
     run_dir_token = execution_run_dir.set(run_dir)

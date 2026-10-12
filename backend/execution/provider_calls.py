@@ -6,9 +6,19 @@ failed, or the run stopped first) made no provider request in this run, so
 the agent spending limits give its share of the run's count back when the
 run ends (main._settle_hold).
 
-Only runs the engine registered (``begin``) are tracked. ``take`` returns
-None for any other run, and the caller then keeps the whole count: a run this
-module can't vouch for is treated as if every node called its provider.
+Every doubt keeps the whole count, so a wrong record can only over-count:
+
+- Only runs registered with ``begin`` are recorded. main registers a run
+  once, when it places the run's spend hold, so the record covers the whole
+  run. ``mark`` never creates a record, so a run whose record was dropped
+  can't come back with a partial one.
+- A second ``begin`` for a run id already recorded (run ids can come from
+  the client) makes that run unrecorded.
+- When the table is full, a new run isn't recorded. main drops a record
+  whenever it drops the run's hold, so the table never outgrows the holds.
+
+``take`` returns None for any run without a trustworthy record, and the
+caller then keeps the whole count.
 """
 from __future__ import annotations
 
@@ -18,25 +28,28 @@ from collections import OrderedDict
 MAX_RUNS = 500
 
 _lock = threading.Lock()
-_runs: OrderedDict[str, set[str]] = OrderedDict()
+# run id -> nodes whose handler was called; None once the record can't be trusted.
+_runs: OrderedDict[str, set[str] | None] = OrderedDict()
 
 
 def begin(run_id: str) -> None:
     with _lock:
-        _runs.setdefault(run_id, set())
-        _runs.move_to_end(run_id)
-        while len(_runs) > MAX_RUNS:
-            _runs.popitem(last=False)
+        if run_id in _runs:
+            _runs[run_id] = None
+        elif len(_runs) < MAX_RUNS:
+            _runs[run_id] = set()
 
 
 def mark(run_id: str | None, node_id: str) -> None:
     if not run_id:
         return
     with _lock:
-        _runs.setdefault(run_id, set()).add(node_id)
+        called = _runs.get(run_id)
+        if called is not None:
+            called.add(node_id)
 
 
 def take(run_id: str) -> set[str] | None:
-    """The nodes that reached their handler, or None if the run wasn't tracked."""
+    """The nodes that reached their handler, or None if the run has no trustworthy record."""
     with _lock:
         return _runs.pop(run_id, None)

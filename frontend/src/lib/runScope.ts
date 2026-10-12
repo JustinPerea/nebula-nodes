@@ -94,6 +94,40 @@ export function runMultipliers(nodes: Node<NodeData>[], edges: Edge[]): Map<stri
   return runs;
 }
 
+// cinema-scene is a local node that calls its base image model's handler once
+// per shot (backend handlers/cinema_scene.py), so it is priced as that model
+// times its shots. Mirrors cinema_scene_base in backend/services/model_pricing.py.
+const CINEMA_SCENE = 'cinema-scene';
+const CINEMA_DEFAULT_BASE = 'seedream-4-5';
+const CINEMA_BASES = new Set(['seedream-4-5', 'nano-banana', 'nano-banana-fal-edit', 'flux-kontext']);
+const CINEMA_NONCOMMERCIAL_BASES = new Set(['flux-1-dev', 'flux.1-dev', 'flux-dev']);
+const CINEMA_SNAKE_ASPECT_BASES = new Set(['nano-banana', 'nano-banana-fal-edit', 'flux-kontext']);
+
+/** The model a cinema scene calls, the params it sends, and its shot count;
+ * null when the scene can't be read or its base would be refused. */
+export function cinemaSceneBase(
+  params: Record<string, unknown>,
+): { model: string; params: Record<string, unknown>; shots: number } | null {
+  const scene = params.scene;
+  if (!scene || typeof scene !== 'object' || Array.isArray(scene)) return null;
+  const { base: rawBase, shots, aspectRatio } = scene as Record<string, unknown>;
+  const base = rawBase ?? {};
+  if (typeof base !== 'object' || Array.isArray(base)) return null;
+  const requested = String((base as Record<string, unknown>).model ?? '').trim().toLowerCase();
+  let model = requested;
+  if (!requested || CINEMA_NONCOMMERCIAL_BASES.has(requested)) model = CINEMA_DEFAULT_BASE;
+  else if (!CINEMA_BASES.has(requested)) return null;
+  const extra = { ...((base as Record<string, unknown>).params as Record<string, unknown> | undefined ?? {}) };
+  // The backend also derives Seedream's image_size; no price row matches on it.
+  const sent = model === CINEMA_DEFAULT_BASE
+    ? extra
+    : { [CINEMA_SNAKE_ASPECT_BASES.has(model) ? 'aspect_ratio' : 'aspectRatio']: String(aspectRatio || '16:9'), ...extra };
+  const count = Array.isArray(shots)
+    ? shots.filter((shot) => shot !== null && typeof shot === 'object' && !Array.isArray(shot)).length
+    : 0;
+  return { model, params: sent, shots: count };
+}
+
 /**
  * Mirrors the stores' run scopes so Run buttons can say what they will do:
  * the whole graph; one target plus every node feeding it; or an explicit
@@ -134,12 +168,29 @@ export function summarizeRunScope(
   // upstream Batch, and a cluster run sends only its own nodes and edges.
   const multipliers = pricing ? runMultipliers(included, edges) : null;
   for (const node of included) {
-    const definition = node.data?.definitionId ? NODE_DEFINITIONS[node.data.definitionId] : undefined;
-    if (!definition || definition.apiProvider === 'utility') continue;
-    const name = node.data.label || definition.displayName;
+    let definition = node.data?.definitionId ? NODE_DEFINITIONS[node.data.definitionId] : undefined;
+    let params = (node.data?.params ?? {}) as Record<string, unknown>;
+    let calls = 1;
+    let unreadable = false;
+    const name = node.data?.label || definition?.displayName || node.id;
+    if (definition && definition.id === CINEMA_SCENE) {
+      const nested = cinemaSceneBase(params);
+      if (nested && NODE_DEFINITIONS[nested.model]) {
+        definition = NODE_DEFINITIONS[nested.model];
+        params = nested.params;
+        calls = nested.shots;
+      } else {
+        unreadable = true;
+      }
+    } else if (!definition || definition.apiProvider === 'utility') {
+      continue;
+    }
     paid.push(name);
-    if (!pricing || !multipliers) continue;
-    const params = (node.data.params ?? {}) as Record<string, unknown>;
+    if (!pricing || !multipliers || !definition) continue;
+    if (unreadable) {
+      cost.unpriced.push(name);
+      continue;
+    }
     if (usesKreaAccount(definition, params)) {
       cost.plan.push(name);
       continue;
@@ -152,7 +203,9 @@ export function summarizeRunScope(
       cost.unpriced.push(name);
       continue;
     }
-    const runs = multipliers.get(node.id) ?? [1, 1];
+    const [fewest, most] = multipliers.get(node.id) ?? [1, 1];
+    // A cinema scene's base model runs once per shot.
+    const runs: [number, number] = [fewest * calls, most * calls];
     const line = { name, low: estimate.low * runs[0], high: estimate.high * runs[1], runs };
     cost.lines.push(line);
     cost.low += line.low;

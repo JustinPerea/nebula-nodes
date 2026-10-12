@@ -340,6 +340,33 @@ def run_multipliers(
     return runs
 
 
+CINEMA_SCENE = "cinema-scene"
+
+
+def cinema_scene_base(params: Mapping[str, Any]) -> tuple[str, dict[str, Any], int] | None:
+    """The paid model a cinema-scene node calls once per shot, the params it
+    sends, and how many shots it runs; None when the scene can't be read.
+
+    cinema-scene is a utility node that calls its base image model through
+    that model's own handler (handlers/cinema_scene.py), so it is priced as
+    that model, once per shot. This uses the handler's own base guard and
+    request builder, so the price follows what the handler actually calls."""
+    from handlers.cinema_scene import _build_base_node, _guard_base_model
+
+    scene = params.get("scene")
+    if not isinstance(scene, dict) or not isinstance(scene.get("base") or {}, dict):
+        return None
+    base = scene.get("base") or {}
+    try:
+        model = _guard_base_model(base)
+        node, _ = _build_base_node(model, "", [], str(scene.get("aspectRatio") or "16:9"),
+                                   dict(base.get("params") or {}), "price")
+    except (ValueError, TypeError):
+        return None
+    shots = sum(1 for shot in scene.get("shots") or [] if isinstance(shot, dict))
+    return model, dict(node.params), shots
+
+
 def estimate_run(
     items: list[Mapping[str, Any]],
     pricing: Mapping[str, Any],
@@ -349,8 +376,9 @@ def estimate_run(
 ) -> dict[str, Any]:
     """USD estimate for a set of nodes, each {id, definitionId, params, name}.
 
-    ``priced`` maps node id to {low, high}; paid nodes without a list price go
-    in ``unpriced``, Krea-account runs in ``plan``. ``low``/``high`` are None
+    ``priced`` maps node id to {low, high, model}, ``model`` being the
+    definition billed (a cinema scene's base model); paid nodes without a list
+    price go in ``unpriced``, Krea-account runs in ``plan``. ``low``/``high`` are None
     when nothing is priced."""
     nodes_pricing = pricing.get("nodes") or {}
     low = high = 0.0
@@ -361,9 +389,17 @@ def estimate_run(
     for item in items:
         node_id = str(item["id"])
         definition = definitions.get(str(item.get("definitionId") or "")) or {}
+        params = item.get("params") or {}
+        calls = 1
+        if definition and str(item.get("definitionId")) == CINEMA_SCENE:
+            nested = cinema_scene_base(params)
+            if nested is None or not definitions.get(nested[0]):
+                unpriced.append(node_id)
+                continue
+            billed, params, calls = nested
+            definition = definitions[billed]
         if not definition or definition.get("apiProvider") == "utility":
             continue
-        params = item.get("params") or {}
         if uses_krea_account(definition, params):
             plan.append(node_id)
             continue
@@ -375,7 +411,8 @@ def estimate_run(
             unpriced.append(node_id)
             continue
         run_low, run_high = (multipliers or {}).get(node_id, (1, 1))
-        line = {"low": estimate["low"] * run_low, "high": estimate["high"] * run_high}
+        line = {"low": estimate["low"] * run_low * calls, "high": estimate["high"] * run_high * calls,
+                "model": str(definition.get("id") or item.get("definitionId") or "")}
         priced[node_id] = line
         low += line["low"]
         high += line["high"]
