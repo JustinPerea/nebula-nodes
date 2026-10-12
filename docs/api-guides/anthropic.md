@@ -27,7 +27,7 @@ Output port: `text` (Text) — the written response, streamed token-by-token as 
 **API-key setup.** Claude needs an Anthropic API key:
 
 1. Get a key from the Anthropic Console (https://platform.claude.com → Account Settings → API keys).
-2. Open Nebula **Settings**, paste it into the **Anthropic** field (`ANTHROPIC_API_KEY`), and choose **Save Settings**. Nebula stores it under `apiKeys.ANTHROPIC_API_KEY` in the project-root `settings.json`; no restart is required.
+2. Open Nebula **Settings** → **Providers**, choose **Add key** on the **Anthropic** row (`ANTHROPIC_API_KEY`), paste it and choose **Save key**. Saving checks the key without generating anything. Nebula stores it under `apiKeys.ANTHROPIC_API_KEY` in the project-root `settings.json`; no restart is required.
 3. The node reports a clear error (`ANTHROPIC_API_KEY is required`) if it is missing.
 
 **Wiring it up.** Connect a Text source into the `messages` port (this is your prompt / question). Optionally connect one or more Image outputs into the `images` port to let Claude see them. Run the graph; the written answer flows out of the `text` port and can feed any node that accepts Text.

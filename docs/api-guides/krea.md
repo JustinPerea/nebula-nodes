@@ -12,7 +12,7 @@ Choose a specific Krea model in the model picker. Canvas supports the full catal
 ## Set up an API token
 
 1. Enable API access on your Krea workspace and create a token at [Krea API tokens](https://www.krea.ai/settings/api-tokens). Workspace owners and admins can create tokens.
-2. In Nebula **Settings**, enter the token in the **Krea** field and choose **Save Settings**. The documented key is `KREA_API_TOKEN`; the backend also accepts the older `KREA_API_KEY` name.
+2. In Nebula **Settings** → **Providers**, choose **Add key** on the **Krea · API token** row, paste the token and choose **Save key**. The documented key is `KREA_API_TOKEN`; the backend also accepts the older `KREA_API_KEY` name.
 3. Check your workspace's [API balance](https://www.krea.ai/app/api). Direct API calls use a separate USD balance from the compute units used by the Krea web app. A configured token alone does not establish that generation is funded or permitted.
 
 No restart is required after saving settings. API-token recipes call `https://api.krea.ai` with bearer-token authentication. A depleted API balance returns HTTP 402; Nebula surfaces the provider error. See [Krea's authentication and billing reference](https://www.krea.ai/docs/developers/api-keys-and-billing).

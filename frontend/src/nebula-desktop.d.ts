@@ -84,6 +84,18 @@ export interface PaperLinkBridge {
   readonly open: (url: string) => Promise<{ readonly ok: boolean; readonly error?: string }>;
 }
 
+export interface FolderPickResult {
+  readonly ok: boolean;
+  /** The folder the person picked, or null when they cancelled. */
+  readonly path?: string | null;
+  readonly error?: string;
+}
+
+/** Shows the OS folder chooser; only the picked path comes back. */
+export interface FolderPickerBridge {
+  readonly choose: (defaultPath?: string) => Promise<FolderPickResult>;
+}
+
 export interface NebulaDesktopBridge {
   readonly platform: string;
   readonly shell: string;
@@ -99,6 +111,8 @@ export interface NebulaDesktopBridge {
   readonly paperLinks?: Readonly<PaperLinkBridge>;
   /** Open Krea's verified OAuth consent URL in the external browser. */
   readonly kreaLinks?: Readonly<PaperLinkBridge>;
+  /** Absent in desktop shells built before Settings had folder pickers. */
+  readonly folders?: Readonly<FolderPickerBridge>;
   /**
    * Provider names with plaintext API keys detected in App Support
    * settings.json on launch. Empty when all keys are securely stored

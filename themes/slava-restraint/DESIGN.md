@@ -327,7 +327,8 @@ Destructive:
 
 ### Disclosure Row
 
-Used by API Keys/settings accordions.
+Used by settings-style accordions. (Settings itself now uses provider rows that
+open in place; see `frontend/src/styles/settings.css`.)
 
 - Full-width button
 - Height determined by content, but padding from control tokens

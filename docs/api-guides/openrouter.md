@@ -31,7 +31,7 @@ Notes that matter for using the node:
 **API-key setup.** OpenRouter needs one key:
 
 1. Create a key at <https://openrouter.ai/keys> (it looks like `sk-or-...`).
-2. Open Nebula **Settings**, paste it into the **OpenRouter** field (`OPENROUTER_API_KEY`), and choose **Save Settings**. Nebula stores it under `apiKeys.OPENROUTER_API_KEY` in the project-root `settings.json`; no restart is required.
+2. Open Nebula **Settings** → **Providers**, choose **Add key** on the **OpenRouter** row (`OPENROUTER_API_KEY`), paste it and choose **Save key**. Saving checks the key without generating anything. Nebula stores it under `apiKeys.OPENROUTER_API_KEY` in the project-root `settings.json`; no restart is required.
 3. The key is required both to **run** the node and to **load the model dropdown** — until it's set, the model picker can't populate.
 
 **Pick a model.** Select the node, open the **Inspector**, and choose a model from the searchable list. The node reconfigures its ports based on what that model can do. Then wire a Text source into `messages` and run.
