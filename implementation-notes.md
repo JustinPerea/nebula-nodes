@@ -1,5 +1,16 @@
 # Implementation Notes
 
+## 2026-10-12 — Settings UX pass
+
+Justin asked for every item from the Settings review: quick fixes first, then a restructure shown as an HTML mockup before building it.
+
+**Quick fixes (commit 1):**
+- **Remove asks first.** It deletes from disk immediately (`DELETE /api/settings/api-keys/{provider}`), unlike every other key edit, so it now takes two presses. The first press arms it and focuses Keep. Escape backs out of the confirm without closing the panel, because the confirm claims Escape in the capture phase (the dock's own Escape listener is native and runs before React's bubble handlers).
+- **Remove was 16px** because `.settings__secondary-button` sets `font: inherit` and the key row inherits the body size. Secondary buttons, the cost-confirm select and "Show onboarding again" now use the UI face at the body size. Key and path inputs stay mono.
+- **Settings is 400px wide** (it was 24vw, about 307px at 1280). Below 701px it keeps the full-width dock rule.
+- **Saving a changed key checks connections.** The Oct 8 rule is that checks run only after an explicit action, never from browsing. Saving a key is that action, so it now runs the same read-only `?refresh=true` check. Saves that change only paths or the Krea default don't. Opening the panel still doesn't check anything, which keeps that rule.
+- **Not done, on purpose:** "show Save only when something changed". The restructure removes the footer Save entirely, so building it now would be thrown away. The orange ring on the close button that showed up in the review was a test artifact (a script `.click()` counts as keyboard), not what a mouse click does.
+
 ## 2026-10-12 — Settings from the Projects home
 
 Justin asked for API keys to be reachable from the home page. Before, Settings only rendered inside a project, so a first run had to create a project just to add keys.

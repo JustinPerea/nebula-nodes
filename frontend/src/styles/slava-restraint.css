@@ -2314,6 +2314,41 @@ body.app-slava-restraint .settings__save-button:disabled {
   cursor: default;
 }
 
+/* Settings' own controls read as UI, not code: keys and paths stay mono
+   (.settings__key-input, path fields), but choices and buttons use the UI face
+   at one size, whatever the container's font size is. */
+body.app-slava-restraint .panel--settings select.inspector__field,
+body.app-slava-restraint .settings__secondary-button,
+body.app-slava-restraint .settings__onboarding-button {
+  font-family: var(--sr-ui);
+  font-size: var(--sr-type-body);
+}
+
+body.app-slava-restraint .settings__secondary-button {
+  min-height: var(--sr-control-h-xs);
+  border-radius: var(--sr-radius-control);
+  color: var(--sr-ink);
+  transition: background-color var(--sr-motion-fast), border-color var(--sr-motion-fast), color var(--sr-motion-fast);
+}
+
+body.app-slava-restraint .settings__secondary-button:hover:not(:disabled) {
+  border-color: var(--sr-edge-strong);
+  background: var(--sr-surface-control-hover);
+  color: var(--sr-ink-bold);
+}
+
+body.app-slava-restraint .settings__remove-key--armed {
+  border-color: var(--sr-danger-border);
+  background: var(--sr-danger-soft);
+  color: var(--sr-danger);
+}
+
+body.app-slava-restraint .settings__remove-key--armed:hover:not(:disabled) {
+  border-color: var(--sr-danger);
+  background: var(--sr-danger-soft);
+  color: var(--sr-danger);
+}
+
 body.app-slava-restraint .settings__toggle-row {
   border: 1px solid var(--sr-edge);
   border-radius: var(--sr-radius-control);

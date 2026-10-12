@@ -987,6 +987,12 @@ body:not(.app-slava-restraint) .settings__key-link:hover {
   align-items: center;
 }
 
+.settings__remove-confirm {
+  display: flex;
+  flex-shrink: 0;
+  gap: 4px;
+}
+
 .settings__key-input {
   flex: 1;
   min-width: 0;
@@ -1026,7 +1032,6 @@ body.app-slava-restraint .settings__onboarding-button {
   background: rgba(0, 0, 0, 0.05);
   border: 1px solid var(--sr-hairline, rgba(0, 0, 0, 0.12));
   color: var(--sr-ink, #1a1a1a);
-  font-family: var(--sr-mono, monospace);
 }
 
 body:not(.app-slava-restraint) .settings__reveal-button {

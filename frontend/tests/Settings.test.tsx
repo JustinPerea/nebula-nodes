@@ -172,6 +172,39 @@ describe('Settings provider discovery handoff', () => {
     expect(updateSettingsMock).not.toHaveBeenCalled();
   });
 
+  it('asks before removing a key: Keep and Escape back out without deleting or closing', async () => {
+    getSettingsMock.mockResolvedValue({ apiKeys: { OPENAI_API_KEY: '***openai' } });
+    render(<Settings />);
+    await expandApiKeys();
+    fireEvent.click(screen.getByRole('button', { name: 'Remove OpenAI API key' }));
+    expect(deleteSettingsApiKeyMock).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Keep' })).toHaveFocus();
+    fireEvent.click(screen.getByRole('button', { name: 'Keep' }));
+    expect(screen.queryByRole('button', { name: 'Confirm removing the OpenAI API key' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Remove OpenAI API key' }));
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Keep' }), { key: 'Escape' });
+    expect(screen.queryByRole('button', { name: 'Keep' })).not.toBeInTheDocument();
+    expect(useUIStore.getState().panels.settings.visible).toBe(true);
+    expect(deleteSettingsApiKeyMock).not.toHaveBeenCalled();
+  });
+
+  it('checks connections after saving a changed key, and not after other saves', async () => {
+    getSettingsMock.mockResolvedValue({ apiKeys: { OPENAI_API_KEY: '***saved' }, outputPath: '' });
+    providerApiFetchMock.mockResolvedValue(new Response(JSON.stringify({ providers: {
+      OpenAI: { configured: true, status: 'valid', last_checked: new Date().toISOString() },
+    } })));
+    render(<Settings />);
+    await expandApiKeys();
+    fireEvent.change(screen.getByLabelText('Output Path'), { target: { value: '/elsewhere' } });
+    clickSave();
+    expect(await screen.findByRole('button', { name: 'Saved' })).toBeInTheDocument();
+    expect(providerApiFetchMock).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText('OpenAI API key'), { target: { value: 'fixture-new-key' } });
+    clickSave();
+    await screen.findByText('Verified credential');
+    expect(providerApiFetchMock.mock.calls).toEqual([['/api/health/providers?refresh=true']]);
+  });
+
   it.each(['stale', 'future'])('excludes %s check timestamps from its verified credential count', async (timestamp) => {
     getSettingsMock.mockResolvedValue({ apiKeys: { OPENAI_API_KEY: '***saved' } });
     render(<Settings />);
@@ -196,7 +229,7 @@ describe('Settings provider discovery handoff', () => {
     if (operation === 'save') {
       fireEvent.change(screen.getByLabelText('OpenAI API key'), { target: { value: 'fixture-new-key' } });
       clickSave();
-    } else fireEvent.click(screen.getByRole('button', { name: 'Remove OpenAI API key' }));
+    } else removeKey('OpenAI');
     await act(async () => finishCheck(new Response(JSON.stringify({ providers: {
       OpenAI: { configured: true, status: 'valid', last_checked: new Date().toISOString() },
     } }))));
@@ -264,6 +297,12 @@ async function expandApiKeys() {
 function clickSave() {
   const saveButton = screen.getByText('Save Settings');
   fireEvent.click(saveButton);
+}
+
+/** Removing a key takes two presses: Remove arms it, the confirming Remove deletes. */
+function removeKey(label: string) {
+  fireEvent.click(screen.getByRole('button', { name: `Remove ${label} API key` }));
+  fireEvent.click(screen.getByRole('button', { name: `Confirm removing the ${label} API key` }));
 }
 
 // ---------------------------------------------------------------------------
@@ -1066,7 +1105,7 @@ describe('Settings — load, draft, and provider removal safety', () => {
     await expandApiKeys();
     fireEvent.change(screen.getByLabelText('Output Path'), { target: { value: '/unsaved-output' } });
     fireEvent.change(screen.getByLabelText('Anthropic API key'), { target: { value: 'fixture-anthropic-edit' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Remove OpenAI API key' }));
+    removeKey('OpenAI');
     expect(await screen.findByText('OpenAI key removed.')).toBeInTheDocument();
     await waitFor(() => expect(screen.getByLabelText('Output Path')).toBeEnabled());
     expect(deleteSettingsApiKeyMock).toHaveBeenCalledExactlyOnceWith('OPENAI_API_KEY');
@@ -1090,7 +1129,7 @@ describe('Settings — load, draft, and provider removal safety', () => {
     useUIStore.getState().setSettingsCache({ OPENAI_API_KEY: '***openai', FAL_KEY: '***fal' });
     render(<Settings />);
     await expandApiKeys();
-    fireEvent.click(screen.getByRole('button', { name: 'Remove OpenAI API key' }));
+    removeKey('OpenAI');
     expect(await screen.findByRole('alert')).toHaveTextContent('The key was removed');
     expect(screen.getByLabelText('OpenAI API key')).toHaveValue('');
     expect(useUIStore.getState().settingsCache.apiKeys).toEqual({ FAL_KEY: '***fal' });
@@ -1111,11 +1150,11 @@ describe('Settings — load, draft, and provider removal safety', () => {
     deleteSettingsApiKeyMock.mockRejectedValueOnce(new Error('fixture deletion failure'));
     render(<Settings />);
     await expandApiKeys();
-    fireEvent.click(screen.getByRole('button', { name: 'Remove OpenAI API key' }));
+    removeKey('OpenAI');
     expect(await screen.findByRole('alert')).toHaveTextContent('Retry Remove');
     expect(screen.getByLabelText('OpenAI API key')).toHaveValue('***openai');
     expect(screen.getByLabelText('fal.ai API key')).toHaveValue('***fal');
-    fireEvent.click(screen.getByRole('button', { name: 'Remove OpenAI API key' }));
+    removeKey('OpenAI');
     await screen.findByText('OpenAI key removed.');
     expect(deleteSettingsApiKeyMock.mock.calls).toEqual([['OPENAI_API_KEY'], ['OPENAI_API_KEY']]);
     expect(updateSettingsMock).not.toHaveBeenCalled();

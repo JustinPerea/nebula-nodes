@@ -52,6 +52,32 @@ interface RoutingOption {
 // The section hides itself while this is empty; re-add entries when a real route exists.
 const ROUTING_OPTIONS: RoutingOption[] = [];
 
+/** Removing a key deletes it from disk right away, so it takes two presses:
+ * the first arms it and focuses Keep (the safe choice), the second removes. */
+function RemoveKeyButton({ label, removing, onConfirm }: { label: string; removing: boolean; onConfirm: () => void }) {
+  const [armed, setArmed] = useState(false);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const disarm = () => { setArmed(false); requestAnimationFrame(() => trigger.current?.focus()); };
+  if (!armed) {
+    return (
+      <button type="button" ref={trigger} className="settings__secondary-button settings__remove-key"
+        aria-label={`Remove ${label} API key`} onClick={() => setArmed(true)}>
+        {removing ? 'Removing…' : 'Remove'}
+      </button>
+    );
+  }
+  return (
+    // Capture phase: the dock closes on Escape from a native listener that
+    // runs before React's bubble handlers, so disarming has to claim it first.
+    <span className="settings__remove-confirm" role="group" aria-label={`Remove the ${label} API key?`}
+      onKeyDownCapture={(event) => { if (event.key === 'Escape') { event.preventDefault(); disarm(); } }}>
+      <button type="button" className="settings__secondary-button" autoFocus onClick={disarm}>Keep</button>
+      <button type="button" className="settings__secondary-button settings__remove-key settings__remove-key--armed"
+        aria-label={`Confirm removing the ${label} API key`} onClick={() => { setArmed(false); onConfirm(); }}>Remove</button>
+    </span>
+  );
+}
+
 export function Settings() {
   const visible = useUIStore((s) => s.panels.settings.visible);
   const togglePanel = useUIStore((s) => s.togglePanel);
@@ -195,6 +221,10 @@ export function Settings() {
     const state = useSettingsDraftStore.getState();
     if (!visible || !loadReady.current || loadState !== 'ready' || !state.draft || state.mutation || state.pendingRefresh) return;
     const submitted = state.draft;
+    // Saving a changed key is the explicit action that checks it. The check is
+    // read-only and never generates; unrelated saves (paths, Krea default) don't run it.
+    const keysChanged = API_KEY_FIELDS.some((field) => (submitted.apiKeys[field.key] ?? '').trim()
+      !== (state.baseline?.apiKeys[field.key] ?? '').trim());
     const operation: SettingsMutation = { id: uuidv4() };
     useProviderReadinessStore.getState().invalidate();
     useSettingsDraftStore.setState({ mutation: operation, saveStatus: 'saving', error: null });
@@ -226,6 +256,10 @@ export function Settings() {
         kreaConnectionMode: submitted.kreaConnectionMode,
       });
       await refreshMutation(operation);
+      const after = useSettingsDraftStore.getState();
+      if (keysChanged && after.saveStatus === 'saved' && !after.pendingRefresh) {
+        void useProviderReadinessStore.getState().checkConnections();
+      }
     } catch {
       if (useSettingsDraftStore.getState().mutation?.id !== operation.id) return;
       useSettingsDraftStore.setState({ mutation: null, saveStatus: 'error',
@@ -462,10 +496,8 @@ export function Settings() {
                         {revealedKeys.has(field.key) ? 'Hide' : 'Show'}
                       </button>
                       {!isDesktopMode && originalApiKeys[field.key]?.trim() && (
-                        <button type="button" className="settings__secondary-button settings__remove-key"
-                          aria-label={`Remove ${field.label} API key`} onClick={() => void handleRemoveKey(field.key)}>
-                          {mutation?.provider === field.key ? 'Removing…' : 'Remove'}
-                        </button>
+                        <RemoveKeyButton label={field.label} removing={mutation?.provider === field.key}
+                          onConfirm={() => void handleRemoveKey(field.key)} />
                       )}
                     </div>
                     <p className="settings__key-status" title={keyReadiness(field.key, readinessCache, providerHealth).detail}>{keyReadiness(field.key, readinessCache, providerHealth).label}</p>
