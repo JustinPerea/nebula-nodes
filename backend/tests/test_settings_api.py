@@ -102,7 +102,7 @@ def test_each_catalog_provider_can_be_removed_without_touching_other_providers(s
 
 def test_removal_provider_catalog_matches_settings_ui_and_registry_example():
     root = Path(__file__).resolve().parents[2]
-    ui = (root / "frontend/src/components/panels/Settings.tsx").read_text()
+    ui = (root / "frontend/src/lib/providerCatalog.ts").read_text()
     ui_providers = set(re.findall(r"\{ key: '([A-Z0-9_]+)'", ui))
     example_providers = set(json.loads((root / "settings.example.json").read_text())["apiKeys"])
     assert main._CREDENTIAL_PROVIDER_ALLOWLIST == ui_providers == example_providers
