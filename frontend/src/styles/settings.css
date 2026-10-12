@@ -46,7 +46,7 @@ body.app-slava-restraint .settings-tabs {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   flex: 0 0 auto;
-  margin: 0 var(--sr-space-4) var(--sr-space-3);
+  margin: var(--sr-space-3) var(--sr-space-4);
   padding: var(--settings-tab-gap);
   border: 1px solid var(--sr-edge);
   border-radius: var(--sr-radius-control-lg);
