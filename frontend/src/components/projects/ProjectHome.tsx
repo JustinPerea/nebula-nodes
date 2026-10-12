@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowUpRight, Check, ChevronRight, Pencil, Plus, RotateCcw, Search, Trash2, X } from 'lucide-react';
+import { ArrowUpRight, Check, ChevronRight, Pencil, Plus, RotateCcw, Search, Settings, Trash2, X } from 'lucide-react';
 import { backendAssetUrlSync } from '../../lib/backend';
 import { CrabMark } from '../brand/CrabMark';
 import '../../styles/project-home.css';
@@ -36,6 +36,9 @@ export interface ProjectHomeProps {
   onPurge?: (id: string) => void;
   onEmptyTrash?: () => void;
   onDismissUndo?: () => void;
+  /** Settings (API keys included) opens from home too, so a first run needn't start a project to add keys. */
+  settingsOpen?: boolean;
+  onToggleSettings?: () => void;
 }
 
 const UNDO_VISIBLE_MS = 8000;
@@ -238,7 +241,8 @@ function UndoToast({ project, busy, onUndo, onDismiss }: {
 const noop = () => {};
 
 export function ProjectHome({ projects, loading, busy, error, onCreate, onOpen, onRename, onDelete, onRetry,
-  trash = [], lastDeleted = null, onRestore = noop, onPurge = noop, onEmptyTrash = noop, onDismissUndo = noop }: ProjectHomeProps) {
+  trash = [], lastDeleted = null, onRestore = noop, onPurge = noop, onEmptyTrash = noop, onDismissUndo = noop,
+  settingsOpen = false, onToggleSettings }: ProjectHomeProps) {
   const [query, setQuery] = useState('');
   const visibleProjects = useMemo(() => projects
     .filter((project) => project.name.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()))
@@ -249,6 +253,10 @@ export function ProjectHome({ projects, loading, busy, error, onCreate, onOpen, 
       <header className="project-home__header">
         <div className="project-home__brand"><CrabMark size={34} palette={monochromeMark} /><span>Nebula Nodes</span></div>
         <span className="project-home__location">Projects</span>
+        {onToggleSettings && <button type="button" className="project-home__settings" aria-label="Settings"
+          title="Settings and API keys" aria-haspopup="dialog" aria-expanded={settingsOpen} onClick={onToggleSettings}>
+          <Settings aria-hidden="true" />
+        </button>}
       </header>
       <main className="project-home__main" aria-busy={loading || busy}>
         <section className="project-home__welcome" aria-labelledby="project-home-title">

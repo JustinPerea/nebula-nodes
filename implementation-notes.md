@@ -1,8 +1,18 @@
 # Implementation Notes
 
+## 2026-10-12 — Settings from the Projects home
+
+Justin asked for API keys to be reachable from the home page. Before, Settings only rendered inside a project, so a first run had to create a project just to add keys.
+
+- **Same panel, not a copy.** Home renders the shared `<Settings />` dock in `.workspace-overlays--home`; a gear at the right of the home header toggles it (`aria-expanded`, `aria-haspopup="dialog"`). Escape and the close button work as in the workspace, and focus returns to the gear (`usePanelFocus`).
+- **Placement.** Home has no rail, so the drawer hangs from the gear (top right, under the header) with the dock's spring, entering downward instead of sliding out of the rail. Reduced motion skips the entrance and fades the exit, like the workspace docks.
+- **Dock state across home ↔ project** (`useHomeSettingsDock`). Settings is a left dock, and nothing reset docks on project open. Arriving home closes an open Settings; leaving home restores the drawer the workspace had (usually the Nodes menu) when the dock is still Settings or closed. So Settings opened from home doesn't follow you into the project, and a drawer picked meanwhile is kept.
+- **Test change.** `App.canvasFocus.test.tsx` asserted home renders no workspace chrome, including Settings. It now expects Settings (closed) and still checks chat, import, commands and run are absent.
+- Checked live at 1280×820: the drawer lines up with the header's right edge, Escape returns focus to the gear, and opening a project with Settings open lands on the canvas with the Nodes menu, not Settings.
+
 ## 2026-10-10 — Retire shut-down Google models; Veo on Vertex AI
 
-Google shut down or is about to shut down several models our nodes call (https://ai.google.dev/gemini-api/docs/deprecations, checked 2026-10-10). Branch `retire-google-models`, not merged.
+Google shut down or is about to shut down several models our nodes call (https://ai.google.dev/gemini-api/docs/deprecations, checked 2026-10-10). Merged as PR #35 on 2026-10-12.
 
 **What changed:**
 - **Imagen 4 is gone** (shut down 2026-08-17). `imagen-4-generate` is removed from both catalogs and the handlers. A saved node loads as Nano Banana on 2.1 (Google's named replacement) with its aspect ratio and 1K/2K size carried over, titled "Nano Banana (was Imagen 4)" unless the person renamed it. `services/retired_nodes.py` runs on boot restore, project snapshots, graph-file import and `CLIGraph.load`. Creating a new one returns a 400 naming the replacement. The onboarding sample graph and Create's Featured list use Nano Banana instead.

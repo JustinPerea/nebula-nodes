@@ -17,6 +17,22 @@ body.app-slava-restraint .project-home__header {
 }
 body.app-slava-restraint .project-home__brand { display: flex; align-items: center; gap: 9px; font-size: 15px; font-weight: 600; letter-spacing: -0.03em; }
 body.app-slava-restraint .project-home__location { padding-left: 24px; border-left: 1px solid var(--sr-edge-strong); color: var(--sr-ink-light); font-size: 13px; }
+body.app-slava-restraint .project-home__settings { display: grid; place-items: center; flex-shrink: 0; width: 36px; height: 36px; margin-left: auto; border: 1px solid transparent; border-radius: var(--sr-radius-control); background: transparent; color: var(--sr-ink-light); transition: background var(--sr-motion-fast), border-color var(--sr-motion-fast), color var(--sr-motion-fast); }
+body.app-slava-restraint .project-home__settings:hover,
+body.app-slava-restraint .project-home__settings[aria-expanded="true"] { border-color: var(--sr-edge); background: var(--sr-surface-control-hover); color: var(--sr-ink); }
+body.app-slava-restraint .project-home__settings svg { width: 17px; height: 17px; stroke-width: var(--sr-icon-stroke); }
+/* Home has no rail, so the Settings drawer hangs from the header's gear
+   instead of sliding out beside the rail. Same panel, same spring. */
+body .workspace-overlays--home .workspace-dock-panel.panel {
+  top: 80px !important;
+  right: clamp(24px, 5vw, 72px) !important;
+  left: auto !important;
+  max-width: calc(100vw - 32px) !important;
+}
+body.app-slava-restraint .workspace-overlays--home .workspace-dock-panel.panel { transform-origin: calc(100% - 18px) 0; animation: project-home-settings-enter var(--workspace-dock-spring) backwards; }
+body.app-slava-restraint .workspace-overlays--home .workspace-dock-panel.panel.panel--exiting { animation: project-home-settings-exit var(--sr-motion-handle, 220ms cubic-bezier(0.32, 0.72, 0, 1)) forwards; }
+@keyframes project-home-settings-enter { from { opacity: 0; transform: translateY(-8px) scale(0.96); } }
+@keyframes project-home-settings-exit { to { opacity: 0; transform: translateY(-8px) scale(0.96); } }
 body.app-slava-restraint .project-home__main { width: min(100%, 1248px); margin: 0 auto; padding: 72px clamp(24px, 5vw, 64px) 64px; }
 body.app-slava-restraint .project-home__welcome { display: flex; align-items: center; justify-content: space-between; gap: 32px; margin-bottom: 56px; }
 body.app-slava-restraint .project-home__eyebrow { margin-bottom: 12px; font-size: 11px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: var(--sr-ink-meta); }
@@ -119,6 +135,7 @@ body.app-slava-restraint .project-home__sr-only { position: absolute; width: 1px
 }
 @media (max-width: 600px) {
   body.app-slava-restraint .project-home__header { min-height: 64px; padding: 12px 20px; gap: 16px; }
+  body .workspace-overlays--home .workspace-dock-panel.panel { top: 72px !important; right: 16px !important; }
   body.app-slava-restraint .project-home__location { padding-left: 16px; }
   body.app-slava-restraint .project-home__main { padding: 40px 20px; }
   body.app-slava-restraint .project-home__welcome { align-items: flex-start; flex-direction: column; gap: 24px; margin-bottom: 40px; }
@@ -139,9 +156,12 @@ body.app-slava-restraint .project-home__sr-only { position: absolute; width: 1px
 }
 @media (prefers-reduced-motion: reduce) {
   body.app-slava-restraint .project-home__new,
+  body.app-slava-restraint .project-home__settings,
   body.app-slava-restraint .project-home__card,
   body.app-slava-restraint .project-home__preview-open,
   body.app-slava-restraint .project-home__trash-toggle svg,
   body.app-slava-restraint .project-home__trash-actions button { transition: none; }
   body.app-slava-restraint .project-home__toast { animation: none; }
+  body.app-slava-restraint .workspace-overlays--home .workspace-dock-panel.panel { animation: none; }
+  body.app-slava-restraint .workspace-overlays--home .workspace-dock-panel.panel.panel--exiting { animation: workspace-dock-fade-out 120ms ease forwards; }
 }
