@@ -4,10 +4,11 @@ To connect a Krea account for Nebula's agents and Canvas/Create generation,
 use **Settings → Connections → Krea**. [Krea MCP setup](KREA-MCP.md) explains
 sign-in, saved connection choices and workspace billing.
 
-Nebula includes a local stdio MCP server that exposes the active canvas
-selection to external agents. The normal FastAPI backend must already be
-running because the MCP process reads the same authoritative graph state as the
-canvas and CLI.
+Nebula includes a local stdio MCP server that lets an agent work on the
+person's open canvas: read it, build on it, run nodes and look at what they
+made. It suits clients without a shell (Claude Desktop, Cursor) as well as
+coding agents. The normal FastAPI backend must already be running because the
+MCP process reads the same authoritative graph state as the canvas and CLI.
 
 Configure an MCP host to launch:
 
@@ -15,7 +16,27 @@ Configure an MCP host to launch:
 <repo>/backend/.venv/bin/python <repo>/backend/mcp_server.py --url http://127.0.0.1:8000
 ```
 
-The server exposes these canvas tools:
+The server exposes these tools for building and running (see
+[Building and running over MCP](#building-and-running-over-mcp)):
+
+- `find_nodes`: node types to build with, best matches first, each with
+  `runsWith` (key, free, krea, nous) and a list `price` at default settings.
+  `ready_only=false` also lists nodes that can't run here, with what's
+  `missing`.
+- `describe_node`: one node type's ports, params (options, defaults, ranges)
+  and list prices by the params that set them.
+- `edit_canvas`: adds nodes, wires, param changes, renames and moves in one
+  call, all or nothing. Same shape as `propose_change`.
+- `remove_from_canvas`: deletes nodes or single wires, all or nothing.
+- `run_nodes`: runs a node and what feeds it (or the whole canvas) under the
+  person's spending limits. Returns outputs with small inline previews, or
+  `running` and a run id.
+- `get_run` / `cancel_run`: collect or stop a run that is still going.
+- `view_output`: a node's output as an image (videos as three frames, image
+  lists as tiles), or as text.
+- `get_spend_limits`: the limits and what this session has used.
+
+And these canvas tools:
 
 - `get_selected_nodes`: selected node IDs, display names, bounded/redacted
   parameters, output-port availability, and connections touching the
@@ -329,6 +350,34 @@ How it works (`backend/services/agent_spend.py`):
 
 `nebula spend` (or `GET /api/agent/spend`) shows an agent its limits and what
 its session has used.
+
+### Building and running over MCP
+
+`edit_canvas` and `remove_from_canvas` send one body to `POST /api/graph/apply`
+(`backend/main.py`, parsed by `services/canvas_edits.py`). It takes the
+proposal shape (`nodes` with `+refs`, `edges`, `params`) plus `rename`,
+`move`, `remove` and `unwire`, stages all of it on a copy of the graph in that
+order (unwire, remove, add and change, rename, move) with the validators the
+single-edit routes use, and commits it at once. A bad wire or a missing node
+leaves the canvas exactly as it was. Limits match proposals (12 new nodes, 24
+wires, 12 param changes, 24 removals). Nodes with unresolved World Labs paid
+state can't be removed. Krea nodes may set `_kreaAuth` to a billing mode the
+node offers; other `_` params are refused. The route never runs anything and
+is for agents only (the canvas edits through its own routes).
+
+A run from `run_nodes` is a CLI run (`POST /api/graph/run` with `wait`), so
+it gets the same spending check and the same long-run handling. It waits 45
+seconds by default because Codex gives each tool call 60 seconds unless
+configured otherwise; `get_run` waits again (up to 300). Finished image and
+video outputs come back as small previews from
+`GET /api/graph/node/{id}/preview`, which reads only files in Nebula's output
+folder (external URLs are never fetched), downscales images to 512, 1024 or
+1568 px and keeps each preview under 350 KB, since Claude Code caps a tool
+result at 25,000 tokens.
+
+`GET /api/agent/nodes` and `GET /api/agent/nodes/{id}` back `find_nodes` and
+`describe_node`. Both use `services/node_readiness.py`, the same rule
+`nebula context` uses, so the CLI and the MCP server agree on what can run.
 
 ### Long runs and graph edits from the CLI
 

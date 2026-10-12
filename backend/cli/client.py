@@ -7,6 +7,8 @@ from urllib.parse import quote
 
 import httpx
 
+from nebula_api import NebulaAPI, NebulaAPIError
+
 
 DEFAULT_BASE = "http://localhost:8000"
 
@@ -18,46 +20,35 @@ class NebulaClient:
         self.base_url = base_url.rstrip("/")
         self._client = httpx.Client(base_url=self.base_url, timeout=300.0)
 
+    @property
+    def api(self) -> NebulaAPI:
+        """The shared request layer (nebula_api), on this client's connection."""
+        return NebulaAPI(self.base_url, client=self._client)
+
     def _identity_headers(self, headers: dict | None = None) -> dict:
-        headers = dict(headers or {})
-        # When the CLI is invoked from inside a Daedalus subprocess, the parent
-        # hermes runtime sets DAEDALUS_APPROVAL in env. Pass that through as a
-        # header so backend guards (e.g. the §1.5 iteration-integrity check on
-        # /api/graph/run) can distinguish agent callers from human callers.
-        if os.environ.get("DAEDALUS_APPROVAL"):
-            headers.setdefault("X-Daedalus-Caller", "1")
-        # A display name for this agent's cursor on the canvas. A verified
+        # The agent token and the Daedalus marker are added by nebula_api.
+        # A display name for this agent's cursor on the canvas; a verified
         # agent token, when present, takes precedence on the backend.
+        headers = dict(headers or {})
         agent_name = os.environ.get("NEBULA_AGENT_NAME")
         if agent_name:
             headers.setdefault("X-Nebula-Agent", agent_name)
-        token = os.environ.get("NEBULA_AGENT_TOKEN")
-        if token:
-            headers = {key: value for key, value in headers.items() if key.lower() != "authorization"}
-            headers["Authorization"] = f"Agent {token}"
         return headers
 
     def _request(self, method: str, path: str, *, binary: bool = False, **kwargs: Any) -> Any:
         kwargs["headers"] = self._identity_headers(kwargs.get("headers"))
         try:
-            resp = self._client.request(method, path, **kwargs)
-        except httpx.ConnectError:
-            print("error: cannot connect to Nebula backend at "
-                  f"{self.base_url} — is the server running?", file=sys.stderr)
+            return self.api.request(method, path, binary=binary, **kwargs)
+        except NebulaAPIError as exc:
+            if exc.kind == "connect":
+                message = f"cannot connect to Nebula backend at {self.base_url} — is the server running?"
+            elif exc.kind == "timeout":
+                message = (f"Nebula didn't answer {method} {path} in time. A run keeps going on the "
+                           "backend; `nebula graph` shows what finished.")
+            else:
+                message = exc.detail
+            print(f"error: {message}", file=sys.stderr)
             sys.exit(1)
-        except httpx.TimeoutException:
-            print(f"error: Nebula didn't answer {method} {path} in time. A run keeps going on the "
-                  "backend; `nebula graph` shows what finished.", file=sys.stderr)
-            sys.exit(1)
-        if resp.status_code >= 400:
-            detail = ""
-            try:
-                detail = resp.json().get("detail", resp.text)
-            except Exception:
-                detail = resp.text
-            print(f"error: {detail}", file=sys.stderr)
-            sys.exit(1)
-        return resp.content if binary else resp.json()
 
     def commons_enabled(self) -> bool:
         capability = self._request("GET", "/api/capabilities/commons")
@@ -85,9 +76,9 @@ class NebulaClient:
     def krea_status(self) -> str | None:
         """The Krea account sign-in status ("connected", ...), or None if unknown."""
         try:
-            resp = self._client.get("/api/krea/connection", timeout=10, headers=self._identity_headers())
-            status = resp.json().get("status") if resp.status_code == 200 else None
-        except (httpx.HTTPError, ValueError, AttributeError):
+            status = self.api.request("GET", "/api/krea/connection", timeout=10,
+                                      headers=self._identity_headers()).get("status")
+        except (NebulaAPIError, AttributeError):
             return None
         return status if isinstance(status, str) else None
 
@@ -164,19 +155,14 @@ class NebulaClient:
         """Call GET /api/graph/node/{id}/path. Raises RuntimeError on HTTP error
         with a message suitable for stderr."""
         try:
-            resp = self._client.request("GET", f"/api/graph/node/{node_id}/path", timeout=10,
-                                        headers=self._identity_headers())
-        except httpx.ConnectError:
-            raise RuntimeError(
-                f"cannot connect to Nebula backend at {self.base_url} — is the server running?"
-            )
-        if resp.status_code == 200:
-            return resp.json()
-        try:
-            detail = resp.json().get("detail", resp.text)
-        except Exception:
-            detail = resp.text
-        raise RuntimeError(detail or f"HTTP {resp.status_code}")
+            return self.api.request("GET", f"/api/graph/node/{node_id}/path", timeout=10,
+                                    headers=self._identity_headers())
+        except NebulaAPIError as exc:
+            if exc.kind == "connect":
+                raise RuntimeError(
+                    f"cannot connect to Nebula backend at {self.base_url} — is the server running?"
+                ) from exc
+            raise RuntimeError(exc.detail) from exc
 
     def clear_graph(self) -> dict[str, Any]:
         return self._request("DELETE", "/api/graph")

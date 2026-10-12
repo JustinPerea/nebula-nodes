@@ -375,7 +375,8 @@ class AgentPresence:
             entry: dict[str, Any] = {
                 "id": node_id,
                 "definitionId": definition_id,
-                "name": definition.get("displayName") or definition_id,
+                # The person's (or an agent's) name for it, else the model's.
+                "name": node.get("label") or definition.get("displayName") or definition_id,
                 "state": (reported or {}).get("state", "unknown" if reported is None else "idle"),
                 "params": safe_value(node.get("params") or {}, key="params"),
                 # Like the selection surface: what exists, never the values
@@ -389,6 +390,8 @@ class AgentPresence:
                 },
                 "inputsFrom": incoming.get(node_id, []),
             }
+            if node.get("label"):
+                entry["model"] = definition.get("displayName") or definition_id
             if reported is not None:
                 entry["position"] = {"x": round(reported["x"], 1), "y": round(reported["y"], 1)}
                 if "width" in reported:

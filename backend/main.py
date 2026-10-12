@@ -79,7 +79,7 @@ from services.settings import (
     update_injected_keys,
 )
 from services.node_registry import NodeRegistry
-from services import agent_spend, model_pricing
+from services import agent_spend, model_pricing, node_readiness, output_preview
 from services.cli_graph import CLIGraph
 from services.retired_nodes import migrate_node, retired_message
 from services.project_store import (
@@ -95,6 +95,7 @@ from services.port_contracts import (
     validate_edge_contracts,
 )
 from services.file_access import ProtectedPathError, require_allowed_path, validate_file_references
+from services.qc_common import extract_frames
 from services.output import OUTPUT_ROOT, DEFAULT_OUTPUT_ROOT, resolve_output_ref, portable_output_ref, ManifestError, find_output_record, read_manifest
 from services.image_input import is_remote_or_data_uri
 from services.cache import ExecutionCache
@@ -137,6 +138,7 @@ from services.person_gate import (
     is_browser_request,
     require_person,
 )
+from services.canvas_edits import EditSpec, parse_edit
 from services.canvas_proposals import (
     MAX_REASON,
     Proposal,
@@ -161,6 +163,7 @@ from routes.quiver_proxy import router as quiver_router
 from routes.video_edit_preview import router as video_edit_preview_router
 from routes.render_exports import router as render_exports_router
 from routes.krea_connector import router as krea_connector_router
+from services.krea_connector import get_connector as _krea_connector
 from routes.commons import router as commons_router
 from commons import actors as commons_actors
 from services.ffmpeg import ffprobe_video
@@ -2648,9 +2651,164 @@ async def agent_spend_status(request: Request) -> dict[str, Any]:
     return {
         "limited": True,
         "agent": label,
+        # "chat": this in-app chat's own budget; "shared": the one budget every
+        # agent without a Nebula chat token shares until the backend restarts.
+        "budget": "chat" if key.startswith("chat:") else "shared",
         "limits": {"perRunUsd": agent_spend.threshold_from_settings(settings), **caps},
         "spent": {"totalUsd": round(spent.total, 4), "models": spent.models},
     }
+
+
+def _short(text: Any, limit: int = 140) -> str:
+    flat = " ".join(str(text or "").split())
+    return flat if len(flat) <= limit else flat[: limit - 1] + "…"
+
+
+@app.get("/api/agent/nodes")
+async def agent_find_nodes(query: str = "", category: str = "", ready_only: bool = True, limit: int = 20) -> dict[str, Any]:
+    """Node types an agent can use, best matches first: whether each can run
+    here (and if not, what's missing) and its list price at default settings.
+
+    Every word of `query` must appear in the id, name or description."""
+    settings = load_settings()
+    keys = node_readiness.configured_keys(settings)
+    try:
+        krea_signed_in = _krea_connector().status().get("status") == "connected"
+    except Exception:  # noqa: BLE001 - an unreadable Krea vault just means not signed in
+        krea_signed_in = False
+    try:
+        pricing = model_pricing.load_pricing().get("nodes") or {}
+    except (OSError, ValueError):
+        pricing = {}
+    words = [word for word in query.lower().split() if word]
+    limit = max(1, min(int(limit), 100))
+    rows: list[tuple[tuple[int, int, str], dict[str, Any]]] = []
+    for definition in node_registry.get_all().values():
+        if category and definition.get("category") != category:
+            continue
+        name = str(definition.get("displayName") or definition["id"])
+        haystack = f"{definition['id']} {name} {definition.get('description') or ''}".lower()
+        if any(word not in haystack for word in words):
+            continue
+        access = node_readiness.node_access(definition, keys, krea_signed_in)
+        if ready_only and access is None:
+            continue
+        row: dict[str, Any] = {
+            "id": definition["id"], "name": name, "category": definition.get("category"),
+            "runsWith": access,
+        }
+        if definition.get("description"):
+            row["description"] = _short(definition["description"])
+        if access is None:
+            row["missing"] = node_readiness.missing(definition, krea_signed_in)
+        if definition.get("apiProvider") == "utility":
+            row["price"] = "free"
+        else:
+            estimate = model_pricing.estimate_node(
+                pricing.get(definition["id"]), definition, {},
+                model_pricing.route_provider(definition, settings.get("apiKeys") or {}))
+            row["price"] = ({"usd": [round(estimate["low"], 4), round(estimate["high"], 4)]}
+                            if estimate and estimate.get("currency") == "usd" else None)
+        # Ready first; then exact id, id prefix, name hits; then by name.
+        idq = " ".join(words)
+        rank = 0 if definition["id"] == idq else 1 if idq and definition["id"].startswith(idq) else \
+            2 if idq and idq in name.lower() else 3
+        rows.append(((0 if access else 1, rank, name.lower()), row))
+    rows.sort(key=lambda pair: pair[0])
+    return {"total": len(rows), "nodes": [row for _, row in rows[:limit]],
+            "krea": "signed in" if krea_signed_in else "not signed in"}
+
+
+def _brief_param(param: dict[str, Any]) -> dict[str, Any]:
+    brief: dict[str, Any] = {"key": param["key"], "type": param.get("type")}
+    for field in ("default", "min", "max", "required"):
+        if param.get(field) not in (None, False):
+            brief[field] = param[field]
+    options = [option.get("value") for option in param.get("options") or [] if isinstance(option, dict)]
+    if options:
+        brief["options"] = options[:40] + (["…"] if len(options) > 40 else [])
+    if param.get("visibleWhen"):
+        brief["onlyWhen"] = param["visibleWhen"]
+    return brief
+
+
+@app.get("/api/agent/nodes/{definition_id}")
+async def agent_describe_node(definition_id: str) -> dict[str, Any]:
+    """One node type, in what an agent needs to wire and set it: ports, params
+    (options, defaults, ranges), whether it can run here, and its list prices."""
+    definition = node_registry.get(definition_id)
+    if definition is None:
+        hint = ", ".join(_suggest_node_ids(definition_id, list(node_registry.get_all())))
+        raise HTTPException(status_code=404, detail=f"No node type '{definition_id}'." + (
+            f" Close matches: {hint}." if hint else " find_nodes lists them."))
+    settings = load_settings()
+    try:
+        krea_signed_in = _krea_connector().status().get("status") == "connected"
+    except Exception:  # noqa: BLE001
+        krea_signed_in = False
+    keys = node_readiness.configured_keys(settings)
+    access = node_readiness.node_access(definition, keys, krea_signed_in)
+    ports = lambda key: [  # noqa: E731
+        {"id": port["id"], "type": port.get("dataType"), **({"required": True} if port.get("required") else {}),
+         **({"multiple": True} if port.get("multiple") else {})}
+        for port in definition.get(key) or []
+    ]
+    result: dict[str, Any] = {
+        "id": definition["id"],
+        "name": definition.get("displayName") or definition["id"],
+        "category": definition.get("category"),
+        "runsWith": access,
+        "inputs": ports("inputPorts"),
+        "outputs": ports("outputPorts"),
+    }
+    if definition.get("description"):
+        result["description"] = definition["description"]
+    shown = lambda key: [_brief_param(param) for param in definition.get(key) or []  # noqa: E731
+                         if not str(param.get("key", "")).startswith("_") and not param.get("hidden")]
+    result["params"] = shown("params") + shown("sharedParams")
+    if definition.get("directParams") or definition.get("falParams"):
+        # Dual-route nodes take different extra params on each route.
+        direct = node_readiness._keys(definition.get("directKeyName"))
+        result["route"] = "direct" if any(k in keys for k in direct) else "fal" if access else None
+        result["paramsDirect"] = shown("directParams")
+        result["paramsFal"] = shown("falParams")
+    if access is None:
+        result["missing"] = node_readiness.missing(definition, krea_signed_in)
+    modes = node_readiness.krea_modes(definition)
+    if modes:
+        result["kreaModes"] = modes
+        if len(modes) > 1:
+            result["kreaNote"] = 'Set params {"_kreaAuth": "mcp"} to bill the signed-in Krea account instead of the API token.'
+    if definition.get("apiProvider") == "utility":
+        result["price"] = "free"
+    else:
+        try:
+            entry = (model_pricing.load_pricing().get("nodes") or {}).get(definition["id"])
+        except (OSError, ValueError):
+            entry = None
+        if not entry:
+            result["price"] = None
+            if modes == ["mcp"]:
+                result["priceNote"] = "Billed to the signed-in Krea plan; not limited or counted."
+            elif modes:
+                result["priceNote"] = ("With _kreaAuth mcp it bills the Krea plan (not limited); with the API token "
+                                       "it has no list price, so agent runs of it must be proposed (propose_change).")
+            else:
+                result["priceNote"] = "No list price; agent runs of it must be proposed (propose_change)."
+        else:
+            estimate = model_pricing.estimate_node(
+                entry, definition, {}, model_pricing.route_provider(definition, settings.get("apiKeys") or {}))
+            rows = [{**row.get("match", {}), "usd": row.get("price")} for row in entry.get("rows") or []]
+            result["price"] = {
+                "per": entry.get("per"),
+                "dependsOn": entry.get("priceParams") or [],
+                "atDefaultsUsd": ([round(estimate["low"], 4), round(estimate["high"], 4)]
+                                  if estimate and estimate.get("currency") == "usd" else None),
+                "rows": rows[:40],
+            }
+            if entry.get("price") is not None and not rows:
+                result["price"]["usd"] = entry.get("price")
+    return result
 
 
 @app.get("/api/health")
@@ -3112,6 +3270,8 @@ def _stage_proposal(
     spec: ProposalSpec,
     *,
     positions: dict[str, dict[str, float]] | None = None,
+    base: CLIGraph | None = None,
+    what: str = "a proposal",
 ) -> tuple[CLIGraph, dict[str, str], list[str], list[str]]:
     """Stage a proposal on a clone of the live graph with the cluster validators.
 
@@ -3119,8 +3279,10 @@ def _stage_proposal(
     HTTPException from the same validators create/connect/update use, so a
     proposal that would fail as direct edits fails here, before anything is
     committed. Missing referenced nodes raise 409 (the canvas moved on).
+    `base` stages onto an already-staged candidate instead (direct edits
+    remove nodes first); `what` names the change in refusals.
     """
-    candidate = cli_graph.clone()
+    candidate = base if base is not None else cli_graph.clone()
     for node_id in sorted(spec.references):
         if node_id not in candidate.nodes:
             raise HTTPException(status_code=409, detail=f"{node_id} is no longer on the canvas")
@@ -3129,9 +3291,9 @@ def _stage_proposal(
         node = candidate.nodes[change.node_id]
         definition_id = str(node.get("definitionId") or "")
         if definition_id == "cinema-scene" and "scene" in change.params:
-            raise HTTPException(status_code=400, detail="Cinema scenes can't be changed by a proposal; edit them in Cinema")
+            raise HTTPException(status_code=400, detail=f"Cinema scenes can't be changed by {what}; edit them in Cinema")
         if uses_durable_recovery(definition_id, provider="worldlabs"):
-            raise HTTPException(status_code=400, detail="World Labs nodes can't be changed by a proposal; propose a new node instead")
+            raise HTTPException(status_code=400, detail=f"World Labs nodes can't be changed by {what}; add a new node instead")
         _validate_params(definition_id, change.params)
         candidate.update_params(change.node_id, _coerce_params(definition_id, change.params))
     raw_nodes = [
@@ -6281,6 +6443,37 @@ async def acknowledge_provider_start_ambiguity(
     }
 
 
+def _ensure_node_deletable(node_id: str, node: dict[str, Any]) -> None:
+    """Refuse (409) to delete a node that still carries World Labs paid state.
+
+    Call inside _paid_graph_mutation so no paid start can land in between.
+    """
+    try:
+        active = provider_start_guard.has_active_node(node_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    held = any(
+        record.get("nodeId") == node_id for record in provider_start_guard.list()
+    )
+    recovered = any(
+        record.get("nodeId") == node_id
+        for record in provider_recovery_store.list()
+    )
+    params = node.get("params") or {}
+    live_checkpoint = has_recovery_identity(
+        str(node.get("definitionId") or ""), params
+    )
+    if active or held or recovered or live_checkpoint:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Cannot delete {node_id}: it has unresolved World Labs paid state. "
+                "Check Marble, then resolve its exact recovery/ambiguity record "
+                "first."
+            ),
+        )
+
+
 @app.delete("/api/graph/node/{node_id}")
 async def delete_graph_node(node_id: str) -> dict:
     """Remove a node and any edges touching it from cli_graph."""
@@ -6289,30 +6482,7 @@ async def delete_graph_node(node_id: str) -> dict:
         node = cli_graph.nodes.get(node_id)
         if node is None:
             raise HTTPException(status_code=404, detail=f"Node '{node_id}' not found")
-        try:
-            active = provider_start_guard.has_active_node(node_id)
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-        held = any(
-            record.get("nodeId") == node_id for record in provider_start_guard.list()
-        )
-        recovered = any(
-            record.get("nodeId") == node_id
-            for record in provider_recovery_store.list()
-        )
-        params = node.get("params") or {}
-        live_checkpoint = has_recovery_identity(
-            str(node.get("definitionId") or ""), params
-        )
-        if active or held or recovered or live_checkpoint:
-            raise HTTPException(
-                status_code=409,
-                detail=(
-                    "Cannot delete a node with unresolved World Labs paid state. "
-                    "Check Marble, then resolve its exact recovery/ambiguity record "
-                    "first."
-                ),
-            )
+        _ensure_node_deletable(node_id, node)
         label = _node_label(node_id)
         removed_definition = str(node.get("definitionId") or "")
         removed_position = copy.deepcopy(node.get("position"))
@@ -6343,6 +6513,190 @@ async def delete_graph_node(node_id: str) -> dict:
     return {"status": "deleted", "id": node_id}
 
 
+def _check_krea_auth(definition_id: str, params: dict[str, Any], label: str) -> None:
+    """Direct edits may set `_kreaAuth`; only to a billing mode the node offers."""
+    if "_kreaAuth" not in params:
+        return
+    modes = node_readiness.krea_modes(node_registry.get(definition_id) or {})
+    if params["_kreaAuth"] not in modes:
+        offered = f"one of {', '.join(modes)}" if modes else "left out (it isn't a Krea node)"
+        raise HTTPException(status_code=400, detail=f"_kreaAuth on {label} must be {offered}")
+
+
+@app.post("/api/graph/apply")
+async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
+    """An agent edits the canvas directly: everything in the body, or nothing.
+
+    Body: the proposal shape (nodes with +refs, edges, params) plus
+    rename {id|ref: name}, move {id|ref: {x, y}}, remove [id] and unwire
+    [{source, sourceHandle, target, targetHandle}]. Staged on a copy of the
+    graph in that order (unwire, remove, add and change, rename, move) with
+    the validators single edits use, then committed at once. Never runs
+    anything; runs go through /api/graph/run and its spending limits.
+    """
+    headers = current_request_headers()
+    identity = identify_agent(headers)
+    if identity is None:
+        if is_browser_request(headers):
+            raise HTTPException(status_code=403, detail="This route is for agents; the canvas edits directly")
+        raise HTTPException(status_code=400, detail="Name yourself with NEBULA_AGENT_NAME or --as")
+    _validate_graph_ingress_complexity(body)
+    try:
+        spec: EditSpec = parse_edit(body)
+    except ProposalError as exc:
+        raise _proposal_http_error(exc) from exc
+    additions = spec.additions
+    for node in additions.nodes:
+        _check_krea_auth(node.definition_id, node.params, node.ref)
+    for change in additions.params:
+        current = cli_graph.nodes.get(change.node_id) or {}
+        _check_krea_auth(str(current.get("definitionId") or ""), change.params, change.node_id)
+
+    positions: dict[str, dict[str, float]] = {}
+    if additions.nodes:
+        known, visible_area = _proposal_layout_hints()
+        positions = place_new_nodes(additions, known, visible_area)
+    positions.update({ref: point for ref, point in spec.move.items() if ref.startswith("+")})
+    shown = _display_positions(list(cli_graph.nodes.values()))
+    params_before = {
+        change.node_id: copy.deepcopy((cli_graph.nodes.get(change.node_id) or {}).get("params") or {})
+        for change in additions.params
+    }
+    labels_before = {key: _node_label(key) for key in spec.rename if not key.startswith("+")}
+
+    removed: list[dict[str, Any]] = []
+    with _paid_graph_mutation("edit the canvas"):
+        candidate = cli_graph.clone()
+        for edge in spec.unwire:
+            if not candidate.remove_edge(edge.source, edge.source_handle, edge.target, edge.target_handle):
+                raise HTTPException(status_code=404, detail=(
+                    f"There's no wire {edge.source}.{edge.source_handle} → {edge.target}.{edge.target_handle}; "
+                    "look_at_canvas lists the current wires."))
+        for node_id in spec.remove:
+            node = candidate.nodes.get(node_id)
+            if node is None:
+                raise HTTPException(status_code=404, detail=f"{node_id} is not on the canvas")
+            _ensure_node_deletable(node_id, node)
+            removed.append({
+                "id": node_id,
+                "name": _node_label(node_id),
+                "definitionId": str(node.get("definitionId") or ""),
+                "position": copy.deepcopy(node.get("position")),
+            })
+            candidate.remove_node(node_id)
+        id_map: dict[str, str] = {}
+        edge_ids: list[str] = []
+        if additions.nodes or additions.edges or additions.params:
+            try:
+                candidate, id_map, edge_ids, _ = _stage_proposal(
+                    additions, positions=positions, base=candidate, what="an edit"
+                )
+            except HTTPException as exc:
+                # A missing node means the agent's view is stale.
+                raise HTTPException(status_code=404 if exc.status_code == 409 else exc.status_code,
+                                    detail=exc.detail) from exc
+        for key, raw in spec.rename.items():
+            node_id = id_map.get(key, key)
+            node = candidate.nodes.get(node_id)
+            if node is None:
+                raise HTTPException(status_code=404, detail=f"{node_id} is not on the canvas")
+            candidate.set_label(node_id, _custom_node_label(raw, str(node.get("definitionId") or "")))
+        moves = {key: point for key, point in spec.move.items() if not key.startswith("+")}
+        missing = [node_id for node_id in moves if node_id not in candidate.nodes]
+        if missing:
+            raise HTTPException(status_code=404, detail=f"{missing[0]} is not on the canvas")
+        if moves:
+            candidate.update_positions(moves)
+        touched = sorted(set(id_map.values()) | set(params_before))
+        _commit_graph_candidate_with_recoveries(
+            candidate,
+            [candidate.nodes[node_id] for node_id in touched],
+            source="agent-edit",
+        )
+
+    await _broadcast_graph_sync()
+    note = f" ({additions.note})" if additions.note != "edit" else ""
+    for edge in spec.unwire:
+        _journal_edge("edge.removed", edge.as_dict())
+    for gone in removed:
+        _journal(
+            "node.removed",
+            node_id=gone["id"],
+            data={"name": gone["name"], "definitionId": gone["definitionId"]},
+            summary=f"removed {gone['name']} ({gone['id']}){note}",
+        )
+        try:
+            detached = canvas_pins.detach_node(gone["id"], gone["position"])
+        except (PinError, ProjectStoreError):
+            detached = []
+        await _journal_detached_pins(detached, f"{gone['name']} was deleted")
+        await _announce_closed_proposals(
+            canvas_proposals.invalidate_referencing(gone["id"], f"{gone['name']} ({gone['id']}) was deleted")
+        )
+        agent_presence.forget_node(gone["id"])
+    _journal_cluster(list(id_map.values()), edge_ids, note=note)
+    changed: list[str] = []
+    for node_id, before in params_before.items():
+        changes = param_changes(before, (cli_graph.nodes.get(node_id) or {}).get("params") or {})
+        if changes:
+            changed.append(node_id)
+            _journal(
+                "node.params",
+                node_id=node_id,
+                data=changes,
+                summary=f"set {_listed(changes['keys'], 4)} on {_node_label(node_id)} ({node_id}){note}",
+            )
+    renamed: dict[str, str] = {}
+    for key in spec.rename:
+        node_id = id_map.get(key, key)
+        renamed[node_id] = _node_label(node_id)
+        if key in labels_before and labels_before[key] != renamed[node_id]:
+            _journal(
+                "node.renamed",
+                node_id=node_id,
+                data={"from": labels_before[key], "to": renamed[node_id]},
+                summary=f"renamed {labels_before[key]} ({node_id}) to {renamed[node_id]}",
+            )
+    moved = [node_id for node_id, point in moves.items() if _moved_far_enough(shown.get(node_id), point)]
+    if moved:
+        _journal(
+            "node.moved",
+            node_id=moved[0] if len(moved) == 1 else None,
+            data={"nodeIds": moved[:50], "count": len(moved)},
+            summary=f"moved {_listed(moved)}",
+        )
+
+    added = list(id_map.values())
+    parts = [
+        f"added {len(added)}" if added else "",
+        f"wired {len(edge_ids)}" if edge_ids else "",
+        f"changed {len(changed)}" if changed else "",
+        f"renamed {len(renamed)}" if renamed else "",
+        f"moved {len(moves)}" if moves else "",
+        f"removed {len(removed)}" if removed else "",
+        f"unwired {len(spec.unwire)}" if spec.unwire else "",
+    ]
+    summary = ", ".join(part for part in parts if part) or "no change"
+    publish_action(f"{identity.name} edited the canvas: {summary}")
+    focus = next(iter(added), None) or next(iter(changed or list(renamed) or list(moves)), None)
+    if focus is not None and focus in cli_graph.nodes:
+        await _show_agent({"nodeId": focus}, say=additions.note if note else summary)
+    wanted = set(edge_ids)
+    return {
+        "status": "applied",
+        "summary": summary,
+        "idMap": id_map,
+        "added": [{"id": node_id, "definitionId": cli_graph.nodes[node_id].get("definitionId"),
+                   "name": _node_label(node_id)} for node_id in added],
+        "wired": [{"id": edge["id"], **_edge_data(edge)} for edge in cli_graph.edges if edge.get("id") in wanted],
+        "changed": changed,
+        "renamed": renamed,
+        "moved": list(moves),
+        "removed": [gone["id"] for gone in removed],
+        "unwired": [edge.as_dict() for edge in spec.unwire],
+    }
+
+
 @app.get("/api/graph/node/{node_id}/path")
 async def get_node_image_path(node_id: str) -> dict:
     """Resolve a node's primary image file to an absolute local path.
@@ -6370,6 +6724,71 @@ async def get_node_image_path(node_id: str) -> dict:
             detail=f"Image for node '{node_id}' is not local (external URL)",
         )
     return {"path": str(local_path.resolve())}
+
+
+_PREVIEWABLE = ("Image", "Video")
+_PREVIEW_PORT_ORDER = ("image", "video", "images", "frames")
+
+
+def _preview_port(node_id: str, outputs: dict[str, Any], port: str | None) -> tuple[str, dict[str, Any]]:
+    if port is not None:
+        entry = outputs.get(port)
+        if not isinstance(entry, dict):
+            have = ", ".join(sorted(outputs)) or "none yet"
+            raise HTTPException(status_code=404, detail=f"{node_id} has no output '{port}' (outputs: {have}).")
+        return port, entry
+    candidates = [(name, entry) for name, entry in outputs.items()
+                  if isinstance(entry, dict) and entry.get("value") not in (None, "", [])]
+    if not candidates:
+        raise HTTPException(status_code=404, detail=f"{node_id} has no output yet. Run it first.")
+    candidates.sort(key=lambda item: (item[1].get("type") not in _PREVIEWABLE,
+                                      _PREVIEW_PORT_ORDER.index(item[0]) if item[0] in _PREVIEW_PORT_ORDER else 99))
+    return candidates[0]
+
+
+def _preview_path(value: Any, node_id: str, port: str) -> Path:
+    path = _output_path_from_ref(value) if isinstance(value, str) else None
+    if path is None:
+        raise HTTPException(status_code=415, detail=(
+            f"{node_id}:{port} isn't a file in Nebula's outputs (an external URL or a value), so there's "
+            "nothing to preview here."))
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail=f"The file for {node_id}:{port} is missing from disk.")
+    return path
+
+
+@app.get("/api/graph/node/{node_id}/preview")
+async def preview_node_output(node_id: str, port: str | None = None, size: str = "medium") -> Response:
+    """A small image of a node's output for an agent to look at: an image
+    downscaled, a video as three frames, an image list as up to four tiles.
+    Only files in Nebula's outputs are read; external URLs are never fetched."""
+    node = cli_graph.nodes.get(node_id)
+    if node is None:
+        raise HTTPException(status_code=404, detail=f"Node '{node_id}' not found")
+    if size not in output_preview.SIZES:
+        raise HTTPException(status_code=400, detail=f"size must be one of {', '.join(output_preview.SIZES)}")
+    name, entry = _preview_port(node_id, node.get("outputs") or {}, port)
+    kind, value = entry.get("type"), entry.get("value")
+    if kind not in _PREVIEWABLE and not (isinstance(value, list) and value):
+        raise HTTPException(status_code=415, detail=(
+            f"{node_id}:{name} is {kind or 'data'}, not an image or video; its value is in the run "
+            "result and look_at_canvas."))
+    try:
+        if kind == "Video":
+            path = _preview_path(value, node_id, name)
+            with tempfile.TemporaryDirectory(prefix="nebula-preview-") as work:
+                frames = await extract_frames(path, (0.1, 0.5, 0.9), Path(work))
+                data, mime = await asyncio.to_thread(output_preview.contact_sheet, frames, size)
+        elif isinstance(value, list):
+            paths = [_preview_path(item, node_id, name) for item in value[:4]]
+            data, mime = await asyncio.to_thread(output_preview.contact_sheet, paths, size)
+        else:
+            data, mime = await asyncio.to_thread(output_preview.image_preview, _preview_path(value, node_id, name), size)
+    except HTTPException:
+        raise
+    except Exception as exc:  # noqa: BLE001 - unreadable media is the caller's answer, not a 500
+        raise HTTPException(status_code=422, detail=f"Couldn't preview {node_id}:{name}: {exc}") from exc
+    return Response(content=data, media_type=mime, headers={"X-Nebula-Preview-Port": name})
 
 
 def _resolve_primary_image_url(node: dict[str, Any]) -> str | None:

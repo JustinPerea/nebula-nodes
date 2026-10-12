@@ -3,6 +3,9 @@ from __future__ import annotations
 import json
 from typing import Any
 
+# The readiness rule lives with the backend so the CLI and MCP server agree.
+from services.node_readiness import krea_modes, node_access  # noqa: F401 (node_access is re-exported)
+
 
 def format_node_table(nodes: list[dict[str, Any]]) -> str:
     """Format nodes as an aligned table grouped by category."""
@@ -213,34 +216,6 @@ def format_selection(selection: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def _keys(value: Any) -> list[str]:
-    return [k for k in (value if isinstance(value, list) else [value]) if k]
-
-
-def _krea_mode_options(node: dict[str, Any]) -> list[str]:
-    for param in node.get("params") or []:
-        if param.get("key") == "_kreaAuth":
-            return [str(option.get("value")) for option in param.get("options") or []]
-    return []
-
-
-def node_access(node: dict[str, Any], configured_keys: set[str], krea_signed_in: bool) -> str | None:
-    """How a node can run here: "key", "free", "krea" (Krea sign-in) or "nous";
-    None when it needs a key or sign-in that isn't set up. Mirrors the canvas
-    (frontend/src/lib/kreaConnection.ts nodeKeyStatus)."""
-    if node.get("apiProvider") == "nous":
-        return "nous"
-    krea_modes = _krea_mode_options(node)
-    keys = _keys(node.get("envKeyName")) + _keys(node.get("directKeyName"))
-    if krea_modes == ["mcp"]:
-        return "krea" if krea_signed_in else None
-    if any(key in configured_keys for key in keys):
-        return "key"
-    if "mcp" in krea_modes and krea_signed_in:
-        return "krea"
-    return "free" if not keys and not krea_modes else None
-
-
 def format_context(
     settings: dict[str, Any], nodes: list[dict[str, Any]], krea_status: str | None = None,
 ) -> str:
@@ -257,7 +232,7 @@ def format_context(
         if access is None:
             continue
         access_count[access] = access_count.get(access, 0) + 1
-        if access == "krea" and _krea_mode_options(n) != ["mcp"]:
+        if access == "krea" and krea_modes(n) != ["mcp"]:
             krea_both.append(n["id"])
         mark = {"krea": "*", "nous": "^"}.get(access, "")
         by_cat.setdefault(n.get("category", "other"), []).append(n["id"] + mark)
@@ -397,7 +372,8 @@ def format_snapshot(snapshot: dict[str, Any]) -> str:
         screen = ""
         if node.get("onScreen") is False:
             screen = " off-screen"
-        lines.append(f"  {node.get('id', '?'):<6}{node.get('name', '?')} [{node.get('state', '?')}] {where}{screen}")
+        model = f" ({node['model']})" if node.get("model") else ""
+        lines.append(f"  {node.get('id', '?'):<6}{node.get('name', '?')}{model} [{node.get('state', '?')}] {where}{screen}")
         params = {k: v for k, v in (node.get("params") or {}).items() if v not in (None, "", {}, [])}
         if params:
             lines.append(f"        params: {_brief(params, 110)}")

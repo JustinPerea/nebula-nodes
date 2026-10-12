@@ -1,5 +1,27 @@
 # Implementation Notes
 
+## 2026-10-12 — MCP tools: build, run and see results from any MCP client (PR 1 of 3)
+
+Branch `mcp-tools`. Justin chose: the MCP server serves outside clients and the in-app agents; tool shape and setup "whatever gives the best results". Plan: three PRs (tools, in-app wiring, `nebula mcp connect`). This is the first.
+
+**Decisions not in the ask**
+
+- **Few batched tools, not one per CLI command.** Anthropic's "Writing effective tools for agents" says more tools don't mean better results and favors consolidated tools for the main workflows. So nine tools, and `edit_canvas` takes the same body as `propose_change`: an agent that learns one can send the other, and a cluster is one call instead of ~15.
+- **All or nothing.** `POST /api/graph/apply` stages unwire → remove → add/change (`_stage_proposal`, now with a `base` graph) → rename → move on a clone and commits once through `_commit_graph_candidate_with_recoveries` under `_paid_graph_mutation`. A half-built graph is worse than an error the agent can fix. Proposal limits apply. The route refuses browser callers (403); it is for agents.
+- **`_ensure_node_deletable`** was factored out of `DELETE /api/graph/node` so removals in an edit get the same World Labs paid-state guard. Its message now names the node.
+- **`_kreaAuth` is allowed in direct edits** (`parse_spec(internal_ok=...)`), checked against the modes the node offers. Without it an agent couldn't put a dual-mode Krea node on the signed-in account; the CLI already allows it. Proposals still refuse underscore params.
+- **Waits default to 45 s.** Codex's per-tool timeout defaults to 60 s. `run_nodes` and `get_run` are async and wait in a worker thread so the stdio server keeps answering while they wait.
+- **One run target.** `run_nodes` runs one node (with what feeds it) or the whole canvas. Several separate targets would start parallel runs that can share upstream nodes and pay twice.
+- **Previews are capped.** `GET /api/graph/node/{id}/preview` reads only files under the output root (external URLs refused, 415), sizes 512/1024/1568, JPEG unless transparent, shrunk until ≤350 KB, because Claude Code caps a tool result at 25,000 tokens. Videos become three frames side by side; image lists up to four tiles. `run_nodes` attaches up to four small previews.
+- **One readiness rule.** `services/node_readiness.py` is used by `nebula context`, `GET /api/agent/nodes` (find_nodes) and `GET /api/agent/nodes/{id}` (describe_node). Dual-route nodes list `paramsDirect`/`paramsFal` and which route this machine uses. Definitions have no `description` field, so search matches id and name only.
+- **One HTTP layer.** `backend/nebula_api.py` (`NebulaAPI`, `NebulaAPIError`) sends the token and Daedalus marker for both the CLI and the MCP server; the CLI keeps its print-and-exit messages on top. `get_selected_nodes` now sends the agent's name and token like the other tools (it sent none).
+- **Instructions are a workflow**, ~210 words plus the commons skill. They keep "agents cannot accept", which a proposals test guards.
+- **Found while verifying: the canvas snapshot ignored custom names.** `look_at_canvas` showed "Image Input" for a node an agent had just renamed "Reference" (the snapshot predates renaming). It now shows the custom name, with the model in `model`; `nebula look` prints both.
+
+**Not changed, worth knowing:** a run of a node whose key is missing (no-key Nano Banana in the smoke test) still counts its upper estimate against the session, because spend is counted when a run starts. It fails before any provider call, so nothing is charged, but the session total goes up. Refunding runs that fail before a provider call would fix it; not built.
+
+**Verification:** backend 194/194 test files pass (per-file runner), including new `test_graph_apply.py` (9), `test_output_preview.py` (6, one with a real ffmpeg clip) and `test_mcp_tools.py` (8, tools called with HTTP routed into the app). Live on an isolated backend (temp state, no keys, port 8123): a stdio `ClientSession` listed 22 tools and ran find/describe/edit/run/view/spend/remove; a bad wire came back as the validator's message and changed nothing. A real `claude -p` with only this server built a two-node graph, ran it and described the image from the inline preview: 7 Nebula calls, no errors, journaled as "Claude Code". With the canvas open in a browser, an edit showed up live with the agent's cursor and note. No paid runs.
+
 ## 2026-10-12 — CLI fixes for agents: spending limits, long runs, missing commands
 
 Branch `cli-agent-fixes`. Justin chose: the person's "Ask before costly runs" threshold applies to agents, a node with no list price needs a proposal, and Settings gets a per-chat-session budget plus per-model limits (per run and per session). Limits apply to agents only; at a limit the agent asks (proposes), it is never silently blocked.

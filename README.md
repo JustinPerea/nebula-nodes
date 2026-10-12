@@ -63,6 +63,7 @@ Requires Paper Desktop running on the same computer as the Nebula backend, signe
 - **Keep your work** with saved JSON graphs, local media outputs, and run history.
 - **Build with an agent** using your local Claude Code or Codex login. Choose the model and thinking effort in Chat. [Chat setup](docs/CHAT-SETUP.md).
 - **Watch agents work live.** Each agent that edits the canvas gets its own named cursor that glides to the node it touches, pulls wires port to port and narrates in one line. Agents read the canvas with `nebula look` instead of taking screenshots, and `nebula watch` tells them when you change something. Pin a short note to a node ("warmer", "redo this one") and agents see it in `nebula look` and answer it on the pin. Before a paid run or a bigger change, agents can propose it instead: you see ghost nodes and dashed wires, drag them where you want, and Accept or Reject. [Agent cursors](docs/MCP-SETUP.md#agent-cursors-nebula-look-and-nebula-watch), [pins](docs/MCP-SETUP.md#pins), [proposals](docs/MCP-SETUP.md#proposals).
+- **Work in Nebula from any MCP client.** Claude Desktop, Cursor, Claude Code or Codex can find models, build a graph in one all-or-nothing edit, run it and see the results inline, under the same spending limits as the CLI. [Building and running over MCP](docs/MCP-SETUP.md#building-and-running-over-mcp).
 - **Set what agents may spend.** In Settings > Preferences, cap an agent run, a whole chat session, or one model per run and per session. Over a limit, or for a node with no list price, the agent has to propose the run and you decide. Your own runs are never capped. [Spending limits](docs/MCP-SETUP.md#spending-limits).
 
 ## Quickstart
@@ -105,7 +106,7 @@ Prefer a desktop window? See the [Electron setup guide](desktop/README.md). Agen
 | [Provider guides](docs/api-guides/README.md) | Example pipelines and API coverage |
 | [Desktop app](desktop/README.md) | Launch, local backend, migration, and Keychain |
 | [Daedalus agent](docs/HERMES-SETUP.md) | Hermes and Daedalus setup |
-| [External-agent MCP](docs/MCP-SETUP.md) | Canvas selection, `look_at_canvas`, agent cursors, `wait_for_canvas_change`, `resolve_pin` and proposals (`propose_change`, `get_proposal`, `withdraw_proposal`) |
+| [External-agent MCP](docs/MCP-SETUP.md) | Build and run from any MCP client (`find_nodes`, `describe_node`, `edit_canvas`, `run_nodes`, `view_output` with inline previews, spending limits), canvas selection, `look_at_canvas`, agent cursors, `wait_for_canvas_change`, `resolve_pin` and proposals |
 | [Provider contracts](docs/contracts/README.md) | Maintained API contracts and verification |
 | [Contributing](CONTRIBUTING.md) | Development checks and adding nodes |
 

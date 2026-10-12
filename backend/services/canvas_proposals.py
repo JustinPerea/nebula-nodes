@@ -182,7 +182,7 @@ def _handle(raw: Any, label: str) -> str:
     return raw
 
 
-def _params(raw: Any, label: str) -> dict[str, Any]:
+def _params(raw: Any, label: str, internal_ok: frozenset[str] = frozenset()) -> dict[str, Any]:
     if raw is None:
         return {}
     if not isinstance(raw, dict):
@@ -191,13 +191,16 @@ def _params(raw: Any, label: str) -> dict[str, Any]:
         if not isinstance(key, str) or not key:
             raise ProposalError(422, f"{label} keys must be text")
         # Underscore keys are the editor's own bookkeeping (_previewUrl, ...).
-        if key.startswith("_"):
+        if key.startswith("_") and key not in internal_ok:
             raise ProposalError(422, f"{label}.{key[:40]} is internal and can't be proposed")
     return dict(raw)
 
 
-def parse_spec(body: Any) -> ProposalSpec:
-    """Shape-check and sanitise a proposal body. Graph validation happens in main."""
+def parse_spec(body: Any, *, internal_ok: frozenset[str] = frozenset()) -> ProposalSpec:
+    """Shape-check and sanitise a proposal body. Graph validation happens in main.
+
+    `internal_ok` names underscore params a caller may set anyway (direct
+    edits allow `_kreaAuth`, the Krea billing choice the CLI also sets)."""
     if not isinstance(body, dict):
         raise ProposalError(422, "the proposal must be a JSON object")
     unknown = sorted(set(body) - _ALLOWED_KEYS)
@@ -223,7 +226,7 @@ def parse_spec(body: Any) -> ProposalSpec:
         nodes.append(ProposedNode(
             ref=ref,
             definition_id=definition_id,
-            params=_params(raw.get("params"), f"nodes[{index}].params"),
+            params=_params(raw.get("params"), f"nodes[{index}].params", internal_ok),
             position=_point(position, f"nodes[{index}].position") if position is not None else None,
         ))
 
@@ -249,7 +252,7 @@ def parse_spec(body: Any) -> ProposalSpec:
         if node_id in seen_nodes:
             raise ProposalError(400, f"params lists {node_id} twice; merge the changes")
         seen_nodes.add(node_id)
-        params = _params(raw.get("params"), f"params[{index}].params")
+        params = _params(raw.get("params"), f"params[{index}].params", internal_ok)
         if not params:
             raise ProposalError(422, f"params[{index}].params must set at least one key")
         changes.append(ParamChange(node_id=node_id, params=params))

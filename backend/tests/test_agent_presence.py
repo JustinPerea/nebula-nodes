@@ -178,7 +178,7 @@ def test_snapshot_merges_the_browser_view_with_the_graph_and_redacts():
     text_node, image_node = snap["nodes"]
     assert text_node["onScreen"] is True and image_node["onScreen"] is False
     assert text_node["params"]["api_token"] == "<redacted>"
-    assert image_node["name"] == "GPT Image 2.5"
+    assert image_node["name"] == "GPT Image 2.5" and "model" not in image_node
     assert image_node["state"] == "complete"
     assert image_node["outputs"] == {"image": {"type": "Image", "available": True}}
     assert "signature" not in str(snap)
@@ -192,6 +192,10 @@ def test_snapshot_merges_the_browser_view_with_the_graph_and_redacts():
     assert "off-screen" in text
     assert f"{first}.text → {second}.prompt" in text
     assert 'Claude Code at n2 "Done"' in text
+
+    graph.set_label(second, "Hero orb")
+    renamed = presence.snapshot(graph, NodeRegistry())["nodes"][1]
+    assert renamed["name"] == "Hero orb" and renamed["model"] == "GPT Image 2.5"
 
 
 # -- HTTP ------------------------------------------------------------------
