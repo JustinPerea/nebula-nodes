@@ -315,10 +315,12 @@ How it works (`backend/services/agent_spend.py`):
 - The cost is the upper estimate at list prices over every node the run
   includes, batches counted. Nebula can't know in advance what the cache will
   skip, so the estimate never undercounts.
-- A run counts against the session when it starts, at that estimate. Sessions
-  are the in-app chat (from its agent token), `NEBULA_AGENT_SESSION` /
-  `X-Nebula-Agent-Session` for other agents, and otherwise one per agent per
-  backend launch. Totals are kept in `~/.nebula/agent-spend.json`.
+- A run counts against the session when it starts, at that estimate. Only
+  the in-app Claude and Codex chats get their own session budget, from the
+  agent token Nebula mints for each chat. Everything else (Hermes, outside
+  agents, scripts) shares one budget until the backend restarts, because a
+  name or header is the caller's to set and renaming would reset the budget.
+  Totals are kept in `~/.nebula/agent-spend.json`.
 - A refusal is a 403 whose message names the cost, the limit and the exact
   `nebula propose ... --run <node>` to send instead. Accepting a proposal is
   the person's approval, so the canvas runs it without checking a limit.

@@ -1665,22 +1665,18 @@ agent_spend_ledger = agent_spend.SpendLedger(_STATE_DIR / "agent-spend.json")
 def _spend_session(headers: Mapping[str, str] | None) -> tuple[str, str]:
     """Which running total a non-person request counts against: (key, label).
 
-    In-app Claude and Codex carry a token minted for their chat session.
-    Hermes and outside agents name a session in X-Nebula-Agent-Session (not
-    verified, like their name); without one, a named agent's session lasts
-    until Nebula restarts. Unnamed clients share one total per launch."""
+    Only a token Nebula minted for an in-app chat (Claude, Codex) names its
+    own budget. Names and headers are set by the caller, so everything else
+    (Hermes, outside agents, scripts) shares one budget per backend launch:
+    a caller can't start a fresh budget by renaming itself."""
     lower = {k.lower(): v for k, v in (headers or {}).items()}
     auth = lower.get("authorization", "")
-    if auth.startswith("Agent "):
+    if auth.lower().startswith("agent "):
         record = commons_actors.agent_registry.lookup(auth[6:].strip())
         if record is not None and record.get("session"):
             identity = identify_agent(headers)
             return f"chat:{record['session']}", identity.name if identity else "Agent"
-    identity = identify_agent(headers)
-    if identity is None:
-        return f"anonymous:{_SPEND_LAUNCH}", "Unnamed client"
-    session = re.sub(r"[^A-Za-z0-9._:-]", "-", lower.get("x-nebula-agent-session", ""))[:64]
-    return f"{identity.id}:{session or _SPEND_LAUNCH}", identity.name
+    return f"unverified:{_SPEND_LAUNCH}", "Agents without a Nebula chat token"
 
 
 def _require_run_spend_approval(run_id: str, nodes: list[GraphNode], edges: list[GraphEdge], **kwargs: Any) -> None:

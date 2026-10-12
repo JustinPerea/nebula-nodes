@@ -31,10 +31,6 @@ class NebulaClient:
         agent_name = os.environ.get("NEBULA_AGENT_NAME")
         if agent_name:
             headers.setdefault("X-Nebula-Agent", agent_name)
-        # Which session spending limits count against (agents without a token).
-        agent_session = os.environ.get("NEBULA_AGENT_SESSION")
-        if agent_session:
-            headers.setdefault("X-Nebula-Agent-Session", agent_session)
         token = os.environ.get("NEBULA_AGENT_TOKEN")
         if token:
             headers = {key: value for key, value in headers.items() if key.lower() != "authorization"}

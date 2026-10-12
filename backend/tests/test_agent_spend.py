@@ -300,7 +300,7 @@ def test_the_person_can_change_the_threshold_and_bad_values_are_refused(client):
     assert client.put("/api/settings", json={"zoomTelemetryEnabled": True}).status_code == 200
 
 
-def test_a_session_budget_holds_across_runs_and_sessions_are_separate(client):
+def test_a_session_budget_holds_across_runs_and_renaming_does_not_reset_it(client):
     import main
 
     price(0.4)
@@ -314,11 +314,14 @@ def test_a_session_budget_holds_across_runs_and_sessions_are_separate(client):
     assert third.status_code == 403 and "already used $0.80 of its $1.00 budget" in third.json()["detail"]
     status = client.get("/api/agent/spend", headers=as_claude).json()
     assert status["spent"]["totalUsd"] == 0.8 and status["limits"]["sessionUsd"] == 1
-    other = {"X-Nebula-Agent": "Claude Code", "X-Nebula-Agent-Session": "s2"}
-    assert client.post("/api/graph/run", json={"targetNodeId": node_id}, headers=other).status_code == 200
+    # Names and session headers are the caller's to set, so they can't buy a fresh budget.
+    for renamed in ({"X-Nebula-Agent": "Claude Code", "X-Nebula-Agent-Session": "s2"},
+                    {"X-Nebula-Agent": "Someone Else"}, {}):
+        refused = client.post("/api/graph/run", json={"targetNodeId": node_id}, headers=renamed)
+        assert refused.status_code == 403, renamed
     # The person's runs are never counted or held back.
     assert client.post("/api/graph/run", json={"targetNodeId": node_id}, headers=PERSON).status_code == 200
-    assert main.execute_graph.await_count == 4
+    assert main.execute_graph.await_count == 3
 
 
 def test_only_the_person_can_change_agent_limits(client):
