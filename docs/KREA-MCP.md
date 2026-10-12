@@ -1,13 +1,15 @@
 # Connect a Krea account
 
-Open **Settings → Connections → Krea MCP → Connect to Krea**. Nebula opens
-Krea sign-in in your browser. If it does not open, click **Open Krea sign-in**;
-use **Restart sign-in** if you need a fresh attempt. Sign in and choose a
-workspace on Krea's consent screen. Return
-to Nebula; the connection card updates when consent finishes. **Check connection**
-initializes MCP and lists tools. Connecting or checking never generates media.
+Open **Settings → Providers** and choose **Sign in** on the **Krea · sign-in**
+row. Nebula opens Krea sign-in in your browser. If it does not open, the row
+opens with an **Open Krea sign-in** link; use **Restart sign-in** if you need a
+fresh attempt. Sign in and choose a workspace on Krea's consent screen. Return
+to Nebula; the row moves to Connected when consent finishes. Its ⋯ menu holds
+**Check connection** (initializes MCP and lists tools), **Reconnect** and
+**Disconnect**. Connecting or checking never generates media.
 
-Choose the default connection for new Krea models, then save Settings:
+In the same menu, **New Krea nodes use** sets the default connection for new
+Krea models. It saves as soon as you pick:
 
 - **Krea account · workspace compute** uses the signed-in MCP connection and the
   workspace selected during consent.
@@ -33,7 +35,7 @@ Which billing path each one supports, and what it refuses, is listed in
 Usage takes a separate enterprise workspace service key (`KREA_USAGE_KEY`),
 because Krea refuses personal API tokens there.
 
-Once connected, the card's **Show Krea plans** lists Krea's plans with links to
+Once connected, **Show plans** in the row's ⋯ menu lists Krea's plans with links to
 krea.ai. When Krea offers the account a trial, **Start a free Pro trial** asks
 Krea for a checkout link that you open yourself; payment details go on Krea's or
 Stripe's page, never into Nebula.

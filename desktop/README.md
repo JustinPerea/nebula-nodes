@@ -98,18 +98,33 @@ the user changes a key via Settings — no sidecar restart needed.
 ### Settings panel integration
 
 In desktop mode (detected via `window.nebulaDesktop.credentials`):
-- API key fields show a "Managed by macOS Keychain" badge.
-- Saving a key calls `nebulaDesktop.credentials.set(provider, key)` →
-  IPC → `safeStorage.encryptStringAsync()` → `credentials.json` →
-  `POST /api/credentials/update`.
-- Clearing a key calls `nebulaDesktop.credentials.clear(provider)`.
+- The Providers tab notes that keys are stored in the macOS Keychain.
+- Each key saves on its own. **Save key** calls
+  `nebulaDesktop.credentials.set(provider, key)` → IPC →
+  `safeStorage.encryptStringAsync()` → `credentials.json` →
+  `POST /api/credentials/update`, then runs a read-only connection check.
+- **Remove** (two presses, in the row's ⋯ menu) calls
+  `nebulaDesktop.credentials.clear(provider)`, then
+  `POST /api/credentials/update` with an empty value.
 - The renderer never receives plaintext keys — the preload bridge exposes
   `set`, `has`, and `clear` but deliberately has no `get` method.
 - Non-secret settings (outputPath, executionMode, etc.) still use
   `PUT /api/settings` normally.
 
-In browser mode (no `nebulaDesktop` bridge): unchanged behavior. Keys are
-stored in `settings.json` and updated via `PUT /api/settings`.
+In browser mode (no `nebulaDesktop` bridge): keys are stored in
+`settings.json`. Saving one sends `PUT /api/settings` with just that key;
+removing one calls `DELETE /api/settings/api-keys/{provider}`.
+
+### Folder picker
+
+The Storage tab's **Choose…** buttons call the frozen
+`nebulaDesktop.folders.choose(defaultPath)` preload method, which invokes the
+`dialog:choose-folder` IPC handler (`folder-picker.mjs`). The handler shows the
+native folder dialog over the main window and returns `{ ok, path }`, with
+`path: null` on cancel. It accepts calls only from the application window's
+main frame, and uses `defaultPath` only when it is an absolute path without
+control characters. Picking a folder saves it through `PUT /api/settings`;
+the renderer never touches the filesystem itself.
 
 ### safeStorage unavailability
 

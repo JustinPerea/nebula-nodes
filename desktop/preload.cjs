@@ -13,6 +13,7 @@ const ipcRenderer = electron.ipcRenderer;
 //   - credentials has set / has / clear — deliberately NO get method.
 //   - migration has status / retry.
 //   - paperLinks has one guarded artwork-opening method.
+//   - folders has one method: show the OS folder chooser, return the pick.
 //   - The root and every namespace are frozen.
 function readEndpointArg(argv, prefix) {
   for (const arg of argv) {
@@ -88,6 +89,10 @@ const paperLinks = Object.freeze({
 const kreaLinks = Object.freeze({
   open: (url) => ipcRenderer.invoke('krea:open-authorization', url),
 });
+// Settings' output/export folders. Main shows the chooser; only the picked path comes back.
+const folders = Object.freeze({
+  choose: (defaultPath) => ipcRenderer.invoke('dialog:choose-folder', defaultPath),
+});
 
 const metadata = Object.freeze({
   platform: process.platform,
@@ -99,6 +104,7 @@ const metadata = Object.freeze({
   migration,
   paperLinks,
   kreaLinks,
+  folders,
   plaintextKeyWarning: Object.freeze([...plaintextKeyWarning]),
 });
 

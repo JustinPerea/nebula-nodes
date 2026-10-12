@@ -30,7 +30,7 @@ Notes on the params, grounded in the node definition and handler:
 **API-key setup:** Higgsfield runs on your own key.
 
 1. Get a key from the Higgsfield dashboard (`cloud.higgsfield.ai`).
-2. Open Nebula **Settings**, paste it into the **Higgsfield** field (`HIGGSFIELD_API_KEY`), and choose **Save Settings**. Higgsfield issues credentials as a **key + secret pair**. The API authenticates with the header `Authorization: Key {key}:{secret}`. If you were issued both, paste the combined value (`key:secret`) — the handler passes whatever you store straight through after `Key `. If you only have a single token, store it alone.
+2. Open Nebula **Settings** → **Providers**, choose **Add key** on the **Higgsfield** row (`HIGGSFIELD_API_KEY`), paste it and choose **Save key**. Saving checks the key without generating anything. Higgsfield issues credentials as a **key + secret pair**. The API authenticates with the header `Authorization: Key {key}:{secret}`. If you were issued both, paste the combined value (`key:secret`) — the handler passes whatever you store straight through after `Key `. If you only have a single token, store it alone.
 3. Nebula stores the value under `apiKeys.HIGGSFIELD_API_KEY` in the project-root `settings.json`; no restart is required.
 
 The node submits the job, then polls until the clip is ready (it can take a minute or more for longer/higher-fidelity models) and saves the finished `.mp4` as the node's `video` output.

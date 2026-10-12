@@ -187,6 +187,14 @@ body .workspace-dock-panel .panel__header {
   cursor: default;
 }
 
+/* Settings holds keys, JSON and folder paths, which need room more than the
+   other drawers do, so it gets a steady width instead of 24vw. */
+@media (min-width: 701px) {
+  body .workspace-dock-panel.panel.panel--settings {
+    --workspace-dock-width: 400px;
+  }
+}
+
 /* Grow out of the rail button that opened the drawer. WorkspaceRail publishes
    that button's center as --workspace-dock-origin-y; a drawer that moves its
    own top (the Nodes menu) sets --workspace-dock-panel-top. This needs the

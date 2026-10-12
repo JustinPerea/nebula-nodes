@@ -1,5 +1,5 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act, within } from '@testing-library/react';
 
 // ---------------------------------------------------------------------------
 // Mocks — must be set up before importing components
@@ -48,42 +48,37 @@ import { useUIStore } from '../src/store/uiStore';
 import { useGraphStore } from '../src/store/graphStore';
 import { useSettingsDraftStore } from '../src/store/settingsDraftStore';
 import { useProviderReadinessStore } from '../src/store/providerReadinessStore';
+import { resetSettingsWrites } from '../src/lib/settingsWrites';
+import { readServiceAccount } from '../src/components/panels/settings/rowHelpers';
 
 // ---------------------------------------------------------------------------
-// Test setup
+// Setup and helpers
 // ---------------------------------------------------------------------------
 
 const INITIAL_UI_STATE = { ...useUIStore.getState() };
 const INITIAL_DRAFT_STATE = { ...useSettingsDraftStore.getState() };
+const KREA_URL = 'https://www.krea.ai/auth/v1/oauth/authorize?state=test';
 
 beforeEach(() => {
   useProviderReadinessStore.getState().invalidate();
+  resetSettingsWrites();
   providerApiFetchMock.mockReset();
   useSettingsDraftStore.setState(INITIAL_DRAFT_STATE, true);
   useUIStore.setState(INITIAL_UI_STATE, true);
   useUIStore.setState((state) => ({
-    panels: {
-      ...state.panels,
-      settings: { ...state.panels.settings, visible: true },
-    },
+    panels: { ...state.panels, settings: { ...state.panels.settings, visible: true } },
   }));
-
   getSettingsMock.mockReset();
-  updateSettingsMock.mockReset();
-  updateCredentialMock.mockReset();
+  updateSettingsMock.mockReset().mockResolvedValue({ status: 'ok' });
+  updateCredentialMock.mockReset().mockResolvedValue({ status: 'updated' });
   deleteSettingsApiKeyMock.mockReset().mockResolvedValue({ status: 'removed' });
-  updateSettingsMock.mockResolvedValue({ status: 'ok' });
-  updateCredentialMock.mockResolvedValue({ status: 'updated' });
   getKreaConnectionMock.mockReset().mockResolvedValue({ status: 'disconnected' });
-  connectKreaMock.mockReset().mockResolvedValue({ status: 'connecting',
-    authorizationUrl: 'https://www.krea.ai/auth/v1/oauth/authorize?state=test' });
+  connectKreaMock.mockReset().mockResolvedValue({ status: 'connecting', authorizationUrl: KREA_URL });
   checkKreaConnectionMock.mockReset().mockResolvedValue({ status: 'connected', tools: ['list_models'] });
   disconnectKreaMock.mockReset().mockResolvedValue({ status: 'disconnected' });
   getKreaPlansMock.mockReset();
   startKreaTrialMock.mockReset();
   vi.spyOn(window, 'open').mockReturnValue(null);
-
-  // Clean window.nebulaDesktop between tests
   delete (window as Record<string, unknown>).nebulaDesktop;
 });
 
@@ -94,242 +89,155 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('Settings provider discovery handoff', () => {
-  it('retries an initial settings read if a newer credential cache refresh overtakes it', async () => {
-    let finishLoad!: (value: Record<string, unknown>) => void;
-    getSettingsMock.mockReturnValueOnce(new Promise<Record<string, unknown>>((resolve) => { finishLoad = resolve; }))
-      .mockResolvedValueOnce({ apiKeys: { FAL_KEY: '***current' }, kreaConnectionMode: 'mcp' });
-    render(<Settings />);
-    act(() => useUIStore.getState().setSettingsCache({ FAL_KEY: '***current' }, 'mcp'));
-    await act(async () => finishLoad({ apiKeys: { OPENAI_API_KEY: '***outdated' } }));
-    await expandApiKeys();
-    expect(screen.getByLabelText('OpenAI API key')).toHaveValue('');
-    expect(screen.getByLabelText('fal.ai API key')).toHaveValue('***current');
-    expect(useUIStore.getState().settingsCache.apiKeys).toEqual({ FAL_KEY: '***current' });
-    expect(useUIStore.getState().settingsCache.kreaConnectionMode).toBe('mcp');
-    expect(getSettingsMock).toHaveBeenCalledTimes(2);
-    expect(providerApiFetchMock).not.toHaveBeenCalled();
-  });
-
-  it('opens and focuses the requested API-key field without changing graph, draft or checking providers', async () => {
-    getSettingsMock.mockResolvedValue({ apiKeys: { OPENAI_API_KEY: '***saved' } });
-    const graph = useGraphStore.getState();
-    act(() => useUIStore.getState().openProviderSetup({ kind: 'api-key', key: 'OPENAI_API_KEY' }));
-    render(<Settings />);
-    const key = await screen.findByRole('textbox', { name: 'Output Path' });
-    expect(key).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByLabelText('OpenAI API key')).toHaveFocus());
-    expect(screen.getByRole('button', { name: /API Keys/ })).toHaveAttribute('aria-expanded', 'true');
-    expect(screen.getByLabelText('OpenAI API key')).toHaveValue('***saved');
-    expect(providerApiFetchMock).not.toHaveBeenCalled();
-    expect(updateSettingsMock).not.toHaveBeenCalled();
-    expect(useGraphStore.getState().nodes).toBe(graph.nodes);
-    expect(useGraphStore.getState().edges).toBe(graph.edges);
-    expect(useGraphStore.getState().runHistory).toBe(graph.runHistory);
-  });
-
-  it('retains unsaved provider edits when setup is opened for another provider', async () => {
-    getSettingsMock.mockResolvedValue({ apiKeys: { OPENAI_API_KEY: '***saved' } });
-    render(<Settings />);
-    await expandApiKeys();
-    fireEvent.change(screen.getByLabelText('OpenAI API key'), { target: { value: 'fixture-unsaved' } });
-    act(() => useUIStore.getState().openProviderSetup({ kind: 'api-key', key: 'FAL_KEY' }));
-    await waitFor(() => expect(screen.getByLabelText('fal.ai API key')).toHaveFocus());
-    expect(screen.getByLabelText('OpenAI API key')).toHaveValue('fixture-unsaved');
-    expect(getSettingsMock).toHaveBeenCalledOnce();
-    expect(screen.getByRole('button', { name: 'Check connections' })).toBeDisabled();
-    expect(providerApiFetchMock).not.toHaveBeenCalled();
-    expect(updateSettingsMock).not.toHaveBeenCalled();
-  });
-
-  it.each(['krea-mcp', 'nous'])('focuses %s setup without starting sign-in, checking or generating', async (kind) => {
-    getSettingsMock.mockResolvedValue({ apiKeys: {} });
-    act(() => useUIStore.getState().openProviderSetup(kind === 'krea-mcp' ? { kind } : { kind: 'external', provider: 'nous' }));
-    render(<Settings />);
-    if (kind === 'krea-mcp') await waitFor(() => expect(screen.getByRole('button', { name: 'Connect to Krea' })).toHaveFocus());
-    else {
-      await waitFor(() => expect(screen.getByRole('region', { name: 'Nous Portal setup' })).toHaveFocus());
-      expect(screen.getByText('hermes-daedalus model')).toBeInTheDocument();
-    }
-    expect(connectKreaMock).not.toHaveBeenCalled();
-    expect(checkKreaConnectionMock).not.toHaveBeenCalled();
-    expect(providerApiFetchMock).not.toHaveBeenCalled();
-    expect(updateSettingsMock).not.toHaveBeenCalled();
-  });
-
-  it('checks saved credentials only on explicit action, and shows credential proof without model claims', async () => {
-    getSettingsMock.mockResolvedValue({ apiKeys: { OPENAI_API_KEY: '***saved' } });
-    providerApiFetchMock.mockResolvedValue(new Response(JSON.stringify({ providers: {
-      OpenAI: { configured: true, status: 'valid', last_checked: new Date().toISOString() },
-    } })));
-    render(<Settings />);
-    await expandApiKeys();
-    expect(providerApiFetchMock).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('button', { name: 'Check connections' }));
-    await screen.findByText('Verified credential');
-    expect(screen.getByText('1 verified credential. Checks expire after five minutes.')).toBeInTheDocument();
-    expect(providerApiFetchMock.mock.calls).toEqual([['/api/health/providers?refresh=true']]);
-    expect(updateSettingsMock).not.toHaveBeenCalled();
-  });
-
-  it.each(['stale', 'future'])('excludes %s check timestamps from its verified credential count', async (timestamp) => {
-    getSettingsMock.mockResolvedValue({ apiKeys: { OPENAI_API_KEY: '***saved' } });
-    render(<Settings />);
-    await expandApiKeys();
-    act(() => useProviderReadinessStore.setState({ providers: { OpenAI: {
-      configured: true, status: 'valid', last_checked: new Date(Date.now() + (timestamp === 'future' ? 60_000 : -300_000)).toISOString(),
-    } }, checkedAt: Date.now() }));
-    expect(screen.getByText('0 verified credentials. Checks expire after five minutes.')).toBeInTheDocument();
-    expect(screen.queryByText('Verified credential')).not.toBeInTheDocument();
-    expect(providerApiFetchMock).not.toHaveBeenCalled();
-  });
-
-  it.each(['save', 'remove'])('invalidates a pending check at %s start before the mutation finishes', async (operation) => {
-    let finishCheck!: (value: Response) => void;
-    providerApiFetchMock.mockReturnValue(new Promise<Response>((resolve) => { finishCheck = resolve; }));
-    getSettingsMock.mockResolvedValue({ apiKeys: { OPENAI_API_KEY: '***saved' } });
-    updateSettingsMock.mockReturnValue(new Promise(() => {}));
-    deleteSettingsApiKeyMock.mockReturnValue(new Promise(() => {}));
-    render(<Settings />);
-    await expandApiKeys();
-    fireEvent.click(screen.getByRole('button', { name: 'Check connections' }));
-    if (operation === 'save') {
-      fireEvent.change(screen.getByLabelText('OpenAI API key'), { target: { value: 'fixture-new-key' } });
-      clickSave();
-    } else fireEvent.click(screen.getByRole('button', { name: 'Remove OpenAI API key' }));
-    await act(async () => finishCheck(new Response(JSON.stringify({ providers: {
-      OpenAI: { configured: true, status: 'valid', last_checked: new Date().toISOString() },
-    } }))));
-    expect(useProviderReadinessStore.getState()).toMatchObject({ providers: {}, checkedAt: null, loading: false });
-    expect(screen.queryByText('Verified credential')).not.toBeInTheDocument();
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-/**
- * Set up the window.nebulaDesktop bridge for desktop mode tests.
- */
 function setupDesktopBridge(overrides?: {
   set?: (provider: string, key: string) => Promise<unknown>;
   clear?: (provider: string) => Promise<unknown>;
-  has?: (provider: string) => Promise<unknown>;
   plaintextKeyWarning?: string[];
   kreaOpen?: (url: string) => Promise<unknown>;
+  choose?: (defaultPath?: string) => Promise<unknown>;
 }) {
   const credentials = Object.freeze({
     set: overrides?.set ?? vi.fn().mockResolvedValue({ ok: true }),
-    has: overrides?.has ?? vi.fn().mockResolvedValue({ ok: true, has: false }),
+    has: vi.fn().mockResolvedValue({ ok: true, has: false }),
     clear: overrides?.clear ?? vi.fn().mockResolvedValue({ ok: true }),
   });
-  const migration = Object.freeze({
-    status: vi.fn().mockResolvedValue({ ok: true, status: 'complete' }),
-    retry: vi.fn().mockResolvedValue({ ok: true, status: 'complete' }),
-  });
-
+  const folders = Object.freeze({ choose: overrides?.choose ?? vi.fn().mockResolvedValue({ ok: true, path: null }) });
   (window as Record<string, unknown>).nebulaDesktop = Object.freeze({
     platform: 'darwin',
     shell: 'electron',
     apiBaseUrl: 'http://127.0.0.1:9999',
     wsBaseUrl: 'ws://127.0.0.1:9999',
     credentials,
-    migration,
+    folders,
+    migration: Object.freeze({ status: vi.fn(), retry: vi.fn() }),
     ...(overrides?.kreaOpen ? { kreaLinks: Object.freeze({ open: overrides.kreaOpen }) } : {}),
     plaintextKeyWarning: Object.freeze(overrides?.plaintextKeyWarning ?? []),
   });
-
-  return { credentials, migration };
+  return { credentials, folders };
 }
 
-/**
- * Wait for the settings panel to finish loading and expand the API Keys section.
- */
-async function expandApiKeys() {
-  await waitFor(() => {
-    expect(screen.getByText('API Keys')).toBeInTheDocument();
-  });
-  const toggle = screen.getByText('API Keys').closest('button');
-  expect(toggle).toBeTruthy();
-  fireEvent.click(toggle!);
-  await waitFor(() => {
-    expect(screen.getByText('OpenAI')).toBeInTheDocument();
-  });
+/** Render with these saved settings and wait for the Providers tab. */
+async function renderSettings(settings: Record<string, unknown> = { apiKeys: {} }) {
+  getSettingsMock.mockResolvedValue(settings);
+  const rendered = render(<Settings />);
+  await screen.findByRole('searchbox', { name: 'Search providers and models' });
+  return rendered;
 }
 
-/**
- * Click the Save Settings button.
- */
-function clickSave() {
-  const saveButton = screen.getByText('Save Settings');
-  fireEvent.click(saveButton);
+function healthResponse(providers: Record<string, string>) {
+  const now = new Date().toISOString();
+  return new Response(JSON.stringify({ providers: Object.fromEntries(Object.entries(providers)
+    .map(([name, status]) => [name, { configured: status !== 'not_configured', status, last_checked: now }])) }));
+}
+
+function list(name: RegExp) {
+  return screen.getByRole('region', { name });
+}
+
+function rowNames(region: HTMLElement) {
+  return [...region.querySelectorAll('.settings-row__name')].map((node) => node.textContent);
+}
+
+function row(label: string) {
+  const name = [...document.querySelectorAll('.settings-row__name')].find((node) => node.textContent === label);
+  if (!name) throw new Error(`No row ${label}`);
+  return name.closest('.settings-row') as HTMLElement;
+}
+
+function openTab(name: 'Providers' | 'Preferences' | 'Storage') {
+  fireEvent.click(screen.getByRole('tab', { name: new RegExp(`^${name}`) }));
+}
+
+async function addKey(label: string, value: string) {
+  fireEvent.click(screen.getByRole('button', { name: `Add ${label} key` }));
+  const input = await screen.findByLabelText(`${label} API key`);
+  fireEvent.change(input, { target: { value } });
+  fireEvent.submit(input.closest('form')!);
+}
+
+function removeKey(label: string) {
+  fireEvent.click(screen.getByRole('button', { name: `Manage ${label}` }));
+  fireEvent.click(screen.getByRole('button', { name: `Remove ${label} API key` }));
+  fireEvent.click(screen.getByRole('button', { name: `Confirm removing the ${label} API key` }));
 }
 
 // ---------------------------------------------------------------------------
-// Tests: Browser mode (unchanged behavior)
+// Shell: loading, tabs, closing
 // ---------------------------------------------------------------------------
 
-describe('Settings — browser mode (no desktop bridge)', () => {
-  it('keeps interface and connection settings without alternate theme choices', async () => {
-    getSettingsMock.mockResolvedValue({ apiKeys: {}, routing: {}, outputPath: '' });
-    render(<Settings />);
-    await waitFor(() => expect(screen.getByText('Interface')).toBeInTheDocument());
-
-    expect(screen.getByRole('dialog', { name: 'Settings' })).toBeInTheDocument();
-    expect(screen.getByText('Connections')).toBeInTheDocument();
-    expect(screen.queryByText('Skin')).not.toBeInTheDocument();
-    expect(screen.queryByRole('radio')).not.toBeInTheDocument();
-    expect(screen.getByText('Only render on-screen nodes. Recommended for large graphs.')).toBeInTheDocument();
-    expect(screen.getByRole('checkbox', { name: /Canvas minimap/ })).not.toBeChecked();
-    expect(screen.getByRole('button', { name: 'Close settings panel' })).toHaveFocus();
-  });
-
-  it('applies the minimap preference immediately without saving or changing performance mode', async () => {
-    getSettingsMock.mockResolvedValue({ apiKeys: {}, routing: {}, outputPath: '' });
-    useUIStore.setState({ canvasPerfMode: false, canvasMinimapEnabled: false });
-    render(<Settings />);
-    const toggle = await screen.findByRole('checkbox', { name: /Canvas minimap/ });
-    fireEvent.click(toggle);
-    expect(toggle).toBeChecked();
-    expect(useUIStore.getState().canvasMinimapEnabled).toBe(true);
-    expect(localStorage.getItem('nebula:canvas:minimapEnabled')).toBe('1');
-    expect(useUIStore.getState().canvasPerfMode).toBe(false);
-    fireEvent.click(toggle);
-    expect(toggle).not.toBeChecked();
-    expect(useUIStore.getState().canvasMinimapEnabled).toBe(false);
-    expect(localStorage.getItem('nebula:canvas:minimapEnabled')).toBe('0');
-    expect(updateSettingsMock).not.toHaveBeenCalled();
+describe('Settings shell', () => {
+  it('opens on Providers with the tab focused, three tabs and no panel-wide Save', async () => {
+    await renderSettings();
+    expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['Providers', 'Preferences', 'Storage']);
+    await waitFor(() => expect(screen.getByRole('tab', { name: /Providers/ })).toHaveFocus());
+    expect(screen.getByRole('tabpanel')).toHaveAttribute('aria-labelledby', 'settings-tab-providers');
+    expect(screen.queryByRole('button', { name: /Save Settings/ })).not.toBeInTheDocument();
     expect(providerApiFetchMock).not.toHaveBeenCalled();
   });
 
-  it('applies the run-cost threshold immediately and can turn the question off', async () => {
-    getSettingsMock.mockResolvedValue({ apiKeys: {}, routing: {}, outputPath: '' });
-    useUIStore.setState({ runCostConfirmUsd: 1 });
-    render(<Settings />);
-    const select = await screen.findByRole('combobox', { name: 'Ask before costly runs' });
-    expect(select).toHaveValue('1');
-    fireEvent.change(select, { target: { value: '5' } });
-    expect(useUIStore.getState().runCostConfirmUsd).toBe(5);
-    expect(localStorage.getItem('nebula:run:costConfirmUsd')).toBe('5');
-    fireEvent.change(select, { target: { value: 'off' } });
-    expect(useUIStore.getState().runCostConfirmUsd).toBeNull();
-    expect(localStorage.getItem('nebula:run:costConfirmUsd')).toBe('off');
-    expect(updateSettingsMock).not.toHaveBeenCalled();
-    useUIStore.getState().setRunCostConfirmUsd(1);
+  it('moves between tabs with the arrow, Home and End keys', async () => {
+    await renderSettings();
+    const providers = screen.getByRole('tab', { name: /Providers/ });
+    fireEvent.keyDown(providers, { key: 'ArrowRight' });
+    expect(screen.getByRole('tab', { name: 'Preferences' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tab', { name: 'Preferences' })).toHaveFocus();
+    fireEvent.keyDown(screen.getByRole('tab', { name: 'Preferences' }), { key: 'End' });
+    expect(screen.getByRole('tab', { name: 'Storage' })).toHaveAttribute('aria-selected', 'true');
+    fireEvent.keyDown(screen.getByRole('tab', { name: 'Storage' }), { key: 'ArrowRight' });
+    expect(screen.getByRole('tab', { name: /Providers/ })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tab', { name: /Providers/ })).toHaveAttribute('tabindex', '0');
+    expect(screen.getByRole('tab', { name: 'Storage' })).toHaveAttribute('tabindex', '-1');
   });
 
-  it('closes from focused settings controls with Escape and restores the opener', async () => {
-    getSettingsMock.mockResolvedValue({ apiKeys: {}, routing: {}, outputPath: '' });
+  it('counts connected providers on the Providers tab', async () => {
+    getKreaConnectionMock.mockResolvedValue({ status: 'connected' });
+    await renderSettings({ apiKeys: { OPENAI_API_KEY: '***aaaa', FAL_KEY: '***bbbb', GOOGLE_API_KEY: '' } });
+    await waitFor(() => expect(screen.getByRole('tab', { name: /Providers/ })).toHaveTextContent('Providers3'));
+  });
+
+  it('keeps a failed first load actionable, and Try again loads the panel', async () => {
+    getSettingsMock.mockRejectedValueOnce(new Error('offline')).mockResolvedValue({ apiKeys: {} });
+    render(<Settings />);
+    expect(await screen.findByRole('alert')).toHaveTextContent("Settings couldn't load");
+    expect(screen.queryByRole('searchbox')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    await screen.findByRole('searchbox', { name: 'Search providers and models' });
+    expect(updateSettingsMock).not.toHaveBeenCalled();
+  });
+
+  it('shows nothing editable until the first load finishes', async () => {
+    getSettingsMock.mockReturnValue(new Promise(() => {}));
+    render(<Settings />);
+    expect(screen.getByText('Loading settings…')).toHaveAttribute('role', 'status');
+    expect(screen.queryByRole('button', { name: /Add .* key/ })).not.toBeInTheDocument();
+  });
+
+  it('retries an initial read if a newer credential cache refresh overtakes it', async () => {
+    let finishLoad!: (value: Record<string, unknown>) => void;
+    getSettingsMock.mockReturnValueOnce(new Promise<Record<string, unknown>>((resolve) => { finishLoad = resolve; }))
+      .mockResolvedValueOnce({ apiKeys: { FAL_KEY: '***current' }, kreaConnectionMode: 'mcp' });
+    render(<Settings />);
+    act(() => useUIStore.getState().setSettingsCache({ FAL_KEY: '***current' }, 'mcp'));
+    await act(async () => finishLoad({ apiKeys: { OPENAI_API_KEY: '***outdated' } }));
+    await screen.findByRole('searchbox');
+    expect(rowNames(list(/^Connected/))).toContain('fal.ai');
+    expect(rowNames(list(/^Connected/))).not.toContain('OpenAI');
+    expect(useUIStore.getState().settingsCache.apiKeys).toEqual({ FAL_KEY: '***current' });
+    expect(getSettingsMock).toHaveBeenCalledTimes(2);
+    expect(providerApiFetchMock).not.toHaveBeenCalled();
+  });
+
+  it('closes on Escape from a tab and restores the opener', async () => {
+    getSettingsMock.mockResolvedValue({ apiKeys: {} });
     const opener = document.createElement('button');
     document.body.append(opener);
     opener.focus();
     useUIStore.getState().setLeftDock('settings');
     const rendered = render(<Settings />);
     try {
-      const close = await screen.findByRole('button', { name: 'Close settings panel' });
-      await waitFor(() => expect(close).toHaveFocus());
-      fireEvent.keyDown(close, { key: 'Escape' });
+      const tab = await screen.findByRole('tab', { name: /Providers/ });
+      await waitFor(() => expect(tab).toHaveFocus());
+      fireEvent.keyDown(tab, { key: 'Escape' });
       expect(useUIStore.getState().panels.settings.visible).toBe(false);
       await waitFor(() => expect(opener).toHaveFocus());
     } finally {
@@ -337,170 +245,393 @@ describe('Settings — browser mode (no desktop bridge)', () => {
       opener.remove();
     }
   });
+});
 
-  it('does not show the Keychain badge', async () => {
-    getSettingsMock.mockResolvedValue({
-      apiKeys: { OPENAI_API_KEY: 'test-fake-key-123' },
-      routing: {},
-      outputPath: '',
-    });
+// ---------------------------------------------------------------------------
+// Providers
+// ---------------------------------------------------------------------------
 
-    render(<Settings />);
-    await waitFor(() => {
-      expect(screen.getByText('API Keys')).toBeInTheDocument();
-    });
-
-    expect(screen.queryByText('Managed by macOS Keychain')).not.toBeInTheDocument();
+describe('Settings — providers list and search', () => {
+  it('lists connected providers first and sorts the rest by how many nodes they unlock', async () => {
+    await renderSettings({ apiKeys: { OPENAI_API_KEY: '***aaaa' } });
+    expect(rowNames(list(/^Connected/))).toEqual(['OpenAI']);
+    const toAdd = rowNames(list(/^Add a provider/));
+    expect(toAdd).not.toContain('OpenAI');
+    expect(toAdd.indexOf('Krea · API token')).toBeLessThan(toAdd.indexOf('fal.ai'));
+    expect(toAdd.indexOf('fal.ai')).toBeLessThan(toAdd.indexOf('Ideogram'));
+    expect(toAdd.indexOf('Ideogram')).toBeLessThan(toAdd.indexOf('Anthropic'));
+    expect(within(row('fal.ai')).getByText(/^\d+ nodes: Kling V3, FLUX 2 Pro/)).toBeInTheDocument();
+    expect(within(row('Ideogram')).getByText(/Ideogram 4/)).toBeInTheDocument();
   });
 
-  it('does not show a plaintext warning banner', async () => {
-    getSettingsMock.mockResolvedValue({
-      apiKeys: { OPENAI_API_KEY: 'test-fake-key-123' },
-      routing: {},
-      outputPath: '',
-    });
-
-    render(<Settings />);
-    await waitFor(() => {
-      expect(screen.getByText('API Keys')).toBeInTheDocument();
-    });
-
-    expect(screen.queryByText(/Plaintext credentials detected/i)).not.toBeInTheDocument();
+  it('says "Connect a provider" when nothing is connected yet', async () => {
+    await renderSettings();
+    expect(screen.queryByRole('region', { name: /^Connected/ })).not.toBeInTheDocument();
+    expect(list(/^Connect a provider/)).toBeInTheDocument();
   });
 
-  it('saves all settings including apiKeys via PUT /api/settings', async () => {
-    getSettingsMock.mockResolvedValue({
-      apiKeys: { OPENAI_API_KEY: 'test-fake-key-123' },
-      routing: {},
-      outputPath: '/custom',
-    });
-
-    render(<Settings />);
-    await waitFor(() => {
-      expect(screen.getByText('Save Settings')).toBeInTheDocument();
-    });
-
-    clickSave();
-
-    await waitFor(() => {
-      expect(updateSettingsMock).toHaveBeenCalledTimes(1);
-    });
-
-    const callArgs = updateSettingsMock.mock.calls[0][0];
-    expect(callArgs.apiKeys).toBeDefined();
-    expect(callArgs.outputPath).toBe('/custom');
+  it('finds every provider that runs a model by name, and Escape clears the search, not the panel', async () => {
+    await renderSettings({ apiKeys: { GOOGLE_API_KEY: '***gggg' } });
+    const search = screen.getByRole('searchbox', { name: 'Search providers and models' });
+    fireEvent.change(search, { target: { value: 'Veo' } });
+    const names = [...rowNames(list(/^Connected/)), ...rowNames(list(/^Add a provider/))];
+    expect(names).toEqual(expect.arrayContaining(['Google · Gemini API', 'Google · Vertex AI', 'fal.ai']));
+    expect(names).not.toContain('Anthropic');
+    fireEvent.keyDown(search, { key: 'Escape' });
+    expect(search).toHaveValue('');
+    expect(useUIStore.getState().panels.settings.visible).toBe(true);
+    fireEvent.change(search, { target: { value: 'zzzz-no-such-model' } });
+    expect(screen.getByText('No provider runs “zzzz-no-such-model”.')).toBeInTheDocument();
   });
 });
 
-describe('Settings — Krea MCP connection', () => {
-  beforeEach(() => {
-    getSettingsMock.mockResolvedValue({ apiKeys: {}, routing: {}, outputPath: '' });
+describe('Settings — adding, replacing and removing keys (browser)', () => {
+  it('saves one key on its own, moves it to Connected, focuses it and checks it once', async () => {
+    providerApiFetchMock.mockResolvedValue(healthResponse({ Ideogram: 'invalid' }));
+    await renderSettings({ apiKeys: { OPENAI_API_KEY: '***aaaa' } });
+    expect(providerApiFetchMock).not.toHaveBeenCalled();
+    await addKey('Ideogram', '  fixture-ideogram  ');
+    await waitFor(() => expect(rowNames(list(/^Connected/))).toContain('Ideogram'));
+    expect(updateSettingsMock.mock.calls).toEqual([[{ apiKeys: { IDEOGRAM_API_KEY: 'fixture-ideogram' } }]]);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Manage Ideogram' })).toHaveFocus());
+    await waitFor(() => expect(within(row('Ideogram')).getByText('Key rejected')).toBeInTheDocument());
+    expect(providerApiFetchMock.mock.calls).toEqual([['/api/health/providers?refresh=true']]);
+    expect(screen.getByText('Ideogram key saved. Checking it now.')).toBeInTheDocument();
+    expect(useUIStore.getState().settingsCache.apiKeys).toEqual({ OPENAI_API_KEY: '***aaaa', IDEOGRAM_API_KEY: '***gram' });
   });
 
+  it('keeps the check when the app reads back the same keys after a save', async () => {
+    providerApiFetchMock.mockResolvedValue(healthResponse({ Ideogram: 'valid' }));
+    await renderSettings({ apiKeys: {} });
+    await addKey('Ideogram', 'fixture-ideogram');
+    await waitFor(() => expect(within(row('Ideogram')).getByText('Connected')).toBeInTheDocument());
+    act(() => useUIStore.getState().setSettingsCache({ ...useUIStore.getState().settingsCache.apiKeys }));
+    expect(within(row('Ideogram')).getByText('Connected')).toBeInTheDocument();
+    act(() => useUIStore.getState().setSettingsCache({ IDEOGRAM_API_KEY: '***diff' }));
+    expect(within(row('Ideogram')).queryByText('Connected')).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ['valid', 'Connected'], ['invalid', 'Key rejected'], ['unauthorized', 'No API access'],
+    ['insufficient_credits', 'Out of credits'], ['error', "Couldn't check"], ['configured_unverified', 'Saved'],
+  ])('shows a %s check as "%s" only after Check connections', async (status, text) => {
+    providerApiFetchMock.mockResolvedValue(healthResponse({ OpenAI: status }));
+    await renderSettings({ apiKeys: { OPENAI_API_KEY: '***aaaa' } });
+    expect(within(row('OpenAI')).getByText('Saved')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Check connections' }));
+    expect(await within(row('OpenAI')).findByText(text)).toBeInTheDocument();
+    expect(providerApiFetchMock).toHaveBeenCalledOnce();
+    expect(updateSettingsMock).not.toHaveBeenCalled();
+  });
+
+  it('keeps the typed key and shows an error when saving fails, without checking', async () => {
+    updateSettingsMock.mockRejectedValueOnce(new Error('offline'));
+    await renderSettings();
+    await addKey('Anthropic', 'fixture-anthropic');
+    expect(await screen.findByRole('alert')).toHaveTextContent("The key couldn't be saved. Your text is still here; try again.");
+    expect(screen.getByLabelText('Anthropic API key')).toHaveValue('fixture-anthropic');
+    expect(rowNames(list(/^Connect a provider/))).toContain('Anthropic');
+    expect(providerApiFetchMock).not.toHaveBeenCalled();
+  });
+
+  it('cancels key entry with Escape, discarding the text, without closing Settings', async () => {
+    await renderSettings();
+    fireEvent.click(screen.getByRole('button', { name: 'Add Anthropic key' }));
+    const input = await screen.findByLabelText('Anthropic API key');
+    await waitFor(() => expect(input).toHaveFocus());
+    fireEvent.change(input, { target: { value: 'half-typed' } });
+    fireEvent.keyDown(input, { key: 'Escape' });
+    expect(screen.queryByLabelText('Anthropic API key')).not.toBeInTheDocument();
+    expect(useUIStore.getState().panels.settings.visible).toBe(true);
+    expect(useSettingsDraftStore.getState().keyDrafts).toEqual({});
+    expect(screen.getByRole('button', { name: 'Add Anthropic key' })).toHaveFocus();
+  });
+
+  it('keeps unsaved key text when Settings closes and reopens, but never in browser storage', async () => {
+    const rendered = await renderSettings();
+    fireEvent.click(screen.getByRole('button', { name: 'Add Anthropic key' }));
+    fireEvent.change(await screen.findByLabelText('Anthropic API key'), { target: { value: 'fixture-secret' } });
+    rendered.unmount();
+    await renderSettings();
+    expect(screen.getByLabelText('Anthropic API key')).toHaveValue('fixture-secret');
+    expect(JSON.stringify({ ...localStorage })).not.toContain('fixture-secret');
+    expect(JSON.stringify({ ...sessionStorage })).not.toContain('fixture-secret');
+  });
+
+  it('undoes a newly added key from the notice', async () => {
+    providerApiFetchMock.mockResolvedValue(healthResponse({}));
+    await renderSettings();
+    await addKey('Anthropic', 'fixture-anthropic');
+    fireEvent.click(await screen.findByRole('button', { name: 'Undo' }));
+    await waitFor(() => expect(deleteSettingsApiKeyMock).toHaveBeenCalledWith('ANTHROPIC_API_KEY'));
+    await waitFor(() => expect(rowNames(list(/^Connect a provider/))).toContain('Anthropic'));
+    expect(screen.getByText('Anthropic key removed.')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Add Anthropic key' })).toHaveFocus());
+  });
+
+  it('replaces a saved key without offering Undo (the old key is gone)', async () => {
+    providerApiFetchMock.mockResolvedValue(healthResponse({ OpenAI: 'valid' }));
+    await renderSettings({ apiKeys: { OPENAI_API_KEY: '***aaaa' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Manage OpenAI' }));
+    expect(screen.getByRole('button', { name: 'Replace key' })).toHaveFocus();
+    expect(screen.getByRole('link', { name: 'Key page ↗' })).toHaveAttribute('href', 'https://platform.openai.com/api-keys');
+    fireEvent.click(screen.getByRole('button', { name: 'Replace key' }));
+    const input = await screen.findByLabelText('OpenAI API key');
+    fireEvent.change(input, { target: { value: 'fixture-new' } });
+    fireEvent.submit(input.closest('form')!);
+    await screen.findByText('OpenAI key saved. Checking it now.');
+    expect(screen.queryByRole('button', { name: 'Undo' })).not.toBeInTheDocument();
+    expect(updateSettingsMock.mock.calls).toEqual([[{ apiKeys: { OPENAI_API_KEY: 'fixture-new' } }]]);
+  });
+
+  it('asks before removing: Keep and Escape back out without deleting or closing', async () => {
+    await renderSettings({ apiKeys: { OPENAI_API_KEY: '***aaaa' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Manage OpenAI' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Remove OpenAI API key' }));
+    expect(screen.getByRole('button', { name: 'Keep' })).toHaveFocus();
+    fireEvent.click(screen.getByRole('button', { name: 'Keep' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Remove OpenAI API key' }));
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Keep' }), { key: 'Escape' });
+    expect(screen.queryByRole('button', { name: 'Keep' })).not.toBeInTheDocument();
+    // The row is still open: the first Escape backs out of the confirmation only.
+    expect(screen.getByRole('button', { name: 'Replace key' })).toBeInTheDocument();
+    expect(useUIStore.getState().panels.settings.visible).toBe(true);
+    expect(deleteSettingsApiKeyMock).not.toHaveBeenCalled();
+  });
+
+  it('removes a key on the second press and moves the row back to the add list', async () => {
+    await renderSettings({ apiKeys: { OPENAI_API_KEY: '***aaaa', FAL_KEY: '***ffff' } });
+    removeKey('OpenAI');
+    await waitFor(() => expect(rowNames(list(/^Add a provider/))).toContain('OpenAI'));
+    expect(deleteSettingsApiKeyMock.mock.calls).toEqual([['OPENAI_API_KEY']]);
+    expect(useUIStore.getState().settingsCache.apiKeys).toEqual({ FAL_KEY: '***ffff' });
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Add OpenAI key' })).toHaveFocus());
+    expect(screen.getByText('OpenAI key removed.')).toBeInTheDocument();
+  });
+
+  it('keeps the row and shows an error when removal fails', async () => {
+    deleteSettingsApiKeyMock.mockRejectedValueOnce(new Error('offline'));
+    await renderSettings({ apiKeys: { OPENAI_API_KEY: '***aaaa' } });
+    removeKey('OpenAI');
+    expect(await screen.findByRole('alert')).toHaveTextContent("The key couldn't be removed. Try again.");
+    expect(rowNames(list(/^Connected/))).toContain('OpenAI');
+  });
+
+  it('invalidates a running check when a key changes', async () => {
+    let finishCheck!: (value: Response) => void;
+    providerApiFetchMock.mockReturnValueOnce(new Promise<Response>((resolve) => { finishCheck = resolve; }));
+    deleteSettingsApiKeyMock.mockReturnValue(new Promise(() => {}));
+    await renderSettings({ apiKeys: { OPENAI_API_KEY: '***aaaa', FAL_KEY: '***ffff' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Check connections' }));
+    updateSettingsMock.mockResolvedValue({ status: 'ok' });
+    await addKey('Anthropic', 'fixture-anthropic');
+    providerApiFetchMock.mockReturnValue(new Promise(() => {}));
+    await act(async () => finishCheck(healthResponse({ OpenAI: 'valid' })));
+    expect(within(row('OpenAI')).queryByText('Connected')).not.toBeInTheDocument();
+  });
+});
+
+describe('Settings — Vertex service-account key', () => {
+  const key = JSON.stringify({ type: 'service_account', project_id: 'demo-project', client_email: 'veo@demo-project.iam.gserviceaccount.com',
+    private_key: '-----BEGIN PRIVATE KEY-----\nfixture\n-----END PRIVATE KEY-----\n' });
+
+  it('reads the key file and names the account and project, never the private key', () => {
+    expect(readServiceAccount(key)).toEqual({ ok: true, email: 'veo@demo-project.iam.gserviceaccount.com', project: 'demo-project' });
+    expect(readServiceAccount('{')).toMatchObject({ ok: false });
+    expect(readServiceAccount('{"type":"authorized_user"}')).toMatchObject({ ok: false });
+    expect(readServiceAccount(JSON.stringify({ ...JSON.parse(key), private_key: undefined }))).toMatchObject({ ok: false });
+  });
+
+  it('takes a chosen key file, shows what it found and saves the JSON', async () => {
+    await renderSettings();
+    fireEvent.click(screen.getByRole('button', { name: 'Add Google · Vertex AI key' }));
+    const save = await screen.findByRole('button', { name: 'Save key' });
+    expect(save).toBeDisabled();
+    const file = new File([key], 'demo-key.json', { type: 'application/json' });
+    const input = document.querySelector<HTMLInputElement>('.settings-sa input[type="file"]')!;
+    await act(async () => { fireEvent.change(input, { target: { files: [file] } }); });
+    expect(await screen.findByText('✓ demo-key.json')).toBeInTheDocument();
+    expect(screen.getByText('veo@demo-project.iam.gserviceaccount.com')).toBeInTheDocument();
+    expect(screen.getByText(/Project demo-project/)).toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent('BEGIN PRIVATE KEY');
+    fireEvent.click(save);
+    await waitFor(() => expect(updateSettingsMock).toHaveBeenCalledWith({ apiKeys: { GOOGLE_VERTEX_CREDENTIALS: key } }));
+  });
+
+  it('accepts pasted JSON and explains what is wrong with it', async () => {
+    await renderSettings();
+    fireEvent.click(screen.getByRole('button', { name: 'Add Google · Vertex AI key' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Paste JSON instead' }));
+    const area = screen.getByLabelText('Google · Vertex AI service-account JSON');
+    fireEvent.change(area, { target: { value: '{"type":"authorized_user"}' } });
+    expect(screen.getByRole('alert')).toHaveTextContent('not a service-account key');
+    expect(screen.getByRole('button', { name: 'Save key' })).toBeDisabled();
+    fireEvent.change(area, { target: { value: key } });
+    expect(screen.getByRole('button', { name: 'Save key' })).toBeEnabled();
+  });
+});
+
+describe('Settings — setup links from nodes', () => {
+  it('opens and focuses the requested key field without writing, checking or touching the graph', async () => {
+    getSettingsMock.mockResolvedValue({ apiKeys: { OPENAI_API_KEY: '***aaaa' } });
+    const graph = useGraphStore.getState();
+    useSettingsDraftStore.setState({ tab: 'storage' });
+    act(() => useUIStore.getState().openProviderSetup({ kind: 'api-key', key: 'OPENAI_API_KEY' }));
+    render(<Settings />);
+    await waitFor(() => expect(screen.getByLabelText('OpenAI API key')).toHaveFocus());
+    expect(screen.getByRole('tab', { name: /Providers/ })).toHaveAttribute('aria-selected', 'true');
+    expect(providerApiFetchMock).not.toHaveBeenCalled();
+    expect(updateSettingsMock).not.toHaveBeenCalled();
+    expect(useGraphStore.getState().nodes).toBe(graph.nodes);
+    expect(useGraphStore.getState().runHistory).toBe(graph.runHistory);
+  });
+
+  it('clears a search that would hide the requested row', async () => {
+    await renderSettings();
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'Ideogram' } });
+    act(() => useUIStore.getState().openProviderSetup({ kind: 'api-key', key: 'FAL_KEY' }));
+    await waitFor(() => expect(screen.getByLabelText('fal.ai API key')).toHaveFocus());
+    expect(screen.getByRole('searchbox')).toHaveValue('');
+  });
+
+  it.each(['krea-mcp', 'nous'] as const)('focuses %s setup without signing in, checking or generating', async (kind) => {
+    getSettingsMock.mockResolvedValue({ apiKeys: {} });
+    act(() => useUIStore.getState().openProviderSetup(kind === 'krea-mcp' ? { kind } : { kind: 'external', provider: 'nous' }));
+    render(<Settings />);
+    if (kind === 'krea-mcp') {
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Sign in to Krea' })).toHaveFocus());
+    } else {
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Done' })).toHaveFocus());
+      expect(screen.getByText('hermes-daedalus model')).toBeInTheDocument();
+    }
+    expect(connectKreaMock).not.toHaveBeenCalled();
+    expect(checkKreaConnectionMock).not.toHaveBeenCalled();
+    expect(providerApiFetchMock).not.toHaveBeenCalled();
+    expect(updateSettingsMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('Settings — desktop app (macOS Keychain)', () => {
+  it('saves a key through the Keychain bridge, not PUT apiKeys', async () => {
+    const { credentials } = setupDesktopBridge();
+    providerApiFetchMock.mockResolvedValue(healthResponse({}));
+    await renderSettings({ apiKeys: { FAL_KEY: '***ffff' } });
+    expect(screen.getByText('Keys are stored in the macOS Keychain.')).toBeInTheDocument();
+    await addKey('OpenAI', 'fixture-openai');
+    await waitFor(() => expect(credentials.set).toHaveBeenCalledWith('OPENAI_API_KEY', 'fixture-openai'));
+    expect(updateCredentialMock).toHaveBeenCalledWith('OPENAI_API_KEY', 'fixture-openai');
+    expect(updateSettingsMock).not.toHaveBeenCalled();
+  });
+
+  it('removes a key through the Keychain bridge', async () => {
+    const { credentials } = setupDesktopBridge();
+    await renderSettings({ apiKeys: { OPENAI_API_KEY: '***aaaa' } });
+    removeKey('OpenAI');
+    await waitFor(() => expect(credentials.clear).toHaveBeenCalledWith('OPENAI_API_KEY'));
+    expect(updateCredentialMock).toHaveBeenCalledWith('OPENAI_API_KEY', '');
+    expect(deleteSettingsApiKeyMock).not.toHaveBeenCalled();
+  });
+
+  it('keeps the key text and says so when the Keychain refuses it', async () => {
+    setupDesktopBridge({ set: vi.fn().mockResolvedValue({ ok: false, error: 'denied' }) });
+    await renderSettings();
+    await addKey('OpenAI', 'fixture-openai');
+    expect(await screen.findByRole('alert')).toHaveTextContent("The key couldn't be saved");
+    expect(updateCredentialMock).not.toHaveBeenCalled();
+    expect(screen.getByLabelText('OpenAI API key')).toHaveValue('fixture-openai');
+  });
+
+  it('warns about plaintext keys found in the settings file', async () => {
+    setupDesktopBridge({ plaintextKeyWarning: ['OPENAI_API_KEY', 'FAL_KEY'] });
+    await renderSettings();
+    expect(screen.getByRole('alert')).toHaveTextContent('Keys for OPENAI_API_KEY, FAL_KEY are stored as plain text');
+  });
+
+  it('shows neither Keychain note nor warning in the browser', async () => {
+    await renderSettings({ apiKeys: { OPENAI_API_KEY: '***aaaa' } });
+    expect(screen.queryByText('Keys are stored in the macOS Keychain.')).not.toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Krea sign-in
+// ---------------------------------------------------------------------------
+
+describe('Settings — Krea sign-in', () => {
   it('starts consent, exposes a browser link and leaves recipes and generation untouched', async () => {
     const params = { prompt: 'saved logo', _kreaAuth: 'api-token' };
     const nodes = [{ id: 'saved', type: 'model-node', position: { x: 0, y: 0 },
-      data: { label: 'Saved Krea recipe', definitionId: 'krea-image-openai-gpt-image-2',
-        params, state: 'idle' as const, outputs: {} } }];
+      data: { label: 'Saved Krea recipe', definitionId: 'krea-image-openai-gpt-image-2', params, state: 'idle' as const, outputs: {} } }];
     useGraphStore.setState({ nodes, edges: [], runHistory: [] });
     const executeNode = vi.spyOn(useGraphStore.getState(), 'executeNode');
-    const executeGraph = vi.spyOn(useGraphStore.getState(), 'executeGraph');
-    render(<Settings />);
-    await screen.findByText('Not connected');
-
-    fireEvent.click(screen.getByRole('button', { name: 'Connect to Krea' }));
-    const link = await screen.findByRole('link', { name: 'Open Krea sign-in' });
-    expect(link).toHaveAttribute('href', 'https://www.krea.ai/auth/v1/oauth/authorize?state=test');
+    await renderSettings();
+    fireEvent.click(await screen.findByRole('button', { name: 'Sign in to Krea' }));
+    const link = await screen.findByRole('link', { name: /Open Krea sign-in/ });
+    expect(link).toHaveAttribute('href', KREA_URL);
     expect(link).toHaveAttribute('target', '_blank');
-    expect(screen.getByText(/workspace’s compute units/)).toBeInTheDocument();
+    expect(within(row('Krea · sign-in')).getByText('Waiting for sign-in…')).toBeInTheDocument();
     expect(connectKreaMock).toHaveBeenCalledOnce();
     expect(useGraphStore.getState().nodes).toEqual(nodes);
-    expect(useGraphStore.getState().runHistory).toEqual([]);
     expect(updateSettingsMock).not.toHaveBeenCalled();
     expect(executeNode).not.toHaveBeenCalled();
-    expect(executeGraph).not.toHaveBeenCalled();
   });
 
-  it('polls pending consent and allows checking and disconnecting without changing the default', async () => {
-    render(<Settings />);
-    await screen.findByText('Not connected');
+  it('polls pending consent, then checks and disconnects from the row menu', async () => {
+    await renderSettings();
+    await screen.findByRole('button', { name: 'Sign in to Krea' });
     vi.useFakeTimers();
     getKreaConnectionMock.mockResolvedValueOnce({ status: 'connected', tools: ['generate_image'] });
-    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Connect to Krea' })); });
-    expect(screen.getByText('Waiting for Krea sign-in…')).toBeInTheDocument();
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Sign in to Krea' })); });
     await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
-    expect(screen.getByText('Connected')).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: 'Open Krea sign-in' })).not.toBeInTheDocument();
+    expect(within(row('Krea · sign-in')).getByText('Signed in')).toBeInTheDocument();
+    expect(rowNames(list(/^Connected/))).toContain('Krea · sign-in');
+    expect(screen.queryByRole('link', { name: /Open Krea sign-in/ })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Manage Krea sign-in' }));
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Check connection' })); });
     expect(checkKreaConnectionMock).toHaveBeenCalledOnce();
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Disconnect' })); });
     expect(disconnectKreaMock).toHaveBeenCalledOnce();
-    expect(screen.getByText('Not connected')).toBeInTheDocument();
-    expect(screen.getByRole('combobox', { name: 'Default Krea connection for new nodes' })).toHaveValue('api-token');
+    expect(screen.getByRole('button', { name: 'Sign in to Krea' })).toBeInTheDocument();
     expect(updateSettingsMock).not.toHaveBeenCalled();
   });
 
-  it('shows Krea plans on request when connected and opens checkout only from a link', async () => {
+  it('shows plans on request when signed in and opens checkout only from a link', async () => {
     getKreaConnectionMock.mockResolvedValue({ status: 'connected', tools: ['show_plans'] });
     getKreaPlansMock.mockResolvedValue({ trialAvailable: true, annualSavingsPct: 40,
       manageUrl: 'https://www.krea.ai/pricing', plans: [{ id: 'creator_pro', name: 'Pro', prominent: false,
         units: 20000, price: 35, annualPrice: 21, examples: [], features: [],
         checkoutUrl: 'https://www.krea.ai/pricing?plan=creator_pro', annualCheckoutUrl: null }] });
     startKreaTrialMock.mockResolvedValue('https://checkout.stripe.com/c/pay/cs_1');
-    render(<Settings />);
-    await screen.findByText('Connected');
+    await renderSettings();
+    fireEvent.click(await screen.findByRole('button', { name: 'Manage Krea sign-in' }));
     expect(getKreaPlansMock).not.toHaveBeenCalled();
-    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Show Krea plans' })); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Show plans' })); });
     expect(screen.getByText('$35/mo · $21/mo yearly')).toBeInTheDocument();
     expect(screen.getByText('20,000 compute units')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'View on Krea' })).toHaveAttribute('href', 'https://www.krea.ai/pricing?plan=creator_pro');
-    expect(startKreaTrialMock).not.toHaveBeenCalled();
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Start a free Pro trial' })); });
-    const checkout = screen.getByRole('link', { name: 'Open trial checkout' });
-    expect(checkout).toHaveAttribute('href', 'https://checkout.stripe.com/c/pay/cs_1');
-    expect(checkout).toHaveAttribute('target', '_blank');
+    expect(screen.getByRole('link', { name: /Open trial checkout/ })).toHaveAttribute('href', 'https://checkout.stripe.com/c/pay/cs_1');
     expect(window.open).not.toHaveBeenCalled();
-    expect(updateSettingsMock).not.toHaveBeenCalled();
   });
 
-  it('hides plans until Krea is connected', async () => {
-    render(<Settings />);
-    await screen.findByText('Not connected');
-    expect(screen.queryByRole('button', { name: 'Show Krea plans' })).not.toBeInTheDocument();
-  });
-
-  it('saves the future-node default explicitly and does not rewrite existing nodes', async () => {
+  it('saves the default for new Krea nodes immediately without rewriting existing nodes', async () => {
+    getKreaConnectionMock.mockResolvedValue({ status: 'connected' });
     const saved = { id: 'old', type: 'model-node', position: { x: 0, y: 0 }, data: {
-      label: 'Old recipe', definitionId: 'krea-video-kling-kling-3-0',
-      params: { duration: 5 }, state: 'idle' as const, outputs: {},
-    } };
+      label: 'Old recipe', definitionId: 'krea-video-kling-kling-3-0', params: { duration: 5 }, state: 'idle' as const, outputs: {} } };
     useGraphStore.setState({ nodes: [saved], runHistory: [] });
-    await act(async () => { render(<Settings />); });
-    const select = await screen.findByRole('combobox', { name: 'Default Krea connection for new nodes' });
-    const savedDefault = useUIStore.getState().settingsCache.kreaConnectionMode;
-    fireEvent.change(select, { target: { value: 'mcp' } });
-    expect(useUIStore.getState().settingsCache.kreaConnectionMode).toBe(savedDefault);
-    expect(updateSettingsMock).not.toHaveBeenCalled();
-    getSettingsMock.mockResolvedValue({ apiKeys: {}, routing: {}, kreaConnectionMode: 'mcp' });
-    clickSave();
+    await renderSettings({ apiKeys: {}, kreaConnectionMode: 'api-token' });
+    fireEvent.click(await screen.findByRole('button', { name: 'Manage Krea sign-in' }));
+    fireEvent.change(screen.getByRole('combobox', { name: 'Default Krea connection for new nodes' }), { target: { value: 'mcp' } });
     await waitFor(() => expect(useUIStore.getState().settingsCache.kreaConnectionMode).toBe('mcp'));
-    expect(updateSettingsMock.mock.calls[0][0]).toMatchObject({ kreaConnectionMode: 'mcp' });
+    expect(updateSettingsMock.mock.calls).toEqual([[{ kreaConnectionMode: 'mcp' }]]);
     expect(useGraphStore.getState().nodes[0].data.params).toEqual({ duration: 5 });
-    expect(useGraphStore.getState().runHistory).toEqual([]);
+    expect(providerApiFetchMock).not.toHaveBeenCalled();
   });
 
-  it('automatically uses the desktop external-browser bridge and keeps the manual fallback', async () => {
-    const open = vi.fn().mockResolvedValue({ ok: true });
-    setupDesktopBridge({ kreaOpen: open });
-    render(<Settings />);
-    await screen.findByText('Not connected');
-    fireEvent.click(screen.getByRole('button', { name: 'Connect to Krea' }));
-    const link = await screen.findByRole('link', { name: 'Open Krea sign-in' });
-    expect(open).toHaveBeenCalledOnce();
-    expect(window.open).not.toHaveBeenCalled();
-    fireEvent.click(link);
-    expect(open).toHaveBeenCalledTimes(2);
-    expect(open).toHaveBeenCalledWith('https://www.krea.ai/auth/v1/oauth/authorize?state=test');
+  it('keeps the default reachable while signed out if new nodes are set to use sign-in', async () => {
+    await renderSettings({ apiKeys: {}, kreaConnectionMode: 'mcp' });
+    expect(await screen.findByRole('combobox', { name: 'Default Krea connection for new nodes' })).toHaveValue('mcp');
   });
 
   it('reserves a browser tab in the click before waiting for Krea registration', async () => {
@@ -509,89 +640,66 @@ describe('Settings — Krea MCP connection', () => {
     const signInWindow = { opener: window, closed: false, document: { title: '', body: { textContent: '' } },
       location: { replace: vi.fn() }, close: vi.fn() };
     vi.mocked(window.open).mockReturnValue(signInWindow as unknown as Window);
-    render(<Settings />);
-    await screen.findByText('Not connected');
-    fireEvent.click(screen.getByRole('button', { name: 'Connect to Krea' }));
+    await renderSettings();
+    fireEvent.click(await screen.findByRole('button', { name: 'Sign in to Krea' }));
     expect(window.open).toHaveBeenCalledWith('about:blank', '_blank');
     expect(signInWindow.opener).toBeNull();
-    expect(signInWindow.location.replace).not.toHaveBeenCalled();
-    const url = 'https://www.krea.ai/auth/v1/oauth/authorize?state=test';
-    await act(async () => { finishConnect({ status: 'connecting', authorizationUrl: url }); });
-    expect(signInWindow.location.replace).toHaveBeenCalledExactlyOnceWith(url);
-    expect(screen.getByRole('link', { name: 'Open Krea sign-in' })).toHaveAttribute('href', url);
+    await act(async () => { finishConnect({ status: 'connecting', authorizationUrl: KREA_URL }); });
+    expect(signInWindow.location.replace).toHaveBeenCalledExactlyOnceWith(KREA_URL);
     expect(signInWindow.close).not.toHaveBeenCalled();
   });
 
-  it.each(['blocked', 'closed'])('keeps an actionable link when the browser tab is %s', async (reason) => {
+  it.each(['blocked', 'closed'])('shows the fallback link without opening the menu when the tab is %s', async (reason) => {
     const replace = vi.fn();
     if (reason === 'closed') vi.mocked(window.open).mockReturnValue({ opener: null, closed: true,
       document: { body: {} }, location: { replace }, close: vi.fn() } as unknown as Window);
-    render(<Settings />);
-    await screen.findByText('Not connected');
-    fireEvent.click(screen.getByRole('button', { name: 'Connect to Krea' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('Click Open Krea sign-in below');
-    expect(screen.getByRole('link', { name: 'Open Krea sign-in' })).toBeInTheDocument();
+    await renderSettings();
+    fireEvent.click(await screen.findByRole('button', { name: 'Sign in to Krea' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Use Open Krea sign-in below');
+    expect(screen.getByRole('link', { name: /Open Krea sign-in/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Restart sign-in' })).toBeEnabled();
-    expect(window.open).toHaveBeenCalledOnce();
     expect(replace).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'Check connection' }));
-    await screen.findByText('Connected');
+    await within(row('Krea · sign-in')).findByText('Signed in');
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(window.open).toHaveBeenCalledOnce();
-  });
-
-  it('opens sign-in even when the browser prevents decorating the blank tab', async () => {
-    const signInWindow = { opener: window, closed: false,
-      get document() { throw new Error('fixture document unavailable'); },
-      location: { replace: vi.fn() }, close: vi.fn() };
-    vi.mocked(window.open).mockReturnValue(signInWindow as unknown as Window);
-    render(<Settings />);
-    await screen.findByText('Not connected');
-    fireEvent.click(screen.getByRole('button', { name: 'Connect to Krea' }));
-    await screen.findByRole('link', { name: 'Open Krea sign-in' });
-    expect(signInWindow.opener).toBeNull();
-    expect(signInWindow.location.replace).toHaveBeenCalledExactlyOnceWith('https://www.krea.ai/auth/v1/oauth/authorize?state=test');
-    expect(signInWindow.close).not.toHaveBeenCalled();
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
   it.each(['untrusted URL', 'registration failure'])('closes the blank tab after %s', async (reason) => {
-    const signInWindow = { opener: null, closed: false, document: { body: {} },
-      location: { replace: vi.fn() }, close: vi.fn() };
+    const signInWindow = { opener: null, closed: false, document: { body: {} }, location: { replace: vi.fn() }, close: vi.fn() };
     vi.mocked(window.open).mockReturnValue(signInWindow as unknown as Window);
-    if (reason === 'untrusted URL') connectKreaMock.mockResolvedValueOnce({ status: 'connecting',
-      authorizationUrl: 'https://untrusted.test/?token=fixture' });
-    else connectKreaMock.mockRejectedValueOnce(new Error('Could not update the Krea connection.'));
-    render(<Settings />);
-    await screen.findByText('Not connected');
-    fireEvent.click(screen.getByRole('button', { name: 'Connect to Krea' }));
+    if (reason === 'untrusted URL') connectKreaMock.mockResolvedValueOnce({ status: 'connecting', authorizationUrl: 'https://untrusted.test/?token=fixture' });
+    else connectKreaMock.mockRejectedValueOnce(new Error("Couldn't update the Krea connection."));
+    await renderSettings();
+    fireEvent.click(await screen.findByRole('button', { name: 'Sign in to Krea' }));
     await screen.findByRole('alert');
     expect(signInWindow.close).toHaveBeenCalledOnce();
     expect(signInWindow.location.replace).not.toHaveBeenCalled();
-    expect(screen.queryByRole('link', { name: 'Open Krea sign-in' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /Open Krea sign-in/ })).not.toBeInTheDocument();
     expect(document.body).not.toHaveTextContent('token=fixture');
   });
 
-  it('keeps the manual fallback when the desktop browser launch fails', async () => {
-    const open = vi.fn().mockRejectedValue(new Error('fixture launch failure'));
+  it('uses the desktop external-browser bridge and keeps the manual fallback', async () => {
+    const open = vi.fn().mockResolvedValue({ ok: true });
     setupDesktopBridge({ kreaOpen: open });
-    render(<Settings />);
-    await screen.findByText('Not connected');
-    fireEvent.click(screen.getByRole('button', { name: 'Connect to Krea' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('Click Open Krea sign-in below');
-    expect(screen.getByRole('link', { name: 'Open Krea sign-in' })).toBeInTheDocument();
+    await renderSettings();
+    fireEvent.click(await screen.findByRole('button', { name: 'Sign in to Krea' }));
+    const link = await screen.findByRole('link', { name: /Open Krea sign-in/ });
     expect(open).toHaveBeenCalledOnce();
     expect(window.open).not.toHaveBeenCalled();
+    fireEvent.click(link);
+    expect(open).toHaveBeenCalledTimes(2);
+    expect(open).toHaveBeenCalledWith(KREA_URL);
   });
 
   it('does not open a browser when Settings loads or polls an already pending sign-in', async () => {
     const open = vi.fn().mockResolvedValue({ ok: true });
     setupDesktopBridge({ kreaOpen: open });
-    getKreaConnectionMock.mockResolvedValue({ status: 'connecting',
-      authorizationUrl: 'https://www.krea.ai/auth/v1/oauth/authorize?state=test' });
+    getKreaConnectionMock.mockResolvedValue({ status: 'connecting', authorizationUrl: KREA_URL });
+    getSettingsMock.mockResolvedValue({ apiKeys: {} });
     vi.useFakeTimers();
     await act(async () => { render(<Settings />); });
-    expect(screen.getByText('Waiting for Krea sign-in…')).toBeInTheDocument();
+    expect(within(row('Krea · sign-in')).getByText('Waiting for sign-in…')).toBeInTheDocument();
     const checksBeforePoll = getKreaConnectionMock.mock.calls.length;
     await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
     expect(getKreaConnectionMock).toHaveBeenCalledTimes(checksBeforePoll + 1);
@@ -601,523 +709,129 @@ describe('Settings — Krea MCP connection', () => {
   });
 
   it('never renders an untrusted authorization URL as a link', async () => {
-    getKreaConnectionMock.mockResolvedValue({ status: 'needs_auth',
-      authorizationUrl: 'https://untrusted.test/?token=fixture', error: 'Sign in again.' });
-    render(<Settings />);
-    await screen.findByText('Sign-in needed');
-    expect(screen.queryByRole('link', { name: 'Open Krea sign-in' })).not.toBeInTheDocument();
-    expect(screen.getByRole('alert')).toHaveTextContent('Sign in again.');
+    getKreaConnectionMock.mockResolvedValue({ status: 'needs_auth', authorizationUrl: 'https://untrusted.test/?token=fixture', error: 'Sign in again.' });
+    await renderSettings();
+    expect(await screen.findByRole('alert')).toHaveTextContent('Sign in again.');
+    expect(screen.queryByRole('link', { name: /Open Krea sign-in/ })).not.toBeInTheDocument();
     expect(document.body).not.toHaveTextContent('token=fixture');
   });
 });
 
 // ---------------------------------------------------------------------------
-// Tests: Desktop mode — Keychain badge (VAL-UX-003)
+// Preferences
 // ---------------------------------------------------------------------------
 
-describe('Settings — desktop mode Keychain badge (VAL-UX-003)', () => {
-  it('shows "Managed by macOS Keychain" badge when nebulaDesktop.credentials is present', async () => {
-    setupDesktopBridge();
-    getSettingsMock.mockResolvedValue({
-      apiKeys: { OPENAI_API_KEY: '***test' },
-      routing: {},
-      outputPath: '',
-    });
-
-    render(<Settings />);
-    await waitFor(() => {
-      expect(screen.getByText('Managed by macOS Keychain')).toBeInTheDocument();
-    });
+describe('Settings — preferences', () => {
+  it('applies switches immediately, in this browser, without a backend write', async () => {
+    useUIStore.setState({ canvasPerfMode: false, canvasMinimapEnabled: false });
+    await renderSettings();
+    openTab('Preferences');
+    const minimap = screen.getByRole('switch', { name: /Minimap/ });
+    expect(minimap).not.toBeChecked();
+    fireEvent.click(minimap);
+    expect(useUIStore.getState().canvasMinimapEnabled).toBe(true);
+    expect(localStorage.getItem('nebula:canvas:minimapEnabled')).toBe('1');
+    expect(useUIStore.getState().canvasPerfMode).toBe(false);
+    fireEvent.click(screen.getByRole('switch', { name: /Agent log/ }));
+    expect(useUIStore.getState().agentLogEnabled).toBe(true);
+    expect(updateSettingsMock).not.toHaveBeenCalled();
+    expect(providerApiFetchMock).not.toHaveBeenCalled();
   });
 
-  it('badge is not shown when bridge is absent (browser mode)', async () => {
-    getSettingsMock.mockResolvedValue({ apiKeys: {}, routing: {} });
+  it('shows Completion sound only while job notifications are on', async () => {
+    useUIStore.setState({ notificationPrefs: { enabled: false, sound: false } });
+    await renderSettings();
+    openTab('Preferences');
+    expect(screen.queryByRole('switch', { name: /Completion sound/ })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('switch', { name: /Job notifications/ }));
+    expect(screen.getByRole('switch', { name: /Completion sound/ })).toBeInTheDocument();
+  });
 
-    render(<Settings />);
-    await waitFor(() => {
-      expect(screen.getByText('API Keys')).toBeInTheDocument();
-    });
-
-    expect(screen.queryByText('Managed by macOS Keychain')).not.toBeInTheDocument();
+  it('applies the run-cost threshold immediately and can turn the question off', async () => {
+    useUIStore.setState({ runCostConfirmUsd: 1 });
+    await renderSettings();
+    openTab('Preferences');
+    const select = screen.getByRole('combobox', { name: 'Ask before costly runs' });
+    expect(select).toHaveValue('1');
+    fireEvent.change(select, { target: { value: '5' } });
+    expect(useUIStore.getState().runCostConfirmUsd).toBe(5);
+    fireEvent.change(select, { target: { value: 'off' } });
+    expect(useUIStore.getState().runCostConfirmUsd).toBeNull();
+    expect(updateSettingsMock).not.toHaveBeenCalled();
+    useUIStore.getState().setRunCostConfirmUsd(1);
   });
 });
 
 // ---------------------------------------------------------------------------
-// Tests: Desktop mode — credential IPC routing (VAL-UX-003)
+// Storage
 // ---------------------------------------------------------------------------
 
-describe('Settings — desktop mode credential IPC routing (VAL-UX-003)', () => {
-  it('routes new key through credentials.set() and updateCredential() instead of PUT apiKeys', async () => {
-    const { credentials } = setupDesktopBridge();
-    getSettingsMock.mockResolvedValue({
-      apiKeys: {},
-      routing: {},
-      outputPath: '/custom',
-    });
-
-    render(<Settings />);
-    await expandApiKeys();
-
-    // Type a new key into the OpenAI field
-    const openaiInput = screen.getByPlaceholderText('sk-...');
-    fireEvent.change(openaiInput, { target: { value: 'test-new-openai-key' } });
-
-    clickSave();
-
-    await waitFor(() => {
-      expect(credentials.set).toHaveBeenCalledWith('OPENAI_API_KEY', 'test-new-openai-key');
-    });
-    expect(updateCredentialMock).toHaveBeenCalledWith('OPENAI_API_KEY', 'test-new-openai-key');
-
-    // Non-secret settings still go through PUT /api/settings (without apiKeys)
-    await waitFor(() => {
-      expect(updateSettingsMock).toHaveBeenCalledTimes(1);
-    });
-    const settingsCall = updateSettingsMock.mock.calls[0][0];
-    expect(settingsCall.apiKeys).toBeUndefined();
-    expect(settingsCall.outputPath).toBe('/custom');
+describe('Settings — storage', () => {
+  it('saves a folder when you leave the field, and an emptied one returns to the default', async () => {
+    await renderSettings({ apiKeys: {}, outputPath: '/old', exportFolder: '' });
+    openTab('Storage');
+    const output = screen.getByRole('textbox', { name: 'Generated files' });
+    expect(output).toHaveValue('/old');
+    expect(screen.getByText(/takes effect after Nebula restarts/)).toBeInTheDocument();
+    fireEvent.change(output, { target: { value: ' /new ' } });
+    fireEvent.blur(output);
+    await waitFor(() => expect(updateSettingsMock).toHaveBeenCalledWith({ outputPath: '/new' }));
+    expect(await screen.findByText('Saved')).toBeInTheDocument();
+    fireEvent.change(output, { target: { value: '' } });
+    fireEvent.keyDown(output, { key: 'Enter' });
+    await waitFor(() => expect(updateSettingsMock).toHaveBeenLastCalledWith({ outputPath: null }));
+    expect(providerApiFetchMock).not.toHaveBeenCalled();
   });
 
-  it('routes key clear through credentials.clear() and updateCredential() with empty string', async () => {
-    const { credentials } = setupDesktopBridge();
-    // Load settings with a masked key (was configured)
-    getSettingsMock.mockResolvedValue({
-      apiKeys: { OPENAI_API_KEY: '***test' },
-      routing: {},
-      outputPath: '',
-    });
-
-    render(<Settings />);
-    await expandApiKeys();
-
-    // Clear the OpenAI field
-    const openaiInput = screen.getByPlaceholderText('sk-...');
-    fireEvent.change(openaiInput, { target: { value: '' } });
-
-    clickSave();
-
-    await waitFor(() => {
-      expect(credentials.clear).toHaveBeenCalledWith('OPENAI_API_KEY');
-    });
-    expect(updateCredentialMock).toHaveBeenCalledWith('OPENAI_API_KEY', '');
-  });
-
-  it('skips unchanged masked keys (does not call set or clear)', async () => {
-    const { credentials } = setupDesktopBridge();
-    getSettingsMock.mockResolvedValue({
-      apiKeys: { OPENAI_API_KEY: '***test', FAL_KEY: '***key1' },
-      routing: {},
-      outputPath: '',
-    });
-
-    render(<Settings />);
-    await expandApiKeys();
-
-    // Don't change any fields — just save
-    clickSave();
-
-    await waitFor(() => {
-      expect(updateSettingsMock).toHaveBeenCalledTimes(1);
-    });
-
-    // No credential operations for unchanged masked keys
-    expect(credentials.set).not.toHaveBeenCalled();
-    expect(credentials.clear).not.toHaveBeenCalled();
-    expect(updateCredentialMock).not.toHaveBeenCalled();
-  });
-
-  it('still sends non-secret settings through PUT /api/settings in desktop mode', async () => {
-    setupDesktopBridge();
-    getSettingsMock.mockResolvedValue({
-      apiKeys: {},
-      routing: { flux: 'fal' },
-      outputPath: '/custom-output',
-      exportFolder: '/exports',
-      zoomTelemetryEnabled: true,
-    });
-
-    render(<Settings />);
-    await waitFor(() => {
-      expect(screen.getByText('Save Settings')).toBeInTheDocument();
-    });
-
-    clickSave();
-
-    await waitFor(() => {
-      expect(updateSettingsMock).toHaveBeenCalledTimes(1);
-    });
-
-    const callArgs = updateSettingsMock.mock.calls[0][0];
-    expect(callArgs.routing).toEqual({ flux: 'fal' });
-    expect(callArgs.outputPath).toBe('/custom-output');
-    expect(callArgs.exportFolder).toBe('/exports');
-    expect(callArgs.zoomTelemetryEnabled).toBe(true);
-    // apiKeys must NOT be in the PUT payload in desktop mode
-    expect(callArgs.apiKeys).toBeUndefined();
-  });
-
-  it('handles credential.set failure gracefully', async () => {
-    const { credentials } = setupDesktopBridge({
-      set: vi.fn().mockResolvedValue({ ok: false, error: 'SAFE_STORAGE_UNAVAILABLE' }),
-    });
-    getSettingsMock.mockResolvedValue({
-      apiKeys: {},
-      routing: {},
-      outputPath: '',
-    });
-
-    render(<Settings />);
-    await expandApiKeys();
-
-    const openaiInput = screen.getByPlaceholderText('sk-...');
-    fireEvent.change(openaiInput, { target: { value: 'test-new-key-value' } });
-
-    clickSave();
-
-    // Should show error state
-    await waitFor(() => {
-      expect(screen.getByText(/Error — Retry/)).toBeInTheDocument();
-    });
-    expect(credentials.set).toHaveBeenCalledWith('OPENAI_API_KEY', 'test-new-key-value');
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Tests: Desktop mode — plaintext key warning (VAL-UX-005)
-// ---------------------------------------------------------------------------
-
-describe('Settings — plaintext key warning (VAL-UX-005)', () => {
-  it('shows warning banner when plaintextKeyWarning is non-empty', async () => {
-    setupDesktopBridge({ plaintextKeyWarning: ['OPENAI_API_KEY', 'FAL_KEY'] });
-    getSettingsMock.mockResolvedValue({
-      apiKeys: {},
-      routing: {},
-      outputPath: '',
-    });
-
-    render(<Settings />);
-    await waitFor(() => {
-      expect(screen.getByText(/Plaintext credentials detected/i)).toBeInTheDocument();
-    });
-
-    // Should mention the affected providers
-    expect(screen.getByText(/OPENAI_API_KEY/)).toBeInTheDocument();
-    expect(screen.getByText(/FAL_KEY/)).toBeInTheDocument();
-  });
-
-  it('does not show warning when plaintextKeyWarning is empty', async () => {
-    setupDesktopBridge({ plaintextKeyWarning: [] });
-    getSettingsMock.mockResolvedValue({ apiKeys: {}, routing: {} });
-
-    render(<Settings />);
-    await waitFor(() => {
-      expect(screen.getByText('API Keys')).toBeInTheDocument();
-    });
-
-    expect(screen.queryByText(/Plaintext credentials detected/i)).not.toBeInTheDocument();
-  });
-
-  it('does not show warning in browser mode', async () => {
-    getSettingsMock.mockResolvedValue({ apiKeys: {}, routing: {} });
-
-    render(<Settings />);
-    await waitFor(() => {
-      expect(screen.getByText('API Keys')).toBeInTheDocument();
-    });
-
-    expect(screen.queryByText(/Plaintext credentials detected/i)).not.toBeInTheDocument();
-  });
-
-  it('warning has role="alert" for accessibility', async () => {
-    setupDesktopBridge({ plaintextKeyWarning: ['OPENAI_API_KEY'] });
-    getSettingsMock.mockResolvedValue({ apiKeys: {}, routing: {} });
-
-    render(<Settings />);
-    await waitFor(() => {
-      const alert = screen.getByRole('alert');
-      expect(alert).toHaveTextContent(/Plaintext credentials detected/i);
-    });
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Tests: Desktop mode — multiple key updates in one save
-// ---------------------------------------------------------------------------
-
-describe('Settings — desktop mode batch key updates', () => {
-  it('processes multiple key changes in a single save', async () => {
-    const { credentials } = setupDesktopBridge();
-    getSettingsMock.mockResolvedValue({
-      apiKeys: { OPENAI_API_KEY: '***old1', ANTHROPIC_API_KEY: '***old2' },
-      routing: {},
-      outputPath: '',
-    });
-
-    render(<Settings />);
-    await expandApiKeys();
-
-    // Change OpenAI key
-    const openaiInput = screen.getByPlaceholderText('sk-...');
-    fireEvent.change(openaiInput, { target: { value: 'test-new-openai' } });
-
-    // Clear Anthropic key
-    const anthropicInput = screen.getByPlaceholderText('sk-ant-...');
-    fireEvent.change(anthropicInput, { target: { value: '' } });
-
-    clickSave();
-
-    await waitFor(() => {
-      expect(credentials.set).toHaveBeenCalledWith('OPENAI_API_KEY', 'test-new-openai');
-    });
-    expect(credentials.clear).toHaveBeenCalledWith('ANTHROPIC_API_KEY');
-    expect(updateCredentialMock).toHaveBeenCalledWith('OPENAI_API_KEY', 'test-new-openai');
-    expect(updateCredentialMock).toHaveBeenCalledWith('ANTHROPIC_API_KEY', '');
-  });
-});
-
-// Deferred requests exercise ownership and recovery without a real credential.
-function deferred<T>() {
-  let resolve!: (value: T) => void;
-  let reject!: (reason?: unknown) => void;
-  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
-    resolve = resolvePromise;
-    reject = rejectPromise;
-  });
-  return { promise, resolve, reject };
-}
-
-function setSettingsVisible(visible: boolean) {
-  act(() => useUIStore.setState((state) => ({
-    panels: { ...state.panels, settings: { ...state.panels.settings, visible } },
-  })));
-}
-
-describe('Settings — load, draft, and provider removal safety', () => {
-  it.each([{}, { apiKeys: [] }, { apiKeys: { OPENAI_API_KEY: 12 } }])('rejects malformed settings instead of enabling defaults (%j)', async (response) => {
-    getSettingsMock.mockResolvedValue(response);
-    render(<Settings />);
-    expect(await screen.findByRole('alert')).toHaveTextContent('Settings could not load');
-    expect(screen.queryByRole('button', { name: 'Save Settings' })).not.toBeInTheDocument();
+  it('does not write when the folder is unchanged, and Escape restores it without closing', async () => {
+    await renderSettings({ apiKeys: {}, outputPath: '/old' });
+    openTab('Storage');
+    const output = screen.getByRole('textbox', { name: 'Generated files' });
+    fireEvent.change(output, { target: { value: '/typo' } });
+    fireEvent.keyDown(output, { key: 'Escape' });
+    expect(output).toHaveValue('/old');
+    expect(useUIStore.getState().panels.settings.visible).toBe(true);
+    fireEvent.blur(output);
     expect(updateSettingsMock).not.toHaveBeenCalled();
   });
 
-  it('keeps a failed GET actionable and cannot save initial defaults; Retry loads the real form', async () => {
-    getSettingsMock.mockRejectedValueOnce(new Error('fixture settings unavailable'));
-    render(<Settings />);
-    expect(await screen.findByRole('alert')).toHaveTextContent('Settings could not load');
-    expect(screen.queryByRole('button', { name: 'Save Settings' })).not.toBeInTheDocument();
-    expect(screen.queryByLabelText('Output Path')).not.toBeInTheDocument();
-    vi.useFakeTimers();
-    await act(async () => vi.advanceTimersByTimeAsync(4000));
-    expect(screen.getByRole('alert')).toHaveTextContent('Settings could not load');
-    vi.useRealTimers();
-    getSettingsMock.mockResolvedValueOnce({ apiKeys: {}, outputPath: '/saved-path' });
-    fireEvent.click(screen.getByRole('button', { name: 'Retry loading settings' }));
-    expect(await screen.findByLabelText('Output Path')).toHaveValue('/saved-path');
-    expect(updateSettingsMock).not.toHaveBeenCalled();
+  it('keeps a typed folder and shows the error when saving fails', async () => {
+    updateSettingsMock.mockRejectedValueOnce(new Error('offline'));
+    await renderSettings({ apiKeys: {}, exportFolder: '' });
+    openTab('Storage');
+    const exports = screen.getByRole('textbox', { name: 'Exports' });
+    fireEvent.change(exports, { target: { value: '/exports' } });
+    fireEvent.blur(exports);
+    expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't save. Try again.");
+    expect(exports).toHaveValue('/exports');
   });
 
-  it('offers neither editable fields nor Save before an initial pending GET resolves', async () => {
-    const load = deferred<Record<string, unknown>>();
-    getSettingsMock.mockReturnValueOnce(load.promise);
-    render(<Settings />);
-    expect(await screen.findByText('Loading settings…')).toBeInTheDocument();
-    expect(screen.queryByLabelText('Output Path')).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Save Settings' })).not.toBeInTheDocument();
-    await act(async () => load.resolve({ apiKeys: {}, outputPath: '/loaded' }));
-    expect(screen.getByLabelText('Output Path')).toHaveValue('/loaded');
-    expect(updateSettingsMock).not.toHaveBeenCalled();
-  });
-
-  it('ignores an old load after closing and reopening, including after the newer form is edited', async () => {
-    const oldLoad = deferred<Record<string, unknown>>();
-    const newLoad = deferred<Record<string, unknown>>();
-    getSettingsMock.mockReturnValueOnce(oldLoad.promise).mockReturnValueOnce(newLoad.promise);
-    render(<Settings />);
-    await screen.findByText('Loading settings…');
-    setSettingsVisible(false);
-    setSettingsVisible(true);
-    await waitFor(() => expect(getSettingsMock).toHaveBeenCalledTimes(2));
-    await act(async () => newLoad.resolve({ apiKeys: {}, outputPath: '/newer' }));
-    fireEvent.change(screen.getByLabelText('Output Path'), { target: { value: '/newer-edit' } });
-    await act(async () => oldLoad.resolve({ apiKeys: {}, outputPath: '/old' }));
-    expect(screen.getByLabelText('Output Path')).toHaveValue('/newer-edit');
-    expect(screen.getByText(/Unsaved changes stay here/)).toBeInTheDocument();
-    expect(updateSettingsMock).not.toHaveBeenCalled();
-  });
-
-  it('retains unsaved fields and credentials through dismiss and unmount without browser persistence', async () => {
-    getSettingsMock.mockResolvedValue({ apiKeys: {}, outputPath: '/original', exportFolder: '/original-exports' });
-    const localWrite = vi.spyOn(Storage.prototype, 'setItem');
-    const rendered = render(<Settings />);
-    await expandApiKeys();
-    localWrite.mockClear();
-    fireEvent.change(screen.getByLabelText('OpenAI API key'), { target: { value: 'fixture-private-draft' } });
-    fireEvent.change(screen.getByLabelText('Output Path'), { target: { value: '/draft-output' } });
-    fireEvent.change(screen.getByLabelText('Default Save Folder'), { target: { value: '/draft-exports' } });
-    fireEvent.change(screen.getByRole('combobox', { name: 'Default Krea connection for new nodes' }), { target: { value: 'mcp' } });
-    fireEvent.click(screen.getByRole('checkbox', { name: /Demo zoom telemetry/ }));
-    expect(localWrite).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('button', { name: 'Close settings panel' }));
-    rendered.unmount();
-    setSettingsVisible(true);
-    render(<Settings />);
-    await expandApiKeys();
-    expect(screen.getByLabelText('OpenAI API key')).toHaveValue('fixture-private-draft');
-    expect(screen.getByLabelText('Output Path')).toHaveValue('/draft-output');
-    expect(screen.getByLabelText('Default Save Folder')).toHaveValue('/draft-exports');
-    expect(screen.getByRole('combobox', { name: 'Default Krea connection for new nodes' })).toHaveValue('mcp');
-    expect(screen.getByRole('checkbox', { name: /Demo zoom telemetry/ })).toBeChecked();
-    expect(getSettingsMock).toHaveBeenCalledOnce();
-    expect(updateSettingsMock).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('button', { name: 'Discard changes' }));
-    expect(screen.getByLabelText('OpenAI API key')).toHaveValue('');
-    expect(screen.getByLabelText('Output Path')).toHaveValue('/original');
-    expect(screen.queryByText(/Unsaved changes stay here/)).not.toBeInTheDocument();
-  });
-
-  it('keeps a failed save and intended edits available, and only explicitly retries the write', async () => {
-    getSettingsMock.mockResolvedValue({ apiKeys: {}, outputPath: '/original' });
-    updateSettingsMock.mockRejectedValueOnce(new Error('fixture write failure'));
-    render(<Settings />);
-    await screen.findByLabelText('Output Path');
-    fireEvent.change(screen.getByLabelText('Output Path'), { target: { value: '/intended' } });
-    clickSave();
-    expect(await screen.findByRole('alert')).toHaveTextContent('Your edits are still here');
-    expect(screen.getByLabelText('Output Path')).toHaveValue('/intended');
-    vi.useFakeTimers();
-    await act(async () => vi.advanceTimersByTimeAsync(4000));
-    expect(screen.getByRole('alert')).toHaveTextContent('could not be saved');
-    vi.useRealTimers();
+  it('picks folders with the desktop chooser, starting from the current one', async () => {
+    const { folders } = setupDesktopBridge({ choose: vi.fn().mockResolvedValueOnce({ ok: true, path: '/picked' }).mockResolvedValueOnce({ ok: true, path: null }) });
+    await renderSettings({ apiKeys: {}, outputPath: '/old' });
+    openTab('Storage');
+    fireEvent.click(screen.getByRole('button', { name: 'Choose generated files folder' }));
+    await waitFor(() => expect(updateSettingsMock).toHaveBeenCalledWith({ outputPath: '/picked' }));
+    expect(folders.choose).toHaveBeenCalledWith('/old');
+    fireEvent.click(screen.getByRole('button', { name: 'Choose exports folder' }));
+    await waitFor(() => expect(folders.choose).toHaveBeenCalledTimes(2));
     expect(updateSettingsMock).toHaveBeenCalledOnce();
-    getSettingsMock.mockResolvedValueOnce({ apiKeys: {}, outputPath: '/intended' });
-    fireEvent.click(screen.getByRole('button', { name: 'Error — Retry' }));
-    expect(await screen.findByRole('button', { name: 'Saved' })).toBeInTheDocument();
-    expect(updateSettingsMock).toHaveBeenCalledTimes(2);
-    expect(updateSettingsMock.mock.calls[1][0].outputPath).toBe('/intended');
   });
 
-  it('blocks edits and a second save while a write is pending, including after unmount and reopen', async () => {
-    const write = deferred<{ status: string }>();
-    getSettingsMock.mockResolvedValueOnce({ apiKeys: {}, outputPath: '/original' })
-      .mockResolvedValueOnce({ apiKeys: {}, outputPath: '/saved-draft' });
-    updateSettingsMock.mockReturnValueOnce(write.promise);
-    const rendered = render(<Settings />);
-    await screen.findByLabelText('Output Path');
-    fireEvent.change(screen.getByLabelText('Output Path'), { target: { value: '/saved-draft' } });
-    const save = screen.getByRole('button', { name: 'Save Settings' });
-    fireEvent.click(save);
-    fireEvent.click(save);
-    expect(screen.getByLabelText('Output Path')).toBeDisabled();
-    rendered.unmount();
-    render(<Settings />);
-    expect(await screen.findByLabelText('Output Path')).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Saving...' })).toBeDisabled();
-    expect(updateSettingsMock).toHaveBeenCalledOnce();
-    await act(async () => write.resolve({ status: 'saved' }));
-    expect(screen.getByLabelText('Output Path')).toHaveValue('/saved-draft');
-    expect(screen.getByLabelText('Output Path')).toBeEnabled();
-    expect(screen.getByRole('button', { name: 'Saved' })).toBeInTheDocument();
-    expect(getSettingsMock).toHaveBeenCalledTimes(2);
+  it('offers no chooser in the browser', async () => {
+    await renderSettings();
+    openTab('Storage');
+    expect(screen.queryByRole('button', { name: /Choose .* folder/ })).not.toBeInTheDocument();
   });
 
-  it('refreshes after a successful save without repeating the write when refresh fails', async () => {
-    getSettingsMock.mockResolvedValueOnce({ apiKeys: {}, outputPath: '/original' })
-      .mockRejectedValueOnce(new Error('fixture refresh failure'));
-    render(<Settings />);
-    await screen.findByLabelText('Output Path');
-    fireEvent.change(screen.getByLabelText('Output Path'), { target: { value: '/saved' } });
-    clickSave();
-    expect(await screen.findByRole('alert')).toHaveTextContent('Settings were saved');
-    expect(screen.getByLabelText('Output Path')).toBeDisabled();
-    expect(screen.queryByRole('button', { name: 'Save Settings' })).not.toBeInTheDocument();
-    getSettingsMock.mockResolvedValueOnce({ apiKeys: {}, outputPath: '/saved' });
-    expect(screen.queryByText(/Unsaved changes stay here/)).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Retry refresh' }));
-    expect(await screen.findByRole('button', { name: 'Saved' })).toBeInTheDocument();
-    expect(updateSettingsMock).toHaveBeenCalledOnce();
-    expect(screen.getByLabelText('Output Path')).toHaveValue('/saved');
-  });
-
-  it('treats whitespace-only browser key edits as blank without removing the configured key', async () => {
-    getSettingsMock.mockResolvedValue({ apiKeys: { OPENAI_API_KEY: '***configured' } });
-    render(<Settings />); await expandApiKeys();
-    fireEvent.change(screen.getByLabelText('OpenAI API key'), { target: { value: '   ' } });
-    clickSave(); await waitFor(() => expect(updateSettingsMock).toHaveBeenCalled());
-    expect(updateSettingsMock.mock.calls[0][0].apiKeys.OPENAI_API_KEY).toBe('');
-    expect(deleteSettingsApiKeyMock).not.toHaveBeenCalled();
-  });
-  it('explains that blanking a configured browser key keeps it, and removal is explicit', async () => {
-    getSettingsMock.mockResolvedValue({ apiKeys: { OPENAI_API_KEY: '***configured' } });
-    render(<Settings />);
-    await expandApiKeys();
-    fireEvent.change(screen.getByLabelText('OpenAI API key'), { target: { value: '' } });
-    expect(screen.getByText('This key is still configured. Use Remove to disconnect it.')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Remove OpenAI API key' })).toBeInTheDocument();
-    expect(deleteSettingsApiKeyMock).not.toHaveBeenCalled();
-    expect(updateSettingsMock).not.toHaveBeenCalled();
-  });
-
-  it('removes one provider, refreshes readiness and retains unrelated drafts through reopening', async () => {
-    getSettingsMock.mockResolvedValueOnce({ apiKeys: { OPENAI_API_KEY: '***openai', ANTHROPIC_API_KEY: '***anthropic' }, outputPath: '/original' })
-      .mockResolvedValueOnce({ apiKeys: { ANTHROPIC_API_KEY: '***anthropic' }, outputPath: '/original' });
-    useUIStore.getState().setSettingsCache({ OPENAI_API_KEY: '***openai', ANTHROPIC_API_KEY: '***anthropic' });
-    const rendered = render(<Settings />);
-    await expandApiKeys();
-    fireEvent.change(screen.getByLabelText('Output Path'), { target: { value: '/unsaved-output' } });
-    fireEvent.change(screen.getByLabelText('Anthropic API key'), { target: { value: 'fixture-anthropic-edit' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Remove OpenAI API key' }));
-    expect(await screen.findByText('OpenAI key removed.')).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByLabelText('Output Path')).toBeEnabled());
-    expect(deleteSettingsApiKeyMock).toHaveBeenCalledExactlyOnceWith('OPENAI_API_KEY');
-    expect(screen.getByLabelText('OpenAI API key')).toHaveValue('');
-    expect(screen.queryByRole('button', { name: 'Remove OpenAI API key' })).not.toBeInTheDocument();
-    expect(screen.getByLabelText('Anthropic API key')).toHaveValue('fixture-anthropic-edit');
-    expect(screen.getByLabelText('Output Path')).toHaveValue('/unsaved-output');
-    expect(useUIStore.getState().settingsCache.apiKeys).toEqual({ ANTHROPIC_API_KEY: '***anthropic' });
-    rendered.unmount();
-    render(<Settings />);
-    await expandApiKeys();
-    expect(screen.getByLabelText('OpenAI API key')).toHaveValue('');
-    expect(screen.getByLabelText('Output Path')).toHaveValue('/unsaved-output');
-    expect(getSettingsMock).toHaveBeenCalledTimes(2);
-    expect(updateSettingsMock).not.toHaveBeenCalled();
-  });
-
-  it('keeps a successfully deleted key absent when GET fails, then retries only refresh', async () => {
-    getSettingsMock.mockResolvedValueOnce({ apiKeys: { OPENAI_API_KEY: '***openai', FAL_KEY: '***fal' } })
-      .mockRejectedValueOnce(new Error('fixture refresh failure'));
-    useUIStore.getState().setSettingsCache({ OPENAI_API_KEY: '***openai', FAL_KEY: '***fal' });
-    render(<Settings />);
-    await expandApiKeys();
-    fireEvent.click(screen.getByRole('button', { name: 'Remove OpenAI API key' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('The key was removed');
-    expect(screen.getByLabelText('OpenAI API key')).toHaveValue('');
-    expect(useUIStore.getState().settingsCache.apiKeys).toEqual({ FAL_KEY: '***fal' });
-    expect(screen.queryByRole('button', { name: 'Save Settings' })).not.toBeInTheDocument();
-    expect(screen.getByLabelText('Output Path')).toBeDisabled();
-    getSettingsMock.mockResolvedValueOnce({ apiKeys: { FAL_KEY: '***fal' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Retry refresh' }));
-    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
-    expect(deleteSettingsApiKeyMock).toHaveBeenCalledOnce();
-    expect(updateSettingsMock).not.toHaveBeenCalled();
-    expect(screen.getByLabelText('OpenAI API key')).toHaveValue('');
-    expect(screen.getByLabelText('fal.ai API key')).toHaveValue('***fal');
-  });
-
-  it('keeps removal errors visible and retries only the selected provider', async () => {
-    getSettingsMock.mockResolvedValueOnce({ apiKeys: { OPENAI_API_KEY: '***openai', FAL_KEY: '***fal' } })
-      .mockResolvedValueOnce({ apiKeys: { FAL_KEY: '***fal' } });
-    deleteSettingsApiKeyMock.mockRejectedValueOnce(new Error('fixture deletion failure'));
-    render(<Settings />);
-    await expandApiKeys();
-    fireEvent.click(screen.getByRole('button', { name: 'Remove OpenAI API key' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('Retry Remove');
-    expect(screen.getByLabelText('OpenAI API key')).toHaveValue('***openai');
-    expect(screen.getByLabelText('fal.ai API key')).toHaveValue('***fal');
-    fireEvent.click(screen.getByRole('button', { name: 'Remove OpenAI API key' }));
-    await screen.findByText('OpenAI key removed.');
-    expect(deleteSettingsApiKeyMock.mock.calls).toEqual([['OPENAI_API_KEY'], ['OPENAI_API_KEY']]);
-    expect(updateSettingsMock).not.toHaveBeenCalled();
+  it('saves demo telemetry on its own and starts onboarding from Help & advanced', async () => {
+    await renderSettings({ apiKeys: {}, zoomTelemetryEnabled: false });
+    openTab('Storage');
+    fireEvent.click(screen.getByRole('switch', { name: /Demo zoom telemetry/ }));
+    await waitFor(() => expect(updateSettingsMock).toHaveBeenCalledWith({ zoomTelemetryEnabled: true }));
+    await waitFor(() => expect(screen.getByRole('switch', { name: /Demo zoom telemetry/ })).toBeChecked());
+    fireEvent.click(screen.getByRole('button', { name: /Show onboarding again/ }));
+    expect(useUIStore.getState().panels.settings.visible).toBe(false);
+    expect(useUIStore.getState().onboardingActive).toBe(true);
   });
 });

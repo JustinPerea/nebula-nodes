@@ -23,6 +23,12 @@ const CANVAS_MINIMAP_ENABLED_KEY = 'nebula:canvas:minimapEnabled';
 const RUN_COST_CONFIRM_KEY = 'nebula:run:costConfirmUsd';
 /** Ask before a run whose estimate could reach this many dollars. */
 export const RUN_COST_CONFIRM_DEFAULT_USD = 1;
+/** Same saved keys, treating a missing key and an empty one alike. */
+function sameApiKeys(a: Record<string, string>, b: Record<string, string>): boolean {
+  return [...new Set([...Object.keys(a), ...Object.keys(b)])]
+    .every((key) => (a[key] ?? '').trim() === (b[key] ?? '').trim());
+}
+
 export const RUN_COST_CONFIRM_CHOICES = [0.5, 1, 5, 20] as const;
 const ONBOARDED_KEY = 'nebula:onboarded';
 const CREATE_SESSION_KEY = 'nebula:create:sessionId';
@@ -766,7 +772,11 @@ export const useUIStore = create<UIState>((set, get) => ({
     })),
 
   setSettingsCache: (apiKeys, kreaConnectionMode) => {
-    useProviderReadinessStore.getState().invalidate();
+    // Checks describe credentials, so only a credential change voids them. A
+    // refresh that reads back the same (masked) keys must not discard a check
+    // that saving a key just started.
+    const current = get().settingsCache;
+    if (!current.loaded || !sameApiKeys(current.apiKeys, apiKeys)) useProviderReadinessStore.getState().invalidate();
     set((state) => ({ settingsCache: {
       ...state.settingsCache, apiKeys, loaded: true,
       ...(kreaConnectionMode ? { kreaConnectionMode } : {}),

@@ -272,8 +272,8 @@ def test_settings_example_covers_all_registry_api_keys(definitions: dict[str, di
 
 
 def test_settings_ui_covers_all_registry_api_keys(definitions: dict[str, dict[str, Any]]) -> None:
-    settings_source = (REPO_ROOT / "frontend" / "src" / "components" / "panels" / "Settings.tsx").read_text()
-    ui_keys = set(re.findall(r"\{ key: '([A-Z0-9_]+)'", settings_source))
+    catalog_source = (REPO_ROOT / "frontend" / "src" / "lib" / "providerCatalog.ts").read_text()
+    ui_keys = set(re.findall(r"\{ key: '([A-Z0-9_]+)'", catalog_source))
     assert ui_keys == _registry_api_keys(definitions)
 
 

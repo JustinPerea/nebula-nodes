@@ -57,9 +57,10 @@ describe('onboarding navigation without authoring changes', () => {
       quantity: 2, uploads: [{ id: 'upload', name: 'reference', attempt: 'attempt', status: 'error' as const, error: 'Retry attachment' }],
     });
     useCreateDraftStore.setState({ drafts: { 'kept-session': draft } });
-    const settings: SettingsDraft = freeze({ apiKeys: { OPENAI_API_KEY: 'fixture-unsaved' }, routing: {},
+    const settings: SettingsDraft = freeze({ apiKeys: {}, routing: {},
       kreaConnectionMode: 'mcp', outputPath: '', exportFolder: '', zoomTelemetryEnabled: false });
-    useSettingsDraftStore.setState({ draft: settings, baseline: { ...settings, apiKeys: {} } });
+    const keyDrafts = freeze({ OPENAI_API_KEY: 'fixture-unsaved' });
+    useSettingsDraftStore.setState({ saved: settings, keyDrafts });
     useUIStore.setState({ viewMode, selectedNodeId: 'logo', createSessionId: 'kept-session',
       cinemaEditorNodeId: 'scene', editorTargetNodeId: 'video', remotionEditorTargetNodeId: 'remotion',
       characterEditorId: 'character', moodboardEditorId: 'moodboard', onboardingStep: 4, isPlaying: true });
@@ -77,7 +78,8 @@ describe('onboarding navigation without authoring changes', () => {
     expect(useGraphStore.getState().runHistory).toBe(history);
     expect(useGraphStore.getState().undoStack).toEqual([]);
     expect(useCreateDraftStore.getState().drafts['kept-session']).toBe(draft);
-    expect(useSettingsDraftStore.getState().draft).toBe(settings);
+    expect(useSettingsDraftStore.getState().saved).toBe(settings);
+    expect(useSettingsDraftStore.getState().keyDrafts).toBe(keyDrafts);
     expect(localStorage.getItem('nebula:onboarded')).toBeNull();
     expect(load).not.toHaveBeenCalled();
     expect(run).not.toHaveBeenCalled();

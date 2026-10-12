@@ -32,7 +32,7 @@
 
 **Where the nodes appear.** Open the node palette and look under the media-type groups: the six image nodes are in **image-gen**, the three audio nodes (TTS, STT, Translate) are in **audio-gen**, and OpenAI Chat is in **text-gen**. Drag a node onto the canvas, wire a Text node (or another node's output) into its input port, and run.
 
-**API-key setup.** All ten nodes use your own OpenAI key (BYOK). Open Nebula **Settings**, paste it into the **OpenAI** field (`OPENAI_API_KEY`), and choose **Save Settings**. Nebula stores it under `apiKeys.OPENAI_API_KEY` in the project-root `settings.json`; no restart is required. One key covers every OpenAI node. Two things to know:
+**API-key setup.** All ten nodes use your own OpenAI key (BYOK). Open Nebula **Settings** → **Providers**, choose **Add key** on the **OpenAI** row (`OPENAI_API_KEY`), paste it and choose **Save key**. Saving checks the key without generating anything. Nebula stores it under `apiKeys.OPENAI_API_KEY` in the project-root `settings.json`; no restart is required. One key covers every OpenAI node. Two things to know:
 - **GPT Image 2 and 2.5 require Organization Verification.** If a `gpt-image-2-*` or `gpt-image-2-5-*` run fails with an "org isn't verified" error, verify at https://platform.openai.com/settings/organization/general. (GPT Image 1 doesn't need this.)
 - **Translate is English-only output** and always runs on `whisper-1` under the hood — the model isn't selectable on that node.
 

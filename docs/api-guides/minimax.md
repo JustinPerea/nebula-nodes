@@ -33,7 +33,7 @@ Notes grounded in the registry:
 
 **API-key setup (one time).**
 1. Get a key from your MiniMax dashboard (the Global host is `api.minimax.io`; Nebula's handler talks to the `api.minimaxi.com` host — see Sources).
-2. Open Nebula **Settings**, paste it into the **MiniMax** field (`MINIMAX_API_KEY`), and choose **Save Settings**.
+2. Open Nebula **Settings** → **Providers**, choose **Add key** on the **MiniMax** row (`MINIMAX_API_KEY`), paste it and choose **Save key**. Saving checks the key without generating anything.
 3. Nebula stores it under `apiKeys.MINIMAX_API_KEY` in the project-root `settings.json`; no restart is required. Without it, the node errors with "MINIMAX_API_KEY is required."
 
 **Heads-up on timing.** Video generation is asynchronous: Nebula submits the job, then polls roughly every 5 seconds (up to ~25 minutes) and shows a progress bar on the node while MiniMax renders. A clip is normal to take a couple of minutes.

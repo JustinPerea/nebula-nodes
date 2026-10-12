@@ -329,7 +329,6 @@ body.app-slava-restraint .chat-panel__model-caret,
 body.app-slava-restraint .chat-panel__chip-close-icon,
 body.app-slava-restraint .connection-popup__category-chevron,
 body.app-slava-restraint .panel__group-chevron,
-body.app-slava-restraint .settings__section-toggle-chevron,
 body.app-slava-restraint .agent-log__chevron {
   width: var(--sr-icon-size-sm);
   height: var(--sr-icon-size-sm);
@@ -495,7 +494,6 @@ body.app-slava-restraint .workspace-overlays--studio .chat-panel {
   z-index: var(--sr-layer-workspace-overlay);
 }
 
-
 body.app-slava-restraint .panel--library {
   z-index: calc(var(--sr-layer-panel) + 1);
 }
@@ -619,8 +617,6 @@ body.app-slava-restraint :is(
   .inspector__file-button,
   .inspector__favorite-button,
   .inspector__info-button,
-  .settings__section-toggle,
-  .settings__save-button,
   .panel__item,
   .panel-launcher,
   .toolbar__button
@@ -1871,120 +1867,6 @@ body.app-slava-restraint .slava-library-drag-preview__label {
   }
 }
 
-/* ─────────────────────────────────────────────────────────────────────
- * Settings — section labels are quiet metadata, not editorial chapters
- * ───────────────────────────────────────────────────────────────────── */
-body.app-slava-restraint .settings__section-label {
-  font-family: var(--sr-ui);
-  font-weight: 500;
-  font-size: var(--sr-type-label);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--sr-ink-light);
-  margin-top: 18px;
-  margin-bottom: 4px;
-}
-
-body.app-slava-restraint .settings__section-label--stacked {
-  margin-top: var(--sr-space-4);
-}
-
-body.app-slava-restraint .settings__loading {
-  padding: var(--sr-space-4);
-  color: var(--sr-ink-meta);
-  font-family: var(--sr-ui);
-  text-align: center;
-}
-
-body.app-slava-restraint .settings__section-toggle {
-  border: 1px solid var(--sr-edge);
-  border-radius: var(--sr-radius-control);
-  background: rgba(255, 255, 255, 0.03);
-  color: var(--sr-ink);
-  font-family: var(--sr-ui);
-  padding: 9px var(--sr-control-pad-x);
-  transition: background-color var(--sr-motion-fast), border-color var(--sr-motion-fast);
-}
-
-body.app-slava-restraint .settings__section-toggle:hover {
-  border-color: var(--sr-edge-strong);
-  background: var(--sr-surface-control-hover);
-}
-
-body.app-slava-restraint .settings__section-toggle:focus-visible {
-  outline: var(--sr-focus-outline);
-  outline-offset: var(--sr-focus-offset);
-}
-
-body.app-slava-restraint .settings__section-toggle-title {
-  color: var(--sr-ink-light);
-  font-size: var(--sr-type-label);
-  font-weight: 600;
-  letter-spacing: 0.04em;
-}
-
-body.app-slava-restraint .settings__section-toggle-count,
-body.app-slava-restraint .settings__section-toggle-chevron {
-  color: var(--sr-ink-meta);
-  font-family: var(--sr-mono);
-  font-size: var(--sr-type-meta);
-}
-
-body.app-slava-restraint .settings__collapsible-body {
-  max-height: min(300px, 34vh);
-  margin-bottom: var(--sr-space-4);
-  padding: var(--sr-space-2);
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  border: 1px solid var(--sr-edge);
-  border-radius: var(--sr-radius-control);
-  background:
-    linear-gradient(var(--sr-glass-raised), var(--sr-glass-raised)) padding-box,
-    linear-gradient(180deg, rgba(255, 255, 255, 0.07), transparent 34%) border-box;
-}
-
-body.app-slava-restraint .settings__collapsible-body .settings__key-row:last-child {
-  margin-bottom: 0;
-}
-
-body.app-slava-restraint .settings__key-link {
-  color: var(--sr-ink-light);
-  font-family: var(--sr-ui);
-  font-size: var(--sr-type-label);
-  transition: color var(--sr-motion-fast);
-}
-
-body.app-slava-restraint .settings__key-link:hover {
-  color: var(--sr-ink-bold);
-  text-decoration: underline;
-}
-
-body.app-slava-restraint .settings__key-input {
-  font-family: var(--sr-mono);
-  font-size: var(--sr-type-label);
-  letter-spacing: 0;
-}
-
-body.app-slava-restraint .settings__reveal-button {
-  min-height: var(--sr-control-h-xs);
-  border: 1px solid var(--sr-edge);
-  border-radius: var(--sr-radius-control);
-  background: var(--sr-surface-control);
-  color: var(--sr-ink-light);
-  font-family: var(--sr-ui);
-  font-size: var(--sr-type-body);
-  transition:
-    background-color var(--sr-motion-fast),
-    border-color var(--sr-motion-fast),
-    color var(--sr-motion-fast);
-}
-
-body.app-slava-restraint .settings__reveal-button:hover {
-  border-color: var(--sr-edge-strong);
-  background: var(--sr-surface-control-hover);
-  color: var(--sr-ink-bold);
-}
-
 body.app-slava-restraint .inspector__node-name {
   color: var(--sr-ink);
   font-family: var(--sr-ui);
@@ -2165,8 +2047,7 @@ body.app-slava-restraint .inspector__checkbox-row {
   font-size: var(--sr-type-body);
 }
 
-body.app-slava-restraint .inspector__checkbox-row input,
-body.app-slava-restraint .settings__toggle-input {
+body.app-slava-restraint .inspector__checkbox-row input {
   accent-color: var(--sr-accent);
 }
 
@@ -2282,61 +2163,6 @@ body.app-slava-restraint .inspector__palette-remove {
 
 body.app-slava-restraint .inspector__palette-remove:hover {
   color: var(--sr-accent);
-}
-
-/* Settings save — primary CTA pill. Single place orange shows up in chrome. */
-body.app-slava-restraint .settings__footer {
-  padding: var(--sr-space-3) var(--sr-space-4) var(--sr-space-4);
-  border-top: 1px solid var(--sr-edge);
-  background: linear-gradient(180deg, rgba(20, 20, 22, 0.52), rgba(20, 20, 22, 0.82));
-}
-
-body.app-slava-restraint .settings__save-button {
-  background: var(--sr-accent);
-  color: var(--sr-on-accent);
-  border: none;
-  padding: 10px 18px;
-  font-family: var(--sr-ui);
-  font-weight: 600;
-  font-size: var(--sr-type-control);
-  letter-spacing: 0;
-  text-transform: none;
-  border-radius: var(--sr-radius-pill);
-  cursor: pointer;
-  margin-top: 0;
-  transition: filter var(--sr-motion-fast);
-}
-body.app-slava-restraint .settings__save-button:hover {
-  filter: brightness(1.08);
-}
-body.app-slava-restraint .settings__save-button:disabled {
-  opacity: var(--sr-disabled-opacity-muted);
-  cursor: default;
-}
-
-body.app-slava-restraint .settings__toggle-row {
-  border: 1px solid var(--sr-edge);
-  border-radius: var(--sr-radius-control);
-  background: rgba(255, 255, 255, 0.03);
-  transition: background-color var(--sr-motion-fast), border-color var(--sr-motion-fast);
-}
-
-body.app-slava-restraint .settings__toggle-row:hover {
-  border-color: var(--sr-edge-strong);
-  background: rgba(255, 255, 255, 0.05);
-}
-
-body.app-slava-restraint .settings__toggle-title {
-  color: var(--sr-ink);
-  font-family: var(--sr-ui);
-  font-size: var(--sr-type-body);
-  font-weight: 600;
-}
-
-body.app-slava-restraint .settings__toggle-description {
-  color: var(--sr-ink-meta);
-  font-family: var(--sr-ui);
-  font-size: var(--sr-type-label);
 }
 
 /* ─────────────────────────────────────────────────────────────────────
@@ -3765,7 +3591,6 @@ body.app-slava-restraint .model-node--text-surface .model-node__header {
   border-radius: var(--sr-radius-panel) var(--sr-radius-panel) 0 0;
 }
 
-
 body.app-slava-restraint .model-node--text-surface .model-node__inline-textarea {
   display: flex;
   flex: 1 1 auto;
@@ -3868,7 +3693,6 @@ body.app-slava-restraint .model-node--text-input .model-node__ports--input .mode
 body.app-slava-restraint .model-node--text-input .model-node__ports--output .model-node__port-row {
   right: 0;
 }
-
 
 body.app-slava-restraint .model-node--text-input .react-flow__handle {
   pointer-events: auto;

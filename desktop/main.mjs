@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, safeStorage, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, safeStorage, shell } from 'electron';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { homedir } from 'node:os';
@@ -6,6 +6,7 @@ import { randomBytes } from 'node:crypto';
 import { startSidecar, stopSidecar, SidecarError, DEFAULT_REPO_ROOT } from './sidecar.mjs';
 import { prepareAppDataEnv } from './paths.mjs';
 import { createPaperLinkSenderValidator, registerPaperLinkHandler } from './paper-links.mjs';
+import { registerFolderPickerHandler } from './folder-picker.mjs';
 import { getConnectorEncryptionKey, registerKreaAuthLinkHandler } from './connector-vault.mjs';
 import { installRendererNavigationGuard } from './navigation.mjs';
 import {
@@ -682,6 +683,7 @@ if (!acquiredLock) {
       registerCredentialHandlers(ipcMain, credentialService, validateSender);
       registerPaperLinkHandler(ipcMain, shell, createPaperLinkSenderValidator(rendererUrl, () => mainWindow?.webContents));
       registerKreaAuthLinkHandler(ipcMain, shell, createPaperLinkSenderValidator(rendererUrl, () => mainWindow?.webContents));
+      registerFolderPickerHandler(ipcMain, dialog, createPaperLinkSenderValidator(rendererUrl, () => mainWindow?.webContents), () => mainWindow);
 
       // --- One-time migration (VAL-MIG-007..010, VAL-UX-001..006) ---
       //
