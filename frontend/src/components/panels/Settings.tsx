@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { ChevronDown, ChevronRight, X } from 'lucide-react';
-import { useUIStore } from '../../store/uiStore';
+import { RUN_COST_CONFIRM_CHOICES, useUIStore } from '../../store/uiStore';
 import { getSettings, updateSettings, updateCredential, deleteSettingsApiKey } from '../../lib/api';
 import { v4 as uuidv4 } from 'uuid';
 import { useSettingsDraftStore, readSettingsDraft, settingsDraftIsDirty, type SettingsDraft, type SettingsMutation } from '../../store/settingsDraftStore';
@@ -24,6 +24,7 @@ const API_KEY_FIELDS: ApiKeyField[] = [
   { key: 'OPENAI_API_KEY', label: 'OpenAI', placeholder: 'sk-...', url: 'https://platform.openai.com/api-keys' },
   { key: 'ANTHROPIC_API_KEY', label: 'Anthropic', placeholder: 'sk-ant-...', url: 'https://console.anthropic.com/settings/keys' },
   { key: 'GOOGLE_API_KEY', label: 'Google (Gemini)', placeholder: 'AIza...', url: 'https://aistudio.google.com/apikey' },
+  { key: 'GOOGLE_VERTEX_CREDENTIALS', label: 'Google Vertex AI (service-account JSON, for Veo)', placeholder: '{"type": "service_account", ...}', url: 'https://console.cloud.google.com/iam-admin/serviceaccounts' },
   { key: 'OPENROUTER_API_KEY', label: 'OpenRouter', placeholder: 'sk-or-...', url: 'https://openrouter.ai/keys' },
   { key: 'REPLICATE_API_TOKEN', label: 'Replicate', placeholder: 'r8_...', url: 'https://replicate.com/account/api-tokens' },
   { key: 'FAL_KEY', label: 'fal.ai', placeholder: 'fal_...', url: 'https://fal.ai/dashboard/keys' },
@@ -62,6 +63,8 @@ export function Settings() {
   const setCanvasLowDetail = useUIStore((s) => s.setCanvasLowDetail);
   const canvasMinimapEnabled = useUIStore((s) => s.canvasMinimapEnabled);
   const setCanvasMinimapEnabled = useUIStore((s) => s.setCanvasMinimapEnabled);
+  const runCostConfirmUsd = useUIStore((s) => s.runCostConfirmUsd);
+  const setRunCostConfirmUsd = useUIStore((s) => s.setRunCostConfirmUsd);
   const notificationPrefs = useUIStore((s) => s.notificationPrefs);
   const setNotificationPrefs = useUIStore((s) => s.setNotificationPrefs);
   const startOnboarding = useUIStore((s) => s.startOnboarding);
@@ -595,6 +598,29 @@ export function Settings() {
                 </span>
               </label>
             )}
+            <div className="inspector__section">
+              <label className="inspector__label" htmlFor="settings-run-cost-confirm">Ask before costly runs</label>
+              <select
+                id="settings-run-cost-confirm"
+                className="inspector__field"
+                value={runCostConfirmUsd === null ? 'off' : String(runCostConfirmUsd)}
+                onChange={(e) => setRunCostConfirmUsd(e.target.value === 'off' ? null : Number(e.target.value))}
+                aria-describedby="settings-run-cost-confirm-help"
+              >
+                {runCostConfirmUsd !== null && !(RUN_COST_CONFIRM_CHOICES as readonly number[]).includes(runCostConfirmUsd) && (
+                  <option value={String(runCostConfirmUsd)}>When a run could cost ${runCostConfirmUsd} or more</option>
+                )}
+                {RUN_COST_CONFIRM_CHOICES.map((usd) => (
+                  <option key={usd} value={String(usd)}>
+                    When a run could cost {usd < 1 ? `$${usd.toFixed(2)}` : `$${usd}`} or more
+                  </option>
+                ))}
+                <option value="off">Never</option>
+              </select>
+              <p id="settings-run-cost-confirm-help" className="settings__key-status">
+                Estimates use list prices checked against each vendor's pricing page. Nodes without a published price aren't counted.
+              </p>
+            </div>
             <button
               type="button"
               className="settings__onboarding-button"

@@ -12,7 +12,7 @@ from models.events import ExecutionEvent
 from cinema.color import _parse_recraft_color
 from handlers.openai_image import handle_openai_image_generate
 from handlers.openai_image_edit import handle_openai_image_edit
-from handlers.google_gemini import handle_imagen4, handle_nano_banana, handle_lyria3, handle_gemini_tts, handle_gemini_embeddings
+from handlers.google_gemini import handle_nano_banana, handle_lyria3, handle_gemini_tts, handle_gemini_embeddings
 from handlers.elevenlabs import handle_elevenlabs_tts, handle_elevenlabs_sfx, handle_elevenlabs_sts, handle_elevenlabs_isolation, handle_elevenlabs_dubbing, handle_elevenlabs_stt
 from handlers.openai_audio import handle_openai_stt, handle_openai_translate, handle_openai_tts
 from handlers.krea import (
@@ -35,7 +35,6 @@ SYNC_HANDLERS: dict[
     "paper-source": handle_paper_source,
     "gpt-image-1-generate": handle_openai_image_generate,
     "gpt-image-1-edit": handle_openai_image_edit,
-    "imagen-4-generate": handle_imagen4,
     "nano-banana": handle_nano_banana,
     "elevenlabs-tts": handle_elevenlabs_tts,
     "elevenlabs-sfx": handle_elevenlabs_sfx,
@@ -509,12 +508,15 @@ def get_handler_registry(
             inputs: dict[str, PortValueDict],
             api_keys: dict[str, str],
         ) -> dict[str, Any]:
-            # Prefer direct Google API, fall back to FAL
-            if api_keys.get("GOOGLE_API_KEY"):
-                from handlers.veo import handle_veo
+            # Google first (Vertex, then the Gemini API), fal as the fallback.
+            from handlers.veo import fal_veo_route, handle_veo, with_vertex_hint
+            if api_keys.get("GOOGLE_VERTEX_CREDENTIALS") or api_keys.get("GOOGLE_API_KEY"):
                 return await handle_veo(node, inputs, api_keys, emit=emit)
-            routed_node = _fal_wrapper_node(node, "fal-ai/veo3", internal_params=("model",))
-            return await handle_fal_universal(routed_node, inputs, api_keys, emit=emit)
+            routed_node, routed_inputs = fal_veo_route(node, inputs)
+            try:
+                return await handle_fal_universal(routed_node, routed_inputs, api_keys, emit=emit)
+            except RuntimeError as exc:
+                raise RuntimeError(with_vertex_hint(str(exc))) from exc
 
         async def _gemini_omni_flash_handler(
             node: GraphNode,
@@ -959,6 +961,10 @@ def get_handler_registry(
             # strip them from inputs to prevent the universal handler from
             # double-mapping to image_url/end_image_url.
             from handlers.fal_universal import _to_fal_url
+            from handlers.veo import handle_veo_flf_vertex, with_vertex_hint
+
+            if api_keys.get("GOOGLE_VERTEX_CREDENTIALS"):
+                return await handle_veo_flf_vertex(node, inputs, api_keys, emit=emit)
 
             params = dict(node.params)
             params["endpoint_id"] = "fal-ai/veo3.1/first-last-frame-to-video"
@@ -978,7 +984,10 @@ def get_handler_registry(
             }
 
             routed_node = node.model_copy(update={"params": params})
-            return await handle_fal_universal(routed_node, modified_inputs, api_keys, emit=emit)
+            try:
+                return await handle_fal_universal(routed_node, modified_inputs, api_keys, emit=emit)
+            except RuntimeError as exc:
+                raise RuntimeError(with_vertex_hint(str(exc))) from exc
 
         async def _ltx_23_handler(
             node: GraphNode,

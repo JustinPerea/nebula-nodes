@@ -10,6 +10,83 @@ Justin asked for API keys to be reachable from the home page. Before, Settings o
 - **Test change.** `App.canvasFocus.test.tsx` asserted home renders no workspace chrome, including Settings. It now expects Settings (closed) and still checks chat, import, commands and run are absent.
 - Checked live at 1280×820: the drawer lines up with the header's right edge, Escape returns focus to the gear, and opening a project with Settings open lands on the canvas with the Nodes menu, not Settings.
 
+## 2026-10-10 — Retire shut-down Google models; Veo on Vertex AI
+
+Google shut down or is about to shut down several models our nodes call (https://ai.google.dev/gemini-api/docs/deprecations, checked 2026-10-10). Merged as PR #35 on 2026-10-12.
+
+**What changed:**
+- **Imagen 4 is gone** (shut down 2026-08-17). `imagen-4-generate` is removed from both catalogs and the handlers. A saved node loads as Nano Banana on 2.1 (Google's named replacement) with its aspect ratio and 1K/2K size carried over, titled "Nano Banana (was Imagen 4)" unless the person renamed it. `services/retired_nodes.py` runs on boot restore, project snapshots, graph-file import and `CLIGraph.load`. Creating a new one returns a 400 naming the replacement. The onboarding sample graph and Create's Featured list use Nano Banana instead.
+- **Nano Banana 2.1** (`gemini-nano-banana-2.1`) is a model on `nano-banana`: 1K/2K/4K, all 14 aspect ratios. Google documents it only on the Interactions API, so it has its own branch in `handlers/google_gemini.py`. Image URLs go to Google as `{"type": "image", "uri"}` rather than being fetched here. A saved 512 renders at 1K.
+- **Gemini Omni** calls `gemini-omni-1.1-flash`. The preview ends 2026-10-22.
+- **Veo 3.0, 3.0 Fast and 2.0 options are gone** (shut down 2026-06-30). Saved nodes move to the matching 3.1 model (`RETIRED_PARAMS` in `retired_nodes.py`). Veo 2's 5 s becomes 6 s, the nearest length that doesn't cut the clip short. The 4 s option and seed are now always visible; 4K stays Standard/Fast only.
+- **Veo routes, in order:** Vertex AI (`GOOGLE_VERTEX_CREDENTIALS`), then the Gemini API (`GOOGLE_API_KEY`), then fal (`FAL_KEY`).
+  - `directKeyName` can now be a list. `frontend/src/lib/directRoute.ts` resolves it for the Inspector, Create, readiness and route display; `model_pricing.route_provider` does the same on the backend. With nothing set, setup points at Vertex.
+  - **Vertex:** `services/google_vertex.py` signs an RS256 JWT with the service-account key (via `cryptography`, already a dependency, so no Google SDK) and exchanges it at the fixed `oauth2.googleapis.com/token`. It never uses the key file's `token_uri`. Tokens are cached until 5 minutes before expiry. Express-mode API keys don't cover Veo, which is why this needs a service account. Calls go to `us-central1`, with the project taken from the key.
+  - **Vertex models:** the preview model values map to `veo-3.1-generate-001` / `veo-3.1-fast-generate-001` (GA, retiring "Nov 17 2026 or later") and `veo-3.1-lite-generate-001` (preview).
+  - **Vertex requests and output:** every request sends `generateAudio: true` and `sampleCount: 1`. No `storageUri` is sent, so videos come back inline. A `gcsUri` answer is downloaded with the same token.
+  - **Vertex extension:** it extends from bytes, so a Vertex run's Source URI is the saved file. A Gemini `files/` URI is refused with an explanation.
+  - **`veo-3-flf`** also runs on Vertex when the key is set. It maps its fal-shaped params: `auto` aspect ratio is omitted, `"6s"` becomes 6, and `negative_prompt` becomes `negativePrompt`.
+  - **fal** moved off the deprecated `fal-ai/veo3` to `fal-ai/veo3.1` and `/fast`. It adds `/image-to-video` when a first frame is wired and `/first-last-frame-to-video` when both frames are. The old fal route sent Google's param names (`aspectRatio`, `"8"`), which fal doesn't read. They're now `aspect_ratio` and `"8s"`. Lite isn't on fal and runs as Fast. Extension isn't offered on fal, so it fails with a pointer to the Google routes.
+  - **From 2026-10-22,** a failed Gemini API or fal Veo run appends "add a Vertex key" (`with_vertex_hint`). Nothing is blocked ahead of time, in case either keeps working.
+- **Settings:** new "Google Vertex AI (service-account JSON, for Veo)" field. The key is on the credential allowlists (backend and desktop bridge). The health check validates the JSON offline (`configured_unverified`), since a real check needs a token exchange.
+- **Image fetches for Veo frames** now go through `fetch_public_media` (public https only, every redirect re-checked). Before, any URL a graph supplied was fetched server-side.
+- **Pricing:**
+  - `veo-3` rows are model × resolution from Google's per-second with-audio table. The old note claimed the node sends no duration or resolution; it does, through `sharedParams`. The estimators didn't read `sharedParams`, and now both do (`_definition_params`, `definitionParams`), with a shared fixture case.
+  - Vertex is priced with the same rows. Vertex lists identical amounts per "count" without saying what a count is; they're read as per second, the higher reading. Unconfirmed.
+  - Nano Banana 2.1 rows: $0.0336 / $0.0504 / $0.113 for 1K / 2K / 4K.
+
+**Not verified live:** no paid generations were run. That covers the Vertex request and response shapes (built from Google's model reference), extension from bytes on Vertex, the fal 3.1 endpoints' param names (from fal's model pages), and Nano Banana 2.1 on the Interactions API.
+
+**Follow-up checks (2026-10-11), against the providers' current docs, still no paid runs:**
+- **fal:** the `fal-ai/veo3.1` endpoint schemas (OpenAPI) match what we send: `aspect_ratio`, `"8s"`, string `safety_tolerance`, `image_url`, `first_frame_url`/`last_frame_url`. `/fast` has a first-last-frame endpoint too.
+- **Nano Banana 2.1:** the Interactions request matches Google's examples and API reference: `response_format` with `type`/`aspect_ratio`/`image_size`, image blocks with `data`+`mime_type` or `uri`, and `store`. Whether any public https image URL is accepted as `uri` isn't spelled out.
+- **Vertex request and response:** `predictLongRunning`, `fetchPredictOperation` and `response.videos[]` (inline bytes when no `storageUri`) all match. Google now brands Vertex AI as "Gemini Enterprise Agent Platform"; hosts and paths are unchanged.
+- **Vertex fixes:**
+  - Fast and Lite stop at 1080p on Vertex (only Standard renders 4K), so 4K with Fast or Lite is refused up front.
+  - Frames must be JPEG/PNG, so other formats are converted to PNG.
+  - Vertex extends with Lite too, doesn't lock the output to 720p, and accepts any 1–30 s, 24 fps MP4. So Extend Video on Vertex now takes a saved file, a public https URL (≤100 MB) or `gs://`.
+- **Lite frames:** Lite's model card says image input "Not supported" while its capability list says image-to-video. Frames are sent and Vertex decides, since a request it rejects should fail clearly at no cost, and the Gemini API route already sends them.
+- **IAM:** the role is "Gemini Enterprise Agent Platform User" (`roles/aiplatform.user`, formerly Vertex AI User).
+- **Gemini Omni:** inputs are now fetched through `fetch_public_media` (public https only, ≤100 MB), closing the same SSRF shape fixed for Veo.
+- **Deprecations:** Google's page names `gemini-omni-1.1-flash` as the Gemini API replacement for the Veo 3.1 previews, alongside the GA models on the Agent Platform.
+
+**Live runs (2026-10-12), on the Mac in browser mode:**
+- **fal: passed.** With only `FAL_KEY` set, `veo-3` on Veo 3.1 Fast, 4 s, 720p, no frames, returned a 4.01 s 1280×720 mp4 with an audio track in about 53 s. That combination can only route to `fal-ai/veo3.1/fast` (`fal_veo_route`).
+- **Gemini API (Nano Banana 2.1): passed** after Justin topped up the project's prepay credits. A 1K 1:1 request returned a 1024×1024 JPEG through the Interactions branch (`INTERACTIONS_IMAGE_MODELS` in `handlers/google_gemini.py`). The first attempt failed with `RESOURCE_EXHAUSTED: Your prepayment credits are depleted`, while the provider health check reported Google "valid". That check only lists models, which is free, so it can't see prepay balance.
+- **Run manifests don't record the route.** `manifest.json`'s `endpoint` is the node definition's static `apiEndpoint` (`execution/engine.py`), so the fal Veo run says `veo-3.1-generate-preview` and the Nano Banana 2.1 run says `generateContent`. Neither was the call made. Left as a follow-up: record the endpoint the handler actually hit.
+- **Vertex: skipped.** The goodmachines.ai org enforces `iam.managed.disableServiceAccountKeyCreation` (Google's default for newer orgs), so no service-account JSON key can be made. A service account `nebula-veo` with `roles/aiplatform.user` exists in `goodmachines-gemini`, without a key. Justin chose to merge without a Vertex live run. Anyone on a recent Google Cloud org will hit the same wall, so keyless Vertex auth (ADC with service-account impersonation) is the follow-up if Vertex matters.
+- The `veo-3` port notes said extension is "not Lite; output locked to 720p" and Source URI is always a `files/…` URI. Both are Gemini-API-only now; the notes say what each route does.
+
+## 2026-10-10 — Run cost from a curated price table
+
+Justin chose option (a): a curated price table, each price checked against the vendor's page, then a cost chip on Run and a confirm above a threshold. Not committed yet.
+
+**The table** (`backend/data/model_pricing.json`, 56 nodes):
+- Every entry has `sources` (https URL plus the quoted price line) and a `checked` date. `validate_pricing` refuses entries without them, values that aren't real node options, utility nodes, and dual-route nodes that don't say whose price it is.
+- 47 Krea entries are **generated** by `scripts/sync-krea-catalog.py` from `x-krea-pricing` in Krea's OpenAPI spec (exact USD per request for API-token runs). They carry `generatedBy` and the sync script owns them: it rewrites only those and errors if one collides with a curated entry. 20 Krea models stay unpriced because their price depends on things a node param doesn't capture (reference image count, video reference, billing tier). The script prints why for each.
+- 9 entries are **hand-curated**: GPT Image 2 / 2.5 generate and edit (OpenAI calculator rows), Nano Banana (Google), Veo 3.1 direct (Google, per second), Nano Banana via fal (generate and edit), Kling v3 (fal, per second).
+- Not priced on purpose: Gemini Omni Flash (per-second rate known, clip length isn't), Imagen 4 (shut down), Veo 3.0/2.0 (shut down), every Krea account run (compute units with no published rate).
+
+**Decisions:**
+- **One estimator, two implementations, one test file.** `services/model_pricing.py` and `frontend/src/lib/pricing.ts` both run `backend/tests/fixtures/pricing_cases.json`, so they can't drift. The frontend fetches the table once from `GET /api/pricing` (`store/pricingStore.ts`, loaded in `App.tsx`).
+- **Ranges, not guesses.** `auto` quality/size on OpenAI resolves at run time, so those rows are `[low, high]` over the node's own options (GPT Image 2.5 auto/auto is about $0.0047–0.43). Wide, but true.
+- **"+" means part of the run has no price.** Edit nodes have `plus: "input images"` (OpenAI bills input image tokens by size), and unpriced paid nodes also open the total. The chip shows "$0.16+", and the tooltip names what's missing.
+- **Route-aware.** Dual-route nodes (Veo 3, Ideogram, Meshy) bill whichever key is set. An entry names its `provider`, and the run is unpriced when it routes elsewhere (Veo via fal has no entry yet). Backend `route_provider` mirrors frontend `runRouteProvider`.
+- **Batches multiply.** Below a Batch a node runs once per item; below an Iterator up to its cap (the array isn't known until run time). The nearest fan-out above a node decides, matching the engine's rules (it rejects independent joins and caps nested expansion). A cluster run only counts fan-out inside the cluster, since that's all the engine receives.
+- **Krea account runs are "billed to your Krea plan"**, not unpriced, and add nothing to the dollar total.
+- **The confirm lives in the store**, in `executeGraph` / `executeNode` / `executeCluster`, so every Run path is covered (toolbar, selection bar, ⌘↵, palette, context menu, Inspector, Cinema, accepted proposals). It asks when the *high* estimate reaches the threshold. If the table didn't load, it never asks. Unpriced nodes don't trigger it but are named in the message.
+- **Threshold** is a per-browser preference (`nebula:run:costConfirmUsd`, default $1, choices $0.50/$1/$5/$20/Never) in Settings › Interface, next to the other immediate preferences. It isn't a saved backend setting.
+- **Proposals got real numbers too.** `cost.estimate` was always `null`. It's now `{currency, low, high, open, unpriced, plan, plus}` (or `null` when nothing is priced), and each node entry has `price`. The proposal bar summary adds "~$0.07", the CLI prints "— $0.07 at list prices", and the MCP docstring and `docs/MCP-SETUP.md` say so.
+
+**Surprises worth knowing:**
+- Krea's spec gave MiniMax H3 Max 6,864 price points. Storing all points bloated the pinned catalog to 2.1 MB, so pricing is stored only for models whose dimensions all map onto request fields (353 KB).
+- Krea lists Veo durations 5 and 7 in pricing that its own request schema rejects. The generator drops unreachable points rather than shipping rows the validator would flag.
+- Gemini 3 Pro Image renders a 512 request at 1K (`allowed_sizes` in `handlers/google_gemini.py`), so the 512 row carries the 1K price.
+- Refreshing the Krea spec changed one random seed default in `node_definitions.json` (Krea's spec ships a random example seed). `MODEL_REFERENCE.md` was regenerated for it. Pinning seed defaults in the sync script would stop that churn. Left as a follow-up.
+- Lifecycle findings while checking Google's pages: Imagen 4 models shut down 2026-08-17 (our `imagen-4-generate` node calls them); Veo 3.0/3.0 Fast/2.0 shut down 2026-06-30; the Veo 3.1 previews and `gemini-omni-flash-preview` shut down 2026-10-22 (replacement `gemini-omni-1.1-flash`). These are fixed in the entry above.
+
+**Keeping prices current:** curated entries need a fresh source and `checked` date when a vendor changes prices. Run `python scripts/sync-krea-catalog.py --refresh` for Krea. `backend/tests/test_model_pricing.py` fails if any entry stops validating against the node catalog.
+
 ## 2026-10-10 — Eight more UX fixes: one bar, shortcuts, renaming, live run status
 
 Justin approved eight from a second UX pass. Seven are done; #5 (cost estimate) is blocked on a pricing source (see below). Not committed yet.
@@ -25,7 +102,7 @@ Justin approved eight from a second UX pass. Seven are done; #5 (cost estimate) 
    - Ctrl+S/O were removed from the canvas handler; `GraphFileActions` already owns them globally.
    - Copy defers to the browser when there's a text selection.
 4. **Image inputs fan out.** Several input handles on a text or image surface used to stack at 50%. Each row gets `--port-index` / `--port-count` and sits `--sr-node-surface-port-gap` (28px) apart around the middle.
-5. **Cost estimate: blocked, not built.** There's no price data we can trust. Node definitions carry none, and the only prices in the app are OpenRouter/Nous per-token rates and Quiver credits. Most nodes (OpenAI images, fal, Runway, Kling…) have none, and real cost depends on params (quality, size, duration). Inventing a table would show wrong numbers with confidence. Options are in the report to Justin; the "N paid" chip stays as it is.
+5. **Cost estimate: blocked, not built.** (Now built from a curated price table; see the next section up.) There's no price data we can trust. Node definitions carry none, and the only prices in the app are OpenRouter/Nous per-token rates and Quiver credits. Most nodes (OpenAI images, fal, Runway, Kling…) have none, and real cost depends on params (quality, size, duration). Inventing a table would show wrong numbers with confidence. Options are in the report to Justin; the "N paid" chip stays as it is.
 6. **`?` opens a shortcut sheet.**
    - `src/lib/keyboardShortcuts.ts` is the one list (also used for tooltips via `displayKey`, so ⌘ vs Ctrl is right per platform).
    - `KeyboardShortcuts.tsx` is a modal: Esc or `?` closes, focus returns where it was. It's also in ⌘K as "Keyboard shortcuts".

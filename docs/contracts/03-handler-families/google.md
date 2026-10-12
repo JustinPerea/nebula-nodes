@@ -15,19 +15,20 @@ Nebula exposes **Google direct** Gemini image nodes (`GOOGLE_API_KEY`) and **FAL
 
 ---
 
-## 1. Nodes in registry (9 direct)
+## 1. Nodes in registry (8 direct)
 
 | Node id | Pattern | Handler | Exemplar |
 |---------|---------|---------|----------|
 | `nano-banana` | sync | `handle_nano_banana` | [../examples/nano-banana.md](../examples/nano-banana.md) |
 | `gemini-chat` | stream | `handle_gemini_chat` | [../examples/gemini-chat.md](../examples/gemini-chat.md) |
-| `imagen-4-generate` | sync | `handle_imagen4` | [../examples/imagen-4-generate.md](../examples/imagen-4-generate.md) |
 | `lyria-3` | sync | `handle_lyria3` | [../examples/lyria-3.md](../examples/lyria-3.md) |
 | `gemini-tts` | sync | `handle_gemini_tts` | [../examples/gemini-tts.md](../examples/gemini-tts.md) |
 | `gemini-embeddings` | sync | `handle_gemini_embeddings` | [../examples/gemini-embeddings.md](../examples/gemini-embeddings.md) |
-| `veo-3` | async-poll | `handle_veo` | [../examples/veo-3.md](../examples/veo-3.md) |
+| `veo-3` | async-poll | `handle_veo` (Vertex → Gemini API; fal fallback) | [../examples/veo-3.md](../examples/veo-3.md) |
 | `gemini-omni-flash` | sync URI / async-poll inline | `handle_gemini_omni` | [../examples/gemini-omni-flash.md](../examples/gemini-omni-flash.md) |
 | `style-reference` | sync | `handle_style_reference` | [../examples/style-reference.md](../examples/style-reference.md) |
+
+**Retired:** `imagen-4-generate` (Imagen 4 shut down 2026-08-17; node removed 2026-10-10, saved nodes migrate to `nano-banana` on `gemini-nano-banana-2.1` via `backend/services/retired_nodes.py`). Its old exemplar is kept for history: [../examples/imagen-4-generate.md](../examples/imagen-4-generate.md).
 
 **FAL-routed (not in this family — `apiProvider: fal`):** `nano-banana-fal`, `nano-banana-fal-edit` → [fal.md](./fal.md), [../examples/nano-banana-fal.md](../examples/nano-banana-fal.md).
 
@@ -45,6 +46,8 @@ Query param alternative (some docs): `?key=` — Nebula handlers use the header.
 
 Missing key → `ValueError("GOOGLE_API_KEY is required")`.
 
+**Veo exception:** `veo-3` (and `veo-3-flf`) prefer `GOOGLE_VERTEX_CREDENTIALS`, a service-account JSON key. The handler signs a JWT, exchanges it for an OAuth token (`backend/services/google_vertex.py`, no Google SDK) and calls `https://us-central1-aiplatform.googleapis.com/v1/projects/{project}/locations/us-central1/publishers/google/models/{model}:predictLongRunning` with `Authorization: Bearer`. `directKeyName` is a list (`["GOOGLE_VERTEX_CREDENTIALS", "GOOGLE_API_KEY"]`); see `frontend/src/lib/directRoute.ts`.
+
 ---
 
 ## 3. Base URL
@@ -58,8 +61,8 @@ Path patterns:
 | Operation | Path template |
 |-----------|---------------|
 | Generate (Gemini multimodal) | `/v1beta/models/{model}:generateContent` |
+| Nano Banana 2.1 | `POST /v1beta/interactions` (image URLs sent as `{"type":"image","uri"}`, not fetched) |
 | Stream chat | `/v1beta/models/{model}:streamGenerateContent?alt=sse` |
-| Imagen | `/v1beta/models/{model}:predict` |
 | Embeddings | `/v1beta/models/{model}:embedContent` |
 | Veo | `/v1beta/models/{model}:predictLongRunning` → poll `operations/...` |
 | Omni Flash | `POST /v1beta/interactions`; URI parses initial response, inline polls `interactions/{id}` |
@@ -100,7 +103,6 @@ Multi-image port → multiple parts in `contents[0].parts`.
 | `inlineData` (image mime) | `image` → saved file path |
 | `text` | `text` |
 | `inlineData` (audio) | `audio` (may wrap PCM in WAV for TTS) |
-| Imagen `bytesBase64Encoded` | `image` |
 | Veo `video.uri` | `video` (downloaded to file) |
 | Omni `steps` video part | `video` + `interaction_id` |
 
@@ -112,6 +114,7 @@ Official docs (2026) use stable ids **without** `-preview`:
 
 | Official (ai.google.dev) | Nebula registry value today |
 |--------------------------|----------------------------|
+| `gemini-nano-banana-2.1` (Interactions API) | `gemini-nano-banana-2.1` (added 2026-10-10) |
 | `gemini-3.1-flash-image` | `gemini-3.1-flash-image` |
 | `gemini-3.1-flash-lite-image` | `gemini-3.1-flash-lite-image` (stable) |
 | `gemini-3-pro-image` | `gemini-3-pro-image` |
@@ -129,8 +132,8 @@ The two preview IDs were shut down on 2026-06-25. Registry and handler values we
 | Models | https://ai.google.dev/gemini-api/docs/models |
 | API — generateContent | https://ai.google.dev/api/generate-content |
 | Pricing | https://ai.google.dev/gemini-api/docs/pricing |
-| Imagen | https://ai.google.dev/gemini-api/docs/imagen |
 | Video (Veo) | https://ai.google.dev/gemini-api/docs/video |
+| Veo on Vertex AI | https://cloud.google.com/vertex-ai/generative-ai/docs/model-reference/veo-video-generation |
 | Nebula audit | `docs/model-providers/google/gemini-nano-banana.md` |
 
 ---
@@ -143,7 +146,7 @@ Shipped 2026-06-30. Uses the **Interactions API** (not `generateContent` / `pred
 
 | Field | Value |
 |-------|-------|
-| Model id | `gemini-omni-flash-preview` (pinned on node) |
+| Model id | `gemini-omni-1.1-flash` (pinned on node; the preview id shuts down 2026-10-22) |
 | URL | `POST https://generativelanguage.googleapis.com/v1beta/interactions` |
 | URI delivery | `background: false`; consume URI from the initial creation response |
 | Inline delivery | `background: true`; poll `GET …/interactions/{id}` |

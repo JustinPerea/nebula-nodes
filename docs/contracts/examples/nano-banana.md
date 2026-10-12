@@ -6,8 +6,8 @@ handler_family: google
 handler_pattern: sync
 nodes:
   - nano-banana
-verified: 2026-07-22
-pricing_verified: 2026-07-01
+verified: 2026-10-10
+pricing_verified: 2026-10-10
 stale_after_days: 14
 sources:
   - https://ai.google.dev/gemini-api/docs/image-generation
@@ -24,7 +24,7 @@ oracle:
 
 Template for porting agents. **Sync** Gemini image generation and editing via `generateContent` — different pattern from [gpt-image-2 stream](./gpt-image-2.md).
 
-**In scope:** single node `nano-banana` (three model enum values).
+**In scope:** single node `nano-banana` (five model enum values). Nano Banana 2.1 uses the Interactions API instead of `generateContent` (see §4). It replaces the retired Imagen 4 node; saved `imagen-4-generate` nodes migrate here.
 
 **Out of scope:** FAL routing → [nano-banana-fal.md](./nano-banana-fal.md). Other Google nodes → see [../03-handler-families/google.md](../03-handler-families/google.md) exemplar index.
 
@@ -56,6 +56,16 @@ Re-check official links when `pricing_verified` is older than `stale_after_days`
 ### Pricing (Google Gemini API, paid tier)
 
 Rates from [official pricing](https://ai.google.dev/gemini-api/docs/pricing) as of `pricing_verified`. Image models bill **output image tokens** (and input tokens for text + reference images).
+
+#### `gemini-nano-banana-2.1` (Nano Banana 2.1)
+
+Registry value: `gemini-nano-banana-2.1` (checked 2026-10-10)
+
+| `imageSize` | ≈ per image |
+|-------------|-------------|
+| 1K (a saved `512` renders at 1K) | $0.0336 |
+| 2K | $0.0504 |
+| 4K | $0.113 |
 
 #### `gemini-3.1-flash-image` (Nano Banana 2)
 
@@ -152,9 +162,9 @@ Draft iterations: use `gemini-3.1-flash-image` at `1K` before `4K` or Pro.
 
 | `key` | `type` | `default` | Values |
 |-------|--------|-----------|--------|
-| `model` | enum | `gemini-3.1-flash-image` | `gemini-3.1-flash-image`, `gemini-3.1-flash-lite-image`, `gemini-3-pro-image`, `gemini-2.5-flash-image` |
-| `aspect_ratio` | enum | `1:1` | `1:1`, `16:9`, `9:16`, `4:3`, `3:4`, `3:2`, `2:3`, `5:4`, `4:5`, `21:9`; plus `1:4`, `4:1`, `1:8`, `8:1` (3.1 flash only in UI) |
-| `imageSize` | enum | `1K` | `512`, `1K`, `2K`, `4K` — hidden for `gemini-2.5-flash-image`; `512` only on 3.1 flash |
+| `model` | enum | `gemini-3.1-flash-image` | `gemini-nano-banana-2.1`, `gemini-3.1-flash-image`, `gemini-3.1-flash-lite-image`, `gemini-3-pro-image`, `gemini-2.5-flash-image` |
+| `aspect_ratio` | enum | `1:1` | `1:1`, `16:9`, `9:16`, `4:3`, `3:4`, `3:2`, `2:3`, `5:4`, `4:5`, `21:9`; plus `1:4`, `4:1`, `1:8`, `8:1` (2.1 and 3.1 flash only in UI) |
+| `imageSize` | enum | `1K` | `512`, `1K`, `2K`, `4K` — hidden for `gemini-2.5-flash-image`; `512` only on 3.1 flash; 2.1 has `1K`/`2K`/`4K`; Flash-Lite `1K` only |
 
 **Handler-pinned**
 
@@ -195,6 +205,8 @@ Content-Type: application/json
 ```
 
 `{model}` from `node.params.model` (registry enum).
+
+**Nano Banana 2.1 exception:** `POST https://generativelanguage.googleapis.com/v1beta/interactions` with body `{ "model": "gemini-nano-banana-2.1", "input": …, "response_format": { "type": "image", "aspect_ratio", "image_size" }, "store": false }`. Wired image URLs go in the input as `{"type":"image","uri"}`; the backend never fetches them. Fixture: `contracts/fixtures/handlers/google/nano-banana-2-1-generate-request.json`.
 
 ### Body (oracle shape)
 
@@ -279,6 +291,8 @@ Nebula cinema uses `MODEL_MAX_REFS["nano-banana"] = 14` for character bundles.
 
 **Fixture (edit via images port):** `contracts/fixtures/handlers/google/nano-banana-edit-request.json`
 
+**Fixture (Nano Banana 2.1, Interactions API):** `contracts/fixtures/handlers/google/nano-banana-2-1-generate-request.json`
+
 Assertions:
 
 - `generationConfig.imageConfig.aspectRatio == "16:9"`
@@ -355,3 +369,4 @@ Edit / multi-ref: connect upstream `image` port(s) → `images` (multi).
 | Date | Change |
 |------|--------|
 | 2026-07-01 | Initial exemplar with official docs + pricing |
+| 2026-10-10 | Added Nano Banana 2.1 (`gemini-nano-banana-2.1`, Interactions API); Imagen 4 nodes migrate here |

@@ -4,7 +4,7 @@ kind: project-model-integration
 project: nebula_nodes
 provider: google
 status: active
-verified: 2026-07-22
+verified: 2026-10-10
 stale_after_days: 14
 ---
 
@@ -72,6 +72,7 @@ Other params (aspect_ratio values, imageSize values, imageConfig path, generatio
 |---|---|---|---|
 | 2026-05-10 | Claude | Initial coverage: gemini-chat, nano-banana, gemini-tts, gemini-embeddings | ai.google.dev |
 | 2026-05-17 | Claude | Phase 2 full audit: all 7 Google nodes (+ imagen-4, lyria-3, veo-3). Initial commit fixed handler bugs but introduced 2 regressions on nano-banana and lyria-3 (path/value mismatches); caught by live smoke tests on the same day and corrected. See "Live smoke regressions" below. Net result: gemini-embeddings camelCase fix verified, nano-banana `imageConfig` path restored, lyria-3 `AUDIO_WAV` proto enum value applied. | ai.google.dev/gemini-api/docs (text-generation, image-generation, imagen, video, speech-generation, music-generation, embeddings) accessed 2026-05-17; direct curl verification 2026-05-17 |
+| 2026-10-10 | Claude | Retired `imagen-4-generate` (migrates to Nano Banana 2.1); added `gemini-nano-banana-2.1`; Veo 3.0/3.0 Fast/2.0 removed, Vertex AI route added, fal moved to `fal-ai/veo3.1`; Omni moved to `gemini-omni-1.1-flash` | ai.google.dev/gemini-api/docs (pricing, models), cloud.google.com Vertex AI Veo reference, checked 2026-10-10 |
 
 ### 2026-05-17 Fixes Applied (final state after live smoke regression fix)
 
@@ -97,13 +98,13 @@ The first pass of this audit (commit `6a30941`) changed two paths based on the p
 | Node ID | Route | Key | Endpoint | Execution | Use |
 |---|---|---|---|---|---|
 | `gemini-chat` | Google direct | `GOOGLE_API_KEY` | `/v1beta/models/{model}:streamGenerateContent?alt=sse` | stream | Streaming text and vision chat |
-| `nano-banana` | Google direct | `GOOGLE_API_KEY` | `/v1beta/models/{model}:generateContent` | sync | Text-to-image and image edit, multi-image composition |
-| `imagen-4-generate` | Google direct | `GOOGLE_API_KEY` | `/v1beta/models/{model}:predict` | sync | High-quality photorealistic image generation |
+| `nano-banana` | Google direct | `GOOGLE_API_KEY` | `/v1beta/models/{model}:generateContent` (Nano Banana 2.1: `/v1beta/interactions`) | sync | Text-to-image and image edit, multi-image composition |
 | `lyria-3` | Google direct | `GOOGLE_API_KEY` | `/v1beta/models/{model}:generateContent` | sync | Music/audio generation with optional lyrics |
 | `gemini-tts` | Google direct | `GOOGLE_API_KEY` | `/v1beta/models/{model}:generateContent` | sync | Gemini text-to-speech, named voice catalog |
 | `gemini-embeddings` | Google direct | `GOOGLE_API_KEY` | `/v1beta/models/{model}:embedContent` | sync | Text and multimodal embeddings |
-| `veo-3` | Google direct | `GOOGLE_API_KEY` | `/v1beta/models/{model}:predictLongRunning` | async-poll | Video generation, image-to-video, frame interpolation |
-| `gemini-omni-flash` | Google direct | `GOOGLE_API_KEY` | `/v1beta/interactions` | sync URI / async-poll inline | Conversational video gen/edit (Interactions API) |
+| `veo-3` | Vertex AI → Google direct → FAL | `GOOGLE_VERTEX_CREDENTIALS`, `GOOGLE_API_KEY`, `FAL_KEY` | `:predictLongRunning` (Vertex `us-central1` or `/v1beta/models/{model}`); fal `fal-ai/veo3.1[/fast]` | async-poll | Video generation, image-to-video, frame interpolation, extension |
+| `veo-3-flf` | Vertex AI → FAL | `GOOGLE_VERTEX_CREDENTIALS`, `FAL_KEY` | Vertex `veo-3.1-generate-001`; fal `fal-ai/veo3.1/first-last-frame-to-video` | async-poll | First + last frame interpolation |
+| `gemini-omni-flash` | Google direct | `GOOGLE_API_KEY` | `/v1beta/interactions` (model `gemini-omni-1.1-flash`) | sync URI / async-poll inline | Conversational video gen/edit (Interactions API) |
 | `nano-banana-fal` | FAL | `FAL_KEY` | `fal-ai/nano-banana*` (model enum) | async-poll | FAL-hosted Nano Banana text-to-image |
 | `nano-banana-fal-edit` | FAL | `FAL_KEY` | `fal-ai/nano-banana*/edit` | async-poll | FAL-hosted multi-ref edit (up to 14 refs on NB2); cinema/character base option |
 
@@ -133,9 +134,9 @@ Output: `text` (Text).
 
 | Param | Values | Default | Notes |
 |---|---|---|---|
-| `model` | `gemini-3.1-flash-image`, `gemini-3.1-flash-lite-image`, `gemini-3-pro-image`, `gemini-2.5-flash-image` | `gemini-3.1-flash-image` | Nano Banana 2, Nano Banana 2 Lite, Nano Banana Pro, and Nano Banana respectively. |
-| `aspect_ratio` | `1:1`, `16:9`, `9:16`, `4:3`, `3:4`, `3:2`, `2:3`, `5:4`, `4:5`, `21:9`, plus `1:4`, `4:1`, `1:8`, `8:1` | `1:1` | Extreme ratios are only visible on `gemini-3.1-flash-image`. |
-| `imageSize` | `512`, `1K`, `2K`, `4K` | `1K` | Visible on the Gemini 3 image models. Flash Lite is limited to `1K`; `512` is exclusive to `gemini-3.1-flash-image`; `2K` and `4K` are available on Flash and Pro; `gemini-2.5-flash-image` is fixed-size. |
+| `model` | `gemini-nano-banana-2.1`, `gemini-3.1-flash-image`, `gemini-3.1-flash-lite-image`, `gemini-3-pro-image`, `gemini-2.5-flash-image` | `gemini-3.1-flash-image` | Nano Banana 2.1, Nano Banana 2, Nano Banana 2 Lite, Nano Banana Pro, and Nano Banana respectively. 2.1 (added 2026-10-10) runs on the Interactions API and forwards image URLs as `{"type":"image","uri"}` without fetching them. |
+| `aspect_ratio` | `1:1`, `16:9`, `9:16`, `4:3`, `3:4`, `3:2`, `2:3`, `5:4`, `4:5`, `21:9`, plus `1:4`, `4:1`, `1:8`, `8:1` | `1:1` | Extreme ratios are only visible on `gemini-nano-banana-2.1` and `gemini-3.1-flash-image`. |
+| `imageSize` | `512`, `1K`, `2K`, `4K` | `1K` | Visible on the Gemini 3 image models. Flash Lite is limited to `1K`; `512` is exclusive to `gemini-3.1-flash-image`; `2K` and `4K` are available on 2.1, Flash and Pro (2.1 has no `512`); `gemini-2.5-flash-image` is fixed-size. |
 
 Inputs: `prompt` (Text, required), `images` (Image, optional, multiple).
 Outputs: `image` (Image), `text` (Text).
@@ -152,22 +153,9 @@ Outputs: `image` (Image), `text` (Text).
 Inputs: `prompt` (Text, required), `images` (Image, optional, multiple), `video` (Video, optional), `previous_interaction_id` (Text, optional).
 Outputs: `video` (Video), `interaction_id` (Text).
 
-## `imagen-4-generate` Params
+## `imagen-4-generate` (retired)
 
-| Param | Values | Default | Notes |
-|---|---|---|---|
-| `model` | `imagen-4.0-generate-001`, `imagen-4.0-ultra-generate-001`, `imagen-4.0-fast-generate-001` | `imagen-4.0-generate-001` | Standard, Ultra, Fast tiers. |
-| `aspectRatio` | `1:1`, `4:3`, `3:4`, `16:9`, `9:16` | `1:1` | All tiers. |
-| `numberOfImages` | 1–4 | 1 | Maps to `parameters.sampleCount`. |
-| `seed` | integer | random | Reproducibility. |
-| `enhancePrompt` | boolean | false | Maps to `parameters.enhancePrompt`. |
-| `imageSize` | `1K`, `2K` | `1K` | Standard and Ultra only; not available on Fast. |
-| `personGeneration` | `allow_all`, `allow_adult`, `dont_allow` | `allow_adult` | |
-
-Request shape: `{"instances": [{"prompt": "..."}], "parameters": {...}}` — uses `:predict` endpoint, not `generateContent`. Response: `predictions[].bytesBase64Encoded` + `mimeType`.
-
-Inputs: `prompt` (Text, required).
-Output: `image` (Image).
+Google shut Imagen 4 down on 2026-08-17. The node was removed 2026-10-10; creating one returns a 400, and saved graphs migrate it to `nano-banana` with `gemini-nano-banana-2.1` (aspect ratio and 1K/2K size carried over, titled "Nano Banana (was Imagen 4)" unless renamed).
 
 ## `lyria-3` Params
 
@@ -210,12 +198,12 @@ Outputs: `embedding` (Text — JSON array), `dimensions` (Text — integer strin
 
 | Param | Values | Default | Notes |
 |---|---|---|---|
-| `model` | `veo-3.1-generate-preview`, `veo-3.1-fast-generate-preview`, `veo-3.1-lite-generate-preview`, `veo-3.0-generate-001`, `veo-3.0-fast-generate-001`, `veo-2.0-generate-001` | `veo-3.1-generate-preview` | |
+| `model` | `veo-3.1-generate-preview`, `veo-3.1-fast-generate-preview`, `veo-3.1-lite-generate-preview` | `veo-3.1-generate-preview` | Veo 3.0, 3.0 Fast and 2.0 removed (shut down 2026-06-30); saved nodes migrate to the matching 3.1 model. On Vertex these map to `veo-3.1-generate-001`, `veo-3.1-fast-generate-001`, `veo-3.1-lite-generate-001` (Lite: preview; frames are sent and Vertex decides). |
 | `aspectRatio` | `16:9`, `9:16` | `16:9` | |
-| `duration` | `4`, `6`, `8` | `8` | 4s only on 3.x models; 5s only on 2.0. Sent as `parameters.durationSeconds`. |
-| `resolution` | `720p`, `1080p`, `4k` | `720p` | 4K only on 3.1 and 3.0 non-lite. |
+| `duration` | `4`, `6`, `8` | `8` | Sent as `parameters.durationSeconds`. |
+| `resolution` | `720p`, `1080p`, `4k` | `720p` | 4K on 3.1 and 3.1 Fast, not Lite. On Vertex only 3.1 (Standard) renders 4K; 4K with Fast or Lite is refused. Gemini API extension forces 720p; Vertex extension keeps the chosen resolution. |
 | `personGeneration` | `allow_all`, `allow_adult`, `dont_allow` | `allow_adult` | |
-| `seed` | integer | random | 3.x models only. |
+| `seed` | integer | random | |
 
 ### Veo Async-Poll Pattern
 
@@ -225,8 +213,10 @@ Outputs: `embedding` (Text — JSON array), `dimensions` (Text — integer strin
 4. Video URI: `response.generateVideoResponse.generatedSamples[0].video.uri`.
 5. Download with `x-goog-api-key` header, save as `.mp4`.
 
-Inputs: `prompt` (Text, required), `image` (Image, optional — first frame), `last_frame` (Image, optional — interpolation).
-Output: `video` (Video).
+Vertex AI (used first when `GOOGLE_VERTEX_CREDENTIALS` is set, checked 2026-10-10): same verb at `https://us-central1-aiplatform.googleapis.com/v1/projects/{project}/locations/us-central1/publishers/google/models/{model}:predictLongRunning`, `Authorization: Bearer` from a service-account JWT exchanged for an OAuth token, `generateAudio: true` always (Vertex is now branded Gemini Enterprise Agent Platform; hosts unchanged, rules re-checked 2026-10-11). Frames that aren't JPEG or PNG are converted to PNG. Extension works on all three Vertex models and takes any MP4 (saved file, public https URL up to 100 MB, or `gs://` URI), not only Veo clips; Gemini `files/` URIs are refused. The Gemini API preview ids retire 2026-10-22; the Vertex GA ids retire "Nov 17 2026 or later".
+
+Inputs: `prompt` (Text, required), `image` (Image, optional — first frame), `last_frame` (Image, optional — interpolation), `video` (Video, optional — extension).
+Outputs: `video` (Video), `source_uri` (Video — wire into a downstream `video` to extend).
 
 ## Known Integration Gaps
 
@@ -291,6 +281,7 @@ When choosing a Gemini-family node:
 | General text / vision Q&A | `gemini-chat` | `gemini-3-flash-preview` or `gemini-2.5-flash` |
 | Hardest reasoning / planning | `gemini-chat` | `gemini-3.1-pro-preview` with `thinkingLevel: high` |
 | Cheap bulk classification | `gemini-chat` | `gemini-3.1-flash-lite-preview` with `thinkingLevel: minimal` |
+| Plain text-to-image (was Imagen 4) | `nano-banana` | `gemini-nano-banana-2.1` |
 | Fast image gen for iteration | `nano-banana` | `gemini-3.1-flash-image` at `1K` |
 | Image with legible text or precise layout | `nano-banana` | `gemini-3-pro-image` |
 | Cheapest single-image baseline | `nano-banana` | `gemini-2.5-flash-image` |

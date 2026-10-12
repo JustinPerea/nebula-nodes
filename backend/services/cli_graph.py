@@ -9,6 +9,7 @@ from typing import Any
 from uuid import uuid4
 
 from services.file_access import require_allowed_path, validate_file_references
+from services.retired_nodes import migrate_node
 
 
 class CLIGraph:
@@ -292,6 +293,20 @@ class CLIGraph:
         source = require_allowed_path(path)
         data = json.loads(source.read_text())
         validate_file_references(data)
-        self.nodes = {n["id"]: n for n in data["nodes"]}
+        self.nodes = {n["id"]: _migrate_retired(n) for n in data["nodes"]}
         self.edges = data["edges"]
         self._counter = data.get("counter", len(self.nodes))
+
+
+def _migrate_retired(node: dict[str, Any]) -> dict[str, Any]:
+    """A saved node whose definition was retired, as its replacement."""
+    definition_id, params, label = migrate_node(
+        str(node.get("definitionId", "")), node.get("params"), node.get("label"),
+    )
+    if definition_id == node.get("definitionId"):
+        # Same node, maybe on a retired model option (Veo 3.0 → 3.1).
+        return node if params == (node.get("params") or {}) else {**node, "params": params}
+    migrated = {**node, "definitionId": definition_id, "params": params}
+    if label:
+        migrated["label"] = label
+    return migrated

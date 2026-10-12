@@ -229,11 +229,19 @@ body and the `propose_change` arguments:
 run), 3 when rejected (with the person's reason, if any), 4 when withdrawn,
 expired or invalidated, and 2 on timeout (600 s default, still open).
 
-**Cost wording.** Nebula has no price list, so it never shows a price.
-Proposals say how many paid model runs and free nodes would run, and from
-which providers. Upstream nodes that have no outputs yet are counted too,
-and then the count reads "up to", because the run cache may skip some of
-them. `cost.estimate` is always `null`.
+**Cost wording.** Proposals say how many paid model runs and free nodes
+would run, and from which providers. Upstream nodes that have no outputs yet
+are counted too, and then the count reads "up to", because the run cache may
+skip some of them. `cost.estimate` adds up list prices in USD from
+`backend/data/model_pricing.json`, where every price cites the vendor page it
+came from: `{currency, low, high, open, unpriced, plan, plus}`. `low` and
+`high` differ when a setting such as `auto` quality only resolves at run time
+or a batch repeats a node. `open` is true when some paid node has no list
+price (`unpriced`) or has a cost the vendor doesn't price up front (`plus`,
+e.g. input images), so the real total can be higher. Krea runs billed to a
+Krea account's plan are listed in `plan`. `estimate` is `null` when no node
+in the run has a list price. Each entry in `cost.nodes` carries its own
+`price` ({low, high} or null). These are list prices, not a quote.
 
 Rules:
 

@@ -71,6 +71,8 @@ import {
 import { wsClient, type ExecutionEvent } from '../lib/wsClient';
 import { notifyJobComplete } from '../lib/jobNotifications';
 import { useUIStore } from './uiStore';
+import { usePricingStore } from './pricingStore';
+import { runCostConfirmMessage, shouldConfirmRunCost, summarizeRunScope, type RunScope } from '../lib/runScope';
 import { useCreateDraftStore } from './createDraftStore';
 import { getCinemaUploadIssue, useCinemaUploadStore } from './cinemaUploadStore';
 import { cinemaMotionSource, cinemaMotionTarget, useCinemaMotionStore } from './cinemaMotionStore';
@@ -2252,6 +2254,18 @@ for (const record of initialRunHistory) {
 }
 currentRunId = initialRunHistory.find((record) => record.status === 'running' && !record.createOrigin && !record.cinemaShot)?.id ?? null;
 
+/** Asks before a run whose list-price estimate reaches the user's threshold
+ * (Settings > Interface). Every run path goes through the execute actions,
+ * so the check lives here rather than on each button. Unpriced runs pass. */
+function confirmRunCost(nodes: Node<NodeData>[], edges: Edge[], scope: RunScope): boolean {
+  const pricing = usePricingStore.getState().table;
+  if (!pricing || typeof window === 'undefined') return true;
+  const { runCostConfirmUsd, settingsCache } = useUIStore.getState();
+  const summary = summarizeRunScope(nodes, edges, scope, { pricing, apiKeys: settingsCache.apiKeys });
+  if (!shouldConfirmRunCost(summary, runCostConfirmUsd)) return true;
+  return window.confirm(runCostConfirmMessage(summary));
+}
+
 export const useGraphStore = create<GraphState>((set, get) => ({
   nodes: [],
   edges: [],
@@ -3808,6 +3822,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     if (isExecuting || get().isImportingGraph) return;
     const uploadIssue = pendingCinemaUploadIssue(nodes);
     if (uploadIssue) { warnPendingCinemaUpload(uploadIssue); return; }
+    if (!confirmRunCost(nodes, edges, { kind: 'graph' })) return;
     resetExecution();
     const snapshot = captureRunSnapshot(nodes, edges);
     const heldStart = blockedProviderStart(snapshot, get().providerStartAmbiguities);
@@ -3879,6 +3894,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     if (isExecuting || get().isImportingGraph) return;
     const uploadIssue = pendingCinemaUploadIssue(nodesInExecutionScope(nodes, edges, nodeId));
     if (uploadIssue) { warnPendingCinemaUpload(uploadIssue); return; }
+    if (!confirmRunCost(nodes, edges, { kind: 'node', nodeId })) return;
     resetExecution();
     const snapshot = captureRunSnapshot(nodes, edges);
     const heldStart = blockedProviderStart(
@@ -4094,6 +4110,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     const uploadIssue = pendingCinemaUploadIssue(clusterNodes);
     if (uploadIssue) { warnPendingCinemaUpload(uploadIssue); return; }
     const clusterEdges = edges.filter((e) => idSet.has(e.source) && idSet.has(e.target));
+    if (!confirmRunCost(nodes, edges, { kind: 'cluster', nodeIds })) return;
     resetExecution();
     const snapshot = captureRunSnapshot(clusterNodes, clusterEdges);
     const heldStart = blockedProviderStart(snapshot, get().providerStartAmbiguities);

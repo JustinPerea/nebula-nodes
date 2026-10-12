@@ -1,4 +1,5 @@
 import type { APIProvider, ModelNodeDefinition, NodeCategory, PortDefinition } from '../types';
+import { directKeyNames } from './directRoute';
 
 export const CATEGORY_LABELS: Record<NodeCategory, string> = {
   'image-gen': 'Image Generation',
@@ -30,6 +31,7 @@ export function providerLabel(provider: string): string {
 
 const CREDENTIAL_PROVIDER_IDS: Readonly<Record<string, APIProvider>> = {
   OPENAI_API_KEY: 'openai', ANTHROPIC_API_KEY: 'anthropic', GOOGLE_API_KEY: 'google',
+  GOOGLE_VERTEX_CREDENTIALS: 'google',
   OPENROUTER_API_KEY: 'openrouter', REPLICATE_API_TOKEN: 'replicate', FAL_KEY: 'fal',
   MESHY_API_KEY: 'meshy', RUNWAY_API_KEY: 'runway', ELEVENLABS_API_KEY: 'elevenlabs',
   MINIMAX_API_KEY: 'minimax', XAI_API_KEY: 'xai', HIGGSFIELD_API_KEY: 'higgsfield',
@@ -42,7 +44,7 @@ const CREDENTIAL_PROVIDER_IDS: Readonly<Record<string, APIProvider>> = {
 export function supportedModelProviders(definition: ModelNodeDefinition): APIProvider[] {
   const providers = new Set<APIProvider>([definition.apiProvider]);
   const keys = Array.isArray(definition.envKeyName) ? definition.envKeyName : [definition.envKeyName];
-  for (const key of [...keys, definition.directKeyName ?? '']) {
+  for (const key of [...keys, ...directKeyNames(definition)]) {
     const provider = Object.hasOwn(CREDENTIAL_PROVIDER_IDS, key) ? CREDENTIAL_PROVIDER_IDS[key] : undefined;
     if (provider) providers.add(provider);
   }
@@ -61,8 +63,8 @@ export function runRouteProvider(
   const keys = (Array.isArray(definition.envKeyName) ? definition.envKeyName : [definition.envKeyName]).filter(Boolean);
   if (keys.length < 2) return definition.apiProvider;
   const configured = (key: string) => Boolean(apiKeys[key]);
-  const direct = definition.directKeyName;
-  const routeKey = direct && configured(direct) ? direct : keys.find((key) => key !== direct && configured(key));
+  const direct = directKeyNames(definition);
+  const routeKey = direct.find(configured) ?? keys.find((key) => !direct.includes(key) && configured(key));
   const provider = routeKey && Object.hasOwn(CREDENTIAL_PROVIDER_IDS, routeKey) ? CREDENTIAL_PROVIDER_IDS[routeKey] : undefined;
   return provider ?? definition.apiProvider;
 }
@@ -115,7 +117,7 @@ export function modelSearchText(definition: ModelNodeDefinition): string {
     modelDescription(definition),
     ...definition.inputPorts.flatMap((port) => [port.label, port.dataType]),
     ...definition.outputPorts.flatMap((port) => [port.label, port.dataType]),
-    ...routeKeys, definition.directKeyName ?? '',
+    ...routeKeys, ...directKeyNames(definition),
     ...(definition.outputPorts.some((port) => port.dataType === 'Video') ? ['animate animation motion'] : []),
     ...modelOptions].join(' ');
 }

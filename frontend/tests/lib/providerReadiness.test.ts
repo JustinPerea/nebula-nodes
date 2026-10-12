@@ -134,9 +134,17 @@ describe('provider readiness without generation', () => {
     expect(modelReadiness(dualRoute, {}, credentials({ apiKeys: { GOOGLE_API_KEY: TOKEN, FAL_KEY: TOKEN } }), bothValid)).toMatchObject({
       label: 'Verified credential', connectionLabel: 'Google API', setupTarget: { kind: 'api-key', key: 'GOOGLE_API_KEY' },
     });
+    // With nothing set, setup points at Vertex: the Gemini API previews retire on 2026-10-22.
     expect(modelReadiness(dualRoute, {}, credentials(), bothValid)).toMatchObject({
-      label: 'Setup required', setupTarget: { kind: 'api-key', key: 'GOOGLE_API_KEY' },
+      label: 'Setup required', setupTarget: { kind: 'api-key', key: 'GOOGLE_VERTEX_CREDENTIALS' },
     });
+  });
+
+  it('prefers Vertex over the Gemini API key when both direct credentials are set', () => {
+    const ready = modelReadiness(dualRoute, {}, credentials({ apiKeys: {
+      GOOGLE_VERTEX_CREDENTIALS: TOKEN, GOOGLE_API_KEY: TOKEN, FAL_KEY: TOKEN,
+    } }), health({ 'Google Vertex': entry('configured_unverified'), Google: entry('valid'), FAL: entry('valid') }));
+    expect(ready).toMatchObject({ setupTarget: { kind: 'api-key', key: 'GOOGLE_VERTEX_CREDENTIALS' } });
   });
 
   it('never masks a rejected direct credential with a verified FAL fallback', () => {

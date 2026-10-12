@@ -203,7 +203,6 @@ Full vertical slices (registry + handler + events):
 | FAL image stream (passthrough) | [examples/gpt-image-2-fal.md](./examples/gpt-image-2-fal.md) |
 | Google image sync | [examples/nano-banana.md](./examples/nano-banana.md) |
 | Google chat stream | [examples/gemini-chat.md](./examples/gemini-chat.md) |
-| Google Imagen sync | [examples/imagen-4-generate.md](./examples/imagen-4-generate.md) |
 | Google audio (Lyria / TTS) | [examples/lyria-3.md](./examples/lyria-3.md), [examples/gemini-tts.md](./examples/gemini-tts.md) |
 | Google embeddings | [examples/gemini-embeddings.md](./examples/gemini-embeddings.md) |
 | Google video (Veo / Omni) | [examples/veo-3.md](./examples/veo-3.md), [examples/gemini-omni-flash.md](./examples/gemini-omni-flash.md) |
