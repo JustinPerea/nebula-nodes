@@ -43,24 +43,6 @@ def node_access(definition: Mapping[str, Any], configured_keys: Iterable[str], k
     return FREE if not keys and not modes else None
 
 
-def can_bill(definition: Mapping[str, Any], params: Mapping[str, Any], configured_keys: Iterable[str]) -> bool:
-    """Whether a run of this node could reach a paid provider with the keys set here.
-
-    False means it fails for a missing key before any provider call, so it
-    can't cost anything (the spending limits don't count it). Krea runs on the
-    account's plan and Nous sign-ins aren't key-based, so they count as able."""
-    if definition.get("apiProvider") == "nous":
-        return True
-    modes = krea_modes(definition)
-    if modes == ["mcp"] or (modes and params.get("_kreaAuth") == "mcp"):
-        return True
-    keys = _keys(definition.get("envKeyName")) + _keys(definition.get("directKeyName"))
-    if not keys:
-        return True
-    configured = set(configured_keys)
-    return any(key in configured for key in keys)
-
-
 def missing(definition: Mapping[str, Any], krea_signed_in: bool) -> str:
     """What the person would need to set up, for a node node_access says can't run."""
     keys = _keys(definition.get("envKeyName")) + _keys(definition.get("directKeyName"))

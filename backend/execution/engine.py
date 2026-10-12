@@ -57,6 +57,7 @@ from models.events import (
     execution_run_id,
     execution_variant,
 )
+from execution.missing_credential import MissingCredentialError
 
 CycleError = _GraphlibCycleError
 
@@ -1382,6 +1383,7 @@ async def _execute_graph(
                     retryable=retryable,
                     category=category,
                     friendly=friendly,
+                    missing_credential=isinstance(exc, MissingCredentialError),
                 )
             )
             return nid, False, 0

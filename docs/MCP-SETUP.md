@@ -325,9 +325,7 @@ The person decides what agents may spend, in **Settings > Preferences**:
 
 Any limit also makes an agent ask before running a node with no list price,
 since Nebula can't check it. Krea runs billed to the account's plan and free
-nodes always pass, and so does a node whose provider key isn't set: it fails
-before calling the provider, so it can't cost anything and isn't counted.
-The person's own runs from the canvas are never limited.
+nodes always pass. The person's own runs from the canvas are never limited.
 
 How it works (`backend/services/agent_spend.py`):
 
@@ -338,7 +336,12 @@ How it works (`backend/services/agent_spend.py`):
 - The cost is the upper estimate at list prices over every node the run
   includes, batches counted. Nebula can't know in advance what the cache will
   skip, so the estimate never undercounts.
-- A run counts against the session when it starts, at that estimate. Only
+- A run counts against the session when it starts, at that estimate. Two
+  cases give the count back, because they can't have cost anything: a node
+  that stops at its own key check before any provider request (its handler
+  raises `MissingCredentialError`), and a request refused after the check
+  but before the run started. The limit is still checked on the whole
+  estimate first, since which key a handler finds is only known by running it. Only
   the in-app Claude and Codex chats get their own session budget, from the
   agent token Nebula mints for each chat. Everything else (Hermes, outside
   agents, scripts) shares one budget until the backend restarts, because a

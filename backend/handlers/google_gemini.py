@@ -13,6 +13,7 @@ from uuid import uuid4
 
 from services.image_input import load_local_image
 from services.output import get_run_dir, save_base64_image
+from execution.missing_credential import MissingCredentialError
 
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
 
@@ -31,7 +32,7 @@ async def handle_gemini_chat(
 
     api_key = api_keys.get("GOOGLE_API_KEY")
     if not api_key:
-        raise ValueError("GOOGLE_API_KEY is required")
+        raise MissingCredentialError("GOOGLE_API_KEY is required")
 
     parts: list[dict[str, Any]] = [{"text": messages_text}]
 
@@ -233,7 +234,7 @@ async def handle_nano_banana(
 
     api_key = api_keys.get("GOOGLE_API_KEY")
     if not api_key:
-        raise ValueError("GOOGLE_API_KEY is required")
+        raise MissingCredentialError("GOOGLE_API_KEY is required")
 
     model = str(node.params.get("model", "gemini-3.1-flash-image"))
 
@@ -330,7 +331,7 @@ async def handle_lyria3(
 
     api_key = api_keys.get("GOOGLE_API_KEY")
     if not api_key:
-        raise ValueError("GOOGLE_API_KEY is required")
+        raise MissingCredentialError("GOOGLE_API_KEY is required")
 
     model = node.params.get("model", "lyria-3-clip-preview")
 
@@ -420,7 +421,7 @@ async def handle_gemini_tts(
 
     api_key = api_keys.get("GOOGLE_API_KEY")
     if not api_key:
-        raise ValueError("GOOGLE_API_KEY is required")
+        raise MissingCredentialError("GOOGLE_API_KEY is required")
 
     model = node.params.get("model", "gemini-2.5-flash-preview-tts")
     voice_name = node.params.get("voiceName", "Kore")
@@ -493,7 +494,7 @@ async def handle_gemini_embeddings(
 
     api_key = api_keys.get("GOOGLE_API_KEY")
     if not api_key:
-        raise ValueError("GOOGLE_API_KEY is required")
+        raise MissingCredentialError("GOOGLE_API_KEY is required")
 
     model = node.params.get("model", "gemini-embedding-001")
 

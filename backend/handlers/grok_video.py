@@ -11,6 +11,7 @@ from models.graph import GraphNode, PortValueDict
 from models.events import ExecutionEvent, ProgressEvent
 from services.image_input import load_local_image
 from services.output import get_run_dir
+from execution.missing_credential import MissingCredentialError
 
 
 def _log(msg: str) -> None:
@@ -25,7 +26,7 @@ async def handle_grok_video(
 ) -> dict[str, Any]:
     api_key = api_keys.get("XAI_API_KEY")
     if not api_key:
-        raise ValueError("XAI_API_KEY is required")
+        raise MissingCredentialError("XAI_API_KEY is required")
 
     prompt_input = inputs.get("prompt")
     if not prompt_input or not prompt_input.value:

@@ -72,6 +72,9 @@ class ErrorEvent(RunScopedEvent):
     # always holds the raw provider string for debugging; these enrich the UI.
     category: str | None = None
     friendly: str | None = None
+    # The handler stopped at its own key check, before any provider request
+    # (execution.missing_credential), so the node cost nothing.
+    missing_credential: bool = False
 
 
 class ValidationErrorDetail(BaseModel):

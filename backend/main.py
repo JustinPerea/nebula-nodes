@@ -1682,10 +1682,49 @@ def _spend_session(headers: Mapping[str, str] | None) -> tuple[str, str]:
     return f"unverified:{_SPEND_LAUNCH}", "Agents without a Nebula chat token"
 
 
+# What each agent run was counted at, per node, so a node that turns out to
+# have had no key can be given back (see _release_unspent_hold).
+_spend_holds: OrderedDict[str, tuple[str, dict[str, tuple[str, float]]]] = OrderedDict()
+_MAX_SPEND_HOLDS = 500
+
+
+def _release_unspent_hold(event: Any, run_id: str | None) -> None:
+    """Give back a node's share of its run's count when it stopped at its own
+    key check (no provider request, so nothing spent). Never fails the run."""
+    try:
+        if not (isinstance(event, ErrorEvent) and event.missing_credential and run_id):
+            return
+        hold = _spend_holds.get(run_id)
+        if hold is None:
+            return
+        key, per_node = hold
+        share = per_node.pop(event.node_id, None)
+        if share is not None:
+            agent_spend_ledger.refund(key, {share[0]: share[1]})
+    except Exception:  # noqa: BLE001 - bookkeeping must not break a run
+        pass
+
+
+def _return_hold(run_id: str) -> None:
+    """Give back everything a run was counted at, for a request refused after
+    the spend check but before the run started (it can't have cost anything)."""
+    hold = _spend_holds.pop(run_id, None)
+    if hold is None:
+        return
+    key, per_node = hold
+    by_model: dict[str, float] = {}
+    for definition_id, amount in per_node.values():
+        by_model[definition_id] = by_model.get(definition_id, 0.0) + amount
+    try:
+        agent_spend_ledger.refund(key, by_model)
+    except Exception:  # noqa: BLE001 - bookkeeping must not mask the refusal
+        pass
+
+
 def _require_run_spend_approval(run_id: str, nodes: list[GraphNode], edges: list[GraphEdge], **kwargs: Any) -> None:
     """The spend check for a run already noted for its actor: a refusal forgets the note."""
     try:
-        _require_spend_approval(nodes, edges, **kwargs)
+        _require_spend_approval(nodes, edges, run_id=run_id, **kwargs)
     except HTTPException:
         canvas_events.forget_run(run_id)
         raise
@@ -1693,7 +1732,7 @@ def _require_run_spend_approval(run_id: str, nodes: list[GraphNode], edges: list
 
 def _require_spend_approval(
     nodes: list[GraphNode], edges: list[GraphEdge], *, how_to_ask: str | None = None,
-    run_ids: list[str] | None = None,
+    run_ids: list[str] | None = None, run_id: str | None = None,
 ) -> None:
     """Refuse a run that isn't the person's when it breaks a spending limit, and
     count it against the caller's session when it doesn't.
@@ -1721,6 +1760,10 @@ def _require_spend_approval(
     if decision.refusal:
         raise HTTPException(status_code=403, detail=decision.refusal)
     agent_spend_ledger.record(key, label, decision.charge)
+    if run_id is not None and decision.per_node:
+        _spend_holds[run_id] = (key, dict(decision.per_node))
+        while len(_spend_holds) > _MAX_SPEND_HOLDS:
+            _spend_holds.popitem(last=False)
 
 
 @app.post("/api/outputs/archive")
@@ -4304,7 +4347,11 @@ async def execute(request: ExecuteRequest) -> dict:
                                 run_ids=_end_node_ids(nodes, request.edges))
 
     handler_registry = get_handler_registry(emit=_emit_and_sync)
-    _claim_fresh_paid_worldlabs_starts(run_id=run_id, nodes=nodes)
+    try:
+        _claim_fresh_paid_worldlabs_starts(run_id=run_id, nodes=nodes)
+    except BaseException:
+        _return_hold(run_id)
+        raise
 
     async def _run() -> None:
         import traceback, sys
@@ -4361,6 +4408,7 @@ async def execute(request: ExecuteRequest) -> dict:
         else:
             await asyncio.gather(task, return_exceptions=True)
         await _release_paid_worldlabs_starts(run_id)
+        _return_hold(run_id)
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ExecutionCancellationCapacityError as exc:
         if task is None:
@@ -4368,6 +4416,7 @@ async def execute(request: ExecuteRequest) -> dict:
         else:
             await asyncio.gather(task, return_exceptions=True)
         await _release_paid_worldlabs_starts(run_id)
+        _return_hold(run_id)
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except ValueError as exc:
         if task is None:
@@ -4376,6 +4425,7 @@ async def execute(request: ExecuteRequest) -> dict:
             task.cancel()
             await asyncio.gather(task, return_exceptions=True)
         await _release_paid_worldlabs_starts(run_id)
+        _return_hold(run_id)
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except Exception:
         if task is None:
@@ -4442,7 +4492,11 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
     _require_run_spend_approval(run_id, sub_nodes, sub_edges, run_ids=[request.target_node_id])
 
     handler_registry = get_handler_registry(emit=_emit_and_sync)
-    _claim_fresh_paid_worldlabs_starts(run_id=run_id, nodes=sub_nodes)
+    try:
+        _claim_fresh_paid_worldlabs_starts(run_id=run_id, nodes=sub_nodes)
+    except BaseException:
+        _return_hold(run_id)
+        raise
 
     async def _run() -> None:
         import traceback
@@ -4479,15 +4533,18 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
     except ExecutionCancelledBeforeStartError as exc:
         await asyncio.gather(task, return_exceptions=True)
         await _release_paid_worldlabs_starts(run_id)
+        _return_hold(run_id)
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ExecutionCancellationCapacityError as exc:
         await asyncio.gather(task, return_exceptions=True)
         await _release_paid_worldlabs_starts(run_id)
+        _return_hold(run_id)
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except ValueError as exc:
         task.cancel()
         await asyncio.gather(task, return_exceptions=True)
         await _release_paid_worldlabs_starts(run_id)
+        _return_hold(run_id)
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except Exception:
         await _release_paid_worldlabs_starts(run_id)
@@ -4916,9 +4973,6 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
     _assert_execution_admissible(run_id)
     if execution_runs.get(run_id) is not None:
         raise HTTPException(status_code=409, detail=f"run '{run_id}' already exists")
-    # Priced as the whole scene: an upper bound for one shot.
-    spend_nodes, spend_edges = get_subgraph(request.nodes, request.edges, request.node_id)
-    _require_spend_approval(spend_nodes, spend_edges, run_ids=[request.node_id])
     canvas_events.note_run(run_id, actor_for_headers(current_request_headers()))
     settings = load_settings()
     api_keys = settings.get("apiKeys", {})
@@ -4985,6 +5039,11 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
         )
         return {"status": "cycle_error"}
 
+    # Priced as the whole scene: an upper bound for one shot. Checked after
+    # validation, so a request that can't run doesn't count.
+    spend_nodes, spend_edges = get_subgraph(request.nodes, request.edges, request.node_id)
+    _require_run_spend_approval(run_id, spend_nodes, spend_edges, run_ids=[request.node_id])
+
     shot_port = f"shot_{request.shot_id}"
     count = request.variations or 1
 
@@ -4995,7 +5054,11 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
     # execution surface. Otherwise an exact recovery deletion can race a World
     # ancestor that is still polling, then admit a stale blank payload as a
     # fresh paid start.
-    _claim_fresh_paid_worldlabs_starts(run_id=run_id, nodes=sub_nodes)
+    try:
+        _claim_fresh_paid_worldlabs_starts(run_id=run_id, nodes=sub_nodes)
+    except BaseException:
+        _return_hold(run_id)
+        raise
 
     async def _run() -> None:
         import traceback
@@ -5085,6 +5148,7 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
         else:
             await asyncio.gather(task, return_exceptions=True)
         await _release_paid_worldlabs_starts(run_id)
+        _return_hold(run_id)
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ExecutionCancellationCapacityError as exc:
         if task is None:
@@ -5092,6 +5156,7 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
         else:
             await asyncio.gather(task, return_exceptions=True)
         await _release_paid_worldlabs_starts(run_id)
+        _return_hold(run_id)
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except ValueError as exc:
         if task is None:
@@ -5100,6 +5165,7 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
             task.cancel()
             await asyncio.gather(task, return_exceptions=True)
         await _release_paid_worldlabs_starts(run_id)
+        _return_hold(run_id)
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except Exception:
         if task is None:
@@ -5342,6 +5408,7 @@ async def _emit_and_sync(event: ExecutionEvent) -> None:
         return
 
     run_id = event.run_id or execution_run_id.get()
+    _release_unspent_hold(event, run_id)
     record = execution_runs.get(run_id) if run_id else None
     if record is not None and record.status in {"cancelling", "cancelled"}:
         return
@@ -7912,14 +7979,14 @@ async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dic
         sub_edges = [GraphEdge.model_validate(e) for e in edges_list]
 
     _validate_cinema_base_models(sub_nodes)
-    _require_spend_approval(sub_nodes, sub_edges,
-                            run_ids=[target] if target else _end_node_ids(sub_nodes, sub_edges))
-
     wait = body.get("wait") if body else None
     if wait is not None and (isinstance(wait, bool) or not isinstance(wait, (int, float)) or wait < 0):
         raise HTTPException(status_code=400, detail="wait must be a number of seconds")
 
+    # Checked last: a request refused for anything else must not count.
     run_id = str(uuid4())
+    _require_spend_approval(sub_nodes, sub_edges, run_id=run_id,
+                            run_ids=[target] if target else _end_node_ids(sub_nodes, sub_edges))
     canvas_events.note_run(run_id, actor_for_headers(current_request_headers()))
     publish_action(
         f"Running {target}..." if target else f"Running {len(sub_nodes)} node(s)..."
@@ -7937,6 +8004,7 @@ async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dic
         task.cancel()
         await asyncio.gather(task, return_exceptions=True)
         await _release_paid_worldlabs_starts(run_id)
+        _return_hold(run_id)
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     _watch_for_cross_process_stop(run_id, task)
     _cli_runs.start(run_id, task, target, outcome)
@@ -7953,6 +8021,7 @@ async def _execute_cli_run(
     async def collect_events(event: ExecutionEvent) -> None:
         # This path keeps per-node events to itself (it returns results in
         # the response), so journal them here for watchers.
+        _release_unspent_hold(event, run_id)
         _journal_execution_event(event, run_id)
         if isinstance(event, (ProviderRecoveryEvent, ProviderStartAmbiguousEvent)):
             await _emit_and_sync(event)
@@ -7966,7 +8035,11 @@ async def _execute_cli_run(
 
     handler_registry = get_handler_registry(emit=collect_events)
     start = _time_module.time()
-    _claim_fresh_paid_worldlabs_starts(run_id=run_id, nodes=sub_nodes)
+    try:
+        _claim_fresh_paid_worldlabs_starts(run_id=run_id, nodes=sub_nodes)
+    except BaseException:
+        _return_hold(run_id)
+        raise
     try:
         await execute_graph(
             nodes=sub_nodes,
@@ -8284,7 +8357,8 @@ async def quick_execute(body: dict[str, Any]) -> dict:
         outputs={},
     ))
     # A quick run has no canvas node to propose, so point at one.
-    _require_spend_approval(temp_nodes, temp_edges, how_to_ask=(
+    quick_run = f"quick-{uuid4().hex}"
+    _require_spend_approval(temp_nodes, temp_edges, run_id=quick_run, how_to_ask=(
         f"Add it to the canvas instead (`nebula create {definition_id}`), then propose the run: "
         "`nebula propose --note \"<why>\" --run <node id>` (MCP: propose_change). "
         "The person accepts on the canvas, and the canvas runs it."
@@ -8298,6 +8372,7 @@ async def quick_execute(body: dict[str, Any]) -> dict:
             results[event.node_id] = event.outputs
         elif isinstance(event, ErrorEvent):
             errors[event.node_id] = event.error
+            _release_unspent_hold(event, quick_run)
 
     handler_registry = get_handler_registry(emit=collect_events)
     # Temp multi-image input nodes are executed by this request-scoped handler —

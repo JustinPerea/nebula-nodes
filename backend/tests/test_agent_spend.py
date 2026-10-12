@@ -38,14 +38,9 @@ def refusal(items, edges=(), *, settings=None, amount=0.4, spent=None):
     return decide(items, edges, settings=settings, amount=amount, spent=spent).refusal
 
 
-# The paid models' key is set unless a test says otherwise: a node without
-# its key can't reach the provider, so it can't spend (see the keyless tests).
-KEYS = {"apiKeys": {"OPENAI_API_KEY": "sk-test"}}
-
-
 def decide(items, edges=(), *, settings=None, amount=0.4, spent=None):
     return agent_spend.decide(
-        items, list(edges), settings={**KEYS, **(settings or {})},
+        items, list(edges), settings=settings if settings is not None else {},
         pricing=pricing(amount), definitions=DEFINITIONS, spent=spent or agent_spend.Spent(),
         how_to_ask="ASK.",
     )
@@ -107,49 +102,6 @@ def test_free_nodes_and_krea_plan_runs_pass():
         {"id": "n1", "definitionId": "free", "params": {}},
         {"id": "n2", "definitionId": "krea", "params": {}},
     ]) is None
-
-
-# -- nodes without their key can't spend ----------------------------------------
-
-NO_KEYS = {"apiKeys": {}}
-
-
-def test_a_node_without_its_key_is_not_counted_or_refused():
-    # Over the $1 threshold, but with no OPENAI_API_KEY it fails before any provider call.
-    expensive = decide(ONE_PAID, settings=NO_KEYS, amount=5)
-    assert expensive.refusal is None and expensive.charge == {}
-    unpriced = decide([{"id": "n4", "definitionId": "unpriced", "params": {}}], settings=NO_KEYS)
-    assert unpriced.refusal is None and unpriced.charge == {}
-
-
-def test_only_the_nodes_that_can_reach_a_provider_count():
-    definitions = {**DEFINITIONS, "gemini": {"id": "gemini", "displayName": "Gemini", "apiProvider": "google",
-                                            "envKeyName": "GOOGLE_API_KEY"}}
-    prices = {"nodes": {"paid": {"currency": "usd", "rows": [{"match": {}, "price": 0.4}]},
-                        "gemini": {"currency": "usd", "rows": [{"match": {}, "price": 0.3}]}}}
-    decision = agent_spend.decide(
-        [{"id": "n1", "definitionId": "paid", "params": {}}, {"id": "n2", "definitionId": "gemini", "params": {}}],
-        [], settings=KEYS, pricing=prices, definitions=definitions, spent=agent_spend.Spent(), how_to_ask="ASK.")
-    assert decision.charge == {"paid": 0.4}
-
-
-@pytest.mark.parametrize(("definition", "params", "keys", "expected"), [
-    ({"apiProvider": "openai", "envKeyName": "OPENAI_API_KEY"}, {}, set(), False),
-    ({"apiProvider": "openai", "envKeyName": "OPENAI_API_KEY"}, {}, {"OPENAI_API_KEY"}, True),
-    # Dual-route: the direct key or the FAL key will do.
-    ({"apiProvider": "fal", "envKeyName": "FAL_KEY", "directKeyName": ["GEMINI_API_KEY"]}, {}, {"GEMINI_API_KEY"}, True),
-    # Krea: the account's plan needs no token; the API-token mode does.
-    ({"apiProvider": "krea", "envKeyName": "KREA_API_TOKEN", "params": [{"key": "_kreaAuth", "options": ["api-token", "mcp"]}]},
-     {"_kreaAuth": "mcp"}, set(), True),
-    ({"apiProvider": "krea", "envKeyName": "KREA_API_TOKEN", "params": [{"key": "_kreaAuth", "options": ["api-token", "mcp"]}]},
-     {}, set(), False),
-    ({"apiProvider": "nous", "envKeyName": []}, {}, set(), True),
-    ({"apiProvider": "utility"}, {}, set(), True),
-])
-def test_can_bill(definition, params, keys, expected):
-    from services.node_readiness import can_bill
-
-    assert can_bill(definition, params, keys) is expected
 
 
 def test_threshold_off_lets_everything_through():
@@ -228,24 +180,9 @@ def client(monkeypatch):
     test_client.delete("/api/graph")
     reset = {"runCostConfirmUsd": 1, "agentSpend": {"sessionUsd": None, "models": {}}}
     test_client.put("/api/settings", json=reset, headers=PERSON)
-    set_key("OPENAI_API_KEY", "sk-test")
     yield test_client
-    set_key("OPENAI_API_KEY", None)
     test_client.delete("/api/graph")
     test_client.put("/api/settings", json=reset, headers=PERSON)
-
-
-def set_key(name: str, value: str | None) -> None:
-    """Write a key straight into the test settings file (conftest points it at a temp file)."""
-    from services.settings import load_settings, save_settings
-
-    settings = load_settings()
-    keys = dict(settings.get("apiKeys") or {})
-    if value is None:
-        keys.pop(name, None)
-    else:
-        keys[name] = value
-    save_settings({**settings, "apiKeys": keys})
 
 
 PRICES: dict = {"nodes": {}}
@@ -324,17 +261,6 @@ def test_turning_the_threshold_off_lets_agents_run(client):
     assert client.put("/api/settings", json={"runCostConfirmUsd": None}, headers=PERSON).status_code == 200
     assert client.post("/api/graph/run", json={"targetNodeId": node_id}).status_code == 200
     main.execute_graph.assert_awaited_once()
-
-
-def test_a_run_without_the_key_leaves_the_session_total_alone(client):
-    import main
-
-    price(5.0)
-    node_id = add_paid_node(client)
-    set_key("OPENAI_API_KEY", None)
-    assert client.post("/api/graph/run", json={"targetNodeId": node_id}).status_code == 200
-    main.execute_graph.assert_awaited_once()
-    assert client.get("/api/agent/spend").json()["spent"]["totalUsd"] == 0
 
 
 def test_quick_points_at_the_canvas(client):
@@ -422,3 +348,90 @@ def test_in_app_tokens_count_against_their_chat_session(client):
         assert main.agent_spend_ledger.spent("chat:chat-123").total == pytest.approx(0.4)
     finally:
         agent_registry.revoke(token)
+
+
+# -- runs that couldn't have cost anything give their count back -------------------
+
+def test_the_ledger_gives_back_part_of_a_count():
+    ledger = agent_spend.SpendLedger(None)
+    ledger.record("s", "Agent", {"paid": 0.5, "other": 0.25})
+    ledger.refund("s", {"paid": 0.5})
+    assert ledger.spent("s") == agent_spend.Spent(0.25, {"other": 0.25})
+    ledger.refund("s", {"other": 1.0})  # never below zero
+    assert ledger.spent("s") == agent_spend.Spent(0.0, {})
+    ledger.refund("unknown", {"paid": 1})  # nothing to give back
+
+
+def test_the_decision_keeps_each_nodes_share():
+    decision = decide([{"id": "n1", "definitionId": "paid", "params": {}},
+                       {"id": "n2", "definitionId": "paid", "params": {}}], amount=0.3)
+    assert decision.per_node == {"n1": ("paid", 0.3), "n2": ("paid", 0.3)}
+
+
+def spent(client) -> float:
+    return client.get("/api/agent/spend").json()["spent"]["totalUsd"]
+
+
+def test_a_node_without_its_key_gives_its_count_back(client, monkeypatch):
+    """The real engine and handler: no OPENAI_API_KEY stops gpt-image-1 at its own
+    key check, before any request, and the run's count goes back to zero."""
+    import main
+    from execution.engine import execute_graph
+
+    monkeypatch.setattr(main, "execute_graph", execute_graph)
+    price(0.4)
+    node_id = add_paid_node(client)
+    prompt = client.post("/api/graph/node", json={"definitionId": FREE, "params": {"value": "a cat"}}).json()["id"]
+    wired = client.post("/api/graph/connect", json={"source": prompt, "sourceHandle": "text",
+                                                    "target": node_id, "targetHandle": "prompt"})
+    assert wired.status_code == 200, wired.text
+    result = client.post("/api/graph/run", json={"targetNodeId": node_id}).json()
+    assert "OPENAI_API_KEY is required" in result["errors"][node_id]
+    assert spent(client) == 0
+
+
+def test_a_provider_failure_still_counts(client, monkeypatch):
+    import main
+    from models.events import ErrorEvent
+
+    async def provider_said_no(*, nodes, emit, run_id, **kwargs):
+        await emit(ErrorEvent(node_id=nodes[0].id, error="HTTP 500 from provider", run_id=run_id))
+
+    monkeypatch.setattr(main, "execute_graph", provider_said_no)
+    price(0.4)
+    node_id = add_paid_node(client)
+    client.post("/api/graph/run", json={"targetNodeId": node_id})
+    assert spent(client) == pytest.approx(0.4)
+
+
+def test_only_the_keyless_node_of_a_run_is_given_back(client, monkeypatch):
+    import main
+    from models.events import ErrorEvent, ExecutedEvent
+
+    async def one_of_each(*, nodes, emit, run_id, **kwargs):
+        first, second = nodes
+        await emit(ExecutedEvent(node_id=first.id, outputs={}, run_id=run_id))
+        await emit(ErrorEvent(node_id=second.id, error="OPENAI_API_KEY is required", run_id=run_id,
+                              missing_credential=True))
+
+    monkeypatch.setattr(main, "execute_graph", one_of_each)
+    price(0.4)
+    add_paid_node(client)
+    add_paid_node(client)
+    client.post("/api/graph/run", json={})
+    assert spent(client) == pytest.approx(0.4)
+
+
+def test_a_request_refused_after_the_check_does_not_count(client):
+    price(0.4)
+    node_id = add_paid_node(client)
+    assert client.post("/api/graph/run", json={"targetNodeId": node_id, "wait": -1}).status_code == 400
+    assert spent(client) == 0
+
+
+def test_a_keyless_run_over_the_limit_is_still_asked_about(client):
+    # Which key a handler will find is only known by running it, so the limit
+    # is checked on the whole estimate; only the count is given back.
+    price(5.0)
+    node_id = add_paid_node(client)
+    assert client.post("/api/graph/run", json={"targetNodeId": node_id}).status_code == 403

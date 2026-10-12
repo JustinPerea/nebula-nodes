@@ -11,6 +11,7 @@ from models.events import ExecutionEvent, ProgressEvent
 from services.file_access import require_allowed_path
 from services.cancellation import schedule_detached_cancel
 from services.output import get_run_dir, save_base64_image
+from execution.missing_credential import MissingCredentialError
 
 FAL_QUEUE_BASE = "https://queue.fal.run"
 STREAMING_FAL_ENDPOINTS = {"openai/gpt-image-2", "openai/gpt-image-2/edit"}
@@ -114,7 +115,7 @@ async def handle_fal_universal(
 ) -> dict[str, Any]:
     api_key = api_keys.get("FAL_KEY")
     if not api_key:
-        raise ValueError("FAL_KEY is required")
+        raise MissingCredentialError("FAL_KEY is required")
 
     endpoint_id = node.params.get("endpoint_id", "")
     if not endpoint_id:
@@ -487,7 +488,7 @@ async def handle_demucs(
     """
     api_key = api_keys.get("FAL_KEY")
     if not api_key:
-        raise ValueError("FAL_KEY is required")
+        raise MissingCredentialError("FAL_KEY is required")
 
     audio_input = inputs.get("audio")
     if not audio_input or not audio_input.value:

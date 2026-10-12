@@ -6,6 +6,7 @@ from models.graph import GraphNode, PortValueDict
 from models.events import ExecutionEvent
 from execution.stream_runner import StreamConfig, stream_execute
 from services.image_input import load_local_image
+from execution.missing_credential import MissingCredentialError
 
 OPENAI_CHAT_URL = "https://api.openai.com/v1/chat/completions"
 
@@ -24,7 +25,7 @@ async def handle_openai_chat(
 
     api_key = api_keys.get("OPENAI_API_KEY")
     if not api_key:
-        raise ValueError("OPENAI_API_KEY is required")
+        raise MissingCredentialError("OPENAI_API_KEY is required")
 
     content: list[dict[str, Any]] = [{"type": "text", "text": messages_text}]
 

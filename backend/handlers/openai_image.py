@@ -6,6 +6,7 @@ import httpx
 
 from models.graph import GraphNode, PortValueDict
 from services.output import get_run_dir, save_base64_image
+from execution.missing_credential import MissingCredentialError
 
 OPENAI_API_URL = "https://api.openai.com/v1/images/generations"
 
@@ -23,7 +24,7 @@ async def handle_openai_image_generate(
 
     api_key = api_keys.get("OPENAI_API_KEY")
     if not api_key:
-        raise ValueError("OPENAI_API_KEY is required")
+        raise MissingCredentialError("OPENAI_API_KEY is required")
 
     model = node.params.get("model", "gpt-image-1")
 

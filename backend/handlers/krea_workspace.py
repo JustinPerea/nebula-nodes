@@ -32,6 +32,7 @@ from models.graph import GraphNode, PortValueDict
 from services.cancellation import schedule_detached_cancel
 from services.output import _MEDIA_EXTENSIONS, get_run_dir, portable_output_ref, write_media_bytes
 from services.public_url import fetch_public_media
+from execution.missing_credential import MissingCredentialError
 
 Emit = Callable[[ExecutionEvent], Awaitable[None]] | None
 _ID = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
@@ -708,7 +709,7 @@ async def handle_krea_usage(node: GraphNode, inputs: dict[str, PortValueDict], a
     """Completed metered jobs and their compute units for a date window."""
     api_key = _clean_str(api_keys.get("KREA_USAGE_KEY"))
     if not api_key:
-        raise ValueError("Krea usage needs a workspace service key (KREA_USAGE_KEY); personal API tokens are refused by Krea")
+        raise MissingCredentialError("Krea usage needs a workspace service key (KREA_USAGE_KEY); personal API tokens are refused by Krea")
     params = {key: _clean_str(node.params.get(key)) for key in ("start_date", "end_date") if _clean_str(node.params.get(key))}
     async with httpx.AsyncClient(timeout=60.0, follow_redirects=False) as client:
         response = await client.get(f"{KREA_BASE_URL}/usage", headers=_auth_headers(api_key), params=params)

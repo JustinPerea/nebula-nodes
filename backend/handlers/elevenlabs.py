@@ -12,6 +12,7 @@ from models.graph import GraphNode, PortValueDict
 from services.file_access import require_allowed_path
 from services.cancellation import schedule_detached_cancel
 from services.output import get_run_dir
+from execution.missing_credential import MissingCredentialError
 
 ELEVENLABS_API_BASE = "https://api.elevenlabs.io/v1/text-to-speech"
 DEFAULT_VOICE_ID = "21m00Tcm4TlvDq8ikWAM"  # Rachel
@@ -30,7 +31,7 @@ async def handle_elevenlabs_tts(
 
     api_key = api_keys.get("ELEVENLABS_API_KEY")
     if not api_key:
-        raise ValueError("ELEVENLABS_API_KEY is required")
+        raise MissingCredentialError("ELEVENLABS_API_KEY is required")
 
     voice_id = node.params.get("voice_id", DEFAULT_VOICE_ID) or DEFAULT_VOICE_ID
     model_id = node.params.get("model_id", "eleven_multilingual_v2")
@@ -188,7 +189,7 @@ async def handle_elevenlabs_sfx(
 
     api_key = api_keys.get("ELEVENLABS_API_KEY")
     if not api_key:
-        raise ValueError("ELEVENLABS_API_KEY is required")
+        raise MissingCredentialError("ELEVENLABS_API_KEY is required")
 
     output_format = node.params.get("output_format", "mp3_44100_128")
 
@@ -237,7 +238,7 @@ async def handle_elevenlabs_sts(
 
     api_key = api_keys.get("ELEVENLABS_API_KEY")
     if not api_key:
-        raise ValueError("ELEVENLABS_API_KEY is required")
+        raise MissingCredentialError("ELEVENLABS_API_KEY is required")
 
     voice_id = node.params.get("voice_id", DEFAULT_VOICE_ID) or DEFAULT_VOICE_ID
     output_format = node.params.get("output_format", "mp3_44100_128")
@@ -308,7 +309,7 @@ async def handle_elevenlabs_isolation(
 
     api_key = api_keys.get("ELEVENLABS_API_KEY")
     if not api_key:
-        raise ValueError("ELEVENLABS_API_KEY is required")
+        raise MissingCredentialError("ELEVENLABS_API_KEY is required")
 
     audio_path = Path(str(audio_input.value))
     if not audio_path.exists():
@@ -342,7 +343,7 @@ async def handle_elevenlabs_dubbing(
 
     api_key = api_keys.get("ELEVENLABS_API_KEY")
     if not api_key:
-        raise ValueError("ELEVENLABS_API_KEY is required")
+        raise MissingCredentialError("ELEVENLABS_API_KEY is required")
 
     target_lang = node.params.get("target_lang", "es")
 
@@ -412,7 +413,7 @@ async def handle_elevenlabs_stt(
 
     api_key = api_keys.get("ELEVENLABS_API_KEY")
     if not api_key:
-        raise ValueError("ELEVENLABS_API_KEY is required")
+        raise MissingCredentialError("ELEVENLABS_API_KEY is required")
 
     audio_path = Path(str(audio_input.value))
     if not audio_path.exists():

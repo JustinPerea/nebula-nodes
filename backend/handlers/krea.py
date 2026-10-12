@@ -16,6 +16,7 @@ from models.graph import GraphNode, PortValueDict
 from services.file_access import require_allowed_path
 from services.cancellation import schedule_detached_cancel
 from services.output import OUTPUT_ROOT, get_run_dir
+from execution.missing_credential import MissingCredentialError
 
 KREA_BASE_URL = "https://api.krea.ai"
 KREA_STATUS_PENDING = {
@@ -42,7 +43,7 @@ _DATA_URI_RE = re.compile(r"^data:(?P<mime>[^;,]+);base64,(?P<data>.*)$", re.DOT
 def _api_key(api_keys: dict[str, str]) -> str:
     key = api_keys.get("KREA_API_TOKEN") or api_keys.get("KREA_API_KEY")
     if not key:
-        raise ValueError("KREA_API_TOKEN is required")
+        raise MissingCredentialError("KREA_API_TOKEN is required")
     return key
 
 

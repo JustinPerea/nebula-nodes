@@ -6,6 +6,7 @@ from models.graph import GraphNode, PortValueDict
 from models.events import ExecutionEvent
 from execution.stream_runner import StreamConfig, stream_execute
 from services.image_input import load_local_image
+from execution.missing_credential import MissingCredentialError
 
 ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
 ANTHROPIC_VERSION = "2023-06-01"
@@ -25,7 +26,7 @@ async def handle_claude_chat(
 
     api_key = api_keys.get("ANTHROPIC_API_KEY")
     if not api_key:
-        raise ValueError("ANTHROPIC_API_KEY is required")
+        raise MissingCredentialError("ANTHROPIC_API_KEY is required")
 
     caching = bool(node.params.get("prompt_caching"))
 

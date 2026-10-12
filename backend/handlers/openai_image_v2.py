@@ -9,6 +9,7 @@ from models.events import ExecutionEvent
 from models.graph import GraphNode, PortValueDict
 from services.file_access import require_allowed_path
 from services.output import get_run_dir
+from execution.missing_credential import MissingCredentialError
 
 OPENAI_GENERATIONS_URL = "https://api.openai.com/v1/images/generations"
 OPENAI_EDITS_URL = "https://api.openai.com/v1/images/edits"
@@ -103,7 +104,7 @@ async def handle_gpt_image_2_generate(
         raise ValueError("Prompt input is required but was not provided")
     api_key = api_keys.get("OPENAI_API_KEY")
     if not api_key:
-        raise ValueError("OPENAI_API_KEY is required")
+        raise MissingCredentialError("OPENAI_API_KEY is required")
 
     body = build_body(node, str(prompt_input.value))
     config = StreamConfig(
@@ -166,7 +167,7 @@ async def handle_gpt_image_2_edit(
         raise ValueError("Prompt input is required but was not provided")
     api_key = api_keys.get("OPENAI_API_KEY")
     if not api_key:
-        raise ValueError("OPENAI_API_KEY is required")
+        raise MissingCredentialError("OPENAI_API_KEY is required")
 
     image_paths = _normalize_image_input(image_input.value)
     if len(image_paths) > MAX_EDIT_IMAGES:

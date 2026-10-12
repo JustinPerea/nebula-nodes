@@ -9,6 +9,7 @@ from models.events import ExecutionEvent
 from execution.stream_runner import StreamConfig, stream_execute
 from services.image_input import load_local_image
 from services.output import get_run_dir, save_base64_image
+from execution.missing_credential import MissingCredentialError
 
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
 
@@ -21,7 +22,7 @@ async def handle_openrouter_universal(
 ) -> dict[str, Any]:
     api_key = api_keys.get("OPENROUTER_API_KEY")
     if not api_key:
-        raise ValueError("OPENROUTER_API_KEY is required")
+        raise MissingCredentialError("OPENROUTER_API_KEY is required")
 
     model = node.params.get("model", "")
     if not model:

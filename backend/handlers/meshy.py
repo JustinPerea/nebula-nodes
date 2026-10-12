@@ -12,6 +12,7 @@ from services.output import image_to_data_uri
 from pathlib import Path
 
 import sys
+from execution.missing_credential import MissingCredentialError
 
 MESHY_API_BASE = "https://api.meshy.ai/openapi"
 
@@ -40,7 +41,7 @@ async def handle_meshy_image_to_3d(
     _log(f"handle_meshy_image_to_3d called, node={node.id}")
     api_key = api_keys.get("MESHY_API_KEY")
     if not api_key:
-        raise ValueError("MESHY_API_KEY is required")
+        raise MissingCredentialError("MESHY_API_KEY is required")
 
     image_input = inputs.get("image")
     if not image_input or not image_input.value:
@@ -124,7 +125,7 @@ async def handle_meshy_text_to_3d(
 ) -> dict[str, Any]:
     api_key = api_keys.get("MESHY_API_KEY")
     if not api_key:
-        raise ValueError("MESHY_API_KEY is required")
+        raise MissingCredentialError("MESHY_API_KEY is required")
 
     prompt_input = inputs.get("prompt")
     if not prompt_input or not prompt_input.value:
@@ -273,7 +274,7 @@ async def handle_meshy_multi_image_to_3d(
 ) -> dict[str, Any]:
     api_key = api_keys.get("MESHY_API_KEY")
     if not api_key:
-        raise ValueError("MESHY_API_KEY is required")
+        raise MissingCredentialError("MESHY_API_KEY is required")
 
     images_input = inputs.get("images")
     if not images_input or not images_input.value:
@@ -343,7 +344,7 @@ async def handle_meshy_retexture(
 ) -> dict[str, Any]:
     api_key = api_keys.get("MESHY_API_KEY")
     if not api_key:
-        raise ValueError("MESHY_API_KEY is required")
+        raise MissingCredentialError("MESHY_API_KEY is required")
 
     model_url_input = inputs.get("model_url")
     if not model_url_input or not model_url_input.value:
@@ -409,7 +410,7 @@ async def handle_meshy_rigging(
 ) -> dict[str, Any]:
     api_key = api_keys.get("MESHY_API_KEY")
     if not api_key:
-        raise ValueError("MESHY_API_KEY is required")
+        raise MissingCredentialError("MESHY_API_KEY is required")
 
     model_url_input = inputs.get("model_url")
     if not model_url_input or not model_url_input.value:
@@ -474,7 +475,7 @@ async def handle_meshy_animate(
 ) -> dict[str, Any]:
     api_key = api_keys.get("MESHY_API_KEY")
     if not api_key:
-        raise ValueError("MESHY_API_KEY is required")
+        raise MissingCredentialError("MESHY_API_KEY is required")
 
     rig_task_id_input = inputs.get("rig_task_id")
     if not rig_task_id_input or not rig_task_id_input.value:
@@ -543,7 +544,7 @@ async def handle_meshy_remesh(
 ) -> dict[str, Any]:
     api_key = api_keys.get("MESHY_API_KEY")
     if not api_key:
-        raise ValueError("MESHY_API_KEY is required")
+        raise MissingCredentialError("MESHY_API_KEY is required")
 
     model_url_input = inputs.get("model_url")
     if not model_url_input or not model_url_input.value:
@@ -608,7 +609,7 @@ async def handle_meshy_text_to_image(
 ) -> dict[str, Any]:
     api_key = api_keys.get("MESHY_API_KEY")
     if not api_key:
-        raise ValueError("MESHY_API_KEY is required")
+        raise MissingCredentialError("MESHY_API_KEY is required")
 
     prompt_input = inputs.get("prompt")
     if not prompt_input or not prompt_input.value:
@@ -679,7 +680,7 @@ async def handle_meshy_image_to_image(
 ) -> dict[str, Any]:
     api_key = api_keys.get("MESHY_API_KEY")
     if not api_key:
-        raise ValueError("MESHY_API_KEY is required")
+        raise MissingCredentialError("MESHY_API_KEY is required")
 
     prompt_input = inputs.get("prompt")
     if not prompt_input or not prompt_input.value:
@@ -764,7 +765,7 @@ async def handle_meshy_3d_print(
 ) -> dict[str, Any]:
     api_key = api_keys.get("MESHY_API_KEY")
     if not api_key:
-        raise ValueError("MESHY_API_KEY is required")
+        raise MissingCredentialError("MESHY_API_KEY is required")
 
     task_id_input = inputs.get("task_id")
     if not task_id_input or not task_id_input.value:

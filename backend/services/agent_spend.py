@@ -27,9 +27,11 @@ Rules, with any limit set:
 Runs billed to a signed-in Krea plan (``plan``) aren't per-call charges and
 are neither limited nor counted, as on the canvas.
 
-Nodes without a key for their provider aren't counted or limited either:
-they fail before any provider call, so they can't cost anything
-(``node_readiness.can_bill``).
+A node that fails at its own key check, before any provider request
+(``execution.missing_credential``), gets its share of the count back when
+the run reports it: it can't have cost anything. The limit itself is still
+checked up front on the whole estimate, because which key a handler will
+find can only be known by running it.
 
 Estimates cover every node the run includes, the same set the canvas prices.
 Nodes whose outputs are cached may not run again, so this is an upper bound;
@@ -47,7 +49,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Mapping
 
-from services import model_pricing, node_readiness
+from services import model_pricing
 
 SETTING_KEY = "runCostConfirmUsd"
 CAPS_KEY = "agentSpend"
@@ -180,6 +182,23 @@ class SpendLedger:
                 sessions.pop(next(iter(sessions)))
             self._save(sessions)
 
+    def refund(self, key: str, by_model: Mapping[str, float]) -> None:
+        """Give back part of what record() counted, for nodes that couldn't have spent it."""
+        with self._lock:
+            sessions = self._load()
+            entry = sessions.get(key)
+            if entry is None:
+                return
+            for definition_id, amount in by_model.items():
+                left = round(entry["models"].get(definition_id, 0.0) - amount, 6)
+                if left > 0:
+                    entry["models"][definition_id] = left
+                else:
+                    entry["models"].pop(definition_id, None)
+                entry["total"] = max(0.0, round(entry["total"] - amount, 6))
+            entry["updated"] = time.time()
+            self._save(sessions)
+
     def _save(self, sessions: Mapping[str, Any]) -> None:
         if self._path is None:
             return
@@ -195,6 +214,7 @@ class SpendLedger:
 class Decision:
     refusal: str | None
     charge: dict[str, float]  # upper-bound USD per node definition, to record if the run goes ahead
+    per_node: dict[str, tuple[str, float]] = field(default_factory=dict)  # node id -> (definition, USD)
 
 
 def _usd(amount: float) -> str:
@@ -234,31 +254,23 @@ def decide(
     api_keys = settings.get("apiKeys") or {}
     multipliers = model_pricing.run_multipliers(list(items), edges)
     estimate = model_pricing.estimate_run(list(items), pricing, definitions, api_keys, multipliers)
-    # A node with no key for its provider fails before any provider call, so
-    # it can't spend: it neither counts against a budget nor needs approval.
-    keys = node_readiness.configured_keys(settings)
-    keyless = {str(item["id"]) for item in items
-               if not node_readiness.can_bill(definitions.get(str(item.get("definitionId") or "")) or {},
-                                              item.get("params") or {}, keys)}
-    if keyless:
-        estimate = {**estimate,
-                    "priced": {k: v for k, v in estimate["priced"].items() if k not in keyless},
-                    "unpriced": [k for k in estimate["unpriced"] if k not in keyless]}
     definition_of = {str(item["id"]): str(item.get("definitionId") or "") for item in items}
     labels = {node_id: str((definitions.get(def_id) or {}).get("displayName") or "") for node_id, def_id in definition_of.items()}
 
     by_model: dict[str, float] = {}
+    per_node: dict[str, tuple[str, float]] = {}
     for node_id, line in estimate["priced"].items():
         def_id = definition_of.get(node_id, "")
         by_model[def_id] = by_model.get(def_id, 0.0) + line["high"]
+        per_node[str(node_id)] = (def_id, line["high"])
 
     def refuse(reason: str) -> Decision:
-        return Decision(f"Needs the person's approval: {reason} {how_to_ask}", by_model)
+        return Decision(f"Needs the person's approval: {reason} {how_to_ask}", by_model, per_node)
 
     limited = (threshold is not None or caps["sessionUsd"] is not None
                or any(v is not None for limits in model_caps.values() for v in limits.values()))
     if not limited:
-        return Decision(None, by_model)
+        return Decision(None, by_model, per_node)
 
     if estimate["unpriced"]:
         return refuse(f"Nebula has no list price for {_names(estimate['unpriced'], labels)}, "
@@ -292,7 +304,7 @@ def decide(
             name = (definitions.get(def_id) or {}).get("displayName") or def_id
             return refuse(f"this run's {name} nodes could cost up to {_usd(amount)}, and this session has "
                           f"already used {_usd(used)} of its {_usd(model_budget)} {name} budget set in Nebula Settings.")
-    return Decision(None, by_model)
+    return Decision(None, by_model, per_node)
 
 
 def propose_hint(run_ids: list[str]) -> str:
