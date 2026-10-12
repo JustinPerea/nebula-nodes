@@ -75,7 +75,7 @@ class AgentRegistry:
         self._lock = threading.Lock()
 
     def mint(self, runner: str, allowed_dirs: list[Path], *, brand: str | None = None,
-             workspace: Path | None = None) -> str:
+             workspace: Path | None = None, session: str | None = None) -> str:
         identity = None
         if workspace is not None:
             from services.agent_workspaces import workspace_identity, validate_workspace
@@ -83,7 +83,8 @@ class AgentRegistry:
             validate_workspace(workspace, identity)
         token = secrets.token_urlsafe(32)
         with self._lock:
-            self._tokens[token] = {"runner": runner, "model": None, "brand": brand,
+            # `session` is the chat session the turn belongs to; spending limits count per session.
+            self._tokens[token] = {"runner": runner, "model": None, "brand": brand, "session": session,
                                    "workspace": Path(workspace).expanduser().resolve() if workspace is not None else None,
                                    "workspace_identity": identity,
                                    "allowed_dirs": tuple(Path(d).resolve() for d in allowed_dirs)}

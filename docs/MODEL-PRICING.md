@@ -25,7 +25,10 @@ without a sourced price is shown as unpriced, never guessed.
   - "N paid" when nothing in the run is priced.
   - The tooltip lists each node.
 - **Cost confirm:** before a run whose high estimate reaches the threshold in
-  Settings › Interface › *Ask before costly runs* (default $1, or Never).
+  Settings › Preferences › *Ask before costly runs* (default $1, or Never).
+- **Agent spending limits:** the same threshold, plus a per-session budget and
+  per-model limits, decide when an agent must propose a run instead of
+  starting it (see [MCP-SETUP](MCP-SETUP.md#spending-limits)).
 - **Agent proposals:** `cost.estimate` and each node's `price` (see
   [MCP-SETUP](MCP-SETUP.md#proposals)).
 

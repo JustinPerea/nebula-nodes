@@ -20,6 +20,7 @@ import { BackendConnectionStatus } from './components/BackendConnectionStatus';
 import { ProviderRecoveryStatus } from './components/ProviderRecoveryStatus';
 import { startWorkingBadge } from './lib/jobNotifications';
 import { getSettings } from './lib/api';
+import { applySavedRunCostConfirm } from './lib/runCostConfirm';
 import { getKreaConnection, normalizeKreaMode, nodeKeyStatus } from './lib/kreaConnection';
 import { useUIStore } from './store/uiStore';
 import { usePricingStore } from './store/pricingStore';
@@ -98,6 +99,7 @@ export default function App() {
     const initialCache = useUIStore.getState().settingsCache;
     getSettings()
       .then((settings) => {
+        if (!cancelled) applySavedRunCostConfirm(settings);
         const currentCache = useUIStore.getState().settingsCache;
         if (cancelled || request !== settingsCacheRequest.current
           || currentCache.apiKeys !== initialCache.apiKeys
@@ -159,6 +161,7 @@ export default function App() {
       const initialCache = useUIStore.getState().settingsCache;
       getSettings()
         .then((settings) => {
+          if (!cancelled) applySavedRunCostConfirm(settings);
           const currentCache = useUIStore.getState().settingsCache;
           if (cancelled || request !== settingsCacheRequest.current
             || currentCache.apiKeys !== initialCache.apiKeys

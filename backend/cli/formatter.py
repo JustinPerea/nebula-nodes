@@ -213,42 +213,97 @@ def format_selection(selection: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def format_context(settings: dict[str, Any], nodes: list[dict[str, Any]]) -> str:
-    """Format the compact context summary (~500 tokens for Claude)."""
+def _keys(value: Any) -> list[str]:
+    return [k for k in (value if isinstance(value, list) else [value]) if k]
+
+
+def _krea_mode_options(node: dict[str, Any]) -> list[str]:
+    for param in node.get("params") or []:
+        if param.get("key") == "_kreaAuth":
+            return [str(option.get("value")) for option in param.get("options") or []]
+    return []
+
+
+def node_access(node: dict[str, Any], configured_keys: set[str], krea_signed_in: bool) -> str | None:
+    """How a node can run here: "key", "free", "krea" (Krea sign-in) or "nous";
+    None when it needs a key or sign-in that isn't set up. Mirrors the canvas
+    (frontend/src/lib/kreaConnection.ts nodeKeyStatus)."""
+    if node.get("apiProvider") == "nous":
+        return "nous"
+    krea_modes = _krea_mode_options(node)
+    keys = _keys(node.get("envKeyName")) + _keys(node.get("directKeyName"))
+    if krea_modes == ["mcp"]:
+        return "krea" if krea_signed_in else None
+    if any(key in configured_keys for key in keys):
+        return "key"
+    if "mcp" in krea_modes and krea_signed_in:
+        return "krea"
+    return "free" if not keys and not krea_modes else None
+
+
+def format_context(
+    settings: dict[str, Any], nodes: list[dict[str, Any]], krea_status: str | None = None,
+) -> str:
+    """Compact summary of what can run right now, by definition id."""
     api_keys = settings.get("apiKeys", {})
     configured_keys = {k for k, v in api_keys.items() if v}
-
-    available: list[dict[str, Any]] = []
-    for n in nodes:
-        env = n.get("envKeyName", "")
-        keys_list = env if isinstance(env, list) else [env] if env else []
-        if any(k in configured_keys for k in keys_list):
-            available.append(n)
+    krea_signed_in = krea_status == "connected"
 
     by_cat: dict[str, list[str]] = {}
-    for n in available:
-        cat = n.get("category", "other")
-        by_cat.setdefault(cat, []).append(n.get("displayName", n["id"]))
+    access_count: dict[str, int] = {}
+    krea_both: list[str] = []
+    for n in nodes:
+        access = node_access(n, configured_keys, krea_signed_in)
+        if access is None:
+            continue
+        access_count[access] = access_count.get(access, 0) + 1
+        if access == "krea" and _krea_mode_options(n) != ["mcp"]:
+            krea_both.append(n["id"])
+        mark = {"krea": "*", "nous": "^"}.get(access, "")
+        by_cat.setdefault(n.get("category", "other"), []).append(n["id"] + mark)
 
     cat_names = {
         "image-gen": "Image", "video-gen": "Video", "text-gen": "Text/Chat",
         "audio-gen": "Audio", "3d-gen": "3D", "transform": "Transform",
-        "analyzer": "Analyzer", "utility": "Utility", "universal": "Universal",
+        "analyzer": "Analyzer", "utility": "Utility (free)", "universal": "Universal",
+        "cinematic": "Cinema", "character": "Character",
     }
 
+    ready = sum(access_count.values())
     lines: list[str] = []
-    lines.append(f"Nebula Nodes — {len(available)} nodes available ({len(nodes)} total)")
+    lines.append(f"Nebula Nodes — {ready} of {len(nodes)} nodes can run here")
+    parts = [f"{access_count.get('key', 0)} with your keys", f"{access_count.get('free', 0)} free"]
+    if access_count.get("krea"):
+        parts.append(f"{access_count['krea']} on the Krea account")
+    if access_count.get("nous"):
+        parts.append(f"{access_count['nous']} with a Nous sign-in")
+    lines.append("(" + ", ".join(parts) + ")")
     lines.append("")
-    lines.append(f"Configured keys: {', '.join(sorted(configured_keys)) or 'none'}")
+    lines.append(f"Keys set: {', '.join(sorted(configured_keys)) or 'none'}")
+    if krea_status is not None:
+        if krea_signed_in:
+            lines.append("Krea account: signed in")
+        else:
+            more = sum(1 for n in nodes if node_access(n, configured_keys, True) == "krea")
+            lines.append(f"Krea account: not signed in ({krea_status})"
+                         + (f"; signing in (Settings > Providers) adds {more} nodes" if more else ""))
     lines.append("")
 
-    for cat, names in by_cat.items():
+    for cat, ids in by_cat.items():
         display = cat_names.get(cat, cat)
-        lines.append(f"{display}: {', '.join(sorted(names))}")
+        lines.append(f"{display}: {', '.join(sorted(ids))}")
 
     lines.append("")
+    if access_count.get("krea"):
+        lines.append("* runs on the signed-in Krea account (workspace compute).")
+        if krea_both:
+            lines.append("  Those that also take a token default to it: create them with --param _kreaAuth=mcp.")
+    if access_count.get("nous"):
+        lines.append("^ needs a local Nous (Hermes) sign-in; not checked here.")
+    lines.append("Ids above go to `nebula create <id>`; `nebula info <id>` shows ports and params.")
     lines.append("Port types: Text, Image, Video, Audio, Mesh, Array, SVG, Any")
     lines.append("Connections must match types (Any connects to anything).")
+    lines.append("Paid runs over your spending limits need a proposal: `nebula spend` shows them.")
 
     return "\n".join(lines)
 
@@ -271,7 +326,8 @@ def format_run_results(results: dict[str, Any], node_defs: dict[str, dict[str, A
     for nid, err in errors.items():
         lines.append(f"{nid}: ERROR — {err}")
 
-    lines.append(f"\nCompleted in {duration}s")
+    if duration is not None:
+        lines.append(f"\nCompleted in {duration}s")
     return "\n".join(lines)
 
 

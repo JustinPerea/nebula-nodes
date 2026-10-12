@@ -36,7 +36,9 @@ mcp = FastMCP(
         "otherwise your CLI edits count as someone else's. look_at_canvas lists "
         "the person's pins (notes for agents): act on them and answer with resolve_pin. "
         "Before a costly change call propose_change; the person accepts or rejects it in "
-        "Nebula (agents cannot accept), and get_proposal(wait_seconds=...) reports the outcome."
+        "Nebula (agents cannot accept), and get_proposal(wait_seconds=...) reports the outcome. "
+        "The person sets what agents may spend: a CLI run over those limits, or with a node "
+        "that has no list price, is refused and must be proposed instead."
         + "\n\n" + COMMONS_SKILL
     ),
 )

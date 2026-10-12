@@ -52,6 +52,27 @@ def build_parser() -> argparse.ArgumentParser:
     set_p.add_argument("params", nargs="+", metavar="key=value",
                        help="Params to set (e.g. aspect_ratio=9:16)")
 
+    delete_p = sub.add_parser("delete", help="Delete nodes and their wires")
+    delete_p.add_argument("node_refs", nargs="+", metavar="node", help="Node references (e.g. n3)")
+
+    disconnect_p = sub.add_parser("disconnect", help="Remove a wire")
+    disconnect_p.add_argument("src", help="Source (e.g. n1:image)")
+    disconnect_p.add_argument("dst", help="Destination (e.g. n2:image)")
+
+    rename_p = sub.add_parser("rename", help="Rename a node on the canvas (empty name restores the model's)")
+    rename_p.add_argument("node_ref", help="Node reference (e.g. n2)")
+    rename_p.add_argument("label", nargs="*", help="New name")
+
+    move_p = sub.add_parser("move", help="Move nodes on the canvas")
+    move_p.add_argument("moves", nargs="+", metavar="node=x,y",
+                        help="Where to put each node, in canvas coordinates (e.g. n2=400,120)")
+
+    sub.add_parser("projects", help="List saved projects")
+    project_p = sub.add_parser("project", help="Open a saved project on the canvas")
+    project_sub = project_p.add_subparsers(dest="project_command", required=True)
+    project_open_p = project_sub.add_parser("open", help="Switch the canvas to a saved project")
+    project_open_p.add_argument("project_id", help="Project id (from `nebula projects`)")
+
     sub.add_parser("graph", help="Show current graph state")
     sub.add_parser("selection", help="Show nodes currently selected on the canvas")
 
@@ -147,10 +168,24 @@ def build_parser() -> argparse.ArgumentParser:
     path_p.add_argument("node_ref", help="Node reference (e.g. n1)")
 
     # -- Execution --
+    wait_help = ("Seconds to wait before returning 'still running' (default 100). "
+                 "The run keeps going either way; exit code 2 means it was still running.")
     run_p = sub.add_parser("run", help="Execute a node and its dependencies")
     run_p.add_argument("node_ref", help="Node reference (e.g. n2)")
+    run_p.add_argument("--wait", type=float, default=100.0, help=wait_help)
 
-    sub.add_parser("run-all", help="Execute the entire graph")
+    run_all_p = sub.add_parser("run-all", help="Execute the entire graph")
+    run_all_p.add_argument("--wait", type=float, default=100.0, help=wait_help)
+
+    result_p = sub.add_parser("result", help="Results of a run that was still running")
+    result_p.add_argument("run_id", help="Run id (printed by `nebula run`)")
+    result_p.add_argument("--wait", type=float, default=0.0,
+                          help="Wait up to this many seconds for it to finish (max 300)")
+
+    cancel_p = sub.add_parser("cancel", help="Stop a run")
+    cancel_p.add_argument("run_id", help="Run id (printed by `nebula run`)")
+
+    sub.add_parser("spend", help="Show the spending limits agents work under, and what this session used")
 
     sub.add_parser("status", help="Show execution state of graph nodes")
 
@@ -234,7 +269,10 @@ def main() -> None:
 
     client = NebulaClient(args.url)
 
-    from .commands import canvas, commons, context, nodes, keys, graph, execute, quick, path, pins, proposals, selection
+    from .commands import (
+        canvas, commons, context, nodes, keys, graph, execute, quick, path, pins, projects, proposals,
+        selection, spend,
+    )
 
     dispatch = {
         "commons": lambda: commons.run(client, args),
@@ -245,6 +283,12 @@ def main() -> None:
         "create": lambda: graph.run_create(client, args.node_id, parse_kv_list(args.param)),
         "connect": lambda: graph.run_connect(client, args.src, args.dst),
         "set": lambda: graph.run_set(client, args.node_ref, parse_kv_list(args.params)),
+        "delete": lambda: graph.run_delete(client, args.node_refs),
+        "disconnect": lambda: graph.run_disconnect(client, args.src, args.dst),
+        "rename": lambda: graph.run_rename(client, args.node_ref, " ".join(args.label)),
+        "move": lambda: graph.run_move(client, args.moves),
+        "projects": lambda: projects.run_list(client),
+        "project": lambda: projects.run_open(client, args.project_id),
         "graph": lambda: graph.run_show(client),
         "selection": lambda: selection.run(client),
         "look": lambda: canvas.run_look(client, as_json=args.json),
@@ -264,8 +308,11 @@ def main() -> None:
         "load": lambda: graph.run_load(client, args.file),
         "clear": lambda: graph.run_clear(client),
         "path": lambda: path.run(client, args.node_ref),
-        "run": lambda: execute.run_node(client, args.node_ref),
-        "run-all": lambda: execute.run_all(client),
+        "run": lambda: execute.run_node(client, args.node_ref, wait=args.wait),
+        "run-all": lambda: execute.run_all(client, wait=args.wait),
+        "result": lambda: execute.run_result(client, args.run_id, wait=args.wait),
+        "cancel": lambda: execute.run_cancel(client, args.run_id),
+        "spend": lambda: spend.run(client),
         "status": lambda: execute.run_status(client),
         "quick": lambda: quick.run(client, args.node_id,
                                    parse_kv_list(args.input), parse_kv_list(args.param)),

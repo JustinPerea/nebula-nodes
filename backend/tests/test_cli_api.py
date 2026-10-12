@@ -1826,6 +1826,7 @@ class TestCinemaScenePersistsScene:
         assert client.get("/api/graph").json()["nodes"] == []
 
 
+@pytest.mark.usefixtures("spending_limits_off")  # quick plumbing, not spending limits
 class TestQuickImageInputParams:
     """Regression: /api/quick previously built image-input nodes with
     ``params={"value": <path>}``, but the engine resolves image/video/audio
@@ -1905,6 +1906,7 @@ class TestQuickImageInputParams:
         assert text_nodes[0].params == {"value": "a red balloon"}
 
 
+@pytest.mark.usefixtures("spending_limits_off")  # quick plumbing, not spending limits
 class TestQuickMultiImageInput:
     """/api/quick array inputs: a JSON array targeting an Image-typed port
     (a single ``image`` port or an ``images`` port with ``multiple: true``)
@@ -2184,6 +2186,7 @@ class TestQuickMultiImageInput:
         assert text_nodes[0].params == {"value": ["a", "b"]}
 
 
+@pytest.mark.usefixtures("spending_limits_off")  # quick plumbing, not spending limits
 class TestQuickScalarUrlAndErrorPropagation:
     """Scrutiny fixes for /api/quick:
 

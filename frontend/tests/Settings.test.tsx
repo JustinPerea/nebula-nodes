@@ -1,5 +1,5 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, fireEvent, waitFor, act, within } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act, within, cleanup } from '@testing-library/react';
 
 // ---------------------------------------------------------------------------
 // Mocks — must be set up before importing components
@@ -49,6 +49,7 @@ import { useGraphStore } from '../src/store/graphStore';
 import { useSettingsDraftStore } from '../src/store/settingsDraftStore';
 import { useProviderReadinessStore } from '../src/store/providerReadinessStore';
 import { resetSettingsWrites } from '../src/lib/settingsWrites';
+import { resetRunCostConfirmMigration } from '../src/lib/runCostConfirm';
 import { readServiceAccount } from '../src/components/panels/settings/rowHelpers';
 
 // ---------------------------------------------------------------------------
@@ -62,6 +63,7 @@ const KREA_URL = 'https://www.krea.ai/auth/v1/oauth/authorize?state=test';
 beforeEach(() => {
   useProviderReadinessStore.getState().invalidate();
   resetSettingsWrites();
+  resetRunCostConfirmMigration();
   providerApiFetchMock.mockReset();
   useSettingsDraftStore.setState(INITIAL_DRAFT_STATE, true);
   useUIStore.setState(INITIAL_UI_STATE, true);
@@ -116,9 +118,11 @@ function setupDesktopBridge(overrides?: {
   return { credentials, folders };
 }
 
-/** Render with these saved settings and wait for the Providers tab. */
+/** Render with these saved settings and wait for the Providers tab. The run
+ * cost threshold is saved unless a test says otherwise (an older settings file
+ * without it makes the panel copy this browser's value over once). */
 async function renderSettings(settings: Record<string, unknown> = { apiKeys: {} }) {
-  getSettingsMock.mockResolvedValue(settings);
+  getSettingsMock.mockResolvedValue({ runCostConfirmUsd: 1, ...settings });
   const rendered = render(<Settings />);
   await screen.findByRole('searchbox', { name: 'Search providers and models' });
   return rendered;
@@ -196,7 +200,7 @@ describe('Settings shell', () => {
   });
 
   it('keeps a failed first load actionable, and Try again loads the panel', async () => {
-    getSettingsMock.mockRejectedValueOnce(new Error('offline')).mockResolvedValue({ apiKeys: {} });
+    getSettingsMock.mockRejectedValueOnce(new Error('offline')).mockResolvedValue({ runCostConfirmUsd: 1, apiKeys: {} });
     render(<Settings />);
     expect(await screen.findByRole('alert')).toHaveTextContent("Settings couldn't load");
     expect(screen.queryByRole('searchbox')).not.toBeInTheDocument();
@@ -215,10 +219,10 @@ describe('Settings shell', () => {
   it('retries an initial read if a newer credential cache refresh overtakes it', async () => {
     let finishLoad!: (value: Record<string, unknown>) => void;
     getSettingsMock.mockReturnValueOnce(new Promise<Record<string, unknown>>((resolve) => { finishLoad = resolve; }))
-      .mockResolvedValueOnce({ apiKeys: { FAL_KEY: '***current' }, kreaConnectionMode: 'mcp' });
+      .mockResolvedValueOnce({ runCostConfirmUsd: 1, apiKeys: { FAL_KEY: '***current' }, kreaConnectionMode: 'mcp' });
     render(<Settings />);
     act(() => useUIStore.getState().setSettingsCache({ FAL_KEY: '***current' }, 'mcp'));
-    await act(async () => finishLoad({ apiKeys: { OPENAI_API_KEY: '***outdated' } }));
+    await act(async () => finishLoad({ runCostConfirmUsd: 1, apiKeys: { OPENAI_API_KEY: '***outdated' } }));
     await screen.findByRole('searchbox');
     expect(rowNames(list(/^Connected/))).toContain('fal.ai');
     expect(rowNames(list(/^Connected/))).not.toContain('OpenAI');
@@ -228,7 +232,7 @@ describe('Settings shell', () => {
   });
 
   it('closes on Escape from a tab and restores the opener', async () => {
-    getSettingsMock.mockResolvedValue({ apiKeys: {} });
+    getSettingsMock.mockResolvedValue({ runCostConfirmUsd: 1, apiKeys: {} });
     const opener = document.createElement('button');
     document.body.append(opener);
     opener.focus();
@@ -473,7 +477,7 @@ describe('Settings — Vertex service-account key', () => {
 
 describe('Settings — setup links from nodes', () => {
   it('opens and focuses the requested key field without writing, checking or touching the graph', async () => {
-    getSettingsMock.mockResolvedValue({ apiKeys: { OPENAI_API_KEY: '***aaaa' } });
+    getSettingsMock.mockResolvedValue({ runCostConfirmUsd: 1, apiKeys: { OPENAI_API_KEY: '***aaaa' } });
     const graph = useGraphStore.getState();
     useSettingsDraftStore.setState({ tab: 'storage' });
     act(() => useUIStore.getState().openProviderSetup({ kind: 'api-key', key: 'OPENAI_API_KEY' }));
@@ -495,7 +499,7 @@ describe('Settings — setup links from nodes', () => {
   });
 
   it.each(['krea-mcp', 'nous'] as const)('focuses %s setup without signing in, checking or generating', async (kind) => {
-    getSettingsMock.mockResolvedValue({ apiKeys: {} });
+    getSettingsMock.mockResolvedValue({ runCostConfirmUsd: 1, apiKeys: {} });
     act(() => useUIStore.getState().openProviderSetup(kind === 'krea-mcp' ? { kind } : { kind: 'external', provider: 'nous' }));
     render(<Settings />);
     if (kind === 'krea-mcp') {
@@ -696,7 +700,7 @@ describe('Settings — Krea sign-in', () => {
     const open = vi.fn().mockResolvedValue({ ok: true });
     setupDesktopBridge({ kreaOpen: open });
     getKreaConnectionMock.mockResolvedValue({ status: 'connecting', authorizationUrl: KREA_URL });
-    getSettingsMock.mockResolvedValue({ apiKeys: {} });
+    getSettingsMock.mockResolvedValue({ runCostConfirmUsd: 1, apiKeys: {} });
     vi.useFakeTimers();
     await act(async () => { render(<Settings />); });
     expect(within(row('Krea · sign-in')).getByText('Waiting for sign-in…')).toBeInTheDocument();
@@ -747,18 +751,64 @@ describe('Settings — preferences', () => {
     expect(screen.getByRole('switch', { name: /Completion sound/ })).toBeInTheDocument();
   });
 
-  it('applies the run-cost threshold immediately and can turn the question off', async () => {
-    useUIStore.setState({ runCostConfirmUsd: 1 });
-    await renderSettings();
+  it('applies the run-cost threshold at once and saves it, since agents are held to it too', async () => {
+    await renderSettings({ apiKeys: {}, runCostConfirmUsd: 1 });
     openTab('Preferences');
     const select = screen.getByRole('combobox', { name: 'Ask before costly runs' });
     expect(select).toHaveValue('1');
     fireEvent.change(select, { target: { value: '5' } });
     expect(useUIStore.getState().runCostConfirmUsd).toBe(5);
+    await waitFor(() => expect(updateSettingsMock).toHaveBeenCalledWith({ runCostConfirmUsd: 5 }));
     fireEvent.change(select, { target: { value: 'off' } });
     expect(useUIStore.getState().runCostConfirmUsd).toBeNull();
-    expect(updateSettingsMock).not.toHaveBeenCalled();
+    await waitFor(() => expect(updateSettingsMock).toHaveBeenLastCalledWith({ runCostConfirmUsd: null }));
+    expect(screen.getByText(/There is no per-run limit/)).toBeInTheDocument();
     useUIStore.getState().setRunCostConfirmUsd(1);
+  });
+
+  it('puts the threshold back and says so when saving it fails', async () => {
+    await renderSettings({ apiKeys: {}, runCostConfirmUsd: 2 });
+    openTab('Preferences');
+    updateSettingsMock.mockRejectedValueOnce(new Error('offline'));
+    fireEvent.change(screen.getByRole('combobox', { name: 'Ask before costly runs' }), { target: { value: '10' } });
+    expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't save");
+    expect(useUIStore.getState().runCostConfirmUsd).toBe(2);
+    useUIStore.getState().setRunCostConfirmUsd(1);
+  });
+
+  it('takes the saved threshold over this browser, and saves a browser-only one once', async () => {
+    useUIStore.setState({ runCostConfirmUsd: 5 });
+    await renderSettings({ apiKeys: {}, runCostConfirmUsd: 20 });
+    expect(useUIStore.getState().runCostConfirmUsd).toBe(20);
+    expect(updateSettingsMock).not.toHaveBeenCalled();
+    cleanup();
+    resetRunCostConfirmMigration();
+    useUIStore.setState({ runCostConfirmUsd: 5 });
+    getSettingsMock.mockResolvedValue({ apiKeys: {} });
+    render(<Settings />);
+    await waitFor(() => expect(updateSettingsMock).toHaveBeenCalledWith({ runCostConfirmUsd: 5 }));
+    useUIStore.getState().setRunCostConfirmUsd(1);
+  });
+
+  it('limits what agents spend per chat session and per model', async () => {
+    await renderSettings({ apiKeys: {}, runCostConfirmUsd: 1, agentSpend: { sessionUsd: null, models: {} } });
+    openTab('Preferences');
+    expect(screen.getByText(/The per-run limit above \(\$1\) applies to agents too/)).toBeInTheDocument();
+    fireEvent.change(screen.getByRole('combobox', { name: 'Per chat session' }), { target: { value: '10' } });
+    await waitFor(() => expect(updateSettingsMock).toHaveBeenLastCalledWith({ agentSpend: { sessionUsd: 10, models: {} } }));
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'Limit a model' }), { target: { value: 'gpt-image-1-generate' } });
+    await waitFor(() => expect(updateSettingsMock).toHaveBeenLastCalledWith({
+      agentSpend: { sessionUsd: 10, models: { 'gpt-image-1-generate': { perRunUsd: 1, sessionUsd: null } } },
+    }));
+    const perSession = await screen.findByRole('combobox', { name: 'GPT Image 1 per session' });
+    fireEvent.change(perSession, { target: { value: '25' } });
+    await waitFor(() => expect(updateSettingsMock).toHaveBeenLastCalledWith({
+      agentSpend: { sessionUsd: 10, models: { 'gpt-image-1-generate': { perRunUsd: 1, sessionUsd: 25 } } },
+    }));
+    fireEvent.click(screen.getByRole('button', { name: 'Remove the limits for GPT Image 1' }));
+    await waitFor(() => expect(updateSettingsMock).toHaveBeenLastCalledWith({ agentSpend: { sessionUsd: 10, models: {} } }));
+    expect(screen.queryByRole('combobox', { name: 'GPT Image 1 per session' })).not.toBeInTheDocument();
   });
 });
 

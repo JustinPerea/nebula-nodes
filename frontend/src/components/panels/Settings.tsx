@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { X } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import { getSettings } from '../../lib/api';
+import { applySavedRunCostConfirm } from '../../lib/runCostConfirm';
 import { useSettingsDraftStore, readSettingsDraft, settingsWriteInFlight, type SettingsTab } from '../../store/settingsDraftStore';
 import { useDelayedUnmount } from '../../hooks/useDelayedUnmount';
 import { usePanelFocus } from '../../hooks/usePanelFocus';
@@ -48,6 +49,7 @@ export function Settings() {
         setRetryLoad((value) => value + 1);
         return;
       }
+      applySavedRunCostConfirm(data);
       const loaded = readSettingsDraft(data);
       useSettingsDraftStore.setState({ saved: loaded });
       const sameKeys = Object.keys(cache.apiKeys).length === Object.keys(loaded.apiKeys).length

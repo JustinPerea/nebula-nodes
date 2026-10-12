@@ -510,6 +510,32 @@ body.app-slava-restraint .settings-krea-default { display: grid; gap: 5px; }
 body.app-slava-restraint .settings-krea-default__control { display: flex; align-items: center; gap: var(--sr-space-2); }
 body.app-slava-restraint .settings-krea-default .settings__select { flex: 1; min-width: 0; }
 
+/* ── Agent spending ─────────────────────────────────────────────────── */
+
+/* Two limits and a remove button don't fit beside the name in the panel's
+   width, so a model's controls sit on their own line under it. */
+body.app-slava-restraint .settings-pref.settings-model-limit {
+  grid-template-columns: minmax(0, 1fr);
+  row-gap: var(--sr-space-2);
+  cursor: default;
+}
+
+body.app-slava-restraint .settings-model-limit__controls {
+  display: flex;
+  align-items: center;
+  gap: var(--sr-space-2);
+}
+
+body.app-slava-restraint .settings-model-limit__controls .settings__select--compact { flex: 1 1 0; max-width: none; }
+
+body.app-slava-restraint .settings-model-limit__remove {
+  display: inline-grid;
+  place-items: center;
+  width: 26px;
+  min-height: 26px;
+  padding: 0;
+}
+
 /* ── Preferences ────────────────────────────────────────────────────── */
 
 body.app-slava-restraint .settings-prefs,

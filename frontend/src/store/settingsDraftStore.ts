@@ -2,6 +2,18 @@ import { create } from 'zustand';
 import { normalizeKreaMode, type KreaConnectionMode } from '../lib/kreaConnection';
 
 /** Settings as the backend reports them. API keys arrive masked ("***abcd"). */
+/** USD limits on what agents may spend without asking (backend/services/agent_spend.py). Null means no limit. */
+export interface ModelSpendLimit {
+  perRunUsd: number | null;
+  sessionUsd: number | null;
+}
+
+export interface AgentSpendLimits {
+  sessionUsd: number | null;
+  /** Keyed by node definition id. */
+  models: Record<string, ModelSpendLimit>;
+}
+
 export interface SettingsDraft {
   apiKeys: Record<string, string>;
   routing: Record<string, string>;
@@ -9,10 +21,11 @@ export interface SettingsDraft {
   outputPath: string;
   exportFolder: string;
   zoomTelemetryEnabled: boolean;
+  agentSpend: AgentSpendLimits;
 }
 
 /** Settings that save on their own, outside API keys. */
-export type SettingsField = 'outputPath' | 'exportFolder' | 'zoomTelemetryEnabled' | 'kreaConnectionMode';
+export type SettingsField = 'outputPath' | 'exportFolder' | 'zoomTelemetryEnabled' | 'kreaConnectionMode' | 'agentSpend';
 
 export type SettingsTab = 'providers' | 'preferences' | 'storage';
 
@@ -71,7 +84,27 @@ export function readSettingsDraft(settings: Record<string, unknown>): SettingsDr
     outputPath: typeof settings.outputPath === 'string' ? settings.outputPath : '',
     exportFolder: typeof settings.exportFolder === 'string' ? settings.exportFolder : '',
     zoomTelemetryEnabled: settings.zoomTelemetryEnabled === true,
+    agentSpend: readAgentSpend(settings.agentSpend),
   };
+}
+
+function readLimit(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null;
+}
+
+/** Anything unreadable counts as no limit, as on the backend. */
+export function readAgentSpend(value: unknown): AgentSpendLimits {
+  const raw = value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+  const models: Record<string, ModelSpendLimit> = {};
+  const rawModels = raw.models && typeof raw.models === 'object' && !Array.isArray(raw.models)
+    ? raw.models as Record<string, unknown> : {};
+  for (const [id, limits] of Object.entries(rawModels)) {
+    if (!limits || typeof limits !== 'object') continue;
+    const entry = limits as Record<string, unknown>;
+    const limit = { perRunUsd: readLimit(entry.perRunUsd), sessionUsd: readLimit(entry.sessionUsd) };
+    if (limit.perRunUsd !== null || limit.sessionUsd !== null) models[id] = limit;
+  }
+  return { sessionUsd: readLimit(raw.sessionUsd), models };
 }
 
 /** True while any key or field is still being written. */

@@ -248,6 +248,9 @@ async def run_hermes(
         **agent_child_env(),
         "NEBULA_DISABLE_QUICK": "1",
         "DAEDALUS_APPROVAL": autonomy,
+        # Spending limits count per chat session. A new chat has no id until
+        # Hermes names it, so its first turn counts until Nebula restarts.
+        **({"NEBULA_AGENT_SESSION": session_id} if session_id else {}),
         # Force Python-CLI Hermes to flush stdout after every print so the
         # line-by-line `readline()` reader sees intermediate narration in real
         # time. Without this, Python block-buffers stdout when the descriptor
