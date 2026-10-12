@@ -27,6 +27,10 @@ Rules, with any limit set:
 Runs billed to a signed-in Krea plan (``plan``) aren't per-call charges and
 are neither limited nor counted, as on the canvas.
 
+Nodes without a key for their provider aren't counted or limited either:
+they fail before any provider call, so they can't cost anything
+(``node_readiness.can_bill``).
+
 Estimates cover every node the run includes, the same set the canvas prices.
 Nodes whose outputs are cached may not run again, so this is an upper bound;
 the cache can't be predicted before the run, because its keys depend on
@@ -43,7 +47,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Mapping
 
-from services import model_pricing
+from services import model_pricing, node_readiness
 
 SETTING_KEY = "runCostConfirmUsd"
 CAPS_KEY = "agentSpend"
@@ -230,6 +234,16 @@ def decide(
     api_keys = settings.get("apiKeys") or {}
     multipliers = model_pricing.run_multipliers(list(items), edges)
     estimate = model_pricing.estimate_run(list(items), pricing, definitions, api_keys, multipliers)
+    # A node with no key for its provider fails before any provider call, so
+    # it can't spend: it neither counts against a budget nor needs approval.
+    keys = node_readiness.configured_keys(settings)
+    keyless = {str(item["id"]) for item in items
+               if not node_readiness.can_bill(definitions.get(str(item.get("definitionId") or "")) or {},
+                                              item.get("params") or {}, keys)}
+    if keyless:
+        estimate = {**estimate,
+                    "priced": {k: v for k, v in estimate["priced"].items() if k not in keyless},
+                    "unpriced": [k for k in estimate["unpriced"] if k not in keyless]}
     definition_of = {str(item["id"]): str(item.get("definitionId") or "") for item in items}
     labels = {node_id: str((definitions.get(def_id) or {}).get("displayName") or "") for node_id, def_id in definition_of.items()}
 

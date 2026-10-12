@@ -156,8 +156,18 @@ def test_a_run_over_the_limit_points_at_propose_change(nebula, monkeypatch):
     reset = {"runCostConfirmUsd": 1, "agentSpend": {"sessionUsd": None, "models": {}}}
     http.put("/api/settings", json=reset, headers=PERSON)
     built = _build()
-    with pytest.raises(NebulaAPIError) as refused:
-        asyncio.run(mcp_server.run_nodes(built["idMap"]["+img"]))
+    # Without its key the node can't spend, so the limit doesn't apply.
+    keyless = _text(asyncio.run(mcp_server.run_nodes(built["idMap"]["+img"], wait_seconds=10)))
+    assert keyless["status"] == "finished"
+    assert mcp_server.get_spend_limits()["spent"]["totalUsd"] == 0
+
+    settings = main.load_settings()
+    main.save_settings({**settings, "apiKeys": {**(settings.get("apiKeys") or {}), "GOOGLE_API_KEY": "test"}})
+    try:
+        with pytest.raises(NebulaAPIError) as refused:
+            asyncio.run(mcp_server.run_nodes(built["idMap"]["+img"]))
+    finally:
+        main.save_settings(settings)
     assert refused.value.status == 403
     assert "propose_change" in refused.value.detail
 

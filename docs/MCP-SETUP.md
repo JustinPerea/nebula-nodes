@@ -325,7 +325,9 @@ The person decides what agents may spend, in **Settings > Preferences**:
 
 Any limit also makes an agent ask before running a node with no list price,
 since Nebula can't check it. Krea runs billed to the account's plan and free
-nodes always pass. The person's own runs from the canvas are never limited.
+nodes always pass, and so does a node whose provider key isn't set: it fails
+before calling the provider, so it can't cost anything and isn't counted.
+The person's own runs from the canvas are never limited.
 
 How it works (`backend/services/agent_spend.py`):
 
