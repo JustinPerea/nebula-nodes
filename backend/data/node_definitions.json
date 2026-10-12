@@ -5716,7 +5716,7 @@
         "label": "Extend Video",
         "dataType": "Video",
         "required": false,
-        "_note": "Veo video extension — continue an existing clip. Wire the upstream Veo node's 'Source URI' output here (Veo only accepts its own clips, not external/re-uploaded video). Veo 3.1 and 3.1 Fast (not Lite); output locked to 720p; a Gemini API URI is valid ~2 days."
+        "_note": "Veo video extension — continue an existing clip. Wire the upstream Veo node's 'Source URI' output here. Gemini API: only its own files/... URIs (valid ~2 days), Veo 3.1 and 3.1 Fast (not Lite), output locked to 720p. Vertex: any 1–30 s, 24 fps MP4 (a saved file, a public https URL or gs://), any 3.1 model including Lite. Not available on fal."
       }
     ],
     "outputPorts": [
@@ -5731,7 +5731,7 @@
         "label": "Source URI",
         "dataType": "Video",
         "required": false,
-        "_note": "This generation's Veo files/... URI — wire into a downstream Veo node's 'Extend Video' input to continue the clip. Valid ~2 days."
+        "_note": "What to extend from — wire into a downstream Veo node's 'Extend Video' input to continue the clip. Gemini API: the Veo files/... URI, valid ~2 days. Vertex: the saved video file (or its gs:// URI)."
       }
     ],
     "params": [],

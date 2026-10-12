@@ -40,6 +40,12 @@ Google shut down or is about to shut down several models our nodes call (https:/
 - **Gemini Omni:** inputs are now fetched through `fetch_public_media` (public https only, ≤100 MB), closing the same SSRF shape fixed for Veo.
 - **Deprecations:** Google's page names `gemini-omni-1.1-flash` as the Gemini API replacement for the Veo 3.1 previews, alongside the GA models on the Agent Platform.
 
+**Live runs (2026-10-12), on the Mac in browser mode:**
+- **fal: passed.** With only `FAL_KEY` set, `veo-3` on Veo 3.1 Fast, 4 s, 720p, no frames, returned a 4.01 s 1280×720 mp4 with an audio track in about 53 s. That combination can only route to `fal-ai/veo3.1/fast` (`fal_veo_route`).
+- **Gemini API (Nano Banana 2.1): not run yet.** The request reached Google, which answered `RESOURCE_EXHAUSTED: Your prepayment credits are depleted` for the `goodmachines-gemini` project. Billing, not request shape. The provider health check still reported Google "valid", because it lists models and that costs nothing. It can't see prepay balance.
+- **Vertex: skipped.** The goodmachines.ai org enforces `iam.managed.disableServiceAccountKeyCreation` (Google's default for newer orgs), so no service-account JSON key can be made. A service account `nebula-veo` with `roles/aiplatform.user` exists in `goodmachines-gemini`, without a key. Justin chose to merge without a Vertex live run. Anyone on a recent Google Cloud org will hit the same wall, so keyless Vertex auth (ADC with service-account impersonation) is the follow-up if Vertex matters.
+- The `veo-3` port notes said extension is "not Lite; output locked to 720p" and Source URI is always a `files/…` URI. Both are Gemini-API-only now; the notes say what each route does.
+
 ## 2026-10-10 — Run cost from a curated price table
 
 Justin chose option (a): a curated price table, each price checked against the vendor's page, then a cost chip on Run and a confirm above a threshold. Not committed yet.
