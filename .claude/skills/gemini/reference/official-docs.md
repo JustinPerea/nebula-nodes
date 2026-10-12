@@ -20,11 +20,13 @@ This skill was synthesized from these pages on **2026-04-16**. The Gemini API su
 ## Image
 
 - Image generation + editing: https://ai.google.dev/gemini-api/docs/image-generation
-- Imagen guide (if separate): https://ai.google.dev/gemini-api/docs/imagen
+- Imagen 4 was shut down on 2026-08-17; use Nano Banana 2.1 (same image-generation page).
 
 ## Video
 
 - Video generation (Veo): https://ai.google.dev/gemini-api/docs/video
+- Veo on Vertex AI: https://cloud.google.com/vertex-ai/generative-ai/docs/model-reference/veo-video-generation
+- Pricing (Gemini API): https://ai.google.dev/gemini-api/docs/pricing
 
 ## Audio
 

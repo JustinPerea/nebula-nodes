@@ -1,0 +1,14 @@
+{
+  "_comment": "Oracle: backend/tests/test_google_contract_fixtures.py::test_google_request_body_matches_fixture[veo-3-vertex-request.json]. Endpoint (not in body): POST https://us-central1-aiplatform.googleapis.com/v1/projects/{project}/locations/us-central1/publishers/google/models/veo-3.1-fast-generate-001:predictLongRunning. Used when GOOGLE_VERTEX_CREDENTIALS is set.",
+  "instances": [
+    { "prompt": "a sunset" }
+  ],
+  "parameters": {
+    "aspectRatio": "9:16",
+    "durationSeconds": 6,
+    "resolution": "1080p",
+    "personGeneration": "allow_adult",
+    "generateAudio": true,
+    "sampleCount": 1
+  }
+}

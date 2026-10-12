@@ -668,7 +668,7 @@ if (!acquiredLock) {
       // credentials.json under App Support. The renderer can set, check,
       // and clear keys but can never read plaintext values (no get
       // channel). Every handler validates the sender and provider name
-      // against the 16-key allowlist.
+      // against the 18-key allowlist.
       const credentialsPath = join(appDataRoot, CREDENTIALS_FILE_NAME);
       const migrationStatePath = join(appDataRoot, MIGRATION_STATE_FILE_NAME);
       const credentialService = createCredentialService({

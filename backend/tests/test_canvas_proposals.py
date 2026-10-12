@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 
 from cli.commands import proposals as proposals_cmd
 from cli.formatter import format_event, format_proposal, format_proposal_outcome, format_snapshot
+from services import model_pricing
 from services.agent_presence import AgentIdentity, AgentPresence
 from services.canvas_events import CanvasEventJournal
 from services.canvas_pins import CanvasPins
@@ -250,10 +251,19 @@ def test_cost_counts_paid_free_and_ancestors_without_outputs(api):
     assert (cost["paidRuns"], cost["freeRuns"], cost["estimate"]) == (0, 1, None)
 
     paid = _propose(api, _upscale_body(n1)).json()["proposal"]["cost"]
-    assert paid["paidRuns"] == 1 and paid["estimate"] is None and paid["providers"] == ["google"]
+    assert paid["paidRuns"] == 1 and paid["providers"] == ["google"]
+    # Nano Banana's default (3.1 Flash Image at 1K) has a list price.
+    import main as main_module
+    expected = model_pricing.estimate_node(
+        model_pricing.load_pricing()["nodes"]["nano-banana"],
+        main_module.node_registry.get_all()["nano-banana"], {"aspect_ratio": "16:9"})
+    assert paid["estimate"] == {"currency": "usd", "low": expected["low"], "high": expected["high"],
+                                "open": False, "unpriced": [], "plan": [], "plus": []}
+    assert {node["ref"]: node["price"] for node in paid["nodes"]}["+img"] == {
+        "low": expected["low"], "high": expected["high"]}
     # n1 has no output yet, so it may run too: "up to".
     assert paid["upTo"] is True and {node["ref"] for node in paid["nodes"]} == {"+img", n1}
-    assert "no price list" in paid["note"]
+    assert "list prices" in paid["note"]
 
     api.graph.nodes[n1]["outputs"] = {"text": {"type": "Text", "value": "a cat"}}
     cached = _propose(api, _upscale_body(n1)).json()["proposal"]["cost"]
@@ -700,9 +710,13 @@ def test_cli_proposal_json_and_formatting():
         "  adds   +up  Topaz Upscale  [paid · fal]  @(820,140)",
         "  wires  n4.image → +up.image",
         "  sets   n4: prompt",
-        "  runs   +up — up to 1 paid run (fal) — Nebula has no price list",
+        "  runs   +up — up to 1 paid run (fal) — no list price",
         "Check the outcome: nebula proposal p_9a1c3e02 --wait",
     ]
+    priced = {**view, "cost": {**view["cost"], "estimate": {"low": 0.0047, "high": 0.43, "open": True}}}
+    assert "— $0.0047–0.43+ at list prices" in format_proposal(priced, now_ms=1_000_000)
+    exact = {**view, "cost": {**view["cost"], "estimate": {"low": 0.067, "high": 0.067, "open": False}}}
+    assert "— $0.067 at list prices" in format_proposal(exact, now_ms=1_000_000)
     event = {"seq": 3, "at": 0, "kind": "proposal.created", "actor": {"kind": "agent", "name": "Codex"},
              "data": {"proposalId": "p_9a1c3e02"}, "summary": 'proposed p_9a1c3e02: "Upscale"'}
     assert "nebula proposal p_9a1c3e02 --wait" in format_event(event)

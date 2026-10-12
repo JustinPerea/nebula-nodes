@@ -360,6 +360,7 @@ The composer is one visual input well, not a text area next to a separate button
 - With exactly one node selected, its actions (Next step, Edit video, Settings) live in the selection toolbar, not in a pill above the card. One bar, not two. With several selected, only the shared selection actions show.
 - Titles rename in place (double-click or F2): the title becomes a field of the same type size with a faint accent ring, so the header doesn't shift. The model's own name stays in the tooltip.
 - A running node shows who it's waiting on and for how long ("OpenAI · 6s"), adding a percentage and bar only once the provider reports progress. Never a bare "0%".
+- Run buttons (bottom bar and selection bar) carry a small chip with the run's list-price estimate: "~$0.16" when exact, "$0.0047–0.43" when a setting like `auto` only resolves at run time, a trailing "+" when part of the run has no list price. It falls back to "N paid" when nothing in the run is priced. The tooltip breaks it down per node. Never show a number we can't source.
 - Several input handles on a text or image surface fan out around the vertical middle, `--sr-node-surface-port-gap` apart, instead of stacking.
 - Sticky Note uses the same Slava text-surface editor on canvas, backed by its `content` param; its Inspector remains the detailed editor for color and secondary params.
 

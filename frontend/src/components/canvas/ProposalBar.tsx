@@ -167,7 +167,9 @@ export function ProposalBar() {
             <p className="proposal-bar__note">{current.view.note}</p>
             <p className="proposal-bar__summary">{proposalSummary(current.view)}</p>
             <p className="proposal-bar__meta">
-              {current.view.run.length > 0 && current.view.cost.paidRuns > 0 ? 'No price list in Nebula · ' : ''}
+              {current.view.run.length > 0 && current.view.cost.paidRuns > 0
+                ? (current.view.cost.estimate ? 'List prices, not a quote · ' : 'No list price · ')
+                : ''}
               expires in {countdown(current.view.expiresAt, now)}
             </p>
             {changes.some((group) => group.lines.length > 0) && (

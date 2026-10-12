@@ -62,11 +62,24 @@ export interface CanvasPinsEvent {
 
 export type ProposalStatus = 'open' | 'accepted' | 'rejected' | 'withdrawn' | 'expired' | 'invalidated';
 
-/** One node's run cost. Nebula has no price list, so it is only free or paid. */
+/** One node's run cost: free or paid, with its list price when Nebula has one. */
 export interface ProposalCost {
   kind: 'free' | 'paid';
   provider: string | null;
   label: string;
+  price?: { low: number; high: number } | null;
+}
+
+/** List-price total for a proposal's run (backend canvas_proposals.summarize_cost). */
+export interface ProposalEstimate {
+  currency: 'usd';
+  low: number;
+  high: number;
+  /** Some paid node has no list price, or a cost the vendor doesn't fix up front. */
+  open: boolean;
+  unpriced: string[];
+  plan: string[];
+  plus: string[];
 }
 
 export interface ProposalPort {
@@ -103,7 +116,7 @@ export interface ProposalView {
   cost: {
     paidRuns: number;
     freeRuns: number;
-    estimate: null;
+    estimate: ProposalEstimate | null;
     upTo: boolean;
     providers: string[];
     nodes: Array<ProposalCost & { ref: string; nodeId: string | null }>;

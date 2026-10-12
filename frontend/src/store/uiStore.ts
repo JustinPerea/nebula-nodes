@@ -20,6 +20,10 @@ const AGENT_LOG_ENABLED_KEY = 'nebula:agentLog:enabled';
 const CANVAS_PERF_MODE_KEY = 'nebula:canvas:perfMode';
 const CANVAS_LOW_DETAIL_KEY = 'nebula:canvas:lowDetail';
 const CANVAS_MINIMAP_ENABLED_KEY = 'nebula:canvas:minimapEnabled';
+const RUN_COST_CONFIRM_KEY = 'nebula:run:costConfirmUsd';
+/** Ask before a run whose estimate could reach this many dollars. */
+export const RUN_COST_CONFIRM_DEFAULT_USD = 1;
+export const RUN_COST_CONFIRM_CHOICES = [0.5, 1, 5, 20] as const;
 const ONBOARDED_KEY = 'nebula:onboarded';
 const CREATE_SESSION_KEY = 'nebula:create:sessionId';
 const PANEL_EDGE_MARGIN = 16;
@@ -117,6 +121,28 @@ function loadCanvasPref(key: string, defaultValue = true): boolean {
 function persistCanvasPref(key: string, enabled: boolean): void {
   if (typeof window === 'undefined') return;
   window.localStorage.setItem(key, enabled ? '1' : '0');
+}
+
+/** null means never ask. Anything unreadable falls back to the default. */
+function loadRunCostConfirm(): number | null {
+  if (typeof window === 'undefined') return RUN_COST_CONFIRM_DEFAULT_USD;
+  try {
+    const raw = window.localStorage.getItem(RUN_COST_CONFIRM_KEY);
+    if (raw === 'off') return null;
+    const value = raw === null ? NaN : Number(raw);
+    return Number.isFinite(value) && value > 0 ? value : RUN_COST_CONFIRM_DEFAULT_USD;
+  } catch {
+    return RUN_COST_CONFIRM_DEFAULT_USD;
+  }
+}
+
+function persistRunCostConfirm(value: number | null): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(RUN_COST_CONFIRM_KEY, value === null ? 'off' : String(value));
+  } catch {
+    /* Private windows can refuse storage; the choice still holds this session. */
+  }
 }
 
 interface PanelState {
@@ -232,6 +258,8 @@ interface UIState {
   canvasPerfMode: boolean;
   canvasLowDetail: boolean;
   canvasMinimapEnabled: boolean;
+  /** Confirm before a run estimated to cost at least this much (USD); null never asks. */
+  runCostConfirmUsd: number | null;
   notificationPrefs: NotificationPrefs;
   hasOnboarded: boolean;
   onboardingActive: boolean;
@@ -307,6 +335,7 @@ interface UIState {
   setCanvasPerfMode: (enabled: boolean) => void;
   setCanvasLowDetail: (enabled: boolean) => void;
   setCanvasMinimapEnabled: (enabled: boolean) => void;
+  setRunCostConfirmUsd: (value: number | null) => void;
   setNotificationPrefs: (partial: Partial<NotificationPrefs>) => void;
   startOnboarding: () => void;
   nextOnboardingStep: () => void;
@@ -370,6 +399,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   canvasPerfMode: loadCanvasPref(CANVAS_PERF_MODE_KEY),
   canvasLowDetail: loadCanvasPref(CANVAS_LOW_DETAIL_KEY),
   canvasMinimapEnabled: loadCanvasPref(CANVAS_MINIMAP_ENABLED_KEY, false),
+  runCostConfirmUsd: loadRunCostConfirm(),
   notificationPrefs: getNotificationPrefs(),
   hasOnboarded: loadOnboarded(),
   onboardingActive: false,
@@ -772,6 +802,12 @@ export const useUIStore = create<UIState>((set, get) => ({
   setCanvasMinimapEnabled: (enabled) => {
     persistCanvasPref(CANVAS_MINIMAP_ENABLED_KEY, enabled);
     set({ canvasMinimapEnabled: enabled });
+  },
+
+  setRunCostConfirmUsd: (value) => {
+    const next = value !== null && Number.isFinite(value) && value > 0 ? value : null;
+    persistRunCostConfirm(next);
+    set({ runCostConfirmUsd: next });
   },
 
   setNotificationPrefs: (partial) => {

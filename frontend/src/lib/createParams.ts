@@ -1,4 +1,5 @@
 import type { ModelNodeDefinition, ParamDefinition, ParamOption } from '../types';
+import { configuredDirectKey } from './directRoute';
 import { withNewKreaMode, type KreaConnectionMode } from './kreaConnection';
 
 export function resolveCreateParamDefinitions(
@@ -7,9 +8,7 @@ export function resolveCreateParamDefinitions(
 ): ParamDefinition[] {
   if (!def.sharedParams) return def.params;
 
-  const useDirectRoute = Boolean(
-    def.directKeyName && apiKeys[def.directKeyName],
-  );
+  const useDirectRoute = Boolean(configuredDirectKey(def, apiKeys));
   const routeParams = useDirectRoute
     ? (def.directParams ?? [])
     : (def.falParams ?? []);

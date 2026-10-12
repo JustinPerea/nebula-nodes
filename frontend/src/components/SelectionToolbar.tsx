@@ -13,7 +13,8 @@ import { useGraphStore } from '../store/graphStore';
 import { useUIStore } from '../store/uiStore';
 import { useCanvasPinsStore } from '../store/canvasPinsStore';
 import { isBackendNodeId } from '../lib/canvasPins';
-import { describeRunScope, summarizeRunScope } from '../lib/runScope';
+import { describeRunScope, runChipLabel, summarizeRunScope } from '../lib/runScope';
+import { usePricingStore } from '../store/pricingStore';
 import { setSelectionActionSlot } from '../lib/selectionActionSlot';
 import {
   collectDownloadableOutputs,
@@ -46,8 +47,12 @@ export function SelectionToolbar() {
   );
   // Same scopes as runSelection: one node runs with everything feeding it;
   // several run as an explicit cluster.
+  const pricing = usePricingStore((s) => s.table);
+  const apiKeys = useUIStore((s) => s.settingsCache.apiKeys);
   const runScope = useMemo(() => summarizeRunScope(nodes, edges ?? [],
-    ids.length === 1 ? { kind: 'node', nodeId: ids[0] } : { kind: 'cluster', nodeIds: ids }), [nodes, edges, ids]);
+    ids.length === 1 ? { kind: 'node', nodeId: ids[0] } : { kind: 'cluster', nodeIds: ids },
+    { pricing, apiKeys }), [nodes, edges, ids, pricing, apiKeys]);
+  const runChip = runChipLabel(runScope);
   const runScopeId = useId();
   if (ids.length === 0) return null;
 
@@ -127,8 +132,8 @@ export function SelectionToolbar() {
       >
         <Play size={17} fill="currentColor" aria-hidden="true" />
         <span>Run</span>
-        {runScope.paid.length > 0 && (
-          <span className="selection-toolbar__paid" aria-hidden="true">{runScope.paid.length} paid</span>
+        {runChip && (
+          <span className="selection-toolbar__paid" aria-hidden="true">{runChip}</span>
         )}
       </button>
       <span id={runScopeId} className="toolbar__sr-only">{describeRunScope(runScope)}</span>

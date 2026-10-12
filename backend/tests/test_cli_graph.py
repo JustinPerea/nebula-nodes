@@ -11,10 +11,10 @@ def graph():
 
 
 def test_add_node(graph):
-    nid = graph.add_node("imagen-4-generate", {"model": "imagen-4.0-generate-001"})
+    nid = graph.add_node("nano-banana", {"model": "gemini-nano-banana-2.1"})
     assert nid == "n1"
-    assert graph.nodes["n1"]["definitionId"] == "imagen-4-generate"
-    assert graph.nodes["n1"]["params"]["model"] == "imagen-4.0-generate-001"
+    assert graph.nodes["n1"]["definitionId"] == "nano-banana"
+    assert graph.nodes["n1"]["params"]["model"] == "gemini-nano-banana-2.1"
 
 
 def test_sequential_ids(graph):
@@ -89,7 +89,7 @@ def test_clear_resets_counter(graph):
 
 
 def test_get_state(graph):
-    graph.add_node("imagen-4-generate", {"model": "v1"})
+    graph.add_node("nano-banana", {"model": "v1"})
     graph.add_node("seedvr2-upscale", {"factor": 2})
     graph.connect("n1", "image", "n2", "image")
     state = graph.get_state()
@@ -98,11 +98,11 @@ def test_get_state(graph):
 
 
 def test_to_execute_format(graph):
-    graph.add_node("imagen-4-generate", {"model": "v1"})
+    graph.add_node("nano-banana", {"model": "v1"})
     nodes, edges = graph.to_execute_format()
     assert len(nodes) == 1
     assert nodes[0]["id"] == "n1"
-    assert nodes[0]["definitionId"] == "imagen-4-generate"
+    assert nodes[0]["definitionId"] == "nano-banana"
     assert nodes[0]["params"] == {"model": "v1"}
     assert nodes[0]["outputs"] == {}
 
@@ -120,6 +120,33 @@ def test_save_and_load(graph, tmp_path):
     assert len(new_graph.nodes) == 2
     assert len(new_graph.edges) == 1
     assert new_graph.nodes["n1"]["params"] == {"x": 1}
+
+
+
+def test_load_migrates_retired_nodes(tmp_path):
+    """A saved Imagen 4 node loads as Nano Banana 2.1 and a Veo 3.0 node as 3.1."""
+    import json
+
+    path = tmp_path / "saved.json"
+    path.write_text(json.dumps({"nodes": [
+        {"id": "n1", "definitionId": "imagen-4-generate",
+         "params": {"model": "imagen-4.0-ultra-generate-001", "aspectRatio": "16:9", "imageSize": "2K",
+                    "numberOfImages": 2, "_editorNote": "hero"}},
+        {"id": "n2", "definitionId": "imagen-4-generate", "label": "My still", "params": {}},
+        {"id": "n3", "definitionId": "veo-3", "params": {"model": "veo-2.0-generate-001", "duration": "5"}},
+        {"id": "n4", "definitionId": "veo-3", "params": {"model": "veo-3.1-generate-preview"}},
+    ], "edges": [], "counter": 4}))
+    graph = CLIGraph()
+    graph.load(path)
+
+    assert graph.nodes["n1"]["definitionId"] == "nano-banana"
+    assert graph.nodes["n1"]["params"] == {
+        "model": "gemini-nano-banana-2.1", "aspect_ratio": "16:9", "imageSize": "2K", "_editorNote": "hero",
+    }
+    assert graph.nodes["n1"]["label"] == "Nano Banana (was Imagen 4)"
+    assert graph.nodes["n2"]["label"] == "My still", "a renamed node keeps its own title"
+    assert graph.nodes["n3"]["params"] == {"model": "veo-3.1-generate-preview", "duration": "6"}
+    assert graph.nodes["n4"]["params"] == {"model": "veo-3.1-generate-preview"}
 
 
 class TestAutoPersist:

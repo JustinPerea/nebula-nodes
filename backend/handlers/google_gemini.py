@@ -15,7 +15,6 @@ from services.image_input import load_local_image
 from services.output import get_run_dir, save_base64_image
 
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
-IMAGEN_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
 
 
 async def handle_gemini_chat(
@@ -132,6 +131,96 @@ async def handle_gemini_chat(
     return {"text": {"type": "Text", "value": full_text}}
 
 
+# Google documents Nano Banana 2.1 only on the Interactions API
+# (https://ai.google.dev/gemini-api/docs/image-generation, checked 2026-10-10),
+# so it doesn't go through generateContent like the older image models.
+INTERACTIONS_URL = "https://generativelanguage.googleapis.com/v1beta/interactions"
+INTERACTIONS_IMAGE_MODELS = {"gemini-nano-banana-2.1"}
+_INTERACTION_SIZES = {"gemini-nano-banana-2.1": {"1K", "2K", "4K"}}
+_INTERACTION_ASPECTS = {
+    "1:1", "1:4", "1:8", "2:3", "3:2", "3:4", "4:1", "4:3", "4:5", "5:4", "8:1", "9:16", "16:9", "21:9",
+}
+
+
+def _interaction_image_part(value: str) -> dict[str, Any]:
+    # URLs go to Google as-is (like fileData.fileUri on generateContent), so the
+    # backend never fetches a URL a graph hands it.
+    if value.startswith(("http://", "https://")):
+        return {"type": "image", "uri": value}
+    if value.startswith("data:"):
+        header, b64 = value.split(",", 1)
+        return {"type": "image", "mime_type": header.split(":")[1].split(";")[0], "data": b64}
+    mime, b64 = load_local_image(value)
+    return {"type": "image", "mime_type": mime, "data": b64}
+
+
+def _image_from_interaction(data: dict[str, Any]) -> tuple[str | None, str, str | None]:
+    """(base64 image, mime type, text) from an Interactions response."""
+    image: str | None = None
+    mime = "image/png"
+    texts: list[str] = []
+    for step in data.get("steps", []):
+        if step.get("type") != "model_output":
+            continue
+        for content in step.get("content", []):
+            if content.get("type") == "image" and content.get("data"):
+                image, mime = str(content["data"]), str(content.get("mime_type") or mime)
+            elif content.get("type") == "text" and content.get("text"):
+                texts.append(str(content["text"]))
+    output = data.get("output_image") or {}
+    if image is None and output.get("data"):
+        image, mime = str(output["data"]), str(output.get("mime_type") or mime)
+    return image, mime, ("\n".join(texts) or None)
+
+
+async def _nano_banana_interaction(
+    node: GraphNode,
+    prompt: str,
+    inputs: dict[str, PortValueDict],
+    api_key: str,
+    model: str,
+) -> dict[str, Any]:
+    response_format: dict[str, Any] = {"type": "image"}
+    aspect = str(node.params.get("aspect_ratio") or "")
+    if aspect in _INTERACTION_ASPECTS:
+        response_format["aspect_ratio"] = aspect
+    size = str(node.params.get("imageSize") or "")
+    allowed = _INTERACTION_SIZES.get(model, set())
+    if size:
+        response_format["image_size"] = size if size in allowed else "1K"
+
+    images_input = inputs.get("images")
+    parts: list[dict[str, Any]] = [{"type": "text", "text": prompt}]
+    if images_input and images_input.value:
+        values = images_input.value if isinstance(images_input.value, list) else [images_input.value]
+        parts.extend(_interaction_image_part(str(value)) for value in values if value)
+
+    async with httpx.AsyncClient(timeout=180.0) as client:
+        body: dict[str, Any] = {
+            "model": model,
+            "input": prompt if len(parts) == 1 else parts,
+            "response_format": response_format,
+            "store": False,
+        }
+        response = await client.post(
+            INTERACTIONS_URL, json=body,
+            headers={"x-goog-api-key": api_key, "Content-Type": "application/json"},
+        )
+        if response.status_code != 200:
+            raise RuntimeError(f"Gemini API error {response.status_code}: {response.text}")
+
+    image, mime, text = _image_from_interaction(response.json())
+    if not image:
+        raise RuntimeError("Gemini returned no image")
+    ext = "png" if "png" in mime else "jpeg" if "jpeg" in mime else "webp" if "webp" in mime else "png"
+    result: dict[str, Any] = {
+        "image": {"type": "Image", "value": str(save_base64_image(image, get_run_dir(), extension=ext))},
+    }
+    if text:
+        result["text"] = {"type": "Text", "value": text}
+    return result
+
+
 async def handle_nano_banana(
     node: GraphNode,
     inputs: dict[str, PortValueDict],
@@ -147,6 +236,9 @@ async def handle_nano_banana(
         raise ValueError("GOOGLE_API_KEY is required")
 
     model = str(node.params.get("model", "gemini-3.1-flash-image"))
+
+    if model in INTERACTIONS_IMAGE_MODELS:
+        return await _nano_banana_interaction(node, str(prompt_input.value), inputs, api_key, model)
 
     contents = [{"parts": [{"text": str(prompt_input.value)}]}]
 
@@ -226,87 +318,6 @@ async def handle_nano_banana(
         raise RuntimeError("Gemini returned no image or text content")
 
     return result
-
-
-async def handle_imagen4(
-    node: GraphNode,
-    inputs: dict[str, PortValueDict],
-    api_keys: dict[str, str],
-) -> dict[str, Any]:
-    prompt_input = inputs.get("prompt")
-    if not prompt_input or not prompt_input.value:
-        raise ValueError("Prompt input is required for Imagen 4")
-
-    prompt_text = str(prompt_input.value)
-
-    api_key = api_keys.get("GOOGLE_API_KEY")
-    if not api_key:
-        raise ValueError("GOOGLE_API_KEY is required")
-
-    model = node.params.get("model", "imagen-4.0-generate-001")
-
-    request_body: dict[str, Any] = {
-        "instances": [{"prompt": prompt_text}],
-        "parameters": {},
-    }
-
-    n = node.params.get("numberOfImages", 1)
-    if n:
-        request_body["parameters"]["sampleCount"] = int(n)
-
-    aspect_ratio = node.params.get("aspectRatio")
-    if aspect_ratio:
-        request_body["parameters"]["aspectRatio"] = str(aspect_ratio)
-
-    seed = node.params.get("seed")
-    if seed is not None and seed != "":
-        request_body["parameters"]["seed"] = int(seed)
-
-    enhance_prompt = node.params.get("enhancePrompt")
-    if enhance_prompt:
-        request_body["parameters"]["enhancePrompt"] = True
-
-    person_gen = node.params.get("personGeneration")
-    if person_gen:
-        request_body["parameters"]["personGeneration"] = str(person_gen)
-
-    image_size = node.params.get("imageSize")
-    if image_size:
-        request_body["parameters"]["imageSize"] = str(image_size)
-
-    url = f"{IMAGEN_BASE_URL}/{model}:predict"
-
-    async with httpx.AsyncClient(timeout=120.0) as client:
-        response = await client.post(
-            url,
-            headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
-            json=request_body,
-        )
-        if response.status_code != 200:
-            raise RuntimeError(f"Imagen 4 API error {response.status_code}: {response.text}")
-
-    data = response.json()
-
-    # Response: {"predictions": [{"bytesBase64Encoded": "...", "mimeType": "image/png"}]}
-    predictions = data.get("predictions", [])
-    if not predictions:
-        raise RuntimeError(f"Imagen 4 returned no predictions: {data}")
-
-    first = predictions[0]
-    b64_data = first.get("bytesBase64Encoded", "")
-    mime_type = first.get("mimeType", "image/png")
-    extension = "png" if "png" in mime_type else "jpg"
-
-    run_dir = get_run_dir()
-    file_path = save_base64_image(b64_data, run_dir, extension=extension)
-
-    return {
-        "image": {
-            "type": "Image",
-            "value": str(file_path),
-        }
-    }
-
 
 async def handle_lyria3(
     node: GraphNode,

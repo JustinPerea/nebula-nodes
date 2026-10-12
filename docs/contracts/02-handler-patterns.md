@@ -49,7 +49,7 @@ Ports must still match Volume 1 schema for graph validation.
 
 ## 3. Sync pattern
 
-**Examples:** `nano-banana`, `imagen-4-generate`, `openai-tts`, `gpt-image-1-generate` (non-stream path).
+**Examples:** `nano-banana`, `openai-tts`, `gpt-image-1-generate` (non-stream path).
 
 ### Flow
 

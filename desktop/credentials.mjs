@@ -9,7 +9,7 @@
  *
  * Security invariants:
  *   - No `credentials:get` channel — renderer never receives plaintext keys.
- *   - Provider names validated against a 16-key allowlist on every handler.
+ *   - Provider names validated against an 18-key allowlist on every handler.
  *   - Sender validated on every IPC handler.
  *   - No plaintext fallback when safeStorage is unavailable (fail closed).
  *   - Encrypted blobs never logged or included in diagnostics.
@@ -23,7 +23,7 @@ import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 // ---------------------------------------------------------------------------
 
 /**
- * The 16 provider keys that may be stored in the credential service.
+ * The 18 provider keys that may be stored in the credential service.
  * Sourced from backend/services/settings.py provider tuples and
  * library/environment.md allowlist.
  */
@@ -45,6 +45,7 @@ export const ALLOWED_PROVIDERS = Object.freeze([
   'XAI_API_KEY',
   'WORLDLABS_API_KEY',
   'KREA_USAGE_KEY',
+  'GOOGLE_VERTEX_CREDENTIALS',
 ]);
 
 /** Prefix for the encrypted-blob wire format. */
@@ -116,7 +117,7 @@ export class UntrustedSenderError extends CredentialError {
 // ---------------------------------------------------------------------------
 
 /**
- * Check if a provider name is in the 16-key allowlist.
+ * Check if a provider name is in the 18-key allowlist.
  *
  * @param {string} provider
  * @returns {boolean}
@@ -324,7 +325,7 @@ export function writeMigrationState(filePath, data, deps = {}) {
  * Create a credential service instance.
  *
  * Combines encryption, file persistence, and migration-state tracking.
- * All operations validate the provider against the 16-key allowlist.
+ * All operations validate the provider against the 18-key allowlist.
  *
  * @param {{
  *   credentialsPath: string,

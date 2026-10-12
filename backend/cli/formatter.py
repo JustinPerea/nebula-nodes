@@ -494,7 +494,23 @@ def _cost_line(cost: dict[str, Any]) -> str:
     line = f"{up_to}{paid} paid run{'s' if paid != 1 else ''}" + (f" ({providers})" if providers else "")
     if free:
         line += f" and {free} free"
-    return line + " — Nebula has no price list"
+    estimate = cost.get("estimate")
+    if not estimate or estimate.get("high") is None:
+        return line + " — no list price"
+    low, high = float(estimate.get("low") or 0), float(estimate["high"])
+    amount = _usd(high) if _usd(low) == _usd(high) else f"{_usd(low)}–{_usd(high)[1:]}"
+    return line + f" — {amount}{'+' if estimate.get('open') else ''} at list prices"
+
+
+def _usd(amount: float) -> str:
+    """Matches the canvas: cents from a dime up, two significant figures below."""
+    if amount <= 0:
+        return "$0"
+    if amount >= 10:
+        return f"${round(amount)}"
+    if amount >= 0.1:
+        return f"${amount:.2f}"
+    return f"${float(f'{amount:.2g}'):g}"
 
 
 def format_proposal(view: dict[str, Any], *, created: bool = False, now_ms: float | None = None) -> str:

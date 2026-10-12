@@ -100,6 +100,7 @@ Prefer a desktop window? See the [Electron setup guide](desktop/README.md). Agen
 | --- | --- |
 | [Paper Source](docs/PAPER-SOURCE.md) | Link artwork, edit, refresh, and rerun |
 | [Node catalog](docs/MODEL_REFERENCE.md) | Nodes, parameters, ports, and endpoints |
+| [Model pricing](docs/MODEL-PRICING.md) | Run cost estimates, the cost confirm, and keeping prices current |
 | [Provider guides](docs/api-guides/README.md) | Example pipelines and API coverage |
 | [Desktop app](desktop/README.md) | Launch, local backend, migration, and Keychain |
 | [Daedalus agent](docs/HERMES-SETUP.md) | Hermes and Daedalus setup |

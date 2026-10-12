@@ -1,17 +1,20 @@
 # Nano Banana — Gemini Image Family
 
-Sourced from https://ai.google.dev/gemini-api/docs/image-generation and the Gemini API release notes (refreshed 2026-07-22).
+Sourced from https://ai.google.dev/gemini-api/docs/image-generation and the Gemini API release notes (refreshed 2026-07-22; Nano Banana 2.1 added 2026-10-10).
 
 ## Model map
 
 | Model ID | Name | Best for | Resolutions |
 |---|---|---|---|
-| `gemini-3.1-flash-image` | Nano Banana 2 | High-volume, iterative, image-search grounded | 512, 1K, 2K, 4K |
+| `gemini-nano-banana-2.1` | Nano Banana 2.1 | Plain text-to-image (Google's named replacement for the retired Imagen 4), edits with references | 1K, 2K, 4K |
+| `gemini-3.1-flash-image` | Nano Banana 2 | High-volume, iterative, image-search grounded (Nebula's default) | 512, 1K, 2K, 4K |
 | `gemini-3-pro-image` | Nano Banana Pro | Studio assets, complex layouts, precise text in image | 1K, 2K, 4K |
 | `gemini-2.5-flash-image` | Nano Banana (original) | Lowest-latency quick gen | 1K, 2K |
 
 Aspect ratios (all): 1:1, 2:3, 3:2, 3:4, 4:3, 4:5, 5:4, 9:16, 16:9, 21:9.
-**Nano Banana 2 only** adds extreme ratios: 1:4, 4:1, 1:8, 8:1.
+**Nano Banana 2.1 and Nano Banana 2** add extreme ratios: 1:4, 4:1, 1:8, 8:1.
+
+Nano Banana 2.1 runs on the Gemini Interactions API (`POST /v1beta/interactions`), not `generateContent`. In Nebula, wired image URLs go to Google as `{"type":"image","uri"}`, so they must be reachable by Google. Price: $0.0336 (1K), $0.0504 (2K), $0.113 (4K) per image (ai.google.dev/gemini-api/docs/pricing, checked 2026-10-10).
 
 Image size strings are uppercase `K`: `"1K"`, `"2K"`, `"4K"`. The 512-pixel option has no K suffix.
 

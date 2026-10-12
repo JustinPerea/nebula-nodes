@@ -5,6 +5,12 @@ Covers image, video, audio, enhance (upscale) and 3D routes.
 
 Default and --check are offline. --refresh fetches Krea's official public
 OpenAPI (or --openapi reads a previously fetched copy); no token or job is used.
+
+Also writes the Krea entries of backend/data/model_pricing.json from each
+operation's `x-krea-pricing` block. These are API-token (USD) prices; Krea
+account runs bill workspace compute units, which Krea doesn't publish per
+option, so they stay unpriced. A model whose price dimensions don't map onto
+its request fields is left unpriced and listed, never guessed.
 """
 from __future__ import annotations
 
@@ -19,6 +25,8 @@ import urllib.request
 ROOT = Path(__file__).resolve().parent.parent
 CATALOG = ROOT / "backend/data/krea_gateway_models.json"
 REGISTRY = ROOT / "backend/data/node_definitions.json"
+PRICING = ROOT / "backend/data/model_pricing.json"
+PRICING_GENERATOR = "scripts/sync-krea-catalog.py"
 FRONTEND = ROOT / "frontend/src/constants/nodeDefinitions.ts"
 SOURCE_URL = "https://api.krea.ai/openapi.json"
 DOC_URL = "docs/model-providers/krea/krea-gateway.md"
@@ -134,6 +142,10 @@ def fields_for(schema):
     return params, ports, json_params
 
 
+def snake(name):
+    return re.sub(r"(?<!^)(?=[A-Z])", "_", name).lower()
+
+
 def refresh(raw, checked_on):
     api = json.loads(raw)
     models = {}
@@ -155,6 +167,18 @@ def refresh(raw, checked_on):
         models[node_id] = {"endpoint": endpoint, "displayName": operation["summary"],
                            "requestSchema": schema, "mediaType": media_type,
                            "inputPorts": ports, "jsonParams": json_params}
+        pricing = operation.get("x-krea-pricing")
+        if isinstance(pricing, dict):
+            # Keep price points only when every dimension is a request field we
+            # send; the rest can't be estimated before a run, so record why.
+            fields = set(schema.get("properties", {}))
+            unmapped = sorted({key for point in pricing.get("price_points") or []
+                               for key in point.get("dimensions", {}) if snake(key) not in fields})
+            if unmapped:
+                models[node_id]["pricingUnmapped"] = unmapped
+            else:
+                models[node_id]["pricing"] = {key: pricing[key] for key in
+                                              ("type", "currency", "unit", "price_points") if key in pricing}
     if not models:
         raise ValueError("Krea OpenAPI has no generation models")
     return {"sourceUrl": SOURCE_URL, "fetchedAt": checked_on,
@@ -195,6 +219,72 @@ def definitions(catalog):
             "params": params, "docUrl": DOC_URL,
         }
     return result
+
+
+def pricing_entries(catalog):
+    """model_pricing.json entries for every Krea model whose price points map
+    onto its own request fields. Returns (entries, skipped reasons)."""
+    entries, skipped = {}, {}
+    for node_id, model in catalog["models"].items():
+        if model.get("pricingUnmapped"):
+            skipped[node_id] = ("price depends on " + ", ".join(model["pricingUnmapped"])
+                                + ", which the request doesn't set directly")
+            continue
+        pricing = model.get("pricing")
+        if not pricing:
+            continue
+        points = pricing.get("price_points") or []
+        fields = set(model["requestSchema"].get("properties", {}))
+        if pricing.get("currency") != "USD" or pricing.get("unit") != "request" or not points:
+            skipped[node_id] = f"unsupported pricing {pricing.get('currency')}/{pricing.get('unit')}"
+            continue
+        unmapped = sorted({key for point in points for key in point.get("dimensions", {})
+                           if snake(key) not in fields})
+        if unmapped:
+            skipped[node_id] = "price depends on " + ", ".join(unmapped) + ", which the request doesn't set directly"
+            continue
+        properties = model["requestSchema"].get("properties", {})
+
+        def reachable(point):
+            # Krea's price list sometimes covers values its own request schema
+            # rejects (e.g. a 5 s Veo clip); a run can never match those.
+            for key, value in point.get("dimensions", {}).items():
+                allowed = simple_schema(properties[snake(key)]).get("enum")
+                if allowed is not None and value not in allowed:
+                    return False
+            return True
+
+        rows = [{"match": {"_kreaAuth": "api-token",
+                           **{snake(key): value for key, value in point.get("dimensions", {}).items()}},
+                 "price": point["amount"]} for point in points if reachable(point)]
+        if not rows:
+            skipped[node_id] = "no price point matches values the request accepts"
+            continue
+        entries[node_id] = {
+            "currency": "usd", "per": "request",
+            "priceParams": sorted({key for row in rows for key in row["match"]}),
+            "rows": rows,
+            "notes": "API-token runs only. Krea account runs bill workspace compute units, "
+                     "which Krea doesn't publish per option, so they stay unpriced.",
+            "sources": [{"url": catalog["sourceUrl"],
+                         "quote": f"x-krea-pricing on POST {model['endpoint']} "
+                                  f"(spec sha256 {catalog['openapiSha256'][:12]})"}],
+            "checked": catalog["fetchedAt"],
+            "generatedBy": PRICING_GENERATOR,
+        }
+    return entries, skipped
+
+
+def pricing_source(source, entries):
+    """Replace only this script's entries; hand-curated ones stay as they are."""
+    data = json.loads(source)
+    nodes = {key: value for key, value in data["nodes"].items()
+             if value.get("generatedBy") != PRICING_GENERATOR}
+    collisions = sorted(set(nodes) & set(entries))
+    if collisions:
+        raise ValueError(f"Hand-curated pricing collides with generated Krea pricing: {collisions}")
+    data["nodes"] = dict(sorted({**nodes, **entries}.items()))
+    return json.dumps(data, indent=2, ensure_ascii=False) + "\n"
 
 
 def frontend_source(source, generated):
@@ -264,10 +354,12 @@ def main():
     else:
         catalog = json.loads(CATALOG.read_text())
     generated = definitions(catalog)
+    prices, unpriced = pricing_entries(catalog)
     expected = {
         CATALOG: json.dumps(catalog, indent=2, ensure_ascii=False) + "\n",
         REGISTRY: registry_source(REGISTRY.read_text(), generated),
         FRONTEND: frontend_source(FRONTEND.read_text(), generated),
+        PRICING: pricing_source(PRICING.read_text(), prices),
     }
     for path, content in expected.items():
         if args.check:
@@ -275,7 +367,10 @@ def main():
                 raise SystemExit(f"Krea catalog drift: {path.relative_to(ROOT)}; run scripts/sync-krea-catalog.py")
         else:
             path.write_text(content)
-    print(f"Krea catalog {'check passed' if args.check else 'generated'}: {len(generated)} generation models")
+    print(f"Krea catalog {'check passed' if args.check else 'generated'}: {len(generated)} generation models, "
+          f"{len(prices)} priced")
+    for node_id, reason in sorted(unpriced.items()):
+        print(f"  unpriced {node_id}: {reason}")
 
 
 if __name__ == "__main__":

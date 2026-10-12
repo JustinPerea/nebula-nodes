@@ -1,0 +1,6991 @@
+{
+  "version": 1,
+  "about": "Hand-curated list prices for paid nodes. Every entry cites the vendor page and the date it was checked. See services/model_pricing.py for the format; never add a price without a canonical source.",
+  "currencies": {},
+  "nodes": {
+    "gpt-image-2-5-edit": {
+      "currency": "usd",
+      "per": "image",
+      "priceParams": [
+        "quality",
+        "size"
+      ],
+      "rows": [
+        {
+          "match": {
+            "quality": "low",
+            "size": "1024x1024"
+          },
+          "price": 0.00588
+        },
+        {
+          "match": {
+            "quality": "low",
+            "size": "1536x1024"
+          },
+          "price": 0.00474
+        },
+        {
+          "match": {
+            "quality": "low",
+            "size": "1024x1536"
+          },
+          "price": 0.00474
+        },
+        {
+          "match": {
+            "quality": "low",
+            "size": "2048x2048"
+          },
+          "price": 0.01191
+        },
+        {
+          "match": {
+            "quality": "low",
+            "size": "2048x1152"
+          },
+          "price": 0.00471
+        },
+        {
+          "match": {
+            "quality": "low",
+            "size": "2560x1440"
+          },
+          "price": 0.00615
+        },
+        {
+          "match": {
+            "quality": "low",
+            "size": "3840x2160"
+          },
+          "price": 0.01113
+        },
+        {
+          "match": {
+            "quality": "low",
+            "size": "2160x3840"
+          },
+          "price": 0.01113
+        },
+        {
+          "match": {
+            "quality": "medium",
+            "size": "1024x1024"
+          },
+          "price": 0.01317
+        },
+        {
+          "match": {
+            "quality": "medium",
+            "size": "1536x1024"
+          },
+          "price": 0.01029
+        },
+        {
+          "match": {
+            "quality": "medium",
+            "size": "1024x1536"
+          },
+          "price": 0.01029
+        },
+        {
+          "match": {
+            "quality": "medium",
+            "size": "2048x2048"
+          },
+          "price": 0.02676
+        },
+        {
+          "match": {
+            "quality": "medium",
+            "size": "2048x1152"
+          },
+          "price": 0.01101
+        },
+        {
+          "match": {
+            "quality": "medium",
+            "size": "2560x1440"
+          },
+          "price": 0.01434
+        },
+        {
+          "match": {
+            "quality": "medium",
+            "size": "3840x2160"
+          },
+          "price": 0.02595
+        },
+        {
+          "match": {
+            "quality": "medium",
+            "size": "2160x3840"
+          },
+          "price": 0.02595
+        },
+        {
+          "match": {
+            "quality": "high",
+            "size": "1024x1024"
+          },
+          "price": 0.05268
+        },
+        {
+          "match": {
+            "quality": "high",
+            "size": "1536x1024"
+          },
+          "price": 0.04116
+        },
+        {
+          "match": {
+            "quality": "high",
+            "size": "1024x1536"
+          },
+          "price": 0.04116
+        },
+        {
+          "match": {
+            "quality": "high",
+            "size": "2048x2048"
+          },
+          "price": 0.10704
+        },
+        {
+          "match": {
+            "quality": "high",
+            "size": "2048x1152"
+          },
+          "price": 0.04239
+        },
+        {
+          "match": {
+            "quality": "high",
+            "size": "2560x1440"
+          },
+          "price": 0.05529
+        },
+        {
+          "match": {
+            "quality": "high",
+            "size": "3840x2160"
+          },
+          "price": 0.10008
+        },
+        {
+          "match": {
+            "quality": "high",
+            "size": "2160x3840"
+          },
+          "price": 0.10008
+        },
+        {
+          "match": {
+            "quality": "xhigh",
+            "size": "1024x1024"
+          },
+          "price": 0.09366
+        },
+        {
+          "match": {
+            "quality": "xhigh",
+            "size": "1536x1024"
+          },
+          "price": 0.07377
+        },
+        {
+          "match": {
+            "quality": "xhigh",
+            "size": "1024x1536"
+          },
+          "price": 0.07377
+        },
+        {
+          "match": {
+            "quality": "xhigh",
+            "size": "2048x2048"
+          },
+          "price": 0.19029
+        },
+        {
+          "match": {
+            "quality": "xhigh",
+            "size": "2048x1152"
+          },
+          "price": 0.07533
+        },
+        {
+          "match": {
+            "quality": "xhigh",
+            "size": "2560x1440"
+          },
+          "price": 0.09828
+        },
+        {
+          "match": {
+            "quality": "xhigh",
+            "size": "3840x2160"
+          },
+          "price": 0.1779
+        },
+        {
+          "match": {
+            "quality": "xhigh",
+            "size": "2160x3840"
+          },
+          "price": 0.1779
+        },
+        {
+          "match": {
+            "quality": "max",
+            "size": "1024x1024"
+          },
+          "price": 0.21072
+        },
+        {
+          "match": {
+            "quality": "max",
+            "size": "1536x1024"
+          },
+          "price": 0.16464
+        },
+        {
+          "match": {
+            "quality": "max",
+            "size": "1024x1536"
+          },
+          "price": 0.16464
+        },
+        {
+          "match": {
+            "quality": "max",
+            "size": "2048x2048"
+          },
+          "price": 0.42816
+        },
+        {
+          "match": {
+            "quality": "max",
+            "size": "2048x1152"
+          },
+          "price": 0.1695
+        },
+        {
+          "match": {
+            "quality": "max",
+            "size": "2560x1440"
+          },
+          "price": 0.2211
+        },
+        {
+          "match": {
+            "quality": "max",
+            "size": "3840x2160"
+          },
+          "price": 0.40026
+        },
+        {
+          "match": {
+            "quality": "max",
+            "size": "2160x3840"
+          },
+          "price": 0.40026
+        },
+        {
+          "match": {
+            "quality": "auto",
+            "size": "1024x1024"
+          },
+          "price": [
+            0.00588,
+            0.21072
+          ]
+        },
+        {
+          "match": {
+            "quality": "auto",
+            "size": "1536x1024"
+          },
+          "price": [
+            0.00474,
+            0.16464
+          ]
+        },
+        {
+          "match": {
+            "quality": "auto",
+            "size": "1024x1536"
+          },
+          "price": [
+            0.00474,
+            0.16464
+          ]
+        },
+        {
+          "match": {
+            "quality": "auto",
+            "size": "2048x2048"
+          },
+          "price": [
+            0.01191,
+            0.42816
+          ]
+        },
+        {
+          "match": {
+            "quality": "auto",
+            "size": "2048x1152"
+          },
+          "price": [
+            0.00471,
+            0.1695
+          ]
+        },
+        {
+          "match": {
+            "quality": "auto",
+            "size": "2560x1440"
+          },
+          "price": [
+            0.00615,
+            0.2211
+          ]
+        },
+        {
+          "match": {
+            "quality": "auto",
+            "size": "3840x2160"
+          },
+          "price": [
+            0.01113,
+            0.40026
+          ]
+        },
+        {
+          "match": {
+            "quality": "auto",
+            "size": "2160x3840"
+          },
+          "price": [
+            0.01113,
+            0.40026
+          ]
+        },
+        {
+          "match": {
+            "quality": "low",
+            "size": "auto"
+          },
+          "price": [
+            0.00471,
+            0.01191
+          ]
+        },
+        {
+          "match": {
+            "quality": "medium",
+            "size": "auto"
+          },
+          "price": [
+            0.01029,
+            0.02676
+          ]
+        },
+        {
+          "match": {
+            "quality": "high",
+            "size": "auto"
+          },
+          "price": [
+            0.04116,
+            0.10704
+          ]
+        },
+        {
+          "match": {
+            "quality": "xhigh",
+            "size": "auto"
+          },
+          "price": [
+            0.07377,
+            0.19029
+          ]
+        },
+        {
+          "match": {
+            "quality": "max",
+            "size": "auto"
+          },
+          "price": [
+            0.16464,
+            0.42816
+          ]
+        },
+        {
+          "match": {
+            "quality": "auto",
+            "size": "auto"
+          },
+          "price": [
+            0.00471,
+            0.42816
+          ]
+        }
+      ],
+      "notes": "Output image tokens at $30/1M, per OpenAI's image-cost calculator on its docs (sizes OpenAI doesn't tabulate are computed with the same formula). 'auto' quality or size is left to the API, which picks per image, so those settings show a range. Text input is negligible; one image per run (the handler streams, so n is never sent). Edits also bill each input image and mask as image input tokens ($8/1M); OpenAI publishes no token formula for GPT Image 2/2.5 inputs, so that part isn't estimated.",
+      "sources": [
+        {
+          "url": "https://developers.openai.com/api/docs/pricing",
+          "quote": "gpt-image-2.5-flare | $8.00 image input | $30.00 image output (per 1M tokens, Standard)"
+        },
+        {
+          "url": "https://developers.openai.com/api/docs/guides/image-generation",
+          "quote": "Use explicit quality and size values for this estimate; auto depends on the generated image."
+        }
+      ],
+      "checked": "2026-10-10",
+      "plus": "input images"
+    },
+    "gpt-image-2-5-generate": {
+      "currency": "usd",
+      "per": "image",
+      "priceParams": [
+        "quality",
+        "size"
+      ],
+      "rows": [
+        {
+          "match": {
+            "quality": "low",
+            "size": "1024x1024"
+          },
+          "price": 0.00588
+        },
+        {
+          "match": {
+            "quality": "low",
+            "size": "1536x1024"
+          },
+          "price": 0.00474
+        },
+        {
+          "match": {
+            "quality": "low",
+            "size": "1024x1536"
+          },
+          "price": 0.00474
+        },
+        {
+          "match": {
+            "quality": "low",
+            "size": "2048x2048"
+          },
+          "price": 0.01191
+        },
+        {
+          "match": {
+            "quality": "low",
+            "size": "2048x1152"
+          },
+          "price": 0.00471
+        },
+        {
+          "match": {
+            "quality": "low",
+            "size": "2560x1440"
+          },
+          "price": 0.00615
+        },
+        {
+          "match": {
+            "quality": "low",
+            "size": "3840x2160"
+          },
+          "price": 0.01113
+        },
+        {
+          "match": {
+            "quality": "low",
+            "size": "2160x3840"
+          },
+          "price": 0.01113
+        },
+        {
+          "match": {
+            "quality": "medium",
+            "size": "1024x1024"
+          },
+          "price": 0.01317
+        },
+        {
+          "match": {
+            "quality": "medium",
+            "size": "1536x1024"
+          },
+          "price": 0.01029
+        },
+        {
+          "match": {
+            "quality": "medium",
+            "size": "1024x1536"
+          },
+          "price": 0.01029
+        },
+        {
+          "match": {
+            "quality": "medium",
+            "size": "2048x2048"
+          },
+          "price": 0.02676
+        },
+        {
+          "match": {
+            "quality": "medium",
+            "size": "2048x1152"
+          },
+          "price": 0.01101
+        },
+        {
+          "match": {
+            "quality": "medium",
+            "size": "2560x1440"
+          },
+          "price": 0.01434
+        },
+        {
+          "match": {
+            "quality": "medium",
+            "size": "3840x2160"
+          },
+          "price": 0.02595
+        },
+        {
+          "match": {
+            "quality": "medium",
+            "size": "2160x3840"
+          },
+          "price": 0.02595
+        },
+        {
+          "match": {
+            "quality": "high",
+            "size": "1024x1024"
+          },
+          "price": 0.05268
+        },
+        {
+          "match": {
+            "quality": "high",
+            "size": "1536x1024"
+          },
+          "price": 0.04116
+        },
+        {
+          "match": {
+            "quality": "high",
+            "size": "1024x1536"
+          },
+          "price": 0.04116
+        },
+        {
+          "match": {
+            "quality": "high",
+            "size": "2048x2048"
+          },
+          "price": 0.10704
+        },
+        {
+          "match": {
+            "quality": "high",
+            "size": "2048x1152"
+          },
+          "price": 0.04239
+        },
+        {
+          "match": {
+            "quality": "high",
+            "size": "2560x1440"
+          },
+          "price": 0.05529
+        },
+        {
+          "match": {
+            "quality": "high",
+            "size": "3840x2160"
+          },
+          "price": 0.10008
+        },
+        {
+          "match": {
+            "quality": "high",
+            "size": "2160x3840"
+          },
+          "price": 0.10008
+        },
+        {
+          "match": {
+            "quality": "xhigh",
+            "size": "1024x1024"
+          },
+          "price": 0.09366
+        },
+        {
+          "match": {
+            "quality": "xhigh",
+            "size": "1536x1024"
+          },
+          "price": 0.07377
+        },
+        {
+          "match": {
+            "quality": "xhigh",
+            "size": "1024x1536"
+          },
+          "price": 0.07377
+        },
+        {
+          "match": {
+            "quality": "xhigh",
+            "size": "2048x2048"
+          },
+          "price": 0.19029
+        },
+        {
+          "match": {
+            "quality": "xhigh",
+            "size": "2048x1152"
+          },
+          "price": 0.07533
+        },
+        {
+          "match": {
+            "quality": "xhigh",
+            "size": "2560x1440"
+          },
+          "price": 0.09828
+        },
+        {
+          "match": {
+            "quality": "xhigh",
+            "size": "3840x2160"
+          },
+          "price": 0.1779
+        },
+        {
+          "match": {
+            "quality": "xhigh",
+            "size": "2160x3840"
+          },
+          "price": 0.1779
+        },
+        {
+          "match": {
+            "quality": "max",
+            "size": "1024x1024"
+          },
+          "price": 0.21072
+        },
+        {
+          "match": {
+            "quality": "max",
+            "size": "1536x1024"
+          },
+          "price": 0.16464
+        },
+        {
+          "match": {
+            "quality": "max",
+            "size": "1024x1536"
+          },
+          "price": 0.16464
+        },
+        {
+          "match": {
+            "quality": "max",
+            "size": "2048x2048"
+          },
+          "price": 0.42816
+        },
+        {
+          "match": {
+            "quality": "max",
+            "size": "2048x1152"
+          },
+          "price": 0.1695
+        },
+        {
+          "match": {
+            "quality": "max",
+            "size": "2560x1440"
+          },
+          "price": 0.2211
+        },
+        {
+          "match": {
+            "quality": "max",
+            "size": "3840x2160"
+          },
+          "price": 0.40026
+        },
+        {
+          "match": {
+            "quality": "max",
+            "size": "2160x3840"
+          },
+          "price": 0.40026
+        },
+        {
+          "match": {
+            "quality": "auto",
+            "size": "1024x1024"
+          },
+          "price": [
+            0.00588,
+            0.21072
+          ]
+        },
+        {
+          "match": {
+            "quality": "auto",
+            "size": "1536x1024"
+          },
+          "price": [
+            0.00474,
+            0.16464
+          ]
+        },
+        {
+          "match": {
+            "quality": "auto",
+            "size": "1024x1536"
+          },
+          "price": [
+            0.00474,
+            0.16464
+          ]
+        },
+        {
+          "match": {
+            "quality": "auto",
+            "size": "2048x2048"
+          },
+          "price": [
+            0.01191,
+            0.42816
+          ]
+        },
+        {
+          "match": {
+            "quality": "auto",
+            "size": "2048x1152"
+          },
+          "price": [
+            0.00471,
+            0.1695
+          ]
+        },
+        {
+          "match": {
+            "quality": "auto",
+            "size": "2560x1440"
+          },
+          "price": [
+            0.00615,
+            0.2211
+          ]
+        },
+        {
+          "match": {
+            "quality": "auto",
+            "size": "3840x2160"
+          },
+          "price": [
+            0.01113,
+            0.40026
+          ]
+        },
+        {
+          "match": {
+            "quality": "auto",
+            "size": "2160x3840"
+          },
+          "price": [
+            0.01113,
+            0.40026
+          ]
+        },
+        {
+          "match": {
+            "quality": "low",
+            "size": "auto"
+          },
+          "price": [
+            0.00471,
+            0.01191
+          ]
+        },
+        {
+          "match": {
+            "quality": "medium",
+            "size": "auto"
+          },
+          "price": [
+            0.01029,
+            0.02676
+          ]
+        },
+        {
+          "match": {
+            "quality": "high",
+            "size": "auto"
+          },
+          "price": [
+            0.04116,
+            0.10704
+          ]
+        },
+        {
+          "match": {
+            "quality": "xhigh",
+            "size": "auto"
+          },
+          "price": [
+            0.07377,
+            0.19029
+          ]
+        },
+        {
+          "match": {
+            "quality": "max",
+            "size": "auto"
+          },
+          "price": [
+            0.16464,
+            0.42816
+          ]
+        },
+        {
+          "match": {
+            "quality": "auto",
+            "size": "auto"
+          },
+          "price": [
+            0.00471,
+            0.42816
+          ]
+        }
+      ],
+      "notes": "Output image tokens at $30/1M, per OpenAI's image-cost calculator on its docs (sizes OpenAI doesn't tabulate are computed with the same formula). 'auto' quality or size is left to the API, which picks per image, so those settings show a range. Text input is negligible; one image per run (the handler streams, so n is never sent).",
+      "sources": [
+        {
+          "url": "https://developers.openai.com/api/docs/pricing",
+          "quote": "gpt-image-2.5-flare | $8.00 image input | $30.00 image output (per 1M tokens, Standard)"
+        },
+        {
+          "url": "https://developers.openai.com/api/docs/guides/image-generation",
+          "quote": "Use explicit quality and size values for this estimate; auto depends on the generated image."
+        }
+      ],
+      "checked": "2026-10-10"
+    },
+    "gpt-image-2-edit": {
+      "currency": "usd",
+      "per": "image",
+      "priceParams": [
+        "quality",
+        "size"
+      ],
+      "rows": [
+        {
+          "match": {
+            "quality": "low",
+            "size": "1024x1024"
+          },
+          "price": 0.00588
+        },
+        {
+          "match": {
+            "quality": "low",
+            "size": "1536x1024"
+          },
+          "price": 0.00474
+        },
+        {
+          "match": {
+            "quality": "low",
+            "size": "1024x1536"
+          },
+          "price": 0.00474
+        },
+        {
+          "match": {
+            "quality": "low",
+            "size": "2048x2048"
+          },
+          "price": 0.01191
+        },
+        {
+          "match": {
+            "quality": "low",
+            "size": "2048x1152"
+          },
+          "price": 0.00471
+        },
+        {
+          "match": {
+            "quality": "low",
+            "size": "3840x2160"
+          },
+          "price": 0.01113
+        },
+        {
+          "match": {
+            "quality": "low",
+            "size": "2160x3840"
+          },
+          "price": 0.01113
+        },
+        {
+          "match": {
+            "quality": "medium",
+            "size": "1024x1024"
+          },
+          "price": 0.05268
+        },
+        {
+          "match": {
+            "quality": "medium",
+            "size": "1536x1024"
+          },
+          "price": 0.04116
+        },
+        {
+          "match": {
+            "quality": "medium",
+            "size": "1024x1536"
+          },
+          "price": 0.04116
+        },
+        {
+          "match": {
+            "quality": "medium",
+            "size": "2048x2048"
+          },
+          "price": 0.10704
+        },
+        {
+          "match": {
+            "quality": "medium",
+            "size": "2048x1152"
+          },
+          "price": 0.04239
+        },
+        {
+          "match": {
+            "quality": "medium",
+            "size": "3840x2160"
+          },
+          "price": 0.10008
+        },
+        {
+          "match": {
+            "quality": "medium",
+            "size": "2160x3840"
+          },
+          "price": 0.10008
+        },
+        {
+          "match": {
+            "quality": "high",
+            "size": "1024x1024"
+          },
+          "price": 0.21072
+        },
+        {
+          "match": {
+            "quality": "high",
+            "size": "1536x1024"
+          },
+          "price": 0.16464
+        },
+        {
+          "match": {
+            "quality": "high",
+            "size": "1024x1536"
+          },
+          "price": 0.16464
+        },
+        {
+          "match": {
+            "quality": "high",
+            "size": "2048x2048"
+          },
+          "price": 0.42816
+        },
+        {
+          "match": {
+            "quality": "high",
+            "size": "2048x1152"
+          },
+          "price": 0.1695
+        },
+        {
+          "match": {
+            "quality": "high",
+            "size": "3840x2160"
+          },
+          "price": 0.40026
+        },
+        {
+          "match": {
+            "quality": "high",
+            "size": "2160x3840"
+          },
+          "price": 0.40026
+        },
+        {
+          "match": {
+            "quality": "auto",
+            "size": "1024x1024"
+          },
+          "price": [
+            0.00588,
+            0.21072
+          ]
+        },
+        {
+          "match": {
+            "quality": "auto",
+            "size": "1536x1024"
+          },
+          "price": [
+            0.00474,
+            0.16464
+          ]
+        },
+        {
+          "match": {
+            "quality": "auto",
+            "size": "1024x1536"
+          },
+          "price": [
+            0.00474,
+            0.16464
+          ]
+        },
+        {
+          "match": {
+            "quality": "auto",
+            "size": "2048x2048"
+          },
+          "price": [
+            0.01191,
+            0.42816
+          ]
+        },
+        {
+          "match": {
+            "quality": "auto",
+            "size": "2048x1152"
+          },
+          "price": [
+            0.00471,
+            0.1695
+          ]
+        },
+        {
+          "match": {
+            "quality": "auto",
+            "size": "3840x2160"
+          },
+          "price": [
+            0.01113,
+            0.40026
+          ]
+        },
+        {
+          "match": {
+            "quality": "auto",
+            "size": "2160x3840"
+          },
+          "price": [
+            0.01113,
+            0.40026
+          ]
+        },
+        {
+          "match": {
+            "quality": "low",
+            "size": "auto"
+          },
+          "price": [
+            0.00471,
+            0.01191
+          ]
+        },
+        {
+          "match": {
+            "quality": "medium",
+            "size": "auto"
+          },
+          "price": [
+            0.04116,
+            0.10704
+          ]
+        },
+        {
+          "match": {
+            "quality": "high",
+            "size": "auto"
+          },
+          "price": [
+            0.16464,
+            0.42816
+          ]
+        },
+        {
+          "match": {
+            "quality": "auto",
+            "size": "auto"
+          },
+          "price": [
+            0.00471,
+            0.42816
+          ]
+        }
+      ],
+      "notes": "Output image tokens at $30/1M, per OpenAI's image-cost calculator on its docs (sizes OpenAI doesn't tabulate are computed with the same formula). 'auto' quality or size is left to the API, which picks per image, so those settings show a range. Text input is negligible; one image per run (the handler streams, so n is never sent). Edits also bill each input image and mask as image input tokens ($8/1M); OpenAI publishes no token formula for GPT Image 2/2.5 inputs, so that part isn't estimated.",
+      "sources": [
+        {
+          "url": "https://developers.openai.com/api/docs/guides/image-generation",
+          "quote": "GPT Image 2 ... Low $0.006 $0.005 $0.005 Medium $0.053 $0.041 $0.041 High $0.211 $0.165 $0.165"
+        },
+        {
+          "url": "https://developers.openai.com/api/docs/pricing",
+          "quote": "gpt-image-2 | $8.00 image input | $30.00 image output (per 1M tokens, Standard)"
+        }
+      ],
+      "checked": "2026-10-10",
+      "plus": "input images"
+    },
+    "gpt-image-2-generate": {
+      "currency": "usd",
+      "per": "image",
+      "priceParams": [
+        "quality",
+        "size"
+      ],
+      "rows": [
+        {
+          "match": {
+            "quality": "low",
+            "size": "1024x1024"
+          },
+          "price": 0.00588
+        },
+        {
+          "match": {
+            "quality": "low",
+            "size": "1536x1024"
+          },
+          "price": 0.00474
+        },
+        {
+          "match": {
+            "quality": "low",
+            "size": "1024x1536"
+          },
+          "price": 0.00474
+        },
+        {
+          "match": {
+            "quality": "low",
+            "size": "2048x2048"
+          },
+          "price": 0.01191
+        },
+        {
+          "match": {
+            "quality": "low",
+            "size": "2048x1152"
+          },
+          "price": 0.00471
+        },
+        {
+          "match": {
+            "quality": "low",
+            "size": "3840x2160"
+          },
+          "price": 0.01113
+        },
+        {
+          "match": {
+            "quality": "low",
+            "size": "2160x3840"
+          },
+          "price": 0.01113
+        },
+        {
+          "match": {
+            "quality": "medium",
+            "size": "1024x1024"
+          },
+          "price": 0.05268
+        },
+        {
+          "match": {
+            "quality": "medium",
+            "size": "1536x1024"
+          },
+          "price": 0.04116
+        },
+        {
+          "match": {
+            "quality": "medium",
+            "size": "1024x1536"
+          },
+          "price": 0.04116
+        },
+        {
+          "match": {
+            "quality": "medium",
+            "size": "2048x2048"
+          },
+          "price": 0.10704
+        },
+        {
+          "match": {
+            "quality": "medium",
+            "size": "2048x1152"
+          },
+          "price": 0.04239
+        },
+        {
+          "match": {
+            "quality": "medium",
+            "size": "3840x2160"
+          },
+          "price": 0.10008
+        },
+        {
+          "match": {
+            "quality": "medium",
+            "size": "2160x3840"
+          },
+          "price": 0.10008
+        },
+        {
+          "match": {
+            "quality": "high",
+            "size": "1024x1024"
+          },
+          "price": 0.21072
+        },
+        {
+          "match": {
+            "quality": "high",
+            "size": "1536x1024"
+          },
+          "price": 0.16464
+        },
+        {
+          "match": {
+            "quality": "high",
+            "size": "1024x1536"
+          },
+          "price": 0.16464
+        },
+        {
+          "match": {
+            "quality": "high",
+            "size": "2048x2048"
+          },
+          "price": 0.42816
+        },
+        {
+          "match": {
+            "quality": "high",
+            "size": "2048x1152"
+          },
+          "price": 0.1695
+        },
+        {
+          "match": {
+            "quality": "high",
+            "size": "3840x2160"
+          },
+          "price": 0.40026
+        },
+        {
+          "match": {
+            "quality": "high",
+            "size": "2160x3840"
+          },
+          "price": 0.40026
+        },
+        {
+          "match": {
+            "quality": "auto",
+            "size": "1024x1024"
+          },
+          "price": [
+            0.00588,
+            0.21072
+          ]
+        },
+        {
+          "match": {
+            "quality": "auto",
+            "size": "1536x1024"
+          },
+          "price": [
+            0.00474,
+            0.16464
+          ]
+        },
+        {
+          "match": {
+            "quality": "auto",
+            "size": "1024x1536"
+          },
+          "price": [
+            0.00474,
+            0.16464
+          ]
+        },
+        {
+          "match": {
+            "quality": "auto",
+            "size": "2048x2048"
+          },
+          "price": [
+            0.01191,
+            0.42816
+          ]
+        },
+        {
+          "match": {
+            "quality": "auto",
+            "size": "2048x1152"
+          },
+          "price": [
+            0.00471,
+            0.1695
+          ]
+        },
+        {
+          "match": {
+            "quality": "auto",
+            "size": "3840x2160"
+          },
+          "price": [
+            0.01113,
+            0.40026
+          ]
+        },
+        {
+          "match": {
+            "quality": "auto",
+            "size": "2160x3840"
+          },
+          "price": [
+            0.01113,
+            0.40026
+          ]
+        },
+        {
+          "match": {
+            "quality": "low",
+            "size": "auto"
+          },
+          "price": [
+            0.00471,
+            0.01191
+          ]
+        },
+        {
+          "match": {
+            "quality": "medium",
+            "size": "auto"
+          },
+          "price": [
+            0.04116,
+            0.10704
+          ]
+        },
+        {
+          "match": {
+            "quality": "high",
+            "size": "auto"
+          },
+          "price": [
+            0.16464,
+            0.42816
+          ]
+        },
+        {
+          "match": {
+            "quality": "auto",
+            "size": "auto"
+          },
+          "price": [
+            0.00471,
+            0.42816
+          ]
+        }
+      ],
+      "notes": "Output image tokens at $30/1M, per OpenAI's image-cost calculator on its docs (sizes OpenAI doesn't tabulate are computed with the same formula). 'auto' quality or size is left to the API, which picks per image, so those settings show a range. Text input is negligible; one image per run (the handler streams, so n is never sent).",
+      "sources": [
+        {
+          "url": "https://developers.openai.com/api/docs/guides/image-generation",
+          "quote": "GPT Image 2 ... Low $0.006 $0.005 $0.005 Medium $0.053 $0.041 $0.041 High $0.211 $0.165 $0.165"
+        },
+        {
+          "url": "https://developers.openai.com/api/docs/pricing",
+          "quote": "gpt-image-2 | $8.00 image input | $30.00 image output (per 1M tokens, Standard)"
+        }
+      ],
+      "checked": "2026-10-10"
+    },
+    "kling-v3": {
+      "currency": "usd",
+      "per": "second",
+      "priceParams": [
+        "model",
+        "generate_audio"
+      ],
+      "rows": [
+        {
+          "match": {
+            "model": "standard",
+            "generate_audio": false
+          },
+          "price": 0.084
+        },
+        {
+          "match": {
+            "model": "standard",
+            "generate_audio": true
+          },
+          "price": 0.126
+        },
+        {
+          "match": {
+            "model": "pro",
+            "generate_audio": false
+          },
+          "price": 0.112
+        },
+        {
+          "match": {
+            "model": "pro",
+            "generate_audio": true
+          },
+          "price": 0.168
+        }
+      ],
+      "multiplyBy": [
+        "duration"
+      ],
+      "notes": "fal list price per generated second (text-to-video route the handler always uses). With multi-prompt shots the billed length may follow the shots rather than the duration setting.",
+      "sources": [
+        {
+          "url": "https://fal.ai/models/fal-ai/kling-video/v3/standard/text-to-video",
+          "quote": "For every second of video you generated, you will be charged $0.084 (audio off) or $0.126 (audio on)"
+        },
+        {
+          "url": "https://fal.ai/models/fal-ai/kling-video/v3/pro/text-to-video",
+          "quote": "For every second of video you generated, you will be charged $0.112 (audio off) or $0.168 (audio on)"
+        }
+      ],
+      "checked": "2026-10-10"
+    },
+    "krea-3d-hyper3d-rodin-2-5": {
+      "currency": "usd",
+      "per": "request",
+      "priceParams": [
+        "_kreaAuth"
+      ],
+      "rows": [
+        {
+          "match": {
+            "_kreaAuth": "api-token"
+          },
+          "price": 0.4
+        }
+      ],
+      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
+      "sources": [
+        {
+          "url": "https://api.krea.ai/openapi.json",
+          "quote": "x-krea-pricing on POST /generate/3d/hyper3d/rodin-2.5 (spec sha256 9d5dd91a9e81)"
+        }
+      ],
+      "checked": "2026-10-10",
+      "generatedBy": "scripts/sync-krea-catalog.py"
+    },
+    "krea-3d-hyper3d-rodin-2-5-fast": {
+      "currency": "usd",
+      "per": "request",
+      "priceParams": [
+        "_kreaAuth"
+      ],
+      "rows": [
+        {
+          "match": {
+            "_kreaAuth": "api-token"
+          },
+          "price": 0.1
+        }
+      ],
+      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
+      "sources": [
+        {
+          "url": "https://api.krea.ai/openapi.json",
+          "quote": "x-krea-pricing on POST /generate/3d/hyper3d/rodin-2.5-fast (spec sha256 9d5dd91a9e81)"
+        }
+      ],
+      "checked": "2026-10-10",
+      "generatedBy": "scripts/sync-krea-catalog.py"
+    },
+    "krea-3d-microsoft-trellis": {
+      "currency": "usd",
+      "per": "request",
+      "priceParams": [
+        "_kreaAuth"
+      ],
+      "rows": [
+        {
+          "match": {
+            "_kreaAuth": "api-token"
+          },
+          "price": 0.02
+        }
+      ],
+      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
+      "sources": [
+        {
+          "url": "https://api.krea.ai/openapi.json",
+          "quote": "x-krea-pricing on POST /generate/3d/microsoft/trellis (spec sha256 9d5dd91a9e81)"
+        }
+      ],
+      "checked": "2026-10-10",
+      "generatedBy": "scripts/sync-krea-catalog.py"
+    },
+    "krea-3d-tencent-hunyuan3d-3-1-rapid": {
+      "currency": "usd",
+      "per": "request",
+      "priceParams": [
+        "_kreaAuth"
+      ],
+      "rows": [
+        {
+          "match": {
+            "_kreaAuth": "api-token"
+          },
+          "price": 0.225
+        }
+      ],
+      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
+      "sources": [
+        {
+          "url": "https://api.krea.ai/openapi.json",
+          "quote": "x-krea-pricing on POST /generate/3d/tencent/hunyuan3d-3.1-rapid (spec sha256 9d5dd91a9e81)"
+        }
+      ],
+      "checked": "2026-10-10",
+      "generatedBy": "scripts/sync-krea-catalog.py"
+    },
+    "krea-3d-tripo-tripo": {
+      "currency": "usd",
+      "per": "request",
+      "priceParams": [
+        "_kreaAuth"
+      ],
+      "rows": [
+        {
+          "match": {
+            "_kreaAuth": "api-token"
+          },
+          "price": 0.3
+        }
+      ],
+      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
+      "sources": [
+        {
+          "url": "https://api.krea.ai/openapi.json",
+          "quote": "x-krea-pricing on POST /generate/3d/tripo/tripo (spec sha256 9d5dd91a9e81)"
+        }
+      ],
+      "checked": "2026-10-10",
+      "generatedBy": "scripts/sync-krea-catalog.py"
+    },
+    "krea-image-alibaba-qwen-image-2-1": {
+      "currency": "usd",
+      "per": "request",
+      "priceParams": [
+        "_kreaAuth"
+      ],
+      "rows": [
+        {
+          "match": {
+            "_kreaAuth": "api-token"
+          },
+          "price": 0.04
+        }
+      ],
+      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
+      "sources": [
+        {
+          "url": "https://api.krea.ai/openapi.json",
+          "quote": "x-krea-pricing on POST /generate/image/alibaba/qwen-image-2.1 (spec sha256 9d5dd91a9e81)"
+        }
+      ],
+      "checked": "2026-10-10",
+      "generatedBy": "scripts/sync-krea-catalog.py"
+    },
+    "krea-image-bfl-flux-1-1-pro": {
+      "currency": "usd",
+      "per": "request",
+      "priceParams": [
+        "_kreaAuth"
+      ],
+      "rows": [
+        {
+          "match": {
+            "_kreaAuth": "api-token"
+          },
+          "price": 0.04
+        }
+      ],
+      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
+      "sources": [
+        {
+          "url": "https://api.krea.ai/openapi.json",
+          "quote": "x-krea-pricing on POST /generate/image/bfl/flux-1.1-pro (spec sha256 9d5dd91a9e81)"
+        }
+      ],
+      "checked": "2026-10-10",
+      "generatedBy": "scripts/sync-krea-catalog.py"
+    },
+    "krea-image-bfl-flux-1-1-pro-ultra": {
+      "currency": "usd",
+      "per": "request",
+      "priceParams": [
+        "_kreaAuth"
+      ],
+      "rows": [
+        {
+          "match": {
+            "_kreaAuth": "api-token"
+          },
+          "price": 0.06
+        }
+      ],
+      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
+      "sources": [
+        {
+          "url": "https://api.krea.ai/openapi.json",
+          "quote": "x-krea-pricing on POST /generate/image/bfl/flux-1.1-pro-ultra (spec sha256 9d5dd91a9e81)"
+        }
+      ],
+      "checked": "2026-10-10",
+      "generatedBy": "scripts/sync-krea-catalog.py"
+    },
+    "krea-image-bfl-flux-1-dev": {
+      "currency": "usd",
+      "per": "request",
+      "priceParams": [
+        "_kreaAuth"
+      ],
+      "rows": [
+        {
+          "match": {
+            "_kreaAuth": "api-token"
+          },
+          "price": 0.007
+        }
+      ],
+      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
+      "sources": [
+        {
+          "url": "https://api.krea.ai/openapi.json",
+          "quote": "x-krea-pricing on POST /generate/image/bfl/flux-1-dev (spec sha256 9d5dd91a9e81)"
+        }
+      ],
+      "checked": "2026-10-10",
+      "generatedBy": "scripts/sync-krea-catalog.py"
+    },
+    "krea-image-bfl-flux-1-kontext-dev": {
+      "currency": "usd",
+      "per": "request",
+      "priceParams": [
+        "_kreaAuth"
+      ],
+      "rows": [
+        {
+          "match": {
+            "_kreaAuth": "api-token"
+          },
+          "price": 0.02
+        }
+      ],
+      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
+      "sources": [
+        {
+          "url": "https://api.krea.ai/openapi.json",
+          "quote": "x-krea-pricing on POST /generate/image/bfl/flux-1-kontext-dev (spec sha256 9d5dd91a9e81)"
+        }
+      ],
+      "checked": "2026-10-10",
+      "generatedBy": "scripts/sync-krea-catalog.py"
+    },
+    "krea-image-bytedance-seedream-4": {
+      "currency": "usd",
+      "per": "request",
+      "priceParams": [
+        "_kreaAuth"
+      ],
+      "rows": [
+        {
+          "match": {
+            "_kreaAuth": "api-token"
+          },
+          "price": 0.03
+        }
+      ],
+      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
+      "sources": [
+        {
+          "url": "https://api.krea.ai/openapi.json",
+          "quote": "x-krea-pricing on POST /generate/image/bytedance/seedream-4 (spec sha256 9d5dd91a9e81)"
+        }
+      ],
+      "checked": "2026-10-10",
+      "generatedBy": "scripts/sync-krea-catalog.py"
+    },
+    "krea-image-bytedance-seedream-5-lite": {
+      "currency": "usd",
+      "per": "request",
+      "priceParams": [
+        "_kreaAuth"
+      ],
+      "rows": [
+        {
+          "match": {
+            "_kreaAuth": "api-token"
+          },
+          "price": 0.035
+        }
+      ],
+      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
+      "sources": [
+        {
+          "url": "https://api.krea.ai/openapi.json",
+          "quote": "x-krea-pricing on POST /generate/image/bytedance/seedream-5-lite (spec sha256 9d5dd91a9e81)"
+        }
+      ],
+      "checked": "2026-10-10",
+      "generatedBy": "scripts/sync-krea-catalog.py"
+    },
+    "krea-image-google-nano-banana": {
+      "currency": "usd",
+      "per": "request",
+      "priceParams": [
+        "_kreaAuth"
+      ],
+      "rows": [
+        {
+          "match": {
+            "_kreaAuth": "api-token"
+          },
+          "price": 0.0429
+        }
+      ],
+      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
+      "sources": [
+        {
+          "url": "https://api.krea.ai/openapi.json",
+          "quote": "x-krea-pricing on POST /generate/image/google/nano-banana (spec sha256 9d5dd91a9e81)"
+        }
+      ],
+      "checked": "2026-10-10",
+      "generatedBy": "scripts/sync-krea-catalog.py"
+    },
+    "krea-image-google-nano-banana-2": {
+      "currency": "usd",
+      "per": "request",
+      "priceParams": [
+        "_kreaAuth",
+        "resolution"
+      ],
+      "rows": [
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1K"
+          },
+          "price": 0.08
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "2K"
+          },
+          "price": 0.12
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "4K"
+          },
+          "price": 0.16
+        }
+      ],
+      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
+      "sources": [
+        {
+          "url": "https://api.krea.ai/openapi.json",
+          "quote": "x-krea-pricing on POST /generate/image/google/nano-banana-2 (spec sha256 9d5dd91a9e81)"
+        }
+      ],
+      "checked": "2026-10-10",
+      "generatedBy": "scripts/sync-krea-catalog.py"
+    },
+    "krea-image-google-nano-banana-2-1": {
+      "currency": "usd",
+      "per": "request",
+      "priceParams": [
+        "_kreaAuth",
+        "resolution"
+      ],
+      "rows": [
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1K"
+          },
+          "price": 0.03
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "2K"
+          },
+          "price": 0.0505
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "4K"
+          },
+          "price": 0.0755
+        }
+      ],
+      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
+      "sources": [
+        {
+          "url": "https://api.krea.ai/openapi.json",
+          "quote": "x-krea-pricing on POST /generate/image/google/nano-banana-2.1 (spec sha256 9d5dd91a9e81)"
+        }
+      ],
+      "checked": "2026-10-10",
+      "generatedBy": "scripts/sync-krea-catalog.py"
+    },
+    "krea-image-google-nano-banana-flash-lite": {
+      "currency": "usd",
+      "per": "request",
+      "priceParams": [
+        "_kreaAuth"
+      ],
+      "rows": [
+        {
+          "match": {
+            "_kreaAuth": "api-token"
+          },
+          "price": 0.034
+        }
+      ],
+      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
+      "sources": [
+        {
+          "url": "https://api.krea.ai/openapi.json",
+          "quote": "x-krea-pricing on POST /generate/image/google/nano-banana-flash-lite (spec sha256 9d5dd91a9e81)"
+        }
+      ],
+      "checked": "2026-10-10",
+      "generatedBy": "scripts/sync-krea-catalog.py"
+    },
+    "krea-image-google-nano-banana-pro": {
+      "currency": "usd",
+      "per": "request",
+      "priceParams": [
+        "_kreaAuth",
+        "resolution"
+      ],
+      "rows": [
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1K"
+          },
+          "price": 0.15
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "2K"
+          },
+          "price": 0.15
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "4K"
+          },
+          "price": 0.3
+        }
+      ],
+      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
+      "sources": [
+        {
+          "url": "https://api.krea.ai/openapi.json",
+          "quote": "x-krea-pricing on POST /generate/image/google/nano-banana-pro (spec sha256 9d5dd91a9e81)"
+        }
+      ],
+      "checked": "2026-10-10",
+      "generatedBy": "scripts/sync-krea-catalog.py"
+    },
+    "krea-image-ideogram-ideogram-2-turbo": {
+      "currency": "usd",
+      "per": "request",
+      "priceParams": [
+        "_kreaAuth"
+      ],
+      "rows": [
+        {
+          "match": {
+            "_kreaAuth": "api-token"
+          },
+          "price": 0.025
+        }
+      ],
+      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
+      "sources": [
+        {
+          "url": "https://api.krea.ai/openapi.json",
+          "quote": "x-krea-pricing on POST /generate/image/ideogram/ideogram-2-turbo (spec sha256 9d5dd91a9e81)"
+        }
+      ],
+      "checked": "2026-10-10",
+      "generatedBy": "scripts/sync-krea-catalog.py"
+    },
+    "krea-image-ideogram-ideogram-4-5-precise": {
+      "currency": "usd",
+      "per": "request",
+      "priceParams": [
+        "_kreaAuth",
+        "quality"
+      ],
+      "rows": [
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "quality": "very_low"
+          },
+          "price": 0.008
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "quality": "low"
+          },
+          "price": 0.03
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "quality": "medium"
+          },
+          "price": 0.06
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "quality": "high"
+          },
+          "price": 0.22
+        }
+      ],
+      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
+      "sources": [
+        {
+          "url": "https://api.krea.ai/openapi.json",
+          "quote": "x-krea-pricing on POST /generate/image/ideogram/ideogram-4.5-precise (spec sha256 9d5dd91a9e81)"
+        }
+      ],
+      "checked": "2026-10-10",
+      "generatedBy": "scripts/sync-krea-catalog.py"
+    },
+    "krea-image-meta-muse-image": {
+      "currency": "usd",
+      "per": "request",
+      "priceParams": [
+        "_kreaAuth"
+      ],
+      "rows": [
+        {
+          "match": {
+            "_kreaAuth": "api-token"
+          },
+          "price": 0.01
+        }
+      ],
+      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
+      "sources": [
+        {
+          "url": "https://api.krea.ai/openapi.json",
+          "quote": "x-krea-pricing on POST /generate/image/meta/muse-image (spec sha256 9d5dd91a9e81)"
+        }
+      ],
+      "checked": "2026-10-10",
+      "generatedBy": "scripts/sync-krea-catalog.py"
+    },
+    "krea-image-openai-gpt-image": {
+      "currency": "usd",
+      "per": "request",
+      "priceParams": [
+        "_kreaAuth"
+      ],
+      "rows": [
+        {
+          "match": {
+            "_kreaAuth": "api-token"
+          },
+          "price": 0.3747
+        }
+      ],
+      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
+      "sources": [
+        {
+          "url": "https://api.krea.ai/openapi.json",
+          "quote": "x-krea-pricing on POST /generate/image/openai/gpt-image (spec sha256 9d5dd91a9e81)"
+        }
+      ],
+      "checked": "2026-10-10",
+      "generatedBy": "scripts/sync-krea-catalog.py"
+    },
+    "krea-image-recraft-recraft-v4-1-flash": {
+      "currency": "usd",
+      "per": "request",
+      "priceParams": [
+        "_kreaAuth"
+      ],
+      "rows": [
+        {
+          "match": {
+            "_kreaAuth": "api-token"
+          },
+          "price": 0.007
+        }
+      ],
+      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
+      "sources": [
+        {
+          "url": "https://api.krea.ai/openapi.json",
+          "quote": "x-krea-pricing on POST /generate/image/recraft/recraft-v4.1-flash (spec sha256 9d5dd91a9e81)"
+        }
+      ],
+      "checked": "2026-10-10",
+      "generatedBy": "scripts/sync-krea-catalog.py"
+    },
+    "krea-video-alibaba-wan-2-2": {
+      "currency": "usd",
+      "per": "request",
+      "priceParams": [
+        "_kreaAuth"
+      ],
+      "rows": [
+        {
+          "match": {
+            "_kreaAuth": "api-token"
+          },
+          "price": 0.3
+        }
+      ],
+      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
+      "sources": [
+        {
+          "url": "https://api.krea.ai/openapi.json",
+          "quote": "x-krea-pricing on POST /generate/video/alibaba/wan-2.2 (spec sha256 9d5dd91a9e81)"
+        }
+      ],
+      "checked": "2026-10-10",
+      "generatedBy": "scripts/sync-krea-catalog.py"
+    },
+    "krea-video-alibaba-wan-2-5": {
+      "currency": "usd",
+      "per": "request",
+      "priceParams": [
+        "_kreaAuth",
+        "duration",
+        "resolution"
+      ],
+      "rows": [
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "480p",
+            "duration": 5
+          },
+          "price": 0.25
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "480p",
+            "duration": 6
+          },
+          "price": 0.3
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "480p",
+            "duration": 7
+          },
+          "price": 0.35
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "480p",
+            "duration": 8
+          },
+          "price": 0.4
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "480p",
+            "duration": 9
+          },
+          "price": 0.45
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "480p",
+            "duration": 10
+          },
+          "price": 0.5
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 5
+          },
+          "price": 0.5
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 6
+          },
+          "price": 0.6
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 7
+          },
+          "price": 0.7
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 5
+          },
+          "price": 0.75
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 8
+          },
+          "price": 0.8
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 6
+          },
+          "price": 0.9
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 9
+          },
+          "price": 0.9
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 10
+          },
+          "price": 1
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 7
+          },
+          "price": 1.05
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 8
+          },
+          "price": 1.2
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 9
+          },
+          "price": 1.35
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 10
+          },
+          "price": 1.5
+        }
+      ],
+      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
+      "sources": [
+        {
+          "url": "https://api.krea.ai/openapi.json",
+          "quote": "x-krea-pricing on POST /generate/video/alibaba/wan-2.5 (spec sha256 9d5dd91a9e81)"
+        }
+      ],
+      "checked": "2026-10-10",
+      "generatedBy": "scripts/sync-krea-catalog.py"
+    },
+    "krea-video-alibaba-wan-3-0": {
+      "currency": "usd",
+      "per": "request",
+      "priceParams": [
+        "_kreaAuth",
+        "duration",
+        "resolution"
+      ],
+      "rows": [
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "480p",
+            "duration": 2
+          },
+          "price": 0.15
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "480p",
+            "duration": 3
+          },
+          "price": 0.225
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "480p",
+            "duration": 4
+          },
+          "price": 0.3
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 2
+          },
+          "price": 0.3
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "480p",
+            "duration": 5
+          },
+          "price": 0.375
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "480p",
+            "duration": 6
+          },
+          "price": 0.45
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 3
+          },
+          "price": 0.45
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "480p",
+            "duration": 7
+          },
+          "price": 0.525
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 2
+          },
+          "price": 0.6
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "480p",
+            "duration": 8
+          },
+          "price": 0.6
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 4
+          },
+          "price": 0.6
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "480p",
+            "duration": 9
+          },
+          "price": 0.675
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "480p",
+            "duration": 10
+          },
+          "price": 0.75
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 5
+          },
+          "price": 0.75
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "480p",
+            "duration": 11
+          },
+          "price": 0.825
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 3
+          },
+          "price": 0.9
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "480p",
+            "duration": 12
+          },
+          "price": 0.9
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 6
+          },
+          "price": 0.9
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "480p",
+            "duration": 13
+          },
+          "price": 0.975
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "480p",
+            "duration": 14
+          },
+          "price": 1.05
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 7
+          },
+          "price": 1.05
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "480p",
+            "duration": 15
+          },
+          "price": 1.125
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 4
+          },
+          "price": 1.2
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "480p",
+            "duration": 16
+          },
+          "price": 1.2
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 8
+          },
+          "price": 1.2
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "480p",
+            "duration": 17
+          },
+          "price": 1.275
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "480p",
+            "duration": 18
+          },
+          "price": 1.35
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 9
+          },
+          "price": 1.35
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "480p",
+            "duration": 19
+          },
+          "price": 1.425
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 5
+          },
+          "price": 1.5
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "480p",
+            "duration": 20
+          },
+          "price": 1.5
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 10
+          },
+          "price": 1.5
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "480p",
+            "duration": 21
+          },
+          "price": 1.575
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "480p",
+            "duration": 22
+          },
+          "price": 1.65
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 11
+          },
+          "price": 1.65
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "480p",
+            "duration": 23
+          },
+          "price": 1.725
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 6
+          },
+          "price": 1.8
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "480p",
+            "duration": 24
+          },
+          "price": 1.8
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 12
+          },
+          "price": 1.8
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "480p",
+            "duration": 25
+          },
+          "price": 1.875
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "480p",
+            "duration": 26
+          },
+          "price": 1.95
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 13
+          },
+          "price": 1.95
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "480p",
+            "duration": 27
+          },
+          "price": 2.025
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 7
+          },
+          "price": 2.1
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "480p",
+            "duration": 28
+          },
+          "price": 2.1
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 14
+          },
+          "price": 2.1
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "480p",
+            "duration": 29
+          },
+          "price": 2.175
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "480p",
+            "duration": 30
+          },
+          "price": 2.25
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 15
+          },
+          "price": 2.25
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 8
+          },
+          "price": 2.4
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 16
+          },
+          "price": 2.4
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 17
+          },
+          "price": 2.55
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 9
+          },
+          "price": 2.7
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 18
+          },
+          "price": 2.7
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 19
+          },
+          "price": 2.85
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 10
+          },
+          "price": 3
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 20
+          },
+          "price": 3
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 21
+          },
+          "price": 3.15
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 11
+          },
+          "price": 3.3
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 22
+          },
+          "price": 3.3
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 23
+          },
+          "price": 3.45
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 12
+          },
+          "price": 3.6
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 24
+          },
+          "price": 3.6
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 25
+          },
+          "price": 3.75
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 13
+          },
+          "price": 3.9
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 26
+          },
+          "price": 3.9
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 27
+          },
+          "price": 4.05
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 14
+          },
+          "price": 4.2
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 28
+          },
+          "price": 4.2
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 29
+          },
+          "price": 4.35
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 15
+          },
+          "price": 4.5
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 30
+          },
+          "price": 4.5
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 16
+          },
+          "price": 4.8
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 17
+          },
+          "price": 5.1
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 18
+          },
+          "price": 5.4
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 19
+          },
+          "price": 5.7
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 20
+          },
+          "price": 6
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 21
+          },
+          "price": 6.3
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 22
+          },
+          "price": 6.6
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 23
+          },
+          "price": 6.9
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 24
+          },
+          "price": 7.2
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 25
+          },
+          "price": 7.5
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 26
+          },
+          "price": 7.8
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 27
+          },
+          "price": 8.1
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 28
+          },
+          "price": 8.4
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 29
+          },
+          "price": 8.7
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 30
+          },
+          "price": 9
+        }
+      ],
+      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
+      "sources": [
+        {
+          "url": "https://api.krea.ai/openapi.json",
+          "quote": "x-krea-pricing on POST /generate/video/alibaba/wan-3.0 (spec sha256 9d5dd91a9e81)"
+        }
+      ],
+      "checked": "2026-10-10",
+      "generatedBy": "scripts/sync-krea-catalog.py"
+    },
+    "krea-video-google-veo-2": {
+      "currency": "usd",
+      "per": "request",
+      "priceParams": [
+        "_kreaAuth",
+        "duration"
+      ],
+      "rows": [
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "duration": 5
+          },
+          "price": 2.5
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "duration": 6
+          },
+          "price": 3
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "duration": 7
+          },
+          "price": 3.5
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "duration": 8
+          },
+          "price": 4
+        }
+      ],
+      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
+      "sources": [
+        {
+          "url": "https://api.krea.ai/openapi.json",
+          "quote": "x-krea-pricing on POST /generate/video/google/veo-2 (spec sha256 9d5dd91a9e81)"
+        }
+      ],
+      "checked": "2026-10-10",
+      "generatedBy": "scripts/sync-krea-catalog.py"
+    },
+    "krea-video-google-veo-3": {
+      "currency": "usd",
+      "per": "request",
+      "priceParams": [
+        "_kreaAuth",
+        "duration",
+        "generate_audio"
+      ],
+      "rows": [
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "generate_audio": false,
+            "duration": 6
+          },
+          "price": 1.2
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "generate_audio": false,
+            "duration": 8
+          },
+          "price": 1.6
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "generate_audio": true,
+            "duration": 6
+          },
+          "price": 2.4
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "generate_audio": true,
+            "duration": 8
+          },
+          "price": 3.2
+        }
+      ],
+      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
+      "sources": [
+        {
+          "url": "https://api.krea.ai/openapi.json",
+          "quote": "x-krea-pricing on POST /generate/video/google/veo-3 (spec sha256 9d5dd91a9e81)"
+        }
+      ],
+      "checked": "2026-10-10",
+      "generatedBy": "scripts/sync-krea-catalog.py"
+    },
+    "krea-video-google-veo-3-1": {
+      "currency": "usd",
+      "per": "request",
+      "priceParams": [
+        "_kreaAuth",
+        "duration",
+        "generate_audio",
+        "resolution"
+      ],
+      "rows": [
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "generate_audio": false,
+            "duration": 4
+          },
+          "price": 0.8
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "generate_audio": false,
+            "duration": 4
+          },
+          "price": 0.8
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "generate_audio": false,
+            "duration": 6
+          },
+          "price": 1.2
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "generate_audio": false,
+            "duration": 6
+          },
+          "price": 1.2
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "generate_audio": false,
+            "duration": 8
+          },
+          "price": 1.6
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "generate_audio": true,
+            "duration": 4
+          },
+          "price": 1.6
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "4K",
+            "generate_audio": false,
+            "duration": 4
+          },
+          "price": 1.6
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "generate_audio": false,
+            "duration": 8
+          },
+          "price": 1.6
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "generate_audio": true,
+            "duration": 4
+          },
+          "price": 1.6
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "generate_audio": true,
+            "duration": 6
+          },
+          "price": 2.4
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "4K",
+            "generate_audio": false,
+            "duration": 6
+          },
+          "price": 2.4
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "4K",
+            "generate_audio": true,
+            "duration": 4
+          },
+          "price": 2.4
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "generate_audio": true,
+            "duration": 6
+          },
+          "price": 2.4
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "generate_audio": true,
+            "duration": 8
+          },
+          "price": 3.2
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "4K",
+            "generate_audio": false,
+            "duration": 8
+          },
+          "price": 3.2
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "generate_audio": true,
+            "duration": 8
+          },
+          "price": 3.2
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "4K",
+            "generate_audio": true,
+            "duration": 6
+          },
+          "price": 3.6
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "4K",
+            "generate_audio": true,
+            "duration": 8
+          },
+          "price": 4.8
+        }
+      ],
+      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
+      "sources": [
+        {
+          "url": "https://api.krea.ai/openapi.json",
+          "quote": "x-krea-pricing on POST /generate/video/google/veo-3.1 (spec sha256 9d5dd91a9e81)"
+        }
+      ],
+      "checked": "2026-10-10",
+      "generatedBy": "scripts/sync-krea-catalog.py"
+    },
+    "krea-video-google-veo-3-1-fast": {
+      "currency": "usd",
+      "per": "request",
+      "priceParams": [
+        "_kreaAuth",
+        "duration",
+        "generate_audio",
+        "resolution"
+      ],
+      "rows": [
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "generate_audio": false,
+            "duration": 4
+          },
+          "price": 0.32
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "generate_audio": false,
+            "duration": 4
+          },
+          "price": 0.4
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "generate_audio": true,
+            "duration": 4
+          },
+          "price": 0.4
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "generate_audio": true,
+            "duration": 4
+          },
+          "price": 0.48
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "generate_audio": false,
+            "duration": 6
+          },
+          "price": 0.48
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "generate_audio": false,
+            "duration": 6
+          },
+          "price": 0.6
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "generate_audio": true,
+            "duration": 6
+          },
+          "price": 0.6
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "generate_audio": false,
+            "duration": 8
+          },
+          "price": 0.64
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "generate_audio": true,
+            "duration": 6
+          },
+          "price": 0.72
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "generate_audio": false,
+            "duration": 8
+          },
+          "price": 0.8
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "generate_audio": true,
+            "duration": 8
+          },
+          "price": 0.8
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "generate_audio": true,
+            "duration": 8
+          },
+          "price": 0.96
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "4K",
+            "generate_audio": false,
+            "duration": 4
+          },
+          "price": 1
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "4K",
+            "generate_audio": true,
+            "duration": 4
+          },
+          "price": 1.2
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "4K",
+            "generate_audio": false,
+            "duration": 6
+          },
+          "price": 1.5
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "4K",
+            "generate_audio": true,
+            "duration": 6
+          },
+          "price": 1.8
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "4K",
+            "generate_audio": false,
+            "duration": 8
+          },
+          "price": 2
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "4K",
+            "generate_audio": true,
+            "duration": 8
+          },
+          "price": 2.4
+        }
+      ],
+      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
+      "sources": [
+        {
+          "url": "https://api.krea.ai/openapi.json",
+          "quote": "x-krea-pricing on POST /generate/video/google/veo-3.1-fast (spec sha256 9d5dd91a9e81)"
+        }
+      ],
+      "checked": "2026-10-10",
+      "generatedBy": "scripts/sync-krea-catalog.py"
+    },
+    "krea-video-google-veo-3-1-lite": {
+      "currency": "usd",
+      "per": "request",
+      "priceParams": [
+        "_kreaAuth",
+        "duration",
+        "resolution"
+      ],
+      "rows": [
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 4
+          },
+          "price": 0.12
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 6
+          },
+          "price": 0.18
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 4
+          },
+          "price": 0.2
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 8
+          },
+          "price": 0.24
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 6
+          },
+          "price": 0.3
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 8
+          },
+          "price": 0.4
+        }
+      ],
+      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
+      "sources": [
+        {
+          "url": "https://api.krea.ai/openapi.json",
+          "quote": "x-krea-pricing on POST /generate/video/google/veo-3.1-lite (spec sha256 9d5dd91a9e81)"
+        }
+      ],
+      "checked": "2026-10-10",
+      "generatedBy": "scripts/sync-krea-catalog.py"
+    },
+    "krea-video-google-veo-3-fast": {
+      "currency": "usd",
+      "per": "request",
+      "priceParams": [
+        "_kreaAuth",
+        "duration",
+        "generate_audio"
+      ],
+      "rows": [
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "generate_audio": false,
+            "duration": 6
+          },
+          "price": 0.6
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "generate_audio": false,
+            "duration": 8
+          },
+          "price": 0.8
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "generate_audio": true,
+            "duration": 6
+          },
+          "price": 0.9
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "generate_audio": true,
+            "duration": 8
+          },
+          "price": 1.2
+        }
+      ],
+      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
+      "sources": [
+        {
+          "url": "https://api.krea.ai/openapi.json",
+          "quote": "x-krea-pricing on POST /generate/video/google/veo-3-fast (spec sha256 9d5dd91a9e81)"
+        }
+      ],
+      "checked": "2026-10-10",
+      "generatedBy": "scripts/sync-krea-catalog.py"
+    },
+    "krea-video-kling-kling-2-5": {
+      "currency": "usd",
+      "per": "request",
+      "priceParams": [
+        "_kreaAuth",
+        "duration"
+      ],
+      "rows": [
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "duration": 5
+          },
+          "price": 0.35
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "duration": 10
+          },
+          "price": 0.7
+        }
+      ],
+      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
+      "sources": [
+        {
+          "url": "https://api.krea.ai/openapi.json",
+          "quote": "x-krea-pricing on POST /generate/video/kling/kling-2.5 (spec sha256 9d5dd91a9e81)"
+        }
+      ],
+      "checked": "2026-10-10",
+      "generatedBy": "scripts/sync-krea-catalog.py"
+    },
+    "krea-video-kling-kling-2-6": {
+      "currency": "usd",
+      "per": "request",
+      "priceParams": [
+        "_kreaAuth",
+        "duration",
+        "generate_audio"
+      ],
+      "rows": [
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "generate_audio": false,
+            "duration": 5
+          },
+          "price": 0.35
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "generate_audio": false,
+            "duration": 10
+          },
+          "price": 0.7
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "generate_audio": true,
+            "duration": 5
+          },
+          "price": 0.7
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "generate_audio": true,
+            "duration": 10
+          },
+          "price": 1.4
+        }
+      ],
+      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
+      "sources": [
+        {
+          "url": "https://api.krea.ai/openapi.json",
+          "quote": "x-krea-pricing on POST /generate/video/kling/kling-2.6 (spec sha256 9d5dd91a9e81)"
+        }
+      ],
+      "checked": "2026-10-10",
+      "generatedBy": "scripts/sync-krea-catalog.py"
+    },
+    "krea-video-kling-kling-3-0": {
+      "currency": "usd",
+      "per": "request",
+      "priceParams": [
+        "_kreaAuth",
+        "duration",
+        "generate_audio",
+        "mode"
+      ],
+      "rows": [
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "mode": "std",
+            "generate_audio": false,
+            "duration": 3
+          },
+          "price": 0.252
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "mode": "pro",
+            "generate_audio": false,
+            "duration": 3
+          },
+          "price": 0.336
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "mode": "std",
+            "generate_audio": false,
+            "duration": 4
+          },
+          "price": 0.336
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "mode": "std",
+            "generate_audio": true,
+            "duration": 3
+          },
+          "price": 0.378
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "mode": "std",
+            "generate_audio": false,
+            "duration": 5
+          },
+          "price": 0.42
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "mode": "pro",
+            "generate_audio": false,
+            "duration": 4
+          },
+          "price": 0.448
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "mode": "pro",
+            "generate_audio": true,
+            "duration": 3
+          },
+          "price": 0.504
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "mode": "std",
+            "generate_audio": false,
+            "duration": 6
+          },
+          "price": 0.504
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "mode": "std",
+            "generate_audio": true,
+            "duration": 4
+          },
+          "price": 0.504
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "mode": "pro",
+            "generate_audio": false,
+            "duration": 5
+          },
+          "price": 0.56
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "mode": "std",
+            "generate_audio": false,
+            "duration": 7
+          },
+          "price": 0.588
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "mode": "std",
+            "generate_audio": true,
+            "duration": 5
+          },
+          "price": 0.63
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "mode": "pro",
+            "generate_audio": false,
+            "duration": 6
+          },
+          "price": 0.672
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "mode": "pro",
+            "generate_audio": true,
+            "duration": 4
+          },
+          "price": 0.672
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "mode": "std",
+            "generate_audio": false,
+            "duration": 8
+          },
+          "price": 0.672
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "mode": "std",
+            "generate_audio": false,
+            "duration": 9
+          },
+          "price": 0.756
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "mode": "std",
+            "generate_audio": true,
+            "duration": 6
+          },
+          "price": 0.756
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "mode": "pro",
+            "generate_audio": false,
+            "duration": 7
+          },
+          "price": 0.784
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "mode": "pro",
+            "generate_audio": true,
+            "duration": 5
+          },
+          "price": 0.84
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "mode": "std",
+            "generate_audio": false,
+            "duration": 10
+          },
+          "price": 0.84
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "mode": "std",
+            "generate_audio": true,
+            "duration": 7
+          },
+          "price": 0.882
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "mode": "pro",
+            "generate_audio": false,
+            "duration": 8
+          },
+          "price": 0.896
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "mode": "std",
+            "generate_audio": false,
+            "duration": 11
+          },
+          "price": 0.924
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "mode": "pro",
+            "generate_audio": false,
+            "duration": 9
+          },
+          "price": 1.008
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "mode": "pro",
+            "generate_audio": true,
+            "duration": 6
+          },
+          "price": 1.008
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "mode": "std",
+            "generate_audio": false,
+            "duration": 12
+          },
+          "price": 1.008
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "mode": "std",
+            "generate_audio": true,
+            "duration": 8
+          },
+          "price": 1.008
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "mode": "std",
+            "generate_audio": false,
+            "duration": 13
+          },
+          "price": 1.092
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "mode": "pro",
+            "generate_audio": false,
+            "duration": 10
+          },
+          "price": 1.12
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "mode": "std",
+            "generate_audio": true,
+            "duration": 9
+          },
+          "price": 1.134
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "mode": "pro",
+            "generate_audio": true,
+            "duration": 7
+          },
+          "price": 1.176
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "mode": "std",
+            "generate_audio": false,
+            "duration": 14
+          },
+          "price": 1.176
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "mode": "pro",
+            "generate_audio": false,
+            "duration": 11
+          },
+          "price": 1.232
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "mode": "4k",
+            "generate_audio": false,
+            "duration": 3
+          },
+          "price": 1.26
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "mode": "4k",
+            "generate_audio": true,
+            "duration": 3
+          },
+          "price": 1.26
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "mode": "std",
+            "generate_audio": false,
+            "duration": 15
+          },
+          "price": 1.26
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "mode": "std",
+            "generate_audio": true,
+            "duration": 10
+          },
+          "price": 1.26
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "mode": "pro",
+            "generate_audio": false,
+            "duration": 12
+          },
+          "price": 1.344
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "mode": "pro",
+            "generate_audio": true,
+            "duration": 8
+          },
+          "price": 1.344
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "mode": "std",
+            "generate_audio": true,
+            "duration": 11
+          },
+          "price": 1.386
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "mode": "pro",
+            "generate_audio": false,
+            "duration": 13
+          },
+          "price": 1.456
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "mode": "pro",
+            "generate_audio": true,
+            "duration": 9
+          },
+          "price": 1.512
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "mode": "std",
+            "generate_audio": true,
+            "duration": 12
+          },
+          "price": 1.512
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "mode": "pro",
+            "generate_audio": false,
+            "duration": 14
+          },
+          "price": 1.568
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "mode": "std",
+            "generate_audio": true,
+            "duration": 13
+          },
+          "price": 1.638
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "mode": "4k",
+            "generate_audio": false,
+            "duration": 4
+          },
+          "price": 1.68
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "mode": "4k",
+            "generate_audio": true,
+            "duration": 4
+          },
+          "price": 1.68
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "mode": "pro",
+            "generate_audio": false,
+            "duration": 15
+          },
+          "price": 1.68
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "mode": "pro",
+            "generate_audio": true,
+            "duration": 10
+          },
+          "price": 1.68
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "mode": "std",
+            "generate_audio": true,
+            "duration": 14
+          },
+          "price": 1.764
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "mode": "pro",
+            "generate_audio": true,
+            "duration": 11
+          },
+          "price": 1.848
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "mode": "std",
+            "generate_audio": true,
+            "duration": 15
+          },
+          "price": 1.89
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "mode": "pro",
+            "generate_audio": true,
+            "duration": 12
+          },
+          "price": 2.016
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "mode": "4k",
+            "generate_audio": false,
+            "duration": 5
+          },
+          "price": 2.1
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "mode": "4k",
+            "generate_audio": true,
+            "duration": 5
+          },
+          "price": 2.1
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "mode": "pro",
+            "generate_audio": true,
+            "duration": 13
+          },
+          "price": 2.184
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "mode": "pro",
+            "generate_audio": true,
+            "duration": 14
+          },
+          "price": 2.352
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "mode": "4k",
+            "generate_audio": false,
+            "duration": 6
+          },
+          "price": 2.52
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "mode": "4k",
+            "generate_audio": true,
+            "duration": 6
+          },
+          "price": 2.52
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "mode": "pro",
+            "generate_audio": true,
+            "duration": 15
+          },
+          "price": 2.52
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "mode": "4k",
+            "generate_audio": false,
+            "duration": 7
+          },
+          "price": 2.94
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "mode": "4k",
+            "generate_audio": true,
+            "duration": 7
+          },
+          "price": 2.94
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "mode": "4k",
+            "generate_audio": false,
+            "duration": 8
+          },
+          "price": 3.36
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "mode": "4k",
+            "generate_audio": true,
+            "duration": 8
+          },
+          "price": 3.36
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "mode": "4k",
+            "generate_audio": false,
+            "duration": 9
+          },
+          "price": 3.78
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "mode": "4k",
+            "generate_audio": true,
+            "duration": 9
+          },
+          "price": 3.78
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "mode": "4k",
+            "generate_audio": false,
+            "duration": 10
+          },
+          "price": 4.2
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "mode": "4k",
+            "generate_audio": true,
+            "duration": 10
+          },
+          "price": 4.2
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "mode": "4k",
+            "generate_audio": false,
+            "duration": 11
+          },
+          "price": 4.62
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "mode": "4k",
+            "generate_audio": true,
+            "duration": 11
+          },
+          "price": 4.62
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "mode": "4k",
+            "generate_audio": false,
+            "duration": 12
+          },
+          "price": 5.04
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "mode": "4k",
+            "generate_audio": true,
+            "duration": 12
+          },
+          "price": 5.04
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "mode": "4k",
+            "generate_audio": false,
+            "duration": 13
+          },
+          "price": 5.46
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "mode": "4k",
+            "generate_audio": true,
+            "duration": 13
+          },
+          "price": 5.46
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "mode": "4k",
+            "generate_audio": false,
+            "duration": 14
+          },
+          "price": 5.88
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "mode": "4k",
+            "generate_audio": true,
+            "duration": 14
+          },
+          "price": 5.88
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "mode": "4k",
+            "generate_audio": false,
+            "duration": 15
+          },
+          "price": 6.3
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "mode": "4k",
+            "generate_audio": true,
+            "duration": 15
+          },
+          "price": 6.3
+        }
+      ],
+      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
+      "sources": [
+        {
+          "url": "https://api.krea.ai/openapi.json",
+          "quote": "x-krea-pricing on POST /generate/video/kling/kling-3.0 (spec sha256 9d5dd91a9e81)"
+        }
+      ],
+      "checked": "2026-10-10",
+      "generatedBy": "scripts/sync-krea-catalog.py"
+    },
+    "krea-video-lightricks-ltx-video-2-5-fast": {
+      "currency": "usd",
+      "per": "request",
+      "priceParams": [
+        "_kreaAuth",
+        "duration",
+        "resolution"
+      ],
+      "rows": [
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 6
+          },
+          "price": 0.54
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 8
+          },
+          "price": 0.72
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 6
+          },
+          "price": 0.78
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 10
+          },
+          "price": 0.9
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 8
+          },
+          "price": 1.04
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 12
+          },
+          "price": 1.08
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1440p",
+            "duration": 6
+          },
+          "price": 1.14
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 14
+          },
+          "price": 1.26
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 10
+          },
+          "price": 1.3
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 16
+          },
+          "price": 1.44
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1440p",
+            "duration": 8
+          },
+          "price": 1.52
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 12
+          },
+          "price": 1.56
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 18
+          },
+          "price": 1.62
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "4k",
+            "duration": 6
+          },
+          "price": 1.8
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 20
+          },
+          "price": 1.8
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 14
+          },
+          "price": 1.82
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1440p",
+            "duration": 10
+          },
+          "price": 1.9
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 16
+          },
+          "price": 2.08
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1440p",
+            "duration": 12
+          },
+          "price": 2.28
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 18
+          },
+          "price": 2.34
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "4k",
+            "duration": 8
+          },
+          "price": 2.4
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 20
+          },
+          "price": 2.6
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1440p",
+            "duration": 14
+          },
+          "price": 2.66
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "4k",
+            "duration": 10
+          },
+          "price": 3
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1440p",
+            "duration": 16
+          },
+          "price": 3.04
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1440p",
+            "duration": 18
+          },
+          "price": 3.42
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "4k",
+            "duration": 12
+          },
+          "price": 3.6
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1440p",
+            "duration": 20
+          },
+          "price": 3.8
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "4k",
+            "duration": 14
+          },
+          "price": 4.2
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "4k",
+            "duration": 16
+          },
+          "price": 4.8
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "4k",
+            "duration": 18
+          },
+          "price": 5.4
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "4k",
+            "duration": 20
+          },
+          "price": 6
+        }
+      ],
+      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
+      "sources": [
+        {
+          "url": "https://api.krea.ai/openapi.json",
+          "quote": "x-krea-pricing on POST /generate/video/lightricks/ltx-video-2.5-fast (spec sha256 9d5dd91a9e81)"
+        }
+      ],
+      "checked": "2026-10-10",
+      "generatedBy": "scripts/sync-krea-catalog.py"
+    },
+    "krea-video-lightricks-ltx-video-2-5-pro": {
+      "currency": "usd",
+      "per": "request",
+      "priceParams": [
+        "_kreaAuth",
+        "duration",
+        "resolution"
+      ],
+      "rows": [
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 6
+          },
+          "price": 0.72
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 8
+          },
+          "price": 0.96
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 6
+          },
+          "price": 1.02
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 10
+          },
+          "price": 1.2
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 8
+          },
+          "price": 1.36
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 10
+          },
+          "price": 1.7
+        }
+      ],
+      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
+      "sources": [
+        {
+          "url": "https://api.krea.ai/openapi.json",
+          "quote": "x-krea-pricing on POST /generate/video/lightricks/ltx-video-2.5-pro (spec sha256 9d5dd91a9e81)"
+        }
+      ],
+      "checked": "2026-10-10",
+      "generatedBy": "scripts/sync-krea-catalog.py"
+    },
+    "krea-video-luma-ray-2": {
+      "currency": "usd",
+      "per": "request",
+      "priceParams": [
+        "_kreaAuth"
+      ],
+      "rows": [
+        {
+          "match": {
+            "_kreaAuth": "api-token"
+          },
+          "price": 0.4
+        }
+      ],
+      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
+      "sources": [
+        {
+          "url": "https://api.krea.ai/openapi.json",
+          "quote": "x-krea-pricing on POST /generate/video/luma/ray-2 (spec sha256 9d5dd91a9e81)"
+        }
+      ],
+      "checked": "2026-10-10",
+      "generatedBy": "scripts/sync-krea-catalog.py"
+    },
+    "krea-video-minimax-h3-max-turbo": {
+      "currency": "usd",
+      "per": "request",
+      "priceParams": [
+        "_kreaAuth",
+        "duration",
+        "resolution"
+      ],
+      "rows": [
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "480p",
+            "duration": 5
+          },
+          "price": 0.125
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "480p",
+            "duration": 6
+          },
+          "price": 0.15
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "480p",
+            "duration": 7
+          },
+          "price": 0.175
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "480p",
+            "duration": 8
+          },
+          "price": 0.2
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "768p",
+            "duration": 5
+          },
+          "price": 0.2
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "480p",
+            "duration": 9
+          },
+          "price": 0.225
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "768p",
+            "duration": 6
+          },
+          "price": 0.24
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "480p",
+            "duration": 10
+          },
+          "price": 0.25
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "480p",
+            "duration": 11
+          },
+          "price": 0.275
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "768p",
+            "duration": 7
+          },
+          "price": 0.28
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "480p",
+            "duration": 12
+          },
+          "price": 0.3
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "768p",
+            "duration": 8
+          },
+          "price": 0.32
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "480p",
+            "duration": 13
+          },
+          "price": 0.325
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "480p",
+            "duration": 14
+          },
+          "price": 0.35
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "768p",
+            "duration": 9
+          },
+          "price": 0.36
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "480p",
+            "duration": 15
+          },
+          "price": 0.375
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 5
+          },
+          "price": 0.4
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "768p",
+            "duration": 10
+          },
+          "price": 0.4
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "768p",
+            "duration": 11
+          },
+          "price": 0.44
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 6
+          },
+          "price": 0.48
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "768p",
+            "duration": 12
+          },
+          "price": 0.48
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "768p",
+            "duration": 13
+          },
+          "price": 0.52
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 7
+          },
+          "price": 0.56
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "768p",
+            "duration": 14
+          },
+          "price": 0.56
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "768p",
+            "duration": 15
+          },
+          "price": 0.6
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 8
+          },
+          "price": 0.64
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 9
+          },
+          "price": 0.72
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 10
+          },
+          "price": 0.8
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 11
+          },
+          "price": 0.88
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 12
+          },
+          "price": 0.96
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 13
+          },
+          "price": 1.04
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 14
+          },
+          "price": 1.12
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 15
+          },
+          "price": 1.2
+        }
+      ],
+      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
+      "sources": [
+        {
+          "url": "https://api.krea.ai/openapi.json",
+          "quote": "x-krea-pricing on POST /generate/video/minimax/h3-max-turbo (spec sha256 9d5dd91a9e81)"
+        }
+      ],
+      "checked": "2026-10-10",
+      "generatedBy": "scripts/sync-krea-catalog.py"
+    },
+    "krea-video-minimax-hailuo": {
+      "currency": "usd",
+      "per": "request",
+      "priceParams": [
+        "_kreaAuth"
+      ],
+      "rows": [
+        {
+          "match": {
+            "_kreaAuth": "api-token"
+          },
+          "price": 0.43
+        }
+      ],
+      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
+      "sources": [
+        {
+          "url": "https://api.krea.ai/openapi.json",
+          "quote": "x-krea-pricing on POST /generate/video/minimax/hailuo (spec sha256 9d5dd91a9e81)"
+        }
+      ],
+      "checked": "2026-10-10",
+      "generatedBy": "scripts/sync-krea-catalog.py"
+    },
+    "krea-video-minimax-hailuo-02": {
+      "currency": "usd",
+      "per": "request",
+      "priceParams": [
+        "_kreaAuth",
+        "duration",
+        "resolution"
+      ],
+      "rows": [
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "512p",
+            "duration": 6
+          },
+          "price": 0.1
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "512p",
+            "duration": 10
+          },
+          "price": 0.15
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "768p",
+            "duration": 6
+          },
+          "price": 0.27
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "512p",
+            "duration": 7
+          },
+          "price": 0.315
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "768p",
+            "duration": 7
+          },
+          "price": 0.315
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "512p",
+            "duration": 8
+          },
+          "price": 0.36
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "768p",
+            "duration": 8
+          },
+          "price": 0.36
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "512p",
+            "duration": 9
+          },
+          "price": 0.405
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "768p",
+            "duration": 9
+          },
+          "price": 0.405
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "768p",
+            "duration": 10
+          },
+          "price": 0.45
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 6
+          },
+          "price": 0.54
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 7
+          },
+          "price": 0.63
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 8
+          },
+          "price": 0.72
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 9
+          },
+          "price": 0.81
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 10
+          },
+          "price": 0.9
+        }
+      ],
+      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
+      "sources": [
+        {
+          "url": "https://api.krea.ai/openapi.json",
+          "quote": "x-krea-pricing on POST /generate/video/minimax/hailuo-02 (spec sha256 9d5dd91a9e81)"
+        }
+      ],
+      "checked": "2026-10-10",
+      "generatedBy": "scripts/sync-krea-catalog.py"
+    },
+    "krea-video-minimax-hailuo-2-3": {
+      "currency": "usd",
+      "per": "request",
+      "priceParams": [
+        "_kreaAuth",
+        "duration",
+        "resolution"
+      ],
+      "rows": [
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "768p",
+            "duration": 6
+          },
+          "price": 0.28
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 10
+          },
+          "price": 0.49
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 6
+          },
+          "price": 0.49
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "768p",
+            "duration": 10
+          },
+          "price": 0.56
+        }
+      ],
+      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
+      "sources": [
+        {
+          "url": "https://api.krea.ai/openapi.json",
+          "quote": "x-krea-pricing on POST /generate/video/minimax/hailuo-2.3 (spec sha256 9d5dd91a9e81)"
+        }
+      ],
+      "checked": "2026-10-10",
+      "generatedBy": "scripts/sync-krea-catalog.py"
+    },
+    "krea-video-minimax-hailuo-2-3-fast": {
+      "currency": "usd",
+      "per": "request",
+      "priceParams": [
+        "_kreaAuth",
+        "duration",
+        "resolution"
+      ],
+      "rows": [
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "768p",
+            "duration": 6
+          },
+          "price": 0.19
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "768p",
+            "duration": 10
+          },
+          "price": 0.32
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 10
+          },
+          "price": 0.33
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 6
+          },
+          "price": 0.33
+        }
+      ],
+      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
+      "sources": [
+        {
+          "url": "https://api.krea.ai/openapi.json",
+          "quote": "x-krea-pricing on POST /generate/video/minimax/hailuo-2.3-fast (spec sha256 9d5dd91a9e81)"
+        }
+      ],
+      "checked": "2026-10-10",
+      "generatedBy": "scripts/sync-krea-catalog.py"
+    },
+    "krea-video-runway-gen-4-5": {
+      "currency": "usd",
+      "per": "request",
+      "priceParams": [
+        "_kreaAuth",
+        "duration"
+      ],
+      "rows": [
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "duration": 2
+          },
+          "price": 0.24
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "duration": 3
+          },
+          "price": 0.36
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "duration": 4
+          },
+          "price": 0.48
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "duration": 5
+          },
+          "price": 0.6
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "duration": 6
+          },
+          "price": 0.72
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "duration": 7
+          },
+          "price": 0.84
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "duration": 8
+          },
+          "price": 0.96
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "duration": 9
+          },
+          "price": 1.08
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "duration": 10
+          },
+          "price": 1.2
+        }
+      ],
+      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
+      "sources": [
+        {
+          "url": "https://api.krea.ai/openapi.json",
+          "quote": "x-krea-pricing on POST /generate/video/runway/gen-4.5 (spec sha256 9d5dd91a9e81)"
+        }
+      ],
+      "checked": "2026-10-10",
+      "generatedBy": "scripts/sync-krea-catalog.py"
+    },
+    "krea-video-runway-gen-4-video": {
+      "currency": "usd",
+      "per": "request",
+      "priceParams": [
+        "_kreaAuth",
+        "duration"
+      ],
+      "rows": [
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "duration": 5
+          },
+          "price": 0.25
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "duration": 10
+          },
+          "price": 0.5
+        }
+      ],
+      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
+      "sources": [
+        {
+          "url": "https://api.krea.ai/openapi.json",
+          "quote": "x-krea-pricing on POST /generate/video/runway/gen-4-video (spec sha256 9d5dd91a9e81)"
+        }
+      ],
+      "checked": "2026-10-10",
+      "generatedBy": "scripts/sync-krea-catalog.py"
+    },
+    "krea-video-vidu-q3": {
+      "currency": "usd",
+      "per": "request",
+      "priceParams": [
+        "_kreaAuth",
+        "duration",
+        "resolution"
+      ],
+      "rows": [
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "540p",
+            "duration": 1
+          },
+          "price": 0.07
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "540p",
+            "duration": 2
+          },
+          "price": 0.14
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 1
+          },
+          "price": 0.154
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 1
+          },
+          "price": 0.154
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "540p",
+            "duration": 3
+          },
+          "price": 0.21
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "540p",
+            "duration": 4
+          },
+          "price": 0.28
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 2
+          },
+          "price": 0.308
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 2
+          },
+          "price": 0.308
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "540p",
+            "duration": 5
+          },
+          "price": 0.35
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "540p",
+            "duration": 6
+          },
+          "price": 0.42
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 3
+          },
+          "price": 0.462
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 3
+          },
+          "price": 0.462
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "540p",
+            "duration": 7
+          },
+          "price": 0.49
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "540p",
+            "duration": 8
+          },
+          "price": 0.56
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 4
+          },
+          "price": 0.616
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 4
+          },
+          "price": 0.616
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "540p",
+            "duration": 9
+          },
+          "price": 0.63
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "540p",
+            "duration": 10
+          },
+          "price": 0.7
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 5
+          },
+          "price": 0.77
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "540p",
+            "duration": 11
+          },
+          "price": 0.77
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 5
+          },
+          "price": 0.77
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "540p",
+            "duration": 12
+          },
+          "price": 0.84
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "540p",
+            "duration": 13
+          },
+          "price": 0.91
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 6
+          },
+          "price": 0.924
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 6
+          },
+          "price": 0.924
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "540p",
+            "duration": 14
+          },
+          "price": 0.98
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "540p",
+            "duration": 15
+          },
+          "price": 1.05
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 7
+          },
+          "price": 1.078
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 7
+          },
+          "price": 1.078
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "540p",
+            "duration": 16
+          },
+          "price": 1.12
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 8
+          },
+          "price": 1.232
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 8
+          },
+          "price": 1.232
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 9
+          },
+          "price": 1.386
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 9
+          },
+          "price": 1.386
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 10
+          },
+          "price": 1.54
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 10
+          },
+          "price": 1.54
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 11
+          },
+          "price": 1.694
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 11
+          },
+          "price": 1.694
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 12
+          },
+          "price": 1.848
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 12
+          },
+          "price": 1.848
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 13
+          },
+          "price": 2.002
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 13
+          },
+          "price": 2.002
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 14
+          },
+          "price": 2.156
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 14
+          },
+          "price": 2.156
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 15
+          },
+          "price": 2.31
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 15
+          },
+          "price": 2.31
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 16
+          },
+          "price": 2.464
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 16
+          },
+          "price": 2.464
+        }
+      ],
+      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
+      "sources": [
+        {
+          "url": "https://api.krea.ai/openapi.json",
+          "quote": "x-krea-pricing on POST /generate/video/vidu/q3 (spec sha256 9d5dd91a9e81)"
+        }
+      ],
+      "checked": "2026-10-10",
+      "generatedBy": "scripts/sync-krea-catalog.py"
+    },
+    "krea-video-xai-grok-video": {
+      "currency": "usd",
+      "per": "request",
+      "priceParams": [
+        "_kreaAuth",
+        "duration",
+        "resolution"
+      ],
+      "rows": [
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "480p",
+            "duration": 1
+          },
+          "price": 0.05
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 1
+          },
+          "price": 0.07
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "480p",
+            "duration": 2
+          },
+          "price": 0.1
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 2
+          },
+          "price": 0.14
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "480p",
+            "duration": 3
+          },
+          "price": 0.15
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "480p",
+            "duration": 4
+          },
+          "price": 0.2
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 3
+          },
+          "price": 0.21
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "480p",
+            "duration": 5
+          },
+          "price": 0.25
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 4
+          },
+          "price": 0.28
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "480p",
+            "duration": 6
+          },
+          "price": 0.3
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "480p",
+            "duration": 7
+          },
+          "price": 0.35
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 5
+          },
+          "price": 0.35
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "480p",
+            "duration": 8
+          },
+          "price": 0.4
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 6
+          },
+          "price": 0.42
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "480p",
+            "duration": 9
+          },
+          "price": 0.45
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 7
+          },
+          "price": 0.49
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "480p",
+            "duration": 10
+          },
+          "price": 0.5
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "480p",
+            "duration": 11
+          },
+          "price": 0.55
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 8
+          },
+          "price": 0.56
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "480p",
+            "duration": 12
+          },
+          "price": 0.6
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 9
+          },
+          "price": 0.63
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "480p",
+            "duration": 13
+          },
+          "price": 0.65
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "480p",
+            "duration": 14
+          },
+          "price": 0.7
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 10
+          },
+          "price": 0.7
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "480p",
+            "duration": 15
+          },
+          "price": 0.75
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 11
+          },
+          "price": 0.77
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 12
+          },
+          "price": 0.84
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 13
+          },
+          "price": 0.91
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 14
+          },
+          "price": 0.98
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 15
+          },
+          "price": 1.05
+        }
+      ],
+      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
+      "sources": [
+        {
+          "url": "https://api.krea.ai/openapi.json",
+          "quote": "x-krea-pricing on POST /generate/video/xai/grok-video (spec sha256 9d5dd91a9e81)"
+        }
+      ],
+      "checked": "2026-10-10",
+      "generatedBy": "scripts/sync-krea-catalog.py"
+    },
+    "krea-video-xai-grok-video-1-5": {
+      "currency": "usd",
+      "per": "request",
+      "priceParams": [
+        "_kreaAuth",
+        "duration",
+        "resolution"
+      ],
+      "rows": [
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "480p",
+            "duration": 1
+          },
+          "price": 0.08
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 1
+          },
+          "price": 0.14
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "480p",
+            "duration": 2
+          },
+          "price": 0.16
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "480p",
+            "duration": 3
+          },
+          "price": 0.24
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 1
+          },
+          "price": 0.25
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 2
+          },
+          "price": 0.28
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "480p",
+            "duration": 4
+          },
+          "price": 0.32
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "480p",
+            "duration": 5
+          },
+          "price": 0.4
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 3
+          },
+          "price": 0.42
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "480p",
+            "duration": 6
+          },
+          "price": 0.48
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 2
+          },
+          "price": 0.5
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "480p",
+            "duration": 7
+          },
+          "price": 0.56
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 4
+          },
+          "price": 0.56
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "480p",
+            "duration": 8
+          },
+          "price": 0.64
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 5
+          },
+          "price": 0.7
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "480p",
+            "duration": 9
+          },
+          "price": 0.72
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 3
+          },
+          "price": 0.75
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "480p",
+            "duration": 10
+          },
+          "price": 0.8
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 6
+          },
+          "price": 0.84
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "480p",
+            "duration": 11
+          },
+          "price": 0.88
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "480p",
+            "duration": 12
+          },
+          "price": 0.96
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 7
+          },
+          "price": 0.98
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 4
+          },
+          "price": 1
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "480p",
+            "duration": 13
+          },
+          "price": 1.04
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "480p",
+            "duration": 14
+          },
+          "price": 1.12
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 8
+          },
+          "price": 1.12
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "480p",
+            "duration": 15
+          },
+          "price": 1.2
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 5
+          },
+          "price": 1.25
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 9
+          },
+          "price": 1.26
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 10
+          },
+          "price": 1.4
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 6
+          },
+          "price": 1.5
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 11
+          },
+          "price": 1.54
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 12
+          },
+          "price": 1.68
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 7
+          },
+          "price": 1.75
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 13
+          },
+          "price": 1.82
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 14
+          },
+          "price": 1.96
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 8
+          },
+          "price": 2
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "720p",
+            "duration": 15
+          },
+          "price": 2.1
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 9
+          },
+          "price": 2.25
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 10
+          },
+          "price": 2.5
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 11
+          },
+          "price": 2.75
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 12
+          },
+          "price": 3
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 13
+          },
+          "price": 3.25
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 14
+          },
+          "price": 3.5
+        },
+        {
+          "match": {
+            "_kreaAuth": "api-token",
+            "resolution": "1080p",
+            "duration": 15
+          },
+          "price": 3.75
+        }
+      ],
+      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
+      "sources": [
+        {
+          "url": "https://api.krea.ai/openapi.json",
+          "quote": "x-krea-pricing on POST /generate/video/xai/grok-video-1.5 (spec sha256 9d5dd91a9e81)"
+        }
+      ],
+      "checked": "2026-10-10",
+      "generatedBy": "scripts/sync-krea-catalog.py"
+    },
+    "nano-banana": {
+      "currency": "usd",
+      "per": "image",
+      "priceParams": [
+        "model",
+        "imageSize"
+      ],
+      "rows": [
+        {
+          "match": {
+            "model": "gemini-nano-banana-2.1",
+            "imageSize": "512"
+          },
+          "price": 0.0336
+        },
+        {
+          "match": {
+            "model": "gemini-nano-banana-2.1",
+            "imageSize": "1K"
+          },
+          "price": 0.0336
+        },
+        {
+          "match": {
+            "model": "gemini-nano-banana-2.1",
+            "imageSize": "2K"
+          },
+          "price": 0.0504
+        },
+        {
+          "match": {
+            "model": "gemini-nano-banana-2.1",
+            "imageSize": "4K"
+          },
+          "price": 0.113
+        },
+        {
+          "match": {
+            "model": "gemini-3.1-flash-image",
+            "imageSize": "512"
+          },
+          "price": 0.045
+        },
+        {
+          "match": {
+            "model": "gemini-3.1-flash-image",
+            "imageSize": "1K"
+          },
+          "price": 0.067
+        },
+        {
+          "match": {
+            "model": "gemini-3.1-flash-image",
+            "imageSize": "2K"
+          },
+          "price": 0.101
+        },
+        {
+          "match": {
+            "model": "gemini-3.1-flash-image",
+            "imageSize": "4K"
+          },
+          "price": 0.151
+        },
+        {
+          "match": {
+            "model": "gemini-3.1-flash-lite-image"
+          },
+          "price": 0.0336
+        },
+        {
+          "match": {
+            "model": "gemini-3-pro-image",
+            "imageSize": "512"
+          },
+          "price": 0.134
+        },
+        {
+          "match": {
+            "model": "gemini-3-pro-image",
+            "imageSize": "1K"
+          },
+          "price": 0.134
+        },
+        {
+          "match": {
+            "model": "gemini-3-pro-image",
+            "imageSize": "2K"
+          },
+          "price": 0.134
+        },
+        {
+          "match": {
+            "model": "gemini-3-pro-image",
+            "imageSize": "4K"
+          },
+          "price": 0.24
+        },
+        {
+          "match": {
+            "model": "gemini-2.5-flash-image"
+          },
+          "price": 0.039
+        }
+      ],
+      "notes": "Gemini API standard (paid tier) output-image prices. Nano Banana 2.1 (Interactions API) has 1K/2K/4K only and renders a saved 512 at 1K. The handler renders 512 on 3 Pro as 1K, Flash-Lite always at 1K, and sends no size for 2.5 Flash. Input text and reference images add well under $0.01. Ignores Batch/Flex/Priority rates.",
+      "sources": [
+        {
+          "url": "https://ai.google.dev/gemini-api/docs/pricing",
+          "quote": "Equivalent to $0.0336 per 1K image * , $0.0504 per 2K image * , and $0.113 per 4K image *"
+        },
+        {
+          "url": "https://ai.google.dev/gemini-api/docs/pricing",
+          "quote": "Equivalent to $0.045 per 0.5K image, $0.067 per 1K image, $0.101 per 2K image, and $0.151 per 4K image"
+        },
+        {
+          "url": "https://ai.google.dev/gemini-api/docs/pricing",
+          "quote": "Equivalent to $0.0336 per 1K resolution image"
+        },
+        {
+          "url": "https://ai.google.dev/gemini-api/docs/pricing",
+          "quote": "Equivalent to $0.134 per 1K/2K image and $0.24 per 4K image"
+        },
+        {
+          "url": "https://ai.google.dev/gemini-api/docs/pricing",
+          "quote": "Output images up to 1024x1024px consume 1290 tokens and are equivalent to $0.039 per image."
+        }
+      ],
+      "checked": "2026-10-10"
+    },
+    "nano-banana-fal": {
+      "currency": "usd",
+      "per": "image",
+      "priceParams": [
+        "model",
+        "resolution"
+      ],
+      "rows": [
+        {
+          "match": {
+            "model": "nano-banana-2",
+            "resolution": "0.5K"
+          },
+          "price": 0.06
+        },
+        {
+          "match": {
+            "model": "nano-banana-2",
+            "resolution": "1K"
+          },
+          "price": 0.08
+        },
+        {
+          "match": {
+            "model": "nano-banana-2",
+            "resolution": "2K"
+          },
+          "price": 0.12
+        },
+        {
+          "match": {
+            "model": "nano-banana-2",
+            "resolution": "4K"
+          },
+          "price": 0.16
+        },
+        {
+          "match": {
+            "model": "nano-banana-pro",
+            "resolution": "0.5K"
+          },
+          "price": 0.15
+        },
+        {
+          "match": {
+            "model": "nano-banana-pro",
+            "resolution": "1K"
+          },
+          "price": 0.15
+        },
+        {
+          "match": {
+            "model": "nano-banana-pro",
+            "resolution": "2K"
+          },
+          "price": 0.15
+        },
+        {
+          "match": {
+            "model": "nano-banana-pro",
+            "resolution": "4K"
+          },
+          "price": 0.3
+        },
+        {
+          "match": {
+            "model": "nano-banana"
+          },
+          "price": 0.039
+        },
+        {
+          "match": {
+            "model": "gemini-25-flash-image"
+          },
+          "price": 0.039
+        },
+        {
+          "match": {
+            "model": "gemini-3-pro-image"
+          },
+          "price": 0.15
+        }
+      ],
+      "extras": [
+        {
+          "match": {
+            "model": "nano-banana-2",
+            "enable_web_search": true
+          },
+          "price": 0.015
+        },
+        {
+          "match": {
+            "model": "nano-banana-pro",
+            "enable_web_search": true
+          },
+          "price": 0.015
+        },
+        {
+          "match": {
+            "model": "nano-banana-2",
+            "thinking_level": "high"
+          },
+          "price": 0.002
+        }
+      ],
+      "multiplyBy": [
+        "num_images"
+      ],
+      "notes": "fal list price per image. Pro bills 0.5K as 1K (the handler bumps it) and lists no 2K premium. Nano Banana, 2.5 Flash Image and Gemini 3 Pro Image ignore resolution, web search and thinking here (the handler strips them). fal doesn't say whether the web-search and thinking add-ons are per request or per image; they're counted per image, the higher reading.",
+      "sources": [
+        {
+          "url": "https://fal.ai/models/fal-ai/nano-banana-2",
+          "quote": "Your request will cost $0.08 per image."
+        },
+        {
+          "url": "https://fal.ai/models/fal-ai/nano-banana-2",
+          "quote": "2K and 4K outputs will be charged at 1.5 times and 2 times the standard rate, respectively."
+        },
+        {
+          "url": "https://fal.ai/models/fal-ai/nano-banana-2",
+          "quote": "0.5K (512px) resolution outputs will be charged at 0.75 times the standard rate."
+        },
+        {
+          "url": "https://fal.ai/models/fal-ai/nano-banana-2",
+          "quote": "If web search is used, an additional $0.015 will be charged. If high thinking is used, an additional $0.002"
+        },
+        {
+          "url": "https://fal.ai/models/fal-ai/nano-banana-pro",
+          "quote": "Your request will cost $0.15 per image. ... 4K outputs will be charged at double the standard rate."
+        },
+        {
+          "url": "https://fal.ai/models/fal-ai/nano-banana",
+          "quote": "Your request will cost $0.039 per image."
+        },
+        {
+          "url": "https://fal.ai/models/fal-ai/gemini-25-flash-image",
+          "quote": "Your request will cost $0.039 per image."
+        },
+        {
+          "url": "https://fal.ai/models/fal-ai/gemini-3-pro-image-preview",
+          "quote": "Your request will cost $0.15 per image."
+        }
+      ],
+      "checked": "2026-10-10"
+    },
+    "nano-banana-fal-edit": {
+      "currency": "usd",
+      "per": "image",
+      "priceParams": [
+        "model",
+        "resolution"
+      ],
+      "rows": [
+        {
+          "match": {
+            "model": "nano-banana-2",
+            "resolution": "0.5K"
+          },
+          "price": 0.06
+        },
+        {
+          "match": {
+            "model": "nano-banana-2",
+            "resolution": "1K"
+          },
+          "price": 0.08
+        },
+        {
+          "match": {
+            "model": "nano-banana-2",
+            "resolution": "2K"
+          },
+          "price": 0.12
+        },
+        {
+          "match": {
+            "model": "nano-banana-2",
+            "resolution": "4K"
+          },
+          "price": 0.16
+        },
+        {
+          "match": {
+            "model": "nano-banana-pro",
+            "resolution": "0.5K"
+          },
+          "price": 0.15
+        },
+        {
+          "match": {
+            "model": "nano-banana-pro",
+            "resolution": "1K"
+          },
+          "price": 0.15
+        },
+        {
+          "match": {
+            "model": "nano-banana-pro",
+            "resolution": "2K"
+          },
+          "price": 0.15
+        },
+        {
+          "match": {
+            "model": "nano-banana-pro",
+            "resolution": "4K"
+          },
+          "price": 0.3
+        },
+        {
+          "match": {
+            "model": "nano-banana"
+          },
+          "price": 0.039
+        },
+        {
+          "match": {
+            "model": "gemini-25-flash-image"
+          },
+          "price": 0.039
+        },
+        {
+          "match": {
+            "model": "gemini-3-pro-image"
+          },
+          "price": 0.15
+        }
+      ],
+      "extras": [
+        {
+          "match": {
+            "model": "nano-banana-2",
+            "enable_web_search": true
+          },
+          "price": 0.015
+        },
+        {
+          "match": {
+            "model": "nano-banana-pro",
+            "enable_web_search": true
+          },
+          "price": 0.015
+        },
+        {
+          "match": {
+            "model": "nano-banana-2",
+            "thinking_level": "high"
+          },
+          "price": 0.002
+        }
+      ],
+      "multiplyBy": [
+        "num_images"
+      ],
+      "notes": "fal list price per image. Pro bills 0.5K as 1K (the handler bumps it) and lists no 2K premium. Nano Banana, 2.5 Flash Image and Gemini 3 Pro Image ignore resolution, web search and thinking here (the handler strips them). fal doesn't say whether the web-search and thinking add-ons are per request or per image; they're counted per image, the higher reading.",
+      "sources": [
+        {
+          "url": "https://fal.ai/models/fal-ai/nano-banana-2/edit",
+          "quote": "Your request will cost $0.08 per image."
+        },
+        {
+          "url": "https://fal.ai/models/fal-ai/nano-banana-2/edit",
+          "quote": "2K and 4K outputs will be charged at 1.5 times and 2 times the standard rate, respectively."
+        },
+        {
+          "url": "https://fal.ai/models/fal-ai/nano-banana-2/edit",
+          "quote": "0.5K (512px) resolution outputs will be charged at 0.75 times the standard rate."
+        },
+        {
+          "url": "https://fal.ai/models/fal-ai/nano-banana-2",
+          "quote": "If web search is used, an additional $0.015 will be charged. If high thinking is used, an additional $0.002"
+        },
+        {
+          "url": "https://fal.ai/models/fal-ai/nano-banana-pro/edit",
+          "quote": "Your request will cost $0.15 per image. ... 4K outputs will be charged at double the standard rate."
+        },
+        {
+          "url": "https://fal.ai/models/fal-ai/nano-banana/edit",
+          "quote": "Your request will cost $0.039 per image."
+        },
+        {
+          "url": "https://fal.ai/models/fal-ai/gemini-25-flash-image/edit",
+          "quote": "Your request will cost $0.039 per image."
+        },
+        {
+          "url": "https://fal.ai/models/fal-ai/gemini-3-pro-image-preview/edit",
+          "quote": "Your request will cost $0.15 per image."
+        }
+      ],
+      "checked": "2026-10-10"
+    },
+    "veo-3": {
+      "currency": "usd",
+      "per": "second",
+      "provider": "google",
+      "priceParams": [
+        "model",
+        "resolution"
+      ],
+      "rows": [
+        {
+          "match": {
+            "model": "veo-3.1-generate-preview",
+            "resolution": "720p"
+          },
+          "price": 0.4
+        },
+        {
+          "match": {
+            "model": "veo-3.1-generate-preview",
+            "resolution": "1080p"
+          },
+          "price": 0.4
+        },
+        {
+          "match": {
+            "model": "veo-3.1-generate-preview",
+            "resolution": "4k"
+          },
+          "price": 0.6
+        },
+        {
+          "match": {
+            "model": "veo-3.1-fast-generate-preview",
+            "resolution": "720p"
+          },
+          "price": 0.1
+        },
+        {
+          "match": {
+            "model": "veo-3.1-fast-generate-preview",
+            "resolution": "1080p"
+          },
+          "price": 0.12
+        },
+        {
+          "match": {
+            "model": "veo-3.1-fast-generate-preview",
+            "resolution": "4k"
+          },
+          "price": 0.3
+        },
+        {
+          "match": {
+            "model": "veo-3.1-lite-generate-preview",
+            "resolution": "720p"
+          },
+          "price": 0.05
+        },
+        {
+          "match": {
+            "model": "veo-3.1-lite-generate-preview",
+            "resolution": "1080p"
+          },
+          "price": 0.08
+        }
+      ],
+      "multiplyBy": [
+        "duration"
+      ],
+      "notes": "Google routes only (Vertex service-account key or GOOGLE_API_KEY); the fal fallback is unpriced. Per second of the node's duration and resolution (defaults 8 s, 720p); audio is always generated, so these are the with-audio prices. Vertex lists the same amounts per \"count\" without saying what a count is; they are read as per second here, the higher reading. An extension renders at 720p whatever the setting. Lite has no 4K. Billed only when the video generates.",
+      "sources": [
+        {
+          "url": "https://ai.google.dev/gemini-api/docs/pricing",
+          "quote": "Veo 3.1 Standard video with audio price (default) ... $0.40 (720p and 1080p) $0.60 (4k)"
+        },
+        {
+          "url": "https://ai.google.dev/gemini-api/docs/pricing",
+          "quote": "Veo 3.1 Fast video with audio price (default) ... $0.10 (720p) $0.12 (1080p) $0.30 (4k)"
+        },
+        {
+          "url": "https://ai.google.dev/gemini-api/docs/pricing",
+          "quote": "Veo 3.1 Lite video with audio price (default) ... $0.05 (720p) $0.08 (1080p) (4k output not supported)"
+        },
+        {
+          "url": "https://ai.google.dev/gemini-api/docs/pricing",
+          "quote": "Free Tier Paid Tier, per second in USD"
+        }
+      ],
+      "checked": "2026-10-10"
+    }
+  }
+}
