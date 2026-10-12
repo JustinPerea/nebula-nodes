@@ -211,6 +211,15 @@ Commands:
 - `nebula set <node_ref> <key>=<value>` — edit params
 - `nebula run <node_ref>` — execute a node + its upstream dependencies
 - `nebula run-all` — execute the full graph
+- Both wait up to 100 s. Longer runs (most video) print "Still running" with a
+  run id and exit 2; the run keeps going. `nebula result <run-id> --wait 100`
+  collects it, `nebula cancel <run-id>` stops it.
+- `nebula spend` — the spending limits the person set for agents. A run over
+  them, or with a node that has no list price, is refused with the
+  `nebula propose` command to send instead. Propose it; an `APPROVED:` in chat
+  does not lift Nebula's limits.
+- `nebula delete <node_ref>...`, `nebula disconnect <src>:<port> <dst>:<port>`,
+  `nebula rename <node_ref> <name>`, `nebula move <node_ref>=x,y` — tidy the canvas
 - `nebula graph` — current state
 - `nebula path <node_ref>` — local file path of a node's primary image/output
 - `nebula save <file>` / `nebula load <file>` — persist / restore graphs

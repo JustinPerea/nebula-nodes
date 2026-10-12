@@ -63,6 +63,7 @@ Requires Paper Desktop running on the same computer as the Nebula backend, signe
 - **Keep your work** with saved JSON graphs, local media outputs, and run history.
 - **Build with an agent** using your local Claude Code or Codex login. Choose the model and thinking effort in Chat. [Chat setup](docs/CHAT-SETUP.md).
 - **Watch agents work live.** Each agent that edits the canvas gets its own named cursor that glides to the node it touches, pulls wires port to port and narrates in one line. Agents read the canvas with `nebula look` instead of taking screenshots, and `nebula watch` tells them when you change something. Pin a short note to a node ("warmer", "redo this one") and agents see it in `nebula look` and answer it on the pin. Before a paid run or a bigger change, agents can propose it instead: you see ghost nodes and dashed wires, drag them where you want, and Accept or Reject. [Agent cursors](docs/MCP-SETUP.md#agent-cursors-nebula-look-and-nebula-watch), [pins](docs/MCP-SETUP.md#pins), [proposals](docs/MCP-SETUP.md#proposals).
+- **Set what agents may spend.** In Settings > Preferences, cap an agent run, a whole chat session, or one model per run and per session. Over a limit, or for a node with no list price, the agent has to propose the run and you decide. Your own runs are never capped. [Spending limits](docs/MCP-SETUP.md#spending-limits).
 
 ## Quickstart
 

@@ -1,5 +1,27 @@
 # Implementation Notes
 
+## 2026-10-12 — CLI fixes for agents: spending limits, long runs, missing commands
+
+Branch `cli-agent-fixes`. Justin chose: the person's "Ask before costly runs" threshold applies to agents, a node with no list price needs a proposal, and Settings gets a per-chat-session budget plus per-model limits (per run and per session). Limits apply to agents only; at a limit the agent asks (proposes), it is never silently blocked.
+
+**Decisions not in the ask**
+
+- **The estimate is an upper bound.** It sums the high list price over every node the run includes, batches counted, like the canvas's `summarizeRunScope`. The run cache could skip some nodes, but cache keys depend on upstream outputs and the cache is in memory with a 1-hour TTL, so it can't be predicted. Overcounting asks too often; undercounting would let a run past a limit.
+- **Counted at start, not at finish.** A session total includes a run when the gate lets it through, at that estimate. Counting on completion would let an agent start several runs in parallel under one budget.
+- **What a "session" is.** In-app Claude/Codex chats: the agent token now carries the chat id (`chat:<id>`), so each chat has its own budget. Everyone else (Hermes, outside agents, scripts) shares one budget per backend launch. A first draft let tokenless callers name their session in an `X-Nebula-Agent-Session` header; a security review pointed out that rotating the header (or the agent name) would reset the budget every run. Budgets are now keyed only by what Nebula itself minted, and the header was removed. Giving Hermes its own budget needs a minted token for it, which also carries workspace authority; not done here. Totals persist to `~/.nebula/agent-spend.json`, pruned to 500 sessions.
+- **Person-only settings.** `PUT /api/settings` refuses `runCostConfirmUsd` and `agentSpend` from anything but the person's canvas (same gate as pins), so an agent can't raise its own limit. Other settings still save from anywhere, as before.
+- **The threshold moved to settings.json.** It used to live only in browser storage. The browser keeps a copy so the Run button can ask before settings load, and copies a browser-only value to settings once (`runCostConfirm.ts`).
+- **Gate after validation.** On `/api/execute` and `/api/execute-node` the spend check runs after graph validation, so an invalid graph reports why it can't run instead of its cost.
+- **Desktop.** The packaged renderer can send `Origin: null`, so the connector session header now also goes on `/api/execute*`, `/api/cinema/generate-shot` and settings writes (not reads). Not checked in Electron; that waits for the desktop pass.
+- **Long runs.** `/api/graph/run` used to run inside the request; the CLI's 300 s HTTP timeout killed long video runs and printed a traceback. The run is now a background task registered with `execution_runs` (so it fences project switching, appears in reconnect statuses, and `DELETE /api/executions/{id}` stops it). `wait` returns `{status: "running", runId}`; `GET /api/graph/runs/{id}?wait=` collects it. Outputs sync to the graph as each node finishes, so a stopped run keeps them. Without `wait` the request still waits, as before.
+- **CLI wait default is 100 s.** Under the usual 120 s agent shell limit; "still running" exits 2, like `watch` and `proposal`.
+- **`nebula context`** now mirrors the canvas readiness rule (`kreaConnection.ts nodeKeyStatus`): keys and direct keys, free nodes, Krea account (and how many nodes a sign-in would add), Nous. It lists definition ids, since that's what `nebula create` takes.
+- **Tests for other subsystems.** Provider-admission, Krea gateway and quick tests post runs the way an agent does, so the gate refused them. They opt into a `spending_limits_off` fixture (conftest) that patches the limit readers, i.e. the person turned limits off. The gate's own behavior is in `test_agent_spend.py`. Settings tests now default to a saved threshold.
+
+**Follow-up for Justin:** Daedalus's `DAEDALUS_APPROVAL=step` asks in chat, but the backend can't see that `APPROVED:`, so a run over a limit still needs a proposal (two confirmations). A server-side, session-scoped approval would fix it; not built.
+
+**Verification:** backend 191/191 test files pass (run file by file with a 240 s cap after one hung). Frontend 2107 tests, lint, `tsc -b` pass. Live check on an isolated backend + Vite (temp settings, no keys): limits saved from Settings reach `GET /api/agent/spend`; through the CLI, create/connect/disconnect/rename/move/delete/projects work, and a Veo 3.1 run was refused at its $1 model limit with the propose command. The model-limit rows were cramped in the 380 px panel, so their controls moved to their own line. No paid runs.
+
 ## 2026-10-12 — Settings UX pass
 
 Justin asked for every item from the Settings review: quick fixes first, then a restructure shown as an HTML mockup before building it.

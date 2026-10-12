@@ -290,3 +290,73 @@ Remaining risk: a program running as the same user on the same machine can
 set any `Origin` header on the `/ws` handshake, receive the keys and accept,
 or read the backend process's environment. These layers stop an agent from approving its own proposal by accident or through
 the normal tools; they are not a sandbox against hostile local code.
+
+### Spending limits
+
+The person decides what agents may spend, in **Settings > Preferences**:
+
+- **Ask before costly runs** (default $1): the canvas asks the person before
+  a run that could cost this much, and an agent run at or over it is refused.
+  Off means no per-run limit.
+- **Per chat session**: the most one agent chat may run in total.
+- **Limit a model**: a per-run limit that replaces the general one for that
+  model, a session budget for it, or both.
+
+Any limit also makes an agent ask before running a node with no list price,
+since Nebula can't check it. Krea runs billed to the account's plan and free
+nodes always pass. The person's own runs from the canvas are never limited.
+
+How it works (`backend/services/agent_spend.py`):
+
+- Every run route checks it (`/api/execute`, `/api/execute-node`,
+  `/api/graph/run`, `/api/quick`, `/api/cinema/generate-shot`), after the
+  graph is validated, for any caller that isn't the person's canvas (the same
+  person gate as pins and proposals).
+- The cost is the upper estimate at list prices over every node the run
+  includes, batches counted. Nebula can't know in advance what the cache will
+  skip, so the estimate never undercounts.
+- A run counts against the session when it starts, at that estimate. Only
+  the in-app Claude and Codex chats get their own session budget, from the
+  agent token Nebula mints for each chat. Everything else (Hermes, outside
+  agents, scripts) shares one budget until the backend restarts, because a
+  name or header is the caller's to set and renaming would reset the budget.
+  Totals are kept in `~/.nebula/agent-spend.json`.
+- A refusal is a 403 whose message names the cost, the limit and the exact
+  `nebula propose ... --run <node>` to send instead. Accepting a proposal is
+  the person's approval, so the canvas runs it without checking a limit.
+- Only the person can change the limits: `PUT /api/settings` refuses
+  `runCostConfirmUsd` and `agentSpend` from anyone else.
+
+`nebula spend` (or `GET /api/agent/spend`) shows an agent its limits and what
+its session has used.
+
+### Long runs and graph edits from the CLI
+
+`nebula run <node>` and `nebula run-all` wait up to 100 seconds (`--wait`),
+which fits inside most agents' shell-tool limits. A run that takes longer,
+like most video, keeps going on the backend; the command prints its run id
+and exits 2:
+
+```bash
+nebula run n5                       # exit 2: "Still running after 100s (run 3f…)"
+nebula result 3f… --wait 100        # 0 finished, 2 still running, 3 stopped
+nebula cancel 3f…                   # stop it; outputs that finished stay
+```
+
+Finished outputs land on the canvas as each node completes, so a stopped
+run keeps what it made. The backend remembers the last 50 finished CLI runs
+until it restarts.
+
+Other graph commands:
+
+```bash
+nebula delete n3 n4                 # nodes and their wires
+nebula disconnect n1:text n2:prompt
+nebula rename n2 "Hero shot"        # an empty name restores the model's
+nebula move n2=400,120 n3=400,320   # canvas coordinates
+nebula projects                     # saved projects; * is open
+nebula project open <id>            # switch the canvas (not while a run is going)
+```
+
+`nebula context` lists the definition ids that can run here: with your keys,
+free, on the signed-in Krea account (marked `*`), or with a Nous sign-in.

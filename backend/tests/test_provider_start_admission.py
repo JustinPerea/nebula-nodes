@@ -23,6 +23,10 @@ from services.execution_runs import ExecutionRunRegistry
 from services.provider_recovery import ProviderRecoveryStore
 from services.provider_start_guard import ProviderStartConflictError, ProviderStartGuard
 
+# These runs come in as an agent would (no canvas Origin); they test paid
+# admission, not spending limits (tests/test_agent_spend.py).
+pytestmark = pytest.mark.usefixtures("spending_limits_off")
+
 
 ENVIRONMENT = "worldlabs-environment"
 EXPORT = "worldlabs-world-export"

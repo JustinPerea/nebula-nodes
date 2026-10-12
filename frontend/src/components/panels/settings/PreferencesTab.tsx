@@ -1,16 +1,19 @@
+import { saveRunCostConfirm } from '../../../lib/settingsWrites';
+import { useSettingsDraftStore } from '../../../store/settingsDraftStore';
 import { RUN_COST_CONFIRM_CHOICES, useUIStore } from '../../../store/uiStore';
+import { AgentSpendSection } from './AgentSpendSection';
 import { SwitchRow } from './Switch';
 
 function usd(value: number) {
   return value < 1 ? `$${value.toFixed(2)}` : `$${value}`;
 }
 
-/** Preferences live in this browser and apply the moment they change. */
+/** Preferences apply the moment they change. Most live in this browser; the
+ * run-cost threshold is saved to settings.json, because it limits agents too. */
 export function PreferencesTab() {
   // Selected one by one: the UI store changes constantly while the canvas is in use.
   const ui = {
     runCostConfirmUsd: useUIStore((s) => s.runCostConfirmUsd),
-    setRunCostConfirmUsd: useUIStore((s) => s.setRunCostConfirmUsd),
     notificationPrefs: useUIStore((s) => s.notificationPrefs),
     setNotificationPrefs: useUIStore((s) => s.setNotificationPrefs),
     canvasPerfMode: useUIStore((s) => s.canvasPerfMode),
@@ -22,6 +25,7 @@ export function PreferencesTab() {
     agentLogEnabled: useUIStore((s) => s.agentLogEnabled),
     setAgentLogEnabled: useUIStore((s) => s.setAgentLogEnabled),
   };
+  const costError = useSettingsDraftStore((s) => s.errors.runCostConfirmUsd);
   const costValue = ui.runCostConfirmUsd === null ? 'off' : String(ui.runCostConfirmUsd);
   const customCost = ui.runCostConfirmUsd !== null && !(RUN_COST_CONFIRM_CHOICES as readonly number[]).includes(ui.runCostConfirmUsd);
 
@@ -33,20 +37,21 @@ export function PreferencesTab() {
           <div className="settings-pref">
             <span className="settings-pref__text">
               <label className="settings-pref__title" htmlFor="settings-run-cost-confirm">Ask before costly runs</label>
-              <span className="settings-pref__description" id="settings-run-cost-confirm-help">At list prices; nodes without a published price aren't counted</span>
+              <span className="settings-pref__description" id="settings-run-cost-confirm-help">At list prices. Agents must ask above this, and for any node without a published price</span>
             </span>
             <select
               id="settings-run-cost-confirm"
               className="settings__select settings__select--compact"
               value={costValue}
               aria-describedby="settings-run-cost-confirm-help"
-              onChange={(event) => ui.setRunCostConfirmUsd(event.target.value === 'off' ? null : Number(event.target.value))}
+              onChange={(event) => void saveRunCostConfirm(event.target.value === 'off' ? null : Number(event.target.value))}
             >
               {customCost && <option value={costValue}>{usd(ui.runCostConfirmUsd!)} or more</option>}
               {RUN_COST_CONFIRM_CHOICES.map((value) => <option key={value} value={String(value)}>{usd(value)} or more</option>)}
               <option value="off">Never</option>
             </select>
           </div>
+          {costError && <p className="settings-row__error" role="alert">{costError}</p>}
           <SwitchRow title="Job notifications" description="When a run finishes in a background tab, or after a long run"
             checked={ui.notificationPrefs.enabled} onChange={(enabled) => ui.setNotificationPrefs({ enabled })} />
           {ui.notificationPrefs.enabled && (
@@ -55,6 +60,8 @@ export function PreferencesTab() {
           )}
         </div>
       </section>
+
+      <AgentSpendSection />
 
       <section aria-labelledby="settings-canvas-heading">
         <div className="settings-label"><h3 id="settings-canvas-heading">Canvas</h3></div>

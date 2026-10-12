@@ -107,3 +107,47 @@ def run_load(client: NebulaClient, filepath: str) -> None:
 def run_clear(client: NebulaClient) -> None:
     client.clear_graph()
     print("Graph cleared.")
+
+
+def _port_ref(value: str, role: str) -> tuple[str, str]:
+    if ":" not in value:
+        print(f"error: {role} must be node:port (e.g. n1:image), got '{value}'", file=sys.stderr)
+        sys.exit(1)
+    node, port = value.split(":", 1)
+    return node, port
+
+
+def run_delete(client: NebulaClient, node_refs: list[str]) -> None:
+    for node_ref in node_refs:
+        client.delete_node(node_ref)
+        print(f"Deleted {node_ref} and its wires")
+
+
+def run_disconnect(client: NebulaClient, src: str, dst: str) -> None:
+    src_node, src_port = _port_ref(src, "source")
+    dst_node, dst_port = _port_ref(dst, "destination")
+    result = client.disconnect(src_node, src_port, dst_node, dst_port)
+    if result.get("status") != "deleted":
+        print(f"error: no wire {src} → {dst} (`nebula graph` lists them)", file=sys.stderr)
+        sys.exit(1)
+    print(f"Disconnected {src} → {dst}")
+
+
+def run_rename(client: NebulaClient, node_ref: str, label: str) -> None:
+    result = client.rename_node(node_ref, label)
+    print(f"Renamed {node_ref} to {result.get('label', label)}")
+
+
+def run_move(client: NebulaClient, moves: list[str]) -> None:
+    """Each move is node=x,y in canvas (flow) coordinates."""
+    positions: dict[str, dict[str, float]] = {}
+    for move in moves:
+        node, _, at = move.partition("=")
+        x, _, y = at.partition(",")
+        try:
+            positions[node] = {"x": float(x), "y": float(y)}
+        except ValueError:
+            print(f"error: a move is node=x,y (e.g. n2=400,120), got '{move}'", file=sys.stderr)
+            sys.exit(1)
+    client.move_nodes(positions)
+    print("Moved " + ", ".join(f"{node} to {int(p['x'])},{int(p['y'])}" for node, p in positions.items()))

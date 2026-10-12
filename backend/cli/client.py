@@ -45,6 +45,10 @@ class NebulaClient:
             print("error: cannot connect to Nebula backend at "
                   f"{self.base_url} — is the server running?", file=sys.stderr)
             sys.exit(1)
+        except httpx.TimeoutException:
+            print(f"error: Nebula didn't answer {method} {path} in time. A run keeps going on the "
+                  "backend; `nebula graph` shows what finished.", file=sys.stderr)
+            sys.exit(1)
         if resp.status_code >= 400:
             detail = ""
             try:
@@ -77,6 +81,18 @@ class NebulaClient:
 
     def get_settings(self) -> dict[str, Any]:
         return self._request("GET", "/api/settings")
+
+    def krea_status(self) -> str | None:
+        """The Krea account sign-in status ("connected", ...), or None if unknown."""
+        try:
+            resp = self._client.get("/api/krea/connection", timeout=10, headers=self._identity_headers())
+            status = resp.json().get("status") if resp.status_code == 200 else None
+        except (httpx.HTTPError, ValueError, AttributeError):
+            return None
+        return status if isinstance(status, str) else None
+
+    def get_spend(self) -> dict[str, Any]:
+        return self._request("GET", "/api/agent/spend")
 
     # -- Graph --
     def create_node(self, definition_id: str, params: dict[str, Any]) -> dict[str, Any]:
@@ -165,10 +181,45 @@ class NebulaClient:
     def clear_graph(self) -> dict[str, Any]:
         return self._request("DELETE", "/api/graph")
 
+    def delete_node(self, node_id: str) -> dict[str, Any]:
+        return self._request("DELETE", f"/api/graph/node/{quote(node_id, safe='')}")
+
+    def disconnect(self, src: str, src_port: str, dst: str, dst_port: str) -> dict[str, Any]:
+        return self._request("DELETE", "/api/graph/edge", json={
+            "source": src, "sourceHandle": src_port,
+            "target": dst, "targetHandle": dst_port,
+        })
+
+    def rename_node(self, node_id: str, label: str) -> dict[str, Any]:
+        return self._request("PUT", f"/api/graph/node/{quote(node_id, safe='')}/label", json={"label": label})
+
+    def move_nodes(self, positions: dict[str, dict[str, float]]) -> dict[str, Any]:
+        return self._request("PUT", "/api/graph/layout", json={"positions": positions})
+
+    # -- Projects --
+    def list_projects(self) -> dict[str, Any]:
+        return self._request("GET", "/api/projects")
+
+    def open_project(self, project_id: str, workspace_revision: str) -> dict[str, Any]:
+        return self._request("POST", f"/api/projects/{quote(project_id, safe='')}/open",
+                             json={"workspaceRevision": workspace_revision})
+
     # -- Execution --
-    def run_graph(self, target_node_id: str | None = None) -> dict[str, Any]:
-        body = {"targetNodeId": target_node_id} if target_node_id else {}
-        return self._request("POST", "/api/graph/run", json=body)
+    def run_graph(self, target_node_id: str | None = None, wait: float | None = None) -> dict[str, Any]:
+        """Start a run. With `wait`, return {"status": "running", "runId"} if it
+        is still going after that many seconds (it keeps running)."""
+        body: dict[str, Any] = {"targetNodeId": target_node_id} if target_node_id else {}
+        if wait is not None:
+            body["wait"] = wait
+        return self._request("POST", "/api/graph/run", json=body,
+                             timeout=None if wait is None else wait + 60)
+
+    def get_run(self, run_id: str, wait: float = 0) -> dict[str, Any]:
+        return self._request("GET", f"/api/graph/runs/{quote(run_id, safe='')}",
+                             params={"wait": wait}, timeout=wait + 60)
+
+    def cancel_run(self, run_id: str) -> dict[str, Any]:
+        return self._request("DELETE", f"/api/executions/{quote(run_id, safe='')}")
 
     def quick(self, definition_id: str, inputs: dict[str, str], params: dict[str, Any]) -> dict[str, Any]:
         body = {

@@ -175,6 +175,9 @@ describe('backendWebSocketUrl with injected endpoint (VAL-TRANSPORT-005)', () =>
     expect(init.headers.get('X-Existing')).toBe('preserved');
     await backend.apiFetch('/api/settings');
     expect(fetchSpy.mock.calls[1]).toEqual(['http://127.0.0.1:56789/api/settings']);
+    // Changing settings can change spending limits, which only the person may do.
+    await backend.apiFetch('/api/settings', { method: 'PUT', body: '{}' });
+    expect(fetchSpy.mock.calls[2][1].headers.get('X-Nebula-Connector-Session')).toBe('synthetic-desktop-nonce');
   });
 
   it('sends the desktop nonce to person-only canvas routes and the canvas socket', async () => {

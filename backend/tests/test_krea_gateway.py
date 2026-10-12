@@ -531,6 +531,7 @@ async def test_asset_http_failure_stops_before_billable_request(tmp_path):
 
 
 @pytest.mark.asyncio
+@pytest.mark.usefixtures("spending_limits_off")  # posts as an agent would; limits: test_agent_spend.py
 @pytest.mark.parametrize("connected", [False, True])
 async def test_execute_http_admits_param_prompt_and_connected_prompt(monkeypatch, connected):
     import main as main_module

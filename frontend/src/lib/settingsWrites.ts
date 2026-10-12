@@ -1,5 +1,6 @@
 import { deleteSettingsApiKey, updateCredential, updateSettings } from './api';
 import { PROVIDER_KEY_SPECS } from './providerCatalog';
+import { RUN_COST_CONFIRM_SETTING } from './runCostConfirm';
 import { useSettingsDraftStore, type SettingsDraft, type SettingsField } from '../store/settingsDraftStore';
 import { useUIStore } from '../store/uiStore';
 import { useProviderReadinessStore } from '../store/providerReadinessStore';
@@ -167,6 +168,30 @@ export function saveField<F extends SettingsField>(field: F, value: SettingsDraf
     confirm({ [field]: typeof value === 'string' ? value.trim() : value } as Partial<SettingsDraft>);
     setPending(field, false);
     markSaved(field);
+    return true;
+  });
+}
+
+/** "Ask before costly runs". The canvas uses the new value at once; it also
+ * limits what agents may spend, so it is saved to settings.json too. A failed
+ * write puts back the old value unless a newer choice has replaced it since. */
+export function saveRunCostConfirm(value: number | null): Promise<boolean> {
+  const id = RUN_COST_CONFIRM_SETTING;
+  const previous = useUIStore.getState().runCostConfirmUsd;
+  useUIStore.getState().setRunCostConfirmUsd(value);
+  const chosen = useUIStore.getState().runCostConfirmUsd;
+  setPending(id, true);
+  return enqueue(async () => {
+    try {
+      await updateSettings({ [id]: chosen });
+    } catch {
+      if (useUIStore.getState().runCostConfirmUsd === chosen) useUIStore.getState().setRunCostConfirmUsd(previous);
+      setPending(id, false);
+      fail(id, "Couldn't save. Try again.");
+      return false;
+    }
+    setPending(id, false);
+    markSaved(id);
     return true;
   });
 }

@@ -55,3 +55,19 @@ def isolated_commons_opt_in(request, monkeypatch):
     }
     if (name.startswith("test_commons_") and not controls_activation) or name == "test_agent_workspace_authority.py":
         monkeypatch.setenv("NEBULA_COMMONS_ENABLED", "1")
+
+
+@pytest.fixture
+def spending_limits_off(monkeypatch):
+    """Run as if the person turned agent spending limits off in Settings.
+
+    For tests about other parts of a run (provider admission, quick, gateways)
+    that call run routes the way an agent does, without the canvas's Origin.
+    The limits themselves are tested in tests/test_agent_spend.py. Patching
+    the reader, not settings.json, keeps it in force when a test rewrites its
+    settings."""
+    from services import agent_spend
+
+    monkeypatch.setattr(agent_spend, "threshold_from_settings", lambda settings: None)
+    monkeypatch.setattr(agent_spend, "caps_from_settings",
+                        lambda settings: {"sessionUsd": None, "models": {}})

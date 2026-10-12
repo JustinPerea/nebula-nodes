@@ -21,14 +21,16 @@ import secrets
 import shutil
 import stat
 import tempfile
+import time as _time_module
 import unicodedata
 import zipfile
+from collections import OrderedDict
 from contextlib import ExitStack, aclosing, contextmanager, nullcontext
 from contextvars import ContextVar
 from functools import wraps
 from pathlib import Path
 from pathlib import PurePosixPath
-from typing import Any, BinaryIO
+from typing import Any, BinaryIO, Mapping
 from urllib.parse import quote, unquote_to_bytes, urlsplit
 
 from uuid import uuid4
@@ -77,7 +79,7 @@ from services.settings import (
     update_injected_keys,
 )
 from services.node_registry import NodeRegistry
-from services import model_pricing
+from services import agent_spend, model_pricing
 from services.cli_graph import CLIGraph
 from services.retired_nodes import migrate_node, retired_message
 from services.project_store import (
@@ -128,7 +130,13 @@ from services.canvas_events import (
     parse_kinds,
 )
 from services.canvas_pins import CanvasPins, PinError, pin_summary
-from services.person_gate import PersonGateError, desktop_session_matches, is_browser_request, require_person
+from services.person_gate import (
+    PersonGateError,
+    desktop_session_matches,
+    has_agent_marker,
+    is_browser_request,
+    require_person,
+)
 from services.canvas_proposals import (
     MAX_REASON,
     Proposal,
@@ -1638,6 +1646,80 @@ def _normalize_execute_nodes(nodes: list[GraphNode]) -> list[GraphNode]:
     return normalized
 
 
+def _end_node_ids(nodes: list[GraphNode], edges: list[GraphEdge]) -> list[str]:
+    """Nodes nothing else reads from: what a proposal should ask to run."""
+    sources = {edge.source for edge in edges}
+    return [node.id for node in nodes if node.id not in sources]
+
+
+def _is_person_request() -> bool:
+    """The person's canvas, not an agent, the CLI or curl (see services/person_gate.py)."""
+    headers = current_request_headers()
+    return not has_agent_marker(headers) and is_browser_request(headers)
+
+
+_SPEND_LAUNCH = uuid4().hex[:12]
+agent_spend_ledger = agent_spend.SpendLedger(_STATE_DIR / "agent-spend.json")
+
+
+def _spend_session(headers: Mapping[str, str] | None) -> tuple[str, str]:
+    """Which running total a non-person request counts against: (key, label).
+
+    Only a token Nebula minted for an in-app chat (Claude, Codex) names its
+    own budget. Names and headers are set by the caller, so everything else
+    (Hermes, outside agents, scripts) shares one budget per backend launch:
+    a caller can't start a fresh budget by renaming itself."""
+    lower = {k.lower(): v for k, v in (headers or {}).items()}
+    auth = lower.get("authorization", "")
+    if auth.lower().startswith("agent "):
+        record = commons_actors.agent_registry.lookup(auth[6:].strip())
+        if record is not None and record.get("session"):
+            identity = identify_agent(headers)
+            return f"chat:{record['session']}", identity.name if identity else "Agent"
+    return f"unverified:{_SPEND_LAUNCH}", "Agents without a Nebula chat token"
+
+
+def _require_run_spend_approval(run_id: str, nodes: list[GraphNode], edges: list[GraphEdge], **kwargs: Any) -> None:
+    """The spend check for a run already noted for its actor: a refusal forgets the note."""
+    try:
+        _require_spend_approval(nodes, edges, **kwargs)
+    except HTTPException:
+        canvas_events.forget_run(run_id)
+        raise
+
+
+def _require_spend_approval(
+    nodes: list[GraphNode], edges: list[GraphEdge], *, how_to_ask: str | None = None,
+    run_ids: list[str] | None = None,
+) -> None:
+    """Refuse a run that isn't the person's when it breaks a spending limit, and
+    count it against the caller's session when it doesn't.
+
+    The person's own runs pass (the canvas asks them itself). Anything else
+    is held to the limits in Settings; see services/agent_spend.py."""
+    headers = current_request_headers()
+    if _is_person_request():
+        return
+    settings = load_settings()
+    ask = how_to_ask or agent_spend.propose_hint(run_ids or [])
+    try:
+        pricing = model_pricing.load_pricing()
+    except (OSError, ValueError) as exc:
+        raise HTTPException(
+            status_code=503, detail=f"Can't check this run's cost (pricing table unavailable: {exc}). {ask}",
+        ) from exc
+    key, label = _spend_session(headers)
+    decision = agent_spend.decide(
+        [{"id": n.id, "definitionId": n.definition_id, "params": n.params} for n in nodes],
+        [(e.source, e.target) for e in edges],
+        settings=settings, pricing=pricing, definitions=node_registry.get_all(),
+        spent=agent_spend_ledger.spent(key), how_to_ask=ask,
+    )
+    if decision.refusal:
+        raise HTTPException(status_code=403, detail=decision.refusal)
+    agent_spend_ledger.record(key, label, decision.charge)
+
+
 @app.post("/api/outputs/archive")
 async def archive_outputs(older_than_days: int = 30) -> dict:
     """Move `output/YYYY-MM-DD_*` directories older than `older_than_days`
@@ -2301,7 +2383,8 @@ async def chat_websocket(websocket: WebSocket) -> None:
                     read_grants = agent_read_grants(output_root=OUTPUT_ROOT, workdir=workdir,
                                                     protected=protected_agent_dirs())
                     agent_token = commons_actors.agent_registry.mint(
-                        agent, [OUTPUT_ROOT, workdir], brand=workspace_session.brand, workspace=workdir)
+                        agent, [OUTPUT_ROOT, workdir], brand=workspace_session.brand, workspace=workdir,
+                        session=workspace_session.id)
                     if model:
                         commons_actors.agent_registry.set_model(agent_token, model)
                     runner_kwargs.update(effort=effort, catalog_validated=catalog_validated,
@@ -2551,6 +2634,24 @@ async def agent_context(request: Request) -> dict[str, Any]:
     if not actor.is_agent or actor.workspace is None:
         raise HTTPException(status_code=401, detail="A scoped agent turn is required")
     return {"workspace": str(actor.workspace), "brand": actor.brand}
+
+@app.get("/api/agent/spend")
+async def agent_spend_status(request: Request) -> dict[str, Any]:
+    """The spending limits and what the calling agent's session has used, so an
+    agent can plan before it runs anything. The person's canvas isn't limited."""
+    settings = load_settings()
+    caps = agent_spend.caps_from_settings(settings)
+    if _is_person_request():
+        return {"limited": False, "limits": {"perRunUsd": agent_spend.threshold_from_settings(settings), **caps}}
+    key, label = _spend_session(request.headers)
+    spent = agent_spend_ledger.spent(key)
+    return {
+        "limited": True,
+        "agent": label,
+        "limits": {"perRunUsd": agent_spend.threshold_from_settings(settings), **caps},
+        "spent": {"totalUsd": round(spent.total, 4), "models": spent.models},
+    }
+
 
 @app.get("/api/health")
 async def health() -> dict:
@@ -3591,6 +3692,19 @@ async def update_settings(body: dict[str, Any]) -> dict:
         raise HTTPException(400, "Krea connection mode must be api-token or mcp")
     if "zoomTelemetryEnabled" in body and not isinstance(body["zoomTelemetryEnabled"], bool):
         raise HTTPException(400, "zoomTelemetryEnabled must be a boolean")
+    if agent_spend.SETTING_KEY in body or agent_spend.CAPS_KEY in body:
+        try:
+            if agent_spend.SETTING_KEY in body:
+                body[agent_spend.SETTING_KEY] = agent_spend.validate_threshold(body[agent_spend.SETTING_KEY])
+            if agent_spend.CAPS_KEY in body:
+                body[agent_spend.CAPS_KEY] = agent_spend.validate_caps(body[agent_spend.CAPS_KEY], node_registry.get_all())
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        # Spending limits hold agents back, so only the person sets them.
+        try:
+            require_person(current_request_headers())
+        except PersonGateError as exc:
+            raise HTTPException(exc.status, exc.detail) from exc
     # Desktop mode: credentials are managed via the Keychain credential IPC
     # and POST /api/credentials/update — never via this endpoint. Ignore any
     # apiKeys in the request body so a compromised renderer cannot overwrite
@@ -3618,6 +3732,8 @@ async def update_settings(body: dict[str, Any]) -> dict:
         "exportFolder",
         "zoomTelemetryEnabled",
         "kreaConnectionMode",
+        agent_spend.SETTING_KEY,
+        agent_spend.CAPS_KEY,
     ):
         if key in body:
             current[key] = body[key]
@@ -4021,6 +4137,10 @@ async def execute(request: ExecuteRequest) -> dict:
         )
         raise HTTPException(status_code=400, detail=f"Graph contains a cycle: {exc}")
 
+    # After validation, so a graph that can't run reports why, not its cost.
+    _require_run_spend_approval(run_id, nodes, request.edges,
+                                run_ids=_end_node_ids(nodes, request.edges))
+
     handler_registry = get_handler_registry(emit=_emit_and_sync)
     _claim_fresh_paid_worldlabs_starts(run_id=run_id, nodes=nodes)
 
@@ -4155,6 +4275,9 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
             )
         )
         raise HTTPException(status_code=400, detail=f"Subgraph contains a cycle: {exc}")
+
+    # After validation, so a graph that can't run reports why, not its cost.
+    _require_run_spend_approval(run_id, sub_nodes, sub_edges, run_ids=[request.target_node_id])
 
     handler_registry = get_handler_registry(emit=_emit_and_sync)
     _claim_fresh_paid_worldlabs_starts(run_id=run_id, nodes=sub_nodes)
@@ -4631,6 +4754,9 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
     _assert_execution_admissible(run_id)
     if execution_runs.get(run_id) is not None:
         raise HTTPException(status_code=409, detail=f"run '{run_id}' already exists")
+    # Priced as the whole scene: an upper bound for one shot.
+    spend_nodes, spend_edges = get_subgraph(request.nodes, request.edges, request.node_id)
+    _require_spend_approval(spend_nodes, spend_edges, run_ids=[request.node_id])
     canvas_events.note_run(run_id, actor_for_headers(current_request_headers()))
     settings = load_settings()
     api_keys = settings.get("apiKeys", {})
@@ -7312,9 +7438,14 @@ async def export_graph_for_frontend() -> dict:
 # ---------- CLI: Synchronous execution ----------
 
 @app.post("/api/graph/run")
-@_track_synchronous_project_run
 async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dict:
-    """Execute the CLI graph synchronously and return results.
+    """Run the CLI graph (or one node and what feeds it) and return the results.
+
+    The run happens in a background task, so it survives the caller giving up.
+    Without ``wait`` the request waits for it, as it always has. With ``wait``
+    (seconds) it returns ``{"status": "running", "runId"}`` if the run is still
+    going then; GET /api/graph/runs/{runId} reports it later. Agents use this so
+    a long video run doesn't outlast their tool's time limit.
 
     §1.5 guard: when called BY Daedalus (header X-Daedalus-Caller set) and
     TARGETING a specific node that already has outputs, block with 400 and
@@ -7343,7 +7474,7 @@ async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dic
                     f"Node '{target}' already has output. Per SKILL.md §1.5, "
                     "add a new node instead of re-running in place — the canvas "
                     "should keep every iteration visible as craft history. "
-                    "Use `nebula add <family>-<variant>` to create the next cut, "
+                    "Use `nebula create <definition-id>` to create the next cut, "
                     "wire it from the corrected upstream, then `nebula run` the "
                     "new node id."
                 ),
@@ -7362,13 +7493,43 @@ async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dic
         sub_edges = [GraphEdge.model_validate(e) for e in edges_list]
 
     _validate_cinema_base_models(sub_nodes)
+    _require_spend_approval(sub_nodes, sub_edges,
+                            run_ids=[target] if target else _end_node_ids(sub_nodes, sub_edges))
 
-    results: dict[str, Any] = {}
-    errors: dict[str, str] = {}
+    wait = body.get("wait") if body else None
+    if wait is not None and (isinstance(wait, bool) or not isinstance(wait, (int, float)) or wait < 0):
+        raise HTTPException(status_code=400, detail="wait must be a number of seconds")
+
     run_id = str(uuid4())
     canvas_events.note_run(run_id, actor_for_headers(current_request_headers()))
+    publish_action(
+        f"Running {target}..." if target else f"Running {len(sub_nodes)} node(s)..."
+    )
+    if target:
+        await _show_agent({"nodeId": target}, say=f"Running {_node_label(target)}")
 
-    import time
+    outcome: dict[str, Any] = {"results": {}, "errors": {}}
+    task = asyncio.create_task(_execute_cli_run(run_id, sub_nodes, sub_edges, api_keys, outcome))
+    # Registered like canvas runs: it fences project switching until it ends,
+    # and DELETE /api/executions/{runId} (`nebula cancel`) stops it.
+    try:
+        execution_runs.register(run_id, task)
+    except (ExecutionCancelledBeforeStartError, ExecutionCancellationCapacityError, ValueError) as exc:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+        await _release_paid_worldlabs_starts(run_id)
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    _watch_for_cross_process_stop(run_id, task)
+    _cli_runs.start(run_id, task, target, outcome)
+    return await _cli_run_response(run_id, None if wait is None else float(wait))
+
+
+async def _execute_cli_run(
+    run_id: str, sub_nodes: list[GraphNode], sub_edges: list[GraphEdge], api_keys: dict[str, Any],
+    outcome: dict[str, Any],
+) -> dict[str, Any]:
+    results: dict[str, Any] = outcome["results"]
+    errors: dict[str, str] = outcome["errors"]
 
     async def collect_events(event: ExecutionEvent) -> None:
         # This path keeps per-node events to itself (it returns results in
@@ -7378,18 +7539,14 @@ async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dic
             await _emit_and_sync(event)
         elif isinstance(event, ExecutedEvent):
             results[event.node_id] = event.outputs
+            # Saved as each node finishes, so a stopped run keeps what it made.
+            if event.node_id in cli_graph.nodes:
+                _sync_outputs_to_cli_graph(event.node_id, event.outputs)
         elif isinstance(event, ErrorEvent):
             errors[event.node_id] = event.error
 
     handler_registry = get_handler_registry(emit=collect_events)
-
-    publish_action(
-        f"Running {target}..." if target else f"Running {len(sub_nodes)} node(s)..."
-    )
-    if target:
-        await _show_agent({"nodeId": target}, say=f"Running {_node_label(target)}")
-
-    start = time.time()
+    start = _time_module.time()
     _claim_fresh_paid_worldlabs_starts(run_id=run_id, nodes=sub_nodes)
     try:
         await execute_graph(
@@ -7401,15 +7558,21 @@ async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dic
             cache=execution_cache,
             run_id=run_id,
         )
+        if _execution_is_cancelling(run_id):
+            raise asyncio.CancelledError
+    except asyncio.CancelledError:
+        await _finalize_cancelled_execution(sub_nodes, run_id)
+        publish_action(f"Stopped after {len(results)} node(s)")
+        raise
+    except Exception as exc:
+        if _execution_is_cancelling(run_id):
+            await _finalize_cancelled_execution(sub_nodes, run_id)
+            raise asyncio.CancelledError from exc
+        raise
     finally:
         await _release_paid_worldlabs_starts(run_id)
         canvas_events.forget_run(run_id)
-    duration = time.time() - start
-
-    # Update CLI graph node outputs
-    for node_id, outputs in results.items():
-        if node_id in cli_graph.nodes:
-            _sync_outputs_to_cli_graph(node_id, outputs)
+    duration = _time_module.time() - start
 
     _sync_params_to_cli_graph(sub_nodes)
 
@@ -7432,6 +7595,52 @@ async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dic
         "duration": round(duration, 2),
         "nodesExecuted": len(results) + len(errors),
     }
+
+
+class _CliRuns:
+    """CLI runs by id, so a caller that stopped waiting can collect the result."""
+
+    KEEP_FINISHED = 50
+
+    def __init__(self) -> None:
+        self._runs: OrderedDict[str, dict[str, Any]] = OrderedDict()
+
+    def start(self, run_id: str, task: asyncio.Task, target: str | None, outcome: dict[str, Any]) -> None:
+        self._runs[run_id] = {"task": task, "target": target, "outcome": outcome, "started": _time_module.time()}
+        finished = [key for key, entry in self._runs.items() if entry["task"].done()]
+        for key in finished[:max(0, len(finished) - self.KEEP_FINISHED)]:
+            self._runs.pop(key, None)
+
+    def get(self, run_id: str) -> dict[str, Any] | None:
+        return self._runs.get(run_id)
+
+
+_cli_runs = _CliRuns()
+
+
+async def _cli_run_response(run_id: str, wait: float | None, *, report_failure: bool = False) -> dict[str, Any]:
+    entry = _cli_runs.get(run_id)
+    if entry is None:
+        raise HTTPException(status_code=404, detail=f"No run '{run_id}' (finished runs are kept for a while, then forgotten)")
+    task: asyncio.Task = entry["task"]
+    # asyncio.wait never cancels the run, even when this request is cancelled.
+    await asyncio.wait({task}, timeout=None if wait is None else min(wait, 3600.0))
+    head = {"runId": run_id, "targetNodeId": entry["target"]}
+    if not task.done():
+        return {**head, "status": "running", "elapsed": round(_time_module.time() - entry["started"], 1)}
+    if task.cancelled():
+        made = entry["outcome"]
+        return {**head, "status": "cancelled", "results": made["results"], "errors": made["errors"],
+                "nodesExecuted": len(made["results"]) + len(made["errors"])}
+    if report_failure and task.exception() is not None:
+        return {**head, "status": "failed", "error": str(task.exception())}
+    return {**head, "status": "finished", **task.result()}
+
+
+@app.get("/api/graph/runs/{run_id}")
+async def get_graph_run(run_id: str, wait: float = 0) -> dict[str, Any]:
+    """A CLI run's outcome; with ``wait`` (seconds, max 300), wait for it to finish first."""
+    return await _cli_run_response(run_id, max(0.0, min(float(wait), 300.0)), report_failure=True)
 
 
 # Image reference suffixes recognized by /api/quick (matches the scalar
@@ -7654,6 +7863,12 @@ async def quick_execute(body: dict[str, Any]) -> dict:
         definition_id=definition_id,
         params=params,
         outputs={},
+    ))
+    # A quick run has no canvas node to propose, so point at one.
+    _require_spend_approval(temp_nodes, temp_edges, how_to_ask=(
+        f"Add it to the canvas instead (`nebula create {definition_id}`), then propose the run: "
+        "`nebula propose --note \"<why>\" --run <node id>` (MCP: propose_change). "
+        "The person accepts on the canvas, and the canvas runs it."
     ))
 
     results: dict[str, Any] = {}

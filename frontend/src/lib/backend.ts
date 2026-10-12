@@ -231,11 +231,18 @@ function shouldRetryWithDiscovery(baseUrl: string, response?: Response): boolean
 
 // Routes that need proof the request came from the person's canvas. In the
 // packaged app the renderer's Origin can be `null`, so the per-launch
-// connector session stands in for it (pins and proposals: person-only).
-const CONNECTOR_SESSION_PREFIXES = ['/api/krea/', '/api/canvas/pins', '/api/canvas/proposals'];
+// connector session stands in for it. Pins and proposals are person-only;
+// runs from anyone else are held to the spending limits.
+const CONNECTOR_SESSION_PREFIXES = [
+  '/api/krea/', '/api/canvas/pins', '/api/canvas/proposals',
+  '/api/execute', '/api/cinema/generate-shot',
+];
+// Only the person may change spending limits; reading settings needs no proof.
+const CONNECTOR_SESSION_WRITES = ['/api/settings'];
 
-function needsConnectorSession(path: string): boolean {
-  return CONNECTOR_SESSION_PREFIXES.some((prefix) => path.startsWith(prefix));
+function needsConnectorSession(path: string, method: string): boolean {
+  return CONNECTOR_SESSION_PREFIXES.some((prefix) => path.startsWith(prefix))
+    || (method !== 'GET' && method !== 'HEAD' && CONNECTOR_SESSION_WRITES.some((prefix) => path.startsWith(prefix)));
 }
 
 export async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
@@ -251,7 +258,7 @@ export async function apiFetch(path: string, init?: RequestInit): Promise<Respon
     requestInit = { ...init, headers };
   }
   const connectorSession = window.nebulaDesktop?.connectorSession;
-  if (getInjectedApiBaseUrl() && connectorSession && needsConnectorSession(path)) {
+  if (getInjectedApiBaseUrl() && connectorSession && needsConnectorSession(path, method)) {
     const headers = new Headers(requestInit?.headers);
     headers.set('X-Nebula-Connector-Session', connectorSession);
     requestInit = { ...requestInit, headers };
